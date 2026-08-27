@@ -1,0 +1,27 @@
+# TypeRB Native
+
+Keep committed documentation, code comments, commit messages, and pull request
+text in English.
+
+Treat this repository as an experimental research project, not as a supported
+TypeRB backend or product commitment.
+
+- Use `type-rb/type-rb` as the source of truth for TypeRB syntax, semantics,
+  diagnostics, packages, and conformance behavior.
+- Do not introduce native-only language semantics or silently weaken portable
+  behavior to improve a benchmark.
+- Keep Native MIR, target ABI profiles, and backend details internal and explicitly
+  unstable until a separate promotion decision is accepted.
+- Keep the reference TypeRB repository independent of this experiment. Any
+  bootstrap bridge added there must be narrow, versioned, data-only, and
+  removable.
+- Put backend-specific lowering behind a common verified Native MIR boundary.
+  Same-target comparisons use the same ABI profile. Do not duplicate the
+  frontend or runtime semantics for each backend candidate.
+- Record benchmark inputs, commands, revisions, hardware, operating system,
+  toolchain versions, cache state, repetitions, and raw results. Include every
+  required sidecar, linker, and runtime in size comparisons.
+- Prefer explicit unsupported-feature diagnostics to fallback semantics,
+  unchecked lowering, or `Any`-shaped escape hatches.
+- Add only the structure required by the current experiment gate. Do not add
+  release, package, or compatibility machinery before a real consumer needs it.
