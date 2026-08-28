@@ -85,7 +85,9 @@ must be integrated with the managed runtime before product feasibility.
 - Passing this gate does not imply full TypeRB source compatibility or a
   supported native compiler CLI.
 - The source-content argument adapter and process-lifetime compiler allocator
-  are explicit temporary boundaries to replace before Gate 5 can pass.
+  are explicit temporary product boundaries. Gate 5 measures and improves the
+  matched compiler core; Gate 6 replaces them before product feasibility can
+  pass.
 - QBE remains the active backend because Gate 4 asks a frontend/self-hosting
   question; adding another backend would not answer it more directly.
 
@@ -103,9 +105,9 @@ input without expanding a temporary cross-repository surface.
 
 ### Require the complete language before the first bootstrap
 
-Deferred to Gate 5 progression. A documented subset that genuinely compiles
-its own compiler exposes the bootstrap invariants earlier while unsupported
-portable behavior continues to fail explicitly.
+Deferred to Gate 6 product-feasibility progression. A documented subset that
+genuinely compiles its own compiler exposes the bootstrap invariants earlier
+while unsupported portable behavior continues to fail explicitly.
 
 ### Switch to generated C for self-hosting
 
