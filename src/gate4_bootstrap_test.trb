@@ -14,6 +14,172 @@ def _gate4_environment(name: String): String
 	return value
 end
 
+def _gate4_read(path: String): Result<String, String>
+	case read_text(path)
+	when Result::Ok(source)
+		return Result<String, String>::Ok(source)
+	when Result::Err(error)
+		return Result<String, String>::Err(error.operation + ": " + error.message)
+	end
+end
+
+def _gate4_compiler_output(
+		executable: String,
+		source: String,
+		mode: String,
+	): Result<String, String>
+	process := case run(executable, [source, mode])
+	when Result::Ok(value)
+		value
+	when Result::Err(error)
+		return Result<String, String>::Err(error.operation + ": " + error.message)
+	end
+	if !process.success
+		return Result<String, String>::Err(executable + " exited with " + process.status.to_s())
+	end
+	if !process.stderr.empty?()
+		return Result<String, String>::Err(executable + " wrote stderr: " + process.stderr)
+	end
+	return Result<String, String>::Ok(process.stdout)
+end
+
+def _gate4_execute_qbe(
+		qbe_source: String,
+		qbe: String,
+		workspace: String,
+		case_name: String,
+	): Result<String, String>
+	qbe_path := workspace + "/conformance-" + case_name + ".ssa"
+	assembly_path := workspace + "/conformance-" + case_name + ".s"
+	executable_path := workspace + "/conformance-" + case_name
+	case write_text(qbe_path, qbe_source)
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		return Result<String, String>::Err(error.operation + ": " + error.message)
+	end
+	qbe_process := case run(qbe, ["-t", "arm64_apple", qbe_path])
+	when Result::Ok(process)
+		process
+	when Result::Err(error)
+		return Result<String, String>::Err(error.operation + ": " + error.message)
+	end
+	if !qbe_process.success
+		return Result<String, String>::Err("QBE rejected " + case_name + ": " + qbe_process.stderr)
+	end
+	case write_text(assembly_path, qbe_process.stdout)
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		return Result<String, String>::Err(error.operation + ": " + error.message)
+	end
+	link_process := case run("/usr/bin/cc", [assembly_path, "-Wl,-dead_strip", "-o", executable_path])
+	when Result::Ok(process)
+		process
+	when Result::Err(error)
+		return Result<String, String>::Err(error.operation + ": " + error.message)
+	end
+	if !link_process.success
+		return Result<String, String>::Err("link failed for " + case_name + ": " + link_process.stderr)
+	end
+	runtime := case run(executable_path, [])
+	when Result::Ok(process)
+		process
+	when Result::Err(error)
+		return Result<String, String>::Err(error.operation + ": " + error.message)
+	end
+	if !runtime.success || !runtime.stderr.empty?()
+		return Result<String, String>::Err("runtime failed for " + case_name + ": " + runtime.stderr)
+	end
+	return Result<String, String>::Ok(runtime.stdout)
+end
+
+def _gate4_verify_valid_case(
+		root: String,
+		category: String,
+		case_name: String,
+		executables: Array<String>,
+		qbe: String,
+		workspace: String,
+	): Result<String, String>
+	base := root + "/compiler/gate4/conformance/" + category + "/" + case_name
+	source := try _gate4_read(base + ".trb")
+	expected_runtime := try _gate4_read(base + ".out")
+	mut canonical_qbe := ""
+	mut index := 0
+	while index < executables.size()
+		check := try _gate4_compiler_output(executables[index], source, "check")
+		if check != "ok\n"
+			return Result<String, String>::Err(case_name + " check differs at compiler " + index.to_s())
+		end
+		first := try _gate4_compiler_output(executables[index], source, "emit-qbe")
+		second := try _gate4_compiler_output(executables[index], source, "emit-qbe")
+		if first != second
+			return Result<String, String>::Err(case_name + " QBE is nondeterministic at compiler " + index.to_s())
+		end
+		if index == 0
+			canonical_qbe = first
+		else
+			if first != canonical_qbe
+				return Result<String, String>::Err(case_name + " QBE differs across compiler generations")
+			end
+		end
+		index += 1
+	end
+	actual_runtime := try _gate4_execute_qbe(canonical_qbe, qbe, workspace, category + "-" + case_name)
+	if actual_runtime != expected_runtime
+		return Result<String, String>::Err(case_name + " runtime output differs")
+	end
+	return Result<String, String>::Ok(canonical_qbe)
+end
+
+def _gate4_verify_conformance(
+		root: String,
+		qbe: String,
+		workspace: String,
+	): Result<Boolean, String>
+	executables := [workspace + "/b0", workspace + "/b1", workspace + "/b2"]
+	valid_names := ["control-flow", "records-arrays", "strings-calls"]
+	mut index := 0
+	while index < valid_names.size()
+		try _gate4_verify_valid_case(root, "valid", valid_names[index], executables, qbe, workspace)
+		index += 1
+	end
+	mutation_names := ["base", "literal", "control"]
+	mut mutation_qbe: Array<String> := []
+	index = 0
+	while index < mutation_names.size()
+		mutation_qbe.push(
+			try _gate4_verify_valid_case(root, "mutations", mutation_names[index], executables, qbe, workspace)
+		)
+		index += 1
+	end
+	if mutation_qbe[0] == mutation_qbe[1] || mutation_qbe[0] == mutation_qbe[2] || mutation_qbe[1] == mutation_qbe[2]
+		return Result<Boolean, String>::Err("source mutations did not produce three distinct QBE programs")
+	end
+	invalid_names := ["lexical", "syntax", "duplicate", "unresolved", "arity", "type", "unsupported-type"]
+	index = 0
+	while index < invalid_names.size()
+		base := root + "/compiler/gate4/conformance/invalid/" + invalid_names[index]
+		source := try _gate4_read(base + ".source")
+		expected := try _gate4_read(base + ".diag")
+		if !expected.start_with?("TRBN")
+			return Result<Boolean, String>::Err(invalid_names[index] + " is not classified as a diagnostic")
+		end
+		mut compiler_index := 0
+		while compiler_index < executables.size()
+			check := try _gate4_compiler_output(executables[compiler_index], source, "check")
+			emit := try _gate4_compiler_output(executables[compiler_index], source, "emit-qbe")
+			if check != expected || emit != expected || emit.include?("export function")
+				return Result<Boolean, String>::Err(
+					invalid_names[index] + " diagnostic differs at compiler " + compiler_index.to_s()
+				)
+			end
+			compiler_index += 1
+		end
+		index += 1
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
 def _gate4_build_cycle(
 		b0_path: String,
 		compiler_source: String,
@@ -65,6 +231,32 @@ def _gate4_build_cycle(
 	if b1_qbe != b2_qbe || b2_qbe != b3_qbe
 		puts("B1, B2, and B3 QBE outputs differ")
 		return false
+	end
+	seeds := [b0_path, b1.output_path, b2.output_path]
+	expected_qbe := [b1_qbe, b2_qbe, b3_qbe]
+	mut seed_index := 0
+	while seed_index < seeds.size()
+		case run(seeds[seed_index], [compiler_source, "check"])
+		when Result::Ok(process)
+			if !process.success || process.stdout != "ok\n" || process.stderr != ""
+				puts("compiler source check differs at seed " + seed_index.to_s())
+				return false
+			end
+		when Result::Err(error)
+			puts(error.operation + ": " + error.message)
+			return false
+		end
+		case run(seeds[seed_index], [compiler_source, "emit-qbe"])
+		when Result::Ok(process)
+			if !process.success || process.stdout != expected_qbe[seed_index] || process.stderr != ""
+				puts("repeated compiler QBE differs at seed " + seed_index.to_s())
+				return false
+			end
+		when Result::Err(error)
+			puts(error.operation + ": " + error.message)
+			return false
+		end
+		seed_index += 1
 	end
 	program := "def main()\n\tputs(\"ok\")\n\treturn\nend\n"
 	mut executables := [b1.output_path, b2.output_path, b3.output_path]
@@ -166,6 +358,13 @@ describe("Gate 4 reference bootstrap") do
 						expect(false).to_be_true()
 					end
 					expect(_gate4_build_cycle(workspace + "/b0", compiler_source, qbe, workspace)).to_be_true()
+					case _gate4_verify_conformance(root, qbe, workspace)
+					when Result::Ok(_value)
+						expect(true).to_be_true()
+					when Result::Err(error)
+						puts(error)
+						expect(false).to_be_true()
+					end
 				when Result::Err(error)
 					puts(error.phase + ": " + error.message + "\n" + error.stderr)
 					expect(false).to_be_true()
