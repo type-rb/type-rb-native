@@ -1,0 +1,233 @@
+import {
+	Gate2Field,
+	Gate2LayoutKind,
+	Gate2TypeDefinition,
+	Gate2ValueType,
+	Gate2Variant,
+	compute_gate2_layout,
+	gate2_field_layout,
+	gate2_value_types_equal,
+	gate2_variant_field_layout,
+	gate2_variant_layout,
+	verify_gate2_layouts,
+} from gate2_layout
+import { ScalarType } from gate1_mir
+import { Result } from trb/std/result
+import { describe, expect, test } from trb/std/test
+
+def _gate2_scalar(value_type: ScalarType): Gate2ValueType
+	return Gate2ValueType::Scalar(value_type)
+end
+
+def _gate2_field(name: String, value_type: Gate2ValueType): Gate2Field
+	return Gate2Field.new(name: name, value_type: value_type)
+end
+
+def _gate2_layout_definitions(): Array<Gate2TypeDefinition>
+	return [
+		Gate2TypeDefinition::Record(
+			"example#Point",
+			[
+				_gate2_field("visible", _gate2_scalar(ScalarType::Boolean)),
+				_gate2_field("x", _gate2_scalar(ScalarType::Integer)),
+				_gate2_field("y", _gate2_scalar(ScalarType::Float)),
+			],
+		),
+		Gate2TypeDefinition::Record(
+			"example#Envelope",
+			[
+				_gate2_field("point", Gate2ValueType::Aggregate("example#Point")),
+				_gate2_field("selected", _gate2_scalar(ScalarType::Boolean)),
+			],
+		),
+		Gate2TypeDefinition::Tagged(
+			"example#Outcome",
+			[
+				Gate2Variant.new(name: "None", fields: []),
+				Gate2Variant.new(
+					name: "Count",
+					fields: [_gate2_field("value", _gate2_scalar(ScalarType::Integer))],
+				),
+				Gate2Variant.new(
+					name: "Located",
+					fields: [_gate2_field("point", Gate2ValueType::Aggregate("example#Point"))],
+				),
+			],
+		),
+	]
+end
+
+describe("Gate 2 static aggregate layout") do
+	test("lays out scalar and nested record fields deterministically") do
+		definitions := _gate2_layout_definitions()
+		case compute_gate2_layout(definitions, "example#Point")
+		when Result::Ok(layout)
+			expect(layout.kind).to_equal(Gate2LayoutKind::Record)
+			expect(layout.size).to_equal(24)
+			expect(layout.alignment).to_equal(8)
+			expect(gate2_field_layout(layout, "visible").offset).to_equal(0)
+			expect(gate2_field_layout(layout, "x").offset).to_equal(8)
+			expect(gate2_field_layout(layout, "y").offset).to_equal(16)
+		when Result::Err(_diagnostic)
+			expect(false).to_be_true()
+		end
+		case compute_gate2_layout(definitions, "example#Envelope")
+		when Result::Ok(layout)
+			expect(layout.size).to_equal(32)
+			expect(layout.alignment).to_equal(8)
+			expect(gate2_field_layout(layout, "point").offset).to_equal(0)
+			expect(gate2_field_layout(layout, "selected").offset).to_equal(24)
+		when Result::Err(_diagnostic)
+			expect(false).to_be_true()
+		end
+	end
+
+	test("lays out tags and maximum payload storage") do
+		case compute_gate2_layout(_gate2_layout_definitions(), "example#Outcome")
+		when Result::Ok(layout)
+			expect(layout.kind).to_equal(Gate2LayoutKind::Tagged)
+			expect(layout.payload_offset).to_equal(8)
+			expect(layout.size).to_equal(32)
+			expect(layout.alignment).to_equal(8)
+			none := gate2_variant_layout(layout, "None")
+			count := gate2_variant_layout(layout, "Count")
+			located := gate2_variant_layout(layout, "Located")
+			expect(none.tag).to_equal(0)
+			expect(none.payload_size).to_equal(0)
+			expect(count.tag).to_equal(1)
+			if count != nil
+				expect(gate2_variant_field_layout(count, "value").offset).to_equal(8)
+			end
+			expect(located.tag).to_equal(2)
+			if located != nil
+				expect(gate2_variant_field_layout(located, "point").size).to_equal(24)
+			end
+		when Result::Err(_diagnostic)
+			expect(false).to_be_true()
+		end
+	end
+
+	test("retains nominal identity for identical shapes") do
+		left := Gate2ValueType::Aggregate("example#Left")
+		right := Gate2ValueType::Aggregate("example#Right")
+		expect(gate2_value_types_equal(left, left)).to_be_true()
+		expect(gate2_value_types_equal(left, right)).to_be_false()
+		expect(
+			compute_gate2_layout(_gate2_layout_definitions(), "example#Outcome")
+		).to_equal(compute_gate2_layout(_gate2_layout_definitions(), "example#Outcome"))
+	end
+
+	test("rejects recursive by-value layouts") do
+		definitions := [
+			Gate2TypeDefinition::Record(
+				"example#Recursive",
+				[_gate2_field("next", Gate2ValueType::Aggregate("example#Recursive"))],
+			),
+		]
+		case verify_gate2_layouts(definitions)
+		when Result::Ok(_valid)
+			expect(false).to_be_true()
+		when Result::Err(diagnostic)
+			expect(diagnostic.code).to_equal("TRBN0004")
+			expect(diagnostic.message).to_equal("recursive by-value aggregate layout is unsupported")
+		end
+	end
+
+	test("rejects duplicate fields and variants") do
+		duplicate_fields := [
+			Gate2TypeDefinition::Record(
+				"example#Duplicate",
+				[
+					_gate2_field("value", _gate2_scalar(ScalarType::Integer)),
+					_gate2_field("value", _gate2_scalar(ScalarType::Float)),
+				],
+			),
+		]
+		case verify_gate2_layouts(duplicate_fields)
+		when Result::Ok(_valid)
+			expect(false).to_be_true()
+		when Result::Err(diagnostic)
+			expect(diagnostic.message).to_equal("field name is duplicated")
+		end
+		duplicate_variants := [
+			Gate2TypeDefinition::Tagged(
+				"example#DuplicateTag",
+				[
+					Gate2Variant.new(name: "Same", fields: []),
+					Gate2Variant.new(name: "Same", fields: []),
+				],
+			),
+		]
+		case verify_gate2_layouts(duplicate_variants)
+		when Result::Ok(_valid)
+			expect(false).to_be_true()
+		when Result::Err(diagnostic)
+			expect(diagnostic.message).to_equal("variant name is duplicated")
+		end
+	end
+
+	test("rejects unknown aggregate field types") do
+		definitions := [
+			Gate2TypeDefinition::Record(
+				"example#Broken",
+				[_gate2_field("missing", Gate2ValueType::Aggregate("example#Missing"))],
+			),
+		]
+		case verify_gate2_layouts(definitions)
+		when Result::Ok(_valid)
+			expect(false).to_be_true()
+		when Result::Err(diagnostic)
+			expect(diagnostic.message).to_equal("aggregate type does not exist")
+		end
+	end
+
+	test("rejects duplicate type identities") do
+		definitions := [
+			Gate2TypeDefinition::Record("example#Same", []),
+			Gate2TypeDefinition::Tagged(
+				"example#Same",
+				[Gate2Variant.new(name: "Only", fields: [])],
+			),
+		]
+		case verify_gate2_layouts(definitions)
+		when Result::Ok(_valid)
+			expect(false).to_be_true()
+		when Result::Err(diagnostic)
+			expect(diagnostic.message).to_equal("type identifier is duplicated")
+		end
+	end
+
+	test("enforces the configured aggregate byte limit") do
+		mut chunk_fields: Array<Gate2Field> := []
+		mut index := 0
+		while index < 256
+			chunk_fields.push(_gate2_field("word" + index.to_s(), _gate2_scalar(ScalarType::Integer)))
+			index += 1
+		end
+		mut page_fields: Array<Gate2Field> := []
+		index = 0
+		while index < 256
+			page_fields.push(_gate2_field("chunk" + index.to_s(), Gate2ValueType::Aggregate("example#Chunk")))
+			index += 1
+		end
+		definitions := [
+			Gate2TypeDefinition::Record("example#Chunk", chunk_fields),
+			Gate2TypeDefinition::Record("example#Page", page_fields),
+			Gate2TypeDefinition::Record(
+				"example#TooLarge",
+				[
+					_gate2_field("first", Gate2ValueType::Aggregate("example#Page")),
+					_gate2_field("second", Gate2ValueType::Aggregate("example#Page")),
+					_gate2_field("third", Gate2ValueType::Aggregate("example#Page")),
+				],
+			),
+		]
+		case compute_gate2_layout(definitions, "example#TooLarge")
+		when Result::Ok(_layout)
+			expect(false).to_be_true()
+		when Result::Err(diagnostic)
+			expect(diagnostic.code).to_equal("TRBN0005")
+			expect(diagnostic.message).to_equal("aggregate layout exceeds the Gate 2 byte limit")
+		end
+	end
+end
