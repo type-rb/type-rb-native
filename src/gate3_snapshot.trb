@@ -38,6 +38,7 @@ import { JsonValue, parse } from trb/std/json
 import { Result } from trb/std/result
 
 GATE3_MAX_INPUT_BYTES := 4194304
+GATE4_BOOTSTRAP_MAX_INPUT_BYTES := 33554432
 GATE3_MAX_SOURCES := 256
 GATE3_MAX_FUNCTIONS := 512
 GATE3_SNAPSHOT_MAX_TYPES := 1024
@@ -47,14 +48,38 @@ GATE3_MAX_PARAMETERS := 256
 GATE3_MAX_BLOCKS := 1024
 GATE3_MAX_INSTRUCTIONS := 16384
 GATE3_MAX_ARGUMENTS := 256
+GATE4_BOOTSTRAP_MAX_ARRAY_ARGUMENTS := 1024
 GATE3_MAX_STATIC_BYTES := 1048576
 GATE3_MAX_IDENTIFIER_SIZE := 256
 GATE3_MAX_SOURCE_PATH_SIZE := 4096
 
 def decode_gate3_snapshot(source: String): Result<Gate3Module, Diagnostic>
-	if source.to_bytes().size() > GATE3_MAX_INPUT_BYTES
+	return _decode_gate3_snapshot(
+		source,
+		GATE3_MAX_INPUT_BYTES,
+		"Gate 3 4 MiB",
+		GATE3_MAX_ARGUMENTS,
+	)
+end
+
+def decode_gate4_bootstrap_snapshot(source: String): Result<Gate3Module, Diagnostic>
+	return _decode_gate3_snapshot(
+		source,
+		GATE4_BOOTSTRAP_MAX_INPUT_BYTES,
+		"Gate 4 bootstrap 32 MiB",
+		GATE4_BOOTSTRAP_MAX_ARRAY_ARGUMENTS,
+	)
+end
+
+def _decode_gate3_snapshot(
+		source: String,
+		max_input_bytes: Integer,
+		limit_name: String,
+		max_array_arguments: Integer,
+	): Result<Gate3Module, Diagnostic>
+	if source.to_bytes().size() > max_input_bytes
 		return Result<Gate3Module, Diagnostic>::Err(
-			boundary_diagnostic("TRBN0005", "", "snapshot exceeds the Gate 3 4 MiB input limit")
+			boundary_diagnostic("TRBN0005", "", "snapshot exceeds the " + limit_name + " input limit")
 		)
 	end
 	root := case parse(source)
@@ -121,7 +146,13 @@ def decode_gate3_snapshot(source: String): Result<Gate3Module, Diagnostic>
 	mut functions: Array<Gate3Function> := []
 	mut function_index := 0
 	while function_index < function_values.size()
-		functions.push(try _gate3_decode_function(function_values[function_index], "/functions/" + function_index.to_s()))
+		functions.push(
+			try _gate3_decode_function(
+				function_values[function_index],
+				"/functions/" + function_index.to_s(),
+				max_array_arguments,
+			)
+		)
 		function_index += 1
 	end
 	native_module := Gate3Module.new(
@@ -278,7 +309,11 @@ def _gate3_decode_source(value: JsonValue, path: String): Result<NativeSource, D
 	)
 end
 
-def _gate3_decode_function(value: JsonValue, path: String): Result<Gate3Function, Diagnostic>
+def _gate3_decode_function(
+		value: JsonValue,
+		path: String,
+		max_array_arguments: Integer,
+	): Result<Gate3Function, Diagnostic>
 	fields := try strict_object(
 		value,
 		path,
@@ -321,7 +356,13 @@ def _gate3_decode_function(value: JsonValue, path: String): Result<Gate3Function
 	mut blocks: Array<Gate3Block> := []
 	mut block_index := 0
 	while block_index < block_values.size()
-		blocks.push(try _gate3_decode_block(block_values[block_index], path + "/blocks/" + block_index.to_s()))
+		blocks.push(
+			try _gate3_decode_block(
+				block_values[block_index],
+				path + "/blocks/" + block_index.to_s(),
+				max_array_arguments,
+			)
+		)
 		block_index += 1
 	end
 	return Result<Gate3Function, Diagnostic>::Ok(
@@ -382,7 +423,11 @@ def _gate3_decode_result_type(name: String, path: String): Result<Gate3ResultTyp
 	)
 end
 
-def _gate3_decode_block(value: JsonValue, path: String): Result<Gate3Block, Diagnostic>
+def _gate3_decode_block(
+		value: JsonValue,
+		path: String,
+		max_array_arguments: Integer,
+	): Result<Gate3Block, Diagnostic>
 	fields := try strict_object(value, path, ["id", "parameters", "origin", "instructions", "terminator"])
 	parameter_values := try required_array(fields, "parameters", path)
 	if parameter_values.size() > GATE3_MAX_PARAMETERS
@@ -408,7 +453,11 @@ def _gate3_decode_block(value: JsonValue, path: String): Result<Gate3Block, Diag
 	mut instruction_index := 0
 	while instruction_index < instruction_values.size()
 		instructions.push(
-			try _gate3_decode_instruction(instruction_values[instruction_index], path + "/instructions/" + instruction_index.to_s())
+			try _gate3_decode_instruction(
+				instruction_values[instruction_index],
+				path + "/instructions/" + instruction_index.to_s(),
+				max_array_arguments,
+			)
 		)
 		instruction_index += 1
 	end
@@ -423,7 +472,11 @@ def _gate3_decode_block(value: JsonValue, path: String): Result<Gate3Block, Diag
 	)
 end
 
-def _gate3_decode_instruction(value: JsonValue, path: String): Result<Gate3Instruction, Diagnostic>
+def _gate3_decode_instruction(
+		value: JsonValue,
+		path: String,
+		max_array_arguments: Integer,
+	): Result<Gate3Instruction, Diagnostic>
 	base_fields := try object(value, path)
 	op := try required_string(base_fields, "op", path, false)
 	if op == "boolean_literal"
@@ -582,7 +635,12 @@ def _gate3_decode_instruction(value: JsonValue, path: String): Result<Gate3Instr
 			Gate3Instruction::ArrayConstruct(
 				try required_string(fields, "result", path, true),
 				try required_string(fields, "type", path, true),
-				try _gate3_required_string_array(fields, "arguments", path),
+				try _gate3_required_string_array_with_limit(
+					fields,
+					"arguments",
+					path,
+					max_array_arguments,
+				),
 				try decode_origin(try required_field(fields, "origin", path), path + "/origin"),
 			)
 		)
@@ -927,8 +985,17 @@ def _gate3_required_string_array(
 		name: String,
 		path: String,
 	): Result<Array<String>, Diagnostic>
+	return _gate3_required_string_array_with_limit(fields, name, path, GATE3_MAX_ARGUMENTS)
+end
+
+def _gate3_required_string_array_with_limit(
+		fields: Hash<String, JsonValue>,
+		name: String,
+		path: String,
+		max_arguments: Integer,
+	): Result<Array<String>, Diagnostic>
 	values := try required_array(fields, name, path)
-	if values.size() > GATE3_MAX_ARGUMENTS
+	if values.size() > max_arguments
 		return Result<Array<String>, Diagnostic>::Err(
 			boundary_diagnostic("TRBN0005", path + "/" + name, "argument count exceeds the Gate 3 limit")
 		)
