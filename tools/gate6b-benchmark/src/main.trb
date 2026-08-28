@@ -1,0 +1,1103 @@
+import { create_directory, read_text, write_text } from trb/std/filesystem
+import { argv, run } from trb/std/process
+import { Result } from trb/std/result
+import trb/std/string_builder
+import { Instant } from trb/std/time
+
+record TimedProcess
+	seconds: Float
+	status: Integer
+	stdout: String
+	stderr: String
+end
+
+record PeakProcess
+	rss: String
+	status: Integer
+	stdout: String
+	stderr: String
+end
+
+def measure_process(command: String, arguments: Array<String>): Result<TimedProcess, String>
+	started := Instant.now()
+	case run(command, arguments)
+	when Result::Ok(process)
+		return Result<TimedProcess, String>::Ok(
+			TimedProcess.new(
+				seconds: Instant.now().duration_since(started).total_seconds(),
+				status: process.status,
+				stdout: process.stdout,
+				stderr: process.stderr,
+			),
+		)
+	when Result::Err(error)
+		return Result<TimedProcess, String>::Err(error.operation + ": " + error.message)
+	end
+end
+
+def append_measurement(
+		mut output: StringBuilder,
+		metric: String,
+		candidate: String,
+		iteration: Integer,
+		value: String,
+		status: Integer,
+	)
+	output.append(
+		metric + ",compiler-source," + candidate + "," + iteration.to_s() + "," + value + "," +
+		status.to_s() + "\n",
+	)
+	return
+end
+
+def append_phases(
+		mut output: StringBuilder,
+		candidate: String,
+		iteration: Integer,
+		stdout: String,
+	): Integer
+	lines := stdout.split("\n")
+	mut count := 0
+	mut index := 0
+	while index < lines.size()
+		if lines[index].start_with?("gate4-phase,")
+			fields := lines[index].split(",")
+			if fields.size() == 3
+				append_measurement(output, "build-" + fields[1], candidate, iteration, fields[2], 0)
+				count += 1
+			end
+		end
+		index += 1
+	end
+	return count
+end
+
+def measure_bootstrap(
+		mut output: StringBuilder,
+		driver: String,
+		arguments: Array<String>,
+		candidate: String,
+		expected_phases: Integer,
+	): Result<Boolean, String>
+	measurement := try measure_process(driver, arguments)
+	append_measurement(
+		output,
+		"bootstrap-total",
+		candidate,
+		0,
+		measurement.seconds.to_s(),
+		measurement.status,
+	)
+	if measurement.status != 0
+		return Result<Boolean, String>::Err(candidate + " failed: " + measurement.stderr)
+	end
+	if append_phases(output, candidate, 0, measurement.stdout) != expected_phases
+		return Result<Boolean, String>::Err(candidate + " did not report every phase")
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def read_required(path: String): Result<String, String>
+	case read_text(path)
+	when Result::Ok(source)
+		return Result<String, String>::Ok(source)
+	when Result::Err(error)
+		return Result<String, String>::Err(error.operation + ": " + error.message)
+	end
+end
+
+def require_equal(left: String, right: String, message: String): Result<Boolean, String>
+	if left != right
+		return Result<Boolean, String>::Err(message)
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def external_build(
+		compiler: String,
+		source_path: String,
+		output_path: String,
+		qbe: String,
+		cc: String,
+	): Result<Boolean, String>
+	emission := try measure_process(compiler, ["emit-qbe", source_path])
+	if emission.status != 0 || !emission.stderr.empty?() || emission.stdout.empty?()
+		return Result<Boolean, String>::Err("compiler emission failed: " + emission.stderr)
+	end
+	qbe_path := output_path + ".ssa"
+	assembly_path := output_path + ".s"
+	case write_text(qbe_path, emission.stdout)
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
+	end
+	qbe_process := try measure_process(
+		qbe,
+		["-t", "arm64_apple", "-o", assembly_path, qbe_path],
+	)
+	if qbe_process.status != 0 || !qbe_process.stdout.empty?() || !qbe_process.stderr.empty?()
+		return Result<Boolean, String>::Err("QBE failed: " + qbe_process.stderr)
+	end
+	cc_process := try measure_process(
+		cc,
+		[assembly_path, "-Wl,-dead_strip", "-o", output_path],
+	)
+	if cc_process.status != 0 || !cc_process.stdout.empty?() || !cc_process.stderr.empty?()
+		return Result<Boolean, String>::Err("CC failed: " + cc_process.stderr)
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def native_arguments(
+		source_path: String,
+		output_path: String,
+		qbe: String,
+		cc: String,
+	): Array<String>
+	return ["build", source_path, "--output", output_path, "--qbe", qbe, "--cc", cc]
+end
+
+def external_arguments(
+		compiler: String,
+		source_path: String,
+		output_path: String,
+		qbe: String,
+		cc: String,
+	): Array<String>
+	return ["external-build", compiler, source_path, output_path, qbe, cc]
+end
+
+def require_file_equal(left: String, right: String, message: String): Result<Boolean, String>
+	comparison := try measure_process("/usr/bin/cmp", [left, right])
+	if comparison.status != 0
+		return Result<Boolean, String>::Err(message)
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def require_no_intermediates(directory: String): Result<Boolean, String>
+	find := try measure_process("/usr/bin/find", [directory, "-name", "*.trbn.*", "-print"])
+	if find.status != 0
+		return Result<Boolean, String>::Err("cannot inspect Native intermediates: " + find.stderr)
+	end
+	if !find.stdout.empty?()
+		return Result<Boolean, String>::Err("Native build left intermediates: " + find.stdout)
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def verify_build_command(
+		command: String,
+		arguments: Array<String>,
+		output_path: String,
+		label: String,
+	): Result<Boolean, String>
+	measurement := try measure_process(command, arguments)
+	if measurement.status != 0 || !measurement.stdout.empty?() || !measurement.stderr.empty?()
+		return Result<Boolean, String>::Err(label + " failed: " + measurement.stderr + measurement.stdout)
+	end
+	probe := try measure_process("/bin/test", ["-f", output_path])
+	if probe.status != 0
+		return Result<Boolean, String>::Err(label + " did not produce " + output_path)
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def verify_built_compiler(
+		executable: String,
+		compiler_path: String,
+		expected_qbe: String,
+		label: String,
+	): Result<Boolean, String>
+	check := try measure_process(executable, ["check", compiler_path])
+	if check.status != 0 || check.stdout != "ok\n" || !check.stderr.empty?()
+		return Result<Boolean, String>::Err(label + " failed compiler-source check")
+	end
+	emission := try measure_process(executable, ["emit-qbe", compiler_path])
+	if emission.status != 0 || emission.stdout != expected_qbe || !emission.stderr.empty?()
+		return Result<Boolean, String>::Err(label + " failed fixed-point emission")
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def verify_seed_compiler(
+		compiler: String,
+		compiler_path: String,
+		compiler_source: String,
+		expected_qbe: String,
+		candidate: String,
+	): Result<Boolean, String>
+	file_check := try measure_process(compiler, ["check", compiler_path])
+	if file_check.status != 0 || file_check.stdout != "ok\n" || !file_check.stderr.empty?()
+		return Result<Boolean, String>::Err(candidate + " failed file check preflight")
+	end
+	hidden_check := try measure_process(
+		compiler,
+		["--source-content", "check", compiler_source],
+	)
+	if hidden_check.status != 0 || hidden_check.stdout != "ok\n" || !hidden_check.stderr.empty?()
+		return Result<Boolean, String>::Err(candidate + " failed recovery check preflight")
+	end
+	file_emit := try measure_process(compiler, ["emit-qbe", compiler_path])
+	if file_emit.status != 0 || file_emit.stdout != expected_qbe || !file_emit.stderr.empty?()
+		return Result<Boolean, String>::Err(candidate + " failed file emission preflight")
+	end
+	hidden_emit := try measure_process(
+		compiler,
+		["--source-content", "emit-qbe", compiler_source],
+	)
+	if hidden_emit.status != 0 || hidden_emit.stdout != expected_qbe || !hidden_emit.stderr.empty?()
+		return Result<Boolean, String>::Err(candidate + " failed recovery emission preflight")
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def measure_application_build(
+		mut output: StringBuilder,
+		command: String,
+		arguments: Array<String>,
+		output_path: String,
+		expected_path: String,
+		intermediate_directory: String,
+		candidate: String,
+		iteration: Integer,
+	): Result<Boolean, String>
+	measurement := try measure_process(command, arguments)
+	append_measurement(
+		output,
+		"application-build-total",
+		candidate,
+		iteration,
+		measurement.seconds.to_s(),
+		measurement.status,
+	)
+	if measurement.status != 0 || !measurement.stdout.empty?() || !measurement.stderr.empty?()
+		return Result<Boolean, String>::Err(candidate + " failed: " + measurement.stderr + measurement.stdout)
+	end
+	try require_file_equal(output_path, expected_path, candidate + " output differs from the fixed point")
+	try require_no_intermediates(intermediate_directory)
+	return Result<Boolean, String>::Ok(true)
+end
+
+def peak_process(command: String, arguments: Array<String>): Result<PeakProcess, String>
+	mut time_arguments := ["-l", command]
+	mut index := 0
+	while index < arguments.size()
+		time_arguments.push(arguments[index])
+		index += 1
+	end
+	measurement := try measure_process("/usr/bin/time", time_arguments)
+	lines := measurement.stderr.split("\n")
+	index = 0
+	while index < lines.size()
+		if lines[index].include?("maximum resident set size")
+			fields := lines[index].strip().split(" ")
+			mut field_index := 0
+			while field_index < fields.size()
+				if !fields[field_index].empty?()
+					return Result<PeakProcess, String>::Ok(
+						PeakProcess.new(
+							rss: fields[field_index],
+							status: measurement.status,
+							stdout: measurement.stdout,
+							stderr: measurement.stderr,
+						),
+					)
+				end
+				field_index += 1
+			end
+		end
+		index += 1
+	end
+	return Result<PeakProcess, String>::Err("time did not report maximum resident set size for " + command)
+end
+
+def measure_application_rss(
+		mut output: StringBuilder,
+		command: String,
+		arguments: Array<String>,
+		output_path: String,
+		expected_path: String,
+		intermediate_directory: String,
+		candidate: String,
+		iteration: Integer,
+	): Result<Boolean, String>
+	measurement := try peak_process(command, arguments)
+	append_measurement(
+		output,
+		"application-build-peak-rss",
+		candidate,
+		iteration,
+		measurement.rss,
+		measurement.status,
+	)
+	if measurement.status != 0 || !measurement.stdout.empty?()
+		return Result<Boolean, String>::Err(candidate + " RSS run failed")
+	end
+	try require_file_equal(output_path, expected_path, candidate + " RSS output differs")
+	try require_no_intermediates(intermediate_directory)
+	return Result<Boolean, String>::Ok(true)
+end
+
+def file_size(path: String): Result<Integer, String>
+	measurement := try measure_process("/usr/bin/stat", ["-f", "%z", path])
+	if measurement.status != 0
+		return Result<Integer, String>::Err("stat " + path + ": " + measurement.stderr)
+	end
+	return Result<Integer, String>::Ok(measurement.stdout.strip().to_i())
+end
+
+def record_size(
+		mut output: StringBuilder,
+		metric: String,
+		candidate: String,
+		path: String,
+	): Result<Integer, String>
+	size := try file_size(path)
+	append_measurement(output, metric, candidate, 0, size.to_s(), 0)
+	return Result<Integer, String>::Ok(size)
+end
+
+def strip_and_record(
+		mut output: StringBuilder,
+		candidate: String,
+		path: String,
+	): Result<Integer, String>
+	stripped := path + ".stripped"
+	measurement := try measure_process("/usr/bin/strip", ["-x", "-o", stripped, path])
+	if measurement.status != 0
+		return Result<Integer, String>::Err("strip " + path + ": " + measurement.stderr)
+	end
+	try record_size(output, "compiler-size-raw", candidate, path)
+	return record_size(output, "compiler-size-stripped", candidate, stripped)
+end
+
+def record_hash(
+		mut output: StringBuilder,
+		metric: String,
+		candidate: String,
+		path: String,
+	): Result<String, String>
+	measurement := try measure_process("/usr/bin/shasum", ["-a", "256", path])
+	if measurement.status != 0
+		return Result<String, String>::Err("shasum " + path + ": " + measurement.stderr)
+	end
+	fields := measurement.stdout.strip().split(" ")
+	if fields.size() < 1
+		return Result<String, String>::Err("shasum returned no digest for " + path)
+	end
+	append_measurement(output, metric, candidate, 0, fields[0], 0)
+	return Result<String, String>::Ok(fields[0])
+end
+
+def run_normalization(
+		root: String,
+		cc: String,
+		workspace: String,
+		mut output: StringBuilder,
+	): Result<String, String>
+	normalization_workspace := workspace + "/normalized"
+	case create_directory(normalization_workspace)
+	when Result::Ok(_unit)
+	when Result::Err(_error)
+	end
+	measurement := try measure_process(
+		"/bin/sh",
+		[
+			root + "/tools/gate5-normalize.sh",
+			cc,
+			workspace + "/b1.s",
+			workspace + "/b2.s",
+			normalization_workspace,
+		],
+	)
+	if measurement.status != 0
+		return Result<String, String>::Err("executable normalization failed: " + measurement.stderr)
+	end
+	lines := measurement.stdout.strip().split("\n")
+	if lines.size() != 3
+		return Result<String, String>::Err("normalization reported an unexpected result")
+	end
+	hash_fields := lines[0].split(",")
+	size_fields := lines[1].split(",")
+	policy_fields := lines[2].split(",")
+	if hash_fields.size() != 2 || size_fields.size() != 2 || policy_fields.size() != 2
+		return Result<String, String>::Err("normalization result is malformed")
+	end
+	if hash_fields[0] != "normalized-sha256" || size_fields[0] != "normalized-size"
+		return Result<String, String>::Err("normalization metrics are unexpected")
+	end
+	if policy_fields[0] != "normalization-policy" || policy_fields[1] != "no-uuid-same-basename"
+		return Result<String, String>::Err("normalization policy is unexpected")
+	end
+	append_measurement(output, "normalized-executable-sha256", "native-b1-b2", 0, hash_fields[1], 0)
+	append_measurement(output, "normalized-executable-size", "native-b1-b2", 0, size_fields[1], 0)
+	return Result<String, String>::Ok(normalization_workspace + "/b1/compiler")
+end
+
+def append_inventory_command(
+		mut inventory: StringBuilder,
+		label: String,
+		command: String,
+		arguments: Array<String>,
+	): Result<TimedProcess, String>
+	inventory.append("## " + label + "\n")
+	inventory.append("command: " + command)
+	mut index := 0
+	while index < arguments.size()
+		inventory.append(" " + arguments[index])
+		index += 1
+	end
+	inventory.append("\n")
+	measurement := try measure_process(command, arguments)
+	inventory.append("status: " + measurement.status.to_s() + "\n")
+	if !measurement.stdout.empty?()
+		inventory.append("stdout:\n" + measurement.stdout)
+		if !measurement.stdout.end_with?("\n")
+			inventory.append("\n")
+		end
+	end
+	if !measurement.stderr.empty?()
+		inventory.append("stderr:\n" + measurement.stderr)
+		if !measurement.stderr.end_with?("\n")
+			inventory.append("\n")
+		end
+	end
+	inventory.append("\n")
+	return Result<TimedProcess, String>::Ok(measurement)
+end
+
+def record_direct_probe(
+		mut inventory: StringBuilder,
+		label: String,
+		command: String,
+		arguments: Array<String>,
+		expected_stdout: String,
+	): Result<Boolean, String>
+	inventory.append("## " + label + "\n")
+	inventory.append("command: " + command)
+	mut index := 0
+	while index < arguments.size()
+		inventory.append(" " + arguments[index])
+		index += 1
+	end
+	inventory.append("\n")
+	measurement := try measure_process(command, arguments)
+	inventory.append("status: " + measurement.status.to_s() + "\n")
+	inventory.append("stdout-bytes: " + measurement.stdout.to_bytes().size().to_s() + "\n")
+	inventory.append("stderr-bytes: " + measurement.stderr.to_bytes().size().to_s() + "\n")
+	inventory.append("expected-output: " + (measurement.stdout == expected_stdout).to_s() + "\n\n")
+	if measurement.status != 0 || !measurement.stderr.empty?() || measurement.stdout != expected_stdout
+		return Result<Boolean, String>::Err(label + " failed")
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def record_inventory(
+		inventory_path: String,
+		root: String,
+		reference_trb: String,
+		driver: String,
+		benchmark: String,
+		go_command: String,
+		qbe: String,
+		cc: String,
+		workspace: String,
+		compiler_path: String,
+		normalized_compiler: String,
+		canonical_output: String,
+		external_output: String,
+	): Result<Boolean, String>
+	mut inventory := string_builder.new()
+	inventory.append("Gate 6B Native-owned single-file build process inventory\n\n")
+	inventory.append("measured command root:\n")
+	inventory.append("  measurement controller starts one B1 Native compiler process\n")
+	inventory.append("ordinary semantic application-build graph:\n")
+	inventory.append("  B1 Native compiler -> explicitly supplied QBE\n")
+	inventory.append("  B1 Native compiler -> explicitly supplied CC -> assembler/linker\n")
+	inventory.append("  B1 reads source, emits QBE, waits for children, publishes output, and cleans intermediates\n")
+	inventory.append("not part of the ordinary semantic graph:\n")
+	inventory.append("  Go, reference trb, Native driver, benchmark harness, shell, hidden source-content input\n")
+	inventory.append("recovery and fixed-point preparation only:\n")
+	inventory.append("  reference trb -> B0; B0 -> B1; B1 -> B2; B2 -> B3\n")
+	inventory.append("comparison baseline only:\n")
+	inventory.append("  TypeRB benchmark harness -> B1 emit-qbe -> QBE -> CC\n\n")
+	case read_text(root + "/TYPE_RB_REVISION")
+	when Result::Ok(revision)
+		inventory.append("pinned TypeRB revision: " + revision.strip() + "\n\n")
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
+	end
+	try append_inventory_command(inventory, "TypeRB Native revision", "/usr/bin/git", ["-C", root, "rev-parse", "HEAD"])
+	try append_inventory_command(inventory, "operating system", "/usr/bin/sw_vers", [])
+	try append_inventory_command(inventory, "kernel and architecture", "/usr/bin/uname", ["-a"])
+	try append_inventory_command(inventory, "processor", "/usr/sbin/sysctl", ["-n", "machdep.cpu.brand_string"])
+	try append_inventory_command(inventory, "physical memory", "/usr/sbin/sysctl", ["-n", "hw.memsize"])
+	try append_inventory_command(inventory, "reference compiler version", reference_trb, ["--version"])
+	try append_inventory_command(inventory, "Go version", go_command, ["version"])
+	try append_inventory_command(inventory, "C toolchain version", cc, ["--version"])
+	try append_inventory_command(inventory, "QBE probe", qbe, ["-h"])
+	try append_inventory_command(
+		inventory,
+		"artifact formats",
+		"/usr/bin/file",
+		[driver, benchmark, reference_trb, workspace + "/b1", workspace + "/b2", qbe, canonical_output],
+	)
+	inventory_directory := workspace + "/inventory-native"
+	case create_directory(inventory_directory)
+	when Result::Ok(_unit)
+	when Result::Err(_error)
+	end
+	inventory_output := inventory_directory + "/compiler"
+	try record_direct_probe(
+		inventory,
+		"B1 ordinary Native-owned build",
+		workspace + "/b1",
+		native_arguments(compiler_path, inventory_output, qbe, cc),
+		"",
+	)
+	try require_file_equal(inventory_output, canonical_output, "inventory build output differs")
+	try require_no_intermediates(inventory_directory)
+	try record_direct_probe(
+		inventory,
+		"built compiler source check",
+		inventory_output,
+		["check", compiler_path],
+		"ok\n",
+	)
+	try record_direct_probe(
+		inventory,
+		"external recipe baseline",
+		benchmark,
+		external_arguments(workspace + "/b1", compiler_path, external_output, qbe, cc),
+		"",
+	)
+	try require_file_equal(inventory_output, external_output, "Native and external inventory outputs differ")
+	native_imports := try append_inventory_command(
+		inventory,
+		"B1 Native undefined symbols",
+		"/usr/bin/nm",
+		["-u", workspace + "/b1"],
+	)
+	if native_imports.status != 0
+		return Result<Boolean, String>::Err("cannot inspect B1 Native symbols")
+	end
+	if !native_imports.stdout.include?("_fork")
+		return Result<Boolean, String>::Err("B1 does not import fork")
+	end
+	if !native_imports.stdout.include?("_execv")
+		return Result<Boolean, String>::Err("B1 does not import execv")
+	end
+	if !native_imports.stdout.include?("_waitpid")
+		return Result<Boolean, String>::Err("B1 does not import waitpid")
+	end
+	mut forbidden_spawn := native_imports.stdout.include?("posix_spawn")
+	forbidden_spawn = forbidden_spawn || native_imports.stdout.include?("_system")
+	forbidden_spawn = forbidden_spawn || native_imports.stdout.include?("_popen")
+	forbidden_spawn = forbidden_spawn || native_imports.stdout.include?("_execve")
+	if forbidden_spawn
+		return Result<Boolean, String>::Err("B1 imports an unregistered process launcher")
+	end
+	qbe_imports := try append_inventory_command(
+		inventory,
+		"QBE undefined symbols",
+		"/usr/bin/nm",
+		["-u", qbe],
+	)
+	if qbe_imports.status != 0
+		return Result<Boolean, String>::Err("cannot inspect QBE symbols")
+	end
+	mut qbe_spawn := qbe_imports.stdout.include?("posix_spawn")
+	qbe_spawn = qbe_spawn || qbe_imports.stdout.include?("_system")
+	qbe_spawn = qbe_spawn || qbe_imports.stdout.include?("_popen")
+	qbe_spawn = qbe_spawn || qbe_imports.stdout.include?("_fork")
+	if qbe_spawn
+		return Result<Boolean, String>::Err("QBE unexpectedly launches another process")
+	end
+	cc_expansion := try append_inventory_command(
+		inventory,
+		"CC assembler and linker expansion",
+		cc,
+		["-###", external_output + ".s", "-Wl,-dead_strip", "-o", workspace + "/inventory-cc-output"],
+	)
+	if cc_expansion.status != 0
+		return Result<Boolean, String>::Err("CC expansion probe failed")
+	end
+	if !cc_expansion.stderr.include?("-cc1as") || !cc_expansion.stderr.include?("/usr/bin/ld")
+		return Result<Boolean, String>::Err("CC expansion does not identify its assembler and linker")
+	end
+	try append_inventory_command(
+		inventory,
+		"B1 Native dynamic libraries",
+		"/usr/bin/otool",
+		["-L", workspace + "/b1"],
+	)
+	try append_inventory_command(
+		inventory,
+		"built compiler dynamic libraries",
+		"/usr/bin/otool",
+		["-L", inventory_output],
+	)
+	go_probe := try append_inventory_command(
+		inventory,
+		"B1 Native Go metadata probe",
+		go_command,
+		["version", "-m", workspace + "/b1"],
+	)
+	if go_probe.status == 0
+		return Result<Boolean, String>::Err("B1 unexpectedly contains Go build metadata")
+	end
+	application_go_probe := try append_inventory_command(
+		inventory,
+		"built compiler Go metadata probe",
+		go_command,
+		["version", "-m", inventory_output],
+	)
+	if application_go_probe.status == 0
+		return Result<Boolean, String>::Err("built compiler unexpectedly contains Go build metadata")
+	end
+	signature := try append_inventory_command(
+		inventory,
+		"built compiler code signature",
+		"/usr/bin/codesign",
+		["-dvv", inventory_output],
+	)
+	if signature.status != 0 || !signature.stderr.include?("Signature=adhoc")
+		return Result<Boolean, String>::Err("built compiler does not retain its ad-hoc signature")
+	end
+	application_load_commands := try append_inventory_command(
+		inventory,
+		"built compiler Mach-O load commands",
+		"/usr/bin/otool",
+		["-l", inventory_output],
+	)
+	if application_load_commands.status != 0 || !application_load_commands.stdout.include?("LC_UUID")
+		return Result<Boolean, String>::Err("built compiler does not retain its required LC_UUID")
+	end
+	normalized_load_commands := try append_inventory_command(
+		inventory,
+		"normalized Native compiler Mach-O load commands",
+		"/usr/bin/otool",
+		["-l", normalized_compiler],
+	)
+	if normalized_load_commands.status != 0 || normalized_load_commands.stdout.include?("LC_UUID")
+		return Result<Boolean, String>::Err("normalized compiler retains LC_UUID")
+	end
+	try append_inventory_command(
+		inventory,
+		"fixed-point compiler QBE hash",
+		"/usr/bin/shasum",
+		["-a", "256", workspace + "/b1.ssa", workspace + "/b2.ssa", workspace + "/b3.ssa"],
+	)
+	application_comparison := try append_inventory_command(
+		inventory,
+		"Native and external application comparison",
+		"/usr/bin/cmp",
+		[canonical_output, external_output],
+	)
+	if application_comparison.status != 0
+		return Result<Boolean, String>::Err("Native and external application outputs differ")
+	end
+	case write_text(inventory_path, inventory.to_s())
+	when Result::Ok(_unit)
+		return Result<Boolean, String>::Ok(true)
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
+	end
+end
+
+def report_error(result: Result<Boolean, String>): Boolean
+	case result
+	when Result::Ok(_value)
+		return false
+	when Result::Err(error)
+		puts(error)
+		return true
+	end
+end
+
+def main()
+	arguments := argv()
+	if arguments.size() == 6
+		if arguments[0] == "external-build"
+			case external_build(arguments[1], arguments[2], arguments[3], arguments[4], arguments[5])
+			when Result::Ok(_value)
+			when Result::Err(error)
+				puts("gate6b external recipe: " + error)
+			end
+			return
+		end
+	end
+	if arguments.size() != 11
+		puts(
+			"usage: gate6b-benchmark ROOT REFERENCE_TRB NATIVE_DRIVER BENCHMARK QBE CC GO WORKSPACE REPETITIONS RAW_CSV INVENTORY",
+		)
+		return
+	end
+	root := arguments[0]
+	reference_trb := arguments[1]
+	driver := arguments[2]
+	benchmark := arguments[3]
+	qbe := arguments[4]
+	cc := arguments[5]
+	go_command := arguments[6]
+	workspace := arguments[7]
+	repetitions := arguments[8].to_i()
+	raw_path := arguments[9]
+	inventory_path := arguments[10]
+	if repetitions < 1
+		puts("repetitions must be positive")
+		return
+	end
+	case create_directory(workspace)
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		puts(error.operation + ": " + error.message)
+		return
+	end
+	directories := [
+		workspace + "/canonical",
+		workspace + "/native-b1",
+		workspace + "/native-b2",
+		workspace + "/external-b1",
+		workspace + "/external-b2",
+	]
+	mut directory_index := 0
+	while directory_index < directories.size()
+		case create_directory(directories[directory_index])
+		when Result::Ok(_unit)
+		when Result::Err(_error)
+		end
+		directory_index += 1
+	end
+	compiler_path := root + "/compiler/gate4/src/compiler.trb"
+	compiler_source := case read_required(compiler_path)
+	when Result::Ok(source)
+		source
+	when Result::Err(error)
+		puts(error)
+		return
+	end
+	mut output := string_builder.new()
+	output.append("metric,case,candidate,iteration,value,status\n")
+	b0_path := workspace + "/b0"
+	b1_path := workspace + "/b1"
+	b2_path := workspace + "/b2"
+	recovery_arguments := ["gate4-b0", reference_trb, compiler_path, qbe, cc, workspace, b0_path]
+	if report_error(measure_bootstrap(output, driver, recovery_arguments, "recovery-b0", 5))
+		return
+	end
+	b0_arguments := ["gate4-generation", b0_path, compiler_path, qbe, cc, workspace, "b1"]
+	b1_arguments := ["gate4-generation", b1_path, compiler_path, qbe, cc, workspace, "b2"]
+	b2_arguments := ["gate4-generation", b2_path, compiler_path, qbe, cc, workspace, "b3"]
+	if report_error(measure_bootstrap(output, driver, b0_arguments, "bootstrap-b0", 3))
+		return
+	end
+	if report_error(measure_bootstrap(output, driver, b1_arguments, "bootstrap-b1", 3))
+		return
+	end
+	if report_error(measure_bootstrap(output, driver, b2_arguments, "bootstrap-b2", 3))
+		return
+	end
+	qbe1 := case read_required(workspace + "/b1.ssa")
+	when Result::Ok(source)
+		source
+	when Result::Err(error)
+		puts(error)
+		return
+	end
+	qbe2 := case read_required(workspace + "/b2.ssa")
+	when Result::Ok(source)
+		source
+	when Result::Err(error)
+		puts(error)
+		return
+	end
+	qbe3 := case read_required(workspace + "/b3.ssa")
+	when Result::Ok(source)
+		source
+	when Result::Err(error)
+		puts(error)
+		return
+	end
+	if report_error(require_equal(qbe1, qbe2, "B1 and B2 QBE differ"))
+		return
+	end
+	if report_error(require_equal(qbe2, qbe3, "B2 and B3 QBE differ"))
+		return
+	end
+	normalized_compiler := case run_normalization(root, cc, workspace, output)
+	when Result::Ok(path)
+		path
+	when Result::Err(error)
+		puts(error)
+		return
+	end
+	if report_error(verify_seed_compiler(b1_path, compiler_path, compiler_source, qbe1, "native-b1"))
+		return
+	end
+	if report_error(verify_seed_compiler(b2_path, compiler_path, compiler_source, qbe1, "native-b2"))
+		return
+	end
+	canonical_output := workspace + "/canonical/compiler"
+	native_b1_output := workspace + "/native-b1/compiler"
+	native_b2_output := workspace + "/native-b2/compiler"
+	external_b1_output := workspace + "/external-b1/compiler"
+	external_b2_output := workspace + "/external-b2/compiler"
+	if report_error(
+			verify_build_command(
+				b1_path,
+				native_arguments(compiler_path, canonical_output, qbe, cc),
+				canonical_output,
+				"canonical Native B1 build",
+			),
+		)
+		return
+	end
+	if report_error(
+			verify_build_command(
+				b1_path,
+				native_arguments(compiler_path, native_b1_output, qbe, cc),
+				native_b1_output,
+				"Native B1 build",
+			),
+		)
+		return
+	end
+	if report_error(
+			verify_build_command(
+				b2_path,
+				native_arguments(compiler_path, native_b2_output, qbe, cc),
+				native_b2_output,
+				"Native B2 build",
+			),
+		)
+		return
+	end
+	if report_error(
+			verify_build_command(
+				benchmark,
+				external_arguments(b1_path, compiler_path, external_b1_output, qbe, cc),
+				external_b1_output,
+				"external B1 recipe",
+			),
+		)
+		return
+	end
+	if report_error(
+			verify_build_command(
+				benchmark,
+				external_arguments(b2_path, compiler_path, external_b2_output, qbe, cc),
+				external_b2_output,
+				"external B2 recipe",
+			),
+		)
+		return
+	end
+	application_paths := [native_b1_output, native_b2_output, external_b1_output, external_b2_output]
+	mut application_index := 0
+	while application_index < application_paths.size()
+		if report_error(
+				require_file_equal(
+					canonical_output,
+					application_paths[application_index],
+					"application output differs at index " + application_index.to_s(),
+				),
+			)
+			return
+		end
+		if report_error(
+				verify_built_compiler(
+					application_paths[application_index],
+					compiler_path,
+					qbe1,
+					"built compiler " + application_index.to_s(),
+				),
+			)
+			return
+		end
+		application_index += 1
+	end
+	if report_error(require_no_intermediates(workspace + "/canonical"))
+		return
+	end
+	if report_error(require_no_intermediates(workspace + "/native-b1"))
+		return
+	end
+	if report_error(require_no_intermediates(workspace + "/native-b2"))
+		return
+	end
+	native_b1_arguments := native_arguments(compiler_path, native_b1_output, qbe, cc)
+	native_b2_arguments := native_arguments(compiler_path, native_b2_output, qbe, cc)
+	external_b1_arguments := external_arguments(b1_path, compiler_path, external_b1_output, qbe, cc)
+	external_b2_arguments := external_arguments(b2_path, compiler_path, external_b2_output, qbe, cc)
+	mut iteration :=- 2
+	while iteration < repetitions
+		if iteration % 2 == 0
+			if report_error(measure_application_build(output, b1_path, native_b1_arguments, native_b1_output, canonical_output, workspace + "/native-b1", "native-b1-build", iteration))
+				return
+			end
+			if report_error(measure_application_build(output, benchmark, external_b1_arguments, external_b1_output, canonical_output, workspace + "/external-b1", "external-b1-recipe", iteration))
+				return
+			end
+			if report_error(measure_application_build(output, benchmark, external_b2_arguments, external_b2_output, canonical_output, workspace + "/external-b2", "external-b2-recipe", iteration))
+				return
+			end
+			if report_error(measure_application_build(output, b2_path, native_b2_arguments, native_b2_output, canonical_output, workspace + "/native-b2", "native-b2-build", iteration))
+				return
+			end
+		else
+			if report_error(measure_application_build(output, b2_path, native_b2_arguments, native_b2_output, canonical_output, workspace + "/native-b2", "native-b2-build", iteration))
+				return
+			end
+			if report_error(measure_application_build(output, benchmark, external_b2_arguments, external_b2_output, canonical_output, workspace + "/external-b2", "external-b2-recipe", iteration))
+				return
+			end
+			if report_error(measure_application_build(output, benchmark, external_b1_arguments, external_b1_output, canonical_output, workspace + "/external-b1", "external-b1-recipe", iteration))
+				return
+			end
+			if report_error(measure_application_build(output, b1_path, native_b1_arguments, native_b1_output, canonical_output, workspace + "/native-b1", "native-b1-build", iteration))
+				return
+			end
+		end
+		iteration += 1
+	end
+	mut rss_repetitions := repetitions
+	if rss_repetitions > 3
+		rss_repetitions = 3
+	end
+	iteration =- 2
+	while iteration < rss_repetitions
+		if iteration % 2 == 0
+			if report_error(measure_application_rss(output, b1_path, native_b1_arguments, native_b1_output, canonical_output, workspace + "/native-b1", "native-b1-build", iteration))
+				return
+			end
+			if report_error(measure_application_rss(output, benchmark, external_b1_arguments, external_b1_output, canonical_output, workspace + "/external-b1", "external-b1-recipe", iteration))
+				return
+			end
+			if report_error(measure_application_rss(output, benchmark, external_b2_arguments, external_b2_output, canonical_output, workspace + "/external-b2", "external-b2-recipe", iteration))
+				return
+			end
+			if report_error(measure_application_rss(output, b2_path, native_b2_arguments, native_b2_output, canonical_output, workspace + "/native-b2", "native-b2-build", iteration))
+				return
+			end
+		else
+			if report_error(measure_application_rss(output, b2_path, native_b2_arguments, native_b2_output, canonical_output, workspace + "/native-b2", "native-b2-build", iteration))
+				return
+			end
+			if report_error(measure_application_rss(output, benchmark, external_b2_arguments, external_b2_output, canonical_output, workspace + "/external-b2", "external-b2-recipe", iteration))
+				return
+			end
+			if report_error(measure_application_rss(output, benchmark, external_b1_arguments, external_b1_output, canonical_output, workspace + "/external-b1", "external-b1-recipe", iteration))
+				return
+			end
+			if report_error(measure_application_rss(output, b1_path, native_b1_arguments, native_b1_output, canonical_output, workspace + "/native-b1", "native-b1-build", iteration))
+				return
+			end
+		end
+		iteration += 1
+	end
+	gate6a_baseline := 149784
+	size_limit := 172251
+	append_measurement(output, "compiler-size-gate6a-baseline", "native-b1", 0, gate6a_baseline.to_s(), 0)
+	append_measurement(output, "compiler-size-registered-limit", "native-b1", 0, size_limit.to_s(), 0)
+	b1_size := case strip_and_record(output, "native-b1", b1_path)
+	when Result::Ok(size)
+		size
+	when Result::Err(error)
+		puts(error)
+		return
+	end
+	b2_size := case strip_and_record(output, "native-b2", b2_path)
+	when Result::Ok(size)
+		size
+	when Result::Err(error)
+		puts(error)
+		return
+	end
+	if b1_size > size_limit || b2_size > size_limit
+		puts("stripped compiler exceeds the registered Gate 6B size limit")
+		return
+	end
+	application_index = 0
+	while application_index < application_paths.size()
+		candidate := ["native-b1-build", "native-b2-build", "external-b1-recipe", "external-b2-recipe"][application_index]
+		case record_size(output, "application-size", candidate, application_paths[application_index])
+		when Result::Ok(_size)
+		when Result::Err(error)
+			puts(error)
+			return
+		end
+		case record_hash(output, "application-sha256", candidate, application_paths[application_index])
+		when Result::Ok(_hash)
+		when Result::Err(error)
+			puts(error)
+			return
+		end
+		application_index += 1
+	end
+	qbe_hash1 := case record_hash(output, "emitted-qbe-sha256", "native-b1", workspace + "/b1.ssa")
+	when Result::Ok(value)
+		value
+	when Result::Err(error)
+		puts(error)
+		return
+	end
+	qbe_hash2 := case record_hash(output, "emitted-qbe-sha256", "native-b2", workspace + "/b2.ssa")
+	when Result::Ok(value)
+		value
+	when Result::Err(error)
+		puts(error)
+		return
+	end
+	qbe_hash3 := case record_hash(output, "emitted-qbe-sha256", "native-b3", workspace + "/b3.ssa")
+	when Result::Ok(value)
+		value
+	when Result::Err(error)
+		puts(error)
+		return
+	end
+	if qbe_hash1 != qbe_hash2 || qbe_hash2 != qbe_hash3
+		puts("B1, B2, and B3 QBE hashes differ")
+		return
+	end
+	case record_size(output, "emitted-qbe-size", "native-b1", workspace + "/b1.ssa")
+	when Result::Ok(size)
+		if size < 1
+			puts("emitted QBE is empty")
+			return
+		end
+	when Result::Err(error)
+		puts(error)
+		return
+	end
+	case write_text(raw_path, output.to_s())
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		puts(error.operation + ": " + error.message)
+		return
+	end
+	case record_inventory(
+			inventory_path,
+			root,
+			reference_trb,
+			driver,
+			benchmark,
+			go_command,
+			qbe,
+			cc,
+			workspace,
+			compiler_path,
+			normalized_compiler,
+			canonical_output,
+			external_b1_output,
+		)
+	when Result::Ok(_value)
+	when Result::Err(error)
+		puts(error)
+		return
+	end
+	puts(raw_path)
+	puts(inventory_path)
+	return
+end
