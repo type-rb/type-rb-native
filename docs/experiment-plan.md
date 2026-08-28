@@ -360,6 +360,15 @@ within 208,530 stripped bytes, and B1-to-B2 time and RSS must remain within 25%
 of the Gate 6C baseline. See the
 [Gate 6E file-root plan](gate-6-file-root-modules.md).
 
+Gate 6E completed at measured TypeRB Native revision
+`b2b4740f39571dc35af9199dae817d94912b7a47`. Native application build time
+and RSS improve on optimized Go by 44.89% and 48.22%; runtime is 13.70% slower
+and runtime RSS 65.32% lower; stripped output is 97.82% smaller and equal to
+the flattened Native size. B1-to-B2 time is 23.80% above the Gate 6C baseline,
+RSS is effectively flat, the compiler strips to 199,992 bytes, and Darwin and
+pinned Linux arm64 fixed points pass. See the
+[Gate 6E result](../results/2026-08-29-gate6e-file-root-darwin-linux-arm64/README.md).
+
 This gate is not authorization to ship. It evaluates:
 
 - broader configured and packaged multi-module applications beyond the
