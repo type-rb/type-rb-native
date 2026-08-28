@@ -118,13 +118,14 @@ grows by 11.38%, within its 15% bound. See the
 [Gate 6B single-file build](docs/gate-6-single-file-build.md) and
 [recorded result](results/2026-08-29-gate6b-single-file-build-darwin-arm64/README.md).
 
-Gate 6C is active under the pre-registered scope in
-[issue #43](https://github.com/type-rb/type-rb-native/issues/43). It feeds a
-Native-built compiler back into the next ordinary `build`, closing the chain
-from one recovered or previously distributed B1 seed through byte-identical
-B2, B3, and B4 executables. Recovery provenance remains outside the ordinary
-Go-free chain. See the
-[Gate 6C Native bootstrap closure](docs/gate-6-native-bootstrap.md).
+Gate 6C is complete at measured revision
+`622d5931e677f7b9283c073021ac0ef39fafa1a5`. Each Native-built compiler is the
+actual executable seed of the next ordinary build, and B2, B3, and B4 are
+byte-identical. Adjacent median time and RSS differ by at most 1.03% and 0.67%,
+every median remains within 1.10% of its Gate 6B baseline, and stripped code
+does not grow. Recovery provenance remains outside the ordinary Go-free chain.
+See the [Gate 6C Native bootstrap closure](docs/gate-6-native-bootstrap.md) and
+[recorded result](results/2026-08-29-gate6c-native-bootstrap-darwin-arm64/README.md).
 
 Multi-module applications, project discovery, production runtime integration,
 package/native-library boundaries, incremental builds, toolchain discovery,
@@ -235,6 +236,7 @@ repository.
 - [Gate 6B Native single-file build](docs/gate-6-single-file-build.md)
 - [Gate 6B Native single-file build Darwin arm64 result](results/2026-08-29-gate6b-single-file-build-darwin-arm64/README.md)
 - [Gate 6C Native-to-Native bootstrap closure](docs/gate-6-native-bootstrap.md)
+- [Gate 6C Native-to-Native bootstrap Darwin arm64 result](results/2026-08-29-gate6c-native-bootstrap-darwin-arm64/README.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
 - [Decision 0003: Gate 1 QBE and Darwin arm64 profile](docs/decisions/0003-gate-1-qbe-target.md)

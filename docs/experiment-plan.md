@@ -311,6 +311,13 @@ within 10%, each step must remain within 25% of the Gate 6B B1 Native baselines,
 and compiler bytes and stripped size must not change. See the
 [Gate 6C Native bootstrap plan](gate-6-native-bootstrap.md).
 
+Gate 6C completed at measured TypeRB Native revision
+`622d5931e677f7b9283c073021ac0ef39fafa1a5`. B2/B3/B4 executable bytes are
+identical, adjacent median time and RSS differ by at most 1.03% and 0.67%,
+every median remains within 1.10% of its Gate 6B baseline, and stripped code
+remains exactly 166,824 bytes. All registered bounds pass. See the
+[Gate 6C result](../results/2026-08-29-gate6c-native-bootstrap-darwin-arm64/README.md).
+
 This gate is not authorization to ship. It evaluates:
 
 - representative multi-module applications;
