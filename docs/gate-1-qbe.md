@@ -5,6 +5,10 @@ correct native executable cheaply enough to justify connecting it to the
 reference frontend. It is an experimental checkpoint, not a supported TypeRB
 target or a measurement of the final self-hosted compiler.
 
+The source-connected differential corpus and provisional measurements are
+complete. Gate 1 passes; see the
+[recorded result](../results/2026-08-28-gate1-qbe-darwin-arm64/README.md).
+
 ## Current pipeline
 
 ```text
@@ -48,7 +52,7 @@ contract.
 Supported instructions are:
 
 - `boolean_literal`, `integer_literal`, and `float_literal`;
-- `integer_binary` with `add`, `subtract`, `multiply`, `divide`, or `remainder`;
+- `integer_binary` with `add`, `subtract`, `multiply`, `divide`, `remainder`, or `power`;
 - `float_binary` with `add`, `subtract`, `multiply`, or `divide`;
 - `integer_compare` and `float_compare` with the six ordered comparison names;
 - `boolean_not`;
@@ -63,10 +67,10 @@ and the decoder applies resource limits before code generation.
 
 Portable Integer values remain within `-9007199254740991` through
 `9007199254740991`. Arithmetic is checked before an out-of-range result can be
-observed. Divide-by-zero, remainder-by-zero, and range failures write a fixed
-diagnostic to standard error and exit with status 70 in this temporary runtime.
-The exact failure text remains experimental until the source-connected
-differential corpus establishes the reference behavior.
+observed. The source-connected differential corpus runs the optimized Go
+baseline with `GOTRACEBACK=none`; range and division-by-zero failures then
+match its exact standard error and status 2. This process envelope remains an
+internal Gate 1 convention rather than a promoted language guarantee.
 
 Boolean values use QBE words, Integer values use QBE longs, and Float values
 use QBE doubles. Non-entry block parameters are lowered through typed stack

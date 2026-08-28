@@ -36,14 +36,21 @@ Gate 0 implements the experimental boundary in TypeRB: strict decoding of
 versioned, data-only bootstrap snapshots, lowering to Native MIR, MIR
 verification, deterministic diagnostics, and source-origin preservation.
 
-Gate 1 is active. Its first vertical slice decodes snapshot v2, verifies a
-heap-free scalar MIR, emits QBE IL from TypeRB code, and builds a working
-`darwin/arm64` executable with pinned QBE 1.3 and the system linker. The current
-subset includes functions, direct calls, block parameters, branches, loops,
-Boolean, portable Integer, binary64 Float, static UTF-8 output, and deterministic
-arithmetic failure. It provides no production runtime, stable ABI, stable
-artifact format, or compatibility guarantee. Records and tagged values are
-deferred to Gate 2.
+Gate 1 is complete at its experimental checkpoint. A pinned, process-based
+reference producer now connects real TypeRB source to snapshot v2, verified
+heap-free scalar MIR, TypeRB-authored QBE emission, and working `darwin/arm64`
+executables. The differential corpus covers functions, direct calls, block
+parameters, branches, loops, Boolean, portable Integer including checked power,
+binary64 Float, static UTF-8 output, and deterministic arithmetic failure.
+
+On the recorded Apple M2 Pro run, native warm build time improved by 30.5% to
+36.3%, stripped executable size improved by 96.85%, and the worst runtime result
+was a 16.0% regression, within the pre-registered 25% bound. See the
+[Gate 1 result](results/2026-08-28-gate1-qbe-darwin-arm64/README.md). Development
+stops before Gate 2 for maintainer review. The result does not select QBE for
+production or measure the final self-hosted compiler. The current path provides
+no production runtime, stable ABI, stable artifact format, or compatibility
+guarantee. Records and tagged values remain deferred to Gate 2.
 
 ## Intended boundary
 
@@ -137,6 +144,7 @@ repository.
 - [Architecture](docs/architecture.md)
 - [Experiment plan](docs/experiment-plan.md)
 - [Gate 1 QBE vertical slice](docs/gate-1-qbe.md)
+- [Gate 1 QBE Darwin arm64 result](results/2026-08-28-gate1-qbe-darwin-arm64/README.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
 - [Decision 0003: Gate 1 QBE and Darwin arm64 profile](docs/decisions/0003-gate-1-qbe-target.md)

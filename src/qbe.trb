@@ -71,7 +71,9 @@ def _qbe_collect_static_data(native_module: Gate1Module): Array<QbeStaticData>
 end
 
 def _qbe_emit_static_data(static_data: Array<QbeStaticData>, mut writer: StringBuilder)
-	_qbe_line(writer, "data $trbn_arithmetic_error = { b 84 121 112 101 82 66 32 73 110 116 101 103 101 114 32 97 114 105 116 104 109 101 116 105 99 32 101 114 114 111 114 10 }")
+	_qbe_line(writer, "data $trbn_integer_range_error = { b 112 97 110 105 99 58 32 73 110 116 101 103 101 114 32 105 115 32 111 117 116 115 105 100 101 32 116 104 101 32 112 111 114 116 97 98 108 101 32 114 97 110 103 101 10 }")
+	_qbe_line(writer, "data $trbn_division_error = { b 112 97 110 105 99 58 32 100 105 118 105 115 105 111 110 32 98 121 32 122 101 114 111 10 }")
+	_qbe_line(writer, "data $trbn_negative_exponent_error = { b 112 97 110 105 99 58 32 110 101 103 97 116 105 118 101 32 73 110 116 101 103 101 114 32 101 120 112 111 110 101 110 116 10 }")
 	mut index := 0
 	while index < static_data.size()
 		item := static_data[index]
@@ -94,10 +96,24 @@ def _qbe_emit_static_data(static_data: Array<QbeStaticData>, mut writer: StringB
 end
 
 def _qbe_emit_runtime(mut writer: StringBuilder)
-	_qbe_line(writer, "function $trbn_arithmetic_fail() {")
+	_qbe_line(writer, "function $trbn_integer_range_fail() {")
 	_qbe_line(writer, "@start")
-	_qbe_line(writer, "\tcall $write(w 2, l $trbn_arithmetic_error, l 32)")
-	_qbe_line(writer, "\tcall $exit(w 70)")
+	_qbe_line(writer, "\tcall $write(w 2, l $trbn_integer_range_error, l 45)")
+	_qbe_line(writer, "\tcall $exit(w 2)")
+	_qbe_line(writer, "\thlt")
+	_qbe_line(writer, "}")
+	_qbe_line(writer, "")
+	_qbe_line(writer, "function $trbn_division_fail() {")
+	_qbe_line(writer, "@start")
+	_qbe_line(writer, "\tcall $write(w 2, l $trbn_division_error, l 24)")
+	_qbe_line(writer, "\tcall $exit(w 2)")
+	_qbe_line(writer, "\thlt")
+	_qbe_line(writer, "}")
+	_qbe_line(writer, "")
+	_qbe_line(writer, "function $trbn_negative_exponent_fail() {")
+	_qbe_line(writer, "@start")
+	_qbe_line(writer, "\tcall $write(w 2, l $trbn_negative_exponent_error, l 33)")
+	_qbe_line(writer, "\tcall $exit(w 2)")
 	_qbe_line(writer, "\thlt")
 	_qbe_line(writer, "}")
 	_qbe_line(writer, "")
@@ -106,6 +122,7 @@ def _qbe_emit_runtime(mut writer: StringBuilder)
 	_qbe_emit_checked_multiply(writer)
 	_qbe_emit_checked_divide(writer)
 	_qbe_emit_checked_remainder(writer)
+	_qbe_emit_checked_power(writer)
 	return
 end
 
@@ -119,7 +136,7 @@ def _qbe_emit_checked_add(mut writer: StringBuilder)
 	_qbe_line(writer, "\t%too_low =w csltl %result, -9007199254740991")
 	_qbe_line(writer, "\tjnz %too_low, @fail, @ok")
 	_qbe_line(writer, "@fail")
-	_qbe_line(writer, "\tcall $trbn_arithmetic_fail()")
+	_qbe_line(writer, "\tcall $trbn_integer_range_fail()")
 	_qbe_line(writer, "\thlt")
 	_qbe_line(writer, "@ok")
 	_qbe_line(writer, "\tret %result")
@@ -138,7 +155,7 @@ def _qbe_emit_checked_subtract(mut writer: StringBuilder)
 	_qbe_line(writer, "\t%too_low =w csltl %result, -9007199254740991")
 	_qbe_line(writer, "\tjnz %too_low, @fail, @ok")
 	_qbe_line(writer, "@fail")
-	_qbe_line(writer, "\tcall $trbn_arithmetic_fail()")
+	_qbe_line(writer, "\tcall $trbn_integer_range_fail()")
 	_qbe_line(writer, "\thlt")
 	_qbe_line(writer, "@ok")
 	_qbe_line(writer, "\tret %result")
@@ -189,7 +206,7 @@ def _qbe_emit_checked_multiply(mut writer: StringBuilder)
 	_qbe_line(writer, "@zero")
 	_qbe_line(writer, "\tret 0")
 	_qbe_line(writer, "@fail")
-	_qbe_line(writer, "\tcall $trbn_arithmetic_fail()")
+	_qbe_line(writer, "\tcall $trbn_integer_range_fail()")
 	_qbe_line(writer, "\thlt")
 	_qbe_line(writer, "}")
 	_qbe_line(writer, "")
@@ -202,7 +219,7 @@ def _qbe_emit_checked_divide(mut writer: StringBuilder)
 	_qbe_line(writer, "\t%zero =w ceql %right, 0")
 	_qbe_line(writer, "\tjnz %zero, @fail, @ok")
 	_qbe_line(writer, "@fail")
-	_qbe_line(writer, "\tcall $trbn_arithmetic_fail()")
+	_qbe_line(writer, "\tcall $trbn_division_fail()")
 	_qbe_line(writer, "\thlt")
 	_qbe_line(writer, "@ok")
 	_qbe_line(writer, "\t%result =l div %left, %right")
@@ -218,10 +235,59 @@ def _qbe_emit_checked_remainder(mut writer: StringBuilder)
 	_qbe_line(writer, "\t%zero =w ceql %right, 0")
 	_qbe_line(writer, "\tjnz %zero, @fail, @ok")
 	_qbe_line(writer, "@fail")
-	_qbe_line(writer, "\tcall $trbn_arithmetic_fail()")
+	_qbe_line(writer, "\tcall $trbn_division_fail()")
 	_qbe_line(writer, "\thlt")
 	_qbe_line(writer, "@ok")
 	_qbe_line(writer, "\t%result =l rem %left, %right")
+	_qbe_line(writer, "\tret %result")
+	_qbe_line(writer, "}")
+	_qbe_line(writer, "")
+	return
+end
+
+def _qbe_emit_checked_power(mut writer: StringBuilder)
+	_qbe_line(writer, "function l $trbn_ipow(l %base, l %exponent) {")
+	_qbe_line(writer, "@start")
+	_qbe_line(writer, "\t%negative =w csltl %exponent, 0")
+	_qbe_line(writer, "\tjnz %negative, @negative, @initialize")
+	_qbe_line(writer, "@negative")
+	_qbe_line(writer, "\tcall $trbn_negative_exponent_fail()")
+	_qbe_line(writer, "\thlt")
+	_qbe_line(writer, "@initialize")
+	_qbe_line(writer, "\t%result_slot =l alloc8 8")
+	_qbe_line(writer, "\t%factor_slot =l alloc8 8")
+	_qbe_line(writer, "\t%exponent_slot =l alloc8 8")
+	_qbe_line(writer, "\tstorel 1, %result_slot")
+	_qbe_line(writer, "\tstorel %base, %factor_slot")
+	_qbe_line(writer, "\tstorel %exponent, %exponent_slot")
+	_qbe_line(writer, "\tjmp @loop")
+	_qbe_line(writer, "@loop")
+	_qbe_line(writer, "\t%remaining =l loadl %exponent_slot")
+	_qbe_line(writer, "\t%done =w ceql %remaining, 0")
+	_qbe_line(writer, "\tjnz %done, @finish, @test_bit")
+	_qbe_line(writer, "@test_bit")
+	_qbe_line(writer, "\t%bit =l and %remaining, 1")
+	_qbe_line(writer, "\t%odd =w ceql %bit, 1")
+	_qbe_line(writer, "\tjnz %odd, @multiply_result, @advance")
+	_qbe_line(writer, "@multiply_result")
+	_qbe_line(writer, "\t%current_result =l loadl %result_slot")
+	_qbe_line(writer, "\t%current_factor =l loadl %factor_slot")
+	_qbe_line(writer, "\t%product =l call $trbn_imul(l %current_result, l %current_factor)")
+	_qbe_line(writer, "\tstorel %product, %result_slot")
+	_qbe_line(writer, "\tjmp @advance")
+	_qbe_line(writer, "@advance")
+	_qbe_line(writer, "\t%remaining_for_advance =l loadl %exponent_slot")
+	_qbe_line(writer, "\t%next_exponent =l div %remaining_for_advance, 2")
+	_qbe_line(writer, "\tstorel %next_exponent, %exponent_slot")
+	_qbe_line(writer, "\t%finished =w ceql %next_exponent, 0")
+	_qbe_line(writer, "\tjnz %finished, @finish, @square_factor")
+	_qbe_line(writer, "@square_factor")
+	_qbe_line(writer, "\t%factor =l loadl %factor_slot")
+	_qbe_line(writer, "\t%squared =l call $trbn_imul(l %factor, l %factor)")
+	_qbe_line(writer, "\tstorel %squared, %factor_slot")
+	_qbe_line(writer, "\tjmp @loop")
+	_qbe_line(writer, "@finish")
+	_qbe_line(writer, "\t%result =l loadl %result_slot")
 	_qbe_line(writer, "\tret %result")
 	_qbe_line(writer, "}")
 	_qbe_line(writer, "")
@@ -438,9 +504,14 @@ def _qbe_emit_instruction(
 		_qbe_line(writer, "\t" + values.fetch(result) + " =d copy d_" + value.to_s())
 	when Gate1Instruction::IntegerBinary(result, operator, left, right, origin)
 		_qbe_emit_origin(native_module, origin, writer)
-		_qbe_line(writer,
-			"\t" + values.fetch(result) + " =l call " + _qbe_integer_operator(operator) +
-			"(l " + values.fetch(left) + ", l " + values.fetch(right) + ")"
+		_qbe_emit_integer_binary(
+			operator,
+			values.fetch(result),
+			values.fetch(left),
+			values.fetch(right),
+			block_index,
+			instruction_index,
+			writer,
 		)
 	when Gate1Instruction::FloatBinary(result, operator, left, right, origin)
 		_qbe_emit_origin(native_module, origin, writer)
@@ -488,6 +559,73 @@ def _qbe_emit_instruction(
 			" =l call $write(w 1, l " + symbol + ", l " + value.to_bytes().size().to_s() + ")"
 		)
 	end
+	return
+end
+
+def _qbe_emit_integer_binary(
+		operator: IntegerBinaryOperator,
+		result: String,
+		left: String,
+		right: String,
+		block_index: Integer,
+		instruction_index: Integer,
+		mut writer: StringBuilder,
+	)
+	prefix := "@integer_" + block_index.to_s() + "_" + instruction_index.to_s() + "_"
+	case operator
+	when IntegerBinaryOperator::Add
+		_qbe_line(writer, "\t" + result + " =l add " + left + ", " + right)
+		_qbe_emit_inline_range_check(result, prefix, writer)
+	when IntegerBinaryOperator::Subtract
+		_qbe_line(writer, "\t" + result + " =l sub " + left + ", " + right)
+		_qbe_emit_inline_range_check(result, prefix, writer)
+	when IntegerBinaryOperator::Multiply
+		_qbe_line(writer, "\t" + result + " =l call $trbn_imul(l " + left + ", l " + right + ")")
+	when IntegerBinaryOperator::Divide
+		_qbe_emit_inline_division(result, left, right, "div", prefix, writer)
+	when IntegerBinaryOperator::Remainder
+		_qbe_emit_inline_division(result, left, right, "rem", prefix, writer)
+	when IntegerBinaryOperator::Power
+		_qbe_line(writer, "\t" + result + " =l call $trbn_ipow(l " + left + ", l " + right + ")")
+	end
+	return
+end
+
+def _qbe_emit_inline_range_check(value: String, prefix: String, mut writer: StringBuilder)
+	check_low := prefix + "check_low"
+	fail := prefix + "fail"
+	ok := prefix + "ok"
+	temporary_prefix := prefix.replace_all("@", "%")
+	_qbe_line(writer, "\t" + temporary_prefix + "too_high =w csgtl " + value + ", 9007199254740991")
+	_qbe_line(writer, "\tjnz " + temporary_prefix + "too_high, " + fail + ", " + check_low)
+	_qbe_line(writer, check_low)
+	_qbe_line(writer, "\t" + temporary_prefix + "too_low =w csltl " + value + ", -9007199254740991")
+	_qbe_line(writer, "\tjnz " + temporary_prefix + "too_low, " + fail + ", " + ok)
+	_qbe_line(writer, fail)
+	_qbe_line(writer, "\tcall $trbn_integer_range_fail()")
+	_qbe_line(writer, "\thlt")
+	_qbe_line(writer, ok)
+	return
+end
+
+def _qbe_emit_inline_division(
+		result: String,
+		left: String,
+		right: String,
+		operation: String,
+		prefix: String,
+		mut writer: StringBuilder,
+	)
+	fail := prefix + "fail"
+	ok := prefix + "ok"
+	zero := prefix.replace_all("@", "%") + "zero"
+	_qbe_line(writer, "\t" + zero + " =w ceql " + right + ", 0")
+	_qbe_line(writer, "\tjnz " + zero + ", " + fail + ", " + ok)
+	_qbe_line(writer, fail)
+	_qbe_line(writer, "\tcall $trbn_division_fail()")
+	_qbe_line(writer, "\thlt")
+	_qbe_line(writer, ok)
+	_qbe_line(writer, "\t" + result + " =l " + operation + " " + left + ", " + right)
 	return
 end
 
@@ -565,21 +703,6 @@ def _qbe_emit_origin(native_module: Gate1Module, origin: SourceOrigin, mut write
 		origin.start_column.to_s() + " end=" + origin.end_line.to_s() + ":" + origin.end_column.to_s()
 	)
 	return
-end
-
-def _qbe_integer_operator(operator: IntegerBinaryOperator): String
-	case operator
-	when IntegerBinaryOperator::Add
-		return "$trbn_iadd"
-	when IntegerBinaryOperator::Subtract
-		return "$trbn_isub"
-	when IntegerBinaryOperator::Multiply
-		return "$trbn_imul"
-	when IntegerBinaryOperator::Divide
-		return "$trbn_idiv"
-	when IntegerBinaryOperator::Remainder
-		return "$trbn_irem"
-	end
 end
 
 def _qbe_float_operator(operator: FloatBinaryOperator): String

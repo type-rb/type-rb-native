@@ -1,0 +1,190 @@
+import { decode_gate1_snapshot } from gate1_snapshot
+import { build_gate1_executable } from gate1_toolchain
+import { create_directory } from trb/std/filesystem
+import { environment, run } from trb/std/process
+import { Result } from trb/std/result
+import { describe, expect, test } from trb/std/test
+
+record Gate1Observation
+	status: Integer
+	stdout: String
+	stderr: String
+end
+
+record Gate1DifferentialPair
+	reference: Gate1Observation
+	native: Gate1Observation
+end
+
+record Gate1DifferentialExpectation
+	name: String
+	stdout: String
+	stderr: String
+	status: Integer
+end
+
+def _gate1_observe(command: String): Result<Gate1Observation, String>
+	case run("/usr/bin/env", ["GOTRACEBACK=none", command])
+	when Result::Ok(process)
+		return Result<Gate1Observation, String>::Ok(
+			Gate1Observation.new(
+				status: process.status,
+				stdout: process.stdout,
+				stderr: process.stderr,
+			)
+		)
+	when Result::Err(error)
+		return Result<Gate1Observation, String>::Err(error.operation + ": " + error.message)
+	end
+end
+
+def _gate1_differential_case(name: String): Result<Gate1DifferentialPair, String>
+	root := environment("TYPE_RB_NATIVE_ROOT")
+	reference_trb := environment("TYPE_RB_NATIVE_REFERENCE_TRB")
+	qbe := environment("TYPE_RB_NATIVE_QBE")
+	if root == nil
+		return Result<Gate1DifferentialPair, String>::Err("TYPE_RB_NATIVE_ROOT is unavailable")
+	end
+	if reference_trb == nil
+		return Result<Gate1DifferentialPair, String>::Err("TYPE_RB_NATIVE_REFERENCE_TRB is unavailable")
+	end
+	if qbe == nil
+		return Result<Gate1DifferentialPair, String>::Err("Gate 1 differential environment is incomplete")
+	end
+	config := root + "/corpus/gate1/" + name + "/trbconfig.jsonc"
+	workspace := "/tmp/type-rb-native-gate1-differential-" + name
+	case create_directory(workspace)
+	when Result::Ok(_unit)
+	when Result::Err(_error)
+	end
+	snapshot_process := case run(reference_trb, ["compiler", "native-snapshot", "--config", config])
+	when Result::Ok(process)
+		process
+	when Result::Err(error)
+		return Result<Gate1DifferentialPair, String>::Err("snapshot: " + error.operation + ": " + error.message)
+	end
+	if !snapshot_process.success
+		return Result<Gate1DifferentialPair, String>::Err("snapshot: " + snapshot_process.stderr)
+	end
+	native_module := case decode_gate1_snapshot(snapshot_process.stdout)
+	when Result::Ok(value)
+		value
+	when Result::Err(diagnostic)
+		return Result<Gate1DifferentialPair, String>::Err(
+			"decode: " + diagnostic.code + " " + diagnostic.path + ": " + diagnostic.message
+		)
+	end
+	native_output := workspace + "/native"
+	case build_gate1_executable(native_module, qbe, "/usr/bin/cc", workspace, native_output)
+	when Result::Ok(_report)
+	when Result::Err(error)
+		return Result<Gate1DifferentialPair, String>::Err("native-build: " + error.phase + ": " + error.message)
+	end
+	reference_output := workspace + "/reference"
+	reference_build := case run(
+			reference_trb,
+			["build", "--compile", "--config", config, "--outfile", reference_output],
+		)
+	when Result::Ok(process)
+		process
+	when Result::Err(error)
+		return Result<Gate1DifferentialPair, String>::Err("reference-build: " + error.operation + ": " + error.message)
+	end
+	if !reference_build.success
+		return Result<Gate1DifferentialPair, String>::Err("reference-build: " + reference_build.stderr)
+	end
+	reference_observation := try _gate1_observe(reference_output)
+	native_observation := try _gate1_observe(native_output)
+	return Result<Gate1DifferentialPair, String>::Ok(
+		Gate1DifferentialPair.new(reference: reference_observation, native: native_observation)
+	)
+end
+
+describe("Gate 1 source-connected differential corpus") do
+	test("matches optimized Go output and process failure behavior") do
+		if environment("TYPE_RB_NATIVE_REFERENCE_TRB") == nil || environment("TYPE_RB_NATIVE_QBE") == nil
+			expect(true).to_be_true()
+		else
+			expectations: Array<Gate1DifferentialExpectation> := [
+				Gate1DifferentialExpectation.new(
+					name: "static-output",
+					stdout: "gate1-static-output\n",
+					stderr: "",
+					status: 0,
+				),
+				Gate1DifferentialExpectation.new(
+					name: "scalar-control-flow",
+					stdout: "gate1-scalar-control-flow\n",
+					stderr: "",
+					status: 0,
+				),
+				Gate1DifferentialExpectation.new(
+					name: "integer-kernel",
+					stdout: "gate1-integer-kernel\n",
+					stderr: "",
+					status: 0,
+				),
+				Gate1DifferentialExpectation.new(
+					name: "integer-overflow",
+					stdout: "",
+					stderr: "panic: Integer is outside the portable range\n",
+					status: 2,
+				),
+				Gate1DifferentialExpectation.new(
+					name: "integer-power-overflow",
+					stdout: "",
+					stderr: "panic: Integer is outside the portable range\n",
+					status: 2,
+				),
+				Gate1DifferentialExpectation.new(
+					name: "negative-integer-exponent",
+					stdout: "",
+					stderr: "panic: negative Integer exponent\n",
+					status: 2,
+				),
+				Gate1DifferentialExpectation.new(
+					name: "division-by-zero",
+					stdout: "",
+					stderr: "panic: division by zero\n",
+					status: 2,
+				),
+			]
+			mut index := 0
+			while index < expectations.size()
+				expected := expectations[index]
+				case _gate1_differential_case(expected.name)
+				when Result::Ok(pair)
+					expect(pair.reference).to_equal(pair.native)
+					expect(pair.native.status).to_equal(expected.status)
+					expect(pair.native.stdout).to_equal(expected.stdout)
+					expect(pair.native.stderr).to_equal(expected.stderr)
+				when Result::Err(error)
+					puts(error)
+					expect(false).to_be_true()
+				end
+				index += 1
+			end
+		end
+	end
+
+	test("rejects unsupported source explicitly at the producer boundary") do
+		root := environment("TYPE_RB_NATIVE_ROOT")
+		reference_trb := environment("TYPE_RB_NATIVE_REFERENCE_TRB")
+		if root == nil
+			expect(true).to_be_true()
+		else
+			if reference_trb == nil
+				expect(true).to_be_true()
+			else
+				config := root + "/corpus/gate1/unsupported-dynamic-output/trbconfig.jsonc"
+				case run(reference_trb, ["compiler", "native-snapshot", "--config", config])
+				when Result::Ok(process)
+					expect(process.success).to_be_false()
+					expect(process.stderr.include?("native snapshot v2 does not support dynamic puts() output")).to_be_true()
+				when Result::Err(_error)
+					expect(false).to_be_true()
+				end
+			end
+		end
+	end
+end
