@@ -1,0 +1,312 @@
+import { decode_gate2_snapshot } from gate2_snapshot
+import { build_gate2_executable } from gate2_toolchain
+import { create_directory } from trb/std/filesystem
+import { environment, run } from trb/std/process
+import { Result } from trb/std/result
+import { describe, expect, test } from trb/std/test
+
+record Gate2Observation
+	status: Integer
+	stdout: String
+	stderr: String
+end
+
+record Gate2DifferentialPair
+	reference: Gate2Observation
+	native: Gate2Observation
+end
+
+record Gate2DifferentialExpectation
+	name: String
+	stdout: String
+	stderr: String
+	status: Integer
+end
+
+def _gate2_observe(command: String): Result<Gate2Observation, String>
+	case run("/usr/bin/env", ["GOTRACEBACK=none", command])
+	when Result::Ok(process)
+		return Result<Gate2Observation, String>::Ok(
+			Gate2Observation.new(
+				status: process.status,
+				stdout: process.stdout,
+				stderr: process.stderr,
+			)
+		)
+	when Result::Err(error)
+		return Result<Gate2Observation, String>::Err(error.operation + ": " + error.message)
+	end
+end
+
+def _gate2_snapshot(name: String): Result<String, String>
+	root := environment("TYPE_RB_NATIVE_ROOT")
+	reference_trb := environment("TYPE_RB_NATIVE_REFERENCE_TRB")
+	if root == nil
+		return Result<String, String>::Err("Gate 2 snapshot root is unavailable")
+	end
+	if reference_trb == nil
+		return Result<String, String>::Err("Gate 2 snapshot environment is incomplete")
+	end
+	config := root + "/corpus/gate2/" + name + "/trbconfig.jsonc"
+	case run(
+			reference_trb,
+			["compiler", "native-snapshot", "--snapshot-version", "3", "--config", config],
+		)
+	when Result::Ok(process)
+		if process.success
+			return Result<String, String>::Ok(process.stdout)
+		end
+		return Result<String, String>::Err("snapshot: " + process.stderr)
+	when Result::Err(error)
+		return Result<String, String>::Err("snapshot: " + error.operation + ": " + error.message)
+	end
+end
+
+def _gate2_reproducibility_case(name: String): Result<Boolean, String>
+	qbe := environment("TYPE_RB_NATIVE_QBE")
+	if qbe == nil
+		return Result<Boolean, String>::Err("TYPE_RB_NATIVE_QBE is unavailable")
+	end
+	first_snapshot := try _gate2_snapshot(name)
+	second_snapshot := try _gate2_snapshot(name)
+	if first_snapshot != second_snapshot
+		return Result<Boolean, String>::Err("source snapshots differ for " + name)
+	end
+	first_module := case decode_gate2_snapshot(first_snapshot)
+	when Result::Ok(value)
+		value
+	when Result::Err(diagnostic)
+		return Result<Boolean, String>::Err(
+			"first decode: " + diagnostic.code + " " + diagnostic.path + ": " + diagnostic.message
+		)
+	end
+	second_module := case decode_gate2_snapshot(second_snapshot)
+	when Result::Ok(value)
+		value
+	when Result::Err(diagnostic)
+		return Result<Boolean, String>::Err(
+			"second decode: " + diagnostic.code + " " + diagnostic.path + ": " + diagnostic.message
+		)
+	end
+	first_workspace := "/tmp/type-rb-native-gate2-reproducibility-" + name + "-first"
+	second_workspace := "/tmp/type-rb-native-gate2-reproducibility-" + name + "-second"
+	case create_directory(first_workspace)
+	when Result::Ok(_unit)
+	when Result::Err(_error)
+	end
+	case create_directory(second_workspace)
+	when Result::Ok(_unit)
+	when Result::Err(_error)
+	end
+	first_output := first_workspace + "/native"
+	second_output := second_workspace + "/native"
+	first_report := case build_gate2_executable(
+			first_module,
+			qbe,
+			"/usr/bin/cc",
+			first_workspace,
+			first_output,
+		)
+	when Result::Ok(report)
+		report
+	when Result::Err(error)
+		return Result<Boolean, String>::Err("first build " + error.phase + ": " + error.message)
+	end
+	second_report := case build_gate2_executable(
+			second_module,
+			qbe,
+			"/usr/bin/cc",
+			second_workspace,
+			second_output,
+		)
+	when Result::Ok(report)
+		report
+	when Result::Err(error)
+		return Result<Boolean, String>::Err("second build " + error.phase + ": " + error.message)
+	end
+	try _gate2_compare_files(first_report.qbe_ir_path, second_report.qbe_ir_path)
+	try _gate2_compare_files(first_report.assembly_path, second_report.assembly_path)
+	try _gate2_compare_files(first_output, second_output)
+	return Result<Boolean, String>::Ok(true)
+end
+
+def _gate2_compare_files(left: String, right: String): Result<Boolean, String>
+	case run("/usr/bin/cmp", [left, right])
+	when Result::Ok(process)
+		if process.success
+			return Result<Boolean, String>::Ok(true)
+		end
+		return Result<Boolean, String>::Err("artifacts differ: " + left + " and " + right)
+	when Result::Err(error)
+		return Result<Boolean, String>::Err("cmp: " + error.operation + ": " + error.message)
+	end
+end
+
+def _gate2_differential_case(name: String): Result<Gate2DifferentialPair, String>
+	root := environment("TYPE_RB_NATIVE_ROOT")
+	reference_trb := environment("TYPE_RB_NATIVE_REFERENCE_TRB")
+	qbe := environment("TYPE_RB_NATIVE_QBE")
+	if root == nil
+		return Result<Gate2DifferentialPair, String>::Err("TYPE_RB_NATIVE_ROOT is unavailable")
+	end
+	if reference_trb == nil
+		return Result<Gate2DifferentialPair, String>::Err("TYPE_RB_NATIVE_REFERENCE_TRB is unavailable")
+	end
+	if qbe == nil
+		return Result<Gate2DifferentialPair, String>::Err("Gate 2 differential environment is incomplete")
+	end
+	config := root + "/corpus/gate2/" + name + "/trbconfig.jsonc"
+	workspace := "/tmp/type-rb-native-gate2-differential-" + name
+	case create_directory(workspace)
+	when Result::Ok(_unit)
+	when Result::Err(_error)
+	end
+	snapshot_process := case run(
+			reference_trb,
+			["compiler", "native-snapshot", "--snapshot-version", "3", "--config", config],
+		)
+	when Result::Ok(process)
+		process
+	when Result::Err(error)
+		return Result<Gate2DifferentialPair, String>::Err("snapshot: " + error.operation + ": " + error.message)
+	end
+	if !snapshot_process.success
+		return Result<Gate2DifferentialPair, String>::Err("snapshot: " + snapshot_process.stderr)
+	end
+	native_module := case decode_gate2_snapshot(snapshot_process.stdout)
+	when Result::Ok(value)
+		value
+	when Result::Err(diagnostic)
+		return Result<Gate2DifferentialPair, String>::Err(
+			"decode: " + diagnostic.code + " " + diagnostic.path + ": " + diagnostic.message
+		)
+	end
+	native_output := workspace + "/native"
+	case build_gate2_executable(native_module, qbe, "/usr/bin/cc", workspace, native_output)
+	when Result::Ok(_report)
+	when Result::Err(error)
+		return Result<Gate2DifferentialPair, String>::Err(
+			"native-build: " + error.phase + ": " + error.message + "\n" + error.stderr
+		)
+	end
+	reference_output := workspace + "/reference"
+	reference_build := case run(
+			reference_trb,
+			["build", "--compile", "--config", config, "--outfile", reference_output],
+		)
+	when Result::Ok(process)
+		process
+	when Result::Err(error)
+		return Result<Gate2DifferentialPair, String>::Err("reference-build: " + error.operation + ": " + error.message)
+	end
+	if !reference_build.success
+		return Result<Gate2DifferentialPair, String>::Err("reference-build: " + reference_build.stderr)
+	end
+	reference_observation := try _gate2_observe(reference_output)
+	native_observation := try _gate2_observe(native_output)
+	return Result<Gate2DifferentialPair, String>::Ok(
+		Gate2DifferentialPair.new(reference: reference_observation, native: native_observation)
+	)
+end
+
+describe("Gate 2 source-connected differential corpus") do
+	test("matches optimized Go records, tagged values, Result, and try behavior") do
+		if environment("TYPE_RB_NATIVE_REFERENCE_TRB") == nil || environment("TYPE_RB_NATIVE_QBE") == nil
+			expect(true).to_be_true()
+		else
+			expectations: Array<Gate2DifferentialExpectation> := [
+				Gate2DifferentialExpectation.new(
+					name: "aggregate-values",
+					stdout: "gate2-aggregate-values\n",
+					stderr: "",
+					status: 0,
+				),
+				Gate2DifferentialExpectation.new(
+					name: "result-control-flow",
+					stdout: "gate2-result-control-flow\n",
+					stderr: "",
+					status: 0,
+				),
+				Gate2DifferentialExpectation.new(
+					name: "aggregate-kernel",
+					stdout: "gate2-aggregate-kernel\n",
+					stderr: "",
+					status: 0,
+				),
+				Gate2DifferentialExpectation.new(
+					name: "aggregate-swap",
+					stdout: "gate2-aggregate-swap\n",
+					stderr: "",
+					status: 0,
+				),
+			]
+			mut index := 0
+			while index < expectations.size()
+				expected := expectations[index]
+				case _gate2_differential_case(expected.name)
+				when Result::Ok(pair)
+					expect(pair.reference).to_equal(pair.native)
+					expect(pair.native.status).to_equal(expected.status)
+					expect(pair.native.stdout).to_equal(expected.stdout)
+					expect(pair.native.stderr).to_equal(expected.stderr)
+				when Result::Err(error)
+					puts(error)
+					expect(false).to_be_true()
+				end
+				index += 1
+			end
+		end
+	end
+
+	test("reproduces source snapshots, decoded MIR output, assembly, and executables") do
+		root := environment("TYPE_RB_NATIVE_ROOT")
+		reference_trb := environment("TYPE_RB_NATIVE_REFERENCE_TRB")
+		qbe := environment("TYPE_RB_NATIVE_QBE")
+		if root == nil
+			expect(true).to_be_true()
+		else
+			if reference_trb == nil || qbe == nil
+				expect(true).to_be_true()
+			else
+				case_names := ["aggregate-values", "result-control-flow", "aggregate-kernel", "aggregate-swap"]
+				mut index := 0
+				while index < case_names.size()
+					case _gate2_reproducibility_case(case_names[index])
+					when Result::Ok(value)
+						expect(value).to_be_true()
+					when Result::Err(error)
+						puts(error)
+						expect(false).to_be_true()
+					end
+					index += 1
+				end
+			end
+		end
+	end
+
+	test("rejects dynamic aggregate storage at the producer boundary") do
+		root := environment("TYPE_RB_NATIVE_ROOT")
+		reference_trb := environment("TYPE_RB_NATIVE_REFERENCE_TRB")
+		if root == nil
+			expect(true).to_be_true()
+		else
+			if reference_trb == nil
+				expect(true).to_be_true()
+			else
+				config := root + "/corpus/gate2/unsupported-dynamic-record/trbconfig.jsonc"
+				case run(
+						reference_trb,
+						["compiler", "native-snapshot", "--snapshot-version", "3", "--config", config],
+					)
+				when Result::Ok(process)
+					expect(process.success).to_be_false()
+					expect(
+						process.stderr.include?("native snapshot v3 does not support value type String")
+					).to_be_true()
+				when Result::Err(_error)
+					expect(false).to_be_true()
+				end
+			end
+		end
+	end
+end

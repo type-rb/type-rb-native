@@ -18,6 +18,7 @@ import {
 	Gate2Function,
 	Gate2Instruction,
 	Gate2Module,
+	Gate2Parameter,
 	Gate2ResultType,
 	Gate2Terminator,
 	gate2_block,
@@ -303,7 +304,7 @@ def _qbe2_context(
 				next_value += 1
 			when Gate2ValueType::Aggregate(_type_id)
 				storage_slots[parameter.id] = "%storage" + next_storage.to_s()
-				values[parameter.id] = storage_slots.fetch(parameter.id)
+				values[parameter.id] = transfer_slots.fetch(parameter.id)
 				next_storage += 1
 			end
 			parameter_index += 1
@@ -329,6 +330,28 @@ def _qbe2_context(
 		end
 		block_index += 1
 	end
+	mut alias_pass := 0
+	while alias_pass < function.blocks.size()
+		block_index = 0
+		while block_index < function.blocks.size()
+			block := function.blocks[block_index]
+			parameter_index = 0
+			while parameter_index < block.parameters.size()
+				parameter := block.parameters[parameter_index]
+				case parameter.value_type
+				when Gate2ValueType::Scalar(_scalar)
+				when Gate2ValueType::Aggregate(_type_id)
+					incoming := _qbe2_common_incoming_value(function, block.id, parameter_index, values)
+					if !incoming.empty?()
+						values[parameter.id] = incoming
+					end
+				end
+				parameter_index += 1
+			end
+			block_index += 1
+		end
+		alias_pass += 1
+	end
 	return Result<Gate2QbeContext, Diagnostic>::Ok(
 		Gate2QbeContext.new(
 			values: values,
@@ -337,6 +360,62 @@ def _qbe2_context(
 			storage_slots: storage_slots,
 		)
 	)
+end
+
+def _qbe2_common_incoming_value(
+		function: Gate2Function,
+		target: String,
+		parameter_index: Integer,
+		values: Hash<String, String>,
+	): String
+	mut common := ""
+	mut block_index := 0
+	while block_index < function.blocks.size()
+		case function.blocks[block_index].terminator
+		when Gate2Terminator::Jump(edge_target, arguments, _origin)
+			if edge_target == target
+				candidate := values.fetch(arguments[parameter_index])
+				if common.empty?()
+					common = candidate
+				else
+					if common != candidate
+						return ""
+					end
+				end
+			end
+		when Gate2Terminator::Branch(
+				_condition,
+				when_true,
+				true_arguments,
+				when_false,
+				false_arguments,
+				_origin,
+			)
+			if when_true == target
+				candidate := values.fetch(true_arguments[parameter_index])
+				if common.empty?()
+					common = candidate
+				else
+					if common != candidate
+						return ""
+					end
+				end
+			end
+			if when_false == target
+				candidate := values.fetch(false_arguments[parameter_index])
+				if common.empty?()
+					common = candidate
+				else
+					if common != candidate
+						return ""
+					end
+				end
+			end
+		when Gate2Terminator::Return(_value, _origin)
+		end
+		block_index += 1
+	end
+	return common
 end
 
 def _qbe2_instruction_type(
@@ -516,14 +595,7 @@ def _qbe2_emit_block_parameter_loads(
 				"\t" + context.values.fetch(parameter.id) + " =" + _qbe_type(scalar) + " " +
 				_qbe2_scalar_slot_load(scalar) + " " + context.transfer_slots.fetch(parameter.id)
 			)
-		when Gate2ValueType::Aggregate(type_id)
-			layout := try compute_gate2_layout(native_module.types, type_id)
-			_qbe2_emit_copy(
-				context.values.fetch(parameter.id),
-				context.transfer_slots.fetch(parameter.id),
-				layout.size,
-				writer,
-			)
+		when Gate2ValueType::Aggregate(_type_id)
 		end
 		index += 1
 	end
@@ -821,23 +893,68 @@ def _qbe2_emit_edge(
 	while index < arguments.size()
 		parameter := block.parameters[index]
 		case parameter.value_type
+		when Gate2ValueType::Scalar(_scalar)
+		when Gate2ValueType::Aggregate(type_id)
+			if _qbe2_parameter_uses_transfer(parameter, context)
+				source := context.values.fetch(arguments[index])
+				destination := context.transfer_slots.fetch(parameter.id)
+				if source != destination && _qbe2_edge_source_is_destination(block, source, context)
+					layout := try compute_gate2_layout(native_module.types, type_id)
+					_qbe2_emit_copy(context.storage_slots.fetch(parameter.id), source, layout.size, writer)
+				end
+			end
+		end
+		index += 1
+	end
+	index = 0
+	while index < arguments.size()
+		parameter := block.parameters[index]
+		case parameter.value_type
 		when Gate2ValueType::Scalar(scalar)
 			_qbe_line(writer,
 				"\t" + _qbe2_scalar_slot_store(scalar) + " " + context.values.fetch(arguments[index]) +
 				", " + context.transfer_slots.fetch(parameter.id)
 			)
 		when Gate2ValueType::Aggregate(type_id)
-			layout := try compute_gate2_layout(native_module.types, type_id)
-			_qbe2_emit_copy(
-				context.transfer_slots.fetch(parameter.id),
-				context.values.fetch(arguments[index]),
-				layout.size,
-				writer,
-			)
+			if _qbe2_parameter_uses_transfer(parameter, context)
+				layout := try compute_gate2_layout(native_module.types, type_id)
+				destination := context.transfer_slots.fetch(parameter.id)
+				mut source := context.values.fetch(arguments[index])
+				if source != destination && _qbe2_edge_source_is_destination(block, source, context)
+					source = context.storage_slots.fetch(parameter.id)
+				end
+				if source != destination
+					_qbe2_emit_copy(destination, source, layout.size, writer)
+				end
+			end
 		end
 		index += 1
 	end
 	return Result<Boolean, Diagnostic>::Ok(true)
+end
+
+def _qbe2_parameter_uses_transfer(parameter: Gate2Parameter, context: Gate2QbeContext): Boolean
+	return context.values.fetch(parameter.id) == context.transfer_slots.fetch(parameter.id)
+end
+
+def _qbe2_edge_source_is_destination(
+		block: Gate2Block?,
+		source: String,
+		context: Gate2QbeContext,
+	): Boolean
+	mut index := 0
+	while index < block.parameters.size()
+		parameter := block.parameters[index]
+		case parameter.value_type
+		when Gate2ValueType::Scalar(_scalar)
+		when Gate2ValueType::Aggregate(_type_id)
+			if _qbe2_parameter_uses_transfer(parameter, context) && context.transfer_slots.fetch(parameter.id) == source
+				return true
+			end
+		end
+		index += 1
+	end
+	return false
 end
 
 def _qbe2_emit_entry(native_module: Gate2Module, mut writer: StringBuilder)
@@ -863,12 +980,31 @@ def _qbe2_emit_origin(native_module: Gate2Module, origin: SourceOrigin, mut writ
 end
 
 def _qbe2_emit_zero(destination: String, size: Integer, mut writer: StringBuilder)
-	_qbe_line(writer, "\tcall $memset(l " + destination + ", w 0, l " + size.to_s() + ")")
+	mut offset := 0
+	while size - offset >= 8
+		address := _qbe2_address(destination, offset, destination + "_zero_" + offset.to_s(), writer)
+		_qbe_line(writer, "\tstorel 0, " + address)
+		offset += 8
+	end
+	if size - offset >= 4
+		address := _qbe2_address(destination, offset, destination + "_zero_" + offset.to_s(), writer)
+		_qbe_line(writer, "\tstorew 0, " + address)
+		offset += 4
+	end
+	if size - offset >= 2
+		address := _qbe2_address(destination, offset, destination + "_zero_" + offset.to_s(), writer)
+		_qbe_line(writer, "\tstoreh 0, " + address)
+		offset += 2
+	end
+	if size - offset == 1
+		address := _qbe2_address(destination, offset, destination + "_zero_" + offset.to_s(), writer)
+		_qbe_line(writer, "\tstoreb 0, " + address)
+	end
 	return
 end
 
 def _qbe2_emit_copy(destination: String, source: String, size: Integer, mut writer: StringBuilder)
-	_qbe_line(writer, "\tcall $memcpy(l " + destination + ", l " + source + ", l " + size.to_s() + ")")
+	_qbe_line(writer, "\tblit " + source + ", " + destination + ", " + size.to_s())
 	return
 end
 
