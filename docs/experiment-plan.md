@@ -261,6 +261,13 @@ conformance corpus, the B1/B2/B3 fixed point, and normalized executable
 identity, then measures the file boundary against the same-generation hidden
 path before broader product work proceeds.
 
+Gate 6A completed at TypeRB Native revision
+`cf6fabccf8bd799d5457372f93f024687d5e6d13`. File input matches the complete
+registered behavior and fixed point, direct time and RSS improve over the
+same-generation hidden path, adjacent B1/B2 measurements converge, stripped
+size grows by 0.16%, and the direct process imports no spawn operation. See the
+[Gate 6A result](../results/2026-08-29-gate6a-file-entry-darwin-arm64/README.md).
+
 This gate is not authorization to ship. It evaluates:
 
 - representative multi-module applications;
