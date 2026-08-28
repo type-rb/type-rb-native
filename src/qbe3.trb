@@ -374,7 +374,7 @@ def _qbe3_emit_function(
 			end
 		end
 	end
-	if !function.captures.empty?()
+	if _qbe3_function_uses_closure_abi(native_module, function.id)
 		parameters.push("l %environment")
 	end
 	mut parameter_index := 0
@@ -1206,6 +1206,9 @@ def _qbe3_emit_instruction(
 				end
 			end
 		end
+		if _qbe3_function_uses_closure_abi(native_module, function_id)
+			call_arguments.push("l 0")
+		end
 		mut index := 0
 		while index < arguments.size()
 			call_arguments.push(
@@ -1485,7 +1488,11 @@ def _qbe3_emit_entry(native_module: Gate3Module, mut writer: StringBuilder)
 	entry_index := _qbe3_function_index(native_module.functions, native_module.entry_function)
 	_qbe_line(writer, "export function w $main() {")
 	_qbe_line(writer, "@start")
-	_qbe_line(writer, "\tcall $trbn_g3f" + entry_index.to_s() + "()")
+	mut arguments := ""
+	if _qbe3_function_uses_closure_abi(native_module, native_module.entry_function)
+		arguments = "l 0"
+	end
+	_qbe_line(writer, "\tcall $trbn_g3f" + entry_index.to_s() + "(" + arguments + ")")
 	_qbe_line(writer, "\tret 0")
 	_qbe_line(writer, "}")
 	return
@@ -1707,6 +1714,35 @@ def _qbe3_function_index(functions: Array<Gate3Function>, id: String): Integer
 		index += 1
 	end
 	return index
+end
+
+def _qbe3_function_uses_closure_abi(native_module: Gate3Module, function_id: String): Boolean
+	function := gate3_function(native_module.functions, function_id)
+	if !function.captures.empty?()
+		return true
+	end
+	mut function_index := 0
+	while function_index < native_module.functions.size()
+		candidate := native_module.functions[function_index]
+		mut block_index := 0
+		while block_index < candidate.blocks.size()
+			block := candidate.blocks[block_index]
+			mut instruction_index := 0
+			while instruction_index < block.instructions.size()
+				case block.instructions[instruction_index]
+				when Gate3Instruction::ClosureConstruct(_result, _type_id, target_id, _captures, _origin)
+					if target_id == function_id
+						return true
+					end
+				else
+				end
+				instruction_index += 1
+			end
+			block_index += 1
+		end
+		function_index += 1
+	end
+	return false
 end
 
 def _qbe3_block_label(blocks: Array<Gate3Block>, id: String): String

@@ -2,13 +2,68 @@ import { decode_gate1_snapshot } from gate1_snapshot
 import { build_gate1_executable } from gate1_toolchain
 import { decode_gate2_snapshot } from gate2_snapshot
 import { build_gate2_executable } from gate2_toolchain
+import { decode_gate3_snapshot } from gate3_snapshot
+import { build_gate3_executable } from gate3_toolchain
 import { write_text } from trb/std/filesystem
 import { argv, run } from trb/std/process
 import { Result } from trb/std/result
 import { Instant } from trb/std/time
 
 def _gate1_driver_usage(): String
-	return "usage: type-rb-native REFERENCE_TRB CONFIG QBE CC WORKSPACE OUTPUT\n       type-rb-native gate2 REFERENCE_TRB CONFIG QBE CC WORKSPACE OUTPUT"
+	return "usage: type-rb-native REFERENCE_TRB CONFIG QBE CC WORKSPACE OUTPUT\n       type-rb-native gate2 REFERENCE_TRB CONFIG QBE CC WORKSPACE OUTPUT\n       type-rb-native gate3 REFERENCE_TRB CONFIG QBE CC WORKSPACE OUTPUT"
+end
+
+def _run_gate3_driver(arguments: Array<String>)
+	snapshot_started := Instant.now()
+	snapshot_process := case run(
+			arguments[1],
+			["compiler", "bootstrap-snapshot", "--snapshot-version", "4", "--config", arguments[2]],
+		)
+	when Result::Ok(result)
+		result
+	when Result::Err(error)
+		puts("snapshot: " + error.operation + ": " + error.message)
+		return
+	end
+	snapshot_seconds := Instant.now().duration_since(snapshot_started).total_seconds()
+	if !snapshot_process.success
+		puts("snapshot: reference compiler rejected the source")
+		puts(snapshot_process.stderr)
+		return
+	end
+	snapshot_path := arguments[5] + "/snapshot.json"
+	case write_text(snapshot_path, snapshot_process.stdout)
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		puts("snapshot: " + error.operation + ": " + error.message)
+		return
+	end
+	decode_started := Instant.now()
+	native_module := case decode_gate3_snapshot(snapshot_process.stdout)
+	when Result::Ok(value)
+		value
+	when Result::Err(diagnostic)
+		puts("decode: " + diagnostic.code + " " + diagnostic.path + ": " + diagnostic.message)
+		return
+	end
+	decode_seconds := Instant.now().duration_since(decode_started).total_seconds()
+	case build_gate3_executable(
+			native_module,
+			arguments[3],
+			arguments[4],
+			arguments[5],
+			arguments[6],
+		)
+	when Result::Ok(report)
+		puts("gate3-phase,snapshot," + snapshot_seconds.to_s())
+		puts("gate3-phase,decode," + decode_seconds.to_s())
+		puts("gate3-phase,emit," + report.emit_seconds.to_s())
+		puts("gate3-phase,qbe," + report.qbe_seconds.to_s())
+		puts("gate3-phase,link," + report.link_seconds.to_s())
+	when Result::Err(error)
+		puts("build: " + error.phase + ": " + error.message)
+	end
+	return
 end
 
 def _run_gate1_driver(arguments: Array<String>)
@@ -126,6 +181,10 @@ def main()
 	if arguments.size() == 7
 		if arguments[0] == "gate2"
 			_run_gate2_driver(arguments)
+			return
+		end
+		if arguments[0] == "gate3"
+			_run_gate3_driver(arguments)
 			return
 		end
 	end

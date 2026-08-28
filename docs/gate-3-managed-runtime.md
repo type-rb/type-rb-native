@@ -5,6 +5,42 @@ pipeline. The registered work and thresholds live in
 [issue #13](https://github.com/type-rb/type-rb-native/issues/13); this document
 defines the implementation boundary used to satisfy them.
 
+## Implementation status
+
+The source-connected correctness slice is complete. The pinned reference
+compiler produces version 4 snapshots for all four registered workloads and
+the two bounds-failure cases. The native decoder, verifier, exact-root runtime,
+QBE emitter, and linker path match the optimized Go executable in stdout,
+stderr, and exit status. Repeated runs reproduce byte-identical snapshots, QBE
+IL, assembly, and executables, while decoded MIR values compare structurally
+equal.
+
+The QBE adapter uses one closure-call ABI for both capturing and zero-capture
+function bodies. Direct calls to a body that is also used as a closure supply a
+null environment, while indirect calls supply the closure's environment. This
+keeps ordinary direct calls compact without misaligning authored parameters.
+
+Gate 3 remains open until automatic-collection evidence, the registered raw
+measurements, and the dated result report pass every continuation bound.
+
+## Reference producer pin
+
+`TYPE_RB_REVISION` pins TypeRB commit
+`57b4ff018cfbc0539c9b4cbbe4c0676afa429857`, which provides the
+consumer-neutral version 4 bootstrap snapshot producer. The integration command
+owned by this repository is:
+
+```sh
+trb compiler bootstrap-snapshot --snapshot-version 4 --config trbconfig.jsonc
+```
+
+Version 4 maps to the managed Gate 3 Native MIR described below. That mapping,
+the QBE ABI, runtime policy, compatibility expectations, and performance gates
+belong only to this repository. The producer remains data-only and contains no
+Native MIR layout or backend detail. Remove the version 4 producer once the
+self-hosted TypeRB frontend emits equivalent verified Native MIR and no other
+consumer requires the snapshot.
+
 ## Supported source subset
 
 Gate 3 retains every Gate 2 feature and adds:
@@ -122,3 +158,13 @@ collector through this boundary.
    the registered benchmark corpus.
 
 No producer-side change precedes a working hand-authored executable path.
+
+Steps 1 through 6 are implemented. The source corpus covers ASCII and
+multibyte UTF-8, empty and dynamic Strings, scalar and managed Arrays, growth,
+element aliasing, nested calls, zero and multiple captures, managed captures,
+nested closures, reference-containing records and tagged values, and an
+unreachable closure/Array cycle. String and Array bounds failures retain their
+distinct TypeRB diagnostics. A broader cross-backend question about Array
+growth through aliases and mutable parameters is tracked independently in
+[type-rb/type-rb#596](https://github.com/type-rb/type-rb/issues/596); the
+registered corpus does not assume an unsettled answer.
