@@ -104,3 +104,11 @@ of the hidden path, adjacent Native generations must remain within 25%, and the
 stripped compiler may grow by at most 10% from the Gate 5 baseline. A complete
 process inventory and raw machine-readable observations are committed before
 Gate 6A closes.
+
+The TypeRB-authored
+[`gate6a-benchmark`](../tools/gate6a-benchmark/README.md) harness constructs the
+fixed point, performs the correctness preflight, records two indexed warmups
+and seven alternating observations, captures up to three peak-RSS observations,
+enforces the registered stripped-size ceiling, and writes the direct process
+inventory. Result artifacts remain outside the repository until the complete
+run passes and is reviewed.
