@@ -205,6 +205,17 @@ Gate 2 completes the heap-free aggregate layer before heap ownership and memory
 management are added. This separation keeps record and tagged-value semantics
 independent of the later allocation strategy.
 
+Gate 3 adds an exact-root, non-moving tracing collector for dynamic Strings,
+Arrays, closures, and recursively reference-containing aggregates. Heap-free
+Gate 2 aggregates remain unboxed. Managed roots use compiler-emitted
+shadow-stack frames, and heap descriptors identify managed fields without
+placing target layouts in the bootstrap snapshot. See
+[Decision 0005](decisions/0005-managed-runtime-and-tracing-gc.md).
+
+The first collector is single-threaded and stop-the-world. Concurrency,
+generational or moving collection, finalizers, and weak references are deferred
+implementation choices rather than new language promises.
+
 Runtime semantics are shared across backend candidates. Target-specific ABI
 profiles and small shims may differ, but the runtime must not be independently
 reimplemented for every code generator.

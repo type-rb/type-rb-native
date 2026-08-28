@@ -146,18 +146,34 @@ for diagnosis and improvement.
 
 ### Gate 3: Runtime viability
 
-Scope may expand to:
+Gate 3 is registered in
+[issue #13](https://github.com/type-rb/type-rb-native/issues/13) and specified
+by [Decision 0005](decisions/0005-managed-runtime-and-tracing-gc.md). Its scope
+is:
 
-- arrays, hashes, and dynamic strings;
-- closures and captured environments;
-- memory-management strategy and cycles;
-- classes, interfaces, unions, and nullable values;
-- source-mapped failures and unwind behavior;
-- module initialization; and
-- selected filesystem, process, time, and JSON operations.
+- managed UTF-8 Strings and mutable homogeneous Arrays;
+- first-class function values, captured environments, and indirect calls;
+- reference-containing records and tagged values;
+- an exact-root, non-moving mark-sweep collector that reclaims cycles; and
+- the existing `darwin-arm64-v0` profile and QBE 1.3 path.
 
-At most one default candidate should normally reach broad runtime work. A
-second candidate requires a distinct, measured development or release role.
+Hash, Bytes, StringBuilder, classes, interfaces, concurrency, module
+initialization, and broad runtime adapters remain deferred until this common
+managed-reference boundary is measured. They are still prerequisites where
+the Gate 4 compiler source uses them.
+
+Exit condition: the pinned reference compiler and native path produce identical
+observable output and failure behavior for the registered String, Array, and
+closure source corpus. Invalid snapshot and MIR inputs fail deterministically,
+repeated builds are byte-reproducible, and the registered stress case proves
+that unreachable closure/Array cycles are reclaimed within the live-set bound.
+Stripped native executables remain at least 30% smaller than the stronger
+optimized Go baseline; warm end-to-end build time, every registered steady-state
+runtime, and peak runtime RSS remain within 25%. No primary metric may regress
+by more than 2x. A miss keeps Gate 3 open for diagnosis and improvement.
+
+Only QBE advances through Gate 3. A second candidate requires a distinct,
+measured development or release role.
 
 ### Gate 4: Self-hosting compiler completeness
 
