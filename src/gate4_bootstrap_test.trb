@@ -3,7 +3,7 @@ import { build_gate4_bootstrap_executable } from gate3_toolchain
 import { build_gate4_generation } from gate4_toolchain
 import { build_gate5_matched_go_compiler } from gate5_matched_driver
 import { create_directory, read_text, write_text } from trb/std/filesystem
-import { environment, run } from trb/std/process
+import { ProcessResult, environment, run } from trb/std/process
 import { Result } from trb/std/result
 import { describe, expect, test } from trb/std/test
 
@@ -22,6 +22,148 @@ def _gate4_read(path: String): Result<String, String>
 	when Result::Err(error)
 		return Result<String, String>::Err(error.operation + ": " + error.message)
 	end
+end
+
+def _gate6_process(command: String, arguments: Array<String>): Result<ProcessResult, String>
+	case run(command, arguments)
+	when Result::Ok(process)
+		return Result<ProcessResult, String>::Ok(process)
+	when Result::Err(error)
+		return Result<ProcessResult, String>::Err(error.operation + ": " + error.message)
+	end
+end
+
+def _gate6_reset_directory(path: String): Result<Boolean, String>
+	remove := try _gate6_process("/bin/rm", ["-rf", path])
+	if !remove.success
+		return Result<Boolean, String>::Err("cannot reset " + path + ": " + remove.stderr)
+	end
+	case create_directory(path)
+	when Result::Ok(_unit)
+		return Result<Boolean, String>::Ok(true)
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
+	end
+end
+
+def _gate6_build(
+		executable: String,
+		source_path: String,
+		output_path: String,
+		qbe: String,
+		cc: String,
+	): Result<ProcessResult, String>
+	return _gate6_process(
+		executable,
+		["build", source_path, "--output", output_path, "--qbe", qbe, "--cc", cc],
+	)
+end
+
+def _gate6_require_no_intermediates(directory: String): Result<Boolean, String>
+	find := try _gate6_process("/usr/bin/find", [directory, "-name", "*.trbn.*", "-print"])
+	if !find.success
+		return Result<Boolean, String>::Err("cannot inspect build intermediates: " + find.stderr)
+	end
+	if !find.stdout.empty?()
+		return Result<Boolean, String>::Err("build left intermediates: " + find.stdout)
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def _gate6_require_missing(path: String): Result<Boolean, String>
+	probe := try _gate6_process("/bin/test", ["!", "-e", path])
+	if !probe.success
+		return Result<Boolean, String>::Err("unexpected build artifact: " + path)
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def _gate6_require_same(left: String, right: String, context: String): Result<Boolean, String>
+	comparison := try _gate6_process("/usr/bin/cmp", [left, right])
+	if !comparison.success
+		return Result<Boolean, String>::Err(context + " executables differ")
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def _gate6_verify_built_program(
+		executable: String,
+		source_path: String,
+		output_path: String,
+		qbe: String,
+		expected_runtime: String,
+		context: String,
+	): Result<Boolean, String>
+	build := try _gate6_build(executable, source_path, output_path, qbe, "/usr/bin/cc")
+	if build.status != 0 || !build.stdout.empty?() || !build.stderr.empty?()
+		return Result<Boolean, String>::Err(context + " build failed: " + build.stderr)
+	end
+	runtime := try _gate6_process(output_path, [])
+	if runtime.status != 0 || runtime.stdout != expected_runtime || !runtime.stderr.empty?()
+		return Result<Boolean, String>::Err(context + " runtime differs: " + runtime.stderr)
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def _gate6_verify_build_case(
+		source_path: String,
+		qbe_source: String,
+		expected_runtime: String,
+		qbe: String,
+		workspace: String,
+		case_name: String,
+	): Result<Boolean, String>
+	b1_directory := workspace + "/gate6-build-" + case_name + "-b1"
+	b2_directory := workspace + "/gate6-build-" + case_name + "-b2"
+	recipe_directory := workspace + "/gate6-build-" + case_name + "-recipe"
+	try _gate6_reset_directory(b1_directory)
+	try _gate6_reset_directory(b2_directory)
+	try _gate6_reset_directory(recipe_directory)
+	b1_output := b1_directory + "/program"
+	b2_output := b2_directory + "/program"
+	recipe_output := recipe_directory + "/program"
+	try _gate6_verify_built_program(
+		workspace + "/b1",
+		source_path,
+		b1_output,
+		qbe,
+		expected_runtime,
+		case_name + " B1",
+	)
+	try _gate6_verify_built_program(
+		workspace + "/b2",
+		source_path,
+		b2_output,
+		qbe,
+		expected_runtime,
+		case_name + " B2",
+	)
+	recipe_qbe := recipe_directory + "/program.ssa"
+	recipe_assembly := recipe_directory + "/program.s"
+	case write_text(recipe_qbe, qbe_source)
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
+	end
+	qbe_process := try _gate6_process(
+		qbe,
+		["-t", "arm64_apple", "-o", recipe_assembly, recipe_qbe],
+	)
+	if !qbe_process.success
+		return Result<Boolean, String>::Err(case_name + " external QBE failed: " + qbe_process.stderr)
+	end
+	cc_process := try _gate6_process(
+		"/usr/bin/cc",
+		[recipe_assembly, "-Wl,-dead_strip", "-o", recipe_output],
+	)
+	if !cc_process.success
+		return Result<Boolean, String>::Err(case_name + " external cc failed: " + cc_process.stderr)
+	end
+	try _gate6_require_same(b1_output, b2_output, case_name + " B1/B2")
+	try _gate6_require_same(b1_output, recipe_output, case_name + " Native/external")
+	try _gate6_require_no_intermediates(b1_directory)
+	try _gate6_require_no_intermediates(b2_directory)
+	return Result<Boolean, String>::Ok(true)
 end
 
 def _gate4_compiler_output(
@@ -152,7 +294,45 @@ def _gate4_verify_valid_case(
 	if actual_runtime != expected_runtime
 		return Result<String, String>::Err(case_name + " runtime output differs")
 	end
+	try _gate6_verify_build_case(
+		base + ".trb",
+		canonical_qbe,
+		expected_runtime,
+		qbe,
+		workspace,
+		category + "-" + case_name,
+	)
 	return Result<String, String>::Ok(canonical_qbe)
+end
+
+def _gate6_verify_invalid_build_case(
+		source_path: String,
+		expected: String,
+		workspace: String,
+		case_name: String,
+	): Result<Boolean, String>
+	mut compiler_index := 1
+	while compiler_index < 3
+		directory := workspace + "/gate6-build-invalid-" + case_name + "-b" + compiler_index.to_s()
+		try _gate6_reset_directory(directory)
+		output_path := directory + "/program"
+		build := try _gate6_build(
+			workspace + "/b" + compiler_index.to_s(),
+			source_path,
+			output_path,
+			"/usr/bin/false",
+			"/usr/bin/false",
+		)
+		if build.status != 1 || !build.stdout.empty?() || build.stderr != expected
+			return Result<Boolean, String>::Err(
+				case_name + " invalid build differs at compiler " + compiler_index.to_s(),
+			)
+		end
+		try _gate6_require_missing(output_path)
+		try _gate6_require_no_intermediates(directory)
+		compiler_index += 1
+	end
+	return Result<Boolean, String>::Ok(true)
 end
 
 def _gate4_verify_conformance(
@@ -231,6 +411,12 @@ def _gate4_verify_conformance(
 			end
 			compiler_index += 1
 		end
+		try _gate6_verify_invalid_build_case(
+			base + ".source",
+			expected,
+			workspace,
+			invalid_names[index],
+		)
 		index += 1
 	end
 	return Result<Boolean, String>::Ok(true)
@@ -384,7 +570,7 @@ def _gate6_verify_file_cli(workspace: String): Result<Boolean, String>
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
 	end
-	usage := "usage: compiler {check|emit-qbe} SOURCE\n"
+	usage := "usage: compiler {check|emit-qbe} SOURCE\n       compiler build SOURCE --output OUTPUT --qbe QBE --cc CC\n"
 	executables := [workspace + "/b1", workspace + "/b2"]
 	mut canonical_qbe := ""
 	mut index := 0
@@ -472,6 +658,182 @@ def _gate6_verify_file_cli(workspace: String): Result<Boolean, String>
 		end
 		index += 1
 	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def _gate6_expect_failed_build(
+		executable: String,
+		source_path: String,
+		output_path: String,
+		qbe: String,
+		cc: String,
+		expected_status: Integer,
+		expected_stderr: String,
+		directory: String,
+		context: String,
+	): Result<Boolean, String>
+	build := try _gate6_build(executable, source_path, output_path, qbe, cc)
+	if build.status != expected_status || !build.stdout.empty?() || build.stderr != expected_stderr
+		return Result<Boolean, String>::Err(context + " failure contract differs")
+	end
+	try _gate6_require_missing(output_path)
+	try _gate6_require_no_intermediates(directory)
+	return Result<Boolean, String>::Ok(true)
+end
+
+def _gate6_verify_build_cli(workspace: String, qbe: String): Result<Boolean, String>
+	executable := workspace + "/b1"
+	source_directory := workspace + "/gate6 source with spaces"
+	output_directory := workspace + "/gate6 output with spaces"
+	failure_directory := workspace + "/gate6-build-failures"
+	try _gate6_reset_directory(source_directory)
+	try _gate6_reset_directory(output_directory)
+	try _gate6_reset_directory(failure_directory)
+	source_path := source_directory + "/input program.trb"
+	output_path := output_directory + "/program"
+	case write_text(source_path, "def main()\n\tputs(\"ok\")\n\treturn\nend\n")
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
+	end
+	case write_text(output_path, "stale output")
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
+	end
+	try _gate6_verify_built_program(
+		executable,
+		source_path,
+		output_path,
+		qbe,
+		"ok\n",
+		"space-bearing atomic replacement",
+	)
+	try _gate6_require_no_intermediates(output_directory)
+
+	usage := "usage: compiler {check|emit-qbe} SOURCE\n       compiler build SOURCE --output OUTPUT --qbe QBE --cc CC\n"
+	invalid_shape := try _gate6_process(
+		executable,
+		["build", source_path, "--output", output_path, "--qbe", qbe],
+	)
+	if invalid_shape.status != 64 || !invalid_shape.stdout.empty?() || invalid_shape.stderr != usage
+		return Result<Boolean, String>::Err("build usage contract differs")
+	end
+
+	missing_source := workspace + "/gate6 missing source.trb"
+	missing_output := failure_directory + "/missing-source"
+	missing := try _gate6_build(executable, missing_source, missing_output, qbe, "/usr/bin/cc")
+	if missing.status != 66 || !missing.stdout.empty?()
+		return Result<Boolean, String>::Err("build missing-source status differs")
+	end
+	if missing.stderr != "compiler: cannot read source file: " + missing_source + "\n"
+		return Result<Boolean, String>::Err("build missing-source diagnostic differs")
+	end
+	try _gate6_require_missing(missing_output)
+	try _gate6_require_no_intermediates(failure_directory)
+
+	qbe_failure_tool := failure_directory + "/qbe failure tool"
+	cc_failure_tool := failure_directory + "/cc failure tool"
+	case write_text(
+			qbe_failure_tool,
+			"#!/bin/sh\nprintf 'qbe child stderr\\n' >&2\nexit 23\n",
+		)
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
+	end
+	case write_text(
+			cc_failure_tool,
+			"#!/bin/sh\nprintf 'cc child stderr\\n' >&2\nexit 24\n",
+		)
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
+	end
+	chmod := try _gate6_process("/bin/chmod", ["+x", qbe_failure_tool, cc_failure_tool])
+	if !chmod.success
+		return Result<Boolean, String>::Err("cannot prepare child failure tools: " + chmod.stderr)
+	end
+	try _gate6_expect_failed_build(
+		executable,
+		source_path,
+		failure_directory + "/qbe-failure",
+		qbe_failure_tool,
+		"/usr/bin/cc",
+		70,
+		"qbe child stderr\ncompiler: qbe failed\n",
+		failure_directory,
+		"QBE",
+	)
+	try _gate6_expect_failed_build(
+		executable,
+		source_path,
+		failure_directory + "/missing-qbe",
+		workspace + "/gate6-missing-qbe",
+		"/usr/bin/cc",
+		70,
+		"compiler: qbe failed\n",
+		failure_directory,
+		"missing QBE",
+	)
+	try _gate6_expect_failed_build(
+		executable,
+		source_path,
+		failure_directory + "/cc-failure",
+		qbe,
+		cc_failure_tool,
+		70,
+		"cc child stderr\ncompiler: cc failed\n",
+		failure_directory,
+		"cc",
+	)
+	try _gate6_expect_failed_build(
+		executable,
+		source_path,
+		failure_directory + "/missing-cc",
+		qbe,
+		workspace + "/gate6-missing-cc",
+		70,
+		"compiler: cc failed\n",
+		failure_directory,
+		"missing cc",
+	)
+
+	missing_parent := workspace + "/gate6-missing-output-parent"
+	remove_parent := try _gate6_process("/bin/rm", ["-rf", missing_parent])
+	if !remove_parent.success
+		return Result<Boolean, String>::Err("cannot reset missing output parent")
+	end
+	intermediate_failure := try _gate6_build(
+		executable,
+		source_path,
+		missing_parent + "/program",
+		qbe,
+		"/usr/bin/cc",
+	)
+	if intermediate_failure.status != 73 || !intermediate_failure.stdout.empty?()
+		return Result<Boolean, String>::Err("intermediate-file status differs")
+	end
+	if intermediate_failure.stderr != "compiler: cannot create intermediate file\n"
+		return Result<Boolean, String>::Err("intermediate-file diagnostic differs")
+	end
+
+	publish_target := workspace + "/gate6-publish-target"
+	try _gate6_reset_directory(publish_target)
+	publish_failure := try _gate6_build(
+		executable,
+		source_path,
+		publish_target,
+		qbe,
+		"/usr/bin/cc",
+	)
+	if publish_failure.status != 73 || !publish_failure.stdout.empty?()
+		return Result<Boolean, String>::Err("publish status differs")
+	end
+	if publish_failure.stderr != "compiler: cannot publish output\n"
+		return Result<Boolean, String>::Err("publish diagnostic differs")
+	end
+	try _gate6_require_no_intermediates(workspace)
 	return Result<Boolean, String>::Ok(true)
 end
 
@@ -571,6 +933,13 @@ describe("Gate 4 reference bootstrap") do
 					end
 					expect(_gate4_build_cycle(workspace + "/b0", compiler_source, qbe, workspace)).to_be_true()
 					case _gate6_verify_file_cli(workspace)
+					when Result::Ok(_value)
+						expect(true).to_be_true()
+					when Result::Err(error)
+						puts(error)
+						expect(false).to_be_true()
+					end
+					case _gate6_verify_build_cli(workspace, qbe)
 					when Result::Ok(_value)
 						expect(true).to_be_true()
 					when Result::Err(error)

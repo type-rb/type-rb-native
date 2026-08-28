@@ -106,10 +106,19 @@ differ by 0.14%, and stripped size grows by 0.16%. See the
 [Gate 6A file entry](docs/gate-6-file-cli.md) and
 [recorded result](results/2026-08-29-gate6a-file-entry-darwin-arm64/README.md).
 
+Gate 6B is active under the pre-registered scope in
+[issue #39](https://github.com/type-rb/type-rb-native/issues/39). Its candidate
+single-file `build` entry owns QBE emission, invokes explicitly supplied QBE
+and C toolchain paths directly without a shell, atomically publishes the
+requested executable, and cleans every intermediate. The implementation must
+still pass its focused measurements and process inventory before Gate 6B
+closes. See the
+[Gate 6B single-file build](docs/gate-6-single-file-build.md).
+
 Multi-module applications, project discovery, production runtime integration,
-package/native-library boundaries, incremental builds, external-tool output
-orchestration, debugging, maintenance evaluation, and a second target remain
-the broader Gate 6 product-feasibility scope.
+package/native-library boundaries, incremental builds, toolchain discovery,
+debugging, maintenance evaluation, and a second target remain the broader
+Gate 6 product-feasibility scope.
 
 ## Intended boundary
 
@@ -212,6 +221,7 @@ repository.
 - [Gate 5 matched compiler Darwin arm64 result](results/2026-08-29-gate5-matched-compiler-darwin-arm64/README.md)
 - [Gate 6A file-oriented compiler entry](docs/gate-6-file-cli.md)
 - [Gate 6A file-entry Darwin arm64 result](results/2026-08-29-gate6a-file-entry-darwin-arm64/README.md)
+- [Gate 6B Native single-file build](docs/gate-6-single-file-build.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
 - [Decision 0003: Gate 1 QBE and Darwin arm64 profile](docs/decisions/0003-gate-1-qbe-target.md)
@@ -220,6 +230,7 @@ repository.
 - [Decision 0006: Behavioral self-hosting boundary](docs/decisions/0006-behavioral-self-hosting-boundary.md)
 - [Decision 0007: Matched self-hosted compiler baseline](docs/decisions/0007-matched-self-hosted-compiler-baseline.md)
 - [Decision 0008: File-oriented Native compiler entry](docs/decisions/0008-file-oriented-compiler-entry.md)
+- [Decision 0009: Native-owned single-file executable build](docs/decisions/0009-native-single-file-build.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 

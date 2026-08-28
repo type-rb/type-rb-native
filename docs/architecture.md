@@ -235,6 +235,15 @@ Every required component counts toward build time and toolchain distribution
 size. Dynamically supplied system libraries must be identified rather than
 silently excluded from comparisons.
 
+The first Native-owned orchestration boundary is the experimental Gate 6B
+single-file build. The TypeRB-authored compiler invokes explicit QBE and C
+toolchain paths directly with `execv`, never through a shell, and atomically
+publishes the finished executable after cleaning its intermediate QBE IL and
+assembly. This proves ownership of the ordinary build graph without implying
+that toolchain discovery, a stable project command, or a self-contained
+distribution has been designed. See
+[Decision 0009](decisions/0009-native-single-file-build.md).
+
 ## Stability and promotion
 
 No MIR, ABI profile, snapshot, object, cache, command, or runtime API in this

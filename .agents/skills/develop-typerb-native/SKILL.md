@@ -53,6 +53,12 @@ a time.
 - Allow external code generators, assemblers, linkers, SDKs, and system
   libraries only behind explicit boundaries whose time and distribution cost
   can be measured.
+- When the Native compiler owns external-tool orchestration, execute explicit
+  tool paths directly rather than assembling a shell command. Preserve child
+  diagnostics, decode child completion deterministically, publish output only
+  after every phase succeeds, and remove intermediates after success and every
+  failure. Test paths containing spaces, existing-output replacement, each
+  phase failure, and that compiler diagnostics launch no external tool.
 - Preserve source origins and exact TypeRB semantics through every lowering.
 - Reject unknown, malformed, unsupported, or unverifiable input with stable,
   deterministic diagnostics. Never add a semantic fallback or `Any` escape

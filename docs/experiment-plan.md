@@ -268,6 +268,25 @@ same-generation hidden path, adjacent B1/B2 measurements converge, stripped
 size grows by 0.16%, and the direct process imports no spawn operation. See the
 [Gate 6A result](../results/2026-08-29-gate6a-file-entry-darwin-arm64/README.md).
 
+Gate 6B is the separately measurable Native-owned single-file build slice
+registered in
+[issue #39](https://github.com/type-rb/type-rb-native/issues/39) and specified
+by [Decision 0009](decisions/0009-native-single-file-build.md). B1 and B2 accept
+the fixed experimental `build SOURCE --output OUTPUT --qbe QBE --cc CC`
+command, emit their own QBE IL, directly invoke the explicit QBE and C
+toolchain paths without a shell, atomically publish the executable, and clean
+all intermediates. Every existing valid, mutation, and invalid input, the
+compiler fixed point, deterministic application output, failure contracts, and
+the ordinary Go-free process graph remain required.
+
+Gate 6B compares the Native-owned command with the existing external
+file-emission/QBE/CC recipe after two warmups and seven alternating
+observations. Time and orchestration-root peak RSS must remain within 25%, B1
+and B2 must remain within 25%, application behavior and size must not regress,
+and the stripped Native compiler must remain within 15% of the 149,784-byte
+Gate 6A baseline. See the
+[Gate 6B single-file build plan](gate-6-single-file-build.md).
+
 This gate is not authorization to ship. It evaluates:
 
 - representative multi-module applications;
