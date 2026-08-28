@@ -5,6 +5,10 @@ correct native executable cheaply enough to justify connecting it to the
 reference frontend. It is an experimental checkpoint, not a supported TypeRB
 target or a measurement of the final self-hosted compiler.
 
+The source-connected differential corpus and provisional measurements are
+complete. Gate 1 passes; see the
+[recorded result](../results/2026-08-28-gate1-qbe-darwin-arm64/README.md).
+
 ## Current pipeline
 
 ```text
