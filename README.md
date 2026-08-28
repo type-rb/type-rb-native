@@ -84,14 +84,18 @@ build-time, RSS, size, and distribution bounds pass. See the
 [Gate 4 implementation boundary](docs/gate-4-self-hosting.md) and
 [recorded result](results/2026-08-28-gate4-self-host-darwin-arm64/README.md).
 
-Gate 5 is in progress under the pre-registered scope in
-[issue #29](https://github.com/type-rb/type-rb-native/issues/29). It first
-builds a functional optimized Go comparison from the same TypeRB-authored
-compiler logic as the Native executable, then replaces Gate 4's source-sized
-parallel compiler storage and measures matched build time, peak RSS, artifact
-size, and distribution size. Multi-module applications, the ordinary
-file-oriented CLI, production runtime integration, package/native-library
-boundaries, and a second target remain the Gate 6 product-feasibility scope.
+Gate 5 is complete under the pre-registered scope in
+[issue #29](https://github.com/type-rb/type-rb-native/issues/29). The functional
+Native and optimized Go artifacts execute the same TypeRB-authored compiler
+logic; demand-sized storage reduces Native direct RSS below matched Go; and
+Native improves direct time by 99.50%, end-to-end build time by 98.11%,
+stripped compiler size by 94.46%, and compiler-plus-QBE distribution size by
+82.18%. B1/B2/B3 QBE and normalized B1/B2 executables converge. See the
+[Gate 5 result](results/2026-08-29-gate5-matched-compiler-darwin-arm64/README.md).
+
+Multi-module applications, the ordinary file-oriented CLI, production runtime
+integration, package/native-library boundaries, incremental builds, and a
+second target remain the Gate 6 product-feasibility scope.
 
 ## Intended boundary
 
@@ -191,6 +195,7 @@ repository.
 - [Gate 3 managed runtime](docs/gate-3-managed-runtime.md)
 - [Gate 4 behavioral self-hosting](docs/gate-4-self-hosting.md)
 - [Gate 5 matched self-hosted compiler baseline](docs/gate-5-matched-compiler.md)
+- [Gate 5 matched compiler Darwin arm64 result](results/2026-08-29-gate5-matched-compiler-darwin-arm64/README.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
 - [Decision 0003: Gate 1 QBE and Darwin arm64 profile](docs/decisions/0003-gate-1-qbe-target.md)

@@ -239,6 +239,14 @@ Native-generation build time, RSS, and stripped size remain within 25%. A
 greater than 2x regression is catastrophic. Exact registered measurement rules
 remain in issue #29.
 
+Gate 5 completed at TypeRB Native revision
+`a83699d6dd87de0c77a8a8a395ea6e266802bf0a`. The matched behavior and
+anti-shortcut checks pass; B1/B2/B3 QBE and normalized B1/B2 executables
+converge; Native direct compilation and end-to-end building are substantially
+faster than the matched Go artifact; all RSS bounds pass; and stripped compiler
+and compiler-plus-QBE sizes improve by 94.46% and 82.18%. See the
+[Gate 5 result](../results/2026-08-29-gate5-matched-compiler-darwin-arm64/README.md).
+
 ### Gate 6: Self-hosted product feasibility
 
 This gate is not authorization to ship. It evaluates:
