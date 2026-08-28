@@ -33,5 +33,10 @@ sources. All three must produce distinct QBE and distinct runtime output. This
 guards against an embedded artifact, a source-insensitive generator, or a
 compiler path that bypasses its runtime input.
 
+The `file-root` directory is the representative Gate 6E import closure used by
+the permanent bootstrap differential tests. `file-root-flattened.trb` preserves
+the same workload and observable output in one source file so the benchmark can
+isolate file-root module overhead from ordinary Native code generation.
+
 This is an experimental subset corpus, not the TypeRB language conformance
 suite. Full language and package compatibility remains outside Gate 4.

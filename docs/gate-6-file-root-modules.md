@@ -50,7 +50,10 @@ than weakening the application:
 Exploratory alternating runs place the representative Native executable inside
 the registered 25% runtime boundary while the fixed-point stripped compiler
 remains below its 208,530-byte ceiling. These probes guide implementation only;
-the benchmark harness and reviewed raw result are the gate evidence.
+the TypeRB-authored [`gate6e-benchmark`](../tools/gate6e-benchmark/README.md)
+records the compiler closure, alternating Native/Go build and runtime series,
+RSS, sizes, hashes, dependency inventory, and recovery provenance used by the
+reviewed result.
 
 ## Deferred scope
 
