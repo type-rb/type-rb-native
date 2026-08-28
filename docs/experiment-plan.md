@@ -297,6 +297,20 @@ adjacent Native generations converge within 0.42%, and stripped compiler
 growth is 11.38%. All registered bounds pass. See the
 [Gate 6B result](../results/2026-08-29-gate6b-single-file-build-darwin-arm64/README.md).
 
+Gate 6C is the Native-to-Native bootstrap-closure slice registered in
+[issue #43](https://github.com/type-rb/type-rb-native/issues/43) and specified
+by [Decision 0010](decisions/0010-native-bootstrap-closure.md). One recovered or
+previously distributed B1 seed is setup input. B1 builds B2, generated B2 builds
+B3, and generated B3 builds B4 through the ordinary Native-owned command. The
+three same-basename outputs must be byte-identical, retain the compiler QBE
+fixed point and complete file-command corpus, and leave no intermediate.
+
+The focused measurement records two warmups and seven alternating observations
+for each adjacent Native generation plus peak RSS. Adjacent medians must remain
+within 10%, each step must remain within 25% of the Gate 6B B1 Native baselines,
+and compiler bytes and stripped size must not change. See the
+[Gate 6C Native bootstrap plan](gate-6-native-bootstrap.md).
+
 This gate is not authorization to ship. It evaluates:
 
 - representative multi-module applications;

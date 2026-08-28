@@ -244,6 +244,14 @@ that toolchain discovery, a stable project command, or a self-contained
 distribution has been designed. See
 [Decision 0009](decisions/0009-native-single-file-build.md).
 
+Gate 6C closes that ordinary build graph after an initial seed exists. A
+Native-built compiler becomes the executable seed for the next complete build,
+and repeated same-basename generations must converge to exact bytes while
+retaining the fixed-point QBE and full file-command behavior. Recovery may
+prepare the first seed during the experiment, but its provenance is recorded
+separately and it is not part of the ordinary Native-to-Native chain. See
+[Decision 0010](decisions/0010-native-bootstrap-closure.md).
+
 ## Stability and promotion
 
 No MIR, ABI profile, snapshot, object, cache, command, or runtime API in this
