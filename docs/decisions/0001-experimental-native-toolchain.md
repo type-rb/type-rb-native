@@ -2,6 +2,10 @@
 
 Status: accepted for the initial experiment
 
+Self-hosting scope is amended by
+[Decision 0002](0002-typerb-owned-self-hosting.md). This decision still defines
+the repository and experimental compiler boundary.
+
 ## Context
 
 The reference TypeRB compiler emits Go, Ruby, and TypeScript from one checked
@@ -77,6 +81,10 @@ short-lived feature branches in the reference repository.
 Rejected because it duplicates a working parser, resolver, checker, diagnostics,
 and tooling before answering the native runtime and backend feasibility
 question.
+
+This rejection concerns sequencing, not the final implementation boundary.
+Decision 0002 requires a TypeRB-authored frontend after earlier native
+execution and runtime gates have justified that investment.
 
 ### Publish the existing typed IR as a stable API
 

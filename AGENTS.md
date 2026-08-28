@@ -25,3 +25,9 @@ TypeRB backend or product commitment.
   unchecked lowering, or `Any`-shaped escape hatches.
 - Add only the structure required by the current experiment gate. Do not add
   release, package, or compatibility machinery before a real consumer needs it.
+- Write repository-owned compiler and runtime implementation source in TypeRB.
+  External code generators, assemblers, linkers, SDKs, and system libraries are
+  allowed when their role and cost are explicit.
+- Treat reproducible TypeRB self-hosting as a required promotion outcome. The
+  Go reference compiler is an early bootstrap and differential oracle, not part
+  of the ordinary final release path.

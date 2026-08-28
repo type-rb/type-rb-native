@@ -34,6 +34,23 @@ Performance does not justify changing portable integer behavior, Unicode
 behavior, failure behavior, initialization order, source attribution, or other
 TypeRB guarantees.
 
+Repository-owned compiler and runtime implementation source must be TypeRB.
+External backend and platform tools are allowed when their revisions, licenses,
+invocations, and distribution costs are explicit. Do not introduce a permanent
+Go, Rust, Zig, or C host implementation as an intermediate shortcut.
+
+Use the pinned reference compiler revision recorded in `TYPE_RB_REVISION` for
+gate verification. A revision update is a reviewed compatibility change, not
+an incidental tool upgrade.
+
+Run the Gate 0 checks from the repository root:
+
+```sh
+trb fmt --check .
+trb check
+TYPE_RB_NATIVE_ROOT="$PWD" trb test
+```
+
 ## Backend changes
 
 Backend candidates share Native MIR, conformance inputs, and benchmark policy.

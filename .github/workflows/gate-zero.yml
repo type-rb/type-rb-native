@@ -1,0 +1,44 @@
+name: Gate 0
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out TypeRB Native
+        uses: actions/checkout@v5
+
+      - name: Check out the pinned TypeRB compiler
+        uses: actions/checkout@v5
+        with:
+          repository: type-rb/type-rb
+          ref: 30b5f5206680a39a02966d1579f76de55760a349
+          path: .type-rb
+
+      - name: Set up Go for the bootstrap compiler
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: .type-rb/go.mod
+          cache-dependency-path: .type-rb/go.sum
+
+      - name: Verify the compiler revision pin
+        run: test "$(cat TYPE_RB_REVISION)" = "$(git -C .type-rb rev-parse HEAD)"
+
+      - name: Verify formatting
+        run: .type-rb/trb fmt --check .
+
+      - name: Check TypeRB sources
+        run: .type-rb/trb check
+
+      - name: Run Gate 0 tests and fixtures
+        env:
+          TYPE_RB_NATIVE_ROOT: ${{ github.workspace }}
+        run: .type-rb/trb test
