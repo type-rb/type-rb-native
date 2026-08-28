@@ -1,6 +1,7 @@
 import { decode_gate3_snapshot, decode_gate4_bootstrap_snapshot } from gate3_snapshot
 import { build_gate4_bootstrap_executable } from gate3_toolchain
 import { build_gate4_generation } from gate4_toolchain
+import { build_gate5_matched_go_compiler } from gate5_matched_driver
 import { create_directory, read_text, write_text } from trb/std/filesystem
 import { environment, run } from trb/std/process
 import { Result } from trb/std/result
@@ -135,8 +136,14 @@ def _gate4_verify_conformance(
 		root: String,
 		qbe: String,
 		workspace: String,
+		matched_go_compiler: String,
 	): Result<Boolean, String>
-	executables := [workspace + "/b0", workspace + "/b1", workspace + "/b2"]
+	executables := [
+		workspace + "/b0",
+		workspace + "/b1",
+		workspace + "/b2",
+		matched_go_compiler,
+	]
 	valid_names := ["control-flow", "records-arrays", "strings-calls"]
 	mut index := 0
 	while index < valid_names.size()
@@ -305,6 +312,18 @@ describe("Gate 4 reference bootstrap") do
 				puts(error.operation + ": " + error.message)
 				expect(false).to_be_true()
 			end
+			matched_go_compiler := case build_gate5_matched_go_compiler(
+					reference_trb,
+					compiler_source,
+					workspace,
+				)
+			when Result::Ok(path)
+				path
+			when Result::Err(error)
+				puts(error.phase + ": " + error.message + "\n" + error.stderr)
+				expect(false).to_be_true()
+				""
+			end
 			snapshot := case run(
 					reference_trb,
 					["compiler", "bootstrap-snapshot", "--snapshot-version", "4", compiler_path],
@@ -358,7 +377,7 @@ describe("Gate 4 reference bootstrap") do
 						expect(false).to_be_true()
 					end
 					expect(_gate4_build_cycle(workspace + "/b0", compiler_source, qbe, workspace)).to_be_true()
-					case _gate4_verify_conformance(root, qbe, workspace)
+					case _gate4_verify_conformance(root, qbe, workspace, matched_go_compiler)
 					when Result::Ok(_value)
 						expect(true).to_be_true()
 					when Result::Err(error)

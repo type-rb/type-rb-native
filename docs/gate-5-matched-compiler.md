@@ -36,6 +36,13 @@ with a call to `compiler_main`. The harness verifies this transformation and
 rejects a baseline that omits or dead-strips the compiler entry. The Native
 entry remains the Gate 4 repository-internal adapter for this gate.
 
+The first implementation stage performs this transformation in TypeRB, proves
+that reversing the import and driver changes recovers the canonical compiler
+source byte-for-byte, builds the optimized Go executable with the pinned
+reference compiler, and runs it as an additional candidate in the complete
+valid, invalid, and mutation corpus. The canonical compiler source is not
+modified for the comparison.
+
 This is deliberately not a supported command contract. The ordinary
 file-oriented compiler CLI, project discovery, package resolution, direct QBE
 and linker orchestration, and production runtime belong to Gate 6.
