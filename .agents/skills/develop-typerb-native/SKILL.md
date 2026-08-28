@@ -58,6 +58,12 @@ a time.
 - Allow external code generators, assemblers, linkers, SDKs, and system
   libraries only behind explicit boundaries whose time and distribution cost
   can be measured.
+- For every target addition, use an internal versioned profile and keep the
+  frontend, Native MIR semantics, runtime behavior, and backend IL shared.
+  Record the QBE/backend target, ABI, linker policy, external dependencies,
+  executable format and imports, deterministic-output policy, and recovery
+  provenance. Reject unknown profiles before source or tool access, and keep
+  all Native target and gate terminology out of the reference repository.
 - When the Native compiler owns external-tool orchestration, execute explicit
   tool paths directly rather than assembling a shell command. Preserve child
   diagnostics, decode child completion deterministically, publish output only

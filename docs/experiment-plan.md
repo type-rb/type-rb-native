@@ -318,6 +318,23 @@ every median remains within 1.10% of its Gate 6B baseline, and stripped code
 remains exactly 166,824 bytes. All registered bounds pass. See the
 [Gate 6C result](../results/2026-08-29-gate6c-native-bootstrap-darwin-arm64/README.md).
 
+Gate 6D is the second-environment target slice registered in
+[issue #47](https://github.com/type-rb/type-rb-native/issues/47) and specified
+by [Decision 0011](decisions/0011-linux-arm64-target-profile.md). The same
+TypeRB-authored compiler source, target-neutral QBE IL, runtime semantics, and
+conformance corpus close a B1-to-B2-to-B3-to-B4 chain under the explicit
+internal `linux-arm64-v0` profile. Only the QBE target, system ABI, and linker
+artifact policy differ from Darwin.
+
+The Linux harness records its pinned environment and recovery provenance,
+requires exact B2/B3/B4 executable bytes, exercises the complete valid,
+mutation, invalid, and failure corpus, and inventories ELF dependencies and the
+ordinary process graph. Two warmups and seven alternating observations compare
+the Native-owned build with the external QBE/CC recipe. Median time and peak RSS
+must remain within 25% of the stronger external path, adjacent Native
+generations within 10%, and stripped compiler size within 208,530 bytes. See
+the [Gate 6D Linux arm64 plan](gate-6-linux-arm64.md).
+
 This gate is not authorization to ship. It evaluates:
 
 - representative multi-module applications;

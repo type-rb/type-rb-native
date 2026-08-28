@@ -252,6 +252,14 @@ prepare the first seed during the experiment, but its provenance is recorded
 separately and it is not part of the ordinary Native-to-Native chain. See
 [Decision 0010](decisions/0010-native-bootstrap-closure.md).
 
+Gate 6D applies the same target-neutral compiler source, QBE IL, runtime
+semantics, and Native-to-Native build graph to Linux arm64. Internal versioned
+profiles select QBE's `arm64_apple` or `arm64` lowering and the corresponding
+system linker policy; they do not fork language behavior or enter the reference
+repository. Explicit selection makes the target part of the reproducibility
+record and keeps cross-platform builds from depending on silent host inference.
+See [Decision 0011](decisions/0011-linux-arm64-target-profile.md).
+
 ## Stability and promotion
 
 No MIR, ABI profile, snapshot, object, cache, command, or runtime API in this
