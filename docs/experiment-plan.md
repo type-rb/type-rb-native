@@ -91,18 +91,31 @@ Scope:
 - Boolean, Integer, and Float values;
 - exact checked Integer behavior;
 - static strings and observable output; and
-- simple static-layout records or tagged values.
+- one disposable `darwin-arm64-v0` ABI profile through QBE 1.3.
+
+Records and tagged values begin at Gate 2. Gate 1 does not change the TypeRB
+`def main()` contract; its no-argument, `Void` MIR entry is an internal
+executable convention rather than new language syntax.
 
 Every backend candidate at this gate runs the same differential corpus against
 the reference compiler's Go backend. A mismatch is triaged against the TypeRB
 specification and accepted conformance behavior rather than automatically
 treating either implementation as correct.
 
+The pre-registered Gate 1 continuation criteria require complete differential
+correctness and at least one representative-corpus improvement: end-to-end
+build time by 20%, steady-state execution time by 10%, or stripped executable
+size by 30%. The other primary outcomes should remain within 25% of the
+stronger applicable optimized Go baseline. A regression greater than 2x stops
+the gate for review. TinyGo is measured only if the unchanged corpus works and
+the calibration costs no more than half a working day; it is not a deliverable.
+
 ### Gate 2: Portable value model
 
 Scope may expand to:
 
 - records and payload enums;
+- static-layout records and tagged values;
 - `Result` representation and propagation;
 - arrays and dynamic strings;
 - closures and captured environments; and

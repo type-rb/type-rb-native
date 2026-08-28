@@ -34,13 +34,16 @@ semantics; it does not define a native-only TypeRB dialect.
 
 Gate 0 implements the experimental boundary in TypeRB: strict decoding of
 versioned, data-only bootstrap snapshots, lowering to Native MIR, MIR
-verification, deterministic diagnostics, and source-origin preservation. It
-does not yet generate or execute machine code and provides no production
-runtime, stable ABI, stable artifact format, or compatibility guarantee.
+verification, deterministic diagnostics, and source-origin preservation.
 
-Gate 1 will use a small, heap-free corpus with
-functions, direct calls, control flow, scalar values, exact TypeRB integer and
-failure behavior, simple static-layout values, and observable output.
+Gate 1 is active. Its first vertical slice decodes snapshot v2, verifies a
+heap-free scalar MIR, emits QBE IL from TypeRB code, and builds a working
+`darwin/arm64` executable with pinned QBE 1.3 and the system linker. The current
+subset includes functions, direct calls, block parameters, branches, loops,
+Boolean, portable Integer, binary64 Float, static UTF-8 output, and deterministic
+arithmetic failure. It provides no production runtime, stable ABI, stable
+artifact format, or compatibility guarantee. Records and tagged values are
+deferred to Gate 2.
 
 ## Intended boundary
 
@@ -133,8 +136,10 @@ repository.
 
 - [Architecture](docs/architecture.md)
 - [Experiment plan](docs/experiment-plan.md)
+- [Gate 1 QBE vertical slice](docs/gate-1-qbe.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
+- [Decision 0003: Gate 1 QBE and Darwin arm64 profile](docs/decisions/0003-gate-1-qbe-target.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 

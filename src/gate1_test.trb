@@ -1,0 +1,561 @@
+import {
+	ComparisonOperator,
+	FloatBinaryOperator,
+	Gate1Block,
+	Gate1Function,
+	Gate1Instruction,
+	Gate1Module,
+	Gate1Parameter,
+	Gate1Terminator,
+	IntegerBinaryOperator,
+	ScalarType,
+	verify_gate1_mir,
+} from gate1_mir
+import { build_gate1_executable } from gate1_toolchain
+import { decode_gate1_snapshot } from gate1_snapshot
+import { NativeSource } from native_mir
+import { emit_qbe } from qbe
+import { SourceOrigin } from snapshot
+import { create_directory, read_text } from trb/std/filesystem
+import { environment, run } from trb/std/process
+import { Result } from trb/std/result
+import { describe, expect, test } from trb/std/test
+
+def _gate1_origin(line: Integer): SourceOrigin
+	return SourceOrigin.new(
+		source_id: "main",
+		start_line: line,
+		start_column: 1,
+		end_line: line,
+		end_column: 8,
+	)
+end
+
+def _gate1_sum_function(): Gate1Function
+	return Gate1Function.new(
+		id: "example/main#sum_to",
+		name: "sum_to",
+		parameters: [Gate1Parameter.new(id: "limit", value_type: ScalarType::Integer, origin: _gate1_origin(1))],
+		result_type: ScalarType::Integer,
+		entry: "entry",
+		origin: _gate1_origin(1),
+		blocks: [
+			Gate1Block.new(
+				id: "entry",
+				parameters: [],
+				origin: _gate1_origin(2),
+				instructions: [Gate1Instruction::IntegerLiteral("zero", 0, _gate1_origin(2))],
+				terminator: Gate1Terminator::Jump("loop", ["zero", "zero"], _gate1_origin(2)),
+			),
+			Gate1Block.new(
+				id: "loop",
+				parameters: [
+					Gate1Parameter.new(id: "index", value_type: ScalarType::Integer, origin: _gate1_origin(3)),
+					Gate1Parameter.new(id: "total", value_type: ScalarType::Integer, origin: _gate1_origin(3)),
+				],
+				origin: _gate1_origin(3),
+				instructions: [
+					Gate1Instruction::IntegerCompare(
+						"continues",
+						ComparisonOperator::LessThan,
+						"index",
+						"limit",
+						_gate1_origin(3),
+					),
+				],
+				terminator: Gate1Terminator::Branch(
+					"continues",
+					"body",
+					["index", "total"],
+					"done",
+					["total"],
+					_gate1_origin(3),
+				),
+			),
+			Gate1Block.new(
+				id: "body",
+				parameters: [
+					Gate1Parameter.new(id: "body_index", value_type: ScalarType::Integer, origin: _gate1_origin(4)),
+					Gate1Parameter.new(id: "body_total", value_type: ScalarType::Integer, origin: _gate1_origin(4)),
+				],
+				origin: _gate1_origin(4),
+				instructions: [
+					Gate1Instruction::IntegerLiteral("one", 1, _gate1_origin(4)),
+					Gate1Instruction::IntegerBinary(
+						"next_index",
+						IntegerBinaryOperator::Add,
+						"body_index",
+						"one",
+						_gate1_origin(4),
+					),
+					Gate1Instruction::IntegerBinary(
+						"next_total",
+						IntegerBinaryOperator::Add,
+						"body_total",
+						"next_index",
+						_gate1_origin(4),
+					),
+				],
+				terminator: Gate1Terminator::Jump("loop", ["next_index", "next_total"], _gate1_origin(4)),
+			),
+			Gate1Block.new(
+				id: "done",
+				parameters: [Gate1Parameter.new(id: "result", value_type: ScalarType::Integer, origin: _gate1_origin(5))],
+				origin: _gate1_origin(5),
+				instructions: [],
+				terminator: Gate1Terminator::Return("result", _gate1_origin(5)),
+			),
+		],
+	)
+end
+
+def _gate1_float_function(): Gate1Function
+	return Gate1Function.new(
+		id: "example/main#float_check",
+		name: "float_check",
+		parameters: [],
+		result_type: ScalarType::Boolean,
+		entry: "entry",
+		origin: _gate1_origin(7),
+		blocks: [
+			Gate1Block.new(
+				id: "entry",
+				parameters: [],
+				origin: _gate1_origin(7),
+				instructions: [
+					Gate1Instruction::FloatLiteral("left", 1.5, _gate1_origin(7)),
+					Gate1Instruction::FloatLiteral("right", 2.0, _gate1_origin(7)),
+					Gate1Instruction::FloatLiteral("expected", 3.0, _gate1_origin(7)),
+					Gate1Instruction::FloatBinary(
+						"product",
+						FloatBinaryOperator::Multiply,
+						"left",
+						"right",
+						_gate1_origin(7),
+					),
+					Gate1Instruction::FloatCompare(
+						"matches",
+						ComparisonOperator::Equal,
+						"product",
+						"expected",
+						_gate1_origin(7),
+					),
+				],
+				terminator: Gate1Terminator::Return("matches", _gate1_origin(7)),
+			),
+		],
+	)
+end
+
+def _gate1_entry_function(): Gate1Function
+	return Gate1Function.new(
+		id: "example/main#main",
+		name: "main",
+		parameters: [],
+		result_type: ScalarType::Void,
+		entry: "entry",
+		origin: _gate1_origin(9),
+		blocks: [
+			Gate1Block.new(
+				id: "entry",
+				parameters: [],
+				origin: _gate1_origin(9),
+				instructions: [
+					Gate1Instruction::IntegerLiteral("limit", 5, _gate1_origin(9)),
+					Gate1Instruction::Call("sum", "example/main#sum_to", ["limit"], _gate1_origin(9)),
+					Gate1Instruction::IntegerLiteral("expected", 15, _gate1_origin(9)),
+					Gate1Instruction::IntegerCompare(
+						"sum_matches",
+						ComparisonOperator::Equal,
+						"sum",
+						"expected",
+						_gate1_origin(9),
+					),
+				],
+				terminator: Gate1Terminator::Branch(
+					"sum_matches",
+					"check_float",
+					[],
+					"failure",
+					[],
+					_gate1_origin(9),
+				),
+			),
+			Gate1Block.new(
+				id: "check_float",
+				parameters: [],
+				origin: _gate1_origin(10),
+				instructions: [
+					Gate1Instruction::Call("float_matches", "example/main#float_check", [], _gate1_origin(10)),
+					Gate1Instruction::BooleanNot("inverted", "float_matches", _gate1_origin(10)),
+					Gate1Instruction::BooleanNot("restored", "inverted", _gate1_origin(10)),
+				],
+				terminator: Gate1Terminator::Branch(
+					"restored",
+					"success",
+					[],
+					"failure",
+					[],
+					_gate1_origin(10),
+				),
+			),
+			Gate1Block.new(
+				id: "success",
+				parameters: [],
+				origin: _gate1_origin(11),
+				instructions: [Gate1Instruction::WriteStatic("ok\n", _gate1_origin(11))],
+				terminator: Gate1Terminator::Return(nil, _gate1_origin(11)),
+			),
+			Gate1Block.new(
+				id: "failure",
+				parameters: [],
+				origin: _gate1_origin(12),
+				instructions: [Gate1Instruction::WriteStatic("bad\n", _gate1_origin(12))],
+				terminator: Gate1Terminator::Return(nil, _gate1_origin(12)),
+			),
+		],
+	)
+end
+
+def _gate1_sample_module(): Gate1Module
+	return Gate1Module.new(
+		id: "example/main",
+		entry_function: "example/main#main",
+		sources: [NativeSource.new(id: "main", path: "src/main.trb")],
+		functions: [_gate1_sum_function(), _gate1_float_function(), _gate1_entry_function()],
+	)
+end
+
+def _gate1_arithmetic_module(overflow: Boolean): Gate1Module
+	mut instructions: Array<Gate1Instruction> := []
+	if overflow
+		instructions = [
+			Gate1Instruction::IntegerLiteral("maximum", 9007199254740991, _gate1_origin(20)),
+			Gate1Instruction::IntegerLiteral("two", 2, _gate1_origin(20)),
+			Gate1Instruction::IntegerBinary(
+				"overflow",
+				IntegerBinaryOperator::Multiply,
+				"maximum",
+				"two",
+				_gate1_origin(20),
+			),
+			Gate1Instruction::WriteStatic("unreachable\n", _gate1_origin(20)),
+		]
+	else
+		instructions = [
+			Gate1Instruction::IntegerLiteral("ten", 10, _gate1_origin(20)),
+			Gate1Instruction::IntegerLiteral("three", 3, _gate1_origin(20)),
+			Gate1Instruction::IntegerLiteral("forty_one", 41, _gate1_origin(20)),
+			Gate1Instruction::IntegerLiteral("negative_seven", - 7, _gate1_origin(20)),
+			Gate1Instruction::IntegerLiteral("negative_five", - 5, _gate1_origin(20)),
+			Gate1Instruction::IntegerLiteral("expected", 77, _gate1_origin(20)),
+			Gate1Instruction::IntegerBinary(
+				"difference",
+				IntegerBinaryOperator::Subtract,
+				"ten",
+				"three",
+				_gate1_origin(20),
+			),
+			Gate1Instruction::IntegerBinary(
+				"product",
+				IntegerBinaryOperator::Multiply,
+				"difference",
+				"three",
+				_gate1_origin(20),
+			),
+			Gate1Instruction::IntegerBinary(
+				"quotient",
+				IntegerBinaryOperator::Divide,
+				"product",
+				"three",
+				_gate1_origin(20),
+			),
+			Gate1Instruction::IntegerBinary(
+				"remainder",
+				IntegerBinaryOperator::Remainder,
+				"quotient",
+				"three",
+				_gate1_origin(20),
+			),
+			Gate1Instruction::IntegerBinary(
+				"answer",
+				IntegerBinaryOperator::Add,
+				"remainder",
+				"forty_one",
+				_gate1_origin(20),
+			),
+			Gate1Instruction::IntegerBinary(
+				"negative_product",
+				IntegerBinaryOperator::Multiply,
+				"negative_seven",
+				"negative_five",
+				_gate1_origin(20),
+			),
+			Gate1Instruction::IntegerBinary(
+				"combined",
+				IntegerBinaryOperator::Add,
+				"answer",
+				"negative_product",
+				_gate1_origin(20),
+			),
+			Gate1Instruction::IntegerCompare(
+				"matches",
+				ComparisonOperator::Equal,
+				"combined",
+				"expected",
+				_gate1_origin(20),
+			),
+		]
+	end
+	terminator := Gate1Terminator::Return(nil, _gate1_origin(20))
+	mut blocks: Array<Gate1Block> := []
+	if overflow
+		blocks = [
+			Gate1Block.new(
+				id: "entry",
+				parameters: [],
+				origin: _gate1_origin(20),
+				instructions: instructions,
+				terminator: terminator,
+			),
+		]
+	else
+		blocks = [
+			Gate1Block.new(
+				id: "entry",
+				parameters: [],
+				origin: _gate1_origin(20),
+				instructions: instructions,
+				terminator: Gate1Terminator::Branch(
+					"matches",
+					"success",
+					[],
+					"failure",
+					[],
+					_gate1_origin(20),
+				),
+			),
+			Gate1Block.new(
+				id: "success",
+				parameters: [],
+				origin: _gate1_origin(21),
+				instructions: [Gate1Instruction::WriteStatic("ok\n", _gate1_origin(21))],
+				terminator: terminator,
+			),
+			Gate1Block.new(
+				id: "failure",
+				parameters: [],
+				origin: _gate1_origin(22),
+				instructions: [Gate1Instruction::WriteStatic("bad\n", _gate1_origin(22))],
+				terminator: terminator,
+			),
+		]
+	end
+	if !overflow
+		blocks = [blocks[1], blocks[0], blocks[2]]
+	end
+	entry_function := Gate1Function.new(
+		id: "example/arithmetic#main",
+		name: "main",
+		parameters: [],
+		result_type: ScalarType::Void,
+		entry: "entry",
+		origin: _gate1_origin(20),
+		blocks: blocks,
+	)
+	return Gate1Module.new(
+		id: "example/arithmetic",
+		entry_function: entry_function.id,
+		sources: [NativeSource.new(id: "main", path: "src/main.trb")],
+		functions: [entry_function],
+	)
+end
+
+def _gate1_fixture_source(): String
+	root := environment("TYPE_RB_NATIVE_ROOT")
+	if root == nil
+		return ""
+	end
+	case read_text(root + "/fixtures/gate1/valid/scalar-call.json")
+	when Result::Ok(source)
+		return source
+	when Result::Err(_error)
+		return ""
+	end
+end
+
+describe("Gate 1 scalar QBE path") do
+	test("verifies scalar calls and control flow") do
+		case verify_gate1_mir(_gate1_sample_module())
+		when Result::Ok(valid)
+			expect(valid).to_be_true()
+		when Result::Err(_diagnostic)
+			expect(false).to_be_true()
+		end
+	end
+
+	test("emits deterministic QBE IL with source origins") do
+		first := emit_qbe(_gate1_sample_module())
+		second := emit_qbe(_gate1_sample_module())
+		case first
+		when Result::Ok(source)
+			expect(second).to_equal(first)
+			expect(source.include?("export function w $main()")).to_be_true()
+			expect(source.include?("$trbn_iadd")).to_be_true()
+			expect(source.include?("trb-origin")).to_be_true()
+		when Result::Err(_diagnostic)
+			expect(false).to_be_true()
+		end
+	end
+
+	test("strictly decodes the version 2 executable fixture") do
+		source := _gate1_fixture_source()
+		expect(source.empty?()).to_be_false()
+		case decode_gate1_snapshot(source)
+		when Result::Ok(native_module)
+			expect(native_module.entry_function).to_equal("example/main#main")
+			expect(native_module.functions.size()).to_equal(2)
+		when Result::Err(_diagnostic)
+			expect(false).to_be_true()
+		end
+	end
+
+	test("rejects version 2 unknown fields deterministically") do
+		root := environment("TYPE_RB_NATIVE_ROOT")
+		if root == nil
+			expect(false).to_be_true()
+		else
+			source := case read_text(root + "/fixtures/gate1/invalid/unknown-field.json")
+			when Result::Ok(value)
+				value
+			when Result::Err(_error)
+				""
+			end
+			case decode_gate1_snapshot(source)
+			when Result::Ok(_native_module)
+				expect(false).to_be_true()
+			when Result::Err(diagnostic)
+				expect(diagnostic.code).to_equal("TRBN0002")
+				expect(diagnostic.path).to_equal("/unexpected")
+			end
+		end
+	end
+
+	test("builds and runs the Darwin arm64 executable when QBE is configured") do
+		qbe_command := environment("TYPE_RB_NATIVE_QBE")
+		if qbe_command == nil
+			expect(true).to_be_true()
+		else
+			workspace := "/tmp/type-rb-native-gate1-integration"
+			case create_directory(workspace)
+			when Result::Ok(_unit)
+			when Result::Err(_error)
+			end
+			case build_gate1_executable(
+					_gate1_sample_module(),
+					qbe_command,
+					"/usr/bin/cc",
+					workspace,
+					workspace + "/sample",
+				)
+			when Result::Ok(report)
+				case run(report.output_path, [])
+				when Result::Ok(process_result)
+					expect(process_result.success).to_be_true()
+					expect(process_result.stdout).to_equal("ok\n")
+					expect(process_result.stderr).to_equal("")
+				when Result::Err(_error)
+					expect(false).to_be_true()
+				end
+			when Result::Err(_error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+
+	test("builds the version 2 data fixture when QBE is configured") do
+		qbe_command := environment("TYPE_RB_NATIVE_QBE")
+		if qbe_command == nil
+			expect(true).to_be_true()
+		else
+			case decode_gate1_snapshot(_gate1_fixture_source())
+			when Result::Ok(native_module)
+				workspace := "/tmp/type-rb-native-gate1-fixture"
+				case create_directory(workspace)
+				when Result::Ok(_unit)
+				when Result::Err(_error)
+				end
+				case build_gate1_executable(
+						native_module,
+						qbe_command,
+						"/usr/bin/cc",
+						workspace,
+						workspace + "/sample",
+					)
+				when Result::Ok(report)
+					case run(report.output_path, [])
+					when Result::Ok(process_result)
+						expect(process_result.success).to_be_true()
+						expect(process_result.stdout).to_equal("ok\n")
+					when Result::Err(_error)
+						expect(false).to_be_true()
+					end
+				when Result::Err(_error)
+					expect(false).to_be_true()
+				end
+			when Result::Err(_diagnostic)
+				expect(false).to_be_true()
+			end
+		end
+	end
+
+	test("executes every checked Integer operator and rejects overflow") do
+		qbe_command := environment("TYPE_RB_NATIVE_QBE")
+		if qbe_command == nil
+			expect(true).to_be_true()
+		else
+			workspace := "/tmp/type-rb-native-gate1-arithmetic"
+			case create_directory(workspace)
+			when Result::Ok(_unit)
+			when Result::Err(_error)
+			end
+			case build_gate1_executable(
+					_gate1_arithmetic_module(false),
+					qbe_command,
+					"/usr/bin/cc",
+					workspace,
+					workspace + "/success",
+				)
+			when Result::Ok(report)
+				case run(report.output_path, [])
+				when Result::Ok(process_result)
+					expect(process_result.success).to_be_true()
+					expect(process_result.stdout).to_equal("ok\n")
+				when Result::Err(_error)
+					expect(false).to_be_true()
+				end
+			when Result::Err(_error)
+				expect(false).to_be_true()
+			end
+			case build_gate1_executable(
+					_gate1_arithmetic_module(true),
+					qbe_command,
+					"/usr/bin/cc",
+					workspace,
+					workspace + "/overflow",
+				)
+			when Result::Ok(report)
+				case run(report.output_path, [])
+				when Result::Ok(process_result)
+					expect(process_result.status).to_equal(70)
+					expect(process_result.stdout).to_equal("")
+					expect(process_result.stderr).to_equal("TypeRB Integer arithmetic error\n")
+				when Result::Err(_error)
+					expect(false).to_be_true()
+				end
+			when Result::Err(_error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+end

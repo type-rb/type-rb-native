@@ -1,0 +1,100 @@
+import { Gate1Module } from gate1_mir
+import { emit_qbe } from qbe
+import { write_text } from trb/std/filesystem
+import { run } from trb/std/process
+import { Result } from trb/std/result
+
+record Gate1BuildError
+	phase: String
+	message: String
+	status: Integer? = nil
+	stdout: String = ""
+	stderr: String = ""
+end
+
+record Gate1BuildReport
+	qbe_ir_path: String
+	assembly_path: String
+	output_path: String
+end
+
+def build_gate1_executable(
+		native_module: Gate1Module,
+		qbe_command: String,
+		cc_command: String,
+		workspace: String,
+		output_path: String,
+	): Result<Gate1BuildReport, Gate1BuildError>
+	qbe_source := case emit_qbe(native_module)
+	when Result::Ok(source)
+		source
+	when Result::Err(diagnostic)
+		return Result<Gate1BuildReport, Gate1BuildError>::Err(
+			Gate1BuildError.new(
+				phase: "verify",
+				message: diagnostic.code + " " + diagnostic.path + ": " + diagnostic.message,
+			)
+		)
+	end
+	qbe_ir_path := workspace + "/module.ssa"
+	assembly_path := workspace + "/module.s"
+	case write_text(qbe_ir_path, qbe_source)
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		return Result<Gate1BuildReport, Gate1BuildError>::Err(
+			Gate1BuildError.new(phase: "write-qbe", message: error.operation + ": " + error.message)
+		)
+	end
+	qbe_result := case run(qbe_command, ["-t", "arm64_apple", qbe_ir_path])
+	when Result::Ok(process_result)
+		process_result
+	when Result::Err(error)
+		return Result<Gate1BuildReport, Gate1BuildError>::Err(
+			Gate1BuildError.new(phase: "qbe", message: error.operation + ": " + error.message)
+		)
+	end
+	if !qbe_result.success
+		return Result<Gate1BuildReport, Gate1BuildError>::Err(
+			Gate1BuildError.new(
+				phase: "qbe",
+				message: "QBE rejected the generated IL",
+				status: qbe_result.status,
+				stdout: qbe_result.stdout,
+				stderr: qbe_result.stderr,
+			)
+		)
+	end
+	case write_text(assembly_path, qbe_result.stdout)
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		return Result<Gate1BuildReport, Gate1BuildError>::Err(
+			Gate1BuildError.new(phase: "write-assembly", message: error.operation + ": " + error.message)
+		)
+	end
+	cc_result := case run(cc_command, [assembly_path, "-Wl,-dead_strip", "-o", output_path])
+	when Result::Ok(process_result)
+		process_result
+	when Result::Err(error)
+		return Result<Gate1BuildReport, Gate1BuildError>::Err(
+			Gate1BuildError.new(phase: "link", message: error.operation + ": " + error.message)
+		)
+	end
+	if !cc_result.success
+		return Result<Gate1BuildReport, Gate1BuildError>::Err(
+			Gate1BuildError.new(
+				phase: "link",
+				message: "the system C toolchain rejected the QBE assembly",
+				status: cc_result.status,
+				stdout: cc_result.stdout,
+				stderr: cc_result.stderr,
+			)
+		)
+	end
+	return Result<Gate1BuildReport, Gate1BuildError>::Ok(
+		Gate1BuildReport.new(
+			qbe_ir_path: qbe_ir_path,
+			assembly_path: assembly_path,
+			output_path: output_path,
+		)
+	)
+end
