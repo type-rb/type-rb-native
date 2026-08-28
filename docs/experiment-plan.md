@@ -1,17 +1,18 @@
-# Experiment Plan
+# Development and Validation Plan
 
-## Research question
+## Engineering objective
 
-Can a TypeRB-specific native AOT pipeline improve at least one of these primary
-outcomes without unacceptable regressions in the others?
+Build a TypeRB-specific native AOT pipeline that ultimately matches or improves
+the optimized Go backend across these primary outcomes:
 
 1. End-to-end application build time.
 2. Generated-program execution time.
 3. Deployed executable size.
 
-If it can, can the compiler and runtime be implemented in TypeRB, reproduce
-themselves, and retain competitive build time and generated-code behavior once
-the complete self-hosted toolchain is measured?
+The compiler and runtime are implemented in TypeRB, reproduce themselves, and
+must retain competitive build time and generated-code behavior once the
+complete self-hosted toolchain is measured. Early gates establish this outcome
+incrementally; they are not a sequence of throwaway demonstrations.
 
 Secondary outcomes include compiler and runtime peak memory, startup latency,
 toolchain distribution size, portability, diagnostics, correctness risk, and
@@ -30,19 +31,22 @@ intentionally unstripped, cold, or otherwise disadvantaged Go configuration.
 - Unsupported behavior fails explicitly.
 - Measurements include serialization, lowering, optimization, code generation,
   assembly, linking, runtime, and required external components.
-- Thresholds and removal rules are recorded before reviewing a result.
+- Quality and performance targets are recorded before reviewing a result.
 - Microbenchmarks diagnose a phase; representative programs determine
   viability.
 
 Before a gate begins, its issue must record metric-specific non-inferiority
-bounds, a minimum meaningful primary-metric improvement, catastrophic-regression
-limits, and a time or engineering-effort budget. These values cannot be revised
-after results are reviewed merely to keep a candidate alive.
+bounds, a minimum meaningful primary-metric improvement where the gate is
+expected to provide one, and catastrophic-regression limits. A miss identifies
+required engineering work or an architectural decision; it does not by itself
+end the native implementation. Targets cannot be weakened after results are
+reviewed merely to label a gate complete.
 
 ## Candidate sequence
 
-The candidates are not implemented to production completeness in parallel.
-They advance through small shared gates and can be removed early.
+Backend candidates are not implemented to production completeness in parallel.
+They advance through small shared gates, and only implementations with a clear
+role continue to accumulate maintenance cost.
 
 1. Use hand-authored bootstrap and MIR fixtures to validate the boundary.
 2. Use QBE for the cheapest runtime and ABI feasibility check.
@@ -110,24 +114,42 @@ stronger applicable optimized Go baseline. A regression greater than 2x stops
 the gate for review. TinyGo is measured only if the unchanged corpus works and
 the calibration costs no more than half a working day; it is not a deliverable.
 
-### Gate 2: Portable value model
+### Gate 2: Heap-free aggregate value model
 
-Scope may expand to:
+Scope:
 
-- records and payload enums;
-- static-layout records and tagged values;
-- `Result` representation and propagation;
-- arrays and dynamic strings;
-- closures and captured environments; and
-- deterministic observable behavior, defined allocation failure, and
-  reproducible artifacts.
+- nominal records with immutable, statically laid-out fields;
+- payloadless and payload-bearing enum variants represented as tagged values;
+- aggregate construction, field and payload projection, direct calls, returns,
+  block parameters, and exhaustive variant dispatch;
+- monomorphized static layouts needed for records and `Result<T, E>` whose
+  fields and payloads are themselves heap-free Gate 2 values;
+- deterministic snapshots, MIR, QBE output, executables, diagnostics, and
+  layout computation; and
+- the existing disposable `darwin-arm64-v0` profile and QBE 1.3 path.
 
-Only candidates that pass Gate 1 correctness and comparability continue.
+Dynamic strings, arrays, hashes, closures, captured environments, escaping
+values, heap allocation, and a memory manager remain outside Gate 2. A static
+string literal may still be used only for the existing observable-output
+operation; it is not yet a first-class aggregate field or payload.
+
+Exit condition: the pinned reference compiler and native path produce identical
+observable results for the registered source corpus covering records, nested
+records, payload enums, exhaustive `case`, explicit `Result` handling, and
+`try` propagation. Invalid snapshot and MIR inputs fail deterministically,
+layout boundary tests pass, and repeated builds reproduce the same snapshot,
+MIR, QBE IL, and executable. On the registered aggregate workloads, stripped
+native executable size remains at least 30% below the stronger applicable Go
+baseline, while warm end-to-end build time and runtime each remain within 25%
+and no primary metric regresses by more than 2x. A target miss keeps Gate 2 open
+for diagnosis and improvement.
 
 ### Gate 3: Runtime viability
 
 Scope may expand to:
 
+- arrays, hashes, and dynamic strings;
+- closures and captured environments;
 - memory-management strategy and cycles;
 - classes, interfaces, unions, and nullable values;
 - source-mapped failures and unwind behavior;
@@ -236,15 +258,16 @@ Every published result should include:
 Store results under a date- and experiment-specific directory only after the
 first executable benchmark exists. Do not commit placeholder result files.
 
-## Selection policy
+## Backend selection policy
 
-A candidate remains only when it:
+A backend implementation remains active only when it:
 
 - passes the current correctness and reproducibility gates;
 - satisfies the pre-registered non-inferiority and catastrophic-regression
   limits;
 - achieves the pre-registered minimum improvement in at least one primary
-  outcome before product feasibility;
+  outcome before product feasibility, or has a concrete diagnostic role in
+  reaching that outcome;
 - has a credible path for the next required target and runtime feature;
 - does not impose disproportionate distribution, security, or maintenance
   costs.
@@ -258,25 +281,15 @@ A secondary improvement may justify a bounded diagnostic experiment, but it
 does not pass product feasibility when all three primary outcomes miss their
 registered gates.
 
-## Abandonment policy
+## Reassessment policy
 
-Archive or remove the native path if time-boxed milestones show that:
+A missed checkpoint triggers diagnosis of the MIR, runtime, backend, or build
+pipeline and a recorded plan to close the gap. Backend adapters may be replaced
+or removed when another implementation serves their role better. The native
+implementation itself is reconsidered only when evidence exposes a fundamental
+conflict with portable TypeRB semantics, safe implementation, or sustainable
+self-hosting—not merely because an early implementation needs optimization.
 
-- no candidate improves the practical tradeoff over an optimized release
-  executable produced by the reference compiler's Go backend;
-- a candidate exceeds its registered time or engineering-effort budget without
-  passing the current gate;
-- gains disappear after linking, runtime, sidecars, and distribution are
-  counted;
-- correctness requires a competing dialect or weaker semantics;
-- the boundary repeatedly duplicates or leaks the reference frontend;
-- source mapping, runtime safety, or package interoperability requires
-  backend-specific language APIs;
-- a second primary target requires divergent language semantics, a separate
-  frontend or runtime, or disproportionate target-specific maintenance; or
-- maintenance and security costs outweigh the demonstrated benefit.
-
-If abandoned, retain generally useful benchmark methodology, conformance tests,
-and architectural findings. Remove experimental bootstrap surfaces that have no
-remaining consumer rather than preserving compatibility for a failed
-experiment.
+Temporary bootstrap surfaces still have no compatibility guarantee. Remove
+them when the independent frontend replaces them, and retain generally useful
+benchmark methodology, conformance tests, and architectural findings.

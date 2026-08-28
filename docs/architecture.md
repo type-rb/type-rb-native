@@ -2,11 +2,12 @@
 
 ## Purpose
 
-TypeRB Native investigates a TypeRB-specific native compiler and runtime while
-keeping the supported language and reference compiler independent. The initial
-question is whether a native pipeline can improve the practical tradeoff among
-build time, execution performance, and deployed binary size after all required
-tooling is counted.
+TypeRB Native develops a TypeRB-specific native compiler and runtime while
+keeping the supported language and reference compiler independent. Its
+engineering objective is a self-hosted implementation that removes Go from the
+ordinary bootstrap and application-build path while matching or improving the
+practical tradeoff among build time, execution performance, and deployed binary
+size after all required tooling is counted.
 
 The experiment is not a port to a different host language. Native execution
 and self-hosting are separate checkpoints, but both belong to the intended
@@ -184,8 +185,9 @@ full-language target would require accepted solutions for:
 
 The initial runtime remains deliberately smaller: static data, scalar values,
 simple aggregate layout, observable output, and deterministic process failure.
-Heap management and concurrency begin only after the first backend comparison
-passes its gates.
+Gate 2 completes the heap-free aggregate layer before heap ownership and memory
+management are added. This separation keeps record and tagged-value semantics
+independent of the later allocation strategy.
 
 Runtime semantics are shared across backend candidates. Target-specific ABI
 profiles and small shims may differ, but the runtime must not be independently
@@ -217,6 +219,8 @@ runtime and package boundaries, reproducible builds, primary-platform support,
 an end-to-end advantage after the complete toolchain is counted, and a
 reproducible self-hosted compiler build whose ordinary path does not use Go.
 
-If the experiment is abandoned, the native implementation and any bootstrap
-bridge should remain removable. Reusable benchmark and conformance findings may
-be retained without preserving a dormant compatibility surface.
+The bootstrap bridge remains removable because the independent frontend will
+eventually replace it, not because removal is the default project outcome.
+Gates expose correctness, performance, and maintenance problems early enough to
+improve the shared MIR, runtime, backend, or build pipeline before those choices
+become public contracts.

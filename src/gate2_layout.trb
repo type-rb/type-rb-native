@@ -1,0 +1,441 @@
+import { Diagnostic, boundary_diagnostic } from diagnostic
+import { ScalarType } from gate1_mir
+import { Result } from trb/std/result
+
+GATE2_MAX_TYPE_DEFINITIONS := 1024
+GATE2_MAX_FIELDS := 256
+GATE2_MAX_VARIANTS := 1024
+GATE2_MAX_LAYOUT_BYTES := 1048576
+
+enum Gate2ValueType
+	Scalar(value_type: ScalarType)
+	Aggregate(type_id: String)
+end
+
+record Gate2Field
+	name: String
+	value_type: Gate2ValueType
+end
+
+record Gate2Variant
+	name: String
+	fields: Array<Gate2Field>
+end
+
+enum Gate2TypeDefinition
+	Record(type_id: String, fields: Array<Gate2Field>)
+	Tagged(type_id: String, variants: Array<Gate2Variant>)
+end
+
+enum Gate2LayoutKind
+	Record
+	Tagged
+end
+
+record Gate2FieldLayout
+	name: String
+	value_type: Gate2ValueType
+	offset: Integer
+	size: Integer
+	alignment: Integer
+end
+
+record Gate2VariantLayout
+	name: String
+	tag: Integer
+	fields: Array<Gate2FieldLayout>
+	payload_size: Integer
+	payload_alignment: Integer
+end
+
+record Gate2Layout
+	type_id: String
+	kind: Gate2LayoutKind
+	size: Integer
+	alignment: Integer
+	payload_offset: Integer
+	fields: Array<Gate2FieldLayout>
+	variants: Array<Gate2VariantLayout>
+end
+
+record Gate2SizeAlignment
+	size: Integer
+	alignment: Integer
+end
+
+def gate2_value_types_equal(left: Gate2ValueType, right: Gate2ValueType): Boolean
+	case left
+	when Gate2ValueType::Scalar(left_scalar)
+		case right
+		when Gate2ValueType::Scalar(right_scalar)
+			return left_scalar == right_scalar
+		when Gate2ValueType::Aggregate(_right_id)
+			return false
+		end
+	when Gate2ValueType::Aggregate(left_id)
+		case right
+		when Gate2ValueType::Scalar(_right_scalar)
+			return false
+		when Gate2ValueType::Aggregate(right_id)
+			return left_id == right_id
+		end
+	end
+end
+
+def verify_gate2_layouts(definitions: Array<Gate2TypeDefinition>): Result<Boolean, Diagnostic>
+	if definitions.size() > GATE2_MAX_TYPE_DEFINITIONS
+		return Result<Boolean, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0005", "/types", "type definition count exceeds the Gate 2 limit")
+		)
+	end
+	mut type_ids: Hash<String, Boolean> := {}
+	mut index := 0
+	while index < definitions.size()
+		type_id := _gate2_definition_id(definitions[index])
+		if type_id.empty?()
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", "/types/" + index.to_s() + "/id", "type identifier must not be empty")
+			)
+		end
+		if type_ids.key?(type_id)
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", "/types/" + index.to_s() + "/id", "type identifier is duplicated")
+			)
+		end
+		type_ids[type_id] = true
+		index += 1
+	end
+	index = 0
+	while index < definitions.size()
+		try compute_gate2_layout(definitions, _gate2_definition_id(definitions[index]))
+		index += 1
+	end
+	return Result<Boolean, Diagnostic>::Ok(true)
+end
+
+def compute_gate2_layout(
+		definitions: Array<Gate2TypeDefinition>,
+		type_id: String,
+	): Result<Gate2Layout, Diagnostic>
+	return _gate2_compute_layout(definitions, type_id, [], "/types/" + type_id)
+end
+
+def _gate2_compute_layout(
+		definitions: Array<Gate2TypeDefinition>,
+		type_id: String,
+		visiting: Array<String>,
+		path: String,
+	): Result<Gate2Layout, Diagnostic>
+	if visiting.include?(type_id)
+		return Result<Gate2Layout, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0004", path, "recursive by-value aggregate layout is unsupported")
+		)
+	end
+	definition := _gate2_definition(definitions, type_id)
+	if definition == nil
+		return Result<Gate2Layout, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0004", path, "aggregate type does not exist")
+		)
+	end
+	mut next_visiting: Array<String> := []
+	mut visiting_index := 0
+	while visiting_index < visiting.size()
+		next_visiting.push(visiting[visiting_index])
+		visiting_index += 1
+	end
+	next_visiting.push(type_id)
+	case definition
+	when Gate2TypeDefinition::Record(_id, fields)
+		return _gate2_record_layout(definitions, type_id, fields, next_visiting, path)
+	when Gate2TypeDefinition::Tagged(_id, variants)
+		return _gate2_tagged_layout(definitions, type_id, variants, next_visiting, path)
+	end
+end
+
+def _gate2_record_layout(
+		definitions: Array<Gate2TypeDefinition>,
+		type_id: String,
+		fields: Array<Gate2Field>,
+		visiting: Array<String>,
+		path: String,
+	): Result<Gate2Layout, Diagnostic>
+	if fields.size() > GATE2_MAX_FIELDS
+		return Result<Gate2Layout, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0005", path + "/fields", "field count exceeds the Gate 2 limit")
+		)
+	end
+	field_layouts := try _gate2_fields_layout(definitions, fields, visiting, path + "/fields", 0)
+	mut alignment := 1
+	mut end_offset := 0
+	mut index := 0
+	while index < field_layouts.size()
+		field := field_layouts[index]
+		alignment = _gate2_max(alignment, field.alignment)
+		end_offset = field.offset + field.size
+		index += 1
+	end
+	mut size := _gate2_align_up(end_offset, alignment)
+	if size == 0
+		size = 1
+	end
+	try _gate2_require_layout_size(size, path)
+	return Result<Gate2Layout, Diagnostic>::Ok(
+		Gate2Layout.new(
+			type_id: type_id,
+			kind: Gate2LayoutKind::Record,
+			size: size,
+			alignment: alignment,
+			payload_offset: 0,
+			fields: field_layouts,
+			variants: [],
+		)
+	)
+end
+
+def _gate2_tagged_layout(
+		definitions: Array<Gate2TypeDefinition>,
+		type_id: String,
+		variants: Array<Gate2Variant>,
+		visiting: Array<String>,
+		path: String,
+	): Result<Gate2Layout, Diagnostic>
+	if variants.empty?()
+		return Result<Gate2Layout, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0004", path + "/variants", "tagged type must declare at least one variant")
+		)
+	end
+	if variants.size() > GATE2_MAX_VARIANTS
+		return Result<Gate2Layout, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0005", path + "/variants", "variant count exceeds the Gate 2 limit")
+		)
+	end
+	mut names: Hash<String, Boolean> := {}
+	mut payload_alignment := 1
+	mut index := 0
+	while index < variants.size()
+		variant := variants[index]
+		variant_path := path + "/variants/" + index.to_s()
+		try _gate2_require_name(names, variant.name, variant_path + "/name", "variant")
+		if variant.fields.size() > GATE2_MAX_FIELDS
+			return Result<Gate2Layout, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0005", variant_path + "/fields", "field count exceeds the Gate 2 limit")
+			)
+		end
+		probe := try _gate2_fields_layout(definitions, variant.fields, visiting, variant_path + "/fields", 0)
+		mut field_index := 0
+		while field_index < probe.size()
+			payload_alignment = _gate2_max(payload_alignment, probe[field_index].alignment)
+			field_index += 1
+		end
+		index += 1
+	end
+	payload_offset := _gate2_align_up(4, payload_alignment)
+	mut variant_layouts: Array<Gate2VariantLayout> := []
+	mut payload_size := 0
+	index = 0
+	while index < variants.size()
+		variant := variants[index]
+		variant_path := path + "/variants/" + index.to_s()
+		fields := try _gate2_fields_layout(
+			definitions,
+			variant.fields,
+			visiting,
+			variant_path + "/fields",
+			payload_offset,
+		)
+		mut variant_end := payload_offset
+		mut variant_alignment := 1
+		mut field_index := 0
+		while field_index < fields.size()
+			field := fields[field_index]
+			variant_end = field.offset + field.size
+			variant_alignment = _gate2_max(variant_alignment, field.alignment)
+			field_index += 1
+		end
+		current_payload_size := variant_end - payload_offset
+		payload_size = _gate2_max(payload_size, current_payload_size)
+		variant_layouts.push(
+			Gate2VariantLayout.new(
+				name: variant.name,
+				tag: index,
+				fields: fields,
+				payload_size: current_payload_size,
+				payload_alignment: variant_alignment,
+			)
+		)
+		index += 1
+	end
+	alignment := _gate2_max(4, payload_alignment)
+	size := _gate2_align_up(payload_offset + payload_size, alignment)
+	try _gate2_require_layout_size(size, path)
+	return Result<Gate2Layout, Diagnostic>::Ok(
+		Gate2Layout.new(
+			type_id: type_id,
+			kind: Gate2LayoutKind::Tagged,
+			size: size,
+			alignment: alignment,
+			payload_offset: payload_offset,
+			fields: [],
+			variants: variant_layouts,
+		)
+	)
+end
+
+def _gate2_fields_layout(
+		definitions: Array<Gate2TypeDefinition>,
+		fields: Array<Gate2Field>,
+		visiting: Array<String>,
+		path: String,
+		start_offset: Integer,
+	): Result<Array<Gate2FieldLayout>, Diagnostic>
+	mut names: Hash<String, Boolean> := {}
+	mut layouts: Array<Gate2FieldLayout> := []
+	mut offset := start_offset
+	mut index := 0
+	while index < fields.size()
+		field := fields[index]
+		field_path := path + "/" + index.to_s()
+		try _gate2_require_name(names, field.name, field_path + "/name", "field")
+		size_alignment := try _gate2_size_alignment(definitions, field.value_type, visiting, field_path + "/type")
+		offset = _gate2_align_up(offset, size_alignment.alignment)
+		if offset + size_alignment.size > GATE2_MAX_LAYOUT_BYTES
+			return Result<Array<Gate2FieldLayout>, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0005", field_path, "aggregate layout exceeds the Gate 2 byte limit")
+			)
+		end
+		layouts.push(
+			Gate2FieldLayout.new(
+				name: field.name,
+				value_type: field.value_type,
+				offset: offset,
+				size: size_alignment.size,
+				alignment: size_alignment.alignment,
+			)
+		)
+		offset += size_alignment.size
+		index += 1
+	end
+	return Result<Array<Gate2FieldLayout>, Diagnostic>::Ok(layouts)
+end
+
+def _gate2_size_alignment(
+		definitions: Array<Gate2TypeDefinition>,
+		value_type: Gate2ValueType,
+		visiting: Array<String>,
+		path: String,
+	): Result<Gate2SizeAlignment, Diagnostic>
+	case value_type
+	when Gate2ValueType::Scalar(scalar)
+		if scalar == ScalarType::Boolean
+			return Result<Gate2SizeAlignment, Diagnostic>::Ok(Gate2SizeAlignment.new(size: 1, alignment: 1))
+		end
+		if scalar == ScalarType::Integer || scalar == ScalarType::Float
+			return Result<Gate2SizeAlignment, Diagnostic>::Ok(Gate2SizeAlignment.new(size: 8, alignment: 8))
+		end
+		return Result<Gate2SizeAlignment, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0004", path, "Void is not a storable Gate 2 value")
+		)
+	when Gate2ValueType::Aggregate(type_id)
+		layout := try _gate2_compute_layout(definitions, type_id, visiting, path)
+		return Result<Gate2SizeAlignment, Diagnostic>::Ok(
+			Gate2SizeAlignment.new(size: layout.size, alignment: layout.alignment)
+		)
+	end
+end
+
+def _gate2_require_name(
+		mut names: Hash<String, Boolean>,
+		name: String,
+		path: String,
+		kind: String,
+	): Result<Boolean, Diagnostic>
+	if name.empty?()
+		return Result<Boolean, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0004", path, kind + " name must not be empty")
+		)
+	end
+	if names.key?(name)
+		return Result<Boolean, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0004", path, kind + " name is duplicated")
+		)
+	end
+	names[name] = true
+	return Result<Boolean, Diagnostic>::Ok(true)
+end
+
+def _gate2_require_layout_size(size: Integer, path: String): Result<Boolean, Diagnostic>
+	if size > GATE2_MAX_LAYOUT_BYTES
+		return Result<Boolean, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0005", path, "aggregate layout exceeds the Gate 2 byte limit")
+		)
+	end
+	return Result<Boolean, Diagnostic>::Ok(true)
+end
+
+def _gate2_definition_id(definition: Gate2TypeDefinition): String
+	case definition
+	when Gate2TypeDefinition::Record(type_id, _fields)
+		return type_id
+	when Gate2TypeDefinition::Tagged(type_id, _variants)
+		return type_id
+	end
+end
+
+def _gate2_definition(
+		definitions: Array<Gate2TypeDefinition>,
+		type_id: String,
+	): Gate2TypeDefinition?
+	mut index := 0
+	while index < definitions.size()
+		definition := definitions[index]
+		if _gate2_definition_id(definition) == type_id
+			return definition
+		end
+		index += 1
+	end
+	return nil
+end
+
+def gate2_field_layout(layout: Gate2Layout, name: String): Gate2FieldLayout?
+	mut index := 0
+	while index < layout.fields.size()
+		if layout.fields[index].name == name
+			return layout.fields[index]
+		end
+		index += 1
+	end
+	return nil
+end
+
+def gate2_variant_layout(layout: Gate2Layout, name: String): Gate2VariantLayout?
+	mut index := 0
+	while index < layout.variants.size()
+		if layout.variants[index].name == name
+			return layout.variants[index]
+		end
+		index += 1
+	end
+	return nil
+end
+
+def gate2_variant_field_layout(variant: Gate2VariantLayout, name: String): Gate2FieldLayout?
+	mut index := 0
+	while index < variant.fields.size()
+		if variant.fields[index].name == name
+			return variant.fields[index]
+		end
+		index += 1
+	end
+	return nil
+end
+
+def _gate2_align_up(value: Integer, alignment: Integer): Integer
+	return ((value + alignment - 1) / alignment) * alignment
+end
+
+def _gate2_max(left: Integer, right: Integer): Integer
+	if left > right
+		return left
+	end
+	return right
+end

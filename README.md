@@ -5,12 +5,15 @@
 > TypeRB backend, runtime, or release target. Everything in this repository may
 > change incompatibly or be removed without notice.
 
-TypeRB Native explores whether a TypeRB-specific native compiler and runtime
-can improve end-to-end build time, generated-program performance, and deployed
+TypeRB Native develops a TypeRB-specific native compiler and runtime intended
+to improve end-to-end build time, generated-program performance, and deployed
 binary size relative to an optimized release executable produced by the
 reference compiler's Go backend. Its long-term objective is a self-hosted
 compiler whose repository-owned implementation is written in TypeRB and whose
 ordinary release/bootstrap path does not require Go or another host language.
+The repository remains experimental while that implementation is incomplete;
+the gates are engineering checkpoints that keep correctness and whole-toolchain
+performance visible as the implementation grows.
 
 The [TypeRB repository](https://github.com/type-rb/type-rb) remains the source
 of truth for the language specification, reference compiler, supported
@@ -27,8 +30,9 @@ semantics; it does not define a native-only TypeRB dialect.
 - Compare multiple machine-code strategies behind the same MIR and semantics.
 - Measure complete toolchains, including code generation, linking, runtime,
   sidecars, and distribution size.
-- Keep the experiment removable if it does not improve the practical tradeoff
-  offered by the Go backend.
+- Preserve a credible path to a native implementation that is at least as
+  practical as the Go backend, and use measured regressions to direct
+  optimization work rather than treating early gates as disposable demos.
 
 ## Current status
 
@@ -46,11 +50,13 @@ binary64 Float, static UTF-8 output, and deterministic arithmetic failure.
 On the recorded Apple M2 Pro run, native warm build time improved by 30.5% to
 36.3%, stripped executable size improved by 96.85%, and the worst runtime result
 was a 16.0% regression, within the pre-registered 25% bound. See the
-[Gate 1 result](results/2026-08-28-gate1-qbe-darwin-arm64/README.md). Development
-stops before Gate 2 for maintainer review. The result does not select QBE for
-production or measure the final self-hosted compiler. The current path provides
-no production runtime, stable ABI, stable artifact format, or compatibility
-guarantee. Records and tagged values remain deferred to Gate 2.
+[Gate 1 result](results/2026-08-28-gate1-qbe-darwin-arm64/README.md). Gate 2 is
+active. Its first checkpoint adds heap-free, static-layout records and tagged
+values, including the representation needed for payload enums and `Result`,
+before dynamic strings, arrays, closures, or a memory manager are introduced.
+The Gate 1 result does not select QBE for production or measure the final
+self-hosted compiler. The current path provides no production runtime, stable
+ABI, stable artifact format, or compatibility guarantee.
 
 ## Intended boundary
 
@@ -114,8 +120,8 @@ gate. More than one implementation may remain only when distinct development,
 release, or target use cases show a durable benefit that justifies the
 maintenance cost.
 
-See the [experiment plan](docs/experiment-plan.md) for correctness gates,
-measurement rules, and abandonment criteria.
+See the [development and validation plan](docs/experiment-plan.md) for
+correctness gates, measurement rules, and backend selection criteria.
 
 ## Non-goals
 
@@ -124,8 +130,8 @@ The initial gates do not attempt to:
 - port the compiler to Rust, Zig, or another host implementation language;
 - replace external code generators, assemblers, linkers, SDKs, or system
   libraries merely to claim self-hosting;
-- implement the full TypeRB frontend before native execution feasibility has
-  passed its earlier gates;
+- implement the full TypeRB frontend before the shared native value model and
+  runtime boundaries are concrete enough to support it;
 - commit TypeRB to a supported native mode;
 - expose mutable compiler internals or backend hooks as a package API;
 - support the full standard library, Web, ORM, Jobs, or native package
@@ -142,12 +148,14 @@ repository.
 ## Documentation
 
 - [Architecture](docs/architecture.md)
-- [Experiment plan](docs/experiment-plan.md)
+- [Development and validation plan](docs/experiment-plan.md)
 - [Gate 1 QBE vertical slice](docs/gate-1-qbe.md)
 - [Gate 1 QBE Darwin arm64 result](results/2026-08-28-gate1-qbe-darwin-arm64/README.md)
+- [Gate 2 heap-free aggregate value model](docs/gate-2-aggregates.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
 - [Decision 0003: Gate 1 QBE and Darwin arm64 profile](docs/decisions/0003-gate-1-qbe-target.md)
+- [Decision 0004: Sustained native implementation and staged Gate 2](docs/decisions/0004-sustained-native-development.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 
