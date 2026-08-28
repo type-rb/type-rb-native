@@ -35,6 +35,12 @@ Work on one recorded experiment gate at a time.
 ## Implement
 
 - Write repository-owned executable compiler and runtime source in TypeRB.
+- For self-hosting gates, require runtime-supplied source to pass through the
+  checked-in lexer, parser, resolver, checker, and emitter. Reject embedded
+  compiler artifacts, source-specific output paths, quines, and hidden host
+  fallbacks as bootstrap evidence.
+- Record B0, B1, and B2 roles explicitly. Verify the ordinary regeneration
+  process graph rather than inferring Go independence from the output binary.
 - Allow external code generators, assemblers, linkers, SDKs, and system
   libraries only behind explicit boundaries whose time and distribution cost
   can be measured.
