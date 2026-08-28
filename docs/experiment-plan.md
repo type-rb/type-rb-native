@@ -287,6 +287,16 @@ and the stripped Native compiler must remain within 15% of the 149,784-byte
 Gate 6A baseline. See the
 [Gate 6B single-file build plan](gate-6-single-file-build.md).
 
+Gate 6B completed at measured TypeRB Native revision
+`1038cfe497a96d9d282db55a54d9eea6509f7868`. Native-owned B1/B2 builds match
+the external recipe's application bytes and behavior, retain the compiler
+fixed point, clean every intermediate, and contain only the registered
+Native-to-QBE-to-CC process graph. Median time is 1.41% and 3.13% above the
+same-generation external recipe, median RSS is 0.63% and 0.27% above it,
+adjacent Native generations converge within 0.42%, and stripped compiler
+growth is 11.38%. All registered bounds pass. See the
+[Gate 6B result](../results/2026-08-29-gate6b-single-file-build-darwin-arm64/README.md).
+
 This gate is not authorization to ship. It evaluates:
 
 - representative multi-module applications;
