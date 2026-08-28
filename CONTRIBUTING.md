@@ -43,6 +43,24 @@ Use the pinned reference compiler revision recorded in `TYPE_RB_REVISION` for
 gate verification. A revision update is a reviewed compatibility change, not
 an incidental tool upgrade.
 
+## Cross-repository changes
+
+Keep the reference TypeRB repository independent of this project. When a
+temporary producer change is required upstream:
+
+- define and name it only in terms of reference-compiler behavior;
+- keep it internal, narrow, versioned, data-only, and removable;
+- do not mention TypeRB Native, gate numbers, native-backend plans, or
+  consumer-specific aliases in upstream code, diagnostics, tests,
+  documentation, changelog entries, commits, or pull requests; and
+- record the integration command, gate mapping, exact merged revision,
+  compatibility note, and removal condition in this repository.
+
+Before opening the upstream pull request, audit both its diff and proposed
+title and body for project terminology. Update `TYPE_RB_REVISION` and CI only
+after the upstream change is merged, then run the complete native checks with
+the exact pinned compiler.
+
 Run the Gate 0 checks from the repository root:
 
 ```sh

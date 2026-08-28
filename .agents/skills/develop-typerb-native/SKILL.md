@@ -15,6 +15,23 @@ Work on one recorded experiment gate at a time.
    conformance source of truth.
 4. State the current gate and its exit condition before expanding scope.
 
+## Preserve repository ownership
+
+- Gate names, Native MIR, backend and runtime plans, integration commands,
+  revision pins, compatibility notes, and bridge retirement conditions belong
+  only in this repository.
+- Keep the reference TypeRB repository consumer-neutral. Never add TypeRB
+  Native, gate numbering, native-backend plans, or consumer-specific aliases to
+  its code, diagnostics, tests, documentation, changelog, commits, or pull
+  requests.
+- If this project requires a temporary reference-compiler surface, justify and
+  name it only by reference-compiler semantics. It must remain narrow,
+  versioned, data-only, internal, removable, and independently understandable
+  without this repository.
+- Before submitting a reference-repository change, audit both the diff and pull
+  request text for leaked project terminology. Record the consumer command,
+  exact merged revision, gate mapping, and removal plan here instead.
+
 ## Implement
 
 - Write repository-owned executable compiler and runtime source in TypeRB.
