@@ -43,6 +43,22 @@ reference repository's normal design and review process. Until the independent
 frontend exists, the reference implementation may provide a narrow snapshot
 producer on a short-lived, removable experimental surface.
 
+### Reference-repository independence
+
+The reference repository is consumer-neutral. A temporary producer there must
+be justified, named, documented, tested, and diagnosed solely as a
+reference-compiler capability; it must be understandable without knowing that
+TypeRB Native exists. Reference code, documentation, changelog entries, commit
+messages, and pull requests must not contain this repository's name, gate
+numbers, backend or runtime roadmap, consumer-specific aliases, integration
+commands, revision pins, or bridge retirement policy.
+
+This repository owns the other side of that boundary: the exact producer
+command it invokes, the snapshot version used by each gate, the pinned merged
+reference revision, compatibility coordination, and the condition for removing
+the bridge. An upstream change remains narrow, internal, versioned, data-only,
+and removable; downstream urgency does not turn it into a public TypeRB API.
+
 ## Implementation-language boundary
 
 Repository-owned executable compiler and runtime source is written in TypeRB.

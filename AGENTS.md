@@ -12,9 +12,15 @@ TypeRB backend or product commitment.
   behavior to improve a benchmark.
 - Keep Native MIR, target ABI profiles, and backend details internal and explicitly
   unstable until a separate promotion decision is accepted.
-- Keep the reference TypeRB repository independent of this experiment. Any
-  bootstrap bridge added there must be narrow, versioned, data-only, and
-  removable.
+- Keep the reference TypeRB repository consumer-neutral and independent of this
+  experiment. Its code, diagnostics, tests, documentation, changelog, commits,
+  and pull requests must not name TypeRB Native, this repository's gates,
+  native-backend plans, or consumer-specific compatibility aliases.
+- Any temporary bootstrap capability added to the reference repository must be
+  justified and named only by reference-compiler semantics. Keep it narrow,
+  versioned, data-only, internal, and removable.
+- Keep all Native integration commands, revision pins, gate mappings, bridge
+  compatibility notes, and retirement conditions in this repository.
 - Put backend-specific lowering behind a common verified Native MIR boundary.
   Same-target comparisons use the same ABI profile. Do not duplicate the
   frontend or runtime semantics for each backend candidate.
