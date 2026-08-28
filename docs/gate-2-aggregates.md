@@ -6,18 +6,17 @@ static-layout values. It implements existing TypeRB record, payload-enum, and
 
 ## Implementation status
 
-The backend-neutral layout model, aggregate Native MIR, verifier, and
-hand-authored QBE vertical slice are implemented. The QBE adapter uses
-caller-owned result storage, borrowed aggregate parameters, separate transfer
-and value slots for aggregate block parameters, and checked payload projection.
-It initializes aggregate storage before construction so padding and inactive
-payload bytes never carry indeterminate data.
+Gate 2 is complete. The backend-neutral layout model, aggregate Native MIR,
+verifier, strict snapshot v3 decoder, source producer, differential corpus,
+reproducibility checks, and measured QBE executable path are implemented. The
+QBE adapter uses caller-owned result storage, borrowed aggregate parameters,
+safe block-parameter copy elision, and checked payload projection. Aggregate
+construction initializes padding and inactive payload bytes deterministically.
 
-The strict version 3 snapshot decoder and executable data fixture are also
-implemented. The source snapshot producer, source differential corpus, and Gate
-2 measurements remain active work. This document records the complete
-checkpoint rather than treating the hand-authored vertical slice as the gate
-result.
+The final source corpus covers ordinary and nested records, payloadless and
+payload-bearing variants, exhaustive dispatch, aggregate direct calls and
+returns, `Result`, `try`, loop-carried record state, and parallel aggregate
+swaps. See the [Gate 2 result](../results/2026-08-28-gate2-qbe-darwin-arm64/README.md).
 
 ## Checkpoint boundary
 
@@ -52,11 +51,11 @@ semantics remain value semantics even though the disposable target ABI passes
 addresses internally. A later allocation strategy can therefore add escaping
 storage without changing TypeRB record or enum behavior.
 
-Aggregate construction zero-initializes its complete slot and uses the system
-`memcpy`/`memset` ABI for fixed-size copies and initialization. These dynamic
-system-library dependencies are counted with the executable in Gate 2 reports.
-Block arguments use distinct transfer and value slots so control-flow edges
-retain parallel-copy semantics, including aggregate swaps and back edges.
+Aggregate construction zero-initializes its complete slot with explicit stores,
+and fixed-size copies use QBE `blit`. Common incoming aggregate values alias
+their existing storage. Other block arguments use transfer slots, with staging
+only when an edge can overwrite another source. This retains parallel-copy
+semantics for aggregate swaps and back edges without unconditional copies.
 
 ## Bootstrap snapshot v3
 
@@ -94,3 +93,8 @@ Gate 2 completes when:
 
 Missing an engineering target leaves Gate 2 open for diagnosis and improvement.
 Gate 3 does not start until this checkpoint is reported.
+
+All six conditions pass in the recorded Darwin arm64 result. The worst runtime
+result is a 17.6% regression on the aggregate kernel, within the 25% limit;
+warm build time improves by 26.0% to 29.5%, and stripped executable size
+improves by 96.85%. Gate 3 has not started.

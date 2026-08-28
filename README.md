@@ -47,16 +47,23 @@ executables. The differential corpus covers functions, direct calls, block
 parameters, branches, loops, Boolean, portable Integer including checked power,
 binary64 Float, static UTF-8 output, and deterministic arithmetic failure.
 
-On the recorded Apple M2 Pro run, native warm build time improved by 30.5% to
-36.3%, stripped executable size improved by 96.85%, and the worst runtime result
-was a 16.0% regression, within the pre-registered 25% bound. See the
-[Gate 1 result](results/2026-08-28-gate1-qbe-darwin-arm64/README.md). Gate 2 is
-active. Its first checkpoint adds heap-free, static-layout records and tagged
-values, including the representation needed for payload enums and `Result`,
-before dynamic strings, arrays, closures, or a memory manager are introduced.
-The Gate 1 result does not select QBE for production or measure the final
-self-hosted compiler. The current path provides no production runtime, stable
-ABI, stable artifact format, or compatibility guarantee.
+On the recorded Apple M2 Pro Gate 1 run, native warm build time improved by
+30.5% to 36.3%, stripped executable size improved by 96.85%, and the worst
+runtime result was a 16.0% regression. See the
+[Gate 1 result](results/2026-08-28-gate1-qbe-darwin-arm64/README.md).
+
+Gate 2 is also complete. Snapshot v3 connects real TypeRB records, nested
+records, tagged values, `Result`, `try`, aggregate calls and returns, and
+parallel aggregate block arguments to the native path. The measured
+five-million-iteration record kernel is 17.6% slower than the stronger Go
+baseline, within the registered 25% bound; the two smaller cases are faster.
+Warm build time improves by 26.0% to 29.5%, stripped executable size improves
+by 96.85%, and observed build and runtime peak RSS remain below both Go paths.
+See the [Gate 2 result](results/2026-08-28-gate2-qbe-darwin-arm64/README.md).
+
+Gate 3 has not started. These results do not select QBE for production or
+measure the final self-hosted compiler. The current path provides no production
+runtime, stable ABI, stable artifact format, or compatibility guarantee.
 
 ## Intended boundary
 
@@ -152,6 +159,7 @@ repository.
 - [Gate 1 QBE vertical slice](docs/gate-1-qbe.md)
 - [Gate 1 QBE Darwin arm64 result](results/2026-08-28-gate1-qbe-darwin-arm64/README.md)
 - [Gate 2 heap-free aggregate value model](docs/gate-2-aggregates.md)
+- [Gate 2 QBE Darwin arm64 result](results/2026-08-28-gate2-qbe-darwin-arm64/README.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
 - [Decision 0003: Gate 1 QBE and Darwin arm64 profile](docs/decisions/0003-gate-1-qbe-target.md)
