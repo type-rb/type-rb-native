@@ -7,7 +7,7 @@ defines the implementation boundary used to satisfy them.
 
 ## Implementation status
 
-The source-connected correctness slice is complete. The pinned reference
+The source-connected correctness and automatic-collection slices are complete. The pinned reference
 compiler produces version 4 snapshots for all four registered workloads and
 the two bounds-failure cases. The native decoder, verifier, exact-root runtime,
 QBE emitter, and linker path match the optimized Go executable in stdout,
@@ -20,8 +20,14 @@ function bodies. Direct calls to a body that is also used as a closure supply a
 null environment, while indirect calls supply the closure's environment. This
 keeps ordinary direct calls compact without misaligning authored parameters.
 
-Gate 3 remains open until automatic-collection evidence, the registered raw
-measurements, and the dated result report pass every continuation bound.
+The registered source cycle crosses the normal allocation threshold repeatedly,
+reclaims its unreachable closure/Array graphs, and finishes within the live-set
+bound. A TypeRB-authored benchmark harness records the build phases, executable
+sizes, peak RSS, steady-state runtimes, and collector statistics without
+changing source-visible behavior.
+
+Gate 3 remains open until the registered raw measurements and dated result
+report pass every continuation bound.
 
 ## Reference producer pin
 
@@ -136,10 +142,16 @@ Its verifier and runtime tests enforce:
   and
 - allocation failure and index failure terminate with stable diagnostics.
 
-The internal GC stress fixture constructs an Array/closure/environment cycle,
-drops its final root by returning from a helper function, and forces repeated
-collections. The collector must report reclaimed cycles and a stable warm live
-set under the bound registered in issue #13.
+The registered source stress case constructs Array/closure/environment cycles,
+drops each final root by returning from a helper function, and triggers at
+least two collections through ordinary allocation pacing. Its instrumented
+executable performs one final reporting collection after `main` returns, so
+total and automatic collection counts remain distinguishable. It reports
+reclaimed cycles and a final live set under the bound registered in issue #13.
+
+A separate hand-authored MIR fixture forces repeated collections to exercise
+the internal operation directly. This is test coverage, not the source-level
+acceptance evidence.
 
 Forced collection and counter reads are represented only by test-only Native
 MIR instructions. They are intentionally absent from snapshot version 4 and
@@ -168,3 +180,29 @@ distinct TypeRB diagnostics. A broader cross-backend question about Array
 growth through aliases and mutable parameters is tracked independently in
 [type-rb/type-rb#596](https://github.com/type-rb/type-rb/issues/596); the
 registered corpus does not assume an unsettled answer.
+
+## Measurement path
+
+`tools/gate3-benchmark` runs the four registered workloads through the same
+pinned source revision and records:
+
+- complete native, optimized Go, and size-optimized Go application build time;
+- native snapshot, decode/lower, emit, QBE-to-assembly, and link phase time;
+- raw and stripped executable size;
+- one warm build and runtime peak-RSS observation per candidate;
+- runtime observations after three unrecorded warmups; and
+- native collection count, automatic collection count, collection nanoseconds,
+  allocated bytes, reclaimed bytes, and final live bytes.
+
+Collector statistics come from a separately built instrumented executable. Its
+stdout and exit behavior must still match the ordinary executable; the report
+is emitted to stderr only after `main` returns. The timed native executable does
+not emit the report. Array backing allocations and growth are included in the
+allocation, live, and reclaimed byte totals and in collection pacing.
+
+The QBE adapter applies three semantics-preserving optimizations required by
+the registered workloads: common unchanged block parameters reuse their SSA
+value and root slot, statically known small scalar closures are devirtualized
+under strict shape checks, and String literals plus literal-only concatenations
+use immutable static objects. Dynamic closure calls and String concatenation
+continue through the general runtime paths.
