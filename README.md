@@ -127,14 +127,16 @@ does not grow. Recovery provenance remains outside the ordinary Go-free chain.
 See the [Gate 6C Native bootstrap closure](docs/gate-6-native-bootstrap.md) and
 [recorded result](results/2026-08-29-gate6c-native-bootstrap-darwin-arm64/README.md).
 
-Gate 6D is active under the pre-registered scope in
-[issue #47](https://github.com/type-rb/type-rb-native/issues/47). It adds the
-internal `linux-arm64-v0` profile and requires the same TypeRB-authored compiler
-to close an exact B1-to-B2-to-B3-to-B4 seed chain in a pinned Linux arm64
-environment. The frontend, emitted QBE IL, runtime semantics, and conformance
-corpus remain shared with Darwin; only the explicit QBE target and linker policy
-differ. See the [Gate 6D Linux arm64 plan](docs/gate-6-linux-arm64.md) and
-[measurement harness](tools/gate6d-benchmark/README.md).
+Gate 6D is complete at measured revision
+`68497f68ed1c3770c2a457790a6519962a2cb921`. The same TypeRB-authored compiler,
+QBE IL fixed point, runtime semantics, and conformance corpus close an exact
+B1-to-B2-to-B3-to-B4 chain under `linux-arm64-v0`. The generated compilers are
+byte-identical at 175,920 bytes. Native median time differs from the equivalent
+external recipe by at most 2.55%, adjacent Native generations by at most 0.88%,
+and median RSS by at most 0.35%. See the
+[Gate 6D Linux arm64 plan](docs/gate-6-linux-arm64.md),
+[measurement harness](tools/gate6d-benchmark/README.md), and
+[recorded result](results/2026-08-29-gate6d-native-bootstrap-linux-arm64/README.md).
 
 Multi-module applications, project discovery, production runtime integration,
 package/native-library boundaries, incremental builds, toolchain discovery,
@@ -247,6 +249,7 @@ repository.
 - [Gate 6C Native-to-Native bootstrap closure](docs/gate-6-native-bootstrap.md)
 - [Gate 6C Native-to-Native bootstrap Darwin arm64 result](results/2026-08-29-gate6c-native-bootstrap-darwin-arm64/README.md)
 - [Gate 6D Linux arm64 target chain](docs/gate-6-linux-arm64.md)
+- [Gate 6D Linux arm64 target-chain result](results/2026-08-29-gate6d-native-bootstrap-linux-arm64/README.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
 - [Decision 0003: Gate 1 QBE and Darwin arm64 profile](docs/decisions/0003-gate-1-qbe-target.md)

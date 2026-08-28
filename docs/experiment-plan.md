@@ -335,6 +335,14 @@ must remain within 25% of the stronger external path, adjacent Native
 generations within 10%, and stripped compiler size within 208,530 bytes. See
 the [Gate 6D Linux arm64 plan](gate-6-linux-arm64.md).
 
+Gate 6D completed at measured TypeRB Native revision
+`68497f68ed1c3770c2a457790a6519962a2cb921`. B1/B2/B3/B4 Linux compiler bytes
+are exact; the complete corpus, failures, ELF and process inventory pass;
+Native/external median time differs by at most 2.55%; adjacent Native medians
+differ by at most 0.88%; median RSS differs by at most 0.35%; and compiler size
+is 15.64% below its registered ceiling. See the
+[Gate 6D result](../results/2026-08-29-gate6d-native-bootstrap-linux-arm64/README.md).
+
 This gate is not authorization to ship. It evaluates:
 
 - representative multi-module applications;

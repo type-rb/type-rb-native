@@ -9,13 +9,12 @@ boundary is defined by
 
 ## Status
 
-Gate 6D is active. The target implementation and permanent Darwin regression
-coverage landed at TypeRB Native revision
-`2a72c048a835804a2fd1bd35e5f2788ddf7a6892`. The TypeRB-authored
-[`gate6d-benchmark`](../tools/gate6d-benchmark/README.md) now provides the
-pinned Linux verification and measurement controller; a reviewed seven-run
-result remains required to complete the gate. This is not a release and does
-not create a supported TypeRB target.
+Gate 6D is complete at measured TypeRB Native revision
+`68497f68ed1c3770c2a457790a6519962a2cb921`. The target implementation,
+permanent Darwin regression coverage, pinned Linux environment,
+TypeRB-authored [`gate6d-benchmark`](../tools/gate6d-benchmark/README.md), and
+reviewed seven-run result pass every registered condition. This is not a
+release and does not create a supported TypeRB target.
 
 ## Target boundary
 
@@ -103,10 +102,21 @@ provided libraries remain identified.
 
 1. Add the explicit profile boundary and preserve Darwin behavior. Complete.
 2. Add a reproducible Linux arm64 verification and measurement harness.
-   Complete when its implementation PR lands.
+   Complete.
 3. Record raw measurements, artifacts, provenance, and the process inventory.
+   Complete.
 4. Close the gate only after every registered correctness and performance
-   condition passes.
+   condition passes. Complete.
+
+## Recorded result
+
+B1 through B4 are exact 175,920-byte ELF64 AArch64 executables. Native median
+build time is between 2.55% faster and 0.68% slower than the matching external
+recipe, adjacent Native medians differ by at most 0.88%, and median RSS differs
+from external by at most 0.35%. Re-stripped compiler bytes remain exact and are
+15.64% below the registered size ceiling. The full corpus, failure contracts,
+cleanup checks, ELF inspection, and observed process graph pass. See the
+[Gate 6D Linux arm64 result](../results/2026-08-29-gate6d-native-bootstrap-linux-arm64/README.md).
 
 ## Deferred scope
 
