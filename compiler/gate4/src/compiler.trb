@@ -352,6 +352,7 @@ def gate4_emit_runtime(mut output: Gate4Output)
 		"data $g4_output_flag = { b \"--output\", b 0 }",
 		"data $g4_qbe_flag = { b \"--qbe\", b 0 }",
 		"data $g4_cc_flag = { b \"--cc\", b 0 }",
+		"data $g4_target_option = { b \"--target\", b 0 }",
 		"data $g4_source_arg = { b \"--source-content\", b 0 }",
 		"data $g4_rb = { b \"rb\", b 0 }",
 		"data $g4_wb = { b \"wb\", b 0 }",
@@ -360,9 +361,16 @@ def gate4_emit_runtime(mut output: Gate4Output)
 		"data $g4_temp_suffix = { b \".trbn.XXXXXX\", b 0 }",
 		"data $g4_slash = { b \"/\", b 0 }",
 		"data $g4_target_flag = { b \"-t\", b 0 }",
-		"data $g4_target = { b \"arm64_apple\", b 0 }",
+		"data $g4_profile_darwin_arm64 = { b \"darwin-arm64-v0\", b 0 }",
+		"data $g4_profile_linux_arm64 = { b \"linux-arm64-v0\", b 0 }",
+		"data $g4_qbe_darwin_arm64 = { b \"arm64_apple\", b 0 }",
+		"data $g4_qbe_linux_arm64 = { b \"arm64\", b 0 }",
 		"data $g4_o_flag = { b \"-o\", b 0 }",
-		"data $g4_dead_strip = { b \"-Wl,-dead_strip\", b 0 }",
+		"data $g4_dead_strip_darwin = { b \"-Wl,-dead_strip\", b 0 }",
+		"data $g4_dead_strip_linux = { b \"-Wl,--gc-sections,--strip-all\", b 0 }",
+		"data $g4_selected_qbe_target = align 8 { l $g4_qbe_darwin_arm64 }",
+		"data $g4_selected_dead_strip = align 8 { l $g4_dead_strip_darwin }",
+		"data $g4_target_error = { b \"compiler: unsupported target profile\", b 10 }",
 		"data $g4_intermediate_error = { b \"compiler: cannot create intermediate file\", b 10 }",
 		"data $g4_qbe_error = { b \"compiler: qbe failed\", b 10 }",
 		"data $g4_cc_error = { b \"compiler: cc failed\", b 10 }",
@@ -495,8 +503,8 @@ def gate4_emit_runtime(mut output: Gate4Output)
 		"function l $g4_c_concat(l %a, l %b) {\n@start\n\t%an =l call $strlen(l %a)\n\t%bn =l call $strlen(l %b)\n\t%n =l add %an, %bn\n\t%sz =l add %n, 1\n\t%r =l call $g4_alloc(l %sz)\n\tcall $memcpy(l %r, l %a, l %an)\n\t%p =l add %r, %an\n\tcall $memcpy(l %p, l %b, l %bn)\n\tret %r\n}\n",
 		"function l $g4_c_basename(l %path) {\n@start\n\t%slash =l call $strrchr(l %path, w 47)\n\t%missing =w ceql %slash, 0\n\tjnz %missing, @whole, @suffix\n@whole\n\tret %path\n@suffix\n\t%base =l add %slash, 1\n\tret %base\n}\n",
 		"function w $g4_run(l %program, l %args) {\n@start\n\t%pid =w call $fork()\n\t%ff =w csltw %pid, 0\n\tjnz %ff, @fail, @child_check\n@child_check\n\t%child =w ceqw %pid, 0\n\tjnz %child, @child, @parent\n@child\n\t%ignored =w call $execv(l %program, l %args)\n\tcall $exit(w 127)\n\thlt\n@parent\n\t%sp =l alloc8 8\n\tstorew 0, %sp\n\t%waited =w call $waitpid(w %pid, l %sp, w 0)\n\t%wf =w csltw %waited, 0\n\tjnz %wf, @fail, @status\n@status\n\t%st =w loadw %sp\n\t%sig =w and %st, 127\n\t%signaled =w cnew %sig, 0\n\tjnz %signaled, @signal, @exited\n@signal\n\t%sr =w add %sig, 128\n\tret %sr\n@exited\n\t%shifted =w shr %st, 8\n\t%code =w and %shifted, 255\n\tret %code\n@fail\n\tret 127\n}\n",
-		"function w $g4_run_qbe(l %qbe, l %ssa, l %assembly) {\n@start\n\t%a =l alloc8 56\n\tstorel %qbe, %a\n\t%a1 =l add %a, 8\n\tstorel $g4_target_flag, %a1\n\t%a2 =l add %a, 16\n\tstorel $g4_target, %a2\n\t%a3 =l add %a, 24\n\tstorel $g4_o_flag, %a3\n\t%a4 =l add %a, 32\n\tstorel %assembly, %a4\n\t%a5 =l add %a, 40\n\tstorel %ssa, %a5\n\t%a6 =l add %a, 48\n\tstorel 0, %a6\n\t%r =w call $g4_run(l %qbe, l %a)\n\tret %r\n}\n",
-		"function w $g4_run_cc(l %cc, l %assembly, l %output) {\n@start\n\t%a =l alloc8 48\n\tstorel %cc, %a\n\t%a1 =l add %a, 8\n\tstorel %assembly, %a1\n\t%a2 =l add %a, 16\n\tstorel $g4_dead_strip, %a2\n\t%a3 =l add %a, 24\n\tstorel $g4_o_flag, %a3\n\t%a4 =l add %a, 32\n\tstorel %output, %a4\n\t%a5 =l add %a, 40\n\tstorel 0, %a5\n\t%r =w call $g4_run(l %cc, l %a)\n\tret %r\n}\n",
+		"function w $g4_run_qbe(l %qbe, l %ssa, l %assembly) {\n@start\n\t%target =l loadl $g4_selected_qbe_target\n\t%a =l alloc8 56\n\tstorel %qbe, %a\n\t%a1 =l add %a, 8\n\tstorel $g4_target_flag, %a1\n\t%a2 =l add %a, 16\n\tstorel %target, %a2\n\t%a3 =l add %a, 24\n\tstorel $g4_o_flag, %a3\n\t%a4 =l add %a, 32\n\tstorel %assembly, %a4\n\t%a5 =l add %a, 40\n\tstorel %ssa, %a5\n\t%a6 =l add %a, 48\n\tstorel 0, %a6\n\t%r =w call $g4_run(l %qbe, l %a)\n\tret %r\n}\n",
+		"function w $g4_run_cc(l %cc, l %assembly, l %output) {\n@start\n\t%dead_strip =l loadl $g4_selected_dead_strip\n\t%a =l alloc8 48\n\tstorel %cc, %a\n\t%a1 =l add %a, 8\n\tstorel %assembly, %a1\n\t%a2 =l add %a, 16\n\tstorel %dead_strip, %a2\n\t%a3 =l add %a, 24\n\tstorel $g4_o_flag, %a3\n\t%a4 =l add %a, 32\n\tstorel %output, %a4\n\t%a5 =l add %a, 40\n\tstorel 0, %a5\n\t%r =w call $g4_run(l %cc, l %a)\n\tret %r\n}\n",
 		"function $g4_cleanup(l %ssa, l %assembly) {\n@start\n\t%i0 =w call $unlink(l %ssa)\n\t%i1 =w call $unlink(l %assembly)\n\tret\n}\n",
 		"function $g4_cleanup_output(l %output, l %directory) {\n@start\n\t%i0 =w call $unlink(l %output)\n\t%i1 =w call $rmdir(l %directory)\n\tret\n}\n",
 		"function l $g4_string_concat(l %left, l %right) {",
@@ -1639,11 +1647,54 @@ def gate4_compiler_entry_function(state: Gate4Compiler): Integer
 	return index
 end
 
-def gate4_emit_entry(state: Gate4Compiler, mut output: Gate4Output)
-	compiler_entry := gate4_compiler_entry_function(state)
+def gate4_emit_target_entry(mut output: Gate4Output)
+	gate4_output_line(output, "")
 	gate4_output_line(output, "export function w $main(w %argc, l %argv) {")
 	gate4_output_line(output, "@start")
+	gate4_output_line(output, "\tstorel $g4_qbe_darwin_arm64, $g4_selected_qbe_target")
+	gate4_output_line(output, "\tstorel $g4_dead_strip_darwin, $g4_selected_dead_strip")
+	gate4_output_line(output, "\t%a11 =w ceqw %argc, 11")
+	gate4_output_line(output, "\tjnz %a11, @target_shape, @dispatch")
+	gate4_output_line(output, "@target_shape")
+	gate4_output_line(output, "\t%target_flag_pointer =l add %argv, 72")
+	gate4_output_line(output, "\t%target_flag =l loadl %target_flag_pointer")
+	gate4_output_line(output, "\t%target_flag_comparison =w call $strcmp(l %target_flag, l $g4_target_option)")
+	gate4_output_line(output, "\t%target_flag_ok =w ceqw %target_flag_comparison, 0")
+	gate4_output_line(output, "\tjnz %target_flag_ok, @target_profile, @dispatch")
+	gate4_output_line(output, "@target_profile")
+	gate4_output_line(output, "\t%profile_pointer =l add %argv, 80")
+	gate4_output_line(output, "\t%profile =l loadl %profile_pointer")
+	gate4_output_line(output, "\t%darwin_comparison =w call $strcmp(l %profile, l $g4_profile_darwin_arm64)")
+	gate4_output_line(output, "\t%darwin =w ceqw %darwin_comparison, 0")
+	gate4_output_line(output, "\tjnz %darwin, @target_darwin, @target_linux_check")
+	gate4_output_line(output, "@target_darwin")
+	gate4_output_line(output, "\tjmp @invoke_target")
+	gate4_output_line(output, "@target_linux_check")
+	gate4_output_line(output, "\t%linux_comparison =w call $strcmp(l %profile, l $g4_profile_linux_arm64)")
+	gate4_output_line(output, "\t%linux =w ceqw %linux_comparison, 0")
+	gate4_output_line(output, "\tjnz %linux, @target_linux, @target_error")
+	gate4_output_line(output, "@target_linux")
+	gate4_output_line(output, "\tstorel $g4_qbe_linux_arm64, $g4_selected_qbe_target")
+	gate4_output_line(output, "\tstorel $g4_dead_strip_linux, $g4_selected_dead_strip")
+	gate4_output_line(output, "\tjmp @invoke_target")
+	gate4_output_line(output, "@target_error")
+	gate4_output_line(output, "\tcall $write(w 2, l $g4_target_error, l 37)")
+	gate4_output_line(output, "\tret 64")
+	gate4_output_line(output, "@invoke_target")
+	gate4_output_line(output, "\t%target_status =w call $g4_compiler_dispatch(w 9, l %argv)")
+	gate4_output_line(output, "\tret %target_status")
+	gate4_output_line(output, "@dispatch")
+	gate4_output_line(output, "\t%dispatch_status =w call $g4_compiler_dispatch(w %argc, l %argv)")
+	gate4_output_line(output, "\tret %dispatch_status")
+	gate4_output_line(output, "}")
+	return
+end
+
+def gate4_emit_entry(state: Gate4Compiler, mut output: Gate4Output)
+	compiler_entry := gate4_compiler_entry_function(state)
 	if compiler_entry >= 0
+		gate4_output_line(output, "function w $g4_compiler_dispatch(w %argc, l %argv) {")
+		gate4_output_line(output, "@start")
 		gate4_output_line(
 			output,
 			"\t%a9 =w ceqw %argc, 9\n\tjnz %a9, @bshape, @other\n@bshape\n\t%bcmdp =l add %argv, 8\n\t%bcmd =l loadl %bcmdp\n\t%boc =w call $strcmp(l %bcmd, l $g4_build)\n\t%bok =w ceqw %boc, 0\n\t%bofp =l add %argv, 24\n\t%bof =l loadl %bofp\n\t%bofc =w call $strcmp(l %bof, l $g4_output_flag)\n\t%bofo =w ceqw %bofc, 0\n\t%bqfp =l add %argv, 40\n\t%bqf =l loadl %bqfp\n\t%bqfc =w call $strcmp(l %bqf, l $g4_qbe_flag)\n\t%bqfo =w ceqw %bqfc, 0\n\t%bcfp =l add %argv, 56\n\t%bcf =l loadl %bcfp\n\t%bcfc =w call $strcmp(l %bcf, l $g4_cc_flag)\n\t%bcfo =w ceqw %bcfc, 0\n\t%bv0 =w and %bok, %bofo\n\t%bv1 =w and %bqfo, %bcfo\n\t%bv =w and %bv0, %bv1\n\tjnz %bv, @build, @usage\n@build\n\t%bspp =l add %argv, 16\n\t%bsp =l loadl %bspp\n\t%bsrc =l call $g4_read_file(l %bsp)\n\t%bsm =w ceql %bsrc, 0\n\tjnz %bsm, @bread_error, @bpaths\n@bread_error\n\tcall $write(w 2, l $g4_file_error, l 35)\n\t%bspl =l call $strlen(l %bsp)\n\tcall $write(w 2, l %bsp, l %bspl)\n\tcall $write(w 2, l $g4_newline, l 1)\n\tret 66\n@bpaths\n\t%bop =l add %argv, 32\n\t%bo =l loadl %bop\n\t%bqp =l add %argv, 48\n\t%bqbe =l loadl %bqp\n\t%bcp =l add %argv, 64\n\t%bcc =l loadl %bcp\n\t%bssa =l call $g4_c_concat(l %bo, l $g4_ssa_suffix)\n\t%basm =l call $g4_c_concat(l %bo, l $g4_asm_suffix)\n\t%bf =l call $fopen(l %bssa, l $g4_wb)\n\t%bfm =w ceql %bf, 0\n\tjnz %bfm, @bfile_error, @bredirect\n@bfile_error\n\tcall $g4_cleanup(l %bssa, l %basm)\n\tcall $write(w 2, l $g4_intermediate_error, l 42)\n\tret 73\n@bredirect\n\t%bfd =w call $fileno(l %bf)\n\t%bsaved =w call $dup(w 1)\n\t%bfdb =w csltw %bfd, 0\n\t%bsavedb =w csltw %bsaved, 0\n\t%brb =w or %bfdb, %bsavedb\n\tjnz %brb, @bredirect_error, @bset_stdout\n@bset_stdout\n\t%bset =w call $dup2(w %bfd, w 1)\n\t%bsetb =w csltw %bset, 0\n\tjnz %bsetb, @bredirect_error, @bcompile\n@bredirect_error\n\t%bci =w call $close(w %bsaved)\n\t%bfci =w call $fclose(l %bf)\n\tcall $g4_cleanup(l %bssa, l %basm)\n\tcall $write(w 2, l $g4_intermediate_error, l 42)\n\tret 73\n@bcompile\n\t%bm =l call $g4_string_from_c(l $g4_emit)",
@@ -1673,11 +1724,16 @@ def gate4_emit_entry(state: Gate4Compiler, mut output: Gate4Output)
 		)
 		gate4_output_line(output, "\t%failed =w cnel %fst, 0\n\tret %failed")
 	else
+		gate4_output_line(output, "export function w $main(w %argc, l %argv) {")
+		gate4_output_line(output, "@start")
 		main_index := gate4_find_function(state, "main")
 		gate4_output_line(output, "\tcall $g4f" + gate4_integer_string(main_index) + "()")
 		gate4_output_line(output, "\tret 0")
 	end
 	gate4_output_line(output, "}")
+	if compiler_entry >= 0
+		gate4_emit_target_entry(output)
+	end
 	return
 end
 

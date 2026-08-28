@@ -59,6 +59,31 @@ def _gate6_build(
 	)
 end
 
+def _gate6_build_target(
+		executable: String,
+		source_path: String,
+		output_path: String,
+		qbe: String,
+		cc: String,
+		target: String,
+	): Result<ProcessResult, String>
+	return _gate6_process(
+		executable,
+		[
+			"build",
+			source_path,
+			"--output",
+			output_path,
+			"--qbe",
+			qbe,
+			"--cc",
+			cc,
+			"--target",
+			target,
+		],
+	)
+end
+
 def _gate6_require_no_intermediates(directory: String): Result<Boolean, String>
 	find := try _gate6_process("/usr/bin/find", [directory, "-name", "*.trbn.*", "-print"])
 	if !find.success
@@ -758,9 +783,11 @@ def _gate6_verify_build_cli(workspace: String, qbe: String): Result<Boolean, Str
 	executable := workspace + "/b1"
 	source_directory := workspace + "/gate6 source with spaces"
 	output_directory := workspace + "/gate6 output with spaces"
+	target_output_directory := workspace + "/gate6 target output with spaces"
 	failure_directory := workspace + "/gate6-build-failures"
 	try _gate6_reset_directory(source_directory)
 	try _gate6_reset_directory(output_directory)
+	try _gate6_reset_directory(target_output_directory)
 	try _gate6_reset_directory(failure_directory)
 	source_path := source_directory + "/input program.trb"
 	output_path := output_directory + "/program"
@@ -783,6 +810,42 @@ def _gate6_verify_build_cli(workspace: String, qbe: String): Result<Boolean, Str
 		"space-bearing atomic replacement",
 	)
 	try _gate6_require_no_intermediates(output_directory)
+	target_output_path := target_output_directory + "/program"
+	target_build := try _gate6_build_target(
+		executable,
+		source_path,
+		target_output_path,
+		qbe,
+		"/usr/bin/cc",
+		"darwin-arm64-v0",
+	)
+	if target_build.status != 0 || !target_build.stdout.empty?() || !target_build.stderr.empty?()
+		return Result<Boolean, String>::Err("explicit Darwin target build failed: " + target_build.stderr)
+	end
+	target_runtime := try _gate6_process(target_output_path, [])
+	if target_runtime.status != 0 || target_runtime.stdout != "ok\n" || !target_runtime.stderr.empty?()
+		return Result<Boolean, String>::Err("explicit Darwin target runtime differs")
+	end
+	try _gate6_require_same(output_path, target_output_path, "implicit/explicit Darwin target")
+	try _gate6_require_no_intermediates(target_output_directory)
+
+	unsupported_output := failure_directory + "/unsupported-target"
+	unsupported_target := try _gate6_build_target(
+		executable,
+		source_path,
+		unsupported_output,
+		workspace + "/gate6-missing-qbe",
+		workspace + "/gate6-missing-cc",
+		"unknown-v0",
+	)
+	if unsupported_target.status != 64 || !unsupported_target.stdout.empty?()
+		return Result<Boolean, String>::Err("unsupported-target status differs")
+	end
+	if unsupported_target.stderr != "compiler: unsupported target profile\n"
+		return Result<Boolean, String>::Err("unsupported-target diagnostic differs")
+	end
+	try _gate6_require_missing(unsupported_output)
+	try _gate6_require_no_intermediates(failure_directory)
 
 	usage := "usage: compiler {check|emit-qbe} SOURCE\n       compiler build SOURCE --output OUTPUT --qbe QBE --cc CC\n"
 	invalid_shape := try _gate6_process(

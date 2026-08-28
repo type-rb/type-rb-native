@@ -127,10 +127,18 @@ does not grow. Recovery provenance remains outside the ordinary Go-free chain.
 See the [Gate 6C Native bootstrap closure](docs/gate-6-native-bootstrap.md) and
 [recorded result](results/2026-08-29-gate6c-native-bootstrap-darwin-arm64/README.md).
 
+Gate 6D is active under the pre-registered scope in
+[issue #47](https://github.com/type-rb/type-rb-native/issues/47). It adds the
+internal `linux-arm64-v0` profile and requires the same TypeRB-authored compiler
+to close an exact B1-to-B2-to-B3-to-B4 seed chain in a pinned Linux arm64
+environment. The frontend, emitted QBE IL, runtime semantics, and conformance
+corpus remain shared with Darwin; only the explicit QBE target and linker policy
+differ. See the [Gate 6D Linux arm64 plan](docs/gate-6-linux-arm64.md).
+
 Multi-module applications, project discovery, production runtime integration,
 package/native-library boundaries, incremental builds, toolchain discovery,
-debugging, maintenance evaluation, and a second target remain the broader
-Gate 6 product-feasibility scope.
+debugging, maintenance evaluation, and additional primary targets remain the
+broader Gate 6 product-feasibility scope.
 
 ## Intended boundary
 
@@ -237,6 +245,7 @@ repository.
 - [Gate 6B Native single-file build Darwin arm64 result](results/2026-08-29-gate6b-single-file-build-darwin-arm64/README.md)
 - [Gate 6C Native-to-Native bootstrap closure](docs/gate-6-native-bootstrap.md)
 - [Gate 6C Native-to-Native bootstrap Darwin arm64 result](results/2026-08-29-gate6c-native-bootstrap-darwin-arm64/README.md)
+- [Gate 6D Linux arm64 target chain](docs/gate-6-linux-arm64.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
 - [Decision 0003: Gate 1 QBE and Darwin arm64 profile](docs/decisions/0003-gate-1-qbe-target.md)
@@ -247,6 +256,7 @@ repository.
 - [Decision 0008: File-oriented Native compiler entry](docs/decisions/0008-file-oriented-compiler-entry.md)
 - [Decision 0009: Native-owned single-file executable build](docs/decisions/0009-native-single-file-build.md)
 - [Decision 0010: Native-to-Native bootstrap closure](docs/decisions/0010-native-bootstrap-closure.md)
+- [Decision 0011: Linux arm64 target profile](docs/decisions/0011-linux-arm64-target-profile.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 
