@@ -13,10 +13,11 @@ and value slots for aggregate block parameters, and checked payload projection.
 It initializes aggregate storage before construction so padding and inactive
 payload bytes never carry indeterminate data.
 
-The source snapshot producer, strict version 3 decoder, source differential
-corpus, and Gate 2 measurements remain active work. This document records the
-complete checkpoint rather than treating the hand-authored vertical slice as
-the gate result.
+The strict version 3 snapshot decoder and executable data fixture are also
+implemented. The source snapshot producer, source differential corpus, and Gate
+2 measurements remain active work. This document records the complete
+checkpoint rather than treating the hand-authored vertical slice as the gate
+result.
 
 ## Checkpoint boundary
 
@@ -56,6 +57,22 @@ Aggregate construction zero-initializes its complete slot and uses the system
 system-library dependencies are counted with the executable in Gate 2 reports.
 Block arguments use distinct transfer and value slots so control-flow edges
 retain parallel-copy semantics, including aggregate swaps and back edges.
+
+## Bootstrap snapshot v3
+
+Snapshot v3 adds a required `types` array. A record definition contains its
+nominal identifier and declaration-ordered fields. A tagged definition contains
+its nominal identifier and declaration-ordered variants, each with
+declaration-ordered payload fields. Scalar types use `Boolean`, `Integer`, and
+`Float`; every other nonempty type string is a nominal aggregate identifier.
+Only function results may use `Void`.
+
+The aggregate instruction set is `record_construct`, `record_project`,
+`variant_construct`, `variant_test`, and `variant_project`. Every projection and
+constructor names its nominal type explicitly, so strict decoding and MIR
+verification do not infer identity from layout shape. Snapshot v2 remains the
+Gate 1 scalar fixture format; v3 is an incompatible, temporary bridge rather
+than a compatibility extension.
 
 ## Exit evidence
 

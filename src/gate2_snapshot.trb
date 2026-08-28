@@ -1,0 +1,757 @@
+import { Diagnostic, boundary_diagnostic } from diagnostic
+import {
+	ComparisonOperator,
+	FloatBinaryOperator,
+	Gate1Instruction,
+	IntegerBinaryOperator,
+	ScalarType,
+} from gate1_mir
+import {
+	Gate2Block,
+	Gate2Function,
+	Gate2Instruction,
+	Gate2Module,
+	Gate2Parameter,
+	Gate2ResultType,
+	Gate2Terminator,
+	verify_gate2_mir,
+} from gate2_mir
+import {
+	Gate2Field,
+	Gate2TypeDefinition,
+	Gate2ValueType,
+	Gate2Variant,
+} from gate2_layout
+import { NativeSource } from native_mir
+import {
+	object,
+	required_array,
+	required_field,
+	required_integer,
+	required_string,
+	strict_object,
+} from json_boundary
+import {
+	decode_origin,
+} from snapshot
+import { JsonValue, parse } from trb/std/json
+import { Result } from trb/std/result
+
+GATE2_MAX_INPUT_BYTES := 4194304
+GATE2_MAX_SOURCES := 256
+GATE2_MAX_FUNCTIONS := 512
+GATE2_SNAPSHOT_MAX_TYPES := 1024
+GATE2_SNAPSHOT_MAX_FIELDS := 256
+GATE2_SNAPSHOT_MAX_VARIANTS := 1024
+GATE2_MAX_PARAMETERS := 256
+GATE2_MAX_BLOCKS := 1024
+GATE2_MAX_INSTRUCTIONS := 16384
+GATE2_MAX_ARGUMENTS := 256
+GATE2_MAX_STATIC_BYTES := 1048576
+GATE2_MAX_IDENTIFIER_SIZE := 256
+GATE2_MAX_SOURCE_PATH_SIZE := 4096
+
+def decode_gate2_snapshot(source: String): Result<Gate2Module, Diagnostic>
+	if source.to_bytes().size() > GATE2_MAX_INPUT_BYTES
+		return Result<Gate2Module, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0005", "", "snapshot exceeds the Gate 2 4 MiB input limit")
+		)
+	end
+	root := case parse(source)
+	when Result::Ok(value)
+		value
+	when Result::Err(error)
+		return Result<Gate2Module, Diagnostic>::Err(
+			Diagnostic.new(
+				code: "TRBN0001",
+				path: error.path,
+				message: error.message,
+				start_line: error.line,
+				start_column: error.column,
+			)
+		)
+	end
+	fields := try strict_object(
+		root,
+		"",
+		["format", "version", "module", "entryFunction", "sources", "types", "functions"],
+	)
+	format := try required_string(fields, "format", "", false)
+	if format != "type-rb-bootstrap-snapshot"
+		return Result<Gate2Module, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0003", "/format", "unsupported snapshot format")
+		)
+	end
+	version := try required_integer(fields, "version", "")
+	if version != 3
+		return Result<Gate2Module, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0003", "/version", "unsupported Gate 2 snapshot version")
+		)
+	end
+	source_values := try required_array(fields, "sources", "")
+	if source_values.size() > GATE2_MAX_SOURCES
+		return Result<Gate2Module, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0005", "/sources", "source count exceeds the Gate 2 limit")
+		)
+	end
+	mut sources: Array<NativeSource> := []
+	mut source_index := 0
+	while source_index < source_values.size()
+		sources.push(try _gate2_decode_source(source_values[source_index], "/sources/" + source_index.to_s()))
+		source_index += 1
+	end
+	type_values := try required_array(fields, "types", "")
+	if type_values.size() > GATE2_SNAPSHOT_MAX_TYPES
+		return Result<Gate2Module, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0005", "/types", "type definition count exceeds the Gate 2 limit")
+		)
+	end
+	mut types: Array<Gate2TypeDefinition> := []
+	mut type_index := 0
+	while type_index < type_values.size()
+		types.push(try _gate2_decode_type_definition(type_values[type_index], "/types/" + type_index.to_s()))
+		type_index += 1
+	end
+	function_values := try required_array(fields, "functions", "")
+	if function_values.size() > GATE2_MAX_FUNCTIONS
+		return Result<Gate2Module, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0005", "/functions", "function count exceeds the Gate 2 limit")
+		)
+	end
+	mut functions: Array<Gate2Function> := []
+	mut function_index := 0
+	while function_index < function_values.size()
+		functions.push(try _gate2_decode_function(function_values[function_index], "/functions/" + function_index.to_s()))
+		function_index += 1
+	end
+	native_module := Gate2Module.new(
+		id: try required_string(fields, "module", "", true),
+		entry_function: try required_string(fields, "entryFunction", "", true),
+		sources: sources,
+		types: types,
+		functions: functions,
+	)
+	try verify_gate2_mir(native_module)
+	return Result<Gate2Module, Diagnostic>::Ok(native_module)
+end
+
+def _gate2_decode_type_definition(value: JsonValue, path: String): Result<Gate2TypeDefinition, Diagnostic>
+	base_fields := try object(value, path)
+	kind := try required_string(base_fields, "kind", path, false)
+	if kind == "record"
+		fields := try strict_object(value, path, ["kind", "id", "fields"])
+		return Result<Gate2TypeDefinition, Diagnostic>::Ok(
+			Gate2TypeDefinition::Record(
+				try required_string(fields, "id", path, true),
+				try _gate2_decode_fields(try required_array(fields, "fields", path), path + "/fields"),
+			)
+		)
+	end
+	if kind == "tagged"
+		fields := try strict_object(value, path, ["kind", "id", "variants"])
+		variant_values := try required_array(fields, "variants", path)
+		if variant_values.size() > GATE2_SNAPSHOT_MAX_VARIANTS
+			return Result<Gate2TypeDefinition, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0005", path + "/variants", "variant count exceeds the Gate 2 limit")
+			)
+		end
+		mut variants: Array<Gate2Variant> := []
+		mut index := 0
+		while index < variant_values.size()
+			variant_path := path + "/variants/" + index.to_s()
+			variant_fields := try strict_object(variant_values[index], variant_path, ["name", "fields"])
+			variants.push(
+				Gate2Variant.new(
+					name: try required_string(variant_fields, "name", variant_path, true),
+					fields: try _gate2_decode_fields(
+						try required_array(variant_fields, "fields", variant_path),
+						variant_path + "/fields",
+					),
+				)
+			)
+			index += 1
+		end
+		return Result<Gate2TypeDefinition, Diagnostic>::Ok(
+			Gate2TypeDefinition::Tagged(
+				try required_string(fields, "id", path, true),
+				variants,
+			)
+		)
+	end
+	return Result<Gate2TypeDefinition, Diagnostic>::Err(
+		boundary_diagnostic("TRBN0003", path + "/kind", "unsupported Gate 2 type definition")
+	)
+end
+
+def _gate2_decode_fields(values: Array<JsonValue>, path: String): Result<Array<Gate2Field>, Diagnostic>
+	if values.size() > GATE2_SNAPSHOT_MAX_FIELDS
+		return Result<Array<Gate2Field>, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0005", path, "field count exceeds the Gate 2 limit")
+		)
+	end
+	mut fields: Array<Gate2Field> := []
+	mut index := 0
+	while index < values.size()
+		field_path := path + "/" + index.to_s()
+		item := try strict_object(values[index], field_path, ["name", "type"])
+		fields.push(
+			Gate2Field.new(
+				name: try required_string(item, "name", field_path, true),
+				value_type: try _gate2_decode_value_type(
+					try required_string(item, "type", field_path, false),
+					field_path + "/type",
+				),
+			)
+		)
+		index += 1
+	end
+	return Result<Array<Gate2Field>, Diagnostic>::Ok(fields)
+end
+
+def _gate2_decode_source(value: JsonValue, path: String): Result<NativeSource, Diagnostic>
+	fields := try strict_object(value, path, ["id", "path"])
+	source_path := try required_string(fields, "path", path, false)
+	if source_path.empty?()
+		return Result<NativeSource, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0004", path + "/path", "source path must not be empty")
+		)
+	end
+	if source_path.size() > GATE2_MAX_SOURCE_PATH_SIZE
+		return Result<NativeSource, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0005", path + "/path", "source path exceeds the Gate 2 limit")
+		)
+	end
+	return Result<NativeSource, Diagnostic>::Ok(
+		NativeSource.new(
+			id: try required_string(fields, "id", path, true),
+			path: source_path,
+		)
+	)
+end
+
+def _gate2_decode_function(value: JsonValue, path: String): Result<Gate2Function, Diagnostic>
+	fields := try strict_object(value, path, ["id", "name", "parameters", "result", "entry", "origin", "blocks"])
+	parameter_values := try required_array(fields, "parameters", path)
+	if parameter_values.size() > GATE2_MAX_PARAMETERS
+		return Result<Gate2Function, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0005", path + "/parameters", "parameter count exceeds the Gate 2 limit")
+		)
+	end
+	mut parameters: Array<Gate2Parameter> := []
+	mut parameter_index := 0
+	while parameter_index < parameter_values.size()
+		parameters.push(
+			try _gate2_decode_parameter(parameter_values[parameter_index], path + "/parameters/" + parameter_index.to_s())
+		)
+		parameter_index += 1
+	end
+	block_values := try required_array(fields, "blocks", path)
+	if block_values.size() > GATE2_MAX_BLOCKS
+		return Result<Gate2Function, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0005", path + "/blocks", "block count exceeds the Gate 2 limit")
+		)
+	end
+	mut blocks: Array<Gate2Block> := []
+	mut block_index := 0
+	while block_index < block_values.size()
+		blocks.push(try _gate2_decode_block(block_values[block_index], path + "/blocks/" + block_index.to_s()))
+		block_index += 1
+	end
+	return Result<Gate2Function, Diagnostic>::Ok(
+		Gate2Function.new(
+			id: try required_string(fields, "id", path, true),
+			name: try required_string(fields, "name", path, true),
+			parameters: parameters,
+			result_type: try _gate2_decode_result_type(
+				try required_string(fields, "result", path, false),
+				path + "/result",
+			),
+			entry: try required_string(fields, "entry", path, true),
+			origin: try decode_origin(try required_field(fields, "origin", path), path + "/origin"),
+			blocks: blocks,
+		)
+	)
+end
+
+def _gate2_decode_parameter(value: JsonValue, path: String): Result<Gate2Parameter, Diagnostic>
+	fields := try strict_object(value, path, ["id", "type", "origin"])
+	return Result<Gate2Parameter, Diagnostic>::Ok(
+		Gate2Parameter.new(
+			id: try required_string(fields, "id", path, true),
+			value_type: try _gate2_decode_value_type(
+				try required_string(fields, "type", path, false),
+				path + "/type",
+			),
+			origin: try decode_origin(try required_field(fields, "origin", path), path + "/origin"),
+		)
+	)
+end
+
+def _gate2_decode_value_type(name: String, path: String): Result<Gate2ValueType, Diagnostic>
+	if name == "Boolean"
+		return Result<Gate2ValueType, Diagnostic>::Ok(Gate2ValueType::Scalar(ScalarType::Boolean))
+	end
+	if name == "Integer"
+		return Result<Gate2ValueType, Diagnostic>::Ok(Gate2ValueType::Scalar(ScalarType::Integer))
+	end
+	if name == "Float"
+		return Result<Gate2ValueType, Diagnostic>::Ok(Gate2ValueType::Scalar(ScalarType::Float))
+	end
+	if name.empty?() || name == "Void"
+		return Result<Gate2ValueType, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0003", path, "unsupported Gate 2 value type")
+		)
+	end
+	return Result<Gate2ValueType, Diagnostic>::Ok(Gate2ValueType::Aggregate(name))
+end
+
+def _gate2_decode_result_type(name: String, path: String): Result<Gate2ResultType, Diagnostic>
+	if name == "Void"
+		return Result<Gate2ResultType, Diagnostic>::Ok(Gate2ResultType::Void)
+	end
+	return Result<Gate2ResultType, Diagnostic>::Ok(
+		Gate2ResultType::Value(try _gate2_decode_value_type(name, path))
+	)
+end
+
+def _gate2_decode_block(value: JsonValue, path: String): Result<Gate2Block, Diagnostic>
+	fields := try strict_object(value, path, ["id", "parameters", "origin", "instructions", "terminator"])
+	parameter_values := try required_array(fields, "parameters", path)
+	if parameter_values.size() > GATE2_MAX_PARAMETERS
+		return Result<Gate2Block, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0005", path + "/parameters", "block parameter count exceeds the Gate 2 limit")
+		)
+	end
+	mut parameters: Array<Gate2Parameter> := []
+	mut parameter_index := 0
+	while parameter_index < parameter_values.size()
+		parameters.push(
+			try _gate2_decode_parameter(parameter_values[parameter_index], path + "/parameters/" + parameter_index.to_s())
+		)
+		parameter_index += 1
+	end
+	instruction_values := try required_array(fields, "instructions", path)
+	if instruction_values.size() > GATE2_MAX_INSTRUCTIONS
+		return Result<Gate2Block, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0005", path + "/instructions", "instruction count exceeds the Gate 2 limit")
+		)
+	end
+	mut instructions: Array<Gate2Instruction> := []
+	mut instruction_index := 0
+	while instruction_index < instruction_values.size()
+		instructions.push(
+			try _gate2_decode_instruction(instruction_values[instruction_index], path + "/instructions/" + instruction_index.to_s())
+		)
+		instruction_index += 1
+	end
+	return Result<Gate2Block, Diagnostic>::Ok(
+		Gate2Block.new(
+			id: try required_string(fields, "id", path, true),
+			parameters: parameters,
+			origin: try decode_origin(try required_field(fields, "origin", path), path + "/origin"),
+			instructions: instructions,
+			terminator: try _gate2_decode_terminator(try required_field(fields, "terminator", path), path + "/terminator"),
+		)
+	)
+end
+
+def _gate2_decode_instruction(value: JsonValue, path: String): Result<Gate2Instruction, Diagnostic>
+	base_fields := try object(value, path)
+	op := try required_string(base_fields, "op", path, false)
+	if op == "boolean_literal"
+		fields := try strict_object(value, path, ["op", "result", "value", "origin"])
+		return Result<Gate2Instruction, Diagnostic>::Ok(
+			Gate2Instruction::Scalar(
+				Gate1Instruction::BooleanLiteral(
+					try required_string(fields, "result", path, true),
+					try _gate2_required_boolean(fields, "value", path),
+					try decode_origin(try required_field(fields, "origin", path), path + "/origin"),
+				)
+			)
+		)
+	end
+	if op == "integer_literal"
+		fields := try strict_object(value, path, ["op", "result", "value", "origin"])
+		return Result<Gate2Instruction, Diagnostic>::Ok(
+			Gate2Instruction::Scalar(
+				Gate1Instruction::IntegerLiteral(
+					try required_string(fields, "result", path, true),
+					try required_integer(fields, "value", path),
+					try decode_origin(try required_field(fields, "origin", path), path + "/origin"),
+				)
+			)
+		)
+	end
+	if op == "float_literal"
+		fields := try strict_object(value, path, ["op", "result", "value", "origin"])
+		return Result<Gate2Instruction, Diagnostic>::Ok(
+			Gate2Instruction::Scalar(
+				Gate1Instruction::FloatLiteral(
+					try required_string(fields, "result", path, true),
+					try _gate2_required_float(fields, "value", path),
+					try decode_origin(try required_field(fields, "origin", path), path + "/origin"),
+				)
+			)
+		)
+	end
+	if op == "integer_binary"
+		fields := try strict_object(value, path, ["op", "result", "operator", "left", "right", "origin"])
+		return Result<Gate2Instruction, Diagnostic>::Ok(
+			Gate2Instruction::Scalar(
+				Gate1Instruction::IntegerBinary(
+					try required_string(fields, "result", path, true),
+					try _gate2_integer_operator(try required_string(fields, "operator", path, false), path + "/operator"),
+					try required_string(fields, "left", path, true),
+					try required_string(fields, "right", path, true),
+					try decode_origin(try required_field(fields, "origin", path), path + "/origin"),
+				)
+			)
+		)
+	end
+	if op == "float_binary"
+		fields := try strict_object(value, path, ["op", "result", "operator", "left", "right", "origin"])
+		return Result<Gate2Instruction, Diagnostic>::Ok(
+			Gate2Instruction::Scalar(
+				Gate1Instruction::FloatBinary(
+					try required_string(fields, "result", path, true),
+					try _gate2_float_operator(try required_string(fields, "operator", path, false), path + "/operator"),
+					try required_string(fields, "left", path, true),
+					try required_string(fields, "right", path, true),
+					try decode_origin(try required_field(fields, "origin", path), path + "/origin"),
+				)
+			)
+		)
+	end
+	if op == "integer_compare" || op == "float_compare"
+		fields := try strict_object(value, path, ["op", "result", "operator", "left", "right", "origin"])
+		result := try required_string(fields, "result", path, true)
+		operator := try _gate2_comparison_operator(try required_string(fields, "operator", path, false), path + "/operator")
+		left := try required_string(fields, "left", path, true)
+		right := try required_string(fields, "right", path, true)
+		origin := try decode_origin(try required_field(fields, "origin", path), path + "/origin")
+		if op == "integer_compare"
+			return Result<Gate2Instruction, Diagnostic>::Ok(
+				Gate2Instruction::Scalar(Gate1Instruction::IntegerCompare(result, operator, left, right, origin))
+			)
+		end
+		return Result<Gate2Instruction, Diagnostic>::Ok(
+			Gate2Instruction::Scalar(Gate1Instruction::FloatCompare(result, operator, left, right, origin))
+		)
+	end
+	if op == "boolean_not"
+		fields := try strict_object(value, path, ["op", "result", "value", "origin"])
+		return Result<Gate2Instruction, Diagnostic>::Ok(
+			Gate2Instruction::Scalar(
+				Gate1Instruction::BooleanNot(
+					try required_string(fields, "result", path, true),
+					try required_string(fields, "value", path, true),
+					try decode_origin(try required_field(fields, "origin", path), path + "/origin"),
+				)
+			)
+		)
+	end
+	if op == "record_construct"
+		fields := try strict_object(value, path, ["op", "result", "type", "arguments", "origin"])
+		return Result<Gate2Instruction, Diagnostic>::Ok(
+			Gate2Instruction::RecordConstruct(
+				try required_string(fields, "result", path, true),
+				try required_string(fields, "type", path, true),
+				try _gate2_required_string_array(fields, "arguments", path),
+				try decode_origin(try required_field(fields, "origin", path), path + "/origin"),
+			)
+		)
+	end
+	if op == "record_project"
+		fields := try strict_object(value, path, ["op", "result", "type", "record", "field", "origin"])
+		return Result<Gate2Instruction, Diagnostic>::Ok(
+			Gate2Instruction::RecordProject(
+				try required_string(fields, "result", path, true),
+				try required_string(fields, "type", path, true),
+				try required_string(fields, "record", path, true),
+				try required_string(fields, "field", path, true),
+				try decode_origin(try required_field(fields, "origin", path), path + "/origin"),
+			)
+		)
+	end
+	if op == "variant_construct"
+		fields := try strict_object(value, path, ["op", "result", "type", "variant", "arguments", "origin"])
+		return Result<Gate2Instruction, Diagnostic>::Ok(
+			Gate2Instruction::VariantConstruct(
+				try required_string(fields, "result", path, true),
+				try required_string(fields, "type", path, true),
+				try required_string(fields, "variant", path, true),
+				try _gate2_required_string_array(fields, "arguments", path),
+				try decode_origin(try required_field(fields, "origin", path), path + "/origin"),
+			)
+		)
+	end
+	if op == "variant_test"
+		fields := try strict_object(value, path, ["op", "result", "type", "value", "variant", "origin"])
+		return Result<Gate2Instruction, Diagnostic>::Ok(
+			Gate2Instruction::VariantTest(
+				try required_string(fields, "result", path, true),
+				try required_string(fields, "type", path, true),
+				try required_string(fields, "value", path, true),
+				try required_string(fields, "variant", path, true),
+				try decode_origin(try required_field(fields, "origin", path), path + "/origin"),
+			)
+		)
+	end
+	if op == "variant_project"
+		fields := try strict_object(value, path, ["op", "result", "type", "value", "variant", "field", "origin"])
+		return Result<Gate2Instruction, Diagnostic>::Ok(
+			Gate2Instruction::VariantProject(
+				try required_string(fields, "result", path, true),
+				try required_string(fields, "type", path, true),
+				try required_string(fields, "value", path, true),
+				try required_string(fields, "variant", path, true),
+				try required_string(fields, "field", path, true),
+				try decode_origin(try required_field(fields, "origin", path), path + "/origin"),
+			)
+		)
+	end
+	if op == "call"
+		fields := try strict_object(value, path, ["op", "result", "function", "arguments", "origin"])
+		return Result<Gate2Instruction, Diagnostic>::Ok(
+			Gate2Instruction::Call(
+				try _gate2_required_nullable_string(fields, "result", path),
+				try required_string(fields, "function", path, true),
+				try _gate2_required_string_array(fields, "arguments", path),
+				try decode_origin(try required_field(fields, "origin", path), path + "/origin"),
+			)
+		)
+	end
+	if op == "write_static"
+		fields := try strict_object(value, path, ["op", "value", "origin"])
+		static_value := try required_string(fields, "value", path, false)
+		if static_value.to_bytes().size() > GATE2_MAX_STATIC_BYTES
+			return Result<Gate2Instruction, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0005", path + "/value", "static output exceeds the Gate 2 limit")
+			)
+		end
+		return Result<Gate2Instruction, Diagnostic>::Ok(
+			Gate2Instruction::Scalar(
+				Gate1Instruction::WriteStatic(
+					static_value,
+					try decode_origin(try required_field(fields, "origin", path), path + "/origin"),
+				)
+			)
+		)
+	end
+	return Result<Gate2Instruction, Diagnostic>::Err(
+		boundary_diagnostic("TRBN0003", path + "/op", "unsupported Gate 2 instruction")
+	)
+end
+
+def _gate2_decode_terminator(value: JsonValue, path: String): Result<Gate2Terminator, Diagnostic>
+	base_fields := try object(value, path)
+	op := try required_string(base_fields, "op", path, false)
+	if op == "jump"
+		fields := try strict_object(value, path, ["op", "target", "arguments", "origin"])
+		return Result<Gate2Terminator, Diagnostic>::Ok(
+			Gate2Terminator::Jump(
+				try required_string(fields, "target", path, true),
+				try _gate2_required_string_array(fields, "arguments", path),
+				try decode_origin(try required_field(fields, "origin", path), path + "/origin"),
+			)
+		)
+	end
+	if op == "branch"
+		fields := try strict_object(
+			value,
+			path,
+			["op", "condition", "whenTrue", "trueArguments", "whenFalse", "falseArguments", "origin"],
+		)
+		return Result<Gate2Terminator, Diagnostic>::Ok(
+			Gate2Terminator::Branch(
+				try required_string(fields, "condition", path, true),
+				try required_string(fields, "whenTrue", path, true),
+				try _gate2_required_string_array(fields, "trueArguments", path),
+				try required_string(fields, "whenFalse", path, true),
+				try _gate2_required_string_array(fields, "falseArguments", path),
+				try decode_origin(try required_field(fields, "origin", path), path + "/origin"),
+			)
+		)
+	end
+	if op == "return"
+		fields := try strict_object(value, path, ["op", "value", "origin"])
+		return Result<Gate2Terminator, Diagnostic>::Ok(
+			Gate2Terminator::Return(
+				try _gate2_required_nullable_string(fields, "value", path),
+				try decode_origin(try required_field(fields, "origin", path), path + "/origin"),
+			)
+		)
+	end
+	return Result<Gate2Terminator, Diagnostic>::Err(
+		boundary_diagnostic("TRBN0003", path + "/op", "unsupported Gate 2 terminator")
+	)
+end
+
+def _gate2_integer_operator(name: String, path: String): Result<IntegerBinaryOperator, Diagnostic>
+	if name == "add"
+		return Result<IntegerBinaryOperator, Diagnostic>::Ok(IntegerBinaryOperator::Add)
+	end
+	if name == "subtract"
+		return Result<IntegerBinaryOperator, Diagnostic>::Ok(IntegerBinaryOperator::Subtract)
+	end
+	if name == "multiply"
+		return Result<IntegerBinaryOperator, Diagnostic>::Ok(IntegerBinaryOperator::Multiply)
+	end
+	if name == "divide"
+		return Result<IntegerBinaryOperator, Diagnostic>::Ok(IntegerBinaryOperator::Divide)
+	end
+	if name == "remainder"
+		return Result<IntegerBinaryOperator, Diagnostic>::Ok(IntegerBinaryOperator::Remainder)
+	end
+	if name == "power"
+		return Result<IntegerBinaryOperator, Diagnostic>::Ok(IntegerBinaryOperator::Power)
+	end
+	return Result<IntegerBinaryOperator, Diagnostic>::Err(
+		boundary_diagnostic("TRBN0003", path, "unsupported Gate 2 Integer operator")
+	)
+end
+
+def _gate2_float_operator(name: String, path: String): Result<FloatBinaryOperator, Diagnostic>
+	if name == "add"
+		return Result<FloatBinaryOperator, Diagnostic>::Ok(FloatBinaryOperator::Add)
+	end
+	if name == "subtract"
+		return Result<FloatBinaryOperator, Diagnostic>::Ok(FloatBinaryOperator::Subtract)
+	end
+	if name == "multiply"
+		return Result<FloatBinaryOperator, Diagnostic>::Ok(FloatBinaryOperator::Multiply)
+	end
+	if name == "divide"
+		return Result<FloatBinaryOperator, Diagnostic>::Ok(FloatBinaryOperator::Divide)
+	end
+	return Result<FloatBinaryOperator, Diagnostic>::Err(
+		boundary_diagnostic("TRBN0003", path, "unsupported Gate 2 Float operator")
+	)
+end
+
+def _gate2_comparison_operator(name: String, path: String): Result<ComparisonOperator, Diagnostic>
+	if name == "equal"
+		return Result<ComparisonOperator, Diagnostic>::Ok(ComparisonOperator::Equal)
+	end
+	if name == "not_equal"
+		return Result<ComparisonOperator, Diagnostic>::Ok(ComparisonOperator::NotEqual)
+	end
+	if name == "less_than"
+		return Result<ComparisonOperator, Diagnostic>::Ok(ComparisonOperator::LessThan)
+	end
+	if name == "less_than_or_equal"
+		return Result<ComparisonOperator, Diagnostic>::Ok(ComparisonOperator::LessThanOrEqual)
+	end
+	if name == "greater_than"
+		return Result<ComparisonOperator, Diagnostic>::Ok(ComparisonOperator::GreaterThan)
+	end
+	if name == "greater_than_or_equal"
+		return Result<ComparisonOperator, Diagnostic>::Ok(ComparisonOperator::GreaterThanOrEqual)
+	end
+	return Result<ComparisonOperator, Diagnostic>::Err(
+		boundary_diagnostic("TRBN0003", path, "unsupported Gate 2 comparison operator")
+	)
+end
+
+def _gate2_required_boolean(
+		fields: Hash<String, JsonValue>,
+		name: String,
+		path: String,
+	): Result<Boolean, Diagnostic>
+	value := try required_field(fields, name, path)
+	case value
+	when JsonValue::Boolean(result)
+		return Result<Boolean, Diagnostic>::Ok(result)
+	else
+		return Result<Boolean, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0002", path + "/" + name, "expected a boolean")
+		)
+	end
+end
+
+def _gate2_required_float(
+		fields: Hash<String, JsonValue>,
+		name: String,
+		path: String,
+	): Result<Float, Diagnostic>
+	value := try required_field(fields, name, path)
+	case value
+	when JsonValue::Float(result)
+		return Result<Float, Diagnostic>::Ok(result)
+	when JsonValue::Integer(result)
+		return Result<Float, Diagnostic>::Ok(result.to_f())
+	else
+		return Result<Float, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0002", path + "/" + name, "expected a number")
+		)
+	end
+end
+
+def _gate2_required_nullable_string(
+		fields: Hash<String, JsonValue>,
+		name: String,
+		path: String,
+	): Result<String?, Diagnostic>
+	value := try required_field(fields, name, path)
+	case value
+	when JsonValue::Null
+		return Result<String?, Diagnostic>::Ok(nil)
+	when JsonValue::String(result)
+		if result.empty?()
+			return Result<String?, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path + "/" + name, "identifier must not be empty")
+			)
+		end
+		if result.size() > GATE2_MAX_IDENTIFIER_SIZE
+			return Result<String?, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0005", path + "/" + name, "identifier exceeds the Gate 2 limit")
+			)
+		end
+		return Result<String?, Diagnostic>::Ok(result)
+	else
+		return Result<String?, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0002", path + "/" + name, "expected a string or null")
+		)
+	end
+end
+
+def _gate2_required_string_array(
+		fields: Hash<String, JsonValue>,
+		name: String,
+		path: String,
+	): Result<Array<String>, Diagnostic>
+	values := try required_array(fields, name, path)
+	if values.size() > GATE2_MAX_ARGUMENTS
+		return Result<Array<String>, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0005", path + "/" + name, "argument count exceeds the Gate 2 limit")
+		)
+	end
+	mut result: Array<String> := []
+	mut index := 0
+	while index < values.size()
+		case values[index]
+		when JsonValue::String(item)
+			if item.empty?()
+				return Result<Array<String>, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/" + name + "/" + index.to_s(), "identifier must not be empty")
+				)
+			end
+			if item.size() > GATE2_MAX_IDENTIFIER_SIZE
+				return Result<Array<String>, Diagnostic>::Err(
+					boundary_diagnostic(
+						"TRBN0005",
+						path + "/" + name + "/" + index.to_s(),
+						"identifier exceeds the Gate 2 limit",
+					)
+				)
+			end
+			result.push(item)
+		else
+			return Result<Array<String>, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0002", path + "/" + name + "/" + index.to_s(), "expected a string")
+			)
+		end
+		index += 1
+	end
+	return Result<Array<String>, Diagnostic>::Ok(result)
+end
