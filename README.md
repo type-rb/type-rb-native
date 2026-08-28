@@ -61,9 +61,13 @@ Warm build time improves by 26.0% to 29.5%, stripped executable size improves
 by 96.85%, and observed build and runtime peak RSS remain below both Go paths.
 See the [Gate 2 result](results/2026-08-28-gate2-qbe-darwin-arm64/README.md).
 
-Gate 3 has not started. These results do not select QBE for production or
-measure the final self-hosted compiler. The current path provides no production
-runtime, stable ABI, stable artifact format, or compatibility guarantee.
+Gate 3 is active under the pre-registered scope in
+[issue #13](https://github.com/type-rb/type-rb-native/issues/13). It adds
+managed UTF-8 Strings, mutable Arrays, closures, and cycle-reclaiming tracing
+collection before broader runtime and self-hosting work. These results do not
+select QBE for production or measure the final self-hosted compiler. The current
+path provides no production runtime, stable ABI, stable artifact format, or
+compatibility guarantee.
 
 ## Intended boundary
 
@@ -160,10 +164,12 @@ repository.
 - [Gate 1 QBE Darwin arm64 result](results/2026-08-28-gate1-qbe-darwin-arm64/README.md)
 - [Gate 2 heap-free aggregate value model](docs/gate-2-aggregates.md)
 - [Gate 2 QBE Darwin arm64 result](results/2026-08-28-gate2-qbe-darwin-arm64/README.md)
+- [Gate 3 managed runtime](docs/gate-3-managed-runtime.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
 - [Decision 0003: Gate 1 QBE and Darwin arm64 profile](docs/decisions/0003-gate-1-qbe-target.md)
 - [Decision 0004: Sustained native implementation and staged Gate 2](docs/decisions/0004-sustained-native-development.md)
+- [Decision 0005: Managed references and tracing GC](docs/decisions/0005-managed-runtime-and-tracing-gc.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 
