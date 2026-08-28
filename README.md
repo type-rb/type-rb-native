@@ -76,12 +76,13 @@ These results do not select QBE for production or measure the final self-hosted
 compiler. The current path provides no production runtime, stable ABI, stable
 artifact format, or compatibility guarantee.
 
-Gate 4 is now active under the pre-registered criteria in
-[issue #20](https://github.com/type-rb/type-rb-native/issues/20). It adds a
-bounded but genuine TypeRB-authored lexer, parser, resolver, checker, emitter,
-and driver, then requires B0-to-B1-to-B2 behavioral self-hosting without Go in
-the B1-to-B2 process graph. See the
-[Gate 4 implementation boundary](docs/gate-4-self-hosting.md).
+Gate 4 is complete. The bounded TypeRB-authored lexer, parser, resolver,
+checker, emitter, and driver reach a byte-identical B1/B2/B3 QBE fixed point;
+the valid, invalid, and mutation corpus passes at every required stage; and the
+ordinary B1-to-B2 process path contains no Go or reference compiler. Registered
+build-time, RSS, size, and distribution bounds pass. See the
+[Gate 4 implementation boundary](docs/gate-4-self-hosting.md) and
+[recorded result](results/2026-08-28-gate4-self-host-darwin-arm64/README.md).
 
 ## Intended boundary
 

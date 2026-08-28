@@ -39,8 +39,11 @@ Work on one recorded experiment gate at a time.
   checked-in lexer, parser, resolver, checker, and emitter. Reject embedded
   compiler artifacts, source-specific output paths, quines, and hidden host
   fallbacks as bootstrap evidence.
-- Record B0, B1, and B2 roles explicitly. Verify the ordinary regeneration
-  process graph rather than inferring Go independence from the output binary.
+- Record B0, B1, and B2 roles explicitly, plus B3 when a fixed-point check is
+  required. Verify the ordinary regeneration process graph rather than
+  inferring Go independence from the output binary. Keep recovery compilers and
+  measurement orchestrators out of the ordinary semantic chain, and inspect
+  executable imports and external-tool subprocesses when recording the graph.
 - Allow external code generators, assemblers, linkers, SDKs, and system
   libraries only behind explicit boundaries whose time and distribution cost
   can be measured.

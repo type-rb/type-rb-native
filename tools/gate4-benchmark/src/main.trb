@@ -90,6 +90,28 @@ def measure_build(
 	return Result<Boolean, String>::Ok(true)
 end
 
+def measure_simple_build(
+		mut output: StringBuilder,
+		command: String,
+		arguments: Array<String>,
+		candidate: String,
+		iteration: Integer,
+	): Result<Boolean, String>
+	measurement := try measure_process(command, arguments)
+	append_measurement(
+		output,
+		"build-total",
+		candidate,
+		iteration,
+		measurement.seconds.to_s(),
+		measurement.status,
+	)
+	if measurement.status != 0
+		return Result<Boolean, String>::Err(candidate + " build failed: " + measurement.stderr)
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
 def measure_peak_rss(command: String, arguments: Array<String>): Result<String, String>
 	mut time_arguments := ["-l", command]
 	mut index := 0
@@ -289,6 +311,38 @@ def main()
 		end
 		iteration += 1
 	end
+	go_output := workspace + "/go-compiler"
+	go_arguments := [
+		"GOCACHE=" + workspace + "/go-cache",
+		"GOFLAGS=-ldflags=-s -w",
+		reference_trb,
+		"build",
+		"--compile",
+		"--config",
+		root + "/compiler/gate4/trbconfig.jsonc",
+		"--outfile",
+		go_output,
+	]
+	iteration =- 2
+	while iteration < 0
+		case measure_simple_build(output, "/usr/bin/env", go_arguments, "go", iteration)
+		when Result::Ok(_value)
+		when Result::Err(error)
+			puts(error)
+			return
+		end
+		iteration += 1
+	end
+	iteration = 0
+	while iteration < repetitions
+		case measure_simple_build(output, "/usr/bin/env", go_arguments, "go", iteration)
+		when Result::Ok(_value)
+		when Result::Err(error)
+			puts(error)
+			return
+		end
+		iteration += 1
+	end
 	qbe1 := case read_text(workspace + "/b1.ssa")
 	when Result::Ok(source)
 		source
@@ -352,6 +406,20 @@ def main()
 			return
 		end
 		iteration += 1
+	end
+	go_build_rss := case measure_peak_rss("/usr/bin/env", go_arguments)
+	when Result::Ok(value)
+		value
+	when Result::Err(error)
+		puts(error)
+		return
+	end
+	append_measurement(output, "build-peak-rss", "go", 0, go_build_rss, 0)
+	case strip_and_record(output, "go", go_output)
+	when Result::Ok(_value)
+	when Result::Err(error)
+		puts(error)
+		return
 	end
 	if !measurement_succeeded(
 			record_file_size(output, "distribution-component-size", "native-compiler", b2_path + ".stripped")
