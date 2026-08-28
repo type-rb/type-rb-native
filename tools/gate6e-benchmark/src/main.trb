@@ -1,0 +1,1017 @@
+import { create_directory, read_text, write_text } from trb/std/filesystem
+import { argv, run } from trb/std/process
+import { Result } from trb/std/result
+import trb/std/string_builder
+import { Instant } from trb/std/time
+
+record TimedProcess
+	seconds: Float
+	status: Integer
+	stdout: String
+	stderr: String
+end
+
+record PeakProcess
+	rss: String
+	status: Integer
+	stdout: String
+	stderr: String
+end
+
+def measure_process(command: String, arguments: Array<String>): Result<TimedProcess, String>
+	started := Instant.now()
+	case run(command, arguments)
+	when Result::Ok(process)
+		return Result<TimedProcess, String>::Ok(
+			TimedProcess.new(
+				seconds: Instant.now().duration_since(started).total_seconds(),
+				status: process.status,
+				stdout: process.stdout,
+				stderr: process.stderr,
+			),
+		)
+	when Result::Err(error)
+		return Result<TimedProcess, String>::Err(error.operation + ": " + error.message)
+	end
+end
+
+def peak_process(command: String, arguments: Array<String>): Result<PeakProcess, String>
+	mut time_arguments := ["-l", command]
+	mut index := 0
+	while index < arguments.size()
+		time_arguments.push(arguments[index])
+		index += 1
+	end
+	measurement := try measure_process("/usr/bin/time", time_arguments)
+	lines := measurement.stderr.split("\n")
+	index = 0
+	while index < lines.size()
+		if lines[index].include?("maximum resident set size")
+			fields := lines[index].strip().split(" ")
+			mut field_index := 0
+			while field_index < fields.size()
+				if !fields[field_index].empty?()
+					return Result<PeakProcess, String>::Ok(
+						PeakProcess.new(
+							rss: fields[field_index],
+							status: measurement.status,
+							stdout: measurement.stdout,
+							stderr: measurement.stderr,
+						),
+					)
+				end
+				field_index += 1
+			end
+		end
+		index += 1
+	end
+	return Result<PeakProcess, String>::Err(
+		"time did not report maximum resident set size for " + command,
+	)
+end
+
+def append_measurement(
+		mut output: StringBuilder,
+		metric: String,
+		case_name: String,
+		candidate: String,
+		iteration: Integer,
+		value: String,
+		status: Integer,
+	)
+	output.append(
+		metric + "," + case_name + "," + candidate + "," + iteration.to_s() + "," + value + "," +
+		status.to_s() + "\n",
+	)
+	return
+end
+
+def create_required_directory(path: String): Result<Boolean, String>
+	case create_directory(path)
+	when Result::Ok(_unit)
+		return Result<Boolean, String>::Ok(true)
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
+	end
+end
+
+def read_required(path: String): Result<String, String>
+	case read_text(path)
+	when Result::Ok(value)
+		return Result<String, String>::Ok(value)
+	when Result::Err(error)
+		return Result<String, String>::Err(error.operation + ": " + error.message)
+	end
+end
+
+def write_required(path: String, value: String): Result<Boolean, String>
+	case write_text(path, value)
+	when Result::Ok(_unit)
+		return Result<Boolean, String>::Ok(true)
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
+	end
+end
+
+def copy_required(source: String, destination: String): Result<Boolean, String>
+	value := try read_required(source)
+	return write_required(destination, value)
+end
+
+def prepare_project(root: String, project: String): Result<Boolean, String>
+	try create_required_directory(project)
+	directories := [project + "/app", project + "/domain", project + "/shared"]
+	mut index := 0
+	while index < directories.size()
+		try create_required_directory(directories[index])
+		index += 1
+	end
+	relative := [
+		"main.trb",
+		"app/summary.trb",
+		"app/label.trb",
+		"domain/score.trb",
+		"shared/index.trb",
+		"unrelated.trb",
+	]
+	fixture := root + "/compiler/gate4/conformance/file-root"
+	index = 0
+	while index < relative.size()
+		try copy_required(fixture + "/" + relative[index], project + "/" + relative[index])
+		index += 1
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def native_build_arguments(
+		source: String,
+		output: String,
+		qbe: String,
+		cc: String,
+	): Array<String>
+	return ["build", source, "--output", output, "--qbe", qbe, "--cc", cc]
+end
+
+def go_build_arguments(source: String, output: String): Array<String>
+	return ["build", "--compile", "--outfile", output, source]
+end
+
+def require_file(path: String): Result<Boolean, String>
+	probe := try measure_process("/bin/test", ["-f", path])
+	if probe.status != 0
+		return Result<Boolean, String>::Err("missing file " + path)
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def require_file_equal(left: String, right: String, message: String): Result<Boolean, String>
+	comparison := try measure_process("/usr/bin/cmp", [left, right])
+	if comparison.status != 0
+		return Result<Boolean, String>::Err(message)
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def require_no_intermediates(directory: String): Result<Boolean, String>
+	find := try measure_process("/usr/bin/find", [directory, "-name", "*.trbn.*", "-print"])
+	if find.status != 0
+		return Result<Boolean, String>::Err("cannot inspect Native intermediates: " + find.stderr)
+	end
+	if !find.stdout.empty?()
+		return Result<Boolean, String>::Err("Native build left intermediates: " + find.stdout)
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def build_checked(
+		command: String,
+		arguments: Array<String>,
+		output_path: String,
+		label: String,
+	): Result<Boolean, String>
+	measurement := try measure_process(command, arguments)
+	if measurement.status != 0 || !measurement.stderr.empty?()
+		return Result<Boolean, String>::Err(label + " failed: " + measurement.stderr + measurement.stdout)
+	end
+	try require_file(output_path)
+	return Result<Boolean, String>::Ok(true)
+end
+
+def verify_runtime(executable: String, label: String): Result<Boolean, String>
+	measurement := try measure_process(executable, [])
+	if measurement.status != 0 || measurement.stdout != "file-root-ok\n" || !measurement.stderr.empty?()
+		return Result<Boolean, String>::Err(label + " runtime differs: " + measurement.stderr)
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def verify_compiler(
+		executable: String,
+		compiler_source: String,
+		expected_qbe: String,
+		label: String,
+	): Result<Boolean, String>
+	check := try measure_process(executable, ["check", compiler_source])
+	if check.status != 0 || check.stdout != "ok\n" || !check.stderr.empty?()
+		return Result<Boolean, String>::Err(label + " compiler-source check failed")
+	end
+	emission := try measure_process(executable, ["emit-qbe", compiler_source])
+	if emission.status != 0 || emission.stdout != expected_qbe || !emission.stderr.empty?()
+		return Result<Boolean, String>::Err(label + " compiler QBE is not fixed")
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def measure_build(
+		mut output: StringBuilder,
+		command: String,
+		arguments: Array<String>,
+		output_path: String,
+		expected_path: String,
+		candidate: String,
+		iteration: Integer,
+	): Result<Boolean, String>
+	measurement := try measure_process(command, arguments)
+	append_measurement(
+		output,
+		"application-build-total",
+		"file-root",
+		candidate,
+		iteration,
+		measurement.seconds.to_s(),
+		measurement.status,
+	)
+	if measurement.status != 0 || !measurement.stderr.empty?()
+		return Result<Boolean, String>::Err(candidate + " build failed: " + measurement.stderr)
+	end
+	try require_file(output_path)
+	if !expected_path.empty?()
+		try require_file_equal(output_path, expected_path, candidate + " build bytes differ")
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def measure_build_rss(
+		mut output: StringBuilder,
+		command: String,
+		arguments: Array<String>,
+		output_path: String,
+		expected_path: String,
+		candidate: String,
+		iteration: Integer,
+	): Result<Boolean, String>
+	measurement := try peak_process(command, arguments)
+	append_measurement(
+		output,
+		"application-build-peak-rss",
+		"file-root",
+		candidate,
+		iteration,
+		measurement.rss,
+		measurement.status,
+	)
+	if measurement.status != 0
+		return Result<Boolean, String>::Err(candidate + " RSS build failed")
+	end
+	try require_file(output_path)
+	if !expected_path.empty?()
+		try require_file_equal(output_path, expected_path, candidate + " RSS build bytes differ")
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def measure_runtime(
+		mut output: StringBuilder,
+		executable: String,
+		candidate: String,
+		iteration: Integer,
+	): Result<Boolean, String>
+	measurement := try measure_process(executable, [])
+	append_measurement(
+		output,
+		"application-runtime",
+		"file-root",
+		candidate,
+		iteration,
+		measurement.seconds.to_s(),
+		measurement.status,
+	)
+	if measurement.status != 0 || measurement.stdout != "file-root-ok\n" || !measurement.stderr.empty?()
+		return Result<Boolean, String>::Err(candidate + " runtime differs")
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def measure_runtime_rss(
+		mut output: StringBuilder,
+		executable: String,
+		candidate: String,
+		iteration: Integer,
+	): Result<Boolean, String>
+	measurement := try peak_process(executable, [])
+	append_measurement(
+		output,
+		"application-runtime-peak-rss",
+		"file-root",
+		candidate,
+		iteration,
+		measurement.rss,
+		measurement.status,
+	)
+	if measurement.status != 0 || measurement.stdout != "file-root-ok\n"
+		return Result<Boolean, String>::Err(candidate + " RSS runtime differs")
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def measure_compiler_build(
+		mut output: StringBuilder,
+		seed: String,
+		arguments: Array<String>,
+		output_path: String,
+		expected_path: String,
+		iteration: Integer,
+	): Result<Boolean, String>
+	measurement := try measure_process(seed, arguments)
+	append_measurement(
+		output,
+		"compiler-build-total",
+		"compiler-source",
+		"native-b1-to-b2",
+		iteration,
+		measurement.seconds.to_s(),
+		measurement.status,
+	)
+	if measurement.status != 0 || !measurement.stdout.empty?() || !measurement.stderr.empty?()
+		return Result<Boolean, String>::Err("B1-to-B2 build failed: " + measurement.stderr)
+	end
+	try require_file_equal(output_path, expected_path, "measured B2 differs from canonical B2")
+	return Result<Boolean, String>::Ok(true)
+end
+
+def measure_compiler_rss(
+		mut output: StringBuilder,
+		seed: String,
+		arguments: Array<String>,
+		output_path: String,
+		expected_path: String,
+		iteration: Integer,
+	): Result<Boolean, String>
+	measurement := try peak_process(seed, arguments)
+	append_measurement(
+		output,
+		"compiler-build-peak-rss",
+		"compiler-source",
+		"native-b1-to-b2",
+		iteration,
+		measurement.rss,
+		measurement.status,
+	)
+	if measurement.status != 0 || !measurement.stdout.empty?()
+		return Result<Boolean, String>::Err("B1-to-B2 RSS build failed")
+	end
+	try require_file_equal(output_path, expected_path, "RSS B2 differs from canonical B2")
+	return Result<Boolean, String>::Ok(true)
+end
+
+def file_size(path: String): Result<Integer, String>
+	measurement := try measure_process("/usr/bin/stat", ["-f", "%z", path])
+	if measurement.status != 0
+		return Result<Integer, String>::Err("stat failed for " + path + ": " + measurement.stderr)
+	end
+	return Result<Integer, String>::Ok(measurement.stdout.strip().to_i())
+end
+
+def record_size(
+		mut output: StringBuilder,
+		metric: String,
+		case_name: String,
+		candidate: String,
+		path: String,
+	): Result<Integer, String>
+	size := try file_size(path)
+	append_measurement(output, metric, case_name, candidate, 0, size.to_s(), 0)
+	return Result<Integer, String>::Ok(size)
+end
+
+def strip_and_record(
+		mut output: StringBuilder,
+		case_name: String,
+		candidate: String,
+		path: String,
+		stripped: String,
+	): Result<Integer, String>
+	measurement := try measure_process("/usr/bin/strip", ["-x", "-o", stripped, path])
+	if measurement.status != 0
+		return Result<Integer, String>::Err("strip failed for " + path + ": " + measurement.stderr)
+	end
+	try record_size(output, case_name + "-size-raw", case_name, candidate, path)
+	return record_size(output, case_name + "-size-stripped", case_name, candidate, stripped)
+end
+
+def record_hash(
+		mut output: StringBuilder,
+		metric: String,
+		case_name: String,
+		candidate: String,
+		path: String,
+	): Result<String, String>
+	measurement := try measure_process("/usr/bin/shasum", ["-a", "256", path])
+	if measurement.status != 0
+		return Result<String, String>::Err("shasum failed for " + path)
+	end
+	fields := measurement.stdout.strip().split(" ")
+	if fields.size() < 1
+		return Result<String, String>::Err("shasum returned no digest for " + path)
+	end
+	append_measurement(output, metric, case_name, candidate, 0, fields[0], 0)
+	return Result<String, String>::Ok(fields[0])
+end
+
+def append_inventory_command(
+		mut inventory: StringBuilder,
+		label: String,
+		command: String,
+		arguments: Array<String>,
+	): Result<TimedProcess, String>
+	inventory.append("## " + label + "\n")
+	inventory.append("command: " + command)
+	mut index := 0
+	while index < arguments.size()
+		inventory.append(" " + arguments[index])
+		index += 1
+	end
+	inventory.append("\n")
+	measurement := try measure_process(command, arguments)
+	inventory.append("status: " + measurement.status.to_s() + "\n")
+	if !measurement.stdout.empty?()
+		inventory.append("stdout:\n" + measurement.stdout)
+		if !measurement.stdout.end_with?("\n")
+			inventory.append("\n")
+		end
+	end
+	if !measurement.stderr.empty?()
+		inventory.append("stderr:\n" + measurement.stderr)
+		if !measurement.stderr.end_with?("\n")
+			inventory.append("\n")
+		end
+	end
+	inventory.append("\n")
+	return Result<TimedProcess, String>::Ok(measurement)
+end
+
+def record_inventory(
+		path: String,
+		root: String,
+		seed: String,
+		seed_provenance: String,
+		benchmark: String,
+		reference_trb: String,
+		qbe: String,
+		cc: String,
+		go_command: String,
+		project: String,
+		native_app: String,
+		go_app: String,
+		flat_app: String,
+		compilers: Array<String>,
+	): Result<Boolean, String>
+	mut inventory := string_builder.new()
+	inventory.append("Gate 6E file-root multi-module process inventory\n\n")
+	inventory.append("seed provenance (outside ordinary chain):\n  " + seed_provenance + "\n\n")
+	inventory.append("ordinary compiler chain:\n")
+	inventory.append("  B1 Native seed -> QBE -> CC -> assembler/linker -> B2 compiler\n")
+	inventory.append("  B2 compiler -> QBE -> CC -> assembler/linker -> B3 compiler\n")
+	inventory.append("  B3 compiler -> QBE -> CC -> assembler/linker -> B4 compiler\n\n")
+	inventory.append("measured application paths:\n")
+	inventory.append("  Native compiler -> QBE -> CC -> Native application\n")
+	inventory.append("  pinned reference trb -> Go toolchain -> optimized Go application\n\n")
+	inventory.append("source graph:\n")
+	inventory.append("  main.trb -> app/summary.trb\n")
+	inventory.append("  app/summary.trb -> app/label.trb, domain/score.trb\n")
+	inventory.append("  app/label.trb -> shared/index.trb\n")
+	inventory.append("  domain/score.trb -> shared/index.trb\n")
+	inventory.append("  unrelated.trb is deliberately unreachable\n\n")
+	case read_text(root + "/TYPE_RB_REVISION")
+	when Result::Ok(revision)
+		inventory.append("pinned TypeRB revision: " + revision.strip() + "\n\n")
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
+	end
+	try append_inventory_command(inventory, "TypeRB Native revision", "/usr/bin/git", ["-C", root, "rev-parse", "HEAD"])
+	try append_inventory_command(inventory, "operating system", "/usr/bin/sw_vers", [])
+	try append_inventory_command(inventory, "kernel and architecture", "/usr/bin/uname", ["-a"])
+	try append_inventory_command(inventory, "processor", "/usr/sbin/sysctl", ["-n", "machdep.cpu.brand_string"])
+	try append_inventory_command(inventory, "physical memory", "/usr/sbin/sysctl", ["-n", "hw.memsize"])
+	try append_inventory_command(inventory, "reference compiler version", reference_trb, ["version"])
+	try append_inventory_command(inventory, "Go toolchain version", go_command, ["version"])
+	try append_inventory_command(inventory, "C toolchain version", cc, ["--version"])
+	try append_inventory_command(inventory, "QBE probe", qbe, ["-h"])
+	artifacts := [benchmark, seed, compilers[0], compilers[1], compilers[2], native_app, go_app, flat_app, qbe]
+	try append_inventory_command(inventory, "artifact formats", "/usr/bin/file", artifacts)
+	mut artifact_hash_arguments := ["-a", "256"]
+	mut artifact_index := 0
+	while artifact_index < artifacts.size()
+		artifact_hash_arguments.push(artifacts[artifact_index])
+		artifact_index += 1
+	end
+	try append_inventory_command(inventory, "artifact SHA-256", "/usr/bin/shasum", artifact_hash_arguments)
+	try append_inventory_command(inventory, "source graph SHA-256", "/usr/bin/shasum", [
+			"-a",
+			"256",
+			project + "/main.trb",
+			project + "/app/summary.trb",
+			project + "/app/label.trb",
+			project + "/domain/score.trb",
+			project + "/shared/index.trb",
+			project + "/unrelated.trb",
+		])
+	try append_inventory_command(inventory, "Native application dependencies", "/usr/bin/otool", ["-L", native_app])
+	try append_inventory_command(inventory, "Go application dependencies", "/usr/bin/otool", ["-L", go_app])
+	try append_inventory_command(inventory, "B4 compiler dependencies", "/usr/bin/otool", ["-L", compilers[2]])
+	try append_inventory_command(inventory, "B4 compiler undefined symbols", "/usr/bin/nm", ["-u", compilers[2]])
+	native_go := try append_inventory_command(inventory, "Native application Go metadata probe", go_command, ["version", "-m", native_app])
+	if native_go.status == 0
+		return Result<Boolean, String>::Err("Native application unexpectedly contains Go metadata")
+	end
+	go_metadata := try append_inventory_command(inventory, "Go application metadata", go_command, ["version", "-m", go_app])
+	if go_metadata.status != 0
+		return Result<Boolean, String>::Err("Go application metadata probe failed")
+	end
+	intermediates := try append_inventory_command(
+		inventory,
+		"Native intermediate leak probe",
+		"/usr/bin/find",
+		[project, "-name", "*.trbn.*", "-print"],
+	)
+	if intermediates.status != 0 || !intermediates.stdout.empty?()
+		return Result<Boolean, String>::Err("Native intermediates remain in the source graph")
+	end
+	return write_required(path, inventory.to_s())
+end
+
+def report_error(result: Result<Boolean, String>): Boolean
+	case result
+	when Result::Ok(_value)
+		return false
+	when Result::Err(error)
+		puts(error)
+		return true
+	end
+end
+
+def main()
+	arguments := argv()
+	if arguments.size() != 11
+		puts(
+			"usage: gate6e-benchmark ROOT SEED SEED_PROVENANCE BENCHMARK REFERENCE_TRB QBE CC GO WORKSPACE RAW_CSV INVENTORY",
+		)
+		return
+	end
+	root := arguments[0]
+	seed := arguments[1]
+	seed_provenance := arguments[2]
+	benchmark := arguments[3]
+	reference_trb := arguments[4]
+	qbe := arguments[5]
+	cc := arguments[6]
+	go_command := arguments[7]
+	workspace := arguments[8]
+	raw_path := arguments[9]
+	inventory_path := arguments[10]
+	if report_error(create_required_directory(workspace))
+		return
+	end
+	project := workspace + "/file-root-project"
+	if report_error(prepare_project(root, project))
+		return
+	end
+	entry := project + "/main.trb"
+	flattened := root + "/compiler/gate4/conformance/file-root-flattened.trb"
+	compiler_source := root + "/compiler/gate4/src/compiler.trb"
+	case read_required(flattened)
+	when Result::Ok(_source)
+	when Result::Err(error)
+		puts(error)
+		return
+	end
+
+	directories := [
+		workspace + "/native-canonical",
+		workspace + "/go-canonical",
+		workspace + "/flat-canonical",
+		workspace + "/native-measured",
+		workspace + "/go-measured",
+		workspace + "/compiler-b2",
+		workspace + "/compiler-b3",
+		workspace + "/compiler-b4",
+		workspace + "/compiler-measured",
+	]
+	mut index := 0
+	while index < directories.size()
+		if report_error(create_required_directory(directories[index]))
+			return
+		end
+		index += 1
+	end
+	native_app := directories[0] + "/program"
+	go_app := directories[1] + "/program"
+	flat_app := directories[2] + "/program"
+	native_measured := directories[3] + "/program"
+	go_measured := directories[4] + "/program"
+	if report_error(
+			build_checked(
+				seed,
+				native_build_arguments(entry, native_app, qbe, cc),
+				native_app,
+				"canonical Native application",
+			),
+		)
+		return
+	end
+	if report_error(
+			build_checked(
+				reference_trb,
+				go_build_arguments(entry, go_app),
+				go_app,
+				"canonical optimized Go application",
+			),
+		)
+		return
+	end
+	if report_error(
+			build_checked(
+				seed,
+				native_build_arguments(flattened, flat_app, qbe, cc),
+				flat_app,
+				"canonical flattened Native application",
+			),
+		)
+		return
+	end
+	if report_error(verify_runtime(native_app, "Native file-root"))
+		return
+	end
+	if report_error(verify_runtime(go_app, "optimized Go file-root"))
+		return
+	end
+	if report_error(verify_runtime(flat_app, "flattened Native"))
+		return
+	end
+	if report_error(require_no_intermediates(workspace))
+		return
+	end
+
+	seed_emission := case measure_process(seed, ["emit-qbe", compiler_source])
+	when Result::Ok(process)
+		process
+	when Result::Err(error)
+		puts(error)
+		return
+	end
+	if seed_emission.status != 0 || seed_emission.stdout.empty?() || !seed_emission.stderr.empty?()
+		puts("B1 seed failed compiler QBE emission")
+		return
+	end
+	expected_qbe := seed_emission.stdout
+	compiler_outputs := [
+		directories[5] + "/compiler",
+		directories[6] + "/compiler",
+		directories[7] + "/compiler",
+	]
+	mut chain_seed := seed
+	index = 0
+	while index < compiler_outputs.size()
+		if report_error(
+				build_checked(
+					chain_seed,
+					native_build_arguments(compiler_source, compiler_outputs[index], qbe, cc),
+					compiler_outputs[index],
+					"canonical compiler generation " + index.to_s(),
+				),
+			)
+			return
+		end
+		if report_error(
+				verify_compiler(
+					compiler_outputs[index],
+					compiler_source,
+					expected_qbe,
+					"canonical compiler generation " + index.to_s(),
+				),
+			)
+			return
+		end
+		if index > 0
+			if report_error(
+					require_file_equal(
+						compiler_outputs[index - 1],
+						compiler_outputs[index],
+						"B2/B3/B4 compiler bytes differ",
+					),
+				)
+				return
+			end
+		end
+		chain_seed = compiler_outputs[index]
+		index += 1
+	end
+
+	mut output := string_builder.new()
+	output.append("metric,case,candidate,iteration,value,status\n")
+	native_build := native_build_arguments(entry, native_measured, qbe, cc)
+	go_build := go_build_arguments(entry, go_measured)
+	mut iteration :=- 2
+	while iteration < 7
+		mut order := 0
+		while order < 2
+			mut candidate := order
+			if iteration % 2 != 0
+				candidate = 1 - order
+			end
+			if candidate == 0
+				if report_error(
+						measure_build(
+							output,
+							seed,
+							native_build,
+							native_measured,
+							native_app,
+							"native",
+							iteration,
+						),
+					)
+					return
+				end
+			else
+				if report_error(
+						measure_build(
+							output,
+							reference_trb,
+							go_build,
+							go_measured,
+							"",
+							"go-optimized",
+							iteration,
+						),
+					)
+					return
+				end
+			end
+			order += 1
+		end
+		iteration += 1
+	end
+
+	iteration =- 2
+	while iteration < 7
+		mut order := 0
+		while order < 2
+			mut candidate := order
+			if iteration % 2 != 0
+				candidate = 1 - order
+			end
+			if candidate == 0
+				if report_error(
+						measure_build_rss(
+							output,
+							seed,
+							native_build,
+							native_measured,
+							native_app,
+							"native",
+							iteration,
+						),
+					)
+					return
+				end
+			else
+				if report_error(
+						measure_build_rss(
+							output,
+							reference_trb,
+							go_build,
+							go_measured,
+							"",
+							"go-optimized",
+							iteration,
+						),
+					)
+					return
+				end
+			end
+			order += 1
+		end
+		iteration += 1
+	end
+
+	iteration =- 2
+	while iteration < 50
+		mut order := 0
+		while order < 2
+			mut candidate := order
+			if iteration % 2 != 0
+				candidate = 1 - order
+			end
+			if candidate == 0
+				if report_error(measure_runtime(output, native_app, "native", iteration))
+					return
+				end
+			else
+				if report_error(measure_runtime(output, go_app, "go-optimized", iteration))
+					return
+				end
+			end
+			order += 1
+		end
+		iteration += 1
+	end
+
+	iteration =- 2
+	while iteration < 7
+		mut order := 0
+		while order < 2
+			mut candidate := order
+			if iteration % 2 != 0
+				candidate = 1 - order
+			end
+			if candidate == 0
+				if report_error(measure_runtime_rss(output, native_app, "native", iteration))
+					return
+				end
+			else
+				if report_error(measure_runtime_rss(output, go_app, "go-optimized", iteration))
+					return
+				end
+			end
+			order += 1
+		end
+		iteration += 1
+	end
+
+	compiler_measured := directories[8] + "/compiler"
+	compiler_build := native_build_arguments(compiler_source, compiler_measured, qbe, cc)
+	iteration =- 2
+	while iteration < 7
+		if report_error(
+				measure_compiler_build(
+					output,
+					seed,
+					compiler_build,
+					compiler_measured,
+					compiler_outputs[0],
+					iteration,
+				),
+			)
+			return
+		end
+		iteration += 1
+	end
+	iteration =- 2
+	while iteration < 7
+		if report_error(
+				measure_compiler_rss(
+					output,
+					seed,
+					compiler_build,
+					compiler_measured,
+					compiler_outputs[0],
+					iteration,
+				),
+			)
+			return
+		end
+		iteration += 1
+	end
+
+	append_measurement(output, "compiler-build-baseline-seconds", "compiler-source", "gate6c-b1", 0, "0.585709", 0)
+	append_measurement(output, "compiler-build-baseline-rss", "compiler-source", "gate6c-b1", 0, "36667392", 0)
+	append_measurement(output, "compiler-size-limit", "compiler-source", "registered", 0, "208530", 0)
+	native_size := case strip_and_record(
+			output,
+			"application",
+			"native",
+			native_app,
+			directories[0] + "/stripped",
+		)
+	when Result::Ok(value)
+		value
+	when Result::Err(error)
+		puts(error)
+		return
+	end
+	go_size := case strip_and_record(
+			output,
+			"application",
+			"go-optimized",
+			go_app,
+			directories[1] + "/stripped",
+		)
+	when Result::Ok(value)
+		value
+	when Result::Err(error)
+		puts(error)
+		return
+	end
+	flat_size := case strip_and_record(
+			output,
+			"application",
+			"native-flattened",
+			flat_app,
+			directories[2] + "/stripped",
+		)
+	when Result::Ok(value)
+		value
+	when Result::Err(error)
+		puts(error)
+		return
+	end
+	compiler_size := case strip_and_record(
+			output,
+			"compiler",
+			"native-b4",
+			compiler_outputs[2],
+			directories[7] + "/stripped",
+		)
+	when Result::Ok(value)
+		value
+	when Result::Err(error)
+		puts(error)
+		return
+	end
+	if native_size * 5 > go_size
+		puts("Native application is not at least 80% smaller than optimized Go")
+		return
+	end
+	if native_size * 100 > flat_size * 110
+		puts("file-root Native application exceeds the flattened Native size bound")
+		return
+	end
+	if compiler_size > 208530
+		puts("fixed-point Native compiler exceeds the registered size limit")
+		return
+	end
+	case record_hash(output, "application-sha256", "file-root", "native", native_app)
+	when Result::Ok(_hash)
+	when Result::Err(error)
+		puts(error)
+		return
+	end
+	case record_hash(output, "application-sha256", "file-root", "go-optimized", go_app)
+	when Result::Ok(_hash)
+	when Result::Err(error)
+		puts(error)
+		return
+	end
+	case record_hash(output, "application-sha256", "flattened", "native", flat_app)
+	when Result::Ok(_hash)
+	when Result::Err(error)
+		puts(error)
+		return
+	end
+	index = 0
+	while index < compiler_outputs.size()
+		case record_hash(
+				output,
+				"compiler-sha256",
+				"compiler-source",
+				"native-b" + (index + 2).to_s(),
+				compiler_outputs[index],
+			)
+		when Result::Ok(_hash)
+		when Result::Err(error)
+			puts(error)
+			return
+		end
+		index += 1
+	end
+	if report_error(require_no_intermediates(workspace))
+		return
+	end
+	if report_error(write_required(raw_path, output.to_s()))
+		return
+	end
+	if report_error(
+			record_inventory(
+				inventory_path,
+				root,
+				seed,
+				seed_provenance,
+				benchmark,
+				reference_trb,
+				qbe,
+				cc,
+				go_command,
+				project,
+				native_app,
+				go_app,
+				flat_app,
+				compiler_outputs,
+			),
+		)
+		return
+	end
+	puts(raw_path)
+	puts(inventory_path)
+	return
+end
