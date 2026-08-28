@@ -1,0 +1,454 @@
+import {
+	ComparisonOperator,
+	Gate1Instruction,
+	IntegerBinaryOperator,
+	ScalarType,
+} from gate1_mir
+import {
+	Gate2Field,
+	Gate2TypeDefinition,
+	Gate2ValueType,
+	Gate2Variant,
+} from gate2_layout
+import {
+	Gate2Block,
+	Gate2Function,
+	Gate2Instruction,
+	Gate2Module,
+	Gate2Parameter,
+	Gate2ResultType,
+	Gate2Terminator,
+	verify_gate2_mir,
+} from gate2_mir
+import { build_gate2_executable } from gate2_toolchain
+import { NativeSource } from native_mir
+import { emit_gate2_qbe } from qbe2
+import { SourceOrigin } from snapshot
+import { create_directory } from trb/std/filesystem
+import { environment, run } from trb/std/process
+import { Result } from trb/std/result
+import { describe, expect, test } from trb/std/test
+
+def _gate2_mir_origin(line: Integer): SourceOrigin
+	return SourceOrigin.new(
+		source_id: "main",
+		start_line: line,
+		start_column: 1,
+		end_line: line,
+		end_column: 8,
+	)
+end
+
+def _gate2_mir_scalar(value_type: ScalarType): Gate2ValueType
+	return Gate2ValueType::Scalar(value_type)
+end
+
+def _gate2_mir_types(): Array<Gate2TypeDefinition>
+	return [
+		Gate2TypeDefinition::Record(
+			"example#Point",
+			[
+				Gate2Field.new(name: "x", value_type: _gate2_mir_scalar(ScalarType::Integer)),
+				Gate2Field.new(name: "y", value_type: _gate2_mir_scalar(ScalarType::Integer)),
+			],
+		),
+		Gate2TypeDefinition::Tagged(
+			"example#Outcome",
+			[
+				Gate2Variant.new(
+					name: "Found",
+					fields: [
+						Gate2Field.new(name: "point", value_type: Gate2ValueType::Aggregate("example#Point")),
+					],
+				),
+				Gate2Variant.new(
+					name: "Missing",
+					fields: [
+						Gate2Field.new(name: "code", value_type: _gate2_mir_scalar(ScalarType::Integer)),
+					],
+				),
+			],
+		),
+	]
+end
+
+def _gate2_make_point(): Gate2Function
+	origin := _gate2_mir_origin(1)
+	return Gate2Function.new(
+		id: "example#make_point",
+		name: "make_point",
+		parameters: [
+			Gate2Parameter.new(id: "x", value_type: _gate2_mir_scalar(ScalarType::Integer), origin: origin),
+			Gate2Parameter.new(id: "y", value_type: _gate2_mir_scalar(ScalarType::Integer), origin: origin),
+		],
+		result_type: Gate2ResultType::Value(Gate2ValueType::Aggregate("example#Point")),
+		entry: "entry",
+		origin: origin,
+		blocks: [
+			Gate2Block.new(
+				id: "entry",
+				parameters: [],
+				origin: origin,
+				instructions: [
+					Gate2Instruction::RecordConstruct("point", "example#Point", ["x", "y"], origin),
+				],
+				terminator: Gate2Terminator::Return("point", origin),
+			),
+		],
+	)
+end
+
+def _gate2_classify(): Gate2Function
+	origin := _gate2_mir_origin(5)
+	point_type := Gate2ValueType::Aggregate("example#Point")
+	return Gate2Function.new(
+		id: "example#classify",
+		name: "classify",
+		parameters: [
+			Gate2Parameter.new(id: "point", value_type: point_type, origin: origin),
+			Gate2Parameter.new(id: "found", value_type: _gate2_mir_scalar(ScalarType::Boolean), origin: origin),
+		],
+		result_type: Gate2ResultType::Value(Gate2ValueType::Aggregate("example#Outcome")),
+		entry: "entry",
+		origin: origin,
+		blocks: [
+			Gate2Block.new(
+				id: "entry",
+				parameters: [],
+				origin: origin,
+				instructions: [],
+				terminator: Gate2Terminator::Branch("found", "yes", ["point"], "no", [], origin),
+			),
+			Gate2Block.new(
+				id: "yes",
+				parameters: [Gate2Parameter.new(id: "selected", value_type: point_type, origin: origin)],
+				origin: origin,
+				instructions: [
+					Gate2Instruction::VariantConstruct(
+						"outcome",
+						"example#Outcome",
+						"Found",
+						["selected"],
+						origin,
+					),
+				],
+				terminator: Gate2Terminator::Return("outcome", origin),
+			),
+			Gate2Block.new(
+				id: "no",
+				parameters: [],
+				origin: origin,
+				instructions: [
+					Gate2Instruction::Scalar(Gate1Instruction::IntegerLiteral("code", 404, origin)),
+					Gate2Instruction::VariantConstruct(
+						"outcome_missing",
+						"example#Outcome",
+						"Missing",
+						["code"],
+						origin,
+					),
+				],
+				terminator: Gate2Terminator::Return("outcome_missing", origin),
+			),
+		],
+	)
+end
+
+def _gate2_sum_point(): Gate2Function
+	origin := _gate2_mir_origin(12)
+	return Gate2Function.new(
+		id: "example#sum_point",
+		name: "sum_point",
+		parameters: [
+			Gate2Parameter.new(
+				id: "point",
+				value_type: Gate2ValueType::Aggregate("example#Point"),
+				origin: origin,
+			),
+		],
+		result_type: Gate2ResultType::Value(_gate2_mir_scalar(ScalarType::Integer)),
+		entry: "entry",
+		origin: origin,
+		blocks: [
+			Gate2Block.new(
+				id: "entry",
+				parameters: [],
+				origin: origin,
+				instructions: [
+					Gate2Instruction::RecordProject("x", "example#Point", "point", "x", origin),
+					Gate2Instruction::RecordProject("y", "example#Point", "point", "y", origin),
+					Gate2Instruction::Scalar(
+						Gate1Instruction::IntegerBinary("sum", IntegerBinaryOperator::Add, "x", "y", origin)
+					),
+				],
+				terminator: Gate2Terminator::Return("sum", origin),
+			),
+		],
+	)
+end
+
+def _gate2_entry(): Gate2Function
+	origin := _gate2_mir_origin(18)
+	outcome_type := Gate2ValueType::Aggregate("example#Outcome")
+	return Gate2Function.new(
+		id: "example#main",
+		name: "main",
+		parameters: [],
+		result_type: Gate2ResultType::Void,
+		entry: "entry",
+		origin: origin,
+		blocks: [
+			Gate2Block.new(
+				id: "entry",
+				parameters: [],
+				origin: origin,
+				instructions: [
+					Gate2Instruction::Scalar(Gate1Instruction::IntegerLiteral("twenty", 20, origin)),
+					Gate2Instruction::Scalar(Gate1Instruction::IntegerLiteral("twenty_two", 22, origin)),
+					Gate2Instruction::Scalar(Gate1Instruction::BooleanLiteral("found", true, origin)),
+					Gate2Instruction::Call("point", "example#make_point", ["twenty", "twenty_two"], origin),
+					Gate2Instruction::Call("outcome", "example#classify", ["point", "found"], origin),
+					Gate2Instruction::VariantTest("is_found", "example#Outcome", "outcome", "Found", origin),
+				],
+				terminator: Gate2Terminator::Branch("is_found", "found", ["outcome"], "failure", [], origin),
+			),
+			Gate2Block.new(
+				id: "found",
+				parameters: [Gate2Parameter.new(id: "matched", value_type: outcome_type, origin: origin)],
+				origin: origin,
+				instructions: [
+					Gate2Instruction::VariantProject(
+						"point_payload",
+						"example#Outcome",
+						"matched",
+						"Found",
+						"point",
+						origin,
+					),
+					Gate2Instruction::Call("answer", "example#sum_point", ["point_payload"], origin),
+					Gate2Instruction::Scalar(Gate1Instruction::IntegerLiteral("expected", 42, origin)),
+					Gate2Instruction::Scalar(
+						Gate1Instruction::IntegerCompare(
+							"matches",
+							ComparisonOperator::Equal,
+							"answer",
+							"expected",
+							origin,
+						)
+					),
+				],
+				terminator: Gate2Terminator::Branch("matches", "success", [], "failure", [], origin),
+			),
+			Gate2Block.new(
+				id: "success",
+				parameters: [],
+				origin: origin,
+				instructions: [
+					Gate2Instruction::Scalar(Gate1Instruction::WriteStatic("gate2-aggregate\n", origin)),
+				],
+				terminator: Gate2Terminator::Return(nil, origin),
+			),
+			Gate2Block.new(
+				id: "failure",
+				parameters: [],
+				origin: origin,
+				instructions: [
+					Gate2Instruction::Scalar(Gate1Instruction::WriteStatic("bad\n", origin)),
+				],
+				terminator: Gate2Terminator::Return(nil, origin),
+			),
+		],
+	)
+end
+
+def gate2_mir_sample_module(): Gate2Module
+	return Gate2Module.new(
+		id: "example",
+		entry_function: "example#main",
+		sources: [NativeSource.new(id: "main", path: "src/main.trb")],
+		types: _gate2_mir_types(),
+		functions: [_gate2_make_point(), _gate2_classify(), _gate2_sum_point(), _gate2_entry()],
+	)
+end
+
+def _gate2_invalid_projection_module(): Gate2Module
+	origin := _gate2_mir_origin(40)
+	entry := Gate2Function.new(
+		id: "example#main",
+		name: "main",
+		parameters: [],
+		result_type: Gate2ResultType::Void,
+		entry: "entry",
+		origin: origin,
+		blocks: [
+			Gate2Block.new(
+				id: "entry",
+				parameters: [],
+				origin: origin,
+				instructions: [
+					Gate2Instruction::Scalar(Gate1Instruction::IntegerLiteral("code", 404, origin)),
+					Gate2Instruction::VariantConstruct(
+						"missing",
+						"example#Outcome",
+						"Missing",
+						["code"],
+						origin,
+					),
+					Gate2Instruction::VariantProject(
+						"invalid",
+						"example#Outcome",
+						"missing",
+						"Found",
+						"point",
+						origin,
+					),
+				],
+				terminator: Gate2Terminator::Return(nil, origin),
+			),
+		],
+	)
+	return Gate2Module.new(
+		id: "example",
+		entry_function: entry.id,
+		sources: [NativeSource.new(id: "main", path: "src/main.trb")],
+		types: _gate2_mir_types(),
+		functions: [entry],
+	)
+end
+
+describe("Gate 2 aggregate MIR") do
+	test("verifies aggregate construction, projection, calls, returns, and block arguments") do
+		case verify_gate2_mir(gate2_mir_sample_module())
+		when Result::Ok(valid)
+			expect(valid).to_be_true()
+		when Result::Err(diagnostic)
+			puts(diagnostic.path + ": " + diagnostic.message)
+			expect(false).to_be_true()
+		end
+	end
+
+	test("emits deterministic QBE IL with stack-owned aggregate storage") do
+		first := emit_gate2_qbe(gate2_mir_sample_module())
+		second := emit_gate2_qbe(gate2_mir_sample_module())
+		case first
+		when Result::Ok(source)
+			expect(second).to_equal(first)
+			expect(source.include?("$memset")).to_be_true()
+			expect(source.include?("$memcpy")).to_be_true()
+			expect(source.include?("$trbn_variant_projection_fail")).to_be_true()
+			expect(source.include?("export function w $main()")).to_be_true()
+		when Result::Err(_diagnostic)
+			expect(false).to_be_true()
+		end
+	end
+
+	test("builds and executes the aggregate vertical slice when QBE is configured") do
+		qbe_command := environment("TYPE_RB_NATIVE_QBE")
+		if qbe_command == nil
+			expect(true).to_be_true()
+		else
+			workspace := "/tmp/type-rb-native-gate2-integration"
+			case create_directory(workspace)
+			when Result::Ok(_unit)
+			when Result::Err(_error)
+			end
+			case build_gate2_executable(
+					gate2_mir_sample_module(),
+					qbe_command,
+					"/usr/bin/cc",
+					workspace,
+					workspace + "/sample",
+				)
+			when Result::Ok(report)
+				case run(report.output_path, [])
+				when Result::Ok(process)
+					expect(process.success).to_be_true()
+					expect(process.stdout).to_equal("gate2-aggregate\n")
+					expect(process.stderr).to_equal("")
+				when Result::Err(_error)
+					expect(false).to_be_true()
+				end
+			when Result::Err(error)
+				puts(error.phase + ": " + error.message + "\n" + error.stderr)
+				expect(false).to_be_true()
+			end
+		end
+	end
+
+	test("fails an invalid dynamic variant projection deterministically") do
+		qbe_command := environment("TYPE_RB_NATIVE_QBE")
+		if qbe_command == nil
+			expect(true).to_be_true()
+		else
+			workspace := "/tmp/type-rb-native-gate2-invalid-projection"
+			case create_directory(workspace)
+			when Result::Ok(_unit)
+			when Result::Err(_error)
+			end
+			case build_gate2_executable(
+					_gate2_invalid_projection_module(),
+					qbe_command,
+					"/usr/bin/cc",
+					workspace,
+					workspace + "/sample",
+				)
+			when Result::Ok(report)
+				case run(report.output_path, [])
+				when Result::Ok(process)
+					expect(process.status).to_equal(2)
+					expect(process.stdout).to_equal("")
+					expect(process.stderr).to_equal("panic: invalid enum projection\n")
+				when Result::Err(_error)
+					expect(false).to_be_true()
+				end
+			when Result::Err(error)
+				puts(error.phase + ": " + error.message + "\n" + error.stderr)
+				expect(false).to_be_true()
+			end
+		end
+	end
+
+	test("rejects nominally mismatched record construction") do
+		origin := _gate2_mir_origin(30)
+		broken := Gate2Function.new(
+			id: "example#main",
+			name: "main",
+			parameters: [],
+			result_type: Gate2ResultType::Void,
+			entry: "entry",
+			origin: origin,
+			blocks: [
+				Gate2Block.new(
+					id: "entry",
+					parameters: [],
+					origin: origin,
+					instructions: [
+						Gate2Instruction::Scalar(Gate1Instruction::BooleanLiteral("wrong", true, origin)),
+						Gate2Instruction::Scalar(Gate1Instruction::IntegerLiteral("right", 1, origin)),
+						Gate2Instruction::RecordConstruct(
+							"point",
+							"example#Point",
+							["wrong", "right"],
+							origin,
+						),
+					],
+					terminator: Gate2Terminator::Return(nil, origin),
+				),
+			],
+		)
+		native_module := Gate2Module.new(
+			id: "example",
+			entry_function: broken.id,
+			sources: [NativeSource.new(id: "main", path: "src/main.trb")],
+			types: _gate2_mir_types(),
+			functions: [broken],
+		)
+		case verify_gate2_mir(native_module)
+		when Result::Ok(_valid)
+			expect(false).to_be_true()
+		when Result::Err(diagnostic)
+			expect(diagnostic.code).to_equal("TRBN0004")
+			expect(diagnostic.message).to_equal("operand type does not match the operation")
+		end
+	end
+end
