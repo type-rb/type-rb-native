@@ -40,6 +40,7 @@ def _gate3_capture_module(): Gate3Module
 				],
 			),
 			Gate3TypeDefinition::Function("() -> Integer", [], integer_type),
+			Gate3TypeDefinition::Function("(Integer) -> Integer", [integer_type], integer_type),
 		],
 		functions: [
 			Gate3Function.new(
@@ -61,6 +62,24 @@ def _gate3_capture_module(): Gate3Module
 					),
 				],
 				captures: [Gate3Parameter.new(id: "pair", value_type: pair_type, origin: origin)],
+			),
+			Gate3Function.new(
+				id: "capture#identity",
+				name: "identity",
+				parameters: [Gate3Parameter.new(id: "value", value_type: integer_type, origin: origin)],
+				result_type: Gate3ResultType::Value(integer_type),
+				entry: "entry",
+				origin: origin,
+				blocks: [
+					Gate3Block.new(
+						id: "entry",
+						parameters: [],
+						origin: origin,
+						instructions: [],
+						terminator: Gate3Terminator::Return("value", origin),
+					),
+				],
+				captures: [],
 			),
 			Gate3Function.new(
 				id: "capture#main",
@@ -106,8 +125,58 @@ def _gate3_capture_module(): Gate3Module
 									origin,
 								)
 							),
+							Gate3Instruction::ClosureConstruct(
+								"identity",
+								"(Integer) -> Integer",
+								"capture#identity",
+								[],
+								origin,
+							),
+							Gate3Instruction::ClosureCall(
+								"identityActual",
+								"(Integer) -> Integer",
+								"identity",
+								["fortyTwo"],
+								origin,
+							),
+							Gate3Instruction::Scalar(
+								Gate1Instruction::IntegerCompare(
+									"identityMatches",
+									ComparisonOperator::Equal,
+									"identityActual",
+									"fortyTwo",
+									origin,
+								)
+							),
 						],
-						terminator: Gate3Terminator::Branch("matches", "success", [], "failure", [], origin),
+						terminator: Gate3Terminator::Branch(
+							"matches",
+							"identity",
+							["identityMatches"],
+							"failure",
+							[],
+							origin,
+						),
+					),
+					Gate3Block.new(
+						id: "identity",
+						parameters: [
+							Gate3Parameter.new(
+								id: "identityResult",
+								value_type: Gate3ValueType::Scalar(ScalarType::Boolean),
+								origin: origin,
+							),
+						],
+						origin: origin,
+						instructions: [],
+						terminator: Gate3Terminator::Branch(
+							"identityResult",
+							"success",
+							[],
+							"failure",
+							[],
+							origin,
+						),
 					),
 					Gate3Block.new(
 						id: "success",
@@ -130,7 +199,7 @@ def _gate3_capture_module(): Gate3Module
 end
 
 describe("Gate 3 closure capture runtime") do
-	test("copies a heap-free aggregate into an escaping environment") do
+	test("supports zero-capture and capturing closure ABIs") do
 		qbe_command := environment("TYPE_RB_NATIVE_QBE")
 		if qbe_command == nil
 			expect(true).to_be_true()

@@ -64,10 +64,13 @@ See the [Gate 2 result](results/2026-08-28-gate2-qbe-darwin-arm64/README.md).
 Gate 3 is active under the pre-registered scope in
 [issue #13](https://github.com/type-rb/type-rb-native/issues/13). It adds
 managed UTF-8 Strings, mutable Arrays, closures, and cycle-reclaiming tracing
-collection before broader runtime and self-hosting work. These results do not
-select QBE for production or measure the final self-hosted compiler. The current
-path provides no production runtime, stable ABI, stable artifact format, or
-compatibility guarantee.
+collection before broader runtime and self-hosting work. The pinned version 4
+producer is now connected to a differential source corpus, and repeated builds
+reproduce the snapshot, decoded MIR structure, QBE IL, assembly, and executable.
+Gate 3 remains open while the registered collector evidence and performance
+measurements are completed. These results do not select QBE for production or
+measure the final self-hosted compiler. The current path provides no production
+runtime, stable ABI, stable artifact format, or compatibility guarantee.
 
 ## Intended boundary
 

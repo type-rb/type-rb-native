@@ -2,7 +2,8 @@ import { qbe_line } from qbe
 
 def emit_gate3_runtime(mut writer: StringBuilder)
 	_gate3_runtime_bytes(writer, "$trbn_allocation_error", "panic: allocation failed\n")
-	_gate3_runtime_bytes(writer, "$trbn_index_error", "panic: index out of bounds\n")
+	_gate3_runtime_bytes(writer, "$trbn_string_index_error", "panic: String index is out of bounds\n")
+	_gate3_runtime_bytes(writer, "$trbn_array_index_error", "panic: Array index is out of bounds\n")
 	_gate3_runtime_bytes(writer, "$trbn_newline", "\n")
 	qbe_line(writer, "data $trbn_heap = align 8 { l 0 }")
 	qbe_line(writer, "data $trbn_roots = align 8 { l 0 }")
@@ -43,9 +44,16 @@ def _gate3_runtime_lines(): Array<String>
 		"\thlt",
 		"}",
 		"",
-		"function $trbn_index_fail() {",
+		"function $trbn_string_index_fail() {",
 		"@start",
-		"\tcall $write(w 2, l $trbn_index_error, l 27)",
+		"\tcall $write(w 2, l $trbn_string_index_error, l 37)",
+		"\tcall $exit(w 2)",
+		"\thlt",
+		"}",
+		"",
+		"function $trbn_array_index_fail() {",
+		"@start",
+		"\tcall $write(w 2, l $trbn_array_index_error, l 36)",
 		"\tcall $exit(w 2)",
 		"\thlt",
 		"}",
@@ -367,7 +375,7 @@ def _gate3_runtime_lines(): Array<String>
 		"\tret %equal",
 		"}",
 		"",
-		"function l $trbn_normalize_index(l %length, l %index) {",
+		"function l $trbn_normalize_index(l %length, l %index, w %array) {",
 		"@start",
 		"\t%negative =w csltl %index, 0",
 		"\tjnz %negative, @negative, @check",
@@ -387,7 +395,12 @@ def _gate3_runtime_lines(): Array<String>
 		"@direct_ok",
 		"\tret %index",
 		"@fail",
-		"\tcall $trbn_index_fail()",
+		"\tjnz %array, @array_fail, @string_fail",
+		"@string_fail",
+		"\tcall $trbn_string_index_fail()",
+		"\thlt",
+		"@array_fail",
+		"\tcall $trbn_array_index_fail()",
 		"\thlt",
 		"}",
 		"",
@@ -416,7 +429,7 @@ def _gate3_runtime_lines(): Array<String>
 		"@start",
 		"\t%length_address =l add %string, 40",
 		"\t%length =l loadl %length_address",
-		"\t%actual =l call $trbn_normalize_index(l %length, l %index)",
+		"\t%actual =l call $trbn_normalize_index(l %length, l %index, w 0)",
 		"\t%offset_slot =l alloc8 8",
 		"\t%position_slot =l alloc8 8",
 		"\tstorel 0, %offset_slot",
@@ -528,7 +541,7 @@ def _gate3_runtime_lines(): Array<String>
 		"@start",
 		"\t%length_address =l add %array, 32",
 		"\t%length =l loadl %length_address",
-		"\t%actual =l call $trbn_normalize_index(l %length, l %index)",
+		"\t%actual =l call $trbn_normalize_index(l %length, l %index, w 1)",
 		"\t%backing_address =l add %array, 64",
 		"\t%backing =l loadl %backing_address",
 		"\t%scaled =l mul %actual, 8",
@@ -541,7 +554,7 @@ def _gate3_runtime_lines(): Array<String>
 		"@start",
 		"\t%length_address =l add %array, 32",
 		"\t%length =l loadl %length_address",
-		"\t%actual =l call $trbn_normalize_index(l %length, l %index)",
+		"\t%actual =l call $trbn_normalize_index(l %length, l %index, w 1)",
 		"\t%backing_address =l add %array, 64",
 		"\t%backing =l loadl %backing_address",
 		"\t%scaled =l mul %actual, 8",
