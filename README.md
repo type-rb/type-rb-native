@@ -84,6 +84,15 @@ build-time, RSS, size, and distribution bounds pass. See the
 [Gate 4 implementation boundary](docs/gate-4-self-hosting.md) and
 [recorded result](results/2026-08-28-gate4-self-host-darwin-arm64/README.md).
 
+Gate 5 is in progress under the pre-registered scope in
+[issue #29](https://github.com/type-rb/type-rb-native/issues/29). It first
+builds a functional optimized Go comparison from the same TypeRB-authored
+compiler logic as the Native executable, then replaces Gate 4's source-sized
+parallel compiler storage and measures matched build time, peak RSS, artifact
+size, and distribution size. Multi-module applications, the ordinary
+file-oriented CLI, production runtime integration, package/native-library
+boundaries, and a second target remain the Gate 6 product-feasibility scope.
+
 ## Intended boundary
 
 ```text
@@ -181,12 +190,14 @@ repository.
 - [Gate 2 QBE Darwin arm64 result](results/2026-08-28-gate2-qbe-darwin-arm64/README.md)
 - [Gate 3 managed runtime](docs/gate-3-managed-runtime.md)
 - [Gate 4 behavioral self-hosting](docs/gate-4-self-hosting.md)
+- [Gate 5 matched self-hosted compiler baseline](docs/gate-5-matched-compiler.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
 - [Decision 0003: Gate 1 QBE and Darwin arm64 profile](docs/decisions/0003-gate-1-qbe-target.md)
 - [Decision 0004: Sustained native implementation and staged Gate 2](docs/decisions/0004-sustained-native-development.md)
 - [Decision 0005: Managed references and tracing GC](docs/decisions/0005-managed-runtime-and-tracing-gc.md)
 - [Decision 0006: Behavioral self-hosting boundary](docs/decisions/0006-behavioral-self-hosting-boundary.md)
+- [Decision 0007: Matched self-hosted compiler baseline](docs/decisions/0007-matched-self-hosted-compiler-baseline.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 

@@ -194,8 +194,9 @@ Exit condition: a Go-bootstrapped B0 compiler produces B1 from the TypeRB
 compiler sources, B1 produces B2 without executing or linking Go, and all three
 stages match observable compiler behavior on the valid and invalid conformance
 corpus. Repeated QBE emission is byte-identical and source-mutation checks prove
-that the frontend and code generator are active. B1/B2 executable identity and
-representative full-product performance remain Gate 5 requirements.
+that the frontend and code generator are active. B1/B2 executable identity
+remains a Gate 5 requirement; representative full-product performance remains
+a Gate 6 requirement.
 
 Gate 4 completed at TypeRB Native revision
 `b48e6b49fadd99f09805cbdefdf85f5dab67494d`. B1, B2, and B3 QBE converge
@@ -205,7 +206,40 @@ stripped size are within the registered B1/B2 convergence bounds, while the
 native compiler-plus-QBE distribution is 99.827% smaller than recovery. See
 the [Gate 4 result](../results/2026-08-28-gate4-self-host-darwin-arm64/README.md).
 
-### Gate 5: Self-hosted product feasibility
+### Gate 5: Matched self-hosted compiler baseline
+
+Gate 5 is registered in
+[issue #29](https://github.com/type-rb/type-rb-native/issues/29) and specified
+by
+[Decision 0007](decisions/0007-matched-self-hosted-compiler-baseline.md). It
+first replaces Gate 4's unmatched diagnostic comparison with functional Native
+and optimized Go compiler executables that run the same checked-in
+TypeRB-authored compiler logic through the same source-content and mode
+interface.
+
+The optimized Go comparison uses a deterministic generated driver that invokes
+`compiler_main` through the existing portable `argv()` contract. The Native
+compiler keeps its repository-internal Gate 4 entry adapter for this bounded
+comparison. The harness must prove that both executables retain and execute the
+lexer, parser, resolver, checker, and QBE emitter; an empty or dead-stripped
+entry cannot pass.
+
+Gate 5 also replaces source-sized parallel compiler storage with demand-sized
+storage where practical, keeps B0 -> B1 -> B2 -> B3 behavioral self-hosting,
+requires byte-identical B1/B2/B3 QBE, and requires B1/B2 executable equivalence
+under a documented normalization policy that preserves code and data. The
+ordinary B1-to-B2 process graph remains free of Go and the reference compiler.
+
+Exit condition: the matched Go and Native compilers pass the complete valid,
+invalid, mutation, and storage-boundary corpus with identical observable
+behavior. Native direct compiler time, end-to-end build time, and peak RSS each
+remain within 25% of the matched optimized Go baseline; stripped compiler and
+complete toolchain distribution sizes improve by at least 30%; and adjacent
+Native-generation build time, RSS, and stripped size remain within 25%. A
+greater than 2x regression is catastrophic. Exact registered measurement rules
+remain in issue #29.
+
+### Gate 6: Self-hosted product feasibility
 
 This gate is not authorization to ship. It evaluates:
 
@@ -216,10 +250,13 @@ This gate is not authorization to ship. It evaluates:
 - debugging and operational behavior; and
 - total ongoing maintenance cost.
 
-It also requires B1 and B2 compiler artifacts to be reproducibly equivalent
-under a documented normalization policy, and all build-time, memory, runtime,
-binary-size, and toolchain-size measurements to use the self-hosted path. A
-previous native release is the ordinary bootstrap seed; Go is not required.
+It also requires all build-time, memory, runtime, binary-size, and
+toolchain-size measurements to use the self-hosted path.
+
+The ordinary compiler accepts files and projects rather than the Gate 5
+source-content adapter, uses the production managed runtime, and performs
+external-tool orchestration through explicit measured boundaries. A previous
+Native release is the ordinary bootstrap seed; Go is not required.
 
 Promotion requires a separate TypeRB design decision.
 

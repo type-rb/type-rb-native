@@ -89,8 +89,8 @@ measured but becomes mandatory only under Gate 5's normalization policy.
 
 The gate stops for review after every registered condition passes. Full
 language coverage, project filesystem loading, package resolution, production
-managed-runtime integration, a second target, and release artifact equivalence
-remain later work.
+managed-runtime integration, and a second target remain Gate 6 work. Gate 5
+owns the matched compiler baseline and release artifact normalization.
 
 ## Result
 
