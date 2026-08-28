@@ -9,7 +9,11 @@ the boundary is defined by
 
 ## Status
 
-Gate 5 is in progress. Results are not yet available.
+Gate 5 is complete at TypeRB Native revision
+`a83699d6dd87de0c77a8a8a395ea6e266802bf0a`. The matched corpus, fixed point,
+normalization, Go-free process boundary, time, peak-RSS, artifact-size,
+distribution, and adjacent-generation criteria all pass. See the
+[recorded Darwin arm64 result](../results/2026-08-29-gate5-matched-compiler-darwin-arm64/README.md).
 
 ## Comparison boundary
 
@@ -50,10 +54,10 @@ and linker orchestration, and production runtime belong to Gate 6.
 ## Storage work
 
 Gate 4 allocated many token, declaration, local, and output arrays at a size
-derived from the complete source length. Gate 5 changes those structures to
-grow with the number of stored elements, or records why a remaining fixed
-allocation is required. Tests cover empty storage, initial growth, repeated
-growth, exact boundary access, and deterministic rejection at resource limits.
+derived from the complete source length. Gate 5 changed those structures to
+grow with the number of stored elements. Tests cover empty storage, initial
+growth, repeated growth, exact boundary access, and deterministic rejection at
+resource limits.
 
 The gate does not accept lower memory use obtained by skipping a compiler pass,
 weakening validation, truncating input, or retaining unchecked fallback data.
@@ -134,8 +138,8 @@ plus QBE distribution sizes must improve by at least 30%; and adjacent Native
 generations must remain within 25%. Correctness is all-or-nothing, and a
 greater than 2x regression is catastrophic.
 
-Targets will not be relaxed after results are observed merely to complete the
-gate. A miss keeps Gate 5 open for diagnosis and implementation work.
+The recorded result uses these criteria without relaxing them. Every bound
+passes, including conservative maximum-to-maximum peak-RSS comparisons.
 
 ## Deferred Gate 6 scope
 
