@@ -76,6 +76,13 @@ These results do not select QBE for production or measure the final self-hosted
 compiler. The current path provides no production runtime, stable ABI, stable
 artifact format, or compatibility guarantee.
 
+Gate 4 is now active under the pre-registered criteria in
+[issue #20](https://github.com/type-rb/type-rb-native/issues/20). It adds a
+bounded but genuine TypeRB-authored lexer, parser, resolver, checker, emitter,
+and driver, then requires B0-to-B1-to-B2 behavioral self-hosting without Go in
+the B1-to-B2 process graph. See the
+[Gate 4 implementation boundary](docs/gate-4-self-hosting.md).
+
 ## Intended boundary
 
 ```text
@@ -172,11 +179,13 @@ repository.
 - [Gate 2 heap-free aggregate value model](docs/gate-2-aggregates.md)
 - [Gate 2 QBE Darwin arm64 result](results/2026-08-28-gate2-qbe-darwin-arm64/README.md)
 - [Gate 3 managed runtime](docs/gate-3-managed-runtime.md)
+- [Gate 4 behavioral self-hosting](docs/gate-4-self-hosting.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
 - [Decision 0003: Gate 1 QBE and Darwin arm64 profile](docs/decisions/0003-gate-1-qbe-target.md)
 - [Decision 0004: Sustained native implementation and staged Gate 2](docs/decisions/0004-sustained-native-development.md)
 - [Decision 0005: Managed references and tracing GC](docs/decisions/0005-managed-runtime-and-tracing-gc.md)
+- [Decision 0006: Behavioral self-hosting boundary](docs/decisions/0006-behavioral-self-hosting-boundary.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 

@@ -177,14 +177,25 @@ measured development or release role.
 
 ### Gate 4: Self-hosting compiler completeness
 
-Scope expands to a TypeRB-authored parser, resolver, checker, and compiler
-driver sufficient to compile this repository's compiler sources. The Go
-reference compiler remains a semantic oracle and recovery bootstrap but is not
-linked into the native compiler.
+Gate 4 is registered in
+[issue #20](https://github.com/type-rb/type-rb-native/issues/20) and specified
+by [Decision 0006](decisions/0006-behavioral-self-hosting-boundary.md). Scope
+expands to a TypeRB-authored lexer, parser, resolver, checker, QBE emitter, and
+compiler driver sufficient to compile this repository's documented compiler
+source closure. The Go reference compiler remains a semantic oracle and
+recovery bootstrap but is not linked into the native compiler.
+
+The compiler receives source at runtime and must compile mutations and the
+registered corpus through the same passes. An embedded source-specific QBE
+artifact, quine, unchecked fallback, or compiler for a non-TypeRB demonstration
+language cannot satisfy the gate.
 
 Exit condition: a Go-bootstrapped B0 compiler produces B1 from the TypeRB
-compiler sources, and B1 produces B2 with matching observable compiler
-behavior on the conformance corpus.
+compiler sources, B1 produces B2 without executing or linking Go, and all three
+stages match observable compiler behavior on the valid and invalid conformance
+corpus. Repeated QBE emission is byte-identical and source-mutation checks prove
+that the frontend and code generator are active. B1/B2 executable identity and
+representative full-product performance remain Gate 5 requirements.
 
 ### Gate 5: Self-hosted product feasibility
 
