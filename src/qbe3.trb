@@ -16,7 +16,7 @@ import {
 	gate3_type_definition,
 	gate3_value_is_managed,
 } from gate3_layout
-import { emit_gate3_runtime } from gate3_runtime
+import { emit_gate3_runtime, emit_gate3_runtime_report_support } from gate3_runtime
 import {
 	Gate3Block,
 	Gate3Function,
@@ -54,10 +54,17 @@ import trb/std/string_builder
 record Gate3QbeContext
 	values: Hash<String, String>
 	value_types: Hash<String, Gate3ValueType>
+	known_static_strings: Hash<String, String>
 	transfer_slots: Hash<String, String>
 	storage_slots: Hash<String, String>
 	root_slots: Hash<String, String>
+	aliased_parameters: Hash<String, Boolean>
 	root_count: Integer
+end
+
+record Gate3KnownClosure
+	function_id: String
+	captures: Array<String>
 end
 
 def _qbe_line(mut writer: StringBuilder, value: String)
@@ -129,15 +136,35 @@ def _qbe_static_symbol(static_data: Array<QbeStaticData>, value: String): String
 	return qbe_static_symbol(static_data, value)
 end
 
+def _qbe3_static_string_symbol(static_data: Array<QbeStaticData>, value: String): String
+	mut index := 0
+	while static_data[index].value != value
+		index += 1
+	end
+	return "$trbn_g3string_" + index.to_s()
+end
+
 def emit_gate3_qbe(native_module: Gate3Module): Result<String, Diagnostic>
+	return _emit_gate3_qbe(native_module, false)
+end
+
+def emit_gate3_qbe_with_runtime_report(native_module: Gate3Module): Result<String, Diagnostic>
+	return _emit_gate3_qbe(native_module, true)
+end
+
+def _emit_gate3_qbe(native_module: Gate3Module, report_runtime: Boolean): Result<String, Diagnostic>
 	try verify_gate3_mir(native_module)
 	static_data := _qbe3_collect_static_data(native_module)
 	mut writer := string_builder.new()
 	_qbe_emit_static_data(static_data, writer)
+	_qbe3_emit_static_strings(static_data, writer)
 	_qbe3_emit_projection_data(writer)
 	try _qbe3_emit_descriptors(native_module, writer)
 	_qbe3_emit_runtime(writer)
 	emit_gate3_runtime(writer)
+	if report_runtime
+		emit_gate3_runtime_report_support(writer)
+	end
 	mut function_index := 0
 	while function_index < native_module.functions.size()
 		try _qbe3_emit_function(
@@ -149,8 +176,34 @@ def emit_gate3_qbe(native_module: Gate3Module): Result<String, Diagnostic>
 		)
 		function_index += 1
 	end
-	_qbe3_emit_entry(native_module, writer)
+	_qbe3_emit_entry(native_module, report_runtime, writer)
 	return Result<String, Diagnostic>::Ok(writer.to_s())
+end
+
+def _qbe3_emit_static_strings(static_data: Array<QbeStaticData>, mut writer: StringBuilder)
+	mut index := 0
+	while index < static_data.size()
+		item := static_data[index]
+		bytes := item.value.to_bytes()
+		mut tail := ""
+		if bytes.size() != 0
+			mut values: Array<String> := []
+			mut byte_index := 0
+			while byte_index < bytes.size()
+				values.push(bytes.at(byte_index).to_s())
+				byte_index += 1
+			end
+			tail = ", b " + values.join(" ")
+		end
+		_qbe_line(
+			writer,
+			"data $trbn_g3string_" + index.to_s() + " = align 8 { l 0, l $trbn_desc_string, l 0, l 1, l " +
+			bytes.size().to_s() + ", l " + item.value.size().to_s() + tail + " }",
+		)
+		index += 1
+	end
+	_qbe_line(writer, "")
+	return
 end
 
 def _qbe3_collect_static_data(native_module: Gate3Module): Array<QbeStaticData>
@@ -159,6 +212,7 @@ def _qbe3_collect_static_data(native_module: Gate3Module): Array<QbeStaticData>
 	mut function_index := 0
 	while function_index < native_module.functions.size()
 		function := native_module.functions[function_index]
+		mut known_static_strings: Hash<String, String> := {}
 		mut block_index := 0
 		while block_index < function.blocks.size()
 			block := function.blocks[block_index]
@@ -175,11 +229,22 @@ def _qbe3_collect_static_data(native_module: Gate3Module): Array<QbeStaticData>
 						end
 					else
 					end
-				when Gate3Instruction::StringLiteral(_result, value, _origin)
+				when Gate3Instruction::StringLiteral(result, value, _origin)
+					known_static_strings[result] = value
 					if !symbols.key?(value)
 						symbol := "$trbn_data_" + static_data.size().to_s()
 						symbols[value] = symbol
 						static_data.push(QbeStaticData.new(symbol: symbol, value: value))
+					end
+				when Gate3Instruction::StringConcat(result, left, right, _origin)
+					if known_static_strings.key?(left) && known_static_strings.key?(right)
+						value := known_static_strings.fetch(left) + known_static_strings.fetch(right)
+						known_static_strings[result] = value
+						if !symbols.key?(value)
+							symbol := "$trbn_data_" + static_data.size().to_s()
+							symbols[value] = symbol
+							static_data.push(QbeStaticData.new(symbol: symbol, value: value))
+						end
 					end
 				else
 				end
@@ -417,9 +482,11 @@ def _qbe3_context(
 	): Result<Gate3QbeContext, Diagnostic>
 	mut values: Hash<String, String> := {}
 	mut value_types: Hash<String, Gate3ValueType> := {}
+	mut known_static_strings: Hash<String, String> := {}
 	mut transfer_slots: Hash<String, String> := {}
 	mut storage_slots: Hash<String, String> := {}
 	mut root_slots: Hash<String, String> := {}
+	mut aliased_parameters: Hash<String, Boolean> := {}
 	mut next_value := 0
 	mut next_transfer := 0
 	mut next_storage := 0
@@ -478,6 +545,15 @@ def _qbe3_context(
 		mut instruction_index := 0
 		while instruction_index < block.instructions.size()
 			instruction := block.instructions[instruction_index]
+			case instruction
+			when Gate3Instruction::StringLiteral(result, value, _origin)
+				known_static_strings[result] = value
+			when Gate3Instruction::StringConcat(result, left, right, _origin)
+				if known_static_strings.key?(left) && known_static_strings.key?(right)
+					known_static_strings[result] = known_static_strings.fetch(left) + known_static_strings.fetch(right)
+				end
+			else
+			end
 			result := gate3_instruction_result(instruction)
 			if result != nil
 				value_type := try _qbe3_instruction_type(native_module, instruction)
@@ -511,13 +587,35 @@ def _qbe3_context(
 			parameter_index = 0
 			while parameter_index < block.parameters.size()
 				parameter := block.parameters[parameter_index]
-				case parameter.value_type
-				when Gate3ValueType::Scalar(_scalar)
-				when Gate3ValueType::Aggregate(_type_id)
-					if !(try gate3_value_is_managed(native_module.types, parameter.value_type))
-						incoming := _qbe3_common_incoming_value(function, block.id, parameter_index, values)
-						if !incoming.empty?()
+				incoming := _qbe3_common_incoming_value(
+					function,
+					block.id,
+					parameter_index,
+					values.fetch(parameter.id),
+					values,
+				)
+				if !incoming.empty?()
+					case parameter.value_type
+					when Gate3ValueType::Scalar(_scalar)
+						values[parameter.id] = incoming
+						aliased_parameters[parameter.id] = true
+					when Gate3ValueType::Aggregate(_type_id)
+						if try gate3_value_is_managed(native_module.types, parameter.value_type)
+							incoming_root := _qbe3_common_incoming_root(
+								function,
+								block.id,
+								parameter_index,
+								root_slots.fetch(parameter.id),
+								root_slots,
+							)
+							if !incoming_root.empty?()
+								values[parameter.id] = incoming
+								root_slots[parameter.id] = incoming_root
+								aliased_parameters[parameter.id] = true
+							end
+						else
 							values[parameter.id] = incoming
+							aliased_parameters[parameter.id] = true
 						end
 					end
 				end
@@ -531,9 +629,11 @@ def _qbe3_context(
 		Gate3QbeContext.new(
 			values: values,
 			value_types: value_types,
+			known_static_strings: known_static_strings,
 			transfer_slots: transfer_slots,
 			storage_slots: storage_slots,
 			root_slots: root_slots,
+			aliased_parameters: aliased_parameters,
 			root_count: next_root,
 		)
 	)
@@ -543,6 +643,7 @@ def _qbe3_common_incoming_value(
 		function: Gate3Function,
 		target: String,
 		parameter_index: Integer,
+		current: String,
 		values: Hash<String, String>,
 	): String
 	mut common := ""
@@ -552,11 +653,14 @@ def _qbe3_common_incoming_value(
 		when Gate3Terminator::Jump(edge_target, arguments, _origin)
 			if edge_target == target
 				candidate := values.fetch(arguments[parameter_index])
-				if common.empty?()
-					common = candidate
+				if candidate == current
 				else
-					if common != candidate
-						return ""
+					if common.empty?()
+						common = candidate
+					else
+						if common != candidate
+							return ""
+						end
 					end
 				end
 			end
@@ -570,21 +674,93 @@ def _qbe3_common_incoming_value(
 			)
 			if when_true == target
 				candidate := values.fetch(true_arguments[parameter_index])
-				if common.empty?()
-					common = candidate
+				if candidate == current
 				else
-					if common != candidate
-						return ""
+					if common.empty?()
+						common = candidate
+					else
+						if common != candidate
+							return ""
+						end
 					end
 				end
 			end
 			if when_false == target
 				candidate := values.fetch(false_arguments[parameter_index])
-				if common.empty?()
-					common = candidate
+				if candidate == current
 				else
-					if common != candidate
-						return ""
+					if common.empty?()
+						common = candidate
+					else
+						if common != candidate
+							return ""
+						end
+					end
+				end
+			end
+		when Gate3Terminator::Return(_value, _origin)
+		end
+		block_index += 1
+	end
+	return common
+end
+
+def _qbe3_common_incoming_root(
+		function: Gate3Function,
+		target: String,
+		parameter_index: Integer,
+		current: String,
+		root_slots: Hash<String, String>,
+	): String
+	mut common := ""
+	mut block_index := 0
+	while block_index < function.blocks.size()
+		case function.blocks[block_index].terminator
+		when Gate3Terminator::Jump(edge_target, arguments, _origin)
+			if edge_target == target
+				candidate := root_slots.fetch(arguments[parameter_index])
+				if candidate == current
+				else
+					if common.empty?()
+						common = candidate
+					else
+						if common != candidate
+							return ""
+						end
+					end
+				end
+			end
+		when Gate3Terminator::Branch(
+				_condition,
+				when_true,
+				true_arguments,
+				when_false,
+				false_arguments,
+				_origin,
+			)
+			if when_true == target
+				candidate := root_slots.fetch(true_arguments[parameter_index])
+				if candidate == current
+				else
+					if common.empty?()
+						common = candidate
+					else
+						if common != candidate
+							return ""
+						end
+					end
+				end
+			end
+			if when_false == target
+				candidate := root_slots.fetch(false_arguments[parameter_index])
+				if candidate == current
+				else
+					if common.empty?()
+						common = candidate
+					else
+						if common != candidate
+							return ""
+						end
 					end
 				end
 			end
@@ -702,6 +878,7 @@ def _qbe3_emit_block(
 	while instruction_index < block.instructions.size()
 		try _qbe3_emit_instruction(
 			native_module,
+			function,
 			block.instructions[instruction_index],
 			block_index,
 			instruction_index,
@@ -812,20 +989,25 @@ def _qbe3_emit_block_parameter_loads(
 		parameter := block.parameters[index]
 		case parameter.value_type
 		when Gate3ValueType::Scalar(scalar)
-			_qbe_line(writer,
-				"\t" + context.values.fetch(parameter.id) + " =" + _qbe_type(scalar) + " " +
-				_qbe3_scalar_slot_load(scalar) + " " + context.transfer_slots.fetch(parameter.id)
-			)
+			if _qbe3_parameter_uses_transfer(parameter, context)
+				_qbe_line(writer,
+					"\t" + context.values.fetch(parameter.id) + " =" + _qbe_type(scalar) + " " +
+					_qbe3_scalar_slot_load(scalar) + " " + context.transfer_slots.fetch(parameter.id)
+				)
+			end
 		when Gate3ValueType::Aggregate(_type_id)
 			if try gate3_value_is_managed(native_module.types, parameter.value_type)
-				_qbe_line(
-					writer,
-					"\t" + context.values.fetch(parameter.id) + " =l loadl " + context.transfer_slots.fetch(parameter.id),
-				)
-				_qbe_line(
-					writer,
-					"\tstorel " + context.values.fetch(parameter.id) + ", " + context.root_slots.fetch(parameter.id),
-				)
+				if _qbe3_parameter_uses_transfer(parameter, context)
+					_qbe_line(
+						writer,
+						"\t" + context.values.fetch(parameter.id) + " =l loadl " +
+						context.transfer_slots.fetch(parameter.id),
+					)
+					_qbe_line(
+						writer,
+						"\tstorel " + context.values.fetch(parameter.id) + ", " + context.root_slots.fetch(parameter.id),
+					)
+				end
 			end
 		end
 		index += 1
@@ -903,6 +1085,7 @@ end
 
 def _qbe3_emit_instruction(
 		native_module: Gate3Module,
+		function: Gate3Function,
 		instruction: Gate3Instruction,
 		block_index: Integer,
 		instruction_index: Integer,
@@ -918,16 +1101,23 @@ def _qbe3_emit_instruction(
 		_qbe3_emit_origin(native_module, origin, writer)
 		_qbe_line(
 			writer,
-			"\t" + context.values.fetch(result) + " =l call $trbn_string_new(l " +
-			_qbe_static_symbol(static_data, value) + ", l " + value.to_bytes().size().to_s() + ", l " + value.size().to_s() + ")",
+			"\t" + context.values.fetch(result) + " =l copy " + _qbe3_static_string_symbol(static_data, value),
 		)
 	when Gate3Instruction::StringConcat(result, left, right, origin)
 		_qbe3_emit_origin(native_module, origin, writer)
-		_qbe_line(
-			writer,
-			"\t" + context.values.fetch(result) + " =l call $trbn_string_concat(l " +
-			context.values.fetch(left) + ", l " + context.values.fetch(right) + ")",
-		)
+		if context.known_static_strings.key?(result)
+			_qbe_line(
+				writer,
+				"\t" + context.values.fetch(result) + " =l copy " +
+				_qbe3_static_string_symbol(static_data, context.known_static_strings.fetch(result)),
+			)
+		else
+			_qbe_line(
+				writer,
+				"\t" + context.values.fetch(result) + " =l call $trbn_string_concat(l " +
+				context.values.fetch(left) + ", l " + context.values.fetch(right) + ")",
+			)
+		end
 	when Gate3Instruction::StringEqual(result, left, right, origin)
 		_qbe3_emit_origin(native_module, origin, writer)
 		_qbe_line(
@@ -1001,7 +1191,7 @@ def _qbe3_emit_instruction(
 		_qbe_line(
 			writer,
 			"\t" + environment + " =l call $trbn_alloc(l " + _qbe3_environment_descriptor(callee_index) +
-			", l " + environment_size.to_s() + ")",
+			", l " + environment_size.to_s() + ", l 0)",
 		)
 		_qbe_line(writer, "\tstorel " + environment + ", " + context.root_slots.fetch(result))
 		mut capture_index := 0
@@ -1026,7 +1216,7 @@ def _qbe3_emit_instruction(
 		end
 		_qbe_line(
 			writer,
-			"\t" + context.values.fetch(result) + " =l call $trbn_alloc(l $trbn_desc_closure, l 16)",
+			"\t" + context.values.fetch(result) + " =l call $trbn_alloc(l $trbn_desc_closure, l 16, l 0)",
 		)
 		code_address := _qbe3_address(context.values.fetch(result), 32, prefix + "closure_code", writer)
 		_qbe_line(writer, "\tstorel $trbn_g3f" + callee_index.to_s() + ", " + code_address)
@@ -1034,6 +1224,19 @@ def _qbe3_emit_instruction(
 		_qbe_line(writer, "\tstorel " + environment + ", " + environment_address)
 	when Gate3Instruction::ClosureCall(result, type_id, closure, arguments, origin)
 		_qbe3_emit_origin(native_module, origin, writer)
+		if _qbe3_emit_inlined_closure_call(
+				native_module,
+				function,
+				result,
+				closure,
+				arguments,
+				block_index,
+				instruction_index,
+				context,
+				writer,
+			)
+			return Result<Boolean, Diagnostic>::Ok(true)
+		end
 		code_address := _qbe3_address(context.values.fetch(closure), 32, prefix + "call_code_address", writer)
 		code := prefix + "call_code"
 		_qbe_line(writer, "\t" + code + " =l loadl " + code_address)
@@ -1070,13 +1273,19 @@ def _qbe3_emit_instruction(
 		_qbe_line(writer, call_prefix + "call " + code + "(" + call_arguments.join(", ") + ")")
 	when Gate3Instruction::RuntimeCollect(origin)
 		_qbe3_emit_origin(native_module, origin, writer)
-		_qbe_line(writer, "\tcall $trbn_collect()")
+		_qbe_line(writer, "\tcall $trbn_collect(w 0)")
 	when Gate3Instruction::RuntimeStatistic(result, statistic, origin)
 		_qbe3_emit_origin(native_module, origin, writer)
 		mut symbol := "$trbn_heap_bytes"
 		case statistic
 		when Gate3RuntimeStatistic::CollectionCount
 			symbol = "$trbn_collection_count"
+		when Gate3RuntimeStatistic::AutomaticCollectionCount
+			symbol = "$trbn_automatic_collection_count"
+		when Gate3RuntimeStatistic::CollectionNanoseconds
+			symbol = "$trbn_collection_nanoseconds"
+		when Gate3RuntimeStatistic::AllocatedBytes
+			symbol = "$trbn_allocated_bytes"
 		when Gate3RuntimeStatistic::HeapBytes
 			symbol = "$trbn_heap_bytes"
 		when Gate3RuntimeStatistic::ReclaimedBytes
@@ -1090,7 +1299,10 @@ def _qbe3_emit_instruction(
 		mut payload := destination
 		if layout.managed
 			descriptor := _qbe3_type_descriptor(_qbe3_type_index(native_module.types, type_id))
-			_qbe_line(writer, "\t" + destination + " =l call $trbn_alloc(l " + descriptor + ", l " + layout.size.to_s() + ")")
+			_qbe_line(
+				writer,
+				"\t" + destination + " =l call $trbn_alloc(l " + descriptor + ", l " + layout.size.to_s() + ", l 0)",
+			)
 			_qbe_line(writer, "\tstorel " + destination + ", " + context.root_slots.fetch(result))
 			payload = _qbe3_address(destination, 32, prefix + "record_payload", writer)
 		else
@@ -1132,7 +1344,10 @@ def _qbe3_emit_instruction(
 		mut payload := destination
 		if layout.managed
 			descriptor := _qbe3_type_descriptor(_qbe3_type_index(native_module.types, type_id))
-			_qbe_line(writer, "\t" + destination + " =l call $trbn_alloc(l " + descriptor + ", l " + layout.size.to_s() + ")")
+			_qbe_line(
+				writer,
+				"\t" + destination + " =l call $trbn_alloc(l " + descriptor + ", l " + layout.size.to_s() + ", l 0)",
+			)
 			_qbe_line(writer, "\tstorel " + destination + ", " + context.root_slots.fetch(result))
 			payload = _qbe3_address(destination, 32, prefix + "variant_payload", writer)
 		else
@@ -1192,6 +1407,19 @@ def _qbe3_emit_instruction(
 		)
 	when Gate3Instruction::Call(result, function_id, arguments, origin)
 		_qbe3_emit_origin(native_module, origin, writer)
+		if _qbe3_emit_inlined_forwarded_closure_call(
+				native_module,
+				function,
+				result,
+				function_id,
+				arguments,
+				block_index,
+				instruction_index,
+				context,
+				writer,
+			)
+			return Result<Boolean, Diagnostic>::Ok(true)
+		end
 		callee_index := _qbe3_function_index(native_module.functions, function_id)
 		callee := native_module.functions[callee_index]
 		mut call_arguments: Array<String> := []
@@ -1431,16 +1659,21 @@ def _qbe3_emit_edge(
 		parameter := block.parameters[index]
 		case parameter.value_type
 		when Gate3ValueType::Scalar(scalar)
-			_qbe_line(writer,
-				"\t" + _qbe3_scalar_slot_store(scalar) + " " + context.values.fetch(arguments[index]) +
-				", " + context.transfer_slots.fetch(parameter.id)
-			)
+			if _qbe3_parameter_uses_transfer(parameter, context)
+				_qbe_line(writer,
+					"\t" + _qbe3_scalar_slot_store(scalar) + " " + context.values.fetch(arguments[index]) +
+					", " + context.transfer_slots.fetch(parameter.id)
+				)
+			end
 		when Gate3ValueType::Aggregate(type_id)
 			if try gate3_value_is_managed(native_module.types, parameter.value_type)
-				_qbe_line(
-					writer,
-					"\tstorel " + context.values.fetch(arguments[index]) + ", " + context.transfer_slots.fetch(parameter.id),
-				)
+				if _qbe3_parameter_uses_transfer(parameter, context)
+					_qbe_line(
+						writer,
+						"\tstorel " + context.values.fetch(arguments[index]) + ", " +
+						context.transfer_slots.fetch(parameter.id),
+					)
+				end
 			else
 				if _qbe3_parameter_uses_transfer(parameter, context)
 					layout := try compute_gate3_layout(native_module.types, type_id)
@@ -1461,7 +1694,7 @@ def _qbe3_emit_edge(
 end
 
 def _qbe3_parameter_uses_transfer(parameter: Gate3Parameter, context: Gate3QbeContext): Boolean
-	return context.values.fetch(parameter.id) == context.transfer_slots.fetch(parameter.id)
+	return !context.aliased_parameters.key?(parameter.id)
 end
 
 def _qbe3_edge_source_is_destination(
@@ -1484,7 +1717,7 @@ def _qbe3_edge_source_is_destination(
 	return false
 end
 
-def _qbe3_emit_entry(native_module: Gate3Module, mut writer: StringBuilder)
+def _qbe3_emit_entry(native_module: Gate3Module, report_runtime: Boolean, mut writer: StringBuilder)
 	entry_index := _qbe3_function_index(native_module.functions, native_module.entry_function)
 	_qbe_line(writer, "export function w $main() {")
 	_qbe_line(writer, "@start")
@@ -1493,8 +1726,74 @@ def _qbe3_emit_entry(native_module: Gate3Module, mut writer: StringBuilder)
 		arguments = "l 0"
 	end
 	_qbe_line(writer, "\tcall $trbn_g3f" + entry_index.to_s() + "(" + arguments + ")")
+	if report_runtime
+		_qbe3_emit_runtime_report(writer)
+	end
 	_qbe_line(writer, "\tret 0")
 	_qbe_line(writer, "}")
+	return
+end
+
+def _qbe3_emit_runtime_report(mut writer: StringBuilder)
+	_qbe_line(writer, "\tcall $trbn_collect(w 0)")
+	_qbe3_emit_runtime_statistic_line(
+		"collections",
+		"$trbn_report_collections",
+		"gate3-gc-stat,collections,",
+		"$trbn_collection_count",
+		writer,
+	)
+	_qbe3_emit_runtime_statistic_line(
+		"automatic_collections",
+		"$trbn_report_automatic_collections",
+		"gate3-gc-stat,automatic-collections,",
+		"$trbn_automatic_collection_count",
+		writer,
+	)
+	_qbe3_emit_runtime_statistic_line(
+		"collection_nanoseconds",
+		"$trbn_report_collection_nanoseconds",
+		"gate3-gc-stat,collection-nanoseconds,",
+		"$trbn_collection_nanoseconds",
+		writer,
+	)
+	_qbe3_emit_runtime_statistic_line(
+		"allocated_bytes",
+		"$trbn_report_allocated_bytes",
+		"gate3-gc-stat,allocated-bytes,",
+		"$trbn_allocated_bytes",
+		writer,
+	)
+	_qbe3_emit_runtime_statistic_line(
+		"reclaimed_bytes",
+		"$trbn_report_reclaimed_bytes",
+		"gate3-gc-stat,reclaimed-bytes,",
+		"$trbn_reclaimed_bytes",
+		writer,
+	)
+	_qbe3_emit_runtime_statistic_line(
+		"live_bytes",
+		"$trbn_report_live_bytes",
+		"gate3-gc-stat,live-bytes,",
+		"$trbn_heap_bytes",
+		writer,
+	)
+	return
+end
+
+def _qbe3_emit_runtime_statistic_line(
+		name: String,
+		label_symbol: String,
+		label: String,
+		value_symbol: String,
+		mut writer: StringBuilder,
+	)
+	value := "%report_" + name
+	_qbe_line(writer, "\t" + value + " =l loadl " + value_symbol)
+	_qbe_line(
+		writer,
+		"\tcall $trbn_report_statistic(l " + label_symbol + ", l " + label.to_bytes().size().to_s() + ", l " + value + ")",
+	)
 	return
 end
 
@@ -1743,6 +2042,223 @@ def _qbe3_function_uses_closure_abi(native_module: Gate3Module, function_id: Str
 		function_index += 1
 	end
 	return false
+end
+
+def _qbe3_emit_inlined_forwarded_closure_call(
+		native_module: Gate3Module,
+		function: Gate3Function,
+		result: String?,
+		function_id: String,
+		arguments: Array<String>,
+		block_index: Integer,
+		instruction_index: Integer,
+		context: Gate3QbeContext,
+		mut writer: StringBuilder,
+	): Boolean
+	callee := native_module.functions[_qbe3_function_index(native_module.functions, function_id)]
+	if !callee.captures.empty?() || callee.blocks.size() != 1
+		return false
+	end
+	block := callee.blocks[0]
+	if block.id != callee.entry || !block.parameters.empty?() || block.instructions.size() != 1
+		return false
+	end
+	case block.instructions[0]
+	when Gate3Instruction::ClosureCall(inner_result, _type_id, closure, inner_arguments, _origin)
+		case block.terminator
+		when Gate3Terminator::Return(returned, _return_origin)
+			if !_qbe3_optional_ids_equal(returned, inner_result)
+				return false
+			end
+		else
+			return false
+		end
+		closure_index := _qbe3_parameter_index(callee.parameters, closure)
+		if closure_index < 0
+			return false
+		end
+		mut forwarded_arguments: Array<String> := []
+		mut index := 0
+		while index < inner_arguments.size()
+			parameter_index := _qbe3_parameter_index(callee.parameters, inner_arguments[index])
+			if parameter_index < 0
+				return false
+			end
+			forwarded_arguments.push(arguments[parameter_index])
+			index += 1
+		end
+		return _qbe3_emit_inlined_closure_call(
+			native_module,
+			function,
+			result,
+			arguments[closure_index],
+			forwarded_arguments,
+			block_index,
+			instruction_index,
+			context,
+			writer,
+		)
+	else
+		return false
+	end
+end
+
+def _qbe3_emit_inlined_closure_call(
+		native_module: Gate3Module,
+		function: Gate3Function,
+		result: String?,
+		closure: String,
+		arguments: Array<String>,
+		block_index: Integer,
+		instruction_index: Integer,
+		context: Gate3QbeContext,
+		mut writer: StringBuilder,
+	): Boolean
+	known := _qbe3_known_closure(function, closure, context)
+	if known == nil
+		return false
+	end
+	if result == nil
+		return false
+	end
+	callee := native_module.functions[_qbe3_function_index(native_module.functions, known.function_id)]
+	if callee.blocks.size() != 1
+		return false
+	end
+	block := callee.blocks[0]
+	if block.id != callee.entry || !block.parameters.empty?()
+		return false
+	end
+	case callee.result_type
+	when Gate3ResultType::Void
+		return false
+	when Gate3ResultType::Value(value_type)
+		case value_type
+		when Gate3ValueType::Aggregate(_type_id)
+			return false
+		when Gate3ValueType::Scalar(scalar)
+			case block.terminator
+			when Gate3Terminator::Return(returned, _return_origin)
+				if returned == nil
+					return false
+				end
+				if block.instructions.empty?()
+					source := _qbe3_inline_operand(callee, known, arguments, returned, context)
+					if source.empty?()
+						return false
+					end
+					_qbe_line(
+						writer,
+						"\t" + context.values.fetch(result) + " =" + _qbe_type(scalar) + " copy " + source,
+					)
+					return true
+				end
+				if block.instructions.size() != 1
+					return false
+				end
+				case block.instructions[0]
+				when Gate3Instruction::Scalar(scalar_instruction)
+					case scalar_instruction
+					when Gate1Instruction::IntegerBinary(inner_result, operator, left, right, _origin)
+						if scalar != ScalarType::Integer || returned != inner_result
+							return false
+						end
+						left_value := _qbe3_inline_operand(callee, known, arguments, left, context)
+						right_value := _qbe3_inline_operand(callee, known, arguments, right, context)
+						if left_value.empty?() || right_value.empty?()
+							return false
+						end
+						_qbe_emit_integer_binary(
+							operator,
+							context.values.fetch(result),
+							left_value,
+							right_value,
+							block_index,
+							instruction_index,
+							writer,
+						)
+						return true
+					else
+						return false
+					end
+				else
+					return false
+				end
+			else
+				return false
+			end
+		end
+	end
+end
+
+def _qbe3_known_closure(
+		function: Gate3Function,
+		closure: String,
+		context: Gate3QbeContext,
+	): Gate3KnownClosure?
+	value := context.values.fetch(closure)
+	mut block_index := 0
+	while block_index < function.blocks.size()
+		block := function.blocks[block_index]
+		mut instruction_index := 0
+		while instruction_index < block.instructions.size()
+			case block.instructions[instruction_index]
+			when Gate3Instruction::ClosureConstruct(result, _type_id, function_id, captures, _origin)
+				if context.values.fetch(result) == value
+					return Gate3KnownClosure.new(function_id: function_id, captures: captures)
+				end
+			else
+			end
+			instruction_index += 1
+		end
+		block_index += 1
+	end
+	return nil
+end
+
+def _qbe3_inline_operand(
+		callee: Gate3Function,
+		known: Gate3KnownClosure,
+		arguments: Array<String>,
+		operand: String,
+		context: Gate3QbeContext,
+	): String
+	mut index := 0
+	while index < callee.captures.size()
+		if callee.captures[index].id == operand
+			return context.values.fetch(known.captures[index])
+		end
+		index += 1
+	end
+	index = 0
+	while index < callee.parameters.size()
+		if callee.parameters[index].id == operand
+			return context.values.fetch(arguments[index])
+		end
+		index += 1
+	end
+	return ""
+end
+
+def _qbe3_parameter_index(parameters: Array<Gate3Parameter>, id: String): Integer
+	mut index := 0
+	while index < parameters.size()
+		if parameters[index].id == id
+			return index
+		end
+		index += 1
+	end
+	return - 1
+end
+
+def _qbe3_optional_ids_equal(left: String?, right: String?): Boolean
+	if left == nil
+		return right == nil
+	end
+	if right == nil
+		return false
+	end
+	return left == right
 end
 
 def _qbe3_block_label(blocks: Array<Gate3Block>, id: String): String

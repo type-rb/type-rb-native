@@ -1,0 +1,379 @@
+import { create_directory, write_text } from trb/std/filesystem
+import { argv, run } from trb/std/process
+import { Result } from trb/std/result
+import trb/std/string_builder
+import { Instant } from trb/std/time
+
+record TimedProcess
+	seconds: Float
+	status: Integer
+	stdout: String
+	stderr: String
+end
+
+def measure_process(command: String, arguments: Array<String>): Result<TimedProcess, String>
+	started := Instant.now()
+	case run(command, arguments)
+	when Result::Ok(process)
+		return Result<TimedProcess, String>::Ok(
+			TimedProcess.new(
+				seconds: Instant.now().duration_since(started).total_seconds(),
+				status: process.status,
+				stdout: process.stdout,
+				stderr: process.stderr,
+			)
+		)
+	when Result::Err(error)
+		return Result<TimedProcess, String>::Err(error.operation + ": " + error.message)
+	end
+end
+
+def append_measurement(
+		mut output: StringBuilder,
+		metric: String,
+		case_name: String,
+		candidate: String,
+		iteration: Integer,
+		value: String,
+		status: Integer,
+	)
+	output.append(
+		metric + "," + case_name + "," + candidate + "," + iteration.to_s() + "," + value + "," + status.to_s() + "\n"
+	)
+	return
+end
+
+def append_native_phases(
+		mut output: StringBuilder,
+		case_name: String,
+		iteration: Integer,
+		stdout: String,
+	)
+	lines := stdout.split("\n")
+	mut index := 0
+	while index < lines.size()
+		line := lines[index]
+		if line.start_with?("gate3-phase,")
+			fields := line.split(",")
+			if fields.size() == 3
+				append_measurement(output, "build-" + fields[1], case_name, "native", iteration, fields[2], 0)
+			end
+		end
+		index += 1
+	end
+	return
+end
+
+def record_size(
+		mut output: StringBuilder,
+		case_name: String,
+		candidate: String,
+		kind: String,
+		path: String,
+	): Result<Boolean, String>
+	measurement := try measure_process("/usr/bin/stat", ["-f", "%z", path])
+	if measurement.status != 0
+		return Result<Boolean, String>::Err("stat " + path + ": " + measurement.stderr)
+	end
+	append_measurement(output, kind, case_name, candidate, 0, measurement.stdout.strip(), 0)
+	return Result<Boolean, String>::Ok(true)
+end
+
+def measure_peak_rss(command: String, arguments: Array<String>): Result<String, String>
+	mut time_arguments := ["-l", command]
+	mut index := 0
+	while index < arguments.size()
+		time_arguments.push(arguments[index])
+		index += 1
+	end
+	measurement := try measure_process("/usr/bin/time", time_arguments)
+	if measurement.status != 0
+		return Result<String, String>::Err("time " + command + ": " + measurement.stderr)
+	end
+	lines := measurement.stderr.split("\n")
+	index = 0
+	while index < lines.size()
+		line := lines[index]
+		if line.include?("maximum resident set size")
+			fields := line.strip().split(" ")
+			mut field_index := 0
+			while field_index < fields.size()
+				if !fields[field_index].empty?()
+					return Result<String, String>::Ok(fields[field_index])
+				end
+				field_index += 1
+			end
+		end
+		index += 1
+	end
+	return Result<String, String>::Err("time did not report maximum resident set size for " + command)
+end
+
+def record_native_gc_statistics(
+		mut output: StringBuilder,
+		reference_trb: String,
+		native_driver: String,
+		qbe: String,
+		cc: String,
+		config: String,
+		workspace: String,
+		case_name: String,
+	): Result<Boolean, String>
+	statistics_workspace := workspace + "/native-statistics-workspace"
+	case create_directory(statistics_workspace)
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
+	end
+	statistics_output := workspace + "/native-statistics"
+	statistics_build := try measure_process(
+		native_driver,
+		["gate3-stats", reference_trb, config, qbe, cc, statistics_workspace, statistics_output],
+	)
+	if statistics_build.status != 0
+		return Result<Boolean, String>::Err("instrumented native build failed: " + statistics_build.stderr)
+	end
+	statistics_run := try measure_process(statistics_output, [])
+	if statistics_run.status != 0
+		return Result<Boolean, String>::Err("instrumented native runtime failed: " + statistics_run.stderr)
+	end
+	lines := statistics_run.stderr.split("\n")
+	mut count := 0
+	mut index := 0
+	while index < lines.size()
+		fields := lines[index].split(",")
+		if fields.size() == 3
+			if fields[0] == "gate3-gc-stat"
+				append_measurement(output, "gc-" + fields[1], case_name, "native", 0, fields[2], 0)
+				count += 1
+			end
+		end
+		index += 1
+	end
+	if count != 6
+		return Result<Boolean, String>::Err("instrumented native runtime did not report six GC statistics")
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def benchmark_case(
+		mut output: StringBuilder,
+		root: String,
+		reference_trb: String,
+		native_driver: String,
+		qbe: String,
+		cc: String,
+		workspace_root: String,
+		case_name: String,
+		build_repetitions: Integer,
+		runtime_repetitions: Integer,
+	): Result<Boolean, String>
+	config := root + "/corpus/gate3/" + case_name + "/trbconfig.jsonc"
+	workspace := workspace_root + "/" + case_name
+	native_workspace := workspace + "/native-workspace"
+	go_cache := workspace + "/go-cache"
+	go_size_cache := workspace + "/go-size-cache"
+	case create_directory(native_workspace)
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
+	end
+	native_output := workspace + "/native"
+	reference_output := workspace + "/reference"
+	reference_size_output := workspace + "/reference-size"
+	mut iteration := 0
+	while iteration < build_repetitions
+		if iteration % 2 == 0
+			native_build := try measure_process(
+				native_driver,
+				["gate3", reference_trb, config, qbe, cc, native_workspace, native_output],
+			)
+			append_measurement(output, "build-total", case_name, "native", iteration, native_build.seconds.to_s(), native_build.status)
+			append_native_phases(output, case_name, iteration, native_build.stdout)
+			reference_build := try measure_process(
+				"/usr/bin/env",
+				["GOCACHE=" + go_cache, reference_trb, "build", "--compile", "--config", config, "--outfile", reference_output],
+			)
+			append_measurement(output, "build-total", case_name, "go", iteration, reference_build.seconds.to_s(), reference_build.status)
+		else
+			reference_build := try measure_process(
+				"/usr/bin/env",
+				["GOCACHE=" + go_cache, reference_trb, "build", "--compile", "--config", config, "--outfile", reference_output],
+			)
+			append_measurement(output, "build-total", case_name, "go", iteration, reference_build.seconds.to_s(), reference_build.status)
+			native_build := try measure_process(
+				native_driver,
+				["gate3", reference_trb, config, qbe, cc, native_workspace, native_output],
+			)
+			append_measurement(output, "build-total", case_name, "native", iteration, native_build.seconds.to_s(), native_build.status)
+			append_native_phases(output, case_name, iteration, native_build.stdout)
+		end
+		reference_size_build := try measure_process(
+			"/usr/bin/env",
+			[
+				"GOCACHE=" + go_size_cache,
+				"GOFLAGS=-ldflags=-s -w",
+				reference_trb,
+				"build",
+				"--compile",
+				"--config",
+				config,
+				"--outfile",
+				reference_size_output,
+			],
+		)
+		append_measurement(
+			output,
+			"build-total",
+			case_name,
+			"go-size",
+			iteration,
+			reference_size_build.seconds.to_s(),
+			reference_size_build.status,
+		)
+		iteration += 1
+	end
+	native_build_rss := try measure_peak_rss(
+		native_driver,
+		["gate3", reference_trb, config, qbe, cc, native_workspace, native_output],
+	)
+	append_measurement(output, "build-peak-rss", case_name, "native", 0, native_build_rss, 0)
+	reference_build_rss := try measure_peak_rss(
+		"/usr/bin/env",
+		["GOCACHE=" + go_cache, reference_trb, "build", "--compile", "--config", config, "--outfile", reference_output],
+	)
+	append_measurement(output, "build-peak-rss", case_name, "go", 0, reference_build_rss, 0)
+	reference_size_build_rss := try measure_peak_rss(
+		"/usr/bin/env",
+		[
+			"GOCACHE=" + go_size_cache,
+			"GOFLAGS=-ldflags=-s -w",
+			reference_trb,
+			"build",
+			"--compile",
+			"--config",
+			config,
+			"--outfile",
+			reference_size_output,
+		],
+	)
+	append_measurement(output, "build-peak-rss", case_name, "go-size", 0, reference_size_build_rss, 0)
+	native_stripped := native_output + ".stripped"
+	reference_stripped := reference_output + ".stripped"
+	reference_size_stripped := reference_size_output + ".stripped"
+	native_strip := try measure_process("/usr/bin/strip", ["-x", "-o", native_stripped, native_output])
+	if native_strip.status != 0
+		return Result<Boolean, String>::Err("strip native: " + native_strip.stderr)
+	end
+	reference_strip := try measure_process("/usr/bin/strip", ["-x", "-o", reference_stripped, reference_output])
+	if reference_strip.status != 0
+		return Result<Boolean, String>::Err("strip go: " + reference_strip.stderr)
+	end
+	reference_size_strip := try measure_process(
+		"/usr/bin/strip",
+		["-x", "-o", reference_size_stripped, reference_size_output],
+	)
+	if reference_size_strip.status != 0
+		return Result<Boolean, String>::Err("strip size-optimized go: " + reference_size_strip.stderr)
+	end
+	try record_size(output, case_name, "native", "size-raw", native_output)
+	try record_size(output, case_name, "go", "size-raw", reference_output)
+	try record_size(output, case_name, "go-size", "size-raw", reference_size_output)
+	try record_size(output, case_name, "native", "size-stripped", native_stripped)
+	try record_size(output, case_name, "go", "size-stripped", reference_stripped)
+	try record_size(output, case_name, "go-size", "size-stripped", reference_size_stripped)
+	native_runtime_rss := try measure_peak_rss(native_output, [])
+	append_measurement(output, "runtime-peak-rss", case_name, "native", 0, native_runtime_rss, 0)
+	reference_runtime_rss := try measure_peak_rss(reference_output, [])
+	append_measurement(output, "runtime-peak-rss", case_name, "go", 0, reference_runtime_rss, 0)
+	reference_size_runtime_rss := try measure_peak_rss(reference_size_output, [])
+	append_measurement(output, "runtime-peak-rss", case_name, "go-size", 0, reference_size_runtime_rss, 0)
+	try record_native_gc_statistics(
+		output,
+		reference_trb,
+		native_driver,
+		qbe,
+		cc,
+		config,
+		workspace,
+		case_name,
+	)
+	iteration = 0
+	while iteration < 3
+		try measure_process(native_output, [])
+		try measure_process(reference_output, [])
+		try measure_process(reference_size_output, [])
+		iteration += 1
+	end
+	iteration = 0
+	while iteration < runtime_repetitions
+		if iteration % 2 == 0
+			native_run := try measure_process(native_output, [])
+			append_measurement(output, "runtime", case_name, "native", iteration, native_run.seconds.to_s(), native_run.status)
+			reference_run := try measure_process(reference_output, [])
+			append_measurement(output, "runtime", case_name, "go", iteration, reference_run.seconds.to_s(), reference_run.status)
+		else
+			reference_run := try measure_process(reference_output, [])
+			append_measurement(output, "runtime", case_name, "go", iteration, reference_run.seconds.to_s(), reference_run.status)
+			native_run := try measure_process(native_output, [])
+			append_measurement(output, "runtime", case_name, "native", iteration, native_run.seconds.to_s(), native_run.status)
+		end
+		reference_size_run := try measure_process(reference_size_output, [])
+		append_measurement(
+			output,
+			"runtime",
+			case_name,
+			"go-size",
+			iteration,
+			reference_size_run.seconds.to_s(),
+			reference_size_run.status,
+		)
+		iteration += 1
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def main()
+	arguments := argv()
+	if arguments.size() != 9
+		puts("usage: gate3-benchmark ROOT REFERENCE_TRB NATIVE_DRIVER QBE CC WORKSPACE BUILD_REPETITIONS RUNTIME_REPETITIONS OUTPUT")
+		return
+	end
+	case create_directory(arguments[5])
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		puts(error.operation + ": " + error.message)
+		return
+	end
+	mut output := string_builder.new()
+	output.append("metric,case,candidate,iteration,value,status\n")
+	case_names := ["utf8-strings", "array-values", "closure-values", "cycle-stress"]
+	mut index := 0
+	while index < case_names.size()
+		case benchmark_case(
+				output,
+				arguments[0],
+				arguments[1],
+				arguments[2],
+				arguments[3],
+				arguments[4],
+				arguments[5],
+				case_names[index],
+				arguments[6].to_i(),
+				arguments[7].to_i(),
+			)
+		when Result::Ok(_value)
+		when Result::Err(error)
+			puts(error)
+			return
+		end
+		index += 1
+	end
+	case write_text(arguments[8], output.to_s())
+	when Result::Ok(_unit)
+		puts(arguments[8])
+	when Result::Err(error)
+		puts(error.operation + ": " + error.message)
+	end
+	return
+end

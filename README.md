@@ -67,10 +67,14 @@ managed UTF-8 Strings, mutable Arrays, closures, and cycle-reclaiming tracing
 collection before broader runtime and self-hosting work. The pinned version 4
 producer is now connected to a differential source corpus, and repeated builds
 reproduce the snapshot, decoded MIR structure, QBE IL, assembly, and executable.
-Gate 3 remains open while the registered collector evidence and performance
-measurements are completed. These results do not select QBE for production or
-measure the final self-hosted compiler. The current path provides no production
-runtime, stable ABI, stable artifact format, or compatibility guarantee.
+The registered source cycle now triggers automatic collection and satisfies the
+reclamation and live-set checks. The TypeRB-authored measurement harness records
+all registered build, runtime, size, RSS, phase, allocation, and collector
+metrics. Gate 3 remains open until its final raw measurements and dated report
+pass every continuation bound. These results do not select QBE for production
+or measure the final self-hosted compiler. The current path provides no
+production runtime, stable ABI, stable artifact format, or compatibility
+guarantee.
 
 ## Intended boundary
 

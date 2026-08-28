@@ -1,5 +1,5 @@
 import { Gate3Module } from gate3_mir
-import { emit_gate3_qbe } from qbe3
+import { emit_gate3_qbe, emit_gate3_qbe_with_runtime_report } from qbe3
 import { write_text } from trb/std/filesystem
 import { run } from trb/std/process
 import { Result } from trb/std/result
@@ -29,8 +29,33 @@ def build_gate3_executable(
 		workspace: String,
 		output_path: String,
 	): Result<Gate3BuildReport, Gate3BuildError>
+	return _build_gate3_executable(native_module, qbe_command, cc_command, workspace, output_path, false)
+end
+
+def build_gate3_instrumented_executable(
+		native_module: Gate3Module,
+		qbe_command: String,
+		cc_command: String,
+		workspace: String,
+		output_path: String,
+	): Result<Gate3BuildReport, Gate3BuildError>
+	return _build_gate3_executable(native_module, qbe_command, cc_command, workspace, output_path, true)
+end
+
+def _build_gate3_executable(
+		native_module: Gate3Module,
+		qbe_command: String,
+		cc_command: String,
+		workspace: String,
+		output_path: String,
+		report_runtime: Boolean,
+	): Result<Gate3BuildReport, Gate3BuildError>
 	emit_started := Instant.now()
-	qbe_source := case emit_gate3_qbe(native_module)
+	mut emit_result := emit_gate3_qbe(native_module)
+	if report_runtime
+		emit_result = emit_gate3_qbe_with_runtime_report(native_module)
+	end
+	qbe_source := case emit_result
 	when Result::Ok(source)
 		source
 	when Result::Err(diagnostic)
