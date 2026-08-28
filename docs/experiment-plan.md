@@ -9,6 +9,10 @@ outcomes without unacceptable regressions in the others?
 2. Generated-program execution time.
 3. Deployed executable size.
 
+If it can, can the compiler and runtime be implemented in TypeRB, reproduce
+themselves, and retain competitive build time and generated-code behavior once
+the complete self-hosted toolchain is measured?
+
 Secondary outcomes include compiler and runtime peak memory, startup latency,
 toolchain distribution size, portability, diagnostics, correctness risk, and
 maintenance cost.
@@ -41,9 +45,9 @@ The candidates are not implemented to production completeness in parallel.
 They advance through small shared gates and can be removed early.
 
 1. Use hand-authored bootstrap and MIR fixtures to validate the boundary.
-2. Use QBE or a similarly small path for the cheapest runtime feasibility
-   check.
-3. Use Cranelift as the first balanced AOT candidate.
+2. Use QBE for the cheapest runtime and ABI feasibility check.
+3. Consider Cranelift only if the QBE result leaves a measured development
+   code-generation problem worth testing.
 4. Add LLVM only after the corpus is representative enough to measure an
    optimization ceiling.
 5. Attempt a direct emitter only if profiling shows codegen or toolchain
@@ -51,19 +55,32 @@ They advance through small shared gates and can be removed early.
 
 This order is a starting hypothesis, not a compatibility promise.
 
+TinyGo may be measured once as a time-boxed calibration of the optimized Go
+baseline. It is not a path to the required Go-independent compiler and is not
+a gate deliverable. A C emitter is likewise deferred unless later profiling
+shows that it answers a specific question more cheaply than the selected
+backend. Neither is built merely to populate a comparison table.
+
 ## Gates
 
 ### Gate 0: Boundary
 
 Scope:
 
-- versioned, data-only fixtures;
-- strict snapshot and MIR verification;
-- deterministic diagnostics for malformed and unsupported input; and
-- source identity retained through lowering.
+- a documented versioned, data-only bootstrap snapshot subset;
+- a TypeRB implementation of strict snapshot decoding and validation;
+- a distinct Native MIR model, lowering, and verifier implemented in TypeRB;
+- deterministic diagnostic codes, paths, and messages for malformed,
+  unsupported, and structurally invalid input;
+- source identity and spans retained on every lowered function, block, and
+  instruction; and
+- valid and invalid fixtures plus portable tests.
 
-Exit condition: the experiment can validate and lower fixtures without
-importing the reference compiler's internal objects.
+Exit condition: the pinned reference TypeRB compiler can check and test the
+Gate 0 implementation, and the implementation can validate and lower all Gate
+0 fixtures without importing reference compiler internal objects. Malformed,
+unknown, unsupported, and invariant-breaking fixtures fail deterministically;
+valid input produces verified Native MIR with unchanged source origins.
 
 ### Gate 1: Heap-free execution
 
@@ -107,7 +124,18 @@ Scope may expand to:
 At most one default candidate should normally reach broad runtime work. A
 second candidate requires a distinct, measured development or release role.
 
-### Gate 4: Product feasibility
+### Gate 4: Self-hosting compiler completeness
+
+Scope expands to a TypeRB-authored parser, resolver, checker, and compiler
+driver sufficient to compile this repository's compiler sources. The Go
+reference compiler remains a semantic oracle and recovery bootstrap but is not
+linked into the native compiler.
+
+Exit condition: a Go-bootstrapped B0 compiler produces B1 from the TypeRB
+compiler sources, and B1 produces B2 with matching observable compiler
+behavior on the conformance corpus.
+
+### Gate 5: Self-hosted product feasibility
 
 This gate is not authorization to ship. It evaluates:
 
@@ -117,6 +145,11 @@ This gate is not authorization to ship. It evaluates:
 - package and native-library boundaries;
 - debugging and operational behavior; and
 - total ongoing maintenance cost.
+
+It also requires B1 and B2 compiler artifacts to be reproducibly equivalent
+under a documented normalization policy, and all build-time, memory, runtime,
+binary-size, and toolchain-size measurements to use the self-hosted path. A
+previous native release is the ordinary bootstrap seed; Go is not required.
 
 Promotion requires a separate TypeRB design decision.
 
