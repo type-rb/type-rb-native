@@ -34,6 +34,10 @@ def _gate3_integer_array_module(): Gate3Module
 				"Array<Integer>",
 				Gate3ValueType::Scalar(ScalarType::Integer),
 			),
+			Gate3TypeDefinition::Array(
+				"Array<Array<Integer>>",
+				Gate3ValueType::Aggregate("Array<Integer>"),
+			),
 		],
 		functions: [
 			Gate3Function.new(
@@ -49,15 +53,29 @@ def _gate3_integer_array_module(): Gate3Module
 						parameters: [],
 						origin: origin,
 						instructions: [
+							Gate3Instruction::Scalar(Gate1Instruction::IntegerLiteral("zero", 0, origin)),
 							Gate3Instruction::Scalar(Gate1Instruction::IntegerLiteral("ten", 10, origin)),
 							Gate3Instruction::Scalar(Gate1Instruction::IntegerLiteral("twenty", 20, origin)),
 							Gate3Instruction::Scalar(Gate1Instruction::IntegerLiteral("two", 2, origin)),
 							Gate3Instruction::Scalar(Gate1Instruction::IntegerLiteral("last", - 1, origin)),
 							Gate3Instruction::ArrayConstruct("values", "Array<Integer>", ["ten"], origin),
-							Gate3Instruction::ArrayPush("Array<Integer>", "values", "twenty", origin),
-							Gate3Instruction::ArraySet("Array<Integer>", "values", "last", "ten", origin),
-							Gate3Instruction::ArrayGet("actual", "Array<Integer>", "values", "last", origin),
-							Gate3Instruction::ArraySize("size", "Array<Integer>", "values", origin),
+							Gate3Instruction::ArrayConstruct(
+								"groups",
+								"Array<Array<Integer>>",
+								["values"],
+								origin,
+							),
+							Gate3Instruction::ArrayGet(
+								"selected",
+								"Array<Array<Integer>>",
+								"groups",
+								"zero",
+								origin,
+							),
+							Gate3Instruction::ArrayPush("Array<Integer>", "selected", "twenty", origin),
+							Gate3Instruction::ArraySet("Array<Integer>", "selected", "last", "ten", origin),
+							Gate3Instruction::ArrayGet("actual", "Array<Integer>", "selected", "last", origin),
+							Gate3Instruction::ArraySize("size", "Array<Integer>", "selected", origin),
 							Gate3Instruction::Scalar(
 								Gate1Instruction::IntegerCompare(
 									"valueMatches",
@@ -127,7 +145,7 @@ def _gate3_integer_array_module(): Gate3Module
 end
 
 describe("Gate 3 Integer Array runtime") do
-	test("executes construction, growth, mutation, indexing, and size") do
+	test("executes nested construction, growth, mutation, indexing, and size") do
 		qbe_command := environment("TYPE_RB_NATIVE_QBE")
 		if qbe_command == nil
 			expect(true).to_be_true()

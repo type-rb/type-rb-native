@@ -1,40 +1,40 @@
 record Gate4Compiler
-	token_kinds: Array<Integer>
-	token_texts: Array<String>
-	token_lines: Array<Integer>
+	token_kinds: Gate4IntegerStorage
+	token_texts: Gate4StringStorage
+	token_lines: Gate4IntegerStorage
 	token_count: Array<Integer>
-	record_names: Array<String>
-	record_field_starts: Array<Integer>
-	record_field_counts: Array<Integer>
-	record_lines: Array<Integer>
+	record_names: Gate4StringStorage
+	record_field_starts: Gate4IntegerStorage
+	record_field_counts: Gate4IntegerStorage
+	record_lines: Gate4IntegerStorage
 	record_count: Array<Integer>
-	field_names: Array<String>
-	field_types: Array<String>
-	field_lines: Array<Integer>
+	field_names: Gate4StringStorage
+	field_types: Gate4StringStorage
+	field_lines: Gate4IntegerStorage
 	field_count: Array<Integer>
-	function_names: Array<String>
-	function_parameter_starts: Array<Integer>
-	function_parameter_counts: Array<Integer>
-	function_result_types: Array<String>
-	function_body_starts: Array<Integer>
-	function_body_ends: Array<Integer>
-	function_lines: Array<Integer>
+	function_names: Gate4StringStorage
+	function_parameter_starts: Gate4IntegerStorage
+	function_parameter_counts: Gate4IntegerStorage
+	function_result_types: Gate4StringStorage
+	function_body_starts: Gate4IntegerStorage
+	function_body_ends: Gate4IntegerStorage
+	function_lines: Gate4IntegerStorage
 	function_count: Array<Integer>
-	parameter_names: Array<String>
-	parameter_types: Array<String>
-	parameter_mutable: Array<Integer>
-	parameter_lines: Array<Integer>
+	parameter_names: Gate4StringStorage
+	parameter_types: Gate4StringStorage
+	parameter_mutable: Gate4IntegerStorage
+	parameter_lines: Gate4IntegerStorage
 	parameter_count: Array<Integer>
-	diagnostic_codes: Array<String>
-	diagnostic_lines: Array<Integer>
-	diagnostic_messages: Array<String>
+	diagnostic_codes: Gate4StringStorage
+	diagnostic_lines: Gate4IntegerStorage
+	diagnostic_messages: Gate4StringStorage
 	diagnostic_count: Array<Integer>
 end
 
 record Gate4Locals
-	names: Array<String>
-	types: Array<String>
-	mutable: Array<Integer>
+	names: Gate4StringStorage
+	types: Gate4StringStorage
+	mutable: Gate4IntegerStorage
 	count: Array<Integer>
 end
 
@@ -46,15 +46,15 @@ record Gate4CheckedValue
 end
 
 record Gate4Output
-	lines: Array<String>
+	lines: Gate4StringStorage
 	count: Array<Integer>
 end
 
 record Gate4EmitContext
-	local_names: Array<String>
-	local_types: Array<String>
-	local_slots: Array<String>
-	local_mutable: Array<Integer>
+	local_names: Gate4StringStorage
+	local_types: Gate4StringStorage
+	local_slots: Gate4StringStorage
+	local_mutable: Gate4IntegerStorage
 	local_count: Array<Integer>
 	slot_count: Array<Integer>
 	temporary_count: Array<Integer>
@@ -70,24 +70,110 @@ record Gate4EmittedValue
 	address: String
 end
 
-def gate4_integer_storage(capacity: Integer): Array<Integer>
+record Gate4IntegerStorage
+	chunks: Array<Array<Array<Integer>>>
+	limit: Array<Integer>
+	used: Array<Integer>
+end
+
+record Gate4StringStorage
+	chunks: Array<Array<Array<String>>>
+	limit: Array<Integer>
+	used: Array<Integer>
+end
+
+def gate4_storage_chunk_size(): Integer
+	return 256
+end
+
+def gate4_integer_chunk(): Array<Integer>
 	mut values: Array<Integer> := []
 	mut index := 0
-	while index < capacity
+	while index < gate4_storage_chunk_size()
 		values.push(0)
 		index += 1
 	end
 	return values
 end
 
-def gate4_string_storage(capacity: Integer): Array<String>
+def gate4_string_chunk(): Array<String>
 	mut values: Array<String> := []
 	mut index := 0
-	while index < capacity
+	while index < gate4_storage_chunk_size()
 		values.push("")
 		index += 1
 	end
 	return values
+end
+
+def gate4_integer_storage(capacity: Integer): Gate4IntegerStorage
+	return Gate4IntegerStorage.new(chunks: [[]], limit: [capacity], used: [0])
+end
+
+def gate4_string_storage(capacity: Integer): Gate4StringStorage
+	return Gate4StringStorage.new(chunks: [[]], limit: [capacity], used: [0])
+end
+
+def gate4_reset_temporary_storage()
+	return
+end
+
+def gate4_store_integer(mut storage: Gate4IntegerStorage, index: Integer, value: Integer): Boolean
+	if index < 0
+		return false
+	end
+	if index >= storage.limit[0]
+		return false
+	end
+	chunk_size := gate4_storage_chunk_size()
+	chunk_index := index / chunk_size
+	mut chunks := storage.chunks[0]
+	while chunks.size() <= chunk_index
+		chunks.push([])
+	end
+	storage.chunks[0] = chunks
+	if storage.chunks[0][chunk_index].size() == 0
+		storage.chunks[0][chunk_index] = gate4_integer_chunk()
+	end
+	storage.chunks[0][chunk_index][index % chunk_size] = value
+	if index >= storage.used[0]
+		storage.used[0] = index + 1
+	end
+	return true
+end
+
+def gate4_store_string(mut storage: Gate4StringStorage, index: Integer, value: String): Boolean
+	if index < 0
+		return false
+	end
+	if index >= storage.limit[0]
+		return false
+	end
+	chunk_size := gate4_storage_chunk_size()
+	chunk_index := index / chunk_size
+	mut chunks := storage.chunks[0]
+	while chunks.size() <= chunk_index
+		chunks.push([])
+	end
+	storage.chunks[0] = chunks
+	if storage.chunks[0][chunk_index].size() == 0
+		storage.chunks[0][chunk_index] = gate4_string_chunk()
+	end
+	storage.chunks[0][chunk_index][index % chunk_size] = value
+	if index >= storage.used[0]
+		storage.used[0] = index + 1
+	end
+	return true
+end
+
+def gate4_load_integer(storage: Gate4IntegerStorage, index: Integer): Integer
+	chunk_size := gate4_storage_chunk_size()
+	return storage.chunks[0][index / chunk_size][index % chunk_size]
+end
+
+def gate4_load_string(storage: Gate4StringStorage, index: Integer): String
+	chunk_size := gate4_storage_chunk_size()
+	return storage.chunks[0][index / chunk_size][index % chunk_size]
 end
 
 def gate4_compiler_new(capacity: Integer): Gate4Compiler
@@ -153,7 +239,7 @@ end
 
 def gate4_output_line(mut output: Gate4Output, line: String)
 	index := output.count[0]
-	output.lines[index] = line
+	gate4_store_string(output.lines, index, line)
 	output.count[0] = index + 1
 	return
 end
@@ -209,9 +295,14 @@ def gate4_emit_static_strings(
 	): Boolean
 	mut token_index := 0
 	while token_index < state.token_count[0]
-		if state.token_kinds[token_index] == 3
-			value := state.token_texts[token_index]
-			mut line := "data $g4s" + gate4_integer_string(token_index) + " = align 8 { l " + gate4_integer_string(value.size()) + ", b"
+		if gate4_load_integer(state.token_kinds, token_index) == 3
+			value := gate4_load_string(state.token_texts, token_index)
+			gate4_output_line(
+				output,
+				"data $g4s" + gate4_integer_string(token_index) + " = align 8 { l " + gate4_integer_string(value.size()) + ",",
+			)
+			mut line := "\tb"
+			mut line_bytes := 0
 			mut character_index := 0
 			while character_index < value.size()
 				code := gate4_ascii_code(value[character_index])
@@ -219,16 +310,24 @@ def gate4_emit_static_strings(
 					gate4_diagnostic(
 						state,
 						"TRBN4005",
-						state.token_lines[token_index],
+						gate4_load_integer(state.token_lines, token_index),
 						"Gate 4 QBE emission supports ASCII String literals only",
 					)
 				else
 					line += " " + gate4_integer_string(code)
+					line_bytes += 1
+					if line_bytes == 16
+						gate4_output_line(output, line + ",")
+						line = "\tb"
+						line_bytes = 0
+					end
 				end
 				character_index += 1
 			end
-			line += " 0 }"
-			gate4_output_line(output, line)
+			if line_bytes > 0
+				gate4_output_line(output, line + ",")
+			end
+			gate4_output_line(output, "\tb 0 }")
 		end
 		token_index += 1
 	end
@@ -239,6 +338,9 @@ end
 def gate4_emit_runtime(mut output: Gate4Output)
 	lines := [
 		"data $g4_newline = { b 10 }",
+		"data $g4_character_cache = align 8 { z 2048 }",
+		"data $g4_string_storage = align 8 { l 0, l 0, l 0 }",
+		"data $g4_temporary_storage = align 8 { l 0, l 0 }",
 		"data $g4_allocation_error = { b 112 97 110 105 99 58 32 97 108 108 111 99 97 116 105 111 110 32 102 97 105 108 101 100 10 }",
 		"data $g4_bounds_error = { b 112 97 110 105 99 58 32 105 110 100 101 120 32 105 115 32 111 117 116 32 111 102 32 98 111 117 110 100 115 10 }",
 		"data $g4_integer_error = { b 112 97 110 105 99 58 32 73 110 116 101 103 101 114 32 111 112 101 114 97 116 105 111 110 32 102 97 105 108 101 100 10 }",
@@ -263,11 +365,99 @@ def gate4_emit_runtime(mut output: Gate4Output)
 		"\tret %pointer",
 		"}",
 		"",
+		"function l $g4_string_alloc(l %size) {",
+		"@start",
+		"\t%with_padding =l add %size, 7",
+		"\t%aligned =l and %with_padding, -8",
+		"\t%used_address =l add $g4_string_storage, 8",
+		"\t%capacity_address =l add $g4_string_storage, 16",
+		"\t%base =l loadl $g4_string_storage",
+		"\t%missing =w ceql %base, 0",
+		"\tjnz %missing, @grow, @check",
+		"@check",
+		"\t%used =l loadl %used_address",
+		"\t%capacity =l loadl %capacity_address",
+		"\t%next =l add %used, %aligned",
+		"\t%fits =w cslel %next, %capacity",
+		"\tjnz %fits, @allocate, @grow",
+		"@grow",
+		"\t%large =w csltl 65536, %aligned",
+		"\tjnz %large, @large, @standard",
+		"@standard",
+		"\t%standard =l call $calloc(l 1, l 65536)",
+		"\t%standard_failed =w ceql %standard, 0",
+		"\tjnz %standard_failed, @fail, @standard_ready",
+		"@standard_ready",
+		"\tstorel %standard, $g4_string_storage",
+		"\tstorel 0, %used_address",
+		"\tstorel 65536, %capacity_address",
+		"\tjmp @allocate",
+		"@large",
+		"\t%large_storage =l call $calloc(l 1, l %aligned)",
+		"\t%large_failed =w ceql %large_storage, 0",
+		"\tjnz %large_failed, @fail, @large_ready",
+		"@large_ready",
+		"\tstorel %large_storage, $g4_string_storage",
+		"\tstorel 0, %used_address",
+		"\tstorel %aligned, %capacity_address",
+		"\tjmp @allocate",
+		"@fail",
+		"\tcall $g4_fail(l $g4_allocation_error, l 26)",
+		"\thlt",
+		"@allocate",
+		"\t%current_base =l loadl $g4_string_storage",
+		"\t%current_used =l loadl %used_address",
+		"\t%result =l add %current_base, %current_used",
+		"\t%next_used =l add %current_used, %aligned",
+		"\tstorel %next_used, %used_address",
+		"\tret %result",
+		"}",
+		"",
+		"function l $g4_temp_alloc(l %size) {",
+		"@start",
+		"\t%storage =l loadl $g4_temporary_storage",
+		"\t%missing =w ceql %storage, 0",
+		"\tjnz %missing, @initialize, @allocate",
+		"@initialize",
+		"\t%allocated =l call $calloc(l 1, l 1048576)",
+		"\t%failed =w ceql %allocated, 0",
+		"\tjnz %failed, @allocation_failed, @initialized",
+		"@allocation_failed",
+		"\tcall $g4_fail(l $g4_allocation_error, l 26)",
+		"\thlt",
+		"@initialized",
+		"\tstorel %allocated, $g4_temporary_storage",
+		"\tjmp @allocate",
+		"@allocate",
+		"\t%base =l loadl $g4_temporary_storage",
+		"\t%used_address =l add $g4_temporary_storage, 8",
+		"\t%used =l loadl %used_address",
+		"\t%with_padding =l add %size, 7",
+		"\t%aligned =l and %with_padding, -8",
+		"\t%next =l add %used, %aligned",
+		"\t%overflow =w csltl 1048576, %next",
+		"\tjnz %overflow, @capacity_failed, @ready",
+		"@capacity_failed",
+		"\tcall $g4_fail(l $g4_allocation_error, l 26)",
+		"\thlt",
+		"@ready",
+		"\t%result =l add %base, %used",
+		"\tstorel %next, %used_address",
+		"\tret %result",
+		"}",
+		"",
+		"function $g4_temp_reset() {",
+		"@start",
+		"\t%used_address =l add $g4_temporary_storage, 8",
+		"\tstorel 0, %used_address",
+		"\tret",
+		"}",
+		"",
 		"function l $g4_string_from_c(l %source) {",
 		"@start",
 		"\t%length =l call $strlen(l %source)",
 		"\t%size =l add %length, 9",
-		"\t%string =l call $g4_alloc(l %size)",
+		"\t%string =l call $g4_string_alloc(l %size)",
 		"\tstorel %length, %string",
 		"\t%data =l add %string, 8",
 		"\tcall $memcpy(l %data, l %source, l %length)",
@@ -282,7 +472,7 @@ def gate4_emit_runtime(mut output: Gate4Output)
 		"\t%right_length =l loadl %right",
 		"\t%length =l add %left_length, %right_length",
 		"\t%size =l add %length, 9",
-		"\t%string =l call $g4_alloc(l %size)",
+		"\t%string =l call $g4_string_alloc(l %size)",
 		"\tstorel %length, %string",
 		"\t%data =l add %string, 8",
 		"\t%left_data =l add %left, 8",
@@ -336,12 +526,22 @@ def gate4_emit_runtime(mut output: Gate4Output)
 		"\t%data =l add %string, 8",
 		"\t%address =l add %data, %index",
 		"\t%character =w loadub %address",
-		"\t%result =l call $g4_alloc(l 10)",
+		"\t%character_long =l extuw %character",
+		"\t%cache_offset =l mul %character_long, 8",
+		"\t%cache_slot =l add $g4_character_cache, %cache_offset",
+		"\t%cached =l loadl %cache_slot",
+		"\t%missing =w ceql %cached, 0",
+		"\tjnz %missing, @allocate, @cached",
+		"@cached",
+		"\tret %cached",
+		"@allocate",
+		"\t%result =l call $g4_string_alloc(l 10)",
 		"\tstorel 1, %result",
 		"\t%result_data =l add %result, 8",
 		"\tstoreb %character, %result_data",
 		"\t%result_end =l add %result_data, 1",
 		"\tstoreb 0, %result_end",
+		"\tstorel %result, %cache_slot",
 		"\tret %result",
 		"}",
 		"",
@@ -564,7 +764,7 @@ def gate4_emit_local_find(context: Gate4EmitContext, name: String): Integer
 	mut found :=- 1
 	mut index := 0
 	while index < context.local_count[0]
-		if context.local_names[index] == name
+		if gate4_load_string(context.local_names, index) == name
 			found = index
 		end
 		index += 1
@@ -583,10 +783,10 @@ def gate4_emit_add_local(
 	index := context.local_count[0]
 	slot_index := context.slot_count[0]
 	slot := "%v" + gate4_integer_string(slot_index)
-	context.local_names[index] = name
-	context.local_types[index] = type_name
-	context.local_slots[index] = slot
-	context.local_mutable[index] = mutable
+	gate4_store_string(context.local_names, index, name)
+	gate4_store_string(context.local_types, index, type_name)
+	gate4_store_string(context.local_slots, index, slot)
+	gate4_store_integer(context.local_mutable, index, mutable)
 	context.local_count[0] = index + 1
 	context.slot_count[0] = slot_index + 1
 	gate4_output_line(output, "\t" + slot + " =l alloc8 8")
@@ -600,14 +800,14 @@ def gate4_emit_loaded_local(
 		index: Integer,
 	): Gate4EmittedValue
 	operand := gate4_emit_temporary(context)
-	gate4_output_line(output, "\t" + operand + " =l loadl " + context.local_slots[index])
+	gate4_output_line(output, "\t" + operand + " =l loadl " + gate4_load_string(context.local_slots, index))
 	return gate4_emitted_value(
 		operand,
-		context.local_types[index],
+		gate4_load_string(context.local_types, index),
 		0,
-		context.local_names[index],
-		context.local_mutable[index],
-		context.local_slots[index],
+		gate4_load_string(context.local_names, index),
+		gate4_load_integer(context.local_mutable, index),
+		gate4_load_string(context.local_slots, index),
 	)
 end
 
@@ -669,8 +869,8 @@ def gate4_emit_direct_call(
 	mut parameter_start := 0
 	mut result_type := "Void"
 	if function_index >= 0
-		parameter_start = state.function_parameter_starts[function_index]
-		result_type = state.function_result_types[function_index]
+		parameter_start = gate4_load_integer(state.function_parameter_starts, function_index)
+		result_type = gate4_load_string(state.function_result_types, function_index)
 	end
 	mut arguments := ""
 	mut argument_count := 0
@@ -681,7 +881,7 @@ def gate4_emit_direct_call(
 		else
 			mut expected := "String"
 			if function_index >= 0
-				expected = state.parameter_types[parameter_start + argument_count]
+				expected = gate4_load_string(state.parameter_types, parameter_start + argument_count)
 			end
 			value := gate4_emit_expression(state, position, context, output, 1, expected)
 			if arguments != ""
@@ -700,6 +900,10 @@ def gate4_emit_direct_call(
 	gate4_expect(state, position, ")")
 	if callee.name == "puts"
 		gate4_output_line(output, "\tcall $g4_puts(" + arguments + ")")
+		return gate4_emitted_value("", "Void", 0, "", 0, "")
+	end
+	if callee.name == "gate4_reset_temporary_storage"
+		gate4_output_line(output, "\tcall $g4_temp_reset()")
 		return gate4_emitted_value("", "Void", 0, "", 0, "")
 	end
 	if result_type == "Void"
@@ -725,12 +929,19 @@ def gate4_emit_record_new(
 		record_name: String,
 	): Gate4EmittedValue
 	record_index := gate4_find_record(state, record_name)
-	field_start := state.record_field_starts[record_index]
-	field_count := state.record_field_counts[record_index]
+	field_start := gate4_load_integer(state.record_field_starts, record_index)
+	field_count := gate4_load_integer(state.record_field_counts, record_index)
 	record_value := gate4_emit_temporary(context)
+	mut allocator := "$g4_alloc"
+	if record_name == "Gate4CheckedValue"
+		allocator = "$g4_temp_alloc"
+	end
+	if record_name == "Gate4EmittedValue"
+		allocator = "$g4_temp_alloc"
+	end
 	gate4_output_line(
 		output,
-		"\t" + record_value + " =l call $g4_alloc(l " + gate4_integer_string(field_count * 8) + ")",
+		"\t" + record_value + " =l call " + allocator + "(l " + gate4_integer_string(field_count * 8) + ")",
 	)
 	gate4_advance(position)
 	gate4_skip_newlines(state, position)
@@ -748,7 +959,7 @@ def gate4_emit_record_new(
 				context,
 				output,
 				1,
-				state.field_types[field_start + field_offset],
+				gate4_load_string(state.field_types, field_start + field_offset),
 			)
 			address := gate4_emit_address(context, output, record_value, field_offset * 8)
 			gate4_output_line(output, "\tstorel " + value.operand + ", " + address)
@@ -827,13 +1038,13 @@ def gate4_emit_postfix(
 				else
 					record_index := gate4_find_record(state, value.type_name)
 					field_index := gate4_find_field(state, record_index, member)
-					offset := (field_index - state.record_field_starts[record_index]) * 8
+					offset := (field_index - gate4_load_integer(state.record_field_starts, record_index)) * 8
 					address := gate4_emit_address(context, output, value.operand, offset)
 					operand := gate4_emit_temporary(context)
 					gate4_output_line(output, "\t" + operand + " =l loadl " + address)
 					value = gate4_emitted_value(
 						operand,
-						state.field_types[field_index],
+						gate4_load_string(state.field_types, field_index),
 						0,
 						member,
 						value.mutable,
@@ -886,9 +1097,9 @@ def gate4_emit_primary(
 		expected: String,
 	): Gate4EmittedValue
 	token_index := position[0]
-	kind := state.token_kinds[token_index]
+	kind := gate4_load_integer(state.token_kinds, token_index)
 	if kind == 2
-		value := state.token_texts[token_index]
+		value := gate4_load_string(state.token_texts, token_index)
 		gate4_advance(position)
 		return gate4_emitted_value(value, "Integer", 0, "", 0, "")
 	end
@@ -939,7 +1150,7 @@ def gate4_emit_primary(
 		return gate4_emitted_value(result, "Integer", 0, "", 0, "")
 	end
 	if kind == 1
-		name := state.token_texts[token_index]
+		name := gate4_load_string(state.token_texts, token_index)
 		gate4_advance(position)
 		if name == "true"
 			return gate4_emitted_value("1", "Boolean", 0, "", 0, "")
@@ -1093,7 +1304,7 @@ def gate4_emit_expression(
 	)
 	mut scanning := true
 	while scanning
-		operator := state.token_texts[position[0]]
+		operator := gate4_load_string(state.token_texts, position[0])
 		precedence := gate4_binary_precedence(operator)
 		if precedence < minimum_precedence
 			scanning = false
@@ -1148,7 +1359,7 @@ def gate4_emit_simple_statement(
 		mut output: Gate4Output,
 	): Boolean
 	left := gate4_emit_expression(state, position, context, output, 1, "")
-	operator := state.token_texts[position[0]]
+	operator := gate4_load_string(state.token_texts, position[0])
 	if operator == "="
 		gate4_advance(position)
 		right := gate4_emit_expression(state, position, context, output, 1, left.type_name)
@@ -1255,7 +1466,7 @@ def gate4_emit_block(
 					else
 						if gate4_token_is(state, position[0], "return")
 							gate4_advance(position)
-							if state.token_kinds[position[0]] == 4
+							if gate4_load_integer(state.token_kinds, position[0]) == 4
 								gate4_output_line(output, "\tret")
 							else
 								value := gate4_emit_expression(state, position, context, output, 1, result_type)
@@ -1268,7 +1479,7 @@ def gate4_emit_block(
 							if gate4_token_is(state, position[0], "mut")
 								declaration = true
 							else
-								if state.token_kinds[position[0]] == 1
+								if gate4_load_integer(state.token_kinds, position[0]) == 1
 									if gate4_token_is(state, position[0] + 1, ":=")
 										declaration = true
 									else
@@ -1311,8 +1522,8 @@ def gate4_emit_function(
 		mut output: Gate4Output,
 	)
 	mut context := gate4_emit_context_new(state.token_count[0] + 1)
-	parameter_start := state.function_parameter_starts[function_index]
-	parameter_count := state.function_parameter_counts[function_index]
+	parameter_start := gate4_load_integer(state.function_parameter_starts, function_index)
+	parameter_count := gate4_load_integer(state.function_parameter_counts, function_index)
 	mut parameters := ""
 	mut parameter_index := 0
 	while parameter_index < parameter_count
@@ -1323,7 +1534,7 @@ def gate4_emit_function(
 		parameter_index += 1
 	end
 	mut result_prefix := ""
-	if state.function_result_types[function_index] != "Void"
+	if gate4_load_string(state.function_result_types, function_index) != "Void"
 		result_prefix = "l "
 	end
 	gate4_output_line(
@@ -1337,23 +1548,23 @@ def gate4_emit_function(
 		gate4_emit_add_local(
 			context,
 			output,
-			state.parameter_names[declaration_index],
-			state.parameter_types[declaration_index],
-			state.parameter_mutable[declaration_index],
+			gate4_load_string(state.parameter_names, declaration_index),
+			gate4_load_string(state.parameter_types, declaration_index),
+			gate4_load_integer(state.parameter_mutable, declaration_index),
 			"%p" + gate4_integer_string(parameter_index),
 		)
 		parameter_index += 1
 	end
-	mut position := [state.function_body_starts[function_index]]
+	mut position := [gate4_load_integer(state.function_body_starts, function_index)]
 	terminated := gate4_emit_block(
 		state,
 		position,
 		context,
 		output,
-		state.function_result_types[function_index],
+		gate4_load_string(state.function_result_types, function_index),
 	)
 	if terminated == 0
-		if state.function_result_types[function_index] == "Void"
+		if gate4_load_string(state.function_result_types, function_index) == "Void"
 			gate4_output_line(output, "\tret")
 		else
 			gate4_output_line(output, "\tcall $g4_fail(l $g4_integer_error, l 32)")
@@ -1362,6 +1573,7 @@ def gate4_emit_function(
 	end
 	gate4_output_line(output, "}")
 	gate4_output_line(output, "")
+	gate4_reset_temporary_storage()
 	return
 end
 
@@ -1370,17 +1582,17 @@ def gate4_compiler_entry_function(state: Gate4Compiler): Integer
 	if index < 0
 		return - 1
 	end
-	if state.function_parameter_counts[index] != 2
+	if gate4_load_integer(state.function_parameter_counts, index) != 2
 		return - 1
 	end
-	start := state.function_parameter_starts[index]
-	if state.parameter_types[start] != "String"
+	start := gate4_load_integer(state.function_parameter_starts, index)
+	if gate4_load_string(state.parameter_types, start) != "String"
 		return - 1
 	end
-	if state.parameter_types[start + 1] != "String"
+	if gate4_load_string(state.parameter_types, start + 1) != "String"
 		return - 1
 	end
-	if state.function_result_types[index] != "Void"
+	if gate4_load_string(state.function_result_types, index) != "Void"
 		return - 1
 	end
 	return index
@@ -1431,8 +1643,8 @@ end
 
 def gate4_print_diagnostic(state: Gate4Compiler)
 	puts(
-		state.diagnostic_codes[0] + ":" + gate4_integer_string(state.diagnostic_lines[0]) + ":" +
-		state.diagnostic_messages[0],
+		gate4_load_string(state.diagnostic_codes, 0) + ":" + gate4_integer_string(gate4_load_integer(state.diagnostic_lines, 0)) + ":" +
+		gate4_load_string(state.diagnostic_messages, 0),
 	)
 	return
 end
@@ -1465,7 +1677,7 @@ def compiler_main(source: String, mode: String)
 		end
 		mut index := 0
 		while index < output.count[0]
-			puts(output.lines[index])
+			puts(gate4_load_string(output.lines, index))
 			index += 1
 		end
 		return
@@ -1480,9 +1692,9 @@ end
 
 def gate4_diagnostic(mut state: Gate4Compiler, code: String, line: Integer, message: String)
 	if state.diagnostic_count[0] == 0
-		state.diagnostic_codes[0] = code
-		state.diagnostic_lines[0] = line
-		state.diagnostic_messages[0] = message
+		gate4_store_string(state.diagnostic_codes, 0, code)
+		gate4_store_integer(state.diagnostic_lines, 0, line)
+		gate4_store_string(state.diagnostic_messages, 0, message)
 		state.diagnostic_count[0] = 1
 	end
 	return
@@ -1517,9 +1729,9 @@ end
 
 def gate4_push_token(mut state: Gate4Compiler, kind: Integer, text: String, line: Integer)
 	index := state.token_count[0]
-	state.token_kinds[index] = kind
-	state.token_texts[index] = text
-	state.token_lines[index] = line
+	gate4_store_integer(state.token_kinds, index, kind)
+	gate4_store_string(state.token_texts, index, text)
+	gate4_store_integer(state.token_lines, index, line)
 	state.token_count[0] = index + 1
 	return
 end
@@ -1770,11 +1982,11 @@ def gate4_lex(mut state: Gate4Compiler, source: String): Boolean
 end
 
 def gate4_token_is(state: Gate4Compiler, index: Integer, text: String): Boolean
-	if state.token_kinds[index] == 1
-		return state.token_texts[index] == text
+	if gate4_load_integer(state.token_kinds, index) == 1
+		return gate4_load_string(state.token_texts, index) == text
 	end
-	if state.token_kinds[index] == 5
-		return state.token_texts[index] == text
+	if gate4_load_integer(state.token_kinds, index) == 5
+		return gate4_load_string(state.token_texts, index) == text
 	end
 	return false
 end
@@ -1785,7 +1997,7 @@ def gate4_advance(mut position: Array<Integer>)
 end
 
 def gate4_skip_newlines(state: Gate4Compiler, mut position: Array<Integer>)
-	while state.token_kinds[position[0]] == 4
+	while gate4_load_integer(state.token_kinds, position[0]) == 4
 		gate4_advance(position)
 	end
 	return
@@ -1799,19 +2011,19 @@ def gate4_expect(mut state: Gate4Compiler, mut position: Array<Integer>, text: S
 	gate4_diagnostic(
 		state,
 		"TRBN4002",
-		state.token_lines[position[0]],
-		"expected " + text + ", found " + state.token_texts[position[0]],
+		gate4_load_integer(state.token_lines, position[0]),
+		"expected " + text + ", found " + gate4_load_string(state.token_texts, position[0]),
 	)
 	return false
 end
 
 def gate4_expect_identifier(mut state: Gate4Compiler, mut position: Array<Integer>): String
-	if state.token_kinds[position[0]] == 1
-		value := state.token_texts[position[0]]
+	if gate4_load_integer(state.token_kinds, position[0]) == 1
+		value := gate4_load_string(state.token_texts, position[0])
 		gate4_advance(position)
 		return value
 	end
-	gate4_diagnostic(state, "TRBN4002", state.token_lines[position[0]], "expected an identifier")
+	gate4_diagnostic(state, "TRBN4002", gate4_load_integer(state.token_lines, position[0]), "expected an identifier")
 	return ""
 end
 
@@ -1881,7 +2093,7 @@ def gate4_parse_arguments_syntax(mut state: Gate4Compiler, mut position: Array<I
 		if gate4_token_is(state, position[0], ")")
 			finished = true
 		else
-			if state.token_kinds[position[0]] == 1
+			if gate4_load_integer(state.token_kinds, position[0]) == 1
 				if gate4_token_is(state, position[0] + 1, ":")
 					gate4_advance(position)
 					gate4_advance(position)
@@ -1903,7 +2115,7 @@ def gate4_parse_arguments_syntax(mut state: Gate4Compiler, mut position: Array<I
 end
 
 def gate4_parse_primary_syntax(mut state: Gate4Compiler, mut position: Array<Integer>): Boolean
-	kind := state.token_kinds[position[0]]
+	kind := gate4_load_integer(state.token_kinds, position[0])
 	if kind == 1
 		gate4_advance(position)
 	else
@@ -1957,7 +2169,7 @@ def gate4_parse_primary_syntax(mut state: Gate4Compiler, mut position: Array<Int
 							gate4_advance(position)
 							return gate4_parse_primary_syntax(state, position)
 						end
-						gate4_diagnostic(state, "TRBN4002", state.token_lines[position[0]], "expected an expression")
+						gate4_diagnostic(state, "TRBN4002", gate4_load_integer(state.token_lines, position[0]), "expected an expression")
 						return false
 					end
 				end
@@ -2015,7 +2227,7 @@ def gate4_parse_expression_syntax(
 	end
 	mut scanning := true
 	while scanning
-		precedence := gate4_binary_precedence(state.token_texts[position[0]])
+		precedence := gate4_binary_precedence(gate4_load_string(state.token_texts, position[0]))
 		if precedence < minimum_precedence
 			scanning = false
 		else
@@ -2030,18 +2242,18 @@ def gate4_parse_expression_syntax(
 end
 
 def gate4_finish_statement(mut state: Gate4Compiler, mut position: Array<Integer>): Boolean
-	if state.token_kinds[position[0]] == 4
+	if gate4_load_integer(state.token_kinds, position[0]) == 4
 		gate4_skip_newlines(state, position)
 		return true
 	end
-	if state.token_kinds[position[0]] == 0
+	if gate4_load_integer(state.token_kinds, position[0]) == 0
 		return true
 	end
 	gate4_diagnostic(
 		state,
 		"TRBN4002",
-		state.token_lines[position[0]],
-		"unexpected token " + state.token_texts[position[0]] + " after statement",
+		gate4_load_integer(state.token_lines, position[0]),
+		"unexpected token " + gate4_load_string(state.token_texts, position[0]) + " after statement",
 	)
 	return false
 end
@@ -2071,7 +2283,7 @@ def gate4_parse_simple_statement_syntax(mut state: Gate4Compiler, mut position: 
 	if !gate4_parse_expression_syntax(state, position, 1)
 		return false
 	end
-	operator := state.token_texts[position[0]]
+	operator := gate4_load_string(state.token_texts, position[0])
 	if operator == "="
 		gate4_advance(position)
 		if !gate4_parse_expression_syntax(state, position, 1)
@@ -2109,8 +2321,8 @@ def gate4_parse_block_syntax(mut state: Gate4Compiler, mut position: Array<Integ
 	gate4_skip_newlines(state, position)
 	mut complete := false
 	while !complete
-		if state.token_kinds[position[0]] == 0
-			gate4_diagnostic(state, "TRBN4002", state.token_lines[position[0]], "expected end")
+		if gate4_load_integer(state.token_kinds, position[0]) == 0
+			gate4_diagnostic(state, "TRBN4002", gate4_load_integer(state.token_lines, position[0]), "expected end")
 			complete = true
 		else
 			if gate4_token_is(state, position[0], "end")
@@ -2148,8 +2360,8 @@ def gate4_parse_block_syntax(mut state: Gate4Compiler, mut position: Array<Integ
 						else
 							if gate4_token_is(state, position[0], "return")
 								gate4_advance(position)
-								if state.token_kinds[position[0]] != 4
-									if state.token_kinds[position[0]] != 0
+								if gate4_load_integer(state.token_kinds, position[0]) != 4
+									if gate4_load_integer(state.token_kinds, position[0]) != 0
 										gate4_parse_expression_syntax(state, position, 1)
 									end
 								end
@@ -2159,7 +2371,7 @@ def gate4_parse_block_syntax(mut state: Gate4Compiler, mut position: Array<Integ
 								if gate4_token_is(state, position[0], "mut")
 									declaration = true
 								else
-									if state.token_kinds[position[0]] == 1
+									if gate4_load_integer(state.token_kinds, position[0]) == 1
 										if gate4_token_is(state, position[0] + 1, ":=")
 											declaration = true
 										else
@@ -2188,23 +2400,23 @@ def gate4_parse_block_syntax(mut state: Gate4Compiler, mut position: Array<Integ
 end
 
 def gate4_parse_record(mut state: Gate4Compiler, mut position: Array<Integer>): Boolean
-	line := state.token_lines[position[0]]
+	line := gate4_load_integer(state.token_lines, position[0])
 	gate4_advance(position)
 	name := gate4_expect_identifier(state, position)
 	if !gate4_finish_statement(state, position)
 		return false
 	end
 	record_index := state.record_count[0]
-	state.record_names[record_index] = name
-	state.record_field_starts[record_index] = state.field_count[0]
-	state.record_lines[record_index] = line
+	gate4_store_string(state.record_names, record_index, name)
+	gate4_store_integer(state.record_field_starts, record_index, state.field_count[0])
+	gate4_store_integer(state.record_lines, record_index, line)
 	mut count := 0
 	while !gate4_token_is(state, position[0], "end")
-		if state.token_kinds[position[0]] == 0
-			gate4_diagnostic(state, "TRBN4002", state.token_lines[position[0]], "expected end for record " + name)
+		if gate4_load_integer(state.token_kinds, position[0]) == 0
+			gate4_diagnostic(state, "TRBN4002", gate4_load_integer(state.token_lines, position[0]), "expected end for record " + name)
 			return false
 		end
-		field_line := state.token_lines[position[0]]
+		field_line := gate4_load_integer(state.token_lines, position[0])
 		field_name := gate4_expect_identifier(state, position)
 		if !gate4_expect(state, position, ":")
 			return false
@@ -2214,20 +2426,20 @@ def gate4_parse_record(mut state: Gate4Compiler, mut position: Array<Integer>): 
 			return false
 		end
 		field_index := state.field_count[0]
-		state.field_names[field_index] = field_name
-		state.field_types[field_index] = field_type
-		state.field_lines[field_index] = field_line
+		gate4_store_string(state.field_names, field_index, field_name)
+		gate4_store_string(state.field_types, field_index, field_type)
+		gate4_store_integer(state.field_lines, field_index, field_line)
 		state.field_count[0] = field_index + 1
 		count += 1
 	end
 	gate4_advance(position)
-	state.record_field_counts[record_index] = count
+	gate4_store_integer(state.record_field_counts, record_index, count)
 	state.record_count[0] = record_index + 1
 	return gate4_finish_statement(state, position)
 end
 
 def gate4_parse_function(mut state: Gate4Compiler, mut position: Array<Integer>): Boolean
-	line := state.token_lines[position[0]]
+	line := gate4_load_integer(state.token_lines, position[0])
 	gate4_advance(position)
 	name := gate4_expect_identifier(state, position)
 	if !gate4_expect(state, position, "(")
@@ -2248,17 +2460,17 @@ def gate4_parse_function(mut state: Gate4Compiler, mut position: Array<Integer>)
 					mutable = 1
 					gate4_advance(position)
 				end
-				parameter_line := state.token_lines[position[0]]
+				parameter_line := gate4_load_integer(state.token_lines, position[0])
 				parameter_name := gate4_expect_identifier(state, position)
 				if !gate4_expect(state, position, ":")
 					return false
 				end
 				parameter_type := gate4_parse_type(state, position)
 				parameter_index := state.parameter_count[0]
-				state.parameter_names[parameter_index] = parameter_name
-				state.parameter_types[parameter_index] = parameter_type
-				state.parameter_mutable[parameter_index] = mutable
-				state.parameter_lines[parameter_index] = parameter_line
+				gate4_store_string(state.parameter_names, parameter_index, parameter_name)
+				gate4_store_string(state.parameter_types, parameter_index, parameter_type)
+				gate4_store_integer(state.parameter_mutable, parameter_index, mutable)
+				gate4_store_integer(state.parameter_lines, parameter_index, parameter_line)
 				state.parameter_count[0] = parameter_index + 1
 				parameter_count += 1
 				if gate4_token_is(state, position[0], ",")
@@ -2294,20 +2506,20 @@ def gate4_parse_function(mut state: Gate4Compiler, mut position: Array<Integer>)
 		return false
 	end
 	function_index := state.function_count[0]
-	state.function_names[function_index] = name
-	state.function_parameter_starts[function_index] = parameter_start
-	state.function_parameter_counts[function_index] = parameter_count
-	state.function_result_types[function_index] = result_type
-	state.function_body_starts[function_index] = body_start
-	state.function_body_ends[function_index] = body_end
-	state.function_lines[function_index] = line
+	gate4_store_string(state.function_names, function_index, name)
+	gate4_store_integer(state.function_parameter_starts, function_index, parameter_start)
+	gate4_store_integer(state.function_parameter_counts, function_index, parameter_count)
+	gate4_store_string(state.function_result_types, function_index, result_type)
+	gate4_store_integer(state.function_body_starts, function_index, body_start)
+	gate4_store_integer(state.function_body_ends, function_index, body_end)
+	gate4_store_integer(state.function_lines, function_index, line)
 	state.function_count[0] = function_index + 1
 	return true
 end
 
 def gate4_skip_import(state: Gate4Compiler, mut position: Array<Integer>)
-	while state.token_kinds[position[0]] != 4
-		if state.token_kinds[position[0]] == 0
+	while gate4_load_integer(state.token_kinds, position[0]) != 4
+		if gate4_load_integer(state.token_kinds, position[0]) == 0
 			return
 		end
 		gate4_advance(position)
@@ -2319,7 +2531,7 @@ end
 def gate4_parse(mut state: Gate4Compiler): Boolean
 	mut position := [0]
 	gate4_skip_newlines(state, position)
-	while state.token_kinds[position[0]] != 0
+	while gate4_load_integer(state.token_kinds, position[0]) != 0
 		if gate4_token_is(state, position[0], "import")
 			gate4_skip_import(state, position)
 		else
@@ -2332,8 +2544,8 @@ def gate4_parse(mut state: Gate4Compiler): Boolean
 					gate4_diagnostic(
 						state,
 						"TRBN4002",
-						state.token_lines[position[0]],
-						"unsupported top-level declaration " + state.token_texts[position[0]],
+						gate4_load_integer(state.token_lines, position[0]),
+						"unsupported top-level declaration " + gate4_load_string(state.token_texts, position[0]),
 					)
 				end
 			end
@@ -2350,7 +2562,7 @@ def gate4_find_record(state: Gate4Compiler, name: String): Integer
 	mut found :=- 1
 	mut index := 0
 	while index < state.record_count[0]
-		if state.record_names[index] == name
+		if gate4_load_string(state.record_names, index) == name
 			found = index
 		end
 		index += 1
@@ -2362,7 +2574,7 @@ def gate4_find_function(state: Gate4Compiler, name: String): Integer
 	mut found :=- 1
 	mut index := 0
 	while index < state.function_count[0]
-		if state.function_names[index] == name
+		if gate4_load_string(state.function_names, index) == name
 			found = index
 		end
 		index += 1
@@ -2372,11 +2584,11 @@ end
 
 def gate4_find_field(state: Gate4Compiler, record_index: Integer, name: String): Integer
 	mut found :=- 1
-	start := state.record_field_starts[record_index]
-	finish := start + state.record_field_counts[record_index]
+	start := gate4_load_integer(state.record_field_starts, record_index)
+	finish := start + gate4_load_integer(state.record_field_counts, record_index)
 	mut index := start
 	while index < finish
-		if state.field_names[index] == name
+		if gate4_load_string(state.field_names, index) == name
 			found = index
 		end
 		index += 1
@@ -2403,6 +2615,18 @@ def gate4_type_exists(state: Gate4Compiler, type_name: String, allow_void: Boole
 	if type_name == "Array<String>"
 		return true
 	end
+	if type_name == "Array<Array<Integer>>"
+		return true
+	end
+	if type_name == "Array<Array<String>>"
+		return true
+	end
+	if type_name == "Array<Array<Array<Integer>>>"
+		return true
+	end
+	if type_name == "Array<Array<Array<String>>>"
+		return true
+	end
 	return gate4_find_record(state, type_name) >= 0
 end
 
@@ -2413,6 +2637,18 @@ def gate4_array_element_type(type_name: String): String
 	if type_name == "Array<String>"
 		return "String"
 	end
+	if type_name == "Array<Array<Integer>>"
+		return "Array<Integer>"
+	end
+	if type_name == "Array<Array<String>>"
+		return "Array<String>"
+	end
+	if type_name == "Array<Array<Array<Integer>>>"
+		return "Array<Array<Integer>>"
+	end
+	if type_name == "Array<Array<Array<String>>>"
+		return "Array<Array<String>>"
+	end
 	return ""
 end
 
@@ -2420,7 +2656,7 @@ def gate4_local_find(locals: Gate4Locals, name: String): Integer
 	mut found :=- 1
 	mut index := 0
 	while index < locals.count[0]
-		if locals.names[index] == name
+		if gate4_load_string(locals.names, index) == name
 			found = index
 		end
 		index += 1
@@ -2441,9 +2677,9 @@ def gate4_local_add(
 		return false
 	end
 	index := locals.count[0]
-	locals.names[index] = name
-	locals.types[index] = type_name
-	locals.mutable[index] = mutable
+	gate4_store_string(locals.names, index, name)
+	gate4_store_string(locals.types, index, type_name)
+	gate4_store_integer(locals.mutable, index, mutable)
 	locals.count[0] = index + 1
 	return true
 end
@@ -2456,9 +2692,9 @@ def gate4_resolution_local_add(
 	)
 	if gate4_local_find(locals, name) < 0
 		index := locals.count[0]
-		locals.names[index] = name
-		locals.types[index] = type_name
-		locals.mutable[index] = mutable
+		gate4_store_string(locals.names, index, name)
+		gate4_store_string(locals.types, index, type_name)
+		gate4_store_integer(locals.mutable, index, mutable)
 		locals.count[0] = index + 1
 	end
 	return
@@ -2498,10 +2734,10 @@ def gate4_is_typed_local_declaration(state: Gate4Compiler, index: Integer): Bool
 	mut scanning := true
 	mut cursor := index + 2
 	while scanning
-		if state.token_kinds[cursor] == 0
+		if gate4_load_integer(state.token_kinds, cursor) == 0
 			scanning = false
 		else
-			if state.token_kinds[cursor] == 4
+			if gate4_load_integer(state.token_kinds, cursor) == 4
 				scanning = false
 			else
 				if gate4_token_is(state, cursor, ":=")
@@ -2529,38 +2765,38 @@ def gate4_resolve_declarations(mut state: Gate4Compiler): Boolean
 	while record_index < state.record_count[0]
 		mut other_record := 0
 		while other_record < record_index
-			if state.record_names[other_record] == state.record_names[record_index]
+			if gate4_load_string(state.record_names, other_record) == gate4_load_string(state.record_names, record_index)
 				gate4_diagnostic(
 					state,
 					"TRBN4003",
-					state.record_lines[record_index],
-					"duplicate record declaration " + state.record_names[record_index],
+					gate4_load_integer(state.record_lines, record_index),
+					"duplicate record declaration " + gate4_load_string(state.record_names, record_index),
 				)
 			end
 			other_record += 1
 		end
-		start := state.record_field_starts[record_index]
-		finish := start + state.record_field_counts[record_index]
+		start := gate4_load_integer(state.record_field_starts, record_index)
+		finish := start + gate4_load_integer(state.record_field_counts, record_index)
 		mut field_index := start
 		while field_index < finish
 			mut other_field := start
 			while other_field < field_index
-				if state.field_names[other_field] == state.field_names[field_index]
+				if gate4_load_string(state.field_names, other_field) == gate4_load_string(state.field_names, field_index)
 					gate4_diagnostic(
 						state,
 						"TRBN4003",
-						state.field_lines[field_index],
-						"duplicate field declaration " + state.field_names[field_index],
+						gate4_load_integer(state.field_lines, field_index),
+						"duplicate field declaration " + gate4_load_string(state.field_names, field_index),
 					)
 				end
 				other_field += 1
 			end
-			if !gate4_type_exists(state, state.field_types[field_index], false)
+			if !gate4_type_exists(state, gate4_load_string(state.field_types, field_index), false)
 				gate4_diagnostic(
 					state,
 					"TRBN4003",
-					state.field_lines[field_index],
-					"unknown field type " + state.field_types[field_index],
+					gate4_load_integer(state.field_lines, field_index),
+					"unknown field type " + gate4_load_string(state.field_types, field_index),
 				)
 			end
 			field_index += 1
@@ -2570,64 +2806,64 @@ def gate4_resolve_declarations(mut state: Gate4Compiler): Boolean
 	mut main_count := 0
 	mut function_index := 0
 	while function_index < state.function_count[0]
-		if state.function_names[function_index] == "main"
+		if gate4_load_string(state.function_names, function_index) == "main"
 			main_count += 1
-			if state.function_parameter_counts[function_index] != 0
-				gate4_diagnostic(state, "TRBN4003", state.function_lines[function_index], "main must take no parameters")
+			if gate4_load_integer(state.function_parameter_counts, function_index) != 0
+				gate4_diagnostic(state, "TRBN4003", gate4_load_integer(state.function_lines, function_index), "main must take no parameters")
 			end
-			if state.function_result_types[function_index] != "Void"
+			if gate4_load_string(state.function_result_types, function_index) != "Void"
 				gate4_diagnostic(
 					state,
 					"TRBN4003",
-					state.function_lines[function_index],
-					"main must return Void, found " + state.function_result_types[function_index],
+					gate4_load_integer(state.function_lines, function_index),
+					"main must return Void, found " + gate4_load_string(state.function_result_types, function_index),
 				)
 			end
 		end
 		mut other_function := 0
 		while other_function < function_index
-			if state.function_names[other_function] == state.function_names[function_index]
+			if gate4_load_string(state.function_names, other_function) == gate4_load_string(state.function_names, function_index)
 				gate4_diagnostic(
 					state,
 					"TRBN4003",
-					state.function_lines[function_index],
-					"duplicate function declaration " + state.function_names[function_index],
+					gate4_load_integer(state.function_lines, function_index),
+					"duplicate function declaration " + gate4_load_string(state.function_names, function_index),
 				)
 			end
 			other_function += 1
 		end
-		parameter_start := state.function_parameter_starts[function_index]
-		parameter_finish := parameter_start + state.function_parameter_counts[function_index]
+		parameter_start := gate4_load_integer(state.function_parameter_starts, function_index)
+		parameter_finish := parameter_start + gate4_load_integer(state.function_parameter_counts, function_index)
 		mut parameter_index := parameter_start
 		while parameter_index < parameter_finish
 			mut other_parameter := parameter_start
 			while other_parameter < parameter_index
-				if state.parameter_names[other_parameter] == state.parameter_names[parameter_index]
+				if gate4_load_string(state.parameter_names, other_parameter) == gate4_load_string(state.parameter_names, parameter_index)
 					gate4_diagnostic(
 						state,
 						"TRBN4003",
-						state.parameter_lines[parameter_index],
-						"duplicate parameter declaration " + state.parameter_names[parameter_index],
+						gate4_load_integer(state.parameter_lines, parameter_index),
+						"duplicate parameter declaration " + gate4_load_string(state.parameter_names, parameter_index),
 					)
 				end
 				other_parameter += 1
 			end
-			if !gate4_type_exists(state, state.parameter_types[parameter_index], false)
+			if !gate4_type_exists(state, gate4_load_string(state.parameter_types, parameter_index), false)
 				gate4_diagnostic(
 					state,
 					"TRBN4003",
-					state.parameter_lines[parameter_index],
-					"unknown parameter type " + state.parameter_types[parameter_index],
+					gate4_load_integer(state.parameter_lines, parameter_index),
+					"unknown parameter type " + gate4_load_string(state.parameter_types, parameter_index),
 				)
 			end
 			parameter_index += 1
 		end
-		if !gate4_type_exists(state, state.function_result_types[function_index], true)
+		if !gate4_type_exists(state, gate4_load_string(state.function_result_types, function_index), true)
 			gate4_diagnostic(
 				state,
 				"TRBN4003",
-				state.function_lines[function_index],
-				"unknown result type " + state.function_result_types[function_index],
+				gate4_load_integer(state.function_lines, function_index),
+				"unknown result type " + gate4_load_string(state.function_result_types, function_index),
 			)
 		end
 		function_index += 1
@@ -2643,24 +2879,24 @@ def gate4_resolve_function_body(
 		function_index: Integer,
 		mut locals: Gate4Locals,
 	): Boolean
-	parameter_start := state.function_parameter_starts[function_index]
-	parameter_finish := parameter_start + state.function_parameter_counts[function_index]
+	parameter_start := gate4_load_integer(state.function_parameter_starts, function_index)
+	parameter_finish := parameter_start + gate4_load_integer(state.function_parameter_counts, function_index)
 	mut parameter_index := parameter_start
 	while parameter_index < parameter_finish
 		gate4_resolution_local_add(
 			locals,
-			state.parameter_names[parameter_index],
-			state.parameter_types[parameter_index],
-			state.parameter_mutable[parameter_index],
+			gate4_load_string(state.parameter_names, parameter_index),
+			gate4_load_string(state.parameter_types, parameter_index),
+			gate4_load_integer(state.parameter_mutable, parameter_index),
 		)
 		parameter_index += 1
 	end
-	mut index := state.function_body_starts[function_index]
-	finish := state.function_body_ends[function_index]
+	mut index := gate4_load_integer(state.function_body_starts, function_index)
+	finish := gate4_load_integer(state.function_body_ends, function_index)
 	mut skipping_type := false
 	while index < finish
-		kind := state.token_kinds[index]
-		text := state.token_texts[index]
+		kind := gate4_load_integer(state.token_kinds, index)
+		text := gate4_load_string(state.token_texts, index)
 		if skipping_type
 			if gate4_token_is(state, index, ":=")
 				skipping_type = false
@@ -2670,8 +2906,8 @@ def gate4_resolve_function_body(
 				if gate4_resolution_keyword(text)
 				else
 					mut previous := ""
-					if index > state.function_body_starts[function_index]
-						previous = state.token_texts[index - 1]
+					if index > gate4_load_integer(state.function_body_starts, function_index)
+						previous = gate4_load_string(state.token_texts, index - 1)
 					end
 					if previous == "."
 					else
@@ -2690,7 +2926,7 @@ def gate4_resolve_function_body(
 											gate4_diagnostic(
 												state,
 												"TRBN4003",
-												state.token_lines[index],
+												gate4_load_integer(state.token_lines, index),
 												"unresolved function " + text,
 											)
 										end
@@ -2702,7 +2938,7 @@ def gate4_resolve_function_body(
 												gate4_diagnostic(
 													state,
 													"TRBN4003",
-													state.token_lines[index],
+													gate4_load_integer(state.token_lines, index),
 													"unresolved record " + text,
 												)
 											end
@@ -2711,7 +2947,7 @@ def gate4_resolve_function_body(
 												gate4_diagnostic(
 													state,
 													"TRBN4003",
-													state.token_lines[index],
+													gate4_load_integer(state.token_lines, index),
 													"unresolved local " + text,
 												)
 											end
@@ -2721,7 +2957,7 @@ def gate4_resolve_function_body(
 											gate4_diagnostic(
 												state,
 												"TRBN4003",
-												state.token_lines[index],
+												gate4_load_integer(state.token_lines, index),
 												"unresolved local " + text,
 											)
 										end
@@ -2805,7 +3041,7 @@ def gate4_check_array_literal(
 		mut locals: Gate4Locals,
 		expected: String,
 	): Gate4CheckedValue
-	line := state.token_lines[position[0]]
+	line := gate4_load_integer(state.token_lines, position[0])
 	gate4_advance(position)
 	gate4_skip_newlines(state, position)
 	mut element_type := gate4_array_element_type(expected)
@@ -2819,7 +3055,7 @@ def gate4_check_array_literal(
 			if element_type == ""
 				element_type = value.type_name
 			else
-				gate4_check_expected(state, value.type_name, element_type, state.token_lines[position[0]])
+				gate4_check_expected(state, value.type_name, element_type, gate4_load_integer(state.token_lines, position[0]))
 			end
 			count += 1
 			if gate4_token_is(state, position[0], ",")
@@ -2843,6 +3079,18 @@ def gate4_check_array_literal(
 	if element_type == "String"
 		result_type = "Array<String>"
 	end
+	if element_type == "Array<Integer>"
+		result_type = "Array<Array<Integer>>"
+	end
+	if element_type == "Array<String>"
+		result_type = "Array<Array<String>>"
+	end
+	if element_type == "Array<Array<Integer>>"
+		result_type = "Array<Array<Array<Integer>>>"
+	end
+	if element_type == "Array<Array<String>>"
+		result_type = "Array<Array<Array<String>>>"
+	end
 	if result_type == ""
 		return gate4_type_diagnostic(state, line, "unsupported Array element type " + element_type)
 	end
@@ -2856,8 +3104,8 @@ def gate4_check_primary(
 		mut locals: Gate4Locals,
 		expected: String,
 	): Gate4CheckedValue
-	line := state.token_lines[position[0]]
-	kind := state.token_kinds[position[0]]
+	line := gate4_load_integer(state.token_lines, position[0])
+	kind := gate4_load_integer(state.token_kinds, position[0])
 	if kind == 2
 		gate4_advance(position)
 		return gate4_checked_value("Integer", 0, "", 0)
@@ -2902,7 +3150,7 @@ def gate4_check_primary(
 		return gate4_checked_value("Integer", 0, "", 0)
 	end
 	if kind == 1
-		name := state.token_texts[position[0]]
+		name := gate4_load_string(state.token_texts, position[0])
 		gate4_advance(position)
 		if name == "true"
 			return gate4_checked_value("Boolean", 0, "", 0)
@@ -2913,10 +3161,10 @@ def gate4_check_primary(
 		local_index := gate4_local_find(locals, name)
 		if local_index >= 0
 			return gate4_checked_value(
-				locals.types[local_index],
+				gate4_load_string(locals.types, local_index),
 				0,
 				name,
-				locals.mutable[local_index],
+				gate4_load_integer(locals.mutable, local_index),
 			)
 		end
 		if name == "puts"
@@ -2939,7 +3187,7 @@ def gate4_check_call(
 		mut locals: Gate4Locals,
 		callee: Gate4CheckedValue,
 	): Gate4CheckedValue
-	line := state.token_lines[position[0]]
+	line := gate4_load_integer(state.token_lines, position[0])
 	gate4_advance(position)
 	gate4_skip_newlines(state, position)
 	mut function_index := gate4_find_function(state, callee.name)
@@ -2951,9 +3199,9 @@ def gate4_check_call(
 		result_type = "Void"
 	else
 		if function_index >= 0
-			parameter_start = state.function_parameter_starts[function_index]
-			parameter_count = state.function_parameter_counts[function_index]
-			result_type = state.function_result_types[function_index]
+			parameter_start = gate4_load_integer(state.function_parameter_starts, function_index)
+			parameter_count = gate4_load_integer(state.function_parameter_counts, function_index)
+			result_type = gate4_load_string(state.function_result_types, function_index)
 		else
 			gate4_diagnostic(state, "TRBN4004", line, "value is not callable")
 		end
@@ -2969,7 +3217,7 @@ def gate4_check_call(
 				if callee.name == "puts"
 					argument_expected = "String"
 				else
-					argument_expected = state.parameter_types[parameter_start + argument_count]
+					argument_expected = gate4_load_string(state.parameter_types, parameter_start + argument_count)
 				end
 			end
 			gate4_check_expression(state, position, locals, 1, argument_expected)
@@ -2996,11 +3244,11 @@ def gate4_check_record_new(
 		record_name: String,
 	): Gate4CheckedValue
 	record_index := gate4_find_record(state, record_name)
-	line := state.token_lines[position[0]]
+	line := gate4_load_integer(state.token_lines, position[0])
 	gate4_advance(position)
 	gate4_skip_newlines(state, position)
-	field_start := state.record_field_starts[record_index]
-	field_count := state.record_field_counts[record_index]
+	field_start := gate4_load_integer(state.record_field_starts, record_index)
+	field_count := gate4_load_integer(state.record_field_counts, record_index)
 	mut argument_index := 0
 	mut finished := false
 	while !finished
@@ -3011,8 +3259,8 @@ def gate4_check_record_new(
 			gate4_expect(state, position, ":")
 			mut expected := "Invalid"
 			if argument_index < field_count
-				expected = state.field_types[field_start + argument_index]
-				if label != state.field_names[field_start + argument_index]
+				expected = gate4_load_string(state.field_types, field_start + argument_index)
+				if label != gate4_load_string(state.field_names, field_start + argument_index)
 					gate4_diagnostic(
 						state,
 						"TRBN4004",
@@ -3045,7 +3293,7 @@ def gate4_check_method_call(
 		receiver: Gate4CheckedValue,
 		method: String,
 	): Gate4CheckedValue
-	line := state.token_lines[position[0]]
+	line := gate4_load_integer(state.token_lines, position[0])
 	gate4_advance(position)
 	gate4_skip_newlines(state, position)
 	if method == "size"
@@ -3089,7 +3337,7 @@ def gate4_check_postfix(
 			else
 				value = gate4_type_diagnostic(
 					state,
-					state.token_lines[position[0]],
+					gate4_load_integer(state.token_lines, position[0]),
 					"value is not directly callable",
 				)
 				scanning = false
@@ -3105,7 +3353,7 @@ def gate4_check_postfix(
 						else
 							value = gate4_type_diagnostic(
 								state,
-								state.token_lines[position[0]],
+								gate4_load_integer(state.token_lines, position[0]),
 								"unsupported record constructor member " + member,
 							)
 							scanning = false
@@ -3118,7 +3366,7 @@ def gate4_check_postfix(
 					if record_index < 0
 						value = gate4_type_diagnostic(
 							state,
-							state.token_lines[position[0]],
+							gate4_load_integer(state.token_lines, position[0]),
 							"field access requires a record value",
 						)
 						scanning = false
@@ -3127,13 +3375,13 @@ def gate4_check_postfix(
 						if field_index < 0
 							value = gate4_type_diagnostic(
 								state,
-								state.token_lines[position[0]],
+								gate4_load_integer(state.token_lines, position[0]),
 								"unknown field " + member + " on " + value.type_name,
 							)
 							scanning = false
 						else
 							value = gate4_checked_value(
-								state.field_types[field_index],
+								gate4_load_string(state.field_types, field_index),
 								0,
 								member,
 								value.mutable,
@@ -3143,7 +3391,7 @@ def gate4_check_postfix(
 				end
 			else
 				if gate4_token_is(state, position[0], "[")
-					line := state.token_lines[position[0]]
+					line := gate4_load_integer(state.token_lines, position[0])
 					gate4_advance(position)
 					gate4_check_expression(state, position, locals, 1, "Integer")
 					gate4_expect(state, position, "]")
@@ -3247,7 +3495,7 @@ def gate4_check_expression(
 		minimum_precedence: Integer,
 		expected: String,
 	): Gate4CheckedValue
-	line := state.token_lines[position[0]]
+	line := gate4_load_integer(state.token_lines, position[0])
 	mut value := gate4_check_postfix(
 		state,
 		position,
@@ -3256,7 +3504,7 @@ def gate4_check_expression(
 	)
 	mut scanning := true
 	while scanning
-		operator := state.token_texts[position[0]]
+		operator := gate4_load_string(state.token_texts, position[0])
 		precedence := gate4_binary_precedence(operator)
 		if precedence < minimum_precedence
 			scanning = false
@@ -3298,7 +3546,7 @@ def gate4_check_declaration(
 		mutable = 1
 		gate4_advance(position)
 	end
-	line := state.token_lines[position[0]]
+	line := gate4_load_integer(state.token_lines, position[0])
 	name := gate4_expect_identifier(state, position)
 	mut declared_type := ""
 	if gate4_token_is(state, position[0], ":")
@@ -3326,9 +3574,9 @@ def gate4_check_simple_statement(
 		mut position: Array<Integer>,
 		mut locals: Gate4Locals,
 	): Boolean
-	line := state.token_lines[position[0]]
+	line := gate4_load_integer(state.token_lines, position[0])
 	left := gate4_check_expression(state, position, locals, 1, "")
-	operator := state.token_texts[position[0]]
+	operator := gate4_load_string(state.token_texts, position[0])
 	if operator == "="
 		if left.mutable == 0
 			gate4_diagnostic(state, "TRBN4004", line, "assignment target is immutable")
@@ -3358,8 +3606,8 @@ def gate4_check_block(
 	gate4_skip_newlines(state, position)
 	mut complete := false
 	while !complete
-		if state.token_kinds[position[0]] == 0
-			gate4_diagnostic(state, "TRBN4004", state.token_lines[position[0]], "unexpected end of input")
+		if gate4_load_integer(state.token_kinds, position[0]) == 0
+			gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, position[0]), "unexpected end of input")
 			complete = true
 		else
 			if gate4_token_is(state, position[0], "end")
@@ -3369,7 +3617,7 @@ def gate4_check_block(
 					complete = true
 				else
 					if gate4_token_is(state, position[0], "if")
-						line := state.token_lines[position[0]]
+						line := gate4_load_integer(state.token_lines, position[0])
 						gate4_advance(position)
 						condition := gate4_check_expression(state, position, locals, 1, "Boolean")
 						gate4_check_expected(state, condition.type_name, "Boolean", line)
@@ -3387,7 +3635,7 @@ def gate4_check_block(
 						gate4_finish_statement(state, position)
 					else
 						if gate4_token_is(state, position[0], "while")
-							line := state.token_lines[position[0]]
+							line := gate4_load_integer(state.token_lines, position[0])
 							gate4_advance(position)
 							condition := gate4_check_expression(state, position, locals, 1, "Boolean")
 							gate4_check_expected(state, condition.type_name, "Boolean", line)
@@ -3399,9 +3647,9 @@ def gate4_check_block(
 							gate4_finish_statement(state, position)
 						else
 							if gate4_token_is(state, position[0], "return")
-								line := state.token_lines[position[0]]
+								line := gate4_load_integer(state.token_lines, position[0])
 								gate4_advance(position)
-								if state.token_kinds[position[0]] == 4
+								if gate4_load_integer(state.token_kinds, position[0]) == 4
 									if result_type != "Void"
 										gate4_diagnostic(state, "TRBN4004", line, "return value is required")
 									end
@@ -3418,7 +3666,7 @@ def gate4_check_block(
 								if gate4_token_is(state, position[0], "mut")
 									declaration = true
 								else
-									if state.token_kinds[position[0]] == 1
+									if gate4_load_integer(state.token_kinds, position[0]) == 1
 										if gate4_token_is(state, position[0] + 1, ":=")
 											declaration = true
 										else
@@ -3448,31 +3696,33 @@ end
 
 def gate4_check_function(mut state: Gate4Compiler, function_index: Integer): Boolean
 	mut locals := gate4_locals_new(state.token_count[0] + 1)
-	parameter_start := state.function_parameter_starts[function_index]
-	parameter_finish := parameter_start + state.function_parameter_counts[function_index]
+	parameter_start := gate4_load_integer(state.function_parameter_starts, function_index)
+	parameter_finish := parameter_start + gate4_load_integer(state.function_parameter_counts, function_index)
 	mut parameter_index := parameter_start
 	while parameter_index < parameter_finish
 		gate4_local_add(
 			state,
 			locals,
-			state.parameter_names[parameter_index],
-			state.parameter_types[parameter_index],
-			state.parameter_mutable[parameter_index],
-			state.parameter_lines[parameter_index],
+			gate4_load_string(state.parameter_names, parameter_index),
+			gate4_load_string(state.parameter_types, parameter_index),
+			gate4_load_integer(state.parameter_mutable, parameter_index),
+			gate4_load_integer(state.parameter_lines, parameter_index),
 		)
 		parameter_index += 1
 	end
-	mut position := [state.function_body_starts[function_index]]
-	gate4_check_block(state, position, locals, state.function_result_types[function_index])
-	if position[0] != state.function_body_ends[function_index]
+	mut position := [gate4_load_integer(state.function_body_starts, function_index)]
+	gate4_check_block(state, position, locals, gate4_load_string(state.function_result_types, function_index))
+	if position[0] != gate4_load_integer(state.function_body_ends, function_index)
 		gate4_diagnostic(
 			state,
 			"TRBN4004",
-			state.function_lines[function_index],
+			gate4_load_integer(state.function_lines, function_index),
 			"checker did not consume the complete function body",
 		)
 	end
-	return !gate4_has_diagnostic(state)
+	valid :=!gate4_has_diagnostic(state)
+	gate4_reset_temporary_storage()
+	return valid
 end
 
 def gate4_check(mut state: Gate4Compiler): Boolean
