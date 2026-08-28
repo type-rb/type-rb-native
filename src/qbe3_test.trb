@@ -1,0 +1,120 @@
+import { decode_gate3_snapshot } from gate3_snapshot
+import { build_gate3_executable } from gate3_toolchain
+import { emit_gate3_qbe } from qbe3
+import { create_directory, read_text } from trb/std/filesystem
+import { environment, run } from trb/std/process
+import { Result } from trb/std/result
+import { describe, expect, test } from trb/std/test
+
+def _qbe3_fixture(): String
+	root := environment("TYPE_RB_NATIVE_ROOT")
+	if root == nil
+		return ""
+	end
+	case read_text(root + "/fixtures/gate3/valid/managed-values.json")
+	when Result::Ok(source)
+		return source
+	when Result::Err(_error)
+		return ""
+	end
+end
+
+describe("Gate 3 managed QBE runtime") do
+	test("emits deterministic managed runtime IL and exact-root frames") do
+		case decode_gate3_snapshot(_qbe3_fixture())
+		when Result::Ok(native_module)
+			first := emit_gate3_qbe(native_module)
+			second := emit_gate3_qbe(native_module)
+			expect(first).to_equal(second)
+			case first
+			when Result::Ok(source)
+				expect(source.include?("function $trbn_collect()")).to_be_true()
+				expect(source.include?("data $trbn_g3desc_t1 = align 8 { l 2, l 1 }")).to_be_true()
+				expect(source.include?("storel %root_frame, $trbn_roots")).to_be_true()
+				expect(source.include?("call %g3_0_3_call_code")).to_be_true()
+			when Result::Err(_diagnostic)
+				expect(false).to_be_true()
+			end
+		when Result::Err(diagnostic)
+			puts(diagnostic.path + ": " + diagnostic.message)
+			expect(false).to_be_true()
+		end
+	end
+
+	test("builds and executes managed Strings, Arrays, and a capturing closure") do
+		qbe_command := environment("TYPE_RB_NATIVE_QBE")
+		if qbe_command == nil
+			expect(true).to_be_true()
+		else
+			case decode_gate3_snapshot(_qbe3_fixture())
+			when Result::Ok(native_module)
+				workspace := "/tmp/type-rb-native-gate3-managed-runtime"
+				case create_directory(workspace)
+				when Result::Ok(_unit)
+				when Result::Err(_error)
+				end
+				case build_gate3_executable(
+						native_module,
+						qbe_command,
+						"/usr/bin/cc",
+						workspace,
+						workspace + "/sample",
+					)
+				when Result::Ok(report)
+					case run(report.output_path, [])
+					when Result::Ok(process)
+						expect(process.success).to_be_true()
+						expect(process.stdout).to_equal("o\n")
+						expect(process.stderr).to_equal("")
+					when Result::Err(_error)
+						expect(false).to_be_true()
+					end
+				when Result::Err(error)
+					puts(error.phase + ": " + error.message + "\n" + error.stderr)
+					expect(false).to_be_true()
+				end
+			when Result::Err(_diagnostic)
+				expect(false).to_be_true()
+			end
+		end
+	end
+
+	test("reports checked negative-index failure deterministically") do
+		qbe_command := environment("TYPE_RB_NATIVE_QBE")
+		if qbe_command == nil
+			expect(true).to_be_true()
+		else
+			broken := _qbe3_fixture().replace_all("\"value\": -1", "\"value\": -99")
+			case decode_gate3_snapshot(broken)
+			when Result::Ok(native_module)
+				workspace := "/tmp/type-rb-native-gate3-index-failure"
+				case create_directory(workspace)
+				when Result::Ok(_unit)
+				when Result::Err(_error)
+				end
+				case build_gate3_executable(
+						native_module,
+						qbe_command,
+						"/usr/bin/cc",
+						workspace,
+						workspace + "/sample",
+					)
+				when Result::Ok(report)
+					case run(report.output_path, [])
+					when Result::Ok(process)
+						expect(process.status).to_equal(2)
+						expect(process.stdout).to_equal("")
+						expect(process.stderr).to_equal("panic: index out of bounds\n")
+					when Result::Err(_error)
+						expect(false).to_be_true()
+					end
+				when Result::Err(error)
+					puts(error.phase + ": " + error.message + "\n" + error.stderr)
+					expect(false).to_be_true()
+				end
+			when Result::Err(_diagnostic)
+				expect(false).to_be_true()
+			end
+		end
+	end
+end
