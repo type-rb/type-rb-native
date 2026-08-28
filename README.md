@@ -93,16 +93,18 @@ stripped compiler size by 94.46%, and compiler-plus-QBE distribution size by
 82.18%. B1/B2/B3 QBE and normalized B1/B2 executables converge. See the
 [Gate 5 result](results/2026-08-29-gate5-matched-compiler-darwin-arm64/README.md).
 
-Gate 6A is in progress under the pre-registered scope in
+Gate 6A is complete under the pre-registered scope in
 [issue #35](https://github.com/type-rb/type-rb-native/issues/35). Its first
 self-emitted compiler entry reads a source file directly for `check` and
 `emit-qbe`, routes diagnostics and operational errors to stderr with distinct
 statuses, and retains the source-content form only as an explicit hidden
 recovery and differential adapter. Correctness coverage includes the compiler
 source, every existing valid, invalid, and mutation input, and a source file
-larger than 512 KiB. The slice remains open until its registered time, RSS,
-stripped-size, fixed-point, and process-inventory evidence is recorded. See the
-[Gate 6A file entry](docs/gate-6-file-cli.md).
+larger than 512 KiB. File-input median time improves by 38.69% for B1 and
+36.72% for B2 versus hidden input, median RSS is lower, B1/B2 time and RSS
+differ by 0.14%, and stripped size grows by 0.16%. See the
+[Gate 6A file entry](docs/gate-6-file-cli.md) and
+[recorded result](results/2026-08-29-gate6a-file-entry-darwin-arm64/README.md).
 
 Multi-module applications, project discovery, production runtime integration,
 package/native-library boundaries, incremental builds, external-tool output
@@ -209,6 +211,7 @@ repository.
 - [Gate 5 matched self-hosted compiler baseline](docs/gate-5-matched-compiler.md)
 - [Gate 5 matched compiler Darwin arm64 result](results/2026-08-29-gate5-matched-compiler-darwin-arm64/README.md)
 - [Gate 6A file-oriented compiler entry](docs/gate-6-file-cli.md)
+- [Gate 6A file-entry Darwin arm64 result](results/2026-08-29-gate6a-file-entry-darwin-arm64/README.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
 - [Decision 0003: Gate 1 QBE and Darwin arm64 profile](docs/decisions/0003-gate-1-qbe-target.md)

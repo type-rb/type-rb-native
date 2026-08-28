@@ -9,9 +9,11 @@ boundary is defined by
 
 ## Status
 
-The implementation and correctness coverage are present. Gate 6A remains open
-until the registered direct-time, peak-RSS, stripped-size, process-inventory,
-and fixed-point measurements are recorded and reviewed.
+Gate 6A is complete at TypeRB Native revision
+`cf6fabccf8bd799d5457372f93f024687d5e6d13`. The complete correctness,
+fixed-point, normalization, direct-time, peak-RSS, stripped-size, and process
+inventory criteria pass. See the
+[recorded Darwin arm64 result](../results/2026-08-29-gate6a-file-entry-darwin-arm64/README.md).
 
 This slice is not the complete Gate 6 exit and does not create a supported
 TypeRB command. Project discovery, multi-module resolution, output management,
@@ -110,5 +112,10 @@ The TypeRB-authored
 fixed point, performs the correctness preflight, records two indexed warmups
 and seven alternating observations, captures up to three peak-RSS observations,
 enforces the registered stripped-size ceiling, and writes the direct process
-inventory. Result artifacts remain outside the repository until the complete
-run passes and is reviewed.
+inventory. The result artifacts remained outside the repository until the
+complete run passed and was reviewed.
+
+The recorded run used the registered seven observations. File-input median
+time was 38.69% lower than hidden input for B1 and 36.72% lower for B2; median
+RSS was also lower. B1/B2 file time and RSS differed by 0.14%, and the stripped
+compiler grew by only 0.16% from Gate 5. Every registered Gate 6A bound passes.
