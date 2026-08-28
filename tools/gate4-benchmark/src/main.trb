@@ -1,0 +1,379 @@
+import { create_directory, read_text, write_text } from trb/std/filesystem
+import { argv, run } from trb/std/process
+import { Result } from trb/std/result
+import trb/std/string_builder
+import { Instant } from trb/std/time
+
+record TimedProcess
+	seconds: Float
+	status: Integer
+	stdout: String
+	stderr: String
+end
+
+def measure_process(command: String, arguments: Array<String>): Result<TimedProcess, String>
+	started := Instant.now()
+	case run(command, arguments)
+	when Result::Ok(process)
+		return Result<TimedProcess, String>::Ok(
+			TimedProcess.new(
+				seconds: Instant.now().duration_since(started).total_seconds(),
+				status: process.status,
+				stdout: process.stdout,
+				stderr: process.stderr,
+			)
+		)
+	when Result::Err(error)
+		return Result<TimedProcess, String>::Err(error.operation + ": " + error.message)
+	end
+end
+
+def append_measurement(
+		mut output: StringBuilder,
+		metric: String,
+		candidate: String,
+		iteration: Integer,
+		value: String,
+		status: Integer,
+	)
+	output.append(
+		metric + ",self-host," + candidate + "," + iteration.to_s() + "," + value + "," + status.to_s() + "\n"
+	)
+	return
+end
+
+def append_phases(
+		mut output: StringBuilder,
+		candidate: String,
+		iteration: Integer,
+		stdout: String,
+	): Integer
+	lines := stdout.split("\n")
+	mut count := 0
+	mut index := 0
+	while index < lines.size()
+		if lines[index].start_with?("gate4-phase,")
+			fields := lines[index].split(",")
+			if fields.size() == 3
+				append_measurement(output, "build-" + fields[1], candidate, iteration, fields[2], 0)
+				count += 1
+			end
+		end
+		index += 1
+	end
+	return count
+end
+
+def measure_build(
+		mut output: StringBuilder,
+		driver: String,
+		arguments: Array<String>,
+		candidate: String,
+		iteration: Integer,
+		expected_phases: Integer,
+	): Result<Boolean, String>
+	measurement := try measure_process(driver, arguments)
+	append_measurement(
+		output,
+		"build-total",
+		candidate,
+		iteration,
+		measurement.seconds.to_s(),
+		measurement.status,
+	)
+	if measurement.status != 0
+		return Result<Boolean, String>::Err(candidate + " build failed: " + measurement.stderr)
+	end
+	if append_phases(output, candidate, iteration, measurement.stdout) != expected_phases
+		return Result<Boolean, String>::Err(candidate + " build did not report every phase: " + measurement.stdout)
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def measure_peak_rss(command: String, arguments: Array<String>): Result<String, String>
+	mut time_arguments := ["-l", command]
+	mut index := 0
+	while index < arguments.size()
+		time_arguments.push(arguments[index])
+		index += 1
+	end
+	measurement := try measure_process("/usr/bin/time", time_arguments)
+	if measurement.status != 0
+		return Result<String, String>::Err("time " + command + ": " + measurement.stderr)
+	end
+	lines := measurement.stderr.split("\n")
+	index = 0
+	while index < lines.size()
+		if lines[index].include?("maximum resident set size")
+			fields := lines[index].strip().split(" ")
+			mut field_index := 0
+			while field_index < fields.size()
+				if !fields[field_index].empty?()
+					return Result<String, String>::Ok(fields[field_index])
+				end
+				field_index += 1
+			end
+		end
+		index += 1
+	end
+	return Result<String, String>::Err("time did not report maximum resident set size for " + command)
+end
+
+def record_file_size(
+		mut output: StringBuilder,
+		metric: String,
+		candidate: String,
+		path: String,
+	): Result<Boolean, String>
+	measurement := try measure_process("/usr/bin/stat", ["-f", "%z", path])
+	if measurement.status != 0
+		return Result<Boolean, String>::Err("stat " + path + ": " + measurement.stderr)
+	end
+	append_measurement(output, metric, candidate, 0, measurement.stdout.strip(), 0)
+	return Result<Boolean, String>::Ok(true)
+end
+
+def record_directory_size(
+		mut output: StringBuilder,
+		metric: String,
+		candidate: String,
+		path: String,
+	): Result<Boolean, String>
+	measurement := try measure_process("/usr/bin/du", ["-sk", path])
+	if measurement.status != 0
+		return Result<Boolean, String>::Err("du " + path + ": " + measurement.stderr)
+	end
+	fields := measurement.stdout.strip().split("\t")
+	if fields.size() != 2
+		return Result<Boolean, String>::Err("du returned an unexpected result for " + path)
+	end
+	append_measurement(output, metric, candidate, 0, (fields[0].to_i() * 1024).to_s(), 0)
+	return Result<Boolean, String>::Ok(true)
+end
+
+def strip_and_record(
+		mut output: StringBuilder,
+		candidate: String,
+		path: String,
+	): Result<Boolean, String>
+	stripped := path + ".stripped"
+	measurement := try measure_process("/usr/bin/strip", ["-x", "-o", stripped, path])
+	if measurement.status != 0
+		return Result<Boolean, String>::Err("strip " + path + ": " + measurement.stderr)
+	end
+	try record_file_size(output, "size-raw", candidate, path)
+	try record_file_size(output, "size-stripped", candidate, stripped)
+	return Result<Boolean, String>::Ok(true)
+end
+
+def measurement_succeeded(result: Result<Boolean, String>): Boolean
+	case result
+	when Result::Ok(_value)
+		return true
+	when Result::Err(error)
+		puts(error)
+		return false
+	end
+end
+
+def main()
+	arguments := argv()
+	if arguments.size() != 9
+		puts("usage: gate4-benchmark ROOT REFERENCE_TRB NATIVE_DRIVER QBE CC GO_ROOT WORKSPACE REPETITIONS OUTPUT")
+		return
+	end
+	root := arguments[0]
+	reference_trb := arguments[1]
+	driver := arguments[2]
+	qbe := arguments[3]
+	cc := arguments[4]
+	go_root := arguments[5]
+	workspace := arguments[6]
+	repetitions := arguments[7].to_i()
+	output_path := arguments[8]
+	case create_directory(workspace)
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		puts(error.operation + ": " + error.message)
+		return
+	end
+	compiler_path := root + "/compiler/gate4/src/compiler.trb"
+	compiler_source := case read_text(compiler_path)
+	when Result::Ok(source)
+		source
+	when Result::Err(error)
+		puts(error.operation + ": " + error.message)
+		return
+	end
+	b0_path := workspace + "/b0"
+	b1_path := workspace + "/b1"
+	b2_path := workspace + "/b2"
+	mut output := string_builder.new()
+	output.append("metric,case,candidate,iteration,value,status\n")
+	recovery_arguments := ["gate4-b0", reference_trb, compiler_path, qbe, cc, workspace, b0_path]
+	mut iteration := 0
+	mut recovery_repetitions := repetitions
+	if recovery_repetitions > 3
+		recovery_repetitions = 3
+	end
+	while iteration < recovery_repetitions
+		case measure_build(output, driver, recovery_arguments, "recovery", iteration, 5)
+		when Result::Ok(_value)
+		when Result::Err(error)
+			puts(error)
+			return
+		end
+		iteration += 1
+	end
+	b0_arguments := ["gate4-generation", b0_path, compiler_path, qbe, cc, workspace, "b1"]
+	b1_arguments := ["gate4-generation", b1_path, compiler_path, qbe, cc, workspace, "b2"]
+	b2_arguments := ["gate4-generation", b2_path, compiler_path, qbe, cc, workspace, "b3"]
+	case measure_build(output, driver, b0_arguments, "b0", 0, 3)
+	when Result::Ok(_value)
+	when Result::Err(error)
+		puts(error)
+		return
+	end
+	case measure_build(output, driver, b1_arguments, "b1", - 2, 3)
+	when Result::Ok(_value)
+	when Result::Err(error)
+		puts(error)
+		return
+	end
+	case measure_build(output, driver, b2_arguments, "b2", - 2, 3)
+	when Result::Ok(_value)
+	when Result::Err(error)
+		puts(error)
+		return
+	end
+	case measure_build(output, driver, b1_arguments, "b1", - 1, 3)
+	when Result::Ok(_value)
+	when Result::Err(error)
+		puts(error)
+		return
+	end
+	case measure_build(output, driver, b2_arguments, "b2", - 1, 3)
+	when Result::Ok(_value)
+	when Result::Err(error)
+		puts(error)
+		return
+	end
+	iteration = 0
+	while iteration < repetitions
+		if iteration % 2 == 0
+			case measure_build(output, driver, b1_arguments, "b1", iteration, 3)
+			when Result::Ok(_value)
+			when Result::Err(error)
+				puts(error)
+				return
+			end
+			case measure_build(output, driver, b2_arguments, "b2", iteration, 3)
+			when Result::Ok(_value)
+			when Result::Err(error)
+				puts(error)
+				return
+			end
+		else
+			case measure_build(output, driver, b2_arguments, "b2", iteration, 3)
+			when Result::Ok(_value)
+			when Result::Err(error)
+				puts(error)
+				return
+			end
+			case measure_build(output, driver, b1_arguments, "b1", iteration, 3)
+			when Result::Ok(_value)
+			when Result::Err(error)
+				puts(error)
+				return
+			end
+		end
+		iteration += 1
+	end
+	qbe1 := case read_text(workspace + "/b1.ssa")
+	when Result::Ok(source)
+		source
+	when Result::Err(error)
+		puts(error.operation + ": " + error.message)
+		return
+	end
+	qbe2 := case read_text(workspace + "/b2.ssa")
+	when Result::Ok(source)
+		source
+	when Result::Err(error)
+		puts(error.operation + ": " + error.message)
+		return
+	end
+	qbe3 := case read_text(workspace + "/b3.ssa")
+	when Result::Ok(source)
+		source
+	when Result::Err(error)
+		puts(error.operation + ": " + error.message)
+		return
+	end
+	if qbe1 != qbe2 || qbe2 != qbe3
+		puts("B1, B2, and B3 QBE differ")
+		return
+	end
+	build_rss_arguments := [b0_arguments, b1_arguments, b2_arguments]
+	compiler_paths := [b0_path, b1_path, b2_path]
+	candidates := ["b0", "b1", "b2"]
+	iteration = 0
+	while iteration < candidates.size()
+		build_rss := case measure_peak_rss(driver, build_rss_arguments[iteration])
+		when Result::Ok(value)
+			value
+		when Result::Err(error)
+			puts(error)
+			return
+		end
+		append_measurement(output, "build-peak-rss", candidates[iteration], 0, build_rss, 0)
+		compiler_rss := case measure_peak_rss(compiler_paths[iteration], [compiler_source, "emit-qbe"])
+		when Result::Ok(value)
+			value
+		when Result::Err(error)
+			puts(error)
+			return
+		end
+		append_measurement(output, "compiler-peak-rss", candidates[iteration], 0, compiler_rss, 0)
+		case strip_and_record(output, candidates[iteration], compiler_paths[iteration])
+		when Result::Ok(_value)
+		when Result::Err(error)
+			puts(error)
+			return
+		end
+		if !measurement_succeeded(
+				record_file_size(
+					output,
+					"emitted-qbe-size",
+					candidates[iteration],
+					workspace + "/b" + (iteration + 1).to_s() + ".ssa",
+				)
+			)
+			return
+		end
+		iteration += 1
+	end
+	if !measurement_succeeded(
+			record_file_size(output, "distribution-component-size", "native-compiler", b2_path + ".stripped")
+		)
+		return
+	end
+	if !measurement_succeeded(record_file_size(output, "distribution-component-size", "qbe", qbe))
+		return
+	end
+	if !measurement_succeeded(
+			record_file_size(output, "distribution-component-size", "reference-trb", reference_trb)
+		)
+		return
+	end
+	if !measurement_succeeded(record_directory_size(output, "distribution-component-size", "go-root", go_root))
+		return
+	end
+	case write_text(output_path, output.to_s())
+	when Result::Ok(_unit)
+		puts(output_path)
+	when Result::Err(error)
+		puts(error.operation + ": " + error.message)
+	end
+	return
+end

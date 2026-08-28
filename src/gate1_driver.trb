@@ -2,15 +2,117 @@ import { decode_gate1_snapshot } from gate1_snapshot
 import { build_gate1_executable } from gate1_toolchain
 import { decode_gate2_snapshot } from gate2_snapshot
 import { build_gate2_executable } from gate2_toolchain
-import { decode_gate3_snapshot } from gate3_snapshot
-import { build_gate3_executable, build_gate3_instrumented_executable } from gate3_toolchain
-import { write_text } from trb/std/filesystem
+import { decode_gate3_snapshot, decode_gate4_bootstrap_snapshot } from gate3_snapshot
+import {
+	build_gate3_executable,
+	build_gate3_instrumented_executable,
+	build_gate4_bootstrap_executable,
+} from gate3_toolchain
+import { build_gate4_generation } from gate4_toolchain
+import { read_text, write_text } from trb/std/filesystem
 import { argv, run } from trb/std/process
 import { Result } from trb/std/result
 import { Instant } from trb/std/time
 
 def _gate1_driver_usage(): String
-	return "usage: type-rb-native REFERENCE_TRB CONFIG QBE CC WORKSPACE OUTPUT\n       type-rb-native gate2 REFERENCE_TRB CONFIG QBE CC WORKSPACE OUTPUT\n       type-rb-native gate3 REFERENCE_TRB CONFIG QBE CC WORKSPACE OUTPUT\n       type-rb-native gate3-stats REFERENCE_TRB CONFIG QBE CC WORKSPACE OUTPUT"
+	return "usage: type-rb-native REFERENCE_TRB CONFIG QBE CC WORKSPACE OUTPUT\n       type-rb-native gate2 REFERENCE_TRB CONFIG QBE CC WORKSPACE OUTPUT\n       type-rb-native gate3 REFERENCE_TRB CONFIG QBE CC WORKSPACE OUTPUT\n       type-rb-native gate3-stats REFERENCE_TRB CONFIG QBE CC WORKSPACE OUTPUT\n       type-rb-native gate4-b0 REFERENCE_TRB COMPILER_SOURCE QBE CC WORKSPACE OUTPUT\n       type-rb-native gate4-generation SEED COMPILER_SOURCE QBE CC WORKSPACE GENERATION"
+end
+
+def _gate4_read_compiler_source(path: String): String?
+	case read_text(path)
+	when Result::Ok(source)
+		return source
+	when Result::Err(error)
+		puts("compiler-source: " + error.operation + ": " + error.message)
+		return nil
+	end
+end
+
+def _run_gate4_b0_driver(arguments: Array<String>)
+	compiler_source := _gate4_read_compiler_source(arguments[2])
+	if compiler_source == nil
+		return
+	end
+	standalone_path := arguments[5] + "/compiler.trb"
+	case write_text(standalone_path, compiler_source)
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		puts("compiler-source: " + error.operation + ": " + error.message)
+		return
+	end
+	snapshot_started := Instant.now()
+	snapshot_process := case run(
+			arguments[1],
+			["compiler", "bootstrap-snapshot", "--snapshot-version", "4", standalone_path],
+		)
+	when Result::Ok(result)
+		result
+	when Result::Err(error)
+		puts("snapshot: " + error.operation + ": " + error.message)
+		return
+	end
+	snapshot_seconds := Instant.now().duration_since(snapshot_started).total_seconds()
+	if !snapshot_process.success
+		puts("snapshot: reference compiler rejected the source")
+		puts(snapshot_process.stderr)
+		return
+	end
+	case write_text(arguments[5] + "/snapshot.json", snapshot_process.stdout)
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		puts("snapshot: " + error.operation + ": " + error.message)
+		return
+	end
+	decode_started := Instant.now()
+	native_module := case decode_gate4_bootstrap_snapshot(snapshot_process.stdout)
+	when Result::Ok(value)
+		value
+	when Result::Err(diagnostic)
+		puts("decode: " + diagnostic.code + " " + diagnostic.path + ": " + diagnostic.message)
+		return
+	end
+	decode_seconds := Instant.now().duration_since(decode_started).total_seconds()
+	case build_gate4_bootstrap_executable(
+			native_module,
+			arguments[3],
+			arguments[4],
+			arguments[5],
+			arguments[6],
+		)
+	when Result::Ok(report)
+		puts("gate4-phase,snapshot," + snapshot_seconds.to_s())
+		puts("gate4-phase,decode," + decode_seconds.to_s())
+		puts("gate4-phase,emit," + report.emit_seconds.to_s())
+		puts("gate4-phase,qbe," + report.qbe_seconds.to_s())
+		puts("gate4-phase,link," + report.link_seconds.to_s())
+	when Result::Err(error)
+		puts("build: " + error.phase + ": " + error.message)
+	end
+	return
+end
+
+def _run_gate4_generation_driver(arguments: Array<String>)
+	compiler_source := _gate4_read_compiler_source(arguments[2])
+	if compiler_source == nil
+		return
+	end
+	case build_gate4_generation(
+			arguments[1],
+			compiler_source,
+			arguments[3],
+			arguments[4],
+			arguments[5],
+			arguments[6],
+		)
+	when Result::Ok(report)
+		puts("gate4-phase,compiler," + report.compiler_seconds.to_s())
+		puts("gate4-phase,qbe," + report.qbe_seconds.to_s())
+		puts("gate4-phase,link," + report.link_seconds.to_s())
+	when Result::Err(error)
+		puts("build: " + error.phase + ": " + error.message)
+		puts(error.stderr)
+	end
+	return
 end
 
 def _run_gate3_driver(arguments: Array<String>, report_runtime: Boolean)
@@ -199,6 +301,14 @@ def main()
 		end
 		if arguments[0] == "gate3-stats"
 			_run_gate3_driver(arguments, true)
+			return
+		end
+		if arguments[0] == "gate4-b0"
+			_run_gate4_b0_driver(arguments)
+			return
+		end
+		if arguments[0] == "gate4-generation"
+			_run_gate4_generation_driver(arguments)
 			return
 		end
 	end
