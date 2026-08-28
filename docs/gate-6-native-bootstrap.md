@@ -81,6 +81,19 @@ size and SHA-256 must be identical, stripped compiler code must not grow from
 166,824 bytes, and any mismatch, leaked intermediate, unexpected process, or
 greater-than-2x regression stops the slice for diagnosis.
 
+The TypeRB-authored
+[`gate6c-benchmark`](../tools/gate6c-benchmark/README.md) accepts a prepared B1
+seed rather than invoking recovery. It constructs and verifies the chained
+fixed point before recording indexed warmups, alternating elapsed-time and RSS
+observations, executable/QBE hashes and sizes, seed provenance, and the exact
+process inventory. The complete source conformance corpus remains enforced by
+the permanent bootstrap integration test; the focused harness independently
+checks the full compiler source and executable chain used for measurement.
+Raw executable identity is measured on the same-basename `compiler` outputs.
+The stripped-code measurement uses equal-length `b1.stripped` through
+`b4.stripped` names, matching Gate 6B so ad-hoc signature identifier length is
+not counted as compiler-code growth.
+
 ## Deferred scope
 
 Gate 6C proves regeneration closure after a seed exists. It does not define how
