@@ -1,0 +1,694 @@
+import { Diagnostic } from diagnostic
+import {
+	ComparisonOperator,
+	FloatBinaryOperator,
+	Gate1Block,
+	Gate1Function,
+	Gate1Instruction,
+	Gate1Module,
+	Gate1Terminator,
+	IntegerBinaryOperator,
+	ScalarType,
+	verify_gate1_mir,
+} from gate1_mir
+import { SourceOrigin } from snapshot
+import { Result } from trb/std/result
+import trb/std/string_builder
+
+record QbeStaticData
+	symbol: String
+	value: String
+end
+
+def emit_qbe(native_module: Gate1Module): Result<String, Diagnostic>
+	try verify_gate1_mir(native_module)
+	static_data := _qbe_collect_static_data(native_module)
+	mut writer := string_builder.new()
+	_qbe_emit_static_data(static_data, writer)
+	_qbe_emit_runtime(writer)
+	mut function_index := 0
+	while function_index < native_module.functions.size()
+		_qbe_emit_function(native_module, native_module.functions[function_index], function_index, static_data, writer)
+		function_index += 1
+	end
+	_qbe_emit_entry(native_module, writer)
+	return Result<String, Diagnostic>::Ok(writer.to_s())
+end
+
+def _qbe_line(mut writer: StringBuilder, value: String)
+	writer.append(value)
+	writer.append("\n")
+	return
+end
+
+def _qbe_collect_static_data(native_module: Gate1Module): Array<QbeStaticData>
+	mut static_data: Array<QbeStaticData> := []
+	mut symbols: Hash<String, String> := {}
+	mut function_index := 0
+	while function_index < native_module.functions.size()
+		function := native_module.functions[function_index]
+		mut block_index := 0
+		while block_index < function.blocks.size()
+			block := function.blocks[block_index]
+			mut instruction_index := 0
+			while instruction_index < block.instructions.size()
+				case block.instructions[instruction_index]
+				when Gate1Instruction::WriteStatic(value, _origin)
+					if !symbols.key?(value)
+						symbol := "$trbn_data_" + static_data.size().to_s()
+						symbols[value] = symbol
+						static_data.push(QbeStaticData.new(symbol: symbol, value: value))
+					end
+				else
+				end
+				instruction_index += 1
+			end
+			block_index += 1
+		end
+		function_index += 1
+	end
+	return static_data
+end
+
+def _qbe_emit_static_data(static_data: Array<QbeStaticData>, mut writer: StringBuilder)
+	_qbe_line(writer, "data $trbn_arithmetic_error = { b 84 121 112 101 82 66 32 73 110 116 101 103 101 114 32 97 114 105 116 104 109 101 116 105 99 32 101 114 114 111 114 10 }")
+	mut index := 0
+	while index < static_data.size()
+		item := static_data[index]
+		bytes := item.value.to_bytes()
+		if bytes.size() == 0
+			_qbe_line(writer, "data " + item.symbol + " = { z 1 }")
+		else
+			mut values: Array<String> := []
+			mut byte_index := 0
+			while byte_index < bytes.size()
+				values.push(bytes.at(byte_index).to_s())
+				byte_index += 1
+			end
+			_qbe_line(writer, "data " + item.symbol + " = { b " + values.join(" ") + " }")
+		end
+		index += 1
+	end
+	_qbe_line(writer, "")
+	return
+end
+
+def _qbe_emit_runtime(mut writer: StringBuilder)
+	_qbe_line(writer, "function $trbn_arithmetic_fail() {")
+	_qbe_line(writer, "@start")
+	_qbe_line(writer, "\tcall $write(w 2, l $trbn_arithmetic_error, l 32)")
+	_qbe_line(writer, "\tcall $exit(w 70)")
+	_qbe_line(writer, "\thlt")
+	_qbe_line(writer, "}")
+	_qbe_line(writer, "")
+	_qbe_emit_checked_add(writer)
+	_qbe_emit_checked_subtract(writer)
+	_qbe_emit_checked_multiply(writer)
+	_qbe_emit_checked_divide(writer)
+	_qbe_emit_checked_remainder(writer)
+	return
+end
+
+def _qbe_emit_checked_add(mut writer: StringBuilder)
+	_qbe_line(writer, "function l $trbn_iadd(l %left, l %right) {")
+	_qbe_line(writer, "@start")
+	_qbe_line(writer, "\t%result =l add %left, %right")
+	_qbe_line(writer, "\t%too_high =w csgtl %result, 9007199254740991")
+	_qbe_line(writer, "\tjnz %too_high, @fail, @check_low")
+	_qbe_line(writer, "@check_low")
+	_qbe_line(writer, "\t%too_low =w csltl %result, -9007199254740991")
+	_qbe_line(writer, "\tjnz %too_low, @fail, @ok")
+	_qbe_line(writer, "@fail")
+	_qbe_line(writer, "\tcall $trbn_arithmetic_fail()")
+	_qbe_line(writer, "\thlt")
+	_qbe_line(writer, "@ok")
+	_qbe_line(writer, "\tret %result")
+	_qbe_line(writer, "}")
+	_qbe_line(writer, "")
+	return
+end
+
+def _qbe_emit_checked_subtract(mut writer: StringBuilder)
+	_qbe_line(writer, "function l $trbn_isub(l %left, l %right) {")
+	_qbe_line(writer, "@start")
+	_qbe_line(writer, "\t%result =l sub %left, %right")
+	_qbe_line(writer, "\t%too_high =w csgtl %result, 9007199254740991")
+	_qbe_line(writer, "\tjnz %too_high, @fail, @check_low")
+	_qbe_line(writer, "@check_low")
+	_qbe_line(writer, "\t%too_low =w csltl %result, -9007199254740991")
+	_qbe_line(writer, "\tjnz %too_low, @fail, @ok")
+	_qbe_line(writer, "@fail")
+	_qbe_line(writer, "\tcall $trbn_arithmetic_fail()")
+	_qbe_line(writer, "\thlt")
+	_qbe_line(writer, "@ok")
+	_qbe_line(writer, "\tret %result")
+	_qbe_line(writer, "}")
+	_qbe_line(writer, "")
+	return
+end
+
+def _qbe_emit_checked_multiply(mut writer: StringBuilder)
+	_qbe_line(writer, "function l $trbn_imul(l %left, l %right) {")
+	_qbe_line(writer, "@start")
+	_qbe_line(writer, "\t%left_zero =w ceql %left, 0")
+	_qbe_line(writer, "\tjnz %left_zero, @zero, @left_sign")
+	_qbe_line(writer, "@left_sign")
+	_qbe_line(writer, "\t%left_positive =w csgtl %left, 0")
+	_qbe_line(writer, "\tjnz %left_positive, @left_positive, @left_negative")
+	_qbe_line(writer, "@left_positive")
+	_qbe_line(writer, "\t%right_positive =w csgtl %right, 0")
+	_qbe_line(writer, "\tjnz %right_positive, @positive_positive, @positive_nonpositive")
+	_qbe_line(writer, "@positive_positive")
+	_qbe_line(writer, "\t%positive_limit =l div 9007199254740991, %right")
+	_qbe_line(writer, "\t%positive_overflow =w csgtl %left, %positive_limit")
+	_qbe_line(writer, "\tjnz %positive_overflow, @fail, @multiply")
+	_qbe_line(writer, "@positive_nonpositive")
+	_qbe_line(writer, "\t%right_zero =w ceql %right, 0")
+	_qbe_line(writer, "\tjnz %right_zero, @zero, @positive_negative")
+	_qbe_line(writer, "@positive_negative")
+	_qbe_line(writer, "\t%negative_limit =l div -9007199254740991, %left")
+	_qbe_line(writer, "\t%negative_overflow =w csltl %right, %negative_limit")
+	_qbe_line(writer, "\tjnz %negative_overflow, @fail, @multiply")
+	_qbe_line(writer, "@left_negative")
+	_qbe_line(writer, "\t%right_positive_two =w csgtl %right, 0")
+	_qbe_line(writer, "\tjnz %right_positive_two, @negative_positive, @negative_nonpositive")
+	_qbe_line(writer, "@negative_positive")
+	_qbe_line(writer, "\t%negative_limit_two =l div -9007199254740991, %right")
+	_qbe_line(writer, "\t%negative_overflow_two =w csltl %left, %negative_limit_two")
+	_qbe_line(writer, "\tjnz %negative_overflow_two, @fail, @multiply")
+	_qbe_line(writer, "@negative_nonpositive")
+	_qbe_line(writer, "\t%right_zero_two =w ceql %right, 0")
+	_qbe_line(writer, "\tjnz %right_zero_two, @zero, @negative_negative")
+	_qbe_line(writer, "@negative_negative")
+	_qbe_line(writer, "\t%positive_limit_two =l div 9007199254740991, %right")
+	_qbe_line(writer, "\t%positive_overflow_two =w csltl %left, %positive_limit_two")
+	_qbe_line(writer, "\tjnz %positive_overflow_two, @fail, @multiply")
+	_qbe_line(writer, "@multiply")
+	_qbe_line(writer, "\t%result =l mul %left, %right")
+	_qbe_line(writer, "\tret %result")
+	_qbe_line(writer, "@zero")
+	_qbe_line(writer, "\tret 0")
+	_qbe_line(writer, "@fail")
+	_qbe_line(writer, "\tcall $trbn_arithmetic_fail()")
+	_qbe_line(writer, "\thlt")
+	_qbe_line(writer, "}")
+	_qbe_line(writer, "")
+	return
+end
+
+def _qbe_emit_checked_divide(mut writer: StringBuilder)
+	_qbe_line(writer, "function l $trbn_idiv(l %left, l %right) {")
+	_qbe_line(writer, "@start")
+	_qbe_line(writer, "\t%zero =w ceql %right, 0")
+	_qbe_line(writer, "\tjnz %zero, @fail, @ok")
+	_qbe_line(writer, "@fail")
+	_qbe_line(writer, "\tcall $trbn_arithmetic_fail()")
+	_qbe_line(writer, "\thlt")
+	_qbe_line(writer, "@ok")
+	_qbe_line(writer, "\t%result =l div %left, %right")
+	_qbe_line(writer, "\tret %result")
+	_qbe_line(writer, "}")
+	_qbe_line(writer, "")
+	return
+end
+
+def _qbe_emit_checked_remainder(mut writer: StringBuilder)
+	_qbe_line(writer, "function l $trbn_irem(l %left, l %right) {")
+	_qbe_line(writer, "@start")
+	_qbe_line(writer, "\t%zero =w ceql %right, 0")
+	_qbe_line(writer, "\tjnz %zero, @fail, @ok")
+	_qbe_line(writer, "@fail")
+	_qbe_line(writer, "\tcall $trbn_arithmetic_fail()")
+	_qbe_line(writer, "\thlt")
+	_qbe_line(writer, "@ok")
+	_qbe_line(writer, "\t%result =l rem %left, %right")
+	_qbe_line(writer, "\tret %result")
+	_qbe_line(writer, "}")
+	_qbe_line(writer, "")
+	return
+end
+
+def _qbe_emit_function(
+		native_module: Gate1Module,
+		function: Gate1Function,
+		function_index: Integer,
+		static_data: Array<QbeStaticData>,
+		mut writer: StringBuilder,
+	)
+	values := _qbe_value_names(function)
+	slots := _qbe_slot_names(function)
+	mut parameters: Array<String> := []
+	mut parameter_index := 0
+	while parameter_index < function.parameters.size()
+		parameter := function.parameters[parameter_index]
+		parameters.push(_qbe_type(parameter.value_type) + " " + values.fetch(parameter.id))
+		parameter_index += 1
+	end
+	mut result_prefix := ""
+	if function.result_type != ScalarType::Void
+		result_prefix = _qbe_type(function.result_type) + " "
+	end
+	_qbe_line(writer, "function " + result_prefix + "$trbn_f" + function_index.to_s() + "(" + parameters.join(", ") + ") {")
+	entry_block_index := _qbe_block_index(function.blocks, function.entry)
+	_qbe_emit_block(native_module, function, entry_block_index, values, slots, static_data, writer)
+	mut block_index := 0
+	while block_index < function.blocks.size()
+		if block_index != entry_block_index
+			_qbe_emit_block(native_module, function, block_index, values, slots, static_data, writer)
+		end
+		block_index += 1
+	end
+	_qbe_line(writer, "}")
+	_qbe_line(writer, "")
+	return
+end
+
+def _qbe_emit_block(
+		native_module: Gate1Module,
+		function: Gate1Function,
+		block_index: Integer,
+		values: Hash<String, String>,
+		slots: Hash<String, String>,
+		static_data: Array<QbeStaticData>,
+		mut writer: StringBuilder,
+	)
+	block := function.blocks[block_index]
+	_qbe_line(writer, "@b" + block_index.to_s())
+	if block.id == function.entry
+		_qbe_emit_slots(function, slots, writer)
+	else
+		_qbe_emit_block_parameter_loads(block, values, slots, writer)
+	end
+	mut instruction_index := 0
+	while instruction_index < block.instructions.size()
+		_qbe_emit_instruction(
+			native_module,
+			block.instructions[instruction_index],
+			block_index,
+			instruction_index,
+			values,
+			static_data,
+			writer,
+		)
+		instruction_index += 1
+	end
+	_qbe_emit_terminator(native_module, function, block.terminator, block_index, values, slots, writer)
+	return
+end
+
+def _qbe_value_names(function: Gate1Function): Hash<String, String>
+	mut values: Hash<String, String> := {}
+	mut next_index := 0
+	mut parameter_index := 0
+	while parameter_index < function.parameters.size()
+		values[function.parameters[parameter_index].id] = "%v" + next_index.to_s()
+		next_index += 1
+		parameter_index += 1
+	end
+	mut block_index := 0
+	while block_index < function.blocks.size()
+		block := function.blocks[block_index]
+		parameter_index = 0
+		while parameter_index < block.parameters.size()
+			values[block.parameters[parameter_index].id] = "%v" + next_index.to_s()
+			next_index += 1
+			parameter_index += 1
+		end
+		mut instruction_index := 0
+		while instruction_index < block.instructions.size()
+			result := _qbe_instruction_result(block.instructions[instruction_index])
+			if result != nil
+				values[result] = "%v" + next_index.to_s()
+				next_index += 1
+			end
+			instruction_index += 1
+		end
+		block_index += 1
+	end
+	return values
+end
+
+def _qbe_instruction_result(instruction: Gate1Instruction): String?
+	case instruction
+	when Gate1Instruction::BooleanLiteral(result, _value, _origin)
+		return result
+	when Gate1Instruction::IntegerLiteral(result, _value, _origin)
+		return result
+	when Gate1Instruction::FloatLiteral(result, _value, _origin)
+		return result
+	when Gate1Instruction::IntegerBinary(result, _operator, _left, _right, _origin)
+		return result
+	when Gate1Instruction::FloatBinary(result, _operator, _left, _right, _origin)
+		return result
+	when Gate1Instruction::IntegerCompare(result, _operator, _left, _right, _origin)
+		return result
+	when Gate1Instruction::FloatCompare(result, _operator, _left, _right, _origin)
+		return result
+	when Gate1Instruction::BooleanNot(result, _value, _origin)
+		return result
+	when Gate1Instruction::Call(result, _function_id, _arguments, _origin)
+		return result
+	when Gate1Instruction::WriteStatic(_value, _origin)
+		return nil
+	end
+end
+
+def _qbe_slot_names(function: Gate1Function): Hash<String, String>
+	mut slots: Hash<String, String> := {}
+	mut next_index := 0
+	mut block_index := 0
+	while block_index < function.blocks.size()
+		block := function.blocks[block_index]
+		if block.id != function.entry
+			mut parameter_index := 0
+			while parameter_index < block.parameters.size()
+				slots[block.parameters[parameter_index].id] = "%slot" + next_index.to_s()
+				next_index += 1
+				parameter_index += 1
+			end
+		end
+		block_index += 1
+	end
+	return slots
+end
+
+def _qbe_emit_slots(function: Gate1Function, slots: Hash<String, String>, mut writer: StringBuilder)
+	mut block_index := 0
+	while block_index < function.blocks.size()
+		block := function.blocks[block_index]
+		if block.id != function.entry
+			mut parameter_index := 0
+			while parameter_index < block.parameters.size()
+				parameter := block.parameters[parameter_index]
+				mut size := "8"
+				mut allocation := "alloc8"
+				if parameter.value_type == ScalarType::Boolean
+					size = "4"
+					allocation = "alloc4"
+				end
+				_qbe_line(writer, "\t" + slots.fetch(parameter.id) + " =l " + allocation + " " + size)
+				parameter_index += 1
+			end
+		end
+		block_index += 1
+	end
+	return
+end
+
+def _qbe_emit_block_parameter_loads(
+		block: Gate1Block,
+		values: Hash<String, String>,
+		slots: Hash<String, String>,
+		mut writer: StringBuilder,
+	)
+	mut index := 0
+	while index < block.parameters.size()
+		parameter := block.parameters[index]
+		_qbe_line(writer,
+			"\t" + values.fetch(parameter.id) + " =" + _qbe_type(parameter.value_type) + " " +
+			_qbe_load(parameter.value_type) + " " + slots.fetch(parameter.id)
+		)
+		index += 1
+	end
+	return
+end
+
+def _qbe_emit_instruction(
+		native_module: Gate1Module,
+		instruction: Gate1Instruction,
+		block_index: Integer,
+		instruction_index: Integer,
+		values: Hash<String, String>,
+		static_data: Array<QbeStaticData>,
+		mut writer: StringBuilder,
+	)
+	case instruction
+	when Gate1Instruction::BooleanLiteral(result, value, origin)
+		_qbe_emit_origin(native_module, origin, writer)
+		mut literal := "0"
+		if value
+			literal = "1"
+		end
+		_qbe_line(writer, "\t" + values.fetch(result) + " =w copy " + literal)
+	when Gate1Instruction::IntegerLiteral(result, value, origin)
+		_qbe_emit_origin(native_module, origin, writer)
+		_qbe_line(writer, "\t" + values.fetch(result) + " =l copy " + value.to_s())
+	when Gate1Instruction::FloatLiteral(result, value, origin)
+		_qbe_emit_origin(native_module, origin, writer)
+		_qbe_line(writer, "\t" + values.fetch(result) + " =d copy d_" + value.to_s())
+	when Gate1Instruction::IntegerBinary(result, operator, left, right, origin)
+		_qbe_emit_origin(native_module, origin, writer)
+		_qbe_line(writer,
+			"\t" + values.fetch(result) + " =l call " + _qbe_integer_operator(operator) +
+			"(l " + values.fetch(left) + ", l " + values.fetch(right) + ")"
+		)
+	when Gate1Instruction::FloatBinary(result, operator, left, right, origin)
+		_qbe_emit_origin(native_module, origin, writer)
+		_qbe_line(writer,
+			"\t" + values.fetch(result) + " =d " + _qbe_float_operator(operator) + " " +
+			values.fetch(left) + ", " + values.fetch(right)
+		)
+	when Gate1Instruction::IntegerCompare(result, operator, left, right, origin)
+		_qbe_emit_origin(native_module, origin, writer)
+		_qbe_line(writer,
+			"\t" + values.fetch(result) + " =w " + _qbe_comparison(operator, "l") + " " +
+			values.fetch(left) + ", " + values.fetch(right)
+		)
+	when Gate1Instruction::FloatCompare(result, operator, left, right, origin)
+		_qbe_emit_origin(native_module, origin, writer)
+		_qbe_line(writer,
+			"\t" + values.fetch(result) + " =w " + _qbe_comparison(operator, "d") + " " +
+			values.fetch(left) + ", " + values.fetch(right)
+		)
+	when Gate1Instruction::BooleanNot(result, value, origin)
+		_qbe_emit_origin(native_module, origin, writer)
+		_qbe_line(writer, "\t" + values.fetch(result) + " =w ceqw " + values.fetch(value) + ", 0")
+	when Gate1Instruction::Call(result, function_id, arguments, origin)
+		_qbe_emit_origin(native_module, origin, writer)
+		callee_index := _qbe_function_index(native_module.functions, function_id)
+		callee := native_module.functions[callee_index]
+		mut call_arguments: Array<String> := []
+		mut argument_index := 0
+		while argument_index < arguments.size()
+			call_arguments.push(
+				_qbe_type(callee.parameters[argument_index].value_type) + " " + values.fetch(arguments[argument_index])
+			)
+			argument_index += 1
+		end
+		mut prefix := "\t"
+		if result != nil
+			prefix = "\t" + values.fetch(result) + " =" + _qbe_type(callee.result_type) + " "
+		end
+		_qbe_line(writer, prefix + "call $trbn_f" + callee_index.to_s() + "(" + call_arguments.join(", ") + ")")
+	when Gate1Instruction::WriteStatic(value, origin)
+		_qbe_emit_origin(native_module, origin, writer)
+		symbol := _qbe_static_symbol(static_data, value)
+		_qbe_line(writer,
+			"\t%io_" + block_index.to_s() + "_" + instruction_index.to_s() +
+			" =l call $write(w 1, l " + symbol + ", l " + value.to_bytes().size().to_s() + ")"
+		)
+	end
+	return
+end
+
+def _qbe_emit_terminator(
+		native_module: Gate1Module,
+		function: Gate1Function,
+		terminator: Gate1Terminator,
+		block_index: Integer,
+		values: Hash<String, String>,
+		slots: Hash<String, String>,
+		mut writer: StringBuilder,
+	)
+	case terminator
+	when Gate1Terminator::Jump(target, arguments, origin)
+		_qbe_emit_origin(native_module, origin, writer)
+		_qbe_emit_edge(function, target, arguments, values, slots, writer)
+		_qbe_line(writer, "\tjmp " + _qbe_block_label(function.blocks, target))
+	when Gate1Terminator::Branch(condition, when_true, true_arguments, when_false, false_arguments, origin)
+		_qbe_emit_origin(native_module, origin, writer)
+		true_edge := "@edge_" + block_index.to_s() + "_true"
+		false_edge := "@edge_" + block_index.to_s() + "_false"
+		_qbe_line(writer, "\tjnz " + values.fetch(condition) + ", " + true_edge + ", " + false_edge)
+		_qbe_line(writer, true_edge)
+		_qbe_emit_edge(function, when_true, true_arguments, values, slots, writer)
+		_qbe_line(writer, "\tjmp " + _qbe_block_label(function.blocks, when_true))
+		_qbe_line(writer, false_edge)
+		_qbe_emit_edge(function, when_false, false_arguments, values, slots, writer)
+		_qbe_line(writer, "\tjmp " + _qbe_block_label(function.blocks, when_false))
+	when Gate1Terminator::Return(value, origin)
+		_qbe_emit_origin(native_module, origin, writer)
+		if value == nil
+			_qbe_line(writer, "\tret")
+		else
+			_qbe_line(writer, "\tret " + values.fetch(value))
+		end
+	end
+	return
+end
+
+def _qbe_emit_edge(
+		function: Gate1Function,
+		target: String,
+		arguments: Array<String>,
+		values: Hash<String, String>,
+		slots: Hash<String, String>,
+		mut writer: StringBuilder,
+	)
+	block := _qbe_find_block(function.blocks, target)
+	mut index := 0
+	while index < arguments.size()
+		parameter := block.parameters[index]
+		_qbe_line(writer, "\t" + _qbe_store(parameter.value_type) + " " + values.fetch(arguments[index]) + ", " + slots.fetch(parameter.id))
+		index += 1
+	end
+	return
+end
+
+def _qbe_emit_entry(native_module: Gate1Module, mut writer: StringBuilder)
+	entry_index := _qbe_function_index(native_module.functions, native_module.entry_function)
+	_qbe_line(writer, "export function w $main() {")
+	_qbe_line(writer, "@start")
+	_qbe_line(writer, "\tcall $trbn_f" + entry_index.to_s() + "()")
+	_qbe_line(writer, "\tret 0")
+	_qbe_line(writer, "}")
+	return
+end
+
+def _qbe_emit_origin(native_module: Gate1Module, origin: SourceOrigin, mut writer: StringBuilder)
+	mut source_index := 0
+	while native_module.sources[source_index].id != origin.source_id
+		source_index += 1
+	end
+	_qbe_line(writer,
+		"\t# trb-origin source=" + source_index.to_s() + " start=" + origin.start_line.to_s() + ":" +
+		origin.start_column.to_s() + " end=" + origin.end_line.to_s() + ":" + origin.end_column.to_s()
+	)
+	return
+end
+
+def _qbe_integer_operator(operator: IntegerBinaryOperator): String
+	case operator
+	when IntegerBinaryOperator::Add
+		return "$trbn_iadd"
+	when IntegerBinaryOperator::Subtract
+		return "$trbn_isub"
+	when IntegerBinaryOperator::Multiply
+		return "$trbn_imul"
+	when IntegerBinaryOperator::Divide
+		return "$trbn_idiv"
+	when IntegerBinaryOperator::Remainder
+		return "$trbn_irem"
+	end
+end
+
+def _qbe_float_operator(operator: FloatBinaryOperator): String
+	case operator
+	when FloatBinaryOperator::Add
+		return "add"
+	when FloatBinaryOperator::Subtract
+		return "sub"
+	when FloatBinaryOperator::Multiply
+		return "mul"
+	when FloatBinaryOperator::Divide
+		return "div"
+	end
+end
+
+def _qbe_comparison(operator: ComparisonOperator, suffix: String): String
+	case operator
+	when ComparisonOperator::Equal
+		return "ceq" + suffix
+	when ComparisonOperator::NotEqual
+		return "cne" + suffix
+	when ComparisonOperator::LessThan
+		if suffix == "l"
+			return "csltl"
+		end
+		return "cltd"
+	when ComparisonOperator::LessThanOrEqual
+		if suffix == "l"
+			return "cslel"
+		end
+		return "cled"
+	when ComparisonOperator::GreaterThan
+		if suffix == "l"
+			return "csgtl"
+		end
+		return "cgtd"
+	when ComparisonOperator::GreaterThanOrEqual
+		if suffix == "l"
+			return "csgel"
+		end
+		return "cged"
+	end
+end
+
+def _qbe_type(value_type: ScalarType): String
+	case value_type
+	when ScalarType::Boolean
+		return "w"
+	when ScalarType::Integer
+		return "l"
+	when ScalarType::Float
+		return "d"
+	when ScalarType::Void
+		return ""
+	end
+end
+
+def _qbe_load(value_type: ScalarType): String
+	if value_type == ScalarType::Boolean
+		return "loadw"
+	end
+	if value_type == ScalarType::Float
+		return "loadd"
+	end
+	return "loadl"
+end
+
+def _qbe_store(value_type: ScalarType): String
+	if value_type == ScalarType::Boolean
+		return "storew"
+	end
+	if value_type == ScalarType::Float
+		return "stored"
+	end
+	return "storel"
+end
+
+def _qbe_function_index(functions: Array<Gate1Function>, id: String): Integer
+	mut index := 0
+	while functions[index].id != id
+		index += 1
+	end
+	return index
+end
+
+def _qbe_block_label(blocks: Array<Gate1Block>, id: String): String
+	return "@b" + _qbe_block_index(blocks, id).to_s()
+end
+
+def _qbe_block_index(blocks: Array<Gate1Block>, id: String): Integer
+	mut index := 0
+	while blocks[index].id != id
+		index += 1
+	end
+	return index
+end
+
+def _qbe_find_block(blocks: Array<Gate1Block>, id: String): Gate1Block
+	mut index := 0
+	while blocks[index].id != id
+		index += 1
+	end
+	return blocks[index]
+end
+
+def _qbe_static_symbol(static_data: Array<QbeStaticData>, value: String): String
+	mut index := 0
+	while static_data[index].value != value
+		index += 1
+	end
+	return static_data[index].symbol
+end
