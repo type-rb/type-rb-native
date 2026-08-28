@@ -61,20 +61,20 @@ Warm build time improves by 26.0% to 29.5%, stripped executable size improves
 by 96.85%, and observed build and runtime peak RSS remain below both Go paths.
 See the [Gate 2 result](results/2026-08-28-gate2-qbe-darwin-arm64/README.md).
 
-Gate 3 is active under the pre-registered scope in
+Gate 3 is complete under the pre-registered scope in
 [issue #13](https://github.com/type-rb/type-rb-native/issues/13). It adds
 managed UTF-8 Strings, mutable Arrays, closures, and cycle-reclaiming tracing
 collection before broader runtime and self-hosting work. The pinned version 4
 producer is now connected to a differential source corpus, and repeated builds
 reproduce the snapshot, decoded MIR structure, QBE IL, assembly, and executable.
-The registered source cycle now triggers automatic collection and satisfies the
-reclamation and live-set checks. The TypeRB-authored measurement harness records
-all registered build, runtime, size, RSS, phase, allocation, and collector
-metrics. Gate 3 remains open until its final raw measurements and dated report
-pass every continuation bound. These results do not select QBE for production
-or measure the final self-hosted compiler. The current path provides no
-production runtime, stable ABI, stable artifact format, or compatibility
-guarantee.
+The registered source cycle triggers three automatic collections and satisfies
+the reclamation and live-set checks. Warm builds improve by 13.0% to 22.9%,
+stripped executable size improves by 96.82% to 96.83%, every runtime remains
+within 21.1% of the stronger Go result, and observed runtime RSS is lower. See
+the [Gate 3 result](results/2026-08-28-gate3-qbe-darwin-arm64/README.md).
+These results do not select QBE for production or measure the final self-hosted
+compiler. The current path provides no production runtime, stable ABI, stable
+artifact format, or compatibility guarantee.
 
 ## Intended boundary
 

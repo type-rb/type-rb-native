@@ -7,13 +7,12 @@ defines the implementation boundary used to satisfy them.
 
 ## Implementation status
 
-The source-connected correctness and automatic-collection slices are complete. The pinned reference
-compiler produces version 4 snapshots for all four registered workloads and
-the two bounds-failure cases. The native decoder, verifier, exact-root runtime,
-QBE emitter, and linker path match the optimized Go executable in stdout,
-stderr, and exit status. Repeated runs reproduce byte-identical snapshots, QBE
-IL, assembly, and executables, while decoded MIR values compare structurally
-equal.
+Gate 3 is complete. The pinned reference compiler produces version 4 snapshots
+for all four registered workloads and the two bounds-failure cases. The native
+decoder, verifier, exact-root runtime, QBE emitter, and linker path match the
+optimized Go executable in stdout, stderr, and exit status. Repeated runs
+reproduce byte-identical snapshots, QBE IL, assembly, and executables, while
+decoded MIR values compare structurally equal.
 
 The QBE adapter uses one closure-call ABI for both capturing and zero-capture
 function bodies. Direct calls to a body that is also used as a closure supply a
@@ -26,8 +25,9 @@ bound. A TypeRB-authored benchmark harness records the build phases, executable
 sizes, peak RSS, steady-state runtimes, and collector statistics without
 changing source-visible behavior.
 
-Gate 3 remains open until the registered raw measurements and dated result
-report pass every continuation bound.
+All registered correctness, automatic-collection, size, build-time, runtime,
+and peak-RSS bounds pass in the
+[dated Darwin arm64 result](../results/2026-08-28-gate3-qbe-darwin-arm64/README.md).
 
 ## Reference producer pin
 
@@ -206,3 +206,23 @@ value and root slot, statically known small scalar closures are devirtualized
 under strict shape checks, and String literals plus literal-only concatenations
 use immutable static objects. Dynamic closure calls and String concatenation
 continue through the general runtime paths.
+
+## Exit evidence
+
+The recorded Darwin arm64 result passes every registered condition:
+
+- all source observations and deterministic failure diagnostics match the
+  optimized Go backend;
+- snapshots, decoded MIR structure, QBE IL, assembly, and executables reproduce
+  byte-for-byte;
+- the source cycle workload triggers three automatic collections, reclaims all
+  measured allocations by the final reporting collection, and finishes with a
+  zero-byte live set;
+- stripped executables are 96.82% to 96.83% smaller than the strongest
+  size-optimized Go baseline;
+- warm builds improve by 13.0% to 22.9%;
+- the worst runtime median is 21.1% slower, within the 25% bound; and
+- observed runtime peak RSS improves by 32.1% to 66.9%.
+
+Gate 3 passes. Work stops before Gate 4 for maintainer review; this checkpoint
+does not select a production backend or claim self-hosted performance.
