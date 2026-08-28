@@ -1,0 +1,79 @@
+import {
+	Gate4Compiler,
+	gate4_compiler_new,
+	gate4_has_diagnostic,
+	gate4_lex,
+	gate4_parse,
+} from compiler
+import { read_text } from trb/std/filesystem
+import { environment } from trb/std/process
+import { Result } from trb/std/result
+import { describe, expect, test } from trb/std/test
+
+def gate4_frontend_test_source(): String
+	return "record Pair\n\tleft: Integer\n\tright: Integer\nend\n\ndef add(left: Integer, right: Integer): Integer\n\treturn left + right\nend\n\ndef main()\n\tpair := Pair.new(left: 20, right: 22)\n\tmut values: Array<Integer> := []\n\tvalues.push(add(pair.left, pair.right))\n\tif values[0] == 42\n\t\tputs(\"ok\")\n\telse\n\t\tputs(\"bad\")\n\tend\n\treturn\nend\n"
+end
+
+describe("Gate 4 TypeRB frontend") do
+	test("lexes and parses the registered declaration and expression subset") do
+		source := gate4_frontend_test_source()
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse(state)).to_be_true()
+		expect(gate4_has_diagnostic(state)).to_be_false()
+		expect(state.record_count[0]).to_equal(1)
+		expect(state.record_names[0]).to_equal("Pair")
+		expect(state.field_count[0]).to_equal(2)
+		expect(state.field_names[0]).to_equal("left")
+		expect(state.field_names[1]).to_equal("right")
+		expect(state.function_count[0]).to_equal(2)
+		expect(state.function_names[0]).to_equal("add")
+		expect(state.function_names[1]).to_equal("main")
+		expect(state.function_result_types[0]).to_equal("Integer")
+		expect(state.function_result_types[1]).to_equal("Void")
+	end
+
+	test("rejects an unsupported source character deterministically") do
+		source := "def main()\n\t@\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_false()
+		expect(state.diagnostic_count[0]).to_equal(1)
+		expect(state.diagnostic_codes[0]).to_equal("TRBN4001")
+		expect(state.diagnostic_lines[0]).to_equal(2)
+		expect(state.diagnostic_messages[0]).to_equal("unsupported source character @")
+	end
+
+	test("rejects an unfinished function deterministically") do
+		source := "def main()\n\tputs(\"missing\")\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse(state)).to_be_false()
+		expect(state.diagnostic_codes[0]).to_equal("TRBN4002")
+		expect(state.diagnostic_messages[0]).to_equal("expected end")
+	end
+
+	test("parses the checked-in compiler source through its own syntax pass") do
+		root := environment("TYPE_RB_NATIVE_ROOT")
+		if root == nil
+			expect(true).to_be_true()
+		else
+			case read_text(root + "/compiler/gate4/src/compiler.trb")
+			when Result::Ok(source)
+				mut state := gate4_compiler_new(source.size() + 1)
+				expect(gate4_lex(state, source)).to_be_true()
+				if !gate4_parse(state)
+					puts(
+						state.diagnostic_codes[0] + ":" + state.diagnostic_lines[0].to_s() + ":" +
+						state.diagnostic_messages[0],
+					)
+				end
+				expect(gate4_has_diagnostic(state)).to_be_false()
+				expect(state.record_names[0]).to_equal("Gate4Compiler")
+				expect(state.function_count[0] > 20).to_be_true()
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+			end
+		end
+	end
+end
