@@ -106,14 +106,17 @@ differ by 0.14%, and stripped size grows by 0.16%. See the
 [Gate 6A file entry](docs/gate-6-file-cli.md) and
 [recorded result](results/2026-08-29-gate6a-file-entry-darwin-arm64/README.md).
 
-Gate 6B is active under the pre-registered scope in
-[issue #39](https://github.com/type-rb/type-rb-native/issues/39). Its candidate
-single-file `build` entry owns QBE emission, invokes explicitly supplied QBE
-and C toolchain paths directly without a shell, atomically publishes the
-requested executable, and cleans every intermediate. The implementation must
-still pass its focused measurements and process inventory before Gate 6B
-closes. See the
-[Gate 6B single-file build](docs/gate-6-single-file-build.md).
+Gate 6B is complete under the pre-registered scope in
+[issue #39](https://github.com/type-rb/type-rb-native/issues/39). Its
+single-file `build` entry owns QBE emission, directly invokes explicitly
+supplied QBE and C toolchain paths without a shell, atomically publishes the
+requested executable, and cleans every intermediate. Native median build time
+is only 1.41% higher for B1 and 3.13% higher for B2 than the external recipe;
+median RSS is 0.63% and 0.27% higher; B1/B2 time and RSS converge within 0.42%;
+and all four application outputs are byte-identical. The stripped compiler
+grows by 11.38%, within its 15% bound. See the
+[Gate 6B single-file build](docs/gate-6-single-file-build.md) and
+[recorded result](results/2026-08-29-gate6b-single-file-build-darwin-arm64/README.md).
 
 Multi-module applications, project discovery, production runtime integration,
 package/native-library boundaries, incremental builds, toolchain discovery,
@@ -222,6 +225,7 @@ repository.
 - [Gate 6A file-oriented compiler entry](docs/gate-6-file-cli.md)
 - [Gate 6A file-entry Darwin arm64 result](results/2026-08-29-gate6a-file-entry-darwin-arm64/README.md)
 - [Gate 6B Native single-file build](docs/gate-6-single-file-build.md)
+- [Gate 6B Native single-file build Darwin arm64 result](results/2026-08-29-gate6b-single-file-build-darwin-arm64/README.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
 - [Decision 0003: Gate 1 QBE and Darwin arm64 profile](docs/decisions/0003-gate-1-qbe-target.md)

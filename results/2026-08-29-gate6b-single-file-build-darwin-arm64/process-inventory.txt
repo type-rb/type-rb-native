@@ -1,0 +1,671 @@
+Gate 6B Native-owned single-file build process inventory
+
+measured command root:
+  measurement controller starts one B1 Native compiler process
+ordinary semantic application-build graph:
+  B1 Native compiler -> explicitly supplied QBE
+  B1 Native compiler -> explicitly supplied CC -> assembler/linker
+  B1 reads source, emits QBE, waits for children, publishes output, and cleans intermediates
+not part of the ordinary semantic graph:
+  Go, reference trb, Native driver, benchmark harness, shell, hidden source-content input
+recovery and fixed-point preparation only:
+  reference trb -> B0; B0 -> B1; B1 -> B2; B2 -> B3
+comparison baseline only:
+  TypeRB benchmark harness -> B1 emit-qbe -> QBE -> CC
+
+pinned TypeRB revision: fa9e0503cc681bcaa691f6f11d2f1e19ca8e6453
+
+## TypeRB Native revision
+command: /usr/bin/git -C /Users/fujita-h/trb/type-rb-native rev-parse HEAD
+status: 0
+stdout:
+1038cfe497a96d9d282db55a54d9eea6509f7868
+
+## operating system
+command: /usr/bin/sw_vers
+status: 0
+stdout:
+ProductName:		macOS
+ProductVersion:		26.6.2
+BuildVersion:		25G83
+
+## kernel and architecture
+command: /usr/bin/uname -a
+status: 0
+stdout:
+Darwin WP-0066 25.6.0 Darwin Kernel Version 25.6.0: Fri Jul 31 19:18:48 PDT 2026; root:xnu-12377.161.14~5/RELEASE_ARM64_T6020 arm64
+
+## processor
+command: /usr/sbin/sysctl -n machdep.cpu.brand_string
+status: 0
+stdout:
+Apple M2 Pro
+
+## physical memory
+command: /usr/sbin/sysctl -n hw.memsize
+status: 0
+stdout:
+34359738368
+
+## reference compiler version
+command: /tmp/type-rb-native-gate5-tools/trb-fa9e050 --version
+status: 0
+stdout:
+0.3.49-dev
+
+## Go version
+command: /opt/homebrew/bin/go version
+status: 0
+stdout:
+go version go1.27.0 darwin/arm64
+
+## C toolchain version
+command: /usr/bin/cc --version
+status: 0
+stdout:
+Apple clang version 21.0.0 (clang-2100.1.1.101)
+Target: arm64-apple-darwin25.6.0
+Thread model: posix
+InstalledDir: /Library/Developer/CommandLineTools/usr/bin
+
+## QBE probe
+command: /tmp/qbe-1.3/qbe -h
+status: 0
+stdout:
+/tmp/qbe-1.3/qbe [OPTIONS] {file.ssa, -}
+	-h          prints this help
+	-o file     output to file
+	-t <target> generate for a target among:
+	            amd64_sysv, amd64_apple, amd64_win, arm64, arm64_apple (default), rv64
+	-d <flags>  dump debug information
+
+## artifact formats
+command: /usr/bin/file /tmp/type-rb-native-gate6b-tools/driver-1038cfe /tmp/type-rb-native-gate6b-tools/benchmark-1038cfe /tmp/type-rb-native-gate5-tools/trb-fa9e050 /tmp/type-rb-native-gate6b-final.IC8hf7/workspace/b1 /tmp/type-rb-native-gate6b-final.IC8hf7/workspace/b2 /tmp/qbe-1.3/qbe /tmp/type-rb-native-gate6b-final.IC8hf7/workspace/canonical/compiler
+status: 0
+stdout:
+/tmp/type-rb-native-gate6b-tools/driver-1038cfe:                      Mach-O 64-bit executable arm64
+/tmp/type-rb-native-gate6b-tools/benchmark-1038cfe:                   Mach-O 64-bit executable arm64
+/tmp/type-rb-native-gate5-tools/trb-fa9e050:                          Mach-O 64-bit executable arm64
+/tmp/type-rb-native-gate6b-final.IC8hf7/workspace/b1:                 Mach-O 64-bit executable arm64
+/tmp/type-rb-native-gate6b-final.IC8hf7/workspace/b2:                 Mach-O 64-bit executable arm64
+/tmp/qbe-1.3/qbe:                                                     Mach-O 64-bit executable arm64
+/tmp/type-rb-native-gate6b-final.IC8hf7/workspace/canonical/compiler: Mach-O 64-bit executable arm64
+
+## B1 ordinary Native-owned build
+command: /tmp/type-rb-native-gate6b-final.IC8hf7/workspace/b1 build /Users/fujita-h/trb/type-rb-native/compiler/gate4/src/compiler.trb --output /tmp/type-rb-native-gate6b-final.IC8hf7/workspace/inventory-native/compiler --qbe /tmp/qbe-1.3/qbe --cc /usr/bin/cc
+status: 0
+stdout-bytes: 0
+stderr-bytes: 0
+expected-output: true
+
+## built compiler source check
+command: /tmp/type-rb-native-gate6b-final.IC8hf7/workspace/inventory-native/compiler check /Users/fujita-h/trb/type-rb-native/compiler/gate4/src/compiler.trb
+status: 0
+stdout-bytes: 3
+stderr-bytes: 0
+expected-output: true
+
+## external recipe baseline
+command: /tmp/type-rb-native-gate6b-tools/benchmark-1038cfe external-build /tmp/type-rb-native-gate6b-final.IC8hf7/workspace/b1 /Users/fujita-h/trb/type-rb-native/compiler/gate4/src/compiler.trb /tmp/type-rb-native-gate6b-final.IC8hf7/workspace/external-b1/compiler /tmp/qbe-1.3/qbe /usr/bin/cc
+status: 0
+stdout-bytes: 0
+stderr-bytes: 0
+expected-output: true
+
+## B1 Native undefined symbols
+command: /usr/bin/nm -u /tmp/type-rb-native-gate6b-final.IC8hf7/workspace/b1
+status: 0
+stdout:
+_calloc
+_close
+_dup
+_dup2
+_execv
+_exit
+_fclose
+_fileno
+_fopen
+_fork
+_fread
+_fseek
+_ftell
+_memcmp
+_memcpy
+_mkdtemp
+_realloc
+_rename
+_rmdir
+_strcmp
+_strlen
+_strrchr
+_unlink
+_waitpid
+_write
+
+## QBE undefined symbols
+command: /usr/bin/nm -u /tmp/qbe-1.3/qbe
+status: 0
+stdout:
+___assert_rtn
+___memcpy_chk
+___memmove_chk
+___memset_chk
+___sprintf_chk
+___stack_chk_fail
+___stack_chk_guard
+___stderrp
+___stdinp
+___stdoutp
+___strcpy_chk
+___vsnprintf_chk
+_abort
+_calloc
+_exit
+_fclose
+_fgetc
+_fopen
+_fprintf
+_fputc
+_fputs
+_free
+_fscanf
+_getopt
+_isalpha
+_isblank
+_isdigit
+_memcpy
+_memset
+_optarg
+_optind
+_puts
+_qsort
+_strcmp
+_strlen
+_toupper
+_ungetc
+_vfprintf
+
+## CC assembler and linker expansion
+command: /usr/bin/cc -### /tmp/type-rb-native-gate6b-final.IC8hf7/workspace/external-b1/compiler.s -Wl,-dead_strip -o /tmp/type-rb-native-gate6b-final.IC8hf7/workspace/inventory-cc-output
+status: 0
+stderr:
+Apple clang version 21.0.0 (clang-2100.1.1.101)
+Target: arm64-apple-darwin25.6.0
+Thread model: posix
+InstalledDir: /Library/Developer/CommandLineTools/usr/bin
+ "/Library/Developer/CommandLineTools/usr/bin/clang" "-cc1" "-triple" "arm64-apple-macosx26.0.0" "-Wundef-prefix=TARGET_OS_" "-Wdeprecated-objc-isa-usage" "-Werror=deprecated-objc-isa-usage" "-Werror=implicit-function-declaration" "-E" "-dumpdir" "/tmp/type-rb-native-gate6b-final.IC8hf7/workspace/inventory-cc-output-" "-disable-free" "-clear-ast-before-backend" "-disable-llvm-verifier" "-discard-value-names" "-main-file-name" "compiler.s" "-mrelocation-model" "pic" "-pic-level" "2" "-mframe-pointer=non-leaf" "-fno-strict-return" "-ffp-contract=on" "-fno-rounding-math" "-funwind-tables=1" "-fobjc-msgsend-selector-stubs" "-fno-sized-deallocation" "-target-sdk-version=26.5" "-fvisibility-inlines-hidden-static-local-var" "-fno-modulemap-allow-subdirectory-search" "-fdefine-target-os-macros" "-fno-assume-unique-vtables" "-fno-modulemap-allow-subdirectory-search" "-enable-tlsdesc" "-target-cpu" "apple-m1" "-target-feature" "+v8.5a" "-target-feature" "+aes" "-target-feature" "+altnzcv" "-target-feature" "+ccdp" "-target-feature" "+ccpp" "-target-feature" "+complxnum" "-target-feature" "+crc" "-target-feature" "+dotprod" "-target-feature" "+flagm" "-target-feature" "+fp-armv8" "-target-feature" "+fp16fml" "-target-feature" "+fptoint" "-target-feature" "+fullfp16" "-target-feature" "+jsconv" "-target-feature" "+lse" "-target-feature" "+neon" "-target-feature" "+pauth" "-target-feature" "+perfmon" "-target-feature" "+predres" "-target-feature" "+ras" "-target-feature" "+rcpc" "-target-feature" "+rdm" "-target-feature" "+sb" "-target-feature" "+sha2" "-target-feature" "+sha3" "-target-feature" "+specrestrict" "-target-feature" "+ssbs" "-target-abi" "darwinpcs" "-debugger-tuning=lldb" "-fdebug-compilation-dir=/Users/fujita-h/trb/type-rb-native" "-target-linker-version" "1267" "-fcoverage-compilation-dir=/Users/fujita-h/trb/type-rb-native" "-resource-dir" "/Library/Developer/CommandLineTools/usr/lib/clang/21" "-isysroot" "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk" "-I/usr/local/include" "-internal-isystem" "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/local/include" "-internal-isystem" "/Library/Developer/CommandLineTools/usr/lib/clang/21/include" "-internal-externc-isystem" "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include" "-internal-externc-isystem" "/Library/Developer/CommandLineTools/usr/include" "-internal-iframework" "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks" "-internal-iframework" "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/SubFrameworks" "-internal-iframework" "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/Library/Frameworks" "-Wno-elaborated-enum-base" "-ferror-limit" "19" "-stack-protector" "1" "-fstack-check" "-mdarwin-stkchk-strong-link" "-fblocks" "-fencode-extended-block-signature" "-fregister-global-dtors-with-atexit" "-fgnuc-version=4.2.1" "-fskip-odr-check-in-gmf" "-fmax-type-align=16" "-fcommon" "-clang-vendor-feature=+disableNonDependentMemberExprInCurrentInstantiation" "-fno-odr-hash-protocols" "-clang-vendor-feature=+enableAggressiveVLAFolding" "-clang-vendor-feature=+revert09abecef7bbf" "-clang-vendor-feature=+thisNoAlignAttr" "-clang-vendor-feature=+thisNoNullAttr" "-clang-vendor-feature=+disableAtImportPrivateFrameworkInImplementationError" "-Wno-error=allocator-wrappers" "-fdwarf2-cfi-asm" "-o" "/var/folders/8n/35jgk3ws0bd7y1b_7fy1l4040000gp/T/compiler-2f0863.s" "-x" "assembler-with-cpp" "/tmp/type-rb-native-gate6b-final.IC8hf7/workspace/external-b1/compiler.s"
+ "/Library/Developer/CommandLineTools/usr/bin/clang" "-cc1as" "-triple" "arm64-apple-macosx26.0.0" "-target-sdk-version=26.5" "-filetype" "obj" "-main-file-name" "compiler.s" "-target-cpu" "apple-m1" "-target-feature" "+v8.5a" "-target-feature" "+aes" "-target-feature" "+altnzcv" "-target-feature" "+ccdp" "-target-feature" "+ccpp" "-target-feature" "+complxnum" "-target-feature" "+crc" "-target-feature" "+dotprod" "-target-feature" "+flagm" "-target-feature" "+fp-armv8" "-target-feature" "+fp16fml" "-target-feature" "+fptoint" "-target-feature" "+fullfp16" "-target-feature" "+jsconv" "-target-feature" "+lse" "-target-feature" "+neon" "-target-feature" "+pauth" "-target-feature" "+perfmon" "-target-feature" "+predres" "-target-feature" "+ras" "-target-feature" "+rcpc" "-target-feature" "+rdm" "-target-feature" "+sb" "-target-feature" "+sha2" "-target-feature" "+sha3" "-target-feature" "+specrestrict" "-target-feature" "+ssbs" "-fdebug-compilation-dir=/Users/fujita-h/trb/type-rb-native" "-dwarf-debug-producer" "Apple clang version 21.0.0 (clang-2100.1.1.101)" "-dwarf-version=5" "-mrelocation-model" "pic" "-o" "/var/folders/8n/35jgk3ws0bd7y1b_7fy1l4040000gp/T/compiler-5e3498.o" "/var/folders/8n/35jgk3ws0bd7y1b_7fy1l4040000gp/T/compiler-2f0863.s"
+ "/Library/Developer/CommandLineTools/usr/bin/ld" "-demangle" "-lto_library" "/Library/Developer/CommandLineTools/usr/lib/libLTO.dylib" "-no_deduplicate" "-dynamic" "-arch" "arm64" "-platform_version" "macos" "26.0.0" "26.5" "-syslibroot" "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk" "-mllvm" "-enable-linkonceodr-outlining" "-o" "/tmp/type-rb-native-gate6b-final.IC8hf7/workspace/inventory-cc-output" "-L." "-L/opt/homebrew/opt/zstd/lib/" "-L/usr/local/lib" "/var/folders/8n/35jgk3ws0bd7y1b_7fy1l4040000gp/T/compiler-5e3498.o" "-dead_strip" "-lSystem" "/Library/Developer/CommandLineTools/usr/lib/clang/21/lib/darwin/libclang_rt.osx.a"
+
+## B1 Native dynamic libraries
+command: /usr/bin/otool -L /tmp/type-rb-native-gate6b-final.IC8hf7/workspace/b1
+status: 0
+stdout:
+/tmp/type-rb-native-gate6b-final.IC8hf7/workspace/b1:
+	/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1356.0.0)
+
+## built compiler dynamic libraries
+command: /usr/bin/otool -L /tmp/type-rb-native-gate6b-final.IC8hf7/workspace/inventory-native/compiler
+status: 0
+stdout:
+/tmp/type-rb-native-gate6b-final.IC8hf7/workspace/inventory-native/compiler:
+	/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1356.0.0)
+
+## B1 Native Go metadata probe
+command: /opt/homebrew/bin/go version -m /tmp/type-rb-native-gate6b-final.IC8hf7/workspace/b1
+status: 1
+stderr:
+/tmp/type-rb-native-gate6b-final.IC8hf7/workspace/b1: could not read Go build info from /tmp/type-rb-native-gate6b-final.IC8hf7/workspace/b1: not a Go executable
+
+## built compiler Go metadata probe
+command: /opt/homebrew/bin/go version -m /tmp/type-rb-native-gate6b-final.IC8hf7/workspace/inventory-native/compiler
+status: 1
+stderr:
+/tmp/type-rb-native-gate6b-final.IC8hf7/workspace/inventory-native/compiler: could not read Go build info from /tmp/type-rb-native-gate6b-final.IC8hf7/workspace/inventory-native/compiler: not a Go executable
+
+## built compiler code signature
+command: /usr/bin/codesign -dvv /tmp/type-rb-native-gate6b-final.IC8hf7/workspace/inventory-native/compiler
+status: 0
+stderr:
+Executable=/private/tmp/type-rb-native-gate6b-final.IC8hf7/workspace/inventory-native/compiler
+Identifier=compiler
+Format=Mach-O thin (arm64)
+CodeDirectory v=20400 size=1665 flags=0x20002(adhoc,linker-signed) hashes=49+0 location=embedded
+Signature=adhoc
+Info.plist=not bound
+TeamIdentifier=not set
+Sealed Resources=none
+Internal requirements=none
+
+## built compiler Mach-O load commands
+command: /usr/bin/otool -l /tmp/type-rb-native-gate6b-final.IC8hf7/workspace/inventory-native/compiler
+status: 0
+stdout:
+/tmp/type-rb-native-gate6b-final.IC8hf7/workspace/inventory-native/compiler:
+Load command 0
+      cmd LC_SEGMENT_64
+  cmdsize 72
+  segname __PAGEZERO
+   vmaddr 0x0000000000000000
+   vmsize 0x0000000100000000
+  fileoff 0
+ filesize 0
+  maxprot 0x00000000
+ initprot 0x00000000
+   nsects 0
+    flags 0x0
+Load command 1
+      cmd LC_SEGMENT_64
+  cmdsize 232
+  segname __TEXT
+   vmaddr 0x0000000100000000
+   vmsize 0x0000000000018000
+  fileoff 0
+ filesize 98304
+  maxprot 0x00000005
+ initprot 0x00000005
+   nsects 2
+    flags 0x0
+Section
+  sectname __text
+   segname __TEXT
+      addr 0x00000001000004a8
+      size 0x00000000000160dc
+    offset 1192
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x80000400
+ reserved1 0
+ reserved2 0
+Section
+  sectname __stubs
+   segname __TEXT
+      addr 0x0000000100016584
+      size 0x000000000000012c
+    offset 91524
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x80000408
+ reserved1 0 (index into indirect symbol table)
+ reserved2 12 (size of stubs)
+Load command 2
+      cmd LC_SEGMENT_64
+  cmdsize 152
+  segname __DATA_CONST
+   vmaddr 0x0000000100018000
+   vmsize 0x0000000000004000
+  fileoff 98304
+ filesize 16384
+  maxprot 0x00000003
+ initprot 0x00000003
+   nsects 1
+    flags 0x10
+Section
+  sectname __got
+   segname __DATA_CONST
+      addr 0x0000000100018000
+      size 0x00000000000000c8
+    offset 98304
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000006
+ reserved1 25 (index into indirect symbol table)
+ reserved2 0
+Load command 3
+      cmd LC_SEGMENT_64
+  cmdsize 232
+  segname __DATA
+   vmaddr 0x000000010001c000
+   vmsize 0x000000000000c000
+  fileoff 114688
+ filesize 49152
+  maxprot 0x00000003
+ initprot 0x00000003
+   nsects 2
+    flags 0x0
+Section
+  sectname __data
+   segname __DATA
+      addr 0x000000010001c000
+      size 0x0000000000009c10
+    offset 114688
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __bss
+   segname __DATA
+      addr 0x0000000100025c10
+      size 0x0000000000000800
+    offset 0
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000001
+ reserved1 0
+ reserved2 0
+Load command 4
+      cmd LC_SEGMENT_64
+  cmdsize 72
+  segname __LINKEDIT
+   vmaddr 0x0000000100028000
+   vmsize 0x000000000000c000
+  fileoff 163840
+ filesize 38248
+  maxprot 0x00000001
+ initprot 0x00000001
+   nsects 0
+    flags 0x0
+Load command 5
+      cmd LC_DYLD_CHAINED_FIXUPS
+  cmdsize 16
+  dataoff 163840
+ datasize 368
+Load command 6
+      cmd LC_DYLD_EXPORTS_TRIE
+  cmdsize 16
+  dataoff 164208
+ datasize 48
+Load command 7
+     cmd LC_SYMTAB
+ cmdsize 24
+  symoff 164512
+   nsyms 1408
+  stroff 187240
+ strsize 13160
+Load command 8
+            cmd LC_DYSYMTAB
+        cmdsize 80
+      ilocalsym 0
+      nlocalsym 1381
+     iextdefsym 1381
+     nextdefsym 2
+      iundefsym 1383
+      nundefsym 25
+         tocoff 0
+           ntoc 0
+      modtaboff 0
+        nmodtab 0
+   extrefsymoff 0
+    nextrefsyms 0
+ indirectsymoff 187040
+  nindirectsyms 50
+      extreloff 0
+        nextrel 0
+      locreloff 0
+        nlocrel 0
+Load command 9
+          cmd LC_LOAD_DYLINKER
+      cmdsize 32
+         name /usr/lib/dyld (offset 12)
+Load command 10
+     cmd LC_UUID
+ cmdsize 24
+    uuid D1DF8E6F-0667-33B3-B015-4645D6566D26
+Load command 11
+      cmd LC_BUILD_VERSION
+  cmdsize 32
+ platform 1
+    minos 26.0
+      sdk 26.5
+   ntools 1
+     tool 3
+  version 1267.0
+Load command 12
+      cmd LC_SOURCE_VERSION
+  cmdsize 16
+  version 0.0
+Load command 13
+       cmd LC_MAIN
+   cmdsize 24
+  entryoff 89788
+ stacksize 0
+Load command 14
+          cmd LC_LOAD_DYLIB
+      cmdsize 56
+         name /usr/lib/libSystem.B.dylib (offset 24)
+   time stamp 2 Thu Jan  1 09:00:02 1970
+      current version 1356.0.0
+compatibility version 1.0.0
+Load command 15
+      cmd LC_FUNCTION_STARTS
+  cmdsize 16
+  dataoff 164256
+ datasize 256
+Load command 16
+      cmd LC_DATA_IN_CODE
+  cmdsize 16
+  dataoff 164512
+ datasize 0
+Load command 17
+      cmd LC_CODE_SIGNATURE
+  cmdsize 16
+  dataoff 200400
+ datasize 1688
+
+## normalized Native compiler Mach-O load commands
+command: /usr/bin/otool -l /tmp/type-rb-native-gate6b-final.IC8hf7/workspace/normalized/b1/compiler
+status: 0
+stdout:
+/tmp/type-rb-native-gate6b-final.IC8hf7/workspace/normalized/b1/compiler:
+Load command 0
+      cmd LC_SEGMENT_64
+  cmdsize 72
+  segname __PAGEZERO
+   vmaddr 0x0000000000000000
+   vmsize 0x0000000100000000
+  fileoff 0
+ filesize 0
+  maxprot 0x00000000
+ initprot 0x00000000
+   nsects 0
+    flags 0x0
+Load command 1
+      cmd LC_SEGMENT_64
+  cmdsize 232
+  segname __TEXT
+   vmaddr 0x0000000100000000
+   vmsize 0x0000000000018000
+  fileoff 0
+ filesize 98304
+  maxprot 0x00000005
+ initprot 0x00000005
+   nsects 2
+    flags 0x0
+Section
+  sectname __text
+   segname __TEXT
+      addr 0x0000000100000490
+      size 0x00000000000160dc
+    offset 1168
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x80000400
+ reserved1 0
+ reserved2 0
+Section
+  sectname __stubs
+   segname __TEXT
+      addr 0x000000010001656c
+      size 0x000000000000012c
+    offset 91500
+     align 2^2 (4)
+    reloff 0
+    nreloc 0
+     flags 0x80000408
+ reserved1 0 (index into indirect symbol table)
+ reserved2 12 (size of stubs)
+Load command 2
+      cmd LC_SEGMENT_64
+  cmdsize 152
+  segname __DATA_CONST
+   vmaddr 0x0000000100018000
+   vmsize 0x0000000000004000
+  fileoff 98304
+ filesize 16384
+  maxprot 0x00000003
+ initprot 0x00000003
+   nsects 1
+    flags 0x10
+Section
+  sectname __got
+   segname __DATA_CONST
+      addr 0x0000000100018000
+      size 0x00000000000000c8
+    offset 98304
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000006
+ reserved1 25 (index into indirect symbol table)
+ reserved2 0
+Load command 3
+      cmd LC_SEGMENT_64
+  cmdsize 232
+  segname __DATA
+   vmaddr 0x000000010001c000
+   vmsize 0x000000000000c000
+  fileoff 114688
+ filesize 49152
+  maxprot 0x00000003
+ initprot 0x00000003
+   nsects 2
+    flags 0x0
+Section
+  sectname __data
+   segname __DATA
+      addr 0x000000010001c000
+      size 0x0000000000009c10
+    offset 114688
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000000
+ reserved1 0
+ reserved2 0
+Section
+  sectname __bss
+   segname __DATA
+      addr 0x0000000100025c10
+      size 0x0000000000000800
+    offset 0
+     align 2^3 (8)
+    reloff 0
+    nreloc 0
+     flags 0x00000001
+ reserved1 0
+ reserved2 0
+Load command 4
+      cmd LC_SEGMENT_64
+  cmdsize 72
+  segname __LINKEDIT
+   vmaddr 0x0000000100028000
+   vmsize 0x000000000000c000
+  fileoff 163840
+ filesize 38248
+  maxprot 0x00000001
+ initprot 0x00000001
+   nsects 0
+    flags 0x0
+Load command 5
+      cmd LC_DYLD_CHAINED_FIXUPS
+  cmdsize 16
+  dataoff 163840
+ datasize 368
+Load command 6
+      cmd LC_DYLD_EXPORTS_TRIE
+  cmdsize 16
+  dataoff 164208
+ datasize 48
+Load command 7
+     cmd LC_SYMTAB
+ cmdsize 24
+  symoff 164512
+   nsyms 1408
+  stroff 187240
+ strsize 13160
+Load command 8
+            cmd LC_DYSYMTAB
+        cmdsize 80
+      ilocalsym 0
+      nlocalsym 1381
+     iextdefsym 1381
+     nextdefsym 2
+      iundefsym 1383
+      nundefsym 25
+         tocoff 0
+           ntoc 0
+      modtaboff 0
+        nmodtab 0
+   extrefsymoff 0
+    nextrefsyms 0
+ indirectsymoff 187040
+  nindirectsyms 50
+      extreloff 0
+        nextrel 0
+      locreloff 0
+        nlocrel 0
+Load command 9
+          cmd LC_LOAD_DYLINKER
+      cmdsize 32
+         name /usr/lib/dyld (offset 12)
+Load command 10
+      cmd LC_BUILD_VERSION
+  cmdsize 32
+ platform 1
+    minos 26.0
+      sdk 26.5
+   ntools 1
+     tool 3
+  version 1267.0
+Load command 11
+      cmd LC_SOURCE_VERSION
+  cmdsize 16
+  version 0.0
+Load command 12
+       cmd LC_MAIN
+   cmdsize 24
+  entryoff 89764
+ stacksize 0
+Load command 13
+          cmd LC_LOAD_DYLIB
+      cmdsize 56
+         name /usr/lib/libSystem.B.dylib (offset 24)
+   time stamp 2 Thu Jan  1 09:00:02 1970
+      current version 1356.0.0
+compatibility version 1.0.0
+Load command 14
+      cmd LC_FUNCTION_STARTS
+  cmdsize 16
+  dataoff 164256
+ datasize 256
+Load command 15
+      cmd LC_DATA_IN_CODE
+  cmdsize 16
+  dataoff 164512
+ datasize 0
+Load command 16
+      cmd LC_CODE_SIGNATURE
+  cmdsize 16
+  dataoff 200400
+ datasize 1688
+
+## fixed-point compiler QBE hash
+command: /usr/bin/shasum -a 256 /tmp/type-rb-native-gate6b-final.IC8hf7/workspace/b1.ssa /tmp/type-rb-native-gate6b-final.IC8hf7/workspace/b2.ssa /tmp/type-rb-native-gate6b-final.IC8hf7/workspace/b3.ssa
+status: 0
+stdout:
+87b14e4be3ed3eeb299c8848e09c393d135046a770834a9993b578a3ac03abac  /tmp/type-rb-native-gate6b-final.IC8hf7/workspace/b1.ssa
+87b14e4be3ed3eeb299c8848e09c393d135046a770834a9993b578a3ac03abac  /tmp/type-rb-native-gate6b-final.IC8hf7/workspace/b2.ssa
+87b14e4be3ed3eeb299c8848e09c393d135046a770834a9993b578a3ac03abac  /tmp/type-rb-native-gate6b-final.IC8hf7/workspace/b3.ssa
+
+## Native and external application comparison
+command: /usr/bin/cmp /tmp/type-rb-native-gate6b-final.IC8hf7/workspace/canonical/compiler /tmp/type-rb-native-gate6b-final.IC8hf7/workspace/external-b1/compiler
+status: 0
+

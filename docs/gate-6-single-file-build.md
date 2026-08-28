@@ -9,10 +9,14 @@ and process boundary is defined by
 
 ## Status
 
-The implementation candidate is active. Gate 6B does not close until its
-focused benchmark, raw observations, process inventory, and summarized result
-pass the registered bounds. This is not the complete Gate 6 product-feasibility
-exit and does not create a supported TypeRB command.
+Gate 6B is complete at measured TypeRB Native revision
+`1038cfe497a96d9d282db55a54d9eea6509f7868`. The complete correctness,
+fixed-point, executable-identity, elapsed-time, peak-RSS, size, cleanup, and
+process-inventory criteria pass. See the
+[recorded Darwin arm64 result](../results/2026-08-29-gate6b-single-file-build-darwin-arm64/README.md).
+
+This is not the complete Gate 6 product-feasibility exit and does not create a
+supported TypeRB command.
 
 ## Experimental command
 
@@ -126,6 +130,15 @@ two indexed warmups and alternating observations, enforces the compiler-size
 ceiling, and writes the exact process inventory. Its external comparison mode
 retains `.ssa` and `.s` files, while Native `build` includes its required
 cleanup in every measured observation.
+
+## Recorded result
+
+Native median build time is 1.41% higher for B1 and 3.13% higher for B2 than
+the corresponding external recipe. Median observed RSS is 0.63% and 0.27%
+higher. Native B1/B2 medians differ by 0.42% for time and 0.40% for RSS. All
+four same-basename application outputs are byte-identical at 202,088 bytes,
+and the stripped B1/B2 compiler is 166,824 bytes: 11.38% above Gate 6A and
+5,427 bytes below the registered ceiling. Every Gate 6B bound passes.
 
 ## Deferred scope
 
