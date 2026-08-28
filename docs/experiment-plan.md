@@ -197,6 +197,14 @@ corpus. Repeated QBE emission is byte-identical and source-mutation checks prove
 that the frontend and code generator are active. B1/B2 executable identity and
 representative full-product performance remain Gate 5 requirements.
 
+Gate 4 completed at TypeRB Native revision
+`b48e6b49fadd99f09805cbdefdf85f5dab67494d`. B1, B2, and B3 QBE converge
+byte-for-byte; every conformance and mutation check passes; and the direct
+B1-to-B2 harness contains no Go or reference compiler. Build time, RSS, and
+stripped size are within the registered B1/B2 convergence bounds, while the
+native compiler-plus-QBE distribution is 99.827% smaller than recovery. See
+the [Gate 4 result](../results/2026-08-28-gate4-self-host-darwin-arm64/README.md).
+
 ### Gate 5: Self-hosted product feasibility
 
 This gate is not authorization to ship. It evaluates:

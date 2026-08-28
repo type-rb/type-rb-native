@@ -8,14 +8,16 @@ bootstrap boundary is defined by
 
 ## Status
 
-Gate 4 is in progress. Gate 3 remains the latest completed checkpoint.
+Gate 4 is complete. B0, B1, B2, and the additional B3 fixed-point stage pass
+the registered correctness and convergence checks. See the
+[recorded result](../results/2026-08-28-gate4-self-host-darwin-arm64/README.md).
 
 ## Compiler source closure
 
 The Gate 4 compiler is repository-owned executable source written in TypeRB.
-It will contain distinct passes for:
+It contains distinct passes for:
 
-1. ASCII-delimited lexical analysis with decoded UTF-8 String literal payloads;
+1. ASCII source lexical analysis and ASCII String literal payloads;
 2. syntax parsing into a deterministic internal program model;
 3. lexical and declaration name resolution;
 4. static type checking for the registered subset; and
@@ -26,8 +28,17 @@ source file through those same passes. The first closure supports top-level
 functions and nominal records; typed positional parameters and results; local
 bindings and assignment; direct calls; record construction and projection;
 Boolean, portable Integer, String, and homogeneous Array values; conditionals;
-loops; and observable output. Exact syntax and deferred constructs will be
-listed here after the implementation corpus is fixed.
+loops; and observable output.
+
+The completed closure accepts one ASCII source unit containing nominal records
+and top-level functions; positional typed parameters and results; mutable and
+immutable local bindings; direct calls; record construction and projection;
+Boolean, portable Integer, ASCII String, and homogeneous `Array<Integer>` /
+`Array<String>` values; assignment; conditionals; loops; checked Integer
+arithmetic; comparisons; String concatenation and content equality; Array
+indexing, size, and push; and `puts` output. Non-ASCII literals, Float, tagged
+values, closures, packages, multiple source units, filesystem discovery, and
+the rest of the portable language remain outside this gate.
 
 Unsupported declarations, expressions, types, member operations, or runtime
 services fail with a stable Gate 4 diagnostic. There is no dynamic fallback,
@@ -57,6 +68,7 @@ The bootstrap harness records each process and counts these external tools.
   frontend, snapshot v4, and the existing native QBE path.
 - **B1** is emitted by B0 from those same runtime-supplied sources.
 - **B2** is emitted by B1 from those same runtime-supplied sources.
+- **B3** is emitted by B2 as an additional fixed-point observation.
 
 B1-to-B2 must not execute or link Go. B0, B1, and B2 must agree on all valid
 outputs and invalid diagnostics in the registered corpus. Repeated QBE emission
@@ -79,3 +91,21 @@ The gate stops for review after every registered condition passes. Full
 language coverage, project filesystem loading, package resolution, production
 managed-runtime integration, a second target, and release artifact equivalence
 remain later work.
+
+## Result
+
+The compiler passes the checked-in valid, invalid, and mutation corpus at B0,
+B1, and B2. B1, B2, and B3 emit byte-identical QBE. A direct system-shell
+harness reproduces B2 using only B1, QBE, Clang's assembler/linker path, and
+inspected system helpers; B1 has no process-spawn import or Go metadata.
+
+Warm B1-to-B2 and B2-to-B3 medians are 0.711847 and 0.809224 seconds, a 12.0%
+difference. Full-build RSS differs by 0.23%, stripped B1/B2 sizes are both
+133,016 bytes, and the 536,440-byte native compiler-plus-QBE distribution is
+99.827% smaller than the 310,535,890-byte recovery distribution.
+
+The diagnostic Go backend build is substantially faster and uses less RSS.
+The self-hosted compiler's process-lifetime allocator and parallel
+source-sized tables are the clearest next optimization targets. These are Gate
+5 concerns because the Go artifact and native adapter are not yet behaviorally
+matched product compilers.
