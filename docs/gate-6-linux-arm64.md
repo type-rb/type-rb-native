@@ -10,8 +10,12 @@ boundary is defined by
 ## Status
 
 Gate 6D is active. The target implementation and permanent Darwin regression
-coverage precede the Linux harness and recorded result. This is not a release
-and does not create a supported TypeRB target.
+coverage landed at TypeRB Native revision
+`2a72c048a835804a2fd1bd35e5f2788ddf7a6892`. The TypeRB-authored
+[`gate6d-benchmark`](../tools/gate6d-benchmark/README.md) now provides the
+pinned Linux verification and measurement controller; a reviewed seven-run
+result remains required to complete the gate. This is not a release and does
+not create a supported TypeRB target.
 
 ## Target boundary
 
@@ -97,8 +101,9 @@ provided libraries remain identified.
 
 ## Delivery sequence
 
-1. Add the explicit profile boundary and preserve Darwin behavior.
+1. Add the explicit profile boundary and preserve Darwin behavior. Complete.
 2. Add a reproducible Linux arm64 verification and measurement harness.
+   Complete when its implementation PR lands.
 3. Record raw measurements, artifacts, provenance, and the process inventory.
 4. Close the gate only after every registered correctness and performance
    condition passes.

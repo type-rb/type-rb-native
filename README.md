@@ -133,7 +133,8 @@ internal `linux-arm64-v0` profile and requires the same TypeRB-authored compiler
 to close an exact B1-to-B2-to-B3-to-B4 seed chain in a pinned Linux arm64
 environment. The frontend, emitted QBE IL, runtime semantics, and conformance
 corpus remain shared with Darwin; only the explicit QBE target and linker policy
-differ. See the [Gate 6D Linux arm64 plan](docs/gate-6-linux-arm64.md).
+differ. See the [Gate 6D Linux arm64 plan](docs/gate-6-linux-arm64.md) and
+[measurement harness](tools/gate6d-benchmark/README.md).
 
 Multi-module applications, project discovery, production runtime integration,
 package/native-library boundaries, incremental builds, toolchain discovery,
