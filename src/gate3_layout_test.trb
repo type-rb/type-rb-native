@@ -1,0 +1,302 @@
+import {
+	Gate3Field,
+	Gate3LayoutKind,
+	Gate3TypeDefinition,
+	Gate3ValueType,
+	Gate3Variant,
+	compute_gate3_layout,
+	gate3_field_layout,
+	gate3_value_is_managed,
+	gate3_value_types_equal,
+	gate3_variant_field_layout,
+	gate3_variant_layout,
+	verify_gate3_layouts,
+} from gate3_layout
+import { ScalarType } from gate1_mir
+import { Result } from trb/std/result
+import { describe, expect, test } from trb/std/test
+
+def _gate3_scalar(value_type: ScalarType): Gate3ValueType
+	return Gate3ValueType::Scalar(value_type)
+end
+
+def _gate3_field(name: String, value_type: Gate3ValueType): Gate3Field
+	return Gate3Field.new(name: name, value_type: value_type)
+end
+
+def _gate3_layout_definitions(): Array<Gate3TypeDefinition>
+	return [
+		Gate3TypeDefinition::Record(
+			"example#Point",
+			[
+				_gate3_field("visible", _gate3_scalar(ScalarType::Boolean)),
+				_gate3_field("x", _gate3_scalar(ScalarType::Integer)),
+				_gate3_field("y", _gate3_scalar(ScalarType::Float)),
+			],
+		),
+		Gate3TypeDefinition::Record(
+			"example#Envelope",
+			[
+				_gate3_field("point", Gate3ValueType::Aggregate("example#Point")),
+				_gate3_field("selected", _gate3_scalar(ScalarType::Boolean)),
+			],
+		),
+		Gate3TypeDefinition::Tagged(
+			"example#Outcome",
+			[
+				Gate3Variant.new(name: "None", fields: []),
+				Gate3Variant.new(
+					name: "Count",
+					fields: [_gate3_field("value", _gate3_scalar(ScalarType::Integer))],
+				),
+				Gate3Variant.new(
+					name: "Located",
+					fields: [_gate3_field("point", Gate3ValueType::Aggregate("example#Point"))],
+				),
+			],
+		),
+		Gate3TypeDefinition::String("String"),
+		Gate3TypeDefinition::Array("Array<String>", Gate3ValueType::Aggregate("String")),
+		Gate3TypeDefinition::Function(
+			"(String) -> String",
+			[Gate3ValueType::Aggregate("String")],
+			Gate3ValueType::Aggregate("String"),
+		),
+		Gate3TypeDefinition::Record(
+			"example#Message",
+			[
+				_gate3_field("text", Gate3ValueType::Aggregate("String")),
+				_gate3_field("lines", Gate3ValueType::Aggregate("Array<String>")),
+			],
+		),
+		Gate3TypeDefinition::Tagged(
+			"example#ManagedOutcome",
+			[
+				Gate3Variant.new(name: "Empty", fields: []),
+				Gate3Variant.new(
+					name: "Found",
+					fields: [_gate3_field("message", Gate3ValueType::Aggregate("example#Message"))],
+				),
+			],
+		),
+	]
+end
+
+describe("Gate 3 static aggregate layout") do
+	test("lays out scalar and nested record fields deterministically") do
+		definitions := _gate3_layout_definitions()
+		case compute_gate3_layout(definitions, "example#Point")
+		when Result::Ok(layout)
+			expect(layout.kind).to_equal(Gate3LayoutKind::Record)
+			expect(layout.size).to_equal(24)
+			expect(layout.alignment).to_equal(8)
+			expect(gate3_field_layout(layout, "visible").offset).to_equal(0)
+			expect(gate3_field_layout(layout, "x").offset).to_equal(8)
+			expect(gate3_field_layout(layout, "y").offset).to_equal(16)
+		when Result::Err(_diagnostic)
+			expect(false).to_be_true()
+		end
+		case compute_gate3_layout(definitions, "example#Envelope")
+		when Result::Ok(layout)
+			expect(layout.size).to_equal(32)
+			expect(layout.alignment).to_equal(8)
+			expect(gate3_field_layout(layout, "point").offset).to_equal(0)
+			expect(gate3_field_layout(layout, "selected").offset).to_equal(24)
+		when Result::Err(_diagnostic)
+			expect(false).to_be_true()
+		end
+	end
+
+	test("lays out tags and maximum payload storage") do
+		case compute_gate3_layout(_gate3_layout_definitions(), "example#Outcome")
+		when Result::Ok(layout)
+			expect(layout.kind).to_equal(Gate3LayoutKind::Tagged)
+			expect(layout.payload_offset).to_equal(8)
+			expect(layout.size).to_equal(32)
+			expect(layout.alignment).to_equal(8)
+			none := gate3_variant_layout(layout, "None")
+			count := gate3_variant_layout(layout, "Count")
+			located := gate3_variant_layout(layout, "Located")
+			expect(none.tag).to_equal(0)
+			expect(none.payload_size).to_equal(0)
+			expect(count.tag).to_equal(1)
+			if count != nil
+				expect(gate3_variant_field_layout(count, "value").offset).to_equal(8)
+			end
+			expect(located.tag).to_equal(2)
+			if located != nil
+				expect(gate3_variant_field_layout(located, "point").size).to_equal(24)
+			end
+		when Result::Err(_diagnostic)
+			expect(false).to_be_true()
+		end
+	end
+
+	test("retains nominal identity for identical shapes") do
+		left := Gate3ValueType::Aggregate("example#Left")
+		right := Gate3ValueType::Aggregate("example#Right")
+		expect(gate3_value_types_equal(left, left)).to_be_true()
+		expect(gate3_value_types_equal(left, right)).to_be_false()
+		expect(
+			compute_gate3_layout(_gate3_layout_definitions(), "example#Outcome")
+		).to_equal(compute_gate3_layout(_gate3_layout_definitions(), "example#Outcome"))
+	end
+
+	test("classifies managed references and boxes aggregates that contain them") do
+		definitions := _gate3_layout_definitions()
+		case compute_gate3_layout(definitions, "String")
+		when Result::Ok(layout)
+			expect(layout.kind).to_equal(Gate3LayoutKind::String)
+			expect(layout.managed).to_be_true()
+			expect(layout.size).to_equal(8)
+		when Result::Err(_diagnostic)
+			expect(false).to_be_true()
+		end
+		case compute_gate3_layout(definitions, "example#Message")
+		when Result::Ok(layout)
+			expect(layout.kind).to_equal(Gate3LayoutKind::Record)
+			expect(layout.managed).to_be_true()
+			expect(layout.size).to_equal(16)
+			expect(gate3_field_layout(layout, "text").managed).to_be_true()
+			expect(gate3_field_layout(layout, "lines").offset).to_equal(8)
+		when Result::Err(_diagnostic)
+			expect(false).to_be_true()
+		end
+		case gate3_value_is_managed(definitions, Gate3ValueType::Aggregate("example#ManagedOutcome"))
+		when Result::Ok(managed)
+			expect(managed).to_be_true()
+		when Result::Err(_diagnostic)
+			expect(false).to_be_true()
+		end
+	end
+
+	test("permits recursive graphs through managed containers") do
+		definitions := [
+			Gate3TypeDefinition::Array("Array<example#Node>", Gate3ValueType::Aggregate("example#Node")),
+			Gate3TypeDefinition::Record(
+				"example#Node",
+				[_gate3_field("children", Gate3ValueType::Aggregate("Array<example#Node>"))],
+			),
+		]
+		case verify_gate3_layouts(definitions)
+		when Result::Ok(valid)
+			expect(valid).to_be_true()
+		when Result::Err(_diagnostic)
+			expect(false).to_be_true()
+		end
+	end
+
+	test("rejects recursive by-value layouts") do
+		definitions := [
+			Gate3TypeDefinition::Record(
+				"example#Recursive",
+				[_gate3_field("next", Gate3ValueType::Aggregate("example#Recursive"))],
+			),
+		]
+		case verify_gate3_layouts(definitions)
+		when Result::Ok(_valid)
+			expect(false).to_be_true()
+		when Result::Err(diagnostic)
+			expect(diagnostic.code).to_equal("TRBN0004")
+			expect(diagnostic.message).to_equal("recursive by-value aggregate layout is unsupported")
+		end
+	end
+
+	test("rejects duplicate fields and variants") do
+		duplicate_fields := [
+			Gate3TypeDefinition::Record(
+				"example#Duplicate",
+				[
+					_gate3_field("value", _gate3_scalar(ScalarType::Integer)),
+					_gate3_field("value", _gate3_scalar(ScalarType::Float)),
+				],
+			),
+		]
+		case verify_gate3_layouts(duplicate_fields)
+		when Result::Ok(_valid)
+			expect(false).to_be_true()
+		when Result::Err(diagnostic)
+			expect(diagnostic.message).to_equal("field name is duplicated")
+		end
+		duplicate_variants := [
+			Gate3TypeDefinition::Tagged(
+				"example#DuplicateTag",
+				[
+					Gate3Variant.new(name: "Same", fields: []),
+					Gate3Variant.new(name: "Same", fields: []),
+				],
+			),
+		]
+		case verify_gate3_layouts(duplicate_variants)
+		when Result::Ok(_valid)
+			expect(false).to_be_true()
+		when Result::Err(diagnostic)
+			expect(diagnostic.message).to_equal("variant name is duplicated")
+		end
+	end
+
+	test("rejects unknown aggregate field types") do
+		definitions := [
+			Gate3TypeDefinition::Record(
+				"example#Broken",
+				[_gate3_field("missing", Gate3ValueType::Aggregate("example#Missing"))],
+			),
+		]
+		case verify_gate3_layouts(definitions)
+		when Result::Ok(_valid)
+			expect(false).to_be_true()
+		when Result::Err(diagnostic)
+			expect(diagnostic.message).to_equal("aggregate type does not exist")
+		end
+	end
+
+	test("rejects duplicate type identities") do
+		definitions := [
+			Gate3TypeDefinition::Record("example#Same", []),
+			Gate3TypeDefinition::Tagged(
+				"example#Same",
+				[Gate3Variant.new(name: "Only", fields: [])],
+			),
+		]
+		case verify_gate3_layouts(definitions)
+		when Result::Ok(_valid)
+			expect(false).to_be_true()
+		when Result::Err(diagnostic)
+			expect(diagnostic.message).to_equal("type identifier is duplicated")
+		end
+	end
+
+	test("enforces the configured aggregate byte limit") do
+		mut chunk_fields: Array<Gate3Field> := []
+		mut index := 0
+		while index < 256
+			chunk_fields.push(_gate3_field("word" + index.to_s(), _gate3_scalar(ScalarType::Integer)))
+			index += 1
+		end
+		mut page_fields: Array<Gate3Field> := []
+		index = 0
+		while index < 256
+			page_fields.push(_gate3_field("chunk" + index.to_s(), Gate3ValueType::Aggregate("example#Chunk")))
+			index += 1
+		end
+		definitions := [
+			Gate3TypeDefinition::Record("example#Chunk", chunk_fields),
+			Gate3TypeDefinition::Record("example#Page", page_fields),
+			Gate3TypeDefinition::Record(
+				"example#TooLarge",
+				[
+					_gate3_field("first", Gate3ValueType::Aggregate("example#Page")),
+					_gate3_field("second", Gate3ValueType::Aggregate("example#Page")),
+					_gate3_field("third", Gate3ValueType::Aggregate("example#Page")),
+				],
+			),
+		]
+		case compute_gate3_layout(definitions, "example#TooLarge")
+		when Result::Ok(_layout)
+			expect(false).to_be_true()
+		when Result::Err(diagnostic)
+			expect(diagnostic.code).to_equal("TRBN0005")
+			expect(diagnostic.message).to_equal("aggregate layout exceeds the Gate 3 byte limit")
+		end
+	end
+end

@@ -1,0 +1,556 @@
+import { Diagnostic, boundary_diagnostic } from diagnostic
+import { ScalarType } from gate1_mir
+import { Result } from trb/std/result
+
+GATE3_MAX_TYPE_DEFINITIONS := 1024
+GATE3_MAX_FIELDS := 256
+GATE3_MAX_VARIANTS := 1024
+GATE3_MAX_LAYOUT_BYTES := 1048576
+
+enum Gate3ValueType
+	Scalar(value_type: ScalarType)
+	Aggregate(type_id: String)
+end
+
+record Gate3Field
+	name: String
+	value_type: Gate3ValueType
+end
+
+record Gate3Variant
+	name: String
+	fields: Array<Gate3Field>
+end
+
+enum Gate3TypeDefinition
+	Record(type_id: String, fields: Array<Gate3Field>)
+	Tagged(type_id: String, variants: Array<Gate3Variant>)
+	String(type_id: String)
+	Array(type_id: String, element_type: Gate3ValueType)
+	Function(type_id: String, parameter_types: Array<Gate3ValueType>, result_type: Gate3ValueType?)
+end
+
+enum Gate3LayoutKind
+	Record
+	Tagged
+	String
+	Array
+	Function
+end
+
+record Gate3FieldLayout
+	name: String
+	value_type: Gate3ValueType
+	offset: Integer
+	size: Integer
+	alignment: Integer
+	managed: Boolean
+end
+
+record Gate3VariantLayout
+	name: String
+	tag: Integer
+	fields: Array<Gate3FieldLayout>
+	payload_size: Integer
+	payload_alignment: Integer
+end
+
+record Gate3Layout
+	type_id: String
+	kind: Gate3LayoutKind
+	size: Integer
+	alignment: Integer
+	payload_offset: Integer
+	fields: Array<Gate3FieldLayout>
+	variants: Array<Gate3VariantLayout>
+	managed: Boolean
+end
+
+record Gate3SizeAlignment
+	size: Integer
+	alignment: Integer
+	managed: Boolean
+end
+
+def gate3_value_types_equal(left: Gate3ValueType, right: Gate3ValueType): Boolean
+	case left
+	when Gate3ValueType::Scalar(left_scalar)
+		case right
+		when Gate3ValueType::Scalar(right_scalar)
+			return left_scalar == right_scalar
+		when Gate3ValueType::Aggregate(_right_id)
+			return false
+		end
+	when Gate3ValueType::Aggregate(left_id)
+		case right
+		when Gate3ValueType::Scalar(_right_scalar)
+			return false
+		when Gate3ValueType::Aggregate(right_id)
+			return left_id == right_id
+		end
+	end
+end
+
+def verify_gate3_layouts(definitions: Array<Gate3TypeDefinition>): Result<Boolean, Diagnostic>
+	if definitions.size() > GATE3_MAX_TYPE_DEFINITIONS
+		return Result<Boolean, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0005", "/types", "type definition count exceeds the Gate 3 limit")
+		)
+	end
+	mut type_ids: Hash<String, Boolean> := {}
+	mut index := 0
+	while index < definitions.size()
+		type_id := _gate3_definition_id(definitions[index])
+		if type_id.empty?()
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", "/types/" + index.to_s() + "/id", "type identifier must not be empty")
+			)
+		end
+		if type_ids.key?(type_id)
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", "/types/" + index.to_s() + "/id", "type identifier is duplicated")
+			)
+		end
+		type_ids[type_id] = true
+		index += 1
+	end
+	index = 0
+	while index < definitions.size()
+		try compute_gate3_layout(definitions, _gate3_definition_id(definitions[index]))
+		index += 1
+	end
+	return Result<Boolean, Diagnostic>::Ok(true)
+end
+
+def compute_gate3_layout(
+		definitions: Array<Gate3TypeDefinition>,
+		type_id: String,
+	): Result<Gate3Layout, Diagnostic>
+	return _gate3_compute_layout(definitions, type_id, [], "/types/" + type_id)
+end
+
+def _gate3_compute_layout(
+		definitions: Array<Gate3TypeDefinition>,
+		type_id: String,
+		visiting: Array<String>,
+		path: String,
+	): Result<Gate3Layout, Diagnostic>
+	if visiting.include?(type_id)
+		return Result<Gate3Layout, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0004", path, "recursive by-value aggregate layout is unsupported")
+		)
+	end
+	definition := _gate3_definition(definitions, type_id)
+	if definition == nil
+		return Result<Gate3Layout, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0004", path, "aggregate type does not exist")
+		)
+	end
+	mut next_visiting: Array<String> := []
+	mut visiting_index := 0
+	while visiting_index < visiting.size()
+		next_visiting.push(visiting[visiting_index])
+		visiting_index += 1
+	end
+	next_visiting.push(type_id)
+	case definition
+	when Gate3TypeDefinition::Record(_id, fields)
+		return _gate3_record_layout(definitions, type_id, fields, next_visiting, path)
+	when Gate3TypeDefinition::Tagged(_id, variants)
+		return _gate3_tagged_layout(definitions, type_id, variants, next_visiting, path)
+	when Gate3TypeDefinition::String(_id)
+		return _gate3_managed_reference_layout(type_id, Gate3LayoutKind::String)
+	when Gate3TypeDefinition::Array(_id, element_type)
+		try _gate3_verify_storable_type(definitions, element_type, path + "/element")
+		return _gate3_managed_reference_layout(type_id, Gate3LayoutKind::Array)
+	when Gate3TypeDefinition::Function(_id, parameter_types, result_type)
+		if parameter_types.size() > GATE3_MAX_FIELDS
+			return Result<Gate3Layout, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0005", path + "/parameters", "function parameter count exceeds the Gate 3 limit")
+			)
+		end
+		mut parameter_index := 0
+		while parameter_index < parameter_types.size()
+			try _gate3_verify_storable_type(
+				definitions,
+				parameter_types[parameter_index],
+				path + "/parameters/" + parameter_index.to_s(),
+			)
+			parameter_index += 1
+		end
+		if result_type != nil
+			try _gate3_verify_storable_type(definitions, result_type, path + "/result")
+		end
+		return _gate3_managed_reference_layout(type_id, Gate3LayoutKind::Function)
+	end
+end
+
+def _gate3_managed_reference_layout(
+		type_id: String,
+		kind: Gate3LayoutKind,
+	): Result<Gate3Layout, Diagnostic>
+	return Result<Gate3Layout, Diagnostic>::Ok(
+		Gate3Layout.new(
+			type_id: type_id,
+			kind: kind,
+			size: 8,
+			alignment: 8,
+			payload_offset: 0,
+			fields: [],
+			variants: [],
+			managed: true,
+		)
+	)
+end
+
+def _gate3_record_layout(
+		definitions: Array<Gate3TypeDefinition>,
+		type_id: String,
+		fields: Array<Gate3Field>,
+		visiting: Array<String>,
+		path: String,
+	): Result<Gate3Layout, Diagnostic>
+	if fields.size() > GATE3_MAX_FIELDS
+		return Result<Gate3Layout, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0005", path + "/fields", "field count exceeds the Gate 3 limit")
+		)
+	end
+	field_layouts := try _gate3_fields_layout(definitions, fields, visiting, path + "/fields", 0)
+	mut alignment := 1
+	mut end_offset := 0
+	mut managed := false
+	mut index := 0
+	while index < field_layouts.size()
+		field := field_layouts[index]
+		alignment = _gate3_max(alignment, field.alignment)
+		end_offset = field.offset + field.size
+		managed = managed || field.managed
+		index += 1
+	end
+	mut size := _gate3_align_up(end_offset, alignment)
+	if size == 0
+		size = 1
+	end
+	try _gate3_require_layout_size(size, path)
+	return Result<Gate3Layout, Diagnostic>::Ok(
+		Gate3Layout.new(
+			type_id: type_id,
+			kind: Gate3LayoutKind::Record,
+			size: size,
+			alignment: alignment,
+			payload_offset: 0,
+			fields: field_layouts,
+			variants: [],
+			managed: managed,
+		)
+	)
+end
+
+def _gate3_tagged_layout(
+		definitions: Array<Gate3TypeDefinition>,
+		type_id: String,
+		variants: Array<Gate3Variant>,
+		visiting: Array<String>,
+		path: String,
+	): Result<Gate3Layout, Diagnostic>
+	if variants.empty?()
+		return Result<Gate3Layout, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0004", path + "/variants", "tagged type must declare at least one variant")
+		)
+	end
+	if variants.size() > GATE3_MAX_VARIANTS
+		return Result<Gate3Layout, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0005", path + "/variants", "variant count exceeds the Gate 3 limit")
+		)
+	end
+	mut names: Hash<String, Boolean> := {}
+	mut payload_alignment := 1
+	mut index := 0
+	while index < variants.size()
+		variant := variants[index]
+		variant_path := path + "/variants/" + index.to_s()
+		try _gate3_require_name(names, variant.name, variant_path + "/name", "variant")
+		if variant.fields.size() > GATE3_MAX_FIELDS
+			return Result<Gate3Layout, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0005", variant_path + "/fields", "field count exceeds the Gate 3 limit")
+			)
+		end
+		probe := try _gate3_fields_layout(definitions, variant.fields, visiting, variant_path + "/fields", 0)
+		mut field_index := 0
+		while field_index < probe.size()
+			payload_alignment = _gate3_max(payload_alignment, probe[field_index].alignment)
+			field_index += 1
+		end
+		index += 1
+	end
+	payload_offset := _gate3_align_up(4, payload_alignment)
+	mut variant_layouts: Array<Gate3VariantLayout> := []
+	mut payload_size := 0
+	mut managed := false
+	index = 0
+	while index < variants.size()
+		variant := variants[index]
+		variant_path := path + "/variants/" + index.to_s()
+		fields := try _gate3_fields_layout(
+			definitions,
+			variant.fields,
+			visiting,
+			variant_path + "/fields",
+			payload_offset,
+		)
+		mut variant_end := payload_offset
+		mut variant_alignment := 1
+		mut field_index := 0
+		while field_index < fields.size()
+			field := fields[field_index]
+			variant_end = field.offset + field.size
+			variant_alignment = _gate3_max(variant_alignment, field.alignment)
+			managed = managed || field.managed
+			field_index += 1
+		end
+		current_payload_size := variant_end - payload_offset
+		payload_size = _gate3_max(payload_size, current_payload_size)
+		variant_layouts.push(
+			Gate3VariantLayout.new(
+				name: variant.name,
+				tag: index,
+				fields: fields,
+				payload_size: current_payload_size,
+				payload_alignment: variant_alignment,
+			)
+		)
+		index += 1
+	end
+	alignment := _gate3_max(4, payload_alignment)
+	size := _gate3_align_up(payload_offset + payload_size, alignment)
+	try _gate3_require_layout_size(size, path)
+	return Result<Gate3Layout, Diagnostic>::Ok(
+		Gate3Layout.new(
+			type_id: type_id,
+			kind: Gate3LayoutKind::Tagged,
+			size: size,
+			alignment: alignment,
+			payload_offset: payload_offset,
+			fields: [],
+			variants: variant_layouts,
+			managed: managed,
+		)
+	)
+end
+
+def _gate3_fields_layout(
+		definitions: Array<Gate3TypeDefinition>,
+		fields: Array<Gate3Field>,
+		visiting: Array<String>,
+		path: String,
+		start_offset: Integer,
+	): Result<Array<Gate3FieldLayout>, Diagnostic>
+	mut names: Hash<String, Boolean> := {}
+	mut layouts: Array<Gate3FieldLayout> := []
+	mut offset := start_offset
+	mut index := 0
+	while index < fields.size()
+		field := fields[index]
+		field_path := path + "/" + index.to_s()
+		try _gate3_require_name(names, field.name, field_path + "/name", "field")
+		size_alignment := try _gate3_size_alignment(definitions, field.value_type, visiting, field_path + "/type")
+		offset = _gate3_align_up(offset, size_alignment.alignment)
+		if offset + size_alignment.size > GATE3_MAX_LAYOUT_BYTES
+			return Result<Array<Gate3FieldLayout>, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0005", field_path, "aggregate layout exceeds the Gate 3 byte limit")
+			)
+		end
+		layouts.push(
+			Gate3FieldLayout.new(
+				name: field.name,
+				value_type: field.value_type,
+				offset: offset,
+				size: size_alignment.size,
+				alignment: size_alignment.alignment,
+				managed: size_alignment.managed,
+			)
+		)
+		offset += size_alignment.size
+		index += 1
+	end
+	return Result<Array<Gate3FieldLayout>, Diagnostic>::Ok(layouts)
+end
+
+def _gate3_size_alignment(
+		definitions: Array<Gate3TypeDefinition>,
+		value_type: Gate3ValueType,
+		visiting: Array<String>,
+		path: String,
+	): Result<Gate3SizeAlignment, Diagnostic>
+	case value_type
+	when Gate3ValueType::Scalar(scalar)
+		if scalar == ScalarType::Boolean
+			return Result<Gate3SizeAlignment, Diagnostic>::Ok(
+				Gate3SizeAlignment.new(size: 1, alignment: 1, managed: false)
+			)
+		end
+		if scalar == ScalarType::Integer || scalar == ScalarType::Float
+			return Result<Gate3SizeAlignment, Diagnostic>::Ok(
+				Gate3SizeAlignment.new(size: 8, alignment: 8, managed: false)
+			)
+		end
+		return Result<Gate3SizeAlignment, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0004", path, "Void is not a storable Gate 3 value")
+		)
+	when Gate3ValueType::Aggregate(type_id)
+		layout := try _gate3_compute_layout(definitions, type_id, visiting, path)
+		if layout.managed
+			return Result<Gate3SizeAlignment, Diagnostic>::Ok(
+				Gate3SizeAlignment.new(size: 8, alignment: 8, managed: true)
+			)
+		end
+		return Result<Gate3SizeAlignment, Diagnostic>::Ok(
+			Gate3SizeAlignment.new(size: layout.size, alignment: layout.alignment, managed: false)
+		)
+	end
+end
+
+def _gate3_verify_storable_type(
+		definitions: Array<Gate3TypeDefinition>,
+		value_type: Gate3ValueType,
+		path: String,
+	): Result<Boolean, Diagnostic>
+	case value_type
+	when Gate3ValueType::Scalar(scalar)
+		if scalar == ScalarType::Void
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path, "Void is not a storable Gate 3 value")
+			)
+		end
+	when Gate3ValueType::Aggregate(type_id)
+		if _gate3_definition(definitions, type_id) == nil
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path, "aggregate type does not exist")
+			)
+		end
+	end
+	return Result<Boolean, Diagnostic>::Ok(true)
+end
+
+def _gate3_require_name(
+		mut names: Hash<String, Boolean>,
+		name: String,
+		path: String,
+		kind: String,
+	): Result<Boolean, Diagnostic>
+	if name.empty?()
+		return Result<Boolean, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0004", path, kind + " name must not be empty")
+		)
+	end
+	if names.key?(name)
+		return Result<Boolean, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0004", path, kind + " name is duplicated")
+		)
+	end
+	names[name] = true
+	return Result<Boolean, Diagnostic>::Ok(true)
+end
+
+def _gate3_require_layout_size(size: Integer, path: String): Result<Boolean, Diagnostic>
+	if size > GATE3_MAX_LAYOUT_BYTES
+		return Result<Boolean, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0005", path, "aggregate layout exceeds the Gate 3 byte limit")
+		)
+	end
+	return Result<Boolean, Diagnostic>::Ok(true)
+end
+
+def _gate3_definition_id(definition: Gate3TypeDefinition): String
+	case definition
+	when Gate3TypeDefinition::Record(type_id, _fields)
+		return type_id
+	when Gate3TypeDefinition::Tagged(type_id, _variants)
+		return type_id
+	when Gate3TypeDefinition::String(type_id)
+		return type_id
+	when Gate3TypeDefinition::Array(type_id, _element_type)
+		return type_id
+	when Gate3TypeDefinition::Function(type_id, _parameter_types, _result_type)
+		return type_id
+	end
+end
+
+def _gate3_definition(
+		definitions: Array<Gate3TypeDefinition>,
+		type_id: String,
+	): Gate3TypeDefinition?
+	mut index := 0
+	while index < definitions.size()
+		definition := definitions[index]
+		if _gate3_definition_id(definition) == type_id
+			return definition
+		end
+		index += 1
+	end
+	return nil
+end
+
+def gate3_type_definition(
+		definitions: Array<Gate3TypeDefinition>,
+		type_id: String,
+	): Gate3TypeDefinition?
+	return _gate3_definition(definitions, type_id)
+end
+
+def gate3_value_is_managed(
+		definitions: Array<Gate3TypeDefinition>,
+		value_type: Gate3ValueType,
+	): Result<Boolean, Diagnostic>
+	case value_type
+	when Gate3ValueType::Scalar(_scalar)
+		return Result<Boolean, Diagnostic>::Ok(false)
+	when Gate3ValueType::Aggregate(type_id)
+		layout := try compute_gate3_layout(definitions, type_id)
+		return Result<Boolean, Diagnostic>::Ok(layout.managed)
+	end
+end
+
+def gate3_field_layout(layout: Gate3Layout, name: String): Gate3FieldLayout?
+	mut index := 0
+	while index < layout.fields.size()
+		if layout.fields[index].name == name
+			return layout.fields[index]
+		end
+		index += 1
+	end
+	return nil
+end
+
+def gate3_variant_layout(layout: Gate3Layout, name: String): Gate3VariantLayout?
+	mut index := 0
+	while index < layout.variants.size()
+		if layout.variants[index].name == name
+			return layout.variants[index]
+		end
+		index += 1
+	end
+	return nil
+end
+
+def gate3_variant_field_layout(variant: Gate3VariantLayout, name: String): Gate3FieldLayout?
+	mut index := 0
+	while index < variant.fields.size()
+		if variant.fields[index].name == name
+			return variant.fields[index]
+		end
+		index += 1
+	end
+	return nil
+end
+
+def _gate3_align_up(value: Integer, alignment: Integer): Integer
+	return ((value + alignment - 1) / alignment) * alignment
+end
+
+def _gate3_max(left: Integer, right: Integer): Integer
+	if left > right
+		return left
+	end
+	return right
+end

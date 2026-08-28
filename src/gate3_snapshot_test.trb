@@ -1,0 +1,112 @@
+import { decode_gate3_snapshot } from gate3_snapshot
+import { read_text } from trb/std/filesystem
+import { environment } from trb/std/process
+import { Result } from trb/std/result
+import { describe, expect, test } from trb/std/test
+
+def _gate3_snapshot_fixture(): String
+	root := environment("TYPE_RB_NATIVE_ROOT")
+	if root == nil
+		return ""
+	end
+	case read_text(root + "/fixtures/gate3/valid/managed.json")
+	when Result::Ok(source)
+		return source
+	when Result::Err(_error)
+		return ""
+	end
+end
+
+def _gate3_managed_snapshot_fixture(): String
+	root := environment("TYPE_RB_NATIVE_ROOT")
+	if root == nil
+		return ""
+	end
+	case read_text(root + "/fixtures/gate3/valid/managed-values.json")
+	when Result::Ok(source)
+		return source
+	when Result::Err(_error)
+		return ""
+	end
+end
+
+describe("Gate 3 snapshot v4") do
+	test("strictly decodes aggregate type and instruction definitions") do
+		case decode_gate3_snapshot(_gate3_snapshot_fixture())
+		when Result::Ok(native_module)
+			expect(native_module.id).to_equal("example")
+			expect(native_module.types.size()).to_equal(2)
+			expect(native_module.functions.size()).to_equal(1)
+		when Result::Err(diagnostic)
+			puts(diagnostic.path + ": " + diagnostic.message)
+			expect(false).to_be_true()
+		end
+	end
+
+	test("strictly decodes managed types, captures, and operations") do
+		case decode_gate3_snapshot(_gate3_managed_snapshot_fixture())
+		when Result::Ok(native_module)
+			expect(native_module.id).to_equal("managed")
+			expect(native_module.types.size()).to_equal(3)
+			expect(native_module.functions.size()).to_equal(2)
+			expect(native_module.functions[0].captures.size()).to_equal(1)
+			expect(native_module.functions[1].blocks[0].instructions.size()).to_equal(14)
+		when Result::Err(diagnostic)
+			puts(diagnostic.path + ": " + diagnostic.message)
+			expect(false).to_be_true()
+		end
+	end
+
+	test("rejects a closure whose captures do not match its function") do
+		source := _gate3_managed_snapshot_fixture().replace_all("\"captures\": [\"suffix\"]", "\"captures\": []")
+		case decode_gate3_snapshot(source)
+		when Result::Ok(_native_module)
+			expect(false).to_be_true()
+		when Result::Err(diagnostic)
+			expect(diagnostic.code).to_equal("TRBN0004")
+			expect(diagnostic.message).to_equal("closure capture count does not match the function")
+		end
+	end
+
+	test("rejects version and unknown root fields deterministically") do
+		source := _gate3_snapshot_fixture()
+		case decode_gate3_snapshot(source.replace_all("\"version\": 4", "\"version\": 5"))
+		when Result::Ok(_native_module)
+			expect(false).to_be_true()
+		when Result::Err(diagnostic)
+			expect(diagnostic.code).to_equal("TRBN0003")
+			expect(diagnostic.path).to_equal("/version")
+		end
+		unknown := source.replace_all("\"functions\": [", "\"unexpected\": true, \"functions\": [")
+		case decode_gate3_snapshot(unknown)
+		when Result::Ok(_native_module)
+			expect(false).to_be_true()
+		when Result::Err(diagnostic)
+			expect(diagnostic.code).to_equal("TRBN0002")
+			expect(diagnostic.path).to_equal("/unexpected")
+		end
+	end
+
+	test("rejects unsupported operations and Void fields") do
+		source := _gate3_snapshot_fixture()
+		unsupported := source.replace_all("\"op\": \"record_construct\"", "\"op\": \"record_build\"")
+		case decode_gate3_snapshot(unsupported)
+		when Result::Ok(_native_module)
+			expect(false).to_be_true()
+		when Result::Err(diagnostic)
+			expect(diagnostic.code).to_equal("TRBN0003")
+			expect(diagnostic.message).to_equal("unsupported Gate 3 instruction")
+		end
+		void_field := source.replace_all(
+			"{ \"name\": \"x\", \"type\": \"Integer\" }",
+			"{ \"name\": \"x\", \"type\": \"Void\" }",
+		)
+		case decode_gate3_snapshot(void_field)
+		when Result::Ok(_native_module)
+			expect(false).to_be_true()
+		when Result::Err(diagnostic)
+			expect(diagnostic.code).to_equal("TRBN0003")
+			expect(diagnostic.message).to_equal("unsupported Gate 3 value type")
+		end
+	end
+end
