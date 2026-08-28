@@ -45,6 +45,14 @@ a time.
   to recovery or differential tests, and kept distinct from ordinary command
   shapes. Test stdout, stderr, exit status, unreadable input, and inputs beyond
   conservative argv limits.
+- For file-root compilation, follow the pinned reference compiler's explicit
+  import closure: root imports at the entry directory, load only reachable
+  named project modules, prefer `name.trb` to `name/index.trb`, retain module
+  identity, and require `main` from the entry module. Test unrelated invalid
+  siblings, diamonds, cycles, duplicate and unused bindings, missing exports,
+  path escape, optional suffixes, and paths containing spaces. Do not silently
+  turn this experimental boundary into configured-project, package, namespace,
+  or public CLI behavior.
 - Record B0, B1, and B2 roles explicitly, plus B3 when a fixed-point check is
   required. Verify the ordinary regeneration process graph rather than
   inferring Go independence from the output binary. Keep recovery compilers and
@@ -71,6 +79,10 @@ a time.
   failure. Test paths containing spaces, existing-output replacement, each
   phase failure, and that compiler diagnostics launch no external tool.
 - Preserve source origins and exact TypeRB semantics through every lowering.
+- Treat the portable Integer range and its failure classes as correctness
+  constraints. Backend optimization may inline or outline checks under a
+  deterministic code-size policy, but it must not substitute machine-word
+  overflow or omit division and range failures to meet a measurement bound.
 - Reject unknown, malformed, unsupported, or unverifiable input with stable,
   deterministic diagnostics. Never add a semantic fallback or `Any` escape
   hatch to improve a benchmark.

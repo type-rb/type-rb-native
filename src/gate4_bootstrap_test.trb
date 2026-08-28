@@ -399,7 +399,16 @@ def _gate4_verify_conformance(
 	if mutation_qbe[0] == mutation_qbe[1] || mutation_qbe[0] == mutation_qbe[2] || mutation_qbe[1] == mutation_qbe[2]
 		return Result<Boolean, String>::Err("source mutations did not produce three distinct QBE programs")
 	end
-	invalid_names := ["lexical", "syntax", "duplicate", "unresolved", "arity", "type", "unsupported-type"]
+	invalid_names := [
+		"lexical",
+		"syntax",
+		"duplicate",
+		"unresolved",
+		"arity",
+		"type",
+		"unsupported-type",
+		"integer-range",
+	]
 	index = 0
 	while index < invalid_names.size()
 		base := root + "/compiler/gate4/conformance/invalid/" + invalid_names[index]
@@ -973,6 +982,296 @@ def _gate6_verify_build_cli(workspace: String, qbe: String): Result<Boolean, Str
 	return Result<Boolean, String>::Ok(true)
 end
 
+def _gate6_copy_source(source: String, destination: String): Result<Boolean, String>
+	contents := try _gate4_read(source)
+	case write_text(destination, contents)
+	when Result::Ok(_unit)
+		return Result<Boolean, String>::Ok(true)
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
+	end
+end
+
+def _gate6_write_source(path: String, source: String): Result<Boolean, String>
+	case write_text(path, source)
+	when Result::Ok(_unit)
+		return Result<Boolean, String>::Ok(true)
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
+	end
+end
+
+def _gate6_expect_file_root_failure(
+		executable: String,
+		project: String,
+		expected: String,
+		label: String,
+	): Result<Boolean, String>
+	output := project + "/program"
+	build := try _gate6_build(
+		executable,
+		project + "/main.trb",
+		output,
+		project + "/missing-qbe",
+		project + "/missing-cc",
+	)
+	if build.status != 1 || !build.stdout.empty?()
+		return Result<Boolean, String>::Err(label + " did not fail before external tools")
+	end
+	if !build.stderr.include?(expected)
+		return Result<Boolean, String>::Err(label + " diagnostic differs: " + build.stderr)
+	end
+	try _gate6_require_missing(output)
+	try _gate6_require_no_intermediates(project)
+	return Result<Boolean, String>::Ok(true)
+end
+
+def _gate6_prepare_file_root_project(root: String, project: String): Result<Boolean, String>
+	try _gate6_reset_directory(project)
+	directories := [project + "/app", project + "/domain", project + "/shared"]
+	mut index := 0
+	while index < directories.size()
+		created := try _gate6_process("/bin/mkdir", ["-p", directories[index]])
+		if !created.success
+			return Result<Boolean, String>::Err("cannot create file-root fixture directory")
+		end
+		index += 1
+	end
+	fixture := root + "/compiler/gate4/conformance/file-root"
+	relative := [
+		"main.trb",
+		"app/summary.trb",
+		"app/label.trb",
+		"domain/score.trb",
+		"shared/index.trb",
+		"unrelated.trb",
+	]
+	index = 0
+	while index < relative.size()
+		try _gate6_copy_source(fixture + "/" + relative[index], project + "/" + relative[index])
+		index += 1
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def _gate6_verify_file_root_modules(
+		root: String,
+		workspace: String,
+		qbe: String,
+		reference_trb: String,
+	): Result<Boolean, String>
+	project := workspace + "/gate6 file root project"
+	try _gate6_prepare_file_root_project(root, project)
+	entry := project + "/main.trb"
+	executables := [
+		workspace + "/b1",
+		workspace + "/b2",
+		workspace + "/native-chain-b2/compiler",
+		workspace + "/native-chain-b3/compiler",
+		workspace + "/native-chain-b4/compiler",
+	]
+	mut canonical_qbe := ""
+	mut index := 0
+	while index < executables.size()
+		check := try _gate6_process(executables[index], ["check", entry])
+		if check.status != 0 || check.stdout != "ok\n" || !check.stderr.empty?()
+			return Result<Boolean, String>::Err("file-root check failed at compiler " + index.to_s() + ": " + check.stderr)
+		end
+		emission := try _gate6_process(executables[index], ["emit-qbe", entry])
+		if emission.status != 0 || emission.stdout.empty?() || !emission.stderr.empty?()
+			return Result<Boolean, String>::Err("file-root emission failed at compiler " + index.to_s())
+		end
+		if canonical_qbe == ""
+			canonical_qbe = emission.stdout
+		else
+			if emission.stdout != canonical_qbe
+				return Result<Boolean, String>::Err("file-root QBE differs across compiler generations")
+			end
+		end
+		output_directory := workspace + "/gate6-file-root-output-" + index.to_s()
+		try _gate6_reset_directory(output_directory)
+		output := output_directory + "/program"
+		try _gate6_verify_built_program(
+			executables[index],
+			entry,
+			output,
+			qbe,
+			"file-root-ok\n",
+			"file-root compiler " + index.to_s(),
+		)
+		try _gate6_require_no_intermediates(output_directory)
+		index += 1
+	end
+
+	repeat_a := workspace + "/gate6-file-root-repeat-a"
+	repeat_b := workspace + "/gate6-file-root-repeat-b"
+	try _gate6_reset_directory(repeat_a)
+	try _gate6_reset_directory(repeat_b)
+	try _gate6_verify_built_program(executables[0], entry, repeat_a + "/program", qbe, "file-root-ok\n", "repeat A")
+	try _gate6_verify_built_program(executables[0], entry, repeat_b + "/program", qbe, "file-root-ok\n", "repeat B")
+	try _gate6_require_same(repeat_a + "/program", repeat_b + "/program", "repeated file-root")
+
+	reference_output := workspace + "/gate6-reference-file-root"
+	reference_check := try _gate6_process(reference_trb, ["check", entry])
+	if reference_check.status != 0
+		return Result<Boolean, String>::Err("reference file-root check failed: " + reference_check.stderr)
+	end
+	reference_build := try _gate6_process(
+		reference_trb,
+		["build", "--compile", "--outfile", reference_output, entry],
+	)
+	if reference_build.status != 0
+		return Result<Boolean, String>::Err("reference file-root build failed: " + reference_build.stderr)
+	end
+	reference_runtime := try _gate6_process(reference_output, [])
+	if reference_runtime.status != 0 || reference_runtime.stdout != "file-root-ok\n" || !reference_runtime.stderr.empty?()
+		return Result<Boolean, String>::Err("reference file-root runtime differs")
+	end
+
+	precedence := workspace + "/gate6-file-root-precedence"
+	try _gate6_reset_directory(precedence)
+	created := try _gate6_process("/bin/mkdir", ["-p", precedence + "/choice"])
+	if !created.success
+		return Result<Boolean, String>::Err("cannot create precedence fixture")
+	end
+	case write_text(
+			precedence + "/main.trb",
+			"import { choice } from choice.trb\n\ndef main()\n\tputs(choice())\n\treturn\nend\n",
+		)
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
+	end
+	case write_text(precedence + "/choice.trb", "def choice(): String\n\treturn \"direct\"\nend\n")
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
+	end
+	case write_text(precedence + "/choice/index.trb", "def choice(): String\n\treturn \"index\"\nend\n")
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
+	end
+	try _gate6_verify_built_program(
+		executables[0],
+		precedence + "/main.trb",
+		precedence + "/program",
+		qbe,
+		"direct\n",
+		"file/index precedence",
+	)
+
+	cycle := workspace + "/gate6-file-root-cycle"
+	try _gate6_reset_directory(cycle)
+	case write_text(
+			cycle + "/main.trb",
+			"import { answer } from a\n\ndef main()\n\tputs(answer())\n\treturn\nend\n",
+		)
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
+	end
+	case write_text(cycle + "/a.trb", "import { helper } from b\n\ndef answer(): String\n\treturn helper()\nend\n")
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
+	end
+	case write_text(cycle + "/b.trb", "import { answer } from a\n\ndef helper(): String\n\treturn \"cycle\"\nend\n\ndef observe(): String\n\treturn answer()\nend\n")
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
+	end
+	cycle_build := try _gate6_build(
+		executables[0],
+		cycle + "/main.trb",
+		cycle + "/program",
+		workspace + "/missing-qbe",
+		workspace + "/missing-cc",
+	)
+	if cycle_build.status != 1 || !cycle_build.stdout.empty?()
+		return Result<Boolean, String>::Err("file-root cycle did not fail before tools")
+	end
+	if !cycle_build.stderr.include?("TRBN4003:1:import cycle through a")
+		return Result<Boolean, String>::Err("file-root cycle diagnostic differs: " + cycle_build.stderr)
+	end
+	try _gate6_require_missing(cycle + "/program")
+	try _gate6_require_no_intermediates(cycle)
+
+	failure_names := [
+		"missing-module",
+		"escaping-path",
+		"malformed-import",
+		"missing-export",
+		"duplicate-binding",
+		"unused-binding",
+		"local-conflict",
+		"missing-entry-main",
+		"invalid-entry-main",
+		"package-import",
+		"namespace-import",
+	]
+	failure_entries := [
+		"import { value } from missing\n\ndef main()\n\tputs(value())\n\treturn\nend\n",
+		"import { value } from ../outside\n\ndef main()\n\tputs(value())\n\treturn\nend\n",
+		"import { value } from lib\n\ndef main()\n\tputs(value())\n\treturn\nend\n",
+		"import { value } from lib\n\ndef main()\n\tputs(value())\n\treturn\nend\n",
+		"import { value, value } from lib\n\ndef main()\n\tputs(value())\n\treturn\nend\n",
+		"import { value } from lib\n\ndef main()\n\treturn\nend\n",
+		"import { value } from lib\n\ndef value(): String\n\treturn \"local\"\nend\n\ndef main()\n\tputs(value())\n\treturn\nend\n",
+		"import { helper } from lib\n\ndef run()\n\tputs(helper())\n\treturn\nend\n",
+		"def main(value: Integer)\n\treturn\nend\n",
+		"import { value } from trb/std/value\n\ndef main()\n\tputs(value())\n\treturn\nend\n",
+		"import lib\n\ndef main()\n\treturn\nend\n",
+	]
+	failure_libraries := [
+		"",
+		"",
+		"def value(): String\n\treturn \"broken\"\n",
+		"def other(): String\n\treturn \"other\"\nend\n",
+		"def value(): String\n\treturn \"value\"\nend\n",
+		"def value(): String\n\treturn \"value\"\nend\n",
+		"def value(): String\n\treturn \"imported\"\nend\n",
+		"def helper(): String\n\treturn \"helper\"\nend\n\ndef main()\n\treturn\nend\n",
+		"",
+		"",
+		"",
+	]
+	failure_diagnostics := [
+		"cannot resolve project import missing",
+		"invalid project import path ../outside",
+		"TRBN4002",
+		"module does not export value",
+		"duplicate import binding value",
+		"unused import value",
+		"import binding conflicts with local declaration value",
+		"program must declare exactly one main function",
+		"main must take no parameters",
+		"package imports are not supported by this compiler subset",
+		"TRBN4002",
+	]
+	mut failure_index := 0
+	while failure_index < failure_names.size()
+		failure_project := workspace + "/gate6-file-root-" + failure_names[failure_index]
+		try _gate6_reset_directory(failure_project)
+		try _gate6_write_source(failure_project + "/main.trb", failure_entries[failure_index])
+		if !failure_libraries[failure_index].empty?()
+			try _gate6_write_source(failure_project + "/lib.trb", failure_libraries[failure_index])
+		end
+		mut compiler_index := 0
+		while compiler_index < executables.size()
+			try _gate6_expect_file_root_failure(
+				executables[compiler_index],
+				failure_project,
+				failure_diagnostics[failure_index],
+				failure_names[failure_index] + " compiler " + compiler_index.to_s(),
+			)
+			compiler_index += 1
+		end
+		failure_index += 1
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
 describe("Gate 4 reference bootstrap") do
 	test("builds B0 from the TypeRB compiler source and executes its checked entry") do
 		root := _gate4_environment("TYPE_RB_NATIVE_ROOT")
@@ -1076,6 +1375,13 @@ describe("Gate 4 reference bootstrap") do
 						expect(false).to_be_true()
 					end
 					case _gate6_verify_build_cli(workspace, qbe)
+					when Result::Ok(_value)
+						expect(true).to_be_true()
+					when Result::Err(error)
+						puts(error)
+						expect(false).to_be_true()
+					end
+					case _gate6_verify_file_root_modules(root, workspace, qbe, reference_trb)
 					when Result::Ok(_value)
 						expect(true).to_be_true()
 					when Result::Err(error)

@@ -260,6 +260,14 @@ repository. Explicit selection makes the target part of the reproducibility
 record and keeps cross-platform builds from depending on silent host inference.
 See [Decision 0011](decisions/0011-linux-arm64-target-profile.md).
 
+Gate 6E adds a config-free file-root module graph without changing that process
+boundary. The TypeRB-authored compiler reads the selected entry and only its
+transitive named project imports, preserves declaration ownership per module,
+and emits one executable after the complete closure checks successfully.
+Unrelated siblings, package discovery, configured projects, and the hidden
+single-source recovery adapter do not enter this graph. See
+[Decision 0012](decisions/0012-file-root-module-closure.md).
+
 ## Stability and promotion
 
 No MIR, ABI profile, snapshot, object, cache, command, or runtime API in this
