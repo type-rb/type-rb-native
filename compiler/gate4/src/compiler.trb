@@ -344,7 +344,12 @@ def gate4_emit_runtime(mut output: Gate4Output)
 		"data $g4_allocation_error = { b 112 97 110 105 99 58 32 97 108 108 111 99 97 116 105 111 110 32 102 97 105 108 101 100 10 }",
 		"data $g4_bounds_error = { b 112 97 110 105 99 58 32 105 110 100 101 120 32 105 115 32 111 117 116 32 111 102 32 98 111 117 110 100 115 10 }",
 		"data $g4_integer_error = { b 112 97 110 105 99 58 32 73 110 116 101 103 101 114 32 111 112 101 114 97 116 105 111 110 32 102 97 105 108 101 100 10 }",
-		"data $g4_usage_error = { b 117 115 97 103 101 58 32 99 111 109 112 105 108 101 114 32 83 79 85 82 67 69 32 77 79 68 69 10 }",
+		"data $g4_usage_error = { b \"usage: compiler {check|emit-qbe} SOURCE\", b 10 }",
+		"data $g4_file_error = { b \"compiler: cannot read source file: \" }",
+		"data $g4_check = { b \"check\", b 0 }",
+		"data $g4_emit = { b \"emit-qbe\", b 0 }",
+		"data $g4_source_arg = { b \"--source-content\", b 0 }",
+		"data $g4_rb = { b \"rb\", b 0 }",
 		"",
 		"function $g4_fail(l %message, l %size) {",
 		"@start",
@@ -466,6 +471,10 @@ def gate4_emit_runtime(mut output: Gate4Output)
 		"\tret %string",
 		"}",
 		"",
+		"function l $g4_read_file(l %p) {\n@start\n\t%f =l call $fopen(l %p, l $g4_rb)\n\t%fm =w ceql %f, 0\n\tjnz %fm, @fail, @seek\n@seek\n\t%es =w call $fseek(l %f, l 0, w 2)\n\t%ef =w cnew %es, 0\n\tjnz %ef, @close, @len",
+		"@len\n\t%n =l call $ftell(l %f)\n\t%neg =w csltl %n, 0\n\tjnz %neg, @close, @rewind\n@rewind\n\t%rs =w call $fseek(l %f, l 0, w 0)\n\t%rf =w cnew %rs, 0\n\tjnz %rf, @close, @alloc",
+		"@alloc\n\t%sz =l add %n, 9\n\t%s =l call $g4_string_alloc(l %sz)\n\tstorel %n, %s\n\t%d =l add %s, 8\n\t%got =l call $fread(l %d, l 1, l %n, l %f)\n\t%cs =w call $fclose(l %f)\n\t%rfe =w cnel %got, %n\n\t%cfe =w cnew %cs, 0\n\t%bad =w or %rfe, %cfe\n\tjnz %bad, @fail, @done",
+		"@done\n\t%e =l add %d, %n\n\tstoreb 0, %e\n\tret %s\n@close\n\t%ignored =w call $fclose(l %f)\n\tjmp @fail\n@fail\n\tret 0\n}\n",
 		"function l $g4_string_concat(l %left, l %right) {",
 		"@start",
 		"\t%left_length =l loadl %left",
@@ -554,6 +563,7 @@ def gate4_emit_runtime(mut output: Gate4Output)
 		"\tret",
 		"}",
 		"",
+		"function $g4_eputs(l %string) {\n@start\n\t%length =l loadl %string\n\t%data =l add %string, 8\n\tcall $write(w 2, l %data, l %length)\n\tcall $write(w 2, l $g4_newline, l 1)\n\tret\n}\n",
 		"function l $g4_array_new() {",
 		"@start",
 		"\t%array =l call $g4_alloc(l 24)",
@@ -900,6 +910,10 @@ def gate4_emit_direct_call(
 	gate4_expect(state, position, ")")
 	if callee.name == "puts"
 		gate4_output_line(output, "\tcall $g4_puts(" + arguments + ")")
+		return gate4_emitted_value("", "Void", 0, "", 0, "")
+	end
+	if callee.name == "gate4_eputs"
+		gate4_output_line(output, "\tcall $g4_eputs(" + arguments + ")")
 		return gate4_emitted_value("", "Void", 0, "", 0, "")
 	end
 	if callee.name == "gate4_reset_temporary_storage"
@@ -1582,7 +1596,7 @@ def gate4_compiler_entry_function(state: Gate4Compiler): Integer
 	if index < 0
 		return - 1
 	end
-	if gate4_load_integer(state.function_parameter_counts, index) != 2
+	if gate4_load_integer(state.function_parameter_counts, index) != 3
 		return - 1
 	end
 	start := gate4_load_integer(state.function_parameter_starts, index)
@@ -1592,7 +1606,10 @@ def gate4_compiler_entry_function(state: Gate4Compiler): Integer
 	if gate4_load_string(state.parameter_types, start + 1) != "String"
 		return - 1
 	end
-	if gate4_load_string(state.function_result_types, index) != "Void"
+	if gate4_load_string(state.parameter_types, start + 2) != "Boolean"
+		return - 1
+	end
+	if gate4_load_string(state.function_result_types, index) != "Integer"
 		return - 1
 	end
 	return index
@@ -1603,27 +1620,30 @@ def gate4_emit_entry(state: Gate4Compiler, mut output: Gate4Output)
 	gate4_output_line(output, "export function w $main(w %argc, l %argv) {")
 	gate4_output_line(output, "@start")
 	if compiler_entry >= 0
-		gate4_output_line(output, "\t%valid_argc =w ceqw %argc, 3")
-		gate4_output_line(output, "\tjnz %valid_argc, @compile, @usage")
-		gate4_output_line(output, "@usage")
-		gate4_output_line(output, "\tcall $g4_fail(l $g4_usage_error, l 28)")
-		gate4_output_line(output, "\thlt")
-		gate4_output_line(output, "@compile")
-		gate4_output_line(output, "\t%source_slot =l add %argv, 8")
-		gate4_output_line(output, "\t%source_c =l loadl %source_slot")
-		gate4_output_line(output, "\t%source =l call $g4_string_from_c(l %source_c)")
-		gate4_output_line(output, "\t%mode_slot =l add %argv, 16")
-		gate4_output_line(output, "\t%mode_c =l loadl %mode_slot")
-		gate4_output_line(output, "\t%mode =l call $g4_string_from_c(l %mode_c)")
 		gate4_output_line(
 			output,
-			"\tcall $g4f" + gate4_integer_string(compiler_entry) + "(l %source, l %mode)",
+			"\t%a3 =w ceqw %argc, 3\n\tjnz %a3, @fargs, @hargc\n@hargc\n\t%a4 =w ceqw %argc, 4\n\tjnz %a4, @hargs, @usage\n@hargs\n\t%hfp =l add %argv, 8\n\t%hf =l loadl %hfp\n\t%hfc =w call $strcmp(l %hf, l $g4_source_arg)\n\t%valid_hf =w ceqw %hfc, 0\n\tjnz %valid_hf, @hidden, @usage\n@usage\n\tcall $write(w 2, l $g4_usage_error, l 40)\n\tret 64\n@hidden\n\t%hmp =l add %argv, 16\n\t%hmc =l loadl %hmp\n\t%hm =l call $g4_string_from_c(l %hmc)\n\t%hsp =l add %argv, 24\n\t%hsc =l loadl %hsp\n\t%hs =l call $g4_string_from_c(l %hsc)",
 		)
+		gate4_output_line(
+			output,
+			"\t%hst =l call $g4f" + gate4_integer_string(compiler_entry) +
+			"(l %hs, l %hm, l 0)",
+		)
+		gate4_output_line(
+			output,
+			"\tret 0\n@fargs\n\t%fmp =l add %argv, 8\n\t%fmc =l loadl %fmp\n\t%cc =w call $strcmp(l %fmc, l $g4_check)\n\t%cm =w ceqw %cc, 0\n\t%ec =w call $strcmp(l %fmc, l $g4_emit)\n\t%em =w ceqw %ec, 0\n\t%valid_fm =w or %cm, %em\n\tjnz %valid_fm, @file, @usage\n@file\n\t%pp =l add %argv, 16\n\t%path =l loadl %pp\n\t%src =l call $g4_read_file(l %path)\n\t%rf =w ceql %src, 0\n\tjnz %rf, @read_error, @compile\n@read_error\n\tcall $write(w 2, l $g4_file_error, l 35)\n\t%pl =l call $strlen(l %path)\n\tcall $write(w 2, l %path, l %pl)\n\tcall $write(w 2, l $g4_newline, l 1)\n\tret 66\n@compile\n\t%fm =l call $g4_string_from_c(l %fmc)",
+		)
+		gate4_output_line(
+			output,
+			"\t%fst =l call $g4f" + gate4_integer_string(compiler_entry) +
+			"(l %src, l %fm, l 1)",
+		)
+		gate4_output_line(output, "\t%failed =w cnel %fst, 0\n\tret %failed")
 	else
 		main_index := gate4_find_function(state, "main")
 		gate4_output_line(output, "\tcall $g4f" + gate4_integer_string(main_index) + "()")
+		gate4_output_line(output, "\tret 0")
 	end
-	gate4_output_line(output, "\tret 0")
 	gate4_output_line(output, "}")
 	return
 end
@@ -1641,15 +1661,24 @@ def gate4_emit_qbe(mut state: Gate4Compiler): Gate4Output
 	return output
 end
 
-def gate4_print_diagnostic(state: Gate4Compiler)
-	puts(
-		gate4_load_string(state.diagnostic_codes, 0) + ":" + gate4_integer_string(gate4_load_integer(state.diagnostic_lines, 0)) + ":" +
-		gate4_load_string(state.diagnostic_messages, 0),
-	)
+def gate4_eputs(_value: String)
 	return
 end
 
-def compiler_main(source: String, mode: String)
+def gate4_print_diagnostic(state: Gate4Compiler, file_mode: Boolean)
+	mut message := gate4_load_string(state.diagnostic_codes, 0) + ":"
+	message += gate4_integer_string(gate4_load_integer(state.diagnostic_lines, 0))
+	message += ":"
+	message += gate4_load_string(state.diagnostic_messages, 0)
+	if file_mode
+		gate4_eputs(message)
+	else
+		puts(message)
+	end
+	return
+end
+
+def compiler_main(source: String, mode: String, file_mode: Boolean): Integer
 	mut state := gate4_compiler_new(source.size() + 1)
 	gate4_lex(state, source)
 	if !gate4_has_diagnostic(state)
@@ -1662,28 +1691,33 @@ def compiler_main(source: String, mode: String)
 		gate4_check(state)
 	end
 	if gate4_has_diagnostic(state)
-		gate4_print_diagnostic(state)
-		return
+		gate4_print_diagnostic(state, file_mode)
+		return 1
 	end
 	if mode == "check"
 		puts("ok")
-		return
+		return 0
 	end
 	if mode == "emit-qbe"
 		output := gate4_emit_qbe(state)
 		if gate4_has_diagnostic(state)
-			gate4_print_diagnostic(state)
-			return
+			gate4_print_diagnostic(state, file_mode)
+			return 1
 		end
 		mut index := 0
 		while index < output.count[0]
 			puts(gate4_load_string(output.lines, index))
 			index += 1
 		end
-		return
+		return 0
 	end
-	puts("TRBN4006:1:unsupported compiler mode " + mode)
-	return
+	message := "TRBN4006:1:unsupported compiler mode " + mode
+	if file_mode
+		gate4_eputs(message)
+	else
+		puts(message)
+	end
+	return 64
 end
 
 def gate4_has_diagnostic(state: Gate4Compiler): Boolean
@@ -1939,8 +1973,9 @@ end
 def gate4_lex(mut state: Gate4Compiler, source: String): Boolean
 	mut position := [0]
 	mut line := 1
+	mut character := ""
 	while position[0] < source.size()
-		character := source[position[0]]
+		character = source[position[0]]
 		if character == " "
 			position[0] = position[0] + 1
 		else

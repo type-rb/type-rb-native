@@ -249,6 +249,18 @@ and compiler-plus-QBE sizes improve by 94.46% and 82.18%. See the
 
 ### Gate 6: Self-hosted product feasibility
 
+Gate 6 begins with the separately measurable Gate 6A file-entry slice
+registered in
+[issue #35](https://github.com/type-rb/type-rb-native/issues/35) and specified
+by [Decision 0008](decisions/0008-file-oriented-compiler-entry.md). B1 and later
+compiler generations first replace the ordinary source-content argv adapter
+with `check SOURCE` and `emit-qbe SOURCE` file commands, exact stderr and exit
+behavior, and TypeRB-owned direct file I/O. B0 retains an explicit hidden
+source-content adapter for recovery. Gate 6A retains the complete compiler and
+conformance corpus, the B1/B2/B3 fixed point, and normalized executable
+identity, then measures the file boundary against the same-generation hidden
+path before broader product work proceeds.
+
 This gate is not authorization to ship. It evaluates:
 
 - representative multi-module applications;
