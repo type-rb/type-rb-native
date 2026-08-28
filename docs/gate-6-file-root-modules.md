@@ -7,10 +7,13 @@ and its ownership decision is [Decision 0012](decisions/0012-file-root-module-cl
 
 ## Status
 
-Implementation and permanent correctness coverage are complete. Formal Darwin
-arm64 and pinned Linux arm64 evidence must still be recorded before Gate 6E is
-complete. This remains an internal experiment rather than a supported project
-or command format.
+Gate 6E is complete at measured TypeRB Native revision
+`b2b4740f39571dc35af9199dae817d94912b7a47`. The reviewed Darwin arm64
+measurements, exact Native compiler closure, and pinned Linux arm64 correctness
+run are recorded in the
+[Gate 6E result](../results/2026-08-29-gate6e-file-root-darwin-linux-arm64/README.md).
+This remains an internal experiment rather than a supported project or command
+format.
 
 ## File-root boundary
 
@@ -47,13 +50,13 @@ than weakening the application:
 - hot-loop arithmetic and safe constant Array addressing may be inlined; and
 - deterministic program-size budgets keep the self-hosted compiler compact.
 
-Exploratory alternating runs place the representative Native executable inside
-the registered 25% runtime boundary while the fixed-point stripped compiler
-remains below its 208,530-byte ceiling. These probes guide implementation only;
-the TypeRB-authored [`gate6e-benchmark`](../tools/gate6e-benchmark/README.md)
-records the compiler closure, alternating Native/Go build and runtime series,
-RSS, sizes, hashes, dependency inventory, and recovery provenance used by the
-reviewed result.
+The formal alternating result places Native runtime 13.70% above optimized Go
+and inside the registered 25% boundary. Native builds 44.89% faster, uses
+48.22% less build RSS and 65.32% less runtime RSS, and produces a stripped
+application 97.82% smaller than Go with no overhead relative to flattened
+Native. The fixed-point compiler is 199,992 stripped bytes. The TypeRB-authored
+[`gate6e-benchmark`](../tools/gate6e-benchmark/README.md) records the compiler
+closure, raw series, hashes, dependency inventory, and recovery provenance.
 
 ## Deferred scope
 

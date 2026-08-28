@@ -138,14 +138,15 @@ and median RSS by at most 0.35%. See the
 [measurement harness](tools/gate6d-benchmark/README.md), and
 [recorded result](results/2026-08-29-gate6d-native-bootstrap-linux-arm64/README.md).
 
-Gate 6E is in progress under the pre-registered scope in
-[issue #51](https://github.com/type-rb/type-rb-native/issues/51). Its
-TypeRB-authored file commands now load the entry module plus the transitive
-closure of explicit named project imports, preserve per-module declaration
-identity, and build a representative five-module executable through the exact
-Native compiler chain. Formal Darwin and pinned Linux evidence remains before
-the gate is complete. See the
-[Gate 6E file-root plan](docs/gate-6-file-root-modules.md).
+Gate 6E is complete at measured revision
+`b2b4740f39571dc35af9199dae817d94912b7a47`. Its TypeRB-authored file
+commands load the entry module plus the transitive closure of explicit named
+project imports and preserve per-module declaration identity. The
+representative Native executable builds 44.89% faster, uses 48.22% less build
+RSS, runs 13.70% slower, uses 65.32% less runtime RSS, and is 97.82% smaller
+than optimized Go. B2/B3/B4 are byte-identical on Darwin and Linux arm64. See
+the [Gate 6E file-root plan](docs/gate-6-file-root-modules.md) and
+[recorded result](results/2026-08-29-gate6e-file-root-darwin-linux-arm64/README.md).
 
 Configured project discovery, production runtime integration,
 package/native-library boundaries, incremental builds, toolchain discovery,
@@ -260,6 +261,7 @@ repository.
 - [Gate 6D Linux arm64 target chain](docs/gate-6-linux-arm64.md)
 - [Gate 6D Linux arm64 target-chain result](results/2026-08-29-gate6d-native-bootstrap-linux-arm64/README.md)
 - [Gate 6E file-root multi-module executables](docs/gate-6-file-root-modules.md)
+- [Gate 6E file-root Darwin/Linux arm64 result](results/2026-08-29-gate6e-file-root-darwin-linux-arm64/README.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
 - [Decision 0003: Gate 1 QBE and Darwin arm64 profile](docs/decisions/0003-gate-1-qbe-target.md)
