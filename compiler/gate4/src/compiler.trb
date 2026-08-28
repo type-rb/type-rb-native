@@ -45,6 +45,31 @@ record Gate4CheckedValue
 	mutable: Integer
 end
 
+record Gate4Output
+	lines: Array<String>
+	count: Array<Integer>
+end
+
+record Gate4EmitContext
+	local_names: Array<String>
+	local_types: Array<String>
+	local_slots: Array<String>
+	local_mutable: Array<Integer>
+	local_count: Array<Integer>
+	slot_count: Array<Integer>
+	temporary_count: Array<Integer>
+	label_count: Array<Integer>
+end
+
+record Gate4EmittedValue
+	operand: String
+	type_name: String
+	category: Integer
+	name: String
+	mutable: Integer
+	address: String
+end
+
 def gate4_integer_storage(capacity: Integer): Array<Integer>
 	mut values: Array<Integer> := []
 	mut index := 0
@@ -107,6 +132,1333 @@ def gate4_locals_new(capacity: Integer): Gate4Locals
 		mutable: gate4_integer_storage(capacity),
 		count: [0],
 	)
+end
+
+def gate4_output_new(capacity: Integer): Gate4Output
+	return Gate4Output.new(lines: gate4_string_storage(capacity), count: [0])
+end
+
+def gate4_emit_context_new(capacity: Integer): Gate4EmitContext
+	return Gate4EmitContext.new(
+		local_names: gate4_string_storage(capacity),
+		local_types: gate4_string_storage(capacity),
+		local_slots: gate4_string_storage(capacity),
+		local_mutable: gate4_integer_storage(capacity),
+		local_count: [0],
+		slot_count: [0],
+		temporary_count: [0],
+		label_count: [0],
+	)
+end
+
+def gate4_output_line(mut output: Gate4Output, line: String)
+	index := output.count[0]
+	output.lines[index] = line
+	output.count[0] = index + 1
+	return
+end
+
+def gate4_integer_string(value: Integer): String
+	if value == 0
+		return "0"
+	end
+	mut remaining := value
+	mut negative := false
+	if remaining < 0
+		negative = true
+		remaining = 0 - remaining
+	end
+	digits := "0123456789"
+	mut result := ""
+	while remaining > 0
+		digit := remaining % 10
+		result = digits[digit] + result
+		remaining /= 10
+	end
+	if negative
+		result = "-" + result
+	end
+	return result
+end
+
+def gate4_ascii_code(character: String): Integer
+	if character == "\n"
+		return 10
+	end
+	if character == "\r"
+		return 13
+	end
+	if character == "\t"
+		return 9
+	end
+	alphabet := " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+	mut code :=- 1
+	mut index := 0
+	while index < alphabet.size()
+		if alphabet[index] == character
+			code = index + 32
+		end
+		index += 1
+	end
+	return code
+end
+
+def gate4_emit_static_strings(
+		mut state: Gate4Compiler,
+		mut output: Gate4Output,
+	): Boolean
+	mut token_index := 0
+	while token_index < state.token_count[0]
+		if state.token_kinds[token_index] == 3
+			value := state.token_texts[token_index]
+			mut line := "data $g4s" + gate4_integer_string(token_index) + " = align 8 { l " + gate4_integer_string(value.size()) + ", b"
+			mut character_index := 0
+			while character_index < value.size()
+				code := gate4_ascii_code(value[character_index])
+				if code < 0
+					gate4_diagnostic(
+						state,
+						"TRBN4005",
+						state.token_lines[token_index],
+						"Gate 4 QBE emission supports ASCII String literals only",
+					)
+				else
+					line += " " + gate4_integer_string(code)
+				end
+				character_index += 1
+			end
+			line += " 0 }"
+			gate4_output_line(output, line)
+		end
+		token_index += 1
+	end
+	gate4_output_line(output, "")
+	return !gate4_has_diagnostic(state)
+end
+
+def gate4_emit_runtime(mut output: Gate4Output)
+	lines := [
+		"data $g4_newline = { b 10 }",
+		"data $g4_allocation_error = { b 112 97 110 105 99 58 32 97 108 108 111 99 97 116 105 111 110 32 102 97 105 108 101 100 10 }",
+		"data $g4_bounds_error = { b 112 97 110 105 99 58 32 105 110 100 101 120 32 105 115 32 111 117 116 32 111 102 32 98 111 117 110 100 115 10 }",
+		"data $g4_integer_error = { b 112 97 110 105 99 58 32 73 110 116 101 103 101 114 32 111 112 101 114 97 116 105 111 110 32 102 97 105 108 101 100 10 }",
+		"data $g4_usage_error = { b 117 115 97 103 101 58 32 99 111 109 112 105 108 101 114 32 83 79 85 82 67 69 32 77 79 68 69 10 }",
+		"",
+		"function $g4_fail(l %message, l %size) {",
+		"@start",
+		"\tcall $write(w 2, l %message, l %size)",
+		"\tcall $exit(w 2)",
+		"\thlt",
+		"}",
+		"",
+		"function l $g4_alloc(l %size) {",
+		"@start",
+		"\t%pointer =l call $calloc(l 1, l %size)",
+		"\t%failed =w ceql %pointer, 0",
+		"\tjnz %failed, @fail, @ok",
+		"@fail",
+		"\tcall $g4_fail(l $g4_allocation_error, l 26)",
+		"\thlt",
+		"@ok",
+		"\tret %pointer",
+		"}",
+		"",
+		"function l $g4_string_from_c(l %source) {",
+		"@start",
+		"\t%length =l call $strlen(l %source)",
+		"\t%size =l add %length, 9",
+		"\t%string =l call $g4_alloc(l %size)",
+		"\tstorel %length, %string",
+		"\t%data =l add %string, 8",
+		"\tcall $memcpy(l %data, l %source, l %length)",
+		"\t%end =l add %data, %length",
+		"\tstoreb 0, %end",
+		"\tret %string",
+		"}",
+		"",
+		"function l $g4_string_concat(l %left, l %right) {",
+		"@start",
+		"\t%left_length =l loadl %left",
+		"\t%right_length =l loadl %right",
+		"\t%length =l add %left_length, %right_length",
+		"\t%size =l add %length, 9",
+		"\t%string =l call $g4_alloc(l %size)",
+		"\tstorel %length, %string",
+		"\t%data =l add %string, 8",
+		"\t%left_data =l add %left, 8",
+		"\tcall $memcpy(l %data, l %left_data, l %left_length)",
+		"\t%right_target =l add %data, %left_length",
+		"\t%right_data =l add %right, 8",
+		"\tcall $memcpy(l %right_target, l %right_data, l %right_length)",
+		"\t%end =l add %data, %length",
+		"\tstoreb 0, %end",
+		"\tret %string",
+		"}",
+		"",
+		"function l $g4_string_equal(l %left, l %right) {",
+		"@start",
+		"\t%left_length =l loadl %left",
+		"\t%right_length =l loadl %right",
+		"\t%same_length =w ceql %left_length, %right_length",
+		"\tjnz %same_length, @compare, @different",
+		"@compare",
+		"\t%left_data =l add %left, 8",
+		"\t%right_data =l add %right, 8",
+		"\t%comparison =w call $memcmp(l %left_data, l %right_data, l %left_length)",
+		"\t%equal =w ceqw %comparison, 0",
+		"\t%result =l extuw %equal",
+		"\tret %result",
+		"@different",
+		"\tret 0",
+		"}",
+		"",
+		"function l $g4_string_index(l %string, l %requested) {",
+		"@start",
+		"\t%length =l loadl %string",
+		"\t%negative =w csltl %requested, 0",
+		"\tjnz %negative, @negative, @check",
+		"@negative",
+		"\t%adjusted_negative =l add %length, %requested",
+		"\tjmp @bounds",
+		"@check",
+		"\t%adjusted_positive =l copy %requested",
+		"\tjmp @bounds",
+		"@bounds",
+		"\t%index =l phi @negative %adjusted_negative, @check %adjusted_positive",
+		"\t%below =w csltl %index, 0",
+		"\t%above =w cslel %length, %index",
+		"\t%invalid =w or %below, %above",
+		"\tjnz %invalid, @fail, @load",
+		"@fail",
+		"\tcall $g4_fail(l $g4_bounds_error, l 30)",
+		"\thlt",
+		"@load",
+		"\t%data =l add %string, 8",
+		"\t%address =l add %data, %index",
+		"\t%character =w loadub %address",
+		"\t%result =l call $g4_alloc(l 10)",
+		"\tstorel 1, %result",
+		"\t%result_data =l add %result, 8",
+		"\tstoreb %character, %result_data",
+		"\t%result_end =l add %result_data, 1",
+		"\tstoreb 0, %result_end",
+		"\tret %result",
+		"}",
+		"",
+		"function $g4_puts(l %string) {",
+		"@start",
+		"\t%length =l loadl %string",
+		"\t%data =l add %string, 8",
+		"\tcall $write(w 1, l %data, l %length)",
+		"\tcall $write(w 1, l $g4_newline, l 1)",
+		"\tret",
+		"}",
+		"",
+		"function l $g4_array_new() {",
+		"@start",
+		"\t%array =l call $g4_alloc(l 24)",
+		"\t%data =l call $g4_alloc(l 32)",
+		"\tstorel 0, %array",
+		"\t%capacity =l add %array, 8",
+		"\tstorel 4, %capacity",
+		"\t%data_slot =l add %array, 16",
+		"\tstorel %data, %data_slot",
+		"\tret %array",
+		"}",
+		"",
+		"function $g4_array_push(l %array, l %value) {",
+		"@start",
+		"\t%length =l loadl %array",
+		"\t%capacity_slot =l add %array, 8",
+		"\t%capacity =l loadl %capacity_slot",
+		"\t%full =w ceql %length, %capacity",
+		"\tjnz %full, @grow, @store",
+		"@grow",
+		"\t%new_capacity =l mul %capacity, 2",
+		"\t%new_bytes =l mul %new_capacity, 8",
+		"\t%data_slot =l add %array, 16",
+		"\t%data =l loadl %data_slot",
+		"\t%new_data =l call $realloc(l %data, l %new_bytes)",
+		"\t%failed =w ceql %new_data, 0",
+		"\tjnz %failed, @fail, @grown",
+		"@fail",
+		"\tcall $g4_fail(l $g4_allocation_error, l 26)",
+		"\thlt",
+		"@grown",
+		"\tstorel %new_capacity, %capacity_slot",
+		"\tstorel %new_data, %data_slot",
+		"\tjmp @store",
+		"@store",
+		"\t%current_data_slot =l add %array, 16",
+		"\t%current_data =l loadl %current_data_slot",
+		"\t%offset =l mul %length, 8",
+		"\t%target =l add %current_data, %offset",
+		"\tstorel %value, %target",
+		"\t%new_length =l add %length, 1",
+		"\tstorel %new_length, %array",
+		"\tret",
+		"}",
+		"",
+		"function l $g4_array_address(l %array, l %requested) {",
+		"@start",
+		"\t%length =l loadl %array",
+		"\t%negative =w csltl %requested, 0",
+		"\tjnz %negative, @negative, @check",
+		"@negative",
+		"\t%adjusted_negative =l add %length, %requested",
+		"\tjmp @bounds",
+		"@check",
+		"\t%adjusted_positive =l copy %requested",
+		"\tjmp @bounds",
+		"@bounds",
+		"\t%index =l phi @negative %adjusted_negative, @check %adjusted_positive",
+		"\t%below =w csltl %index, 0",
+		"\t%above =w cslel %length, %index",
+		"\t%invalid =w or %below, %above",
+		"\tjnz %invalid, @fail, @load",
+		"@fail",
+		"\tcall $g4_fail(l $g4_bounds_error, l 30)",
+		"\thlt",
+		"@load",
+		"\t%data_slot =l add %array, 16",
+		"\t%data =l loadl %data_slot",
+		"\t%offset =l mul %index, 8",
+		"\t%address =l add %data, %offset",
+		"\tret %address",
+		"}",
+		"",
+		"function l $g4_integer_add(l %left, l %right) {",
+		"@start",
+		"\t%result =l add %left, %right",
+		"\t%left_changed =l xor %left, %result",
+		"\t%right_changed =l xor %right, %result",
+		"\t%both =l and %left_changed, %right_changed",
+		"\t%overflow =w csltl %both, 0",
+		"\tjnz %overflow, @fail, @ok",
+		"@fail",
+		"\tcall $g4_fail(l $g4_integer_error, l 32)",
+		"\thlt",
+		"@ok",
+		"\tret %result",
+		"}",
+		"",
+		"function l $g4_integer_subtract(l %left, l %right) {",
+		"@start",
+		"\t%result =l sub %left, %right",
+		"\t%different =l xor %left, %right",
+		"\t%changed =l xor %left, %result",
+		"\t%both =l and %different, %changed",
+		"\t%overflow =w csltl %both, 0",
+		"\tjnz %overflow, @fail, @ok",
+		"@fail",
+		"\tcall $g4_fail(l $g4_integer_error, l 32)",
+		"\thlt",
+		"@ok",
+		"\tret %result",
+		"}",
+		"",
+		"function l $g4_integer_multiply(l %left, l %right) {",
+		"@start",
+		"\t%left_zero =w ceql %left, 0",
+		"\t%right_zero =w ceql %right, 0",
+		"\t%zero =w or %left_zero, %right_zero",
+		"\tjnz %zero, @zero, @special",
+		"@zero",
+		"\tret 0",
+		"@special",
+		"\t%minimum =w ceql %left, -9223372036854775808",
+		"\t%negative_one =w ceql %right, -1",
+		"\t%reverse_minimum =w ceql %right, -9223372036854775808",
+		"\t%reverse_negative_one =w ceql %left, -1",
+		"\t%overflow_one =w and %minimum, %negative_one",
+		"\t%overflow_two =w and %reverse_minimum, %reverse_negative_one",
+		"\t%overflow_special =w or %overflow_one, %overflow_two",
+		"\tjnz %overflow_special, @fail, @multiply",
+		"@multiply",
+		"\t%result =l mul %left, %right",
+		"\t%recovered =l div %result, %right",
+		"\t%overflow =w cnel %recovered, %left",
+		"\tjnz %overflow, @fail, @ok",
+		"@fail",
+		"\tcall $g4_fail(l $g4_integer_error, l 32)",
+		"\thlt",
+		"@ok",
+		"\tret %result",
+		"}",
+		"",
+		"function l $g4_integer_divide(l %left, l %right) {",
+		"@start",
+		"\t%zero =w ceql %right, 0",
+		"\t%minimum =w ceql %left, -9223372036854775808",
+		"\t%negative_one =w ceql %right, -1",
+		"\t%overflow =w and %minimum, %negative_one",
+		"\t%invalid =w or %zero, %overflow",
+		"\tjnz %invalid, @fail, @ok",
+		"@fail",
+		"\tcall $g4_fail(l $g4_integer_error, l 32)",
+		"\thlt",
+		"@ok",
+		"\t%result =l div %left, %right",
+		"\tret %result",
+		"}",
+		"",
+		"function l $g4_integer_remainder(l %left, l %right) {",
+		"@start",
+		"\t%zero =w ceql %right, 0",
+		"\tjnz %zero, @fail, @special",
+		"@fail",
+		"\tcall $g4_fail(l $g4_integer_error, l 32)",
+		"\thlt",
+		"@special",
+		"\t%minimum =w ceql %left, -9223372036854775808",
+		"\t%negative_one =w ceql %right, -1",
+		"\t%safe_zero =w and %minimum, %negative_one",
+		"\tjnz %safe_zero, @zero, @ok",
+		"@zero",
+		"\tret 0",
+		"@ok",
+		"\t%result =l rem %left, %right",
+		"\tret %result",
+		"}",
+		"",
+	]
+	mut index := 0
+	while index < lines.size()
+		gate4_output_line(output, lines[index])
+		index += 1
+	end
+	return
+end
+
+def gate4_emitted_value(
+		operand: String,
+		type_name: String,
+		category: Integer,
+		name: String,
+		mutable: Integer,
+		address: String,
+	): Gate4EmittedValue
+	return Gate4EmittedValue.new(
+		operand: operand,
+		type_name: type_name,
+		category: category,
+		name: name,
+		mutable: mutable,
+		address: address,
+	)
+end
+
+def gate4_emit_temporary(mut context: Gate4EmitContext): String
+	index := context.temporary_count[0]
+	context.temporary_count[0] = index + 1
+	return "%t" + gate4_integer_string(index)
+end
+
+def gate4_emit_label(mut context: Gate4EmitContext): String
+	index := context.label_count[0]
+	context.label_count[0] = index + 1
+	return "@l" + gate4_integer_string(index)
+end
+
+def gate4_emit_local_find(context: Gate4EmitContext, name: String): Integer
+	mut found :=- 1
+	mut index := 0
+	while index < context.local_count[0]
+		if context.local_names[index] == name
+			found = index
+		end
+		index += 1
+	end
+	return found
+end
+
+def gate4_emit_add_local(
+		mut context: Gate4EmitContext,
+		mut output: Gate4Output,
+		name: String,
+		type_name: String,
+		mutable: Integer,
+		initial: String,
+	): String
+	index := context.local_count[0]
+	slot_index := context.slot_count[0]
+	slot := "%v" + gate4_integer_string(slot_index)
+	context.local_names[index] = name
+	context.local_types[index] = type_name
+	context.local_slots[index] = slot
+	context.local_mutable[index] = mutable
+	context.local_count[0] = index + 1
+	context.slot_count[0] = slot_index + 1
+	gate4_output_line(output, "\t" + slot + " =l alloc8 8")
+	gate4_output_line(output, "\tstorel " + initial + ", " + slot)
+	return slot
+end
+
+def gate4_emit_loaded_local(
+		mut context: Gate4EmitContext,
+		mut output: Gate4Output,
+		index: Integer,
+	): Gate4EmittedValue
+	operand := gate4_emit_temporary(context)
+	gate4_output_line(output, "\t" + operand + " =l loadl " + context.local_slots[index])
+	return gate4_emitted_value(
+		operand,
+		context.local_types[index],
+		0,
+		context.local_names[index],
+		context.local_mutable[index],
+		context.local_slots[index],
+	)
+end
+
+def gate4_emit_address(
+		mut context: Gate4EmitContext,
+		mut output: Gate4Output,
+		base: String,
+		offset: Integer,
+	): String
+	if offset == 0
+		return base
+	end
+	address := gate4_emit_temporary(context)
+	gate4_output_line(output, "\t" + address + " =l add " + base + ", " + gate4_integer_string(offset))
+	return address
+end
+
+def gate4_emit_array_literal(
+		mut state: Gate4Compiler,
+		mut position: Array<Integer>,
+		mut context: Gate4EmitContext,
+		mut output: Gate4Output,
+		expected: String,
+	): Gate4EmittedValue
+	gate4_advance(position)
+	gate4_skip_newlines(state, position)
+	element_type := gate4_array_element_type(expected)
+	array := gate4_emit_temporary(context)
+	gate4_output_line(output, "\t" + array + " =l call $g4_array_new()")
+	mut finished := false
+	while !finished
+		if gate4_token_is(state, position[0], "]")
+			finished = true
+		else
+			value := gate4_emit_expression(state, position, context, output, 1, element_type)
+			gate4_output_line(output, "\tcall $g4_array_push(l " + array + ", l " + value.operand + ")")
+			if gate4_token_is(state, position[0], ",")
+				gate4_advance(position)
+				gate4_skip_newlines(state, position)
+			else
+				finished = true
+			end
+		end
+	end
+	gate4_expect(state, position, "]")
+	return gate4_emitted_value(array, expected, 0, "", 1, "")
+end
+
+def gate4_emit_direct_call(
+		mut state: Gate4Compiler,
+		mut position: Array<Integer>,
+		mut context: Gate4EmitContext,
+		mut output: Gate4Output,
+		callee: Gate4EmittedValue,
+	): Gate4EmittedValue
+	gate4_advance(position)
+	gate4_skip_newlines(state, position)
+	function_index := gate4_find_function(state, callee.name)
+	mut parameter_start := 0
+	mut result_type := "Void"
+	if function_index >= 0
+		parameter_start = state.function_parameter_starts[function_index]
+		result_type = state.function_result_types[function_index]
+	end
+	mut arguments := ""
+	mut argument_count := 0
+	mut finished := false
+	while !finished
+		if gate4_token_is(state, position[0], ")")
+			finished = true
+		else
+			mut expected := "String"
+			if function_index >= 0
+				expected = state.parameter_types[parameter_start + argument_count]
+			end
+			value := gate4_emit_expression(state, position, context, output, 1, expected)
+			if arguments != ""
+				arguments += ", "
+			end
+			arguments += "l " + value.operand
+			argument_count += 1
+			if gate4_token_is(state, position[0], ",")
+				gate4_advance(position)
+				gate4_skip_newlines(state, position)
+			else
+				finished = true
+			end
+		end
+	end
+	gate4_expect(state, position, ")")
+	if callee.name == "puts"
+		gate4_output_line(output, "\tcall $g4_puts(" + arguments + ")")
+		return gate4_emitted_value("", "Void", 0, "", 0, "")
+	end
+	if result_type == "Void"
+		gate4_output_line(
+			output,
+			"\tcall $g4f" + gate4_integer_string(function_index) + "(" + arguments + ")",
+		)
+		return gate4_emitted_value("", "Void", 0, "", 0, "")
+	end
+	result := gate4_emit_temporary(context)
+	gate4_output_line(
+		output,
+		"\t" + result + " =l call $g4f" + gate4_integer_string(function_index) + "(" + arguments + ")",
+	)
+	return gate4_emitted_value(result, result_type, 0, "", 0, "")
+end
+
+def gate4_emit_record_new(
+		mut state: Gate4Compiler,
+		mut position: Array<Integer>,
+		mut context: Gate4EmitContext,
+		mut output: Gate4Output,
+		record_name: String,
+	): Gate4EmittedValue
+	record_index := gate4_find_record(state, record_name)
+	field_start := state.record_field_starts[record_index]
+	field_count := state.record_field_counts[record_index]
+	record_value := gate4_emit_temporary(context)
+	gate4_output_line(
+		output,
+		"\t" + record_value + " =l call $g4_alloc(l " + gate4_integer_string(field_count * 8) + ")",
+	)
+	gate4_advance(position)
+	gate4_skip_newlines(state, position)
+	mut field_offset := 0
+	mut finished := false
+	while !finished
+		if gate4_token_is(state, position[0], ")")
+			finished = true
+		else
+			gate4_expect_identifier(state, position)
+			gate4_expect(state, position, ":")
+			value := gate4_emit_expression(
+				state,
+				position,
+				context,
+				output,
+				1,
+				state.field_types[field_start + field_offset],
+			)
+			address := gate4_emit_address(context, output, record_value, field_offset * 8)
+			gate4_output_line(output, "\tstorel " + value.operand + ", " + address)
+			field_offset += 1
+			if gate4_token_is(state, position[0], ",")
+				gate4_advance(position)
+				gate4_skip_newlines(state, position)
+			else
+				finished = true
+			end
+		end
+	end
+	gate4_expect(state, position, ")")
+	return gate4_emitted_value(record_value, record_name, 0, "", 1, "")
+end
+
+def gate4_emit_method_call(
+		mut state: Gate4Compiler,
+		mut position: Array<Integer>,
+		mut context: Gate4EmitContext,
+		mut output: Gate4Output,
+		receiver: Gate4EmittedValue,
+		method: String,
+	): Gate4EmittedValue
+	gate4_advance(position)
+	gate4_skip_newlines(state, position)
+	if method == "size"
+		gate4_expect(state, position, ")")
+		result := gate4_emit_temporary(context)
+		gate4_output_line(output, "\t" + result + " =l loadl " + receiver.operand)
+		return gate4_emitted_value(result, "Integer", 0, "", 0, "")
+	end
+	if method == "push"
+		element_type := gate4_array_element_type(receiver.type_name)
+		value := gate4_emit_expression(state, position, context, output, 1, element_type)
+		gate4_skip_newlines(state, position)
+		gate4_expect(state, position, ")")
+		gate4_output_line(
+			output,
+			"\tcall $g4_array_push(l " + receiver.operand + ", l " + value.operand + ")",
+		)
+		return gate4_emitted_value("", "Void", 0, "", 0, "")
+	end
+	return gate4_emitted_value("", "Invalid", 0, "", 0, "")
+end
+
+def gate4_emit_postfix(
+		mut state: Gate4Compiler,
+		mut position: Array<Integer>,
+		mut context: Gate4EmitContext,
+		mut output: Gate4Output,
+		initial: Gate4EmittedValue,
+	): Gate4EmittedValue
+	mut value := gate4_emitted_value(
+		initial.operand,
+		initial.type_name,
+		initial.category,
+		initial.name,
+		initial.mutable,
+		initial.address,
+	)
+	mut scanning := true
+	while scanning
+		if gate4_token_is(state, position[0], "(")
+			value = gate4_emit_direct_call(state, position, context, output, value)
+		else
+			if gate4_token_is(state, position[0], ".")
+				gate4_advance(position)
+				member := gate4_expect_identifier(state, position)
+				if gate4_token_is(state, position[0], "(")
+					if value.category == 2
+						value = gate4_emit_record_new(state, position, context, output, value.name)
+					else
+						value = gate4_emit_method_call(state, position, context, output, value, member)
+					end
+				else
+					record_index := gate4_find_record(state, value.type_name)
+					field_index := gate4_find_field(state, record_index, member)
+					offset := (field_index - state.record_field_starts[record_index]) * 8
+					address := gate4_emit_address(context, output, value.operand, offset)
+					operand := gate4_emit_temporary(context)
+					gate4_output_line(output, "\t" + operand + " =l loadl " + address)
+					value = gate4_emitted_value(
+						operand,
+						state.field_types[field_index],
+						0,
+						member,
+						value.mutable,
+						address,
+					)
+				end
+			else
+				if gate4_token_is(state, position[0], "[")
+					gate4_advance(position)
+					index := gate4_emit_expression(state, position, context, output, 1, "Integer")
+					gate4_expect(state, position, "]")
+					if value.type_name == "String"
+						result := gate4_emit_temporary(context)
+						gate4_output_line(
+							output,
+							"\t" + result + " =l call $g4_string_index(l " + value.operand + ", l " + index.operand + ")",
+						)
+						value = gate4_emitted_value(result, "String", 0, "", 0, "")
+					else
+						address := gate4_emit_temporary(context)
+						gate4_output_line(
+							output,
+							"\t" + address + " =l call $g4_array_address(l " + value.operand + ", l " + index.operand + ")",
+						)
+						operand := gate4_emit_temporary(context)
+						gate4_output_line(output, "\t" + operand + " =l loadl " + address)
+						value = gate4_emitted_value(
+							operand,
+							gate4_array_element_type(value.type_name),
+							0,
+							"",
+							value.mutable,
+							address,
+						)
+					end
+				else
+					scanning = false
+				end
+			end
+		end
+	end
+	return value
+end
+
+def gate4_emit_primary(
+		mut state: Gate4Compiler,
+		mut position: Array<Integer>,
+		mut context: Gate4EmitContext,
+		mut output: Gate4Output,
+		expected: String,
+	): Gate4EmittedValue
+	token_index := position[0]
+	kind := state.token_kinds[token_index]
+	if kind == 2
+		value := state.token_texts[token_index]
+		gate4_advance(position)
+		return gate4_emitted_value(value, "Integer", 0, "", 0, "")
+	end
+	if kind == 3
+		gate4_advance(position)
+		return gate4_emitted_value("$g4s" + gate4_integer_string(token_index), "String", 0, "", 0, "")
+	end
+	if gate4_token_is(state, token_index, "[")
+		return gate4_emit_array_literal(state, position, context, output, expected)
+	end
+	if gate4_token_is(state, token_index, "(")
+		gate4_advance(position)
+		gate4_skip_newlines(state, position)
+		value := gate4_emit_expression(state, position, context, output, 1, expected)
+		gate4_skip_newlines(state, position)
+		gate4_expect(state, position, ")")
+		return value
+	end
+	if gate4_token_is(state, token_index, "!")
+		gate4_advance(position)
+		value := gate4_emit_postfix(
+			state,
+			position,
+			context,
+			output,
+			gate4_emit_primary(state, position, context, output, "Boolean"),
+		)
+		comparison := gate4_emit_temporary(context)
+		result := gate4_emit_temporary(context)
+		gate4_output_line(output, "\t" + comparison + " =w ceql " + value.operand + ", 0")
+		gate4_output_line(output, "\t" + result + " =l extuw " + comparison)
+		return gate4_emitted_value(result, "Boolean", 0, "", 0, "")
+	end
+	if gate4_token_is(state, token_index, "-")
+		gate4_advance(position)
+		value := gate4_emit_postfix(
+			state,
+			position,
+			context,
+			output,
+			gate4_emit_primary(state, position, context, output, "Integer"),
+		)
+		result := gate4_emit_temporary(context)
+		gate4_output_line(
+			output,
+			"\t" + result + " =l call $g4_integer_subtract(l 0, l " + value.operand + ")",
+		)
+		return gate4_emitted_value(result, "Integer", 0, "", 0, "")
+	end
+	if kind == 1
+		name := state.token_texts[token_index]
+		gate4_advance(position)
+		if name == "true"
+			return gate4_emitted_value("1", "Boolean", 0, "", 0, "")
+		end
+		if name == "false"
+			return gate4_emitted_value("0", "Boolean", 0, "", 0, "")
+		end
+		local_index := gate4_emit_local_find(context, name)
+		if local_index >= 0
+			return gate4_emit_loaded_local(context, output, local_index)
+		end
+		if name == "puts"
+			return gate4_emitted_value("", "", 1, name, 0, "")
+		end
+		if gate4_find_function(state, name) >= 0
+			return gate4_emitted_value("", "", 1, name, 0, "")
+		end
+		if gate4_find_record(state, name) >= 0
+			return gate4_emitted_value("", "", 2, name, 0, "")
+		end
+	end
+	return gate4_emitted_value("", "Invalid", 0, "", 0, "")
+end
+
+def gate4_emit_binary(
+		mut context: Gate4EmitContext,
+		mut output: Gate4Output,
+		operator: String,
+		left: Gate4EmittedValue,
+		right: Gate4EmittedValue,
+	): Gate4EmittedValue
+	result_type := gate4_binary_result_type_name(operator, left.type_name)
+	result := gate4_emit_temporary(context)
+	if operator == "+"
+		if left.type_name == "String"
+			gate4_output_line(
+				output,
+				"\t" + result + " =l call $g4_string_concat(l " + left.operand + ", l " + right.operand + ")",
+			)
+		else
+			gate4_output_line(
+				output,
+				"\t" + result + " =l call $g4_integer_add(l " + left.operand + ", l " + right.operand + ")",
+			)
+		end
+		return gate4_emitted_value(result, result_type, 0, "", 0, "")
+	end
+	mut helper := ""
+	if operator == "-"
+		helper = "subtract"
+	end
+	if operator == "*"
+		helper = "multiply"
+	end
+	if operator == "/"
+		helper = "divide"
+	end
+	if operator == "%"
+		helper = "remainder"
+	end
+	if helper != ""
+		gate4_output_line(
+			output,
+			"\t" + result + " =l call $g4_integer_" + helper + "(l " + left.operand + ", l " + right.operand + ")",
+		)
+		return gate4_emitted_value(result, result_type, 0, "", 0, "")
+	end
+	if operator == "=="
+		if left.type_name == "String"
+			gate4_output_line(
+				output,
+				"\t" + result + " =l call $g4_string_equal(l " + left.operand + ", l " + right.operand + ")",
+			)
+			return gate4_emitted_value(result, "Boolean", 0, "", 0, "")
+		end
+	end
+	mut comparison := "ceql"
+	if operator == "!="
+		comparison = "cnel"
+	end
+	if operator == "<"
+		comparison = "csltl"
+	end
+	if operator == "<="
+		comparison = "cslel"
+	end
+	if operator == ">"
+		comparison = "csgtl"
+	end
+	if operator == ">="
+		comparison = "csgel"
+	end
+	word := gate4_emit_temporary(context)
+	gate4_output_line(
+		output,
+		"\t" + word + " =w " + comparison + " " + left.operand + ", " + right.operand,
+	)
+	gate4_output_line(output, "\t" + result + " =l extuw " + word)
+	return gate4_emitted_value(result, "Boolean", 0, "", 0, "")
+end
+
+def gate4_binary_result_type_name(operator: String, operand_type: String): String
+	if operator == "=="
+		return "Boolean"
+	end
+	if operator == "!="
+		return "Boolean"
+	end
+	if operator == "<"
+		return "Boolean"
+	end
+	if operator == "<="
+		return "Boolean"
+	end
+	if operator == ">"
+		return "Boolean"
+	end
+	if operator == ">="
+		return "Boolean"
+	end
+	return operand_type
+end
+
+def gate4_emit_expression(
+		mut state: Gate4Compiler,
+		mut position: Array<Integer>,
+		mut context: Gate4EmitContext,
+		mut output: Gate4Output,
+		minimum_precedence: Integer,
+		expected: String,
+	): Gate4EmittedValue
+	mut value := gate4_emit_postfix(
+		state,
+		position,
+		context,
+		output,
+		gate4_emit_primary(state, position, context, output, expected),
+	)
+	mut scanning := true
+	while scanning
+		operator := state.token_texts[position[0]]
+		precedence := gate4_binary_precedence(operator)
+		if precedence < minimum_precedence
+			scanning = false
+		else
+			gate4_advance(position)
+			gate4_skip_newlines(state, position)
+			right := gate4_emit_expression(
+				state,
+				position,
+				context,
+				output,
+				precedence + 1,
+				value.type_name,
+			)
+			value = gate4_emit_binary(context, output, operator, value, right)
+		end
+	end
+	return value
+end
+
+def gate4_emit_declaration(
+		mut state: Gate4Compiler,
+		mut position: Array<Integer>,
+		mut context: Gate4EmitContext,
+		mut output: Gate4Output,
+	): Boolean
+	mut mutable := 0
+	if gate4_token_is(state, position[0], "mut")
+		mutable = 1
+		gate4_advance(position)
+	end
+	name := gate4_expect_identifier(state, position)
+	mut declared_type := ""
+	if gate4_token_is(state, position[0], ":")
+		gate4_advance(position)
+		declared_type = gate4_parse_type(state, position)
+	end
+	gate4_expect(state, position, ":=")
+	value := gate4_emit_expression(state, position, context, output, 1, declared_type)
+	mut local_type := declared_type
+	if local_type == ""
+		local_type = value.type_name
+	end
+	gate4_emit_add_local(context, output, name, local_type, mutable, value.operand)
+	return gate4_finish_statement(state, position)
+end
+
+def gate4_emit_simple_statement(
+		mut state: Gate4Compiler,
+		mut position: Array<Integer>,
+		mut context: Gate4EmitContext,
+		mut output: Gate4Output,
+	): Boolean
+	left := gate4_emit_expression(state, position, context, output, 1, "")
+	operator := state.token_texts[position[0]]
+	if operator == "="
+		gate4_advance(position)
+		right := gate4_emit_expression(state, position, context, output, 1, left.type_name)
+		gate4_output_line(output, "\tstorel " + right.operand + ", " + left.address)
+	else
+		compound := gate4_compound_operator(operator)
+		if compound != ""
+			gate4_advance(position)
+			right := gate4_emit_expression(state, position, context, output, 1, left.type_name)
+			result := gate4_emit_binary(context, output, compound, left, right)
+			gate4_output_line(output, "\tstorel " + result.operand + ", " + left.address)
+		end
+	end
+	return gate4_finish_statement(state, position)
+end
+
+def gate4_emit_condition(
+		mut context: Gate4EmitContext,
+		mut output: Gate4Output,
+		operand: String,
+	): String
+	condition := gate4_emit_temporary(context)
+	gate4_output_line(output, "\t" + condition + " =w cnel " + operand + ", 0")
+	return condition
+end
+
+def gate4_emit_block(
+		mut state: Gate4Compiler,
+		mut position: Array<Integer>,
+		mut context: Gate4EmitContext,
+		mut output: Gate4Output,
+		result_type: String,
+	): Integer
+	gate4_skip_newlines(state, position)
+	mut complete := false
+	mut terminated := 0
+	while !complete
+		if gate4_token_is(state, position[0], "end")
+			complete = true
+		else
+			if gate4_token_is(state, position[0], "else")
+				complete = true
+			else
+				if gate4_token_is(state, position[0], "if")
+					gate4_advance(position)
+					condition_value := gate4_emit_expression(state, position, context, output, 1, "Boolean")
+					gate4_finish_statement(state, position)
+					condition := gate4_emit_condition(context, output, condition_value.operand)
+					when_true := gate4_emit_label(context)
+					when_false := gate4_emit_label(context)
+					join := gate4_emit_label(context)
+					gate4_output_line(output, "\tjnz " + condition + ", " + when_true + ", " + when_false)
+					gate4_output_line(output, when_true)
+					saved_count := context.local_count[0]
+					true_terminated := gate4_emit_block(state, position, context, output, result_type)
+					context.local_count[0] = saved_count
+					if true_terminated == 0
+						gate4_output_line(output, "\tjmp " + join)
+					end
+					gate4_output_line(output, when_false)
+					mut false_terminated := 0
+					if gate4_token_is(state, position[0], "else")
+						gate4_advance(position)
+						gate4_finish_statement(state, position)
+						false_terminated = gate4_emit_block(state, position, context, output, result_type)
+						context.local_count[0] = saved_count
+					end
+					if false_terminated == 0
+						gate4_output_line(output, "\tjmp " + join)
+					end
+					gate4_expect(state, position, "end")
+					gate4_finish_statement(state, position)
+					if true_terminated == 1
+						if false_terminated == 1
+							terminated = 1
+						else
+							gate4_output_line(output, join)
+						end
+					else
+						gate4_output_line(output, join)
+					end
+				else
+					if gate4_token_is(state, position[0], "while")
+						header := gate4_emit_label(context)
+						body := gate4_emit_label(context)
+						done := gate4_emit_label(context)
+						gate4_output_line(output, "\tjmp " + header)
+						gate4_output_line(output, header)
+						gate4_advance(position)
+						condition_value := gate4_emit_expression(state, position, context, output, 1, "Boolean")
+						gate4_finish_statement(state, position)
+						condition := gate4_emit_condition(context, output, condition_value.operand)
+						gate4_output_line(output, "\tjnz " + condition + ", " + body + ", " + done)
+						gate4_output_line(output, body)
+						saved_count := context.local_count[0]
+						body_terminated := gate4_emit_block(state, position, context, output, result_type)
+						context.local_count[0] = saved_count
+						if body_terminated == 0
+							gate4_output_line(output, "\tjmp " + header)
+						end
+						gate4_expect(state, position, "end")
+						gate4_finish_statement(state, position)
+						gate4_output_line(output, done)
+					else
+						if gate4_token_is(state, position[0], "return")
+							gate4_advance(position)
+							if state.token_kinds[position[0]] == 4
+								gate4_output_line(output, "\tret")
+							else
+								value := gate4_emit_expression(state, position, context, output, 1, result_type)
+								gate4_output_line(output, "\tret " + value.operand)
+							end
+							gate4_finish_statement(state, position)
+							terminated = 1
+						else
+							mut declaration := false
+							if gate4_token_is(state, position[0], "mut")
+								declaration = true
+							else
+								if state.token_kinds[position[0]] == 1
+									if gate4_token_is(state, position[0] + 1, ":=")
+										declaration = true
+									else
+										if gate4_token_is(state, position[0] + 1, ":")
+											declaration = true
+										end
+									end
+								end
+							end
+							if declaration
+								gate4_emit_declaration(state, position, context, output)
+							else
+								gate4_emit_simple_statement(state, position, context, output)
+							end
+						end
+					end
+				end
+			end
+		end
+		if terminated == 1
+			while !complete
+				if gate4_token_is(state, position[0], "end")
+					complete = true
+				else
+					if gate4_token_is(state, position[0], "else")
+						complete = true
+					else
+						gate4_parse_simple_statement_syntax(state, position)
+					end
+				end
+			end
+		end
+	end
+	return terminated
+end
+
+def gate4_emit_function(
+		mut state: Gate4Compiler,
+		function_index: Integer,
+		mut output: Gate4Output,
+	)
+	mut context := gate4_emit_context_new(state.token_count[0] + 1)
+	parameter_start := state.function_parameter_starts[function_index]
+	parameter_count := state.function_parameter_counts[function_index]
+	mut parameters := ""
+	mut parameter_index := 0
+	while parameter_index < parameter_count
+		if parameters != ""
+			parameters += ", "
+		end
+		parameters += "l %p" + gate4_integer_string(parameter_index)
+		parameter_index += 1
+	end
+	mut result_prefix := ""
+	if state.function_result_types[function_index] != "Void"
+		result_prefix = "l "
+	end
+	gate4_output_line(
+		output,
+		"function " + result_prefix + "$g4f" + gate4_integer_string(function_index) + "(" + parameters + ") {",
+	)
+	gate4_output_line(output, "@start")
+	parameter_index = 0
+	while parameter_index < parameter_count
+		declaration_index := parameter_start + parameter_index
+		gate4_emit_add_local(
+			context,
+			output,
+			state.parameter_names[declaration_index],
+			state.parameter_types[declaration_index],
+			state.parameter_mutable[declaration_index],
+			"%p" + gate4_integer_string(parameter_index),
+		)
+		parameter_index += 1
+	end
+	mut position := [state.function_body_starts[function_index]]
+	terminated := gate4_emit_block(
+		state,
+		position,
+		context,
+		output,
+		state.function_result_types[function_index],
+	)
+	if terminated == 0
+		if state.function_result_types[function_index] == "Void"
+			gate4_output_line(output, "\tret")
+		else
+			gate4_output_line(output, "\tcall $g4_fail(l $g4_integer_error, l 32)")
+			gate4_output_line(output, "\thlt")
+		end
+	end
+	gate4_output_line(output, "}")
+	gate4_output_line(output, "")
+	return
+end
+
+def gate4_compiler_entry_function(state: Gate4Compiler): Integer
+	index := gate4_find_function(state, "compiler_main")
+	if index < 0
+		return - 1
+	end
+	if state.function_parameter_counts[index] != 2
+		return - 1
+	end
+	start := state.function_parameter_starts[index]
+	if state.parameter_types[start] != "String"
+		return - 1
+	end
+	if state.parameter_types[start + 1] != "String"
+		return - 1
+	end
+	if state.function_result_types[index] != "Void"
+		return - 1
+	end
+	return index
+end
+
+def gate4_emit_entry(state: Gate4Compiler, mut output: Gate4Output)
+	compiler_entry := gate4_compiler_entry_function(state)
+	gate4_output_line(output, "export function w $main(w %argc, l %argv) {")
+	gate4_output_line(output, "@start")
+	if compiler_entry >= 0
+		gate4_output_line(output, "\t%valid_argc =w ceqw %argc, 3")
+		gate4_output_line(output, "\tjnz %valid_argc, @compile, @usage")
+		gate4_output_line(output, "@usage")
+		gate4_output_line(output, "\tcall $g4_fail(l $g4_usage_error, l 28)")
+		gate4_output_line(output, "\thlt")
+		gate4_output_line(output, "@compile")
+		gate4_output_line(output, "\t%source_slot =l add %argv, 8")
+		gate4_output_line(output, "\t%source_c =l loadl %source_slot")
+		gate4_output_line(output, "\t%source =l call $g4_string_from_c(l %source_c)")
+		gate4_output_line(output, "\t%mode_slot =l add %argv, 16")
+		gate4_output_line(output, "\t%mode_c =l loadl %mode_slot")
+		gate4_output_line(output, "\t%mode =l call $g4_string_from_c(l %mode_c)")
+		gate4_output_line(
+			output,
+			"\tcall $g4f" + gate4_integer_string(compiler_entry) + "(l %source, l %mode)",
+		)
+	else
+		main_index := gate4_find_function(state, "main")
+		gate4_output_line(output, "\tcall $g4f" + gate4_integer_string(main_index) + "()")
+	end
+	gate4_output_line(output, "\tret 0")
+	gate4_output_line(output, "}")
+	return
+end
+
+def gate4_emit_qbe(mut state: Gate4Compiler): Gate4Output
+	mut output := gate4_output_new(state.token_count[0] * 24 + 4096)
+	gate4_emit_static_strings(state, output)
+	gate4_emit_runtime(output)
+	mut function_index := 0
+	while function_index < state.function_count[0]
+		gate4_emit_function(state, function_index, output)
+		function_index += 1
+	end
+	gate4_emit_entry(state, output)
+	return output
+end
+
+def gate4_print_diagnostic(state: Gate4Compiler)
+	puts(
+		state.diagnostic_codes[0] + ":" + gate4_integer_string(state.diagnostic_lines[0]) + ":" +
+		state.diagnostic_messages[0],
+	)
+	return
+end
+
+def compiler_main(source: String, mode: String)
+	mut state := gate4_compiler_new(source.size() + 1)
+	gate4_lex(state, source)
+	if !gate4_has_diagnostic(state)
+		gate4_parse(state)
+	end
+	if !gate4_has_diagnostic(state)
+		gate4_resolve(state)
+	end
+	if !gate4_has_diagnostic(state)
+		gate4_check(state)
+	end
+	if gate4_has_diagnostic(state)
+		gate4_print_diagnostic(state)
+		return
+	end
+	if mode == "check"
+		puts("ok")
+		return
+	end
+	if mode == "emit-qbe"
+		output := gate4_emit_qbe(state)
+		if gate4_has_diagnostic(state)
+			gate4_print_diagnostic(state)
+			return
+		end
+		mut index := 0
+		while index < output.count[0]
+			puts(output.lines[index])
+			index += 1
+		end
+		return
+	end
+	puts("TRBN4006:1:unsupported compiler mode " + mode)
+	return
 end
 
 def gate4_has_diagnostic(state: Gate4Compiler): Boolean
@@ -564,14 +1916,18 @@ def gate4_parse_primary_syntax(mut state: Gate4Compiler, mut position: Array<Int
 						if !gate4_token_is(state, position[0], "]")
 							mut finished := false
 							while !finished
-								if !gate4_parse_expression_syntax(state, position, 1)
-									return false
-								end
-								if gate4_token_is(state, position[0], ",")
-									gate4_advance(position)
-									gate4_skip_newlines(state, position)
-								else
+								if gate4_token_is(state, position[0], "]")
 									finished = true
+								else
+									if !gate4_parse_expression_syntax(state, position, 1)
+										return false
+									end
+									if gate4_token_is(state, position[0], ",")
+										gate4_advance(position)
+										gate4_skip_newlines(state, position)
+									else
+										finished = true
+									end
 								end
 							end
 						end
@@ -651,6 +2007,7 @@ def gate4_parse_expression_syntax(
 			scanning = false
 		else
 			gate4_advance(position)
+			gate4_skip_newlines(state, position)
 			if !gate4_parse_expression_syntax(state, position, precedence + 1)
 				return false
 			end
@@ -1887,6 +3244,7 @@ def gate4_check_expression(
 			scanning = false
 		else
 			gate4_advance(position)
+			gate4_skip_newlines(state, position)
 			right := gate4_check_expression(state, position, locals, precedence + 1, value.type_name)
 			result_type := gate4_binary_result_type(state, operator, value.type_name, right.type_name, line)
 			value = gate4_checked_value(result_type, 0, "", 0)
