@@ -1,0 +1,113 @@
+import { Gate2Module } from gate2_mir
+import { emit_gate2_qbe } from qbe2
+import { write_text } from trb/std/filesystem
+import { run } from trb/std/process
+import { Result } from trb/std/result
+import { Instant } from trb/std/time
+
+record Gate2BuildError
+	phase: String
+	message: String
+	status: Integer? = nil
+	stdout: String = ""
+	stderr: String = ""
+end
+
+record Gate2BuildReport
+	qbe_ir_path: String
+	assembly_path: String
+	output_path: String
+	emit_seconds: Float
+	qbe_seconds: Float
+	link_seconds: Float
+end
+
+def build_gate2_executable(
+		native_module: Gate2Module,
+		qbe_command: String,
+		cc_command: String,
+		workspace: String,
+		output_path: String,
+	): Result<Gate2BuildReport, Gate2BuildError>
+	emit_started := Instant.now()
+	qbe_source := case emit_gate2_qbe(native_module)
+	when Result::Ok(source)
+		source
+	when Result::Err(diagnostic)
+		return Result<Gate2BuildReport, Gate2BuildError>::Err(
+			Gate2BuildError.new(
+				phase: "verify",
+				message: diagnostic.code + " " + diagnostic.path + ": " + diagnostic.message,
+			)
+		)
+	end
+	emit_seconds := Instant.now().duration_since(emit_started).total_seconds()
+	qbe_ir_path := workspace + "/module.ssa"
+	assembly_path := workspace + "/module.s"
+	case write_text(qbe_ir_path, qbe_source)
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		return Result<Gate2BuildReport, Gate2BuildError>::Err(
+			Gate2BuildError.new(phase: "write-qbe", message: error.operation + ": " + error.message)
+		)
+	end
+	qbe_started := Instant.now()
+	qbe_result := case run(qbe_command, ["-t", "arm64_apple", qbe_ir_path])
+	when Result::Ok(process_result)
+		process_result
+	when Result::Err(error)
+		return Result<Gate2BuildReport, Gate2BuildError>::Err(
+			Gate2BuildError.new(phase: "qbe", message: error.operation + ": " + error.message)
+		)
+	end
+	qbe_seconds := Instant.now().duration_since(qbe_started).total_seconds()
+	if !qbe_result.success
+		return Result<Gate2BuildReport, Gate2BuildError>::Err(
+			Gate2BuildError.new(
+				phase: "qbe",
+				message: "QBE rejected the generated Gate 2 IL",
+				status: qbe_result.status,
+				stdout: qbe_result.stdout,
+				stderr: qbe_result.stderr,
+			)
+		)
+	end
+	case write_text(assembly_path, qbe_result.stdout)
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		return Result<Gate2BuildReport, Gate2BuildError>::Err(
+			Gate2BuildError.new(phase: "write-assembly", message: error.operation + ": " + error.message)
+		)
+	end
+	link_started := Instant.now()
+	cc_result := case run(cc_command, [assembly_path, "-Wl,-dead_strip", "-o", output_path])
+	when Result::Ok(process_result)
+		process_result
+	when Result::Err(error)
+		return Result<Gate2BuildReport, Gate2BuildError>::Err(
+			Gate2BuildError.new(phase: "link", message: error.operation + ": " + error.message)
+		)
+	end
+	link_seconds := Instant.now().duration_since(link_started).total_seconds()
+	if !cc_result.success
+		return Result<Gate2BuildReport, Gate2BuildError>::Err(
+			Gate2BuildError.new(
+				phase: "link",
+				message: "the system C toolchain rejected the Gate 2 QBE assembly",
+				status: cc_result.status,
+				stdout: cc_result.stdout,
+				stderr: cc_result.stderr,
+			)
+		)
+	end
+	return Result<Gate2BuildReport, Gate2BuildError>::Ok(
+		Gate2BuildReport.new(
+			qbe_ir_path: qbe_ir_path,
+			assembly_path: assembly_path,
+			output_path: output_path,
+			emit_seconds: emit_seconds,
+			qbe_seconds: qbe_seconds,
+			link_seconds: link_seconds,
+		)
+	)
+end

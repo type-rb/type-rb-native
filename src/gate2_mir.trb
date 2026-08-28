@@ -1,0 +1,803 @@
+import { Diagnostic, boundary_diagnostic } from diagnostic
+import {
+	Gate1Instruction,
+	ScalarType,
+} from gate1_mir
+import {
+	Gate2FieldLayout,
+	Gate2Layout,
+	Gate2LayoutKind,
+	Gate2TypeDefinition,
+	Gate2ValueType,
+	Gate2VariantLayout,
+	compute_gate2_layout,
+	gate2_field_layout,
+	gate2_value_types_equal,
+	gate2_variant_field_layout,
+	gate2_variant_layout,
+	verify_gate2_layouts,
+} from gate2_layout
+import { NativeSource } from native_mir
+import { SourceOrigin } from snapshot
+import { Result } from trb/std/result
+
+record Gate2Parameter
+	id: String
+	value_type: Gate2ValueType
+	origin: SourceOrigin
+end
+
+enum Gate2ResultType
+	Void
+	Value(value_type: Gate2ValueType)
+end
+
+enum Gate2Instruction
+	Scalar(instruction: Gate1Instruction)
+	RecordConstruct(
+		result: String,
+		type_id: String,
+		arguments: Array<String>,
+		origin: SourceOrigin,
+	)
+	RecordProject(
+		result: String,
+		type_id: String,
+		record: String,
+			field: String,
+			origin: SourceOrigin,
+		)
+		VariantConstruct(
+			result: String,
+			type_id: String,
+			variant: String,
+			arguments: Array<String>,
+			origin: SourceOrigin,
+		)
+		VariantTest(
+			result: String,
+			type_id: String,
+			value: String,
+			variant: String,
+			origin: SourceOrigin,
+		)
+		VariantProject(
+			result: String,
+			type_id: String,
+			value: String,
+			variant: String,
+			field: String,
+			origin: SourceOrigin,
+		)
+		Call(result: String?, function_id: String, arguments: Array<String>, origin: SourceOrigin)
+	end
+
+	enum Gate2Terminator
+		Jump(target: String, arguments: Array<String>, origin: SourceOrigin)
+		Branch(
+			condition: String,
+			when_true: String,
+			true_arguments: Array<String>,
+			when_false: String,
+			false_arguments: Array<String>,
+			origin: SourceOrigin,
+		)
+		Return(value: String?, origin: SourceOrigin)
+	end
+
+	record Gate2Block
+		id: String
+		parameters: Array<Gate2Parameter>
+		origin: SourceOrigin
+		instructions: Array<Gate2Instruction>
+		terminator: Gate2Terminator
+	end
+
+	record Gate2Function
+		id: String
+		name: String
+		parameters: Array<Gate2Parameter>
+		result_type: Gate2ResultType
+		entry: String
+		origin: SourceOrigin
+		blocks: Array<Gate2Block>
+	end
+
+	record Gate2Module
+		id: String
+		entry_function: String
+		sources: Array<NativeSource>
+		types: Array<Gate2TypeDefinition>
+		functions: Array<Gate2Function>
+	end
+
+	record Gate2Definition
+		id: String
+		value_type: Gate2ValueType
+	end
+
+	def gate2_result_types_equal(left: Gate2ResultType, right: Gate2ResultType): Boolean
+		case left
+		when Gate2ResultType::Void
+			case right
+			when Gate2ResultType::Void
+				return true
+			when Gate2ResultType::Value(_right_type)
+				return false
+			end
+		when Gate2ResultType::Value(left_type)
+			case right
+			when Gate2ResultType::Void
+				return false
+			when Gate2ResultType::Value(right_type)
+				return gate2_value_types_equal(left_type, right_type)
+			end
+		end
+	end
+
+	def verify_gate2_mir(native_module: Gate2Module): Result<Boolean, Diagnostic>
+		if native_module.sources.empty?()
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", "/sources", "Gate 2 MIR must declare at least one source")
+			)
+		end
+		if native_module.functions.empty?()
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", "/functions", "Gate 2 MIR must contain at least one function")
+			)
+		end
+		try verify_gate2_layouts(native_module.types)
+		mut source_ids: Array<String> := []
+		mut index := 0
+		while index < native_module.sources.size()
+			source := native_module.sources[index]
+			if source_ids.include?(source.id)
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", "/sources/" + index.to_s() + "/id", "Gate 2 MIR source identifier is duplicated")
+				)
+			end
+			source_ids.push(source.id)
+			index += 1
+		end
+		mut function_ids: Hash<String, Boolean> := {}
+		index = 0
+		while index < native_module.functions.size()
+			function := native_module.functions[index]
+			path := "/functions/" + index.to_s()
+			if function.id.empty?() || function_ids.key?(function.id)
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/id", "Gate 2 MIR function identifier is empty or duplicated")
+				)
+			end
+			function_ids[function.id] = true
+			try _gate2_verify_origin(function.origin, source_ids, path + "/origin")
+			index += 1
+		end
+		entry := gate2_function(native_module.functions, native_module.entry_function)
+		if entry == nil
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", "/entryFunction", "Gate 2 MIR entry function does not exist")
+			)
+		end
+		if !entry.parameters.empty?()
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", "/entryFunction", "Gate 2 MIR entry function must take no arguments")
+			)
+		end
+		case entry.result_type
+		when Gate2ResultType::Void
+		when Gate2ResultType::Value(_value_type)
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", "/entryFunction", "Gate 2 MIR entry function must return Void")
+			)
+		end
+		index = 0
+		while index < native_module.functions.size()
+			try _gate2_verify_function(
+				native_module,
+				native_module.functions[index],
+				source_ids,
+				"/functions/" + index.to_s(),
+			)
+			index += 1
+		end
+		return Result<Boolean, Diagnostic>::Ok(true)
+	end
+
+	def _gate2_verify_function(
+			native_module: Gate2Module,
+			function: Gate2Function,
+			source_ids: Array<String>,
+			path: String,
+		): Result<Boolean, Diagnostic>
+		if function.blocks.empty?()
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path + "/blocks", "Gate 2 MIR function has no blocks")
+			)
+		end
+		mut definitions: Hash<String, Gate2ValueType> := {}
+		mut index := 0
+		while index < function.parameters.size()
+			parameter := function.parameters[index]
+			parameter_path := path + "/parameters/" + index.to_s()
+			try _gate2_verify_origin(parameter.origin, source_ids, parameter_path + "/origin")
+			try _gate2_define(definitions, parameter.id, parameter.value_type, parameter_path + "/id")
+			index += 1
+		end
+		mut block_ids: Hash<String, Boolean> := {}
+		mut entry_found := false
+		index = 0
+		while index < function.blocks.size()
+			block := function.blocks[index]
+			block_path := path + "/blocks/" + index.to_s()
+			if block.id.empty?() || block_ids.key?(block.id)
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", block_path + "/id", "Gate 2 MIR block identifier is empty or duplicated")
+				)
+			end
+			block_ids[block.id] = true
+			if block.id == function.entry
+				entry_found = true
+				if !block.parameters.empty?()
+					return Result<Boolean, Diagnostic>::Err(
+						boundary_diagnostic("TRBN0004", block_path + "/parameters", "entry block must not have parameters")
+					)
+				end
+			end
+			try _gate2_verify_origin(block.origin, source_ids, block_path + "/origin")
+			mut parameter_index := 0
+			while parameter_index < block.parameters.size()
+				parameter := block.parameters[parameter_index]
+				parameter_path := block_path + "/parameters/" + parameter_index.to_s()
+				try _gate2_verify_origin(parameter.origin, source_ids, parameter_path + "/origin")
+				try _gate2_define(definitions, parameter.id, parameter.value_type, parameter_path + "/id")
+				parameter_index += 1
+			end
+			mut instruction_index := 0
+			while instruction_index < block.instructions.size()
+				instruction_path := block_path + "/instructions/" + instruction_index.to_s()
+				definition := try _gate2_instruction_definition(native_module, block.instructions[instruction_index], instruction_path)
+				if definition != nil
+					try _gate2_define(definitions, definition.id, definition.value_type, instruction_path + "/result")
+				end
+				instruction_index += 1
+			end
+			index += 1
+		end
+		if !entry_found
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path + "/entry", "Gate 2 MIR entry block does not exist")
+			)
+		end
+		index = 0
+		while index < function.blocks.size()
+			try _gate2_verify_block(
+				native_module,
+				function,
+				function.blocks[index],
+				definitions,
+				source_ids,
+				path + "/blocks/" + index.to_s(),
+			)
+			index += 1
+		end
+		return Result<Boolean, Diagnostic>::Ok(true)
+	end
+
+	def _gate2_instruction_definition(
+			native_module: Gate2Module,
+			instruction: Gate2Instruction,
+			path: String,
+		): Result<Gate2Definition?, Diagnostic>
+		case instruction
+		when Gate2Instruction::Scalar(scalar)
+			case scalar
+			when Gate1Instruction::BooleanLiteral(result, _value, _origin)
+				return _gate2_some_definition(result, Gate2ValueType::Scalar(ScalarType::Boolean))
+			when Gate1Instruction::IntegerLiteral(result, _value, _origin)
+				return _gate2_some_definition(result, Gate2ValueType::Scalar(ScalarType::Integer))
+			when Gate1Instruction::FloatLiteral(result, _value, _origin)
+				return _gate2_some_definition(result, Gate2ValueType::Scalar(ScalarType::Float))
+			when Gate1Instruction::IntegerBinary(result, _operator, _left, _right, _origin)
+				return _gate2_some_definition(result, Gate2ValueType::Scalar(ScalarType::Integer))
+			when Gate1Instruction::FloatBinary(result, _operator, _left, _right, _origin)
+				return _gate2_some_definition(result, Gate2ValueType::Scalar(ScalarType::Float))
+			when Gate1Instruction::IntegerCompare(result, _operator, _left, _right, _origin)
+				return _gate2_some_definition(result, Gate2ValueType::Scalar(ScalarType::Boolean))
+			when Gate1Instruction::FloatCompare(result, _operator, _left, _right, _origin)
+				return _gate2_some_definition(result, Gate2ValueType::Scalar(ScalarType::Boolean))
+			when Gate1Instruction::BooleanNot(result, _value, _origin)
+				return _gate2_some_definition(result, Gate2ValueType::Scalar(ScalarType::Boolean))
+			when Gate1Instruction::Call(_result, _function_id, _arguments, _origin)
+				return Result<Gate2Definition?, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path, "Gate 1 call must be normalized to a Gate 2 call")
+				)
+			when Gate1Instruction::WriteStatic(_value, _origin)
+				return Result<Gate2Definition?, Diagnostic>::Ok(nil)
+			end
+		when Gate2Instruction::RecordConstruct(result, type_id, _arguments, _origin)
+			layout := try compute_gate2_layout(native_module.types, type_id)
+			if layout.kind != Gate2LayoutKind::Record
+				return Result<Gate2Definition?, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/type", "record construction requires a record type")
+				)
+			end
+			return _gate2_some_definition(result, Gate2ValueType::Aggregate(type_id))
+		when Gate2Instruction::RecordProject(result, type_id, _record, field, _origin)
+			layout := try compute_gate2_layout(native_module.types, type_id)
+			field_layout := gate2_field_layout(layout, field)
+			if layout.kind != Gate2LayoutKind::Record || field_layout == nil
+				return Result<Gate2Definition?, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/field", "record projection references an unknown field")
+				)
+			end
+			return _gate2_some_definition(result, field_layout.value_type)
+		when Gate2Instruction::VariantConstruct(result, type_id, variant, _arguments, _origin)
+			layout := try compute_gate2_layout(native_module.types, type_id)
+			if layout.kind != Gate2LayoutKind::Tagged || gate2_variant_layout(layout, variant) == nil
+				return Result<Gate2Definition?, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/variant", "variant construction references an unknown variant")
+				)
+			end
+			return _gate2_some_definition(result, Gate2ValueType::Aggregate(type_id))
+		when Gate2Instruction::VariantTest(result, _type_id, _value, _variant, _origin)
+			return _gate2_some_definition(result, Gate2ValueType::Scalar(ScalarType::Boolean))
+		when Gate2Instruction::VariantProject(result, type_id, _value, variant, field, _origin)
+			layout := try compute_gate2_layout(native_module.types, type_id)
+			variant_layout := gate2_variant_layout(layout, variant)
+			if layout.kind != Gate2LayoutKind::Tagged
+				return Result<Gate2Definition?, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/variant", "variant projection requires a tagged type")
+				)
+			end
+			if variant_layout == nil
+				return Result<Gate2Definition?, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/variant", "variant projection references an unknown variant")
+				)
+			end
+			field_layout := gate2_variant_field_layout(variant_layout, field)
+			if field_layout == nil
+				return Result<Gate2Definition?, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/field", "variant projection references an unknown field")
+				)
+			end
+			return _gate2_some_definition(result, field_layout.value_type)
+		when Gate2Instruction::Call(result, function_id, _arguments, _origin)
+			callee := gate2_function(native_module.functions, function_id)
+			if callee == nil
+				return Result<Gate2Definition?, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/function", "call references an unknown function")
+				)
+			end
+			case callee.result_type
+			when Gate2ResultType::Void
+				if result != nil
+					return Result<Gate2Definition?, Diagnostic>::Err(
+						boundary_diagnostic("TRBN0004", path + "/result", "Void call must not define a result")
+					)
+				end
+				return Result<Gate2Definition?, Diagnostic>::Ok(nil)
+			when Gate2ResultType::Value(value_type)
+				if result == nil
+					return Result<Gate2Definition?, Diagnostic>::Err(
+						boundary_diagnostic("TRBN0004", path + "/result", "non-Void call must define a result")
+					)
+				end
+				return _gate2_some_definition(result, value_type)
+			end
+		end
+	end
+
+	def _gate2_verify_block(
+			native_module: Gate2Module,
+			function: Gate2Function,
+			block: Gate2Block,
+			definitions: Hash<String, Gate2ValueType>,
+			source_ids: Array<String>,
+			path: String,
+		): Result<Boolean, Diagnostic>
+		mut available: Hash<String, Gate2ValueType> := {}
+		mut index := 0
+		while index < function.parameters.size()
+			parameter := function.parameters[index]
+			available[parameter.id] = parameter.value_type
+			index += 1
+		end
+		index = 0
+		while index < block.parameters.size()
+			parameter := block.parameters[index]
+			available[parameter.id] = parameter.value_type
+			index += 1
+		end
+		index = 0
+		while index < block.instructions.size()
+			instruction := block.instructions[index]
+			instruction_path := path + "/instructions/" + index.to_s()
+			try _gate2_verify_instruction(native_module, instruction, available, source_ids, instruction_path)
+			definition := try _gate2_instruction_definition(native_module, instruction, instruction_path)
+			if definition != nil
+				available[definition.id] = definitions.fetch(definition.id)
+			end
+			index += 1
+		end
+		try _gate2_verify_terminator(native_module, function, block.terminator, available, source_ids, path + "/terminator")
+		return Result<Boolean, Diagnostic>::Ok(true)
+	end
+
+	def _gate2_verify_instruction(
+			native_module: Gate2Module,
+			instruction: Gate2Instruction,
+			available: Hash<String, Gate2ValueType>,
+			source_ids: Array<String>,
+			path: String,
+		): Result<Boolean, Diagnostic>
+		case instruction
+		when Gate2Instruction::Scalar(scalar)
+			return _gate2_verify_scalar(scalar, available, source_ids, path)
+		when Gate2Instruction::RecordConstruct(_result, type_id, arguments, origin)
+			try _gate2_verify_origin(origin, source_ids, path + "/origin")
+			layout := try compute_gate2_layout(native_module.types, type_id)
+			try _gate2_require_arguments(available, arguments, layout.fields, path + "/arguments")
+		when Gate2Instruction::RecordProject(_result, type_id, record, field, origin)
+			try _gate2_verify_origin(origin, source_ids, path + "/origin")
+			try _gate2_require(available, record, Gate2ValueType::Aggregate(type_id), path + "/record")
+			layout := try compute_gate2_layout(native_module.types, type_id)
+			if layout.kind != Gate2LayoutKind::Record || gate2_field_layout(layout, field) == nil
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/field", "record projection references an unknown field")
+				)
+			end
+		when Gate2Instruction::VariantConstruct(_result, type_id, variant, arguments, origin)
+			try _gate2_verify_origin(origin, source_ids, path + "/origin")
+			layout := try compute_gate2_layout(native_module.types, type_id)
+			variant_layout := gate2_variant_layout(layout, variant)
+			if layout.kind != Gate2LayoutKind::Tagged || variant_layout == nil
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/variant", "variant construction references an unknown variant")
+				)
+			end
+			try _gate2_require_arguments(available, arguments, variant_layout.fields, path + "/arguments")
+		when Gate2Instruction::VariantTest(_result, type_id, value, variant, origin)
+			try _gate2_verify_origin(origin, source_ids, path + "/origin")
+			try _gate2_require(available, value, Gate2ValueType::Aggregate(type_id), path + "/value")
+			layout := try compute_gate2_layout(native_module.types, type_id)
+			if layout.kind != Gate2LayoutKind::Tagged || gate2_variant_layout(layout, variant) == nil
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/variant", "variant test references an unknown variant")
+				)
+			end
+		when Gate2Instruction::VariantProject(_result, type_id, value, variant, field, origin)
+			try _gate2_verify_origin(origin, source_ids, path + "/origin")
+			try _gate2_require(available, value, Gate2ValueType::Aggregate(type_id), path + "/value")
+			layout := try compute_gate2_layout(native_module.types, type_id)
+			variant_layout := gate2_variant_layout(layout, variant)
+			if layout.kind != Gate2LayoutKind::Tagged
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/variant", "variant projection requires a tagged type")
+				)
+			end
+			if variant_layout == nil
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/variant", "variant projection references an unknown variant")
+				)
+			end
+			if gate2_variant_field_layout(variant_layout, field) == nil
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/field", "variant projection references an unknown field")
+				)
+			end
+		when Gate2Instruction::Call(_result, function_id, arguments, origin)
+			try _gate2_verify_origin(origin, source_ids, path + "/origin")
+			callee := gate2_function(native_module.functions, function_id)
+			if callee == nil
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/function", "call references an unknown function")
+				)
+			end
+			if arguments.size() != callee.parameters.size()
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/arguments", "call argument count does not match the callee")
+				)
+			end
+			mut index := 0
+			while index < arguments.size()
+				try _gate2_require(available, arguments[index], callee.parameters[index].value_type, path + "/arguments/" + index.to_s())
+				index += 1
+			end
+		end
+		return Result<Boolean, Diagnostic>::Ok(true)
+	end
+
+	def _gate2_verify_scalar(
+			instruction: Gate1Instruction,
+			available: Hash<String, Gate2ValueType>,
+			source_ids: Array<String>,
+			path: String,
+		): Result<Boolean, Diagnostic>
+		case instruction
+		when Gate1Instruction::BooleanLiteral(_result, _value, origin)
+			try _gate2_verify_origin(origin, source_ids, path + "/origin")
+		when Gate1Instruction::IntegerLiteral(_result, value, origin)
+			try _gate2_verify_origin(origin, source_ids, path + "/origin")
+			if value < - 9007199254740991 || value > 9007199254740991
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/value", "Integer literal is outside the portable range")
+				)
+			end
+		when Gate1Instruction::FloatLiteral(_result, value, origin)
+			try _gate2_verify_origin(origin, source_ids, path + "/origin")
+			if !value.finite?()
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/value", "Float literal must be finite")
+				)
+			end
+		when Gate1Instruction::IntegerBinary(_result, _operator, left, right, origin)
+			try _gate2_verify_origin(origin, source_ids, path + "/origin")
+			try _gate2_require_scalar(available, left, ScalarType::Integer, path + "/left")
+			try _gate2_require_scalar(available, right, ScalarType::Integer, path + "/right")
+		when Gate1Instruction::FloatBinary(_result, _operator, left, right, origin)
+			try _gate2_verify_origin(origin, source_ids, path + "/origin")
+			try _gate2_require_scalar(available, left, ScalarType::Float, path + "/left")
+			try _gate2_require_scalar(available, right, ScalarType::Float, path + "/right")
+		when Gate1Instruction::IntegerCompare(_result, _operator, left, right, origin)
+			try _gate2_verify_origin(origin, source_ids, path + "/origin")
+			try _gate2_require_scalar(available, left, ScalarType::Integer, path + "/left")
+			try _gate2_require_scalar(available, right, ScalarType::Integer, path + "/right")
+		when Gate1Instruction::FloatCompare(_result, _operator, left, right, origin)
+			try _gate2_verify_origin(origin, source_ids, path + "/origin")
+			try _gate2_require_scalar(available, left, ScalarType::Float, path + "/left")
+			try _gate2_require_scalar(available, right, ScalarType::Float, path + "/right")
+		when Gate1Instruction::BooleanNot(_result, value, origin)
+			try _gate2_verify_origin(origin, source_ids, path + "/origin")
+			try _gate2_require_scalar(available, value, ScalarType::Boolean, path + "/value")
+		when Gate1Instruction::Call(_result, _function_id, _arguments, _origin)
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path, "Gate 1 call must be normalized to a Gate 2 call")
+			)
+		when Gate1Instruction::WriteStatic(_value, origin)
+			try _gate2_verify_origin(origin, source_ids, path + "/origin")
+		end
+		return Result<Boolean, Diagnostic>::Ok(true)
+	end
+
+	def _gate2_verify_terminator(
+			native_module: Gate2Module,
+			function: Gate2Function,
+			terminator: Gate2Terminator,
+			available: Hash<String, Gate2ValueType>,
+			source_ids: Array<String>,
+			path: String,
+		): Result<Boolean, Diagnostic>
+		case terminator
+		when Gate2Terminator::Jump(target, arguments, origin)
+			try _gate2_verify_origin(origin, source_ids, path + "/origin")
+			try _gate2_verify_target(function, target, arguments, available, path)
+		when Gate2Terminator::Branch(condition, when_true, true_arguments, when_false, false_arguments, origin)
+			try _gate2_verify_origin(origin, source_ids, path + "/origin")
+			try _gate2_require_scalar(available, condition, ScalarType::Boolean, path + "/condition")
+			try _gate2_verify_target(function, when_true, true_arguments, available, path + "/true")
+			try _gate2_verify_target(function, when_false, false_arguments, available, path + "/false")
+		when Gate2Terminator::Return(value, origin)
+			try _gate2_verify_origin(origin, source_ids, path + "/origin")
+			case function.result_type
+			when Gate2ResultType::Void
+				if value != nil
+					return Result<Boolean, Diagnostic>::Err(
+						boundary_diagnostic("TRBN0004", path + "/value", "Void function must not return a value")
+					)
+				end
+			when Gate2ResultType::Value(value_type)
+				if value == nil
+					return Result<Boolean, Diagnostic>::Err(
+						boundary_diagnostic("TRBN0004", path + "/value", "non-Void function must return a value")
+					)
+				end
+				try _gate2_require(available, value, value_type, path + "/value")
+			end
+		end
+		return Result<Boolean, Diagnostic>::Ok(true)
+	end
+
+	def _gate2_verify_target(
+			function: Gate2Function,
+			target: String,
+			arguments: Array<String>,
+			available: Hash<String, Gate2ValueType>,
+			path: String,
+		): Result<Boolean, Diagnostic>
+		block := gate2_block(function.blocks, target)
+		if block == nil
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path + "/target", "terminator references an unknown block")
+			)
+		end
+		if arguments.size() != block.parameters.size()
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path + "/arguments", "block argument count does not match the target")
+			)
+		end
+		mut index := 0
+		while index < arguments.size()
+			try _gate2_require(available, arguments[index], block.parameters[index].value_type, path + "/arguments/" + index.to_s())
+			index += 1
+		end
+		return Result<Boolean, Diagnostic>::Ok(true)
+	end
+
+	def _gate2_require_arguments(
+			available: Hash<String, Gate2ValueType>,
+			arguments: Array<String>,
+			fields: Array<Gate2FieldLayout>,
+			path: String,
+		): Result<Boolean, Diagnostic>
+		if arguments.size() != fields.size()
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path, "aggregate argument count does not match its layout")
+			)
+		end
+		mut index := 0
+		while index < arguments.size()
+			try _gate2_require(available, arguments[index], fields[index].value_type, path + "/" + index.to_s())
+			index += 1
+		end
+		return Result<Boolean, Diagnostic>::Ok(true)
+	end
+
+	def _gate2_define(
+			mut definitions: Hash<String, Gate2ValueType>,
+			id: String,
+			value_type: Gate2ValueType,
+			path: String,
+		): Result<Boolean, Diagnostic>
+		if id.empty?() || definitions.key?(id)
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path, "value identifier is empty or defined more than once")
+			)
+		end
+		definitions[id] = value_type
+		return Result<Boolean, Diagnostic>::Ok(true)
+	end
+
+	def _gate2_require(
+			available: Hash<String, Gate2ValueType>,
+			id: String,
+			expected: Gate2ValueType,
+			path: String,
+		): Result<Boolean, Diagnostic>
+		actual := try _gate2_require_any(available, id, path)
+		if !gate2_value_types_equal(actual, expected)
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path, "operand type does not match the operation")
+			)
+		end
+		return Result<Boolean, Diagnostic>::Ok(true)
+	end
+
+	def _gate2_require_scalar(
+			available: Hash<String, Gate2ValueType>,
+			id: String,
+			scalar: ScalarType,
+			path: String,
+		): Result<Boolean, Diagnostic>
+		return _gate2_require(available, id, Gate2ValueType::Scalar(scalar), path)
+	end
+
+	def _gate2_require_any(
+			available: Hash<String, Gate2ValueType>,
+			id: String,
+			path: String,
+		): Result<Gate2ValueType, Diagnostic>
+		if !available.key?(id)
+			return Result<Gate2ValueType, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path, "operand is not available in this block")
+			)
+		end
+		return Result<Gate2ValueType, Diagnostic>::Ok(available.fetch(id))
+	end
+
+	def _gate2_aggregate_layout(
+			native_module: Gate2Module,
+			value_type: Gate2ValueType,
+			path: String,
+		): Result<Gate2Layout, Diagnostic>
+		case value_type
+		when Gate2ValueType::Scalar(_scalar)
+			return Result<Gate2Layout, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path, "operation requires an aggregate value")
+			)
+		when Gate2ValueType::Aggregate(type_id)
+			return compute_gate2_layout(native_module.types, type_id)
+		end
+	end
+
+	def _gate2_some_definition(
+			id: String,
+			value_type: Gate2ValueType,
+		): Result<Gate2Definition?, Diagnostic>
+		return Result<Gate2Definition?, Diagnostic>::Ok(Gate2Definition.new(id: id, value_type: value_type))
+	end
+
+	def gate2_instruction_result(instruction: Gate2Instruction): String?
+		case instruction
+		when Gate2Instruction::Scalar(scalar)
+			case scalar
+			when Gate1Instruction::BooleanLiteral(result, _value, _origin)
+				return result
+			when Gate1Instruction::IntegerLiteral(result, _value, _origin)
+				return result
+			when Gate1Instruction::FloatLiteral(result, _value, _origin)
+				return result
+			when Gate1Instruction::IntegerBinary(result, _operator, _left, _right, _origin)
+				return result
+			when Gate1Instruction::FloatBinary(result, _operator, _left, _right, _origin)
+				return result
+			when Gate1Instruction::IntegerCompare(result, _operator, _left, _right, _origin)
+				return result
+			when Gate1Instruction::FloatCompare(result, _operator, _left, _right, _origin)
+				return result
+			when Gate1Instruction::BooleanNot(result, _value, _origin)
+				return result
+			when Gate1Instruction::Call(result, _function_id, _arguments, _origin)
+				return result
+			when Gate1Instruction::WriteStatic(_value, _origin)
+				return nil
+			end
+		when Gate2Instruction::RecordConstruct(result, _type_id, _arguments, _origin)
+			return result
+		when Gate2Instruction::RecordProject(result, _type_id, _record, _field, _origin)
+			return result
+		when Gate2Instruction::VariantConstruct(result, _type_id, _variant, _arguments, _origin)
+			return result
+		when Gate2Instruction::VariantTest(result, _type_id, _value, _variant, _origin)
+			return result
+		when Gate2Instruction::VariantProject(result, _type_id, _value, _variant, _field, _origin)
+			return result
+		when Gate2Instruction::Call(result, _function_id, _arguments, _origin)
+			return result
+		end
+	end
+
+	def gate2_function(functions: Array<Gate2Function>, id: String): Gate2Function?
+		mut index := 0
+		while index < functions.size()
+			if functions[index].id == id
+				return functions[index]
+			end
+			index += 1
+		end
+		return nil
+	end
+
+	def gate2_block(blocks: Array<Gate2Block>, id: String): Gate2Block?
+		mut index := 0
+		while index < blocks.size()
+			if blocks[index].id == id
+				return blocks[index]
+			end
+			index += 1
+		end
+		return nil
+	end
+
+	def _gate2_verify_origin(
+			origin: SourceOrigin,
+			source_ids: Array<String>,
+			path: String,
+		): Result<Boolean, Diagnostic>
+		if !source_ids.include?(origin.source_id)
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path + "/source", "origin references an unknown source")
+			)
+		end
+		if origin.start_line < 1 || origin.start_column < 1 || origin.end_line < 1 || origin.end_column < 1
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path, "origin coordinates must be positive")
+			)
+		end
+		if origin.end_line < origin.start_line || (origin.end_line == origin.start_line && origin.end_column < origin.start_column)
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path, "origin end precedes its start")
+			)
+		end
+		return Result<Boolean, Diagnostic>::Ok(true)
+	end

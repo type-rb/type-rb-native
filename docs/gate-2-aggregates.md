@@ -4,6 +4,20 @@ Gate 2 extends the verified QBE path from scalar SSA values to heap-free,
 static-layout values. It implements existing TypeRB record, payload-enum, and
 `Result` semantics without introducing a native-only language feature.
 
+## Implementation status
+
+The backend-neutral layout model, aggregate Native MIR, verifier, and
+hand-authored QBE vertical slice are implemented. The QBE adapter uses
+caller-owned result storage, borrowed aggregate parameters, separate transfer
+and value slots for aggregate block parameters, and checked payload projection.
+It initializes aggregate storage before construction so padding and inactive
+payload bytes never carry indeterminate data.
+
+The source snapshot producer, strict version 3 decoder, source differential
+corpus, and Gate 2 measurements remain active work. This document records the
+complete checkpoint rather than treating the hand-authored vertical slice as
+the gate result.
+
 ## Checkpoint boundary
 
 The supported value graph is finite and known at compile time:
@@ -36,6 +50,12 @@ direct call, and aggregate results use caller-provided result storage. The MIR
 semantics remain value semantics even though the disposable target ABI passes
 addresses internally. A later allocation strategy can therefore add escaping
 storage without changing TypeRB record or enum behavior.
+
+Aggregate construction zero-initializes its complete slot and uses the system
+`memcpy`/`memset` ABI for fixed-size copies and initialization. These dynamic
+system-library dependencies are counted with the executable in Gate 2 reports.
+Block arguments use distinct transfer and value slots so control-flow edges
+retain parallel-copy semantics, including aggregate swaps and back edges.
 
 ## Exit evidence
 
