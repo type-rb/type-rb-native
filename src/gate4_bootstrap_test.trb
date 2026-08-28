@@ -267,7 +267,13 @@ def _gate4_verify_valid_case(
 		end
 		index += 1
 	end
-	file_executables := [executables[1], executables[2]]
+	file_executables := [
+		executables[1],
+		executables[2],
+		executables[3],
+		executables[4],
+		executables[5],
+	]
 	index = 0
 	while index < file_executables.size()
 		check_process := case run(file_executables[index], ["check", base + ".trb"])
@@ -345,6 +351,9 @@ def _gate4_verify_conformance(
 		workspace + "/b0",
 		workspace + "/b1",
 		workspace + "/b2",
+		workspace + "/native-chain-b2/compiler",
+		workspace + "/native-chain-b3/compiler",
+		workspace + "/native-chain-b4/compiler",
 		matched_go_compiler,
 	]
 	valid_names := ["control-flow", "records-arrays", "strings-calls"]
@@ -386,7 +395,7 @@ def _gate4_verify_conformance(
 			compiler_index += 1
 		end
 		compiler_index = 1
-		while compiler_index < 3
+		while compiler_index < 6
 			file_check := case run(executables[compiler_index], ["check", base + ".source"])
 			when Result::Ok(process)
 				process
@@ -419,6 +428,58 @@ def _gate4_verify_conformance(
 		)
 		index += 1
 	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def _gate6_verify_native_bootstrap_cycle(
+		b1_path: String,
+		compiler_path: String,
+		expected_qbe: String,
+		qbe: String,
+		workspace: String,
+	): Result<Boolean, String>
+	directories := [
+		workspace + "/native-chain-b2",
+		workspace + "/native-chain-b3",
+		workspace + "/native-chain-b4",
+	]
+	mut directory_index := 0
+	while directory_index < directories.size()
+		try _gate6_reset_directory(directories[directory_index])
+		directory_index += 1
+	end
+	outputs := [
+		directories[0] + "/compiler",
+		directories[1] + "/compiler",
+		directories[2] + "/compiler",
+	]
+	mut seed := b1_path
+	mut generation := 0
+	while generation < outputs.size()
+		build := try _gate6_build(seed, compiler_path, outputs[generation], qbe, "/usr/bin/cc")
+		if build.status != 0 || !build.stdout.empty?() || !build.stderr.empty?()
+			return Result<Boolean, String>::Err(
+				"Native bootstrap generation " + generation.to_s() + " failed: " + build.stderr,
+			)
+		end
+		try _gate6_require_no_intermediates(directories[generation])
+		check := try _gate6_process(outputs[generation], ["check", compiler_path])
+		if check.status != 0 || check.stdout != "ok\n" || !check.stderr.empty?()
+			return Result<Boolean, String>::Err(
+				"Native bootstrap generation " + generation.to_s() + " failed source check",
+			)
+		end
+		emission := try _gate6_process(outputs[generation], ["emit-qbe", compiler_path])
+		if emission.status != 0 || emission.stdout != expected_qbe || !emission.stderr.empty?()
+			return Result<Boolean, String>::Err(
+				"Native bootstrap generation " + generation.to_s() + " left the QBE fixed point",
+			)
+		end
+		seed = outputs[generation]
+		generation += 1
+	end
+	try _gate6_require_same(outputs[0], outputs[1], "Native bootstrap B2/B3")
+	try _gate6_require_same(outputs[1], outputs[2], "Native bootstrap B3/B4")
 	return Result<Boolean, String>::Ok(true)
 end
 
@@ -472,6 +533,18 @@ def _gate4_build_cycle(
 	end
 	if b1_qbe != b2_qbe || b2_qbe != b3_qbe
 		puts("B1, B2, and B3 QBE outputs differ")
+		return false
+	end
+	case _gate6_verify_native_bootstrap_cycle(
+			b1.output_path,
+			workspace + "/compiler.trb",
+			b1_qbe,
+			qbe,
+			workspace,
+		)
+	when Result::Ok(_value)
+	when Result::Err(error)
+		puts(error)
 		return false
 	end
 	seeds := [b0_path, b1.output_path, b2.output_path]

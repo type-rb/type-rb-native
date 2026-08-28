@@ -50,6 +50,11 @@ a time.
   inferring Go independence from the output binary. Keep recovery compilers and
   measurement orchestrators out of the ordinary semantic chain, and inspect
   executable imports and external-tool subprocesses when recording the graph.
+- When claiming Native bootstrap closure, use each produced compiler as the
+  executable seed of the following full build. Record the initial seed
+  provenance separately, compare same-basename output bytes across repeated
+  generations, and never count recovery seed creation as part of the ordinary
+  Go-free chain.
 - Allow external code generators, assemblers, linkers, SDKs, and system
   libraries only behind explicit boundaries whose time and distribution cost
   can be measured.
