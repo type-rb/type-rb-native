@@ -1,19 +1,33 @@
 import {
 	Gate4Compiler,
+	Gate4Output,
 	gate4_check,
 	gate4_compiler_new,
+	gate4_emit_qbe,
 	gate4_has_diagnostic,
 	gate4_lex,
 	gate4_parse,
 	gate4_resolve,
 } from compiler
-import { read_text } from trb/std/filesystem
-import { environment } from trb/std/process
+import { create_directory, read_text, write_text } from trb/std/filesystem
+import { environment, run } from trb/std/process
 import { Result } from trb/std/result
+import trb/std/string_builder
 import { describe, expect, test } from trb/std/test
 
 def gate4_frontend_test_source(): String
 	return "record Pair\n\tleft: Integer\n\tright: Integer\nend\n\ndef add(left: Integer, right: Integer): Integer\n\treturn left + right\nend\n\ndef main()\n\tpair := Pair.new(left: 20, right: 22)\n\tmut values: Array<Integer> := []\n\tvalues.push(add(pair.left, pair.right))\n\tif values[0] == 42\n\t\tputs(\"ok\")\n\telse\n\t\tputs(\"bad\")\n\tend\n\treturn\nend\n"
+end
+
+def gate4_output_source(output: Gate4Output): String
+	mut writer := string_builder.new()
+	mut index := 0
+	while index < output.count[0]
+		writer.append(output.lines[index])
+		writer.append("\n")
+		index += 1
+	end
+	return writer.to_s()
 end
 
 describe("Gate 4 TypeRB frontend") do
@@ -151,5 +165,70 @@ describe("Gate 4 TypeRB frontend") do
 		expect(state.diagnostic_codes[0]).to_equal("TRBN4004")
 		expect(state.diagnostic_lines[0]).to_equal(3)
 		expect(state.diagnostic_messages[0]).to_equal("push receiver is immutable")
+	end
+
+	test("emits deterministic QBE and executes the registered source subset") do
+		source := gate4_frontend_test_source()
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse(state)).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		first := gate4_output_source(gate4_emit_qbe(state))
+		second := gate4_output_source(gate4_emit_qbe(state))
+		expect(first).to_equal(second)
+		expect(first.include?("function l $g4f0(l %p0, l %p1) {")).to_be_true()
+		expect(first.include?("export function w $main(w %argc, l %argv) {")).to_be_true()
+		qbe := environment("TYPE_RB_NATIVE_QBE")
+		if qbe == nil
+			expect(true).to_be_true()
+		else
+			workspace := "/tmp/type-rb-native-gate4-emitter"
+			case create_directory(workspace)
+			when Result::Ok(_unit)
+			when Result::Err(_error)
+			end
+			case write_text(workspace + "/module.ssa", first)
+			when Result::Ok(_unit)
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+			end
+			case run(qbe, ["-t", "arm64_apple", workspace + "/module.ssa"])
+			when Result::Ok(qbe_result)
+				if !qbe_result.success
+					puts(qbe_result.stderr)
+				end
+				expect(qbe_result.success).to_be_true()
+				case write_text(workspace + "/module.s", qbe_result.stdout)
+				when Result::Ok(_unit)
+				when Result::Err(error)
+					puts(error.operation + ": " + error.message)
+					expect(false).to_be_true()
+				end
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+			end
+			case run("/usr/bin/cc", [workspace + "/module.s", "-o", workspace + "/program"])
+			when Result::Ok(link_result)
+				if !link_result.success
+					puts(link_result.stderr)
+				end
+				expect(link_result.success).to_be_true()
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+			end
+			case run(workspace + "/program", [])
+			when Result::Ok(result)
+				expect(result.success).to_be_true()
+				expect(result.stdout).to_equal("ok\n")
+				expect(result.stderr).to_equal("")
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+			end
+		end
 	end
 end
