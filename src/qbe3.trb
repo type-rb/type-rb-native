@@ -1,4 +1,4 @@
-import { Diagnostic } from diagnostic
+import { Diagnostic, boundary_diagnostic } from diagnostic
 import {
 	ComparisonOperator,
 	FloatBinaryOperator,
@@ -145,23 +145,41 @@ def _qbe3_static_string_symbol(static_data: Array<QbeStaticData>, value: String)
 end
 
 def emit_gate3_qbe(native_module: Gate3Module): Result<String, Diagnostic>
-	return _emit_gate3_qbe(native_module, false)
+	return _emit_gate3_qbe(native_module, false, false)
 end
 
 def emit_gate3_qbe_with_runtime_report(native_module: Gate3Module): Result<String, Diagnostic>
-	return _emit_gate3_qbe(native_module, true)
+	return _emit_gate3_qbe(native_module, true, false)
 end
 
-def _emit_gate3_qbe(native_module: Gate3Module, report_runtime: Boolean): Result<String, Diagnostic>
+def emit_gate4_bootstrap_qbe(native_module: Gate3Module): Result<String, Diagnostic>
+	return _emit_gate3_qbe(native_module, false, true)
+end
+
+def _emit_gate3_qbe(
+		native_module: Gate3Module,
+		report_runtime: Boolean,
+		gate4_bootstrap: Boolean,
+	): Result<String, Diagnostic>
 	try verify_gate3_mir(native_module)
+	mut bootstrap_index :=- 1
+	if gate4_bootstrap
+		bootstrap_index = try _qbe3_gate4_bootstrap_function_index(native_module)
+	end
 	static_data := _qbe3_collect_static_data(native_module)
 	mut writer := string_builder.new()
 	_qbe_emit_static_data(static_data, writer)
 	_qbe3_emit_static_strings(static_data, writer)
 	_qbe3_emit_projection_data(writer)
+	if gate4_bootstrap
+		_qbe3_emit_gate4_bootstrap_data(writer)
+	end
 	try _qbe3_emit_descriptors(native_module, writer)
 	_qbe3_emit_runtime(writer)
 	emit_gate3_runtime(writer)
+	if gate4_bootstrap
+		_qbe3_emit_gate4_bootstrap_runtime(writer)
+	end
 	if report_runtime
 		emit_gate3_runtime_report_support(writer)
 	end
@@ -176,8 +194,111 @@ def _emit_gate3_qbe(native_module: Gate3Module, report_runtime: Boolean): Result
 		)
 		function_index += 1
 	end
-	_qbe3_emit_entry(native_module, report_runtime, writer)
+	if gate4_bootstrap
+		_qbe3_emit_gate4_bootstrap_entry(bootstrap_index, writer)
+	else
+		_qbe3_emit_entry(native_module, report_runtime, writer)
+	end
 	return Result<String, Diagnostic>::Ok(writer.to_s())
+end
+
+def _qbe3_gate4_bootstrap_function_index(native_module: Gate3Module): Result<Integer, Diagnostic>
+	mut match_index :=- 1
+	mut index := 0
+	while index < native_module.functions.size()
+		if native_module.functions[index].name == "compiler_main"
+			if match_index != - 1
+				return Result<Integer, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", "/functions", "Gate 4 bootstrap compiler_main is ambiguous")
+				)
+			end
+			match_index = index
+		end
+		index += 1
+	end
+	if match_index == - 1
+		return Result<Integer, Diagnostic>::Err(
+			boundary_diagnostic("TRBN0004", "/functions", "Gate 4 bootstrap requires compiler_main")
+		)
+	end
+	function := native_module.functions[match_index]
+	if function.parameters.size() != 2 || !function.captures.empty?()
+		return Result<Integer, Diagnostic>::Err(
+			boundary_diagnostic(
+				"TRBN0004",
+				"/functions/" + match_index.to_s(),
+				"Gate 4 bootstrap compiler_main must take two uncaptured String parameters",
+			)
+		)
+	end
+	mut parameters_valid := true
+	index = 0
+	while index < function.parameters.size()
+		case function.parameters[index].value_type
+		when Gate3ValueType::Aggregate(type_id)
+			if type_id != "String"
+				parameters_valid = false
+			end
+		else
+			parameters_valid = false
+		end
+		index += 1
+	end
+	if !parameters_valid
+		return Result<Integer, Diagnostic>::Err(
+			boundary_diagnostic(
+				"TRBN0004",
+				"/functions/" + match_index.to_s() + "/parameters",
+				"Gate 4 bootstrap compiler_main parameters must be String",
+			)
+		)
+	end
+	case function.result_type
+	when Gate3ResultType::Void
+	when Gate3ResultType::Value(_value_type)
+		return Result<Integer, Diagnostic>::Err(
+			boundary_diagnostic(
+				"TRBN0004",
+				"/functions/" + match_index.to_s() + "/result",
+				"Gate 4 bootstrap compiler_main must return Void",
+			)
+		)
+	end
+	if _qbe3_function_uses_closure_abi(native_module, function.id)
+		return Result<Integer, Diagnostic>::Err(
+			boundary_diagnostic(
+				"TRBN0004",
+				"/functions/" + match_index.to_s(),
+				"Gate 4 bootstrap compiler_main must use the direct-call ABI",
+			)
+		)
+	end
+	return Result<Integer, Diagnostic>::Ok(match_index)
+end
+
+def _qbe3_emit_gate4_bootstrap_data(mut writer: StringBuilder)
+	usage := "usage: gate4-compiler SOURCE MODE\n"
+	bytes := usage.to_bytes()
+	mut values: Array<String> := []
+	mut index := 0
+	while index < bytes.size()
+		values.push(bytes.at(index).to_s())
+		index += 1
+	end
+	_qbe_line(writer, "data $trbn_g4_usage = { b " + values.join(" ") + " }")
+	_qbe_line(writer, "")
+	return
+end
+
+def _qbe3_emit_gate4_bootstrap_runtime(mut writer: StringBuilder)
+	_qbe_line(writer, "function l $trbn_g4_string_from_c(l %source) {")
+	_qbe_line(writer, "@start")
+	_qbe_line(writer, "\t%length =l call $strlen(l %source)")
+	_qbe_line(writer, "\t%string =l call $trbn_string_new(l %source, l %length, l %length)")
+	_qbe_line(writer, "\tret %string")
+	_qbe_line(writer, "}")
+	_qbe_line(writer, "")
+	return
 end
 
 def _qbe3_emit_static_strings(static_data: Array<QbeStaticData>, mut writer: StringBuilder)
@@ -1729,6 +1850,41 @@ def _qbe3_emit_entry(native_module: Gate3Module, report_runtime: Boolean, mut wr
 	if report_runtime
 		_qbe3_emit_runtime_report(writer)
 	end
+	_qbe_line(writer, "\tret 0")
+	_qbe_line(writer, "}")
+	return
+end
+
+def _qbe3_emit_gate4_bootstrap_entry(function_index: Integer, mut writer: StringBuilder)
+	_qbe_line(writer, "export function w $main(w %argc, l %argv) {")
+	_qbe_line(writer, "@start")
+	_qbe_line(writer, "\t%valid =w ceqw %argc, 3")
+	_qbe_line(writer, "\tjnz %valid, @compile, @usage")
+	_qbe_line(writer, "@usage")
+	_qbe_line(writer, "\tcall $write(w 2, l $trbn_g4_usage, l 34)")
+	_qbe_line(writer, "\tret 64")
+	_qbe_line(writer, "@compile")
+	_qbe_line(writer, "\t%root_frame =l alloc8 32")
+	_qbe_line(writer, "\t%previous_roots =l loadl $trbn_roots")
+	_qbe_line(writer, "\tstorel %previous_roots, %root_frame")
+	_qbe_line(writer, "\t%root_count_address =l add %root_frame, 8")
+	_qbe_line(writer, "\tstorel 2, %root_count_address")
+	_qbe_line(writer, "\t%source_root =l add %root_frame, 16")
+	_qbe_line(writer, "\tstorel 0, %source_root")
+	_qbe_line(writer, "\t%mode_root =l add %root_frame, 24")
+	_qbe_line(writer, "\tstorel 0, %mode_root")
+	_qbe_line(writer, "\tstorel %root_frame, $trbn_roots")
+	_qbe_line(writer, "\t%source_argument_address =l add %argv, 8")
+	_qbe_line(writer, "\t%source_argument =l loadl %source_argument_address")
+	_qbe_line(writer, "\t%source =l call $trbn_g4_string_from_c(l %source_argument)")
+	_qbe_line(writer, "\tstorel %source, %source_root")
+	_qbe_line(writer, "\t%mode_argument_address =l add %argv, 16")
+	_qbe_line(writer, "\t%mode_argument =l loadl %mode_argument_address")
+	_qbe_line(writer, "\t%mode =l call $trbn_g4_string_from_c(l %mode_argument)")
+	_qbe_line(writer, "\tstorel %mode, %mode_root")
+	_qbe_line(writer, "\tcall $trbn_g3f" + function_index.to_s() + "(l %source, l %mode)")
+	_qbe_line(writer, "\t%restore_roots =l loadl %root_frame")
+	_qbe_line(writer, "\tstorel %restore_roots, $trbn_roots")
 	_qbe_line(writer, "\tret 0")
 	_qbe_line(writer, "}")
 	return

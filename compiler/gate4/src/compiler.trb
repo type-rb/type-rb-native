@@ -1007,12 +1007,25 @@ def gate4_emit_binary(
 		)
 		return gate4_emitted_value(result, result_type, 0, "", 0, "")
 	end
-	if operator == "=="
-		if left.type_name == "String"
+	if left.type_name == "String"
+		mut compare_strings := operator == "=="
+		if operator == "!="
+			compare_strings = true
+		end
+		if compare_strings
+			mut equality := result
+			if operator == "!="
+				equality = gate4_emit_temporary(context)
+			end
 			gate4_output_line(
 				output,
-				"\t" + result + " =l call $g4_string_equal(l " + left.operand + ", l " + right.operand + ")",
+				"\t" + equality + " =l call $g4_string_equal(l " + left.operand + ", l " + right.operand + ")",
 			)
+			if operator == "!="
+				word := gate4_emit_temporary(context)
+				gate4_output_line(output, "\t" + word + " =w ceql " + equality + ", 0")
+				gate4_output_line(output, "\t" + result + " =l extuw " + word)
+			end
 			return gate4_emitted_value(result, "Boolean", 0, "", 0, "")
 		end
 	end
@@ -2563,7 +2576,12 @@ def gate4_resolve_declarations(mut state: Gate4Compiler): Boolean
 				gate4_diagnostic(state, "TRBN4003", state.function_lines[function_index], "main must take no parameters")
 			end
 			if state.function_result_types[function_index] != "Void"
-				gate4_diagnostic(state, "TRBN4003", state.function_lines[function_index], "main must return Void")
+				gate4_diagnostic(
+					state,
+					"TRBN4003",
+					state.function_lines[function_index],
+					"main must return Void, found " + state.function_result_types[function_index],
+				)
 			end
 		end
 		mut other_function := 0

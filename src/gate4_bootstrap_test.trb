@@ -1,0 +1,179 @@
+import { decode_gate3_snapshot, decode_gate4_bootstrap_snapshot } from gate3_snapshot
+import { build_gate4_bootstrap_executable } from gate3_toolchain
+import { build_gate4_generation } from gate4_toolchain
+import { create_directory, read_text, write_text } from trb/std/filesystem
+import { environment, run } from trb/std/process
+import { Result } from trb/std/result
+import { describe, expect, test } from trb/std/test
+
+def _gate4_environment(name: String): String
+	value := environment(name)
+	if value == nil
+		return ""
+	end
+	return value
+end
+
+def _gate4_build_cycle(
+		b0_path: String,
+		compiler_source: String,
+		qbe: String,
+		workspace: String,
+	): Boolean
+	b1 := case build_gate4_generation(b0_path, compiler_source, qbe, "/usr/bin/cc", workspace, "b1")
+	when Result::Ok(report)
+		report
+	when Result::Err(error)
+		puts(error.phase + ": " + error.message + "\n" + error.stderr)
+		return false
+	end
+	b2 := case build_gate4_generation(b1.output_path, compiler_source, qbe, "/usr/bin/cc", workspace, "b2")
+	when Result::Ok(report)
+		report
+	when Result::Err(error)
+		puts(error.phase + ": " + error.message + "\n" + error.stderr)
+		return false
+	end
+	b3 := case build_gate4_generation(b2.output_path, compiler_source, qbe, "/usr/bin/cc", workspace, "b3")
+	when Result::Ok(report)
+		report
+	when Result::Err(error)
+		puts(error.phase + ": " + error.message + "\n" + error.stderr)
+		return false
+	end
+	b1_qbe := case read_text(b1.qbe_ir_path)
+	when Result::Ok(source)
+		source
+	when Result::Err(error)
+		puts(error.operation + ": " + error.message)
+		return false
+	end
+	b2_qbe := case read_text(b2.qbe_ir_path)
+	when Result::Ok(source)
+		source
+	when Result::Err(error)
+		puts(error.operation + ": " + error.message)
+		return false
+	end
+	b3_qbe := case read_text(b3.qbe_ir_path)
+	when Result::Ok(source)
+		source
+	when Result::Err(error)
+		puts(error.operation + ": " + error.message)
+		return false
+	end
+	if b1_qbe != b2_qbe || b2_qbe != b3_qbe
+		puts("B1, B2, and B3 QBE outputs differ")
+		return false
+	end
+	program := "def main()\n\tputs(\"ok\")\n\treturn\nend\n"
+	mut executables := [b1.output_path, b2.output_path, b3.output_path]
+	mut index := 0
+	while index < executables.size()
+		case run(executables[index], [program, "check"])
+		when Result::Ok(process)
+			if !process.success || process.stdout != "ok\n" || process.stderr != ""
+				puts("self-hosted compiler check failed")
+				return false
+			end
+		when Result::Err(error)
+			puts(error.operation + ": " + error.message)
+			return false
+		end
+		index += 1
+	end
+	return true
+end
+
+describe("Gate 4 reference bootstrap") do
+	test("builds B0 from the TypeRB compiler source and executes its checked entry") do
+		root := _gate4_environment("TYPE_RB_NATIVE_ROOT")
+		reference_trb := _gate4_environment("TYPE_RB_NATIVE_REFERENCE_TRB")
+		qbe := _gate4_environment("TYPE_RB_NATIVE_QBE")
+		if root.empty?() || reference_trb.empty?() || qbe.empty?()
+			expect(true).to_be_true()
+		else
+			workspace := "/tmp/type-rb-native-gate4-bootstrap"
+			case create_directory(workspace)
+			when Result::Ok(_unit)
+			when Result::Err(_error)
+			end
+			compiler_source := case read_text(root + "/compiler/gate4/src/compiler.trb")
+			when Result::Ok(source)
+				source
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+				""
+			end
+			compiler_path := workspace + "/compiler.trb"
+			case write_text(compiler_path, compiler_source)
+			when Result::Ok(_unit)
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+			end
+			snapshot := case run(
+					reference_trb,
+					["compiler", "bootstrap-snapshot", "--snapshot-version", "4", compiler_path],
+				)
+			when Result::Ok(process)
+				if !process.success
+					puts(process.stderr)
+				end
+				expect(process.success).to_be_true()
+				process.stdout
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+				""
+			end
+			expect(snapshot.to_bytes().size() > 4194304).to_be_true()
+			case decode_gate3_snapshot(snapshot)
+			when Result::Ok(_native_module)
+				expect(false).to_be_true()
+			when Result::Err(diagnostic)
+				expect(diagnostic.code).to_equal("TRBN0005")
+				expect(diagnostic.message).to_equal("snapshot exceeds the Gate 3 4 MiB input limit")
+			end
+			case decode_gate4_bootstrap_snapshot(snapshot)
+			when Result::Ok(native_module)
+				case build_gate4_bootstrap_executable(
+						native_module,
+						qbe,
+						"/usr/bin/cc",
+						workspace,
+						workspace + "/b0",
+					)
+				when Result::Ok(_report)
+					case run(workspace + "/b0", [])
+					when Result::Ok(usage)
+						expect(usage.status).to_equal(64)
+						expect(usage.stdout).to_equal("")
+						expect(usage.stderr).to_equal("usage: gate4-compiler SOURCE MODE\n")
+					when Result::Err(error)
+						puts(error.operation + ": " + error.message)
+						expect(false).to_be_true()
+					end
+					source := "def main()\n\tputs(\"ok\")\n\treturn\nend\n"
+					case run(workspace + "/b0", [source, "check"])
+					when Result::Ok(check)
+						expect(check.success).to_be_true()
+						expect(check.stdout).to_equal("ok\n")
+						expect(check.stderr).to_equal("")
+					when Result::Err(error)
+						puts(error.operation + ": " + error.message)
+						expect(false).to_be_true()
+					end
+					expect(_gate4_build_cycle(workspace + "/b0", compiler_source, qbe, workspace)).to_be_true()
+				when Result::Err(error)
+					puts(error.phase + ": " + error.message + "\n" + error.stderr)
+					expect(false).to_be_true()
+				end
+			when Result::Err(diagnostic)
+				puts(diagnostic.code + " " + diagnostic.path + ": " + diagnostic.message)
+				expect(false).to_be_true()
+			end
+		end
+	end
+end

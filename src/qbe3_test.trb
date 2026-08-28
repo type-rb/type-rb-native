@@ -1,6 +1,6 @@
 import { decode_gate3_snapshot } from gate3_snapshot
 import { build_gate3_executable } from gate3_toolchain
-import { emit_gate3_qbe } from qbe3
+import { emit_gate3_qbe, emit_gate4_bootstrap_qbe } from qbe3
 import { create_directory, read_text } from trb/std/filesystem
 import { environment, run } from trb/std/process
 import { Result } from trb/std/result
@@ -20,6 +20,23 @@ def _qbe3_fixture(): String
 end
 
 describe("Gate 3 managed QBE runtime") do
+	test("rejects a module without the Gate 4 bootstrap ABI") do
+		case decode_gate3_snapshot(_qbe3_fixture())
+		when Result::Ok(native_module)
+			case emit_gate4_bootstrap_qbe(native_module)
+			when Result::Ok(_source)
+				expect(false).to_be_true()
+			when Result::Err(diagnostic)
+				expect(diagnostic.code).to_equal("TRBN0004")
+				expect(diagnostic.path).to_equal("/functions")
+				expect(diagnostic.message).to_equal("Gate 4 bootstrap requires compiler_main")
+			end
+		when Result::Err(diagnostic)
+			puts(diagnostic.path + ": " + diagnostic.message)
+			expect(false).to_be_true()
+		end
+	end
+
 	test("emits deterministic managed runtime IL and exact-root frames") do
 		case decode_gate3_snapshot(_qbe3_fixture())
 		when Result::Ok(native_module)
