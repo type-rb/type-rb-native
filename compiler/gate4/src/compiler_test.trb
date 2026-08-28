@@ -5,9 +5,15 @@ import {
 	gate4_compiler_new,
 	gate4_emit_qbe,
 	gate4_has_diagnostic,
+	gate4_integer_storage,
+	gate4_load_integer,
+	gate4_load_string,
 	gate4_lex,
 	gate4_parse,
 	gate4_resolve,
+	gate4_store_integer,
+	gate4_store_string,
+	gate4_string_storage,
 } from compiler
 import { create_directory, read_text, write_text } from trb/std/filesystem
 import { environment, run } from trb/std/process
@@ -23,7 +29,7 @@ def gate4_output_source(output: Gate4Output): String
 	mut writer := string_builder.new()
 	mut index := 0
 	while index < output.count[0]
-		writer.append(output.lines[index])
+		writer.append(gate4_load_string(output.lines, index))
 		writer.append("\n")
 		index += 1
 	end
@@ -31,6 +37,41 @@ def gate4_output_source(output: Gate4Output): String
 end
 
 describe("Gate 4 TypeRB frontend") do
+	test("grows chunked storage only as elements are stored") do
+		empty := gate4_integer_storage(0)
+		expect(empty.chunks[0].size()).to_equal(0)
+		expect(empty.used[0]).to_equal(0)
+		expect(gate4_store_integer(empty, 0, 1)).to_be_false()
+
+		integers := gate4_integer_storage(513)
+		expect(integers.chunks[0].size()).to_equal(0)
+		expect(gate4_store_integer(integers, 0, 10)).to_be_true()
+		expect(gate4_store_integer(integers, 255, 20)).to_be_true()
+		expect(integers.chunks[0].size()).to_equal(1)
+		expect(integers.chunks[0][0].size()).to_equal(256)
+		expect(gate4_store_integer(integers, 256, 30)).to_be_true()
+		expect(integers.chunks[0].size()).to_equal(2)
+		expect(gate4_store_integer(integers, 512, 40)).to_be_true()
+		expect(integers.chunks[0].size()).to_equal(3)
+		expect(integers.chunks[0][1].size()).to_equal(256)
+		expect(integers.chunks[0][2].size()).to_equal(256)
+		expect(integers.used[0]).to_equal(513)
+		expect(gate4_load_integer(integers, 0)).to_equal(10)
+		expect(gate4_load_integer(integers, 255)).to_equal(20)
+		expect(gate4_load_integer(integers, 256)).to_equal(30)
+		expect(gate4_load_integer(integers, 512)).to_equal(40)
+		expect(gate4_store_integer(integers, - 1, 50)).to_be_false()
+		expect(gate4_store_integer(integers, 513, 50)).to_be_false()
+		expect(integers.used[0]).to_equal(513)
+
+		strings := gate4_string_storage(257)
+		expect(gate4_store_string(strings, 0, "first")).to_be_true()
+		expect(gate4_store_string(strings, 256, "last")).to_be_true()
+		expect(gate4_load_string(strings, 0)).to_equal("first")
+		expect(gate4_load_string(strings, 256)).to_equal("last")
+		expect(gate4_store_string(strings, 257, "outside")).to_be_false()
+	end
+
 	test("lexes and parses the registered declaration and expression subset") do
 		source := gate4_frontend_test_source()
 		mut state := gate4_compiler_new(source.size() + 1)
@@ -38,15 +79,15 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_parse(state)).to_be_true()
 		expect(gate4_has_diagnostic(state)).to_be_false()
 		expect(state.record_count[0]).to_equal(1)
-		expect(state.record_names[0]).to_equal("Pair")
+		expect(gate4_load_string(state.record_names, 0)).to_equal("Pair")
 		expect(state.field_count[0]).to_equal(2)
-		expect(state.field_names[0]).to_equal("left")
-		expect(state.field_names[1]).to_equal("right")
+		expect(gate4_load_string(state.field_names, 0)).to_equal("left")
+		expect(gate4_load_string(state.field_names, 1)).to_equal("right")
 		expect(state.function_count[0]).to_equal(2)
-		expect(state.function_names[0]).to_equal("add")
-		expect(state.function_names[1]).to_equal("main")
-		expect(state.function_result_types[0]).to_equal("Integer")
-		expect(state.function_result_types[1]).to_equal("Void")
+		expect(gate4_load_string(state.function_names, 0)).to_equal("add")
+		expect(gate4_load_string(state.function_names, 1)).to_equal("main")
+		expect(gate4_load_string(state.function_result_types, 0)).to_equal("Integer")
+		expect(gate4_load_string(state.function_result_types, 1)).to_equal("Void")
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_true()
 	end
@@ -56,9 +97,9 @@ describe("Gate 4 TypeRB frontend") do
 		mut state := gate4_compiler_new(source.size() + 1)
 		expect(gate4_lex(state, source)).to_be_false()
 		expect(state.diagnostic_count[0]).to_equal(1)
-		expect(state.diagnostic_codes[0]).to_equal("TRBN4001")
-		expect(state.diagnostic_lines[0]).to_equal(2)
-		expect(state.diagnostic_messages[0]).to_equal("unsupported source character @")
+		expect(gate4_load_string(state.diagnostic_codes, 0)).to_equal("TRBN4001")
+		expect(gate4_load_integer(state.diagnostic_lines, 0)).to_equal(2)
+		expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("unsupported source character @")
 	end
 
 	test("rejects an unfinished function deterministically") do
@@ -66,8 +107,8 @@ describe("Gate 4 TypeRB frontend") do
 		mut state := gate4_compiler_new(source.size() + 1)
 		expect(gate4_lex(state, source)).to_be_true()
 		expect(gate4_parse(state)).to_be_false()
-		expect(state.diagnostic_codes[0]).to_equal("TRBN4002")
-		expect(state.diagnostic_messages[0]).to_equal("expected end")
+		expect(gate4_load_string(state.diagnostic_codes, 0)).to_equal("TRBN4002")
+		expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("expected end")
 	end
 
 	test("parses the checked-in compiler source through its own syntax pass") do
@@ -81,24 +122,24 @@ describe("Gate 4 TypeRB frontend") do
 				expect(gate4_lex(state, source)).to_be_true()
 				if !gate4_parse(state)
 					puts(
-						state.diagnostic_codes[0] + ":" + state.diagnostic_lines[0].to_s() + ":" +
-						state.diagnostic_messages[0],
+						gate4_load_string(state.diagnostic_codes, 0) + ":" + gate4_load_integer(state.diagnostic_lines, 0).to_s() + ":" +
+						gate4_load_string(state.diagnostic_messages, 0),
 					)
 				end
 				expect(gate4_has_diagnostic(state)).to_be_false()
-				expect(state.record_names[0]).to_equal("Gate4Compiler")
+				expect(gate4_load_string(state.record_names, 0)).to_equal("Gate4Compiler")
 				expect(state.function_count[0] > 20).to_be_true()
 				if !gate4_resolve(state)
 					puts(
-						state.diagnostic_codes[0] + ":" + state.diagnostic_lines[0].to_s() + ":" +
-						state.diagnostic_messages[0],
+						gate4_load_string(state.diagnostic_codes, 0) + ":" + gate4_load_integer(state.diagnostic_lines, 0).to_s() + ":" +
+						gate4_load_string(state.diagnostic_messages, 0),
 					)
 				end
 				expect(gate4_has_diagnostic(state)).to_be_false()
 				if !gate4_check(state)
 					puts(
-						state.diagnostic_codes[0] + ":" + state.diagnostic_lines[0].to_s() + ":" +
-						state.diagnostic_messages[0],
+						gate4_load_string(state.diagnostic_codes, 0) + ":" + gate4_load_integer(state.diagnostic_lines, 0).to_s() + ":" +
+						gate4_load_string(state.diagnostic_messages, 0),
 					)
 				end
 				expect(gate4_has_diagnostic(state)).to_be_false()
@@ -115,9 +156,9 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_lex(state, source)).to_be_true()
 		expect(gate4_parse(state)).to_be_true()
 		expect(gate4_resolve(state)).to_be_false()
-		expect(state.diagnostic_codes[0]).to_equal("TRBN4003")
-		expect(state.diagnostic_lines[0]).to_equal(5)
-		expect(state.diagnostic_messages[0]).to_equal("duplicate function declaration main")
+		expect(gate4_load_string(state.diagnostic_codes, 0)).to_equal("TRBN4003")
+		expect(gate4_load_integer(state.diagnostic_lines, 0)).to_equal(5)
+		expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("duplicate function declaration main")
 	end
 
 	test("rejects an unresolved direct call during resolution") do
@@ -126,9 +167,9 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_lex(state, source)).to_be_true()
 		expect(gate4_parse(state)).to_be_true()
 		expect(gate4_resolve(state)).to_be_false()
-		expect(state.diagnostic_codes[0]).to_equal("TRBN4003")
-		expect(state.diagnostic_lines[0]).to_equal(2)
-		expect(state.diagnostic_messages[0]).to_equal("unresolved function missing")
+		expect(gate4_load_string(state.diagnostic_codes, 0)).to_equal("TRBN4003")
+		expect(gate4_load_integer(state.diagnostic_lines, 0)).to_equal(2)
+		expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("unresolved function missing")
 	end
 
 	test("rejects a local initializer type mismatch during checking") do
@@ -138,9 +179,9 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_parse(state)).to_be_true()
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_false()
-		expect(state.diagnostic_codes[0]).to_equal("TRBN4004")
-		expect(state.diagnostic_lines[0]).to_equal(2)
-		expect(state.diagnostic_messages[0]).to_equal("expected Integer, found String")
+		expect(gate4_load_string(state.diagnostic_codes, 0)).to_equal("TRBN4004")
+		expect(gate4_load_integer(state.diagnostic_lines, 0)).to_equal(2)
+		expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("expected Integer, found String")
 	end
 
 	test("rejects direct-call arity mismatches during checking") do
@@ -150,9 +191,9 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_parse(state)).to_be_true()
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_false()
-		expect(state.diagnostic_codes[0]).to_equal("TRBN4004")
-		expect(state.diagnostic_lines[0]).to_equal(6)
-		expect(state.diagnostic_messages[0]).to_equal("call argument count does not match identity")
+		expect(gate4_load_string(state.diagnostic_codes, 0)).to_equal("TRBN4004")
+		expect(gate4_load_integer(state.diagnostic_lines, 0)).to_equal(6)
+		expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("call argument count does not match identity")
 	end
 
 	test("rejects destructive calls through immutable bindings") do
@@ -162,9 +203,9 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_parse(state)).to_be_true()
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_false()
-		expect(state.diagnostic_codes[0]).to_equal("TRBN4004")
-		expect(state.diagnostic_lines[0]).to_equal(3)
-		expect(state.diagnostic_messages[0]).to_equal("push receiver is immutable")
+		expect(gate4_load_string(state.diagnostic_codes, 0)).to_equal("TRBN4004")
+		expect(gate4_load_integer(state.diagnostic_lines, 0)).to_equal(3)
+		expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("push receiver is immutable")
 	end
 
 	test("emits deterministic QBE and executes the registered source subset") do

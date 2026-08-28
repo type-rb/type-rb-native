@@ -32,7 +32,7 @@ and peak-RSS bounds pass in the
 ## Reference producer pin
 
 `TYPE_RB_REVISION` pins TypeRB commit
-`57b4ff018cfbc0539c9b4cbbe4c0676afa429857`, which provides the
+`fa9e0503cc681bcaa691f6f11d2f1e19ca8e6453`, which provides the
 consumer-neutral version 4 bootstrap snapshot producer. The integration command
 owned by this repository is:
 
@@ -54,8 +54,8 @@ Gate 3 retains every Gate 2 feature and adds:
 - first-class dynamic UTF-8 `String` values;
 - String concatenation, equality, code-point `size`, indexed access, and
   dynamic `puts`;
-- mutable `Array<Integer>`, `Array<String>`, and closure-Array literals, reads,
-  writes, growth, `size`, and `push`;
+- mutable `Array<Integer>`, `Array<String>`, closure-Array, and recursively
+  nested Array literals, reads, writes, growth, `size`, and `push`;
 - first-class positional function values, immutable lexical captures, managed
   captures, and indirect calls; and
 - records and tagged values whose fields recursively contain the supported
