@@ -1,0 +1,99 @@
+import { read_text } from trb/std/filesystem
+import { Result } from trb/std/result
+
+record Gate6FCompilerSources
+	entry: String
+	storage: String
+	path: String
+	flattened: String
+end
+
+def gate6f_compiler_import_prefix(): String
+	mut source := "import {\n"
+	source += "\tGate4IntegerStorage,\n"
+	source += "\tGate4StringStorage,\n"
+	source += "\tgate4_integer_storage,\n"
+	source += "\tgate4_load_integer,\n"
+	source += "\tgate4_load_string,\n"
+	source += "\tgate4_store_integer,\n"
+	source += "\tgate4_store_string,\n"
+	source += "\tgate4_string_storage,\n"
+	source += "} from storage\n"
+	source += "import {\n"
+	source += "\tgate4_path_basename,\n"
+	source += "\tgate4_path_directory,\n"
+	source += "\tgate4_path_join,\n"
+	source += "\tgate4_string_starts_with,\n"
+	source += "\tgate4_string_without_suffix,\n"
+	source += "} from path\n\n"
+	return source
+end
+
+def gate6f_flatten_compiler_source(
+		entry: String,
+		storage: String,
+		path: String,
+	): Result<String, String>
+	prefix := gate6f_compiler_import_prefix()
+	if !entry.start_with?(prefix)
+		return Result<String, String>::Err("compiler entry import boundary differs")
+	end
+	core := entry.slice(prefix.size()...entry.size())
+	return Result<String, String>::Ok(storage + "\n" + path + "\n" + core)
+end
+
+def gate6f_compiler_directory(path: String): String
+	mut slash :=- 1
+	mut index := 0
+	while index < path.size()
+		if path[index] == "/"
+			slash = index
+		end
+		index += 1
+	end
+	if slash < 0
+		return "."
+	end
+	if slash == 0
+		return "/"
+	end
+	mut result := ""
+	index = 0
+	while index < slash
+		result += path[index]
+		index += 1
+	end
+	return result
+end
+
+def gate6f_compiler_path(directory: String, filename: String): String
+	if directory == "/"
+		return directory + filename
+	end
+	return directory + "/" + filename
+end
+
+def gate6f_read_required_source(path: String): Result<String, String>
+	case read_text(path)
+	when Result::Ok(source)
+		return Result<String, String>::Ok(source)
+	when Result::Err(error)
+		return Result<String, String>::Err(error.operation + ": " + error.message)
+	end
+end
+
+def gate6f_read_compiler_sources(entry_path: String): Result<Gate6FCompilerSources, String>
+	directory := gate6f_compiler_directory(entry_path)
+	entry := try gate6f_read_required_source(entry_path)
+	storage := try gate6f_read_required_source(gate6f_compiler_path(directory, "storage.trb"))
+	path := try gate6f_read_required_source(gate6f_compiler_path(directory, "path.trb"))
+	flattened := try gate6f_flatten_compiler_source(entry, storage, path)
+	return Result<Gate6FCompilerSources, String>::Ok(
+		Gate6FCompilerSources.new(
+			entry: entry,
+			storage: storage,
+			path: path,
+			flattened: flattened,
+		),
+	)
+end

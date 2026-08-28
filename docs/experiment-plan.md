@@ -369,6 +369,19 @@ RSS is effectively flat, the compiler strips to 199,992 bytes, and Darwin and
 pinned Linux arm64 fixed points pass. See the
 [Gate 6E result](../results/2026-08-29-gate6e-file-root-darwin-linux-arm64/README.md).
 
+Gate 6F is the reflexive multi-file compiler slice registered in
+[issue #55](https://github.com/type-rb/type-rb-native/issues/55) and specified
+by [Decision 0013](decisions/0013-multi-file-self-hosted-compiler.md). The
+canonical compiler entry imports pure storage and path modules; recovery may
+derive one temporary flat B1 source, but every ordinary B1-to-B4 generation
+must compile the real source closure.
+
+The split compiler retains the Gate 6E absolute build-time, RSS, and size
+bounds. Alternating multi-file/flat self-build observations add a 10% source
+organization bound, exact B2/B3/B4 bytes and QBE remain mandatory, and the
+pinned Linux image rebuilds both the compiler and representative application.
+See the [Gate 6F plan](gate-6-multifile-compiler.md).
+
 This gate is not authorization to ship. It evaluates:
 
 - broader configured and packaged multi-module applications beyond the

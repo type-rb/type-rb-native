@@ -2,6 +2,7 @@ import { decode_gate3_snapshot, decode_gate4_bootstrap_snapshot } from gate3_sna
 import { build_gate4_bootstrap_executable } from gate3_toolchain
 import { build_gate4_generation } from gate4_toolchain
 import { build_gate5_matched_go_compiler } from gate5_matched_driver
+import { gate6f_flatten_compiler_source } from gate6f_compiler_source
 import { create_directory, read_text, write_text } from trb/std/filesystem
 import { ProcessResult, environment, run } from trb/std/process
 import { Result } from trb/std/result
@@ -22,6 +23,47 @@ def _gate4_read(path: String): Result<String, String>
 	when Result::Err(error)
 		return Result<String, String>::Err(error.operation + ": " + error.message)
 	end
+end
+
+def _gate6f_replace_once(source: String, before: String, after: String): Result<String, String>
+	if before.empty?()
+		return Result<String, String>::Err("replacement needle is empty")
+	end
+	mut match_index :=- 1
+	mut index := 0
+	while index + before.size() <= source.size()
+		mut matches := true
+		mut offset := 0
+		while offset < before.size()
+			if source[index + offset] != before[offset]
+				matches = false
+			end
+			offset += 1
+		end
+		if matches
+			if match_index >= 0
+				return Result<String, String>::Err("replacement needle is not unique")
+			end
+			match_index = index
+		end
+		index += 1
+	end
+	if match_index < 0
+		return Result<String, String>::Err("replacement needle is missing")
+	end
+	mut result := ""
+	index = 0
+	while index < match_index
+		result += source[index]
+		index += 1
+	end
+	result += after
+	index = match_index + before.size()
+	while index < source.size()
+		result += source[index]
+		index += 1
+	end
+	return Result<String, String>::Ok(result)
 end
 
 def _gate6_process(command: String, arguments: Array<String>): Result<ProcessResult, String>
@@ -519,25 +561,26 @@ end
 
 def _gate4_build_cycle(
 		b0_path: String,
-		compiler_source: String,
+		recovery_source: String,
+		compiler_path: String,
 		qbe: String,
 		workspace: String,
 	): Boolean
-	b1 := case build_gate4_generation(b0_path, compiler_source, qbe, "/usr/bin/cc", workspace, "b1")
+	b1 := case build_gate4_generation(b0_path, recovery_source, qbe, "/usr/bin/cc", workspace, "b1")
 	when Result::Ok(report)
 		report
 	when Result::Err(error)
 		puts(error.phase + ": " + error.message + "\n" + error.stderr)
 		return false
 	end
-	b2 := case build_gate4_generation(b1.output_path, compiler_source, qbe, "/usr/bin/cc", workspace, "b2")
+	b2 := case build_gate4_generation(b1.output_path, recovery_source, qbe, "/usr/bin/cc", workspace, "b2")
 	when Result::Ok(report)
 		report
 	when Result::Err(error)
 		puts(error.phase + ": " + error.message + "\n" + error.stderr)
 		return false
 	end
-	b3 := case build_gate4_generation(b2.output_path, compiler_source, qbe, "/usr/bin/cc", workspace, "b3")
+	b3 := case build_gate4_generation(b2.output_path, recovery_source, qbe, "/usr/bin/cc", workspace, "b3")
 	when Result::Ok(report)
 		report
 	when Result::Err(error)
@@ -566,13 +609,24 @@ def _gate4_build_cycle(
 		return false
 	end
 	if b1_qbe != b2_qbe || b2_qbe != b3_qbe
-		puts("B1, B2, and B3 QBE outputs differ")
+		puts("recovery B1, B2, and B3 QBE outputs differ")
+		return false
+	end
+	canonical_qbe := case run(b1.output_path, ["emit-qbe", compiler_path])
+	when Result::Ok(process)
+		if !process.success || process.stdout.empty?() || !process.stderr.empty?()
+			puts("B1 could not emit the multi-file compiler closure")
+			return false
+		end
+		process.stdout
+	when Result::Err(error)
+		puts(error.operation + ": " + error.message)
 		return false
 	end
 	case _gate6_verify_native_bootstrap_cycle(
 			b1.output_path,
-			workspace + "/compiler.trb",
-			b1_qbe,
+			compiler_path,
+			canonical_qbe,
 			qbe,
 			workspace,
 		)
@@ -585,7 +639,7 @@ def _gate4_build_cycle(
 	expected_qbe := [b1_qbe, b2_qbe, b3_qbe]
 	mut seed_index := 0
 	while seed_index < seeds.size()
-		case run(seeds[seed_index], ["--source-content", "check", compiler_source])
+		case run(seeds[seed_index], ["--source-content", "check", recovery_source])
 		when Result::Ok(process)
 			if !process.success || process.stdout != "ok\n" || process.stderr != ""
 				puts("compiler source check differs at seed " + seed_index.to_s())
@@ -595,7 +649,7 @@ def _gate4_build_cycle(
 			puts(error.operation + ": " + error.message)
 			return false
 		end
-		case run(seeds[seed_index], ["--source-content", "emit-qbe", compiler_source])
+		case run(seeds[seed_index], ["--source-content", "emit-qbe", recovery_source])
 		when Result::Ok(process)
 			if !process.success || process.stdout != expected_qbe[seed_index] || process.stderr != ""
 				puts("repeated compiler QBE differs at seed " + seed_index.to_s())
@@ -608,10 +662,9 @@ def _gate4_build_cycle(
 		seed_index += 1
 	end
 	file_seeds := [b1.output_path, b2.output_path]
-	file_expected_qbe := [b2_qbe, b3_qbe]
 	seed_index = 0
 	while seed_index < file_seeds.size()
-		case run(file_seeds[seed_index], ["check", workspace + "/compiler.trb"])
+		case run(file_seeds[seed_index], ["check", compiler_path])
 		when Result::Ok(process)
 			if !process.success || process.stdout != "ok\n" || process.stderr != ""
 				puts("file-oriented compiler source check differs at seed " + seed_index.to_s())
@@ -621,9 +674,9 @@ def _gate4_build_cycle(
 			puts(error.operation + ": " + error.message)
 			return false
 		end
-		case run(file_seeds[seed_index], ["emit-qbe", workspace + "/compiler.trb"])
+		case run(file_seeds[seed_index], ["emit-qbe", compiler_path])
 		when Result::Ok(process)
-			if !process.success || process.stdout != file_expected_qbe[seed_index] || process.stderr != ""
+			if !process.success || process.stdout != canonical_qbe || process.stderr != ""
 				puts("file-oriented compiler QBE differs at seed " + seed_index.to_s())
 				return false
 			end
@@ -1001,6 +1054,124 @@ def _gate6_write_source(path: String, source: String): Result<Boolean, String>
 	end
 end
 
+def _gate6f_prepare_compiler_project(
+		directory: String,
+		entry: String,
+		storage: String,
+		path: String,
+		include_storage: Boolean,
+	): Result<Boolean, String>
+	try _gate6_reset_directory(directory)
+	try _gate6_write_source(directory + "/compiler.trb", entry)
+	if include_storage
+		try _gate6_write_source(directory + "/storage.trb", storage)
+	end
+	try _gate6_write_source(directory + "/path.trb", path)
+	try _gate6_write_source(directory + "/unrelated.trb", "@\n")
+	return Result<Boolean, String>::Ok(true)
+end
+
+def _gate6f_verify_compiler_source_closure(
+		executable: String,
+		compiler_path: String,
+		entry: String,
+		storage: String,
+		path: String,
+		workspace: String,
+	): Result<Boolean, String>
+	canonical := try _gate6_process(executable, ["emit-qbe", compiler_path])
+	if canonical.status != 0 || canonical.stdout.empty?() || !canonical.stderr.empty?()
+		return Result<Boolean, String>::Err("cannot emit canonical multi-file compiler QBE")
+	end
+	hidden := try _gate6_process(executable, ["--source-content", "check", entry])
+	if hidden.status != 0 || !hidden.stderr.empty?()
+		return Result<Boolean, String>::Err("hidden compiler-source probe process differs")
+	end
+	if !hidden.stdout.include?("module does not export Gate4IntegerStorage")
+		return Result<Boolean, String>::Err("hidden source-content adapter loaded compiler modules")
+	end
+
+	storage_mutation := try _gate6f_replace_once(
+		storage,
+		"def gate4_storage_chunk_size(): Integer\n\treturn 256\nend\n",
+		"def gate4_storage_chunk_size(): Integer\n\treturn 128\nend\n",
+	)
+	path_mutation := try _gate6f_replace_once(
+		path,
+		"\t\treturn \".\"\n",
+		"\t\treturn \"./\"\n",
+	)
+	mutation_names := ["storage", "path"]
+	mutation_storage := [storage_mutation, storage]
+	mutation_path := [path, path_mutation]
+	mut mutation_index := 0
+	while mutation_index < mutation_names.size()
+		directory := workspace + "/gate6f-compiler-" + mutation_names[mutation_index] + "-mutation"
+		try _gate6f_prepare_compiler_project(
+			directory,
+			entry,
+			mutation_storage[mutation_index],
+			mutation_path[mutation_index],
+			true,
+		)
+		emission := try _gate6_process(executable, ["emit-qbe", directory + "/compiler.trb"])
+		if emission.status != 0 || emission.stdout.empty?() || !emission.stderr.empty?()
+			return Result<Boolean, String>::Err(mutation_names[mutation_index] + " mutation emission failed")
+		end
+		if emission.stdout == canonical.stdout
+			return Result<Boolean, String>::Err(mutation_names[mutation_index] + " mutation did not change compiler QBE")
+		end
+		try _gate6_require_no_intermediates(directory)
+		mutation_index += 1
+	end
+
+	unrelated := workspace + "/gate6f-compiler-unrelated"
+	try _gate6f_prepare_compiler_project(unrelated, entry, storage, path, true)
+	unrelated_emission := try _gate6_process(executable, ["emit-qbe", unrelated + "/compiler.trb"])
+	if unrelated_emission.status != 0 || unrelated_emission.stdout != canonical.stdout || !unrelated_emission.stderr.empty?()
+		return Result<Boolean, String>::Err("unrelated invalid compiler sibling entered the closure")
+	end
+
+	missing := workspace + "/gate6f-compiler-missing-storage"
+	try _gate6f_prepare_compiler_project(missing, entry, storage, path, false)
+	missing_output := missing + "/compiler"
+	missing_build := try _gate6_build(
+		executable,
+		missing + "/compiler.trb",
+		missing_output,
+		missing + "/missing-qbe",
+		missing + "/missing-cc",
+	)
+	if missing_build.status != 1 || !missing_build.stdout.empty?()
+		return Result<Boolean, String>::Err("missing compiler module did not fail before tools")
+	end
+	if !missing_build.stderr.include?("cannot resolve project import storage")
+		return Result<Boolean, String>::Err("missing compiler module diagnostic differs")
+	end
+	try _gate6_require_missing(missing_output)
+	try _gate6_require_no_intermediates(missing)
+
+	malformed := workspace + "/gate6f-compiler-malformed-storage"
+	try _gate6f_prepare_compiler_project(malformed, entry, storage + "\n@\n", path, true)
+	malformed_output := malformed + "/compiler"
+	malformed_build := try _gate6_build(
+		executable,
+		malformed + "/compiler.trb",
+		malformed_output,
+		malformed + "/missing-qbe",
+		malformed + "/missing-cc",
+	)
+	if malformed_build.status != 1 || !malformed_build.stdout.empty?()
+		return Result<Boolean, String>::Err("malformed compiler module did not fail before tools")
+	end
+	if !malformed_build.stderr.include?("TRBN4001")
+		return Result<Boolean, String>::Err("malformed compiler module diagnostic differs")
+	end
+	try _gate6_require_missing(malformed_output)
+	try _gate6_require_no_intermediates(malformed)
+	return Result<Boolean, String>::Ok(true)
+end
+
 def _gate6_expect_file_root_failure(
 		executable: String,
 		project: String,
@@ -1293,6 +1464,34 @@ describe("Gate 4 reference bootstrap") do
 				expect(false).to_be_true()
 				""
 			end
+			storage_source := case read_text(root + "/compiler/gate4/src/storage.trb")
+			when Result::Ok(source)
+				source
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+				""
+			end
+			path_source := case read_text(root + "/compiler/gate4/src/path.trb")
+			when Result::Ok(source)
+				source
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+				""
+			end
+			recovery_source := case gate6f_flatten_compiler_source(
+					compiler_source,
+					storage_source,
+					path_source,
+				)
+			when Result::Ok(source)
+				source
+			when Result::Err(message)
+				puts(message)
+				expect(false).to_be_true()
+				""
+			end
 			compiler_path := workspace + "/compiler.trb"
 			case write_text(compiler_path, compiler_source)
 			when Result::Ok(_unit)
@@ -1300,9 +1499,21 @@ describe("Gate 4 reference bootstrap") do
 				puts(error.operation + ": " + error.message)
 				expect(false).to_be_true()
 			end
+			case write_text(workspace + "/storage.trb", storage_source)
+			when Result::Ok(_unit)
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+			end
+			case write_text(workspace + "/path.trb", path_source)
+			when Result::Ok(_unit)
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+			end
 			matched_go_compiler := case build_gate5_matched_go_compiler(
 					reference_trb,
-					compiler_source,
+					recovery_source,
 					workspace,
 				)
 			when Result::Ok(path)
@@ -1366,7 +1577,29 @@ describe("Gate 4 reference bootstrap") do
 						puts(error.operation + ": " + error.message)
 						expect(false).to_be_true()
 					end
-					expect(_gate4_build_cycle(workspace + "/b0", compiler_source, qbe, workspace)).to_be_true()
+					expect(
+						_gate4_build_cycle(
+							workspace + "/b0",
+							recovery_source,
+							compiler_path,
+							qbe,
+							workspace,
+						),
+					).to_be_true()
+					case _gate6f_verify_compiler_source_closure(
+							workspace + "/b1",
+							compiler_path,
+							compiler_source,
+							storage_source,
+							path_source,
+							workspace,
+						)
+					when Result::Ok(_value)
+						expect(true).to_be_true()
+					when Result::Err(error)
+						puts(error)
+						expect(false).to_be_true()
+					end
 					case _gate6_verify_file_cli(workspace)
 					when Result::Ok(_value)
 						expect(true).to_be_true()

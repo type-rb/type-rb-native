@@ -53,6 +53,12 @@ a time.
   path escape, optional suffixes, and paths containing spaces. Do not silently
   turn this experimental boundary into configured-project, package, namespace,
   or public CLI behavior.
+- Treat the canonical compiler as a real file-root closure. Keep extracted
+  declarations in one TypeRB source only, require explicit imports, and run
+  every ordinary replacement generation from the entry path. A temporary
+  flattened equivalent is recovery-only: derive it deterministically from the
+  canonical modules, verify and record its inputs, never commit it, and never
+  substitute it for an ordinary self-hosted build.
 - Record B0, B1, and B2 roles explicitly, plus B3 when a fixed-point check is
   required. Verify the ordinary regeneration process graph rather than
   inferring Go independence from the output binary. Keep recovery compilers and

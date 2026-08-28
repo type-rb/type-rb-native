@@ -148,6 +148,14 @@ than optimized Go. B2/B3/B4 are byte-identical on Darwin and Linux arm64. See
 the [Gate 6E file-root plan](docs/gate-6-file-root-modules.md) and
 [recorded result](results/2026-08-29-gate6e-file-root-darwin-linux-arm64/README.md).
 
+Gate 6F is in progress under the pre-registered scope in
+[issue #55](https://github.com/type-rb/type-rb-native/issues/55). The canonical
+TypeRB-authored compiler is now an explicit three-module closure: the entry
+imports pure chunked-storage and path helpers, while recovery derives a
+temporary flat B1 handoff outside the ordinary chain. The first ordinary
+multi-file B2/B3/B4 outputs are byte-identical. See the
+[Gate 6F multi-file compiler plan](docs/gate-6-multifile-compiler.md).
+
 Configured project discovery, production runtime integration,
 package/native-library boundaries, incremental builds, toolchain discovery,
 debugging, maintenance evaluation, and additional primary targets remain in
@@ -262,6 +270,7 @@ repository.
 - [Gate 6D Linux arm64 target-chain result](results/2026-08-29-gate6d-native-bootstrap-linux-arm64/README.md)
 - [Gate 6E file-root multi-module executables](docs/gate-6-file-root-modules.md)
 - [Gate 6E file-root Darwin/Linux arm64 result](results/2026-08-29-gate6e-file-root-darwin-linux-arm64/README.md)
+- [Gate 6F multi-file self-hosted compiler](docs/gate-6-multifile-compiler.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
 - [Decision 0003: Gate 1 QBE and Darwin arm64 profile](docs/decisions/0003-gate-1-qbe-target.md)
@@ -274,6 +283,7 @@ repository.
 - [Decision 0010: Native-to-Native bootstrap closure](docs/decisions/0010-native-bootstrap-closure.md)
 - [Decision 0011: Linux arm64 target profile](docs/decisions/0011-linux-arm64-target-profile.md)
 - [Decision 0012: File-root module closure](docs/decisions/0012-file-root-module-closure.md)
+- [Decision 0013: Multi-file self-hosted compiler closure](docs/decisions/0013-multi-file-self-hosted-compiler.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 
