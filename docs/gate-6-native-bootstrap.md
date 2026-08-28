@@ -9,10 +9,11 @@ and ordinary ownership boundary is defined by
 
 ## Status
 
-The implementation candidate is active. Gate 6C does not close until its
-focused Native-chain benchmark, raw observations, seed provenance, process
-inventory, and summarized result pass the registered bounds. This is not a
-release and does not create a supported compiler distribution.
+Gate 6C is complete at measured TypeRB Native revision
+`622d5931e677f7b9283c073021ac0ef39fafa1a5`. Its focused Native-chain benchmark,
+raw observations, seed provenance, process inventory, and summarized result
+pass every registered bound. This is not a release and does not create a
+supported compiler distribution.
 
 ## Bootstrap roles
 
@@ -93,6 +94,16 @@ Raw executable identity is measured on the same-basename `compiler` outputs.
 The stripped-code measurement uses equal-length `b1.stripped` through
 `b4.stripped` names, matching Gate 6B so ad-hoc signature identifier length is
 not counted as compiler-code growth.
+
+## Recorded result
+
+B2, B3, and B4 are byte-identical at 202,088 bytes. The three adjacent build
+medians are 0.579261, 0.585245, and 0.587965 seconds; adjacent differences are
+at most 1.03%, and every value remains within 1.10% of the Gate 6B baseline.
+Median observed RSS is 36,667,392, 36,421,632, and 36,503,552 bytes; adjacent
+differences are at most 0.67%, and every value remains within 0.67% of the
+baseline. Stripped compiler code remains exactly 166,824 bytes. See the
+[Gate 6C Darwin arm64 result](../results/2026-08-29-gate6c-native-bootstrap-darwin-arm64/README.md).
 
 ## Deferred scope
 
