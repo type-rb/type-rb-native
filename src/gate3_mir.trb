@@ -1,0 +1,1174 @@
+import { Diagnostic, boundary_diagnostic } from diagnostic
+import {
+	Gate1Instruction,
+	ScalarType,
+} from gate1_mir
+import {
+	Gate3FieldLayout,
+	Gate3Layout,
+	Gate3LayoutKind,
+	Gate3TypeDefinition,
+	Gate3ValueType,
+	Gate3VariantLayout,
+	compute_gate3_layout,
+	gate3_field_layout,
+	gate3_type_definition,
+	gate3_value_types_equal,
+	gate3_variant_field_layout,
+	gate3_variant_layout,
+	verify_gate3_layouts,
+} from gate3_layout
+import { NativeSource } from native_mir
+import { SourceOrigin } from snapshot
+import { Result } from trb/std/result
+
+record Gate3Parameter
+	id: String
+	value_type: Gate3ValueType
+	origin: SourceOrigin
+end
+
+enum Gate3ResultType
+	Void
+	Value(value_type: Gate3ValueType)
+end
+
+enum Gate3Instruction
+	Scalar(instruction: Gate1Instruction)
+	StringLiteral(result: String, value: String, origin: SourceOrigin)
+	StringConcat(result: String, left: String, right: String, origin: SourceOrigin)
+	StringEqual(result: String, left: String, right: String, origin: SourceOrigin)
+	StringSize(result: String, value: String, origin: SourceOrigin)
+	StringIndex(result: String, value: String, index: String, origin: SourceOrigin)
+	WriteString(value: String, newline: Boolean, origin: SourceOrigin)
+	ArrayConstruct(result: String, type_id: String, arguments: Array<String>, origin: SourceOrigin)
+	ArraySize(result: String, type_id: String, array: String, origin: SourceOrigin)
+	ArrayGet(result: String, type_id: String, array: String, index: String, origin: SourceOrigin)
+	ArraySet(type_id: String, array: String, index: String, value: String, origin: SourceOrigin)
+	ArrayPush(type_id: String, array: String, value: String, origin: SourceOrigin)
+	ClosureConstruct(
+		result: String,
+		type_id: String,
+		function_id: String,
+		captures: Array<String>,
+		origin: SourceOrigin,
+	)
+	ClosureCall(
+		result: String?,
+		type_id: String,
+		closure: String,
+		arguments: Array<String>,
+		origin: SourceOrigin,
+	)
+	RecordConstruct(
+		result: String,
+		type_id: String,
+		arguments: Array<String>,
+		origin: SourceOrigin,
+	)
+	RecordProject(
+		result: String,
+		type_id: String,
+		record: String,
+			field: String,
+			origin: SourceOrigin,
+		)
+		VariantConstruct(
+			result: String,
+			type_id: String,
+			variant: String,
+			arguments: Array<String>,
+			origin: SourceOrigin,
+		)
+		VariantTest(
+			result: String,
+			type_id: String,
+			value: String,
+			variant: String,
+			origin: SourceOrigin,
+		)
+		VariantProject(
+			result: String,
+			type_id: String,
+			value: String,
+			variant: String,
+			field: String,
+			origin: SourceOrigin,
+		)
+		Call(result: String?, function_id: String, arguments: Array<String>, origin: SourceOrigin)
+	end
+
+	enum Gate3Terminator
+		Jump(target: String, arguments: Array<String>, origin: SourceOrigin)
+		Branch(
+			condition: String,
+			when_true: String,
+			true_arguments: Array<String>,
+			when_false: String,
+			false_arguments: Array<String>,
+			origin: SourceOrigin,
+		)
+		Return(value: String?, origin: SourceOrigin)
+	end
+
+	record Gate3Block
+		id: String
+		parameters: Array<Gate3Parameter>
+		origin: SourceOrigin
+		instructions: Array<Gate3Instruction>
+		terminator: Gate3Terminator
+	end
+
+	record Gate3Function
+		id: String
+		name: String
+		parameters: Array<Gate3Parameter>
+		result_type: Gate3ResultType
+		entry: String
+		origin: SourceOrigin
+		blocks: Array<Gate3Block>
+		captures: Array<Gate3Parameter> = []
+	end
+
+	record Gate3Module
+		id: String
+		entry_function: String
+		sources: Array<NativeSource>
+		types: Array<Gate3TypeDefinition>
+		functions: Array<Gate3Function>
+	end
+
+	record Gate3Definition
+		id: String
+		value_type: Gate3ValueType
+	end
+
+	def gate3_result_types_equal(left: Gate3ResultType, right: Gate3ResultType): Boolean
+		case left
+		when Gate3ResultType::Void
+			case right
+			when Gate3ResultType::Void
+				return true
+			when Gate3ResultType::Value(_right_type)
+				return false
+			end
+		when Gate3ResultType::Value(left_type)
+			case right
+			when Gate3ResultType::Void
+				return false
+			when Gate3ResultType::Value(right_type)
+				return gate3_value_types_equal(left_type, right_type)
+			end
+		end
+	end
+
+	def verify_gate3_mir(native_module: Gate3Module): Result<Boolean, Diagnostic>
+		if native_module.sources.empty?()
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", "/sources", "Gate 3 MIR must declare at least one source")
+			)
+		end
+		if native_module.functions.empty?()
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", "/functions", "Gate 3 MIR must contain at least one function")
+			)
+		end
+		try verify_gate3_layouts(native_module.types)
+		mut source_ids: Array<String> := []
+		mut index := 0
+		while index < native_module.sources.size()
+			source := native_module.sources[index]
+			if source_ids.include?(source.id)
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", "/sources/" + index.to_s() + "/id", "Gate 3 MIR source identifier is duplicated")
+				)
+			end
+			source_ids.push(source.id)
+			index += 1
+		end
+		mut function_ids: Hash<String, Boolean> := {}
+		index = 0
+		while index < native_module.functions.size()
+			function := native_module.functions[index]
+			path := "/functions/" + index.to_s()
+			if function.id.empty?() || function_ids.key?(function.id)
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/id", "Gate 3 MIR function identifier is empty or duplicated")
+				)
+			end
+			function_ids[function.id] = true
+			try _gate3_verify_origin(function.origin, source_ids, path + "/origin")
+			index += 1
+		end
+		entry := gate3_function(native_module.functions, native_module.entry_function)
+		if entry == nil
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", "/entryFunction", "Gate 3 MIR entry function does not exist")
+			)
+		end
+		if !entry.parameters.empty?()
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", "/entryFunction", "Gate 3 MIR entry function must take no arguments")
+			)
+		end
+		if !entry.captures.empty?()
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", "/entryFunction", "Gate 3 MIR entry function must not capture values")
+			)
+		end
+		case entry.result_type
+		when Gate3ResultType::Void
+		when Gate3ResultType::Value(_value_type)
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", "/entryFunction", "Gate 3 MIR entry function must return Void")
+			)
+		end
+		index = 0
+		while index < native_module.functions.size()
+			try _gate3_verify_function(
+				native_module,
+				native_module.functions[index],
+				source_ids,
+				"/functions/" + index.to_s(),
+			)
+			index += 1
+		end
+		return Result<Boolean, Diagnostic>::Ok(true)
+	end
+
+	def _gate3_verify_function(
+			native_module: Gate3Module,
+			function: Gate3Function,
+			source_ids: Array<String>,
+			path: String,
+		): Result<Boolean, Diagnostic>
+		if function.blocks.empty?()
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path + "/blocks", "Gate 3 MIR function has no blocks")
+			)
+		end
+		mut definitions: Hash<String, Gate3ValueType> := {}
+		mut index := 0
+		while index < function.captures.size()
+			capture := function.captures[index]
+			capture_path := path + "/captures/" + index.to_s()
+			try _gate3_verify_origin(capture.origin, source_ids, capture_path + "/origin")
+			try _gate3_verify_value_type(native_module, capture.value_type, capture_path + "/type")
+			try _gate3_define(definitions, capture.id, capture.value_type, capture_path + "/id")
+			index += 1
+		end
+		index = 0
+		while index < function.parameters.size()
+			parameter := function.parameters[index]
+			parameter_path := path + "/parameters/" + index.to_s()
+			try _gate3_verify_origin(parameter.origin, source_ids, parameter_path + "/origin")
+			try _gate3_verify_value_type(native_module, parameter.value_type, parameter_path + "/type")
+			try _gate3_define(definitions, parameter.id, parameter.value_type, parameter_path + "/id")
+			index += 1
+		end
+		mut block_ids: Hash<String, Boolean> := {}
+		mut entry_found := false
+		index = 0
+		while index < function.blocks.size()
+			block := function.blocks[index]
+			block_path := path + "/blocks/" + index.to_s()
+			if block.id.empty?() || block_ids.key?(block.id)
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", block_path + "/id", "Gate 3 MIR block identifier is empty or duplicated")
+				)
+			end
+			block_ids[block.id] = true
+			if block.id == function.entry
+				entry_found = true
+				if !block.parameters.empty?()
+					return Result<Boolean, Diagnostic>::Err(
+						boundary_diagnostic("TRBN0004", block_path + "/parameters", "entry block must not have parameters")
+					)
+				end
+			end
+			try _gate3_verify_origin(block.origin, source_ids, block_path + "/origin")
+			mut parameter_index := 0
+			while parameter_index < block.parameters.size()
+				parameter := block.parameters[parameter_index]
+				parameter_path := block_path + "/parameters/" + parameter_index.to_s()
+				try _gate3_verify_origin(parameter.origin, source_ids, parameter_path + "/origin")
+				try _gate3_verify_value_type(native_module, parameter.value_type, parameter_path + "/type")
+				try _gate3_define(definitions, parameter.id, parameter.value_type, parameter_path + "/id")
+				parameter_index += 1
+			end
+			mut instruction_index := 0
+			while instruction_index < block.instructions.size()
+				instruction_path := block_path + "/instructions/" + instruction_index.to_s()
+				definition := try _gate3_instruction_definition(native_module, block.instructions[instruction_index], instruction_path)
+				if definition != nil
+					try _gate3_define(definitions, definition.id, definition.value_type, instruction_path + "/result")
+				end
+				instruction_index += 1
+			end
+			index += 1
+		end
+		if !entry_found
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path + "/entry", "Gate 3 MIR entry block does not exist")
+			)
+		end
+		index = 0
+		while index < function.blocks.size()
+			try _gate3_verify_block(
+				native_module,
+				function,
+				function.blocks[index],
+				definitions,
+				source_ids,
+				path + "/blocks/" + index.to_s(),
+			)
+			index += 1
+		end
+		case function.result_type
+		when Gate3ResultType::Void
+		when Gate3ResultType::Value(value_type)
+			try _gate3_verify_value_type(native_module, value_type, path + "/result")
+		end
+		return Result<Boolean, Diagnostic>::Ok(true)
+	end
+
+	def _gate3_instruction_definition(
+			native_module: Gate3Module,
+			instruction: Gate3Instruction,
+			path: String,
+		): Result<Gate3Definition?, Diagnostic>
+		case instruction
+		when Gate3Instruction::Scalar(scalar)
+			case scalar
+			when Gate1Instruction::BooleanLiteral(result, _value, _origin)
+				return _gate3_some_definition(result, Gate3ValueType::Scalar(ScalarType::Boolean))
+			when Gate1Instruction::IntegerLiteral(result, _value, _origin)
+				return _gate3_some_definition(result, Gate3ValueType::Scalar(ScalarType::Integer))
+			when Gate1Instruction::FloatLiteral(result, _value, _origin)
+				return _gate3_some_definition(result, Gate3ValueType::Scalar(ScalarType::Float))
+			when Gate1Instruction::IntegerBinary(result, _operator, _left, _right, _origin)
+				return _gate3_some_definition(result, Gate3ValueType::Scalar(ScalarType::Integer))
+			when Gate1Instruction::FloatBinary(result, _operator, _left, _right, _origin)
+				return _gate3_some_definition(result, Gate3ValueType::Scalar(ScalarType::Float))
+			when Gate1Instruction::IntegerCompare(result, _operator, _left, _right, _origin)
+				return _gate3_some_definition(result, Gate3ValueType::Scalar(ScalarType::Boolean))
+			when Gate1Instruction::FloatCompare(result, _operator, _left, _right, _origin)
+				return _gate3_some_definition(result, Gate3ValueType::Scalar(ScalarType::Boolean))
+			when Gate1Instruction::BooleanNot(result, _value, _origin)
+				return _gate3_some_definition(result, Gate3ValueType::Scalar(ScalarType::Boolean))
+			when Gate1Instruction::Call(_result, _function_id, _arguments, _origin)
+				return Result<Gate3Definition?, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path, "Gate 1 call must be normalized to a Gate 3 call")
+				)
+			when Gate1Instruction::WriteStatic(_value, _origin)
+				return Result<Gate3Definition?, Diagnostic>::Ok(nil)
+			end
+		when Gate3Instruction::StringLiteral(result, _value, _origin)
+			try _gate3_require_string_type(native_module, path)
+			return _gate3_some_definition(result, Gate3ValueType::Aggregate("String"))
+		when Gate3Instruction::StringConcat(result, _left, _right, _origin)
+			try _gate3_require_string_type(native_module, path)
+			return _gate3_some_definition(result, Gate3ValueType::Aggregate("String"))
+		when Gate3Instruction::StringEqual(result, _left, _right, _origin)
+			return _gate3_some_definition(result, Gate3ValueType::Scalar(ScalarType::Boolean))
+		when Gate3Instruction::StringSize(result, _value, _origin)
+			return _gate3_some_definition(result, Gate3ValueType::Scalar(ScalarType::Integer))
+		when Gate3Instruction::StringIndex(result, _value, _index, _origin)
+			try _gate3_require_string_type(native_module, path)
+			return _gate3_some_definition(result, Gate3ValueType::Aggregate("String"))
+		when Gate3Instruction::WriteString(_value, _newline, _origin)
+			return Result<Gate3Definition?, Diagnostic>::Ok(nil)
+		when Gate3Instruction::ArrayConstruct(result, type_id, _arguments, _origin)
+			try _gate3_array_element_type(native_module, type_id, path + "/type")
+			return _gate3_some_definition(result, Gate3ValueType::Aggregate(type_id))
+		when Gate3Instruction::ArraySize(result, type_id, _array, _origin)
+			try _gate3_array_element_type(native_module, type_id, path + "/type")
+			return _gate3_some_definition(result, Gate3ValueType::Scalar(ScalarType::Integer))
+		when Gate3Instruction::ArrayGet(result, type_id, _array, _index, _origin)
+			element_type := try _gate3_array_element_type(native_module, type_id, path + "/type")
+			return _gate3_some_definition(result, element_type)
+		when Gate3Instruction::ArraySet(_type_id, _array, _index, _value, _origin)
+			return Result<Gate3Definition?, Diagnostic>::Ok(nil)
+		when Gate3Instruction::ArrayPush(_type_id, _array, _value, _origin)
+			return Result<Gate3Definition?, Diagnostic>::Ok(nil)
+		when Gate3Instruction::ClosureConstruct(result, type_id, _function_id, _captures, _origin)
+			try _gate3_function_type(native_module, type_id, path + "/type")
+			return _gate3_some_definition(result, Gate3ValueType::Aggregate(type_id))
+		when Gate3Instruction::ClosureCall(result, type_id, _closure, _arguments, _origin)
+			definition := try _gate3_function_type(native_module, type_id, path + "/type")
+			case definition
+			when Gate3TypeDefinition::Function(_id, _parameters, result_type)
+				if result_type == nil
+					if result != nil
+						return Result<Gate3Definition?, Diagnostic>::Err(
+							boundary_diagnostic("TRBN0004", path + "/result", "Void closure call must not define a result")
+						)
+					end
+					return Result<Gate3Definition?, Diagnostic>::Ok(nil)
+				end
+				if result == nil
+					return Result<Gate3Definition?, Diagnostic>::Err(
+						boundary_diagnostic("TRBN0004", path + "/result", "non-Void closure call must define a result")
+					)
+				end
+				return _gate3_some_definition(result, result_type)
+			else
+				return Result<Gate3Definition?, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/type", "closure call requires a function type")
+				)
+			end
+		when Gate3Instruction::RecordConstruct(result, type_id, _arguments, _origin)
+			layout := try compute_gate3_layout(native_module.types, type_id)
+			if layout.kind != Gate3LayoutKind::Record
+				return Result<Gate3Definition?, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/type", "record construction requires a record type")
+				)
+			end
+			return _gate3_some_definition(result, Gate3ValueType::Aggregate(type_id))
+		when Gate3Instruction::RecordProject(result, type_id, _record, field, _origin)
+			layout := try compute_gate3_layout(native_module.types, type_id)
+			field_layout := gate3_field_layout(layout, field)
+			if layout.kind != Gate3LayoutKind::Record || field_layout == nil
+				return Result<Gate3Definition?, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/field", "record projection references an unknown field")
+				)
+			end
+			return _gate3_some_definition(result, field_layout.value_type)
+		when Gate3Instruction::VariantConstruct(result, type_id, variant, _arguments, _origin)
+			layout := try compute_gate3_layout(native_module.types, type_id)
+			if layout.kind != Gate3LayoutKind::Tagged || gate3_variant_layout(layout, variant) == nil
+				return Result<Gate3Definition?, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/variant", "variant construction references an unknown variant")
+				)
+			end
+			return _gate3_some_definition(result, Gate3ValueType::Aggregate(type_id))
+		when Gate3Instruction::VariantTest(result, _type_id, _value, _variant, _origin)
+			return _gate3_some_definition(result, Gate3ValueType::Scalar(ScalarType::Boolean))
+		when Gate3Instruction::VariantProject(result, type_id, _value, variant, field, _origin)
+			layout := try compute_gate3_layout(native_module.types, type_id)
+			variant_layout := gate3_variant_layout(layout, variant)
+			if layout.kind != Gate3LayoutKind::Tagged
+				return Result<Gate3Definition?, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/variant", "variant projection requires a tagged type")
+				)
+			end
+			if variant_layout == nil
+				return Result<Gate3Definition?, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/variant", "variant projection references an unknown variant")
+				)
+			end
+			field_layout := gate3_variant_field_layout(variant_layout, field)
+			if field_layout == nil
+				return Result<Gate3Definition?, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/field", "variant projection references an unknown field")
+				)
+			end
+			return _gate3_some_definition(result, field_layout.value_type)
+		when Gate3Instruction::Call(result, function_id, _arguments, _origin)
+			callee := gate3_function(native_module.functions, function_id)
+			if callee == nil
+				return Result<Gate3Definition?, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/function", "call references an unknown function")
+				)
+			end
+			case callee.result_type
+			when Gate3ResultType::Void
+				if result != nil
+					return Result<Gate3Definition?, Diagnostic>::Err(
+						boundary_diagnostic("TRBN0004", path + "/result", "Void call must not define a result")
+					)
+				end
+				return Result<Gate3Definition?, Diagnostic>::Ok(nil)
+			when Gate3ResultType::Value(value_type)
+				if result == nil
+					return Result<Gate3Definition?, Diagnostic>::Err(
+						boundary_diagnostic("TRBN0004", path + "/result", "non-Void call must define a result")
+					)
+				end
+				return _gate3_some_definition(result, value_type)
+			end
+		end
+	end
+
+	def _gate3_verify_block(
+			native_module: Gate3Module,
+			function: Gate3Function,
+			block: Gate3Block,
+			definitions: Hash<String, Gate3ValueType>,
+			source_ids: Array<String>,
+			path: String,
+		): Result<Boolean, Diagnostic>
+		mut available: Hash<String, Gate3ValueType> := {}
+		mut index := 0
+		while index < function.captures.size()
+			capture := function.captures[index]
+			available[capture.id] = capture.value_type
+			index += 1
+		end
+		index = 0
+		while index < function.parameters.size()
+			parameter := function.parameters[index]
+			available[parameter.id] = parameter.value_type
+			index += 1
+		end
+		index = 0
+		while index < block.parameters.size()
+			parameter := block.parameters[index]
+			available[parameter.id] = parameter.value_type
+			index += 1
+		end
+		index = 0
+		while index < block.instructions.size()
+			instruction := block.instructions[index]
+			instruction_path := path + "/instructions/" + index.to_s()
+			try _gate3_verify_instruction(native_module, instruction, available, source_ids, instruction_path)
+			definition := try _gate3_instruction_definition(native_module, instruction, instruction_path)
+			if definition != nil
+				available[definition.id] = definitions.fetch(definition.id)
+			end
+			index += 1
+		end
+		try _gate3_verify_terminator(native_module, function, block.terminator, available, source_ids, path + "/terminator")
+		return Result<Boolean, Diagnostic>::Ok(true)
+	end
+
+	def _gate3_verify_instruction(
+			native_module: Gate3Module,
+			instruction: Gate3Instruction,
+			available: Hash<String, Gate3ValueType>,
+			source_ids: Array<String>,
+			path: String,
+		): Result<Boolean, Diagnostic>
+		case instruction
+		when Gate3Instruction::Scalar(scalar)
+			return _gate3_verify_scalar(scalar, available, source_ids, path)
+		when Gate3Instruction::StringLiteral(_result, _value, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+			try _gate3_require_string_type(native_module, path)
+		when Gate3Instruction::StringConcat(_result, left, right, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+			try _gate3_require_string(available, left, path + "/left")
+			try _gate3_require_string(available, right, path + "/right")
+		when Gate3Instruction::StringEqual(_result, left, right, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+			try _gate3_require_string(available, left, path + "/left")
+			try _gate3_require_string(available, right, path + "/right")
+		when Gate3Instruction::StringSize(_result, value, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+			try _gate3_require_string(available, value, path + "/value")
+		when Gate3Instruction::StringIndex(_result, value, index, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+			try _gate3_require_string(available, value, path + "/value")
+			try _gate3_require_scalar(available, index, ScalarType::Integer, path + "/index")
+		when Gate3Instruction::WriteString(value, _newline, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+			try _gate3_require_string(available, value, path + "/value")
+		when Gate3Instruction::ArrayConstruct(_result, type_id, arguments, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+			element_type := try _gate3_array_element_type(native_module, type_id, path + "/type")
+			mut argument_index := 0
+			while argument_index < arguments.size()
+				try _gate3_require(available, arguments[argument_index], element_type, path + "/arguments/" + argument_index.to_s())
+				argument_index += 1
+			end
+		when Gate3Instruction::ArraySize(_result, type_id, array, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+			try _gate3_array_element_type(native_module, type_id, path + "/type")
+			try _gate3_require(available, array, Gate3ValueType::Aggregate(type_id), path + "/array")
+		when Gate3Instruction::ArrayGet(_result, type_id, array, index, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+			try _gate3_array_element_type(native_module, type_id, path + "/type")
+			try _gate3_require(available, array, Gate3ValueType::Aggregate(type_id), path + "/array")
+			try _gate3_require_scalar(available, index, ScalarType::Integer, path + "/index")
+		when Gate3Instruction::ArraySet(type_id, array, index, value, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+			element_type := try _gate3_array_element_type(native_module, type_id, path + "/type")
+			try _gate3_require(available, array, Gate3ValueType::Aggregate(type_id), path + "/array")
+			try _gate3_require_scalar(available, index, ScalarType::Integer, path + "/index")
+			try _gate3_require(available, value, element_type, path + "/value")
+		when Gate3Instruction::ArrayPush(type_id, array, value, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+			element_type := try _gate3_array_element_type(native_module, type_id, path + "/type")
+			try _gate3_require(available, array, Gate3ValueType::Aggregate(type_id), path + "/array")
+			try _gate3_require(available, value, element_type, path + "/value")
+		when Gate3Instruction::ClosureConstruct(_result, type_id, function_id, captures, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+			function_type := try _gate3_function_type(native_module, type_id, path + "/type")
+			callee := gate3_function(native_module.functions, function_id)
+			if callee == nil
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/function", "closure construction references an unknown function")
+				)
+			end
+			try _gate3_verify_closure_signature(function_type, callee, path + "/type")
+			if captures.size() != callee.captures.size()
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/captures", "closure capture count does not match the function")
+				)
+			end
+			mut capture_index := 0
+			while capture_index < captures.size()
+				try _gate3_require(
+					available,
+					captures[capture_index],
+					callee.captures[capture_index].value_type,
+					path + "/captures/" + capture_index.to_s(),
+				)
+				capture_index += 1
+			end
+		when Gate3Instruction::ClosureCall(_result, type_id, closure, arguments, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+			function_type := try _gate3_function_type(native_module, type_id, path + "/type")
+			try _gate3_require(available, closure, Gate3ValueType::Aggregate(type_id), path + "/closure")
+			case function_type
+			when Gate3TypeDefinition::Function(_id, parameter_types, _result_type)
+				if arguments.size() != parameter_types.size()
+					return Result<Boolean, Diagnostic>::Err(
+						boundary_diagnostic("TRBN0004", path + "/arguments", "closure call argument count does not match its type")
+					)
+				end
+				mut argument_index := 0
+				while argument_index < arguments.size()
+					try _gate3_require(
+						available,
+						arguments[argument_index],
+						parameter_types[argument_index],
+						path + "/arguments/" + argument_index.to_s(),
+					)
+					argument_index += 1
+				end
+			else
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/type", "closure call requires a function type")
+				)
+			end
+		when Gate3Instruction::RecordConstruct(_result, type_id, arguments, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+			layout := try compute_gate3_layout(native_module.types, type_id)
+			try _gate3_require_arguments(available, arguments, layout.fields, path + "/arguments")
+		when Gate3Instruction::RecordProject(_result, type_id, record, field, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+			try _gate3_require(available, record, Gate3ValueType::Aggregate(type_id), path + "/record")
+			layout := try compute_gate3_layout(native_module.types, type_id)
+			if layout.kind != Gate3LayoutKind::Record || gate3_field_layout(layout, field) == nil
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/field", "record projection references an unknown field")
+				)
+			end
+		when Gate3Instruction::VariantConstruct(_result, type_id, variant, arguments, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+			layout := try compute_gate3_layout(native_module.types, type_id)
+			variant_layout := gate3_variant_layout(layout, variant)
+			if layout.kind != Gate3LayoutKind::Tagged || variant_layout == nil
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/variant", "variant construction references an unknown variant")
+				)
+			end
+			try _gate3_require_arguments(available, arguments, variant_layout.fields, path + "/arguments")
+		when Gate3Instruction::VariantTest(_result, type_id, value, variant, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+			try _gate3_require(available, value, Gate3ValueType::Aggregate(type_id), path + "/value")
+			layout := try compute_gate3_layout(native_module.types, type_id)
+			if layout.kind != Gate3LayoutKind::Tagged || gate3_variant_layout(layout, variant) == nil
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/variant", "variant test references an unknown variant")
+				)
+			end
+		when Gate3Instruction::VariantProject(_result, type_id, value, variant, field, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+			try _gate3_require(available, value, Gate3ValueType::Aggregate(type_id), path + "/value")
+			layout := try compute_gate3_layout(native_module.types, type_id)
+			variant_layout := gate3_variant_layout(layout, variant)
+			if layout.kind != Gate3LayoutKind::Tagged
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/variant", "variant projection requires a tagged type")
+				)
+			end
+			if variant_layout == nil
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/variant", "variant projection references an unknown variant")
+				)
+			end
+			if gate3_variant_field_layout(variant_layout, field) == nil
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/field", "variant projection references an unknown field")
+				)
+			end
+		when Gate3Instruction::Call(_result, function_id, arguments, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+			callee := gate3_function(native_module.functions, function_id)
+			if callee == nil
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/function", "call references an unknown function")
+				)
+			end
+			if !callee.captures.empty?()
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/function", "capturing function requires a closure call")
+				)
+			end
+			if arguments.size() != callee.parameters.size()
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/arguments", "call argument count does not match the callee")
+				)
+			end
+			mut index := 0
+			while index < arguments.size()
+				try _gate3_require(available, arguments[index], callee.parameters[index].value_type, path + "/arguments/" + index.to_s())
+				index += 1
+			end
+		end
+		return Result<Boolean, Diagnostic>::Ok(true)
+	end
+
+	def _gate3_verify_scalar(
+			instruction: Gate1Instruction,
+			available: Hash<String, Gate3ValueType>,
+			source_ids: Array<String>,
+			path: String,
+		): Result<Boolean, Diagnostic>
+		case instruction
+		when Gate1Instruction::BooleanLiteral(_result, _value, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+		when Gate1Instruction::IntegerLiteral(_result, value, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+			if value < - 9007199254740991 || value > 9007199254740991
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/value", "Integer literal is outside the portable range")
+				)
+			end
+		when Gate1Instruction::FloatLiteral(_result, value, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+			if !value.finite?()
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path + "/value", "Float literal must be finite")
+				)
+			end
+		when Gate1Instruction::IntegerBinary(_result, _operator, left, right, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+			try _gate3_require_scalar(available, left, ScalarType::Integer, path + "/left")
+			try _gate3_require_scalar(available, right, ScalarType::Integer, path + "/right")
+		when Gate1Instruction::FloatBinary(_result, _operator, left, right, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+			try _gate3_require_scalar(available, left, ScalarType::Float, path + "/left")
+			try _gate3_require_scalar(available, right, ScalarType::Float, path + "/right")
+		when Gate1Instruction::IntegerCompare(_result, _operator, left, right, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+			try _gate3_require_scalar(available, left, ScalarType::Integer, path + "/left")
+			try _gate3_require_scalar(available, right, ScalarType::Integer, path + "/right")
+		when Gate1Instruction::FloatCompare(_result, _operator, left, right, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+			try _gate3_require_scalar(available, left, ScalarType::Float, path + "/left")
+			try _gate3_require_scalar(available, right, ScalarType::Float, path + "/right")
+		when Gate1Instruction::BooleanNot(_result, value, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+			try _gate3_require_scalar(available, value, ScalarType::Boolean, path + "/value")
+		when Gate1Instruction::Call(_result, _function_id, _arguments, _origin)
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path, "Gate 1 call must be normalized to a Gate 3 call")
+			)
+		when Gate1Instruction::WriteStatic(_value, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+		end
+		return Result<Boolean, Diagnostic>::Ok(true)
+	end
+
+	def _gate3_verify_terminator(
+			native_module: Gate3Module,
+			function: Gate3Function,
+			terminator: Gate3Terminator,
+			available: Hash<String, Gate3ValueType>,
+			source_ids: Array<String>,
+			path: String,
+		): Result<Boolean, Diagnostic>
+		case terminator
+		when Gate3Terminator::Jump(target, arguments, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+			try _gate3_verify_target(function, target, arguments, available, path)
+		when Gate3Terminator::Branch(condition, when_true, true_arguments, when_false, false_arguments, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+			try _gate3_require_scalar(available, condition, ScalarType::Boolean, path + "/condition")
+			try _gate3_verify_target(function, when_true, true_arguments, available, path + "/true")
+			try _gate3_verify_target(function, when_false, false_arguments, available, path + "/false")
+		when Gate3Terminator::Return(value, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+			case function.result_type
+			when Gate3ResultType::Void
+				if value != nil
+					return Result<Boolean, Diagnostic>::Err(
+						boundary_diagnostic("TRBN0004", path + "/value", "Void function must not return a value")
+					)
+				end
+			when Gate3ResultType::Value(value_type)
+				if value == nil
+					return Result<Boolean, Diagnostic>::Err(
+						boundary_diagnostic("TRBN0004", path + "/value", "non-Void function must return a value")
+					)
+				end
+				try _gate3_require(available, value, value_type, path + "/value")
+			end
+		end
+		return Result<Boolean, Diagnostic>::Ok(true)
+	end
+
+	def _gate3_verify_target(
+			function: Gate3Function,
+			target: String,
+			arguments: Array<String>,
+			available: Hash<String, Gate3ValueType>,
+			path: String,
+		): Result<Boolean, Diagnostic>
+		block := gate3_block(function.blocks, target)
+		if block == nil
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path + "/target", "terminator references an unknown block")
+			)
+		end
+		if arguments.size() != block.parameters.size()
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path + "/arguments", "block argument count does not match the target")
+			)
+		end
+		mut index := 0
+		while index < arguments.size()
+			try _gate3_require(available, arguments[index], block.parameters[index].value_type, path + "/arguments/" + index.to_s())
+			index += 1
+		end
+		return Result<Boolean, Diagnostic>::Ok(true)
+	end
+
+	def _gate3_require_arguments(
+			available: Hash<String, Gate3ValueType>,
+			arguments: Array<String>,
+			fields: Array<Gate3FieldLayout>,
+			path: String,
+		): Result<Boolean, Diagnostic>
+		if arguments.size() != fields.size()
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path, "aggregate argument count does not match its layout")
+			)
+		end
+		mut index := 0
+		while index < arguments.size()
+			try _gate3_require(available, arguments[index], fields[index].value_type, path + "/" + index.to_s())
+			index += 1
+		end
+		return Result<Boolean, Diagnostic>::Ok(true)
+	end
+
+	def _gate3_require_string_type(
+			native_module: Gate3Module,
+			path: String,
+		): Result<Boolean, Diagnostic>
+		layout := try compute_gate3_layout(native_module.types, "String")
+		if layout.kind != Gate3LayoutKind::String
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path + "/type", "String operation requires the canonical String type")
+			)
+		end
+		return Result<Boolean, Diagnostic>::Ok(true)
+	end
+
+	def _gate3_verify_value_type(
+			native_module: Gate3Module,
+			value_type: Gate3ValueType,
+			path: String,
+		): Result<Boolean, Diagnostic>
+		case value_type
+		when Gate3ValueType::Scalar(scalar)
+			if scalar == ScalarType::Void
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path, "Void is not a storable Gate 3 value")
+				)
+			end
+		when Gate3ValueType::Aggregate(type_id)
+			try compute_gate3_layout(native_module.types, type_id)
+		end
+		return Result<Boolean, Diagnostic>::Ok(true)
+	end
+
+	def _gate3_require_string(
+			available: Hash<String, Gate3ValueType>,
+			id: String,
+			path: String,
+		): Result<Boolean, Diagnostic>
+		return _gate3_require(available, id, Gate3ValueType::Aggregate("String"), path)
+	end
+
+	def _gate3_array_element_type(
+			native_module: Gate3Module,
+			type_id: String,
+			path: String,
+		): Result<Gate3ValueType, Diagnostic>
+		definition := gate3_type_definition(native_module.types, type_id)
+		if definition == nil
+			return Result<Gate3ValueType, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path, "Array operation requires an Array type")
+			)
+		end
+		case definition
+		when Gate3TypeDefinition::Array(_id, element_type)
+			return Result<Gate3ValueType, Diagnostic>::Ok(element_type)
+		else
+			return Result<Gate3ValueType, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path, "Array operation requires an Array type")
+			)
+		end
+	end
+
+	def _gate3_function_type(
+			native_module: Gate3Module,
+			type_id: String,
+			path: String,
+		): Result<Gate3TypeDefinition, Diagnostic>
+		definition := gate3_type_definition(native_module.types, type_id)
+		if definition == nil
+			return Result<Gate3TypeDefinition, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path, "closure operation requires a function type")
+			)
+		end
+		case definition
+		when Gate3TypeDefinition::Function(_id, _parameter_types, _result_type)
+			return Result<Gate3TypeDefinition, Diagnostic>::Ok(definition)
+		else
+			return Result<Gate3TypeDefinition, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path, "closure operation requires a function type")
+			)
+		end
+	end
+
+	def _gate3_verify_closure_signature(
+			definition: Gate3TypeDefinition,
+			function: Gate3Function,
+			path: String,
+		): Result<Boolean, Diagnostic>
+		case definition
+		when Gate3TypeDefinition::Function(_id, parameter_types, result_type)
+			if parameter_types.size() != function.parameters.size()
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path, "closure function parameters do not match its type")
+				)
+			end
+			mut index := 0
+			while index < parameter_types.size()
+				if !gate3_value_types_equal(parameter_types[index], function.parameters[index].value_type)
+					return Result<Boolean, Diagnostic>::Err(
+						boundary_diagnostic("TRBN0004", path, "closure function parameters do not match its type")
+					)
+				end
+				index += 1
+			end
+			if result_type == nil
+				case function.result_type
+				when Gate3ResultType::Void
+					return Result<Boolean, Diagnostic>::Ok(true)
+				when Gate3ResultType::Value(_value_type)
+					return Result<Boolean, Diagnostic>::Err(
+						boundary_diagnostic("TRBN0004", path, "closure function result does not match its type")
+					)
+				end
+			end
+			case function.result_type
+			when Gate3ResultType::Void
+				return Result<Boolean, Diagnostic>::Err(
+					boundary_diagnostic("TRBN0004", path, "closure function result does not match its type")
+				)
+			when Gate3ResultType::Value(value_type)
+				if !gate3_value_types_equal(result_type, value_type)
+					return Result<Boolean, Diagnostic>::Err(
+						boundary_diagnostic("TRBN0004", path, "closure function result does not match its type")
+					)
+				end
+				return Result<Boolean, Diagnostic>::Ok(true)
+			end
+		else
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path, "closure operation requires a function type")
+			)
+		end
+	end
+
+	def _gate3_define(
+			mut definitions: Hash<String, Gate3ValueType>,
+			id: String,
+			value_type: Gate3ValueType,
+			path: String,
+		): Result<Boolean, Diagnostic>
+		if id.empty?() || definitions.key?(id)
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path, "value identifier is empty or defined more than once")
+			)
+		end
+		definitions[id] = value_type
+		return Result<Boolean, Diagnostic>::Ok(true)
+	end
+
+	def _gate3_require(
+			available: Hash<String, Gate3ValueType>,
+			id: String,
+			expected: Gate3ValueType,
+			path: String,
+		): Result<Boolean, Diagnostic>
+		actual := try _gate3_require_any(available, id, path)
+		if !gate3_value_types_equal(actual, expected)
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path, "operand type does not match the operation")
+			)
+		end
+		return Result<Boolean, Diagnostic>::Ok(true)
+	end
+
+	def _gate3_require_scalar(
+			available: Hash<String, Gate3ValueType>,
+			id: String,
+			scalar: ScalarType,
+			path: String,
+		): Result<Boolean, Diagnostic>
+		return _gate3_require(available, id, Gate3ValueType::Scalar(scalar), path)
+	end
+
+	def _gate3_require_any(
+			available: Hash<String, Gate3ValueType>,
+			id: String,
+			path: String,
+		): Result<Gate3ValueType, Diagnostic>
+		if !available.key?(id)
+			return Result<Gate3ValueType, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path, "operand is not available in this block")
+			)
+		end
+		return Result<Gate3ValueType, Diagnostic>::Ok(available.fetch(id))
+	end
+
+	def _gate3_aggregate_layout(
+			native_module: Gate3Module,
+			value_type: Gate3ValueType,
+			path: String,
+		): Result<Gate3Layout, Diagnostic>
+		case value_type
+		when Gate3ValueType::Scalar(_scalar)
+			return Result<Gate3Layout, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path, "operation requires an aggregate value")
+			)
+		when Gate3ValueType::Aggregate(type_id)
+			return compute_gate3_layout(native_module.types, type_id)
+		end
+	end
+
+	def _gate3_some_definition(
+			id: String,
+			value_type: Gate3ValueType,
+		): Result<Gate3Definition?, Diagnostic>
+		return Result<Gate3Definition?, Diagnostic>::Ok(Gate3Definition.new(id: id, value_type: value_type))
+	end
+
+	def gate3_instruction_result(instruction: Gate3Instruction): String?
+		case instruction
+		when Gate3Instruction::Scalar(scalar)
+			case scalar
+			when Gate1Instruction::BooleanLiteral(result, _value, _origin)
+				return result
+			when Gate1Instruction::IntegerLiteral(result, _value, _origin)
+				return result
+			when Gate1Instruction::FloatLiteral(result, _value, _origin)
+				return result
+			when Gate1Instruction::IntegerBinary(result, _operator, _left, _right, _origin)
+				return result
+			when Gate1Instruction::FloatBinary(result, _operator, _left, _right, _origin)
+				return result
+			when Gate1Instruction::IntegerCompare(result, _operator, _left, _right, _origin)
+				return result
+			when Gate1Instruction::FloatCompare(result, _operator, _left, _right, _origin)
+				return result
+			when Gate1Instruction::BooleanNot(result, _value, _origin)
+				return result
+			when Gate1Instruction::Call(result, _function_id, _arguments, _origin)
+				return result
+			when Gate1Instruction::WriteStatic(_value, _origin)
+				return nil
+			end
+		when Gate3Instruction::StringLiteral(result, _value, _origin)
+			return result
+		when Gate3Instruction::StringConcat(result, _left, _right, _origin)
+			return result
+		when Gate3Instruction::StringEqual(result, _left, _right, _origin)
+			return result
+		when Gate3Instruction::StringSize(result, _value, _origin)
+			return result
+		when Gate3Instruction::StringIndex(result, _value, _index, _origin)
+			return result
+		when Gate3Instruction::WriteString(_value, _newline, _origin)
+			return nil
+		when Gate3Instruction::ArrayConstruct(result, _type_id, _arguments, _origin)
+			return result
+		when Gate3Instruction::ArraySize(result, _type_id, _array, _origin)
+			return result
+		when Gate3Instruction::ArrayGet(result, _type_id, _array, _index, _origin)
+			return result
+		when Gate3Instruction::ArraySet(_type_id, _array, _index, _value, _origin)
+			return nil
+		when Gate3Instruction::ArrayPush(_type_id, _array, _value, _origin)
+			return nil
+		when Gate3Instruction::ClosureConstruct(result, _type_id, _function_id, _captures, _origin)
+			return result
+		when Gate3Instruction::ClosureCall(result, _type_id, _closure, _arguments, _origin)
+			return result
+		when Gate3Instruction::RecordConstruct(result, _type_id, _arguments, _origin)
+			return result
+		when Gate3Instruction::RecordProject(result, _type_id, _record, _field, _origin)
+			return result
+		when Gate3Instruction::VariantConstruct(result, _type_id, _variant, _arguments, _origin)
+			return result
+		when Gate3Instruction::VariantTest(result, _type_id, _value, _variant, _origin)
+			return result
+		when Gate3Instruction::VariantProject(result, _type_id, _value, _variant, _field, _origin)
+			return result
+		when Gate3Instruction::Call(result, _function_id, _arguments, _origin)
+			return result
+		end
+	end
+
+	def gate3_function(functions: Array<Gate3Function>, id: String): Gate3Function?
+		mut index := 0
+		while index < functions.size()
+			if functions[index].id == id
+				return functions[index]
+			end
+			index += 1
+		end
+		return nil
+	end
+
+	def gate3_block(blocks: Array<Gate3Block>, id: String): Gate3Block?
+		mut index := 0
+		while index < blocks.size()
+			if blocks[index].id == id
+				return blocks[index]
+			end
+			index += 1
+		end
+		return nil
+	end
+
+	def _gate3_verify_origin(
+			origin: SourceOrigin,
+			source_ids: Array<String>,
+			path: String,
+		): Result<Boolean, Diagnostic>
+		if !source_ids.include?(origin.source_id)
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path + "/source", "origin references an unknown source")
+			)
+		end
+		if origin.start_line < 1 || origin.start_column < 1 || origin.end_line < 1 || origin.end_column < 1
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path, "origin coordinates must be positive")
+			)
+		end
+		if origin.end_line < origin.start_line || (origin.end_line == origin.start_line && origin.end_column < origin.start_column)
+			return Result<Boolean, Diagnostic>::Err(
+				boundary_diagnostic("TRBN0004", path, "origin end precedes its start")
+			)
+		end
+		return Result<Boolean, Diagnostic>::Ok(true)
+	end

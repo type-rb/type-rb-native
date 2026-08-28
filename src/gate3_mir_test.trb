@@ -1,0 +1,369 @@
+import {
+	ComparisonOperator,
+	Gate1Instruction,
+	IntegerBinaryOperator,
+	ScalarType,
+} from gate1_mir
+import {
+	Gate3Field,
+	Gate3TypeDefinition,
+	Gate3ValueType,
+	Gate3Variant,
+} from gate3_layout
+import {
+	Gate3Block,
+	Gate3Function,
+	Gate3Instruction,
+	Gate3Module,
+	Gate3Parameter,
+	Gate3ResultType,
+	Gate3Terminator,
+	verify_gate3_mir,
+} from gate3_mir
+import { NativeSource } from native_mir
+import { SourceOrigin } from snapshot
+import { Result } from trb/std/result
+import { describe, expect, test } from trb/std/test
+
+def _gate3_mir_origin(line: Integer): SourceOrigin
+	return SourceOrigin.new(
+		source_id: "main",
+		start_line: line,
+		start_column: 1,
+		end_line: line,
+		end_column: 8,
+	)
+end
+
+def _gate3_mir_scalar(value_type: ScalarType): Gate3ValueType
+	return Gate3ValueType::Scalar(value_type)
+end
+
+def _gate3_mir_types(): Array<Gate3TypeDefinition>
+	return [
+		Gate3TypeDefinition::Record(
+			"example#Point",
+			[
+				Gate3Field.new(name: "x", value_type: _gate3_mir_scalar(ScalarType::Integer)),
+				Gate3Field.new(name: "y", value_type: _gate3_mir_scalar(ScalarType::Integer)),
+			],
+		),
+		Gate3TypeDefinition::Tagged(
+			"example#Outcome",
+			[
+				Gate3Variant.new(
+					name: "Found",
+					fields: [
+						Gate3Field.new(name: "point", value_type: Gate3ValueType::Aggregate("example#Point")),
+					],
+				),
+				Gate3Variant.new(
+					name: "Missing",
+					fields: [
+						Gate3Field.new(name: "code", value_type: _gate3_mir_scalar(ScalarType::Integer)),
+					],
+				),
+			],
+		),
+	]
+end
+
+def _gate3_make_point(): Gate3Function
+	origin := _gate3_mir_origin(1)
+	return Gate3Function.new(
+		id: "example#make_point",
+		name: "make_point",
+		parameters: [
+			Gate3Parameter.new(id: "x", value_type: _gate3_mir_scalar(ScalarType::Integer), origin: origin),
+			Gate3Parameter.new(id: "y", value_type: _gate3_mir_scalar(ScalarType::Integer), origin: origin),
+		],
+		result_type: Gate3ResultType::Value(Gate3ValueType::Aggregate("example#Point")),
+		entry: "entry",
+		origin: origin,
+		blocks: [
+			Gate3Block.new(
+				id: "entry",
+				parameters: [],
+				origin: origin,
+				instructions: [
+					Gate3Instruction::RecordConstruct("point", "example#Point", ["x", "y"], origin),
+				],
+				terminator: Gate3Terminator::Return("point", origin),
+			),
+		],
+	)
+end
+
+def _gate3_classify(): Gate3Function
+	origin := _gate3_mir_origin(5)
+	point_type := Gate3ValueType::Aggregate("example#Point")
+	return Gate3Function.new(
+		id: "example#classify",
+		name: "classify",
+		parameters: [
+			Gate3Parameter.new(id: "point", value_type: point_type, origin: origin),
+			Gate3Parameter.new(id: "found", value_type: _gate3_mir_scalar(ScalarType::Boolean), origin: origin),
+		],
+		result_type: Gate3ResultType::Value(Gate3ValueType::Aggregate("example#Outcome")),
+		entry: "entry",
+		origin: origin,
+		blocks: [
+			Gate3Block.new(
+				id: "entry",
+				parameters: [],
+				origin: origin,
+				instructions: [],
+				terminator: Gate3Terminator::Branch("found", "yes", ["point"], "no", [], origin),
+			),
+			Gate3Block.new(
+				id: "yes",
+				parameters: [Gate3Parameter.new(id: "selected", value_type: point_type, origin: origin)],
+				origin: origin,
+				instructions: [
+					Gate3Instruction::VariantConstruct(
+						"outcome",
+						"example#Outcome",
+						"Found",
+						["selected"],
+						origin,
+					),
+				],
+				terminator: Gate3Terminator::Return("outcome", origin),
+			),
+			Gate3Block.new(
+				id: "no",
+				parameters: [],
+				origin: origin,
+				instructions: [
+					Gate3Instruction::Scalar(Gate1Instruction::IntegerLiteral("code", 404, origin)),
+					Gate3Instruction::VariantConstruct(
+						"outcome_missing",
+						"example#Outcome",
+						"Missing",
+						["code"],
+						origin,
+					),
+				],
+				terminator: Gate3Terminator::Return("outcome_missing", origin),
+			),
+		],
+	)
+end
+
+def _gate3_sum_point(): Gate3Function
+	origin := _gate3_mir_origin(12)
+	return Gate3Function.new(
+		id: "example#sum_point",
+		name: "sum_point",
+		parameters: [
+			Gate3Parameter.new(
+				id: "point",
+				value_type: Gate3ValueType::Aggregate("example#Point"),
+				origin: origin,
+			),
+		],
+		result_type: Gate3ResultType::Value(_gate3_mir_scalar(ScalarType::Integer)),
+		entry: "entry",
+		origin: origin,
+		blocks: [
+			Gate3Block.new(
+				id: "entry",
+				parameters: [],
+				origin: origin,
+				instructions: [
+					Gate3Instruction::RecordProject("x", "example#Point", "point", "x", origin),
+					Gate3Instruction::RecordProject("y", "example#Point", "point", "y", origin),
+					Gate3Instruction::Scalar(
+						Gate1Instruction::IntegerBinary("sum", IntegerBinaryOperator::Add, "x", "y", origin)
+					),
+				],
+				terminator: Gate3Terminator::Return("sum", origin),
+			),
+		],
+	)
+end
+
+def _gate3_entry(): Gate3Function
+	origin := _gate3_mir_origin(18)
+	outcome_type := Gate3ValueType::Aggregate("example#Outcome")
+	return Gate3Function.new(
+		id: "example#main",
+		name: "main",
+		parameters: [],
+		result_type: Gate3ResultType::Void,
+		entry: "entry",
+		origin: origin,
+		blocks: [
+			Gate3Block.new(
+				id: "entry",
+				parameters: [],
+				origin: origin,
+				instructions: [
+					Gate3Instruction::Scalar(Gate1Instruction::IntegerLiteral("twenty", 20, origin)),
+					Gate3Instruction::Scalar(Gate1Instruction::IntegerLiteral("twenty_two", 22, origin)),
+					Gate3Instruction::Scalar(Gate1Instruction::BooleanLiteral("found", true, origin)),
+					Gate3Instruction::Call("point", "example#make_point", ["twenty", "twenty_two"], origin),
+					Gate3Instruction::Call("outcome", "example#classify", ["point", "found"], origin),
+					Gate3Instruction::VariantTest("is_found", "example#Outcome", "outcome", "Found", origin),
+				],
+				terminator: Gate3Terminator::Branch("is_found", "found", ["outcome"], "failure", [], origin),
+			),
+			Gate3Block.new(
+				id: "found",
+				parameters: [Gate3Parameter.new(id: "matched", value_type: outcome_type, origin: origin)],
+				origin: origin,
+				instructions: [
+					Gate3Instruction::VariantProject(
+						"point_payload",
+						"example#Outcome",
+						"matched",
+						"Found",
+						"point",
+						origin,
+					),
+					Gate3Instruction::Call("answer", "example#sum_point", ["point_payload"], origin),
+					Gate3Instruction::Scalar(Gate1Instruction::IntegerLiteral("expected", 42, origin)),
+					Gate3Instruction::Scalar(
+						Gate1Instruction::IntegerCompare(
+							"matches",
+							ComparisonOperator::Equal,
+							"answer",
+							"expected",
+							origin,
+						)
+					),
+				],
+				terminator: Gate3Terminator::Branch("matches", "success", [], "failure", [], origin),
+			),
+			Gate3Block.new(
+				id: "success",
+				parameters: [],
+				origin: origin,
+				instructions: [
+					Gate3Instruction::Scalar(Gate1Instruction::WriteStatic("gate3-aggregate\n", origin)),
+				],
+				terminator: Gate3Terminator::Return(nil, origin),
+			),
+			Gate3Block.new(
+				id: "failure",
+				parameters: [],
+				origin: origin,
+				instructions: [
+					Gate3Instruction::Scalar(Gate1Instruction::WriteStatic("bad\n", origin)),
+				],
+				terminator: Gate3Terminator::Return(nil, origin),
+			),
+		],
+	)
+end
+
+def gate3_mir_sample_module(): Gate3Module
+	return Gate3Module.new(
+		id: "example",
+		entry_function: "example#main",
+		sources: [NativeSource.new(id: "main", path: "src/main.trb")],
+		types: _gate3_mir_types(),
+		functions: [_gate3_make_point(), _gate3_classify(), _gate3_sum_point(), _gate3_entry()],
+	)
+end
+
+def _gate3_invalid_projection_module(): Gate3Module
+	origin := _gate3_mir_origin(40)
+	entry := Gate3Function.new(
+		id: "example#main",
+		name: "main",
+		parameters: [],
+		result_type: Gate3ResultType::Void,
+		entry: "entry",
+		origin: origin,
+		blocks: [
+			Gate3Block.new(
+				id: "entry",
+				parameters: [],
+				origin: origin,
+				instructions: [
+					Gate3Instruction::Scalar(Gate1Instruction::IntegerLiteral("code", 404, origin)),
+					Gate3Instruction::VariantConstruct(
+						"missing",
+						"example#Outcome",
+						"Missing",
+						["code"],
+						origin,
+					),
+					Gate3Instruction::VariantProject(
+						"invalid",
+						"example#Outcome",
+						"missing",
+						"Found",
+						"point",
+						origin,
+					),
+				],
+				terminator: Gate3Terminator::Return(nil, origin),
+			),
+		],
+	)
+	return Gate3Module.new(
+		id: "example",
+		entry_function: entry.id,
+		sources: [NativeSource.new(id: "main", path: "src/main.trb")],
+		types: _gate3_mir_types(),
+		functions: [entry],
+	)
+end
+
+describe("Gate 3 aggregate MIR") do
+	test("verifies aggregate construction, projection, calls, returns, and block arguments") do
+		case verify_gate3_mir(gate3_mir_sample_module())
+		when Result::Ok(valid)
+			expect(valid).to_be_true()
+		when Result::Err(diagnostic)
+			puts(diagnostic.path + ": " + diagnostic.message)
+			expect(false).to_be_true()
+		end
+	end
+
+	test("rejects nominally mismatched record construction") do
+		origin := _gate3_mir_origin(30)
+		broken := Gate3Function.new(
+			id: "example#main",
+			name: "main",
+			parameters: [],
+			result_type: Gate3ResultType::Void,
+			entry: "entry",
+			origin: origin,
+			blocks: [
+				Gate3Block.new(
+					id: "entry",
+					parameters: [],
+					origin: origin,
+					instructions: [
+						Gate3Instruction::Scalar(Gate1Instruction::BooleanLiteral("wrong", true, origin)),
+						Gate3Instruction::Scalar(Gate1Instruction::IntegerLiteral("right", 1, origin)),
+						Gate3Instruction::RecordConstruct(
+							"point",
+							"example#Point",
+							["wrong", "right"],
+							origin,
+						),
+					],
+					terminator: Gate3Terminator::Return(nil, origin),
+				),
+			],
+		)
+		native_module := Gate3Module.new(
+			id: "example",
+			entry_function: broken.id,
+			sources: [NativeSource.new(id: "main", path: "src/main.trb")],
+			types: _gate3_mir_types(),
+			functions: [broken],
+		)
+		case verify_gate3_mir(native_module)
+		when Result::Ok(_valid)
+			expect(false).to_be_true()
+		when Result::Err(diagnostic)
+			expect(diagnostic.code).to_equal("TRBN0004")
+			expect(diagnostic.message).to_equal("operand type does not match the operation")
+		end
+	end
+end
