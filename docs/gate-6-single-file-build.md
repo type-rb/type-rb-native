@@ -119,6 +119,14 @@ bytes (15% above the 149,784-byte Gate 6A compiler). Any correctness mismatch,
 leaked intermediate, unexpected process, or greater-than-2x time/RSS regression
 stops the slice for diagnosis.
 
+The TypeRB-authored
+[`gate6b-benchmark`](../tools/gate6b-benchmark/README.md) harness constructs the
+fixed point, runs the correctness and executable-identity preflight, records
+two indexed warmups and alternating observations, enforces the compiler-size
+ceiling, and writes the exact process inventory. Its external comparison mode
+retains `.ssa` and `.s` files, while Native `build` includes its required
+cleanup in every measured observation.
+
 ## Deferred scope
 
 This slice supports one source file, one output, explicit tool paths, and
