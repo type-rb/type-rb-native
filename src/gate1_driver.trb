@@ -1,0 +1,68 @@
+import { decode_gate1_snapshot } from gate1_snapshot
+import { build_gate1_executable } from gate1_toolchain
+import { write_text } from trb/std/filesystem
+import { argv, run } from trb/std/process
+import { Result } from trb/std/result
+import { Instant } from trb/std/time
+
+def _gate1_driver_usage(): String
+	return "usage: type-rb-native REFERENCE_TRB CONFIG QBE CC WORKSPACE OUTPUT"
+end
+
+def main()
+	arguments := argv()
+	if arguments.size() != 6
+		puts(_gate1_driver_usage())
+		return
+	end
+	snapshot_started := Instant.now()
+	snapshot_process := case run(
+			arguments[0],
+			["compiler", "native-snapshot", "--config", arguments[1]],
+		)
+	when Result::Ok(result)
+		result
+	when Result::Err(error)
+		puts("snapshot: " + error.operation + ": " + error.message)
+		return
+	end
+	snapshot_seconds := Instant.now().duration_since(snapshot_started).total_seconds()
+	if !snapshot_process.success
+		puts("snapshot: reference compiler rejected the source")
+		puts(snapshot_process.stderr)
+		return
+	end
+	snapshot_path := arguments[4] + "/snapshot.json"
+	case write_text(snapshot_path, snapshot_process.stdout)
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		puts("snapshot: " + error.operation + ": " + error.message)
+		return
+	end
+	decode_started := Instant.now()
+	native_module := case decode_gate1_snapshot(snapshot_process.stdout)
+	when Result::Ok(value)
+		value
+	when Result::Err(diagnostic)
+		puts("decode: " + diagnostic.code + " " + diagnostic.path + ": " + diagnostic.message)
+		return
+	end
+	decode_seconds := Instant.now().duration_since(decode_started).total_seconds()
+	case build_gate1_executable(
+			native_module,
+			arguments[2],
+			arguments[3],
+			arguments[4],
+			arguments[5],
+		)
+	when Result::Ok(report)
+		puts("gate1-phase,snapshot," + snapshot_seconds.to_s())
+		puts("gate1-phase,decode," + decode_seconds.to_s())
+		puts("gate1-phase,emit," + report.emit_seconds.to_s())
+		puts("gate1-phase,qbe," + report.qbe_seconds.to_s())
+		puts("gate1-phase,link," + report.link_seconds.to_s())
+	when Result::Err(error)
+		puts("build: " + error.phase + ": " + error.message)
+	end
+	return
+end
