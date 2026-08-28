@@ -162,6 +162,7 @@ def _gate3_compute_layout(
 		return _gate3_managed_reference_layout(type_id, Gate3LayoutKind::String)
 	when Gate3TypeDefinition::Array(_id, element_type)
 		try _gate3_verify_storable_type(definitions, element_type, path + "/element")
+		try _gate3_verify_array_element(definitions, element_type, path + "/element")
 		return _gate3_managed_reference_layout(type_id, Gate3LayoutKind::Array)
 	when Gate3TypeDefinition::Function(_id, parameter_types, result_type)
 		if parameter_types.size() > GATE3_MAX_FIELDS
@@ -183,6 +184,33 @@ def _gate3_compute_layout(
 		end
 		return _gate3_managed_reference_layout(type_id, Gate3LayoutKind::Function)
 	end
+end
+
+def _gate3_verify_array_element(
+		definitions: Array<Gate3TypeDefinition>,
+		value_type: Gate3ValueType,
+		path: String,
+	): Result<Boolean, Diagnostic>
+	case value_type
+	when Gate3ValueType::Scalar(scalar)
+		if scalar == ScalarType::Integer
+			return Result<Boolean, Diagnostic>::Ok(true)
+		end
+	when Gate3ValueType::Aggregate(type_id)
+		definition := _gate3_definition(definitions, type_id)
+		if definition != nil
+			case definition
+			when Gate3TypeDefinition::String(_id)
+				return Result<Boolean, Diagnostic>::Ok(true)
+			when Gate3TypeDefinition::Function(_id, _parameters, _result)
+				return Result<Boolean, Diagnostic>::Ok(true)
+			else
+			end
+		end
+	end
+	return Result<Boolean, Diagnostic>::Err(
+		boundary_diagnostic("TRBN0004", path, "unsupported Gate 3 Array element type")
+	)
 end
 
 def _gate3_managed_reference_layout(

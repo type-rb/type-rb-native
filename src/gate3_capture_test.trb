@@ -1,0 +1,165 @@
+import { ComparisonOperator, Gate1Instruction, ScalarType } from gate1_mir
+import { Gate3Field, Gate3TypeDefinition, Gate3ValueType } from gate3_layout
+import {
+	Gate3Block,
+	Gate3Function,
+	Gate3Instruction,
+	Gate3Module,
+	Gate3Parameter,
+	Gate3ResultType,
+	Gate3Terminator,
+} from gate3_mir
+import { build_gate3_executable } from gate3_toolchain
+import { NativeSource } from native_mir
+import { SourceOrigin } from snapshot
+import { create_directory } from trb/std/filesystem
+import { environment, run } from trb/std/process
+import { Result } from trb/std/result
+import { describe, expect, test } from trb/std/test
+
+def _gate3_capture_module(): Gate3Module
+	origin := SourceOrigin.new(
+		source_id: "main",
+		start_line: 1,
+		start_column: 1,
+		end_line: 12,
+		end_column: 4,
+	)
+	integer_type := Gate3ValueType::Scalar(ScalarType::Integer)
+	pair_type := Gate3ValueType::Aggregate("capture#Pair")
+	return Gate3Module.new(
+		id: "capture",
+		entry_function: "capture#main",
+		sources: [NativeSource.new(id: "main", path: "src/main.trb")],
+		types: [
+			Gate3TypeDefinition::Record(
+				"capture#Pair",
+				[
+					Gate3Field.new(name: "left", value_type: integer_type),
+					Gate3Field.new(name: "right", value_type: integer_type),
+				],
+			),
+			Gate3TypeDefinition::Function("() -> Integer", [], integer_type),
+		],
+		functions: [
+			Gate3Function.new(
+				id: "capture#body",
+				name: "body",
+				parameters: [],
+				result_type: Gate3ResultType::Value(integer_type),
+				entry: "entry",
+				origin: origin,
+				blocks: [
+					Gate3Block.new(
+						id: "entry",
+						parameters: [],
+						origin: origin,
+						instructions: [
+							Gate3Instruction::RecordProject("value", "capture#Pair", "pair", "left", origin),
+						],
+						terminator: Gate3Terminator::Return("value", origin),
+					),
+				],
+				captures: [Gate3Parameter.new(id: "pair", value_type: pair_type, origin: origin)],
+			),
+			Gate3Function.new(
+				id: "capture#main",
+				name: "main",
+				parameters: [],
+				result_type: Gate3ResultType::Void,
+				entry: "entry",
+				origin: origin,
+				blocks: [
+					Gate3Block.new(
+						id: "entry",
+						parameters: [],
+						origin: origin,
+						instructions: [
+							Gate3Instruction::Scalar(Gate1Instruction::IntegerLiteral("fortyTwo", 42, origin)),
+							Gate3Instruction::Scalar(Gate1Instruction::IntegerLiteral("one", 1, origin)),
+							Gate3Instruction::RecordConstruct(
+								"pair",
+								"capture#Pair",
+								["fortyTwo", "one"],
+								origin,
+							),
+							Gate3Instruction::ClosureConstruct(
+								"closure",
+								"() -> Integer",
+								"capture#body",
+								["pair"],
+								origin,
+							),
+							Gate3Instruction::ClosureCall(
+								"actual",
+								"() -> Integer",
+								"closure",
+								[],
+								origin,
+							),
+							Gate3Instruction::Scalar(
+								Gate1Instruction::IntegerCompare(
+									"matches",
+									ComparisonOperator::Equal,
+									"actual",
+									"fortyTwo",
+									origin,
+								)
+							),
+						],
+						terminator: Gate3Terminator::Branch("matches", "success", [], "failure", [], origin),
+					),
+					Gate3Block.new(
+						id: "success",
+						parameters: [],
+						origin: origin,
+						instructions: [Gate3Instruction::Scalar(Gate1Instruction::WriteStatic("capture-ok\n", origin))],
+						terminator: Gate3Terminator::Return(nil, origin),
+					),
+					Gate3Block.new(
+						id: "failure",
+						parameters: [],
+						origin: origin,
+						instructions: [Gate3Instruction::Scalar(Gate1Instruction::WriteStatic("capture-fail\n", origin))],
+						terminator: Gate3Terminator::Return(nil, origin),
+					),
+				],
+			),
+		],
+	)
+end
+
+describe("Gate 3 closure capture runtime") do
+	test("copies a heap-free aggregate into an escaping environment") do
+		qbe_command := environment("TYPE_RB_NATIVE_QBE")
+		if qbe_command == nil
+			expect(true).to_be_true()
+		else
+			workspace := "/tmp/type-rb-native-gate3-capture"
+			case create_directory(workspace)
+			when Result::Ok(_unit)
+			when Result::Err(_error)
+			end
+			case build_gate3_executable(
+					_gate3_capture_module(),
+					qbe_command,
+					"/usr/bin/cc",
+					workspace,
+					workspace + "/sample",
+				)
+			when Result::Ok(report)
+				case run(report.output_path, [])
+				when Result::Ok(process)
+					expect(process.success).to_be_true()
+					expect(process.stdout).to_equal("capture-ok\n")
+					expect(process.stderr).to_equal("")
+				when Result::Err(_error)
+					expect(false).to_be_true()
+				end
+			when Result::Err(error)
+				puts(error.phase + ": " + error.message + "\n" + error.stderr)
+				expect(false).to_be_true()
+			end
+		end
+	end
+end

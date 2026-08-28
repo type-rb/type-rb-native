@@ -33,6 +33,12 @@ enum Gate3ResultType
 	Value(value_type: Gate3ValueType)
 end
 
+enum Gate3RuntimeStatistic
+	CollectionCount
+	HeapBytes
+	ReclaimedBytes
+end
+
 enum Gate3Instruction
 	Scalar(instruction: Gate1Instruction)
 	StringLiteral(result: String, value: String, origin: SourceOrigin)
@@ -60,6 +66,8 @@ enum Gate3Instruction
 		arguments: Array<String>,
 		origin: SourceOrigin,
 	)
+	RuntimeCollect(origin: SourceOrigin)
+	RuntimeStatistic(result: String, statistic: Gate3RuntimeStatistic, origin: SourceOrigin)
 	RecordConstruct(
 		result: String,
 		type_id: String,
@@ -417,6 +425,10 @@ enum Gate3Instruction
 					boundary_diagnostic("TRBN0004", path + "/type", "closure call requires a function type")
 				)
 			end
+		when Gate3Instruction::RuntimeCollect(_origin)
+			return Result<Gate3Definition?, Diagnostic>::Ok(nil)
+		when Gate3Instruction::RuntimeStatistic(result, _statistic, _origin)
+			return _gate3_some_definition(result, Gate3ValueType::Scalar(ScalarType::Integer))
 		when Gate3Instruction::RecordConstruct(result, type_id, _arguments, _origin)
 			layout := try compute_gate3_layout(native_module.types, type_id)
 			if layout.kind != Gate3LayoutKind::Record
@@ -642,6 +654,10 @@ enum Gate3Instruction
 					boundary_diagnostic("TRBN0004", path + "/type", "closure call requires a function type")
 				)
 			end
+		when Gate3Instruction::RuntimeCollect(origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
+		when Gate3Instruction::RuntimeStatistic(_result, _statistic, origin)
+			try _gate3_verify_origin(origin, source_ids, path + "/origin")
 		when Gate3Instruction::RecordConstruct(_result, type_id, arguments, origin)
 			try _gate3_verify_origin(origin, source_ids, path + "/origin")
 			layout := try compute_gate3_layout(native_module.types, type_id)
@@ -1112,6 +1128,10 @@ enum Gate3Instruction
 		when Gate3Instruction::ClosureConstruct(result, _type_id, _function_id, _captures, _origin)
 			return result
 		when Gate3Instruction::ClosureCall(result, _type_id, _closure, _arguments, _origin)
+			return result
+		when Gate3Instruction::RuntimeCollect(_origin)
+			return nil
+		when Gate3Instruction::RuntimeStatistic(result, _statistic, _origin)
 			return result
 		when Gate3Instruction::RecordConstruct(result, _type_id, _arguments, _origin)
 			return result

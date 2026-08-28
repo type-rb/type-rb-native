@@ -105,6 +105,11 @@ drops its final root by returning from a helper function, and forces repeated
 collections. The collector must report reclaimed cycles and a stable warm live
 set under the bound registered in issue #13.
 
+Forced collection and counter reads are represented only by test-only Native
+MIR instructions. They are intentionally absent from snapshot version 4 and
+from the portable TypeRB surface; source programs cannot trigger or observe the
+collector through this boundary.
+
 ## Implementation order
 
 1. Decode and verify hand-authored version 4 fixtures.
