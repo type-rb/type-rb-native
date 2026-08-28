@@ -79,6 +79,36 @@ def record_size(
 	return Result<Boolean, String>::Ok(true)
 end
 
+def measure_peak_rss(command: String, arguments: Array<String>): Result<String, String>
+	mut time_arguments := ["-l", command]
+	mut index := 0
+	while index < arguments.size()
+		time_arguments.push(arguments[index])
+		index += 1
+	end
+	measurement := try measure_process("/usr/bin/time", time_arguments)
+	if measurement.status != 0
+		return Result<String, String>::Err("time " + command + ": " + measurement.stderr)
+	end
+	lines := measurement.stderr.split("\n")
+	index = 0
+	while index < lines.size()
+		line := lines[index]
+		if line.include?("maximum resident set size")
+			fields := line.strip().split(" ")
+			mut field_index := 0
+			while field_index < fields.size()
+				if !fields[field_index].empty?()
+					return Result<String, String>::Ok(fields[field_index])
+				end
+				field_index += 1
+			end
+		end
+		index += 1
+	end
+	return Result<String, String>::Err("time did not report maximum resident set size for " + command)
+end
+
 def benchmark_case(
 		mut output: StringBuilder,
 		root: String,
@@ -156,6 +186,31 @@ def benchmark_case(
 		)
 		iteration += 1
 	end
+	native_build_rss := try measure_peak_rss(
+		native_driver,
+		[reference_trb, config, qbe, cc, native_workspace, native_output],
+	)
+	append_measurement(output, "build-peak-rss", case_name, "native", 0, native_build_rss, 0)
+	reference_build_rss := try measure_peak_rss(
+		"/usr/bin/env",
+		["GOCACHE=" + go_cache, reference_trb, "build", "--compile", "--config", config, "--outfile", reference_output],
+	)
+	append_measurement(output, "build-peak-rss", case_name, "go", 0, reference_build_rss, 0)
+	reference_size_build_rss := try measure_peak_rss(
+		"/usr/bin/env",
+		[
+			"GOCACHE=" + go_size_cache,
+			"GOFLAGS=-ldflags=-s -w",
+			reference_trb,
+			"build",
+			"--compile",
+			"--config",
+			config,
+			"--outfile",
+			reference_size_output,
+		],
+	)
+	append_measurement(output, "build-peak-rss", case_name, "go-size", 0, reference_size_build_rss, 0)
 	native_stripped := native_output + ".stripped"
 	reference_stripped := reference_output + ".stripped"
 	reference_size_stripped := reference_size_output + ".stripped"
@@ -180,6 +235,12 @@ def benchmark_case(
 	try record_size(output, case_name, "native", "size-stripped", native_stripped)
 	try record_size(output, case_name, "go", "size-stripped", reference_stripped)
 	try record_size(output, case_name, "go-size", "size-stripped", reference_size_stripped)
+	native_runtime_rss := try measure_peak_rss(native_output, [])
+	append_measurement(output, "runtime-peak-rss", case_name, "native", 0, native_runtime_rss, 0)
+	reference_runtime_rss := try measure_peak_rss(reference_output, [])
+	append_measurement(output, "runtime-peak-rss", case_name, "go", 0, reference_runtime_rss, 0)
+	reference_size_runtime_rss := try measure_peak_rss(reference_size_output, [])
+	append_measurement(output, "runtime-peak-rss", case_name, "go-size", 0, reference_size_runtime_rss, 0)
 	iteration = 0
 	while iteration < 3
 		try measure_process(native_output, [])
