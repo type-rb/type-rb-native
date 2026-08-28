@@ -69,6 +69,62 @@ weakening validation, truncating input, or retaining unchecked fallback data.
 - The valid, invalid, mutation, and storage-boundary corpus runs through every
   required Native generation and the functional optimized Go comparison.
 
+### Executable normalization
+
+QBE and assembly remain byte-identical before linking. On Darwin, the remaining
+Mach-O variation comes from `LC_UUID` and from the ad-hoc code-signature
+identifier derived from the output basename. The registered normalization
+therefore relinks each unchanged B1/B2 assembly with the ordinary
+`-Wl,-dead_strip` option plus `-Wl,-no_uuid`, using `compiler` as the basename
+in two separate directories. It then compares the complete Mach-O files.
+
+This policy does not remove or ignore any code or data section. The automated
+[`gate5-normalize.sh`](../tools/gate5-normalize.sh) check also rejects an
+output that still contains `LC_UUID`. Under this policy B1 and B2 must be
+byte-identical, which is stronger than section-wise equivalence.
+
+### Measurement harness
+
+[`tools/gate5-benchmark`](../tools/gate5-benchmark) constructs B0 through B3
+and the matched Go artifact, verifies the fixed point and the direct Go-free
+B1-to-B2 recipe, and refuses to record measurements if any compiler output
+differs. It records two indexed warmups followed by the requested repetitions,
+alternating Native stage order around the matched Go candidate. Direct compiler
+and end-to-end build time are separate; compiler, QBE, and link phases remain
+visible.
+
+Peak RSS is measured separately with `/usr/bin/time -l` for both direct and
+end-to-end paths, up to three repetitions. The same run records raw and
+stripped artifacts, distribution components, QBE and artifact hashes, the
+deterministic-link result, revisions, tool versions, dynamic dependencies,
+undefined symbols, Go metadata probes, and the C driver's assembler/linker
+subprocess inventory. The committed result documents the exact command and
+requested repetition count.
+
+For a local Darwin arm64 run after preparing the pinned reference `trb` and
+QBE 1.3, build the two repository-owned drivers and invoke the harness as
+follows. The workspace and output files must be outside a committed result
+directory until the run passes and is reviewed.
+
+```sh
+trb build --compile --outfile /tmp/type-rb-native-gate5-driver
+trb build --compile \
+  --config tools/gate5-benchmark/trbconfig.jsonc \
+  --outfile /tmp/type-rb-native-gate5-benchmark
+
+/tmp/type-rb-native-gate5-benchmark \
+  "$PWD" \
+  /path/to/pinned/trb \
+  /tmp/type-rb-native-gate5-driver \
+  /path/to/qbe-1.3/qbe \
+  /usr/bin/cc \
+  /path/to/go \
+  /tmp/type-rb-native-gate5-workspace \
+  7 \
+  /tmp/type-rb-native-gate5-raw.csv \
+  /tmp/type-rb-native-gate5-process-inventory.txt
+```
+
 ## Registered performance criteria
 
 The exact pre-registered criteria are in issue #29. In summary, Native direct
