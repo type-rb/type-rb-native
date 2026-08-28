@@ -343,9 +343,27 @@ differ by at most 0.88%; median RSS differs by at most 0.35%; and compiler size
 is 15.64% below its registered ceiling. See the
 [Gate 6D result](../results/2026-08-29-gate6d-native-bootstrap-linux-arm64/README.md).
 
+Gate 6E is the file-root multi-module slice registered in
+[issue #51](https://github.com/type-rb/type-rb-native/issues/51) and specified
+by [Decision 0012](decisions/0012-file-root-module-closure.md). The existing
+file commands load the entry plus its transitive named project-import closure,
+retain module-local identity, and build one representative five-module
+executable through the ordinary Native chain. The hidden recovery entry remains
+single-source, while configured projects, packages, and public CLI design stay
+deferred.
+
+After two warmups, seven alternating application builds and 50 alternating
+runs compare the self-hosted Native result with the pinned optimized Go
+reference. Time and peak RSS must remain within 25% of the stronger Go result,
+the Native application must remain at least 80% smaller, the compiler must stay
+within 208,530 stripped bytes, and B1-to-B2 time and RSS must remain within 25%
+of the Gate 6C baseline. See the
+[Gate 6E file-root plan](gate-6-file-root-modules.md).
+
 This gate is not authorization to ship. It evaluates:
 
-- representative multi-module applications;
+- broader configured and packaged multi-module applications beyond the
+  file-root slice;
 - at least two primary target environments;
 - incremental and reproducible builds;
 - package and native-library boundaries;

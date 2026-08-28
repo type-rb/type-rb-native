@@ -24,7 +24,9 @@ lexer, parser, resolver, and checker to remain active and cover unsupported
 characters, unfinished syntax, duplicate declarations, unresolved calls,
 arity errors, type mismatches, and unsupported types. `emit-qbe` must return
 the same diagnostic without emitting an executable function, proving that the
-failure occurs before code generation.
+failure occurs before code generation. The Integer boundary case also keeps
+the self-hosted compiler aligned with TypeRB's portable range rather than the
+wider machine-word range.
 
 The `mutations` directory contains a base program and two independently changed
 sources. All three must produce distinct QBE and distinct runtime output. This

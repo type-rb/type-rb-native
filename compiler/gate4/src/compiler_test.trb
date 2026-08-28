@@ -1,6 +1,7 @@
 import {
 	Gate4Compiler,
 	Gate4Output,
+	gate4_add_module,
 	gate4_check,
 	gate4_compiler_new,
 	gate4_emit_qbe,
@@ -9,7 +10,9 @@ import {
 	gate4_load_integer,
 	gate4_load_string,
 	gate4_lex,
+	gate4_lex_module,
 	gate4_parse,
+	gate4_parse_module,
 	gate4_resolve,
 	gate4_store_integer,
 	gate4_store_string,
@@ -90,6 +93,43 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_load_string(state.function_result_types, 1)).to_equal("Void")
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_true()
+	end
+
+	test("keeps declarations and named imports scoped to their source modules") do
+		mut state := gate4_compiler_new(16384)
+		gate4_add_module(state, "main", "/project/main.trb")
+		gate4_add_module(state, "alpha", "/project/alpha.trb")
+		gate4_add_module(state, "beta", "/project/beta.trb")
+		state.entry_module[0] = 0
+		sources := [
+			"import { left } from alpha\nimport { right } from beta\n\ndef main()\n\tif left() + right() == 42\n\t\tputs(\"modules-ok\")\n\tend\n\treturn\nend\n",
+			"record Value\n\tnumber: Integer\nend\n\ndef normalize(value: Integer): Integer\n\treturn value\nend\n\ndef left(): Integer\n\tvalue := Value.new(number: 20)\n\treturn normalize(value.number)\nend\n",
+			"record Value\n\tnumber: Integer\nend\n\ndef normalize(value: Integer): Integer\n\treturn value\nend\n\ndef right(): Integer\n\tvalue := Value.new(number: 22)\n\treturn normalize(value.number)\nend\n",
+		]
+		mut module_index := 0
+		while module_index < sources.size()
+			start := state.token_count[0]
+			expect(gate4_lex_module(state, sources[module_index], module_index)).to_be_true()
+			expect(gate4_parse_module(state, start, module_index)).to_be_true()
+			module_index += 1
+		end
+		mut import_index := 0
+		while import_index < state.import_count[0]
+			path := gate4_load_string(state.import_paths, import_index)
+			if path == "alpha"
+				gate4_store_integer(state.import_targets, import_index, 1)
+			else
+				gate4_store_integer(state.import_targets, import_index, 2)
+			end
+			import_index += 1
+		end
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		expect(state.record_count[0]).to_equal(2)
+		expect(state.function_count[0]).to_equal(5)
+		first := gate4_output_source(gate4_emit_qbe(state))
+		second := gate4_output_source(gate4_emit_qbe(state))
+		expect(first).to_equal(second)
 	end
 
 	test("rejects an unsupported source character deterministically") do
@@ -182,6 +222,27 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_load_string(state.diagnostic_codes, 0)).to_equal("TRBN4004")
 		expect(gate4_load_integer(state.diagnostic_lines, 0)).to_equal(2)
 		expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("expected Integer, found String")
+	end
+
+	test("enforces the portable Integer literal range during checking") do
+		valid_source := "def main()\n\tvalue := 9007199254740991\n\treturn\nend\n"
+		mut valid := gate4_compiler_new(valid_source.size() + 1)
+		expect(gate4_lex(valid, valid_source)).to_be_true()
+		expect(gate4_parse(valid)).to_be_true()
+		expect(gate4_resolve(valid)).to_be_true()
+		expect(gate4_check(valid)).to_be_true()
+
+		invalid_source := "def main()\n\tvalue := 9007199254740992\n\treturn\nend\n"
+		mut invalid := gate4_compiler_new(invalid_source.size() + 1)
+		expect(gate4_lex(invalid, invalid_source)).to_be_true()
+		expect(gate4_parse(invalid)).to_be_true()
+		expect(gate4_resolve(invalid)).to_be_true()
+		expect(gate4_check(invalid)).to_be_false()
+		expect(gate4_load_string(invalid.diagnostic_codes, 0)).to_equal("TRBN4004")
+		expect(gate4_load_integer(invalid.diagnostic_lines, 0)).to_equal(2)
+		expect(gate4_load_string(invalid.diagnostic_messages, 0)).to_equal(
+			"Integer literal is outside the portable range",
+		)
 	end
 
 	test("rejects direct-call arity mismatches during checking") do
