@@ -5,7 +5,8 @@ description: Implement and review TypeRB Native compiler, MIR, runtime, bootstra
 
 # Develop TypeRB Native
 
-Work on one recorded experiment gate at a time.
+Work on one recorded experiment gate or independently measurable gate slice at
+a time.
 
 ## Establish the boundary
 
@@ -39,6 +40,11 @@ Work on one recorded experiment gate at a time.
   checked-in lexer, parser, resolver, checker, and emitter. Reject embedded
   compiler artifacts, source-specific output paths, quines, and hidden host
   fallbacks as bootstrap evidence.
+- Keep ordinary compiler input file- or project-oriented once that boundary is
+  available. Source-content argv adapters must be explicitly hidden, limited
+  to recovery or differential tests, and kept distinct from ordinary command
+  shapes. Test stdout, stderr, exit status, unreadable input, and inputs beyond
+  conservative argv limits.
 - Record B0, B1, and B2 roles explicitly, plus B3 when a fixed-point check is
   required. Verify the ordinary regeneration process graph rather than
   inferring Go independence from the output binary. Keep recovery compilers and
@@ -73,6 +79,9 @@ Go reference baseline and every active native candidate. Count frontend,
 serialization, lowering, code generation, assembly, linking, runtime, sidecar,
 and distribution costs according to `docs/experiment-plan.md`.
 
-When the active gate passes, stop before starting the next gate. Report the
-implemented subset, evidence for every exit condition, measurements, known
-limitations, discarded paths, and decisions that need maintainer discussion.
+When the active gate or slice passes, record and report the implemented subset,
+evidence for every exit condition, measurements, known limitations, discarded
+paths, and decisions that need maintainer discussion. If the maintainer has
+given standing direction to continue, pre-register the next bounded slice and
+proceed; gate completion alone is not a reason to stop. Stop before work that
+requires an unresolved language, ownership, release, or product decision.

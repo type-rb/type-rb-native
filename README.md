@@ -93,9 +93,21 @@ stripped compiler size by 94.46%, and compiler-plus-QBE distribution size by
 82.18%. B1/B2/B3 QBE and normalized B1/B2 executables converge. See the
 [Gate 5 result](results/2026-08-29-gate5-matched-compiler-darwin-arm64/README.md).
 
-Multi-module applications, the ordinary file-oriented CLI, production runtime
-integration, package/native-library boundaries, incremental builds, and a
-second target remain the Gate 6 product-feasibility scope.
+Gate 6A is in progress under the pre-registered scope in
+[issue #35](https://github.com/type-rb/type-rb-native/issues/35). Its first
+self-emitted compiler entry reads a source file directly for `check` and
+`emit-qbe`, routes diagnostics and operational errors to stderr with distinct
+statuses, and retains the source-content form only as an explicit hidden
+recovery and differential adapter. Correctness coverage includes the compiler
+source, every existing valid, invalid, and mutation input, and a source file
+larger than 512 KiB. The slice remains open until its registered time, RSS,
+stripped-size, fixed-point, and process-inventory evidence is recorded. See the
+[Gate 6A file entry](docs/gate-6-file-cli.md).
+
+Multi-module applications, project discovery, production runtime integration,
+package/native-library boundaries, incremental builds, external-tool output
+orchestration, debugging, maintenance evaluation, and a second target remain
+the broader Gate 6 product-feasibility scope.
 
 ## Intended boundary
 
@@ -196,6 +208,7 @@ repository.
 - [Gate 4 behavioral self-hosting](docs/gate-4-self-hosting.md)
 - [Gate 5 matched self-hosted compiler baseline](docs/gate-5-matched-compiler.md)
 - [Gate 5 matched compiler Darwin arm64 result](results/2026-08-29-gate5-matched-compiler-darwin-arm64/README.md)
+- [Gate 6A file-oriented compiler entry](docs/gate-6-file-cli.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
 - [Decision 0003: Gate 1 QBE and Darwin arm64 profile](docs/decisions/0003-gate-1-qbe-target.md)
@@ -203,6 +216,7 @@ repository.
 - [Decision 0005: Managed references and tracing GC](docs/decisions/0005-managed-runtime-and-tracing-gc.md)
 - [Decision 0006: Behavioral self-hosting boundary](docs/decisions/0006-behavioral-self-hosting-boundary.md)
 - [Decision 0007: Matched self-hosted compiler baseline](docs/decisions/0007-matched-self-hosted-compiler-baseline.md)
+- [Decision 0008: File-oriented Native compiler entry](docs/decisions/0008-file-oriented-compiler-entry.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 

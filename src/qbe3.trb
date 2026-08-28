@@ -222,18 +222,18 @@ def _qbe3_gate4_bootstrap_function_index(native_module: Gate3Module): Result<Int
 		)
 	end
 	function := native_module.functions[match_index]
-	if function.parameters.size() != 2 || !function.captures.empty?()
+	if function.parameters.size() != 3 || !function.captures.empty?()
 		return Result<Integer, Diagnostic>::Err(
 			boundary_diagnostic(
 				"TRBN0004",
 				"/functions/" + match_index.to_s(),
-				"Gate 4 bootstrap compiler_main must take two uncaptured String parameters",
+				"Gate 4 bootstrap compiler_main must take String, String, Boolean without captures",
 			)
 		)
 	end
 	mut parameters_valid := true
 	index = 0
-	while index < function.parameters.size()
+	while index < 2
 		case function.parameters[index].value_type
 		when Gate3ValueType::Aggregate(type_id)
 			if type_id != "String"
@@ -244,23 +244,41 @@ def _qbe3_gate4_bootstrap_function_index(native_module: Gate3Module): Result<Int
 		end
 		index += 1
 	end
+	case function.parameters[2].value_type
+	when Gate3ValueType::Scalar(scalar)
+		if scalar != ScalarType::Boolean
+			parameters_valid = false
+		end
+	else
+		parameters_valid = false
+	end
 	if !parameters_valid
 		return Result<Integer, Diagnostic>::Err(
 			boundary_diagnostic(
 				"TRBN0004",
 				"/functions/" + match_index.to_s() + "/parameters",
-				"Gate 4 bootstrap compiler_main parameters must be String",
+				"Gate 4 bootstrap compiler_main parameters must be String, String, Boolean",
 			)
 		)
 	end
+	mut result_valid := false
 	case function.result_type
 	when Gate3ResultType::Void
-	when Gate3ResultType::Value(_value_type)
+	when Gate3ResultType::Value(value_type)
+		case value_type
+		when Gate3ValueType::Scalar(scalar)
+			if scalar == ScalarType::Integer
+				result_valid = true
+			end
+		else
+		end
+	end
+	if !result_valid
 		return Result<Integer, Diagnostic>::Err(
 			boundary_diagnostic(
 				"TRBN0004",
 				"/functions/" + match_index.to_s() + "/result",
-				"Gate 4 bootstrap compiler_main must return Void",
+				"Gate 4 bootstrap compiler_main must return Integer",
 			)
 		)
 	end
@@ -277,7 +295,7 @@ def _qbe3_gate4_bootstrap_function_index(native_module: Gate3Module): Result<Int
 end
 
 def _qbe3_emit_gate4_bootstrap_data(mut writer: StringBuilder)
-	usage := "usage: gate4-compiler SOURCE MODE\n"
+	usage := "usage: gate4-compiler --source-content MODE SOURCE\n"
 	bytes := usage.to_bytes()
 	mut values: Array<String> := []
 	mut index := 0
@@ -286,6 +304,10 @@ def _qbe3_emit_gate4_bootstrap_data(mut writer: StringBuilder)
 		index += 1
 	end
 	_qbe_line(writer, "data $trbn_g4_usage = { b " + values.join(" ") + " }")
+	_qbe_line(
+		writer,
+		"data $trbn_g4_source_content = { b 45 45 115 111 117 114 99 101 45 99 111 110 116 101 110 116 0 }",
+	)
 	_qbe_line(writer, "")
 	return
 end
@@ -1858,10 +1880,16 @@ end
 def _qbe3_emit_gate4_bootstrap_entry(function_index: Integer, mut writer: StringBuilder)
 	_qbe_line(writer, "export function w $main(w %argc, l %argv) {")
 	_qbe_line(writer, "@start")
-	_qbe_line(writer, "\t%valid =w ceqw %argc, 3")
-	_qbe_line(writer, "\tjnz %valid, @compile, @usage")
+	_qbe_line(writer, "\t%valid_argc =w ceqw %argc, 4")
+	_qbe_line(writer, "\tjnz %valid_argc, @check_flag, @usage")
+	_qbe_line(writer, "@check_flag")
+	_qbe_line(writer, "\t%flag_address =l add %argv, 8")
+	_qbe_line(writer, "\t%flag =l loadl %flag_address")
+	_qbe_line(writer, "\t%flag_comparison =w call $strcmp(l %flag, l $trbn_g4_source_content)")
+	_qbe_line(writer, "\t%valid_flag =w ceqw %flag_comparison, 0")
+	_qbe_line(writer, "\tjnz %valid_flag, @compile, @usage")
 	_qbe_line(writer, "@usage")
-	_qbe_line(writer, "\tcall $write(w 2, l $trbn_g4_usage, l 34)")
+	_qbe_line(writer, "\tcall $write(w 2, l $trbn_g4_usage, l 51)")
 	_qbe_line(writer, "\tret 64")
 	_qbe_line(writer, "@compile")
 	_qbe_line(writer, "\t%root_frame =l alloc8 32")
@@ -1874,7 +1902,7 @@ def _qbe3_emit_gate4_bootstrap_entry(function_index: Integer, mut writer: String
 	_qbe_line(writer, "\t%mode_root =l add %root_frame, 24")
 	_qbe_line(writer, "\tstorel 0, %mode_root")
 	_qbe_line(writer, "\tstorel %root_frame, $trbn_roots")
-	_qbe_line(writer, "\t%source_argument_address =l add %argv, 8")
+	_qbe_line(writer, "\t%source_argument_address =l add %argv, 24")
 	_qbe_line(writer, "\t%source_argument =l loadl %source_argument_address")
 	_qbe_line(writer, "\t%source =l call $trbn_g4_string_from_c(l %source_argument)")
 	_qbe_line(writer, "\tstorel %source, %source_root")
@@ -1882,7 +1910,7 @@ def _qbe3_emit_gate4_bootstrap_entry(function_index: Integer, mut writer: String
 	_qbe_line(writer, "\t%mode_argument =l loadl %mode_argument_address")
 	_qbe_line(writer, "\t%mode =l call $trbn_g4_string_from_c(l %mode_argument)")
 	_qbe_line(writer, "\tstorel %mode, %mode_root")
-	_qbe_line(writer, "\tcall $trbn_g3f" + function_index.to_s() + "(l %source, l %mode)")
+	_qbe_line(writer, "\t%status =l call $trbn_g3f" + function_index.to_s() + "(l %source, l %mode, w 0)")
 	_qbe_line(writer, "\t%restore_roots =l loadl %root_frame")
 	_qbe_line(writer, "\tstorel %restore_roots, $trbn_roots")
 	_qbe_line(writer, "\tret 0")
