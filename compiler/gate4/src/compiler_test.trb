@@ -1,9 +1,11 @@
 import {
 	Gate4Compiler,
+	gate4_check,
 	gate4_compiler_new,
 	gate4_has_diagnostic,
 	gate4_lex,
 	gate4_parse,
+	gate4_resolve,
 } from compiler
 import { read_text } from trb/std/filesystem
 import { environment } from trb/std/process
@@ -31,6 +33,8 @@ describe("Gate 4 TypeRB frontend") do
 		expect(state.function_names[1]).to_equal("main")
 		expect(state.function_result_types[0]).to_equal("Integer")
 		expect(state.function_result_types[1]).to_equal("Void")
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
 	end
 
 	test("rejects an unsupported source character deterministically") do
@@ -70,10 +74,82 @@ describe("Gate 4 TypeRB frontend") do
 				expect(gate4_has_diagnostic(state)).to_be_false()
 				expect(state.record_names[0]).to_equal("Gate4Compiler")
 				expect(state.function_count[0] > 20).to_be_true()
+				if !gate4_resolve(state)
+					puts(
+						state.diagnostic_codes[0] + ":" + state.diagnostic_lines[0].to_s() + ":" +
+						state.diagnostic_messages[0],
+					)
+				end
+				expect(gate4_has_diagnostic(state)).to_be_false()
+				if !gate4_check(state)
+					puts(
+						state.diagnostic_codes[0] + ":" + state.diagnostic_lines[0].to_s() + ":" +
+						state.diagnostic_messages[0],
+					)
+				end
+				expect(gate4_has_diagnostic(state)).to_be_false()
 			when Result::Err(error)
 				puts(error.operation + ": " + error.message)
 				expect(false).to_be_true()
 			end
 		end
+	end
+
+	test("rejects duplicate declarations during resolution") do
+		source := "def main()\n\treturn\nend\n\ndef main()\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse(state)).to_be_true()
+		expect(gate4_resolve(state)).to_be_false()
+		expect(state.diagnostic_codes[0]).to_equal("TRBN4003")
+		expect(state.diagnostic_lines[0]).to_equal(5)
+		expect(state.diagnostic_messages[0]).to_equal("duplicate function declaration main")
+	end
+
+	test("rejects an unresolved direct call during resolution") do
+		source := "def main()\n\tmissing()\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse(state)).to_be_true()
+		expect(gate4_resolve(state)).to_be_false()
+		expect(state.diagnostic_codes[0]).to_equal("TRBN4003")
+		expect(state.diagnostic_lines[0]).to_equal(2)
+		expect(state.diagnostic_messages[0]).to_equal("unresolved function missing")
+	end
+
+	test("rejects a local initializer type mismatch during checking") do
+		source := "def main()\n\tvalue: Integer := \"bad\"\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse(state)).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_false()
+		expect(state.diagnostic_codes[0]).to_equal("TRBN4004")
+		expect(state.diagnostic_lines[0]).to_equal(2)
+		expect(state.diagnostic_messages[0]).to_equal("expected Integer, found String")
+	end
+
+	test("rejects direct-call arity mismatches during checking") do
+		source := "def identity(value: Integer): Integer\n\treturn value\nend\n\ndef main()\n\tidentity()\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse(state)).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_false()
+		expect(state.diagnostic_codes[0]).to_equal("TRBN4004")
+		expect(state.diagnostic_lines[0]).to_equal(6)
+		expect(state.diagnostic_messages[0]).to_equal("call argument count does not match identity")
+	end
+
+	test("rejects destructive calls through immutable bindings") do
+		source := "def main()\n\tvalues: Array<Integer> := [1]\n\tvalues.push(2)\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse(state)).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_false()
+		expect(state.diagnostic_codes[0]).to_equal("TRBN4004")
+		expect(state.diagnostic_lines[0]).to_equal(3)
+		expect(state.diagnostic_messages[0]).to_equal("push receiver is immutable")
 	end
 end
