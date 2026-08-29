@@ -69,6 +69,15 @@ a time.
   provenance separately, compare same-basename output bytes across repeated
   generations, and never count recovery seed creation as part of the ordinary
   Go-free chain.
+- When distributing an experimental bootstrap seed, keep compiler binaries out
+  of Git history. Record one-time root provenance separately, publish raw
+  target compilers with a strict versioned SHA-256 manifest and artifact
+  attestations, make the completed release immutable, and verify the actual
+  published assets from fresh target runners before calling the handoff
+  durable. Later ordinary chains start only from a previous Native compiler;
+  they must not quietly recreate recovery through Go or the reference
+  compiler. Do not infer stable version, compatibility, installation, signing,
+  or support promises from an experimental bootstrap tag.
 - Allow external code generators, assemblers, linkers, SDKs, and system
   libraries only behind explicit boundaries whose time and distribution cost
   can be measured.

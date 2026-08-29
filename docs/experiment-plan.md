@@ -547,6 +547,28 @@ compiler guardrail, and exact Darwin and Linux arm64 candidate chains close.
 See the
 [Gate 6K result](../results/2026-08-30-gate6k-configured-project-darwin-linux-arm64/README.md).
 
+Gate 6L is the experimental bootstrap seed distribution slice registered in
+[issue #90](https://github.com/type-rb/type-rb-native/issues/90) and specified
+by
+[Decision 0019](decisions/0019-experimental-bootstrap-seed-distribution.md).
+It publishes one registered target-neutral root QBE plus attested Darwin and
+Linux arm64 compiler seeds as immutable assets of a date-labelled prerelease.
+The root translation is one-time setup provenance. Fresh post-publication jobs
+must verify the actual release manifest, SHA-256 digest, and artifact
+attestation before closing an ordinary B1/B2/B3/B4 chain without Go or the
+reference compiler.
+
+Two warmups and seven observations measure every adjacent compiler generation
+on each target. Adjacent time and peak-RSS medians remain within 25%, a
+greater-than-2x regression is catastrophic, each raw compiler asset remains at
+or below 310,000 bytes, and the two compiler assets together remain at or below
+620,000 bytes. Exact fixed points, the compiler and configured-project corpus,
+failure and cleanup behavior, target inspection, process inventory, and
+external tool accounting remain mandatory. This distribution slice registers
+no application primary-metric improvement; stable versions, compatibility,
+installation, tool bundling, and support remain deferred. See the
+[Gate 6L plan](gate-6-bootstrap-seed-distribution.md).
+
 This gate is not authorization to ship. It evaluates:
 
 - broader configured and packaged multi-module applications beyond the

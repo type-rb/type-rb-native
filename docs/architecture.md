@@ -290,6 +290,16 @@ accelerators do not stabilize a project, package, module, Hash, or CLI
 contract. See
 [Decision 0015](decisions/0015-indexed-module-graph.md).
 
+Gate 6L makes the first durable previous-Native seed handoff without turning
+the experiment into a stable release. A one-time registered fixed-point QBE
+root produces attested Darwin and Linux arm64 compiler assets in an immutable
+date-labelled prerelease. Fresh consumers verify the manifest, digest, and
+attestation before an ordinary B1-to-B4 chain that contains no Go or reference
+compiler. Compiler binaries stay out of Git history, while QBE, CC, system
+libraries, GitHub release retention, and attestation infrastructure remain
+explicit dependencies. See
+[Decision 0019](decisions/0019-experimental-bootstrap-seed-distribution.md).
+
 ## Stability and promotion
 
 No MIR, ABI profile, snapshot, object, cache, command, or runtime API in this
