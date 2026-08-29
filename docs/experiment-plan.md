@@ -431,7 +431,17 @@ emission, and 10% for a complete Native build. RSS, Native-versus-Go build
 time and memory, application size and behavior, canonical self-build time and
 memory, stripped compiler size, exact fixed points, representative application
 identity, and pinned Linux arm64 correctness remain bounded. See the
-[Gate 6H plan](gate-6-module-graph.md). Formal results are not yet recorded.
+[Gate 6H plan](gate-6-module-graph.md).
+
+Gate 6H is complete at measured revision
+`e39f774237a6306d7cd46b09941367c42816c628`. On the exact 1,025-file project,
+direct checking improves by 41.96%, QBE emission by 39.92%, and the complete
+Native build by 16.16%; median RSS is lower in all three comparisons. The
+candidate remains within the canonical Gate 6G guardrails, builds the same
+project 85.79% faster and with 92.93% less peak RSS than the pinned optimized
+Go path, produces a 97.00% smaller stripped application, and closes exact
+Darwin and Linux arm64 chains. See the
+[Gate 6H result](../results/2026-08-29-gate6h-module-graph-darwin-linux-arm64/README.md).
 
 This gate is not authorization to ship. It evaluates:
 
