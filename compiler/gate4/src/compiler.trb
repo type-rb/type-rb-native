@@ -728,6 +728,7 @@ def gate4_emit_runtime(mut output: Gate4Output, project_runtime: Boolean)
 		"data $g4_qbe_darwin_arm64 = { b \"arm64_apple\", b 0 }",
 		"data $g4_qbe_linux_arm64 = { b \"arm64\", b 0 }",
 		"data $g4_o_flag = { b \"-o\", b 0 }",
+		"data $g4_project_assembler_input = { b \"-xassembler\", b 0 }",
 		"data $g4_dead_strip_darwin = { b \"-Wl,-dead_strip\", b 0 }",
 		"data $g4_dead_strip_linux = { b \"-Wl,--gc-sections,--strip-all\", b 0 }",
 		"data $g4_selected_qbe_target = align 8 { l $g4_qbe_darwin_arm64 }",
@@ -887,7 +888,7 @@ def gate4_emit_runtime(mut output: Gate4Output, project_runtime: Boolean)
 		"function l $g4_c_basename(l %path) {\n@start\n\t%slash =l call $strrchr(l %path, w 47)\n\t%missing =w ceql %slash, 0\n\tjnz %missing, @whole, @suffix\n@whole\n\tret %path\n@suffix\n\t%base =l add %slash, 1\n\tret %base\n}\n",
 		"function w $g4_run(l %program, l %args) {\n@start\n\t%pid =w call $fork()\n\t%ff =w csltw %pid, 0\n\tjnz %ff, @fail, @child_check\n@child_check\n\t%child =w ceqw %pid, 0\n\tjnz %child, @child, @parent\n@child\n\t%ignored =w call $execv(l %program, l %args)\n\tcall $exit(w 127)\n\thlt\n@parent\n\t%sp =l alloc8 8\n\tstorew 0, %sp\n\t%waited =w call $waitpid(w %pid, l %sp, w 0)\n\t%wf =w csltw %waited, 0\n\tjnz %wf, @fail, @status\n@status\n\t%st =w loadw %sp\n\t%sig =w and %st, 127\n\t%signaled =w cnew %sig, 0\n\tjnz %signaled, @signal, @exited\n@signal\n\t%sr =w add %sig, 128\n\tret %sr\n@exited\n\t%shifted =w shr %st, 8\n\t%code =w and %shifted, 255\n\tret %code\n@fail\n\tret 127\n}\n",
 		"function w $g4_run_qbe(l %qbe, l %ssa, l %assembly) {\n@start\n\t%target =l loadl $g4_selected_qbe_target\n\t%a =l alloc8 56\n\tstorel %qbe, %a\n\t%a1 =l add %a, 8\n\tstorel $g4_target_flag, %a1\n\t%a2 =l add %a, 16\n\tstorel %target, %a2\n\t%a3 =l add %a, 24\n\tstorel $g4_o_flag, %a3\n\t%a4 =l add %a, 32\n\tstorel %assembly, %a4\n\t%a5 =l add %a, 40\n\tstorel %ssa, %a5\n\t%a6 =l add %a, 48\n\tstorel 0, %a6\n\t%r =w call $g4_run(l %qbe, l %a)\n\tret %r\n}\n",
-		"function w $g4_run_cc(l %cc, l %assembly, l %output) {\n@start\n\t%dead_strip =l loadl $g4_selected_dead_strip\n\t%a =l alloc8 48\n\tstorel %cc, %a\n\t%a1 =l add %a, 8\n\tstorel %assembly, %a1\n\t%a2 =l add %a, 16\n\tstorel %dead_strip, %a2\n\t%a3 =l add %a, 24\n\tstorel $g4_o_flag, %a3\n\t%a4 =l add %a, 32\n\tstorel %output, %a4\n\t%a5 =l add %a, 40\n\tstorel 0, %a5\n\t%r =w call $g4_run(l %cc, l %a)\n\tret %r\n}\n",
+		"function w $g4_project_run_cc(l %cc, l %assembly, l %output) {\n@start\n\t%dead_strip =l loadl $g4_selected_dead_strip\n\t%a =l alloc8 56\n\tstorel %cc, %a\n\t%a1 =l add %a, 8\n\tstorel $g4_project_assembler_input, %a1\n\t%a2 =l add %a, 16\n\tstorel %assembly, %a2\n\t%a3 =l add %a, 24\n\tstorel %dead_strip, %a3\n\t%a4 =l add %a, 32\n\tstorel $g4_o_flag, %a4\n\t%a5 =l add %a, 40\n\tstorel %output, %a5\n\t%a6 =l add %a, 48\n\tstorel 0, %a6\n\t%r =w call $g4_run(l %cc, l %a)\n\tret %r\n}\n",
 		"function $g4_cleanup(l %ssa, l %assembly) {\n@start\n\t%i0 =w call $unlink(l %ssa)\n\t%i1 =w call $unlink(l %assembly)\n\tret\n}\n",
 		"function $g4_cleanup_output(l %output, l %directory) {\n@start\n\t%i0 =w call $unlink(l %output)\n\t%i1 =w call $rmdir(l %directory)\n\tret\n}\n",
 		"function l $g4_string_concat(l %left, l %right) {",
@@ -1158,14 +1159,21 @@ def gate4_emit_runtime(mut output: Gate4Output, project_runtime: Boolean)
 		if project_runtime
 			gate4_output_line(output, line)
 		else
-			if gate4_string_starts_with(line, "function l $g4_read_source")
+			if gate4_string_starts_with(line, "function w $g4_project_run_cc")
 				gate4_output_line(
 					output,
-					"function l $g4_read_source(l %path) {\n@start\n\t%data =l add %path, 8\n\t%source =l call $g4_read_file(l %data)\n\tret %source\n}\n",
+					"function w $g4_run_cc(l %cc, l %assembly, l %output) {\n@start\n\t%dead_strip =l loadl $g4_selected_dead_strip\n\t%a =l alloc8 48\n\tstorel %cc, %a\n\t%a1 =l add %a, 8\n\tstorel %assembly, %a1\n\t%a2 =l add %a, 16\n\tstorel %dead_strip, %a2\n\t%a3 =l add %a, 24\n\tstorel $g4_o_flag, %a3\n\t%a4 =l add %a, 32\n\tstorel %output, %a4\n\t%a5 =l add %a, 40\n\tstorel 0, %a5\n\t%r =w call $g4_run(l %cc, l %a)\n\tret %r\n}\n",
 				)
 			else
-				if !gate4_project_runtime_qbe_line(line)
-					gate4_output_line(output, line)
+				if gate4_string_starts_with(line, "function l $g4_read_source")
+					gate4_output_line(
+						output,
+						"function l $g4_read_source(l %path) {\n@start\n\t%data =l add %path, 8\n\t%source =l call $g4_read_file(l %data)\n\tret %source\n}\n",
+					)
+				else
+					if !gate4_project_runtime_qbe_line(line)
+						gate4_output_line(output, line)
+					end
 				end
 			end
 		end
@@ -2602,7 +2610,7 @@ def gate4_emit_entry(state: Gate4Compiler, mut output: Gate4Output)
 		)
 		gate4_output_line(
 			output,
-			"\t%brestore =w call $dup2(w %bsaved, w 1)\n\t%bclosed =w call $close(w %bsaved)\n\t%bfclosed =w call $fclose(l %bf)\n\t%brb0 =w csltw %brestore, 0\n\t%brb1 =w csltw %bclosed, 0\n\t%brb2 =w cnew %bfclosed, 0\n\t%brb3 =w or %brb0, %brb1\n\t%brbad =w or %brb3, %brb2\n\tjnz %brbad, @bpost_error, @bcompiled\n@bpost_error\n\tcall $g4_cleanup(l %bssa, l %basm)\n\tcall $write(w 2, l $g4_intermediate_error, l 42)\n\tret 73\n@bcompiled\n\t%bcfail =w cnel %bst, 0\n\tjnz %bcfail, @bcompiler_failed, @bqbe\n@bcompiler_failed\n\tcall $g4_cleanup(l %bssa, l %basm)\n\tret 1\n@bqbe\n\t%bqs =w call $g4_run_qbe(l %bqbe, l %bssa, l %basm)\n\t%bqfail =w cnew %bqs, 0\n\tjnz %bqfail, @bqbe_failed, @btemp\n@bqbe_failed\n\tcall $g4_cleanup(l %bssa, l %basm)\n\tcall $write(w 2, l $g4_qbe_error, l 21)\n\tret 70\n@btemp\n\t%btmpl =l call $g4_c_concat(l %bo, l $g4_temp_suffix)\n\t%bdir =l call $mkdtemp(l %btmpl)\n\t%bdfail =w ceql %bdir, 0\n\tjnz %bdfail, @btemp_failed, @btemp_path\n@btemp_failed\n\tcall $g4_cleanup(l %bssa, l %basm)\n\tcall $write(w 2, l $g4_intermediate_error, l 42)\n\tret 73\n@btemp_path\n\t%bbase =l call $g4_c_basename(l %bo)\n\t%bdp =l call $g4_c_concat(l %bdir, l $g4_slash)\n\t%bexe =l call $g4_c_concat(l %bdp, l %bbase)\n\t%bcs =w call $g4_run_cc(l %bcc, l %basm, l %bexe)\n\t%bccfail =w cnew %bcs, 0\n\tjnz %bccfail, @bcc_failed, @bpublish\n@bcc_failed\n\tcall $g4_cleanup(l %bssa, l %basm)\n\tcall $g4_cleanup_output(l %bexe, l %bdir)\n\tcall $write(w 2, l $g4_cc_error, l 20)\n\tret 70\n@bpublish\n\t%bpr =w call $rename(l %bexe, l %bo)\n\t%bpf =w cnew %bpr, 0\n\tjnz %bpf, @bpublish_failed, @bsuccess\n@bpublish_failed\n\tcall $g4_cleanup(l %bssa, l %basm)\n\tcall $g4_cleanup_output(l %bexe, l %bdir)\n\tcall $write(w 2, l $g4_publish_error, l 32)\n\tret 73\n@bsuccess\n\tcall $g4_cleanup(l %bssa, l %basm)\n\tcall $g4_cleanup_output(l %bexe, l %bdir)\n\tret 0\n@other\n\t%a3 =w ceqw %argc, 3\n\tjnz %a3, @fargs, @hargc\n@hargc\n\t%a4 =w ceqw %argc, 4\n\tjnz %a4, @hargs, @usage\n@hargs\n\t%hfp =l add %argv, 8\n\t%hf =l loadl %hfp\n\t%hfc =w call $strcmp(l %hf, l $g4_source_arg)\n\t%valid_hf =w ceqw %hfc, 0\n\tjnz %valid_hf, @hidden, @usage\n@usage\n\tcall $write(w 2, l $g4_usage_error, l 103)\n\tret 64\n@hidden\n\t%hmp =l add %argv, 16\n\t%hmc =l loadl %hmp\n\t%hm =l call $g4_string_from_c(l %hmc)\n\t%hsp =l add %argv, 24\n\t%hsc =l loadl %hsp\n\t%hs =l call $g4_string_from_c(l %hsc)",
+			"\t%brestore =w call $dup2(w %bsaved, w 1)\n\t%bclosed =w call $close(w %bsaved)\n\t%bfclosed =w call $fclose(l %bf)\n\t%brb0 =w csltw %brestore, 0\n\t%brb1 =w csltw %bclosed, 0\n\t%brb2 =w cnew %bfclosed, 0\n\t%brb3 =w or %brb0, %brb1\n\t%brbad =w or %brb3, %brb2\n\tjnz %brbad, @bpost_error, @bcompiled\n@bpost_error\n\tcall $g4_cleanup(l %bssa, l %basm)\n\tcall $write(w 2, l $g4_intermediate_error, l 42)\n\tret 73\n@bcompiled\n\t%bcfail =w cnel %bst, 0\n\tjnz %bcfail, @bcompiler_failed, @bqbe\n@bcompiler_failed\n\tcall $g4_cleanup(l %bssa, l %basm)\n\tret 1\n@bqbe\n\t%bqs =w call $g4_run_qbe(l %bqbe, l %bssa, l %basm)\n\t%bqfail =w cnew %bqs, 0\n\tjnz %bqfail, @bqbe_failed, @btemp\n@bqbe_failed\n\tcall $g4_cleanup(l %bssa, l %basm)\n\tcall $write(w 2, l $g4_qbe_error, l 21)\n\tret 70\n@btemp\n\t%btmpl =l call $g4_c_concat(l %bo, l $g4_temp_suffix)\n\t%bdir =l call $mkdtemp(l %btmpl)\n\t%bdfail =w ceql %bdir, 0\n\tjnz %bdfail, @btemp_failed, @btemp_path\n@btemp_failed\n\tcall $g4_cleanup(l %bssa, l %basm)\n\tcall $write(w 2, l $g4_intermediate_error, l 42)\n\tret 73\n@btemp_path\n\t%bbase =l call $g4_c_basename(l %bo)\n\t%bdp =l call $g4_c_concat(l %bdir, l $g4_slash)\n\t%bexe =l call $g4_c_concat(l %bdp, l %bbase)\n\t%bcs =w call $g4_project_run_cc(l %bcc, l %basm, l %bexe)\n\t%bccfail =w cnew %bcs, 0\n\tjnz %bccfail, @bcc_failed, @bpublish\n@bcc_failed\n\tcall $g4_cleanup(l %bssa, l %basm)\n\tcall $g4_cleanup_output(l %bexe, l %bdir)\n\tcall $write(w 2, l $g4_cc_error, l 20)\n\tret 70\n@bpublish\n\t%bpr =w call $rename(l %bexe, l %bo)\n\t%bpf =w cnew %bpr, 0\n\tjnz %bpf, @bpublish_failed, @bsuccess\n@bpublish_failed\n\tcall $g4_cleanup(l %bssa, l %basm)\n\tcall $g4_cleanup_output(l %bexe, l %bdir)\n\tcall $write(w 2, l $g4_publish_error, l 32)\n\tret 73\n@bsuccess\n\tcall $g4_cleanup(l %bssa, l %basm)\n\tcall $g4_cleanup_output(l %bexe, l %bdir)\n\tret 0\n@other\n\t%a3 =w ceqw %argc, 3\n\tjnz %a3, @fargs, @hargc\n@hargc\n\t%a4 =w ceqw %argc, 4\n\tjnz %a4, @hargs, @usage\n@hargs\n\t%hfp =l add %argv, 8\n\t%hf =l loadl %hfp\n\t%hfc =w call $strcmp(l %hf, l $g4_source_arg)\n\t%valid_hf =w ceqw %hfc, 0\n\tjnz %valid_hf, @hidden, @usage\n@usage\n\tcall $write(w 2, l $g4_usage_error, l 103)\n\tret 64\n@hidden\n\t%hmp =l add %argv, 16\n\t%hmc =l loadl %hmp\n\t%hm =l call $g4_string_from_c(l %hmc)\n\t%hsp =l add %argv, 24\n\t%hsc =l loadl %hsp\n\t%hs =l call $g4_string_from_c(l %hsc)",
 		)
 		gate4_output_line(
 			output,
@@ -2640,7 +2648,8 @@ end
 def gate4_emit_qbe(mut state: Gate4Compiler): Gate4Output
 	mut output := gate4_output_new(state.token_count[0] * 24 + 4096)
 	gate4_emit_static_strings(state, output)
-	gate4_emit_runtime(output, gate4_compiler_entry_function(state) >= 0)
+	compiler_runtime := gate4_compiler_entry_function(state) >= 0
+	gate4_emit_runtime(output, compiler_runtime)
 	mut inline_budget := [0]
 	if state.function_count[0] <= 32
 		inline_budget[0] = 64
@@ -2650,6 +2659,11 @@ def gate4_emit_qbe(mut state: Gate4Compiler): Gate4Output
 		end
 	end
 	mut function_index := 0
+	# The compiler-runtime intrinsics are the fixed declaration prefix above.
+	# Their source bodies are recovery fallbacks and are not part of a self-hosted compiler.
+	if compiler_runtime
+		function_index = 5
+	end
 	while function_index < state.function_count[0]
 		gate4_emit_function(state, function_index, output, inline_budget)
 		function_index += 1
@@ -4589,14 +4603,6 @@ def gate4_project_join(root: String, relative: String): String
 	return gate4_path_join(root, relative)
 end
 
-def gate4_project_module_name_value(source_root: String, path: String): String
-	mut prefix_size := source_root.size()
-	if source_root != "/"
-		prefix_size += 1
-	end
-	return gate4_source_slice(path, prefix_size, path.size() - 4)
-end
-
 def gate4_project_module_name(
 		mut state: Gate4Compiler,
 		source_root: String,
@@ -4612,7 +4618,7 @@ def gate4_project_module_name(
 		if !gate4_string_ends_with(path, ".trb")
 			gate4_diagnostic(state, "TRBN4010", 1, "project source does not end in .trb")
 		else
-			name := gate4_project_module_name_value(source_root, path)
+			name := gate4_source_slice(path, prefix.size(), path.size() - 4)
 			if name != ""
 				return name
 			end
@@ -4698,10 +4704,18 @@ def gate4_order_project_sources(source_root: String, bundle: Gate4ProjectSources
 	mut included: Array<Integer> := []
 	mut module_names := gate4_string_storage(bundle.paths.size())
 	mut module_lookup := gate4_symbol_index_new(bundle.paths.size() * 4 + 16)
+	mut prefix_size := source_root.size()
+	if source_root != "/"
+		prefix_size += 1
+	end
 	mut index := 0
 	while index < bundle.paths.size()
 		included.push(0)
-		name := gate4_project_module_name_value(source_root, bundle.paths[index])
+		name := gate4_source_slice(
+			bundle.paths[index],
+			prefix_size,
+			bundle.paths[index].size() - 4,
+		)
 		gate4_store_string(module_names, index, name)
 		gate4_add_name_index(module_lookup, module_names, index + 1)
 		if gate4_project_source_declares_main(bundle.sources[index])
@@ -4730,7 +4744,6 @@ def gate4_order_project_sources(source_root: String, bundle: Gate4ProjectSources
 	while index < bundle.paths.size()
 		if included[index] == 0
 			order.push(index)
-			included[index] = 1
 		end
 		index += 1
 	end
