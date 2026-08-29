@@ -461,6 +461,17 @@ candidate B2/B3/B4 bytes, fixed-point QBE, representative application identity,
 and a pinned Linux arm64 correctness chain remain mandatory. See the
 [Gate 6I plan](gate-6-float.md).
 
+Gate 6I is complete at measured implementation revision
+`cd2335e6472b4daca8d631b17b889a094959c2f2` with the harness at revision
+`073504790b930157b48c1bc6743bc0102f5fe014`. Native builds the fixed workload
+41.37% faster and with 48.35% less peak RSS than optimized Go, runs 10.60%
+slower with 65.60% less peak RSS, and produces a 96.80% smaller stripped
+executable. All four Go-parity metrics remain within the registered 25%
+ceiling. The candidate also remains within every canonical compiler guardrail,
+strips to 216,552 bytes, and closes exact Darwin and Linux arm64 replacement
+chains. See the
+[Gate 6I result](../results/2026-08-29-gate6i-float-darwin-linux-arm64/README.md).
+
 This gate is not authorization to ship. It evaluates:
 
 - broader configured and packaged multi-module applications beyond the
