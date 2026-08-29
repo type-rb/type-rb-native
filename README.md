@@ -221,6 +221,16 @@ and exact Darwin/Linux arm64 replacement chains close. See the
 [Decision 0018](docs/decisions/0018-explicit-configured-project.md), and
 [recorded result](results/2026-08-30-gate6k-configured-project-darwin-linux-arm64/README.md).
 
+Gate 6L is pre-registered in
+[issue #90](https://github.com/type-rb/type-rb-native/issues/90). It will turn
+the retained target-neutral compiler fixed point into attested experimental
+Darwin and Linux arm64 prerelease seeds, then require fresh runners to fetch
+the actual assets and close the ordinary Native-to-Native chain without Go or
+the reference compiler. The date-labelled bootstrap prerelease is not Native
+SemVer or a stable support promise. See the
+[Gate 6L bootstrap seed plan](docs/gate-6-bootstrap-seed-distribution.md) and
+[Decision 0019](docs/decisions/0019-experimental-bootstrap-seed-distribution.md).
+
 Upward configured project discovery, production runtime integration,
 package/native-library boundaries, incremental builds, toolchain discovery,
 debugging, maintenance evaluation, and additional primary targets remain in
@@ -347,6 +357,7 @@ repository.
 - [Gate 6J self-hosted Float Array Darwin/Linux arm64 result](results/2026-08-29-gate6j-float-arrays-darwin-linux-arm64/README.md)
 - [Gate 6K explicit configured-project executables](docs/gate-6-configured-project.md)
 - [Gate 6K configured-project Darwin/Linux arm64 result](results/2026-08-30-gate6k-configured-project-darwin-linux-arm64/README.md)
+- [Gate 6L experimental bootstrap seed distribution](docs/gate-6-bootstrap-seed-distribution.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
 - [Decision 0003: Gate 1 QBE and Darwin arm64 profile](docs/decisions/0003-gate-1-qbe-target.md)
@@ -365,6 +376,7 @@ repository.
 - [Decision 0016: Self-hosted Float scalar path](docs/decisions/0016-self-hosted-float-scalar-path.md)
 - [Decision 0017: Self-hosted Float Arrays](docs/decisions/0017-self-hosted-float-arrays.md)
 - [Decision 0018: Explicit configured-project executables](docs/decisions/0018-explicit-configured-project.md)
+- [Decision 0019: Experimental bootstrap seed distribution](docs/decisions/0019-experimental-bootstrap-seed-distribution.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 
