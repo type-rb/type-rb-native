@@ -9,12 +9,20 @@ and ownership model is defined by
 
 ## Status
 
-Implementation and the TypeRB-authored
-[benchmark controller](../tools/gate6i-benchmark/README.md) are complete;
-formal measurement is pending. The ordinary Darwin B1-to-B4 smoke chain is
-byte-identical, the permanent Float corpus executes, and the existing
-representative application retains exact bytes. These are pre-measurement
-correctness checks rather than the registered result.
+Gate 6I is complete at measured implementation revision
+`cd2335e6472b4daca8d631b17b889a094959c2f2` with the TypeRB-authored
+[benchmark controller](../tools/gate6i-benchmark/README.md) at revision
+`073504790b930157b48c1bc6743bc0102f5fe014`. Every registered semantic,
+correctness, performance, memory, size, ownership, fixed-point, and pinned
+Linux arm64 criterion passes. See the
+[recorded result](../results/2026-08-29-gate6i-float-darwin-linux-arm64/README.md).
+
+On the fixed Float workload, Native builds 41.37% faster and with 48.35% less
+peak RSS than optimized Go. It runs 10.60% slower with 65.60% less peak RSS,
+remaining within the registered 25% ceiling, and its stripped executable is
+96.80% smaller. Fresh canonical compiler emit/build time and RSS remain within
+the 10% guardrail, the compiler strips to 216,552 bytes, and exact Darwin and
+Linux arm64 replacement chains close.
 
 The fixed source baseline is TypeRB Native main revision
 `1311dfccee379dcf2dd3a70a525bc188d195981d`. Both baseline and candidate begin

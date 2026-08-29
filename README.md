@@ -181,15 +181,18 @@ CLI, project, package, or external-tool contract. See the
 [Decision 0015](docs/decisions/0015-indexed-module-graph.md), and
 [recorded result](results/2026-08-29-gate6h-module-graph-darwin-linux-arm64/README.md).
 
-Gate 6I is registered in
-[issue #69](https://github.com/type-rb/type-rb-native/issues/69). It adds the
-existing TypeRB binary64 `Float` scalar path to the ordinary self-hosted
-frontend and QBE emitter, including safe Integer widening and runtime
-signed-zero, infinity, and NaN behavior. The same fixed numeric TypeRB workload
-must remain competitive with optimized Go for build time, runtime, memory, and
-executable size while the compiler fixed point and existing applications stay
-exact. See the [Gate 6I Float plan](docs/gate-6-float.md) and
-[Decision 0016](docs/decisions/0016-self-hosted-float-scalar-path.md).
+Gate 6I is complete at measured implementation revision
+`cd2335e6472b4daca8d631b17b889a094959c2f2`. The existing TypeRB binary64
+`Float` scalar path now runs through the ordinary self-hosted frontend and QBE
+emitter, including safe Integer widening and signed-zero, infinity, and NaN
+behavior. On the fixed workload, Native builds 41.37% faster and with 48.35%
+less peak RSS than optimized Go, runs 10.60% slower with 65.60% less peak RSS,
+and produces a 96.80% smaller stripped executable. It remains within every
+registered Go-parity and canonical compiler guardrail and closes exact Darwin
+and Linux arm64 replacement chains. See the
+[Gate 6I Float plan](docs/gate-6-float.md),
+[Decision 0016](docs/decisions/0016-self-hosted-float-scalar-path.md), and
+[recorded result](results/2026-08-29-gate6i-float-darwin-linux-arm64/README.md).
 
 Configured project discovery, production runtime integration,
 package/native-library boundaries, incremental builds, toolchain discovery,
@@ -312,6 +315,7 @@ repository.
 - [Gate 6H scalable file-root module graph](docs/gate-6-module-graph.md)
 - [Gate 6H scalable module-graph Darwin/Linux arm64 result](results/2026-08-29-gate6h-module-graph-darwin-linux-arm64/README.md)
 - [Gate 6I self-hosted Float scalar path](docs/gate-6-float.md)
+- [Gate 6I self-hosted Float Darwin/Linux arm64 result](results/2026-08-29-gate6i-float-darwin-linux-arm64/README.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
 - [Decision 0003: Gate 1 QBE and Darwin arm64 profile](docs/decisions/0003-gate-1-qbe-target.md)
