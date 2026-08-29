@@ -459,25 +459,49 @@ def gate4_small_nonnegative_integer_operand(value: String): Boolean
 	return parsed <= 1024
 end
 
+def gate4_number_without_underscores(value: String): String
+	mut result := ""
+	mut index := 0
+	while index < value.size()
+		if value[index] != "_"
+			result += value[index]
+		end
+		index += 1
+	end
+	return result
+end
+
+def gate4_number_is_float(value: String): Boolean
+	mut index := 0
+	while index < value.size()
+		if value[index] == "."
+			return true
+		end
+		index += 1
+	end
+	return false
+end
+
 def gate4_integer_literal_in_range(value: String): Boolean
+	normalized := gate4_number_without_underscores(value)
 	limit := "9007199254740991"
 	mut first := 0
 	mut scanning := true
 	while scanning
-		if first >= value.size()
+		if first >= normalized.size()
 			scanning = false
 		else
-			if value[first] == "0"
+			if normalized[first] == "0"
 				first += 1
 			else
 				scanning = false
 			end
 		end
 	end
-	if first == value.size()
+	if first == normalized.size()
 		return true
 	end
-	digits := value.size() - first
+	digits := normalized.size() - first
 	if digits < limit.size()
 		return true
 	end
@@ -486,7 +510,7 @@ def gate4_integer_literal_in_range(value: String): Boolean
 	end
 	mut index := 0
 	while index < limit.size()
-		actual := gate4_ascii_code(value[first + index])
+		actual := gate4_ascii_code(normalized[first + index])
 		maximum := gate4_ascii_code(limit[index])
 		if actual < maximum
 			return true
@@ -497,6 +521,56 @@ def gate4_integer_literal_in_range(value: String): Boolean
 		index += 1
 	end
 	return true
+end
+
+def gate4_float_literal_in_range(value: String): Boolean
+	normalized := gate4_number_without_underscores(value)
+	# Round-to-nearest overflows at 2^1024 - 2^970. The tie rounds to
+	# infinity, so a decimal magnitude must be strictly below this integer.
+	limit := "179769313486231580793728971405303415079934132710037826936173778980444968292764750946649017977587207096330286416692887910946555547851940402630657488671505820681908902000708383676273854845817711531764475730270069855571366959622842914819860834936475292719074168444365510704342711559699508093042880177904174497792"
+	mut decimal := normalized.size()
+	mut index := 0
+	while index < normalized.size()
+		if normalized[index] == "."
+			decimal = index
+			index = normalized.size()
+		else
+			index += 1
+		end
+	end
+	mut first := 0
+	mut scanning := true
+	while scanning
+		if first >= decimal
+			scanning = false
+		else
+			if normalized[first] == "0"
+				first += 1
+			else
+				scanning = false
+			end
+		end
+	end
+	integer_digits := decimal - first
+	if integer_digits < limit.size()
+		return true
+	end
+	if integer_digits > limit.size()
+		return false
+	end
+	index = 0
+	while index < limit.size()
+		actual := gate4_ascii_code(normalized[first + index])
+		maximum := gate4_ascii_code(limit[index])
+		if actual < maximum
+			return true
+		end
+		if actual > maximum
+			return false
+		end
+		index += 1
+	end
+	return false
 end
 
 def gate4_emit_static_strings(
@@ -1009,6 +1083,43 @@ def gate4_emitted_value(
 	)
 end
 
+def gate4_qbe_type(type_name: String): String
+	if type_name == "Float"
+		return "d"
+	end
+	return "l"
+end
+
+def gate4_qbe_load(type_name: String): String
+	if type_name == "Float"
+		return "loadd"
+	end
+	return "loadl"
+end
+
+def gate4_qbe_store(type_name: String): String
+	if type_name == "Float"
+		return "stored"
+	end
+	return "storel"
+end
+
+def gate4_emit_expected_type(
+		mut context: Gate4EmitContext,
+		mut output: Gate4Output,
+		value: Gate4EmittedValue,
+		expected: String,
+	): Gate4EmittedValue
+	if expected == "Float"
+		if value.type_name == "Integer"
+			result := gate4_emit_temporary(context)
+			gate4_output_line(output, "\t" + result + " =d sltof " + value.operand)
+			return gate4_emitted_value(result, "Float", value.category, value.name, value.mutable, value.address)
+		end
+	end
+	return value
+end
+
 def gate4_emit_temporary(mut context: Gate4EmitContext): String
 	index := context.temporary_count[0]
 	context.temporary_count[0] = index + 1
@@ -1237,7 +1348,7 @@ def gate4_emit_add_local(
 	context.local_count[0] = index + 1
 	context.slot_count[0] = slot_index + 1
 	gate4_output_line(output, "\t" + slot + " =l alloc8 8")
-	gate4_output_line(output, "\tstorel " + initial + ", " + slot)
+	gate4_output_line(output, "\t" + gate4_qbe_store(type_name) + " " + initial + ", " + slot)
 	return slot
 end
 
@@ -1247,10 +1358,15 @@ def gate4_emit_loaded_local(
 		index: Integer,
 	): Gate4EmittedValue
 	operand := gate4_emit_temporary(context)
-	gate4_output_line(output, "\t" + operand + " =l loadl " + gate4_load_string(context.local_slots, index))
+	type_name := gate4_load_string(context.local_types, index)
+	gate4_output_line(
+		output,
+		"\t" + operand + " =" + gate4_qbe_type(type_name) + " " + gate4_qbe_load(type_name) + " " +
+		gate4_load_string(context.local_slots, index),
+	)
 	return gate4_emitted_value(
 		operand,
-		gate4_load_string(context.local_types, index),
+		type_name,
 		0,
 		gate4_load_string(context.local_names, index),
 		gate4_load_integer(context.local_mutable, index),
@@ -1334,7 +1450,7 @@ def gate4_emit_direct_call(
 			if arguments != ""
 				arguments += ", "
 			end
-			arguments += "l " + value.operand
+			arguments += gate4_qbe_type(value.type_name) + " " + value.operand
 			argument_count += 1
 			if gate4_token_is(state, position[0], ",")
 				gate4_advance(position)
@@ -1379,7 +1495,8 @@ def gate4_emit_direct_call(
 	result := gate4_emit_temporary(context)
 	gate4_output_line(
 		output,
-		"\t" + result + " =l call $g4f" + gate4_integer_string(function_index) + "(" + arguments + ")",
+		"\t" + result + " =" + gate4_qbe_type(result_type) + " call $g4f" +
+		gate4_integer_string(function_index) + "(" + arguments + ")",
 	)
 	return gate4_emitted_value(result, result_type, 0, "", 0, "")
 end
@@ -1425,7 +1542,8 @@ def gate4_emit_record_new(
 				gate4_load_string(state.field_types, field_start + field_offset),
 			)
 			address := gate4_emit_address(context, output, record_value, field_offset * 8)
-			gate4_output_line(output, "\tstorel " + value.operand + ", " + address)
+			field_type := gate4_load_string(state.field_types, field_start + field_offset)
+			gate4_output_line(output, "\t" + gate4_qbe_store(field_type) + " " + value.operand + ", " + address)
 			field_offset += 1
 			if gate4_token_is(state, position[0], ",")
 				gate4_advance(position)
@@ -1504,10 +1622,14 @@ def gate4_emit_postfix(
 					offset := (field_index - gate4_load_integer(state.record_field_starts, record_index)) * 8
 					address := gate4_emit_address(context, output, value.operand, offset)
 					operand := gate4_emit_temporary(context)
-					gate4_output_line(output, "\t" + operand + " =l loadl " + address)
+					field_type := gate4_load_string(state.field_types, field_index)
+					gate4_output_line(
+						output,
+						"\t" + operand + " =" + gate4_qbe_type(field_type) + " " + gate4_qbe_load(field_type) + " " + address,
+					)
 					value = gate4_emitted_value(
 						operand,
-						gate4_load_string(state.field_types, field_index),
+						field_type,
 						0,
 						member,
 						value.mutable,
@@ -1573,8 +1695,11 @@ def gate4_emit_primary(
 	token_index := position[0]
 	kind := gate4_load_integer(state.token_kinds, token_index)
 	if kind == 2
-		value := gate4_load_string(state.token_texts, token_index)
+		value := gate4_number_without_underscores(gate4_load_string(state.token_texts, token_index))
 		gate4_advance(position)
+		if gate4_number_is_float(value)
+			return gate4_emitted_value("d_" + value, "Float", 0, "", 0, "")
+		end
 		return gate4_emitted_value(value, "Integer", 0, "", 0, "")
 	end
 	if kind == 3
@@ -1614,14 +1739,25 @@ def gate4_emit_primary(
 			position,
 			context,
 			output,
-			gate4_emit_primary(state, position, context, output, "Integer"),
+			gate4_emit_primary(state, position, context, output, ""),
 		)
 		result := gate4_emit_temporary(context)
-		gate4_output_line(
-			output,
-			"\t" + result + " =l call $g4_integer_subtract(l 0, l " + value.operand + ")",
-		)
+		if value.type_name == "Float"
+			gate4_output_line(output, "\t" + result + " =d sub d_-0.0, " + value.operand)
+			return gate4_emitted_value(result, "Float", 0, "", 0, "")
+		end
+		gate4_output_line(output, "\t" + result + " =l call $g4_integer_subtract(l 0, l " + value.operand + ")")
 		return gate4_emitted_value(result, "Integer", 0, "", 0, "")
+	end
+	if gate4_token_is(state, token_index, "+")
+		gate4_advance(position)
+		return gate4_emit_postfix(
+			state,
+			position,
+			context,
+			output,
+			gate4_emit_primary(state, position, context, output, ""),
+		)
 	end
 	if kind == 1
 		name := gate4_load_string(state.token_texts, token_index)
@@ -1656,8 +1792,29 @@ def gate4_emit_binary(
 		left: Gate4EmittedValue,
 		right: Gate4EmittedValue,
 	): Gate4EmittedValue
-	result_type := gate4_binary_result_type_name(operator, left.type_name)
+	result_type := gate4_binary_result_type_name(operator, left.type_name, right.type_name)
 	result := gate4_emit_temporary(context)
+	mut left_operand := left.operand
+	mut right_operand := right.operand
+	mut float_operands := false
+	if left.type_name == "Float"
+		float_operands = true
+	end
+	if right.type_name == "Float"
+		float_operands = true
+	end
+	if float_operands
+		if left.type_name == "Integer"
+			converted_left := gate4_emit_temporary(context)
+			gate4_output_line(output, "\t" + converted_left + " =d sltof " + left_operand)
+			left_operand = converted_left
+		end
+		if right.type_name == "Integer"
+			converted_right := gate4_emit_temporary(context)
+			gate4_output_line(output, "\t" + converted_right + " =d sltof " + right_operand)
+			right_operand = converted_right
+		end
+	end
 	if operator == "+"
 		if left.type_name == "String"
 			gate4_output_line(
@@ -1665,6 +1822,10 @@ def gate4_emit_binary(
 				"\t" + result + " =l call $g4_string_concat(l " + left.operand + ", l " + right.operand + ")",
 			)
 		else
+			if result_type == "Float"
+				gate4_output_line(output, "\t" + result + " =d add " + left_operand + ", " + right_operand)
+				return gate4_emitted_value(result, result_type, 0, "", 0, "")
+			end
 			if gate4_take_inline_budget(context)
 				gate4_emit_checked_integer_add(context, output, result, left.operand, right.operand)
 			else
@@ -1677,6 +1838,10 @@ def gate4_emit_binary(
 		return gate4_emitted_value(result, result_type, 0, "", 0, "")
 	end
 	if operator == "-"
+		if result_type == "Float"
+			gate4_output_line(output, "\t" + result + " =d sub " + left_operand + ", " + right_operand)
+			return gate4_emitted_value(result, result_type, 0, "", 0, "")
+		end
 		if gate4_take_inline_budget(context)
 			gate4_emit_checked_integer_subtract(context, output, result, left.operand, right.operand)
 		else
@@ -1688,10 +1853,18 @@ def gate4_emit_binary(
 		return gate4_emitted_value(result, result_type, 0, "", 0, "")
 	end
 	if operator == "*"
+		if result_type == "Float"
+			gate4_output_line(output, "\t" + result + " =d mul " + left_operand + ", " + right_operand)
+			return gate4_emitted_value(result, result_type, 0, "", 0, "")
+		end
 		gate4_emit_checked_integer_multiply(context, output, result, left.operand, right.operand)
 		return gate4_emitted_value(result, result_type, 0, "", 0, "")
 	end
 	if operator == "/"
+		if result_type == "Float"
+			gate4_output_line(output, "\t" + result + " =d div " + left_operand + ", " + right_operand)
+			return gate4_emitted_value(result, result_type, 0, "", 0, "")
+		end
 		if gate4_take_inline_budget(context)
 			gate4_emit_checked_integer_divide(context, output, result, left.operand, right.operand)
 		else
@@ -1736,31 +1909,54 @@ def gate4_emit_binary(
 		end
 	end
 	mut comparison := "ceql"
+	if float_operands
+		comparison = "ceqd"
+	end
 	if operator == "!="
-		comparison = "cnel"
+		if float_operands
+			comparison = "cned"
+		else
+			comparison = "cnel"
+		end
 	end
 	if operator == "<"
-		comparison = "csltl"
+		if float_operands
+			comparison = "cltd"
+		else
+			comparison = "csltl"
+		end
 	end
 	if operator == "<="
-		comparison = "cslel"
+		if float_operands
+			comparison = "cled"
+		else
+			comparison = "cslel"
+		end
 	end
 	if operator == ">"
-		comparison = "csgtl"
+		if float_operands
+			comparison = "cgtd"
+		else
+			comparison = "csgtl"
+		end
 	end
 	if operator == ">="
-		comparison = "csgel"
+		if float_operands
+			comparison = "cged"
+		else
+			comparison = "csgel"
+		end
 	end
 	word := gate4_emit_temporary(context)
 	gate4_output_line(
 		output,
-		"\t" + word + " =w " + comparison + " " + left.operand + ", " + right.operand,
+		"\t" + word + " =w " + comparison + " " + left_operand + ", " + right_operand,
 	)
 	gate4_output_line(output, "\t" + result + " =l extuw " + word)
 	return gate4_emitted_value(result, "Boolean", 0, "", 0, "")
 end
 
-def gate4_binary_result_type_name(operator: String, operand_type: String): String
+def gate4_binary_result_type_name(operator: String, left: String, right: String): String
 	if operator == "=="
 		return "Boolean"
 	end
@@ -1779,7 +1975,13 @@ def gate4_binary_result_type_name(operator: String, operand_type: String): Strin
 	if operator == ">="
 		return "Boolean"
 	end
-	return operand_type
+	if left == "Float"
+		return "Float"
+	end
+	if right == "Float"
+		return "Float"
+	end
+	return left
 end
 
 def gate4_emit_expression(
@@ -1812,12 +2014,12 @@ def gate4_emit_expression(
 				context,
 				output,
 				precedence + 1,
-				value.type_name,
+				"",
 			)
 			value = gate4_emit_binary(context, output, operator, value, right)
 		end
 	end
-	return value
+	return gate4_emit_expected_type(context, output, value, expected)
 end
 
 def gate4_emit_declaration(
@@ -1859,14 +2061,14 @@ def gate4_emit_simple_statement(
 	if operator == "="
 		gate4_advance(position)
 		right := gate4_emit_expression(state, position, context, output, 1, left.type_name)
-		gate4_output_line(output, "\tstorel " + right.operand + ", " + left.address)
+		gate4_output_line(output, "\t" + gate4_qbe_store(left.type_name) + " " + right.operand + ", " + left.address)
 	else
 		compound := gate4_compound_operator(operator)
 		if compound != ""
 			gate4_advance(position)
 			right := gate4_emit_expression(state, position, context, output, 1, left.type_name)
 			result := gate4_emit_binary(context, output, compound, left, right)
-			gate4_output_line(output, "\tstorel " + result.operand + ", " + left.address)
+			gate4_output_line(output, "\t" + gate4_qbe_store(left.type_name) + " " + result.operand + ", " + left.address)
 		end
 	end
 	return gate4_finish_statement(state, position)
@@ -2030,12 +2232,14 @@ def gate4_emit_function(
 		if parameters != ""
 			parameters += ", "
 		end
-		parameters += "l %p" + gate4_integer_string(parameter_index)
+		parameter_type := gate4_load_string(state.parameter_types, parameter_start + parameter_index)
+		parameters += gate4_qbe_type(parameter_type) + " %p" + gate4_integer_string(parameter_index)
 		parameter_index += 1
 	end
 	mut result_prefix := ""
-	if gate4_load_string(state.function_result_types, function_index) != "Void"
-		result_prefix = "l "
+	result_type := gate4_load_string(state.function_result_types, function_index)
+	if result_type != "Void"
+		result_prefix = gate4_qbe_type(result_type) + " "
 	end
 	gate4_output_line(
 		output,
@@ -2359,6 +2563,13 @@ def gate4_digit(character: String): Boolean
 	return gate4_character_in(character, "0123456789")
 end
 
+def gate4_number_character(character: String): Boolean
+	if gate4_digit(character)
+		return true
+	end
+	return character == "_"
+end
+
 def gate4_push_token(mut state: Gate4Compiler, kind: Integer, text: String, line: Integer)
 	index := state.token_count[0]
 	gate4_store_integer(state.token_kinds, index, kind)
@@ -2393,7 +2604,7 @@ def gate4_scan_identifier(
 	return
 end
 
-def gate4_scan_integer(
+def gate4_scan_number(
 		mut state: Gate4Compiler,
 		source: String,
 		mut position: Array<Integer>,
@@ -2405,11 +2616,32 @@ def gate4_scan_integer(
 		if position[0] >= source.size()
 			scanning = false
 		else
-			if gate4_digit(source[position[0]])
+			if gate4_number_character(source[position[0]])
 				text += source[position[0]]
 				position[0] = position[0] + 1
 			else
 				scanning = false
+			end
+		end
+	end
+	if position[0] + 1 < source.size()
+		if source[position[0]] == "."
+			if gate4_digit(source[position[0] + 1])
+				text += "."
+				position[0] = position[0] + 1
+				scanning = true
+				while scanning
+					if position[0] >= source.size()
+						scanning = false
+					else
+						if gate4_number_character(source[position[0]])
+							text += source[position[0]]
+							position[0] = position[0] + 1
+						else
+							scanning = false
+						end
+					end
+				end
 			end
 		end
 	end
@@ -2596,7 +2828,7 @@ def gate4_lex_source(mut state: Gate4Compiler, source: String, terminal_kind: In
 								gate4_scan_identifier(state, source, position, line)
 							else
 								if gate4_digit(character)
-									gate4_scan_integer(state, source, position, line)
+									gate4_scan_number(state, source, position, line)
 								else
 									if character == "\""
 										gate4_scan_string(state, source, position, line)
@@ -2814,6 +3046,10 @@ def gate4_parse_primary_syntax(mut state: Gate4Compiler, mut position: Array<Int
 							return gate4_parse_primary_syntax(state, position)
 						end
 						if gate4_token_is(state, position[0], "-")
+							gate4_advance(position)
+							return gate4_parse_primary_syntax(state, position)
+						end
+						if gate4_token_is(state, position[0], "+")
 							gate4_advance(position)
 							return gate4_parse_primary_syntax(state, position)
 						end
@@ -3587,6 +3823,9 @@ def gate4_builtin_type_exists(type_name: String, allow_void: Boolean): Boolean
 	if type_name == "Integer"
 		return true
 	end
+	if type_name == "Float"
+		return true
+	end
 	if type_name == "Boolean"
 		return true
 	end
@@ -4089,6 +4328,23 @@ def gate4_types_equal(left: String, right: String): Boolean
 	return left == right
 end
 
+def gate4_numeric_type(type_name: String): Boolean
+	if type_name == "Integer"
+		return true
+	end
+	return type_name == "Float"
+end
+
+def gate4_types_assignable(actual: String, expected: String): Boolean
+	if gate4_types_equal(actual, expected)
+		return true
+	end
+	if actual == "Integer"
+		return expected == "Float"
+	end
+	return false
+end
+
 def gate4_check_expected(
 		mut state: Gate4Compiler,
 		actual: String,
@@ -4098,7 +4354,7 @@ def gate4_check_expected(
 	if expected == ""
 		return true
 	end
-	if gate4_types_equal(actual, expected)
+	if gate4_types_assignable(actual, expected)
 		return true
 	end
 	gate4_diagnostic(
@@ -4184,6 +4440,12 @@ def gate4_check_primary(
 	if kind == 2
 		literal := gate4_load_string(state.token_texts, position[0])
 		gate4_advance(position)
+		if gate4_number_is_float(literal)
+			if !gate4_float_literal_in_range(literal)
+				return gate4_type_diagnostic(state, line, "Float literal is outside the finite binary64 range")
+			end
+			return gate4_checked_value("Float", 0, "", 0)
+		end
 		if !gate4_integer_literal_in_range(literal)
 			return gate4_type_diagnostic(state, line, "Integer literal is outside the portable range")
 		end
@@ -4222,11 +4484,25 @@ def gate4_check_primary(
 			state,
 			position,
 			locals,
-			gate4_check_primary(state, position, locals, "Integer"),
+			gate4_check_primary(state, position, locals, ""),
 		)
-		gate4_check_expected(state, value.type_name, "Integer", line)
-		gate4_check_expected(state, "Integer", expected, line)
-		return gate4_checked_value("Integer", 0, "", 0)
+		if !gate4_numeric_type(value.type_name)
+			return gate4_type_diagnostic(state, line, "unary - requires Integer or Float")
+		end
+		return gate4_checked_value(value.type_name, 0, "", 0)
+	end
+	if gate4_token_is(state, position[0], "+")
+		gate4_advance(position)
+		value := gate4_check_postfix(
+			state,
+			position,
+			locals,
+			gate4_check_primary(state, position, locals, ""),
+		)
+		if !gate4_numeric_type(value.type_name)
+			return gate4_type_diagnostic(state, line, "unary + requires Integer or Float")
+		end
+		return gate4_checked_value(value.type_name, 0, "", 0)
 	end
 	if kind == 1
 		name := gate4_load_string(state.token_texts, position[0])
@@ -4505,65 +4781,96 @@ def gate4_binary_result_type(
 		right: String,
 		line: Integer,
 	): String
+	mut numeric_pair := false
+	if gate4_numeric_type(left)
+		if gate4_numeric_type(right)
+			numeric_pair = true
+		end
+	end
 	if left != right
-		gate4_diagnostic(state, "TRBN4004", line, "binary operands have different types")
-		return "Invalid"
+		if !numeric_pair
+			gate4_diagnostic(state, "TRBN4004", line, "binary operands have different types")
+			return "Invalid"
+		end
+	end
+	mut numeric_result := "Integer"
+	if left == "Float"
+		numeric_result = "Float"
+	end
+	if right == "Float"
+		numeric_result = "Float"
 	end
 	if operator == "+"
-		if left == "Integer"
-			return "Integer"
+		if numeric_pair
+			return numeric_result
 		end
 		if left == "String"
 			return "String"
 		end
 	end
 	if operator == "-"
-		if left == "Integer"
-			return "Integer"
+		if numeric_pair
+			return numeric_result
 		end
 	end
 	if operator == "*"
-		if left == "Integer"
-			return "Integer"
+		if numeric_pair
+			return numeric_result
 		end
 	end
 	if operator == "/"
-		if left == "Integer"
-			return "Integer"
+		if numeric_pair
+			return numeric_result
 		end
 	end
 	if operator == "%"
 		if left == "Integer"
-			return "Integer"
+			if right == "Integer"
+				return "Integer"
+			end
 		end
 	end
 	if operator == "=="
-		return "Boolean"
+		if numeric_pair
+			return "Boolean"
+		end
+		if left == right
+			return "Boolean"
+		end
 	end
 	if operator == "!="
-		return "Boolean"
+		if numeric_pair
+			return "Boolean"
+		end
+		if left == right
+			return "Boolean"
+		end
 	end
 	if operator == "<"
-		if left == "Integer"
+		if numeric_pair
 			return "Boolean"
 		end
 	end
 	if operator == "<="
-		if left == "Integer"
+		if numeric_pair
 			return "Boolean"
 		end
 	end
 	if operator == ">"
-		if left == "Integer"
+		if numeric_pair
 			return "Boolean"
 		end
 	end
 	if operator == ">="
-		if left == "Integer"
+		if numeric_pair
 			return "Boolean"
 		end
 	end
-	gate4_diagnostic(state, "TRBN4004", line, "unsupported operator " + operator + " for " + left)
+	mut display_type := left
+	if right == "Float"
+		display_type = "Float"
+	end
+	gate4_diagnostic(state, "TRBN4004", line, "unsupported operator " + operator + " for " + display_type)
 	return "Invalid"
 end
 
@@ -4590,7 +4897,7 @@ def gate4_check_expression(
 		else
 			gate4_advance(position)
 			gate4_skip_newlines(state, position)
-			right := gate4_check_expression(state, position, locals, precedence + 1, value.type_name)
+			right := gate4_check_expression(state, position, locals, precedence + 1, "")
 			result_type := gate4_binary_result_type(state, operator, value.type_name, right.type_name, line)
 			value = gate4_checked_value(result_type, 0, "", 0)
 		end

@@ -9,7 +9,10 @@ and ownership model is defined by
 
 ## Status
 
-Registered. Implementation and formal measurement have not begun.
+Implementation complete; formal measurement pending. The ordinary Darwin
+B1-to-B4 smoke chain is byte-identical, the permanent Float corpus executes,
+and the existing representative application retains exact bytes. These are
+pre-measurement correctness checks rather than the registered result.
 
 The fixed source baseline is TypeRB Native main revision
 `1311dfccee379dcf2dd3a70a525bc188d195981d`. Both baseline and candidate begin
@@ -64,7 +67,10 @@ value = value / 1.00000001 - 0.00000005
 ```
 
 It accepts only a final value strictly between `2.9456` and `2.9457` and prints
-`float-kernel-ok`. The checked-in source hash is fixed before formal results.
+`float-kernel-ok`. The checked-in
+[`main.trb`](../corpus/gate6i/float-kernel/src/main.trb) SHA-256 is
+`7d5125967da5a740faf62c0cc3a89d04bdaade54a475c2649d82892847e77dfe`.
+It is fixed before formal results.
 
 On Darwin arm64, Native and the pinned optimized Go backend build and run the
 same TypeRB source. After the registered warmups and alternating observations:
@@ -84,4 +90,3 @@ diagnostic, but its correctness-only B1-to-B4 and application runs must pass.
 Formal evidence records raw observations, workload and source hashes, artifact
 identity, seed provenance, exact commands, sizes, process and dependency
 boundaries, external tools, and cleanup.
-
