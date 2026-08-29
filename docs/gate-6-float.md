@@ -9,10 +9,12 @@ and ownership model is defined by
 
 ## Status
 
-Implementation complete; formal measurement pending. The ordinary Darwin
-B1-to-B4 smoke chain is byte-identical, the permanent Float corpus executes,
-and the existing representative application retains exact bytes. These are
-pre-measurement correctness checks rather than the registered result.
+Implementation and the TypeRB-authored
+[benchmark controller](../tools/gate6i-benchmark/README.md) are complete;
+formal measurement is pending. The ordinary Darwin B1-to-B4 smoke chain is
+byte-identical, the permanent Float corpus executes, and the existing
+representative application retains exact bytes. These are pre-measurement
+correctness checks rather than the registered result.
 
 The fixed source baseline is TypeRB Native main revision
 `1311dfccee379dcf2dd3a70a525bc188d195981d`. Both baseline and candidate begin

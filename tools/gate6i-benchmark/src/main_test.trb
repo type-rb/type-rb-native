@@ -1,0 +1,56 @@
+import {
+	gate6i_candidate_within_percent,
+	gate6i_median_float,
+	gate6i_median_integer,
+	verify_float_qbe,
+} from main
+import { Result } from trb/std/result
+import { describe, expect, test } from trb/std/test
+
+describe("Gate 6I benchmark policy") do
+	test("computes registered odd medians without mutating input") do
+		floats := [5.0, 1.0, 4.0, 2.0, 3.0]
+		integers := [50, 10, 40, 20, 30]
+		expect(gate6i_median_float(floats)).to_equal(3.0)
+		expect(gate6i_median_integer(integers)).to_equal(30)
+		expect(floats[0]).to_equal(5.0)
+		expect(integers[0]).to_equal(50)
+	end
+
+	test("enforces percentage bounds at their exact boundary") do
+		expect(gate6i_candidate_within_percent(100.0, 110.0, 110.0)).to_be_true()
+		expect(gate6i_candidate_within_percent(100.0, 110.001, 110.0)).to_be_false()
+		expect(gate6i_candidate_within_percent(100.0, 125.0, 125.0)).to_be_true()
+		expect(gate6i_candidate_within_percent(100.0, 125.001, 125.0)).to_be_false()
+	end
+
+	test("requires every registered Float QBE family") do
+		qbe := (
+			"function d $float(d %value) {\n" +
+			"@start\n" +
+			"\t%wide =d sltof 1\n" +
+			"\t%loaded =d loadd %slot\n" +
+			"\tstored %wide, %slot\n" +
+			"\t%added =d add %wide, %loaded\n" +
+			"\t%subtracted =d sub %added, d_1.0\n" +
+			"\t%multiplied =d mul %subtracted, d_2.0\n" +
+			"\t%divided =d div %multiplied, d_2.0\n" +
+			"\t%less =w cltd %divided, d_2.0\n" +
+			"\t%greater =w cgtd %divided, d_0.0\n" +
+			"\tret %divided\n}\n"
+		)
+		case verify_float_qbe(qbe)
+		when Result::Ok(_value)
+			expect(true).to_be_true()
+		when Result::Err(error)
+			puts(error)
+			expect(false).to_be_true()
+		end
+		case verify_float_qbe(qbe.replace_all("=d sltof ", "=d copy "))
+		when Result::Ok(_value)
+			expect(false).to_be_true()
+		when Result::Err(error)
+			expect(error).to_equal("Float QBE is missing =d sltof ")
+		end
+	end
+end
