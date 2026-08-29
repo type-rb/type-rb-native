@@ -268,6 +268,12 @@ Unrelated siblings, package discovery, configured projects, and the hidden
 single-source recovery adapter do not enter this graph. See
 [Decision 0012](decisions/0012-file-root-module-closure.md).
 
+Gate 6F makes that graph reflexive: the canonical TypeRB-authored compiler is
+itself a file-root closure with separate storage and path modules. A temporary
+flat source may prepare the recovery seed, but every ordinary replacement
+generation loads the real closure and reaches exact B2/B3/B4 QBE and bytes.
+See [Decision 0013](decisions/0013-multi-file-self-hosted-compiler.md).
+
 ## Stability and promotion
 
 No MIR, ABI profile, snapshot, object, cache, command, or runtime API in this

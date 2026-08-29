@@ -6,18 +6,20 @@ import {
 	gate4_compiler_new,
 	gate4_emit_qbe,
 	gate4_has_diagnostic,
-	gate4_integer_storage,
-	gate4_load_integer,
-	gate4_load_string,
 	gate4_lex,
 	gate4_lex_module,
 	gate4_parse,
 	gate4_parse_module,
 	gate4_resolve,
+} from compiler
+import {
+	gate4_integer_storage,
+	gate4_load_integer,
+	gate4_load_string,
 	gate4_store_integer,
 	gate4_store_string,
 	gate4_string_storage,
-} from compiler
+} from storage
 import { create_directory, read_text, write_text } from trb/std/filesystem
 import { environment, run } from trb/std/process
 import { Result } from trb/std/result
@@ -37,6 +39,16 @@ def gate4_output_source(output: Gate4Output): String
 		index += 1
 	end
 	return writer.to_s()
+end
+
+def gate4_required_test_source(path: String): String
+	case read_text(path)
+	when Result::Ok(source)
+		return source
+	when Result::Err(error)
+		puts(error.operation + ": " + error.message)
+		return ""
+	end
 end
 
 describe("Gate 4 TypeRB frontend") do
@@ -151,42 +163,58 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("expected end")
 	end
 
-	test("parses the checked-in compiler source through its own syntax pass") do
+	test("parses the checked-in compiler closure through its own frontend") do
 		root := environment("TYPE_RB_NATIVE_ROOT")
 		if root == nil
 			expect(true).to_be_true()
 		else
-			case read_text(root + "/compiler/gate4/src/compiler.trb")
-			when Result::Ok(source)
-				mut state := gate4_compiler_new(source.size() + 1)
-				expect(gate4_lex(state, source)).to_be_true()
-				if !gate4_parse(state)
-					puts(
-						gate4_load_string(state.diagnostic_codes, 0) + ":" + gate4_load_integer(state.diagnostic_lines, 0).to_s() + ":" +
-						gate4_load_string(state.diagnostic_messages, 0),
-					)
-				end
-				expect(gate4_has_diagnostic(state)).to_be_false()
-				expect(gate4_load_string(state.record_names, 0)).to_equal("Gate4Compiler")
-				expect(state.function_count[0] > 20).to_be_true()
-				if !gate4_resolve(state)
-					puts(
-						gate4_load_string(state.diagnostic_codes, 0) + ":" + gate4_load_integer(state.diagnostic_lines, 0).to_s() + ":" +
-						gate4_load_string(state.diagnostic_messages, 0),
-					)
-				end
-				expect(gate4_has_diagnostic(state)).to_be_false()
-				if !gate4_check(state)
-					puts(
-						gate4_load_string(state.diagnostic_codes, 0) + ":" + gate4_load_integer(state.diagnostic_lines, 0).to_s() + ":" +
-						gate4_load_string(state.diagnostic_messages, 0),
-					)
-				end
-				expect(gate4_has_diagnostic(state)).to_be_false()
-			when Result::Err(error)
-				puts(error.operation + ": " + error.message)
-				expect(false).to_be_true()
+			base := root + "/compiler/gate4/src/"
+			sources := [
+				gate4_required_test_source(base + "compiler.trb"),
+				gate4_required_test_source(base + "storage.trb"),
+				gate4_required_test_source(base + "path.trb"),
+			]
+			expect(!sources[0].empty?()).to_be_true()
+			expect(!sources[1].empty?()).to_be_true()
+			expect(!sources[2].empty?()).to_be_true()
+			mut state := gate4_compiler_new(sources[0].size() + sources[1].size() + sources[2].size() + 3)
+			gate4_add_module(state, "compiler", base + "compiler.trb")
+			gate4_add_module(state, "storage", base + "storage.trb")
+			gate4_add_module(state, "path", base + "path.trb")
+			state.entry_module[0] = 0
+			mut module_index := 0
+			while module_index < sources.size()
+				start := state.token_count[0]
+				expect(gate4_lex_module(state, sources[module_index], module_index)).to_be_true()
+				expect(gate4_parse_module(state, start, module_index)).to_be_true()
+				module_index += 1
 			end
+			mut import_index := 0
+			while import_index < state.import_count[0]
+				if gate4_load_string(state.import_paths, import_index) == "storage"
+					gate4_store_integer(state.import_targets, import_index, 1)
+				else
+					gate4_store_integer(state.import_targets, import_index, 2)
+				end
+				import_index += 1
+			end
+			expect(gate4_load_string(state.record_names, 0)).to_equal("Gate4Compiler")
+			expect(state.record_count[0] > 5).to_be_true()
+			expect(state.function_count[0] > 20).to_be_true()
+			if !gate4_resolve(state)
+				puts(
+					gate4_load_string(state.diagnostic_codes, 0) + ":" + gate4_load_integer(state.diagnostic_lines, 0).to_s() + ":" +
+					gate4_load_string(state.diagnostic_messages, 0),
+				)
+			end
+			expect(gate4_has_diagnostic(state)).to_be_false()
+			if !gate4_check(state)
+				puts(
+					gate4_load_string(state.diagnostic_codes, 0) + ":" + gate4_load_integer(state.diagnostic_lines, 0).to_s() + ":" +
+					gate4_load_string(state.diagnostic_messages, 0),
+				)
+			end
+			expect(gate4_has_diagnostic(state)).to_be_false()
 		end
 	end
 

@@ -1,3 +1,21 @@
+import {
+	Gate4IntegerStorage,
+	Gate4StringStorage,
+	gate4_integer_storage,
+	gate4_load_integer,
+	gate4_load_string,
+	gate4_store_integer,
+	gate4_store_string,
+	gate4_string_storage,
+} from storage
+import {
+	gate4_path_basename,
+	gate4_path_directory,
+	gate4_path_join,
+	gate4_string_starts_with,
+	gate4_string_without_suffix,
+} from path
+
 record Gate4Compiler
 	token_kinds: Gate4IntegerStorage
 	token_texts: Gate4StringStorage
@@ -88,50 +106,6 @@ record Gate4EmittedValue
 	address: String
 end
 
-record Gate4IntegerStorage
-	chunks: Array<Array<Array<Integer>>>
-	limit: Array<Integer>
-	used: Array<Integer>
-end
-
-record Gate4StringStorage
-	chunks: Array<Array<Array<String>>>
-	limit: Array<Integer>
-	used: Array<Integer>
-end
-
-def gate4_storage_chunk_size(): Integer
-	return 256
-end
-
-def gate4_integer_chunk(): Array<Integer>
-	mut values: Array<Integer> := []
-	mut index := 0
-	while index < gate4_storage_chunk_size()
-		values.push(0)
-		index += 1
-	end
-	return values
-end
-
-def gate4_string_chunk(): Array<String>
-	mut values: Array<String> := []
-	mut index := 0
-	while index < gate4_storage_chunk_size()
-		values.push("")
-		index += 1
-	end
-	return values
-end
-
-def gate4_integer_storage(capacity: Integer): Gate4IntegerStorage
-	return Gate4IntegerStorage.new(chunks: [[]], limit: [capacity], used: [0])
-end
-
-def gate4_string_storage(capacity: Integer): Gate4StringStorage
-	return Gate4StringStorage.new(chunks: [[]], limit: [capacity], used: [0])
-end
-
 def gate4_reset_temporary_storage()
 	return
 end
@@ -145,64 +119,6 @@ end
 
 def gate4_read_source(_path: String): String
 	return ""
-end
-
-def gate4_store_integer(mut storage: Gate4IntegerStorage, index: Integer, value: Integer): Boolean
-	if index < 0
-		return false
-	end
-	if index >= storage.limit[0]
-		return false
-	end
-	chunk_size := gate4_storage_chunk_size()
-	chunk_index := index / chunk_size
-	mut chunks := storage.chunks[0]
-	while chunks.size() <= chunk_index
-		chunks.push([])
-	end
-	storage.chunks[0] = chunks
-	if storage.chunks[0][chunk_index].size() == 0
-		storage.chunks[0][chunk_index] = gate4_integer_chunk()
-	end
-	storage.chunks[0][chunk_index][index % chunk_size] = value
-	if index >= storage.used[0]
-		storage.used[0] = index + 1
-	end
-	return true
-end
-
-def gate4_store_string(mut storage: Gate4StringStorage, index: Integer, value: String): Boolean
-	if index < 0
-		return false
-	end
-	if index >= storage.limit[0]
-		return false
-	end
-	chunk_size := gate4_storage_chunk_size()
-	chunk_index := index / chunk_size
-	mut chunks := storage.chunks[0]
-	while chunks.size() <= chunk_index
-		chunks.push([])
-	end
-	storage.chunks[0] = chunks
-	if storage.chunks[0][chunk_index].size() == 0
-		storage.chunks[0][chunk_index] = gate4_string_chunk()
-	end
-	storage.chunks[0][chunk_index][index % chunk_size] = value
-	if index >= storage.used[0]
-		storage.used[0] = index + 1
-	end
-	return true
-end
-
-def gate4_load_integer(storage: Gate4IntegerStorage, index: Integer): Integer
-	chunk_size := gate4_storage_chunk_size()
-	return storage.chunks[0][index / chunk_size][index % chunk_size]
-end
-
-def gate4_load_string(storage: Gate4StringStorage, index: Integer): String
-	chunk_size := gate4_storage_chunk_size()
-	return storage.chunks[0][index / chunk_size][index % chunk_size]
 end
 
 def gate4_compiler_new(capacity: Integer): Gate4Compiler
@@ -3211,98 +3127,6 @@ end
 
 def gate4_parse(mut state: Gate4Compiler): Boolean
 	return gate4_parse_module(state, 0, state.entry_module[0])
-end
-
-def gate4_string_ends_with(value: String, suffix: String): Boolean
-	if suffix.size() > value.size()
-		return false
-	end
-	mut index := 0
-	start := value.size() - suffix.size()
-	while index < suffix.size()
-		if value[start + index] != suffix[index]
-			return false
-		end
-		index += 1
-	end
-	return true
-end
-
-def gate4_string_starts_with(value: String, prefix: String): Boolean
-	if prefix.size() > value.size()
-		return false
-	end
-	mut index := 0
-	while index < prefix.size()
-		if value[index] != prefix[index]
-			return false
-		end
-		index += 1
-	end
-	return true
-end
-
-def gate4_string_without_suffix(value: String, suffix: String): String
-	if !gate4_string_ends_with(value, suffix)
-		return value
-	end
-	mut result := ""
-	mut index := 0
-	finish := value.size() - suffix.size()
-	while index < finish
-		result += value[index]
-		index += 1
-	end
-	return result
-end
-
-def gate4_path_directory(path: String): String
-	mut slash :=- 1
-	mut index := 0
-	while index < path.size()
-		if path[index] == "/"
-			slash = index
-		end
-		index += 1
-	end
-	if slash < 0
-		return "."
-	end
-	if slash == 0
-		return "/"
-	end
-	mut result := ""
-	index = 0
-	while index < slash
-		result += path[index]
-		index += 1
-	end
-	return result
-end
-
-def gate4_path_basename(path: String): String
-	mut slash :=- 1
-	mut index := 0
-	while index < path.size()
-		if path[index] == "/"
-			slash = index
-		end
-		index += 1
-	end
-	mut result := ""
-	index = slash + 1
-	while index < path.size()
-		result += path[index]
-		index += 1
-	end
-	return result
-end
-
-def gate4_path_join(root: String, relative: String): String
-	if root == "/"
-		return root + relative
-	end
-	return root + "/" + relative
 end
 
 def gate4_normalize_import_path(mut state: Gate4Compiler, raw: String, line: Integer): String

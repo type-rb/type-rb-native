@@ -10,32 +10,45 @@ import {
 } from gate3_toolchain
 import { build_gate4_generation } from gate4_toolchain
 import { build_gate5_matched_go_compiler } from gate5_matched_driver
-import { read_text, write_text } from trb/std/filesystem
+import { Gate6FCompilerSources, gate6f_read_compiler_sources } from gate6f_compiler_source
+import { write_text } from trb/std/filesystem
 import { argv, run } from trb/std/process
 import { Result } from trb/std/result
 import { Instant } from trb/std/time
 
 def _gate1_driver_usage(): String
-	return "usage: type-rb-native REFERENCE_TRB CONFIG QBE CC WORKSPACE OUTPUT\n       type-rb-native gate2 REFERENCE_TRB CONFIG QBE CC WORKSPACE OUTPUT\n       type-rb-native gate3 REFERENCE_TRB CONFIG QBE CC WORKSPACE OUTPUT\n       type-rb-native gate3-stats REFERENCE_TRB CONFIG QBE CC WORKSPACE OUTPUT\n       type-rb-native gate4-b0 REFERENCE_TRB COMPILER_SOURCE QBE CC WORKSPACE OUTPUT\n       type-rb-native gate4-generation SEED COMPILER_SOURCE QBE CC WORKSPACE GENERATION\n       type-rb-native gate5-matched-go REFERENCE_TRB COMPILER_SOURCE WORKSPACE"
+	return "usage: type-rb-native REFERENCE_TRB CONFIG QBE CC WORKSPACE OUTPUT\n       type-rb-native gate2 REFERENCE_TRB CONFIG QBE CC WORKSPACE OUTPUT\n       type-rb-native gate3 REFERENCE_TRB CONFIG QBE CC WORKSPACE OUTPUT\n       type-rb-native gate3-stats REFERENCE_TRB CONFIG QBE CC WORKSPACE OUTPUT\n       type-rb-native gate4-b0 REFERENCE_TRB COMPILER_ENTRY QBE CC WORKSPACE OUTPUT\n       type-rb-native gate4-generation SEED COMPILER_ENTRY QBE CC WORKSPACE GENERATION\n       type-rb-native gate5-matched-go REFERENCE_TRB COMPILER_ENTRY WORKSPACE"
 end
 
-def _gate4_read_compiler_source(path: String): String?
-	case read_text(path)
-	when Result::Ok(source)
-		return source
-	when Result::Err(error)
-		puts("compiler-source: " + error.operation + ": " + error.message)
+def _gate6f_read_driver_sources(path: String): Gate6FCompilerSources?
+	case gate6f_read_compiler_sources(path)
+	when Result::Ok(sources)
+		return sources
+	when Result::Err(message)
+		puts("compiler-source: " + message)
 		return nil
 	end
 end
 
 def _run_gate4_b0_driver(arguments: Array<String>)
-	compiler_source := _gate4_read_compiler_source(arguments[2])
-	if compiler_source == nil
+	sources := _gate6f_read_driver_sources(arguments[2])
+	if sources == nil
 		return
 	end
 	standalone_path := arguments[5] + "/compiler.trb"
-	case write_text(standalone_path, compiler_source)
+	case write_text(standalone_path, sources.entry)
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		puts("compiler-source: " + error.operation + ": " + error.message)
+		return
+	end
+	case write_text(arguments[5] + "/storage.trb", sources.storage)
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		puts("compiler-source: " + error.operation + ": " + error.message)
+		return
+	end
+	case write_text(arguments[5] + "/path.trb", sources.path)
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		puts("compiler-source: " + error.operation + ": " + error.message)
@@ -93,13 +106,13 @@ def _run_gate4_b0_driver(arguments: Array<String>)
 end
 
 def _run_gate4_generation_driver(arguments: Array<String>)
-	compiler_source := _gate4_read_compiler_source(arguments[2])
-	if compiler_source == nil
+	sources := _gate6f_read_driver_sources(arguments[2])
+	if sources == nil
 		return
 	end
 	case build_gate4_generation(
 			arguments[1],
-			compiler_source,
+			sources.flattened,
 			arguments[3],
 			arguments[4],
 			arguments[5],
@@ -117,11 +130,11 @@ def _run_gate4_generation_driver(arguments: Array<String>)
 end
 
 def _run_gate5_matched_go_driver(arguments: Array<String>)
-	compiler_source := _gate4_read_compiler_source(arguments[2])
-	if compiler_source == nil
+	sources := _gate6f_read_driver_sources(arguments[2])
+	if sources == nil
 		return
 	end
-	case build_gate5_matched_go_compiler(arguments[1], compiler_source, arguments[3])
+	case build_gate5_matched_go_compiler(arguments[1], sources.flattened, arguments[3])
 	when Result::Ok(path)
 		puts("gate5-matched-go," + path)
 	when Result::Err(error)

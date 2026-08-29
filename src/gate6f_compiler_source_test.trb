@@ -1,0 +1,30 @@
+import {
+	gate6f_compiler_import_prefix,
+	gate6f_flatten_compiler_source,
+} from gate6f_compiler_source
+import { Result } from trb/std/result
+import { describe, expect, test } from trb/std/test
+
+describe("Gate 6F compiler source closure") do
+	test("derives one deterministic recovery source from the canonical modules") do
+		entry := gate6f_compiler_import_prefix() + "def main()\n\treturn\nend\n"
+		case gate6f_flatten_compiler_source(entry, "def storage()\n\treturn\nend\n", "def path()\n\treturn\nend\n")
+		when Result::Ok(flattened)
+			expect(flattened).to_equal(
+				"def storage()\n\treturn\nend\n\ndef path()\n\treturn\nend\n\ndef main()\n\treturn\nend\n",
+			)
+		when Result::Err(message)
+			puts(message)
+			expect(false).to_be_true()
+		end
+	end
+
+	test("rejects a changed compiler import boundary") do
+		case gate6f_flatten_compiler_source("def main()\n\treturn\nend\n", "", "")
+		when Result::Ok(_flattened)
+			expect(false).to_be_true()
+		when Result::Err(message)
+			expect(message).to_equal("compiler entry import boundary differs")
+		end
+	end
+end
