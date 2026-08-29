@@ -207,7 +207,17 @@ closes exact Darwin and Linux arm64 replacement chains. See the
 [Decision 0017](docs/decisions/0017-self-hosted-float-arrays.md), and
 [recorded result](results/2026-08-29-gate6j-float-arrays-darwin-linux-arm64/README.md).
 
-Configured project discovery, production runtime integration,
+Gate 6K is pre-registered in
+[issue #80](https://github.com/type-rb/type-rb-native/issues/80). It adds an
+explicit standard `trbconfig.jsonc` input to the ordinary self-hosted compiler,
+strictly loads the bounded Go-mode configuration, deterministically checks the
+complete production source set, and builds the project's unique top-level
+`main()`. The existing file-root path, language semantics, Native MIR, and
+explicit QBE/CC boundary remain unchanged. See the
+[Gate 6K configured-project plan](docs/gate-6-configured-project.md) and
+[Decision 0018](docs/decisions/0018-explicit-configured-project.md).
+
+Upward configured project discovery, production runtime integration,
 package/native-library boundaries, incremental builds, toolchain discovery,
 debugging, maintenance evaluation, and additional primary targets remain in
 the broader Gate 6 product-feasibility scope.
@@ -331,6 +341,7 @@ repository.
 - [Gate 6I self-hosted Float Darwin/Linux arm64 result](results/2026-08-29-gate6i-float-darwin-linux-arm64/README.md)
 - [Gate 6J self-hosted Float Arrays](docs/gate-6-float-arrays.md)
 - [Gate 6J self-hosted Float Array Darwin/Linux arm64 result](results/2026-08-29-gate6j-float-arrays-darwin-linux-arm64/README.md)
+- [Gate 6K explicit configured-project executables](docs/gate-6-configured-project.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
 - [Decision 0003: Gate 1 QBE and Darwin arm64 profile](docs/decisions/0003-gate-1-qbe-target.md)
@@ -348,6 +359,7 @@ repository.
 - [Decision 0015: Indexed file-root module graph](docs/decisions/0015-indexed-module-graph.md)
 - [Decision 0016: Self-hosted Float scalar path](docs/decisions/0016-self-hosted-float-scalar-path.md)
 - [Decision 0017: Self-hosted Float Arrays](docs/decisions/0017-self-hosted-float-arrays.md)
+- [Decision 0018: Explicit configured-project executables](docs/decisions/0018-explicit-configured-project.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 
