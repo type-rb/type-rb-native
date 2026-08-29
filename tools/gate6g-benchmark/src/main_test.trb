@@ -1,0 +1,47 @@
+import {
+	gate6g_candidate_within_percent,
+	gate6g_median_float,
+	gate6g_median_integer,
+	gate6g_scale_source,
+} from main
+import { Result } from trb/std/result
+import { describe, expect, test } from trb/std/test
+
+describe("Gate 6G benchmark policy") do
+	test("generates the exact declaration-chain shape") do
+		case gate6g_scale_source(3)
+		when Result::Ok(source)
+			expect(source).to_equal(
+				"def f0(value: Integer): Integer\n\treturn value\nend\n\ndef f1(value: Integer): Integer\n\treturn f0(value)\nend\n\ndef f2(value: Integer): Integer\n\treturn f1(value)\nend\n\ndef main()\n\tvalue := f2(1)\n\treturn\nend\n",
+			)
+		when Result::Err(error)
+			puts(error)
+			expect(false).to_be_true()
+		end
+	end
+
+	test("rejects a scale source without a predecessor chain") do
+		case gate6g_scale_source(1)
+		when Result::Ok(_source)
+			expect(false).to_be_true()
+		when Result::Err(error)
+			expect(error).to_equal("scale function count must be at least 2")
+		end
+	end
+
+	test("computes registered odd medians without mutating input") do
+		floats := [5.0, 1.0, 4.0, 2.0, 3.0]
+		integers := [50, 10, 40, 20, 30]
+		expect(gate6g_median_float(floats)).to_equal(3.0)
+		expect(gate6g_median_integer(integers)).to_equal(30)
+		expect(floats[0]).to_equal(5.0)
+		expect(integers[0]).to_equal(50)
+	end
+
+	test("enforces improvement percentages at their exact boundary") do
+		expect(gate6g_candidate_within_percent(100.0, 95.0, 95.0)).to_be_true()
+		expect(gate6g_candidate_within_percent(100.0, 95.001, 95.0)).to_be_false()
+		expect(gate6g_candidate_within_percent(100.0, 97.0, 97.0)).to_be_true()
+		expect(gate6g_candidate_within_percent(100.0, 75.0, 75.0)).to_be_true()
+	end
+end
