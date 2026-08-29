@@ -382,6 +382,14 @@ organization bound, exact B2/B3/B4 bytes and QBE remain mandatory, and the
 pinned Linux image rebuilds both the compiler and representative application.
 See the [Gate 6F plan](gate-6-multifile-compiler.md).
 
+Gate 6F is complete at measured revision
+`7cb7e85c0b5bff14157dc1a686829c010d095b70`. The real multi-file compiler
+builds 0.37% faster and uses 0.09% less RSS than its temporary flat comparator;
+it remains within the Gate 6C absolute bounds, strips to the same 199,992
+bytes, preserves the Gate 6E application hash, and closes exact Darwin and
+Linux arm64 B2/B3/B4 chains. See the
+[Gate 6F result](../results/2026-08-29-gate6f-multifile-compiler-darwin-linux-arm64/README.md).
+
 This gate is not authorization to ship. It evaluates:
 
 - broader configured and packaged multi-module applications beyond the

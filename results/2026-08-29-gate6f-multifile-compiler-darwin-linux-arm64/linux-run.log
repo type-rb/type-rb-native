@@ -1,0 +1,274 @@
++ repo=/repo
++ run=/run
++ entry=/repo/compiler/gate4/src/compiler.trb
++ application_entry=/repo/compiler/gate4/conformance/file-root/main.trb
++ qbe=/usr/local/bin/qbe
++ cc=/usr/bin/cc
++ uname -a
+Linux 7b20e26c6643 7.0.12-linuxkit #1 SMP PREEMPT Wed Aug 12 20:18:49 UTC 2026 aarch64 GNU/Linux
++ cat /etc/os-release
+PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"
+NAME="Debian GNU/Linux"
+VERSION_ID="12"
+VERSION="12 (bookworm)"
+VERSION_CODENAME=bookworm
+ID=debian
+HOME_URL="https://www.debian.org/"
+SUPPORT_URL="https://www.debian.org/support"
+BUG_REPORT_URL="https://bugs.debian.org/"
++ getconf _NPROCESSORS_ONLN
++ getconf _PHYS_PAGES
+10
+4088336
+4096
++ getconf PAGE_SIZE
++ /usr/bin/cc --version
+cc (Debian 12.2.0-14+deb12u1) 12.2.0
+Copyright (C) 2022 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
++ /usr/local/bin/qbe -h
++ sha256sum /usr/local/bin/qbe
+/usr/local/bin/qbe [OPTIONS] {file.ssa, -}
+	-h          prints this help
+	-o file     output to file
+	-t <target> generate for a target among:
+	            amd64_sysv, amd64_apple, amd64_win, arm64 (default), arm64_apple, rv64
+	-d <flags>  dump debug information
+7da10dfca9072976f564806c45b44c8a653d83e7e27a646ce2d3114804d2195c  /usr/local/bin/qbe
++ dpkg-query -W -f=${binary:Package}\t${Version}\n
++ wc -l /run/package-inventory.txt
+166 /run/package-inventory.txt
++ sha256sum /run/package-inventory.txt
+e69941d57445ed89119a93eea399b1c7d3cc6157544e9e1d06aa3fa9b97c9132  /run/package-inventory.txt
++ /usr/local/bin/qbe -t arm64 -o /run/b1.s /run/b1.ssa
++ /usr/bin/cc /run/b1.s -Wl,--gc-sections,--strip-all -o /run/b1
++ mkdir -p /run/b2 /run/b3 /run/b4 /run/application /run/application-repeat /run/trace
++ /run/b1 check /repo/compiler/gate4/src/compiler.trb
+ok
++ /run/b1 build /repo/compiler/gate4/src/compiler.trb --output /run/b2/compiler --qbe /usr/local/bin/qbe --cc /usr/bin/cc --target linux-arm64-v0
++ /run/b2/compiler check /repo/compiler/gate4/src/compiler.trb
+ok
++ /run/b2/compiler build /repo/compiler/gate4/src/compiler.trb --output /run/b3/compiler --qbe /usr/local/bin/qbe --cc /usr/bin/cc --target linux-arm64-v0
++ /run/b3/compiler check /repo/compiler/gate4/src/compiler.trb
+ok
++ /run/b3/compiler build /repo/compiler/gate4/src/compiler.trb --output /run/b4/compiler --qbe /usr/local/bin/qbe --cc /usr/bin/cc --target linux-arm64-v0
++ /run/b4/compiler check /repo/compiler/gate4/src/compiler.trb
+ok
++ cmp /run/b2/compiler /run/b3/compiler
++ cmp /run/b3/compiler /run/b4/compiler
++ /run/b4/compiler emit-qbe /repo/compiler/gate4/src/compiler.trb
++ cmp /run/b1.ssa /run/b4.ssa
++ /run/b4/compiler check /repo/compiler/gate4/conformance/file-root/main.trb
+ok
++ /run/b4/compiler build /repo/compiler/gate4/conformance/file-root/main.trb --output /run/application/program --qbe /usr/local/bin/qbe --cc /usr/bin/cc --target linux-arm64-v0
++ /run/b4/compiler build /repo/compiler/gate4/conformance/file-root/main.trb --output /run/application-repeat/program --qbe /usr/local/bin/qbe --cc /usr/bin/cc --target linux-arm64-v0
++ cmp /run/application/program /run/application-repeat/program
++ /run/application/program
++ cat /run/application.stdout
++ test file-root-ok = file-root-ok
++ /usr/bin/strace -f -e trace=process -o /run/process.trace /run/b1 build /repo/compiler/gate4/src/compiler.trb --output /run/trace/compiler --qbe /usr/local/bin/qbe --cc /usr/bin/cc --target linux-arm64-v0
++ cmp /run/b2/compiler /run/trace/compiler
++ grep -E execve|clone|vfork|wait /run/process.trace
++ find /run -name *.trbn.* -print
+536231 /run/b1.ssa
+856549 /run/b1.s
+182384 /run/b1
+182384 /run/b2/compiler
+182384 /run/b3/compiler
+182384 /run/b4/compiler
+68568 /run/application/program
++ test ! -s /run/intermediates.txt
++ stat -c %s %n /run/b1.ssa /run/b1.s /run/b1 /run/b2/compiler /run/b3/compiler /run/b4/compiler /run/application/program
++ sha256sum /repo/compiler/gate4/src/compiler.trb /repo/compiler/gate4/src/storage.trb /repo/compiler/gate4/src/path.trb
++ sha256sum /run/b1.ssa /run/b1.s /run/b1 /run/b2/compiler /run/b3/compiler /run/b4/compiler /run/application/program
+d6cbf5100e2d76f6d04ff48a597de11fea8abd952f9c8e212f1d6f71de30c9ce  /repo/compiler/gate4/src/compiler.trb
+d4c77fec9e5c5e8580cb0b5ee71fbd2c9c714555cbd4fd1457fcd44cc6db1f9d  /repo/compiler/gate4/src/storage.trb
+6347003851071b73cb8dbf38622fcc7cf3be6abf81ea253b9aad081fb057510a  /repo/compiler/gate4/src/path.trb
+626bcdfb28c6517c50b86851edf76f4ab5b0d8ada7d28e73209ff10e193bae67  /run/b1.ssa
+db2c4fbce00034db614b1e005cd1588b0683644435ec56b91edf07cc0deebeab  /run/b1.s
+f8b7826f54d527acead4a6ab6849dbac3c6f5955df5c199e09adfd61ec454d78  /run/b1
+f8b7826f54d527acead4a6ab6849dbac3c6f5955df5c199e09adfd61ec454d78  /run/b2/compiler
+f8b7826f54d527acead4a6ab6849dbac3c6f5955df5c199e09adfd61ec454d78  /run/b3/compiler
+f8b7826f54d527acead4a6ab6849dbac3c6f5955df5c199e09adfd61ec454d78  /run/b4/compiler
+6f27705eca2c8666951503b082dc1d05600808d81ecab66b2ac4419ac3ea7073  /run/application/program
++ file /run/b1 /run/b2/compiler /run/b3/compiler /run/b4/compiler /run/application/program
+/run/b1:                  ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=2e7c6a6e723bd3ac6e862987abf3492e6409ca43, for GNU/Linux 3.7.0, stripped
+/run/b2/compiler:         ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=2e7c6a6e723bd3ac6e862987abf3492e6409ca43, for GNU/Linux 3.7.0, stripped
+/run/b3/compiler:         ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=2e7c6a6e723bd3ac6e862987abf3492e6409ca43, for GNU/Linux 3.7.0, stripped
+/run/b4/compiler:         ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=2e7c6a6e723bd3ac6e862987abf3492e6409ca43, for GNU/Linux 3.7.0, stripped
+/run/application/program: ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, BuildID[sha1]=c3f011044b9116d34369da7847ebe579d940bc3b, for GNU/Linux 3.7.0, stripped
++ readelf -l /run/b4/compiler
+
+Elf file type is DYN (Position-Independent Executable file)
+Entry point 0xd80
+There are 9 program headers, starting at offset 64
+
+Program Headers:
+  Type           Offset             VirtAddr           PhysAddr
+                 FileSiz            MemSiz              Flags  Align
+  PHDR           0x0000000000000040 0x0000000000000040 0x0000000000000040
+                 0x00000000000001f8 0x00000000000001f8  R      0x8
+  INTERP         0x0000000000000238 0x0000000000000238 0x0000000000000238
+                 0x000000000000001b 0x000000000000001b  R      0x1
+      [Requesting program interpreter: /lib/ld-linux-aarch64.so.1]
+  LOAD           0x0000000000000000 0x0000000000000000 0x0000000000000000
+                 0x000000000001dfb4 0x000000000001dfb4  R E    0x10000
+  LOAD           0x000000000001fdc8 0x000000000002fdc8 0x000000000002fdc8
+                 0x000000000000c310 0x000000000000cb18  RW     0x10000
+  DYNAMIC        0x000000000001fdd8 0x000000000002fdd8 0x000000000002fdd8
+                 0x00000000000001e0 0x00000000000001e0  RW     0x8
+  NOTE           0x0000000000000254 0x0000000000000254 0x0000000000000254
+                 0x0000000000000044 0x0000000000000044  R      0x4
+  GNU_EH_FRAME   0x000000000001def0 0x000000000001def0 0x000000000001def0
+                 0x0000000000000034 0x0000000000000034  R      0x4
+  GNU_STACK      0x0000000000000000 0x0000000000000000 0x0000000000000000
+                 0x0000000000000000 0x0000000000000000  RW     0x10
+  GNU_RELRO      0x000000000001fdc8 0x000000000002fdc8 0x000000000002fdc8
+                 0x0000000000000238 0x0000000000000238  R      0x1
+
+ Section to Segment mapping:
+  Segment Sections...
+   00
+   01     .interp
+   02     .interp .note.gnu.build-id .note.ABI-tag .gnu.hash .dynsym .dynstr .gnu.version .gnu.version_r .rela.dyn .rela.plt .init .plt .text .fini .eh_frame_hdr .eh_frame
+   03     .init_array .fini_array .dynamic .got .got.plt .data .bss
+   04     .dynamic
+   05     .note.gnu.build-id .note.ABI-tag
+   06     .eh_frame_hdr
+   07
+   08     .init_array .fini_array .dynamic .got
++ readelf -d /run/b4/compiler
+
+Dynamic section at offset 0x1fdd8 contains 26 entries:
+  Tag        Type                         Name/Value
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x000000000000000c (INIT)               0xb68
+ 0x000000000000000d (FINI)               0x1dedc
+ 0x0000000000000019 (INIT_ARRAY)         0x2fdc8
+ 0x000000000000001b (INIT_ARRAYSZ)       8 (bytes)
+ 0x000000000000001a (FINI_ARRAY)         0x2fdd0
+ 0x000000000000001c (FINI_ARRAYSZ)       8 (bytes)
+ 0x000000006ffffef5 (GNU_HASH)           0x298
+ 0x0000000000000005 (STRTAB)             0x600
+ 0x0000000000000006 (SYMTAB)             0x2b8
+ 0x000000000000000a (STRSZ)              304 (bytes)
+ 0x000000000000000b (SYMENT)             24 (bytes)
+ 0x0000000000000015 (DEBUG)              0x0
+ 0x0000000000000003 (PLTGOT)             0x2ffe8
+ 0x0000000000000002 (PLTRELSZ)           720 (bytes)
+ 0x0000000000000014 (PLTREL)             RELA
+ 0x0000000000000017 (JMPREL)             0x898
+ 0x0000000000000007 (RELA)               0x7a8
+ 0x0000000000000008 (RELASZ)             240 (bytes)
+ 0x0000000000000009 (RELAENT)            24 (bytes)
+ 0x000000006ffffffb (FLAGS_1)            Flags: PIE
+ 0x000000006ffffffe (VERNEED)            0x778
+ 0x000000006fffffff (VERNEEDNUM)         1
+ 0x000000006ffffff0 (VERSYM)             0x730
+ 0x000000006ffffff9 (RELACOUNT)          6
+ 0x0000000000000000 (NULL)               0x0
++ readelf -l /run/application/program
+
+Elf file type is DYN (Position-Independent Executable file)
+Entry point 0xbc0
+There are 9 program headers, starting at offset 64
+
+Program Headers:
+  Type           Offset             VirtAddr           PhysAddr
+                 FileSiz            MemSiz              Flags  Align
+  PHDR           0x0000000000000040 0x0000000000000040 0x0000000000000040
+                 0x00000000000001f8 0x00000000000001f8  R      0x8
+  INTERP         0x0000000000000238 0x0000000000000238 0x0000000000000238
+                 0x000000000000001b 0x000000000000001b  R      0x1
+      [Requesting program interpreter: /lib/ld-linux-aarch64.so.1]
+  LOAD           0x0000000000000000 0x0000000000000000 0x0000000000000000
+                 0x0000000000001f24 0x0000000000001f24  R E    0x10000
+  LOAD           0x000000000000fdc8 0x000000000001fdc8 0x000000000001fdc8
+                 0x0000000000000678 0x0000000000000e80  RW     0x10000
+  DYNAMIC        0x000000000000fdd8 0x000000000001fdd8 0x000000000001fdd8
+                 0x00000000000001e0 0x00000000000001e0  RW     0x8
+  NOTE           0x0000000000000254 0x0000000000000254 0x0000000000000254
+                 0x0000000000000044 0x0000000000000044  R      0x4
+  GNU_EH_FRAME   0x0000000000001e60 0x0000000000001e60 0x0000000000001e60
+                 0x0000000000000034 0x0000000000000034  R      0x4
+  GNU_STACK      0x0000000000000000 0x0000000000000000 0x0000000000000000
+                 0x0000000000000000 0x0000000000000000  RW     0x10
+  GNU_RELRO      0x000000000000fdc8 0x000000000001fdc8 0x000000000001fdc8
+                 0x0000000000000238 0x0000000000000238  R      0x1
+
+ Section to Segment mapping:
+  Segment Sections...
+   00
+   01     .interp
+   02     .interp .note.gnu.build-id .note.ABI-tag .gnu.hash .dynsym .dynstr .gnu.version .gnu.version_r .rela.dyn .rela.plt .init .plt .text .fini .eh_frame_hdr .eh_frame
+   03     .init_array .fini_array .dynamic .got .got.plt .data .bss
+   04     .dynamic
+   05     .note.gnu.build-id .note.ABI-tag
+   06     .eh_frame_hdr
+   07
+   08     .init_array .fini_array .dynamic .got
++ readelf -d /run/application/program
+
+Dynamic section at offset 0xfdd8 contains 26 entries:
+  Tag        Type                         Name/Value
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x000000000000000c (INIT)               0x9e8
+ 0x000000000000000d (FINI)               0x1e4c
+ 0x0000000000000019 (INIT_ARRAY)         0x1fdc8
+ 0x000000000000001b (INIT_ARRAYSZ)       8 (bytes)
+ 0x000000000000001a (FINI_ARRAY)         0x1fdd0
+ 0x000000000000001c (FINI_ARRAYSZ)       8 (bytes)
+ 0x000000006ffffef5 (GNU_HASH)           0x298
+ 0x0000000000000005 (STRTAB)             0x558
+ 0x0000000000000006 (SYMTAB)             0x2b8
+ 0x000000000000000a (STRSZ)              266 (bytes)
+ 0x000000000000000b (SYMENT)             24 (bytes)
+ 0x0000000000000015 (DEBUG)              0x0
+ 0x0000000000000003 (PLTGOT)             0x1ffe8
+ 0x0000000000000002 (PLTRELSZ)           552 (bytes)
+ 0x0000000000000014 (PLTREL)             RELA
+ 0x0000000000000017 (JMPREL)             0x7c0
+ 0x0000000000000007 (RELA)               0x6d0
+ 0x0000000000000008 (RELASZ)             240 (bytes)
+ 0x0000000000000009 (RELAENT)            24 (bytes)
+ 0x000000006ffffffb (FLAGS_1)            Flags: PIE
+ 0x000000006ffffffe (VERNEED)            0x6a0
+ 0x000000006fffffff (VERNEEDNUM)         1
+ 0x000000006ffffff0 (VERSYM)             0x662
+ 0x000000006ffffff9 (RELACOUNT)          6
+ 0x0000000000000000 (NULL)               0x0
++ cat /run/application.stdout
+file-root-ok
++ cat /run/process-summary.txt
+69    execve("/run/b1", ["/run/b1", "build", "/repo/compiler/gate4/src/compile"..., "--output", "/run/trace/compiler", "--qbe", "/usr/local/bin/qbe", "--cc", "/usr/bin/cc", "--target", "linux-arm64-v0"], 0xffffcd4fc418 /* 6 vars */) = 0
+69    clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0xffff965b2050) = 70
+69    wait4(70,  <unfinished ...>
+70    execve("/usr/local/bin/qbe", ["/usr/local/bin/qbe", "-t", "arm64", "-o", "/run/trace/compiler.trbn.s", "/run/trace/compiler.trbn.ssa"], 0xffffd9ab8098 /* 6 vars */) = 0
+69    <... wait4 resumed>[{WIFEXITED(s) && WEXITSTATUS(s) == 0}], 0, NULL) = 70
+69    clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0xffff965b2050) = 71
+69    wait4(71,  <unfinished ...>
+71    execve("/usr/bin/cc", ["/usr/bin/cc", "/run/trace/compiler.trbn.s", "-Wl,--gc-sections,--strip-all", "-o", "/run/trace/compiler.trbn.SJdlJ9/"...], 0xffffd9ab8098 /* 6 vars */) = 0
+71    clone(child_stack=0xffffdce04450, flags=CLONE_VM|CLONE_VFORK|SIGCHLD <unfinished ...>
+72    execve("/usr/local/sbin/as", ["as", "-EL", "-mabi=lp64", "-o", "/tmp/ccCU6036.o", "/run/trace/compiler.trbn.s"], 0x3fee89c0 /* 9 vars */) = -1 ENOENT (No such file or directory)
+72    execve("/usr/local/bin/as", ["as", "-EL", "-mabi=lp64", "-o", "/tmp/ccCU6036.o", "/run/trace/compiler.trbn.s"], 0x3fee89c0 /* 9 vars */) = -1 ENOENT (No such file or directory)
+72    execve("/usr/sbin/as", ["as", "-EL", "-mabi=lp64", "-o", "/tmp/ccCU6036.o", "/run/trace/compiler.trbn.s"], 0x3fee89c0 /* 9 vars */) = -1 ENOENT (No such file or directory)
+72    execve("/usr/bin/as", ["as", "-EL", "-mabi=lp64", "-o", "/tmp/ccCU6036.o", "/run/trace/compiler.trbn.s"], 0x3fee89c0 /* 9 vars */ <unfinished ...>
+71    <... clone resumed>)              = 72
+72    <... execve resumed>)             = 0
+71    wait4(72,  <unfinished ...>
+71    <... wait4 resumed>[{WIFEXITED(s) && WEXITSTATUS(s) == 0}], 0, NULL) = 72
+71    clone(child_stack=0xffffdce036f0, flags=CLONE_VM|CLONE_VFORK|SIGCHLD <unfinished ...>
+73    execve("/usr/lib/gcc/aarch64-linux-gnu/12/collect2", ["/usr/lib/gcc/aarch64-linux-gnu/1"..., "-plugin", "/usr/lib/gcc/aarch64-linux-gnu/1"..., "-plugin-opt=/usr/lib/gcc/aarch64"..., "-plugin-opt=-fresolution=/tmp/cc"..., "-plugin-opt=-pass-through=-lgcc", "-plugin-opt=-pass-through=-lgcc_"..., "-plugin-opt=-pass-through=-lc", "-plugin-opt=-pass-through=-lgcc", "-plugin-opt=-pass-through=-lgcc_"..., "--build-id", "--eh-frame-hdr", "--hash-style=gnu", "--as-needed", "-dynamic-linker", "/lib/ld-linux-aarch64.so.1", "-X", "-EL", "-maarch64linux", "--fix-cortex-a53-843419", "-pie", "-o", "/run/trace/compiler.trbn.SJdlJ9/"..., "/usr/lib/gcc/aarch64-linux-gnu/1"..., "/usr/lib/gcc/aarch64-linux-gnu/1"..., "/usr/lib/gcc/aarch64-linux-gnu/1"..., "-L/usr/lib/gcc/aarch64-linux-gnu"..., "-L/usr/lib/gcc/aarch64-linux-gnu"..., "-L/usr/lib/gcc/aarch64-linux-gnu"..., "-L/lib/aarch64-linux-gnu", "-L/lib/../lib", "-L/usr/lib/aarch64-linux-gnu", ...], 0x3fee8c90 /* 11 vars */ <unfinished ...>
+71    <... clone resumed>)              = 73
+73    <... execve resumed>)             = 0
+71    wait4(73,  <unfinished ...>
+73    clone(child_stack=0xffffdd7ca580, flags=CLONE_VM|CLONE_VFORK|SIGCHLD <unfinished ...>
+74    execve("/usr/bin/ld", ["/usr/bin/ld", "-plugin", "/usr/lib/gcc/aarch64-linux-gnu/1"..., "-plugin-opt=/usr/lib/gcc/aarch64"..., "-plugin-opt=-fresolution=/tmp/cc"..., "-plugin-opt=-pass-through=-lgcc", "-plugin-opt=-pass-through=-lgcc_"..., "-plugin-opt=-pass-through=-lc", "-plugin-opt=-pass-through=-lgcc", "-plugin-opt=-pass-through=-lgcc_"..., "--build-id", "--eh-frame-hdr", "--hash-style=gnu", "--as-needed", "-dynamic-linker", "/lib/ld-linux-aarch64.so.1", "-X", "-EL", "-maarch64linux", "--fix-cortex-a53-843419", "-pie", "-o", "/run/trace/compiler.trbn.SJdlJ9/"..., "/usr/lib/gcc/aarch64-linux-gnu/1"..., "/usr/lib/gcc/aarch64-linux-gnu/1"..., "/usr/lib/gcc/aarch64-linux-gnu/1"..., "-L/usr/lib/gcc/aarch64-linux-gnu"..., "-L/usr/lib/gcc/aarch64-linux-gnu"..., "-L/usr/lib/gcc/aarch64-linux-gnu"..., "-L/lib/aarch64-linux-gnu", "-L/lib/../lib", "-L/usr/lib/aarch64-linux-gnu", ...], 0xffffdd7cab80 /* 11 vars */ <unfinished ...>
+73    <... clone resumed>)              = 74
+74    <... execve resumed>)             = 0
+73    wait4(74,  <unfinished ...>
+73    <... wait4 resumed>[{WIFEXITED(s) && WEXITSTATUS(s) == 0}], 0, NULL) = 74
+71    <... wait4 resumed>[{WIFEXITED(s) && WEXITSTATUS(s) == 0}], 0, NULL) = 73
+69    <... wait4 resumed>[{WIFEXITED(s) && WEXITSTATUS(s) == 0}], 0, NULL) = 71
