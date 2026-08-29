@@ -1,0 +1,27 @@
+import { gate6f_compiler_import_prefix, gate6f_flatten_compiler_source } from main
+import { Result } from trb/std/result
+import { describe, expect, test } from trb/std/test
+
+describe("Gate 6F benchmark source derivation") do
+	test("derives the temporary flat comparison source from the exact closure boundary") do
+		entry := gate6f_compiler_import_prefix() + "def main()\n\treturn\nend\n"
+		case gate6f_flatten_compiler_source(entry, "def storage()\n\treturn\nend\n", "def path()\n\treturn\nend\n")
+		when Result::Ok(source)
+			expect(source).to_equal(
+				"def storage()\n\treturn\nend\n\ndef path()\n\treturn\nend\n\ndef main()\n\treturn\nend\n",
+			)
+		when Result::Err(error)
+			puts(error)
+			expect(false).to_be_true()
+		end
+	end
+
+	test("rejects compiler import drift instead of measuring another source") do
+		case gate6f_flatten_compiler_source("def main()\n\treturn\nend\n", "", "")
+		when Result::Ok(_source)
+			expect(false).to_be_true()
+		when Result::Err(error)
+			expect(error).to_equal("compiler entry import boundary differs")
+		end
+	end
+end

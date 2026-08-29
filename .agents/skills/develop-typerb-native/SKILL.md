@@ -120,3 +120,8 @@ paths, and decisions that need maintainer discussion. If the maintainer has
 given standing direction to continue, pre-register the next bounded slice and
 proceed; gate completion alone is not a reason to stop. Stop before work that
 requires an unresolved language, ownership, release, or product decision.
+
+Use GitHub issue-closing keywords only in the reviewed result pull request that
+actually completes a gate. Never put a closing keyword next to the gate issue
+even in a negated sentence: GitHub does not interpret the negation and will
+close the issue when the intermediate pull request merges.
