@@ -4525,14 +4525,12 @@ def gate4_parse(mut state: Gate4Compiler): Boolean
 	return gate4_parse_module(state, 0, state.entry_module[0])
 end
 
-def gate4_normalize_import_path(mut state: Gate4Compiler, raw: String, line: Integer): String
+def gate4_import_path_value(raw: String): String
 	mut path := gate4_string_without_suffix(raw, ".trb")
 	if path == ""
-		gate4_diagnostic(state, "TRBN4003", line, "invalid project import path " + raw)
 		return ""
 	end
 	if path[0] == "/"
-		gate4_diagnostic(state, "TRBN4003", line, "invalid project import path " + raw)
 		return ""
 	end
 	mut simple := true
@@ -4562,12 +4560,10 @@ def gate4_normalize_import_path(mut state: Gate4Compiler, raw: String, line: Int
 			character = path[index]
 		end
 		if character == ":"
-			gate4_diagnostic(state, "TRBN4003", line, "invalid project import path " + raw)
 			return ""
 		end
 		if character == "/"
 			if segment == ".."
-				gate4_diagnostic(state, "TRBN4003", line, "invalid project import path " + raw)
 				return ""
 			end
 			if segment != ""
@@ -4582,7 +4578,6 @@ def gate4_normalize_import_path(mut state: Gate4Compiler, raw: String, line: Int
 		index += 1
 	end
 	if segments.size() == 0
-		gate4_diagnostic(state, "TRBN4003", line, "invalid project import path " + raw)
 		return ""
 	end
 	mut normalized := ""
@@ -4593,6 +4588,14 @@ def gate4_normalize_import_path(mut state: Gate4Compiler, raw: String, line: Int
 		end
 		normalized += segments[index]
 		index += 1
+	end
+	return normalized
+end
+
+def gate4_normalize_import_path(mut state: Gate4Compiler, raw: String, line: Integer): String
+	normalized := gate4_import_path_value(raw)
+	if normalized == ""
+		gate4_diagnostic(state, "TRBN4003", line, "invalid project import path " + raw)
 	end
 	return normalized
 end
@@ -4645,6 +4648,128 @@ def gate4_project_module_name(
 		gate4_diagnostic(state, "TRBN4010", 1, "project source has an empty module name")
 	end
 	return name
+end
+
+def gate4_string_starts_at(value: String, start: Integer, prefix: String): Boolean
+	mut index := 0
+	while index < prefix.size()
+		if value[start + index] != prefix[index]
+			return false
+		end
+		index += 1
+	end
+	return true
+end
+
+def gate4_project_source_declares_main(source: String): Boolean
+	mut index := 0
+	while index + 9 <= source.size()
+		if gate4_string_starts_at(source, index, "def main(")
+			if index == 0
+				return true
+			end
+			if source[index - 1] == "\n"
+				return true
+			end
+		end
+		index += 1
+	end
+	return false
+end
+
+def gate4_project_append_imports(
+		bundle: Gate4ProjectSources,
+		source: String,
+		mut order: Array<Integer>,
+	): Array<Integer>
+	mut index := 0
+	while index + 6 <= source.size()
+		if gate4_string_starts_at(source, index, " from ")
+			mut raw := ""
+			mut cursor := index + 6
+			mut collecting := true
+			while cursor < source.size()
+				if collecting
+					if source[cursor] == "\n"
+						collecting = false
+					else
+						raw += source[cursor]
+					end
+				end
+				cursor += 1
+			end
+			normalized := gate4_import_path_value(raw)
+			target := gate4_project_bundle_find_import(bundle, normalized)
+			if target >= 0
+				if !gate4_project_order_contains(order, target)
+					order.push(target)
+				end
+			end
+		end
+		index += 1
+	end
+	return order
+end
+
+def gate4_project_bundle_find_import(bundle: Gate4ProjectSources, name: String): Integer
+	direct := "/" + name + ".trb"
+	mut index := 0
+	while index < bundle.paths.size()
+		if gate4_string_ends_with(bundle.paths[index], direct)
+			return index
+		end
+		index += 1
+	end
+	return - 1
+end
+
+def gate4_project_order_contains(order: Array<Integer>, target: Integer): Boolean
+	mut index := 0
+	while index < order.size()
+		if order[index] == target
+			return true
+		end
+		index += 1
+	end
+	return false
+end
+
+def gate4_order_project_sources(bundle: Gate4ProjectSources): Gate4ProjectSources
+	mut entry :=- 1
+	mut index := 0
+	while index < bundle.paths.size()
+		if gate4_project_source_declares_main(bundle.sources[index])
+			entry = index
+		end
+		index += 1
+	end
+	if entry < 0
+		return bundle
+	end
+
+	mut order := [entry]
+	mut cursor := 0
+	while cursor < order.size()
+		order = gate4_project_append_imports(bundle, bundle.sources[order[cursor]], order)
+		cursor += 1
+	end
+	index = 0
+	while index < bundle.paths.size()
+		if !gate4_project_order_contains(order, index)
+			order.push(index)
+		end
+		index += 1
+	end
+
+	mut paths: Array<String> := []
+	mut sources: Array<String> := []
+	index = 0
+	while index < order.size()
+		paths.push(bundle.paths[order[index]])
+		sources.push(bundle.sources[order[index]])
+		index += 1
+	end
+	return Gate4ProjectSources.new(paths: paths, sources: sources, error: "")
 end
 
 def gate4_project_select_entry(mut state: Gate4Compiler): Boolean
@@ -4758,22 +4883,23 @@ def gate4_load_project_sources(
 	if bundle.paths.size() != bundle.sources.size()
 		return gate4_project_error_state(config_path, 1, "project source adapter returned mismatched paths and sources")
 	end
+	ordered := gate4_order_project_sources(bundle)
 	mut state := gate4_compiler_new(gate4_project_capacity())
 	mut module_index := 0
-	while module_index < bundle.paths.size()
+	while module_index < ordered.paths.size()
 		state.active_module[0] = module_index
-		name := gate4_project_module_name(state, source_root, bundle.paths[module_index])
+		name := gate4_project_module_name(state, source_root, ordered.paths[module_index])
 		if gate4_has_diagnostic(state)
 			return state
 		end
-		gate4_add_module(state, name, bundle.paths[module_index])
+		gate4_add_module(state, name, ordered.paths[module_index])
 		module_index += 1
 	end
 	module_index = 0
 	while module_index < state.module_count[0]
 		state.active_module[0] = module_index
 		start := state.token_count[0]
-		gate4_lex_module(state, bundle.sources[module_index], module_index)
+		gate4_lex_module(state, ordered.sources[module_index], module_index)
 		if !gate4_has_diagnostic(state)
 			gate4_parse_module(state, start, module_index)
 		end
