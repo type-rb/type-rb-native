@@ -160,14 +160,23 @@ bytes and behavior. See the
 [measurement harness](tools/gate6f-benchmark/README.md), and
 [recorded result](results/2026-08-29-gate6f-multifile-compiler-darwin-linux-arm64/README.md).
 
-Gate 6G is in progress under the pre-registered scope in
-[issue #59](https://github.com/type-rb/type-rb-native/issues/59). It derives a
-deterministic TypeRB-authored function index from the canonical declaration
-arrays before resolution, preserving source order and exact lookup semantics
-without adding public Hash behavior or a compiler-runtime intrinsic. Formal
-correctness and performance evidence has not yet been recorded. See the
-[Gate 6G symbol-lookup plan](docs/gate-6-symbol-lookup.md) and
-[Decision 0014](docs/decisions/0014-indexed-function-lookup.md).
+Gate 6G is complete at measured revision
+`8bcc2a6e1c5ecede5f07c2dda63a4d4d82631375`. Canonical direct QBE emission
+improves by 30.80%, complete build time by 5.95%, and 6,000-function emission
+by 53.49%, with bounded RSS and a 200,008-byte stripped compiler. Exact Darwin
+and Linux arm64 replacement chains and representative application identity
+pass. See the [Gate 6G symbol-lookup plan](docs/gate-6-symbol-lookup.md),
+[Decision 0014](docs/decisions/0014-indexed-function-lookup.md), and
+[recorded result](results/2026-08-29-gate6g-symbol-lookup-darwin-linux-arm64/README.md).
+
+Gate 6H is in progress under the pre-registered scope in
+[issue #64](https://github.com/type-rb/type-rb-native/issues/64). It scales the
+existing file-root path to a deterministic 1,025-file closure with an internal
+module-name index and module-local import and declaration traversal, without
+widening the language, runtime, CLI, project, package, or external-tool
+contract. See the
+[Gate 6H module-graph plan](docs/gate-6-module-graph.md) and
+[Decision 0015](docs/decisions/0015-indexed-module-graph.md).
 
 Configured project discovery, production runtime integration,
 package/native-library boundaries, incremental builds, toolchain discovery,

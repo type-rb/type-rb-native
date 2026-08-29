@@ -274,6 +274,22 @@ flat source may prepare the recovery seed, but every ordinary replacement
 generation loads the real closure and reaches exact B2/B3/B4 QBE and bytes.
 See [Decision 0013](decisions/0013-multi-file-self-hosted-compiler.md).
 
+Gate 6G derives a deterministic module-qualified function index from the
+canonical declaration arrays before resolution. Full key comparison preserves
+semantics under collisions, while source-order head insertion preserves the
+previous last-match behavior. The index is TypeRB-owned and internal; it is not
+a public Hash or serialized compiler format. See
+[Decision 0014](decisions/0014-indexed-function-lookup.md).
+
+Gate 6H applies the same internal-derivation rule to file-root module graphs.
+An incrementally maintained module-name index and parsed per-module import
+spans let loading and resolution follow module-owned ranges, while contiguous
+declaration boundaries stop duplicate scans before another module. Canonical
+source-order arrays retain ownership. The private bucket and graph
+accelerators do not stabilize a project, package, module, Hash, or CLI
+contract. See
+[Decision 0015](decisions/0015-indexed-module-graph.md).
+
 ## Stability and promotion
 
 No MIR, ABI profile, snapshot, object, cache, command, or runtime API in this

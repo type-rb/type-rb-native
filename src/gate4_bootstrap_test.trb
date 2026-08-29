@@ -1225,6 +1225,44 @@ def _gate6_prepare_file_root_project(root: String, project: String): Result<Bool
 	return Result<Boolean, String>::Ok(true)
 end
 
+def _gate6h_fixed_width_name(prefix: String, index: Integer): String
+	mut digits := index.to_s()
+	while digits.size() < 4
+		digits = "0" + digits
+	end
+	return prefix + digits
+end
+
+def _gate6h_prepare_module_chain(project: String, count: Integer): Result<String, String>
+	try _gate6_reset_directory(project)
+	mut index := 0
+	while index < count
+		module_name := _gate6h_fixed_width_name("m", index)
+		function_name := _gate6h_fixed_width_name("f", index)
+		mut source := ""
+		if index > 0
+			previous_module := _gate6h_fixed_width_name("m", index - 1)
+			previous_function := _gate6h_fixed_width_name("f", index - 1)
+			source += "import { " + previous_function + " } from " + previous_module + "\n\n"
+			source += "def " + function_name + "(): Integer\n\treturn " + previous_function + "() + 1\nend\n"
+		else
+			source = "def " + function_name + "(): Integer\n\treturn 0\nend\n"
+		end
+		try _gate6_write_source(project + "/" + module_name + ".trb", source)
+		index += 1
+	end
+	last_function := _gate6h_fixed_width_name("f", count - 1)
+	last_module := _gate6h_fixed_width_name("m", count - 1)
+	entry := project + "/main.trb"
+	try _gate6_write_source(
+		entry,
+		"import { " + last_function + " } from " + last_module + "\n\n" +
+		"def main()\n\tif " + last_function + "() == " + (count - 1).to_s() +
+		"\n\t\tputs(\"module-scale-ok\")\n\tend\n\treturn\nend\n",
+	)
+	return Result<String, String>::Ok(entry)
+end
+
 def _gate6_verify_file_root_modules(
 		root: String,
 		workspace: String,
@@ -1298,6 +1336,56 @@ def _gate6_verify_file_root_modules(
 	if reference_runtime.status != 0 || reference_runtime.stdout != "file-root-ok\n" || !reference_runtime.stderr.empty?()
 		return Result<Boolean, String>::Err("reference file-root runtime differs")
 	end
+
+	scale_project := workspace + "/gate6h-module-chain"
+	scale_entry := try _gate6h_prepare_module_chain(scale_project, 64)
+	mut scale_qbe := ""
+	index = 0
+	while index < executables.size()
+		scale_check := try _gate6_process(executables[index], ["check", scale_entry])
+		if scale_check.status != 0 || scale_check.stdout != "ok\n" || !scale_check.stderr.empty?()
+			return Result<Boolean, String>::Err(
+				"module-chain check failed at compiler " + index.to_s() + ": " + scale_check.stderr,
+			)
+		end
+		scale_emission := try _gate6_process(executables[index], ["emit-qbe", scale_entry])
+		if scale_emission.status != 0 || scale_emission.stdout.empty?() || !scale_emission.stderr.empty?()
+			return Result<Boolean, String>::Err("module-chain emission failed at compiler " + index.to_s())
+		end
+		if scale_qbe == ""
+			scale_qbe = scale_emission.stdout
+		else
+			if scale_emission.stdout != scale_qbe
+				return Result<Boolean, String>::Err("module-chain QBE differs across compiler generations")
+			end
+		end
+		index += 1
+	end
+	scale_output := scale_project + "/native-program"
+	try _gate6_verify_built_program(
+		executables[0],
+		scale_entry,
+		scale_output,
+		qbe,
+		"module-scale-ok\n",
+		"64-module Native chain",
+	)
+	scale_reference_output := scale_project + "/reference-program"
+	scale_reference_build := try _gate6_process(
+		reference_trb,
+		["build", "--compile", "--outfile", scale_reference_output, scale_entry],
+	)
+	if scale_reference_build.status != 0
+		return Result<Boolean, String>::Err("reference module-chain build failed: " + scale_reference_build.stderr)
+	end
+	scale_reference_runtime := try _gate6_process(scale_reference_output, [])
+	if scale_reference_runtime.status != 0
+		return Result<Boolean, String>::Err("reference module-chain execution failed")
+	end
+	if scale_reference_runtime.stdout != "module-scale-ok\n" || !scale_reference_runtime.stderr.empty?()
+		return Result<Boolean, String>::Err("reference module-chain runtime differs")
+	end
+	try _gate6_require_no_intermediates(scale_project)
 
 	precedence := workspace + "/gate6-file-root-precedence"
 	try _gate6_reset_directory(precedence)
