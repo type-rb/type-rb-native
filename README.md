@@ -160,6 +160,15 @@ bytes and behavior. See the
 [measurement harness](tools/gate6f-benchmark/README.md), and
 [recorded result](results/2026-08-29-gate6f-multifile-compiler-darwin-linux-arm64/README.md).
 
+Gate 6G is in progress under the pre-registered scope in
+[issue #59](https://github.com/type-rb/type-rb-native/issues/59). It derives a
+deterministic TypeRB-authored function index from the canonical declaration
+arrays before resolution, preserving source order and exact lookup semantics
+without adding public Hash behavior or a compiler-runtime intrinsic. Formal
+correctness and performance evidence has not yet been recorded. See the
+[Gate 6G symbol-lookup plan](docs/gate-6-symbol-lookup.md) and
+[Decision 0014](docs/decisions/0014-indexed-function-lookup.md).
+
 Configured project discovery, production runtime integration,
 package/native-library boundaries, incremental builds, toolchain discovery,
 debugging, maintenance evaluation, and additional primary targets remain in

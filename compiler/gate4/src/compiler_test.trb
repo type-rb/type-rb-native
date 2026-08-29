@@ -2,15 +2,27 @@ import {
 	Gate4Compiler,
 	Gate4Output,
 	gate4_add_module,
+	gate4_build_function_index,
 	gate4_check,
 	gate4_compiler_new,
+	gate4_emit_context_new,
+	gate4_emit_local_find,
 	gate4_emit_qbe,
+	gate4_find_field,
+	gate4_find_function_in_module,
+	gate4_find_import_binding,
+	gate4_find_module,
+	gate4_find_record_in_module,
+	gate4_find_record_type,
 	gate4_has_diagnostic,
 	gate4_lex,
 	gate4_lex_module,
+	gate4_local_find,
+	gate4_locals_new,
 	gate4_parse,
 	gate4_parse_module,
 	gate4_resolve,
+	gate4_symbol_bucket_count,
 } from compiler
 import {
 	gate4_integer_storage,
@@ -51,6 +63,20 @@ def gate4_required_test_source(path: String): String
 	end
 end
 
+def gate4_scale_test_source(count: Integer): String
+	mut writer := string_builder.new()
+	writer.append("def f0(value: Integer): Integer\n\treturn value\nend\n\n")
+	mut index := 1
+	while index < count
+		writer.append("def f" + index.to_s() + "(value: Integer): Integer\n\treturn f")
+		writer.append((index - 1).to_s())
+		writer.append("(value)\nend\n\n")
+		index += 1
+	end
+	writer.append("def main()\n\tvalue := f" + (count - 1).to_s() + "(1)\n\treturn\nend\n")
+	return writer.to_s()
+end
+
 describe("Gate 4 TypeRB frontend") do
 	test("grows chunked storage only as elements are stored") do
 		empty := gate4_integer_storage(0)
@@ -85,6 +111,96 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_load_string(strings, 0)).to_equal("first")
 		expect(gate4_load_string(strings, 256)).to_equal("last")
 		expect(gate4_store_string(strings, 257, "outside")).to_be_false()
+	end
+
+	test("returns the last matching symbol without changing missing lookup") do
+		mut state := gate4_compiler_new(128)
+		gate4_add_module(state, "shared", "/first.trb")
+		gate4_add_module(state, "other", "/other.trb")
+		gate4_add_module(state, "shared", "/last.trb")
+		expect(gate4_find_module(state, "shared")).to_equal(2)
+		expect(gate4_find_module(state, "missing")).to_equal(- 1)
+
+		gate4_store_string(state.function_names, 0, "value")
+		gate4_store_integer(state.function_modules, 0, 0)
+		gate4_store_string(state.function_names, 1, "value")
+		gate4_store_integer(state.function_modules, 1, 1)
+		gate4_store_string(state.function_names, 2, "value")
+		gate4_store_integer(state.function_modules, 2, 0)
+		gate4_store_string(state.function_names, 3, "other")
+		gate4_store_integer(state.function_modules, 3, 0)
+		state.function_count[0] = 4
+		gate4_store_string(state.record_names, 0, "Value")
+		gate4_store_integer(state.record_modules, 0, 0)
+		gate4_store_string(state.record_names, 1, "Value")
+		gate4_store_integer(state.record_modules, 1, 1)
+		gate4_store_string(state.record_names, 2, "Value")
+		gate4_store_integer(state.record_modules, 2, 0)
+		gate4_store_string(state.record_names, 3, "Other")
+		gate4_store_integer(state.record_modules, 3, 0)
+		state.record_count[0] = 4
+		expect(gate4_find_record_type(state, "Record#2")).to_equal(2)
+		expect(gate4_find_record_type(state, "Record#4")).to_equal(- 1)
+
+		gate4_store_string(state.import_symbols, 0, "load")
+		gate4_store_integer(state.import_modules, 0, 0)
+		gate4_store_string(state.import_symbols, 1, "load")
+		gate4_store_integer(state.import_modules, 1, 1)
+		gate4_store_string(state.import_symbols, 2, "load")
+		gate4_store_integer(state.import_modules, 2, 0)
+		gate4_store_string(state.import_symbols, 3, "save")
+		gate4_store_integer(state.import_modules, 3, 0)
+		state.import_count[0] = 4
+		expect(gate4_symbol_bucket_count(0)).to_equal(0)
+		expect(gate4_symbol_bucket_count(8)).to_equal(16)
+		expect(gate4_symbol_bucket_count(9)).to_equal(32)
+		expect(gate4_symbol_bucket_count(65)).to_equal(256)
+		gate4_build_function_index(state)
+		expect(gate4_find_function_in_module(state, 0, "value")).to_equal(2)
+		expect(gate4_find_function_in_module(state, 0, "other")).to_equal(3)
+		expect(gate4_find_function_in_module(state, 1, "value")).to_equal(1)
+		expect(gate4_find_function_in_module(state, 0, "missing")).to_equal(- 1)
+		expect(gate4_find_record_in_module(state, 0, "Value")).to_equal(2)
+		expect(gate4_find_record_in_module(state, 0, "Other")).to_equal(3)
+		expect(gate4_find_record_in_module(state, 0, "Missing")).to_equal(- 1)
+		expect(gate4_find_import_binding(state, 0, "load")).to_equal(2)
+		expect(gate4_find_import_binding(state, 0, "save")).to_equal(3)
+		expect(gate4_find_import_binding(state, 0, "missing")).to_equal(- 1)
+
+		gate4_store_integer(state.record_field_starts, 0, 0)
+		gate4_store_integer(state.record_field_counts, 0, 3)
+		gate4_store_string(state.field_names, 0, "item")
+		gate4_store_string(state.field_names, 1, "other")
+		gate4_store_string(state.field_names, 2, "item")
+		expect(gate4_find_field(state, 0, "item")).to_equal(2)
+		expect(gate4_find_field(state, 0, "missing")).to_equal(- 1)
+
+		mut locals := gate4_locals_new(4)
+		gate4_store_string(locals.names, 0, "item")
+		gate4_store_string(locals.names, 1, "other")
+		gate4_store_string(locals.names, 2, "item")
+		locals.count[0] = 3
+		expect(gate4_local_find(locals, "item")).to_equal(2)
+		expect(gate4_local_find(locals, "missing")).to_equal(- 1)
+
+		mut context := gate4_emit_context_new(4, [0])
+		gate4_store_string(context.local_names, 0, "item")
+		gate4_store_string(context.local_names, 1, "other")
+		gate4_store_string(context.local_names, 2, "item")
+		context.local_count[0] = 3
+		expect(gate4_emit_local_find(context, "item")).to_equal(2)
+		expect(gate4_emit_local_find(context, "missing")).to_equal(- 1)
+	end
+
+	test("checks a generated declaration-chain scale probe") do
+		source := gate4_scale_test_source(128)
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse(state)).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		expect(state.function_count[0]).to_equal(129)
+		expect(gate4_output_source(gate4_emit_qbe(state)).include?("function l $g4f127")).to_be_true()
 	end
 
 	test("lexes and parses the registered declaration and expression subset") do
@@ -198,7 +314,7 @@ describe("Gate 4 TypeRB frontend") do
 				end
 				import_index += 1
 			end
-			expect(gate4_load_string(state.record_names, 0)).to_equal("Gate4Compiler")
+			expect(gate4_find_record_in_module(state, 0, "Gate4Compiler") >= 0).to_be_true()
 			expect(state.record_count[0] > 5).to_be_true()
 			expect(state.function_count[0] > 20).to_be_true()
 			if !gate4_resolve(state)

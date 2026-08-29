@@ -390,6 +390,22 @@ bytes, preserves the Gate 6E application hash, and closes exact Darwin and
 Linux arm64 B2/B3/B4 chains. See the
 [Gate 6F result](../results/2026-08-29-gate6f-multifile-compiler-darwin-linux-arm64/README.md).
 
+Gate 6G is the self-hosted symbol-lookup scalability slice registered in
+[issue #59](https://github.com/type-rb/type-rb-native/issues/59) and specified
+by [Decision 0014](decisions/0014-indexed-function-lookup.md). It keeps
+source-ordered declarations canonical and derives a deterministic
+module-qualified function index before resolution. No public Hash, new runtime
+intrinsic, source behavior, target behavior, or external-tool boundary is
+introduced.
+
+Two warmups and eleven alternating Darwin observations compare the Gate 6F
+baseline and candidate on canonical direct QBE emission, complete self-builds,
+and a generated 6,000-function chain. The registered minimum improvements are
+5%, 3%, and 25% respectively; RSS, stripped compiler size, exact fixed points,
+application identity, and pinned Linux arm64 correctness remain bounded. See
+the [Gate 6G plan](gate-6-symbol-lookup.md). Formal results are not yet
+recorded.
+
 This gate is not authorization to ship. It evaluates:
 
 - broader configured and packaged multi-module applications beyond the
