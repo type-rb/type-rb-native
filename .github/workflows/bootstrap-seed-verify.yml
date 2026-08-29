@@ -1,0 +1,144 @@
+name: Verify published bootstrap seed
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Exact published experimental bootstrap seed tag
+        required: true
+        default: bootstrap-seed-2026-08-30
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify-target:
+    name: Verify ${{ matrix.asset }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            profile: darwin-arm64-v0
+            target: darwin-arm64
+            asset: type-rb-native-bootstrap-darwin-arm64
+          - runner: ubuntu-24.04-arm
+            profile: linux-arm64-v0
+            target: linux-arm64
+            asset: type-rb-native-bootstrap-linux-arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Check out the published Native revision
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.release_tag }}
+
+      - name: Build pinned QBE 1.3
+        id: qbe
+        run: |
+          curl -L https://c9x.me/compile/release/qbe-1.3.tar.xz -o "$RUNNER_TEMP/qbe-1.3.tar.xz"
+          if command -v sha256sum >/dev/null 2>&1; then
+            echo "d587905d620dc5e1d2bfa7c2cc642b9b837aa89a3188c6e37b53d756cf66e320  $RUNNER_TEMP/qbe-1.3.tar.xz" | sha256sum -c -
+          else
+            echo "d587905d620dc5e1d2bfa7c2cc642b9b837aa89a3188c6e37b53d756cf66e320  $RUNNER_TEMP/qbe-1.3.tar.xz" | shasum -a 256 -c -
+          fi
+          tar -C "$RUNNER_TEMP" -xf "$RUNNER_TEMP/qbe-1.3.tar.xz"
+          make -C "$RUNNER_TEMP/qbe-1.3"
+          echo "path=$RUNNER_TEMP/qbe-1.3/qbe" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure Linux process tracing is available
+        if: matrix.profile == 'linux-arm64-v0'
+        run: |
+          if ! command -v strace >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y strace
+          fi
+
+      - name: Download only the ordinary seed inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          TARGET_ASSET: ${{ matrix.asset }}
+        run: |
+          test "$RELEASE_TAG" = bootstrap-seed-2026-08-30
+          mkdir -p "$RUNNER_TEMP/release"
+          started=$(date +%s)
+          gh release download "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$RUNNER_TEMP/release" \
+            --pattern "$TARGET_ASSET" \
+            --pattern type-rb-native-bootstrap-manifest-v1.json \
+            --pattern SHA256SUMS
+          finished=$(date +%s)
+          printf 'download_seconds=%s\n' "$((finished - started))" > "$RUNNER_TEMP/download-time.txt"
+          test ! -e "$RUNNER_TEMP/release/type-rb-native-bootstrap-root-qbe-v1.ssa"
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > "$RUNNER_TEMP/release.json"
+
+      - name: Verify release state, manifest, digests, and attestations
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          TARGET_ASSET: ${{ matrix.asset }}
+        run: |
+          revision=$(git rev-parse HEAD)
+          started=$(date +%s)
+          /bin/sh tools/bootstrap-seed-manifest.sh verify \
+            "$RELEASE_TAG" \
+            "$revision" \
+            "$TARGET_ASSET" \
+            "$RUNNER_TEMP/release/$TARGET_ASSET" \
+            "$RUNNER_TEMP/release/type-rb-native-bootstrap-manifest-v1.json" \
+            "$RUNNER_TEMP/release/SHA256SUMS" \
+            "$RUNNER_TEMP/release.json"
+          gh attestation verify \
+            "$RUNNER_TEMP/release/$TARGET_ASSET" \
+            -R "$GITHUB_REPOSITORY" \
+            --format json > "$RUNNER_TEMP/compiler-attestation.json"
+          gh attestation verify \
+            "$RUNNER_TEMP/release/type-rb-native-bootstrap-manifest-v1.json" \
+            -R "$GITHUB_REPOSITORY" \
+            --format json > "$RUNNER_TEMP/manifest-attestation.json"
+          gh attestation verify \
+            "$RUNNER_TEMP/release/SHA256SUMS" \
+            -R "$GITHUB_REPOSITORY" \
+            --format json > "$RUNNER_TEMP/checksums-attestation.json"
+          finished=$(date +%s)
+          printf 'verification_seconds=%s\n' "$((finished - started))" > "$RUNNER_TEMP/verification-time.txt"
+          chmod 0755 "$RUNNER_TEMP/release/$TARGET_ASSET"
+
+      - name: Close the ordinary previous-Native chain
+        run: |
+          mkdir -p "$RUNNER_TEMP/package"
+          /bin/sh tools/bootstrap-seed.sh \
+            --mode previous \
+            --input "$RUNNER_TEMP/release/${{ matrix.asset }}" \
+            --qbe "${{ steps.qbe.outputs.path }}" \
+            --cc /usr/bin/cc \
+            --profile "${{ matrix.profile }}" \
+            --runner-image "${{ matrix.runner }}" \
+            --workspace "$RUNNER_TEMP/bootstrap-workspace" \
+            --output "$RUNNER_TEMP/package/generated-${{ matrix.asset }}" \
+            --evidence "$RUNNER_TEMP/bootstrap-evidence" \
+            --metadata "$RUNNER_TEMP/package/${{ matrix.target }}.json" \
+            --asset-name "${{ matrix.asset }}"
+          cp "$RUNNER_TEMP/download-time.txt" "$RUNNER_TEMP/bootstrap-evidence/"
+          cp "$RUNNER_TEMP/verification-time.txt" "$RUNNER_TEMP/bootstrap-evidence/"
+          cp "$RUNNER_TEMP/release.json" "$RUNNER_TEMP/bootstrap-evidence/"
+          cp "$RUNNER_TEMP/compiler-attestation.json" "$RUNNER_TEMP/bootstrap-evidence/"
+          cp "$RUNNER_TEMP/manifest-attestation.json" "$RUNNER_TEMP/bootstrap-evidence/"
+          cp "$RUNNER_TEMP/checksums-attestation.json" "$RUNNER_TEMP/bootstrap-evidence/"
+          wc -c "$RUNNER_TEMP/qbe-1.3.tar.xz" > "$RUNNER_TEMP/bootstrap-evidence/qbe-source-size.txt"
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "$RUNNER_TEMP/qbe-1.3.tar.xz" > "$RUNNER_TEMP/bootstrap-evidence/qbe-source-sha256.txt"
+          else
+            shasum -a 256 "$RUNNER_TEMP/qbe-1.3.tar.xz" > "$RUNNER_TEMP/bootstrap-evidence/qbe-source-sha256.txt"
+          fi
+
+      - name: Upload post-publication evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: bootstrap-seed-published-evidence-${{ matrix.target }}
+          path: ${{ runner.temp }}/bootstrap-evidence
+          if-no-files-found: error
+          retention-days: 30

@@ -9,7 +9,9 @@ ownership boundary is defined by
 
 ## Status
 
-Pre-registered. No bootstrap seed release has been published yet.
+Active. The root and previous-seed harnesses, strict manifest validator, and
+fresh-runner workflows are implemented. No bootstrap seed release has been
+published yet.
 
 ## Public baseline
 
@@ -158,6 +160,31 @@ verification latency is advisory because it includes external services.
 
 No incomplete draft is described as a distributed seed, and no published
 asset is replaced in place.
+
+## Tooling
+
+[`tools/bootstrap-seed.sh`](../tools/bootstrap-seed.sh) owns the finite
+correctness, fixed-point, failure, cleanup, target inspection, process
+inventory, and adjacent-generation measurement procedure. Its `initial` mode
+accepts only the registered root QBE; its `previous` mode accepts only a
+platform compiler seed and never reads the root.
+
+[`tools/bootstrap-seed-manifest.sh`](../tools/bootstrap-seed-manifest.sh)
+creates and strictly validates manifest version 1, the checksum index, target
+metadata, release asset digests, the complete asset set, prerelease state, and
+release immutability. Its synthetic
+[`manifest test`](../tools/bootstrap-seed-manifest-test.sh) covers valid
+creation and verification plus unknown-field and changed-compiler rejection.
+
+The manual
+[`initial ceremony workflow`](../.github/workflows/bootstrap-seed-initial.yml)
+accepts the exact draft root asset id, builds pinned QBE, runs both target
+harnesses, attests the compilers, assembles and attests the manifest and
+checksum file, and retains the reviewed release inputs as Actions artifacts.
+It does not publish the draft automatically. The separate
+[`published-seed workflow`](../.github/workflows/bootstrap-seed-verify.yml)
+checks out the release tag, downloads no root QBE, verifies the immutable
+release and attestations, and runs `previous` mode on fresh target runners.
 
 ## Deferred scope
 
