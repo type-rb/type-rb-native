@@ -134,9 +134,11 @@ Both initial and post-publication jobs enforce:
 - absence of Go, reference, recovery, and shell-mediated compiler children
   from the ordinary chain.
 
-Two warmups and seven observations record each adjacent compiler build's
-elapsed time and orchestration-root peak RSS. Adjacent medians must remain
-within 25%, and a value above 2x the strongest adjacent median is catastrophic.
+Two warmups and seven interleaved observation rounds record each adjacent
+compiler build's elapsed time and orchestration-root peak RSS. Interleaving
+keeps shared-runner drift from being assigned to one generation. Adjacent
+medians must remain within 25%, and a value above 2x the strongest adjacent
+median is catastrophic.
 The gate expects no application primary-metric improvement; it preserves Gate
 6K behavior while adding distribution and trust work.
 
@@ -185,6 +187,10 @@ It does not publish the draft automatically. The separate
 [`published-seed workflow`](../.github/workflows/bootstrap-seed-verify.yml)
 checks out the release tag, downloads no root QBE, verifies the immutable
 release and attestations, and runs `previous` mode on fresh target runners.
+Compiler source and fixtures come from the immutable release tag. The
+verification scripts come from the exact workflow revision and receive the tag
+checkout as an explicit repository root, so an audit or evidence-retention fix
+does not rewrite a published seed. Both revisions are retained in evidence.
 
 ## Deferred scope
 

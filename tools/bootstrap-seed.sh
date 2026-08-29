@@ -11,7 +11,7 @@ usage() {
 usage: bootstrap-seed.sh --mode initial|previous --input PATH --qbe PATH --cc PATH
        --profile darwin-arm64-v0|linux-arm64-v0 --runner-image LABEL
        --workspace PATH --output PATH --evidence PATH --metadata PATH
-       --asset-name NAME
+       --asset-name NAME [--repository-root PATH]
 EOF
 	exit 64
 }
@@ -73,6 +73,7 @@ output=
 evidence=
 metadata=
 asset_name=
+repository_root_override=
 
 while test "$#" -gt 0; do
 	case "$1" in
@@ -142,6 +143,12 @@ while test "$#" -gt 0; do
 		asset_name=$2
 		shift 2
 		;;
+	--repository-root)
+		test -z "$repository_root_override" || usage
+		test "$#" -ge 2 || usage
+		repository_root_override=$2
+		shift 2
+		;;
 	*) usage ;;
 	esac
 done
@@ -188,7 +195,12 @@ else
 fi
 
 script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-repository_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
+if test -n "$repository_root_override"; then
+	test -d "$repository_root_override" || fail "repository root does not exist"
+	repository_root=$(CDPATH= cd -- "$repository_root_override" && pwd)
+else
+	repository_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
+fi
 compiler_entry=$repository_root/compiler/gate4/src/compiler.trb
 configured_project=$repository_root/corpus/gate6k/configured-project/trbconfig.jsonc
 
@@ -439,10 +451,10 @@ measure_build() {
 	printf '%s,%s,%s,%s\n' "$stage" "$iteration" "$elapsed" "$rss" >> "$measurements"
 }
 
-for stage_pair in "b1-b2:$b1:$b2" "b2-b3:$b2:$b3" "b3-b4:$b3:$b4"; do
-	stage=$(printf '%s\n' "$stage_pair" | cut -d: -f1)
-	seed=$(printf '%s\n' "$stage_pair" | cut -d: -f2)
-	expected_compiler=$(printf '%s\n' "$stage_pair" | cut -d: -f3)
+warmup_build() {
+	stage=$1
+	seed=$2
+	expected_compiler=$3
 	warmup=1
 	while test "$warmup" -le 2; do
 		warmup_directory=$workspace/warmup-$stage-$warmup
@@ -453,11 +465,18 @@ for stage_pair in "b1-b2:$b1:$b2" "b2-b3:$b2:$b3" "b3-b4:$b3:$b4"; do
 			fail "warmup compiler bytes differ"
 		warmup=$((warmup + 1))
 	done
-	iteration=1
-	while test "$iteration" -le 7; do
-		measure_build "$stage" "$iteration" "$seed" "$expected_compiler"
-		iteration=$((iteration + 1))
-	done
+}
+
+warmup_build b1-b2 "$b1" "$b2"
+warmup_build b2-b3 "$b2" "$b3"
+warmup_build b3-b4 "$b3" "$b4"
+
+iteration=1
+while test "$iteration" -le 7; do
+	measure_build b1-b2 "$iteration" "$b1" "$b2"
+	measure_build b2-b3 "$iteration" "$b2" "$b3"
+	measure_build b3-b4 "$iteration" "$b3" "$b4"
+	iteration=$((iteration + 1))
 done
 
 median_value() {
@@ -488,19 +507,19 @@ require_within_25_percent() {
 		if (second > maximum) maximum = second
 		if (third > maximum) maximum = third
 		exit !(maximum <= minimum * 1.25 && maximum <= minimum * 2.0)
-	}' || fail "$label adjacent medians exceed the registered bound"
+	}' || fail "$label adjacent medians exceed the registered bound: $first, $second, $third"
 }
-
-require_within_25_percent elapsed \
-	"$median_b1_b2_time" "$median_b2_b3_time" "$median_b3_b4_time"
-require_within_25_percent rss \
-	"$median_b1_b2_rss" "$median_b2_b3_rss" "$median_b3_b4_rss"
 
 cat > "$evidence/medians.txt" <<EOF
 b1-b2 elapsed_seconds=$median_b1_b2_time peak_rss_bytes=$median_b1_b2_rss
 b2-b3 elapsed_seconds=$median_b2_b3_time peak_rss_bytes=$median_b2_b3_rss
 b3-b4 elapsed_seconds=$median_b3_b4_time peak_rss_bytes=$median_b3_b4_rss
 EOF
+
+require_within_25_percent elapsed \
+	"$median_b1_b2_time" "$median_b2_b3_time" "$median_b3_b4_time"
+require_within_25_percent rss \
+	"$median_b1_b2_rss" "$median_b2_b3_rss" "$median_b3_b4_rss"
 
 trace_directory=$workspace/trace
 mkdir -p "$trace_directory"

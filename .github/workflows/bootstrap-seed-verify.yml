@@ -34,6 +34,12 @@ jobs:
         with:
           ref: ${{ inputs.release_tag }}
 
+      - name: Check out the exact verification tooling revision
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          path: .bootstrap-verifier
+
       - name: Build pinned QBE 1.3
         id: qbe
         run: |
@@ -83,7 +89,7 @@ jobs:
         run: |
           revision=$(git rev-parse HEAD)
           started=$(date +%s)
-          /bin/sh tools/bootstrap-seed-manifest.sh verify \
+          /bin/sh .bootstrap-verifier/tools/bootstrap-seed-manifest.sh verify \
             "$RELEASE_TAG" \
             "$revision" \
             "$TARGET_ASSET" \
@@ -120,9 +126,10 @@ jobs:
           chmod 0755 "$RUNNER_TEMP/release/$TARGET_ASSET"
 
       - name: Close the ordinary previous-Native chain
+        id: chain
         run: |
           mkdir -p "$RUNNER_TEMP/package"
-          /bin/sh tools/bootstrap-seed.sh \
+          /bin/sh .bootstrap-verifier/tools/bootstrap-seed.sh \
             --mode previous \
             --input "$RUNNER_TEMP/release/${{ matrix.asset }}" \
             --qbe "${{ steps.qbe.outputs.path }}" \
@@ -133,7 +140,12 @@ jobs:
             --output "$RUNNER_TEMP/package/generated-${{ matrix.asset }}" \
             --evidence "$RUNNER_TEMP/bootstrap-evidence" \
             --metadata "$RUNNER_TEMP/package/${{ matrix.target }}.json" \
-            --asset-name "${{ matrix.asset }}"
+            --asset-name "${{ matrix.asset }}" \
+            --repository-root "$GITHUB_WORKSPACE"
+
+      - name: Collect verification context
+        if: always() && steps.chain.outcome != 'skipped'
+        run: |
           cp "$RUNNER_TEMP/download-time.txt" "$RUNNER_TEMP/bootstrap-evidence/"
           cp "$RUNNER_TEMP/verification-time.txt" "$RUNNER_TEMP/bootstrap-evidence/"
           cp "$RUNNER_TEMP/release.json" "$RUNNER_TEMP/bootstrap-evidence/"
@@ -146,8 +158,10 @@ jobs:
           else
             shasum -a 256 "$RUNNER_TEMP/qbe-1.3.tar.xz" > "$RUNNER_TEMP/bootstrap-evidence/qbe-source-sha256.txt"
           fi
+          printf 'verification_tooling_revision=%s\n' "$GITHUB_SHA" > "$RUNNER_TEMP/bootstrap-evidence/verification-tooling.txt"
 
       - name: Upload post-publication evidence
+        if: always() && steps.chain.outcome != 'skipped'
         uses: actions/upload-artifact@v4
         with:
           name: bootstrap-seed-published-evidence-${{ matrix.target }}
