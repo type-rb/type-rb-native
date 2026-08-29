@@ -1,0 +1,1073 @@
+import { create_directory, read_text, write_text } from trb/std/filesystem
+import { argv, run } from trb/std/process
+import { Result } from trb/std/result
+import trb/std/string_builder
+import { Instant } from trb/std/time
+
+record TimedProcess
+	seconds: Float
+	status: Integer
+	stdout: String
+	stderr: String
+end
+
+record PeakProcess
+	rss: Integer
+	status: Integer
+	stdout: String
+	stderr: String
+end
+
+record CompilerSources
+	root: String
+	entry_path: String
+	storage_path: String
+	path_path: String
+	entry: String
+	storage: String
+	path_source: String
+end
+
+record CompilerChain
+	b2: String
+	b3: String
+	b4: String
+	fixed_qbe: String
+	fixed_qbe_path: String
+end
+
+def measure_process(command: String, arguments: Array<String>): Result<TimedProcess, String>
+	started := Instant.now()
+	case run(command, arguments)
+	when Result::Ok(process)
+		return Result<TimedProcess, String>::Ok(
+			TimedProcess.new(
+				seconds: Instant.now().duration_since(started).total_seconds(),
+				status: process.status,
+				stdout: process.stdout,
+				stderr: process.stderr,
+			),
+		)
+	when Result::Err(error)
+		return Result<TimedProcess, String>::Err(error.operation + ": " + error.message)
+	end
+end
+
+def peak_process(command: String, arguments: Array<String>): Result<PeakProcess, String>
+	mut time_arguments := ["-l", command]
+	mut index := 0
+	while index < arguments.size()
+		time_arguments.push(arguments[index])
+		index += 1
+	end
+	measurement := try measure_process("/usr/bin/time", time_arguments)
+	lines := measurement.stderr.split("\n")
+	index = 0
+	while index < lines.size()
+		if lines[index].include?("maximum resident set size")
+			fields := lines[index].strip().split(" ")
+			mut field_index := 0
+			while field_index < fields.size()
+				if !fields[field_index].empty?()
+					return Result<PeakProcess, String>::Ok(
+						PeakProcess.new(
+							rss: fields[field_index].to_i(),
+							status: measurement.status,
+							stdout: measurement.stdout,
+							stderr: measurement.stderr,
+						),
+					)
+				end
+				field_index += 1
+			end
+		end
+		index += 1
+	end
+	return Result<PeakProcess, String>::Err("time did not report maximum resident set size for " + command)
+end
+
+def append_measurement(
+		mut output: StringBuilder,
+		metric: String,
+		case_name: String,
+		candidate: String,
+		iteration: Integer,
+		value: String,
+		status: Integer,
+	)
+	output.append(
+		metric + "," + case_name + "," + candidate + "," + iteration.to_s() + "," + value + "," +
+		status.to_s() + "\n",
+	)
+end
+
+def create_required_directory(path: String): Result<Boolean, String>
+	case create_directory(path)
+	when Result::Ok(_unit)
+		return Result<Boolean, String>::Ok(true)
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
+	end
+end
+
+def read_required(path: String): Result<String, String>
+	case read_text(path)
+	when Result::Ok(value)
+		return Result<String, String>::Ok(value)
+	when Result::Err(error)
+		return Result<String, String>::Err(error.operation + ": " + error.message)
+	end
+end
+
+def write_required(path: String, value: String): Result<Boolean, String>
+	case write_text(path, value)
+	when Result::Ok(_unit)
+		return Result<Boolean, String>::Ok(true)
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
+	end
+end
+
+def copy_required(source: String, destination: String): Result<Boolean, String>
+	value := try read_required(source)
+	return write_required(destination, value)
+end
+
+def require_file(path: String): Result<Boolean, String>
+	probe := try measure_process("/bin/test", ["-f", path])
+	return Result<Boolean, String>::Err("missing file " + path) if probe.status != 0
+	return Result<Boolean, String>::Ok(true)
+end
+
+def require_file_equal(left: String, right: String, message: String): Result<Boolean, String>
+	comparison := try measure_process("/usr/bin/cmp", [left, right])
+	return Result<Boolean, String>::Err(message) if comparison.status != 0
+	return Result<Boolean, String>::Ok(true)
+end
+
+def require_no_intermediates(directory: String): Result<Boolean, String>
+	find := try measure_process("/usr/bin/find", [directory, "-name", "*.trbn.*", "-print"])
+	return Result<Boolean, String>::Err("cannot inspect Native intermediates: " + find.stderr) if find.status != 0
+	return Result<Boolean, String>::Err("Native build left intermediates: " + find.stdout) if !find.stdout.empty?()
+	return Result<Boolean, String>::Ok(true)
+end
+
+def sha256(path: String): Result<String, String>
+	measurement := try measure_process("/usr/bin/shasum", ["-a", "256", path])
+	if measurement.status != 0
+		return Result<String, String>::Err("shasum failed for " + path + ": " + measurement.stderr)
+	end
+	fields := measurement.stdout.strip().split(" ")
+	return Result<String, String>::Err("shasum returned no digest for " + path) if fields.size() < 1
+	return Result<String, String>::Ok(fields[0])
+end
+
+def require_hash(path: String, expected: String, label: String): Result<Boolean, String>
+	actual := try sha256(path)
+	return Result<Boolean, String>::Err(label + " SHA-256 differs: " + actual) if actual != expected
+	return Result<Boolean, String>::Ok(true)
+end
+
+def file_size(path: String): Result<Integer, String>
+	measurement := try measure_process("/usr/bin/stat", ["-f", "%z", path])
+	if measurement.status != 0
+		return Result<Integer, String>::Err("stat failed for " + path + ": " + measurement.stderr)
+	end
+	return Result<Integer, String>::Ok(measurement.stdout.strip().to_i())
+end
+
+def record_hash(
+		mut output: StringBuilder,
+		metric: String,
+		case_name: String,
+		candidate: String,
+		path: String,
+	): Result<String, String>
+	digest := try sha256(path)
+	append_measurement(output, metric, case_name, candidate, 0, digest, 0)
+	return Result<String, String>::Ok(digest)
+end
+
+def record_size(
+		mut output: StringBuilder,
+		metric: String,
+		case_name: String,
+		candidate: String,
+		path: String,
+	): Result<Integer, String>
+	size := try file_size(path)
+	append_measurement(output, metric, case_name, candidate, 0, size.to_s(), 0)
+	return Result<Integer, String>::Ok(size)
+end
+
+def strip_and_record(
+		mut output: StringBuilder,
+		candidate: String,
+		path: String,
+		stripped: String,
+	): Result<Integer, String>
+	measurement := try measure_process("/usr/bin/strip", ["-x", "-o", stripped, path])
+	if measurement.status != 0
+		return Result<Integer, String>::Err("strip failed for " + path + ": " + measurement.stderr)
+	end
+	try record_size(output, "compiler-size-raw", "compiler-source", candidate, path)
+	return record_size(output, "compiler-size-stripped", "compiler-source", candidate, stripped)
+end
+
+def read_compiler_sources(root: String): Result<CompilerSources, String>
+	entry_path := root + "/compiler/gate4/src/compiler.trb"
+	storage_path := root + "/compiler/gate4/src/storage.trb"
+	path_path := root + "/compiler/gate4/src/path.trb"
+	return Result<CompilerSources, String>::Ok(
+		CompilerSources.new(
+			root: root,
+			entry_path: entry_path,
+			storage_path: storage_path,
+			path_path: path_path,
+			entry: try read_required(entry_path),
+			storage: try read_required(storage_path),
+			path_source: try read_required(path_path),
+		),
+	)
+end
+
+def build_arguments(
+		source_path: String,
+		output_path: String,
+		qbe: String,
+		cc: String,
+	): Array<String>
+	return ["build", source_path, "--output", output_path, "--qbe", qbe, "--cc", cc]
+end
+
+def build_checked(
+		seed: String,
+		source_path: String,
+		output_path: String,
+		qbe: String,
+		cc: String,
+		label: String,
+	): Result<Boolean, String>
+	measurement := try measure_process(seed, build_arguments(source_path, output_path, qbe, cc))
+	if measurement.status != 0 || !measurement.stdout.empty?() || !measurement.stderr.empty?()
+		return Result<Boolean, String>::Err(label + " failed: " + measurement.stderr + measurement.stdout)
+	end
+	try require_file(output_path)
+	return Result<Boolean, String>::Ok(true)
+end
+
+def emitted_qbe(executable: String, source_path: String, label: String): Result<String, String>
+	emission := try measure_process(executable, ["emit-qbe", source_path])
+	if emission.status != 0 || emission.stdout.empty?() || !emission.stderr.empty?()
+		return Result<String, String>::Err(label + " QBE emission failed: " + emission.stderr)
+	end
+	return Result<String, String>::Ok(emission.stdout)
+end
+
+def verify_compiler(
+		executable: String,
+		source_path: String,
+		expected_qbe: String,
+		label: String,
+	): Result<Boolean, String>
+	check := try measure_process(executable, ["check", source_path])
+	if check.status != 0 || check.stdout != "ok\n" || !check.stderr.empty?()
+		return Result<Boolean, String>::Err(label + " compiler-source check failed")
+	end
+	emission := try emitted_qbe(executable, source_path, label)
+	return Result<Boolean, String>::Err(label + " compiler QBE is not fixed") if emission != expected_qbe
+	return Result<Boolean, String>::Ok(true)
+end
+
+def build_compiler_chain(
+		seed: String,
+		sources: CompilerSources,
+		qbe: String,
+		cc: String,
+		workspace: String,
+		label: String,
+	): Result<CompilerChain, String>
+	try create_required_directory(workspace)
+	directories := [workspace + "/b2", workspace + "/b3", workspace + "/b4"]
+	mut index := 0
+	while index < directories.size()
+		try create_required_directory(directories[index])
+		index += 1
+	end
+	expected_qbe := try emitted_qbe(seed, sources.entry_path, label + " B1")
+	outputs := [directories[0] + "/compiler", directories[1] + "/compiler", directories[2] + "/compiler"]
+	mut chain_seed := seed
+	index = 0
+	while index < outputs.size()
+		try build_checked(
+			chain_seed,
+			sources.entry_path,
+			outputs[index],
+			qbe,
+			cc,
+			label + " B" + (index + 1).to_s() + "-to-B" + (index + 2).to_s(),
+		)
+		try verify_compiler(outputs[index], sources.entry_path, expected_qbe, label + " B" + (index + 2).to_s())
+		if index > 0
+			try require_file_equal(outputs[index - 1], outputs[index], label + " B2/B3/B4 bytes differ")
+		end
+		chain_seed = outputs[index]
+		index += 1
+	end
+	fixed_qbe_path := workspace + "/fixed-point.ssa"
+	try write_required(fixed_qbe_path, expected_qbe)
+	return Result<CompilerChain, String>::Ok(
+		CompilerChain.new(
+			b2: outputs[0],
+			b3: outputs[1],
+			b4: outputs[2],
+			fixed_qbe: expected_qbe,
+			fixed_qbe_path: fixed_qbe_path,
+		),
+	)
+end
+
+def prepare_application(root: String, project: String): Result<Boolean, String>
+	try create_required_directory(project)
+	directories := [project + "/app", project + "/domain", project + "/shared"]
+	mut index := 0
+	while index < directories.size()
+		try create_required_directory(directories[index])
+		index += 1
+	end
+	relative := [
+		"main.trb",
+		"app/summary.trb",
+		"app/label.trb",
+		"domain/score.trb",
+		"shared/index.trb",
+		"unrelated.trb",
+	]
+	fixture := root + "/compiler/gate4/conformance/file-root"
+	index = 0
+	while index < relative.size()
+		try copy_required(fixture + "/" + relative[index], project + "/" + relative[index])
+		index += 1
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def verify_application(executable: String, label: String): Result<Boolean, String>
+	measurement := try measure_process(executable, [])
+	if measurement.status != 0 || measurement.stdout != "file-root-ok\n" || !measurement.stderr.empty?()
+		return Result<Boolean, String>::Err(label + " runtime differs: " + measurement.stderr)
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def gate6g_scale_source(count: Integer): Result<String, String>
+	return Result<String, String>::Err("scale function count must be at least 2") if count < 2
+	mut writer := string_builder.new()
+	writer.append("def f0(value: Integer): Integer\n\treturn value\nend\n\n")
+	mut index := 1
+	while index < count
+		writer.append("def f" + index.to_s() + "(value: Integer): Integer\n\treturn f")
+		writer.append((index - 1).to_s())
+		writer.append("(value)\nend\n\n")
+		index += 1
+	end
+	writer.append("def main()\n\tvalue := f" + (count - 1).to_s() + "(1)\n\treturn\nend\n")
+	return Result<String, String>::Ok(writer.to_s())
+end
+
+def gate6g_median_float(values: Array<Float>): Float
+	mut sorted: Array<Float> := []
+	mut index := 0
+	while index < values.size()
+		sorted.push(values[index])
+		index += 1
+	end
+	index = 0
+	while index < sorted.size()
+		mut other := index + 1
+		while other < sorted.size()
+			if sorted[other] < sorted[index]
+				value := sorted[index]
+				sorted[index] = sorted[other]
+				sorted[other] = value
+			end
+			other += 1
+		end
+		index += 1
+	end
+	return sorted[sorted.size() / 2]
+end
+
+def gate6g_median_integer(values: Array<Integer>): Integer
+	mut sorted: Array<Integer> := []
+	mut index := 0
+	while index < values.size()
+		sorted.push(values[index])
+		index += 1
+	end
+	index = 0
+	while index < sorted.size()
+		mut other := index + 1
+		while other < sorted.size()
+			if sorted[other] < sorted[index]
+				value := sorted[index]
+				sorted[index] = sorted[other]
+				sorted[other] = value
+			end
+			other += 1
+		end
+		index += 1
+	end
+	return sorted[sorted.size() / 2]
+end
+
+def gate6g_candidate_within_percent(baseline: Float, candidate: Float, maximum_percent: Float): Boolean
+	return candidate * 100.0 <= baseline * maximum_percent
+end
+
+def measure_emit_time(
+		mut output: StringBuilder,
+		compiler: String,
+		source: String,
+		expected: String,
+		case_name: String,
+		candidate: String,
+		iteration: Integer,
+	): Result<Float, String>
+	measurement := try measure_process(compiler, ["emit-qbe", source])
+	append_measurement(
+		output,
+		"compiler-emit-qbe-total",
+		case_name,
+		candidate,
+		iteration,
+		measurement.seconds.to_s(),
+		measurement.status,
+	)
+	if measurement.status != 0 || measurement.stdout != expected || !measurement.stderr.empty?()
+		return Result<Float, String>::Err(candidate + " " + case_name + " emission differs")
+	end
+	return Result<Float, String>::Ok(measurement.seconds)
+end
+
+def measure_emit_rss(
+		mut output: StringBuilder,
+		compiler: String,
+		source: String,
+		expected: String,
+		case_name: String,
+		candidate: String,
+		iteration: Integer,
+	): Result<Integer, String>
+	measurement := try peak_process(compiler, ["emit-qbe", source])
+	append_measurement(
+		output,
+		"compiler-emit-qbe-peak-rss",
+		case_name,
+		candidate,
+		iteration,
+		measurement.rss.to_s(),
+		measurement.status,
+	)
+	if measurement.status != 0 || measurement.stdout != expected
+		return Result<Integer, String>::Err(candidate + " " + case_name + " RSS emission differs")
+	end
+	return Result<Integer, String>::Ok(measurement.rss)
+end
+
+def measure_build_time(
+		mut output: StringBuilder,
+		compiler: String,
+		source: String,
+		output_path: String,
+		expected_path: String,
+		qbe: String,
+		cc: String,
+		candidate: String,
+		iteration: Integer,
+	): Result<Float, String>
+	measurement := try measure_process(compiler, build_arguments(source, output_path, qbe, cc))
+	append_measurement(
+		output,
+		"compiler-build-total",
+		"compiler-source",
+		candidate,
+		iteration,
+		measurement.seconds.to_s(),
+		measurement.status,
+	)
+	if measurement.status != 0 || !measurement.stdout.empty?() || !measurement.stderr.empty?()
+		return Result<Float, String>::Err(candidate + " compiler build failed")
+	end
+	try require_file_equal(output_path, expected_path, candidate + " measured compiler bytes differ")
+	return Result<Float, String>::Ok(measurement.seconds)
+end
+
+def measure_build_rss(
+		mut output: StringBuilder,
+		compiler: String,
+		source: String,
+		output_path: String,
+		expected_path: String,
+		qbe: String,
+		cc: String,
+		candidate: String,
+		iteration: Integer,
+	): Result<Integer, String>
+	measurement := try peak_process(compiler, build_arguments(source, output_path, qbe, cc))
+	append_measurement(
+		output,
+		"compiler-build-peak-rss",
+		"compiler-source",
+		candidate,
+		iteration,
+		measurement.rss.to_s(),
+		measurement.status,
+	)
+	if measurement.status != 0 || !measurement.stdout.empty?()
+		return Result<Integer, String>::Err(candidate + " compiler RSS build failed")
+	end
+	try require_file_equal(output_path, expected_path, candidate + " RSS compiler bytes differ")
+	return Result<Integer, String>::Ok(measurement.rss)
+end
+
+def measure_emit_time_series(
+		mut output: StringBuilder,
+		compilers: Array<String>,
+		sources: Array<String>,
+		expected: Array<String>,
+		case_name: String,
+	): Result<Array<Array<Float>>, String>
+	mut baseline_values: Array<Float> := []
+	mut candidate_values: Array<Float> := []
+	mut iteration :=- 2
+	while iteration < 11
+		mut order := 0
+		while order < 2
+			mut candidate := order
+			if iteration % 2 != 0
+				candidate = 1 - order
+			end
+			mut label := "baseline"
+			if candidate == 1
+				label = "candidate"
+			end
+			value := try measure_emit_time(
+				output,
+				compilers[candidate],
+				sources[candidate],
+				expected[candidate],
+				case_name,
+				label,
+				iteration,
+			)
+			if iteration >= 0
+				if candidate == 0
+					baseline_values.push(value)
+				else
+					candidate_values.push(value)
+				end
+			end
+			order += 1
+		end
+		iteration += 1
+	end
+	return Result<Array<Array<Float>>, String>::Ok([baseline_values, candidate_values])
+end
+
+def measure_emit_rss_series(
+		mut output: StringBuilder,
+		compilers: Array<String>,
+		sources: Array<String>,
+		expected: Array<String>,
+		case_name: String,
+	): Result<Array<Array<Integer>>, String>
+	mut baseline_values: Array<Integer> := []
+	mut candidate_values: Array<Integer> := []
+	mut iteration :=- 2
+	while iteration < 11
+		mut order := 0
+		while order < 2
+			mut candidate := order
+			if iteration % 2 != 0
+				candidate = 1 - order
+			end
+			mut label := "baseline"
+			if candidate == 1
+				label = "candidate"
+			end
+			value := try measure_emit_rss(
+				output,
+				compilers[candidate],
+				sources[candidate],
+				expected[candidate],
+				case_name,
+				label,
+				iteration,
+			)
+			if iteration >= 0
+				if candidate == 0
+					baseline_values.push(value)
+				else
+					candidate_values.push(value)
+				end
+			end
+			order += 1
+		end
+		iteration += 1
+	end
+	return Result<Array<Array<Integer>>, String>::Ok([baseline_values, candidate_values])
+end
+
+def measure_build_time_series(
+		mut output: StringBuilder,
+		compilers: Array<String>,
+		sources: Array<String>,
+		measured_outputs: Array<String>,
+		expected_outputs: Array<String>,
+		qbe: String,
+		cc: String,
+	): Result<Array<Array<Float>>, String>
+	mut baseline_values: Array<Float> := []
+	mut candidate_values: Array<Float> := []
+	mut iteration :=- 2
+	while iteration < 11
+		mut order := 0
+		while order < 2
+			mut candidate := order
+			if iteration % 2 != 0
+				candidate = 1 - order
+			end
+			mut label := "baseline"
+			if candidate == 1
+				label = "candidate"
+			end
+			value := try measure_build_time(
+				output,
+				compilers[candidate],
+				sources[candidate],
+				measured_outputs[candidate],
+				expected_outputs[candidate],
+				qbe,
+				cc,
+				label,
+				iteration,
+			)
+			if iteration >= 0
+				if candidate == 0
+					baseline_values.push(value)
+				else
+					candidate_values.push(value)
+				end
+			end
+			order += 1
+		end
+		iteration += 1
+	end
+	return Result<Array<Array<Float>>, String>::Ok([baseline_values, candidate_values])
+end
+
+def measure_build_rss_series(
+		mut output: StringBuilder,
+		compilers: Array<String>,
+		sources: Array<String>,
+		measured_outputs: Array<String>,
+		expected_outputs: Array<String>,
+		qbe: String,
+		cc: String,
+	): Result<Array<Array<Integer>>, String>
+	mut baseline_values: Array<Integer> := []
+	mut candidate_values: Array<Integer> := []
+	mut iteration :=- 2
+	while iteration < 11
+		mut order := 0
+		while order < 2
+			mut candidate := order
+			if iteration % 2 != 0
+				candidate = 1 - order
+			end
+			mut label := "baseline"
+			if candidate == 1
+				label = "candidate"
+			end
+			value := try measure_build_rss(
+				output,
+				compilers[candidate],
+				sources[candidate],
+				measured_outputs[candidate],
+				expected_outputs[candidate],
+				qbe,
+				cc,
+				label,
+				iteration,
+			)
+			if iteration >= 0
+				if candidate == 0
+					baseline_values.push(value)
+				else
+					candidate_values.push(value)
+				end
+			end
+			order += 1
+		end
+		iteration += 1
+	end
+	return Result<Array<Array<Integer>>, String>::Ok([baseline_values, candidate_values])
+end
+
+def append_inventory_command(
+		mut inventory: StringBuilder,
+		label: String,
+		command: String,
+		arguments: Array<String>,
+	): Result<TimedProcess, String>
+	inventory.append("## " + label + "\n")
+	inventory.append("command: " + command)
+	mut index := 0
+	while index < arguments.size()
+		inventory.append(" " + arguments[index])
+		index += 1
+	end
+	inventory.append("\n")
+	measurement := try measure_process(command, arguments)
+	inventory.append("status: " + measurement.status.to_s() + "\n")
+	if !measurement.stdout.empty?()
+		inventory.append("stdout:\n" + measurement.stdout)
+		if !measurement.stdout.end_with?("\n")
+			inventory.append("\n")
+		end
+	end
+	if !measurement.stderr.empty?()
+		inventory.append("stderr:\n" + measurement.stderr)
+		if !measurement.stderr.end_with?("\n")
+			inventory.append("\n")
+		end
+	end
+	inventory.append("\n")
+	return Result<TimedProcess, String>::Ok(measurement)
+end
+
+def record_inventory(
+		inventory_path: String,
+		candidate_root: String,
+		baseline_root: String,
+		seed: String,
+		seed_provenance: String,
+		benchmark: String,
+		qbe: String,
+		cc: String,
+		go_command: String,
+		workspace: String,
+		baseline_sources: CompilerSources,
+		candidate_sources: CompilerSources,
+		baseline_chain: CompilerChain,
+		candidate_chain: CompilerChain,
+		scale_source: String,
+		scale_qbe: String,
+		application: String,
+	): Result<Boolean, String>
+	mut inventory := string_builder.new()
+	inventory.append("Gate 6G self-hosted symbol lookup process inventory\n\n")
+	inventory.append("initial seed provenance (outside ordinary chains):\n  " + seed_provenance + "\n\n")
+	inventory.append("ordinary baseline chain:\n")
+	inventory.append("  B1 -> baseline B2/compiler -> baseline B3/compiler -> baseline B4/compiler\n")
+	inventory.append("ordinary candidate chain:\n")
+	inventory.append("  B1 -> candidate B2/compiler -> candidate B3/compiler -> candidate B4/compiler\n\n")
+	inventory.append("measured comparison:\n")
+	inventory.append("  baseline B4 emits/builds the Gate 6F source; candidate B4 emits/builds the Gate 6G source\n")
+	inventory.append("  both build outputs use the basename compiler\n")
+	inventory.append("  both B4 compilers emit the same generated 6,000-function source\n")
+	inventory.append("  two warmups precede eleven alternating observations for time and RSS\n\n")
+	inventory.append("retained external boundary:\n")
+	inventory.append("  Native compiler -> explicit QBE 1.3 -> explicit system CC -> assembler/linker\n")
+	inventory.append("  recovery, Go, benchmark controller, and shell are outside ordinary chains\n\n")
+	inventory.append("exact measured commands:\n")
+	inventory.append("  " + baseline_chain.b4 + " emit-qbe " + baseline_sources.entry_path + "\n")
+	inventory.append("  " + candidate_chain.b4 + " emit-qbe " + candidate_sources.entry_path + "\n")
+	inventory.append("  " + baseline_chain.b4 + " build " + baseline_sources.entry_path + " --output " + workspace + "/measured-baseline/compiler --qbe " + qbe + " --cc " + cc + "\n")
+	inventory.append("  " + candidate_chain.b4 + " build " + candidate_sources.entry_path + " --output " + workspace + "/measured-candidate/compiler --qbe " + qbe + " --cc " + cc + "\n")
+	inventory.append("  " + baseline_chain.b4 + " emit-qbe " + scale_source + "\n")
+	inventory.append("  " + candidate_chain.b4 + " emit-qbe " + scale_source + "\n\n")
+	try append_inventory_command(inventory, "candidate TypeRB Native revision", "/usr/bin/git", ["-C", candidate_root, "rev-parse", "HEAD"])
+	try append_inventory_command(inventory, "candidate worktree status", "/usr/bin/git", ["-C", candidate_root, "status", "--porcelain"])
+	try append_inventory_command(inventory, "baseline TypeRB Native revision", "/usr/bin/git", ["-C", baseline_root, "rev-parse", "HEAD"])
+	try append_inventory_command(inventory, "operating system", "/usr/bin/sw_vers", [])
+	try append_inventory_command(inventory, "kernel and architecture", "/usr/bin/uname", ["-a"])
+	try append_inventory_command(inventory, "processor", "/usr/sbin/sysctl", ["-n", "machdep.cpu.brand_string"])
+	try append_inventory_command(inventory, "physical memory", "/usr/sbin/sysctl", ["-n", "hw.memsize"])
+	try append_inventory_command(inventory, "Go inventory tool version", go_command, ["version"])
+	try append_inventory_command(inventory, "C toolchain version", cc, ["--version"])
+	try append_inventory_command(inventory, "QBE probe", qbe, ["-h"])
+	artifacts := [
+		benchmark,
+		seed,
+		baseline_chain.b2,
+		baseline_chain.b3,
+		baseline_chain.b4,
+		candidate_chain.b2,
+		candidate_chain.b3,
+		candidate_chain.b4,
+		application,
+		qbe,
+	]
+	try append_inventory_command(inventory, "artifact formats", "/usr/bin/file", artifacts)
+	mut hash_arguments := ["-a", "256"]
+	mut index := 0
+	while index < artifacts.size()
+		hash_arguments.push(artifacts[index])
+		index += 1
+	end
+	try append_inventory_command(inventory, "artifact SHA-256", "/usr/bin/shasum", hash_arguments)
+	try append_inventory_command(inventory, "compiler source closure SHA-256", "/usr/bin/shasum", [
+			"-a",
+			"256",
+			baseline_sources.entry_path,
+			baseline_sources.storage_path,
+			baseline_sources.path_path,
+			candidate_sources.entry_path,
+			candidate_sources.storage_path,
+			candidate_sources.path_path,
+			scale_source,
+		])
+	try append_inventory_command(inventory, "fixed-point and scale QBE SHA-256", "/usr/bin/shasum", [
+			"-a",
+			"256",
+			baseline_chain.fixed_qbe_path,
+			candidate_chain.fixed_qbe_path,
+			scale_qbe,
+		])
+	try append_inventory_command(inventory, "baseline compiler undefined symbols", "/usr/bin/nm", ["-u", baseline_chain.b4])
+	try append_inventory_command(inventory, "candidate compiler undefined symbols", "/usr/bin/nm", ["-u", candidate_chain.b4])
+	try append_inventory_command(inventory, "baseline compiler dynamic libraries", "/usr/bin/otool", ["-L", baseline_chain.b4])
+	try append_inventory_command(inventory, "candidate compiler dynamic libraries", "/usr/bin/otool", ["-L", candidate_chain.b4])
+	try append_inventory_command(inventory, "baseline compiler Go metadata probe", go_command, ["version", "-m", baseline_chain.b4])
+	try append_inventory_command(inventory, "candidate compiler Go metadata probe", go_command, ["version", "-m", candidate_chain.b4])
+	assembly_probe := workspace + "/inventory-cc-probe.s"
+	try write_required(assembly_probe, "")
+	try append_inventory_command(
+		inventory,
+		"CC assembler and linker expansion",
+		cc,
+		["-###", assembly_probe, "-Wl,-dead_strip", "-o", workspace + "/inventory-cc-output"],
+	)
+	try require_no_intermediates(workspace)
+	return write_required(inventory_path, inventory.to_s())
+end
+
+def record_chain_hashes(
+		mut output: StringBuilder,
+		candidate: String,
+		chain: CompilerChain,
+	): Result<Boolean, String>
+	try record_hash(output, "compiler-sha256", "compiler-source", candidate + "-b2", chain.b2)
+	try record_hash(output, "compiler-sha256", "compiler-source", candidate + "-b3", chain.b3)
+	try record_hash(output, "compiler-sha256", "compiler-source", candidate + "-b4", chain.b4)
+	try record_hash(output, "emitted-qbe-sha256", "compiler-source", candidate, chain.fixed_qbe_path)
+	return Result<Boolean, String>::Ok(true)
+end
+
+def execute_benchmark(
+		candidate_root: String,
+		baseline_root: String,
+		seed: String,
+		seed_provenance: String,
+		benchmark: String,
+		qbe: String,
+		cc: String,
+		go_command: String,
+		workspace: String,
+		raw_path: String,
+		inventory_path: String,
+	): Result<Boolean, String>
+	try create_required_directory(workspace)
+	baseline_sources := try read_compiler_sources(baseline_root)
+	candidate_sources := try read_compiler_sources(candidate_root)
+	baseline_revision := try measure_process("/usr/bin/git", ["-C", baseline_root, "rev-parse", "HEAD"])
+	if baseline_revision.status != 0 || baseline_revision.stdout.strip() != "7cb7e85c0b5bff14157dc1a686829c010d095b70"
+		return Result<Boolean, String>::Err("baseline root is not the registered Gate 6F revision")
+	end
+	try require_hash(seed, "f7bcdadad91a125808e9ef509a28f2a54414d4635af5b12e9493caf49c42e44e", "Gate 6F B1 seed")
+	try require_hash(baseline_sources.entry_path, "d6cbf5100e2d76f6d04ff48a597de11fea8abd952f9c8e212f1d6f71de30c9ce", "baseline compiler entry")
+	try require_hash(candidate_sources.entry_path, "ebba63420e0cee349f0abf2726686b161712ef3f8a9d5399bdea8e23d0940dc0", "candidate compiler entry")
+	try require_hash(baseline_sources.storage_path, "d4c77fec9e5c5e8580cb0b5ee71fbd2c9c714555cbd4fd1457fcd44cc6db1f9d", "baseline storage source")
+	try require_hash(candidate_sources.storage_path, "d4c77fec9e5c5e8580cb0b5ee71fbd2c9c714555cbd4fd1457fcd44cc6db1f9d", "candidate storage source")
+	try require_hash(baseline_sources.path_path, "6347003851071b73cb8dbf38622fcc7cf3be6abf81ea253b9aad081fb057510a", "baseline path source")
+	try require_hash(candidate_sources.path_path, "6347003851071b73cb8dbf38622fcc7cf3be6abf81ea253b9aad081fb057510a", "candidate path source")
+	baseline_chain := try build_compiler_chain(seed, baseline_sources, qbe, cc, workspace + "/baseline-chain", "baseline")
+	candidate_chain := try build_compiler_chain(seed, candidate_sources, qbe, cc, workspace + "/candidate-chain", "candidate")
+	try require_hash(baseline_chain.b4, "2b63bd297e2e049f51c54b59299385aabf05d93ff218c701a5c6a54307358e12", "baseline B4 compiler")
+	try require_hash(candidate_chain.b4, "0c3c8c2d59a416aeb2165079a3e14ea83f2624aed3ea3deb750b7e47c3271cd7", "candidate B4 compiler")
+	try require_hash(baseline_chain.fixed_qbe_path, "626bcdfb28c6517c50b86851edf76f4ab5b0d8ada7d28e73209ff10e193bae67", "baseline fixed-point QBE")
+	try require_hash(candidate_chain.fixed_qbe_path, "7f67262117dfdcd8f075cb9273fe5843051a53ceddcff71bc8c633ce262fe402", "candidate fixed-point QBE")
+	scale_source_path := workspace + "/scale-6000.trb"
+	try write_required(scale_source_path, try gate6g_scale_source(6000))
+	baseline_scale_qbe := try emitted_qbe(baseline_chain.b4, scale_source_path, "baseline scale")
+	candidate_scale_qbe := try emitted_qbe(candidate_chain.b4, scale_source_path, "candidate scale")
+	if baseline_scale_qbe != candidate_scale_qbe
+		return Result<Boolean, String>::Err("candidate scale QBE differs from baseline")
+	end
+	scale_qbe_path := workspace + "/scale-6000.ssa"
+	try write_required(scale_qbe_path, baseline_scale_qbe)
+	try require_hash(scale_qbe_path, "05fc4203f253c341ac4bab441a3d9c06320e36ad2c40e4ef56ce0b39b4479559", "scale QBE")
+	application_project := workspace + "/file-root-project"
+	try prepare_application(candidate_root, application_project)
+	application_directories := [workspace + "/application-baseline", workspace + "/application-candidate", workspace + "/application-repeat"]
+	mut index := 0
+	while index < application_directories.size()
+		try create_required_directory(application_directories[index])
+		index += 1
+	end
+	application_outputs := [
+		application_directories[0] + "/program",
+		application_directories[1] + "/program",
+		application_directories[2] + "/program",
+	]
+	try build_checked(baseline_chain.b4, application_project + "/main.trb", application_outputs[0], qbe, cc, "baseline application")
+	try build_checked(candidate_chain.b4, application_project + "/main.trb", application_outputs[1], qbe, cc, "candidate application")
+	try build_checked(candidate_chain.b4, application_project + "/main.trb", application_outputs[2], qbe, cc, "repeated candidate application")
+	index = 0
+	while index < application_outputs.size()
+		try verify_application(application_outputs[index], "application " + index.to_s())
+		try require_hash(application_outputs[index], "413d97fd8a3f26e1086795b1fd5306ad5817613e7080ddba410eb8264c0a67b9", "application " + index.to_s())
+		if index > 0
+			try require_file_equal(application_outputs[0], application_outputs[index], "application bytes differ")
+		end
+		index += 1
+	end
+	measured_directories := [workspace + "/measured-baseline", workspace + "/measured-candidate"]
+	index = 0
+	while index < measured_directories.size()
+		try create_required_directory(measured_directories[index])
+		index += 1
+	end
+	compilers := [baseline_chain.b4, candidate_chain.b4]
+	compiler_sources := [baseline_sources.entry_path, candidate_sources.entry_path]
+	compiler_qbe := [baseline_chain.fixed_qbe, candidate_chain.fixed_qbe]
+	measured_outputs := [measured_directories[0] + "/compiler", measured_directories[1] + "/compiler"]
+	expected_outputs := [baseline_chain.b4, candidate_chain.b4]
+	mut output := string_builder.new()
+	output.append("metric,case,candidate,iteration,value,status\n")
+	direct_times := try measure_emit_time_series(output, compilers, compiler_sources, compiler_qbe, "compiler-source")
+	build_times := try measure_build_time_series(output, compilers, compiler_sources, measured_outputs, expected_outputs, qbe, cc)
+	scale_sources := [scale_source_path, scale_source_path]
+	scale_qbe := [baseline_scale_qbe, baseline_scale_qbe]
+	scale_times := try measure_emit_time_series(output, compilers, scale_sources, scale_qbe, "scale-6000-functions")
+	direct_rss := try measure_emit_rss_series(output, compilers, compiler_sources, compiler_qbe, "compiler-source")
+	build_rss := try measure_build_rss_series(output, compilers, compiler_sources, measured_outputs, expected_outputs, qbe, cc)
+	scale_rss := try measure_emit_rss_series(output, compilers, scale_sources, scale_qbe, "scale-6000-functions")
+	baseline_direct_median := gate6g_median_float(direct_times[0])
+	candidate_direct_median := gate6g_median_float(direct_times[1])
+	baseline_build_median := gate6g_median_float(build_times[0])
+	candidate_build_median := gate6g_median_float(build_times[1])
+	baseline_scale_median := gate6g_median_float(scale_times[0])
+	candidate_scale_median := gate6g_median_float(scale_times[1])
+	baseline_direct_rss := gate6g_median_integer(direct_rss[0])
+	candidate_direct_rss := gate6g_median_integer(direct_rss[1])
+	baseline_build_rss := gate6g_median_integer(build_rss[0])
+	candidate_build_rss := gate6g_median_integer(build_rss[1])
+	baseline_scale_rss := gate6g_median_integer(scale_rss[0])
+	candidate_scale_rss := gate6g_median_integer(scale_rss[1])
+	append_measurement(output, "median", "compiler-emit-qbe-total", "baseline", 0, baseline_direct_median.to_s(), 0)
+	append_measurement(output, "median", "compiler-emit-qbe-total", "candidate", 0, candidate_direct_median.to_s(), 0)
+	append_measurement(output, "median", "compiler-build-total", "baseline", 0, baseline_build_median.to_s(), 0)
+	append_measurement(output, "median", "compiler-build-total", "candidate", 0, candidate_build_median.to_s(), 0)
+	append_measurement(output, "median", "scale-6000-functions-total", "baseline", 0, baseline_scale_median.to_s(), 0)
+	append_measurement(output, "median", "scale-6000-functions-total", "candidate", 0, candidate_scale_median.to_s(), 0)
+	append_measurement(output, "median-rss", "compiler-emit-qbe", "baseline", 0, baseline_direct_rss.to_s(), 0)
+	append_measurement(output, "median-rss", "compiler-emit-qbe", "candidate", 0, candidate_direct_rss.to_s(), 0)
+	append_measurement(output, "median-rss", "compiler-build", "baseline", 0, baseline_build_rss.to_s(), 0)
+	append_measurement(output, "median-rss", "compiler-build", "candidate", 0, candidate_build_rss.to_s(), 0)
+	append_measurement(output, "median-rss", "scale-6000-functions", "baseline", 0, baseline_scale_rss.to_s(), 0)
+	append_measurement(output, "median-rss", "scale-6000-functions", "candidate", 0, candidate_scale_rss.to_s(), 0)
+	append_measurement(output, "improvement-limit-percent", "compiler-emit-qbe", "candidate-over-baseline", 0, "95", 0)
+	append_measurement(output, "improvement-limit-percent", "compiler-build", "candidate-over-baseline", 0, "97", 0)
+	append_measurement(output, "improvement-limit-percent", "scale-6000-functions", "candidate-over-baseline", 0, "75", 0)
+	append_measurement(output, "rss-limit-percent", "compiler-emit-qbe", "candidate-over-baseline", 0, "105", 0)
+	append_measurement(output, "rss-limit-percent", "compiler-build", "candidate-over-baseline", 0, "105", 0)
+	append_measurement(output, "rss-limit-percent", "scale-6000-functions", "candidate-over-baseline", 0, "110", 0)
+	append_measurement(output, "compiler-size-absolute-limit", "compiler-source", "candidate", 0, "208530", 0)
+	baseline_stripped := try strip_and_record(output, "baseline-b4", baseline_chain.b4, workspace + "/baseline-chain/stripped")
+	candidate_stripped := try strip_and_record(output, "candidate-b4", candidate_chain.b4, workspace + "/candidate-chain/stripped")
+	try record_hash(output, "seed-sha256", "compiler-seed", "gate6f-b1", seed)
+	try record_hash(output, "compiler-source-sha256", "source", "baseline-entry", baseline_sources.entry_path)
+	try record_hash(output, "compiler-source-sha256", "source", "candidate-entry", candidate_sources.entry_path)
+	try record_hash(output, "scale-source-sha256", "source", "6000-functions", scale_source_path)
+	try record_hash(output, "scale-qbe-sha256", "qbe", "both", scale_qbe_path)
+	try record_chain_hashes(output, "baseline", baseline_chain)
+	try record_chain_hashes(output, "candidate", candidate_chain)
+	try record_hash(output, "application-sha256", "file-root", "candidate", application_outputs[1])
+	append_measurement(output, "compiler-size-stripped-baseline", "compiler-source", "gate6f", 0, baseline_stripped.to_s(), 0)
+	append_measurement(output, "compiler-size-stripped-candidate", "compiler-source", "gate6g", 0, candidate_stripped.to_s(), 0)
+	try require_no_intermediates(workspace)
+	try write_required(raw_path, output.to_s())
+	try record_inventory(
+		inventory_path,
+		candidate_root,
+		baseline_root,
+		seed,
+		seed_provenance,
+		benchmark,
+		qbe,
+		cc,
+		go_command,
+		workspace,
+		baseline_sources,
+		candidate_sources,
+		baseline_chain,
+		candidate_chain,
+		scale_source_path,
+		scale_qbe_path,
+		application_outputs[1],
+	)
+	if !gate6g_candidate_within_percent(baseline_direct_median, candidate_direct_median, 95.0)
+		return Result<Boolean, String>::Err("candidate compiler emit-qbe median misses the 5% improvement")
+	end
+	if !gate6g_candidate_within_percent(baseline_build_median, candidate_build_median, 97.0)
+		return Result<Boolean, String>::Err("candidate compiler build median misses the 3% improvement")
+	end
+	if !gate6g_candidate_within_percent(baseline_scale_median, candidate_scale_median, 75.0)
+		return Result<Boolean, String>::Err("candidate scale median misses the 25% improvement")
+	end
+	if candidate_direct_rss * 100 > baseline_direct_rss * 105
+		return Result<Boolean, String>::Err("candidate compiler emit-qbe RSS exceeds the 5% bound")
+	end
+	if candidate_build_rss * 100 > baseline_build_rss * 105
+		return Result<Boolean, String>::Err("candidate compiler build RSS exceeds the 5% bound")
+	end
+	if candidate_scale_rss * 100 > baseline_scale_rss * 110
+		return Result<Boolean, String>::Err("candidate scale RSS exceeds the 10% bound")
+	end
+	if candidate_stripped > 208530
+		return Result<Boolean, String>::Err("candidate stripped compiler exceeds the registered size bound")
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def main()
+	arguments := argv()
+	if arguments.size() != 11
+		puts(
+			"usage: gate6g-benchmark CANDIDATE_ROOT BASELINE_ROOT SEED SEED_PROVENANCE BENCHMARK QBE CC GO WORKSPACE RAW_CSV INVENTORY",
+		)
+		return
+	end
+	case execute_benchmark(
+			arguments[0],
+			arguments[1],
+			arguments[2],
+			arguments[3],
+			arguments[4],
+			arguments[5],
+			arguments[6],
+			arguments[7],
+			arguments[8],
+			arguments[9],
+			arguments[10],
+		)
+	when Result::Ok(_value)
+		puts(arguments[9])
+		puts(arguments[10])
+	when Result::Err(error)
+		puts(error)
+	end
+end
