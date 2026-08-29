@@ -60,7 +60,7 @@ gate6k-benchmark \
 
 `BASELINE_ROOT` must be an exact checkout of
 `e9b00ed946919957fad82b6d2d3ffccfe8cd48d1`. `CANDIDATE_ROOT` must be an exact
-checkout of `196741058ef85f68b98f08f7371015367e059768`. `SEED` must be the retained
+checkout of `84e2e4a6e2cff9d7fdab46ce4eec33b609a597c4`. `SEED` must be the retained
 Gate 6J B4 artifact. `REFERENCE_TRB` is the pinned Go implementation and uses
 one inherited Go cache policy for every warmup and observation.
 
