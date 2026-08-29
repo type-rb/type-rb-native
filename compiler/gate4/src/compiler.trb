@@ -26,8 +26,6 @@ record Gate4Compiler
 	token_kinds: Gate4IntegerStorage
 	token_texts: Gate4StringStorage
 	token_lines: Gate4IntegerStorage
-	token_modules: Gate4IntegerStorage
-	static_string_tokens: Gate4IntegerStorage
 	token_count: Array<Integer>
 	module_names: Gate4StringStorage
 	module_files: Gate4StringStorage
@@ -157,37 +155,18 @@ def gate4_read_source(_path: String): String
 	return ""
 end
 
-def gate4_project_source_request(action: String, value: String): String
-	mut request := "trbn-internal:project-sources-v1:" + action
-	if value != ""
-		request += ":" + value
+def gate4_source_slice(source: String, start: Integer, finish: Integer): String
+	mut value := ""
+	mut index := start
+	while index < finish
+		value += source[index]
+		index += 1
 	end
-	return request
+	return value
 end
 
-def gate4_collect_project_sources(source_root: String, out_root: String): Gate4ProjectSources
-	gate4_read_source(gate4_project_source_request("source-root", source_root))
-	gate4_read_source(gate4_project_source_request("out-root", out_root))
-	error := gate4_read_source(gate4_project_source_request("collect", ""))
-	mut paths: Array<String> := []
-	mut sources: Array<String> := []
-	if error == ""
-		mut index := 0
-		mut collecting := true
-		while collecting
-			index_text := gate4_integer_string(index)
-			path := gate4_read_source(gate4_project_source_request("path", index_text))
-			if path == ""
-				collecting = false
-			else
-				source := gate4_read_source(gate4_project_source_request("source", index_text))
-				paths.push(path)
-				sources.push(source)
-				index += 1
-			end
-		end
-	end
-	return Gate4ProjectSources.new(paths: paths, sources: sources, error: error)
+def gate4_collect_project_sources(_source_root: String, _out_root: String): Gate4ProjectSources
+	return Gate4ProjectSources.new(paths: [], sources: [], error: "")
 end
 
 def gate4_symbol_index_new(capacity: Integer): Gate4SymbolIndex
@@ -202,8 +181,6 @@ def gate4_compiler_new(capacity: Integer): Gate4Compiler
 		token_kinds: gate4_integer_storage(capacity),
 		token_texts: gate4_string_storage(capacity),
 		token_lines: gate4_integer_storage(capacity),
-		token_modules: gate4_integer_storage(capacity),
-		static_string_tokens: gate4_integer_storage(capacity),
 		token_count: [0],
 		module_names: gate4_string_storage(capacity),
 		module_files: gate4_string_storage(capacity),
@@ -659,7 +636,6 @@ def gate4_emit_static_strings(
 					end
 				end
 			end
-			gate4_store_integer(state.static_string_tokens, token_index, canonical)
 			if !found
 				canonical_values.push(value)
 				canonical_tokens.push(token_index)
@@ -695,6 +671,7 @@ def gate4_emit_static_strings(
 				end
 				gate4_output_line(output, "\tb 0 }")
 			end
+			gate4_store_integer(state.token_lines, token_index, canonical)
 		end
 		token_index += 1
 	end
@@ -706,13 +683,7 @@ def gate4_project_runtime_qbe_line(value: String): Boolean
 	if gate4_string_starts_with(value, "data $g4_project_")
 		return true
 	end
-	if gate4_string_starts_with(value, "function w $g4_string_has_c_prefix")
-		return true
-	end
-	if gate4_string_starts_with(value, "function l $g4_string_suffix_after_c_prefix")
-		return true
-	end
-	if gate4_string_starts_with(value, "function l $g4_project_request_item")
+	if gate4_string_starts_with(value, "function l $g4_source_slice")
 		return true
 	end
 	if gate4_string_starts_with(value, "function w $g4_c_")
@@ -765,15 +736,7 @@ def gate4_emit_runtime(mut output: Gate4Output, project_runtime: Boolean)
 		"data $g4_project_error = align 8 { l 0 }",
 		"data $g4_project_source_root = align 8 { l 0 }",
 		"data $g4_project_out_root = align 8 { l 0 }",
-		"data $g4_project_request_source = align 8 { l 0 }",
-		"data $g4_project_request_out = align 8 { l 0 }",
-		"data $g4_project_request_result = align 8 { l 0 }",
 		"data $g4_project_empty_string = align 8 { l 0, b 0 }",
-		"data $g4_project_request_source_prefix = { b \"trbn-internal:project-sources-v1:source-root:\", b 0 }",
-		"data $g4_project_request_out_prefix = { b \"trbn-internal:project-sources-v1:out-root:\", b 0 }",
-		"data $g4_project_request_collect = { b \"trbn-internal:project-sources-v1:collect\", b 0 }",
-		"data $g4_project_request_path_prefix = { b \"trbn-internal:project-sources-v1:path:\", b 0 }",
-		"data $g4_project_request_body_prefix = { b \"trbn-internal:project-sources-v1:source:\", b 0 }",
 		"data $g4_project_trb_suffix = { b \".trb\", b 0 }",
 		"data $g4_project_test_suffix = { b \"_test.trb\", b 0 }",
 		"data $g4_project_git_component = { b \"/.git\", b 0 }",
@@ -910,10 +873,8 @@ def gate4_emit_runtime(mut output: Gate4Output, project_runtime: Boolean)
 		"@alloc\n\t%sz =l add %n, 9\n\t%s =l call $g4_string_alloc(l %sz)\n\tstorel %n, %s\n\t%d =l add %s, 8\n\t%got =l call $fread(l %d, l 1, l %n, l %f)\n\t%cs =w call $fclose(l %f)\n\t%rfe =w cnel %got, %n\n\t%cfe =w cnew %cs, 0\n\t%bad =w or %rfe, %cfe\n\tjnz %bad, @fail, @done",
 		"@done\n\t%e =l add %d, %n\n\tstoreb 0, %e\n\tret %s\n@close\n\t%ignored =w call $fclose(l %f)\n\tjmp @fail\n@fail\n\tret 0\n}\n",
 		"function l $g4_file_exists(l %path) {\n@start\n\t%data =l add %path, 8\n\t%status =w call $access(l %data, w 0)\n\t%ok =w ceqw %status, 0\n\t%result =l extuw %ok\n\tret %result\n}\n",
-		"function w $g4_string_has_c_prefix(l %value, l %prefix) {\n@start\n\t%value_length =l loadl %value\n\t%prefix_length =l call $strlen(l %prefix)\n\t%short =w csltl %value_length, %prefix_length\n\tjnz %short, @no, @compare\n@compare\n\t%data =l add %value, 8\n\t%comparison =w call $memcmp(l %data, l %prefix, l %prefix_length)\n\t%equal =w ceqw %comparison, 0\n\tret %equal\n@no\n\tret 0\n}\n",
-		"function l $g4_string_suffix_after_c_prefix(l %value, l %prefix) {\n@start\n\t%value_length =l loadl %value\n\t%prefix_length =l call $strlen(l %prefix)\n\t%suffix_length =l sub %value_length, %prefix_length\n\t%size =l add %suffix_length, 9\n\t%result =l call $g4_string_alloc(l %size)\n\tstorel %suffix_length, %result\n\t%value_data =l add %value, 8\n\t%source =l add %value_data, %prefix_length\n\t%target =l add %result, 8\n\tcall $memcpy(l %target, l %source, l %suffix_length)\n\t%end =l add %target, %suffix_length\n\tstoreb 0, %end\n\tret %result\n}\n",
-		"function l $g4_project_request_item(l %path, l %prefix, l %field_offset) {\n@start\n\t%result =l loadl $g4_project_request_result\n\t%missing =w ceql %result, 0\n\tjnz %missing, @empty, @index\n@index\n\t%prefix_length =l call $strlen(l %prefix)\n\t%path_data =l add %path, 8\n\t%index_data =l add %path_data, %prefix_length\n\t%requested =l call $strtol(l %index_data, l 0, w 10)\n\t%negative =w csltl %requested, 0\n\tjnz %negative, @empty, @array\n@array\n\t%field =l add %result, %field_offset\n\t%items =l loadl %field\n\t%count =l loadl %items\n\t%past =w cslel %count, %requested\n\tjnz %past, @empty, @load\n@load\n\t%data_slot =l add %items, 16\n\t%data =l loadl %data_slot\n\t%offset =l mul %requested, 8\n\t%slot =l add %data, %offset\n\t%item =l loadl %slot\n\tret %item\n@empty\n\tret $g4_project_empty_string\n}\n",
-		"function l $g4_read_source(l %path) {\n@start\n\t%set_source =w call $g4_string_has_c_prefix(l %path, l $g4_project_request_source_prefix)\n\tjnz %set_source, @source_root, @check_out\n@source_root\n\t%source_value =l call $g4_string_suffix_after_c_prefix(l %path, l $g4_project_request_source_prefix)\n\tstorel %source_value, $g4_project_request_source\n\tret $g4_project_empty_string\n@check_out\n\t%set_out =w call $g4_string_has_c_prefix(l %path, l $g4_project_request_out_prefix)\n\tjnz %set_out, @out_root, @check_collect\n@out_root\n\t%out_value =l call $g4_string_suffix_after_c_prefix(l %path, l $g4_project_request_out_prefix)\n\tstorel %out_value, $g4_project_request_out\n\tret $g4_project_empty_string\n@check_collect\n\t%collect =w call $g4_string_has_c_prefix(l %path, l $g4_project_request_collect)\n\tjnz %collect, @collect, @check_path\n@collect\n\t%source_root =l loadl $g4_project_request_source\n\t%out_root =l loadl $g4_project_request_out\n\t%source_missing =w ceql %source_root, 0\n\t%out_missing =w ceql %out_root, 0\n\t%roots_missing =w or %source_missing, %out_missing\n\tjnz %roots_missing, @empty, @run_collect\n@run_collect\n\t%result =l call $g4_collect_project_sources(l %source_root, l %out_root)\n\tstorel %result, $g4_project_request_result\n\t%error_slot =l add %result, 16\n\t%error =l loadl %error_slot\n\tret %error\n@check_path\n\t%path_request =w call $g4_string_has_c_prefix(l %path, l $g4_project_request_path_prefix)\n\tjnz %path_request, @path_item, @check_body\n@path_item\n\t%path_item_value =l call $g4_project_request_item(l %path, l $g4_project_request_path_prefix, l 0)\n\tret %path_item_value\n@check_body\n\t%body_request =w call $g4_string_has_c_prefix(l %path, l $g4_project_request_body_prefix)\n\tjnz %body_request, @body_item, @file\n@body_item\n\t%body_item_value =l call $g4_project_request_item(l %path, l $g4_project_request_body_prefix, l 8)\n\tret %body_item_value\n@file\n\t%data =l add %path, 8\n\t%file_source =l call $g4_read_file(l %data)\n\tret %file_source\n@empty\n\tret $g4_project_empty_string\n}\n",
+		"function l $g4_read_source(l %path) {\n@start\n\t%data =l add %path, 8\n\t%source =l call $g4_read_file(l %data)\n\tret %source\n}\n",
+		"function l $g4_source_slice(l %source, l %start, l %finish) {\n@start\n\t%length =l sub %finish, %start\n\t%size =l add %length, 9\n\t%result =l call $g4_string_alloc(l %size)\n\tstorel %length, %result\n\t%source_data =l add %source, 8\n\t%from =l add %source_data, %start\n\t%data =l add %result, 8\n\tcall $memcpy(l %data, l %from, l %length)\n\t%end =l add %data, %length\n\tstoreb 0, %end\n\tret %result\n}\n",
 		"function w $g4_c_ends_with(l %value, l %suffix) {\n@start\n\t%value_length =l call $strlen(l %value)\n\t%suffix_length =l call $strlen(l %suffix)\n\t%short =w csltl %value_length, %suffix_length\n\tjnz %short, @no, @compare\n@compare\n\t%offset =l sub %value_length, %suffix_length\n\t%start =l add %value, %offset\n\t%comparison =w call $memcmp(l %start, l %suffix, l %suffix_length)\n\t%equal =w ceqw %comparison, 0\n\tret %equal\n@no\n\tret 0\n}\n",
 		"function w $g4_c_is_test_source(l %path) {\n@start\n\t%length =l call $strlen(l %path)\n\t%short =w csltl %length, 9\n\tjnz %short, @no, @compare\n@compare\n\t%offset =l sub %length, 9\n\t%start =l add %path, %offset\n\t%comparison =w call $strncasecmp(l %start, l $g4_project_test_suffix, l 9)\n\t%equal =w ceqw %comparison, 0\n\tret %equal\n@no\n\tret 0\n}\n",
 		"function w $g4_c_has_directory_component(l %path, l %component) {\n@start\n\t%component_length =l call $strlen(l %component)\n\tjmp @search\n@search\n\t%cursor =l phi @start %path, @advance %advanced\n\t%match =l call $strstr(l %cursor, l %component)\n\t%missing =w ceql %match, 0\n\tjnz %missing, @no, @boundary\n@boundary\n\t%after =l add %match, %component_length\n\t%character =w loadub %after\n\t%end =w ceqw %character, 0\n\t%slash =w ceqw %character, 47\n\t%matched =w or %end, %slash\n\tjnz %matched, @yes, @advance\n@advance\n\t%advanced =l add %match, 1\n\tjmp @search\n@yes\n\tret 1\n@no\n\tret 0\n}\n",
@@ -1704,6 +1665,16 @@ def gate4_emit_direct_call(
 			gate4_output_line(output, "\t" + result + " =l call $g4_read_source(" + arguments + ")")
 			return gate4_emitted_value(result, "String", 0, "", 0, "")
 		end
+		if callee.name == "gate4_source_slice"
+			result := gate4_emit_temporary(context)
+			gate4_output_line(output, "\t" + result + " =l call $g4_source_slice(" + arguments + ")")
+			return gate4_emitted_value(result, "String", 0, "", 0, "")
+		end
+		if callee.name == "gate4_collect_project_sources"
+			result := gate4_emit_temporary(context)
+			gate4_output_line(output, "\t" + result + " =l call $g4_collect_project_sources(" + arguments + ")")
+			return gate4_emitted_value(result, result_type, 0, "", 0, "")
+		end
 	end
 	if callee.name == "puts"
 		gate4_output_line(output, "\tcall $g4_puts(" + arguments + ")")
@@ -1938,7 +1909,7 @@ def gate4_emit_primary(
 	end
 	if kind == 3
 		gate4_advance(position)
-		canonical := gate4_load_integer(state.static_string_tokens, token_index)
+		canonical := gate4_load_integer(state.token_lines, token_index)
 		return gate4_emitted_value("$g4s" + gate4_integer_string(canonical), "String", 0, "", 0, "")
 	end
 	if gate4_token_is(state, token_index, "[")
@@ -3571,7 +3542,6 @@ def gate4_push_token(mut state: Gate4Compiler, kind: Integer, text: String, line
 	gate4_store_integer(state.token_kinds, index, kind)
 	gate4_store_string(state.token_texts, index, text)
 	gate4_store_integer(state.token_lines, index, line)
-	gate4_store_integer(state.token_modules, index, state.active_module[0])
 	state.token_count[0] = index + 1
 	return
 end
@@ -3582,21 +3552,20 @@ def gate4_scan_identifier(
 		mut position: Array<Integer>,
 		line: Integer,
 	)
-	mut text := ""
+	start := position[0]
 	mut scanning := true
 	while scanning
 		if position[0] >= source.size()
 			scanning = false
 		else
 			if gate4_identifier_continue(source[position[0]])
-				text += source[position[0]]
 				gate4_project_advance(position, 1)
 			else
 				scanning = false
 			end
 		end
 	end
-	gate4_push_token(state, 1, text, line)
+	gate4_push_token(state, 1, gate4_source_slice(source, start, position[0]), line)
 	return
 end
 
@@ -3606,14 +3575,13 @@ def gate4_scan_number(
 		mut position: Array<Integer>,
 		line: Integer,
 	)
-	mut text := ""
+	start := position[0]
 	mut scanning := true
 	while scanning
 		if position[0] >= source.size()
 			scanning = false
 		else
 			if gate4_number_character(source[position[0]])
-				text += source[position[0]]
 				gate4_project_advance(position, 1)
 			else
 				scanning = false
@@ -3623,7 +3591,6 @@ def gate4_scan_number(
 	if position[0] + 1 < source.size()
 		if source[position[0]] == "."
 			if gate4_digit(source[position[0] + 1])
-				text += "."
 				gate4_project_advance(position, 1)
 				scanning = true
 				while scanning
@@ -3631,7 +3598,6 @@ def gate4_scan_number(
 						scanning = false
 					else
 						if gate4_number_character(source[position[0]])
-							text += source[position[0]]
 							gate4_project_advance(position, 1)
 						else
 							scanning = false
@@ -3641,7 +3607,7 @@ def gate4_scan_number(
 			end
 		end
 	end
-	gate4_push_token(state, 2, text, line)
+	gate4_push_token(state, 2, gate4_source_slice(source, start, position[0]), line)
 	return
 end
 
@@ -3679,6 +3645,7 @@ def gate4_scan_string(
 	)
 	gate4_project_advance(position, 1)
 	mut text := ""
+	mut chunk_start := position[0]
 	mut scanning := true
 	mut closed := false
 	while scanning
@@ -3687,6 +3654,7 @@ def gate4_scan_string(
 		else
 			current := source[position[0]]
 			if current == "\""
+				text += gate4_source_slice(source, chunk_start, position[0])
 				closed = true
 				scanning = false
 				gate4_project_advance(position, 1)
@@ -3696,6 +3664,7 @@ def gate4_scan_string(
 					scanning = false
 				else
 					if current == "\\"
+						text += gate4_source_slice(source, chunk_start, position[0])
 						gate4_project_advance(position, 1)
 						if position[0] >= source.size()
 							gate4_diagnostic(state, "TRBN4001", line, "unterminated String escape")
@@ -3703,9 +3672,9 @@ def gate4_scan_string(
 						else
 							text += gate4_decode_escape(state, source[position[0]], line)
 							gate4_project_advance(position, 1)
+							chunk_start = position[0]
 						end
 					else
-						text += current
 						gate4_project_advance(position, 1)
 					end
 				end
@@ -4620,6 +4589,14 @@ def gate4_project_join(root: String, relative: String): String
 	return gate4_path_join(root, relative)
 end
 
+def gate4_project_module_name_value(source_root: String, path: String): String
+	mut prefix_size := source_root.size()
+	if source_root != "/"
+		prefix_size += 1
+	end
+	return gate4_source_slice(path, prefix_size, path.size() - 4)
+end
+
 def gate4_project_module_name(
 		mut state: Gate4Compiler,
 		source_root: String,
@@ -4631,23 +4608,23 @@ def gate4_project_module_name(
 	end
 	if !gate4_string_starts_with(path, prefix)
 		gate4_diagnostic(state, "TRBN4010", 1, "project source is outside configured sourceDir")
-		return ""
+	else
+		if !gate4_string_ends_with(path, ".trb")
+			gate4_diagnostic(state, "TRBN4010", 1, "project source does not end in .trb")
+		else
+			name := gate4_project_module_name_value(source_root, path)
+			if name != ""
+				return name
+			end
+			gate4_diagnostic(
+				state,
+				"TRBN4010",
+				1,
+				"project source has an empty module name",
+			)
+		end
 	end
-	if !gate4_string_ends_with(path, ".trb")
-		gate4_diagnostic(state, "TRBN4010", 1, "project source does not end in .trb")
-		return ""
-	end
-	mut name := ""
-	mut index := prefix.size()
-	finish := path.size() - 4
-	while index < finish
-		name += path[index]
-		index += 1
-	end
-	if name == ""
-		gate4_diagnostic(state, "TRBN4010", 1, "project source has an empty module name")
-	end
-	return name
+	return ""
 end
 
 def gate4_string_starts_at(value: String, start: Integer, prefix: String): Boolean
@@ -4678,66 +4655,55 @@ def gate4_project_source_declares_main(source: String): Boolean
 end
 
 def gate4_project_append_imports(
-		bundle: Gate4ProjectSources,
+		module_names: Gate4StringStorage,
+		module_lookup: Gate4SymbolIndex,
 		source: String,
 		mut order: Array<Integer>,
+		mut included: Array<Integer>,
 	): Array<Integer>
 	mut index := 0
 	while index + 6 <= source.size()
 		if gate4_string_starts_at(source, index, " from ")
-			mut raw := ""
 			mut cursor := index + 6
 			mut collecting := true
-			while cursor < source.size()
-				if collecting
+			while collecting
+				if cursor >= source.size()
+					collecting = false
+				else
 					if source[cursor] == "\n"
 						collecting = false
 					else
-						raw += source[cursor]
+						cursor += 1
 					end
 				end
-				cursor += 1
 			end
+			raw := gate4_source_slice(source, index + 6, cursor)
 			normalized := gate4_import_path_value(raw)
-			target := gate4_project_bundle_find_import(bundle, normalized)
+			target := gate4_find_name(module_lookup, module_names, normalized)
 			if target >= 0
-				if !gate4_project_order_contains(order, target)
+				if included[target] == 0
 					order.push(target)
+					included[target] = 1
 				end
 			end
+			index = cursor
 		end
 		index += 1
 	end
 	return order
 end
 
-def gate4_project_bundle_find_import(bundle: Gate4ProjectSources, name: String): Integer
-	direct := "/" + name + ".trb"
-	mut index := 0
-	while index < bundle.paths.size()
-		if gate4_string_ends_with(bundle.paths[index], direct)
-			return index
-		end
-		index += 1
-	end
-	return - 1
-end
-
-def gate4_project_order_contains(order: Array<Integer>, target: Integer): Boolean
-	mut index := 0
-	while index < order.size()
-		if order[index] == target
-			return true
-		end
-		index += 1
-	end
-	return false
-end
-
-def gate4_order_project_sources(bundle: Gate4ProjectSources): Gate4ProjectSources
+def gate4_order_project_sources(source_root: String, bundle: Gate4ProjectSources): Gate4ProjectSources
 	mut entry :=- 1
+	mut included: Array<Integer> := []
+	mut module_names := gate4_string_storage(bundle.paths.size())
+	mut module_lookup := gate4_symbol_index_new(bundle.paths.size() * 4 + 16)
 	mut index := 0
 	while index < bundle.paths.size()
+		included.push(0)
+		name := gate4_project_module_name_value(source_root, bundle.paths[index])
+		gate4_store_string(module_names, index, name)
+		gate4_add_name_index(module_lookup, module_names, index + 1)
 		if gate4_project_source_declares_main(bundle.sources[index])
 			entry = index
 		end
@@ -4748,15 +4714,23 @@ def gate4_order_project_sources(bundle: Gate4ProjectSources): Gate4ProjectSource
 	end
 
 	mut order := [entry]
+	included[entry] = 1
 	mut cursor := 0
 	while cursor < order.size()
-		order = gate4_project_append_imports(bundle, bundle.sources[order[cursor]], order)
+		order = gate4_project_append_imports(
+			module_names,
+			module_lookup,
+			bundle.sources[order[cursor]],
+			order,
+			included,
+		)
 		cursor += 1
 	end
 	index = 0
 	while index < bundle.paths.size()
-		if !gate4_project_order_contains(order, index)
+		if included[index] == 0
 			order.push(index)
+			included[index] = 1
 		end
 		index += 1
 	end
@@ -4802,6 +4776,41 @@ def gate4_project_select_entry(mut state: Gate4Compiler): Boolean
 	return true
 end
 
+def gate4_project_module_acyclic(mut state: Gate4Compiler, module_index: Integer): Boolean
+	color := gate4_load_integer(state.function_lookup.next, module_index)
+	if color > 0
+		return color == 2
+	end
+	gate4_store_integer(state.function_lookup.next, module_index, 1)
+	mut import_index := gate4_load_integer(state.module_import_starts, module_index)
+	import_end := import_index + gate4_load_integer(state.module_import_counts, module_index)
+	while import_index < import_end
+		target := gate4_load_integer(state.import_targets, import_index)
+		if !gate4_project_module_acyclic(state, target)
+			return false
+		end
+		import_index += 1
+	end
+	gate4_store_integer(state.function_lookup.next, module_index, 2)
+	return true
+end
+
+def gate4_project_import_graph_acyclic(mut state: Gate4Compiler): Boolean
+	mut module_index := 0
+	while module_index < state.module_count[0]
+		gate4_store_integer(state.function_lookup.next, module_index, 0)
+		module_index += 1
+	end
+	module_index = 0
+	while module_index < state.module_count[0]
+		if !gate4_project_module_acyclic(state, module_index)
+			return false
+		end
+		module_index += 1
+	end
+	return true
+end
+
 def gate4_resolve_project_imports(mut state: Gate4Compiler): Boolean
 	mut module_index := 0
 	while module_index < state.module_count[0]
@@ -4836,22 +4845,24 @@ def gate4_resolve_project_imports(mut state: Gate4Compiler): Boolean
 		end
 		module_index += 1
 	end
-	module_index = 0
-	while module_index < state.module_count[0]
-		mut import_index := gate4_load_integer(state.module_import_starts, module_index)
-		import_end := import_index + gate4_load_integer(state.module_import_counts, module_index)
-		while import_index < import_end
-			state.active_module[0] = module_index
-			target := gate4_load_integer(state.import_targets, import_index)
-			if gate4_module_reaches(state, target, module_index)
-				raw_path := gate4_load_string(state.import_paths, import_index)
-				line := gate4_load_integer(state.import_lines, import_index)
-				gate4_diagnostic(state, "TRBN4003", line, "import cycle through " + raw_path)
-				return false
+	if !gate4_project_import_graph_acyclic(state)
+		module_index = 0
+		while module_index < state.module_count[0]
+			mut import_index := gate4_load_integer(state.module_import_starts, module_index)
+			import_end := import_index + gate4_load_integer(state.module_import_counts, module_index)
+			while import_index < import_end
+				state.active_module[0] = module_index
+				target := gate4_load_integer(state.import_targets, import_index)
+				if gate4_module_reaches(state, target, module_index)
+					raw_path := gate4_load_string(state.import_paths, import_index)
+					line := gate4_load_integer(state.import_lines, import_index)
+					gate4_diagnostic(state, "TRBN4003", line, "import cycle through " + raw_path)
+					return false
+				end
+				import_index += 1
 			end
-			import_index += 1
+			module_index += 1
 		end
-		module_index += 1
 	end
 	state.active_module[0] = state.entry_module[0]
 	return true
@@ -4883,7 +4894,7 @@ def gate4_load_project_sources(
 	if bundle.paths.size() != bundle.sources.size()
 		return gate4_project_error_state(config_path, 1, "project source adapter returned mismatched paths and sources")
 	end
-	ordered := gate4_order_project_sources(bundle)
+	ordered := gate4_order_project_sources(source_root, bundle)
 	mut state := gate4_compiler_new(gate4_project_capacity())
 	mut module_index := 0
 	while module_index < ordered.paths.size()
