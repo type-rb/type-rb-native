@@ -9,11 +9,14 @@ ownership model is defined by
 
 ## Status
 
-Gate 6K is pre-registered and implementation is in progress. The strict
-configuration projection, complete-source project loading, physical collection
-adapter, and exact Darwin candidate fixed point have passed focused development
-checks. The permanent native harness, registered Darwin measurements, pinned
-Linux arm64 evidence, and reviewed result remain required.
+Gate 6K is complete. The strict configuration projection, complete-source
+project loading, physical collection adapter, permanent TypeRB-authored
+harness, registered Darwin measurements, exact fixed points and regressions,
+and pinned Linux arm64 evidence all pass the pre-registered boundary. The
+measured compiler implementation is
+`84e2e4a6e2cff9d7fdab46ce4eec33b609a597c4`; the reviewed harness is
+`9d11966a92ca308d4bb84dacc59f47efbb92b6cc`. See the
+[recorded result](../results/2026-08-30-gate6k-configured-project-darwin-linux-arm64/README.md).
 
 The fixed source baseline is TypeRB Native main revision
 `e9b00ed946919957fad82b6d2d3ffccfe8cd48d1`. Both baseline and candidate
@@ -177,6 +180,9 @@ measurement controller, raw Darwin and pinned Linux arm64 evidence, exact
 fixed points and retained regressions, process/dependency inventory, and
 reviewed result all pass issue #80 without weakening its registered workload
 or thresholds.
+
+The recorded result satisfies that condition with the original workload and
+thresholds unchanged.
 
 Config discovery, packages, native dependencies, stable CLI design, default
 output placement, incremental caching, automatic tool discovery, source maps,

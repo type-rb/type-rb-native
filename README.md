@@ -207,15 +207,19 @@ closes exact Darwin and Linux arm64 replacement chains. See the
 [Decision 0017](docs/decisions/0017-self-hosted-float-arrays.md), and
 [recorded result](results/2026-08-29-gate6j-float-arrays-darwin-linux-arm64/README.md).
 
-Gate 6K is pre-registered in
-[issue #80](https://github.com/type-rb/type-rb-native/issues/80). It adds an
-explicit standard `trbconfig.jsonc` input to the ordinary self-hosted compiler,
-strictly loads the bounded Go-mode configuration, deterministically checks the
-complete production source set, and builds the project's unique top-level
-`main()`. The existing file-root path, language semantics, Native MIR, and
-explicit QBE/CC boundary remain unchanged. See the
-[Gate 6K configured-project plan](docs/gate-6-configured-project.md) and
-[Decision 0018](docs/decisions/0018-explicit-configured-project.md).
+Gate 6K is complete at measured implementation revision
+`84e2e4a6e2cff9d7fdab46ce4eec33b609a597c4`. The ordinary self-hosted compiler
+now accepts an explicit standard `trbconfig.jsonc`, strictly loads the bounded
+Go-mode configuration, deterministically checks the complete production source
+set, and builds the project's unique top-level `main()`. On the fixed
+1,025-file project, Native build is 85.81% faster with 93.08% less peak RSS
+than optimized Go, runtime is 18.73% faster with 67.55% less peak RSS, and the
+stripped executable is 96.98% smaller. Configured-input overhead remains within
+the registered file-root bounds, every canonical compiler guardrail passes,
+and exact Darwin/Linux arm64 replacement chains close. See the
+[Gate 6K configured-project plan](docs/gate-6-configured-project.md),
+[Decision 0018](docs/decisions/0018-explicit-configured-project.md), and
+[recorded result](results/2026-08-30-gate6k-configured-project-darwin-linux-arm64/README.md).
 
 Upward configured project discovery, production runtime integration,
 package/native-library boundaries, incremental builds, toolchain discovery,
@@ -342,6 +346,7 @@ repository.
 - [Gate 6J self-hosted Float Arrays](docs/gate-6-float-arrays.md)
 - [Gate 6J self-hosted Float Array Darwin/Linux arm64 result](results/2026-08-29-gate6j-float-arrays-darwin-linux-arm64/README.md)
 - [Gate 6K explicit configured-project executables](docs/gate-6-configured-project.md)
+- [Gate 6K configured-project Darwin/Linux arm64 result](results/2026-08-30-gate6k-configured-project-darwin-linux-arm64/README.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
 - [Decision 0003: Gate 1 QBE and Darwin arm64 profile](docs/decisions/0003-gate-1-qbe-target.md)
