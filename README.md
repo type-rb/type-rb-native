@@ -153,8 +153,11 @@ Gate 6F is in progress under the pre-registered scope in
 TypeRB-authored compiler is now an explicit three-module closure: the entry
 imports pure chunked-storage and path helpers, while recovery derives a
 temporary flat B1 handoff outside the ordinary chain. The first ordinary
-multi-file B2/B3/B4 outputs are byte-identical. See the
-[Gate 6F multi-file compiler plan](docs/gate-6-multifile-compiler.md).
+multi-file B2/B3/B4 outputs are byte-identical. A TypeRB-authored controller
+now fixes the alternating multi-file/flat comparison, compiler bounds, and
+Gate 6E application identity before formal measurement. See the
+[Gate 6F multi-file compiler plan](docs/gate-6-multifile-compiler.md) and
+[measurement harness](tools/gate6f-benchmark/README.md).
 
 Configured project discovery, production runtime integration,
 package/native-library boundaries, incremental builds, toolchain discovery,

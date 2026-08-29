@@ -10,8 +10,11 @@ ownership is defined by
 
 Implementation is in progress. The canonical compiler is now a three-module
 TypeRB closure, its focused unit and bootstrap tests pass, and the first
-B2/B3/B4 executables are byte-identical. A reviewed benchmark and pinned Linux
-correctness result remain before Gate 6F is complete.
+B2/B3/B4 executables are byte-identical. The
+[TypeRB-authored benchmark controller](../tools/gate6f-benchmark/README.md)
+encodes the registered Darwin comparison and Gate 6E application identity. A
+reviewed measurement and pinned Linux correctness result remain before Gate 6F
+is complete.
 
 ## Compiler closure
 
