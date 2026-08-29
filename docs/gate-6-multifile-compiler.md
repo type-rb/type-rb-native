@@ -8,13 +8,15 @@ ownership is defined by
 
 ## Status
 
-Implementation is in progress. The canonical compiler is now a three-module
-TypeRB closure, its focused unit and bootstrap tests pass, and the first
-B2/B3/B4 executables are byte-identical. The
-[TypeRB-authored benchmark controller](../tools/gate6f-benchmark/README.md)
-encodes the registered Darwin comparison and Gate 6E application identity. A
-reviewed measurement and pinned Linux correctness result remain before Gate 6F
-is complete.
+Gate 6F is complete at measured revision
+`7cb7e85c0b5bff14157dc1a686829c010d095b70`. The canonical compiler is a
+three-module TypeRB closure, and ordinary B2/B3/B4 executables are
+byte-identical on Darwin and pinned Linux arm64. Darwin multi-file median time
+is 0.712012 seconds, 21.56% above the Gate 6C baseline and 0.37% faster than the
+temporary flat source; median RSS is 36,716,544 bytes, and both compilers strip
+to 199,992 bytes. The Gate 6E application retains exact bytes and behavior.
+See the [TypeRB-authored benchmark controller](../tools/gate6f-benchmark/README.md)
+and [recorded result](../results/2026-08-29-gate6f-multifile-compiler-darwin-linux-arm64/README.md).
 
 ## Compiler closure
 
