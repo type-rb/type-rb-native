@@ -75,6 +75,8 @@ dependency boundaries, and retained external tools.
 
 ## Deferred scope
 
-Public Hash semantics, a stronger String hash, configured projects, packages,
+Gate 6H separately registers a private TypeRB-authored rolling bucket for its
+compiler-internal module index; the Gate 6G function bucket remains unchanged.
+Public Hash and String hash semantics, configured projects, packages,
 incremental builds, tool discovery, source maps, release seed policy, and
 further compiler decomposition remain separate slices.

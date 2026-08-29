@@ -414,6 +414,25 @@ application exactly, and closes exact Darwin and Linux arm64 replacement
 chains. See the
 [Gate 6G result](../results/2026-08-29-gate6g-symbol-lookup-darwin-linux-arm64/README.md).
 
+Gate 6H is the file-root module-graph scalability slice registered in
+[issue #64](https://github.com/type-rb/type-rb-native/issues/64) and specified
+by [Decision 0015](decisions/0015-indexed-module-graph.md). Canonical module
+and import arrays retain source order while a deterministic internal
+module-name index and per-module import spans remove quadratic whole-table
+scans from loading, import resolution, and duplicate validation. Contiguous
+declaration boundaries stop duplicate scans at the preceding module. No
+configured project, package, public Hash, syntax, runtime, CLI, snapshot, MIR,
+target, or external-tool contract is introduced.
+
+Two warmups and eleven alternating Darwin observations compare the fixed Gate
+6G baseline and candidate on a generated entry plus 1,024 imported modules.
+The registered minimum improvements are 35% for direct checking, 25% for QBE
+emission, and 10% for a complete Native build. RSS, Native-versus-Go build
+time and memory, application size and behavior, canonical self-build time and
+memory, stripped compiler size, exact fixed points, representative application
+identity, and pinned Linux arm64 correctness remain bounded. See the
+[Gate 6H plan](gate-6-module-graph.md). Formal results are not yet recorded.
+
 This gate is not authorization to ship. It evaluates:
 
 - broader configured and packaged multi-module applications beyond the
