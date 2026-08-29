@@ -403,8 +403,16 @@ baseline and candidate on canonical direct QBE emission, complete self-builds,
 and a generated 6,000-function chain. The registered minimum improvements are
 5%, 3%, and 25% respectively; RSS, stripped compiler size, exact fixed points,
 application identity, and pinned Linux arm64 correctness remain bounded. See
-the [Gate 6G plan](gate-6-symbol-lookup.md). Formal results are not yet
-recorded.
+the [Gate 6G plan](gate-6-symbol-lookup.md).
+
+Gate 6G is complete at measured revision
+`8bcc2a6e1c5ecede5f07c2dda63a4d4d82631375`. Canonical direct QBE emission
+improves by 30.80%, the complete build improves by 5.95%, and 6,000-function
+emission improves by 53.49%; median RSS changes by +1.31%, 0.00%, and +0.12%
+respectively. The candidate strips to 200,008 bytes, retains the representative
+application exactly, and closes exact Darwin and Linux arm64 replacement
+chains. See the
+[Gate 6G result](../results/2026-08-29-gate6g-symbol-lookup-darwin-linux-arm64/README.md).
 
 This gate is not authorization to ship. It evaluates:
 

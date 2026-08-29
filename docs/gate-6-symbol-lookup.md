@@ -9,8 +9,17 @@ internal ownership model is defined by
 
 ## Status
 
-Implementation is in progress. Formal results are not yet recorded and none of
-the registered thresholds may be inferred from diagnostic runs.
+Complete at measured revision
+`8bcc2a6e1c5ecede5f07c2dda63a4d4d82631375`. The formal Darwin and pinned
+Linux arm64 evidence is retained in the
+[Gate 6G result](../results/2026-08-29-gate6g-symbol-lookup-darwin-linux-arm64/README.md).
+
+Canonical direct QBE emission improves by 30.80%, the complete compiler build
+improves by 5.95%, and 6,000-function direct QBE emission improves by 53.49%.
+The respective registered minimums were 5%, 3%, and 25%. Median RSS changes by
++1.31%, 0.00%, and +0.12%; the candidate strips to 200,008 bytes; exact Darwin
+and Linux replacement chains pass; and the representative application retains
+exact bytes and behavior.
 
 ## Indexed boundary
 
