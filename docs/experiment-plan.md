@@ -535,6 +535,18 @@ fixed-point QBE, retained applications, full corpus, and pinned Linux arm64
 correctness remain mandatory. See the
 [Gate 6K plan](gate-6-configured-project.md).
 
+Gate 6K is complete at measured implementation revision
+`84e2e4a6e2cff9d7fdab46ce4eec33b609a597c4` with the reviewed harness at
+revision `9d11966a92ca308d4bb84dacc59f47efbb92b6cc`. On the registered scale
+project, configured Native check, emit, and build medians are 6.41%, 11.01%,
+and 1.73% above the same candidate's file-root path. Against optimized Go,
+Native configured check is 2.85% faster, build is 85.81% faster, and runtime is
+18.73% faster, with materially lower peak RSS and a 96.98% smaller stripped
+application. The fresh Gate 6J comparison remains within every canonical
+compiler guardrail, and exact Darwin and Linux arm64 candidate chains close.
+See the
+[Gate 6K result](../results/2026-08-30-gate6k-configured-project-darwin-linux-arm64/README.md).
+
 This gate is not authorization to ship. It evaluates:
 
 - broader configured and packaged multi-module applications beyond the
