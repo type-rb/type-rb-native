@@ -9,7 +9,13 @@ representation and ownership model is defined by
 
 ## Status
 
-Implementation complete; formal Darwin and Linux measurement is pending.
+Implementation and the TypeRB-authored
+[benchmark controller](../tools/gate6j-benchmark/README.md) are complete;
+formal Darwin and Linux measurement is pending. The ordinary Darwin B1-to-B4
+smoke chain is byte-identical, the permanent Float Array corpus executes, and
+the Gate 6E representative and Gate 6I scalar Float applications retain exact
+bytes. These are pre-measurement correctness checks rather than the registered
+result.
 
 The fixed source baseline is TypeRB Native main revision
 `5ff3da39c8c41a30596bbeed3b6fcffc207a43ed`. Both baseline and candidate begin
