@@ -501,6 +501,32 @@ strips to 216,552 bytes, preserves the exact representative and scalar Float
 applications, and closes exact Darwin and Linux arm64 replacement chains. See
 the [Gate 6J result](../results/2026-08-29-gate6j-float-arrays-darwin-linux-arm64/README.md).
 
+Gate 6K is the explicit configured-project slice registered in
+[issue #80](https://github.com/type-rb/type-rb-native/issues/80) and specified
+by [Decision 0018](decisions/0018-explicit-configured-project.md). It lets the
+ordinary self-hosted compiler accept a directly named standard
+`trbconfig.jsonc`, strictly decode a bounded Go-mode projection, enumerate and
+check the complete production `sourceDir`, preserve root-relative module
+identity, and build the unique top-level runnable `main()`.
+
+The command remains experimental and continues to require explicit config,
+output, QBE, and CC paths. Upward discovery, packages, native dependencies,
+default output placement, test compilation, and stable CLI behavior are not
+part of this slice. Directory enumeration uses a narrow internal physical
+compiler-runtime boundary; it does not add a public TypeRB API or modify the
+reference repository.
+
+The exact Gate 6H 1,025-file graph runs through configured Native, file-root
+Native, and pinned optimized-Go project paths. Configured Native check, emit,
+and build time and RSS must remain within 15% of the candidate file-root path.
+Configured Native check and build plus Native application runtime and RSS must
+remain within 25% of optimized Go, and the stripped Native application must be
+at least 80% smaller. A fresh Gate 6J comparison bounds canonical compiler time
+and RSS to +15% and stripped size to 248,000 bytes. Exact candidate B2/B3/B4,
+fixed-point QBE, retained applications, full corpus, and pinned Linux arm64
+correctness remain mandatory. See the
+[Gate 6K plan](gate-6-configured-project.md).
+
 This gate is not authorization to ship. It evaluates:
 
 - broader configured and packaged multi-module applications beyond the
