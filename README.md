@@ -194,18 +194,18 @@ and Linux arm64 replacement chains. See the
 [Decision 0016](docs/decisions/0016-self-hosted-float-scalar-path.md), and
 [recorded result](results/2026-08-29-gate6i-float-darwin-linux-arm64/README.md).
 
-Gate 6J implementation is complete and formal measurement is pending under
-[issue #74](https://github.com/type-rb/type-rb-native/issues/74). It extends
-the existing self-hosted Array runtime with `Array<Float>`, including safe
-Integer element widening, common numeric literal inference, growth, indexing,
-mutation, nested Arrays, and binary64 payload operations. The fixed five-
-million-element workload must remain competitive with optimized Go for build
-time, runtime, memory, and executable size while the compiler fixed point and
-existing applications stay exact. Permanent candidate-only conformance passes
-from the updated Native B2 without changing the retained recovery snapshot.
-See the
-[Gate 6J Float Array plan](docs/gate-6-float-arrays.md) and
-[Decision 0017](docs/decisions/0017-self-hosted-float-arrays.md).
+Gate 6J is complete at measured implementation revision
+`914f4f592f344111b7a790aac00aecbf0d411d11`. The existing self-hosted Array
+runtime now carries `Array<Float>`, including safe Integer element widening,
+common numeric literal inference, growth, indexing, mutation, nested Arrays,
+and binary64 payload operations. On the fixed workload, Native builds 42.00%
+faster and with 48.25% less peak RSS than optimized Go, runs 18.02% slower with
+58.18% less peak RSS, and produces a 96.80% smaller stripped executable. It
+remains within every registered Go-parity and canonical compiler guardrail and
+closes exact Darwin and Linux arm64 replacement chains. See the
+[Gate 6J Float Array plan](docs/gate-6-float-arrays.md),
+[Decision 0017](docs/decisions/0017-self-hosted-float-arrays.md), and
+[recorded result](results/2026-08-29-gate6j-float-arrays-darwin-linux-arm64/README.md).
 
 Configured project discovery, production runtime integration,
 package/native-library boundaries, incremental builds, toolchain discovery,
@@ -330,6 +330,7 @@ repository.
 - [Gate 6I self-hosted Float scalar path](docs/gate-6-float.md)
 - [Gate 6I self-hosted Float Darwin/Linux arm64 result](results/2026-08-29-gate6i-float-darwin-linux-arm64/README.md)
 - [Gate 6J self-hosted Float Arrays](docs/gate-6-float-arrays.md)
+- [Gate 6J self-hosted Float Array Darwin/Linux arm64 result](results/2026-08-29-gate6j-float-arrays-darwin-linux-arm64/README.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
 - [Decision 0003: Gate 1 QBE and Darwin arm64 profile](docs/decisions/0003-gate-1-qbe-target.md)
