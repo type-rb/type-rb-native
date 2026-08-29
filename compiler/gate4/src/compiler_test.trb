@@ -210,6 +210,8 @@ describe("Gate 4 TypeRB frontend") do
 		)
 		expect(gate4_has_diagnostic(state)).to_be_false()
 		expect(state.module_count[0]).to_equal(4)
+		expect(gate4_load_string(state.module_names, 0)).to_equal("application")
+		expect(gate4_load_string(state.module_names, 1)).to_equal("lib/value")
 		expect(gate4_load_string(state.module_names, state.entry_module[0])).to_equal("application")
 		direct := gate4_find_module(state, "lib/value")
 		expect(direct >= 0).to_be_true()
@@ -237,6 +239,53 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_has_diagnostic(forward)).to_be_false()
 		expect(gate4_resolve(forward)).to_be_true()
 		expect(gate4_check(forward)).to_be_true()
+	end
+
+	test("orders configured modules like file-root discovery") do
+		mut configured := gate4_load_project_sources(
+			"/project/trbconfig.jsonc",
+			"/project/src",
+			Gate4ProjectSources.new(
+				paths: [
+					"/project/src/m0000.trb",
+					"/project/src/m0001.trb",
+					"/project/src/main.trb",
+				],
+				sources: [
+					"def f0000(): Integer\n\treturn 1\nend\n",
+					"import { f0000 } from m0000\n\ndef f0001(): Integer\n\treturn f0000() + 1\nend\n",
+					"import { f0001 } from m0001\n\ndef main()\n\tvalue := f0001()\n\treturn\nend\n",
+				],
+				error: "",
+			),
+		)
+		mut file_order := gate4_load_project_sources(
+			"/project/trbconfig.jsonc",
+			"/project/src",
+			Gate4ProjectSources.new(
+				paths: [
+					"/project/src/main.trb",
+					"/project/src/m0001.trb",
+					"/project/src/m0000.trb",
+				],
+				sources: [
+					"import { f0001 } from m0001\n\ndef main()\n\tvalue := f0001()\n\treturn\nend\n",
+					"import { f0000 } from m0000\n\ndef f0001(): Integer\n\treturn f0000() + 1\nend\n",
+					"def f0000(): Integer\n\treturn 1\nend\n",
+				],
+				error: "",
+			),
+		)
+		expect(gate4_load_string(configured.module_names, 0)).to_equal("main")
+		expect(gate4_load_string(configured.module_names, 1)).to_equal("m0001")
+		expect(gate4_load_string(configured.module_names, 2)).to_equal("m0000")
+		expect(gate4_resolve(configured)).to_be_true()
+		expect(gate4_check(configured)).to_be_true()
+		expect(gate4_resolve(file_order)).to_be_true()
+		expect(gate4_check(file_order)).to_be_true()
+		expect(gate4_output_source(gate4_emit_qbe(configured))).to_equal(
+			gate4_output_source(gate4_emit_qbe(file_order)),
+		)
 	end
 
 	test("rejects invalid configured project bundles before checking") do
