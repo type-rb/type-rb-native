@@ -25,6 +25,11 @@ intrinsic, a snapshot or Native MIR field, new syntax, or CLI behavior. Records,
 imports, fields, modules, and locals remain canonical-array data and retain
 their existing observable behavior.
 
+The lexer also stops bounded character-set membership at the first exact
+match. The checked-in ASCII identifier sets, tokenization, and diagnostics are
+unchanged; only the already-determined suffix scan is removed. This lookup is
+kept as a direct scan rather than acquiring persistent index state.
+
 ## Correctness boundary
 
 Permanent tests cover:
@@ -32,6 +37,7 @@ Permanent tests cover:
 - deterministic bucket sizing across its growth boundary;
 - same-length collisions, duplicate names, module qualification, and missing
   names;
+- successful and missing bounded character-set membership;
 - the exact last-match behavior of every existing lookup family;
 - a generated 128-function chain in ordinary tests and a 6,000-function chain
   in formal measurement;

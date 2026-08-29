@@ -43,6 +43,11 @@ the canonical arrays. Applicable short-lived tables may return from the last
 matching entry, but they do not acquire a second persistent index without
 separate evidence.
 
+Lexical character-set membership remains a direct scan of the checked-in ASCII
+sets and returns at the first exact character match. It does not retain index
+state or change the accepted identifier alphabet; it only avoids scanning the
+known-irrelevant remainder after success.
+
 ## Consequences
 
 The ordinary resolver must build the function index before any indexed lookup;
