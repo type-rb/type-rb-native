@@ -309,6 +309,9 @@ def _gate4_verify_valid_case(
 		executables: Array<String>,
 		qbe: String,
 		workspace: String,
+		file_start: Integer,
+		file_end: Integer,
+		verify_legacy_build: Boolean,
 	): Result<String, String>
 	base := root + "/compiler/gate4/conformance/" + category + "/" + case_name
 	source := try _gate4_read(base + ".trb")
@@ -334,16 +337,9 @@ def _gate4_verify_valid_case(
 		end
 		index += 1
 	end
-	file_executables := [
-		executables[1],
-		executables[2],
-		executables[3],
-		executables[4],
-		executables[5],
-	]
-	index = 0
-	while index < file_executables.size()
-		check_process := case run(file_executables[index], ["check", base + ".trb"])
+	index = file_start
+	while index < file_end
+		check_process := case run(executables[index], ["check", base + ".trb"])
 		when Result::Ok(process)
 			process
 		when Result::Err(error)
@@ -352,7 +348,7 @@ def _gate4_verify_valid_case(
 		if check_process.status != 0 || check_process.stdout != "ok\n" || !check_process.stderr.empty?()
 			return Result<String, String>::Err(case_name + " file check differs at compiler " + index.to_s())
 		end
-		emit_process := case run(file_executables[index], ["emit-qbe", base + ".trb"])
+		emit_process := case run(executables[index], ["emit-qbe", base + ".trb"])
 		when Result::Ok(process)
 			process
 		when Result::Err(error)
@@ -367,14 +363,16 @@ def _gate4_verify_valid_case(
 	if actual_runtime != expected_runtime
 		return Result<String, String>::Err(case_name + " runtime output differs")
 	end
-	try _gate6_verify_build_case(
-		base + ".trb",
-		canonical_qbe,
-		expected_runtime,
-		qbe,
-		workspace,
-		category + "-" + case_name,
-	)
+	if verify_legacy_build
+		try _gate6_verify_build_case(
+			base + ".trb",
+			canonical_qbe,
+			expected_runtime,
+			qbe,
+			workspace,
+			category + "-" + case_name,
+		)
+	end
 	return Result<String, String>::Ok(canonical_qbe)
 end
 
@@ -408,6 +406,139 @@ def _gate6_verify_invalid_build_case(
 	return Result<Boolean, String>::Ok(true)
 end
 
+def _gate6j_verify_candidate_builds(
+		executables: Array<String>,
+		source_path: String,
+		expected_runtime: String,
+		qbe: String,
+		workspace: String,
+		case_name: String,
+	): Result<Boolean, String>
+	mut outputs: Array<String> := []
+	mut index := 0
+	while index < executables.size()
+		directory := workspace + "/gate6j-build-" + case_name + "-" + index.to_s()
+		try _gate6_reset_directory(directory)
+		output := directory + "/program"
+		try _gate6_verify_built_program(
+			executables[index],
+			source_path,
+			output,
+			qbe,
+			expected_runtime,
+			case_name + " candidate " + index.to_s(),
+		)
+		try _gate6_require_no_intermediates(directory)
+		outputs.push(output)
+		index += 1
+	end
+	index = 1
+	while index < outputs.size()
+		try _gate6_require_same(outputs[0], outputs[index], case_name + " candidate build")
+		index += 1
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def _gate6j_verify_invalid_case(
+		root: String,
+		case_name: String,
+		executables: Array<String>,
+		workspace: String,
+	): Result<Boolean, String>
+	base := root + "/compiler/gate4/conformance/invalid/" + case_name
+	source := try _gate4_read(base + ".source")
+	expected := try _gate4_read(base + ".diag")
+	mut index := 0
+	while index < executables.size()
+		check := try _gate4_compiler_output(executables[index], source, "check")
+		emit := try _gate4_compiler_output(executables[index], source, "emit-qbe")
+		if check != expected || emit != expected || emit.include?("export function")
+			return Result<Boolean, String>::Err(
+				case_name + " diagnostic differs at candidate " + index.to_s()
+			)
+		end
+		file_check := try _gate6_process(executables[index], ["check", base + ".source"])
+		file_emit := try _gate6_process(executables[index], ["emit-qbe", base + ".source"])
+		if file_check.status != 1 || !file_check.stdout.empty?() || file_check.stderr != expected
+			return Result<Boolean, String>::Err(
+				case_name + " file check differs at candidate " + index.to_s(),
+			)
+		end
+		if file_emit.status != 1 || !file_emit.stdout.empty?() || file_emit.stderr != expected
+			return Result<Boolean, String>::Err(
+				case_name + " file emission differs at candidate " + index.to_s(),
+			)
+		end
+		directory := workspace + "/gate6j-invalid-" + case_name + "-" + index.to_s()
+		try _gate6_reset_directory(directory)
+		output := directory + "/program"
+		build := try _gate6_build(
+			executables[index],
+			base + ".source",
+			output,
+			"/usr/bin/false",
+			"/usr/bin/false",
+		)
+		if build.status != 1 || !build.stdout.empty?() || build.stderr != expected
+			return Result<Boolean, String>::Err(
+				case_name + " build differs at candidate " + index.to_s(),
+			)
+		end
+		try _gate6_require_missing(output)
+		try _gate6_require_no_intermediates(directory)
+		index += 1
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def _gate6j_verify_bounds_failure(
+		root: String,
+		executables: Array<String>,
+		qbe: String,
+		workspace: String,
+	): Result<Boolean, String>
+	source_path := root + "/compiler/gate4/conformance/runtime-invalid/float-array-bounds.trb"
+	source := try _gate4_read(source_path)
+	mut canonical_qbe := ""
+	mut outputs: Array<String> := []
+	mut index := 0
+	while index < executables.size()
+		check := try _gate4_compiler_output(executables[index], source, "check")
+		if check != "ok\n"
+			return Result<Boolean, String>::Err("Float Array bounds source check differs")
+		end
+		emission := try _gate4_compiler_output(executables[index], source, "emit-qbe")
+		if index == 0
+			canonical_qbe = emission
+		else
+			if emission != canonical_qbe
+				return Result<Boolean, String>::Err("Float Array bounds QBE differs")
+			end
+		end
+		directory := workspace + "/gate6j-bounds-" + index.to_s()
+		try _gate6_reset_directory(directory)
+		output := directory + "/program"
+		build := try _gate6_build(executables[index], source_path, output, qbe, "/usr/bin/cc")
+		if build.status != 0 || !build.stdout.empty?() || !build.stderr.empty?()
+			return Result<Boolean, String>::Err("Float Array bounds build failed: " + build.stderr)
+		end
+		runtime := try _gate6_process(output, [])
+		if runtime.status != 2 || !runtime.stdout.empty?() || runtime.stderr != "panic: index is out of bounds\n"
+			return Result<Boolean, String>::Err("Float Array bounds failure differs")
+		end
+		try _gate6_require_no_intermediates(directory)
+		outputs.push(output)
+		index += 1
+	end
+	index = 1
+	while index < outputs.size()
+		try _gate6_require_same(outputs[0], outputs[index], "Float Array bounds candidate build")
+		index += 1
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
 def _gate4_verify_conformance(
 		root: String,
 		qbe: String,
@@ -434,6 +565,9 @@ def _gate4_verify_conformance(
 			executables,
 			qbe,
 			workspace,
+			1,
+			6,
+			true,
 		)
 		if valid_names[index] == "float-scalars"
 			float_qbe = valid_qbe
@@ -471,12 +605,79 @@ def _gate4_verify_conformance(
 	if float_qbe.include?("function d $g4f1(l ") || float_qbe.include?("call $g4f1(l ")
 		return Result<Boolean, String>::Err("Float call boundary uses the Integer ABI")
 	end
+	candidate_executables := [executables[3], executables[4], executables[5]]
+	float_array_qbe := try _gate4_verify_valid_case(
+		root,
+		"valid",
+		"float-arrays",
+		candidate_executables,
+		qbe,
+		workspace,
+		0,
+		3,
+		false,
+	)
+	required_float_array_qbe := [
+		"function $g4_array_push_d(l %array, d %value)",
+		"call $g4_array_push_d(l ",
+		", d ",
+		"=d sltof ",
+		"=d loadd ",
+		"stored ",
+	]
+	index = 0
+	while index < required_float_array_qbe.size()
+		if !float_array_qbe.include?(required_float_array_qbe[index])
+			return Result<Boolean, String>::Err(
+				"Float Array QBE is missing " + required_float_array_qbe[index]
+			)
+		end
+		index += 1
+	end
+	if float_array_qbe.include?("$g4_array_push_d(l %array, l %value)")
+		return Result<Boolean, String>::Err("Float Array push uses the Integer ABI")
+	end
+	try _gate6j_verify_candidate_builds(
+		candidate_executables,
+		root + "/compiler/gate4/conformance/valid/float-arrays.trb",
+		"float-arrays-ok\n",
+		qbe,
+		workspace,
+		"float-arrays",
+	)
+	gate6j_invalid_names := [
+		"float-array-element",
+		"float-array-invariance",
+		"float-array-immutable",
+		"float-array-method",
+	]
+	index = 0
+	while index < gate6j_invalid_names.size()
+		try _gate6j_verify_invalid_case(
+			root,
+			gate6j_invalid_names[index],
+			candidate_executables,
+			workspace,
+		)
+		index += 1
+	end
+	try _gate6j_verify_bounds_failure(root, candidate_executables, qbe, workspace)
 	mutation_names := ["base", "literal", "control"]
 	mut mutation_qbe: Array<String> := []
 	index = 0
 	while index < mutation_names.size()
 		mutation_qbe.push(
-			try _gate4_verify_valid_case(root, "mutations", mutation_names[index], executables, qbe, workspace)
+			try _gate4_verify_valid_case(
+				root,
+				"mutations",
+				mutation_names[index],
+				executables,
+				qbe,
+				workspace,
+				1,
+				6,
+				true,
+			)
 		)
 		index += 1
 	end

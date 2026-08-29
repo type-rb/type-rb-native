@@ -9,12 +9,26 @@ representation and ownership model is defined by
 
 ## Status
 
-Registered. Implementation and formal measurement have not begun.
+Implementation complete; formal Darwin and Linux measurement is pending.
 
 The fixed source baseline is TypeRB Native main revision
 `5ff3da39c8c41a30596bbeed3b6fcffc207a43ed`. Both baseline and candidate begin
 from the retained 264,264-byte Gate 6I Darwin B4 compiler with SHA-256
 `849f5d6c6fc0738735c84b9240e8f87a477e8d978b0c64a995a5cae5944d8f8d`.
+
+The implementation adds a direct binary64 Array push helper while retaining
+the existing header, growth, bounds, and reference-element path. The
+self-hosted checker performs contextual and common-numeric literal typing, and
+the emitter inserts explicit Integer-to-Float conversions before values enter
+direct Float cells. The implementation compiler strips to 216,560 bytes in the
+pre-formal smoke build, below the registered 224,000-byte ceiling.
+
+Permanent candidate-only conformance begins at the updated Native B2, because
+the retained recovery B0/B1 snapshot predates this feature. It covers the
+complete registered valid surface, exact B2/B3/B4 QBE and executable output,
+deterministic invalid diagnostics and builds, direct `d`/`loadd`/`stored`
+evidence, and the registered bounds panic. Existing B0/B1 conformance remains
+unchanged.
 
 ## Semantic boundary
 

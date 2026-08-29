@@ -500,6 +500,23 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("push receiver is immutable")
 	end
 
+	test("emits direct binary64 cells for Float Arrays") do
+		source := "record Floats\n\tvalues: Array<Float>\nend\n\ndef carry(values: Array<Float>): Array<Float>\n\treturn values\nend\n\ndef main()\n\tmut values := [1, 2.5]\n\tvalues.push(3)\n\tvalues[0] += 0.5\n\tbox := Floats.new(values: values)\n\tresult := carry(box.values)\n\tvalue := result[- 1]\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse(state)).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		qbe := gate4_output_source(gate4_emit_qbe(state))
+		expect(qbe.include?("function $g4_array_push_d(l %array, d %value)")).to_be_true()
+		expect(qbe.include?("call $g4_array_push_d(l ")).to_be_true()
+		expect(qbe.include?(", d ")).to_be_true()
+		expect(qbe.include?("=d sltof ")).to_be_true()
+		expect(qbe.include?("=d loadd ")).to_be_true()
+		expect(qbe.include?("stored ")).to_be_true()
+		expect(qbe.include?("$g4_array_push_d(l %array, l %value)")).to_be_false()
+	end
+
 	test("emits deterministic QBE and executes the registered source subset") do
 		source := gate4_frontend_test_source()
 		mut state := gate4_compiler_new(source.size() + 1)

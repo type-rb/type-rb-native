@@ -490,6 +490,11 @@ bytes. Exact candidate B2/B3/B4 bytes, fixed-point QBE, representative and
 scalar Float application identity, and a pinned Linux arm64 correctness chain
 remain mandatory. See the [Gate 6J plan](gate-6-float-arrays.md).
 
+The Gate 6J implementation is complete and formal measurement is pending.
+Permanent conformance begins at the updated Native B2 so the retained recovery
+snapshot stays unchanged. It covers the registered valid, invalid, direct
+binary64-cell, exact-build, and runtime-bounds boundaries across B2/B3/B4.
+
 This gate is not authorization to ship. It evaluates:
 
 - broader configured and packaged multi-module applications beyond the
