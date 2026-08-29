@@ -1,10 +1,13 @@
 # Gate 4 Compiler Conformance Corpus
 
-This corpus fixes the behavioral boundary shared by B0, B1, and B2. Every
-source is passed to the compiler at runtime. The harness runs each valid source
-through `check` and two independent `emit-qbe` invocations at every generation,
-requires byte-identical QBE, links that QBE, and compares the program output
-with the checked-in `.out` file.
+This corpus fixes the behavioral boundary of the self-hosted compiler. Every
+source is passed to the compiler at runtime. The harness runs each applicable
+valid source through `check` and two independent `emit-qbe` invocations at
+every required generation, requires byte-identical QBE, links that QBE, and
+compares the program output with the checked-in `.out` file. The original
+cases remain shared by recovery B0/B1 and every later generation. Feature
+fixtures added after the retained snapshot begin at their first updated Native
+B2 and do not retroactively widen recovery.
 
 The valid cases cover:
 
@@ -16,7 +19,11 @@ The valid cases cover:
   `valid/strings-calls.trb`;
 - finite binary64 literals, signed zero, subnormal and underflow behavior,
   infinity, NaN, mixed Integer widening, arithmetic, comparisons, calls,
-  mutable locals, and record fields in `valid/float-scalars.trb`; and
+  mutable locals, and record fields in `valid/float-scalars.trb`;
+- contextual and inferred Float Arrays, Integer element widening, parameters,
+  results, records, aliases, growth, positive and negative indexing, mutation,
+  compound arithmetic, and nested Float Arrays in
+  `valid/float-arrays.trb`, starting at its updated Native B2; and
 - the compiler source closure itself, exercised by the bootstrap test outside
   this directory.
 
@@ -31,6 +38,12 @@ return the same diagnostic without emitting an executable function, proving
 that the failure occurs before code generation. The Integer and Float boundary
 cases keep the self-hosted compiler aligned with TypeRB's portable ranges
 rather than target or QBE fallback behavior.
+
+The candidate-only Float Array diagnostics additionally preserve incompatible
+element rejection, mutable Array invariance, immutable mutation rejection, and
+unsupported-method rejection. The `runtime-invalid` directory contains a
+well-typed Float Array bounds case whose exact nonzero status and panic text
+must agree across the updated B2/B3/B4 compilers.
 
 The `mutations` directory contains a base program and two independently changed
 sources. All three must produce distinct QBE and distinct runtime output. This

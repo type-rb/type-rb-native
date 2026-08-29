@@ -194,14 +194,16 @@ and Linux arm64 replacement chains. See the
 [Decision 0016](docs/decisions/0016-self-hosted-float-scalar-path.md), and
 [recorded result](results/2026-08-29-gate6i-float-darwin-linux-arm64/README.md).
 
-Gate 6J is registered in
+Gate 6J implementation is complete and formal measurement is pending under
 [issue #74](https://github.com/type-rb/type-rb-native/issues/74). It extends
 the existing self-hosted Array runtime with `Array<Float>`, including safe
 Integer element widening, common numeric literal inference, growth, indexing,
 mutation, nested Arrays, and binary64 payload operations. The fixed five-
 million-element workload must remain competitive with optimized Go for build
 time, runtime, memory, and executable size while the compiler fixed point and
-existing applications stay exact. See the
+existing applications stay exact. Permanent candidate-only conformance passes
+from the updated Native B2 without changing the retained recovery snapshot.
+See the
 [Gate 6J Float Array plan](docs/gate-6-float-arrays.md) and
 [Decision 0017](docs/decisions/0017-self-hosted-float-arrays.md).
 

@@ -1065,6 +1065,40 @@ def gate4_emit_runtime(mut output: Gate4Output)
 	return
 end
 
+def gate4_emit_float_array_runtime(mut output: Gate4Output)
+	lines := [
+		"",
+		"function $g4_array_push_d(l %array, d %value) {",
+		"@start",
+		"\tcall $g4_array_push(l %array, l 0)",
+		"\t%length =l loadl %array",
+		"\t%index =l sub %length, 1",
+		"\t%data_slot =l add %array, 16",
+		"\t%data =l loadl %data_slot",
+		"\t%offset =l mul %index, 8",
+		"\t%target =l add %data, %offset",
+		"\tstored %value, %target",
+		"\tret",
+		"}",
+	]
+	mut index := 0
+	while index < lines.size()
+		gate4_output_line(output, lines[index])
+		index += 1
+	end
+end
+
+def gate4_output_starts_with(output: Gate4Output, prefix: String): Boolean
+	mut index := 0
+	while index < output.count[0]
+		if gate4_string_starts_with(gate4_load_string(output.lines, index), prefix)
+			return true
+		end
+		index += 1
+	end
+	return false
+end
+
 def gate4_emitted_value(
 		operand: String,
 		type_name: String,
@@ -1102,6 +1136,26 @@ def gate4_qbe_store(type_name: String): String
 		return "stored"
 	end
 	return "storel"
+end
+
+def gate4_array_push_function(element_type: String): String
+	if element_type == "Float"
+		return "$g4_array_push_d"
+	end
+	return "$g4_array_push"
+end
+
+def gate4_emit_array_push(
+		mut output: Gate4Output,
+		array: String,
+		element_type: String,
+		operand: String,
+	)
+	gate4_output_line(
+		output,
+		"\tcall " + gate4_array_push_function(element_type) + "(l " + array + ", " +
+		gate4_qbe_type(element_type) + " " + operand + ")",
+	)
 end
 
 def gate4_emit_expected_type(
@@ -1397,7 +1451,10 @@ def gate4_emit_array_literal(
 	): Gate4EmittedValue
 	gate4_advance(position)
 	gate4_skip_newlines(state, position)
-	element_type := gate4_array_element_type(expected)
+	contextual_element_type := gate4_array_element_type(expected)
+	mut element_type := contextual_element_type
+	mut operands: Array<String> := []
+	mut value_types: Array<String> := []
 	array := gate4_emit_temporary(context)
 	gate4_output_line(output, "\t" + array + " =l call $g4_array_new()")
 	mut finished := false
@@ -1405,8 +1462,14 @@ def gate4_emit_array_literal(
 		if gate4_token_is(state, position[0], "]")
 			finished = true
 		else
-			value := gate4_emit_expression(state, position, context, output, 1, element_type)
-			gate4_output_line(output, "\tcall $g4_array_push(l " + array + ", l " + value.operand + ")")
+			value := gate4_emit_expression(state, position, context, output, 1, contextual_element_type)
+			if contextual_element_type == ""
+				operands.push(value.operand)
+				value_types.push(value.type_name)
+				element_type = gate4_common_array_element_type(element_type, value.type_name)
+			else
+				gate4_emit_array_push(output, array, contextual_element_type, value.operand)
+			end
 			if gate4_token_is(state, position[0], ",")
 				gate4_advance(position)
 				gate4_skip_newlines(state, position)
@@ -1416,7 +1479,20 @@ def gate4_emit_array_literal(
 		end
 	end
 	gate4_expect(state, position, "]")
-	return gate4_emitted_value(array, expected, 0, "", 1, "")
+	mut index := 0
+	while index < operands.size()
+		mut operand := operands[index]
+		if element_type == "Float"
+			if value_types[index] == "Integer"
+				converted := gate4_emit_temporary(context)
+				gate4_output_line(output, "\t" + converted + " =d sltof " + operand)
+				operand = converted
+			end
+		end
+		gate4_emit_array_push(output, array, element_type, operand)
+		index += 1
+	end
+	return gate4_emitted_value(array, gate4_array_type(element_type), 0, "", 1, "")
 end
 
 def gate4_emit_direct_call(
@@ -1578,10 +1654,7 @@ def gate4_emit_method_call(
 		value := gate4_emit_expression(state, position, context, output, 1, element_type)
 		gate4_skip_newlines(state, position)
 		gate4_expect(state, position, ")")
-		gate4_output_line(
-			output,
-			"\tcall $g4_array_push(l " + receiver.operand + ", l " + value.operand + ")",
-		)
+		gate4_emit_array_push(output, receiver.operand, element_type, value.operand)
 		return gate4_emitted_value("", "Void", 0, "", 0, "")
 	end
 	return gate4_emitted_value("", "Invalid", 0, "", 0, "")
@@ -1665,11 +1738,16 @@ def gate4_emit_postfix(
 								"\t" + address + " =l call $g4_array_address(l " + value.operand + ", l " + index.operand + ")",
 							)
 						end
+						element_type := gate4_array_element_type(value.type_name)
 						operand := gate4_emit_temporary(context)
-						gate4_output_line(output, "\t" + operand + " =l loadl " + address)
+						gate4_output_line(
+							output,
+							"\t" + operand + " =" + gate4_qbe_type(element_type) + " " +
+							gate4_qbe_load(element_type) + " " + address,
+						)
 						value = gate4_emitted_value(
 							operand,
-							gate4_array_element_type(value.type_name),
+							element_type,
 							0,
 							"",
 							value.mutable,
@@ -2449,6 +2527,9 @@ def gate4_emit_qbe(mut state: Gate4Compiler): Gate4Output
 		function_index += 1
 	end
 	gate4_emit_entry(state, output)
+	if gate4_output_starts_with(output, "\tcall $g4_array_push_d")
+		gate4_emit_float_array_runtime(output)
+	end
 	return output
 end
 
@@ -3835,22 +3916,7 @@ def gate4_builtin_type_exists(type_name: String, allow_void: Boolean): Boolean
 	if type_name == "Void"
 		return allow_void
 	end
-	if type_name == "Array<Integer>"
-		return true
-	end
-	if type_name == "Array<String>"
-		return true
-	end
-	if type_name == "Array<Array<Integer>>"
-		return true
-	end
-	if type_name == "Array<Array<String>>"
-		return true
-	end
-	if type_name == "Array<Array<Array<Integer>>>"
-		return true
-	end
-	if type_name == "Array<Array<Array<String>>>"
+	if gate4_array_element_type(type_name) != ""
 		return true
 	end
 	return false
@@ -3879,17 +3945,54 @@ def gate4_array_element_type(type_name: String): String
 	if type_name == "Array<String>"
 		return "String"
 	end
+	if type_name == "Array<Float>"
+		return "Float"
+	end
 	if type_name == "Array<Array<Integer>>"
 		return "Array<Integer>"
 	end
 	if type_name == "Array<Array<String>>"
 		return "Array<String>"
 	end
+	if type_name == "Array<Array<Float>>"
+		return "Array<Float>"
+	end
 	if type_name == "Array<Array<Array<Integer>>>"
 		return "Array<Array<Integer>>"
 	end
 	if type_name == "Array<Array<Array<String>>>"
 		return "Array<Array<String>>"
+	end
+	if type_name == "Array<Array<Array<Float>>>"
+		return "Array<Array<Float>>"
+	end
+	return ""
+end
+
+def gate4_array_type(element_type: String): String
+	result := "Array<" + element_type + ">"
+	if gate4_builtin_type_exists(result, false)
+		return result
+	end
+	return ""
+end
+
+def gate4_common_array_element_type(left: String, right: String): String
+	if left == ""
+		return right
+	end
+	if left == right
+		return left
+	end
+	if left == "Integer"
+		if right == "Float"
+			return "Float"
+		end
+	end
+	if left == "Float"
+		if right == "Integer"
+			return "Float"
+		end
 	end
 	return ""
 end
@@ -4375,20 +4478,27 @@ def gate4_check_array_literal(
 	line := gate4_load_integer(state.token_lines, position[0])
 	gate4_advance(position)
 	gate4_skip_newlines(state, position)
-	mut element_type := gate4_array_element_type(expected)
-	mut count := 0
+	contextual_element_type := gate4_array_element_type(expected)
+	mut element_type := contextual_element_type
 	mut finished := false
 	while !finished
 		if gate4_token_is(state, position[0], "]")
 			finished = true
 		else
-			value := gate4_check_expression(state, position, locals, 1, element_type)
-			if element_type == ""
-				element_type = value.type_name
-			else
-				gate4_check_expected(state, value.type_name, element_type, gate4_load_integer(state.token_lines, position[0]))
+			value := gate4_check_expression(state, position, locals, 1, contextual_element_type)
+			if contextual_element_type == ""
+				common_type := gate4_common_array_element_type(element_type, value.type_name)
+				if common_type == ""
+					gate4_check_expected(
+						state,
+						value.type_name,
+						element_type,
+						gate4_load_integer(state.token_lines, position[0]),
+					)
+				else
+					element_type = common_type
+				end
 			end
-			count += 1
 			if gate4_token_is(state, position[0], ",")
 				gate4_advance(position)
 				gate4_skip_newlines(state, position)
@@ -4403,25 +4513,7 @@ def gate4_check_array_literal(
 	if element_type == ""
 		return gate4_type_diagnostic(state, line, "empty Array literal requires a contextual type")
 	end
-	mut result_type := ""
-	if element_type == "Integer"
-		result_type = "Array<Integer>"
-	end
-	if element_type == "String"
-		result_type = "Array<String>"
-	end
-	if element_type == "Array<Integer>"
-		result_type = "Array<Array<Integer>>"
-	end
-	if element_type == "Array<String>"
-		result_type = "Array<Array<String>>"
-	end
-	if element_type == "Array<Array<Integer>>"
-		result_type = "Array<Array<Array<Integer>>>"
-	end
-	if element_type == "Array<Array<String>>"
-		result_type = "Array<Array<Array<String>>>"
-	end
+	result_type := gate4_array_type(element_type)
 	if result_type == ""
 		return gate4_type_diagnostic(state, line, "unsupported Array element type " + element_type)
 	end
