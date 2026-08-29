@@ -423,11 +423,53 @@ def _gate4_verify_conformance(
 		workspace + "/native-chain-b4/compiler",
 		matched_go_compiler,
 	]
-	valid_names := ["control-flow", "records-arrays", "strings-calls"]
+	valid_names := ["control-flow", "records-arrays", "strings-calls", "float-scalars"]
+	mut float_qbe := ""
 	mut index := 0
 	while index < valid_names.size()
-		try _gate4_verify_valid_case(root, "valid", valid_names[index], executables, qbe, workspace)
+		valid_qbe := try _gate4_verify_valid_case(
+			root,
+			"valid",
+			valid_names[index],
+			executables,
+			qbe,
+			workspace,
+		)
+		if valid_names[index] == "float-scalars"
+			float_qbe = valid_qbe
+		end
 		index += 1
+	end
+	required_float_qbe := [
+		"function d $g4f0(l %p0)",
+		"function d $g4f1(d %p0, d %p1)",
+		"=d call $g4f1(d ",
+		"=d sltof ",
+		"=d loadd ",
+		"stored ",
+		"=d add ",
+		"=d sub ",
+		"=d mul ",
+		"=d div ",
+		"=w ceqd ",
+		"=w cned ",
+		"=w cltd ",
+		"=w cled ",
+		"=w cgtd ",
+		"=w cged ",
+		"d_-0.0",
+	]
+	index = 0
+	while index < required_float_qbe.size()
+		if !float_qbe.include?(required_float_qbe[index])
+			return Result<Boolean, String>::Err(
+				"Float QBE is missing " + required_float_qbe[index]
+			)
+		end
+		index += 1
+	end
+	if float_qbe.include?("function d $g4f1(l ") || float_qbe.include?("call $g4f1(l ")
+		return Result<Boolean, String>::Err("Float call boundary uses the Integer ABI")
 	end
 	mutation_names := ["base", "literal", "control"]
 	mut mutation_qbe: Array<String> := []
@@ -450,6 +492,11 @@ def _gate4_verify_conformance(
 		"type",
 		"unsupported-type",
 		"integer-range",
+		"float-overflow",
+		"float-narrowing",
+		"float-remainder",
+		"float-method",
+		"float-malformed",
 	]
 	index = 0
 	while index < invalid_names.size()

@@ -13,7 +13,10 @@ The valid cases cover:
 - nominal record construction and projection plus homogeneous Integer Array
   construction, indexing, growth, and mutation in `valid/records-arrays.trb`;
 - managed String concatenation and content inequality in
-  `valid/strings-calls.trb`; and
+  `valid/strings-calls.trb`;
+- finite binary64 literals, signed zero, subnormal and underflow behavior,
+  infinity, NaN, mixed Integer widening, arithmetic, comparisons, calls,
+  mutable locals, and record fields in `valid/float-scalars.trb`; and
 - the compiler source closure itself, exercised by the bootstrap test outside
   this directory.
 
@@ -22,11 +25,12 @@ extension keeps intentionally malformed programs out of repository-wide source
 formatting. Together they require the
 lexer, parser, resolver, and checker to remain active and cover unsupported
 characters, unfinished syntax, duplicate declarations, unresolved calls,
-arity errors, type mismatches, and unsupported types. `emit-qbe` must return
-the same diagnostic without emitting an executable function, proving that the
-failure occurs before code generation. The Integer boundary case also keeps
-the self-hosted compiler aligned with TypeRB's portable range rather than the
-wider machine-word range.
+arity errors, type mismatches, unsupported types, malformed and overflowing
+Float literals, narrowing, remainder, and unavailable methods. `emit-qbe` must
+return the same diagnostic without emitting an executable function, proving
+that the failure occurs before code generation. The Integer and Float boundary
+cases keep the self-hosted compiler aligned with TypeRB's portable ranges
+rather than target or QBE fallback behavior.
 
 The `mutations` directory contains a base program and two independently changed
 sources. All three must produce distinct QBE and distinct runtime output. This
