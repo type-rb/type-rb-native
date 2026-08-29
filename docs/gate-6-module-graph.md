@@ -9,8 +9,16 @@ ownership model is defined by
 
 ## Status
 
-Implementation is in progress. Formal results are not yet recorded and none of
-the registered thresholds may be inferred from diagnostic runs.
+Complete at measured revision
+`e39f774237a6306d7cd46b09941367c42816c628`. The reviewed Darwin and pinned
+Linux arm64 evidence is retained in the
+[Gate 6H result](../results/2026-08-29-gate6h-module-graph-darwin-linux-arm64/README.md).
+
+On the exact 1,025-file closure, direct checking improves by 41.96%, direct QBE
+emission by 39.92%, and the complete Native build by 16.16%. Median scale RSS
+falls by 48.50%, 40.04%, and 0.18% respectively. Canonical compiler guards,
+exact replacement, optimized-Go comparison, application size and identity,
+and pinned Linux arm64 correctness all pass.
 
 ## Indexed graph boundary
 

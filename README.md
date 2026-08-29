@@ -169,14 +169,17 @@ pass. See the [Gate 6G symbol-lookup plan](docs/gate-6-symbol-lookup.md),
 [Decision 0014](docs/decisions/0014-indexed-function-lookup.md), and
 [recorded result](results/2026-08-29-gate6g-symbol-lookup-darwin-linux-arm64/README.md).
 
-Gate 6H is in progress under the pre-registered scope in
-[issue #64](https://github.com/type-rb/type-rb-native/issues/64). It scales the
-existing file-root path to a deterministic 1,025-file closure with an internal
-module-name index and module-local import and declaration traversal, without
-widening the language, runtime, CLI, project, package, or external-tool
-contract. See the
-[Gate 6H module-graph plan](docs/gate-6-module-graph.md) and
-[Decision 0015](docs/decisions/0015-indexed-module-graph.md).
+Gate 6H is complete at measured revision
+`e39f774237a6306d7cd46b09941367c42816c628`. On the exact 1,025-file project,
+direct checking improves by 41.96%, QBE emission by 39.92%, and the complete
+Native build by 16.16%, with lower median RSS. The candidate builds the same
+project 85.79% faster and with 92.93% less peak RSS than the pinned optimized
+Go path, and its stripped application is 97.00% smaller. Exact Darwin and
+Linux arm64 replacement chains pass without widening the language, runtime,
+CLI, project, package, or external-tool contract. See the
+[Gate 6H module-graph plan](docs/gate-6-module-graph.md),
+[Decision 0015](docs/decisions/0015-indexed-module-graph.md), and
+[recorded result](results/2026-08-29-gate6h-module-graph-darwin-linux-arm64/README.md).
 
 Configured project discovery, production runtime integration,
 package/native-library boundaries, incremental builds, toolchain discovery,
@@ -294,6 +297,10 @@ repository.
 - [Gate 6E file-root Darwin/Linux arm64 result](results/2026-08-29-gate6e-file-root-darwin-linux-arm64/README.md)
 - [Gate 6F multi-file self-hosted compiler](docs/gate-6-multifile-compiler.md)
 - [Gate 6F multi-file self-hosted compiler Darwin/Linux arm64 result](results/2026-08-29-gate6f-multifile-compiler-darwin-linux-arm64/README.md)
+- [Gate 6G indexed function lookup](docs/gate-6-symbol-lookup.md)
+- [Gate 6G indexed function-lookup Darwin/Linux arm64 result](results/2026-08-29-gate6g-symbol-lookup-darwin-linux-arm64/README.md)
+- [Gate 6H scalable file-root module graph](docs/gate-6-module-graph.md)
+- [Gate 6H scalable module-graph Darwin/Linux arm64 result](results/2026-08-29-gate6h-module-graph-darwin-linux-arm64/README.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
 - [Decision 0003: Gate 1 QBE and Darwin arm64 profile](docs/decisions/0003-gate-1-qbe-target.md)
@@ -307,6 +314,8 @@ repository.
 - [Decision 0011: Linux arm64 target profile](docs/decisions/0011-linux-arm64-target-profile.md)
 - [Decision 0012: File-root module closure](docs/decisions/0012-file-root-module-closure.md)
 - [Decision 0013: Multi-file self-hosted compiler closure](docs/decisions/0013-multi-file-self-hosted-compiler.md)
+- [Decision 0014: Indexed self-hosted function lookup](docs/decisions/0014-indexed-function-lookup.md)
+- [Decision 0015: Indexed file-root module graph](docs/decisions/0015-indexed-module-graph.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 
