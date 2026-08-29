@@ -9,13 +9,13 @@ representation and ownership model is defined by
 
 ## Status
 
-Implementation and the TypeRB-authored
-[benchmark controller](../tools/gate6j-benchmark/README.md) are complete;
-formal Darwin and Linux measurement is pending. The ordinary Darwin B1-to-B4
-smoke chain is byte-identical, the permanent Float Array corpus executes, and
-the Gate 6E representative and Gate 6I scalar Float applications retain exact
-bytes. These are pre-measurement correctness checks rather than the registered
-result.
+Gate 6J is complete at measured implementation revision
+`914f4f592f344111b7a790aac00aecbf0d411d11` with the TypeRB-authored
+[benchmark controller](../tools/gate6j-benchmark/README.md) at revision
+`328f93ea348fe569c56d7737206246c7df42eb9c`. Every registered correctness,
+performance, memory, size, fixed-point, regression, and pinned Linux arm64
+criterion passes. See the
+[recorded result](../results/2026-08-29-gate6j-float-arrays-darwin-linux-arm64/README.md).
 
 The fixed source baseline is TypeRB Native main revision
 `5ff3da39c8c41a30596bbeed3b6fcffc207a43ed`. Both baseline and candidate begin
@@ -26,8 +26,8 @@ The implementation adds a direct binary64 Array push helper while retaining
 the existing header, growth, bounds, and reference-element path. The
 self-hosted checker performs contextual and common-numeric literal typing, and
 the emitter inserts explicit Integer-to-Float conversions before values enter
-direct Float cells. The implementation compiler strips to 216,560 bytes in the
-pre-formal smoke build, below the registered 224,000-byte ceiling.
+direct Float cells. The measured implementation compiler strips to 216,552
+bytes, below the registered 224,000-byte ceiling.
 
 Permanent candidate-only conformance begins at the updated Native B2, because
 the retained recovery B0/B1 snapshot predates this feature. It covers the

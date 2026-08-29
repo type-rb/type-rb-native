@@ -490,10 +490,16 @@ bytes. Exact candidate B2/B3/B4 bytes, fixed-point QBE, representative and
 scalar Float application identity, and a pinned Linux arm64 correctness chain
 remain mandatory. See the [Gate 6J plan](gate-6-float-arrays.md).
 
-The Gate 6J implementation is complete and formal measurement is pending.
-Permanent conformance begins at the updated Native B2 so the retained recovery
-snapshot stays unchanged. It covers the registered valid, invalid, direct
-binary64-cell, exact-build, and runtime-bounds boundaries across B2/B3/B4.
+Gate 6J is complete at measured implementation revision
+`914f4f592f344111b7a790aac00aecbf0d411d11` with the harness at revision
+`328f93ea348fe569c56d7737206246c7df42eb9c`. Native builds the fixed workload
+42.00% faster and with 48.25% less peak RSS than optimized Go, runs 18.02%
+slower with 58.18% less peak RSS, and produces a 96.80% smaller stripped
+executable. All four Go-parity metrics remain within the registered 25%
+ceiling. The candidate also remains within every canonical compiler guardrail,
+strips to 216,552 bytes, preserves the exact representative and scalar Float
+applications, and closes exact Darwin and Linux arm64 replacement chains. See
+the [Gate 6J result](../results/2026-08-29-gate6j-float-arrays-darwin-linux-arm64/README.md).
 
 This gate is not authorization to ship. It evaluates:
 
