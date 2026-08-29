@@ -443,6 +443,24 @@ Go path, produces a 97.00% smaller stripped application, and closes exact
 Darwin and Linux arm64 chains. See the
 [Gate 6H result](../results/2026-08-29-gate6h-module-graph-darwin-linux-arm64/README.md).
 
+Gate 6I is the self-hosted Float scalar slice registered in
+[issue #69](https://github.com/type-rb/type-rb-native/issues/69) and specified
+by
+[Decision 0016](decisions/0016-self-hosted-float-scalar-path.md). It adds the
+reference language's finite decimal binary64 literals, Float storage and
+function ABI, arithmetic and comparisons, signed-zero/infinity/NaN behavior,
+and safe Integer-to-Float widening to the ordinary TypeRB-authored compiler.
+No Native-only syntax, semantic rule, or compiler-runtime intrinsic is added.
+
+The registered five-million-iteration Float workload is built and run through
+Native and the pinned optimized Go backend. Native build time, build RSS,
+runtime, and runtime RSS must remain within 25%, while stripped application
+size must improve by at least 80%. A fresh Gate 6H comparison bounds canonical
+compiler time and RSS to +10% and stripped size to 220,000 bytes. Exact
+candidate B2/B3/B4 bytes, fixed-point QBE, representative application identity,
+and a pinned Linux arm64 correctness chain remain mandatory. See the
+[Gate 6I plan](gate-6-float.md).
+
 This gate is not authorization to ship. It evaluates:
 
 - broader configured and packaged multi-module applications beyond the
