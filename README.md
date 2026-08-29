@@ -221,16 +221,22 @@ and exact Darwin/Linux arm64 replacement chains close. See the
 [Decision 0018](docs/decisions/0018-explicit-configured-project.md), and
 [recorded result](results/2026-08-30-gate6k-configured-project-darwin-linux-arm64/README.md).
 
-Gate 6L is active under
-[issue #90](https://github.com/type-rb/type-rb-native/issues/90). It will turn
-the retained target-neutral compiler fixed point into attested experimental
-Darwin and Linux arm64 prerelease seeds, then require fresh runners to fetch
-the actual assets and close the ordinary Native-to-Native chain without Go or
-the reference compiler. The date-labelled bootstrap prerelease is not Native
-SemVer or a stable support promise. The initial and published-seed workflows
-are implemented, but no seed has been published yet. See the
-[Gate 6L bootstrap seed plan](docs/gate-6-bootstrap-seed-distribution.md) and
-[Decision 0019](docs/decisions/0019-experimental-bootstrap-seed-distribution.md).
+Gate 6L is complete under
+[issue #90](https://github.com/type-rb/type-rb-native/issues/90). The immutable
+experimental prerelease
+[`bootstrap-seed-2026-08-30`](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-08-30)
+contains attested Darwin and Linux arm64 compilers plus a strict manifest and
+checksum index. Fresh post-publication jobs verified the exact release,
+digests, signer workflow, source revision/ref, and hosted-runner identity, then
+closed byte-identical B1/B2/B3/B4 chains without downloading the root QBE or
+executing Go or the reference compiler. The two compiler assets total 500,520
+bytes; final adjacent-generation elapsed and RSS spreads are at most 4.63% and
+0.68%. This date-labelled seed is not Native SemVer or a stable support
+promise. See the
+[Gate 6L bootstrap seed plan](docs/gate-6-bootstrap-seed-distribution.md),
+[Decision 0019](docs/decisions/0019-experimental-bootstrap-seed-distribution.md),
+and
+[recorded result](results/2026-08-30-gate6l-bootstrap-seed-darwin-linux-arm64/README.md).
 
 Upward configured project discovery, production runtime integration,
 package/native-library boundaries, incremental builds, toolchain discovery,
@@ -359,6 +365,7 @@ repository.
 - [Gate 6K explicit configured-project executables](docs/gate-6-configured-project.md)
 - [Gate 6K configured-project Darwin/Linux arm64 result](results/2026-08-30-gate6k-configured-project-darwin-linux-arm64/README.md)
 - [Gate 6L experimental bootstrap seed distribution](docs/gate-6-bootstrap-seed-distribution.md)
+- [Gate 6L durable bootstrap seed Darwin/Linux arm64 result](results/2026-08-30-gate6l-bootstrap-seed-darwin-linux-arm64/README.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
 - [Decision 0003: Gate 1 QBE and Darwin arm64 profile](docs/decisions/0003-gate-1-qbe-target.md)

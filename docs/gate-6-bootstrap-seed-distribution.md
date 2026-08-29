@@ -9,9 +9,13 @@ ownership boundary is defined by
 
 ## Status
 
-Active. The root and previous-seed harnesses, strict manifest validator, and
-fresh-runner workflows are implemented. No bootstrap seed release has been
-published yet.
+Complete. The immutable experimental prerelease
+[`bootstrap-seed-2026-08-30`](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-08-30)
+contains the exact registered root, Darwin/Linux arm64 Native compilers,
+strict manifest, and checksum index. Fresh post-publication runners verified
+the release digests and exact attestation identity, downloaded no root QBE,
+and closed both ordinary previous-Native chains. See the
+[recorded result](../results/2026-08-30-gate6l-bootstrap-seed-darwin-linux-arm64/README.md).
 
 ## Public baseline
 
