@@ -9,7 +9,11 @@ ownership model is defined by
 
 ## Status
 
-Gate 6K is pre-registered. Implementation and measurement have not started.
+Gate 6K is pre-registered and implementation is in progress. The strict
+configuration projection, complete-source project loading, physical collection
+adapter, and exact Darwin candidate fixed point have passed focused development
+checks. The permanent native harness, registered Darwin measurements, pinned
+Linux arm64 evidence, and reviewed result remain required.
 
 The fixed source baseline is TypeRB Native main revision
 `e9b00ed946919957fad82b6d2d3ffccfe8cd48d1`. Both baseline and candidate
@@ -39,6 +43,28 @@ diagnostics remain TypeRB-authored compiler logic. The only new system boundary
 is a narrow internal physical-directory adapter for Darwin and Linux arm64. It
 must not run a shell or helper process, follow symlinks, enter the reference
 repository, or become a public language API.
+
+## Bootstrap introduction boundary
+
+The retained Gate 6J compiler predates the physical-directory runtime adapter.
+Because runtime QBE is emitted by the executable seed, that seed cannot include
+the new adapter in its first output. Gate 6K therefore uses this explicit
+Go-free introduction graph:
+
+```text
+retained Gate 6J Native seed -> untimed file-root transition
+transition                   -> candidate B2
+candidate B2                 -> candidate B3
+candidate B3                 -> candidate B4
+```
+
+The transition compiles the current canonical compiler closure through the
+existing ordinary file-root command. It is setup-only, is not required to
+accept configured input, and is excluded from candidate timing and fixed-point
+claims. It executes neither Go nor the reference compiler. Candidate B2, B3,
+and B4 must all accept the registered configured projects and must converge to
+exact QBE and executable bytes. A future Native seed that already contains the
+adapter starts the ordinary chain directly and needs no transition.
 
 ## Configuration boundary
 

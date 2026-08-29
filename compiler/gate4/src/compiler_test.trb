@@ -1,6 +1,7 @@
 import {
 	Gate4Compiler,
 	Gate4Output,
+	Gate4ProjectSources,
 	gate4_add_module,
 	gate4_build_function_index,
 	gate4_character_in,
@@ -22,12 +23,14 @@ import {
 	gate4_identifier_start,
 	gate4_lex,
 	gate4_lex_module,
+	gate4_load_project_sources,
 	gate4_local_find,
 	gate4_locals_new,
 	gate4_number_is_float,
 	gate4_number_without_underscores,
 	gate4_parse,
 	gate4_parse_module,
+	gate4_parse_project_config,
 	gate4_resolve,
 	gate4_string_bucket,
 	gate4_symbol_bucket_count,
@@ -86,6 +89,258 @@ def gate4_scale_test_source(count: Integer): String
 end
 
 describe("Gate 4 TypeRB frontend") do
+	test("strictly decodes the configured-project projection and comments") do
+		config := gate4_parse_project_config(
+			"{\n" +
+			"  // a comment outside a String\n" +
+			"  \"$schema\": \"https://example.com/schema//v1\",\n" +
+			"  \"name\": \"configured /* project */\",\n" +
+			"  \"version\": \"2.0.0\",\n" +
+			"  \"m\\u006fde\": \"go\",\n" +
+			"  \"sourceDir\": \"src/./application/../lib\",\n" +
+			"  \"outDir\": \"artifacts/native\",\n" +
+			"  \"copyFiles\": false,\n" +
+			"  \"packageManagement\": \"external\",\n" +
+			"  /* the bounded portable Go projection */\n" +
+			"  \"go\": {\n" +
+			"    \"module\": \"example.com/configured\",\n" +
+			"    \"version\": \"1.28.1\",\n" +
+			"    \"rootPackage\": \"command\"\n" +
+			"  }\n" +
+			"}\n",
+		)
+		expect(config.error).to_equal("")
+		expect(config.name).to_equal("configured /* project */")
+		expect(config.version).to_equal("2.0.0")
+		expect(config.mode).to_equal("go")
+		expect(config.source_dir).to_equal("src/lib")
+		expect(config.out_dir).to_equal("artifacts/native")
+		expect(config.copy_files).to_be_false()
+		expect(config.package_management).to_equal("external")
+		expect(config.go_config.module_name).to_equal("example.com/configured")
+		expect(config.go_config.version).to_equal("1.28.1")
+		expect(config.go_config.root_package).to_equal("command")
+	end
+
+	test("applies the configured-project defaults") do
+		config := gate4_parse_project_config(
+			"{\"name\":\"minimal\",\"mode\":\"go\",\"go\":{\"module\":\"example.com/minimal\"}}",
+		)
+		expect(config.error).to_equal("")
+		expect(config.version).to_equal("0.1.0")
+		expect(config.source_dir).to_equal(".")
+		expect(config.out_dir).to_equal("build")
+		expect(config.copy_files).to_be_true()
+		expect(config.package_management).to_equal("managed")
+		expect(config.go_config.version).to_equal("1.27")
+		expect(config.go_config.root_package).to_equal("main")
+	end
+
+	test("rejects ambiguous and unsupported configured-project input") do
+		duplicate := gate4_parse_project_config(
+			"{\"name\":\"first\",\"name\":\"second\",\"mode\":\"go\",\"go\":{\"module\":\"example.com/x\"}}",
+		)
+		expect(duplicate.error).to_equal("duplicate project configuration field name")
+
+		trailing := gate4_parse_project_config(
+			"{\"name\":\"x\",\"mode\":\"go\",\"go\":{\"module\":\"example.com/x\",}}",
+		)
+		expect(trailing.error).to_equal("trailing comma in go configuration")
+
+		unsupported := gate4_parse_project_config(
+			"{\"name\":\"x\",\"mode\":\"go\",\"packages\":{},\"go\":{\"module\":\"example.com/x\"}}",
+		)
+		expect(unsupported.error).to_equal("unsupported project configuration field packages")
+
+		wrong_type := gate4_parse_project_config(
+			"{\"name\":\"x\",\"mode\":\"go\",\"copyFiles\":\"false\",\"go\":{\"module\":\"example.com/x\"}}",
+		)
+		expect(wrong_type.error).to_equal("expected JSON Boolean")
+	end
+
+	test("validates configured-project modes, versions, and paths") do
+		wrong_mode := gate4_parse_project_config(
+			"{\"name\":\"x\",\"mode\":\"ruby\",\"go\":{\"module\":\"example.com/x\"}}",
+		)
+		expect(wrong_mode.error).to_equal("mode must be go for configured Native builds")
+
+		missing_module := gate4_parse_project_config("{\"name\":\"x\",\"mode\":\"go\",\"go\":{}}")
+		expect(missing_module.error).to_equal("go.module is required for mode go")
+
+		old_go := gate4_parse_project_config(
+			"{\"name\":\"x\",\"mode\":\"go\",\"go\":{\"module\":\"example.com/x\",\"version\":\"1.26.9\"}}",
+		)
+		expect(old_go.error).to_equal("go.version must be 1.27 or later")
+
+		overflowing_go := gate4_parse_project_config(
+			"{\"name\":\"x\",\"mode\":\"go\",\"go\":{\"module\":\"example.com/x\",\"version\":\"999999999999999999999999999.27\"}}",
+		)
+		expect(overflowing_go.error).to_equal("go.version must be 1.27 or later")
+
+		absolute := gate4_parse_project_config(
+			"{\"name\":\"x\",\"mode\":\"go\",\"sourceDir\":\"/tmp/src\",\"go\":{\"module\":\"example.com/x\"}}",
+		)
+		expect(absolute.error).to_equal("sourceDir must be relative to the project root")
+
+		escaping := gate4_parse_project_config(
+			"{\"name\":\"x\",\"mode\":\"go\",\"outDir\":\"build/../../outside\",\"go\":{\"module\":\"example.com/x\"}}",
+		)
+		expect(escaping.error).to_equal("outDir cannot escape the project root")
+	end
+
+	test("loads every configured project module and selects its unique main") do
+		mut state := gate4_load_project_sources(
+			"/project/trbconfig.jsonc",
+			"/project/src",
+			Gate4ProjectSources.new(
+				paths: [
+					"/project/src/lib/value/index.trb",
+					"/project/src/unrelated.trb",
+					"/project/src/application.trb",
+					"/project/src/lib/value.trb",
+				],
+				sources: [
+					"def configured_value(): Integer\n\treturn 7\nend\n",
+					"def unrelated_value(): Integer\n\treturn 99\nend\n",
+					"import { configured_value } from lib/value\n\ndef main()\n\tvalue := configured_value()\n\treturn\nend\n",
+					"def configured_value(): Integer\n\treturn 42\nend\n",
+				],
+				error: "",
+			),
+		)
+		expect(gate4_has_diagnostic(state)).to_be_false()
+		expect(state.module_count[0]).to_equal(4)
+		expect(gate4_load_string(state.module_names, state.entry_module[0])).to_equal("application")
+		direct := gate4_find_module(state, "lib/value")
+		expect(direct >= 0).to_be_true()
+		expect(gate4_load_integer(state.import_targets, 0)).to_equal(direct)
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+
+		mut forward := gate4_load_project_sources(
+			"/project/trbconfig.jsonc",
+			"/project/src",
+			Gate4ProjectSources.new(
+				paths: [
+					"/project/src/application.trb",
+					"/project/src/middle.trb",
+					"/project/src/value.trb",
+				],
+				sources: [
+					"import { middle } from middle\n\ndef main()\n\tmiddle()\n\treturn\nend\n",
+					"import { value } from value\n\ndef middle(): Integer\n\treturn value()\nend\n",
+					"def value(): Integer\n\treturn 1\nend\n",
+				],
+				error: "",
+			),
+		)
+		expect(gate4_has_diagnostic(forward)).to_be_false()
+		expect(gate4_resolve(forward)).to_be_true()
+		expect(gate4_check(forward)).to_be_true()
+	end
+
+	test("rejects invalid configured project bundles before checking") do
+		empty := gate4_load_project_sources(
+			"/project/trbconfig.jsonc",
+			"/project/src",
+			Gate4ProjectSources.new(paths: [], sources: [], error: ""),
+		)
+		expect(gate4_load_string(empty.diagnostic_messages, 0)).to_equal("no production .trb files found")
+
+		mismatched := gate4_load_project_sources(
+			"/project/trbconfig.jsonc",
+			"/project/src",
+			Gate4ProjectSources.new(paths: ["/project/src/main.trb"], sources: [], error: ""),
+		)
+		expect(gate4_load_string(mismatched.diagnostic_messages, 0)).to_equal(
+			"project source adapter returned mismatched paths and sources",
+		)
+
+		outside := gate4_load_project_sources(
+			"/project/trbconfig.jsonc",
+			"/project/src",
+			Gate4ProjectSources.new(
+				paths: ["/project/outside.trb"],
+				sources: ["def main()\n\treturn\nend\n"],
+				error: "",
+			),
+		)
+		expect(gate4_load_string(outside.diagnostic_messages, 0)).to_equal(
+			"project source is outside configured sourceDir",
+		)
+	end
+
+	test("checks unimported configured sources and unique entrypoints") do
+		invalid := gate4_load_project_sources(
+			"/project/trbconfig.jsonc",
+			"/project/src",
+			Gate4ProjectSources.new(
+				paths: ["/project/src/application.trb", "/project/src/unrelated.trb"],
+				sources: ["def main()\n\treturn\nend\n", "def unfinished(\n"],
+				error: "",
+			),
+		)
+		expect(gate4_has_diagnostic(invalid)).to_be_true()
+		expect(gate4_load_string(invalid.module_files, 1)).to_equal("/project/src/unrelated.trb")
+
+		missing := gate4_load_project_sources(
+			"/project/trbconfig.jsonc",
+			"/project/src",
+			Gate4ProjectSources.new(
+				paths: ["/project/src/library.trb"],
+				sources: ["def value(): Integer\n\treturn 1\nend\n"],
+				error: "",
+			),
+		)
+		expect(gate4_load_string(missing.diagnostic_messages, 0)).to_equal(
+			"project must declare exactly one top-level main function",
+		)
+
+		duplicate := gate4_load_project_sources(
+			"/project/trbconfig.jsonc",
+			"/project/src",
+			Gate4ProjectSources.new(
+				paths: ["/project/src/first.trb", "/project/src/second.trb"],
+				sources: ["def main()\n\treturn\nend\n", "def main()\n\treturn\nend\n"],
+				error: "",
+			),
+		)
+		expect(gate4_load_string(duplicate.diagnostic_messages, 0)).to_equal(
+			"project has more than one top-level main function",
+		)
+	end
+
+	test("rejects configured project missing imports and cycles") do
+		missing := gate4_load_project_sources(
+			"/project/trbconfig.jsonc",
+			"/project/src",
+			Gate4ProjectSources.new(
+				paths: ["/project/src/application.trb"],
+				sources: ["import { value } from missing\n\ndef main()\n\treturn\nend\n"],
+				error: "",
+			),
+		)
+		expect(gate4_load_string(missing.diagnostic_messages, 0)).to_equal(
+			"cannot resolve project import missing",
+		)
+
+		cycle := gate4_load_project_sources(
+			"/project/trbconfig.jsonc",
+			"/project/src",
+			Gate4ProjectSources.new(
+				paths: ["/project/src/application.trb", "/project/src/library.trb"],
+				sources: [
+					"import { value } from library\n\ndef main()\n\treturn\nend\n",
+					"import { main } from application\n\ndef value(): Integer\n\treturn 1\nend\n",
+				],
+				error: "",
+			),
+		)
+		expect(gate4_load_string(cycle.diagnostic_messages, 0)).to_equal(
+			"import cycle through library",
+		)
+	end
+
 	test("grows chunked storage only as elements are stored") do
 		empty := gate4_integer_storage(0)
 		expect(empty.chunks[0].size()).to_equal(0)

@@ -45,6 +45,21 @@ rather than reading through it. A narrow internal, versioned compiler-runtime
 adapter may expose directory entries and file kinds on Darwin and Linux arm64.
 It is not a public TypeRB filesystem API.
 
+The adapter is introduced through one explicit bootstrap transition. Runtime
+QBE is part of the output emitted by the compiler executable, so the retained
+Gate 6J seed cannot place a runtime operation that did not exist at its own
+revision into its first output. The retained Native seed therefore compiles the
+current canonical compiler closure once through the existing file-root path to
+produce an untimed transition compiler. That transition builds candidate B2,
+then B2 builds B3 and B3 builds B4. B2, B3, and B4 must all support configured
+projects and converge to exact QBE and executable bytes.
+
+The transition is setup evidence, not a candidate generation, release seed, or
+measured workaround. It executes neither Go nor the reference compiler, and it
+does not weaken the ordinary Native-to-Native fixed-point requirement. Once a
+distributed Native compiler already contains this adapter, later ordinary
+bootstrap chains do not need the transition.
+
 Every collected production source is parsed and checked, including unimported
 files. Module names are root-relative, direct files retain precedence over
 `index.trb`, cycles retain their existing diagnostics, and the complete
@@ -59,6 +74,13 @@ explicit standard config without Go in the ordinary Native chain. The same
 1,025-file source graph can measure config parsing and deterministic physical
 collection against both the existing file-root path and the pinned optimized
 Go compiler.
+
+Adding a compiler-runtime operation across an older retained seed now has an
+explicit introduction rule: use one Go-free, file-root transition outside the
+candidate and measurement set, then require the new candidate generations to
+close the exact fixed point. This rule records the real executable process
+graph without treating predecessor runtime bytes as if they already contained
+the new operation.
 
 The command shape remains experimental, and `build` still requires an explicit
 output. Upward config discovery, default artifact placement, test compilation,
