@@ -181,6 +181,16 @@ CLI, project, package, or external-tool contract. See the
 [Decision 0015](docs/decisions/0015-indexed-module-graph.md), and
 [recorded result](results/2026-08-29-gate6h-module-graph-darwin-linux-arm64/README.md).
 
+Gate 6I is registered in
+[issue #69](https://github.com/type-rb/type-rb-native/issues/69). It adds the
+existing TypeRB binary64 `Float` scalar path to the ordinary self-hosted
+frontend and QBE emitter, including safe Integer widening and runtime
+signed-zero, infinity, and NaN behavior. The same fixed numeric TypeRB workload
+must remain competitive with optimized Go for build time, runtime, memory, and
+executable size while the compiler fixed point and existing applications stay
+exact. See the [Gate 6I Float plan](docs/gate-6-float.md) and
+[Decision 0016](docs/decisions/0016-self-hosted-float-scalar-path.md).
+
 Configured project discovery, production runtime integration,
 package/native-library boundaries, incremental builds, toolchain discovery,
 debugging, maintenance evaluation, and additional primary targets remain in
@@ -301,6 +311,7 @@ repository.
 - [Gate 6G indexed function-lookup Darwin/Linux arm64 result](results/2026-08-29-gate6g-symbol-lookup-darwin-linux-arm64/README.md)
 - [Gate 6H scalable file-root module graph](docs/gate-6-module-graph.md)
 - [Gate 6H scalable module-graph Darwin/Linux arm64 result](results/2026-08-29-gate6h-module-graph-darwin-linux-arm64/README.md)
+- [Gate 6I self-hosted Float scalar path](docs/gate-6-float.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
 - [Decision 0003: Gate 1 QBE and Darwin arm64 profile](docs/decisions/0003-gate-1-qbe-target.md)
@@ -316,6 +327,7 @@ repository.
 - [Decision 0013: Multi-file self-hosted compiler closure](docs/decisions/0013-multi-file-self-hosted-compiler.md)
 - [Decision 0014: Indexed self-hosted function lookup](docs/decisions/0014-indexed-function-lookup.md)
 - [Decision 0015: Indexed file-root module graph](docs/decisions/0015-indexed-module-graph.md)
+- [Decision 0016: Self-hosted Float scalar path](docs/decisions/0016-self-hosted-float-scalar-path.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 
