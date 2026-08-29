@@ -1066,24 +1066,32 @@ def gate4_emit_runtime(mut output: Gate4Output)
 end
 
 def gate4_emit_float_array_runtime(mut output: Gate4Output)
-	lines := [
-		"",
-		"function $g4_array_push_d(l %array, d %value) {",
-		"@start",
-		"\tcall $g4_array_push(l %array, l 0)",
-		"\t%length =l loadl %array",
-		"\t%index =l sub %length, 1",
-		"\t%data_slot =l add %array, 16",
-		"\t%data =l loadl %data_slot",
-		"\t%offset =l mul %index, 8",
-		"\t%target =l add %data, %offset",
-		"\tstored %value, %target",
-		"\tret",
-		"}",
-	]
+	mut start :=- 1
 	mut index := 0
-	while index < lines.size()
-		gate4_output_line(output, lines[index])
+	while index < output.count[0]
+		if gate4_load_string(output.lines, index) == "function $g4_array_push(l %array, l %value) {"
+			start = index
+			index = output.count[0]
+		else
+			index += 1
+		end
+	end
+	if start < 0
+		return
+	end
+	gate4_output_line(output, "")
+	gate4_output_line(output, "function $g4_array_push_d(l %array, d %value) {")
+	index = start + 1
+	mut finished := false
+	while !finished
+		mut line := gate4_load_string(output.lines, index)
+		if line == "\tstorel %value, %target"
+			line = "\tstored %value, %target"
+		end
+		gate4_output_line(output, line)
+		if line == "}"
+			finished = true
+		end
 		index += 1
 	end
 end
