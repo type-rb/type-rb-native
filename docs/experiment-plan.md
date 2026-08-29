@@ -516,6 +516,14 @@ part of this slice. Directory enumeration uses a narrow internal physical
 compiler-runtime boundary; it does not add a public TypeRB API or modify the
 reference repository.
 
+The retained Gate 6J seed predates that runtime boundary. One untimed Go-free
+transition compiler may therefore introduce the adapter through the existing
+file-root path before candidate B2. The transition is setup-only and does not
+count as a candidate, measurement, or release seed. B2, B3, and B4 must all be
+configured-project-capable and converge to exact QBE and executable bytes; no
+Go or reference-compiler execution enters this transition or the ordinary
+candidate chain.
+
 The exact Gate 6H 1,025-file graph runs through configured Native, file-root
 Native, and pinned optimized-Go project paths. Configured Native check, emit,
 and build time and RSS must remain within 15% of the candidate file-root path.
