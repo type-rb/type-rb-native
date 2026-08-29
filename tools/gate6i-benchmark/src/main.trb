@@ -1,0 +1,1635 @@
+import { create_directory, read_text, write_text } from trb/std/filesystem
+import { argv, run } from trb/std/process
+import { Result } from trb/std/result
+import trb/std/string_builder
+import { Instant } from trb/std/time
+
+record TimedProcess
+	seconds: Float
+	status: Integer
+	stdout: String
+	stderr: String
+end
+
+record PeakProcess
+	rss: Integer
+	status: Integer
+	stdout: String
+	stderr: String
+end
+
+record CompilerSources
+	root: String
+	entry_path: String
+	storage_path: String
+	path_path: String
+	entry: String
+	storage: String
+	path_source: String
+end
+
+record CompilerChain
+	b2: String
+	b3: String
+	b4: String
+	fixed_qbe: String
+	fixed_qbe_path: String
+end
+
+record ApplicationBuild
+	command: String
+	arguments: Array<String>
+	output_path: String
+	expected_path: String
+	label: String
+end
+
+def measure_process(command: String, arguments: Array<String>): Result<TimedProcess, String>
+	started := Instant.now()
+	case run(command, arguments)
+	when Result::Ok(process)
+		return Result<TimedProcess, String>::Ok(
+			TimedProcess.new(
+				seconds: Instant.now().duration_since(started).total_seconds(),
+				status: process.status,
+				stdout: process.stdout,
+				stderr: process.stderr,
+			),
+		)
+	when Result::Err(error)
+		return Result<TimedProcess, String>::Err(error.operation + ": " + error.message)
+	end
+end
+
+def peak_process(command: String, arguments: Array<String>): Result<PeakProcess, String>
+	mut time_arguments := ["-l", command]
+	mut index := 0
+	while index < arguments.size()
+		time_arguments.push(arguments[index])
+		index += 1
+	end
+	measurement := try measure_process("/usr/bin/time", time_arguments)
+	lines := measurement.stderr.split("\n")
+	index = 0
+	while index < lines.size()
+		if lines[index].include?("maximum resident set size")
+			fields := lines[index].strip().split(" ")
+			mut field_index := 0
+			while field_index < fields.size()
+				if !fields[field_index].empty?()
+					return Result<PeakProcess, String>::Ok(
+						PeakProcess.new(
+							rss: fields[field_index].to_i(),
+							status: measurement.status,
+							stdout: measurement.stdout,
+							stderr: measurement.stderr,
+						),
+					)
+				end
+				field_index += 1
+			end
+		end
+		index += 1
+	end
+	return Result<PeakProcess, String>::Err(
+		"time did not report maximum resident set size for " + command + ": " + measurement.stderr,
+	)
+end
+
+def append_measurement(
+		mut output: StringBuilder,
+		metric: String,
+		case_name: String,
+		candidate: String,
+		iteration: Integer,
+		value: String,
+		status: Integer,
+	)
+	output.append(
+		metric + "," + case_name + "," + candidate + "," + iteration.to_s() + "," + value + "," +
+		status.to_s() + "\n",
+	)
+end
+
+def create_required_directory(path: String): Result<Boolean, String>
+	case create_directory(path)
+	when Result::Ok(_unit)
+		return Result<Boolean, String>::Ok(true)
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
+	end
+end
+
+def read_required(path: String): Result<String, String>
+	case read_text(path)
+	when Result::Ok(value)
+		return Result<String, String>::Ok(value)
+	when Result::Err(error)
+		return Result<String, String>::Err(error.operation + ": " + error.message)
+	end
+end
+
+def write_required(path: String, value: String): Result<Boolean, String>
+	case write_text(path, value)
+	when Result::Ok(_unit)
+		return Result<Boolean, String>::Ok(true)
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
+	end
+end
+
+def copy_required(source: String, destination: String): Result<Boolean, String>
+	value := try read_required(source)
+	return write_required(destination, value)
+end
+
+def require_file(path: String): Result<Boolean, String>
+	probe := try measure_process("/bin/test", ["-f", path])
+	return Result<Boolean, String>::Err("missing file " + path) if probe.status != 0
+	return Result<Boolean, String>::Ok(true)
+end
+
+def require_file_equal(left: String, right: String, message: String): Result<Boolean, String>
+	comparison := try measure_process("/usr/bin/cmp", [left, right])
+	return Result<Boolean, String>::Err(message) if comparison.status != 0
+	return Result<Boolean, String>::Ok(true)
+end
+
+def require_no_intermediates(directory: String): Result<Boolean, String>
+	find := try measure_process("/usr/bin/find", [directory, "-name", "*.trbn.*", "-print"])
+	return Result<Boolean, String>::Err("cannot inspect Native intermediates: " + find.stderr) if find.status != 0
+	return Result<Boolean, String>::Err("Native build left intermediates: " + find.stdout) if !find.stdout.empty?()
+	return Result<Boolean, String>::Ok(true)
+end
+
+def sha256(path: String): Result<String, String>
+	measurement := try measure_process("/usr/bin/shasum", ["-a", "256", path])
+	if measurement.status != 0
+		return Result<String, String>::Err("shasum failed for " + path + ": " + measurement.stderr)
+	end
+	fields := measurement.stdout.strip().split(" ")
+	return Result<String, String>::Err("shasum returned no digest for " + path) if fields.size() < 1
+	return Result<String, String>::Ok(fields[0])
+end
+
+def require_hash(path: String, expected: String, label: String): Result<Boolean, String>
+	actual := try sha256(path)
+	return Result<Boolean, String>::Err(label + " SHA-256 differs: " + actual) if actual != expected
+	return Result<Boolean, String>::Ok(true)
+end
+
+def file_size(path: String): Result<Integer, String>
+	measurement := try measure_process("/usr/bin/stat", ["-f", "%z", path])
+	if measurement.status != 0
+		return Result<Integer, String>::Err("stat failed for " + path + ": " + measurement.stderr)
+	end
+	return Result<Integer, String>::Ok(measurement.stdout.strip().to_i())
+end
+
+def record_hash(
+		mut output: StringBuilder,
+		metric: String,
+		case_name: String,
+		candidate: String,
+		path: String,
+	): Result<String, String>
+	digest := try sha256(path)
+	append_measurement(output, metric, case_name, candidate, 0, digest, 0)
+	return Result<String, String>::Ok(digest)
+end
+
+def record_size(
+		mut output: StringBuilder,
+		metric: String,
+		case_name: String,
+		candidate: String,
+		path: String,
+	): Result<Integer, String>
+	size := try file_size(path)
+	append_measurement(output, metric, case_name, candidate, 0, size.to_s(), 0)
+	return Result<Integer, String>::Ok(size)
+end
+
+def strip_and_record(
+		mut output: StringBuilder,
+		candidate: String,
+		path: String,
+		stripped: String,
+	): Result<Integer, String>
+	measurement := try measure_process("/usr/bin/strip", ["-x", "-o", stripped, path])
+	if measurement.status != 0
+		return Result<Integer, String>::Err("strip failed for " + path + ": " + measurement.stderr)
+	end
+	try record_size(output, "compiler-size-raw", "compiler-source", candidate, path)
+	return record_size(output, "compiler-size-stripped", "compiler-source", candidate, stripped)
+end
+
+def read_compiler_sources(root: String): Result<CompilerSources, String>
+	entry_path := root + "/compiler/gate4/src/compiler.trb"
+	storage_path := root + "/compiler/gate4/src/storage.trb"
+	path_path := root + "/compiler/gate4/src/path.trb"
+	return Result<CompilerSources, String>::Ok(
+		CompilerSources.new(
+			root: root,
+			entry_path: entry_path,
+			storage_path: storage_path,
+			path_path: path_path,
+			entry: try read_required(entry_path),
+			storage: try read_required(storage_path),
+			path_source: try read_required(path_path),
+		),
+	)
+end
+
+def build_arguments(
+		source_path: String,
+		output_path: String,
+		qbe: String,
+		cc: String,
+	): Array<String>
+	return ["build", source_path, "--output", output_path, "--qbe", qbe, "--cc", cc]
+end
+
+def go_build_arguments(config_path: String, output_path: String): Array<String>
+	return ["build", "--compile", "--config", config_path, "--outfile", output_path]
+end
+
+def build_checked(
+		seed: String,
+		source_path: String,
+		output_path: String,
+		qbe: String,
+		cc: String,
+		label: String,
+	): Result<Boolean, String>
+	measurement := try measure_process(seed, build_arguments(source_path, output_path, qbe, cc))
+	if measurement.status != 0 || !measurement.stdout.empty?() || !measurement.stderr.empty?()
+		return Result<Boolean, String>::Err(label + " failed: " + measurement.stderr + measurement.stdout)
+	end
+	try require_file(output_path)
+	return Result<Boolean, String>::Ok(true)
+end
+
+def emitted_qbe(executable: String, source_path: String, label: String): Result<String, String>
+	emission := try measure_process(executable, ["emit-qbe", source_path])
+	if emission.status != 0 || emission.stdout.empty?() || !emission.stderr.empty?()
+		return Result<String, String>::Err(label + " QBE emission failed: " + emission.stderr)
+	end
+	return Result<String, String>::Ok(emission.stdout)
+end
+
+def verify_compiler(
+		executable: String,
+		source_path: String,
+		expected_qbe: String,
+		label: String,
+	): Result<Boolean, String>
+	check := try measure_process(executable, ["check", source_path])
+	if check.status != 0 || check.stdout != "ok\n" || !check.stderr.empty?()
+		return Result<Boolean, String>::Err(label + " compiler-source check failed")
+	end
+	emission := try emitted_qbe(executable, source_path, label)
+	return Result<Boolean, String>::Err(label + " compiler QBE is not fixed") if emission != expected_qbe
+	return Result<Boolean, String>::Ok(true)
+end
+
+def build_compiler_chain(
+		seed: String,
+		sources: CompilerSources,
+		qbe: String,
+		cc: String,
+		workspace: String,
+		label: String,
+	): Result<CompilerChain, String>
+	try create_required_directory(workspace)
+	directories := [workspace + "/b2", workspace + "/b3", workspace + "/b4"]
+	mut index := 0
+	while index < directories.size()
+		try create_required_directory(directories[index])
+		index += 1
+	end
+	expected_qbe := try emitted_qbe(seed, sources.entry_path, label + " B1")
+	outputs := [directories[0] + "/compiler", directories[1] + "/compiler", directories[2] + "/compiler"]
+	mut chain_seed := seed
+	index = 0
+	while index < outputs.size()
+		try build_checked(
+			chain_seed,
+			sources.entry_path,
+			outputs[index],
+			qbe,
+			cc,
+			label + " B" + (index + 1).to_s() + "-to-B" + (index + 2).to_s(),
+		)
+		try verify_compiler(outputs[index], sources.entry_path, expected_qbe, label + " B" + (index + 2).to_s())
+		if index > 0
+			try require_file_equal(outputs[index - 1], outputs[index], label + " B2/B3/B4 bytes differ")
+		end
+		chain_seed = outputs[index]
+		index += 1
+	end
+	fixed_qbe_path := workspace + "/fixed-point.ssa"
+	try write_required(fixed_qbe_path, expected_qbe)
+	return Result<CompilerChain, String>::Ok(
+		CompilerChain.new(
+			b2: outputs[0],
+			b3: outputs[1],
+			b4: outputs[2],
+			fixed_qbe: expected_qbe,
+			fixed_qbe_path: fixed_qbe_path,
+		),
+	)
+end
+
+def prepare_application(root: String, project: String): Result<Boolean, String>
+	try create_required_directory(project)
+	directories := [project + "/app", project + "/domain", project + "/shared"]
+	mut index := 0
+	while index < directories.size()
+		try create_required_directory(directories[index])
+		index += 1
+	end
+	relative := [
+		"main.trb",
+		"app/summary.trb",
+		"app/label.trb",
+		"domain/score.trb",
+		"shared/index.trb",
+		"unrelated.trb",
+	]
+	fixture := root + "/compiler/gate4/conformance/file-root"
+	index = 0
+	while index < relative.size()
+		try copy_required(fixture + "/" + relative[index], project + "/" + relative[index])
+		index += 1
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def verify_application(executable: String, label: String): Result<Boolean, String>
+	measurement := try measure_process(executable, [])
+	if measurement.status != 0 || measurement.stdout != "file-root-ok\n" || !measurement.stderr.empty?()
+		return Result<Boolean, String>::Err(label + " runtime differs: " + measurement.stderr)
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def verify_float_application(executable: String, label: String): Result<Boolean, String>
+	measurement := try measure_process(executable, [])
+	if measurement.status != 0 || measurement.stdout != "float-kernel-ok\n" || !measurement.stderr.empty?()
+		return Result<Boolean, String>::Err(label + " runtime differs: " + measurement.stderr)
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def verify_float_conformance_application(executable: String, label: String): Result<Boolean, String>
+	measurement := try measure_process(executable, [])
+	if measurement.status != 0 || measurement.stdout != "float-scalars-ok\n" || !measurement.stderr.empty?()
+		return Result<Boolean, String>::Err(label + " runtime differs: " + measurement.stderr)
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def verify_float_qbe(qbe: String): Result<Boolean, String>
+	required := [
+		"function d ",
+		"=d sltof ",
+		"=d loadd ",
+		"stored ",
+		"=d add ",
+		"=d sub ",
+		"=d mul ",
+		"=d div ",
+		"=w cltd ",
+		"=w cgtd ",
+	]
+	mut index := 0
+	while index < required.size()
+		if !qbe.include?(required[index])
+			return Result<Boolean, String>::Err("Float QBE is missing " + required[index])
+		end
+		index += 1
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def gate6i_median_float(values: Array<Float>): Float
+	mut sorted: Array<Float> := []
+	mut index := 0
+	while index < values.size()
+		sorted.push(values[index])
+		index += 1
+	end
+	index = 0
+	while index < sorted.size()
+		mut other := index + 1
+		while other < sorted.size()
+			if sorted[other] < sorted[index]
+				value := sorted[index]
+				sorted[index] = sorted[other]
+				sorted[other] = value
+			end
+			other += 1
+		end
+		index += 1
+	end
+	return sorted[sorted.size() / 2]
+end
+
+def gate6i_median_integer(values: Array<Integer>): Integer
+	mut sorted: Array<Integer> := []
+	mut index := 0
+	while index < values.size()
+		sorted.push(values[index])
+		index += 1
+	end
+	index = 0
+	while index < sorted.size()
+		mut other := index + 1
+		while other < sorted.size()
+			if sorted[other] < sorted[index]
+				value := sorted[index]
+				sorted[index] = sorted[other]
+				sorted[other] = value
+			end
+			other += 1
+		end
+		index += 1
+	end
+	return sorted[sorted.size() / 2]
+end
+
+def gate6i_candidate_within_percent(baseline: Float, candidate: Float, maximum_percent: Float): Boolean
+	return candidate * 100.0 <= baseline * maximum_percent
+end
+
+def measure_emit_time(
+		mut output: StringBuilder,
+		compiler: String,
+		source: String,
+		expected: String,
+		case_name: String,
+		candidate: String,
+		iteration: Integer,
+	): Result<Float, String>
+	measurement := try measure_process(compiler, ["emit-qbe", source])
+	append_measurement(
+		output,
+		"compiler-emit-qbe-total",
+		case_name,
+		candidate,
+		iteration,
+		measurement.seconds.to_s(),
+		measurement.status,
+	)
+	if measurement.status != 0 || measurement.stdout != expected || !measurement.stderr.empty?()
+		return Result<Float, String>::Err(candidate + " " + case_name + " emission differs")
+	end
+	return Result<Float, String>::Ok(measurement.seconds)
+end
+
+def measure_emit_rss(
+		mut output: StringBuilder,
+		compiler: String,
+		source: String,
+		expected: String,
+		case_name: String,
+		candidate: String,
+		iteration: Integer,
+	): Result<Integer, String>
+	measurement := try peak_process(compiler, ["emit-qbe", source])
+	append_measurement(
+		output,
+		"compiler-emit-qbe-peak-rss",
+		case_name,
+		candidate,
+		iteration,
+		measurement.rss.to_s(),
+		measurement.status,
+	)
+	if measurement.status != 0 || measurement.stdout != expected
+		return Result<Integer, String>::Err(candidate + " " + case_name + " RSS emission differs")
+	end
+	return Result<Integer, String>::Ok(measurement.rss)
+end
+
+def measure_build_time(
+		mut output: StringBuilder,
+		compiler: String,
+		source: String,
+		output_path: String,
+		expected_path: String,
+		qbe: String,
+		cc: String,
+		candidate: String,
+		iteration: Integer,
+	): Result<Float, String>
+	measurement := try measure_process(compiler, build_arguments(source, output_path, qbe, cc))
+	append_measurement(
+		output,
+		"compiler-build-total",
+		"compiler-source",
+		candidate,
+		iteration,
+		measurement.seconds.to_s(),
+		measurement.status,
+	)
+	if measurement.status != 0 || !measurement.stdout.empty?() || !measurement.stderr.empty?()
+		return Result<Float, String>::Err(candidate + " compiler build failed")
+	end
+	try require_file_equal(output_path, expected_path, candidate + " measured compiler bytes differ")
+	return Result<Float, String>::Ok(measurement.seconds)
+end
+
+def measure_build_rss(
+		mut output: StringBuilder,
+		compiler: String,
+		source: String,
+		output_path: String,
+		expected_path: String,
+		qbe: String,
+		cc: String,
+		candidate: String,
+		iteration: Integer,
+	): Result<Integer, String>
+	measurement := try peak_process(compiler, build_arguments(source, output_path, qbe, cc))
+	append_measurement(
+		output,
+		"compiler-build-peak-rss",
+		"compiler-source",
+		candidate,
+		iteration,
+		measurement.rss.to_s(),
+		measurement.status,
+	)
+	if measurement.status != 0 || !measurement.stdout.empty?()
+		return Result<Integer, String>::Err(candidate + " compiler RSS build failed")
+	end
+	try require_file_equal(output_path, expected_path, candidate + " RSS compiler bytes differ")
+	return Result<Integer, String>::Ok(measurement.rss)
+end
+
+def measure_emit_time_series(
+		mut output: StringBuilder,
+		compilers: Array<String>,
+		sources: Array<String>,
+		expected: Array<String>,
+		case_name: String,
+	): Result<Array<Array<Float>>, String>
+	mut baseline_values: Array<Float> := []
+	mut candidate_values: Array<Float> := []
+	mut iteration :=- 2
+	while iteration < 11
+		mut order := 0
+		while order < 2
+			mut candidate := order
+			if iteration % 2 != 0
+				candidate = 1 - order
+			end
+			mut label := "baseline"
+			if candidate == 1
+				label = "candidate"
+			end
+			value := try measure_emit_time(
+				output,
+				compilers[candidate],
+				sources[candidate],
+				expected[candidate],
+				case_name,
+				label,
+				iteration,
+			)
+			if iteration >= 0
+				if candidate == 0
+					baseline_values.push(value)
+				else
+					candidate_values.push(value)
+				end
+			end
+			order += 1
+		end
+		iteration += 1
+	end
+	return Result<Array<Array<Float>>, String>::Ok([baseline_values, candidate_values])
+end
+
+def measure_emit_rss_series(
+		mut output: StringBuilder,
+		compilers: Array<String>,
+		sources: Array<String>,
+		expected: Array<String>,
+		case_name: String,
+	): Result<Array<Array<Integer>>, String>
+	mut baseline_values: Array<Integer> := []
+	mut candidate_values: Array<Integer> := []
+	mut iteration :=- 2
+	while iteration < 11
+		mut order := 0
+		while order < 2
+			mut candidate := order
+			if iteration % 2 != 0
+				candidate = 1 - order
+			end
+			mut label := "baseline"
+			if candidate == 1
+				label = "candidate"
+			end
+			value := try measure_emit_rss(
+				output,
+				compilers[candidate],
+				sources[candidate],
+				expected[candidate],
+				case_name,
+				label,
+				iteration,
+			)
+			if iteration >= 0
+				if candidate == 0
+					baseline_values.push(value)
+				else
+					candidate_values.push(value)
+				end
+			end
+			order += 1
+		end
+		iteration += 1
+	end
+	return Result<Array<Array<Integer>>, String>::Ok([baseline_values, candidate_values])
+end
+
+def measure_build_time_series(
+		mut output: StringBuilder,
+		compilers: Array<String>,
+		sources: Array<String>,
+		measured_outputs: Array<String>,
+		expected_outputs: Array<String>,
+		qbe: String,
+		cc: String,
+	): Result<Array<Array<Float>>, String>
+	mut baseline_values: Array<Float> := []
+	mut candidate_values: Array<Float> := []
+	mut iteration :=- 2
+	while iteration < 11
+		mut order := 0
+		while order < 2
+			mut candidate := order
+			if iteration % 2 != 0
+				candidate = 1 - order
+			end
+			mut label := "baseline"
+			if candidate == 1
+				label = "candidate"
+			end
+			value := try measure_build_time(
+				output,
+				compilers[candidate],
+				sources[candidate],
+				measured_outputs[candidate],
+				expected_outputs[candidate],
+				qbe,
+				cc,
+				label,
+				iteration,
+			)
+			if iteration >= 0
+				if candidate == 0
+					baseline_values.push(value)
+				else
+					candidate_values.push(value)
+				end
+			end
+			order += 1
+		end
+		iteration += 1
+	end
+	return Result<Array<Array<Float>>, String>::Ok([baseline_values, candidate_values])
+end
+
+def measure_build_rss_series(
+		mut output: StringBuilder,
+		compilers: Array<String>,
+		sources: Array<String>,
+		measured_outputs: Array<String>,
+		expected_outputs: Array<String>,
+		qbe: String,
+		cc: String,
+	): Result<Array<Array<Integer>>, String>
+	mut baseline_values: Array<Integer> := []
+	mut candidate_values: Array<Integer> := []
+	mut iteration :=- 2
+	while iteration < 11
+		mut order := 0
+		while order < 2
+			mut candidate := order
+			if iteration % 2 != 0
+				candidate = 1 - order
+			end
+			mut label := "baseline"
+			if candidate == 1
+				label = "candidate"
+			end
+			value := try measure_build_rss(
+				output,
+				compilers[candidate],
+				sources[candidate],
+				measured_outputs[candidate],
+				expected_outputs[candidate],
+				qbe,
+				cc,
+				label,
+				iteration,
+			)
+			if iteration >= 0
+				if candidate == 0
+					baseline_values.push(value)
+				else
+					candidate_values.push(value)
+				end
+			end
+			order += 1
+		end
+		iteration += 1
+	end
+	return Result<Array<Array<Integer>>, String>::Ok([baseline_values, candidate_values])
+end
+
+def measure_application_build_time(
+		mut output: StringBuilder,
+		command: String,
+		arguments: Array<String>,
+		output_path: String,
+		expected_path: String,
+		candidate: String,
+		iteration: Integer,
+	): Result<Float, String>
+	measurement := try measure_process(command, arguments)
+	append_measurement(
+		output,
+		"application-build-total",
+		"float-kernel",
+		candidate,
+		iteration,
+		measurement.seconds.to_s(),
+		measurement.status,
+	)
+	if measurement.status != 0 || !measurement.stderr.empty?()
+		return Result<Float, String>::Err(candidate + " Float workload build failed: " + measurement.stderr)
+	end
+	try require_file(output_path)
+	if !expected_path.empty?()
+		try require_file_equal(output_path, expected_path, candidate + " Float workload bytes differ")
+	end
+	try verify_float_application(output_path, candidate + " measured Float workload")
+	return Result<Float, String>::Ok(measurement.seconds)
+end
+
+def measure_application_build_rss(
+		mut output: StringBuilder,
+		command: String,
+		arguments: Array<String>,
+		output_path: String,
+		expected_path: String,
+		candidate: String,
+		iteration: Integer,
+	): Result<Integer, String>
+	measurement := try peak_process(command, arguments)
+	append_measurement(
+		output,
+		"application-build-peak-rss",
+		"float-kernel",
+		candidate,
+		iteration,
+		measurement.rss.to_s(),
+		measurement.status,
+	)
+	if measurement.status != 0
+		return Result<Integer, String>::Err(candidate + " Float workload RSS build failed")
+	end
+	try require_file(output_path)
+	if !expected_path.empty?()
+		try require_file_equal(output_path, expected_path, candidate + " Float workload RSS bytes differ")
+	end
+	try verify_float_application(output_path, candidate + " measured RSS Float workload")
+	return Result<Integer, String>::Ok(measurement.rss)
+end
+
+def measure_application_build_time_series(
+		mut output: StringBuilder,
+		builds: Array<ApplicationBuild>,
+	): Result<Array<Array<Float>>, String>
+	mut first_values: Array<Float> := []
+	mut second_values: Array<Float> := []
+	mut iteration :=- 2
+	while iteration < 11
+		mut order := 0
+		while order < 2
+			mut candidate := order
+			if iteration % 2 != 0
+				candidate = 1 - order
+			end
+			build := builds[candidate]
+			value := try measure_application_build_time(
+				output,
+				build.command,
+				build.arguments,
+				build.output_path,
+				build.expected_path,
+				build.label,
+				iteration,
+			)
+			if iteration >= 0
+				if candidate == 0
+					first_values.push(value)
+				else
+					second_values.push(value)
+				end
+			end
+			order += 1
+		end
+		iteration += 1
+	end
+	return Result<Array<Array<Float>>, String>::Ok([first_values, second_values])
+end
+
+def measure_application_build_rss_series(
+		mut output: StringBuilder,
+		builds: Array<ApplicationBuild>,
+	): Result<Array<Array<Integer>>, String>
+	mut first_values: Array<Integer> := []
+	mut second_values: Array<Integer> := []
+	mut iteration :=- 2
+	while iteration < 11
+		mut order := 0
+		while order < 2
+			mut candidate := order
+			if iteration % 2 != 0
+				candidate = 1 - order
+			end
+			build := builds[candidate]
+			value := try measure_application_build_rss(
+				output,
+				build.command,
+				build.arguments,
+				build.output_path,
+				build.expected_path,
+				build.label,
+				iteration,
+			)
+			if iteration >= 0
+				if candidate == 0
+					first_values.push(value)
+				else
+					second_values.push(value)
+				end
+			end
+			order += 1
+		end
+		iteration += 1
+	end
+	return Result<Array<Array<Integer>>, String>::Ok([first_values, second_values])
+end
+
+def measure_runtime_time(
+		mut output: StringBuilder,
+		executable: String,
+		candidate: String,
+		iteration: Integer,
+	): Result<Float, String>
+	measurement := try measure_process(executable, [])
+	append_measurement(
+		output,
+		"application-runtime-total",
+		"float-kernel",
+		candidate,
+		iteration,
+		measurement.seconds.to_s(),
+		measurement.status,
+	)
+	if measurement.status != 0 || measurement.stdout != "float-kernel-ok\n" || !measurement.stderr.empty?()
+		return Result<Float, String>::Err(candidate + " Float workload runtime differs")
+	end
+	return Result<Float, String>::Ok(measurement.seconds)
+end
+
+def measure_runtime_rss(
+		mut output: StringBuilder,
+		executable: String,
+		candidate: String,
+		iteration: Integer,
+	): Result<Integer, String>
+	measurement := try peak_process(executable, [])
+	append_measurement(
+		output,
+		"application-runtime-peak-rss",
+		"float-kernel",
+		candidate,
+		iteration,
+		measurement.rss.to_s(),
+		measurement.status,
+	)
+	if measurement.status != 0 || measurement.stdout != "float-kernel-ok\n"
+		return Result<Integer, String>::Err(candidate + " Float workload runtime RSS differs")
+	end
+	return Result<Integer, String>::Ok(measurement.rss)
+end
+
+def measure_runtime_time_series(
+		mut output: StringBuilder,
+		executables: Array<String>,
+	): Result<Array<Array<Float>>, String>
+	mut native_values: Array<Float> := []
+	mut go_values: Array<Float> := []
+	mut iteration :=- 3
+	while iteration < 31
+		mut order := 0
+		while order < 2
+			mut candidate := order
+			if iteration % 2 != 0
+				candidate = 1 - order
+			end
+			mut label := "native-candidate"
+			if candidate == 1
+				label = "go-optimized"
+			end
+			value := try measure_runtime_time(output, executables[candidate], label, iteration)
+			if iteration >= 0
+				if candidate == 0
+					native_values.push(value)
+				else
+					go_values.push(value)
+				end
+			end
+			order += 1
+		end
+		iteration += 1
+	end
+	return Result<Array<Array<Float>>, String>::Ok([native_values, go_values])
+end
+
+def measure_runtime_rss_series(
+		mut output: StringBuilder,
+		executables: Array<String>,
+	): Result<Array<Array<Integer>>, String>
+	mut native_values: Array<Integer> := []
+	mut go_values: Array<Integer> := []
+	mut iteration :=- 3
+	while iteration < 31
+		mut order := 0
+		while order < 2
+			mut candidate := order
+			if iteration % 2 != 0
+				candidate = 1 - order
+			end
+			mut label := "native-candidate"
+			if candidate == 1
+				label = "go-optimized"
+			end
+			value := try measure_runtime_rss(output, executables[candidate], label, iteration)
+			if iteration >= 0
+				if candidate == 0
+					native_values.push(value)
+				else
+					go_values.push(value)
+				end
+			end
+			order += 1
+		end
+		iteration += 1
+	end
+	return Result<Array<Array<Integer>>, String>::Ok([native_values, go_values])
+end
+
+def strip_application_and_record(
+		mut output: StringBuilder,
+		candidate: String,
+		path: String,
+		stripped: String,
+	): Result<Integer, String>
+	measurement := try measure_process("/usr/bin/strip", ["-x", "-o", stripped, path])
+	if measurement.status != 0
+		return Result<Integer, String>::Err("strip failed for " + path + ": " + measurement.stderr)
+	end
+	try record_size(output, "application-size-raw", "float-kernel", candidate, path)
+	return record_size(output, "application-size-stripped", "float-kernel", candidate, stripped)
+end
+
+def append_inventory_command(
+		mut inventory: StringBuilder,
+		label: String,
+		command: String,
+		arguments: Array<String>,
+	): Result<TimedProcess, String>
+	inventory.append("## " + label + "\n")
+	inventory.append("command: " + command)
+	mut index := 0
+	while index < arguments.size()
+		inventory.append(" " + arguments[index])
+		index += 1
+	end
+	inventory.append("\n")
+	measurement := try measure_process(command, arguments)
+	inventory.append("status: " + measurement.status.to_s() + "\n")
+	if !measurement.stdout.empty?()
+		inventory.append("stdout:\n" + measurement.stdout)
+		if !measurement.stdout.end_with?("\n")
+			inventory.append("\n")
+		end
+	end
+	if !measurement.stderr.empty?()
+		inventory.append("stderr:\n" + measurement.stderr)
+		if !measurement.stderr.end_with?("\n")
+			inventory.append("\n")
+		end
+	end
+	inventory.append("\n")
+	return Result<TimedProcess, String>::Ok(measurement)
+end
+
+def record_inventory(
+		inventory_path: String,
+		candidate_root: String,
+		baseline_root: String,
+		seed: String,
+		seed_provenance: String,
+		benchmark: String,
+		reference_trb: String,
+		qbe: String,
+		cc: String,
+		go_command: String,
+		workspace: String,
+		baseline_sources: CompilerSources,
+		candidate_sources: CompilerSources,
+		baseline_chain: CompilerChain,
+		candidate_chain: CompilerChain,
+		representative_application: String,
+		float_source: String,
+		float_conformance_qbe: String,
+		float_qbe: String,
+		float_conformance_application: String,
+		native_float_application: String,
+		go_float_application: String,
+		go_size_application: String,
+	): Result<Boolean, String>
+	mut inventory := string_builder.new()
+	inventory.append("Gate 6I self-hosted Float scalar process inventory\n\n")
+	inventory.append("initial seed provenance (outside ordinary chains):\n  " + seed_provenance + "\n\n")
+	inventory.append("ordinary baseline chain:\n")
+	inventory.append("  shared B1 -> baseline B2/compiler -> baseline B3/compiler -> baseline B4/compiler\n")
+	inventory.append("ordinary candidate chain:\n")
+	inventory.append("  shared B1 -> candidate B2/compiler -> candidate B3/compiler -> candidate B4/compiler\n\n")
+	inventory.append("measured comparisons:\n")
+	inventory.append("  baseline B4 emits/builds the Gate 6H compiler source\n")
+	inventory.append("  candidate B4 emits/builds the Gate 6I compiler source\n")
+	inventory.append("  candidate B4 and pinned trb build the same Float source with output basename program\n")
+	inventory.append("  two warmups precede eleven alternating compiler and application build observations\n")
+	inventory.append("  three warmups precede 31 alternating Float runtime observations\n")
+	inventory.append("  time and peak RSS use independent alternating series under one inherited Go cache policy\n\n")
+	inventory.append("retained external boundary:\n")
+	inventory.append("  Native compiler -> explicit QBE 1.3 -> explicit system CC -> assembler/linker\n")
+	inventory.append("  recovery, Go, reference trb, benchmark controller, and shell stay outside ordinary chains\n\n")
+	inventory.append("exact measured commands:\n")
+	inventory.append("  " + baseline_chain.b4 + " emit-qbe " + baseline_sources.entry_path + "\n")
+	inventory.append("  " + candidate_chain.b4 + " emit-qbe " + candidate_sources.entry_path + "\n")
+	inventory.append("  " + baseline_chain.b4 + " build " + baseline_sources.entry_path + " --output " + workspace + "/measured-baseline/compiler --qbe " + qbe + " --cc " + cc + "\n")
+	inventory.append("  " + candidate_chain.b4 + " build " + candidate_sources.entry_path + " --output " + workspace + "/measured-candidate/compiler --qbe " + qbe + " --cc " + cc + "\n")
+	inventory.append("  " + candidate_chain.b4 + " build " + float_source + " --output <native>/program --qbe " + qbe + " --cc " + cc + "\n")
+	inventory.append("  " + reference_trb + " build --compile --config " + candidate_root + "/corpus/gate6i/float-kernel/trbconfig.jsonc --outfile <go>/program\n")
+	inventory.append("  <native>/program\n  <go>/program\n\n")
+	try append_inventory_command(inventory, "candidate TypeRB Native revision", "/usr/bin/git", ["-C", candidate_root, "rev-parse", "HEAD"])
+	try append_inventory_command(inventory, "candidate worktree status", "/usr/bin/git", ["-C", candidate_root, "status", "--porcelain"])
+	try append_inventory_command(inventory, "baseline TypeRB Native revision", "/usr/bin/git", ["-C", baseline_root, "rev-parse", "HEAD"])
+	try append_inventory_command(inventory, "baseline worktree status", "/usr/bin/git", ["-C", baseline_root, "status", "--porcelain"])
+	try append_inventory_command(inventory, "operating system", "/usr/bin/sw_vers", [])
+	try append_inventory_command(inventory, "kernel and architecture", "/usr/bin/uname", ["-a"])
+	try append_inventory_command(inventory, "processor", "/usr/sbin/sysctl", ["-n", "machdep.cpu.brand_string"])
+	try append_inventory_command(inventory, "physical memory", "/usr/sbin/sysctl", ["-n", "hw.memsize"])
+	try append_inventory_command(inventory, "reference compiler version", reference_trb, ["version"])
+	try append_inventory_command(inventory, "Go version", go_command, ["version"])
+	try append_inventory_command(inventory, "inherited Go cache", go_command, ["env", "GOCACHE"])
+	try append_inventory_command(inventory, "C toolchain version", cc, ["--version"])
+	try append_inventory_command(inventory, "QBE probe", qbe, ["-h"])
+	artifacts := [
+		benchmark,
+		seed,
+		baseline_chain.b2,
+		baseline_chain.b3,
+		baseline_chain.b4,
+		candidate_chain.b2,
+		candidate_chain.b3,
+		candidate_chain.b4,
+		representative_application,
+		float_conformance_qbe,
+		float_qbe,
+		float_conformance_application,
+		native_float_application,
+		go_float_application,
+		go_size_application,
+		qbe,
+	]
+	try append_inventory_command(inventory, "artifact formats", "/usr/bin/file", artifacts)
+	mut hash_arguments := ["-a", "256"]
+	mut index := 0
+	while index < artifacts.size()
+		hash_arguments.push(artifacts[index])
+		index += 1
+	end
+	try append_inventory_command(inventory, "artifact SHA-256", "/usr/bin/shasum", hash_arguments)
+	try append_inventory_command(inventory, "source SHA-256", "/usr/bin/shasum", [
+			"-a",
+			"256",
+			baseline_sources.entry_path,
+			baseline_sources.storage_path,
+			baseline_sources.path_path,
+			candidate_sources.entry_path,
+			candidate_sources.storage_path,
+			candidate_sources.path_path,
+			candidate_root + "/compiler/gate4/conformance/valid/float-scalars.trb",
+			float_source,
+		])
+	try append_inventory_command(inventory, "fixed-point QBE SHA-256", "/usr/bin/shasum", [
+			"-a",
+			"256",
+			baseline_chain.fixed_qbe_path,
+			candidate_chain.fixed_qbe_path,
+			float_conformance_qbe,
+			float_qbe,
+		])
+	try append_inventory_command(inventory, "baseline compiler undefined symbols", "/usr/bin/nm", ["-u", baseline_chain.b4])
+	try append_inventory_command(inventory, "candidate compiler undefined symbols", "/usr/bin/nm", ["-u", candidate_chain.b4])
+	try append_inventory_command(inventory, "baseline compiler dynamic libraries", "/usr/bin/otool", ["-L", baseline_chain.b4])
+	try append_inventory_command(inventory, "candidate compiler dynamic libraries", "/usr/bin/otool", ["-L", candidate_chain.b4])
+	try append_inventory_command(inventory, "Native Float application dynamic libraries", "/usr/bin/otool", ["-L", native_float_application])
+	try append_inventory_command(inventory, "Go Float application dynamic libraries", "/usr/bin/otool", ["-L", go_float_application])
+	try append_inventory_command(inventory, "baseline compiler Go metadata probe", go_command, ["version", "-m", baseline_chain.b4])
+	try append_inventory_command(inventory, "candidate compiler Go metadata probe", go_command, ["version", "-m", candidate_chain.b4])
+	native_go := try append_inventory_command(inventory, "Native Float application Go metadata probe", go_command, ["version", "-m", native_float_application])
+	if native_go.status == 0
+		return Result<Boolean, String>::Err("Native Float application unexpectedly contains Go metadata")
+	end
+	go_metadata := try append_inventory_command(inventory, "optimized Go Float application metadata", go_command, ["version", "-m", go_float_application])
+	if go_metadata.status != 0
+		return Result<Boolean, String>::Err("optimized Go Float application metadata probe failed")
+	end
+	assembly_probe := workspace + "/inventory-cc-probe.s"
+	try write_required(assembly_probe, "")
+	try append_inventory_command(
+		inventory,
+		"CC assembler and linker expansion",
+		cc,
+		["-###", assembly_probe, "-Wl,-dead_strip", "-o", workspace + "/inventory-cc-output"],
+	)
+	try require_no_intermediates(workspace)
+	return write_required(inventory_path, inventory.to_s())
+end
+
+def record_chain_hashes(
+		mut output: StringBuilder,
+		candidate: String,
+		chain: CompilerChain,
+	): Result<Boolean, String>
+	try record_hash(output, "compiler-sha256", "compiler-source", candidate + "-b2", chain.b2)
+	try record_hash(output, "compiler-sha256", "compiler-source", candidate + "-b3", chain.b3)
+	try record_hash(output, "compiler-sha256", "compiler-source", candidate + "-b4", chain.b4)
+	try record_hash(output, "emitted-qbe-sha256", "compiler-source", candidate, chain.fixed_qbe_path)
+	return Result<Boolean, String>::Ok(true)
+end
+
+def execute_benchmark(
+		candidate_root: String,
+		baseline_root: String,
+		seed: String,
+		seed_provenance: String,
+		benchmark: String,
+		reference_trb: String,
+		qbe: String,
+		cc: String,
+		go_command: String,
+		workspace: String,
+		raw_path: String,
+		inventory_path: String,
+	): Result<Boolean, String>
+	try create_required_directory(workspace)
+	baseline_sources := try read_compiler_sources(baseline_root)
+	candidate_sources := try read_compiler_sources(candidate_root)
+	baseline_revision := try measure_process("/usr/bin/git", ["-C", baseline_root, "rev-parse", "HEAD"])
+	if baseline_revision.status != 0 || baseline_revision.stdout.strip() != "1311dfccee379dcf2dd3a70a525bc188d195981d"
+		return Result<Boolean, String>::Err("baseline root is not the registered Gate 6H revision")
+	end
+	candidate_revision := try measure_process("/usr/bin/git", ["-C", candidate_root, "rev-parse", "HEAD"])
+	if candidate_revision.status != 0 || candidate_revision.stdout.strip() != "cd2335e6472b4daca8d631b17b889a094959c2f2"
+		return Result<Boolean, String>::Err("candidate root is not the registered Gate 6I implementation revision")
+	end
+	baseline_status := try measure_process("/usr/bin/git", ["-C", baseline_root, "status", "--porcelain"])
+	if baseline_status.status != 0 || !baseline_status.stdout.empty?()
+		return Result<Boolean, String>::Err("baseline root is not clean")
+	end
+	candidate_status := try measure_process("/usr/bin/git", ["-C", candidate_root, "status", "--porcelain"])
+	if candidate_status.status != 0 || !candidate_status.stdout.empty?()
+		return Result<Boolean, String>::Err("candidate root is not clean")
+	end
+	try require_hash(seed, "b66d65c4ddb729f71afa6ab2c6bca38f6be65eda2433ebb160058d15377891b2", "Gate 6H shared B1 seed")
+	try require_hash(baseline_sources.entry_path, "7c4df4a7876c5bc81090d520ae93bceec676166445bef07170660f54549e2396", "baseline compiler entry")
+	try require_hash(candidate_sources.entry_path, "fb6b1719e545d4af1d80392c75ef03253b517e684b305459c64ef698445602dc", "candidate compiler entry")
+	try require_hash(baseline_sources.storage_path, "d4c77fec9e5c5e8580cb0b5ee71fbd2c9c714555cbd4fd1457fcd44cc6db1f9d", "baseline storage source")
+	try require_hash(candidate_sources.storage_path, "d4c77fec9e5c5e8580cb0b5ee71fbd2c9c714555cbd4fd1457fcd44cc6db1f9d", "candidate storage source")
+	try require_hash(baseline_sources.path_path, "6347003851071b73cb8dbf38622fcc7cf3be6abf81ea253b9aad081fb057510a", "baseline path source")
+	try require_hash(candidate_sources.path_path, "6347003851071b73cb8dbf38622fcc7cf3be6abf81ea253b9aad081fb057510a", "candidate path source")
+	float_source := candidate_root + "/corpus/gate6i/float-kernel/src/main.trb"
+	float_config := candidate_root + "/corpus/gate6i/float-kernel/trbconfig.jsonc"
+	try require_hash(float_source, "7d5125967da5a740faf62c0cc3a89d04bdaade54a475c2649d82892847e77dfe", "Float workload source")
+
+	baseline_chain := try build_compiler_chain(
+		seed,
+		baseline_sources,
+		qbe,
+		cc,
+		workspace + "/baseline-chain",
+		"baseline",
+	)
+	candidate_chain := try build_compiler_chain(
+		seed,
+		candidate_sources,
+		qbe,
+		cc,
+		workspace + "/candidate-chain",
+		"candidate",
+	)
+	try require_hash(baseline_chain.b4, "b66d65c4ddb729f71afa6ab2c6bca38f6be65eda2433ebb160058d15377891b2", "baseline B4 compiler")
+	try require_hash(candidate_chain.b4, "849f5d6c6fc0738735c84b9240e8f87a477e8d978b0c64a995a5cae5944d8f8d", "candidate B4 compiler")
+	try require_hash(baseline_chain.fixed_qbe_path, "cc3b7322158dd9cb369368c0d3008b531b2cec16e007e0c46089389023dd8753", "baseline fixed-point QBE")
+	try require_hash(candidate_chain.fixed_qbe_path, "da3ba99a19f023c8d227a58e77d748ce77e64bfc650d0963aefb3f1512d4217e", "candidate fixed-point QBE")
+
+	float_conformance_source := candidate_root + "/compiler/gate4/conformance/valid/float-scalars.trb"
+	float_conformance_qbe := try emitted_qbe(candidate_chain.b4, float_conformance_source, "Float conformance")
+	float_conformance_repeat := try emitted_qbe(candidate_chain.b4, float_conformance_source, "repeated Float conformance")
+	if float_conformance_qbe != float_conformance_repeat
+		return Result<Boolean, String>::Err("Float conformance QBE is not deterministic")
+	end
+	try verify_float_qbe(float_conformance_qbe)
+	float_conformance_qbe_path := workspace + "/float-conformance.ssa"
+	try write_required(float_conformance_qbe_path, float_conformance_qbe)
+	float_conformance_directories := [
+		workspace + "/float-conformance-native",
+		workspace + "/float-conformance-repeat",
+	]
+	mut index := 0
+	while index < float_conformance_directories.size()
+		try create_required_directory(float_conformance_directories[index])
+		index += 1
+	end
+	float_conformance_outputs := [
+		float_conformance_directories[0] + "/program",
+		float_conformance_directories[1] + "/program",
+	]
+	try build_checked(
+		candidate_chain.b4,
+		float_conformance_source,
+		float_conformance_outputs[0],
+		qbe,
+		cc,
+		"Float conformance application",
+	)
+	try build_checked(
+		candidate_chain.b4,
+		float_conformance_source,
+		float_conformance_outputs[1],
+		qbe,
+		cc,
+		"repeated Float conformance application",
+	)
+	try require_file_equal(
+		float_conformance_outputs[0],
+		float_conformance_outputs[1],
+		"repeated Float conformance application bytes differ",
+	)
+	try verify_float_conformance_application(float_conformance_outputs[0], "Float conformance application")
+	try verify_float_conformance_application(
+		float_conformance_outputs[1],
+		"repeated Float conformance application",
+	)
+	float_kernel_qbe := try emitted_qbe(candidate_chain.b4, float_source, "Float workload")
+	float_kernel_repeat := try emitted_qbe(candidate_chain.b4, float_source, "repeated Float workload")
+	if float_kernel_qbe != float_kernel_repeat
+		return Result<Boolean, String>::Err("Float workload QBE is not deterministic")
+	end
+	float_kernel_qbe_path := workspace + "/float-kernel.ssa"
+	try write_required(float_kernel_qbe_path, float_kernel_qbe)
+
+	representative_project := workspace + "/file-root-project"
+	try prepare_application(candidate_root, representative_project)
+	representative_directories := [
+		workspace + "/representative-baseline",
+		workspace + "/representative-candidate",
+		workspace + "/representative-repeat",
+	]
+	index = 0
+	while index < representative_directories.size()
+		try create_required_directory(representative_directories[index])
+		index += 1
+	end
+	representative_outputs := [
+		representative_directories[0] + "/program",
+		representative_directories[1] + "/program",
+		representative_directories[2] + "/program",
+	]
+	try build_checked(baseline_chain.b4, representative_project + "/main.trb", representative_outputs[0], qbe, cc, "baseline representative application")
+	try build_checked(candidate_chain.b4, representative_project + "/main.trb", representative_outputs[1], qbe, cc, "candidate representative application")
+	try build_checked(candidate_chain.b4, representative_project + "/main.trb", representative_outputs[2], qbe, cc, "repeated representative application")
+	index = 0
+	while index < representative_outputs.size()
+		try verify_application(representative_outputs[index], "representative application " + index.to_s())
+		try require_hash(representative_outputs[index], "413d97fd8a3f26e1086795b1fd5306ad5817613e7080ddba410eb8264c0a67b9", "representative application " + index.to_s())
+		if index > 0
+			try require_file_equal(representative_outputs[0], representative_outputs[index], "representative application bytes differ")
+		end
+		index += 1
+	end
+
+	float_directories := [
+		workspace + "/float-native-reference",
+		workspace + "/float-native-repeat",
+		workspace + "/float-go-reference",
+		workspace + "/float-go-size",
+		workspace + "/float-measured-native",
+		workspace + "/float-measured-go",
+	]
+	index = 0
+	while index < float_directories.size()
+		try create_required_directory(float_directories[index])
+		index += 1
+	end
+	float_outputs := [
+		float_directories[0] + "/program",
+		float_directories[1] + "/program",
+		float_directories[2] + "/program",
+		float_directories[3] + "/program",
+		float_directories[4] + "/program",
+		float_directories[5] + "/program",
+	]
+	try build_checked(candidate_chain.b4, float_source, float_outputs[0], qbe, cc, "Native Float application")
+	try build_checked(candidate_chain.b4, float_source, float_outputs[1], qbe, cc, "repeated Native Float application")
+	try require_file_equal(float_outputs[0], float_outputs[1], "repeated Native Float application bytes differ")
+	go_build := try measure_process(reference_trb, go_build_arguments(float_config, float_outputs[2]))
+	if go_build.status != 0 || !go_build.stderr.empty?()
+		return Result<Boolean, String>::Err("optimized Go Float application build failed: " + go_build.stderr)
+	end
+	go_size_build := try measure_process(
+		"/usr/bin/env",
+		[
+			"GOFLAGS=-ldflags=-s -w",
+			reference_trb,
+			"build",
+			"--compile",
+			"--config",
+			float_config,
+			"--outfile",
+			float_outputs[3],
+		],
+	)
+	if go_size_build.status != 0 || !go_size_build.stderr.empty?()
+		return Result<Boolean, String>::Err("size-optimized Go Float application build failed: " + go_size_build.stderr)
+	end
+	index = 0
+	while index < 4
+		try require_file(float_outputs[index])
+		try verify_float_application(float_outputs[index], "Float application " + index.to_s())
+		index += 1
+	end
+
+	measured_directories := [workspace + "/measured-baseline", workspace + "/measured-candidate"]
+	index = 0
+	while index < measured_directories.size()
+		try create_required_directory(measured_directories[index])
+		index += 1
+	end
+	compilers := [baseline_chain.b4, candidate_chain.b4]
+	compiler_sources := [baseline_sources.entry_path, candidate_sources.entry_path]
+	compiler_qbe := [baseline_chain.fixed_qbe, candidate_chain.fixed_qbe]
+	measured_outputs := [measured_directories[0] + "/compiler", measured_directories[1] + "/compiler"]
+	expected_outputs := [baseline_chain.b4, candidate_chain.b4]
+	application_builds := [
+		ApplicationBuild.new(
+			command: candidate_chain.b4,
+			arguments: build_arguments(float_source, float_outputs[4], qbe, cc),
+			output_path: float_outputs[4],
+			expected_path: float_outputs[0],
+			label: "native-candidate",
+		),
+		ApplicationBuild.new(
+			command: reference_trb,
+			arguments: go_build_arguments(float_config, float_outputs[5]),
+			output_path: float_outputs[5],
+			expected_path: "",
+			label: "go-optimized",
+		),
+	]
+	mut output := string_builder.new()
+	output.append("metric,case,candidate,iteration,value,status\n")
+	canonical_emit_times := try measure_emit_time_series(
+		output,
+		compilers,
+		compiler_sources,
+		compiler_qbe,
+		"compiler-source",
+	)
+	canonical_build_times := try measure_build_time_series(
+		output,
+		compilers,
+		compiler_sources,
+		measured_outputs,
+		expected_outputs,
+		qbe,
+		cc,
+	)
+	application_build_times := try measure_application_build_time_series(output, application_builds)
+	canonical_emit_rss := try measure_emit_rss_series(
+		output,
+		compilers,
+		compiler_sources,
+		compiler_qbe,
+		"compiler-source",
+	)
+	canonical_build_rss := try measure_build_rss_series(
+		output,
+		compilers,
+		compiler_sources,
+		measured_outputs,
+		expected_outputs,
+		qbe,
+		cc,
+	)
+	application_build_rss := try measure_application_build_rss_series(output, application_builds)
+	runtime_times := try measure_runtime_time_series(output, [float_outputs[0], float_outputs[2]])
+	runtime_rss := try measure_runtime_rss_series(output, [float_outputs[0], float_outputs[2]])
+
+	baseline_canonical_emit_median := gate6i_median_float(canonical_emit_times[0])
+	candidate_canonical_emit_median := gate6i_median_float(canonical_emit_times[1])
+	baseline_canonical_build_median := gate6i_median_float(canonical_build_times[0])
+	candidate_canonical_build_median := gate6i_median_float(canonical_build_times[1])
+	native_build_median := gate6i_median_float(application_build_times[0])
+	go_build_median := gate6i_median_float(application_build_times[1])
+	baseline_canonical_emit_rss := gate6i_median_integer(canonical_emit_rss[0])
+	candidate_canonical_emit_rss := gate6i_median_integer(canonical_emit_rss[1])
+	baseline_canonical_build_rss := gate6i_median_integer(canonical_build_rss[0])
+	candidate_canonical_build_rss := gate6i_median_integer(canonical_build_rss[1])
+	native_build_rss := gate6i_median_integer(application_build_rss[0])
+	go_build_rss := gate6i_median_integer(application_build_rss[1])
+	native_runtime_median := gate6i_median_float(runtime_times[0])
+	go_runtime_median := gate6i_median_float(runtime_times[1])
+	native_runtime_rss := gate6i_median_integer(runtime_rss[0])
+	go_runtime_rss := gate6i_median_integer(runtime_rss[1])
+
+	append_measurement(output, "median", "compiler-emit-qbe-total", "baseline", 0, baseline_canonical_emit_median.to_s(), 0)
+	append_measurement(output, "median", "compiler-emit-qbe-total", "candidate", 0, candidate_canonical_emit_median.to_s(), 0)
+	append_measurement(output, "median", "compiler-build-total", "baseline", 0, baseline_canonical_build_median.to_s(), 0)
+	append_measurement(output, "median", "compiler-build-total", "candidate", 0, candidate_canonical_build_median.to_s(), 0)
+	append_measurement(output, "median", "application-build-total", "native-candidate", 0, native_build_median.to_s(), 0)
+	append_measurement(output, "median", "application-build-total", "go-optimized", 0, go_build_median.to_s(), 0)
+	append_measurement(output, "median", "application-runtime-total", "native-candidate", 0, native_runtime_median.to_s(), 0)
+	append_measurement(output, "median", "application-runtime-total", "go-optimized", 0, go_runtime_median.to_s(), 0)
+	append_measurement(output, "median-rss", "compiler-emit-qbe", "baseline", 0, baseline_canonical_emit_rss.to_s(), 0)
+	append_measurement(output, "median-rss", "compiler-emit-qbe", "candidate", 0, candidate_canonical_emit_rss.to_s(), 0)
+	append_measurement(output, "median-rss", "compiler-build", "baseline", 0, baseline_canonical_build_rss.to_s(), 0)
+	append_measurement(output, "median-rss", "compiler-build", "candidate", 0, candidate_canonical_build_rss.to_s(), 0)
+	append_measurement(output, "median-rss", "application-build", "native-candidate", 0, native_build_rss.to_s(), 0)
+	append_measurement(output, "median-rss", "application-build", "go-optimized", 0, go_build_rss.to_s(), 0)
+	append_measurement(output, "median-rss", "application-runtime", "native-candidate", 0, native_runtime_rss.to_s(), 0)
+	append_measurement(output, "median-rss", "application-runtime", "go-optimized", 0, go_runtime_rss.to_s(), 0)
+	append_measurement(output, "regression-limit-percent", "compiler-source", "candidate-over-baseline", 0, "110", 0)
+	append_measurement(output, "go-parity-limit-percent", "float-kernel", "native-over-go", 0, "125", 0)
+	append_measurement(output, "application-size-reduction-percent", "float-kernel", "native-vs-go-size", 0, "80", 0)
+	append_measurement(output, "compiler-size-absolute-limit", "compiler-source", "candidate", 0, "220000", 0)
+
+	baseline_stripped := try strip_and_record(output, "baseline-b4", baseline_chain.b4, workspace + "/baseline-chain/stripped")
+	candidate_stripped := try strip_and_record(output, "candidate-b4", candidate_chain.b4, workspace + "/candidate-chain/stripped")
+	native_float_size := try strip_application_and_record(
+		output,
+		"native-candidate",
+		float_outputs[0],
+		float_directories[0] + "/stripped",
+	)
+	go_size := try record_size(
+		output,
+		"application-size-size-optimized",
+		"float-kernel",
+		"go-size",
+		float_outputs[3],
+	)
+	try record_hash(output, "seed-sha256", "compiler-seed", "gate6h-b4", seed)
+	try record_hash(output, "compiler-source-sha256", "source", "baseline-entry", baseline_sources.entry_path)
+	try record_hash(output, "compiler-source-sha256", "source", "candidate-entry", candidate_sources.entry_path)
+	try record_hash(output, "workload-source-sha256", "source", "float-kernel", float_source)
+	try record_hash(
+		output,
+		"conformance-source-sha256",
+		"source",
+		"float-scalars",
+		float_conformance_source,
+	)
+	try record_hash(output, "float-qbe-sha256", "qbe", "conformance", float_conformance_qbe_path)
+	try record_hash(output, "float-qbe-sha256", "qbe", "float-kernel", float_kernel_qbe_path)
+	try record_hash(
+		output,
+		"application-sha256",
+		"float-conformance",
+		"native",
+		float_conformance_outputs[0],
+	)
+	try record_chain_hashes(output, "baseline", baseline_chain)
+	try record_chain_hashes(output, "candidate", candidate_chain)
+	try record_hash(output, "application-sha256", "file-root", "candidate", representative_outputs[1])
+	try record_hash(output, "application-sha256", "float-kernel", "native", float_outputs[0])
+	try record_hash(output, "application-sha256", "float-kernel", "go-optimized", float_outputs[2])
+	try record_hash(output, "application-sha256", "float-kernel", "go-size", float_outputs[3])
+	append_measurement(output, "compiler-size-stripped-baseline", "compiler-source", "gate6h", 0, baseline_stripped.to_s(), 0)
+	append_measurement(output, "compiler-size-stripped-candidate", "compiler-source", "gate6i", 0, candidate_stripped.to_s(), 0)
+	try require_no_intermediates(workspace)
+	try write_required(raw_path, output.to_s())
+	try record_inventory(
+		inventory_path,
+		candidate_root,
+		baseline_root,
+		seed,
+		seed_provenance,
+		benchmark,
+		reference_trb,
+		qbe,
+		cc,
+		go_command,
+		workspace,
+		baseline_sources,
+		candidate_sources,
+		baseline_chain,
+		candidate_chain,
+		representative_outputs[1],
+		float_source,
+		float_conformance_qbe_path,
+		float_kernel_qbe_path,
+		float_conformance_outputs[0],
+		float_outputs[0],
+		float_outputs[2],
+		float_outputs[3],
+	)
+
+	if !gate6i_candidate_within_percent(baseline_canonical_emit_median, candidate_canonical_emit_median, 110.0)
+		return Result<Boolean, String>::Err("candidate canonical emit-qbe exceeds the fresh baseline 10% bound")
+	end
+	if !gate6i_candidate_within_percent(baseline_canonical_build_median, candidate_canonical_build_median, 110.0)
+		return Result<Boolean, String>::Err("candidate canonical build exceeds the fresh baseline 10% bound")
+	end
+	if candidate_canonical_emit_rss * 100 > baseline_canonical_emit_rss * 110
+		return Result<Boolean, String>::Err("candidate canonical emit-qbe RSS exceeds the fresh baseline 10% bound")
+	end
+	if candidate_canonical_build_rss * 100 > baseline_canonical_build_rss * 110
+		return Result<Boolean, String>::Err("candidate canonical build RSS exceeds the fresh baseline 10% bound")
+	end
+	if !gate6i_candidate_within_percent(go_build_median, native_build_median, 125.0)
+		return Result<Boolean, String>::Err("Native Float build time exceeds the optimized Go 25% bound")
+	end
+	if native_build_rss * 100 > go_build_rss * 125
+		return Result<Boolean, String>::Err("Native Float build RSS exceeds the optimized Go 25% bound")
+	end
+	if !gate6i_candidate_within_percent(go_runtime_median, native_runtime_median, 125.0)
+		return Result<Boolean, String>::Err("Native Float runtime exceeds the optimized Go 25% bound")
+	end
+	if native_runtime_rss * 100 > go_runtime_rss * 125
+		return Result<Boolean, String>::Err("Native Float runtime RSS exceeds the optimized Go 25% bound")
+	end
+	if native_float_size * 5 > go_size
+		return Result<Boolean, String>::Err("Native Float application is not at least 80% smaller than size-optimized Go")
+	end
+	if candidate_stripped > 220000
+		return Result<Boolean, String>::Err("candidate stripped compiler exceeds the registered size bound")
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+def main()
+	arguments := argv()
+	if arguments.size() != 12
+		puts(
+			"usage: gate6i-benchmark CANDIDATE_ROOT BASELINE_ROOT SEED SEED_PROVENANCE BENCHMARK REFERENCE_TRB QBE CC GO WORKSPACE RAW_CSV INVENTORY",
+		)
+		return
+	end
+	case execute_benchmark(
+			arguments[0],
+			arguments[1],
+			arguments[2],
+			arguments[3],
+			arguments[4],
+			arguments[5],
+			arguments[6],
+			arguments[7],
+			arguments[8],
+			arguments[9],
+			arguments[10],
+			arguments[11],
+		)
+	when Result::Ok(_value)
+		puts(arguments[10])
+		puts(arguments[11])
+	when Result::Err(error)
+		puts(error)
+	end
+end
