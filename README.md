@@ -194,6 +194,17 @@ and Linux arm64 replacement chains. See the
 [Decision 0016](docs/decisions/0016-self-hosted-float-scalar-path.md), and
 [recorded result](results/2026-08-29-gate6i-float-darwin-linux-arm64/README.md).
 
+Gate 6J is registered in
+[issue #74](https://github.com/type-rb/type-rb-native/issues/74). It extends
+the existing self-hosted Array runtime with `Array<Float>`, including safe
+Integer element widening, common numeric literal inference, growth, indexing,
+mutation, nested Arrays, and binary64 payload operations. The fixed five-
+million-element workload must remain competitive with optimized Go for build
+time, runtime, memory, and executable size while the compiler fixed point and
+existing applications stay exact. See the
+[Gate 6J Float Array plan](docs/gate-6-float-arrays.md) and
+[Decision 0017](docs/decisions/0017-self-hosted-float-arrays.md).
+
 Configured project discovery, production runtime integration,
 package/native-library boundaries, incremental builds, toolchain discovery,
 debugging, maintenance evaluation, and additional primary targets remain in
@@ -316,6 +327,7 @@ repository.
 - [Gate 6H scalable module-graph Darwin/Linux arm64 result](results/2026-08-29-gate6h-module-graph-darwin-linux-arm64/README.md)
 - [Gate 6I self-hosted Float scalar path](docs/gate-6-float.md)
 - [Gate 6I self-hosted Float Darwin/Linux arm64 result](results/2026-08-29-gate6i-float-darwin-linux-arm64/README.md)
+- [Gate 6J self-hosted Float Arrays](docs/gate-6-float-arrays.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
 - [Decision 0003: Gate 1 QBE and Darwin arm64 profile](docs/decisions/0003-gate-1-qbe-target.md)
@@ -332,6 +344,7 @@ repository.
 - [Decision 0014: Indexed self-hosted function lookup](docs/decisions/0014-indexed-function-lookup.md)
 - [Decision 0015: Indexed file-root module graph](docs/decisions/0015-indexed-module-graph.md)
 - [Decision 0016: Self-hosted Float scalar path](docs/decisions/0016-self-hosted-float-scalar-path.md)
+- [Decision 0017: Self-hosted Float Arrays](docs/decisions/0017-self-hosted-float-arrays.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 

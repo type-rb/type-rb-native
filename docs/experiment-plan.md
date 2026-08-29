@@ -472,6 +472,24 @@ strips to 216,552 bytes, and closes exact Darwin and Linux arm64 replacement
 chains. See the
 [Gate 6I result](../results/2026-08-29-gate6i-float-darwin-linux-arm64/README.md).
 
+Gate 6J is the self-hosted Float Array slice registered in
+[issue #74](https://github.com/type-rb/type-rb-native/issues/74) and specified
+by [Decision 0017](decisions/0017-self-hosted-float-arrays.md). It adds the
+reference language's homogeneous binary64 Array storage, safe Integer element
+widening, common numeric literal inference, growth, indexing, mutation, and
+bounded nested forms to the ordinary TypeRB-authored compiler and runtime. No
+Native-only syntax, collection method, snapshot or MIR field, configured
+project, or public CLI contract is added.
+
+The registered five-million-element Float Array workload is built and run
+through Native and the pinned optimized Go backend. Native build time, build
+RSS, runtime, and runtime RSS must remain within 25%, while stripped
+application size must improve by at least 80%. A fresh Gate 6I comparison
+bounds canonical compiler time and RSS to +10% and stripped size to 224,000
+bytes. Exact candidate B2/B3/B4 bytes, fixed-point QBE, representative and
+scalar Float application identity, and a pinned Linux arm64 correctness chain
+remain mandatory. See the [Gate 6J plan](gate-6-float-arrays.md).
+
 This gate is not authorization to ship. It evaluates:
 
 - broader configured and packaged multi-module applications beyond the
