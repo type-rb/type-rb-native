@@ -21,6 +21,13 @@ permissions:
 jobs:
   build-target:
     name: Build ${{ matrix.asset }}
+    # GitHub returns draft releases only to callers with push access. Limit the
+    # required contents write permission to the jobs that read the registered
+    # root asset; these jobs never create, edit, or upload release content.
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     strategy:
       fail-fast: false
       matrix:
@@ -49,11 +56,18 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" > "$RUNNER_TEMP/releases.json"
           jq -e \
             --arg tag "$RELEASE_TAG" \
+            --arg sha "$GITHUB_SHA" \
             --argjson id "$ROOT_ASSET_ID" \
             '
               [
                 .[]
-                | select(.draft == true and .tag_name == $tag)
+                | select(
+                    .draft == true and
+                    .prerelease == true and
+                    .immutable == false and
+                    .tag_name == $tag and
+                    .target_commitish == $sha
+                  )
                 | .assets[]
                 | select(
                     .id == $id and
