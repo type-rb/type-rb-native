@@ -278,6 +278,8 @@ registered fixed-point, Go-parity, memory, performance, size, and external-libm
 evidence are defined by the
 [Gate 6M plan](docs/gate-6-portable-benchmark-entry.md) and
 [Decision 0021](docs/decisions/0021-portable-benchmark-entry-primitives.md).
+The reproducible Darwin procedure is implemented by the
+[TypeRB-authored measurement controller](tools/gate6m-benchmark/README.md).
 No result is claimed until that evidence is complete.
 
 Upward configured project discovery, persistent service runtime integration,
