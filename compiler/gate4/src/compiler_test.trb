@@ -1,4 +1,4 @@
-import { Gate4Compiler, Gate4Output, Gate4ProjectSources, gate4_add_module, gate4_build_function_index, gate4_character_in, gate4_check, gate4_compiler_new, gate4_digit, gate4_emit_context_new, gate4_emit_local_find, gate4_emit_qbe, gate4_find_field, gate4_find_function_in_module, gate4_find_import_binding, gate4_find_module, gate4_find_record_in_module, gate4_find_record_type, gate4_float_literal_in_range, gate4_has_diagnostic, gate4_identifier_continue, gate4_identifier_start, gate4_lex, gate4_lex_module, gate4_load_project_sources, gate4_local_find, gate4_locals_new, gate4_number_is_float, gate4_number_without_underscores, gate4_parse, gate4_parse_module, gate4_parse_project_config, gate4_resolve, gate4_string_bucket, gate4_symbol_bucket_count } from compiler
+import { Gate4Compiler, Gate4Output, Gate4ProjectSources, gate4_add_module, gate4_build_symbol_index, gate4_character_in, gate4_check, gate4_compiler_new, gate4_emit_qbe, gate4_find_field, gate4_find_function_in_module, gate4_find_import_binding, gate4_find_module, gate4_find_record_in_module, gate4_find_record_type, gate4_float_literal_in_range, gate4_has_diagnostic, gate4_lex, gate4_lex_module, gate4_load_project_sources, gate4_local_find, gate4_locals_new, gate4_number_is_float, gate4_number_without_underscores, gate4_parse_module, gate4_parse_project_config, gate4_resolve, gate4_string_bucket, gate4_symbol_bucket_count } from compiler
 import { gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage
 import trb/std/filesystem
 import trb/std/process
@@ -618,7 +618,7 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_symbol_bucket_count(8)).to_equal(16)
 		expect(gate4_symbol_bucket_count(9)).to_equal(32)
 		expect(gate4_symbol_bucket_count(65)).to_equal(256)
-		gate4_build_function_index(state)
+		gate4_build_symbol_index(state.function_lookup, state.function_modules, state.function_names, state.function_count[0])
 		expect(gate4_find_function_in_module(state, 0, "value")).to_equal(2)
 		expect(gate4_find_function_in_module(state, 0, "other")).to_equal(3)
 		expect(gate4_find_function_in_module(state, 1, "value")).to_equal(1)
@@ -647,13 +647,6 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_local_find(locals, "item")).to_equal(2)
 		expect(gate4_local_find(locals, "missing")).to_equal(- 1)
 
-		mut context := gate4_emit_context_new(4, [0])
-		gate4_store_string(context.local_names, 0, "item")
-		gate4_store_string(context.local_names, 1, "other")
-		gate4_store_string(context.local_names, 2, "item")
-		context.local_count[0] = 3
-		expect(gate4_emit_local_find(context, "item")).to_equal(2)
-		expect(gate4_emit_local_find(context, "missing")).to_equal(- 1)
 	end
 
 	test("indexes colliding fixed-width module names across deterministic growth") do
@@ -683,19 +676,21 @@ describe("Gate 4 TypeRB frontend") do
 	end
 
 	test("preserves ASCII identifier and digit classification after hot-path ordering") do
-		expect(gate4_identifier_start("a")).to_be_true()
-		expect(gate4_identifier_start("Z")).to_be_true()
-		expect(gate4_identifier_start("_")).to_be_true()
-		expect(gate4_identifier_start("0")).to_be_false()
-		expect(gate4_identifier_start("-")).to_be_false()
-		expect(gate4_identifier_continue("a")).to_be_true()
-		expect(gate4_identifier_continue("Z")).to_be_true()
-		expect(gate4_identifier_continue("_")).to_be_true()
-		expect(gate4_identifier_continue("0")).to_be_true()
-		expect(gate4_identifier_continue("-")).to_be_false()
-		expect(gate4_digit("0")).to_be_true()
-		expect(gate4_digit("9")).to_be_true()
-		expect(gate4_digit("a")).to_be_false()
+		identifier_start := "fretnmoidupglsavchbyxkwqzjABCDEFGHIJKLMNOPQRSTUVWXYZ_"
+		identifier_continue := "0123456789" + identifier_start
+		expect(gate4_character_in("a", identifier_start)).to_be_true()
+		expect(gate4_character_in("Z", identifier_start)).to_be_true()
+		expect(gate4_character_in("_", identifier_start)).to_be_true()
+		expect(gate4_character_in("0", identifier_start)).to_be_false()
+		expect(gate4_character_in("-", identifier_start)).to_be_false()
+		expect(gate4_character_in("a", identifier_continue)).to_be_true()
+		expect(gate4_character_in("Z", identifier_continue)).to_be_true()
+		expect(gate4_character_in("_", identifier_continue)).to_be_true()
+		expect(gate4_character_in("0", identifier_continue)).to_be_true()
+		expect(gate4_character_in("-", identifier_continue)).to_be_false()
+		expect(gate4_character_in("0", "0123456789")).to_be_true()
+		expect(gate4_character_in("9", "0123456789")).to_be_true()
+		expect(gate4_character_in("a", "0123456789")).to_be_false()
 	end
 
 	test("classifies decimal literals and enforces the finite binary64 boundary") do
@@ -724,7 +719,7 @@ describe("Gate 4 TypeRB frontend") do
 		source := gate4_scale_test_source(128)
 		mut state := gate4_compiler_new(source.size() + 1)
 		expect(gate4_lex(state, source)).to_be_true()
-		expect(gate4_parse(state)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_true()
 		expect(state.function_count[0]).to_equal(129)
@@ -735,7 +730,7 @@ describe("Gate 4 TypeRB frontend") do
 		source := gate4_frontend_test_source()
 		mut state := gate4_compiler_new(source.size() + 1)
 		expect(gate4_lex(state, source)).to_be_true()
-		expect(gate4_parse(state)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(gate4_has_diagnostic(state)).to_be_false()
 		expect(state.record_count[0]).to_equal(1)
 		expect(gate4_load_string(state.record_names, 0)).to_equal("Pair")
@@ -808,7 +803,7 @@ describe("Gate 4 TypeRB frontend") do
 		source := "def main()\n\tputs(\"missing\")\n"
 		mut state := gate4_compiler_new(source.size() + 1)
 		expect(gate4_lex(state, source)).to_be_true()
-		expect(gate4_parse(state)).to_be_false()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_false()
 		expect(gate4_load_string(state.diagnostic_codes, 0)).to_equal("TRBN4002")
 		expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("expected end")
 	end
@@ -872,7 +867,7 @@ describe("Gate 4 TypeRB frontend") do
 		source := "def main()\n\treturn\nend\n\ndef main()\n\treturn\nend\n"
 		mut state := gate4_compiler_new(source.size() + 1)
 		expect(gate4_lex(state, source)).to_be_true()
-		expect(gate4_parse(state)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(gate4_resolve(state)).to_be_false()
 		expect(gate4_load_string(state.diagnostic_codes, 0)).to_equal("TRBN4003")
 		expect(gate4_load_integer(state.diagnostic_lines, 0)).to_equal(5)
@@ -883,7 +878,7 @@ describe("Gate 4 TypeRB frontend") do
 		source := "def main()\n\tmissing()\n\treturn\nend\n"
 		mut state := gate4_compiler_new(source.size() + 1)
 		expect(gate4_lex(state, source)).to_be_true()
-		expect(gate4_parse(state)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(gate4_resolve(state)).to_be_false()
 		expect(gate4_load_string(state.diagnostic_codes, 0)).to_equal("TRBN4003")
 		expect(gate4_load_integer(state.diagnostic_lines, 0)).to_equal(2)
@@ -894,7 +889,7 @@ describe("Gate 4 TypeRB frontend") do
 		source := "def main()\n\tvalue: Integer := \"bad\"\n\treturn\nend\n"
 		mut state := gate4_compiler_new(source.size() + 1)
 		expect(gate4_lex(state, source)).to_be_true()
-		expect(gate4_parse(state)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_false()
 		expect(gate4_load_string(state.diagnostic_codes, 0)).to_equal("TRBN4004")
@@ -906,14 +901,14 @@ describe("Gate 4 TypeRB frontend") do
 		valid_source := "def main()\n\tvalue := 9007199254740991\n\treturn\nend\n"
 		mut valid := gate4_compiler_new(valid_source.size() + 1)
 		expect(gate4_lex(valid, valid_source)).to_be_true()
-		expect(gate4_parse(valid)).to_be_true()
+		expect(gate4_parse_module(valid, 0, valid.entry_module[0])).to_be_true()
 		expect(gate4_resolve(valid)).to_be_true()
 		expect(gate4_check(valid)).to_be_true()
 
 		invalid_source := "def main()\n\tvalue := 9007199254740992\n\treturn\nend\n"
 		mut invalid := gate4_compiler_new(invalid_source.size() + 1)
 		expect(gate4_lex(invalid, invalid_source)).to_be_true()
-		expect(gate4_parse(invalid)).to_be_true()
+		expect(gate4_parse_module(invalid, 0, invalid.entry_module[0])).to_be_true()
 		expect(gate4_resolve(invalid)).to_be_true()
 		expect(gate4_check(invalid)).to_be_false()
 		expect(gate4_load_string(invalid.diagnostic_codes, 0)).to_equal("TRBN4004")
@@ -927,7 +922,7 @@ describe("Gate 4 TypeRB frontend") do
 		source := "def identity(value: Integer): Integer\n\treturn value\nend\n\ndef main()\n\tidentity()\n\treturn\nend\n"
 		mut state := gate4_compiler_new(source.size() + 1)
 		expect(gate4_lex(state, source)).to_be_true()
-		expect(gate4_parse(state)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_false()
 		expect(gate4_load_string(state.diagnostic_codes, 0)).to_equal("TRBN4004")
@@ -939,7 +934,7 @@ describe("Gate 4 TypeRB frontend") do
 		source := "def main()\n\tvalues: Array<Integer> := [1]\n\tvalues.push(2)\n\treturn\nend\n"
 		mut state := gate4_compiler_new(source.size() + 1)
 		expect(gate4_lex(state, source)).to_be_true()
-		expect(gate4_parse(state)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_false()
 		expect(gate4_load_string(state.diagnostic_codes, 0)).to_equal("TRBN4004")
@@ -951,11 +946,14 @@ describe("Gate 4 TypeRB frontend") do
 		source := "record Floats\n\tvalues: Array<Float>\nend\n\ndef carry(values: Array<Float>): Array<Float>\n\treturn values\nend\n\ndef main()\n\tmut values := [1, 2.5]\n\tvalues.push(3)\n\tvalues[0] += 0.5\n\tbox := Floats.new(values: values)\n\tresult := carry(box.values)\n\tvalue := result[- 1]\n\treturn\nend\n"
 		mut state := gate4_compiler_new(source.size() + 1)
 		expect(gate4_lex(state, source)).to_be_true()
-		expect(gate4_parse(state)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_true()
 		qbe := gate4_output_source(gate4_emit_qbe(state))
+		expect(qbe.include?("function $g4_array_push_paced(l %array, l %value)")).to_be_true()
 		expect(qbe.include?("function $g4_array_push_d(l %array, d %value)")).to_be_true()
+		expect(qbe.include?("call $g4_gc_maybe_collect(l %growth)")).to_be_true()
+		expect(qbe.include?("call $g4_array_preflight(l ")).to_be_false()
 		expect(qbe.include?("call $g4_array_push_d(l ")).to_be_true()
 		expect(qbe.include?(", d ")).to_be_true()
 		expect(qbe.include?("=d sltof ")).to_be_true()
@@ -965,11 +963,31 @@ describe("Gate 4 TypeRB frontend") do
 		expect(qbe.include?("\tcall $g4_array_push(l %array, l 0)")).to_be_false()
 	end
 
+	test("emits exact logical root segments and one managed-return epilogue") do
+		source := "record Bundle\n\tlabel: String\n\tlabels: Array<String>\nend\n\ndef select(mut bundle: Bundle, mut current: String): String\n\twhile current != \"done\"\n\t\tcurrent = bundle.label\n\t\tbundle = Bundle.new(label: \"done\", labels: bundle.labels)\n\t\treturn bundle.labels[0]\n\tend\n\treturn current\nend\n\ndef grow(mut current: String): String\n\tmut index := 0\n\twhile index < 2\n\t\tcurrent += \"x\"\n\t\tindex += 1\n\tend\n\treturn current\nend\n\ndef main()\n\tmut labels: Array<String> := []\n\tlabels.push(\"kept\")\n\tbundle := Bundle.new(label: \"next\", labels: labels)\n\tresult := grow(select(bundle, \"start\"))\n\tputs(result)\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		qbe := gate4_output_source(gate4_emit_qbe(state))
+		expect(qbe.include?("\t%temporary_roots =l loadl $g4_gc_temp_count")).to_be_true()
+		expect(qbe.include?("\tcall $g4_gc_temp_reset(l %temporary_roots)")).to_be_true()
+		expect(qbe.include?("\tcall $g4_gc_temp_push(l %t")).to_be_true()
+		expect(
+			qbe.include?(
+				"\tcall $g4_gc_temp_reset(l %temporary_roots)\n\t%return_result =l loadl %return_value\n\tcall $g4_gc_temp_push(l %return_result)\n\tret %return_result\n",
+			),
+		).to_be_true()
+		expect(qbe.include?("call $g4_gc_frame_enter")).to_be_false()
+		expect(qbe.include?("call $g4_gc_frame_leave")).to_be_false()
+	end
+
 	test("emits deterministic QBE and executes the registered source subset") do
 		source := gate4_frontend_test_source()
 		mut state := gate4_compiler_new(source.size() + 1)
 		expect(gate4_lex(state, source)).to_be_true()
-		expect(gate4_parse(state)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_true()
 		first := gate4_output_source(gate4_emit_qbe(state))

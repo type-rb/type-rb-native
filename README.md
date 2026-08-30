@@ -352,6 +352,7 @@ repository.
 - [Gate 2 heap-free aggregate value model](docs/gate-2-aggregates.md)
 - [Gate 2 QBE Darwin arm64 result](results/2026-08-28-gate2-qbe-darwin-arm64/README.md)
 - [Gate 3 managed runtime](docs/gate-3-managed-runtime.md)
+- [Ordinary runtime memory stability](docs/runtime-memory-stability.md)
 - [Gate 4 behavioral self-hosting](docs/gate-4-self-hosting.md)
 - [Gate 5 matched self-hosted compiler baseline](docs/gate-5-matched-compiler.md)
 - [Gate 5 matched compiler Darwin arm64 result](results/2026-08-29-gate5-matched-compiler-darwin-arm64/README.md)

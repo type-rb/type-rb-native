@@ -52,7 +52,10 @@ jobs:
           /bin/sh -n tools/bootstrap-seed.sh
           /bin/sh -n tools/bootstrap-seed-manifest.sh
           /bin/sh -n tools/bootstrap-seed-manifest-test.sh
+          /bin/sh -n tools/runtime-memory-soak/analyze-rss-test.sh
+          /bin/sh -n tools/runtime-memory-soak/runtime-memory-soak.sh
           /bin/sh tools/bootstrap-seed-manifest-test.sh
+          /bin/sh tools/runtime-memory-soak/analyze-rss-test.sh
 
       - name: Check TypeRB sources
         run: |
@@ -107,6 +110,26 @@ jobs:
           "$RUNNER_TEMP/trb" test --config tools/gate6j-benchmark/trbconfig.jsonc
           "$RUNNER_TEMP/trb" test --config tools/gate6k-benchmark/trbconfig.jsonc
           "$RUNNER_TEMP/trb" test --config compiler/gate4/trbconfig.jsonc
+
+      - name: Run the self-hosted managed-runtime allocation smoke
+        run: |
+          /bin/sh tools/runtime-memory-soak/runtime-memory-soak.sh \
+            smoke \
+            /tmp/type-rb-native-gate4-bootstrap/native-chain-b4/compiler \
+            "$RUNNER_TEMP/qbe-1.3/qbe" \
+            /usr/bin/cc \
+            darwin-arm64-v0 \
+            "$RUNNER_TEMP/runtime-memory-smoke-workspace" \
+            "$RUNNER_TEMP/runtime-memory-smoke-evidence"
+
+      - name: Upload managed-runtime smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-memory-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/runtime-memory-smoke-evidence
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Verify the Gate 4 compiler closure fits snapshot v4
         run: |

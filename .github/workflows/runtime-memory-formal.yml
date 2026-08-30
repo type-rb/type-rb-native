@@ -1,0 +1,306 @@
+name: Formal runtime memory stability
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Exact published Native seed used to close the current compiler chain
+        required: true
+        default: bootstrap-seed-2026-08-30
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify-target:
+    name: Verify ${{ matrix.target }} memory stability
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            profile: darwin-arm64-v0
+            target: darwin-arm64
+            asset: type-rb-native-bootstrap-darwin-arm64
+          - runner: ubuntu-24.04-arm
+            profile: linux-arm64-v0
+            target: linux-arm64
+            asset: type-rb-native-bootstrap-linux-arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Check out the exact candidate revision
+        uses: actions/checkout@v5
+
+      - name: Build pinned QBE 1.3
+        id: qbe
+        run: |
+          curl -L https://c9x.me/compile/release/qbe-1.3.tar.xz -o "$RUNNER_TEMP/qbe-1.3.tar.xz"
+          if command -v sha256sum >/dev/null 2>&1; then
+            echo "d587905d620dc5e1d2bfa7c2cc642b9b837aa89a3188c6e37b53d756cf66e320  $RUNNER_TEMP/qbe-1.3.tar.xz" | sha256sum -c -
+          else
+            echo "d587905d620dc5e1d2bfa7c2cc642b9b837aa89a3188c6e37b53d756cf66e320  $RUNNER_TEMP/qbe-1.3.tar.xz" | shasum -a 256 -c -
+          fi
+          tar -C "$RUNNER_TEMP" -xf "$RUNNER_TEMP/qbe-1.3.tar.xz"
+          make -C "$RUNNER_TEMP/qbe-1.3"
+          echo "path=$RUNNER_TEMP/qbe-1.3/qbe" >> "$GITHUB_OUTPUT"
+
+      - name: Install Linux memory and process oracles
+        if: matrix.profile == 'linux-arm64-v0'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang libclang-rt-dev strace valgrind
+
+      - name: Download the published ordinary Native seed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          TARGET_ASSET: ${{ matrix.asset }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/release"
+          gh release download "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$RUNNER_TEMP/release" \
+            --pattern "$TARGET_ASSET"
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > "$RUNNER_TEMP/release.json"
+          chmod 0755 "$RUNNER_TEMP/release/$TARGET_ASSET"
+
+      - name: Build the setup-only current-source transitions
+        env:
+          PUBLISHED_SEED: ${{ runner.temp }}/release/${{ matrix.asset }}
+          PROFILE: ${{ matrix.profile }}
+        run: |
+          mkdir -p \
+            "$RUNNER_TEMP/transition/first" \
+            "$RUNNER_TEMP/transition/current-runtime" \
+            "$RUNNER_TEMP/transition-evidence"
+          started=$(date +%s)
+          if test "$PROFILE" = linux-arm64-v0; then
+            strace -f -e trace=process -o "$RUNNER_TEMP/transition-evidence/first-process.trace" \
+              "$PUBLISHED_SEED" build compiler/gate4/src/compiler.trb \
+                --output "$RUNNER_TEMP/transition/first/compiler" \
+                --qbe "${{ steps.qbe.outputs.path }}" \
+                --cc /usr/bin/cc \
+                --target "$PROFILE" \
+                > "$RUNNER_TEMP/transition-evidence/first.stdout" \
+                2> "$RUNNER_TEMP/transition-evidence/first.stderr"
+            test -x "$RUNNER_TEMP/transition/first/compiler"
+            strace -f -e trace=process -o "$RUNNER_TEMP/transition-evidence/current-runtime-process.trace" \
+              "$RUNNER_TEMP/transition/first/compiler" build compiler/gate4/src/compiler.trb \
+                --output "$RUNNER_TEMP/transition/current-runtime/compiler" \
+                --qbe "${{ steps.qbe.outputs.path }}" \
+                --cc /usr/bin/cc \
+                --target "$PROFILE" \
+                > "$RUNNER_TEMP/transition-evidence/current-runtime.stdout" \
+                2> "$RUNNER_TEMP/transition-evidence/current-runtime.stderr"
+            grep execve "$RUNNER_TEMP/transition-evidence/first-process.trace" \
+              > "$RUNNER_TEMP/transition-evidence/process-inventory.txt"
+            grep execve "$RUNNER_TEMP/transition-evidence/current-runtime-process.trace" \
+              >> "$RUNNER_TEMP/transition-evidence/process-inventory.txt"
+            if grep -E 'execve\("[^"]*/(go|trb|sh|bash|zsh)"' \
+              "$RUNNER_TEMP/transition-evidence/first-process.trace" \
+              "$RUNNER_TEMP/transition-evidence/current-runtime-process.trace" > /dev/null; then
+              printf 'setup transition launched a forbidden executable\n' >&2
+              exit 1
+            fi
+          else
+            "$PUBLISHED_SEED" build compiler/gate4/src/compiler.trb \
+              --output "$RUNNER_TEMP/transition/first/compiler" \
+              --qbe "${{ steps.qbe.outputs.path }}" \
+              --cc /usr/bin/cc \
+              --target "$PROFILE" \
+              > "$RUNNER_TEMP/transition-evidence/first.stdout" \
+              2> "$RUNNER_TEMP/transition-evidence/first.stderr"
+            test -x "$RUNNER_TEMP/transition/first/compiler"
+            "$RUNNER_TEMP/transition/first/compiler" build compiler/gate4/src/compiler.trb \
+              --output "$RUNNER_TEMP/transition/current-runtime/compiler" \
+              --qbe "${{ steps.qbe.outputs.path }}" \
+              --cc /usr/bin/cc \
+              --target "$PROFILE" \
+              > "$RUNNER_TEMP/transition-evidence/current-runtime.stdout" \
+              2> "$RUNNER_TEMP/transition-evidence/current-runtime.stderr"
+            {
+              printf 'setup controller: workflow shell\n'
+              printf 'first compiler: published Native seed\n'
+              printf 'second compiler: first current-source transition\n'
+              printf 'compiler child boundary: %s\n' '${{ steps.qbe.outputs.path }}'
+              printf 'compiler child boundary: %s\n' /usr/bin/cc
+              printf 'forbidden compiler children: Go, reference trb, recovery compiler, shell\n'
+            } > "$RUNNER_TEMP/transition-evidence/process-inventory.txt"
+          fi
+          finished=$(date +%s)
+          test -x "$RUNNER_TEMP/transition/current-runtime/compiler"
+          test ! -s "$RUNNER_TEMP/transition-evidence/first.stdout"
+          test ! -s "$RUNNER_TEMP/transition-evidence/first.stderr"
+          test ! -s "$RUNNER_TEMP/transition-evidence/current-runtime.stdout"
+          test ! -s "$RUNNER_TEMP/transition-evidence/current-runtime.stderr"
+          chmod 0755 \
+            "$RUNNER_TEMP/transition/first/compiler" \
+            "$RUNNER_TEMP/transition/current-runtime/compiler"
+          {
+            printf 'elapsed_seconds=%s\n' "$((finished - started))"
+            printf 'compiler_source=%s\n' compiler/gate4/src/compiler.trb
+            printf 'profile=%s\n' "$PROFILE"
+            printf 'qbe=%s\n' '${{ steps.qbe.outputs.path }}'
+            printf 'cc=%s\n' /usr/bin/cc
+            printf 'published_seed_size=%s\n' "$(wc -c < "$PUBLISHED_SEED" | tr -d ' ')"
+            printf 'first_transition_size=%s\n' "$(wc -c < "$RUNNER_TEMP/transition/first/compiler" | tr -d ' ')"
+            printf 'current_runtime_transition_size=%s\n' "$(wc -c < "$RUNNER_TEMP/transition/current-runtime/compiler" | tr -d ' ')"
+          } > "$RUNNER_TEMP/transition-evidence/identities.txt"
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum \
+              "$PUBLISHED_SEED" \
+              "$RUNNER_TEMP/transition/first/compiler" \
+              "$RUNNER_TEMP/transition/current-runtime/compiler" \
+              > "$RUNNER_TEMP/transition-evidence/SHA256SUMS"
+          else
+            shasum -a 256 \
+              "$PUBLISHED_SEED" \
+              "$RUNNER_TEMP/transition/first/compiler" \
+              "$RUNNER_TEMP/transition/current-runtime/compiler" \
+              > "$RUNNER_TEMP/transition-evidence/SHA256SUMS"
+          fi
+
+      - name: Close and verify the current Go-free compiler chain
+        run: |
+          /bin/sh tools/bootstrap-seed.sh \
+            --mode previous \
+            --input "$RUNNER_TEMP/transition/current-runtime/compiler" \
+            --input-role transition \
+            --qbe "${{ steps.qbe.outputs.path }}" \
+            --cc /usr/bin/cc \
+            --profile "${{ matrix.profile }}" \
+            --runner-image "${{ matrix.runner }}" \
+            --workspace "$RUNNER_TEMP/bootstrap-workspace" \
+            --output "$RUNNER_TEMP/candidate-compiler" \
+            --evidence "$RUNNER_TEMP/bootstrap-evidence" \
+            --metadata "$RUNNER_TEMP/bootstrap-metadata.json" \
+            --asset-name runtime-memory-candidate-${{ matrix.target }}
+
+      - name: Run the production allocation smoke
+        run: |
+          /bin/sh tools/runtime-memory-soak/runtime-memory-soak.sh \
+            smoke \
+            "$RUNNER_TEMP/candidate-compiler" \
+            "${{ steps.qbe.outputs.path }}" \
+            /usr/bin/cc \
+            "${{ matrix.profile }}" \
+            "$RUNNER_TEMP/memory-smoke-workspace" \
+            "$RUNNER_TEMP/memory-smoke-evidence"
+
+      - name: Run the dedicated ASan and LSan oracle
+        if: matrix.profile == 'linux-arm64-v0'
+        run: |
+          /bin/sh tools/runtime-memory-soak/runtime-memory-soak.sh \
+            asan \
+            "$RUNNER_TEMP/candidate-compiler" \
+            "${{ steps.qbe.outputs.path }}" \
+            /usr/bin/clang \
+            "${{ matrix.profile }}" \
+            "$RUNNER_TEMP/memory-asan-workspace" \
+            "$RUNNER_TEMP/memory-asan-evidence"
+
+      - name: Run the Valgrind Memcheck oracle
+        if: matrix.profile == 'linux-arm64-v0'
+        run: |
+          /bin/sh tools/runtime-memory-soak/runtime-memory-soak.sh \
+            valgrind \
+            "$RUNNER_TEMP/candidate-compiler" \
+            "${{ steps.qbe.outputs.path }}" \
+            /usr/bin/cc \
+            "${{ matrix.profile }}" \
+            "$RUNNER_TEMP/memory-valgrind-workspace" \
+            "$RUNNER_TEMP/memory-valgrind-evidence"
+
+      - name: Run the registered 300,000,000-iteration soak
+        if: matrix.profile == 'linux-arm64-v0'
+        run: |
+          /bin/sh tools/runtime-memory-soak/runtime-memory-soak.sh \
+            formal \
+            "$RUNNER_TEMP/candidate-compiler" \
+            "${{ steps.qbe.outputs.path }}" \
+            /usr/bin/cc \
+            "${{ matrix.profile }}" \
+            "$RUNNER_TEMP/memory-formal-workspace" \
+            "$RUNNER_TEMP/memory-formal-evidence"
+
+      - name: Record exact workflow context
+        if: always()
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          TARGET: ${{ matrix.target }}
+          PROFILE: ${{ matrix.profile }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/workflow-evidence"
+          {
+            printf 'repository_revision=%s\n' "$GITHUB_SHA"
+            printf 'repository_ref=%s\n' "$GITHUB_REF"
+            printf 'workflow=%s\n' .github/workflows/runtime-memory-formal.yml
+            printf 'workflow_run_id=%s\n' "$GITHUB_RUN_ID"
+            printf 'workflow_run_attempt=%s\n' "$GITHUB_RUN_ATTEMPT"
+            printf 'release_tag=%s\n' "$RELEASE_TAG"
+            printf 'target=%s\n' "$TARGET"
+            printf 'profile=%s\n' "$PROFILE"
+          } > "$RUNNER_TEMP/workflow-evidence/context.txt"
+          if test -f "$RUNNER_TEMP/qbe-1.3.tar.xz"; then
+            wc -c "$RUNNER_TEMP/qbe-1.3.tar.xz" > "$RUNNER_TEMP/workflow-evidence/qbe-source-size.txt"
+          fi
+          if test -f "$RUNNER_TEMP/release.json"; then
+            cp "$RUNNER_TEMP/release.json" "$RUNNER_TEMP/workflow-evidence/release.json"
+          fi
+
+      - name: Upload target evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-memory-evidence-${{ matrix.target }}
+          path: |
+            ${{ runner.temp }}/bootstrap-evidence
+            ${{ runner.temp }}/bootstrap-metadata.json
+            ${{ runner.temp }}/transition-evidence
+            ${{ runner.temp }}/memory-smoke-evidence
+            ${{ runner.temp }}/memory-asan-evidence
+            ${{ runner.temp }}/memory-valgrind-evidence
+            ${{ runner.temp }}/memory-formal-evidence
+            ${{ runner.temp }}/workflow-evidence
+          if-no-files-found: error
+          retention-days: 30
+
+  verify-combined-size:
+    name: Verify combined stripped compiler size
+    if: always()
+    needs: verify-target
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Download target evidence
+        uses: actions/download-artifact@v5
+        with:
+          pattern: runtime-memory-evidence-*
+          path: ${{ runner.temp }}/target-evidence
+
+      - name: Enforce and record the aggregate bound
+        run: |
+          darwin="$RUNNER_TEMP/target-evidence/runtime-memory-evidence-darwin-arm64/memory-smoke-evidence/identities.txt"
+          linux="$RUNNER_TEMP/target-evidence/runtime-memory-evidence-linux-arm64/memory-smoke-evidence/identities.txt"
+          test -f "$darwin"
+          test -f "$linux"
+          darwin_size=$(awk -F= '$1 == "stripped_compiler_size" {print $2}' "$darwin")
+          linux_size=$(awk -F= '$1 == "stripped_compiler_size" {print $2}' "$linux")
+          test "$darwin_size" -le 310000
+          test "$linux_size" -le 310000
+          combined_size=$((darwin_size + linux_size))
+          test "$combined_size" -le 620000
+          {
+            printf 'darwin_arm64_stripped_bytes=%s\n' "$darwin_size"
+            printf 'linux_arm64_stripped_bytes=%s\n' "$linux_size"
+            printf 'combined_stripped_bytes=%s\n' "$combined_size"
+          } > "$RUNNER_TEMP/combined-size.txt"
+
+      - name: Upload aggregate size evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-memory-evidence-combined-size
+          path: ${{ runner.temp }}/combined-size.txt
+          if-no-files-found: error
+          retention-days: 30
