@@ -1668,6 +1668,142 @@ def _gate6_verify_file_root_modules(
 		"file/index precedence",
 	)
 
+	declaration_imports := workspace + "/gate6-file-root-declaration-imports"
+	try _gate6_reset_directory(declaration_imports)
+	declaration_directories := [
+		declaration_imports + "/services",
+		declaration_imports + "/shared/ui/data_table",
+	]
+	index = 0
+	while index < declaration_directories.size()
+		created := try _gate6_process("/bin/mkdir", ["-p", declaration_directories[index]])
+		if !created.success
+			return Result<Boolean, String>::Err("cannot create declaration-import fixture")
+		end
+		index += 1
+	end
+	try _gate6_write_source(
+		declaration_imports + "/main.trb",
+		"import { Response as WebResponse, status_code as read_status } from services/http\n" +
+		"import services/secure_random as Random\n" +
+		"import shared/ui/data_table\n\n" +
+		"def main()\n" +
+		"\tresponse := WebResponse.new(status: read_status())\n" +
+		"\trandom := Random.new(value: response.status)\n" +
+		"\ttable := DataTable.new(rows: random.value)\n" +
+		"\tif table.rows == 42\n\t\tputs(\"declaration-imports-ok\")\n\tend\n" +
+		"\treturn\nend\n",
+	)
+	try _gate6_write_source(
+		declaration_imports + "/services/http.trb",
+		"record Response\n\tstatus: Integer\nend\n\ndef status_code(): Integer\n\treturn 42\nend\n",
+	)
+	try _gate6_write_source(
+		declaration_imports + "/services/secure_random.trb",
+		"record SecureRandom\n\tvalue: Integer\nend\n",
+	)
+	try _gate6_write_source(
+		declaration_imports + "/shared/ui/data_table/index.trb",
+		"record DataTable\n\trows: Integer\nend\n",
+	)
+	mut declaration_qbe := ""
+	index = 0
+	while index < executables.size()
+		declaration_check := try _gate6_process(
+			executables[index],
+			["check", declaration_imports + "/main.trb"],
+		)
+		if declaration_check.status != 0 || declaration_check.stdout != "ok\n" || !declaration_check.stderr.empty?()
+			return Result<Boolean, String>::Err(
+				"declaration-import check failed at compiler " + index.to_s() + ": " + declaration_check.stderr,
+			)
+		end
+		declaration_emission := try _gate6_process(
+			executables[index],
+			["emit-qbe", declaration_imports + "/main.trb"],
+		)
+		if declaration_emission.status != 0 || declaration_emission.stdout.empty?() || !declaration_emission.stderr.empty?()
+			return Result<Boolean, String>::Err(
+				"declaration-import emission failed at compiler " + index.to_s(),
+			)
+		end
+		if declaration_qbe == ""
+			declaration_qbe = declaration_emission.stdout
+		else
+			if declaration_emission.stdout != declaration_qbe
+				return Result<Boolean, String>::Err("declaration-import QBE differs across compiler generations")
+			end
+		end
+		index += 1
+	end
+	try _gate6_verify_built_program(
+		executables[0],
+		declaration_imports + "/main.trb",
+		declaration_imports + "/native-program",
+		qbe,
+		"declaration-imports-ok\n",
+		"Native declaration imports",
+	)
+	reference_declaration_output := declaration_imports + "/reference-program"
+	reference_declaration_build := try _gate6_process(
+		reference_trb,
+		[
+			"build",
+			"--compile",
+			"--outfile",
+			reference_declaration_output,
+			declaration_imports + "/main.trb",
+		],
+	)
+	if reference_declaration_build.status != 0
+		return Result<Boolean, String>::Err(
+			"reference declaration-import build failed: " + reference_declaration_build.stderr,
+		)
+	end
+	reference_declaration_runtime := try _gate6_process(reference_declaration_output, [])
+	if reference_declaration_runtime.status != 0
+		return Result<Boolean, String>::Err("reference declaration-import execution failed")
+	end
+	if reference_declaration_runtime.stdout != "declaration-imports-ok\n" || !reference_declaration_runtime.stderr.empty?()
+		return Result<Boolean, String>::Err("reference declaration-import runtime differs")
+	end
+	try _gate6_require_no_intermediates(declaration_imports)
+
+	root_conflict := workspace + "/gate6-file-root-root-conflict"
+	try _gate6_reset_directory(root_conflict)
+	created_conflict := try _gate6_process("/bin/mkdir", ["-p", root_conflict + "/choice"])
+	if !created_conflict.success
+		return Result<Boolean, String>::Err("cannot create root-conflict fixture")
+	end
+	try _gate6_write_source(
+		root_conflict + "/main.trb",
+		"import { choice as direct_choice } from choice\n" +
+		"import { choice as indexed_choice } from choice/index\n\n" +
+		"def main()\n\tputs(direct_choice() + indexed_choice())\n\treturn\nend\n",
+	)
+	try _gate6_write_source(root_conflict + "/choice.trb", "def choice(): String\n\treturn \"direct\"\nend\n")
+	try _gate6_write_source(
+		root_conflict + "/choice/index.trb",
+		"def choice(): String\n\treturn \"index\"\nend\n",
+	)
+	index = 0
+	while index < executables.size()
+		try _gate6_expect_file_root_failure(
+			executables[index],
+			root_conflict,
+			"define the same import root",
+			"file/index root conflict compiler " + index.to_s(),
+		)
+		index += 1
+	end
+	reference_root_conflict := try _gate6_process(reference_trb, ["check", root_conflict + "/main.trb"])
+	if reference_root_conflict.status == 0
+		return Result<Boolean, String>::Err("reference accepted a direct/index root conflict")
+	end
+	if !reference_root_conflict.stderr.include?("define the same import root")
+		return Result<Boolean, String>::Err("reference root-conflict diagnostic differs")
+	end
+
 	cycle := workspace + "/gate6-file-root-cycle"
 	try _gate6_reset_directory(cycle)
 	case FileSystem.write_text(
@@ -1709,26 +1845,36 @@ def _gate6_verify_file_root_modules(
 		"escaping-path",
 		"malformed-import",
 		"missing-export",
-		"duplicate-binding",
+		"duplicate-identity",
+		"binding-collision",
 		"unused-binding",
 		"local-conflict",
+		"zero-root",
+		"ambiguous-root",
+		"bare-function",
 		"missing-entry-main",
 		"invalid-entry-main",
 		"package-import",
-		"namespace-import",
+		"package-root-import",
+		"capability-activation",
 	]
 	failure_entries := [
 		"import { value } from missing\n\ndef main()\n\tputs(value())\n\treturn\nend\n",
 		"import { value } from ../outside\n\ndef main()\n\tputs(value())\n\treturn\nend\n",
 		"import { value } from lib\n\ndef main()\n\tputs(value())\n\treturn\nend\n",
 		"import { value } from lib\n\ndef main()\n\tputs(value())\n\treturn\nend\n",
-		"import { value, value } from lib\n\ndef main()\n\tputs(value())\n\treturn\nend\n",
+		"import { value as first, value as second } from lib\n\ndef main()\n\treturn\nend\n",
+		"import { value as shared, other as shared } from lib\n\ndef main()\n\treturn\nend\n",
 		"import { value } from lib\n\ndef main()\n\treturn\nend\n",
 		"import { value } from lib\n\ndef value(): String\n\treturn \"local\"\nend\n\ndef main()\n\tputs(value())\n\treturn\nend\n",
+		"import lib\n\ndef main()\n\treturn\nend\n",
+		"import lib\n\ndef main()\n\treturn\nend\n",
+		"import lib\n\ndef main()\n\treturn\nend\n",
 		"import { helper } from lib\n\ndef run()\n\tputs(helper())\n\treturn\nend\n",
 		"def main(value: Integer)\n\treturn\nend\n",
 		"import { value } from trb/std/value\n\ndef main()\n\tputs(value())\n\treturn\nend\n",
-		"import lib\n\ndef main()\n\treturn\nend\n",
+		"import trb/std/json\n\ndef main()\n\treturn\nend\n",
+		"activate trb/platform/ruby/native\n\ndef main()\n\treturn\nend\n",
 	]
 	failure_libraries := [
 		"",
@@ -1736,9 +1882,14 @@ def _gate6_verify_file_root_modules(
 		"def value(): String\n\treturn \"broken\"\n",
 		"def other(): String\n\treturn \"other\"\nend\n",
 		"def value(): String\n\treturn \"value\"\nend\n",
+		"def value(): String\n\treturn \"value\"\nend\n\ndef other(): String\n\treturn \"other\"\nend\n",
 		"def value(): String\n\treturn \"value\"\nend\n",
 		"def value(): String\n\treturn \"imported\"\nend\n",
+		"record Other\n\tvalue: Integer\nend\n",
+		"record LIB\n\tvalue: Integer\nend\n\nrecord Lib\n\tvalue: Integer\nend\n",
+		"def lib(): String\n\treturn \"function\"\nend\n",
 		"def helper(): String\n\treturn \"helper\"\nend\n\ndef main()\n\treturn\nend\n",
+		"",
 		"",
 		"",
 		"",
@@ -1748,13 +1899,18 @@ def _gate6_verify_file_root_modules(
 		"invalid project import path ../outside",
 		"TRBN4002",
 		"module does not export value",
-		"duplicate import binding value",
+		"declaration value from lib is already imported as first",
+		"duplicate import binding shared",
 		"unused import value",
 		"import binding conflicts with local declaration value",
+		"import lib has no record root declaration matching lib",
+		"import lib has multiple record root declarations matching lib",
+		"import lib matches only a top-level function; use an exact named import",
 		"program must declare exactly one main function",
 		"main must take no parameters",
 		"package imports are not supported by this compiler subset",
-		"TRBN4002",
+		"package imports are not supported by this compiler subset",
+		"unsupported top-level declaration activate",
 	]
 	mut failure_index := 0
 	while failure_index < failure_names.size()

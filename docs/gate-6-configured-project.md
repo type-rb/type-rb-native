@@ -26,6 +26,12 @@ with SHA-256
 The pinned TypeRB semantic oracle remains revision
 `fa9e0503cc681bcaa691f6f11d2f1e19ca8e6453` (`0.3.49-dev`).
 
+Those revisions and the precedence rule below describe the recorded Gate 6K
+result. Current development uses the exact newer reference pin and import
+behavior recorded in the
+[TypeRB compatibility mapping](type-rb-compatibility.md); it does not rewrite
+the historical measurement or immutable bootstrap seed.
+
 ## Command boundary
 
 The existing experimental command shapes accept either their existing `.trb`
@@ -100,7 +106,7 @@ and the configured `outDir`. Symlinked directories are not followed; a
 symlinked `.trb` source is rejected; other non-source symlinks are ignored.
 
 At the recorded Gate 6K baseline, every module retains its slash-normalized
-root-relative identity. Project imports prefer `name.trb` over
+root-relative identity. Project imports preferred `name.trb` over
 `name/index.trb`, preserve the then-current missing import and cycle
 diagnostics, and cannot escape the source root. Exactly one collected module
 must own a top-level runnable `def main()`. The source filename does not select

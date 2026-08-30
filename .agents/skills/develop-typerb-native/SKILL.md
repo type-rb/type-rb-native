@@ -47,12 +47,15 @@ a time.
   conservative argv limits.
 - For file-root compilation, follow the pinned reference compiler's explicit
   import closure: root imports at the entry directory, load only reachable
-  named project modules, prefer `name.trb` to `name/index.trb`, retain module
-  identity, and require `main` from the entry module. Test unrelated invalid
-  siblings, diamonds, cycles, duplicate and unused bindings, missing exports,
-  path escape, optional suffixes, and paths containing spaces. Do not silently
-  turn this experimental boundary into configured-project, package, namespace,
-  or public CLI behavior.
+  declaration imports, retain canonical module and declaration identity, and
+  require `main` from the entry module. Resolve a unique directory `index`
+  through either equivalent authored path, but reject a resolved graph that
+  contains both `name.trb` and `name/index.trb`; never restore direct-file
+  precedence between two loaded identities. Test named and bare aliases,
+  declaration identity, the ASCII root-key rule, unrelated invalid siblings,
+  diamonds, cycles, duplicate and unused bindings, missing exports, path
+  escape, optional suffixes, and paths containing spaces. Do not silently turn
+  this experimental boundary into package, namespace, or public CLI behavior.
 - Treat the canonical compiler as a real file-root closure. Keep extracted
   declarations in one TypeRB source only, require explicit imports, and run
   every ordinary replacement generation from the entry path. A temporary

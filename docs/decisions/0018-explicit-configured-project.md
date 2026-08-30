@@ -4,6 +4,11 @@
 
 Accepted for the Gate 6K experiment.
 
+This decision records the original measured configured-project boundary. The
+current compiler keeps complete-source collection but replaces the historical
+direct-file precedence rule with the
+[TypeRB 0.4 compatibility mapping](../type-rb-compatibility.md).
+
 ## Context
 
 Gate 6E introduced executable file-root import closures, and Gate 6H proved
