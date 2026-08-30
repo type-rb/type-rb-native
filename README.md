@@ -285,6 +285,14 @@ Linux evidence observes the explicit LLD and dynamic libm boundaries. See the
 [Decision 0022](docs/decisions/0022-linux-arm64-lld-linker.md), and
 [recorded result](results/2026-08-31-gate6m-portable-benchmark-entry-darwin-linux-arm64/README.md).
 
+The first reproducible language-benchmark corpus now admits the published
+`fannkuch-redux`, `n-body`, and `spectral-norm` specifications without adding
+Native-only language behavior. The exact same TypeRB sources pass the pinned
+Go and self-hosted Native paths, while cross-language implementation context
+is kept in separate one-core and four-core lanes. See the
+[benchmark plan](docs/benchmarksgame.md) and
+[Decision 0023](docs/decisions/0023-reproducible-benchmark-layers.md).
+
 Upward configured project discovery, persistent service runtime integration,
 package/native-library boundaries, incremental builds, toolchain discovery,
 debugging, maintenance evaluation, and additional primary targets remain in
@@ -420,6 +428,7 @@ repository.
 - [Gate 6L durable bootstrap seed Darwin/Linux arm64 result](results/2026-08-30-gate6l-bootstrap-seed-darwin-linux-arm64/README.md)
 - [Gate 6M portable benchmark-entry primitives](docs/gate-6-portable-benchmark-entry.md)
 - [Gate 6M portable benchmark-entry Darwin/Linux arm64 result](results/2026-08-31-gate6m-portable-benchmark-entry-darwin-linux-arm64/README.md)
+- [Reproducible language benchmark plan](docs/benchmarksgame.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
 - [Decision 0003: Gate 1 QBE and Darwin arm64 profile](docs/decisions/0003-gate-1-qbe-target.md)
@@ -442,6 +451,7 @@ repository.
 - [Decision 0020: Independent Native versioning and exact TypeRB compatibility](docs/decisions/0020-independent-native-versioning.md)
 - [Decision 0021: Portable benchmark-entry primitives](docs/decisions/0021-portable-benchmark-entry-primitives.md)
 - [Decision 0022: Linux arm64 LLD linker](docs/decisions/0022-linux-arm64-lld-linker.md)
+- [Decision 0023: Reproducible benchmark layers](docs/decisions/0023-reproducible-benchmark-layers.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 
