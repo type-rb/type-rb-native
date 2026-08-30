@@ -6,7 +6,9 @@ self-hosted Native application path. Its correctness and measurement boundary
 is pre-registered in
 [issue #113](https://github.com/type-rb/type-rb-native/issues/113), and its
 internal package, runtime, and external-library choices are fixed by
-[Decision 0021](decisions/0021-portable-benchmark-entry-primitives.md).
+[Decision 0021](decisions/0021-portable-benchmark-entry-primitives.md). The
+current Linux arm64 linker recipe is fixed by
+[Decision 0022](decisions/0022-linux-arm64-lld-linker.md).
 
 ## Status
 
@@ -54,10 +56,13 @@ existing managed runtime for process argument copies and String results, emits
 conversion helpers only when referenced, and calls the external C ABI `sqrt`
 symbol for square root.
 
-Every Native-owned C-toolchain invocation supplies `-lm` explicitly. Formal
-evidence must identify QBE, the C toolchain, the system linker, libc, and libm
-as external components. No Go package or generated-Go helper enters the
-ordinary Native application path.
+Every Native-owned C-toolchain invocation supplies `-lm` explicitly. The
+`linux-arm64-v0` profile additionally selects LLD through the supplied C
+driver; `darwin-arm64-v0` retains its existing linker behavior. Formal
+evidence must identify QBE, the C toolchain, the selected linker, libc, and
+libm as external components and must observe LLD in the Linux process graph.
+No Go package or generated-Go helper enters the ordinary Native application
+path.
 
 ## Correctness evidence
 

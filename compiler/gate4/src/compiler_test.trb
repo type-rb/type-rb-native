@@ -942,6 +942,29 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("push receiver is immutable")
 	end
 
+	test("selects LLD only for compiler-driven Linux links") do
+		compiler_source := "def compiler_main(source: String, path: String, check_only: Boolean): Integer\n\treturn 0\nend\n\ndef main()\n\treturn\nend\n"
+		mut compiler_state := gate4_compiler_new(compiler_source.size() + 1)
+		expect(gate4_lex(compiler_state, compiler_source)).to_be_true()
+		expect(gate4_parse_module(compiler_state, 0, compiler_state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(compiler_state)).to_be_true()
+		expect(gate4_check(compiler_state)).to_be_true()
+		compiler_qbe := gate4_output_source(gate4_emit_qbe(compiler_state))
+		expect(compiler_qbe.include?("data $g4_project_linker_lld = { b \"-fuse-ld=lld\", b 0 }")).to_be_true()
+		expect(compiler_qbe.include?("storel $g4_project_linker_lld, $g4_project_selected_linker")).to_be_true()
+		expect(compiler_qbe.include?("%has_linker =w cnel %linker, 0")).to_be_true()
+		expect(compiler_qbe.include?("%tail =l phi @linker %linker_tail, @default %default_tail")).to_be_true()
+
+		application_source := "def main()\n\treturn\nend\n"
+		mut application_state := gate4_compiler_new(application_source.size() + 1)
+		expect(gate4_lex(application_state, application_source)).to_be_true()
+		expect(gate4_parse_module(application_state, 0, application_state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(application_state)).to_be_true()
+		expect(gate4_check(application_state)).to_be_true()
+		application_qbe := gate4_output_source(gate4_emit_qbe(application_state))
+		expect(application_qbe.include?("g4_project_linker_lld")).to_be_false()
+	end
+
 	test("checks and emits portable benchmark entry primitives") do
 		source := "import trb/std/process\nimport trb/std/math as Numeric\n\ndef main()\n\tmut first := Process.argv()\n\tfirst.push(\"local\")\n\tsecond := Process.argv()\n\tparsed := second[0].to_i()\n\troot := Numeric.sqrt(parsed)\n\ttruncated := root.to_i()\n\tputs(first.size().to_s())\n\tputs(second.size().to_s())\n\tputs(truncated.to_s())\n\tnan := Numeric.sqrt(- 1)\n\tif nan != nan\n\t\tputs(\"nan\")\n\telse\n\t\tputs(\"number\")\n\tend\n\tputs(\"+9007199254740991\".to_i().to_s())\n\tputs(\"-9007199254740991\".to_i().to_s())\n\tvalue := - 2.75\n\tputs(value.to_i().to_s())\n\treturn\nend\n"
 		mut state := gate4_compiler_new(source.size() + 1)

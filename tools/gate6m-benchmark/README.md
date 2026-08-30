@@ -80,10 +80,12 @@ The workflow runs [`gate6m-linux.sh`](../gate6m-linux.sh) independently on
 Go-free setup transitions, closes the candidate B2/B3/B4 chain with the shared
 bootstrap verifier, checks target-neutral fixed-point QBE, and compares the
 portable success and runtime-failure projects with the pinned Go oracle. It
-also records Linux process traces, ELF metadata, undefined symbols, the `libm`
-and `sqrt` boundary, deterministic application bytes, and the raw compiler
-size. A final job enforces the registered 620,000-byte combined Darwin and
-Linux compiler bound.
+also requires the explicit LLD link selected by `linux-arm64-v0`, records its
+version and observed process boundary, and records ELF metadata, undefined
+symbols, the `libm` and `sqrt` boundary, deterministic application bytes, and
+the raw compiler size. A final job enforces the registered 620,000-byte
+combined Darwin and Linux compiler bound. The Linux linker choice is defined
+by [Decision 0022](../../docs/decisions/0022-linux-arm64-lld-linker.md).
 
 The formal workflow uploads raw target evidence and the aggregate size record.
 Its presence defines the reproducible procedure; a gate result is claimed only

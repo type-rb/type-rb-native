@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted for Gate 6D.
+Accepted for Gate 6D. The current Linux linker selection is amended by
+[Decision 0022](0022-linux-arm64-lld-linker.md).
 
 ## Context
 

@@ -84,6 +84,13 @@ require_forbidden_processes_absent() {
 	fi
 }
 
+require_lld_observed() {
+	trace=$1
+	label=$2
+	grep -E 'execve\("[^"]*/ld\.lld"' "$trace" > /dev/null ||
+		fail "$label did not launch ld.lld"
+}
+
 test "$#" -eq 9 || usage
 
 candidate_root=$1
@@ -105,7 +112,7 @@ aarch64 | arm64) ;;
 *) fail "Linux arm64 is required" ;;
 esac
 
-for command_name in awk cmp cut find git grep jq nm readelf sed sha256sum strace strip; do
+for command_name in awk cmp cut find git grep jq ld.lld nm readelf sed sha256sum strace strip; do
 	command -v "$command_name" > /dev/null 2>&1 || fail "$command_name is required"
 done
 
@@ -183,6 +190,7 @@ test -x "$runtime_transition" || fail "current-runtime setup transition did not 
 require_empty_file "$evidence/setup/current-runtime.stdout" "current-runtime setup transition wrote stdout"
 require_empty_file "$evidence/setup/current-runtime.stderr" "current-runtime setup transition wrote stderr"
 require_forbidden_processes_absent "$evidence/setup/current-runtime-process.trace" "current-runtime setup transition"
+require_lld_observed "$evidence/setup/current-runtime-process.trace" "current-runtime setup transition"
 
 {
 	grep execve "$evidence/setup/first-process.trace"
@@ -292,6 +300,7 @@ strace -f -e trace=process -o "$evidence/applications/native-build-process.trace
 require_empty_file "$evidence/applications/native-trace.stdout" "traced Native portable-entry build wrote stdout"
 require_empty_file "$evidence/applications/native-trace.stderr" "traced Native portable-entry build wrote stderr"
 require_forbidden_processes_absent "$evidence/applications/native-build-process.trace" "ordinary Native application build"
+require_lld_observed "$evidence/applications/native-build-process.trace" "ordinary Native application build"
 grep execve "$evidence/applications/native-build-process.trace" \
 	> "$evidence/applications/native-build-process-inventory.txt"
 cmp "$native_application" "$native_application_traced" > /dev/null ||
@@ -420,6 +429,7 @@ strip --strip-all -o "$workspace/go/program.stripped" "$go_application"
 	"$reference_trb" version
 	"$go_command" version
 	"$cc" --version
+	ld.lld --version
 	"$qbe" -h
 } > "$evidence/environment.txt" 2>&1
 
