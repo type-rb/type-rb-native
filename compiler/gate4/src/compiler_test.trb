@@ -1179,6 +1179,22 @@ describe("Gate 4 TypeRB frontend") do
 		).to_be_true()
 	end
 
+	test("reserves the managed-local high-water mark and bulk-rewrites loop roots") do
+		source := "def nested(limit: Integer): String\n\tmut outer: Array<String> := []\n\tmut index := 0\n\twhile index < limit\n\t\tmut inner: Array<String> := []\n\t\twhile inner.size() < 1\n\t\t\tinner.push(\"ok\")\n\t\tend\n\t\touter.push(inner[0])\n\t\tindex += 1\n\tend\n\treturn outer[0]\nend\n\ndef main()\n\tvalue := nested(1)\n\tputs(value)\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		qbe := gate4_output_source(gate4_emit_qbe(state))
+		expect(qbe.include?("function $g4_gc_temp_reserve(l %required)")).to_be_true()
+		expect(qbe.include?("\t%root_capacity =l add %temporary_roots, 2")).to_be_true()
+		expect(qbe.include?("\tcall $g4_gc_temp_reserve(l %root_capacity)")).to_be_true()
+		expect(qbe.include?("=l loadl $g4_gc_temp_data")).to_be_true()
+		expect(qbe.include?("=l mul %temporary_roots, 8")).to_be_true()
+		expect(qbe.include?("\tcall $g4_gc_temp_reset(l %temporary_roots)")).to_be_false()
+	end
+
 	test("emits exact logical root segments and one managed-return epilogue") do
 		source := "record Bundle\n\tlabel: String\n\tlabels: Array<String>\nend\n\ndef select(mut bundle: Bundle, mut current: String): String\n\twhile current != \"done\"\n\t\tcurrent = bundle.label\n\t\tbundle = Bundle.new(label: \"done\", labels: bundle.labels)\n\t\treturn bundle.labels[0]\n\tend\n\treturn current\nend\n\ndef grow(mut current: String): String\n\tmut index := 0\n\twhile index < 2\n\t\tcurrent += \"x\"\n\t\tindex += 1\n\tend\n\treturn current\nend\n\ndef main()\n\tmut labels: Array<String> := []\n\tlabels.push(\"kept\")\n\tbundle := Bundle.new(label: \"next\", labels: labels)\n\tresult := grow(select(bundle, \"start\"))\n\tputs(result)\n\treturn\nend\n"
 		mut state := gate4_compiler_new(source.size() + 1)
@@ -1188,11 +1204,12 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_check(state)).to_be_true()
 		qbe := gate4_output_source(gate4_emit_qbe(state))
 		expect(qbe.include?("\t%temporary_roots =l loadl $g4_gc_temp_count")).to_be_true()
-		expect(qbe.include?("\tcall $g4_gc_temp_reset(l %temporary_roots)")).to_be_true()
+		expect(qbe.include?("\tstorel %temporary_roots, $g4_gc_temp_count")).to_be_true()
+		expect(qbe.include?("\tcall $g4_gc_temp_reset(l %temporary_roots)")).to_be_false()
 		expect(qbe.include?("\tcall $g4_gc_temp_push(l %t")).to_be_true()
 		expect(
 			qbe.include?(
-				"\tcall $g4_gc_temp_reset(l %temporary_roots)\n\t%return_result =l loadl %return_value\n\tcall $g4_gc_temp_push(l %return_result)\n\tret %return_result\n",
+				"\tstorel %temporary_roots, $g4_gc_temp_count\n\t%return_result =l loadl %return_value\n\tcall $g4_gc_temp_push(l %return_result)\n\tret %return_result\n",
 			),
 		).to_be_true()
 		expect(qbe.include?("$g4_gc_roots")).to_be_false()
