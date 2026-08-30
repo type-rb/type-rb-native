@@ -44,9 +44,11 @@ process-entry values.
 The TypeRB-owned runtime implements complete ASCII `[+-]?[0-9]+` validation,
 portable-range accumulation, canonical base-10 Integer formatting, and Float
 truncation toward zero. Float narrowing rejects NaN and both infinities before
-the portable Integer range check. Helper bodies are emitted only when the
-generated program calls them, preserving the compact runtime for unrelated
-applications.
+the portable Integer range check. These related helper bodies form one
+conditionally emitted runtime slice: using any registered conversion or
+process primitive includes the slice, while unrelated applications omit it
+entirely. This keeps feature selection compact inside the self-hosted compiler
+without enlarging its baseline runtime.
 
 `Math.sqrt` lowers to the platform C ABI `sqrt` symbol with a binary64
 argument and result. Native-owned C-toolchain invocations pass `-lm`

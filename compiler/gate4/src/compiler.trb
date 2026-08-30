@@ -767,8 +767,7 @@ def gate4_emit_managed_runtime_compact(mut output: Gate4Output)
 end
 
 def gate4_emit_float_array_runtime(mut output: Gate4Output)
-	gate4_output_line(output, "")
-	gate4_output_line(output, "function $g4_array_push_d(l %array, d %value) {\n@start\n\t%length_slot =l add %array, 8\n\t%length =l loadl %length_slot\n\t%capacity_slot =l add %array, 16\n\t%capacity =l loadl %capacity_slot\n\t%full =w ceql %length, %capacity\n\tjnz %full, @grow, @store\n@grow\n\t%new_capacity =l mul %capacity, 2\n\t%new_bytes =l mul %new_capacity, 8\n\t%old_bytes =l mul %capacity, 8\n\t%growth =l sub %new_bytes, %old_bytes\n\tcall $g4_gc_maybe_collect(l %growth)\n\t%data_slot =l add %array, 24\n\t%data =l loadl %data_slot\n\t%new_data =l call $realloc(l %data, l %new_bytes)\n\t%failed =w ceql %new_data, 0\n\tjnz %failed, @fail, @grown\n@fail\n\tcall $g4_fail(l $g4_allocation_error, l 26)\n\thlt\n@grown\n\t%heap_before =l loadl $g4_gc_heap_bytes\n\t%heap_after =l add %heap_before, %growth\n\tstorel %heap_after, $g4_gc_heap_bytes\n\t%allocated_before =l loadl $g4_gc_allocated_bytes\n\t%allocated_after =l add %allocated_before, %growth\n\tstorel %allocated_after, $g4_gc_allocated_bytes\n\tcall $g4_gc_update_peak(l %heap_after)\n\tstorel %new_capacity, %capacity_slot\n\tstorel %new_data, %data_slot\n\tjmp @store\n@store\n\t%current_data_slot =l add %array, 24\n\t%current_data =l loadl %current_data_slot\n\t%offset =l mul %length, 8\n\t%target =l add %current_data, %offset\n\tstored %value, %target\n\t%new_length =l add %length, 1\n\tstorel %new_length, %length_slot\n\tret\n}")
+	gate4_output_line(output, "\nfunction $g4_array_push_d(l %array, d %value) {\n@start\n\t%length_slot =l add %array, 8\n\t%length =l loadl %length_slot\n\t%capacity_slot =l add %array, 16\n\t%capacity =l loadl %capacity_slot\n\t%full =w ceql %length, %capacity\n\tjnz %full, @grow, @store\n@grow\n\t%new_capacity =l mul %capacity, 2\n\t%new_bytes =l mul %new_capacity, 8\n\t%old_bytes =l mul %capacity, 8\n\t%growth =l sub %new_bytes, %old_bytes\n\tcall $g4_gc_maybe_collect(l %growth)\n\t%data_slot =l add %array, 24\n\t%data =l loadl %data_slot\n\t%new_data =l call $realloc(l %data, l %new_bytes)\n\t%failed =w ceql %new_data, 0\n\tjnz %failed, @fail, @grown\n@fail\n\tcall $g4_fail(l $g4_allocation_error, l 26)\n\thlt\n@grown\n\t%heap_before =l loadl $g4_gc_heap_bytes\n\t%heap_after =l add %heap_before, %growth\n\tstorel %heap_after, $g4_gc_heap_bytes\n\t%allocated_before =l loadl $g4_gc_allocated_bytes\n\t%allocated_after =l add %allocated_before, %growth\n\tstorel %allocated_after, $g4_gc_allocated_bytes\n\tcall $g4_gc_update_peak(l %heap_after)\n\tstorel %new_capacity, %capacity_slot\n\tstorel %new_data, %data_slot\n\tjmp @store\n@store\n\t%current_data_slot =l add %array, 24\n\t%current_data =l loadl %current_data_slot\n\t%offset =l mul %length, 8\n\t%target =l add %current_data, %offset\n\tstored %value, %target\n\t%new_length =l add %length, 1\n\tstorel %new_length, %length_slot\n\tret\n}")
 	return
 end
 
@@ -789,19 +788,17 @@ def gate4_emit_string_to_integer_runtime(mut output: Gate4Output)
 end
 
 def gate4_emit_integer_to_string_runtime(mut output: Gate4Output)
-	gate4_output_line(output, "")
 	gate4_output_line(
 		output,
-		"function l $g4_integer_to_string(l %value) {\n@start\n\t%buffer =l alloc8 32\n\t%end =l add %buffer, 32\n\t%cursor_slot =l alloc8 8\n\tstorel %end, %cursor_slot\n\t%negative =w csltl %value, 0\n\tjnz %negative, @negative_value, @positive_value\n@negative_value\n\t%negative_magnitude =l sub 0, %value\n\tjmp @magnitude\n@positive_value\n\t%positive_magnitude =l copy %value\n\tjmp @magnitude\n@magnitude\n\t%magnitude_value =l phi @negative_value %negative_magnitude, @positive_value %positive_magnitude\n\t%zero =w ceql %magnitude_value, 0\n\tjnz %zero, @zero_digit, @digits\n@zero_digit\n\t%zero_cursor =l sub %end, 1\n\tstoreb 48, %zero_cursor\n\tstorel %zero_cursor, %cursor_slot\n\tjmp @sign\n@digits\n\t%current =l phi @magnitude %magnitude_value, @digit %remaining\n\t%done =w ceql %current, 0\n\tjnz %done, @sign, @digit\n@digit\n\t%remainder =l rem %current, 10\n\t%digit_value =l add %remainder, 48\n\t%digit_byte =w copy %digit_value\n\t%cursor =l loadl %cursor_slot\n\t%next_cursor =l sub %cursor, 1\n\tstoreb %digit_byte, %next_cursor\n\tstorel %next_cursor, %cursor_slot\n\t%remaining =l div %current, 10\n\tjmp @digits\n@sign\n\tjnz %negative, @negative_sign, @finish\n@negative_sign\n\t%sign_cursor =l loadl %cursor_slot\n\t%before_sign =l sub %sign_cursor, 1\n\tstoreb 45, %before_sign\n\tstorel %before_sign, %cursor_slot\n\tjmp @finish\n@finish\n\t%start =l loadl %cursor_slot\n\t%length =l sub %end, %start\n\t%size =l add %length, 9\n\t%string =l call $g4_string_alloc(l %size)\n\t%length_address =l add %string, 8\n\tstorel %length, %length_address\n\t%data =l add %string, 16\n\tcall $memcpy(l %data, l %start, l %length)\n\t%terminator =l add %data, %length\n\tstoreb 0, %terminator\n\tret %string\n}",
+		"\nfunction l $g4_integer_to_string(l %value) {\n@start\n\t%buffer =l alloc8 32\n\t%end =l add %buffer, 32\n\t%cursor_slot =l alloc8 8\n\tstorel %end, %cursor_slot\n\t%negative =w csltl %value, 0\n\tjnz %negative, @negative_value, @positive_value\n@negative_value\n\t%negative_magnitude =l sub 0, %value\n\tjmp @magnitude\n@positive_value\n\t%positive_magnitude =l copy %value\n\tjmp @magnitude\n@magnitude\n\t%magnitude_value =l phi @negative_value %negative_magnitude, @positive_value %positive_magnitude\n\t%zero =w ceql %magnitude_value, 0\n\tjnz %zero, @zero_digit, @digits\n@zero_digit\n\t%zero_cursor =l sub %end, 1\n\tstoreb 48, %zero_cursor\n\tstorel %zero_cursor, %cursor_slot\n\tjmp @sign\n@digits\n\t%current =l phi @magnitude %magnitude_value, @digit %remaining\n\t%done =w ceql %current, 0\n\tjnz %done, @sign, @digit\n@digit\n\t%remainder =l rem %current, 10\n\t%digit_value =l add %remainder, 48\n\t%digit_byte =w copy %digit_value\n\t%cursor =l loadl %cursor_slot\n\t%next_cursor =l sub %cursor, 1\n\tstoreb %digit_byte, %next_cursor\n\tstorel %next_cursor, %cursor_slot\n\t%remaining =l div %current, 10\n\tjmp @digits\n@sign\n\tjnz %negative, @negative_sign, @finish\n@negative_sign\n\t%sign_cursor =l loadl %cursor_slot\n\t%before_sign =l sub %sign_cursor, 1\n\tstoreb 45, %before_sign\n\tstorel %before_sign, %cursor_slot\n\tjmp @finish\n@finish\n\t%start =l loadl %cursor_slot\n\t%length =l sub %end, %start\n\t%size =l add %length, 9\n\t%string =l call $g4_string_alloc(l %size)\n\t%length_address =l add %string, 8\n\tstorel %length, %length_address\n\t%data =l add %string, 16\n\tcall $memcpy(l %data, l %start, l %length)\n\t%terminator =l add %data, %length\n\tstoreb 0, %terminator\n\tret %string\n}",
 	)
 	return
 end
 
 def gate4_emit_float_to_integer_runtime(mut output: Gate4Output)
-	gate4_output_line(output, "")
 	gate4_output_line(
 		output,
-		"data $g4_float_integer_error = { b \"panic: Float cannot be converted to Integer\", b 10 }\n\nfunction l $g4_float_to_integer(d %value) {\n@start\n\t%self_difference =d sub %value, %value\n\t%finite =w ceqd %self_difference, %self_difference\n\tjnz %finite, @range, @nonfinite\n@range\n\t%too_high =w cgtd %value, d_9007199254740991.0\n\t%too_low =w cltd %value, d_-9007199254740991.0\n\t%outside =w or %too_high, %too_low\n\tjnz %outside, @outside, @convert\n@convert\n\t%result =l dtosi %value\n\tret %result\n@nonfinite\n\tcall $g4_fail(l $g4_float_integer_error, l 44)\n\thlt\n@outside\n\tcall $g4_fail(l $g4_integer_range_error, l 45)\n\thlt\n}",
+		"\ndata $g4_float_integer_error = { b \"panic: Float cannot be converted to Integer\", b 10 }\n\nfunction l $g4_float_to_integer(d %value) {\n@start\n\t%self_difference =d sub %value, %value\n\t%finite =w ceqd %self_difference, %self_difference\n\tjnz %finite, @range, @nonfinite\n@range\n\t%too_high =w cgtd %value, d_9007199254740991.0\n\t%too_low =w cltd %value, d_-9007199254740991.0\n\t%outside =w or %too_high, %too_low\n\tjnz %outside, @outside, @convert\n@convert\n\t%result =l dtosi %value\n\tret %result\n@nonfinite\n\tcall $g4_fail(l $g4_float_integer_error, l 44)\n\thlt\n@outside\n\tcall $g4_fail(l $g4_integer_range_error, l 45)\n\thlt\n}",
 	)
 	return
 end
@@ -1486,24 +1483,17 @@ def gate4_emit_method_call(
 	if method == "to_i"
 		gate4_expect(state, position, ")")
 		result := gate4_emit_temporary(context)
+		output.runtime_flags[1] = 1
+		mut conversion := "$g4_float_to_integer(d "
 		if receiver.type_name == "String"
-			output.runtime_flags[2] = 1
-			gate4_output_line(
-				output,
-				"\t" + result + " =l call $g4_string_to_integer(l " + receiver.operand + ")",
-			)
-		else
-			output.runtime_flags[4] = 1
-			gate4_output_line(
-				output,
-				"\t" + result + " =l call $g4_float_to_integer(d " + receiver.operand + ")",
-			)
+			conversion = "$g4_string_to_integer(l "
 		end
+		gate4_output_line(output, "\t" + result + " =l call " + conversion + receiver.operand + ")")
 		return gate4_emitted_value(result, "Integer", 0, "", 0, "")
 	end
 	if method == "to_s"
 		gate4_expect(state, position, ")")
-		output.runtime_flags[3] = 1
+		output.runtime_flags[1] = 1
 		result := gate4_emit_temporary(context)
 		gate4_output_line(
 			output,
@@ -2291,8 +2281,7 @@ def gate4_emit_function(
 		end
 		gate4_output_line(output, "\tret %return_result")
 	end
-	gate4_output_line(output, "}")
-	gate4_output_line(output, "")
+	gate4_output_line(output, "}\n")
 	gate4_reset_temporary_storage()
 	return
 end
@@ -2357,8 +2346,7 @@ def gate4_emit_process_arguments(mut output: Gate4Output)
 end
 
 def gate4_emit_target_entry(mut output: Gate4Output)
-	gate4_output_line(output, "")
-	gate4_output_line(output, "export function w $main(w %argc, l %argv) {")
+	gate4_output_line(output, "\nexport function w $main(w %argc, l %argv) {")
 	gate4_output_line(output, "@start")
 	if output.runtime_flags[1] == 1
 		gate4_emit_process_arguments(output)
@@ -2466,7 +2454,7 @@ def gate4_emit_entry(state: Gate4Compiler, mut output: Gate4Output)
 end
 
 def gate4_emit_qbe(mut state: Gate4Compiler): Gate4Output
-	mut output := gate4_output_new(state.token_count[0] * 24 + 4096, [0, 0, 0, 0, 0])
+	mut output := gate4_output_new(state.token_count[0] * 24 + 4096, [0, 0])
 	gate4_emit_static_strings(state, output)
 	gate4_emit_record_descriptors(state, output)
 	compiler_runtime := gate4_compiler_entry_function(state) >= 0
@@ -2497,14 +2485,8 @@ def gate4_emit_qbe(mut state: Gate4Compiler): Gate4Output
 	end
 	if output.runtime_flags[1] == 1
 		gate4_emit_process_runtime(output)
-	end
-	if output.runtime_flags[2] == 1
 		gate4_emit_string_to_integer_runtime(output)
-	end
-	if output.runtime_flags[3] == 1
 		gate4_emit_integer_to_string_runtime(output)
-	end
-	if output.runtime_flags[4] == 1
 		gate4_emit_float_to_integer_runtime(output)
 	end
 	return output
@@ -4539,9 +4521,8 @@ def gate4_standard_package_import(
 	target := gate4_load_integer(state.import_targets, import_index)
 	if target < - 1
 		gate4_store_integer(state.import_used, import_index, 1)
-		return target
 	end
-	return - 1
+	return target
 end
 
 def gate4_project_error_state(path: String, line: Integer, message: String): Gate4Compiler
@@ -5842,17 +5823,15 @@ def gate4_resolve_function_body(
 												)
 											end
 										else
-											mut resolved_receiver := gate4_local_find(locals, text) >= 0
-											if !resolved_receiver
-												resolved_receiver = gate4_standard_package_import(state, module_index, text) < - 1
-											end
-											if !resolved_receiver
-												gate4_diagnostic(
-													state,
-													"TRBN4003",
-													gate4_load_integer(state.token_lines, index),
-													"unresolved local " + text,
-												)
+											if gate4_local_find(locals, text) < 0
+												if gate4_find_import_binding(state, module_index, text) < 0
+													gate4_diagnostic(
+														state,
+														"TRBN4003",
+														gate4_load_integer(state.token_lines, index),
+														"unresolved local " + text,
+													)
+												end
 											end
 										end
 									else
@@ -6129,7 +6108,6 @@ def gate4_check_call(
 	mut result_type := "Void"
 	if callee.name == "puts"
 		function_index =- 1
-		result_type = "Void"
 	else
 		if callee.category == 4
 			function_index =- 1
