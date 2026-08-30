@@ -12,10 +12,12 @@ current Linux arm64 linker recipe is fixed by
 
 ## Status
 
-Gate 6M measurement is in progress. The portable compiler/runtime slice is
-merged at TypeRB Native revision
-`97b3ac2aa1d88cbb7782602589ad70686593ddab`; this document does not claim a
-gate result before the registered Darwin and Linux evidence is complete.
+Gate 6M is complete. The measured portable compiler/runtime slice is TypeRB
+Native revision `97b3ac2aa1d88cbb7782602589ad70686593ddab`; the final evidence
+tooling is revision `c326b52d4bb2ce72602a6e33839883c94fd30f1d`. The reviewed
+[Darwin and Linux arm64 result](../results/2026-08-31-gate6m-portable-benchmark-entry-darwin-linux-arm64/README.md)
+passes every registered correctness, fixed-point, process, performance,
+memory, and size criterion.
 
 The fixed compiler baseline is TypeRB Native main revision
 `71495bbf18f0820891ea086104ca7da808bfd25f`. The semantic oracle is TypeRB
@@ -108,6 +110,24 @@ external dependencies, process boundaries, and intermediate cleanup. Gate 6M
 claims capability and non-inferiority only; cross-language benchmark results
 remain a later independently registered experiment.
 
+## Result
+
+The successful formal
+[run 33321032161](https://github.com/type-rb/type-rb-native/actions/runs/33321032161)
+closed exact candidate B2/B3/B4 fixed points on both targets. The candidate
+compiler is 299,576 bytes on Darwin and 274,144 bytes on Linux; the
+573,720-byte total is below the 620,000-byte bound. Against the fixed Darwin
+compiler baseline, candidate build time is 7.93% higher and peak RSS is 13.77%
+higher, both below the 15% ceiling.
+
+On the identical portable TypeRB workload, Native build time is 59.23% lower,
+build peak RSS is 46.81% lower, runtime is 28.89% lower, and runtime peak RSS
+is 71.54% lower than optimized Go. The stripped Native application is 98.19%
+smaller on Darwin and 99.15% smaller on Linux. The Linux process evidence
+observes the explicit LLD and dynamic libm boundaries. Detailed measurements,
+correction history, and all retained raw artifacts are in the
+[recorded result](../results/2026-08-31-gate6m-portable-benchmark-entry-darwin-linux-arm64/README.md).
+
 The TypeRB-authored
 [Gate 6M benchmark controller](../tools/gate6m-benchmark/README.md) owns the
 Darwin fixed-point, differential, timing, RSS, size, dependency, and process
@@ -115,7 +135,7 @@ inventory procedure. The manually dispatched
 [formal Gate 6M workflow](../.github/workflows/gate6m-formal.yml) runs that
 controller on `macos-15`, runs the separate
 [Linux arm64 verifier](../tools/gate6m-linux.sh) on `ubuntu-24.04-arm`, and
-enforces the combined target-size bound. The workflow and verifier are pinned
-to the registered candidate, TypeRB oracle, QBE source release, and immutable
-previous-Native seed; they do not change this document's in-progress status
-until the resulting artifacts are reviewed and committed.
+enforces the combined target-size bound. The workflow and verifier remain
+pinned to the registered candidate, TypeRB oracle, QBE source release, and
+immutable previous-Native seed. The reviewed successful artifacts are retained
+with the recorded result rather than relying on the workflow status alone.

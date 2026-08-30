@@ -647,6 +647,15 @@ improvement. See the
 [Gate 6M plan](gate-6-portable-benchmark-entry.md). This prerequisite does not
 stand in for the later cross-language benchmark result.
 
+The
+[recorded Darwin/Linux arm64 result](../results/2026-08-31-gate6m-portable-benchmark-entry-darwin-linux-arm64/README.md)
+passes every frozen criterion. Candidate compiler time and RSS are 7.93% and
+13.77% above the fixed baseline; both remain below the 15% ceiling. The
+identical-source Native application is faster and lighter than optimized Go on
+all four primary medians and at least 98.19% smaller when stripped. Exact
+fixed points, the 573,720-byte combined compiler size, LLD, libm, failure
+classes, and process boundaries are retained with the raw evidence.
+
 This gate is not authorization to ship. It evaluates:
 
 - broader configured and packaged multi-module applications beyond the

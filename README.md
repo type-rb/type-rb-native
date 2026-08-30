@@ -269,21 +269,21 @@ lifecycles. See the
 [runtime memory design](docs/runtime-memory-stability.md) and
 [recorded result](results/2026-08-30-runtime-memory-stability-darwin-linux-arm64/README.md).
 
-Gate 6M is in progress under
-[issue #113](https://github.com/type-rb/type-rb-native/issues/113). It adds the
-existing portable `Process.argv()`, strict String-to-Integer conversion,
-canonical Integer formatting, checked Float narrowing, and `Math.sqrt()`
-contracts to the ordinary self-hosted application path. The shared corpus and
-registered fixed-point, Go-parity, memory, performance, size, and external-libm
-evidence are defined by the
-[Gate 6M plan](docs/gate-6-portable-benchmark-entry.md) and
-[Decision 0021](docs/decisions/0021-portable-benchmark-entry-primitives.md).
-The Linux arm64 build keeps the registered size bound by selecting the explicit
-LLD boundary recorded in
-[Decision 0022](docs/decisions/0022-linux-arm64-lld-linker.md).
-The reproducible Darwin procedure is implemented by the
-[TypeRB-authored measurement controller](tools/gate6m-benchmark/README.md).
-No result is claimed until that evidence is complete.
+Gate 6M is complete under
+[issue #113](https://github.com/type-rb/type-rb-native/issues/113). The
+ordinary self-hosted application path now implements the existing portable
+`Process.argv()`, strict String-to-Integer conversion, canonical Integer
+formatting, checked Float narrowing, and `Math.sqrt()` contracts. Exact
+Darwin/Linux B2/B3/B4 fixed points close, the two compiler assets total 573,720
+bytes, and the canonical Darwin compiler remains within its strict 15% time
+and RSS guardrails. On the identical portable TypeRB workload, Native builds
+59.23% faster with 46.81% less peak RSS and runs 28.89% faster with 71.54% less
+peak RSS than optimized Go; stripped binaries are at least 98.19% smaller. The
+Linux evidence observes the explicit LLD and dynamic libm boundaries. See the
+[Gate 6M plan](docs/gate-6-portable-benchmark-entry.md),
+[Decision 0021](docs/decisions/0021-portable-benchmark-entry-primitives.md),
+[Decision 0022](docs/decisions/0022-linux-arm64-lld-linker.md), and
+[recorded result](results/2026-08-31-gate6m-portable-benchmark-entry-darwin-linux-arm64/README.md).
 
 Upward configured project discovery, persistent service runtime integration,
 package/native-library boundaries, incremental builds, toolchain discovery,
@@ -419,6 +419,7 @@ repository.
 - [Gate 6L experimental bootstrap seed distribution](docs/gate-6-bootstrap-seed-distribution.md)
 - [Gate 6L durable bootstrap seed Darwin/Linux arm64 result](results/2026-08-30-gate6l-bootstrap-seed-darwin-linux-arm64/README.md)
 - [Gate 6M portable benchmark-entry primitives](docs/gate-6-portable-benchmark-entry.md)
+- [Gate 6M portable benchmark-entry Darwin/Linux arm64 result](results/2026-08-31-gate6m-portable-benchmark-entry-darwin-linux-arm64/README.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
 - [Decision 0003: Gate 1 QBE and Darwin arm64 profile](docs/decisions/0003-gate-1-qbe-target.md)
