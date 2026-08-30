@@ -30,7 +30,7 @@ output=
 while test "$#" -gt 0; do
 	case "$1" in
 	--quiet) shift ;;
-	--memlimit | --walltimelimit | --cores | --read-only-dir | --output)
+	--memlimit | --walltimelimit | --cores | --read-only-dir | --overlay-dir | --output)
 		option=$1
 		value=$2
 		shift 2

@@ -204,6 +204,7 @@ done
 	printf 'cache_control=%s\n' "$cache_control"
 	printf 'network_access=disabled-by-default-container-policy\n'
 	printf 'root_filesystem=read-only\n'
+	printf 'home_filesystem=isolated-overlay\n'
 	uname -a | sed 's/^/uname=/'
 	if test -r /proc/cpuinfo; then
 		awk -F: '$1 ~ /model name|Model|CPU implementer|CPU part/ { gsub(/^[[:space:]]+/, "", $2); print "cpu_" NR "=" $2 }' /proc/cpuinfo
@@ -286,6 +287,7 @@ EOF
 			--walltimelimit "$walltime_limit" \
 			--cores "$cores" \
 			--read-only-dir / \
+			--overlay-dir /home \
 			--output "$observation/run.log" \
 			-- "$@" \
 			> "$observation/runexec.stdout" \
