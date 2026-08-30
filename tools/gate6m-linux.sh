@@ -221,8 +221,15 @@ require_forbidden_processes_absent "$evidence/setup/current-runtime-process.trac
 	> "$evidence/bootstrap.stdout" \
 	2> "$evidence/bootstrap.stderr" || fail "candidate compiler chain failed"
 printf 'bootstrap-seed: previous linux-arm64-v0 passed\n' > "$evidence/bootstrap.expected"
-cmp "$evidence/bootstrap.expected" "$evidence/bootstrap.stdout" > /dev/null ||
-	fail "candidate compiler chain stdout differs"
+sed -n '$p' "$evidence/bootstrap.stdout" > "$evidence/bootstrap-marker.actual"
+cmp "$evidence/bootstrap.expected" "$evidence/bootstrap-marker.actual" > /dev/null ||
+	fail "candidate compiler chain success marker differs"
+sed '$d' "$evidence/bootstrap.stdout" > "$evidence/bootstrap-checks.stdout"
+test -s "$evidence/bootstrap-checks.stdout" ||
+	fail "candidate compiler chain did not report checker results"
+if grep -v '^ok$' "$evidence/bootstrap-checks.stdout" > /dev/null; then
+	fail "candidate compiler chain reported unexpected checker output"
+fi
 require_empty_file "$evidence/bootstrap.stderr" "candidate compiler chain wrote stderr"
 require_lld_observed "$evidence/bootstrap/process.trace" "closed candidate ordinary build"
 
@@ -394,7 +401,7 @@ readelf -d "$output_compiler" > "$evidence/compiler-elf-dependencies.txt"
 readelf -h "$native_application" > "$evidence/applications/native-elf-header.txt"
 readelf -l "$native_application" > "$evidence/applications/native-elf-segments.txt"
 readelf -d "$native_application" > "$evidence/applications/native-elf-dependencies.txt"
-nm -u "$native_application" > "$evidence/applications/native-undefined-symbols.txt"
+nm -D -u "$native_application" > "$evidence/applications/native-undefined-symbols.txt"
 grep -Eq 'Shared library: \[libm\.so' "$evidence/applications/native-elf-dependencies.txt" ||
 	fail "Native portable-entry executable does not declare libm"
 grep -Eq '(^|[[:space:]])sqrt(@|$)' "$evidence/applications/native-undefined-symbols.txt" ||
