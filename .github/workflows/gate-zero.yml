@@ -50,7 +50,7 @@ jobs:
 
       - name: Verify formatting
         run: |
-          "$RUNNER_TEMP/trb" fmt --check src compiler corpus tools
+          "$RUNNER_TEMP/trb" fmt --check src compiler corpus tools benchmarks
 
       - name: Verify bootstrap seed tooling
         run: |
@@ -58,8 +58,10 @@ jobs:
           /bin/sh -n tools/bootstrap-seed-manifest.sh
           /bin/sh -n tools/bootstrap-seed-manifest-test.sh
           /bin/sh -n tools/gate6m-linux.sh
+          /bin/sh -n tools/benchmarksgame-context-verify.sh
           /bin/sh -n tools/runtime-memory-soak/analyze-rss-test.sh
           /bin/sh -n tools/runtime-memory-soak/runtime-memory-soak.sh
+          /bin/sh -n tools/benchmarksgame-verify.sh
           /bin/sh tools/bootstrap-seed-manifest-test.sh
           /bin/sh tools/runtime-memory-soak/analyze-rss-test.sh
 
@@ -105,6 +107,9 @@ jobs:
           for config in corpus/gate6m/*/trbconfig.jsonc; do
             "$RUNNER_TEMP/trb" check --config "$config"
           done
+          for config in benchmarks/benchmarksgame/*/trbconfig.jsonc; do
+            "$RUNNER_TEMP/trb" check --config "$config"
+          done
 
       - name: Run gate tests, fixtures, and source differential corpus
         env:
@@ -139,6 +144,25 @@ jobs:
         with:
           name: runtime-memory-smoke-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/runtime-memory-smoke-evidence
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Verify the identical-source language benchmark corpus
+        run: |
+          /bin/sh tools/benchmarksgame-verify.sh \
+            --native-compiler /tmp/type-rb-native-gate4-bootstrap/native-chain-b4/compiler \
+            --reference-trb "$RUNNER_TEMP/trb" \
+            --qbe "$RUNNER_TEMP/qbe-1.3/qbe" \
+            --cc /usr/bin/cc \
+            --target darwin-arm64-v0 \
+            --workspace "$RUNNER_TEMP/benchmarksgame-verify"
+
+      - name: Upload language benchmark verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmarksgame-verify-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/benchmarksgame-verify
           if-no-files-found: error
           retention-days: 30
 
