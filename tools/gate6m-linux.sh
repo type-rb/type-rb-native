@@ -190,7 +190,6 @@ test -x "$runtime_transition" || fail "current-runtime setup transition did not 
 require_empty_file "$evidence/setup/current-runtime.stdout" "current-runtime setup transition wrote stdout"
 require_empty_file "$evidence/setup/current-runtime.stderr" "current-runtime setup transition wrote stderr"
 require_forbidden_processes_absent "$evidence/setup/current-runtime-process.trace" "current-runtime setup transition"
-require_lld_observed "$evidence/setup/current-runtime-process.trace" "current-runtime setup transition"
 
 {
 	grep execve "$evidence/setup/first-process.trace"
@@ -225,6 +224,7 @@ printf 'bootstrap-seed: previous linux-arm64-v0 passed\n' > "$evidence/bootstrap
 cmp "$evidence/bootstrap.expected" "$evidence/bootstrap.stdout" > /dev/null ||
 	fail "candidate compiler chain stdout differs"
 require_empty_file "$evidence/bootstrap.stderr" "candidate compiler chain wrote stderr"
+require_lld_observed "$evidence/bootstrap/process.trace" "closed candidate ordinary build"
 
 fixed_point_qbe_sha256=$(awk -F= '$1 == "fixed_point_qbe_sha256" {print $2}' "$evidence/bootstrap/identities.txt")
 test "$fixed_point_qbe_sha256" = "$CANDIDATE_FIXED_POINT_QBE_SHA256" ||

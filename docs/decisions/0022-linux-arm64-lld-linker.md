@@ -39,10 +39,14 @@ GCC- or Clang-compatible C toolchain driver. It retains
 
 LLD is an explicit external component of the Linux arm64 toolchain. Linux
 bootstrap, runtime-memory, and Gate 6M workflows must install it. Verification
-must record its version, observe `ld.lld` in the current-runtime transition and
-ordinary application-build process traces, and inspect the resulting ELF
-segments and dynamic flags. A missing LLD installation is an environment error;
-the compiler does not silently fall back to another linker for this profile.
+must record its version, observe `ld.lld` in a build executed by the closed
+current-runtime compiler and in ordinary application-build process traces, and
+inspect the resulting ELF segments and dynamic flags. The setup build executed
+before the new runtime becomes active retains its executing compiler's
+historical linker behavior; that trace is evidence of the generational
+boundary, not of the new profile implementation. A missing LLD installation is
+an environment error; the compiler does not silently fall back to another
+linker for this profile.
 
 The selection is compiler-build orchestration data only. Project-only linker
 strings and dispatch state are omitted from ordinary application QBE, just like

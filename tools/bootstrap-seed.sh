@@ -582,6 +582,10 @@ if test "$os" = linux; then
 	if grep -E 'execve\("[^"]*/(go|trb|sh|bash|zsh)"' "$evidence/process.trace" > /dev/null; then
 		fail "ordinary Linux trace contains a forbidden executable"
 	fi
+	if grep -F 'g4_project_linker_lld' "$compiler_entry" > /dev/null; then
+		grep -E 'execve\("[^"]*/ld\.lld"' "$evidence/process.trace" > /dev/null ||
+			fail "ordinary Linux trace did not launch ld.lld"
+	fi
 	readelf -h "$b4" > "$evidence/executable-header.txt"
 	readelf -l "$b4" > "$evidence/executable-segments.txt"
 	readelf -d "$b4" > "$evidence/executable-dependencies.txt"
