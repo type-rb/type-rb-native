@@ -37,7 +37,8 @@ require_empty_file() {
 }
 
 require_no_intermediates() {
-	if find "$1" -name '*.trbn.*' -print | grep . > /dev/null 2>&1; then
+	if find "$1" \( -name '*.trbn.*' -o -name '*.gate6n-external.*' \) -print |
+		grep . > /dev/null 2>&1; then
 		fail "Native build left an intermediate below $1"
 	fi
 }
@@ -62,6 +63,36 @@ require_tool_observed() {
 	pattern=$2
 	label=$3
 	grep -E "$pattern" "$trace" > /dev/null || fail "$label was not observed"
+}
+
+require_exact_tool_observed() {
+	trace=$1
+	tool=$2
+	label=$3
+	grep -F "execve(\"$tool\"" "$trace" > /dev/null || fail "$label was not observed at $tool"
+}
+
+require_closed_ordinary_trace() {
+	trace=$1
+	compiler=$2
+	label=$3
+	inventory=$trace.executables
+	sed -n 's/.*execve("\([^"]*\)".*/\1/p' "$trace" > "$inventory"
+	test -s "$inventory" || fail "$label process inventory is empty"
+	while IFS= read -r executable; do
+		case "$executable" in
+		"$compiler" | "$qbe" | "$cc" | */cc1 | */collect2 | */as | */x86_64-linux-gnu-as | */ld.lld) ;;
+		*) fail "$label launched an unregistered executable: $executable" ;;
+		esac
+	done < "$inventory"
+	require_exact_tool_observed "$trace" "$qbe" "$label QBE"
+	require_exact_tool_observed "$trace" "$cc" "$label CC"
+	require_tool_observed "$trace" 'execve\("[^"]*/(as|x86_64-linux-gnu-as)"' "$label assembler"
+	require_tool_observed "$trace" 'execve\("[^"]*/ld\.lld"' "$label LLD"
+	require_forbidden_processes_absent "$trace" "$label"
+	if grep -F -- '--source-content' "$trace" > /dev/null; then
+		fail "$label used the hidden source-content adapter"
+	fi
 }
 
 require_successful_command() {
@@ -137,7 +168,10 @@ record_native_elf() {
 	grep -Eq 'Type:[[:space:]]+DYN' "$directory/header.txt" || fail "$label is not a PIE executable"
 	grep -Eq 'INTERP' "$directory/segments.txt" || fail "$label has no ELF interpreter"
 	grep -Eq 'GNU_RELRO' "$directory/segments.txt" || fail "$label has no GNU_RELRO segment"
-	if grep -Eq 'GNU_STACK.*RWE' "$directory/segments.txt"; then
+	stack_count=$(awk '$1 == "GNU_STACK" {count += 1} END {print count + 0}' "$directory/segments.txt")
+	test "$stack_count" -eq 1 || fail "$label does not have exactly one GNU_STACK segment"
+	if awk '$1 == "GNU_STACK" && $(NF - 1) ~ /E/ {found = 1} END {exit !found}' \
+		"$directory/segments.txt"; then
 		fail "$label requests an executable stack"
 	fi
 	if grep -Eq '\.go\.buildinfo|\.note\.go\.buildid' "$directory/sections.txt"; then
@@ -386,7 +420,7 @@ bootstrap_median() {
 	stage=$1
 	column=$2
 	awk -F, -v stage="$stage" -v column="$column" \
-		'NR > 1 && $1 == stage {print $column}' "$evidence/bootstrap/measurements.csv" |
+		'NR > 1 && $1 == stage && $5 == 0 {print $column}' "$evidence/bootstrap/measurements.csv" |
 		LC_ALL=C sort -n | sed -n '4p'
 }
 
@@ -416,13 +450,23 @@ require_spread() {
 	}' || fail "$label exceeds the registered spread: $first, $second"
 }
 
-require_native_observations_below_catastrophic() {
+require_observations_below_catastrophic() {
 	stage=$1
-	column=$2
-	strongest=$3
-	awk -F, -v stage="$stage" -v column="$column" -v strongest="$strongest" \
-		'NR > 1 && $1 == stage && $2 == "native" && $3 > 0 && $column > strongest * 2 {exit 1}' \
-		"$measurements" || fail "$stage Native observation exceeds the catastrophic bound"
+	candidate=$2
+	column=$3
+	baseline=$4
+	awk -F, -v stage="$stage" -v candidate="$candidate" -v column="$column" -v baseline="$baseline" \
+		'NR > 1 && $1 == stage && $2 == candidate && $3 > 0 && $column > baseline * 2 {exit 1}' \
+		"$measurements" || fail "$stage $candidate observation exceeds the catastrophic bound"
+}
+
+require_bootstrap_observations_below_catastrophic() {
+	column=$1
+	baseline=$2
+	awk -F, -v column="$column" -v baseline="$baseline" \
+		'NR > 1 && ($1 == "b2-b3" || $1 == "b3-b4") && $2 > 0 && $5 == 0 && $column > baseline * 2 {exit 1}' \
+		"$evidence/bootstrap/measurements.csv" ||
+		fail "adjacent compiler observation exceeds the catastrophic bound"
 }
 
 test "$(retained_count "$measurements" compiler-build native)" -eq 7 ||
@@ -470,25 +514,25 @@ require_native_within_strongest "application runtime time" \
 require_native_within_strongest "application runtime RSS" \
 	"$application_native_runtime_rss" "$application_go_runtime_rss" 125
 
-compiler_strongest_time=$(awk -v a="$compiler_native_time" -v b="$compiler_external_time" \
+adjacent_strongest_time=$(awk -v a="$adjacent_b2_b3_time" -v b="$adjacent_b3_b4_time" \
 	'BEGIN {if (a < b) print a; else print b}')
-compiler_strongest_rss=$(awk -v a="$compiler_native_rss" -v b="$compiler_external_rss" \
-	'BEGIN {if (a < b) print a; else print b}')
-application_build_strongest_time=$(awk -v a="$application_native_build_time" -v b="$application_go_build_time" \
-	'BEGIN {if (a < b) print a; else print b}')
-application_build_strongest_rss=$(awk -v a="$application_native_build_rss" -v b="$application_go_build_rss" \
-	'BEGIN {if (a < b) print a; else print b}')
-application_runtime_strongest_time=$(awk -v a="$application_native_runtime_time" -v b="$application_go_runtime_time" \
-	'BEGIN {if (a < b) print a; else print b}')
-application_runtime_strongest_rss=$(awk -v a="$application_native_runtime_rss" -v b="$application_go_runtime_rss" \
+adjacent_strongest_rss=$(awk -v a="$adjacent_b2_b3_rss" -v b="$adjacent_b3_b4_rss" \
 	'BEGIN {if (a < b) print a; else print b}')
 
-require_native_observations_below_catastrophic compiler-build 4 "$compiler_strongest_time"
-require_native_observations_below_catastrophic compiler-build 5 "$compiler_strongest_rss"
-require_native_observations_below_catastrophic application-build 4 "$application_build_strongest_time"
-require_native_observations_below_catastrophic application-build 5 "$application_build_strongest_rss"
-require_native_observations_below_catastrophic application-runtime 4 "$application_runtime_strongest_time"
-require_native_observations_below_catastrophic application-runtime 5 "$application_runtime_strongest_rss"
+require_observations_below_catastrophic compiler-build native 4 "$compiler_external_time"
+require_observations_below_catastrophic compiler-build native 5 "$compiler_external_rss"
+require_observations_below_catastrophic compiler-build external 4 "$compiler_external_time"
+require_observations_below_catastrophic compiler-build external 5 "$compiler_external_rss"
+require_observations_below_catastrophic application-build native 4 "$application_go_build_time"
+require_observations_below_catastrophic application-build native 5 "$application_go_build_rss"
+require_observations_below_catastrophic application-build go 4 "$application_go_build_time"
+require_observations_below_catastrophic application-build go 5 "$application_go_build_rss"
+require_observations_below_catastrophic application-runtime native 4 "$application_go_runtime_time"
+require_observations_below_catastrophic application-runtime native 5 "$application_go_runtime_rss"
+require_observations_below_catastrophic application-runtime go 4 "$application_go_runtime_time"
+require_observations_below_catastrophic application-runtime go 5 "$application_go_runtime_rss"
+require_bootstrap_observations_below_catastrophic 3 "$adjacent_strongest_time"
+require_bootstrap_observations_below_catastrophic 4 "$adjacent_strongest_rss"
 
 strip --strip-all -o "$workspace/native-first/program.stripped" "$native_application"
 strip --strip-all -o "$workspace/go/program.stripped" "$go_application"
@@ -564,10 +608,26 @@ test -x "$cc" || fail "CC is not executable"
 test -x "$reference_trb" || fail "reference trb is not executable"
 test -x "$go_command" || fail "Go is not executable"
 test -x "$external_recipe" || fail "external comparison recipe is not executable"
+file -L "$qbe" | grep -F 'ELF ' > /dev/null || fail "QBE must be a direct ELF executable"
+file -L "$cc" | grep -F 'ELF ' > /dev/null || fail "CC must be a direct ELF executable"
 test "$(command -v go)" = "$go_command" || fail "Go command does not match PATH"
 test ! -e "$workspace" || fail "workspace already exists"
 test ! -e "$evidence" || fail "evidence path already exists"
 test ! -e "$output_compiler" || fail "output compiler already exists"
+
+record_temporary_inventory() {
+	mkdir -p "$evidence"
+	if test -d "$workspace"; then
+		find "$workspace" \( -name '*.trbn.*' -o -name '*.gate6n-external.*' \) -print \
+			> "$evidence/final-temporary-inventory.txt" 2>&1 || true
+	else
+		: > "$evidence/final-temporary-inventory.txt"
+	fi
+}
+trap record_temporary_inventory 0
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 require_clean_revision "$candidate_root" "Gate 6N candidate"
 test "$(tr -d '\n' < "$candidate_root/TYPE_RB_REVISION")" = "$TYPE_RB_REVISION" ||
@@ -607,6 +667,8 @@ root_compiler=$workspace/setup/root-era/compiler
 first_qbe=$workspace/setup/first/compiler.ssa
 first_assembly=$workspace/setup/first/compiler.s
 first_transition=$workspace/setup/first/compiler
+runtime_qbe=$workspace/setup/current-runtime/compiler.ssa
+runtime_assembly=$workspace/setup/current-runtime/compiler.s
 runtime_transition=$workspace/setup/current-runtime/compiler
 
 strace -f -e trace=process -o "$evidence/setup/root-qbe-process.trace" \
@@ -664,20 +726,35 @@ test -x "$first_transition" || fail "first current-source transition was not pro
 require_tool_observed "$evidence/setup/first-link-process.trace" 'execve\("[^"]*/ld\.lld"' \
 	"first-transition LLD"
 
-strace -f -e trace=process -o "$evidence/setup/current-runtime-process.trace" \
-	"$first_transition" build "$compiler_entry" \
-		--output "$runtime_transition" \
-		--qbe "$qbe" \
-		--cc "$cc" \
-		--target "$PROFILE" \
-	> "$evidence/setup/current-runtime.stdout" \
-	2> "$evidence/setup/current-runtime.stderr" || fail "current-runtime setup transition failed"
-require_empty_file "$evidence/setup/current-runtime.stdout" "current-runtime transition wrote stdout"
-require_empty_file "$evidence/setup/current-runtime.stderr" "current-runtime transition wrote stderr"
+strace -f -e trace=process -o "$evidence/setup/current-runtime-emit-process.trace" \
+	"$first_transition" emit-qbe "$compiler_entry" \
+	> "$runtime_qbe" \
+	2> "$evidence/setup/current-runtime-emit.stderr" || fail "current-runtime QBE emission failed"
+require_empty_file "$evidence/setup/current-runtime-emit.stderr" "current-runtime QBE emission wrote stderr"
+test -s "$runtime_qbe" || fail "first transition emitted empty current-runtime QBE"
+require_forbidden_processes_absent "$evidence/setup/current-runtime-emit-process.trace" \
+	"current-runtime QBE emission"
+
+strace -f -e trace=process -o "$evidence/setup/current-runtime-qbe-process.trace" \
+	"$qbe" -t amd64_sysv -o "$runtime_assembly" "$runtime_qbe" \
+	> "$evidence/setup/current-runtime-qbe.stdout" \
+	2> "$evidence/setup/current-runtime-qbe.stderr" || fail "current-runtime QBE translation failed"
+require_empty_file "$evidence/setup/current-runtime-qbe.stdout" "current-runtime QBE translation wrote stdout"
+require_empty_file "$evidence/setup/current-runtime-qbe.stderr" "current-runtime QBE translation wrote stderr"
+test -s "$runtime_assembly" || fail "current-runtime QBE translation did not produce assembly"
+
+strace -f -e trace=process -o "$evidence/setup/current-runtime-link-process.trace" \
+	"$cc" -xassembler "$runtime_assembly" \
+		-fuse-ld=lld \
+		-Wl,--gc-sections,--strip-all \
+		-lm \
+		-o "$runtime_transition" \
+	> "$evidence/setup/current-runtime-link.stdout" \
+	2> "$evidence/setup/current-runtime-link.stderr" || fail "current-runtime setup link failed"
+require_empty_file "$evidence/setup/current-runtime-link.stdout" "current-runtime link wrote stdout"
+require_empty_file "$evidence/setup/current-runtime-link.stderr" "current-runtime link wrote stderr"
 test -x "$runtime_transition" || fail "current-runtime transition was not produced"
-require_forbidden_processes_absent "$evidence/setup/current-runtime-process.trace" \
-	"current-runtime setup transition"
-require_tool_observed "$evidence/setup/current-runtime-process.trace" 'execve\("[^"]*/ld\.lld"' \
+require_tool_observed "$evidence/setup/current-runtime-link-process.trace" 'execve\("[^"]*/ld\.lld"' \
 	"current-runtime LLD"
 
 {
@@ -686,7 +763,9 @@ require_tool_observed "$evidence/setup/current-runtime-process.trace" 'execve\("
 	grep execve "$evidence/setup/root-emit-process.trace"
 	grep execve "$evidence/setup/first-qbe-process.trace"
 	grep execve "$evidence/setup/first-link-process.trace"
-	grep execve "$evidence/setup/current-runtime-process.trace"
+	grep execve "$evidence/setup/current-runtime-emit-process.trace"
+	grep execve "$evidence/setup/current-runtime-qbe-process.trace"
+	grep execve "$evidence/setup/current-runtime-link-process.trace"
 } > "$evidence/setup/process-inventory.txt"
 {
 	printf 'root_qbe_size=%s\n' "$(file_size "$root_qbe")"
@@ -697,6 +776,8 @@ require_tool_observed "$evidence/setup/current-runtime-process.trace" 'execve\("
 	printf 'first_transition_qbe_sha256=%s\n' "$(sha256 "$first_qbe")"
 	printf 'first_transition_size=%s\n' "$(file_size "$first_transition")"
 	printf 'first_transition_sha256=%s\n' "$(sha256 "$first_transition")"
+	printf 'current_runtime_qbe_size=%s\n' "$(file_size "$runtime_qbe")"
+	printf 'current_runtime_qbe_sha256=%s\n' "$(sha256 "$runtime_qbe")"
 	printf 'current_runtime_transition_size=%s\n' "$(file_size "$runtime_transition")"
 	printf 'current_runtime_transition_sha256=%s\n' "$(sha256 "$runtime_transition")"
 } > "$evidence/setup/identities.txt"
@@ -731,6 +812,87 @@ require_forbidden_processes_absent "$evidence/bootstrap/process.trace" \
 	"closed candidate ordinary build"
 require_tool_observed "$evidence/bootstrap/process.trace" 'execve\("[^"]*/ld\.lld"' \
 	"closed candidate LLD"
+
+ordinary_trace_directory=$workspace/ordinary-chain-traces
+mkdir -p "$ordinary_trace_directory" "$evidence/ordinary-chain"
+trace_ordinary_build() {
+	label=$1
+	seed=$2
+	expected=$3
+	build_directory=$ordinary_trace_directory/$label
+	trace=$evidence/ordinary-chain/$label.process.trace
+	mkdir -p "$build_directory"
+	strace -f -e trace=process -o "$trace" \
+		"$seed" build "$compiler_entry" \
+			--output "$build_directory/compiler" \
+			--qbe "$qbe" --cc "$cc" --target "$PROFILE" \
+		> "$evidence/ordinary-chain/$label.stdout" \
+		2> "$evidence/ordinary-chain/$label.stderr" || fail "$label traced ordinary build failed"
+	require_empty_file "$evidence/ordinary-chain/$label.stdout" "$label traced ordinary build wrote stdout"
+	require_empty_file "$evidence/ordinary-chain/$label.stderr" "$label traced ordinary build wrote stderr"
+	cmp "$expected" "$build_directory/compiler" > /dev/null || fail "$label traced compiler bytes differ"
+	require_closed_ordinary_trace "$trace" "$seed" "$label ordinary build"
+	require_no_intermediates "$build_directory"
+}
+
+bootstrap_b1=$workspace/bootstrap/b1/compiler
+bootstrap_b2=$workspace/bootstrap/b2/compiler
+bootstrap_b3=$workspace/bootstrap/b3/compiler
+bootstrap_b4=$workspace/bootstrap/b4/compiler
+trace_ordinary_build b1-to-b2 "$bootstrap_b1" "$bootstrap_b2"
+trace_ordinary_build b2-to-b3 "$bootstrap_b2" "$bootstrap_b3"
+trace_ordinary_build b3-to-b4 "$bootstrap_b3" "$bootstrap_b4"
+{
+	cat "$evidence/ordinary-chain/b1-to-b2.process.trace.executables"
+	cat "$evidence/ordinary-chain/b2-to-b3.process.trace.executables"
+	cat "$evidence/ordinary-chain/b3-to-b4.process.trace.executables"
+} > "$evidence/ordinary-chain/process-inventory.txt"
+
+failure_order_directory=$workspace/gate6n-failure-order
+mkdir -p "$failure_order_directory"
+probe_tool=$failure_order_directory/probe-tool
+probe_marker=$failure_order_directory/probe-launched
+cat > "$probe_tool" <<EOF
+#!/bin/sh
+/usr/bin/touch "$probe_marker"
+exit 91
+EOF
+chmod 0755 "$probe_tool"
+printf 'compiler: unsupported target profile\n' > "$failure_order_directory/unsupported.expected"
+set +e
+"$output_compiler" build "$failure_order_directory/missing-source.trb" \
+	--output "$failure_order_directory/unsupported-output" \
+	--qbe "$probe_tool" --cc "$probe_tool" --target unknown-v0 \
+	> "$failure_order_directory/unsupported.stdout" \
+	2> "$failure_order_directory/unsupported.stderr"
+unsupported_status=$?
+set -e
+test "$unsupported_status" -eq 64 || fail "unknown target did not fail with status 64"
+require_empty_file "$failure_order_directory/unsupported.stdout" "unknown target wrote stdout"
+cmp "$failure_order_directory/unsupported.expected" "$failure_order_directory/unsupported.stderr" > /dev/null ||
+	fail "unknown target diagnostic differs"
+test ! -e "$probe_marker" || fail "unknown target launched an external tool"
+test ! -e "$failure_order_directory/unsupported-output" || fail "unknown target published output"
+
+publication_output=$failure_order_directory/publication-output
+mkdir "$publication_output"
+printf 'preserve-publication-directory\n' > "$publication_output/sentinel"
+printf 'compiler: cannot publish output\n' > "$failure_order_directory/publication.expected"
+set +e
+"$output_compiler" build "$portable_config" \
+	--output "$publication_output" \
+	--qbe "$qbe" --cc "$cc" --target "$PROFILE" \
+	> "$failure_order_directory/publication.stdout" \
+	2> "$failure_order_directory/publication.stderr"
+publication_status=$?
+set -e
+test "$publication_status" -eq 73 || fail "publication failure did not return status 73"
+require_empty_file "$failure_order_directory/publication.stdout" "publication failure wrote stdout"
+cmp "$failure_order_directory/publication.expected" "$failure_order_directory/publication.stderr" > /dev/null ||
+	fail "publication failure diagnostic differs"
+test "$(cat "$publication_output/sentinel")" = preserve-publication-directory ||
+	fail "publication failure did not preserve the destination directory"
+require_no_intermediates "$failure_order_directory"
 
 compiler_size=$(file_size "$output_compiler")
 test "$compiler_size" -le "$MAX_COMPILER_SIZE" || fail "candidate compiler exceeds the size bound"

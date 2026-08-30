@@ -446,7 +446,7 @@ require_empty_file "$space_directory/stderr" "space-bearing project stderr diffe
 require_no_intermediates "$space_directory"
 
 measurements=$evidence/measurements.csv
-printf 'stage,iteration,elapsed_seconds,peak_rss_bytes\n' > "$measurements"
+printf 'stage,iteration,elapsed_seconds,peak_rss_bytes,status\n' > "$measurements"
 
 measure_build() {
 	stage=$1
@@ -458,30 +458,44 @@ measure_build() {
 	measured_output=$measurement_directory/compiler
 	time_log=$measurement_directory/time.txt
 	stdout_log=$measurement_directory/stdout
+	elapsed=0
+	rss=0
+	measurement_status=0
 	if test "$os" = darwin; then
+		set +e
 		/usr/bin/time -p -l \
 			"$seed" build "$compiler_entry" --output "$measured_output" \
 			--qbe "$qbe" --cc "$cc" --target "$profile" \
-			> "$stdout_log" 2> "$time_log" ||
-			fail "measured build failed for $stage observation $iteration"
+			> "$stdout_log" 2> "$time_log"
+		measurement_status=$?
+		set -e
 		elapsed=$(awk '$1 == "real" { print $2; exit }' "$time_log")
 		rss=$(awk '/maximum resident set size/ { print $1; exit }' "$time_log")
 	else
+		set +e
 		/usr/bin/time -f '%e %M' -o "$time_log" \
 			"$seed" build "$compiler_entry" --output "$measured_output" \
 			--qbe "$qbe" --cc "$cc" --target "$profile" \
-			> "$stdout_log" 2> "$measurement_directory/stderr" ||
-			fail "measured build failed for $stage observation $iteration"
+			> "$stdout_log" 2> "$measurement_directory/stderr"
+		measurement_status=$?
+		set -e
 		elapsed=$(awk '{ print $1 }' "$time_log")
 		rss_kib=$(awk '{ print $2 }' "$time_log")
-		rss=$((rss_kib * 1024))
+		case "$rss_kib" in
+		'' | *[!0-9]*) rss=0 ;;
+		*) rss=$((rss_kib * 1024)) ;;
+		esac
+	fi
+	printf '%s,%s,%s,%s,%s\n' \
+		"$stage" "$iteration" "${elapsed:-0}" "${rss:-0}" "$measurement_status" >> "$measurements"
+	test "$measurement_status" -eq 0 || fail "measured build failed for $stage observation $iteration"
+	if test "$os" != darwin; then
 		require_empty_file "$measurement_directory/stderr" "measured build stderr differs"
 	fi
 	test -n "$elapsed" && test -n "$rss" || fail "could not parse time output"
 	require_empty_file "$stdout_log" "measured build stdout differs"
 	cmp "$expected_compiler" "$measured_output" >/dev/null || fail "measured compiler bytes differ"
 	require_no_intermediates "$measurement_directory"
-	printf '%s,%s,%s,%s\n' "$stage" "$iteration" "$elapsed" "$rss" >> "$measurements"
 }
 
 warmup_build() {
@@ -520,7 +534,7 @@ median_value() {
 	stage=$1
 	column=$2
 	awk -F, -v wanted="$stage" -v selected="$column" \
-		'NR > 1 && $1 == wanted { print $selected }' "$measurements" |
+		'NR > 1 && $1 == wanted && $5 == 0 { print $selected }' "$measurements" |
 		LC_ALL=C sort -n | sed -n '4p'
 }
 

@@ -49,10 +49,12 @@ profile still fails before source or external-tool access.
 The initial amd64 recovery verifies the immutable release root QBE's registered
 size and SHA-256, translates it with QBE `amd64_sysv`, and links one root-era
 compiler on the fresh x64 runner. That compiler emits the current compiler
-QBE. External QBE and CC then create the first current-source transition. The
-first transition owns the new profile, builds a second current-runtime
-transition through the ordinary Native command, and hands that compiler to the
-candidate B2/B3/B4 chain.
+QBE. External QBE and CC then create the first current-source transition. Its
+compiler logic owns the new profile, but its executable driver was still
+emitted by the root-era compiler and therefore cannot select that profile for
+an ordinary build. It emits the compiler once more, and external QBE and CC
+create the current-runtime transition whose driver owns the new profile. That
+compiler enters the candidate B2/B3/B4 chain.
 
 The root-era compiler and both current-source transitions are setup provenance.
 They execute neither Go nor the reference compiler, but they are excluded from

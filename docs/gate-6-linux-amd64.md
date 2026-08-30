@@ -40,7 +40,7 @@ target-neutral root QBE is therefore the one-time recovery input:
 setup only:
 immutable root QBE -> QBE amd64_sysv + CC/LLD -> root-era amd64 compiler
 root-era compiler  -> emit current compiler QBE -> external QBE + CC/LLD -> first transition
-first transition   -> ordinary Native build -> current-runtime transition
+first transition   -> emit current compiler QBE -> external QBE + CC/LLD -> current-runtime transition
 
 candidate chain:
 current-runtime transition -> ordinary Native build -> B2
@@ -52,7 +52,10 @@ The root asset must match its registered 658,639-byte size and
 `62db3c31527a670c3050051a9fa27bf142b6c5deaab81ef8234104bd467aa95a`
 SHA-256 before execution. Setup compilers remain separately identified and
 excluded from candidate measurements. Setup is Go-free but is not described as
-a previous Native release.
+a previous Native release. The second external translation is required because
+the first transition contains current compiler logic but still has the
+root-era executable driver's target dispatch. Only the current-runtime
+transition can execute an ordinary `linux-amd64-v0` build.
 
 ## Correctness requirements
 

@@ -28,7 +28,13 @@ test -x "$cc" || fail "CC is not executable"
 test -d "$(dirname -- "$output")" || fail "output directory does not exist"
 
 temporary_directory=$(mktemp -d "${output}.gate6n-external.XXXXXX")
-trap 'rm -rf "$temporary_directory"' EXIT HUP INT TERM
+cleanup() {
+	rm -rf "$temporary_directory"
+}
+trap cleanup 0
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 qbe_source=$temporary_directory/output.ssa
 assembly=$temporary_directory/output.s
