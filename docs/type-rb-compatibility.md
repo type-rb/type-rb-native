@@ -6,6 +6,14 @@ current source and semantic oracle is TypeRB
 `TYPE_RB_REVISION`. This is an exact development pin, not a supported version
 range.
 
+The machine-readable
+[`compatibility/current.json`](../compatibility/current.json) records this
+exact mapping beside the independent Native `0.1.0-dev` implementation
+identity. Its strict schema and CI validation keep TypeRB, bootstrap, MIR,
+runtime ABI, backend, target, and evidence identities separate. See
+[Native versioning and compatibility](versioning.md) for bump and release
+rules.
+
 The declaration-import compatibility work was registered in
 [issue #97](https://github.com/type-rb/type-rb-native/issues/97). Its
 [Darwin/Linux arm64 result](../results/2026-08-30-typerb-0-4-compatibility-darwin-linux-arm64/README.md)
@@ -98,5 +106,7 @@ the compatibility chain. The existing attested seed reaches the exact
 That confirms bootstrap feasibility without making the older embedded runtime
 free: a future seed containing the current runtime can remove both transitions.
 Revision alignment alone does not warrant replacing or relabelling the seed.
-Native SemVer, TypeRB compatibility ranges, installation policy, and support
-promises remain deferred.
+Native SemVer is now independently defined for experimental development, but
+TypeRB compatibility ranges, stable installation policy, and support promises
+remain deferred. The current schema can express only this exact verified
+TypeRB revision.
