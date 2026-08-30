@@ -1,62 +1,62 @@
 import { Diagnostic, boundary_diagnostic } from diagnostic
-import { JsonValue } from trb/std/json
-import { Result } from trb/std/result
+import trb/std/json
+import trb/std/result
 
 BOUNDARY_MAX_IDENTIFIER_SIZE := 256
 
 def strict_object(
-		value: JsonValue,
+		value: JSON::Value,
 		path: String,
 		allowed: Array<String>,
-	): Result<Hash<String, JsonValue>, Diagnostic>
+	): Result<Hash<String, JSON::Value>, Diagnostic>
 	fields := try object(value, path)
 	names := fields.keys().sort()
 	mut index := 0
 	while index < names.size()
 		name := names[index]
 		if !allowed.include?(name)
-			return Result<Hash<String, JsonValue>, Diagnostic>::Err(
+			return Result<Hash<String, JSON::Value>, Diagnostic>::Err(
 				boundary_diagnostic("TRBN0002", path + "/" + name, "unknown field")
 			)
 		end
 		index += 1
 	end
-	return Result<Hash<String, JsonValue>, Diagnostic>::Ok(fields)
+	return Result<Hash<String, JSON::Value>, Diagnostic>::Ok(fields)
 end
 
-def object(value: JsonValue, path: String): Result<Hash<String, JsonValue>, Diagnostic>
+def object(value: JSON::Value, path: String): Result<Hash<String, JSON::Value>, Diagnostic>
 	case value
-	when JsonValue::Object(fields)
-		return Result<Hash<String, JsonValue>, Diagnostic>::Ok(fields)
+	when JSON::Value::Object(fields)
+		return Result<Hash<String, JSON::Value>, Diagnostic>::Ok(fields)
 	else
-		return Result<Hash<String, JsonValue>, Diagnostic>::Err(
+		return Result<Hash<String, JSON::Value>, Diagnostic>::Err(
 			boundary_diagnostic("TRBN0002", path, "expected an object")
 		)
 	end
 end
 
 def required_field(
-		fields: Hash<String, JsonValue>,
+		fields: Hash<String, JSON::Value>,
 		name: String,
 		path: String,
-	): Result<JsonValue, Diagnostic>
+	): Result<JSON::Value, Diagnostic>
 	if !fields.key?(name)
-		return Result<JsonValue, Diagnostic>::Err(
+		return Result<JSON::Value, Diagnostic>::Err(
 			boundary_diagnostic("TRBN0002", path + "/" + name, "required field is missing")
 		)
 	end
-	return Result<JsonValue, Diagnostic>::Ok(fields.fetch(name))
+	return Result<JSON::Value, Diagnostic>::Ok(fields.fetch(name))
 end
 
 def required_string(
-		fields: Hash<String, JsonValue>,
+		fields: Hash<String, JSON::Value>,
 		name: String,
 		path: String,
 		identifier: Boolean,
 	): Result<String, Diagnostic>
 	value := try required_field(fields, name, path)
 	case value
-	when JsonValue::String(result)
+	when JSON::Value::String(result)
 		if identifier && result.empty?()
 			return Result<String, Diagnostic>::Err(
 				boundary_diagnostic("TRBN0004", path + "/" + name, "identifier must not be empty")
@@ -76,13 +76,13 @@ def required_string(
 end
 
 def required_integer(
-		fields: Hash<String, JsonValue>,
+		fields: Hash<String, JSON::Value>,
 		name: String,
 		path: String,
 	): Result<Integer, Diagnostic>
 	value := try required_field(fields, name, path)
 	case value
-	when JsonValue::Integer(result)
+	when JSON::Value::Integer(result)
 		return Result<Integer, Diagnostic>::Ok(result)
 	else
 		return Result<Integer, Diagnostic>::Err(
@@ -92,16 +92,16 @@ def required_integer(
 end
 
 def required_array(
-		fields: Hash<String, JsonValue>,
+		fields: Hash<String, JSON::Value>,
 		name: String,
 		path: String,
-	): Result<Array<JsonValue>, Diagnostic>
+	): Result<Array<JSON::Value>, Diagnostic>
 	value := try required_field(fields, name, path)
 	case value
-	when JsonValue::Array(result)
-		return Result<Array<JsonValue>, Diagnostic>::Ok(result)
+	when JSON::Value::Array(result)
+		return Result<Array<JSON::Value>, Diagnostic>::Ok(result)
 	else
-		return Result<Array<JsonValue>, Diagnostic>::Err(
+		return Result<Array<JSON::Value>, Diagnostic>::Err(
 			boundary_diagnostic("TRBN0002", path + "/" + name, "expected an array")
 		)
 	end

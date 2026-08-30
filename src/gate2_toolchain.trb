@@ -1,8 +1,8 @@
 import { Gate2Module } from gate2_mir
 import { emit_gate2_qbe } from qbe2
-import { write_text } from trb/std/filesystem
-import { run } from trb/std/process
-import { Result } from trb/std/result
+import trb/std/filesystem
+import trb/std/process
+import trb/std/result
 import { Instant } from trb/std/time
 
 record Gate2BuildError
@@ -44,7 +44,7 @@ def build_gate2_executable(
 	emit_seconds := Instant.now().duration_since(emit_started).total_seconds()
 	qbe_ir_path := workspace + "/module.ssa"
 	assembly_path := workspace + "/module.s"
-	case write_text(qbe_ir_path, qbe_source)
+	case FileSystem.write_text(qbe_ir_path, qbe_source)
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		return Result<Gate2BuildReport, Gate2BuildError>::Err(
@@ -52,7 +52,7 @@ def build_gate2_executable(
 		)
 	end
 	qbe_started := Instant.now()
-	qbe_result := case run(qbe_command, ["-t", "arm64_apple", qbe_ir_path])
+	qbe_result := case Process.run(qbe_command, ["-t", "arm64_apple", qbe_ir_path])
 	when Result::Ok(process_result)
 		process_result
 	when Result::Err(error)
@@ -72,7 +72,7 @@ def build_gate2_executable(
 			)
 		)
 	end
-	case write_text(assembly_path, qbe_result.stdout)
+	case FileSystem.write_text(assembly_path, qbe_result.stdout)
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		return Result<Gate2BuildReport, Gate2BuildError>::Err(
@@ -80,7 +80,7 @@ def build_gate2_executable(
 		)
 	end
 	link_started := Instant.now()
-	cc_result := case run(cc_command, [assembly_path, "-Wl,-dead_strip", "-o", output_path])
+	cc_result := case Process.run(cc_command, [assembly_path, "-Wl,-dead_strip", "-o", output_path])
 	when Result::Ok(process_result)
 		process_result
 	when Result::Err(error)

@@ -1,41 +1,12 @@
 import { Diagnostic, boundary_diagnostic } from diagnostic
-import {
-	ComparisonOperator,
-	FloatBinaryOperator,
-	Gate1Instruction,
-	IntegerBinaryOperator,
-	ScalarType,
-} from gate1_mir
-import {
-	Gate2Block,
-	Gate2Function,
-	Gate2Instruction,
-	Gate2Module,
-	Gate2Parameter,
-	Gate2ResultType,
-	Gate2Terminator,
-	verify_gate2_mir,
-} from gate2_mir
-import {
-	Gate2Field,
-	Gate2TypeDefinition,
-	Gate2ValueType,
-	Gate2Variant,
-} from gate2_layout
+import { ComparisonOperator, FloatBinaryOperator, Gate1Instruction, IntegerBinaryOperator, ScalarType } from gate1_mir
+import { Gate2Block, Gate2Function, Gate2Instruction, Gate2Module, Gate2Parameter, Gate2ResultType, Gate2Terminator, verify_gate2_mir } from gate2_mir
+import { Gate2Field, Gate2TypeDefinition, Gate2ValueType, Gate2Variant } from gate2_layout
 import { NativeSource } from native_mir
-import {
-	object,
-	required_array,
-	required_field,
-	required_integer,
-	required_string,
-	strict_object,
-} from json_boundary
-import {
-	decode_origin,
-} from snapshot
-import { JsonValue, parse } from trb/std/json
-import { Result } from trb/std/result
+import { object, required_array, required_field, required_integer, required_string, strict_object } from json_boundary
+import { decode_origin } from snapshot
+import trb/std/json
+import trb/std/result
 
 GATE2_MAX_INPUT_BYTES := 4194304
 GATE2_MAX_SOURCES := 256
@@ -57,7 +28,7 @@ def decode_gate2_snapshot(source: String): Result<Gate2Module, Diagnostic>
 			boundary_diagnostic("TRBN0005", "", "snapshot exceeds the Gate 2 4 MiB input limit")
 		)
 	end
-	root := case parse(source)
+	root := case JSON.parse(source)
 	when Result::Ok(value)
 		value
 	when Result::Err(error)
@@ -135,7 +106,7 @@ def decode_gate2_snapshot(source: String): Result<Gate2Module, Diagnostic>
 	return Result<Gate2Module, Diagnostic>::Ok(native_module)
 end
 
-def _gate2_decode_type_definition(value: JsonValue, path: String): Result<Gate2TypeDefinition, Diagnostic>
+def _gate2_decode_type_definition(value: JSON::Value, path: String): Result<Gate2TypeDefinition, Diagnostic>
 	base_fields := try object(value, path)
 	kind := try required_string(base_fields, "kind", path, false)
 	if kind == "record"
@@ -183,7 +154,7 @@ def _gate2_decode_type_definition(value: JsonValue, path: String): Result<Gate2T
 	)
 end
 
-def _gate2_decode_fields(values: Array<JsonValue>, path: String): Result<Array<Gate2Field>, Diagnostic>
+def _gate2_decode_fields(values: Array<JSON::Value>, path: String): Result<Array<Gate2Field>, Diagnostic>
 	if values.size() > GATE2_SNAPSHOT_MAX_FIELDS
 		return Result<Array<Gate2Field>, Diagnostic>::Err(
 			boundary_diagnostic("TRBN0005", path, "field count exceeds the Gate 2 limit")
@@ -208,7 +179,7 @@ def _gate2_decode_fields(values: Array<JsonValue>, path: String): Result<Array<G
 	return Result<Array<Gate2Field>, Diagnostic>::Ok(fields)
 end
 
-def _gate2_decode_source(value: JsonValue, path: String): Result<NativeSource, Diagnostic>
+def _gate2_decode_source(value: JSON::Value, path: String): Result<NativeSource, Diagnostic>
 	fields := try strict_object(value, path, ["id", "path"])
 	source_path := try required_string(fields, "path", path, false)
 	if source_path.empty?()
@@ -229,7 +200,7 @@ def _gate2_decode_source(value: JsonValue, path: String): Result<NativeSource, D
 	)
 end
 
-def _gate2_decode_function(value: JsonValue, path: String): Result<Gate2Function, Diagnostic>
+def _gate2_decode_function(value: JSON::Value, path: String): Result<Gate2Function, Diagnostic>
 	fields := try strict_object(value, path, ["id", "name", "parameters", "result", "entry", "origin", "blocks"])
 	parameter_values := try required_array(fields, "parameters", path)
 	if parameter_values.size() > GATE2_MAX_PARAMETERS
@@ -273,7 +244,7 @@ def _gate2_decode_function(value: JsonValue, path: String): Result<Gate2Function
 	)
 end
 
-def _gate2_decode_parameter(value: JsonValue, path: String): Result<Gate2Parameter, Diagnostic>
+def _gate2_decode_parameter(value: JSON::Value, path: String): Result<Gate2Parameter, Diagnostic>
 	fields := try strict_object(value, path, ["id", "type", "origin"])
 	return Result<Gate2Parameter, Diagnostic>::Ok(
 		Gate2Parameter.new(
@@ -314,7 +285,7 @@ def _gate2_decode_result_type(name: String, path: String): Result<Gate2ResultTyp
 	)
 end
 
-def _gate2_decode_block(value: JsonValue, path: String): Result<Gate2Block, Diagnostic>
+def _gate2_decode_block(value: JSON::Value, path: String): Result<Gate2Block, Diagnostic>
 	fields := try strict_object(value, path, ["id", "parameters", "origin", "instructions", "terminator"])
 	parameter_values := try required_array(fields, "parameters", path)
 	if parameter_values.size() > GATE2_MAX_PARAMETERS
@@ -355,7 +326,7 @@ def _gate2_decode_block(value: JsonValue, path: String): Result<Gate2Block, Diag
 	)
 end
 
-def _gate2_decode_instruction(value: JsonValue, path: String): Result<Gate2Instruction, Diagnostic>
+def _gate2_decode_instruction(value: JSON::Value, path: String): Result<Gate2Instruction, Diagnostic>
 	base_fields := try object(value, path)
 	op := try required_string(base_fields, "op", path, false)
 	if op == "boolean_literal"
@@ -543,7 +514,7 @@ def _gate2_decode_instruction(value: JsonValue, path: String): Result<Gate2Instr
 	)
 end
 
-def _gate2_decode_terminator(value: JsonValue, path: String): Result<Gate2Terminator, Diagnostic>
+def _gate2_decode_terminator(value: JSON::Value, path: String): Result<Gate2Terminator, Diagnostic>
 	base_fields := try object(value, path)
 	op := try required_string(base_fields, "op", path, false)
 	if op == "jump"
@@ -654,13 +625,13 @@ def _gate2_comparison_operator(name: String, path: String): Result<ComparisonOpe
 end
 
 def _gate2_required_boolean(
-		fields: Hash<String, JsonValue>,
+		fields: Hash<String, JSON::Value>,
 		name: String,
 		path: String,
 	): Result<Boolean, Diagnostic>
 	value := try required_field(fields, name, path)
 	case value
-	when JsonValue::Boolean(result)
+	when JSON::Value::Boolean(result)
 		return Result<Boolean, Diagnostic>::Ok(result)
 	else
 		return Result<Boolean, Diagnostic>::Err(
@@ -670,15 +641,15 @@ def _gate2_required_boolean(
 end
 
 def _gate2_required_float(
-		fields: Hash<String, JsonValue>,
+		fields: Hash<String, JSON::Value>,
 		name: String,
 		path: String,
 	): Result<Float, Diagnostic>
 	value := try required_field(fields, name, path)
 	case value
-	when JsonValue::Float(result)
+	when JSON::Value::Float(result)
 		return Result<Float, Diagnostic>::Ok(result)
-	when JsonValue::Integer(result)
+	when JSON::Value::Integer(result)
 		return Result<Float, Diagnostic>::Ok(result.to_f())
 	else
 		return Result<Float, Diagnostic>::Err(
@@ -688,15 +659,15 @@ def _gate2_required_float(
 end
 
 def _gate2_required_nullable_string(
-		fields: Hash<String, JsonValue>,
+		fields: Hash<String, JSON::Value>,
 		name: String,
 		path: String,
 	): Result<String?, Diagnostic>
 	value := try required_field(fields, name, path)
 	case value
-	when JsonValue::Null
+	when JSON::Value::Null
 		return Result<String?, Diagnostic>::Ok(nil)
-	when JsonValue::String(result)
+	when JSON::Value::String(result)
 		if result.empty?()
 			return Result<String?, Diagnostic>::Err(
 				boundary_diagnostic("TRBN0004", path + "/" + name, "identifier must not be empty")
@@ -716,7 +687,7 @@ def _gate2_required_nullable_string(
 end
 
 def _gate2_required_string_array(
-		fields: Hash<String, JsonValue>,
+		fields: Hash<String, JSON::Value>,
 		name: String,
 		path: String,
 	): Result<Array<String>, Diagnostic>
@@ -730,7 +701,7 @@ def _gate2_required_string_array(
 	mut index := 0
 	while index < values.size()
 		case values[index]
-		when JsonValue::String(item)
+		when JSON::Value::String(item)
 			if item.empty?()
 				return Result<Array<String>, Diagnostic>::Err(
 					boundary_diagnostic("TRBN0004", path + "/" + name + "/" + index.to_s(), "identifier must not be empty")

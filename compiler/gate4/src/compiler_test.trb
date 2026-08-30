@@ -1,51 +1,8 @@
-import {
-	Gate4Compiler,
-	Gate4Output,
-	Gate4ProjectSources,
-	gate4_add_module,
-	gate4_build_function_index,
-	gate4_character_in,
-	gate4_check,
-	gate4_compiler_new,
-	gate4_emit_context_new,
-	gate4_emit_local_find,
-	gate4_emit_qbe,
-	gate4_digit,
-	gate4_float_literal_in_range,
-	gate4_find_field,
-	gate4_find_function_in_module,
-	gate4_find_import_binding,
-	gate4_find_module,
-	gate4_find_record_in_module,
-	gate4_find_record_type,
-	gate4_has_diagnostic,
-	gate4_identifier_continue,
-	gate4_identifier_start,
-	gate4_lex,
-	gate4_lex_module,
-	gate4_load_project_sources,
-	gate4_local_find,
-	gate4_locals_new,
-	gate4_number_is_float,
-	gate4_number_without_underscores,
-	gate4_parse,
-	gate4_parse_module,
-	gate4_parse_project_config,
-	gate4_resolve,
-	gate4_string_bucket,
-	gate4_symbol_bucket_count,
-} from compiler
-import {
-	gate4_integer_storage,
-	gate4_load_integer,
-	gate4_load_string,
-	gate4_store_integer,
-	gate4_store_string,
-	gate4_string_storage,
-} from storage
-import { create_directory, read_text, write_text } from trb/std/filesystem
-import { environment, run } from trb/std/process
-import { Result } from trb/std/result
+import { Gate4Compiler, Gate4Output, Gate4ProjectSources, gate4_add_module, gate4_build_function_index, gate4_character_in, gate4_check, gate4_compiler_new, gate4_digit, gate4_emit_context_new, gate4_emit_local_find, gate4_emit_qbe, gate4_find_field, gate4_find_function_in_module, gate4_find_import_binding, gate4_find_module, gate4_find_record_in_module, gate4_find_record_type, gate4_float_literal_in_range, gate4_has_diagnostic, gate4_identifier_continue, gate4_identifier_start, gate4_lex, gate4_lex_module, gate4_load_project_sources, gate4_local_find, gate4_locals_new, gate4_number_is_float, gate4_number_without_underscores, gate4_parse, gate4_parse_module, gate4_parse_project_config, gate4_resolve, gate4_string_bucket, gate4_symbol_bucket_count } from compiler
+import { gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage
+import trb/std/filesystem
+import trb/std/process
+import trb/std/result
 import trb/std/string_builder
 import { describe, expect, test } from trb/std/test
 
@@ -54,7 +11,7 @@ def gate4_frontend_test_source(): String
 end
 
 def gate4_output_source(output: Gate4Output): String
-	mut writer := string_builder.new()
+	mut writer := StringBuilder.new()
 	mut index := 0
 	while index < output.count[0]
 		writer.append(gate4_load_string(output.lines, index))
@@ -65,7 +22,7 @@ def gate4_output_source(output: Gate4Output): String
 end
 
 def gate4_required_test_source(path: String): String
-	case read_text(path)
+	case FileSystem.read_text(path)
 	when Result::Ok(source)
 		return source
 	when Result::Err(error)
@@ -75,7 +32,7 @@ def gate4_required_test_source(path: String): String
 end
 
 def gate4_scale_test_source(count: Integer): String
-	mut writer := string_builder.new()
+	mut writer := StringBuilder.new()
 	writer.append("def f0(value: Integer): Integer\n\treturn value\nend\n\n")
 	mut index := 1
 	while index < count
@@ -671,7 +628,7 @@ describe("Gate 4 TypeRB frontend") do
 	end
 
 	test("parses the checked-in compiler closure through its own frontend") do
-		root := environment("TYPE_RB_NATIVE_ROOT")
+		root := Process.environment("TYPE_RB_NATIVE_ROOT")
 		if root == nil
 			expect(true).to_be_true()
 		else
@@ -834,28 +791,28 @@ describe("Gate 4 TypeRB frontend") do
 		expect(first).to_equal(second)
 		expect(first.include?("function l $g4f0(l %p0, l %p1) {")).to_be_true()
 		expect(first.include?("export function w $main(w %argc, l %argv) {")).to_be_true()
-		qbe := environment("TYPE_RB_NATIVE_QBE")
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
 		if qbe == nil
 			expect(true).to_be_true()
 		else
 			workspace := "/tmp/type-rb-native-gate4-emitter"
-			case create_directory(workspace)
+			case FileSystem.create_directory(workspace)
 			when Result::Ok(_unit)
 			when Result::Err(_error)
 			end
-			case write_text(workspace + "/module.ssa", first)
+			case FileSystem.write_text(workspace + "/module.ssa", first)
 			when Result::Ok(_unit)
 			when Result::Err(error)
 				puts(error.operation + ": " + error.message)
 				expect(false).to_be_true()
 			end
-			case run(qbe, ["-t", "arm64_apple", workspace + "/module.ssa"])
+			case Process.run(qbe, ["-t", "arm64_apple", workspace + "/module.ssa"])
 			when Result::Ok(qbe_result)
 				if !qbe_result.success
 					puts(qbe_result.stderr)
 				end
 				expect(qbe_result.success).to_be_true()
-				case write_text(workspace + "/module.s", qbe_result.stdout)
+				case FileSystem.write_text(workspace + "/module.s", qbe_result.stdout)
 				when Result::Ok(_unit)
 				when Result::Err(error)
 					puts(error.operation + ": " + error.message)
@@ -865,7 +822,7 @@ describe("Gate 4 TypeRB frontend") do
 				puts(error.operation + ": " + error.message)
 				expect(false).to_be_true()
 			end
-			case run("/usr/bin/cc", [workspace + "/module.s", "-o", workspace + "/program"])
+			case Process.run("/usr/bin/cc", [workspace + "/module.s", "-o", workspace + "/program"])
 			when Result::Ok(link_result)
 				if !link_result.success
 					puts(link_result.stderr)
@@ -875,7 +832,7 @@ describe("Gate 4 TypeRB frontend") do
 				puts(error.operation + ": " + error.message)
 				expect(false).to_be_true()
 			end
-			case run(workspace + "/program", [])
+			case Process.run(workspace + "/program", [])
 			when Result::Ok(result)
 				expect(result.success).to_be_true()
 				expect(result.stdout).to_equal("ok\n")
