@@ -24,31 +24,47 @@ case "$user_id" in
 esac
 
 user_service=/sys/fs/cgroup/user.slice/user-$user_id.slice/user@$user_id.service
-controllers=$user_service/cgroup.controllers
-subtree_control=$user_service/cgroup.subtree_control
-test -r "$controllers" || fail "systemd user-service cgroup controllers are unavailable"
-test -r "$subtree_control" || fail "systemd user-service subtree control is unavailable"
-grep -qw cpuset "$controllers" || fail "cpuset is not available to the systemd user service"
-
 {
 	printf 'user_id=%s\n' "$user_id"
 	printf 'user_service=%s\n' "$user_service"
 	printf 'current_cgroup=%s\n' "$(awk -F: '$1 == 0 { print $3 }' /proc/self/cgroup)"
-	printf 'available_controllers=%s\n' "$(cat "$controllers")"
-	printf 'subtree_control_before=%s\n' "$(cat "$subtree_control")"
 } > "$evidence"
 
 : > "$evidence.sudo.stdout"
 : > "$evidence.sudo.stderr"
-if ! grep -qw cpuset "$subtree_control"; then
-	set +e
-	printf '+cpuset\n' |
-		/usr/bin/sudo -n /usr/bin/tee "$subtree_control" > "$evidence.sudo.stdout" 2> "$evidence.sudo.stderr"
-	delegation_status=$?
-	set -e
-	test "$delegation_status" -eq 0 || fail "could not delegate cpuset"
+
+enable_cpuset() {
+	label=$1
+	cgroup_path=$2
+	controllers=$cgroup_path/cgroup.controllers
+	subtree_control=$cgroup_path/cgroup.subtree_control
+	test -r "$controllers" || fail "$label cgroup controllers are unavailable"
+	test -r "$subtree_control" || fail "$label subtree control is unavailable"
+	grep -qw cpuset "$controllers" || fail "cpuset is not available to $label"
+	{
+		printf '%s_path=%s\n' "$label" "$cgroup_path"
+		printf '%s_available_controllers=%s\n' "$label" "$(cat "$controllers")"
+		printf '%s_subtree_control_before=%s\n' "$label" "$(cat "$subtree_control")"
+	} >> "$evidence"
+	if ! grep -qw cpuset "$subtree_control"; then
+		set +e
+		printf '+cpuset\n' |
+			/usr/bin/sudo -n /usr/bin/tee "$subtree_control" >> "$evidence.sudo.stdout" 2>> "$evidence.sudo.stderr"
+		delegation_status=$?
+		set -e
+		test "$delegation_status" -eq 0 || fail "could not delegate cpuset to $label"
+	fi
+	printf '%s_subtree_control_after=%s\n' "$label" "$(cat "$subtree_control")" >> "$evidence"
+	grep -qw cpuset "$subtree_control" || fail "cpuset remains unavailable to $label"
+}
+
+enable_cpuset user_service "$user_service"
+benchexec_slice=$user_service/benchexec.slice
+if test -d "$benchexec_slice"; then
+	printf 'benchexec_slice_present=true\n' >> "$evidence"
+	enable_cpuset benchexec_slice "$benchexec_slice"
+else
+	printf 'benchexec_slice_present=false\n' >> "$evidence"
 fi
 
-printf 'subtree_control_after=%s\n' "$(cat "$subtree_control")" >> "$evidence"
-grep -qw cpuset "$subtree_control" || fail "cpuset remains unavailable after delegation"
 printf 'benchmarksgame-cpuset-delegation: cpuset is delegated\n'
