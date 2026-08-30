@@ -240,17 +240,17 @@ and
 
 Current development pins TypeRB `0.4.3-dev` at an exact revision. In addition
 to the existing declaration-root subset, the executable differential corpus
-now fixes shared outer Array identity across aliases and mutable parameters,
-including growth and parameter-local rebinding. The last recorded
-previous-seed result, at `0.4.1-dev`, closed exact B2/B3/B4 fixed points on
-Darwin and Linux arm64 with adjacent elapsed and RSS spreads of at most 3.54%
-and 0.36%; its platform compilers totaled 518,344 bytes. The immutable seed
-remains unchanged while the `0.4.3-dev` successor is revalidated; this does not
-imply stable Native version compatibility. See the
+fixes shared outer Array identity across aliases and mutable parameters,
+including growth and parameter-local rebinding. The immutable previous-Native
+seed reaches exact current B2/B3/B4 fixed points on Darwin and Linux arm64
+through two setup-only Go-free transitions. Candidate elapsed and RSS spreads
+are at most 1.89% and 0.18%, and the current platform compilers total 544,712
+bytes. The seed remains unchanged; this does not imply stable Native version
+compatibility. See the
 [TypeRB compatibility mapping](docs/type-rb-compatibility.md),
-[current registered revalidation](https://github.com/type-rb/type-rb-native/issues/106),
+[registered revalidation](https://github.com/type-rb/type-rb-native/issues/106),
 and
-[predecessor result](results/2026-08-30-typerb-0-4-compatibility-darwin-linux-arm64/README.md).
+[recorded result](results/2026-08-30-typerb-0-4-3-compatibility-darwin-linux-arm64/README.md).
 
 The ordinary self-hosted runtime now reclaims dynamic Strings, Arrays, and
 managed records through an exact-root non-moving collector. The registered
