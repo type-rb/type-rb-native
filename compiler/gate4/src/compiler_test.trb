@@ -1,4 +1,4 @@
-import { Gate4Compiler, Gate4Output, Gate4ProjectSources, gate4_add_module, gate4_build_symbol_index, gate4_character_in, gate4_check, gate4_compiler_new, gate4_emit_qbe, gate4_find_field, gate4_find_function_in_module, gate4_find_import_binding, gate4_find_module, gate4_find_record_in_module, gate4_find_record_type, gate4_float_literal_in_range, gate4_has_diagnostic, gate4_lex, gate4_lex_module, gate4_load_project_sources, gate4_local_find, gate4_locals_new, gate4_number_is_float, gate4_number_without_underscores, gate4_parse_module, gate4_parse_project_config, gate4_resolve, gate4_string_bucket, gate4_symbol_bucket_count } from compiler
+import { Gate4Compiler, Gate4Output, Gate4ProjectSources, gate4_add_module, gate4_build_symbol_index, gate4_character_in, gate4_check, gate4_compiler_new, gate4_emit_qbe, gate4_find_field, gate4_find_function_in_module, gate4_find_import_binding, gate4_find_module, gate4_find_record_in_module, gate4_find_record_type, gate4_float_literal_in_range, gate4_has_diagnostic, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_local_find, gate4_locals_new, gate4_number_is_float, gate4_number_without_underscores, gate4_parse_module, gate4_parse_project_config, gate4_resolve, gate4_string_bucket, gate4_symbol_bucket_count } from compiler
 import { gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage
 import trb/std/filesystem
 import trb/std/process
@@ -940,6 +940,186 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_load_string(state.diagnostic_codes, 0)).to_equal("TRBN4004")
 		expect(gate4_load_integer(state.diagnostic_lines, 0)).to_equal(3)
 		expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("push receiver is immutable")
+	end
+
+	test("checks and emits portable benchmark entry primitives") do
+		source := "import trb/std/process\nimport trb/std/math as Numeric\n\ndef main()\n\tmut first := Process.argv()\n\tfirst.push(\"local\")\n\tsecond := Process.argv()\n\tparsed := second[0].to_i()\n\troot := Numeric.sqrt(parsed)\n\ttruncated := root.to_i()\n\tputs(first.size().to_s())\n\tputs(second.size().to_s())\n\tputs(truncated.to_s())\n\tnan := Numeric.sqrt(- 1)\n\tif nan != nan\n\t\tputs(\"nan\")\n\telse\n\t\tputs(\"number\")\n\tend\n\tputs(\"+9007199254740991\".to_i().to_s())\n\tputs(\"-9007199254740991\".to_i().to_s())\n\tvalue := - 2.75\n\tputs(value.to_i().to_s())\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		emitted := gate4_emit_qbe(state)
+		expect(emitted.runtime_flags[1]).to_equal(1)
+		expect(emitted.runtime_flags[2]).to_equal(1)
+		expect(emitted.runtime_flags[3]).to_equal(1)
+		expect(emitted.runtime_flags[4]).to_equal(1)
+		qbe := gate4_output_source(emitted)
+		expect(qbe.include?("storel %process_argc, $g4_process_argc")).to_be_true()
+		expect(qbe.include?("function l $g4_process_argv()")).to_be_true()
+		expect(qbe.include?("function l $g4_string_to_integer(l %string)")).to_be_true()
+		expect(qbe.include?("function l $g4_integer_to_string(l %value)")).to_be_true()
+		expect(qbe.include?("function l $g4_float_to_integer(d %value)")).to_be_true()
+		expect(qbe.include?("=d call $sqrt(d ")).to_be_true()
+		expect(qbe.include?("=d sltof ")).to_be_true()
+		expect(qbe.include?("=l dtosi ")).to_be_true()
+		qbe_path := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe_path == nil
+			expect(true).to_be_true()
+		else
+			workspace := "/tmp/type-rb-native-gate6m-entry"
+			case FileSystem.create_directory(workspace)
+			when Result::Ok(_unit)
+			when Result::Err(_error)
+			end
+			case FileSystem.write_text(workspace + "/module.ssa", qbe)
+			when Result::Ok(_unit)
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+			end
+			case Process.run(qbe_path, ["-t", "arm64_apple", workspace + "/module.ssa"])
+			when Result::Ok(qbe_result)
+				if !qbe_result.success
+					puts(qbe_result.stderr)
+				end
+				expect(qbe_result.success).to_be_true()
+				case FileSystem.write_text(workspace + "/module.s", qbe_result.stdout)
+				when Result::Ok(_unit)
+				when Result::Err(error)
+					puts(error.operation + ": " + error.message)
+					expect(false).to_be_true()
+				end
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+			end
+			case Process.run("/usr/bin/cc", [workspace + "/module.s", "-lm", "-o", workspace + "/program"])
+			when Result::Ok(link_result)
+				if !link_result.success
+					puts(link_result.stderr)
+				end
+				expect(link_result.success).to_be_true()
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+			end
+			case Process.run(workspace + "/program", ["9"])
+			when Result::Ok(result)
+				expect(result.success).to_be_true()
+				expect(result.stdout).to_equal("2\n1\n3\nnan\n9007199254740991\n-9007199254740991\n-2\n")
+				expect(result.stderr).to_equal("")
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+			end
+		end
+	end
+
+	test("preserves portable numeric conversion failure classes") do
+		source := "import trb/std/process\nimport trb/std/math\n\ndef main()\n\tmode := Process.argv()[0]\n\tif mode == \"invalid-format\"\n\t\tputs(\"12x\".to_i().to_s())\n\t\treturn\n\tend\n\tif mode == \"sign-only\"\n\t\tputs(\"+\".to_i().to_s())\n\t\treturn\n\tend\n\tif mode == \"integer-range\"\n\t\tputs(\"9007199254740992\".to_i().to_s())\n\t\treturn\n\tend\n\tif mode == \"nan\"\n\t\tputs(Math.sqrt(- 1).to_i().to_s())\n\t\treturn\n\tend\n\tif mode == \"infinity\"\n\t\tzero := 0.0\n\t\tinfinite := 1.0 / zero\n\t\tputs(infinite.to_i().to_s())\n\t\treturn\n\tend\n\tif mode == \"float-range\"\n\t\toutside := 9007199254740992.0\n\t\tputs(outside.to_i().to_s())\n\t\treturn\n\tend\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		checked := gate4_check(state)
+		if !checked
+			puts(gate4_load_integer(state.diagnostic_lines, 0).to_s() + ": " + gate4_load_string(state.diagnostic_messages, 0))
+		end
+		expect(checked).to_be_true()
+		qbe_path := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe_path == nil
+			expect(true).to_be_true()
+		else
+			workspace := "/tmp/type-rb-native-gate6m-failures"
+			case FileSystem.create_directory(workspace)
+			when Result::Ok(_unit)
+			when Result::Err(_error)
+			end
+			case FileSystem.write_text(workspace + "/module.ssa", gate4_output_source(gate4_emit_qbe(state)))
+			when Result::Ok(_unit)
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+			end
+			case Process.run(qbe_path, ["-t", "arm64_apple", workspace + "/module.ssa"])
+			when Result::Ok(qbe_result)
+				if !qbe_result.success
+					puts(qbe_result.stderr)
+				end
+				expect(qbe_result.success).to_be_true()
+				case FileSystem.write_text(workspace + "/module.s", qbe_result.stdout)
+				when Result::Ok(_unit)
+				when Result::Err(error)
+					puts(error.operation + ": " + error.message)
+					expect(false).to_be_true()
+				end
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+			end
+			case Process.run("/usr/bin/cc", [workspace + "/module.s", "-lm", "-o", workspace + "/program"])
+			when Result::Ok(link_result)
+				if !link_result.success
+					puts(link_result.stderr)
+				end
+				expect(link_result.success).to_be_true()
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+			end
+			modes := ["invalid-format", "sign-only", "integer-range", "nan", "infinity", "float-range"]
+			expected := ["panic: invalid Integer\n", "panic: invalid Integer\n", "panic: Integer is outside the portable range\n", "panic: Float cannot be converted to Integer\n", "panic: Float cannot be converted to Integer\n", "panic: Integer is outside the portable range\n"]
+			mut index := 0
+			while index < modes.size()
+				case Process.run(workspace + "/program", [modes[index]])
+				when Result::Ok(result)
+					expect(result.success).to_be_false()
+					expect(result.stdout).to_equal("")
+					expect(result.stderr).to_equal(expected[index])
+				when Result::Err(error)
+					puts(error.operation + ": " + error.message)
+					expect(false).to_be_true()
+				end
+				index += 1
+			end
+		end
+	end
+
+	test("rejects unsupported benchmark entry boundaries deterministically") do
+		unsupported_package := gate4_load_file_root(
+			"import trb/std/random\n\ndef main()\n\treturn\nend\n",
+			"/tmp/gate6m-unsupported-package.trb",
+		)
+		expect(gate4_load_string(unsupported_package.diagnostic_codes, 0)).to_equal("TRBN4003")
+		expect(gate4_load_string(unsupported_package.diagnostic_messages, 0)).to_equal("package imports are not supported by this compiler subset")
+
+		member_source := "import trb/std/process\n\ndef main()\n\tvalue := Process.environment()\n\treturn\nend\n"
+		mut member_state := gate4_compiler_new(member_source.size() + 1)
+		expect(gate4_lex(member_state, member_source)).to_be_true()
+		expect(gate4_parse_module(member_state, 0, member_state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(member_state)).to_be_true()
+		expect(gate4_check(member_state)).to_be_false()
+		expect(gate4_load_string(member_state.diagnostic_codes, 0)).to_equal("TRBN4004")
+		expect(gate4_load_string(member_state.diagnostic_messages, 0)).to_equal("unsupported standard package member")
+
+		type_source := "import trb/std/math\n\ndef main()\n\tvalue := Math.sqrt(\"nine\")\n\treturn\nend\n"
+		mut type_state := gate4_compiler_new(type_source.size() + 1)
+		expect(gate4_lex(type_state, type_source)).to_be_true()
+		expect(gate4_parse_module(type_state, 0, type_state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(type_state)).to_be_true()
+		expect(gate4_check(type_state)).to_be_false()
+		expect(gate4_load_string(type_state.diagnostic_codes, 0)).to_equal("TRBN4004")
+		expect(gate4_load_string(type_state.diagnostic_messages, 0)).to_equal("expected Float, found String")
+
+		arity_source := "import trb/std/process\n\ndef main()\n\tvalue := Process.argv(1)\n\treturn\nend\n"
+		mut arity_state := gate4_compiler_new(arity_source.size() + 1)
+		expect(gate4_lex(arity_state, arity_source)).to_be_true()
+		expect(gate4_parse_module(arity_state, 0, arity_state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(arity_state)).to_be_true()
+		expect(gate4_check(arity_state)).to_be_false()
+		expect(gate4_load_string(arity_state.diagnostic_codes, 0)).to_equal("TRBN4004")
+		expect(gate4_load_string(arity_state.diagnostic_messages, 0)).to_equal("call argument count does not match Process")
 	end
 
 	test("emits direct binary64 cells for Float Arrays") do
