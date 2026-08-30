@@ -579,6 +579,14 @@ current fixed-point identity remain separate. The
 passes the same two-warmup, seven-observation, 25%, 2x, 310,000-byte, and
 620,000-byte bounds without publishing a replacement seed.
 
+The successor revalidation is registered in
+[issue #106](https://github.com/type-rb/type-rb-native/issues/106). It advances
+the exact reference to TypeRB `0.4.3-dev`, adds an executable differential for
+shared Array identity and parameter-local rebinding, and reruns the complete
+selected-reference corpus plus ordinary previous-seed fixed points on Darwin
+and Linux arm64. The immutable seed, Native versioning, and registered time,
+RSS, and size boundaries remain independent of the reference revision.
+
 The ordinary-path runtime memory stability stage is registered in
 [issue #104](https://github.com/type-rb/type-rb-native/issues/104). It replaces
 process-lifetime allocation for supported Strings, Arrays, and managed records

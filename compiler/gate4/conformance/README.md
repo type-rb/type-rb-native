@@ -23,7 +23,10 @@ The valid cases cover:
 - contextual and inferred Float Arrays, Integer element widening, parameters,
   results, records, aliases, growth, positive and negative indexing, mutation,
   compound arithmetic, and nested Float Arrays in
-  `valid/float-arrays.trb`, starting at its updated Native B2; and
+  `valid/float-arrays.trb`, starting at its updated Native B2;
+- shared outer Integer Array identity across aliases and mutable parameters,
+  including growth, element mutation, and parameter-local rebinding in
+  `valid/array-aliases.trb`; and
 - the compiler source closure itself, exercised by the bootstrap test outside
   this directory.
 

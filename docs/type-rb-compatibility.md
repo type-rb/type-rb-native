@@ -2,16 +2,46 @@
 
 TypeRB Native follows exact reference revisions while it is experimental. The
 current source and semantic oracle is TypeRB
-`7fcc1d7f8978d5335368c1d4d3be4c79db86d995` (`0.4.1-dev`), recorded in
+`2cf63e95b4fc1a92f6094e2c89c47fb75262adae` (`0.4.3-dev`), recorded in
 `TYPE_RB_REVISION`. This is an exact development pin, not a supported version
 range.
 
-The compatibility work was registered in
+The declaration-import compatibility work was registered in
 [issue #97](https://github.com/type-rb/type-rb-native/issues/97). Its
 [Darwin/Linux arm64 result](../results/2026-08-30-typerb-0-4-compatibility-darwin-linux-arm64/README.md)
-passes the selected-reference, previous-seed, exact fixed-point, process,
-elapsed-time, peak-RSS, and compiler-size criteria. This document records the
-implementation boundary independently of those measurements.
+passes the selected `0.4.1-dev` reference, previous-seed, exact fixed-point,
+process, elapsed-time, peak-RSS, and compiler-size criteria. The `0.4.3-dev`
+successor is registered in
+[issue #106](https://github.com/type-rb/type-rb-native/issues/106). This
+document records the implementation boundary independently of those
+measurements.
+
+## TypeRB 0.4.3 semantic revalidation
+
+The selected revision includes the TypeRB 0.4.1 and 0.4.2 releases, owner-
+qualified Web API changes outside the current self-hosted subset, shared Array
+alias fixes in the Go backend, nested Go runtime-helper propagation, and the
+distinction between Nil values and Void results.
+
+`compiler/gate4/conformance/valid/array-aliases.trb` turns the relevant Array
+change into an executable compiler differential. It grows one Integer Array
+through two aliases, mutates it through a mutable parameter, rebinds that
+parameter to a different Array, and then mutates the original through the
+second caller alias. Recovery and current Native compiler generations plus the
+same TypeRB-authored compiler built by the selected Go reference must emit
+byte-identical QBE and produce the same output. This preserves three portable
+rules:
+
+- assigning or passing an Array preserves its outer reference identity;
+- destructive growth and element updates remain visible through every alias;
+- rebinding a `mut` parameter changes only that local binding and never writes
+  a replacement Array into the caller binding.
+
+The selected reference checker also distinguishes a Nil value from a Void
+result. Repository-owned source is formatted, checked, and tested by that
+checker. Native does not infer full nullable or Void compatibility from this
+pin: unsupported language surface remains outside the self-hosted subset and
+must still fail explicitly.
 
 ## Current declaration-import mapping
 
@@ -59,7 +89,9 @@ The reference pin and a Native bootstrap seed answer different questions:
   replacing or relabelling the seed.
 
 A later seed is warranted only by a concrete distribution need demonstrated by
-the completed compatibility chain. The existing attested seed reaches the
-current exact fixed point on both targets, so no replacement seed is warranted
-merely to align revision strings. Native SemVer, TypeRB compatibility ranges,
-installation policy, and support promises remain deferred.
+the compatibility chain. The existing attested seed reached the exact
+`0.4.1-dev` fixed point on both targets; the `0.4.3-dev` revalidation must prove
+that it still reaches the new exact fixed point before drawing the same
+conclusion. Revision alignment alone does not warrant replacing or relabelling
+the seed. Native SemVer, TypeRB compatibility ranges, installation policy, and
+support promises remain deferred.
