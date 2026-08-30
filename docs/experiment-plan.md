@@ -590,7 +590,12 @@ sampling, and retains ASan/LSan and Valgrind evidence. Final live managed bytes,
 allocation accounting, a 4 MiB managed-heap ceiling, 64 MiB RSS ceiling, both
 registered RSS-trend limits, the 5x calibration guardrail, compiler sizes, and
 existing fixed points are mandatory. See the
-[runtime memory stability plan](runtime-memory-stability.md).
+[runtime memory stability plan](runtime-memory-stability.md). The
+[recorded result](../results/2026-08-30-runtime-memory-stability-darwin-linux-arm64/README.md)
+passes every frozen Stage 1 criterion: 42,300,000,000 managed bytes are
+allocated and reclaimed, final live bytes and both RSS trend values are zero,
+and ASan/LSan, Valgrind, exact fixed-point, process, and compiler-size checks
+pass. Persistent Web and Job resource lifecycles remain deferred.
 
 This gate is not authorization to ship. It evaluates:
 

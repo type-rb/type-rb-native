@@ -117,9 +117,15 @@ instrumenting QBE instructions.
 
 ## Current status
 
-The ordinary managed path, deterministic smoke harness, independent-oracle
-paths, and formal workflow are implemented. A dated result is added only after
-the reviewed workflow completes with all frozen criteria satisfied. Persistent
-service lifecycles, concurrent mutation, closure cycles in the self-hosted
-subset, finalizers, weak references, and non-memory resource cleanup remain
-separate work.
+The reviewed
+[Darwin/Linux arm64 result](../results/2026-08-30-runtime-memory-stability-darwin-linux-arm64/README.md)
+passes every frozen Stage 1 criterion. The 300,000,000-iteration production
+soak allocates and reclaims 42,300,000,000 managed bytes, ends with zero live
+managed bytes, and records zero RSS growth or fitted slope. ASan/LSan reports no
+finding, while Valgrind reports no lost or possibly lost allocation and only
+the enumerated 512-byte globally reachable exact-root buffer.
+
+Persistent service lifecycles, concurrent mutation, closure cycles in the
+self-hosted subset, finalizers, weak references, and non-memory resource
+cleanup remain separate work. The bounded allocation result must not be
+presented as proof for those later surfaces.

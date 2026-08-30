@@ -249,7 +249,18 @@ unchanged; this does not imply stable Native version compatibility. See the
 and
 [recorded result](results/2026-08-30-typerb-0-4-compatibility-darwin-linux-arm64/README.md).
 
-Upward configured project discovery, production runtime integration,
+The ordinary self-hosted runtime now reclaims dynamic Strings, Arrays, and
+managed records through an exact-root non-moving collector. The registered
+300,000,000-iteration Linux soak allocates and reclaims 42,300,000,000 managed
+bytes, ends with zero live managed bytes, and records a flat 2,347,008-byte RSS
+series. ASan/LSan and Valgrind report no lost allocation or memory error, and
+the exact Darwin/Linux compiler chains remain below the registered size bounds.
+This bounded Stage 1 result is not proof for persistent Web or Job resource
+lifecycles. See the
+[runtime memory design](docs/runtime-memory-stability.md) and
+[recorded result](results/2026-08-30-runtime-memory-stability-darwin-linux-arm64/README.md).
+
+Upward configured project discovery, persistent service runtime integration,
 package/native-library boundaries, incremental builds, toolchain discovery,
 debugging, maintenance evaluation, and additional primary targets remain in
 the broader Gate 6 product-feasibility scope.
@@ -353,6 +364,7 @@ repository.
 - [Gate 2 QBE Darwin arm64 result](results/2026-08-28-gate2-qbe-darwin-arm64/README.md)
 - [Gate 3 managed runtime](docs/gate-3-managed-runtime.md)
 - [Ordinary runtime memory stability](docs/runtime-memory-stability.md)
+- [Ordinary runtime memory stability Darwin/Linux arm64 result](results/2026-08-30-runtime-memory-stability-darwin-linux-arm64/README.md)
 - [Gate 4 behavioral self-hosting](docs/gate-4-self-hosting.md)
 - [Gate 5 matched self-hosted compiler baseline](docs/gate-5-matched-compiler.md)
 - [Gate 5 matched compiler Darwin arm64 result](results/2026-08-29-gate5-matched-compiler-darwin-arm64/README.md)
