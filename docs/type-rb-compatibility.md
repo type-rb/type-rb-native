@@ -84,9 +84,11 @@ The reference pin and a Native bootstrap seed answer different questions:
   accept.
 - The immutable
   [`bootstrap-seed-2026-08-30`](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-08-30)
-  remains unchanged. Compatibility is established by building current B2 from
-  that previous Native B1 and then proving exact B2/B3/B4 fixed points, not by
-  replacing or relabelling the seed.
+  remains unchanged. When its embedded runtime or link policy predates current
+  source, compatibility uses separately identified setup-only Native
+  transitions before proving exact current B2/B3/B4 fixed points. The
+  transitions remain Go-free and outside candidate timing and size claims;
+  they do not replace or relabel the seed.
 
 A later seed is warranted only by a concrete distribution need demonstrated by
 the compatibility chain. The existing attested seed reached the exact
