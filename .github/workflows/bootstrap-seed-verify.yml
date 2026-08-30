@@ -133,17 +133,123 @@ jobs:
           printf 'verification_seconds=%s\n' "$((finished - started))" > "$RUNNER_TEMP/verification-time.txt"
           chmod 0755 "$RUNNER_TEMP/release/$TARGET_ASSET"
 
+      - name: Build setup-only current-source transitions
+        id: transition
+        if: inputs.compiler_source == 'workflow-revision'
+        env:
+          PUBLISHED_SEED: ${{ runner.temp }}/release/${{ matrix.asset }}
+          PROFILE: ${{ matrix.profile }}
+        run: |
+          repository_root="$GITHUB_WORKSPACE/.bootstrap-verifier"
+          compiler_entry="$repository_root/compiler/gate4/src/compiler.trb"
+          mkdir -p \
+            "$RUNNER_TEMP/transition/first" \
+            "$RUNNER_TEMP/transition/current-runtime" \
+            "$RUNNER_TEMP/transition-evidence"
+          started=$(date +%s)
+          if test "$PROFILE" = linux-arm64-v0; then
+            strace -f -e trace=process -o "$RUNNER_TEMP/transition-evidence/first-process.trace" \
+              "$PUBLISHED_SEED" build "$compiler_entry" \
+                --output "$RUNNER_TEMP/transition/first/compiler" \
+                --qbe "${{ steps.qbe.outputs.path }}" \
+                --cc /usr/bin/cc \
+                --target "$PROFILE" \
+                > "$RUNNER_TEMP/transition-evidence/first.stdout" \
+                2> "$RUNNER_TEMP/transition-evidence/first.stderr"
+            test -x "$RUNNER_TEMP/transition/first/compiler"
+            strace -f -e trace=process -o "$RUNNER_TEMP/transition-evidence/current-runtime-process.trace" \
+              "$RUNNER_TEMP/transition/first/compiler" build "$compiler_entry" \
+                --output "$RUNNER_TEMP/transition/current-runtime/compiler" \
+                --qbe "${{ steps.qbe.outputs.path }}" \
+                --cc /usr/bin/cc \
+                --target "$PROFILE" \
+                > "$RUNNER_TEMP/transition-evidence/current-runtime.stdout" \
+                2> "$RUNNER_TEMP/transition-evidence/current-runtime.stderr"
+            grep execve "$RUNNER_TEMP/transition-evidence/first-process.trace" \
+              > "$RUNNER_TEMP/transition-evidence/process-inventory.txt"
+            grep execve "$RUNNER_TEMP/transition-evidence/current-runtime-process.trace" \
+              >> "$RUNNER_TEMP/transition-evidence/process-inventory.txt"
+            if grep -E 'execve\("[^"]*/(go|trb|sh|bash|zsh)"' \
+              "$RUNNER_TEMP/transition-evidence/first-process.trace" \
+              "$RUNNER_TEMP/transition-evidence/current-runtime-process.trace" > /dev/null; then
+              printf 'setup transition launched a forbidden executable\n' >&2
+              exit 1
+            fi
+          else
+            "$PUBLISHED_SEED" build "$compiler_entry" \
+              --output "$RUNNER_TEMP/transition/first/compiler" \
+              --qbe "${{ steps.qbe.outputs.path }}" \
+              --cc /usr/bin/cc \
+              --target "$PROFILE" \
+              > "$RUNNER_TEMP/transition-evidence/first.stdout" \
+              2> "$RUNNER_TEMP/transition-evidence/first.stderr"
+            test -x "$RUNNER_TEMP/transition/first/compiler"
+            "$RUNNER_TEMP/transition/first/compiler" build "$compiler_entry" \
+              --output "$RUNNER_TEMP/transition/current-runtime/compiler" \
+              --qbe "${{ steps.qbe.outputs.path }}" \
+              --cc /usr/bin/cc \
+              --target "$PROFILE" \
+              > "$RUNNER_TEMP/transition-evidence/current-runtime.stdout" \
+              2> "$RUNNER_TEMP/transition-evidence/current-runtime.stderr"
+            {
+              printf 'setup controller: workflow shell\n'
+              printf 'first compiler: published Native seed\n'
+              printf 'second compiler: first current-source transition\n'
+              printf 'compiler child boundary: %s\n' '${{ steps.qbe.outputs.path }}'
+              printf 'compiler child boundary: %s\n' /usr/bin/cc
+              printf 'forbidden compiler children: Go, reference trb, recovery compiler, shell\n'
+            } > "$RUNNER_TEMP/transition-evidence/process-inventory.txt"
+          fi
+          finished=$(date +%s)
+          test -x "$RUNNER_TEMP/transition/current-runtime/compiler"
+          test ! -s "$RUNNER_TEMP/transition-evidence/first.stdout"
+          test ! -s "$RUNNER_TEMP/transition-evidence/first.stderr"
+          test ! -s "$RUNNER_TEMP/transition-evidence/current-runtime.stdout"
+          test ! -s "$RUNNER_TEMP/transition-evidence/current-runtime.stderr"
+          chmod 0755 \
+            "$RUNNER_TEMP/transition/first/compiler" \
+            "$RUNNER_TEMP/transition/current-runtime/compiler"
+          {
+            printf 'elapsed_seconds=%s\n' "$((finished - started))"
+            printf 'compiler_source=%s\n' "$compiler_entry"
+            printf 'compiler_source_revision=%s\n' "$(git -C "$repository_root" rev-parse HEAD)"
+            printf 'profile=%s\n' "$PROFILE"
+            printf 'qbe=%s\n' '${{ steps.qbe.outputs.path }}'
+            printf 'cc=%s\n' /usr/bin/cc
+            printf 'published_seed_size=%s\n' "$(wc -c < "$PUBLISHED_SEED" | tr -d ' ')"
+            printf 'first_transition_size=%s\n' "$(wc -c < "$RUNNER_TEMP/transition/first/compiler" | tr -d ' ')"
+            printf 'current_runtime_transition_size=%s\n' "$(wc -c < "$RUNNER_TEMP/transition/current-runtime/compiler" | tr -d ' ')"
+          } > "$RUNNER_TEMP/transition-evidence/identities.txt"
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum \
+              "$PUBLISHED_SEED" \
+              "$RUNNER_TEMP/transition/first/compiler" \
+              "$RUNNER_TEMP/transition/current-runtime/compiler" \
+              > "$RUNNER_TEMP/transition-evidence/SHA256SUMS"
+          else
+            shasum -a 256 \
+              "$PUBLISHED_SEED" \
+              "$RUNNER_TEMP/transition/first/compiler" \
+              "$RUNNER_TEMP/transition/current-runtime/compiler" \
+              > "$RUNNER_TEMP/transition-evidence/SHA256SUMS"
+          fi
+
       - name: Close the ordinary previous-Native chain
         id: chain
         run: |
           repository_root="$GITHUB_WORKSPACE"
+          compiler_input="$RUNNER_TEMP/release/${{ matrix.asset }}"
+          input_role=ordinary
           if test "${{ inputs.compiler_source }}" = workflow-revision; then
             repository_root="$GITHUB_WORKSPACE/.bootstrap-verifier"
+            compiler_input="$RUNNER_TEMP/transition/current-runtime/compiler"
+            input_role=transition
           fi
           mkdir -p "$RUNNER_TEMP/package"
           /bin/sh .bootstrap-verifier/tools/bootstrap-seed.sh \
             --mode previous \
-            --input "$RUNNER_TEMP/release/${{ matrix.asset }}" \
+            --input "$compiler_input" \
+            --input-role "$input_role" \
             --qbe "${{ steps.qbe.outputs.path }}" \
             --cc /usr/bin/cc \
             --profile "${{ matrix.profile }}" \
@@ -190,6 +296,15 @@ jobs:
         with:
           name: bootstrap-seed-published-evidence-${{ inputs.compiler_source }}-${{ matrix.target }}
           path: ${{ runner.temp }}/bootstrap-evidence
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload setup-transition evidence
+        if: always() && steps.transition.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bootstrap-seed-setup-transition-${{ inputs.compiler_source }}-${{ matrix.target }}
+          path: ${{ runner.temp }}/transition-evidence
           if-no-files-found: error
           retention-days: 30
 

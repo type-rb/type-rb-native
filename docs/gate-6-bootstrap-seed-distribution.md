@@ -199,10 +199,17 @@ does not rewrite a published seed. Both revisions are retained in evidence.
 The workflow also has an explicit `workflow-revision` source mode for a later
 compatibility revalidation. That mode still verifies the release tag,
 manifest, checksums, and attestations before executing the downloaded seed, but
-uses compiler source and fixtures from the exact workflow revision. Evidence
-records the seed source, newer compiler source, generated compiler, and new
-fixed-point QBE as separate identities. The default remains `release-tag`, so
-the historical release-integrity procedure does not silently change meaning.
+uses compiler source and fixtures from the exact workflow revision. When that
+source contains a newer embedded runtime or link policy, the workflow first
+builds two setup-only current-source transitions: the first introduces the
+current TypeRB-authored emitter through the published seed runtime, and the
+second carries the current embedded runtime. Both are Go-free, separately
+identified, process-audited, and excluded from candidate timing and size
+claims. The second transition builds candidate B2; B2, B3, and B4 must still
+converge to exact executable and QBE bytes. Evidence records the seed source,
+newer compiler source, transitions, generated compiler, and new fixed-point QBE
+as separate identities. The default remains `release-tag`, so the historical
+release-integrity procedure does not silently change meaning.
 
 ## Deferred scope
 

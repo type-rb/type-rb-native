@@ -583,9 +583,12 @@ The successor revalidation is registered in
 [issue #106](https://github.com/type-rb/type-rb-native/issues/106). It advances
 the exact reference to TypeRB `0.4.3-dev`, adds an executable differential for
 shared Array identity and parameter-local rebinding, and reruns the complete
-selected-reference corpus plus ordinary previous-seed fixed points on Darwin
-and Linux arm64. The immutable seed, Native versioning, and registered time,
-RSS, and size boundaries remain independent of the reference revision.
+selected-reference corpus plus previous-seed fixed points on Darwin and Linux
+arm64. Because the immutable seed predates the current embedded runtime and
+link policy, two separately identified Go-free setup transitions carry current
+source and runtime before candidate B2. Candidate B2/B3/B4 exactness and all
+registered time, RSS, process, and size boundaries remain unchanged and
+independent of the reference revision.
 
 The ordinary-path runtime memory stability stage is registered in
 [issue #104](https://github.com/type-rb/type-rb-native/issues/104). It replaces
