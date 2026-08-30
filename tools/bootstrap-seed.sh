@@ -2,8 +2,8 @@
 
 set -eu
 
-ROOT_QBE_SIZE=658639
-ROOT_QBE_SHA256=62db3c31527a670c3050051a9fa27bf142b6c5deaab81ef8234104bd467aa95a
+INITIAL_ROOT_QBE_SIZE=658639
+INITIAL_ROOT_QBE_SHA256=62db3c31527a670c3050051a9fa27bf142b6c5deaab81ef8234104bd467aa95a
 MAX_COMPILER_SIZE=310000
 
 usage() {
@@ -217,8 +217,8 @@ b3=$workspace/b3/compiler
 b4=$workspace/b4/compiler
 
 if test "$mode" = initial; then
-	test "$(file_size "$input")" -eq "$ROOT_QBE_SIZE" || fail "root QBE size differs"
-	test "$(sha256 "$input")" = "$ROOT_QBE_SHA256" || fail "root QBE digest differs"
+	test "$(file_size "$input")" -eq "$INITIAL_ROOT_QBE_SIZE" || fail "root QBE size differs"
+	test "$(sha256 "$input")" = "$INITIAL_ROOT_QBE_SHA256" || fail "root QBE digest differs"
 	assembly=$workspace/b1/compiler.s
 	"$qbe" -t "$qbe_target" -o "$assembly" "$input"
 	if test "$os" = darwin; then
@@ -244,13 +244,18 @@ cmp "$b3" "$b4" >/dev/null || fail "B3 and B4 differ"
 for compiler in "$b2" "$b3" "$b4"; do
 	"$compiler" check "$compiler_entry"
 	"$compiler" emit-qbe "$compiler_entry" > "$compiler.fixed-point.ssa"
-	test "$(file_size "$compiler.fixed-point.ssa")" -eq "$ROOT_QBE_SIZE" ||
-		fail "compiler fixed-point QBE size differs"
-	test "$(sha256 "$compiler.fixed-point.ssa")" = "$ROOT_QBE_SHA256" ||
-		fail "compiler fixed-point QBE digest differs"
 done
 cmp "$b2.fixed-point.ssa" "$b3.fixed-point.ssa" >/dev/null || fail "B2/B3 QBE differs"
 cmp "$b3.fixed-point.ssa" "$b4.fixed-point.ssa" >/dev/null || fail "B3/B4 QBE differs"
+
+fixed_point_qbe_size=$(file_size "$b4.fixed-point.ssa")
+fixed_point_qbe_sha256=$(sha256 "$b4.fixed-point.ssa")
+if test "$mode" = initial; then
+	test "$fixed_point_qbe_size" -eq "$INITIAL_ROOT_QBE_SIZE" ||
+		fail "initial compiler fixed-point QBE size differs"
+	test "$fixed_point_qbe_sha256" = "$INITIAL_ROOT_QBE_SHA256" ||
+		fail "initial compiler fixed-point QBE digest differs"
+fi
 
 verify_program_case() {
 	compiler=$1
@@ -431,14 +436,16 @@ measure_build() {
 		/usr/bin/time -p -l \
 			"$seed" build "$compiler_entry" --output "$measured_output" \
 			--qbe "$qbe" --cc "$cc" --target "$profile" \
-			> "$stdout_log" 2> "$time_log"
+			> "$stdout_log" 2> "$time_log" ||
+			fail "measured build failed for $stage observation $iteration"
 		elapsed=$(awk '$1 == "real" { print $2; exit }' "$time_log")
 		rss=$(awk '/maximum resident set size/ { print $1; exit }' "$time_log")
 	else
 		/usr/bin/time -f '%e %M' -o "$time_log" \
 			"$seed" build "$compiler_entry" --output "$measured_output" \
 			--qbe "$qbe" --cc "$cc" --target "$profile" \
-			> "$stdout_log" 2> "$measurement_directory/stderr"
+			> "$stdout_log" 2> "$measurement_directory/stderr" ||
+			fail "measured build failed for $stage observation $iteration"
 		elapsed=$(awk '{ print $1 }' "$time_log")
 		rss_kib=$(awk '{ print $2 }' "$time_log")
 		rss=$((rss_kib * 1024))
@@ -558,10 +565,32 @@ require_no_intermediates "$trace_directory"
 	printf 'profile=%s\n' "$profile"
 	printf 'runner_image=%s\n' "$runner_image"
 	printf 'repository_revision=%s\n' "$(git -C "$repository_root" rev-parse HEAD)"
+	printf 'type_rb_revision=%s\n' "$(tr -d '\n' < "$repository_root/TYPE_RB_REVISION")"
 	uname -a
 	"$cc" --version
 	"$qbe" -h
 } > "$evidence/environment.txt" 2>&1
+
+if test "$mode" = initial; then
+	input_kind=registered-fixed-point-qbe
+else
+	input_kind=previous-native-compiler
+fi
+{
+	printf 'input_kind=%s\n' "$input_kind"
+	printf 'input_size=%s\n' "$(file_size "$input")"
+	printf 'input_sha256=%s\n' "$(sha256 "$input")"
+	printf 'b1_size=%s\n' "$(file_size "$b1")"
+	printf 'b1_sha256=%s\n' "$(sha256 "$b1")"
+	printf 'b2_size=%s\n' "$(file_size "$b2")"
+	printf 'b2_sha256=%s\n' "$(sha256 "$b2")"
+	printf 'b3_size=%s\n' "$(file_size "$b3")"
+	printf 'b3_sha256=%s\n' "$(sha256 "$b3")"
+	printf 'b4_size=%s\n' "$(file_size "$b4")"
+	printf 'b4_sha256=%s\n' "$(sha256 "$b4")"
+	printf 'fixed_point_qbe_size=%s\n' "$fixed_point_qbe_size"
+	printf 'fixed_point_qbe_sha256=%s\n' "$fixed_point_qbe_sha256"
+} > "$evidence/identities.txt"
 
 {
 	printf '%s  %s\n' "$(sha256 "$input")" input
@@ -573,8 +602,11 @@ require_no_intermediates "$trace_directory"
 	printf '%s  %s\n' "$(sha256 "$b4.fixed-point.ssa")" b4/fixed-point.ssa
 } > "$evidence/SHA256SUMS"
 
+for compiler in "$b1" "$b2" "$b3" "$b4"; do
+	test "$(file_size "$compiler")" -le "$MAX_COMPILER_SIZE" ||
+		fail "compiler generation exceeds size bound: $compiler"
+done
 compiler_size=$(file_size "$b4")
-test "$compiler_size" -le "$MAX_COMPILER_SIZE" || fail "compiler asset exceeds size bound"
 compiler_sha256=$(sha256 "$b4")
 qbe_size=$(file_size "$qbe")
 qbe_sha256=$(sha256 "$qbe")
