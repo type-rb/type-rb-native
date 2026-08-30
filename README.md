@@ -20,6 +20,12 @@ of truth for the language specification, reference compiler, supported
 backends, packages, and user documentation. This repository must preserve those
 semantics; it does not define a native-only TypeRB dialect.
 
+The current implementation identity is Native `0.1.0-dev`. Native versions are
+managed independently from TypeRB versions; the strict
+[compatibility manifest](compatibility/current.json) declares only the exact
+TypeRB version and revision backed by current evidence. See
+[Native versioning and compatibility](docs/versioning.md).
+
 ## Goals
 
 - Test a native AOT pipeline without requiring the Go toolchain to compile a
@@ -359,6 +365,7 @@ repository.
 
 - [Architecture](docs/architecture.md)
 - [Development and validation plan](docs/experiment-plan.md)
+- [Native versioning and compatibility](docs/versioning.md)
 - [TypeRB compatibility mapping](docs/type-rb-compatibility.md)
 - [TypeRB 0.4 compatibility Darwin/Linux arm64 result](results/2026-08-30-typerb-0-4-compatibility-darwin-linux-arm64/README.md)
 - [Gate 1 QBE vertical slice](docs/gate-1-qbe.md)
@@ -414,6 +421,7 @@ repository.
 - [Decision 0017: Self-hosted Float Arrays](docs/decisions/0017-self-hosted-float-arrays.md)
 - [Decision 0018: Explicit configured-project executables](docs/decisions/0018-explicit-configured-project.md)
 - [Decision 0019: Experimental bootstrap seed distribution](docs/decisions/0019-experimental-bootstrap-seed-distribution.md)
+- [Decision 0020: Independent Native versioning and exact TypeRB compatibility](docs/decisions/0020-independent-native-versioning.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 

@@ -67,7 +67,14 @@ Run the Gate 0 checks from the repository root:
 trb fmt --check .
 trb check
 TYPE_RB_NATIVE_ROOT="$PWD" trb test
+python3 -m unittest tools/compatibility_manifest_test.py
+python3 tools/compatibility_manifest.py --reference-trb /path/to/pinned/trb
 ```
+
+`NATIVE_VERSION` identifies this implementation independently from TypeRB.
+When changing it, `TYPE_RB_REVISION`, the compatibility manifest, bootstrap or
+target identities, or their evidence, keep the canonical files consistent and
+follow the bump rules in [Native versioning and compatibility](docs/versioning.md).
 
 ## Backend changes
 
