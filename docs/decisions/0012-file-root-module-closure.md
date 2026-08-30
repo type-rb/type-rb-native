@@ -4,6 +4,13 @@
 
 Accepted for the Gate 6E experiment.
 
+This decision records the original measured boundary. Direct candidate
+selection remains valid when its index peer stays outside the closure; the
+current compiler additionally applies the
+[TypeRB 0.4 compatibility mapping](../type-rb-compatibility.md) when equivalent
+or conflicting peer identities enter the graph. File-root ownership and the
+explicit-closure decision remain in force.
+
 ## Context
 
 The self-hosted compiler could compile one source file, but a useful TypeRB

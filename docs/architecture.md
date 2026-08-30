@@ -262,10 +262,12 @@ See [Decision 0011](decisions/0011-linux-arm64-target-profile.md).
 
 Gate 6E adds a config-free file-root module graph without changing that process
 boundary. The TypeRB-authored compiler reads the selected entry and only its
-transitive named project imports, preserves declaration ownership per module,
-and emits one executable after the complete closure checks successfully.
+transitive project declaration imports, preserves declaration ownership per
+module, and emits one executable after the complete closure checks
+successfully. The original gate accepted only named imports; the current
+frontend also implements the bounded TypeRB 0.4 declaration-root mapping.
 Unrelated siblings, package discovery, configured projects, and the hidden
-single-source recovery adapter do not enter this graph. See
+single-source recovery adapter do not enter the original graph. See
 [Decision 0012](decisions/0012-file-root-module-closure.md).
 
 Gate 6F makes that graph reflexive: the canonical TypeRB-authored compiler is

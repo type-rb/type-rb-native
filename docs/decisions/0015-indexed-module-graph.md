@@ -4,6 +4,12 @@
 
 Accepted for the Gate 6H experiment.
 
+This decision records the original measured graph semantics. The current
+module index retains this ownership, candidate ordering, and scaling design
+while also following the later
+[TypeRB 0.4 compatibility mapping](../type-rb-compatibility.md), which rejects
+two loaded direct/index peer identities.
+
 ## Context
 
 Gate 6E established a correct config-free file-root closure, and Gate 6F made

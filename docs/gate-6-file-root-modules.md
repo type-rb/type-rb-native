@@ -15,13 +15,20 @@ run are recorded in the
 This remains an internal experiment rather than a supported project or command
 format.
 
+The direct candidate selection described below remains valid when its index
+peer never enters the file-root closure. The later
+[TypeRB 0.4 compatibility mapping](type-rb-compatibility.md) additionally lets
+one directory index resolve through either equivalent authored path and rejects
+a resolved graph containing both peer module identities.
+
 ## File-root boundary
 
-For `check SOURCE`, `emit-qbe SOURCE`, and `build SOURCE ...`, `SOURCE` is the
-entry module and its directory is the source root. The compiler loads only
-transitive named project imports. It accepts an optional `.trb` suffix, checks
-`name.trb` before `name/index.trb`, reads one snapshot per canonical module,
-and ignores unrelated siblings.
+At the recorded Gate 6E revision, `check SOURCE`, `emit-qbe SOURCE`, and
+`build SOURCE ...` treated `SOURCE` as the entry module and its directory as
+the source root. The compiler loaded only transitive named project imports. It
+accepted an optional `.trb` suffix, checked `name.trb` before
+`name/index.trb`, read one snapshot per canonical module, and ignored unrelated
+siblings.
 
 Module ownership survives parsing, resolution, checking, and emission. Imported
 records and functions resolve only through explicit bindings, same-named local
@@ -33,9 +40,9 @@ The checked-in five-module application covers nested imports, a diamond,
 directory-index fallback, records, calls, loops, Arrays, Strings, and
 same-named private functions. Its invalid sibling proves that directory
 enumeration is not part of the closure. Integration coverage also checks paths
-with spaces, direct-file precedence, optional suffixes, cycles, repeated exact
-application bytes, the optimized Go oracle, and the exact B2/B3/B4 compiler
-fixed point.
+with spaces, the then-current direct-file precedence, optional suffixes,
+cycles, repeated exact application bytes, the optimized Go oracle, and the
+exact B2/B3/B4 compiler fixed point.
 
 ## Shared emitted-code correction
 

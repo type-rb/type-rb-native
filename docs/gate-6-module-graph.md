@@ -14,6 +14,13 @@ Complete at measured revision
 Linux arm64 evidence is retained in the
 [Gate 6H result](../results/2026-08-29-gate6h-module-graph-darwin-linux-arm64/README.md).
 
+The recorded direct candidate selection remains valid when its index peer does
+not enter the file-root closure. The current graph index also preserves the
+later
+[TypeRB 0.4 declaration-import mapping](type-rb-compatibility.md), including
+equivalent directory-index identity and rejection when both peer module
+identities enter the resolved graph.
+
 On the exact 1,025-file closure, direct checking improves by 41.96%, direct QBE
 emission by 39.92%, and the complete Native build by 16.16%. Median scale RSS
 falls by 48.50%, 40.04%, and 0.18% respectively. Canonical compiler guards,
@@ -53,8 +60,8 @@ Permanent evidence covers:
 - zero-, one-, and multiple-import spans;
 - a generated 64-module predecessor chain during ordinary CI and a
   1,024-imported-module chain during formal measurement;
-- direct-file precedence, index fallback, shared dependencies, unrelated
-  siblings, module-local names, and direct and deep cycles;
+- the then-current direct-file precedence, index fallback, shared dependencies,
+  unrelated siblings, module-local names, and direct and deep cycles;
 - the complete valid, invalid, mutation, build-failure, file-root, Darwin, and
   Linux-profile corpus;
 - exact candidate B2/B3/B4 bytes and QBE, representative application identity,

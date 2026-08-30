@@ -154,25 +154,23 @@ describe("Gate 4 TypeRB frontend") do
 					"/project/src/lib/value/index.trb",
 					"/project/src/unrelated.trb",
 					"/project/src/application.trb",
-					"/project/src/lib/value.trb",
 				],
 				sources: [
-					"def configured_value(): Integer\n\treturn 7\nend\n",
+					"def configured_value(): Integer\n\treturn 42\nend\n",
 					"def unrelated_value(): Integer\n\treturn 99\nend\n",
 					"import { configured_value } from lib/value\n\ndef main()\n\tvalue := configured_value()\n\treturn\nend\n",
-					"def configured_value(): Integer\n\treturn 42\nend\n",
 				],
 				error: "",
 			),
 		)
 		expect(gate4_has_diagnostic(state)).to_be_false()
-		expect(state.module_count[0]).to_equal(4)
+		expect(state.module_count[0]).to_equal(3)
 		expect(gate4_load_string(state.module_names, 0)).to_equal("application")
-		expect(gate4_load_string(state.module_names, 1)).to_equal("lib/value")
+		expect(gate4_load_string(state.module_names, 1)).to_equal("lib/value/index")
 		expect(gate4_load_string(state.module_names, state.entry_module[0])).to_equal("application")
-		direct := gate4_find_module(state, "lib/value")
-		expect(direct >= 0).to_be_true()
-		expect(gate4_load_integer(state.import_targets, 0)).to_equal(direct)
+		indexed := gate4_find_module(state, "lib/value/index")
+		expect(indexed >= 0).to_be_true()
+		expect(gate4_load_integer(state.import_targets, 0)).to_equal(indexed)
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_true()
 
@@ -245,6 +243,173 @@ describe("Gate 4 TypeRB frontend") do
 		)
 	end
 
+	test("resolves exact aliases and unique record roots with canonical identities") do
+		mut state := gate4_load_project_sources(
+			"/project/trbconfig.jsonc",
+			"/project/src",
+			Gate4ProjectSources.new(
+				paths: [
+					"/project/src/shared/ui/data_table/index.trb",
+					"/project/src/main.trb",
+					"/project/src/services/secure_random.trb",
+					"/project/src/services/http.trb",
+				],
+				sources: [
+					"record DataTable\n\trows: Integer\nend\n",
+					"import { Response as WebResponse, status_code as read_status } from services/http\nimport services/secure_random as Random\nimport shared/ui/data_table\n\ndef main()\n\tresponse := WebResponse.new(status: read_status())\n\trandom := Random.new(value: response.status)\n\ttable := DataTable.new(rows: random.value)\n\treturn\nend\n",
+					"record SecureRandom\n\tvalue: Integer\nend\n",
+					"record Response\n\tstatus: Integer\nend\n\ndef status_code(): Integer\n\treturn 42\nend\n",
+				],
+				error: "",
+			),
+		)
+		expect(gate4_has_diagnostic(state)).to_be_false()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		expect(gate4_load_string(state.import_declarations, 0)).to_equal("Response")
+		expect(gate4_load_string(state.import_symbols, 0)).to_equal("WebResponse")
+		expect(gate4_load_string(state.import_declarations, 1)).to_equal("status_code")
+		expect(gate4_load_string(state.import_symbols, 1)).to_equal("read_status")
+		expect(gate4_load_string(state.import_declarations, 2)).to_equal("SecureRandom")
+		expect(gate4_load_string(state.import_symbols, 2)).to_equal("Random")
+		expect(gate4_load_string(state.import_declarations, 3)).to_equal("DataTable")
+		expect(gate4_load_string(state.import_symbols, 3)).to_equal("DataTable")
+		data_table_target := gate4_load_integer(state.import_targets, 3)
+		expect(gate4_load_string(state.module_names, data_table_target)).to_equal(
+			"shared/ui/data_table/index",
+		)
+	end
+
+	test("rejects invalid declaration-root imports deterministically") do
+		zero_match := gate4_load_project_sources(
+			"/project/trbconfig.jsonc",
+			"/project/src",
+			Gate4ProjectSources.new(
+				paths: ["/project/src/main.trb", "/project/src/value.trb"],
+				sources: [
+					"import value\n\ndef main()\n\treturn\nend\n",
+					"record Other\n\tnumber: Integer\nend\n",
+				],
+				error: "",
+			),
+		)
+		expect(gate4_resolve(zero_match)).to_be_false()
+		expect(gate4_load_string(zero_match.diagnostic_messages, 0)).to_equal(
+			"import value has no record root declaration matching value",
+		)
+
+		ambiguous := gate4_load_project_sources(
+			"/project/trbconfig.jsonc",
+			"/project/src",
+			Gate4ProjectSources.new(
+				paths: ["/project/src/main.trb", "/project/src/json.trb"],
+				sources: [
+					"import json\n\ndef main()\n\treturn\nend\n",
+					"record JSON\n\tvalue: Integer\nend\n\nrecord Json\n\tvalue: Integer\nend\n",
+				],
+				error: "",
+			),
+		)
+		expect(gate4_resolve(ambiguous)).to_be_false()
+		expect(gate4_load_string(ambiguous.diagnostic_messages, 0)).to_equal(
+			"import json has multiple record root declarations matching json: JSON, Json; use an exact named import",
+		)
+
+		bare_function := gate4_load_project_sources(
+			"/project/trbconfig.jsonc",
+			"/project/src",
+			Gate4ProjectSources.new(
+				paths: ["/project/src/main.trb", "/project/src/worker.trb"],
+				sources: [
+					"import worker\n\ndef main()\n\treturn\nend\n",
+					"def worker(): Integer\n\treturn 1\nend\n",
+				],
+				error: "",
+			),
+		)
+		expect(gate4_resolve(bare_function)).to_be_false()
+		expect(gate4_load_string(bare_function.diagnostic_messages, 0)).to_equal(
+			"import worker matches only a top-level function; use an exact named import",
+		)
+
+		unused_alias := gate4_load_project_sources(
+			"/project/trbconfig.jsonc",
+			"/project/src",
+			Gate4ProjectSources.new(
+				paths: ["/project/src/main.trb", "/project/src/value.trb"],
+				sources: [
+					"import value as Renamed\n\ndef main()\n\treturn\nend\n",
+					"record Value\n\tnumber: Integer\nend\n",
+				],
+				error: "",
+			),
+		)
+		expect(gate4_resolve(unused_alias)).to_be_true()
+		expect(gate4_check(unused_alias)).to_be_false()
+		expect(gate4_load_string(unused_alias.diagnostic_messages, 0)).to_equal(
+			"unused import Renamed",
+		)
+
+		duplicate_identity := gate4_load_project_sources(
+			"/project/trbconfig.jsonc",
+			"/project/src",
+			Gate4ProjectSources.new(
+				paths: ["/project/src/main.trb", "/project/src/value.trb"],
+				sources: [
+					"import { Value as First, Value as Second } from value\n\ndef main()\n\treturn\nend\n",
+					"record Value\n\tnumber: Integer\nend\n",
+				],
+				error: "",
+			),
+		)
+		expect(gate4_resolve(duplicate_identity)).to_be_false()
+		expect(gate4_load_string(duplicate_identity.diagnostic_messages, 0)).to_equal(
+			"declaration Value from value is already imported as First",
+		)
+
+		equivalent_index_identity := gate4_load_project_sources(
+			"/project/trbconfig.jsonc",
+			"/project/src",
+			Gate4ProjectSources.new(
+				paths: [
+					"/project/src/main.trb",
+					"/project/src/shared/data_table/index.trb",
+				],
+				sources: [
+					"import { DataTable as First } from shared/data_table\nimport { DataTable as Second } from shared/data_table/index\n\ndef main()\n\treturn\nend\n",
+					"record DataTable\n\trows: Integer\nend\n",
+				],
+				error: "",
+			),
+		)
+		expect(gate4_resolve(equivalent_index_identity)).to_be_false()
+		expect(gate4_load_string(equivalent_index_identity.diagnostic_messages, 0)).to_equal(
+			"declaration DataTable from shared/data_table/index is already imported as First",
+		)
+
+		binding_collision := gate4_load_project_sources(
+			"/project/trbconfig.jsonc",
+			"/project/src",
+			Gate4ProjectSources.new(
+				paths: [
+					"/project/src/main.trb",
+					"/project/src/first.trb",
+					"/project/src/second.trb",
+				],
+				sources: [
+					"import { First as Shared } from first\nimport { Second as Shared } from second\n\ndef main()\n\treturn\nend\n",
+					"record First\n\tnumber: Integer\nend\n",
+					"record Second\n\tnumber: Integer\nend\n",
+				],
+				error: "",
+			),
+		)
+		expect(gate4_resolve(binding_collision)).to_be_false()
+		expect(gate4_load_string(binding_collision.diagnostic_messages, 0)).to_equal(
+			"duplicate import binding Shared",
+		)
+	end
+
 	test("rejects invalid configured project bundles before checking") do
 		empty := gate4_load_project_sources(
 			"/project/trbconfig.jsonc",
@@ -273,6 +438,27 @@ describe("Gate 4 TypeRB frontend") do
 		)
 		expect(gate4_load_string(outside.diagnostic_messages, 0)).to_equal(
 			"project source is outside configured sourceDir",
+		)
+
+		conflicting_roots := gate4_load_project_sources(
+			"/project/trbconfig.jsonc",
+			"/project/src",
+			Gate4ProjectSources.new(
+				paths: [
+					"/project/src/main.trb",
+					"/project/src/lib/value.trb",
+					"/project/src/lib/value/index.trb",
+				],
+				sources: [
+					"import { Value } from lib/value\n\ndef main()\n\tvalue := Value.new(number: 1)\n\treturn\nend\n",
+					"record Value\n\tnumber: Integer\nend\n",
+					"record ValueIndex\n\tnumber: Integer\nend\n",
+				],
+				error: "",
+			),
+		)
+		expect(gate4_load_string(conflicting_roots.diagnostic_messages, 0)).to_equal(
+			"module paths lib/value/index and lib/value define the same import root",
 		)
 	end
 
