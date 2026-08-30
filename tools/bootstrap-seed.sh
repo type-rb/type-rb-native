@@ -12,6 +12,7 @@ usage: bootstrap-seed.sh --mode initial|previous --input PATH --qbe PATH --cc PA
        --profile darwin-arm64-v0|linux-arm64-v0 --runner-image LABEL
        --workspace PATH --output PATH --evidence PATH --metadata PATH
        --asset-name NAME [--repository-root PATH]
+       [--input-role ordinary|transition]
 EOF
 	exit 64
 }
@@ -74,6 +75,7 @@ evidence=
 metadata=
 asset_name=
 repository_root_override=
+input_role=ordinary
 
 while test "$#" -gt 0; do
 	case "$1" in
@@ -149,11 +151,21 @@ while test "$#" -gt 0; do
 		repository_root_override=$2
 		shift 2
 		;;
+	--input-role)
+		test "$input_role" = ordinary || usage
+		test "$#" -ge 2 || usage
+		input_role=$2
+		shift 2
+		;;
 	*) usage ;;
 	esac
 done
 
 test "$mode" = initial || test "$mode" = previous || usage
+test "$input_role" = ordinary || test "$input_role" = transition || usage
+if test "$input_role" = transition; then
+	test "$mode" = previous || usage
+fi
 test -n "$input" && test -n "$qbe" && test -n "$cc" || usage
 test -n "$profile" && test -n "$runner_image" || usage
 test -n "$workspace" && test -n "$output" && test -n "$evidence" || usage
@@ -474,13 +486,17 @@ warmup_build() {
 	done
 }
 
-warmup_build b1-b2 "$b1" "$b2"
+if test "$input_role" = ordinary; then
+	warmup_build b1-b2 "$b1" "$b2"
+fi
 warmup_build b2-b3 "$b2" "$b3"
 warmup_build b3-b4 "$b3" "$b4"
 
 iteration=1
 while test "$iteration" -le 7; do
-	measure_build b1-b2 "$iteration" "$b1" "$b2"
+	if test "$input_role" = ordinary; then
+		measure_build b1-b2 "$iteration" "$b1" "$b2"
+	fi
 	measure_build b2-b3 "$iteration" "$b2" "$b3"
 	measure_build b3-b4 "$iteration" "$b3" "$b4"
 	iteration=$((iteration + 1))
@@ -494,10 +510,8 @@ median_value() {
 		LC_ALL=C sort -n | sed -n '4p'
 }
 
-median_b1_b2_time=$(median_value b1-b2 3)
 median_b2_b3_time=$(median_value b2-b3 3)
 median_b3_b4_time=$(median_value b3-b4 3)
-median_b1_b2_rss=$(median_value b1-b2 4)
 median_b2_b3_rss=$(median_value b2-b3 4)
 median_b3_b4_rss=$(median_value b3-b4 4)
 
@@ -517,16 +531,44 @@ require_within_25_percent() {
 	}' || fail "$label adjacent medians exceed the registered bound: $first, $second, $third"
 }
 
-cat > "$evidence/medians.txt" <<EOF
+require_pair_within_25_percent() {
+	label=$1
+	first=$2
+	second=$3
+	awk -v first="$first" -v second="$second" 'BEGIN {
+		minimum = first
+		if (second < minimum) minimum = second
+		maximum = first
+		if (second > maximum) maximum = second
+		exit !(maximum <= minimum * 1.25)
+	}' || fail "$label candidate medians exceed the registered bound: $first, $second"
+}
+
+if test "$input_role" = ordinary; then
+	median_b1_b2_time=$(median_value b1-b2 3)
+	median_b1_b2_rss=$(median_value b1-b2 4)
+	cat > "$evidence/medians.txt" <<EOF
 b1-b2 elapsed_seconds=$median_b1_b2_time peak_rss_bytes=$median_b1_b2_rss
 b2-b3 elapsed_seconds=$median_b2_b3_time peak_rss_bytes=$median_b2_b3_rss
 b3-b4 elapsed_seconds=$median_b3_b4_time peak_rss_bytes=$median_b3_b4_rss
 EOF
 
-require_within_25_percent elapsed \
-	"$median_b1_b2_time" "$median_b2_b3_time" "$median_b3_b4_time"
-require_within_25_percent rss \
-	"$median_b1_b2_rss" "$median_b2_b3_rss" "$median_b3_b4_rss"
+	require_within_25_percent elapsed \
+		"$median_b1_b2_time" "$median_b2_b3_time" "$median_b3_b4_time"
+	require_within_25_percent rss \
+		"$median_b1_b2_rss" "$median_b2_b3_rss" "$median_b3_b4_rss"
+else
+	cat > "$evidence/medians.txt" <<EOF
+b1-b2 excluded=setup-only-transition
+b2-b3 elapsed_seconds=$median_b2_b3_time peak_rss_bytes=$median_b2_b3_rss
+b3-b4 elapsed_seconds=$median_b3_b4_time peak_rss_bytes=$median_b3_b4_rss
+EOF
+
+	require_pair_within_25_percent elapsed \
+		"$median_b2_b3_time" "$median_b3_b4_time"
+	require_pair_within_25_percent rss \
+		"$median_b2_b3_rss" "$median_b3_b4_rss"
+fi
 
 trace_directory=$workspace/trace
 mkdir -p "$trace_directory"
@@ -573,11 +615,14 @@ require_no_intermediates "$trace_directory"
 
 if test "$mode" = initial; then
 	input_kind=registered-fixed-point-qbe
+elif test "$input_role" = transition; then
+	input_kind=setup-only-native-transition
 else
 	input_kind=previous-native-compiler
 fi
 {
 	printf 'input_kind=%s\n' "$input_kind"
+	printf 'input_role=%s\n' "$input_role"
 	printf 'input_size=%s\n' "$(file_size "$input")"
 	printf 'input_sha256=%s\n' "$(sha256 "$input")"
 	printf 'b1_size=%s\n' "$(file_size "$b1")"
@@ -602,7 +647,11 @@ fi
 	printf '%s  %s\n' "$(sha256 "$b4.fixed-point.ssa")" b4/fixed-point.ssa
 } > "$evidence/SHA256SUMS"
 
-for compiler in "$b1" "$b2" "$b3" "$b4"; do
+size_candidates="$b2 $b3 $b4"
+if test "$input_role" = ordinary; then
+	size_candidates="$b1 $size_candidates"
+fi
+for compiler in $size_candidates; do
 	test "$(file_size "$compiler")" -le "$MAX_COMPILER_SIZE" ||
 		fail "compiler generation exceeds size bound: $compiler"
 done

@@ -216,6 +216,17 @@ The first collector is single-threaded and stop-the-world. Concurrency,
 generational or moving collection, finalizers, and weak references are deferred
 implementation choices rather than new language promises.
 
+The ordinary self-hosted emitter reuses that collector for its supported
+dynamic Strings, Arrays, and reference-containing records. Its current root
+representation is one exact managed-reference stack with per-function
+watermarks, loop compaction, alias roots, and managed-return preservation. It
+does not conservatively scan the machine stack. Fixed descriptors,
+Array-backing reclamation, and deterministic pacing are therefore shared by
+compiler-generated applications rather than being confined to the earlier
+snapshot adapter. Versioned statistics remain an internal
+environment-controlled test path; they do not add a portable TypeRB API. See
+the [runtime memory stability plan](runtime-memory-stability.md).
+
 Runtime semantics are shared across backend candidates. Target-specific ABI
 profiles and small shims may differ, but the runtime must not be independently
 reimplemented for every code generator.

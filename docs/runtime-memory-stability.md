@@ -1,0 +1,125 @@
+# Ordinary Runtime Memory Stability
+
+The ordinary self-hosted compiler now emits managed Strings, Arrays, and
+reference-containing records through the exact-root tracing model established
+by Gate 3. This stage closes the process-lifetime allocation policy that was
+acceptable for behavioral self-hosting but unsuitable for persistent Web and
+Job processes.
+
+The scope and thresholds were frozen publicly in
+[issue #104](https://github.com/type-rb/type-rb-native/issues/104) before the
+implementation was measured. This document describes the implementation and
+evidence path; it does not relax those criteria or claim that the experimental
+runtime is production-ready.
+
+## Runtime integration
+
+The self-hosted emitter uses a single-threaded, stop-the-world, non-moving
+mark-sweep collector. Managed objects have a 16-byte allocation header, and the
+descriptor word immediately preceding the payload carries the mark bit.
+Static String objects use a zero descriptor sentinel and are never linked into
+the heap.
+
+The compiler emits:
+
+- one exact managed-reference stack shared by allocation results, managed
+  aliases, and logical function root segments;
+- a per-function root-count watermark, loop-backedge compaction that
+  repopulates the current managed locals, and return-value preservation across
+  watermark restoration;
+- fixed descriptors containing managed field offsets and payload size;
+- distinct scalar and managed Array descriptors; and
+- a final post-`main` collection when the internal statistics switch is set.
+
+The root representation contains only compiler-proven managed references; the
+collector does not conservatively scan machine stack memory. Allocation and
+managed-return paths push their result before another collection can occur.
+Managed record-field and Array-element loads push an alias root before the
+owning container can leave the current logical segment. Parameters remain
+covered by their caller unless the callee directly reassigns its binding.
+Every emitted return shares one epilogue that restores the entry watermark and
+then re-pushes a managed result for the caller. Long-running loops restore the
+watermark and repopulate live local roots at each header, preventing root-stack
+growth across iterations.
+
+Array backing storage is included in pacing and allocation accounting, and is
+released before the Array handle. A collection leaves objects in place, so the
+QBE ABI does not require forwarding updates. The next heap target is at least
+1 MiB and otherwise twice the post-sweep live heap plus 64 KiB.
+
+The versioned `TYPE_RB_NATIVE_RUNTIME_STATS` switch is internal test machinery.
+It reports collection count, automatic collection count, cumulative allocated
+and reclaimed bytes, final live bytes, and peak managed heap to stderr after
+the authored `main` frame has returned. Ordinary programs do not emit the
+report, and TypeRB gains no source-visible GC operation.
+
+The exact-root buffer is one raw runtime allocation whose capacity follows
+maximum logical root depth rather than cumulative allocation. The registered
+workload stays at its initial 64-word, 512-byte capacity, which remains globally
+reachable until process exit. Valgrind exposes and records it explicitly rather
+than suppressing reachable memory; every managed object and every Array backing
+allocation must still be reclaimed.
+
+## Registered workload
+
+[`tools/runtime-memory-soak/workload.trb`](../tools/runtime-memory-soak/workload.trb)
+is one authored workload shared by every measurement mode. Each iteration:
+
+1. creates a dynamic String;
+2. creates and grows a four-element `Array<Integer>`;
+3. carries the String across a nested allocating call;
+4. constructs a managed record containing both references;
+5. consumes the fields through another call; and
+6. returns only an Integer checksum, dropping the last managed root.
+
+Each phase runs an allocation-idle Integer loop, prints one fixed phase marker,
+and contributes to the final checked success line. The canonical invocation is
+60 phases of 5,000,000 iterations. The harness derives the one-phase CI smoke
+and 50,000-iteration oracle input by replacing only that exact invocation.
+
+## Automated evidence
+
+[`runtime-memory-soak.sh`](../tools/runtime-memory-soak/runtime-memory-soak.sh)
+checks deterministic QBE emission, application output, collector invariants,
+runtime, compiler size, and artifact identities. The normal pull-request
+workflow runs the 5,000,000-iteration Darwin arm64 smoke after closing the
+self-hosted compiler chain.
+
+The manually dispatched
+[`runtime-memory-formal.yml`](../.github/workflows/runtime-memory-formal.yml)
+starts from the published ordinary Native seeds. Because those seeds predate
+the current emitter and embedded linker policy, each target first builds two
+setup-only, Go-free transitions from the current compiler sources. The first
+introduces the current TypeRB-authored emitter through the published seed's
+runtime; the second carries the current embedded runtime and link policy. The
+second transition then builds candidate B2, B2 builds B3, and B3 builds B4.
+Both transitions are identified separately and excluded from candidate timing
+and size claims; B2/B3/B4 compiler and QBE bytes must converge exactly on
+Darwin and Linux arm64. A future published seed containing the current runtime
+can omit these compatibility transitions. The workflow then records:
+
+- a production-linked smoke on both targets;
+- one dedicated Linux arm64 QBE output linked with Clang ASan/LSan;
+- a reduced Linux arm64 Valgrind Memcheck run with all leak classes visible;
+- the 300,000,000-iteration Linux arm64 production soak;
+- raw RSS samples every 250 ms, annotated with the latest authored phase
+  marker count;
+- first- and last-temporal-quartile median RSS after six warmup phases;
+- an ordinary least-squares RSS slope in bytes per minute;
+- exact revisions, source, tools, commands, hashes, sizes, timings, runtime
+  statistics, and process inventory; and
+- the per-target and combined stripped compiler size result.
+
+The analyzer reports both trend values independently. Passing the absolute RSS
+ceiling cannot substitute for either trend limit. The dedicated sanitizer link
+intercepts allocator and linked-toolchain behavior; it is not described as
+instrumenting QBE instructions.
+
+## Current status
+
+The ordinary managed path, deterministic smoke harness, independent-oracle
+paths, and formal workflow are implemented. A dated result is added only after
+the reviewed workflow completes with all frozen criteria satisfied. Persistent
+service lifecycles, concurrent mutation, closure cycles in the self-hosted
+subset, finalizers, weak references, and non-memory resource cleanup remain
+separate work.

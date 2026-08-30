@@ -579,6 +579,19 @@ current fixed-point identity remain separate. The
 passes the same two-warmup, seven-observation, 25%, 2x, 310,000-byte, and
 620,000-byte bounds without publishing a replacement seed.
 
+The ordinary-path runtime memory stability stage is registered in
+[issue #104](https://github.com/type-rb/type-rb-native/issues/104). It replaces
+process-lifetime allocation for supported Strings, Arrays, and managed records
+with the existing exact-root non-moving collector, without adding ownership or
+collection semantics to TypeRB. A reviewed CI smoke performs 5,000,000
+allocation iterations. A separate manual Linux arm64 workflow closes the
+current Go-free compiler chain, runs 300,000,000 iterations with 250 ms RSS
+sampling, and retains ASan/LSan and Valgrind evidence. Final live managed bytes,
+allocation accounting, a 4 MiB managed-heap ceiling, 64 MiB RSS ceiling, both
+registered RSS-trend limits, the 5x calibration guardrail, compiler sizes, and
+existing fixed points are mandatory. See the
+[runtime memory stability plan](runtime-memory-stability.md).
+
 This gate is not authorization to ship. It evaluates:
 
 - broader configured and packaged multi-module applications beyond the
@@ -593,7 +606,7 @@ It also requires all build-time, memory, runtime, binary-size, and
 toolchain-size measurements to use the self-hosted path.
 
 The ordinary compiler accepts files and projects rather than the Gate 5
-source-content adapter, uses the production managed runtime, and performs
+source-content adapter, uses the ordinary managed runtime, and performs
 external-tool orchestration through explicit measured boundaries. A previous
 Native release is the ordinary bootstrap seed; Go is not required.
 
