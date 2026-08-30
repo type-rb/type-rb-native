@@ -126,12 +126,16 @@ Go reference baseline and every active native candidate. Count frontend,
 serialization, lowering, code generation, assembly, linking, runtime, sidecar,
 and distribution costs according to `docs/experiment-plan.md`.
 
-Treat a published bootstrap tag, release, and asset set as immutable. When its
-verification procedure must advance, keep compiler source and fixtures pinned
-to the release tag, record the exact verifier revision separately, and never
-replace the seed in place. Interleave adjacent comparative measurements on
-shared runners, write medians before applying bounds, and retain evidence from
-failed as well as successful verification runs.
+Treat a published bootstrap tag, release, and asset set as immutable. Keep a
+release-integrity re-verification pinned to the release source and fixtures,
+and record the exact verifier revision separately. For a later source
+compatibility revalidation, verify that immutable seed and its provenance
+before execution, then record the newer compiler-source revision and resulting
+fixed-point identity separately from the seed's source-era root and compiler
+identity. Never replace or relabel the seed merely to align revisions.
+Interleave adjacent comparative measurements on shared runners, write medians
+before applying bounds, and retain evidence from failed as well as successful
+verification runs.
 
 When the active gate or slice passes, record and report the implemented subset,
 evidence for every exit condition, measurements, known limitations, discarded
