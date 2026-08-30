@@ -2,12 +2,12 @@
 
 set -eu
 
-CANDIDATE_REVISION=4a34ad49052cacd0b5a411b2d0846a5afe09aa97
+CANDIDATE_REVISION=97b3ac2aa1d88cbb7782602589ad70686593ddab
 TYPE_RB_REVISION=2cf63e95b4fc1a92f6094e2c89c47fb75262adae
 TYPE_RB_VERSION=0.4.3-dev
 PUBLISHED_SEED_SIZE=241488
 PUBLISHED_SEED_SHA256=b4307c244edc9e4da620f2a7c1b03a733e575da032efefae615f9edf75048a37
-CANDIDATE_FIXED_POINT_QBE_SHA256=8ccd78fedd787e20494cf73b81a02e8ef71af08362bbedcb4d63a63658eb6ded
+CANDIDATE_FIXED_POINT_QBE_SHA256=7018b68a348cd73e8268dd2e610e0e82308c58c6bd688266e98b4089f5448d9f
 PORTABLE_ENTRY_QBE_SHA256=9e885e1d7dc973e2b28ed04fedf56f166465ac3d00ffb727348c6fc5467763c3
 MAX_COMPILER_SIZE=310000
 
@@ -84,6 +84,13 @@ require_forbidden_processes_absent() {
 	fi
 }
 
+require_lld_observed() {
+	trace=$1
+	label=$2
+	grep -E 'execve\("[^"]*/ld\.lld"' "$trace" > /dev/null ||
+		fail "$label did not launch ld.lld"
+}
+
 test "$#" -eq 9 || usage
 
 candidate_root=$1
@@ -105,7 +112,7 @@ aarch64 | arm64) ;;
 *) fail "Linux arm64 is required" ;;
 esac
 
-for command_name in awk cmp cut find git grep jq nm readelf sed sha256sum strace strip; do
+for command_name in awk cmp cut find git grep jq ld.lld nm readelf sed sha256sum strace strip; do
 	command -v "$command_name" > /dev/null 2>&1 || fail "$command_name is required"
 done
 
@@ -138,7 +145,7 @@ portable_source=$candidate_root/corpus/gate6m/portable-entry/src/main.trb
 failure_config=$candidate_root/corpus/gate6m/runtime-failures/trbconfig.jsonc
 failure_source=$candidate_root/corpus/gate6m/runtime-failures/src/main.trb
 
-test "$(sha256 "$compiler_entry")" = fcc431ba0363a6190670997326b4ac9ade43c05b87db6ba28e269f07dfd6068c ||
+test "$(sha256 "$compiler_entry")" = d36afd8dbc399af25087edabfc4505bd4f18442255b0ffbd0b12b28856829727 ||
 	fail "candidate compiler entry digest differs"
 test "$(sha256 "$portable_config")" = 4b81aaacced57409eeaa8494c45ecba6fd67868f74075e768e287815cf7c6519 ||
 	fail "portable-entry config digest differs"
@@ -183,6 +190,7 @@ test -x "$runtime_transition" || fail "current-runtime setup transition did not 
 require_empty_file "$evidence/setup/current-runtime.stdout" "current-runtime setup transition wrote stdout"
 require_empty_file "$evidence/setup/current-runtime.stderr" "current-runtime setup transition wrote stderr"
 require_forbidden_processes_absent "$evidence/setup/current-runtime-process.trace" "current-runtime setup transition"
+require_lld_observed "$evidence/setup/current-runtime-process.trace" "current-runtime setup transition"
 
 {
 	grep execve "$evidence/setup/first-process.trace"
@@ -292,6 +300,7 @@ strace -f -e trace=process -o "$evidence/applications/native-build-process.trace
 require_empty_file "$evidence/applications/native-trace.stdout" "traced Native portable-entry build wrote stdout"
 require_empty_file "$evidence/applications/native-trace.stderr" "traced Native portable-entry build wrote stderr"
 require_forbidden_processes_absent "$evidence/applications/native-build-process.trace" "ordinary Native application build"
+require_lld_observed "$evidence/applications/native-build-process.trace" "ordinary Native application build"
 grep execve "$evidence/applications/native-build-process.trace" \
 	> "$evidence/applications/native-build-process-inventory.txt"
 cmp "$native_application" "$native_application_traced" > /dev/null ||
@@ -420,6 +429,7 @@ strip --strip-all -o "$workspace/go/program.stripped" "$go_application"
 	"$reference_trb" version
 	"$go_command" version
 	"$cc" --version
+	ld.lld --version
 	"$qbe" -h
 } > "$evidence/environment.txt" 2>&1
 

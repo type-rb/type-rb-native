@@ -278,6 +278,9 @@ registered fixed-point, Go-parity, memory, performance, size, and external-libm
 evidence are defined by the
 [Gate 6M plan](docs/gate-6-portable-benchmark-entry.md) and
 [Decision 0021](docs/decisions/0021-portable-benchmark-entry-primitives.md).
+The Linux arm64 build keeps the registered size bound by selecting the explicit
+LLD boundary recorded in
+[Decision 0022](docs/decisions/0022-linux-arm64-lld-linker.md).
 The reproducible Darwin procedure is implemented by the
 [TypeRB-authored measurement controller](tools/gate6m-benchmark/README.md).
 No result is claimed until that evidence is complete.
@@ -437,6 +440,7 @@ repository.
 - [Decision 0019: Experimental bootstrap seed distribution](docs/decisions/0019-experimental-bootstrap-seed-distribution.md)
 - [Decision 0020: Independent Native versioning and exact TypeRB compatibility](docs/decisions/0020-independent-native-versioning.md)
 - [Decision 0021: Portable benchmark-entry primitives](docs/decisions/0021-portable-benchmark-entry-primitives.md)
+- [Decision 0022: Linux arm64 LLD linker](docs/decisions/0022-linux-arm64-lld-linker.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 

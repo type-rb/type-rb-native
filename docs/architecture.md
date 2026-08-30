@@ -266,10 +266,12 @@ separately and it is not part of the ordinary Native-to-Native chain. See
 Gate 6D applies the same target-neutral compiler source, QBE IL, runtime
 semantics, and Native-to-Native build graph to Linux arm64. Internal versioned
 profiles select QBE's `arm64_apple` or `arm64` lowering and the corresponding
-system linker policy; they do not fork language behavior or enter the reference
-repository. Explicit selection makes the target part of the reproducibility
-record and keeps cross-platform builds from depending on silent host inference.
-See [Decision 0011](decisions/0011-linux-arm64-target-profile.md).
+external linker policy; they do not fork language behavior or enter the
+reference repository. Explicit selection makes the target part of the
+reproducibility record and keeps cross-platform builds from depending on silent
+host inference. Linux arm64 currently selects LLD through the supplied C driver.
+See [Decision 0011](decisions/0011-linux-arm64-target-profile.md) and
+[Decision 0022](decisions/0022-linux-arm64-lld-linker.md).
 
 Gate 6E adds a config-free file-root module graph without changing that process
 boundary. The TypeRB-authored compiler reads the selected entry and only its

@@ -52,7 +52,7 @@ gate6m-benchmark \
 
 `BASELINE_ROOT` must be a clean exact checkout of
 `71495bbf18f0820891ea086104ca7da808bfd25f`. `CANDIDATE_ROOT` must be a clean
-exact checkout of `4a34ad49052cacd0b5a411b2d0846a5afe09aa97`. `SEED` must be the
+exact checkout of `97b3ac2aa1d88cbb7782602589ad70686593ddab`. `SEED` must be the
 259,032-byte Darwin asset from the immutable experimental bootstrap release,
 with SHA-256
 `ef438d13598c534766334b408a39715c56ff1b69db528910ebf7d90ec7720b65`.
@@ -80,10 +80,12 @@ The workflow runs [`gate6m-linux.sh`](../gate6m-linux.sh) independently on
 Go-free setup transitions, closes the candidate B2/B3/B4 chain with the shared
 bootstrap verifier, checks target-neutral fixed-point QBE, and compares the
 portable success and runtime-failure projects with the pinned Go oracle. It
-also records Linux process traces, ELF metadata, undefined symbols, the `libm`
-and `sqrt` boundary, deterministic application bytes, and the raw compiler
-size. A final job enforces the registered 620,000-byte combined Darwin and
-Linux compiler bound.
+also requires the explicit LLD link selected by `linux-arm64-v0`, records its
+version and observed process boundary, and records ELF metadata, undefined
+symbols, the `libm` and `sqrt` boundary, deterministic application bytes, and
+the raw compiler size. A final job enforces the registered 620,000-byte
+combined Darwin and Linux compiler bound. The Linux linker choice is defined
+by [Decision 0022](../../docs/decisions/0022-linux-arm64-lld-linker.md).
 
 The formal workflow uploads raw target evidence and the aggregate size record.
 Its presence defines the reproducible procedure; a gate result is claimed only

@@ -204,6 +204,7 @@ else
 	aarch64 | arm64) ;;
 	*) fail "Linux profile requires arm64" ;;
 	esac
+	command -v ld.lld >/dev/null 2>&1 || fail "ld.lld is required on Linux"
 fi
 
 script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -236,7 +237,7 @@ if test "$mode" = initial; then
 	if test "$os" = darwin; then
 		"$cc" -x assembler "$assembly" -Wl,-dead_strip -o "$b1"
 	else
-		"$cc" -x assembler "$assembly" -Wl,--gc-sections,--strip-all -o "$b1"
+		"$cc" -x assembler "$assembly" -fuse-ld=lld -Wl,--gc-sections,--strip-all -o "$b1"
 	fi
 else
 	cp "$input" "$b1"
@@ -610,6 +611,9 @@ require_no_intermediates "$trace_directory"
 	printf 'type_rb_revision=%s\n' "$(tr -d '\n' < "$repository_root/TYPE_RB_REVISION")"
 	uname -a
 	"$cc" --version
+	if test "$os" = linux; then
+		ld.lld --version
+	fi
 	"$qbe" -h
 } > "$evidence/environment.txt" 2>&1
 

@@ -16,6 +16,11 @@ TypeRB-authored [`gate6d-benchmark`](../tools/gate6d-benchmark/README.md), and
 reviewed seven-run result pass every registered condition. This is not a
 release and does not create a supported TypeRB target.
 
+This document preserves the historical Gate 6D recipe and result. The current
+`linux-arm64-v0` linker selection was later amended to LLD by
+[Decision 0022](decisions/0022-linux-arm64-lld-linker.md); that change does not
+rewrite the recorded Gate 6D evidence.
+
 ## Target boundary
 
 The experimental build command selects the Linux profile explicitly:
