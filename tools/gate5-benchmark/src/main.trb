@@ -1,6 +1,6 @@
-import { create_directory, read_text, write_text } from trb/std/filesystem
-import { argv, run } from trb/std/process
-import { Result } from trb/std/result
+import trb/std/filesystem
+import trb/std/process
+import trb/std/result
 import trb/std/string_builder
 import { Instant } from trb/std/time
 
@@ -20,7 +20,7 @@ end
 
 def measure_process(command: String, arguments: Array<String>): Result<TimedProcess, String>
 	started := Instant.now()
-	case run(command, arguments)
+	case Process.run(command, arguments)
 	when Result::Ok(process)
 		return Result<TimedProcess, String>::Ok(
 			TimedProcess.new(
@@ -190,7 +190,7 @@ def measure_build_rss(
 	if measurement.status != 0
 		return Result<Boolean, String>::Err(candidate + " build RSS run failed")
 	end
-	mut ignored := string_builder.new()
+	mut ignored := StringBuilder.new()
 	if append_phases(ignored, candidate, iteration, measurement.stdout) != 3
 		return Result<Boolean, String>::Err(candidate + " build RSS run did not report every phase")
 	end
@@ -198,7 +198,7 @@ def measure_build_rss(
 end
 
 def read_required(path: String): Result<String, String>
-	case read_text(path)
+	case FileSystem.read_text(path)
 	when Result::Ok(source)
 		return Result<String, String>::Ok(source)
 	when Result::Err(error)
@@ -304,7 +304,7 @@ def run_normalization(
 		mut output: StringBuilder,
 	): Result<String, String>
 	normalization_workspace := workspace + "/normalized"
-	case create_directory(normalization_workspace)
+	case FileSystem.create_directory(normalization_workspace)
 	when Result::Ok(_unit)
 	when Result::Err(_error)
 	end
@@ -386,7 +386,7 @@ def record_inventory(
 		matched_go: String,
 		normalized_compiler: String,
 	): Result<Boolean, String>
-	mut inventory := string_builder.new()
+	mut inventory := StringBuilder.new()
 	inventory.append("Gate 5 process inventory\n\n")
 	inventory.append("ordinary native regeneration:\n")
 	inventory.append("  /bin/sh -> /bin/cat, B1 compiler, QBE, CC -> clang assembler, linker\n")
@@ -394,7 +394,7 @@ def record_inventory(
 	inventory.append("  measurement driver -> matched Go compiler, QBE, CC -> clang assembler, linker\n")
 	inventory.append("recovery/bootstrap only:\n")
 	inventory.append("  reference trb -> Go toolchain; reference trb -> B0; B0 -> B1\n\n")
-	case read_text(root + "/TYPE_RB_REVISION")
+	case FileSystem.read_text(root + "/TYPE_RB_REVISION")
 	when Result::Ok(revision)
 		inventory.append("pinned TypeRB revision: " + revision.strip() + "\n\n")
 	when Result::Err(error)
@@ -454,7 +454,7 @@ def record_inventory(
 	if link_probe.status != 0
 		return Result<Boolean, String>::Err("C driver process inventory failed")
 	end
-	case write_text(inventory_path, inventory.to_s())
+	case FileSystem.write_text(inventory_path, inventory.to_s())
 	when Result::Ok(_unit)
 		return Result<Boolean, String>::Ok(true)
 	when Result::Err(error)
@@ -508,7 +508,7 @@ def report_error(result: Result<Boolean, String>): Boolean
 end
 
 def main()
-	arguments := argv()
+	arguments := Process.argv()
 	if arguments.size() != 10
 		puts(
 			"usage: gate5-benchmark ROOT REFERENCE_TRB NATIVE_DRIVER QBE CC GO WORKSPACE REPETITIONS RAW_CSV INVENTORY"
@@ -529,7 +529,7 @@ def main()
 		puts("repetitions must be positive")
 		return
 	end
-	case create_directory(workspace)
+	case FileSystem.create_directory(workspace)
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		puts(error.operation + ": " + error.message)
@@ -543,7 +543,7 @@ def main()
 		puts(error)
 		return
 	end
-	mut output := string_builder.new()
+	mut output := StringBuilder.new()
 	output.append("metric,case,candidate,iteration,value,status\n")
 	b0_path := workspace + "/b0"
 	b1_path := workspace + "/b1"
@@ -910,7 +910,7 @@ def main()
 		puts(error)
 		return
 	end
-	case write_text(raw_path, output.to_s())
+	case FileSystem.write_text(raw_path, output.to_s())
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		puts(error.operation + ": " + error.message)

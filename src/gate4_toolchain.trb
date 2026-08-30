@@ -1,6 +1,6 @@
-import { write_text } from trb/std/filesystem
-import { run } from trb/std/process
-import { Result } from trb/std/result
+import trb/std/filesystem
+import trb/std/process
+import trb/std/result
 import { Instant } from trb/std/time
 
 record Gate4BuildError
@@ -29,7 +29,7 @@ def build_gate4_generation(
 		generation: String,
 	): Result<Gate4BuildReport, Gate4BuildError>
 	compiler_started := Instant.now()
-	compiler_process := case run(seed_path, ["--source-content", "emit-qbe", compiler_source])
+	compiler_process := case Process.run(seed_path, ["--source-content", "emit-qbe", compiler_source])
 	when Result::Ok(process)
 		process
 	when Result::Err(error)
@@ -52,7 +52,7 @@ def build_gate4_generation(
 	qbe_ir_path := workspace + "/" + generation + ".ssa"
 	assembly_path := workspace + "/" + generation + ".s"
 	output_path := workspace + "/" + generation
-	case write_text(qbe_ir_path, compiler_process.stdout)
+	case FileSystem.write_text(qbe_ir_path, compiler_process.stdout)
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		return Result<Gate4BuildReport, Gate4BuildError>::Err(
@@ -60,7 +60,7 @@ def build_gate4_generation(
 		)
 	end
 	qbe_started := Instant.now()
-	qbe_process := case run(qbe_command, ["-t", "arm64_apple", qbe_ir_path])
+	qbe_process := case Process.run(qbe_command, ["-t", "arm64_apple", qbe_ir_path])
 	when Result::Ok(process)
 		process
 	when Result::Err(error)
@@ -80,7 +80,7 @@ def build_gate4_generation(
 			)
 		)
 	end
-	case write_text(assembly_path, qbe_process.stdout)
+	case FileSystem.write_text(assembly_path, qbe_process.stdout)
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		return Result<Gate4BuildReport, Gate4BuildError>::Err(
@@ -88,7 +88,7 @@ def build_gate4_generation(
 		)
 	end
 	link_started := Instant.now()
-	link_process := case run(cc_command, [assembly_path, "-Wl,-dead_strip", "-o", output_path])
+	link_process := case Process.run(cc_command, [assembly_path, "-Wl,-dead_strip", "-o", output_path])
 	when Result::Ok(process)
 		process
 	when Result::Err(error)

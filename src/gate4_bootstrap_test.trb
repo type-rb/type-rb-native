@@ -3,13 +3,13 @@ import { build_gate4_bootstrap_executable } from gate3_toolchain
 import { build_gate4_generation } from gate4_toolchain
 import { build_gate5_matched_go_compiler } from gate5_matched_driver
 import { gate6f_flatten_compiler_source } from gate6f_compiler_source
-import { create_directory, read_text, write_text } from trb/std/filesystem
-import { ProcessResult, environment, run } from trb/std/process
-import { Result } from trb/std/result
+import trb/std/filesystem
+import trb/std/process
+import trb/std/result
 import { describe, expect, test } from trb/std/test
 
 def _gate4_environment(name: String): String
-	value := environment(name)
+	value := Process.environment(name)
 	if value == nil
 		return ""
 	end
@@ -17,7 +17,7 @@ def _gate4_environment(name: String): String
 end
 
 def _gate4_read(path: String): Result<String, String>
-	case read_text(path)
+	case FileSystem.read_text(path)
 	when Result::Ok(source)
 		return Result<String, String>::Ok(source)
 	when Result::Err(error)
@@ -66,12 +66,12 @@ def _gate6f_replace_once(source: String, before: String, after: String): Result<
 	return Result<String, String>::Ok(result)
 end
 
-def _gate6_process(command: String, arguments: Array<String>): Result<ProcessResult, String>
-	case run(command, arguments)
+def _gate6_process(command: String, arguments: Array<String>): Result<Process::Output, String>
+	case Process.run(command, arguments)
 	when Result::Ok(process)
-		return Result<ProcessResult, String>::Ok(process)
+		return Result<Process::Output, String>::Ok(process)
 	when Result::Err(error)
-		return Result<ProcessResult, String>::Err(error.operation + ": " + error.message)
+		return Result<Process::Output, String>::Err(error.operation + ": " + error.message)
 	end
 end
 
@@ -80,7 +80,7 @@ def _gate6_reset_directory(path: String): Result<Boolean, String>
 	if !remove.success
 		return Result<Boolean, String>::Err("cannot reset " + path + ": " + remove.stderr)
 	end
-	case create_directory(path)
+	case FileSystem.create_directory(path)
 	when Result::Ok(_unit)
 		return Result<Boolean, String>::Ok(true)
 	when Result::Err(error)
@@ -94,7 +94,7 @@ def _gate6_build(
 		output_path: String,
 		qbe: String,
 		cc: String,
-	): Result<ProcessResult, String>
+	): Result<Process::Output, String>
 	return _gate6_process(
 		executable,
 		["build", source_path, "--output", output_path, "--qbe", qbe, "--cc", cc],
@@ -108,7 +108,7 @@ def _gate6_build_target(
 		qbe: String,
 		cc: String,
 		target: String,
-	): Result<ProcessResult, String>
+	): Result<Process::Output, String>
 	return _gate6_process(
 		executable,
 		[
@@ -207,7 +207,7 @@ def _gate6_verify_build_case(
 	)
 	recipe_qbe := recipe_directory + "/program.ssa"
 	recipe_assembly := recipe_directory + "/program.s"
-	case write_text(recipe_qbe, qbe_source)
+	case FileSystem.write_text(recipe_qbe, qbe_source)
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
@@ -238,7 +238,7 @@ def _gate4_compiler_output(
 		source: String,
 		mode: String,
 	): Result<String, String>
-	process := case run(executable, ["--source-content", mode, source])
+	process := case Process.run(executable, ["--source-content", mode, source])
 	when Result::Ok(value)
 		value
 	when Result::Err(error)
@@ -262,12 +262,12 @@ def _gate4_execute_qbe(
 	qbe_path := workspace + "/conformance-" + case_name + ".ssa"
 	assembly_path := workspace + "/conformance-" + case_name + ".s"
 	executable_path := workspace + "/conformance-" + case_name
-	case write_text(qbe_path, qbe_source)
+	case FileSystem.write_text(qbe_path, qbe_source)
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		return Result<String, String>::Err(error.operation + ": " + error.message)
 	end
-	qbe_process := case run(qbe, ["-t", "arm64_apple", qbe_path])
+	qbe_process := case Process.run(qbe, ["-t", "arm64_apple", qbe_path])
 	when Result::Ok(process)
 		process
 	when Result::Err(error)
@@ -276,12 +276,12 @@ def _gate4_execute_qbe(
 	if !qbe_process.success
 		return Result<String, String>::Err("QBE rejected " + case_name + ": " + qbe_process.stderr)
 	end
-	case write_text(assembly_path, qbe_process.stdout)
+	case FileSystem.write_text(assembly_path, qbe_process.stdout)
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		return Result<String, String>::Err(error.operation + ": " + error.message)
 	end
-	link_process := case run("/usr/bin/cc", [assembly_path, "-Wl,-dead_strip", "-o", executable_path])
+	link_process := case Process.run("/usr/bin/cc", [assembly_path, "-Wl,-dead_strip", "-o", executable_path])
 	when Result::Ok(process)
 		process
 	when Result::Err(error)
@@ -290,7 +290,7 @@ def _gate4_execute_qbe(
 	if !link_process.success
 		return Result<String, String>::Err("link failed for " + case_name + ": " + link_process.stderr)
 	end
-	runtime := case run(executable_path, [])
+	runtime := case Process.run(executable_path, [])
 	when Result::Ok(process)
 		process
 	when Result::Err(error)
@@ -339,7 +339,7 @@ def _gate4_verify_valid_case(
 	end
 	index = file_start
 	while index < file_end
-		check_process := case run(executables[index], ["check", base + ".trb"])
+		check_process := case Process.run(executables[index], ["check", base + ".trb"])
 		when Result::Ok(process)
 			process
 		when Result::Err(error)
@@ -348,7 +348,7 @@ def _gate4_verify_valid_case(
 		if check_process.status != 0 || check_process.stdout != "ok\n" || !check_process.stderr.empty?()
 			return Result<String, String>::Err(case_name + " file check differs at compiler " + index.to_s())
 		end
-		emit_process := case run(executables[index], ["emit-qbe", base + ".trb"])
+		emit_process := case Process.run(executables[index], ["emit-qbe", base + ".trb"])
 		when Result::Ok(process)
 			process
 		when Result::Err(error)
@@ -720,13 +720,13 @@ def _gate4_verify_conformance(
 		end
 		compiler_index = 1
 		while compiler_index < 6
-			file_check := case run(executables[compiler_index], ["check", base + ".source"])
+			file_check := case Process.run(executables[compiler_index], ["check", base + ".source"])
 			when Result::Ok(process)
 				process
 			when Result::Err(error)
 				return Result<Boolean, String>::Err(error.operation + ": " + error.message)
 			end
-			file_emit := case run(executables[compiler_index], ["emit-qbe", base + ".source"])
+			file_emit := case Process.run(executables[compiler_index], ["emit-qbe", base + ".source"])
 			when Result::Ok(process)
 				process
 			when Result::Err(error)
@@ -835,21 +835,21 @@ def _gate4_build_cycle(
 		puts(error.phase + ": " + error.message + "\n" + error.stderr)
 		return false
 	end
-	b1_qbe := case read_text(b1.qbe_ir_path)
+	b1_qbe := case FileSystem.read_text(b1.qbe_ir_path)
 	when Result::Ok(source)
 		source
 	when Result::Err(error)
 		puts(error.operation + ": " + error.message)
 		return false
 	end
-	b2_qbe := case read_text(b2.qbe_ir_path)
+	b2_qbe := case FileSystem.read_text(b2.qbe_ir_path)
 	when Result::Ok(source)
 		source
 	when Result::Err(error)
 		puts(error.operation + ": " + error.message)
 		return false
 	end
-	b3_qbe := case read_text(b3.qbe_ir_path)
+	b3_qbe := case FileSystem.read_text(b3.qbe_ir_path)
 	when Result::Ok(source)
 		source
 	when Result::Err(error)
@@ -860,7 +860,7 @@ def _gate4_build_cycle(
 		puts("recovery B1, B2, and B3 QBE outputs differ")
 		return false
 	end
-	canonical_qbe := case run(b1.output_path, ["emit-qbe", compiler_path])
+	canonical_qbe := case Process.run(b1.output_path, ["emit-qbe", compiler_path])
 	when Result::Ok(process)
 		if !process.success || process.stdout.empty?() || !process.stderr.empty?()
 			puts("B1 could not emit the multi-file compiler closure")
@@ -887,7 +887,7 @@ def _gate4_build_cycle(
 	expected_qbe := [b1_qbe, b2_qbe, b3_qbe]
 	mut seed_index := 0
 	while seed_index < seeds.size()
-		case run(seeds[seed_index], ["--source-content", "check", recovery_source])
+		case Process.run(seeds[seed_index], ["--source-content", "check", recovery_source])
 		when Result::Ok(process)
 			if !process.success || process.stdout != "ok\n" || process.stderr != ""
 				puts("compiler source check differs at seed " + seed_index.to_s())
@@ -897,7 +897,7 @@ def _gate4_build_cycle(
 			puts(error.operation + ": " + error.message)
 			return false
 		end
-		case run(seeds[seed_index], ["--source-content", "emit-qbe", recovery_source])
+		case Process.run(seeds[seed_index], ["--source-content", "emit-qbe", recovery_source])
 		when Result::Ok(process)
 			if !process.success || process.stdout != expected_qbe[seed_index] || process.stderr != ""
 				puts("repeated compiler QBE differs at seed " + seed_index.to_s())
@@ -912,7 +912,7 @@ def _gate4_build_cycle(
 	file_seeds := [b1.output_path, b2.output_path]
 	seed_index = 0
 	while seed_index < file_seeds.size()
-		case run(file_seeds[seed_index], ["check", compiler_path])
+		case Process.run(file_seeds[seed_index], ["check", compiler_path])
 		when Result::Ok(process)
 			if !process.success || process.stdout != "ok\n" || process.stderr != ""
 				puts("file-oriented compiler source check differs at seed " + seed_index.to_s())
@@ -922,7 +922,7 @@ def _gate4_build_cycle(
 			puts(error.operation + ": " + error.message)
 			return false
 		end
-		case run(file_seeds[seed_index], ["emit-qbe", compiler_path])
+		case Process.run(file_seeds[seed_index], ["emit-qbe", compiler_path])
 		when Result::Ok(process)
 			if !process.success || process.stdout != canonical_qbe || process.stderr != ""
 				puts("file-oriented compiler QBE differs at seed " + seed_index.to_s())
@@ -938,7 +938,7 @@ def _gate4_build_cycle(
 	mut executables := [b1.output_path, b2.output_path, b3.output_path]
 	mut index := 0
 	while index < executables.size()
-		case run(executables[index], ["--source-content", "check", program])
+		case Process.run(executables[index], ["--source-content", "check", program])
 		when Result::Ok(process)
 			if !process.success || process.stdout != "ok\n" || process.stderr != ""
 				puts("self-hosted compiler check failed")
@@ -959,12 +959,12 @@ def _gate6_verify_file_cli(workspace: String): Result<Boolean, String>
 	invalid_path := workspace + "/gate6-invalid.trb"
 	missing_path := workspace + "/gate6-missing.trb"
 	large_path := workspace + "/gate6-large.trb"
-	case write_text(valid_path, valid_source)
+	case FileSystem.write_text(valid_path, valid_source)
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
 	end
-	case write_text(invalid_path, "def main()\n\tmissing()\n\treturn\nend\n")
+	case FileSystem.write_text(invalid_path, "def main()\n\tmissing()\n\treturn\nend\n")
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
@@ -973,7 +973,7 @@ def _gate6_verify_file_cli(workspace: String): Result<Boolean, String>
 	while padding.size() < 524288
 		padding += padding
 	end
-	case write_text(large_path, "def main()" + padding + "\n\treturn\nend\n")
+	case FileSystem.write_text(large_path, "def main()" + padding + "\n\treturn\nend\n")
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
@@ -984,7 +984,7 @@ def _gate6_verify_file_cli(workspace: String): Result<Boolean, String>
 	mut index := 0
 	while index < executables.size()
 		executable := executables[index]
-		check := case run(executable, ["check", valid_path])
+		check := case Process.run(executable, ["check", valid_path])
 		when Result::Ok(process)
 			process
 		when Result::Err(error)
@@ -993,7 +993,7 @@ def _gate6_verify_file_cli(workspace: String): Result<Boolean, String>
 		if check.status != 0 || check.stdout != "ok\n" || !check.stderr.empty?()
 			return Result<Boolean, String>::Err("file check failed at compiler " + index.to_s())
 		end
-		emit := case run(executable, ["emit-qbe", valid_path])
+		emit := case Process.run(executable, ["emit-qbe", valid_path])
 		when Result::Ok(process)
 			process
 		when Result::Err(error)
@@ -1013,7 +1013,7 @@ def _gate6_verify_file_cli(workspace: String): Result<Boolean, String>
 				return Result<Boolean, String>::Err("file QBE differs across compiler generations")
 			end
 		end
-		diagnostic := case run(executable, ["check", invalid_path])
+		diagnostic := case Process.run(executable, ["check", invalid_path])
 		when Result::Ok(process)
 			process
 		when Result::Err(error)
@@ -1025,7 +1025,7 @@ def _gate6_verify_file_cli(workspace: String): Result<Boolean, String>
 		if diagnostic.stderr != "TRBN4003:2:unresolved function missing\n"
 			return Result<Boolean, String>::Err("file diagnostic contract failed at compiler " + index.to_s())
 		end
-		missing := case run(executable, ["check", missing_path])
+		missing := case Process.run(executable, ["check", missing_path])
 		when Result::Ok(process)
 			process
 		when Result::Err(error)
@@ -1037,7 +1037,7 @@ def _gate6_verify_file_cli(workspace: String): Result<Boolean, String>
 		if missing.stderr != "compiler: cannot read source file: " + missing_path + "\n"
 			return Result<Boolean, String>::Err("missing-file contract failed at compiler " + index.to_s())
 		end
-		no_arguments := case run(executable, [])
+		no_arguments := case Process.run(executable, [])
 		when Result::Ok(process)
 			process
 		when Result::Err(error)
@@ -1046,7 +1046,7 @@ def _gate6_verify_file_cli(workspace: String): Result<Boolean, String>
 		if no_arguments.status != 64 || !no_arguments.stdout.empty?() || no_arguments.stderr != usage
 			return Result<Boolean, String>::Err("no-argument usage contract failed at compiler " + index.to_s())
 		end
-		invalid_mode := case run(executable, ["invalid", valid_path])
+		invalid_mode := case Process.run(executable, ["invalid", valid_path])
 		when Result::Ok(process)
 			process
 		when Result::Err(error)
@@ -1055,7 +1055,7 @@ def _gate6_verify_file_cli(workspace: String): Result<Boolean, String>
 		if invalid_mode.status != 64 || !invalid_mode.stdout.empty?() || invalid_mode.stderr != usage
 			return Result<Boolean, String>::Err("invalid-mode usage contract failed at compiler " + index.to_s())
 		end
-		large := case run(executable, ["check", large_path])
+		large := case Process.run(executable, ["check", large_path])
 		when Result::Ok(process)
 			process
 		when Result::Err(error)
@@ -1101,12 +1101,12 @@ def _gate6_verify_build_cli(workspace: String, qbe: String): Result<Boolean, Str
 	try _gate6_reset_directory(failure_directory)
 	source_path := source_directory + "/input program.trb"
 	output_path := output_directory + "/program"
-	case write_text(source_path, "def main()\n\tputs(\"ok\")\n\treturn\nend\n")
+	case FileSystem.write_text(source_path, "def main()\n\tputs(\"ok\")\n\treturn\nend\n")
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
 	end
-	case write_text(output_path, "stale output")
+	case FileSystem.write_text(output_path, "stale output")
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
@@ -1180,7 +1180,7 @@ def _gate6_verify_build_cli(workspace: String, qbe: String): Result<Boolean, Str
 
 	qbe_failure_tool := failure_directory + "/qbe failure tool"
 	cc_failure_tool := failure_directory + "/cc failure tool"
-	case write_text(
+	case FileSystem.write_text(
 			qbe_failure_tool,
 			"#!/bin/sh\nprintf 'qbe child stderr\\n' >&2\nexit 23\n",
 		)
@@ -1188,7 +1188,7 @@ def _gate6_verify_build_cli(workspace: String, qbe: String): Result<Boolean, Str
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
 	end
-	case write_text(
+	case FileSystem.write_text(
 			cc_failure_tool,
 			"#!/bin/sh\nprintf 'cc child stderr\\n' >&2\nexit 24\n",
 		)
@@ -1285,7 +1285,7 @@ end
 
 def _gate6_copy_source(source: String, destination: String): Result<Boolean, String>
 	contents := try _gate4_read(source)
-	case write_text(destination, contents)
+	case FileSystem.write_text(destination, contents)
 	when Result::Ok(_unit)
 		return Result<Boolean, String>::Ok(true)
 	when Result::Err(error)
@@ -1294,7 +1294,7 @@ def _gate6_copy_source(source: String, destination: String): Result<Boolean, Str
 end
 
 def _gate6_write_source(path: String, source: String): Result<Boolean, String>
-	case write_text(path, source)
+	case FileSystem.write_text(path, source)
 	when Result::Ok(_unit)
 		return Result<Boolean, String>::Ok(true)
 	when Result::Err(error)
@@ -1641,7 +1641,7 @@ def _gate6_verify_file_root_modules(
 	if !created.success
 		return Result<Boolean, String>::Err("cannot create precedence fixture")
 	end
-	case write_text(
+	case FileSystem.write_text(
 			precedence + "/main.trb",
 			"import { choice } from choice.trb\n\ndef main()\n\tputs(choice())\n\treturn\nend\n",
 		)
@@ -1649,12 +1649,12 @@ def _gate6_verify_file_root_modules(
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
 	end
-	case write_text(precedence + "/choice.trb", "def choice(): String\n\treturn \"direct\"\nend\n")
+	case FileSystem.write_text(precedence + "/choice.trb", "def choice(): String\n\treturn \"direct\"\nend\n")
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
 	end
-	case write_text(precedence + "/choice/index.trb", "def choice(): String\n\treturn \"index\"\nend\n")
+	case FileSystem.write_text(precedence + "/choice/index.trb", "def choice(): String\n\treturn \"index\"\nend\n")
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
@@ -1670,7 +1670,7 @@ def _gate6_verify_file_root_modules(
 
 	cycle := workspace + "/gate6-file-root-cycle"
 	try _gate6_reset_directory(cycle)
-	case write_text(
+	case FileSystem.write_text(
 			cycle + "/main.trb",
 			"import { answer } from a\n\ndef main()\n\tputs(answer())\n\treturn\nend\n",
 		)
@@ -1678,12 +1678,12 @@ def _gate6_verify_file_root_modules(
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
 	end
-	case write_text(cycle + "/a.trb", "import { helper } from b\n\ndef answer(): String\n\treturn helper()\nend\n")
+	case FileSystem.write_text(cycle + "/a.trb", "import { helper } from b\n\ndef answer(): String\n\treturn helper()\nend\n")
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
 	end
-	case write_text(cycle + "/b.trb", "import { answer } from a\n\ndef helper(): String\n\treturn \"cycle\"\nend\n\ndef observe(): String\n\treturn answer()\nend\n")
+	case FileSystem.write_text(cycle + "/b.trb", "import { answer } from a\n\ndef helper(): String\n\treturn \"cycle\"\nend\n\ndef observe(): String\n\treturn answer()\nend\n")
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
@@ -1788,11 +1788,11 @@ describe("Gate 4 reference bootstrap") do
 			expect(true).to_be_true()
 		else
 			workspace := "/tmp/type-rb-native-gate4-bootstrap"
-			case create_directory(workspace)
+			case FileSystem.create_directory(workspace)
 			when Result::Ok(_unit)
 			when Result::Err(_error)
 			end
-			compiler_source := case read_text(root + "/compiler/gate4/src/compiler.trb")
+			compiler_source := case FileSystem.read_text(root + "/compiler/gate4/src/compiler.trb")
 			when Result::Ok(source)
 				source
 			when Result::Err(error)
@@ -1800,7 +1800,7 @@ describe("Gate 4 reference bootstrap") do
 				expect(false).to_be_true()
 				""
 			end
-			storage_source := case read_text(root + "/compiler/gate4/src/storage.trb")
+			storage_source := case FileSystem.read_text(root + "/compiler/gate4/src/storage.trb")
 			when Result::Ok(source)
 				source
 			when Result::Err(error)
@@ -1808,7 +1808,7 @@ describe("Gate 4 reference bootstrap") do
 				expect(false).to_be_true()
 				""
 			end
-			path_source := case read_text(root + "/compiler/gate4/src/path.trb")
+			path_source := case FileSystem.read_text(root + "/compiler/gate4/src/path.trb")
 			when Result::Ok(source)
 				source
 			when Result::Err(error)
@@ -1828,26 +1828,26 @@ describe("Gate 4 reference bootstrap") do
 				expect(false).to_be_true()
 				""
 			end
-			case write_text(workspace + "/compiler-recovery.trb", recovery_source)
+			case FileSystem.write_text(workspace + "/compiler-recovery.trb", recovery_source)
 			when Result::Ok(_unit)
 			when Result::Err(error)
 				puts(error.operation + ": " + error.message)
 				expect(false).to_be_true()
 			end
 			compiler_path := workspace + "/compiler.trb"
-			case write_text(compiler_path, compiler_source)
+			case FileSystem.write_text(compiler_path, compiler_source)
 			when Result::Ok(_unit)
 			when Result::Err(error)
 				puts(error.operation + ": " + error.message)
 				expect(false).to_be_true()
 			end
-			case write_text(workspace + "/storage.trb", storage_source)
+			case FileSystem.write_text(workspace + "/storage.trb", storage_source)
 			when Result::Ok(_unit)
 			when Result::Err(error)
 				puts(error.operation + ": " + error.message)
 				expect(false).to_be_true()
 			end
-			case write_text(workspace + "/path.trb", path_source)
+			case FileSystem.write_text(workspace + "/path.trb", path_source)
 			when Result::Ok(_unit)
 			when Result::Err(error)
 				puts(error.operation + ": " + error.message)
@@ -1865,7 +1865,7 @@ describe("Gate 4 reference bootstrap") do
 				expect(false).to_be_true()
 				""
 			end
-			snapshot := case run(
+			snapshot := case Process.run(
 					reference_trb,
 					["compiler", "bootstrap-snapshot", "--snapshot-version", "4", compiler_path],
 				)
@@ -1898,7 +1898,7 @@ describe("Gate 4 reference bootstrap") do
 						workspace + "/b0",
 					)
 				when Result::Ok(_report)
-					case run(workspace + "/b0", [])
+					case Process.run(workspace + "/b0", [])
 					when Result::Ok(usage)
 						expect(usage.status).to_equal(64)
 						expect(usage.stdout).to_equal("")
@@ -1910,7 +1910,7 @@ describe("Gate 4 reference bootstrap") do
 						expect(false).to_be_true()
 					end
 					source := "def main()\n\tputs(\"ok\")\n\treturn\nend\n"
-					case run(workspace + "/b0", ["--source-content", "check", source])
+					case Process.run(workspace + "/b0", ["--source-content", "check", source])
 					when Result::Ok(check)
 						expect(check.success).to_be_true()
 						expect(check.stdout).to_equal("ok\n")
@@ -1963,7 +1963,7 @@ describe("Gate 4 reference bootstrap") do
 						puts(error)
 						expect(false).to_be_true()
 					end
-					case run(
+					case Process.run(
 							"/bin/sh",
 							[
 								root + "/tools/gate5-normalize.sh",

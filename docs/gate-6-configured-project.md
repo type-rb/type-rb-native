@@ -99,11 +99,12 @@ case-insensitive `_test.trb` files and prunes `.git`, `.trb`, `node_modules`,
 and the configured `outDir`. Symlinked directories are not followed; a
 symlinked `.trb` source is rejected; other non-source symlinks are ignored.
 
-Every module retains its slash-normalized root-relative identity. Project
-imports prefer `name.trb` over `name/index.trb`, preserve the current missing
-import and cycle diagnostics, and cannot escape the source root. Exactly one
-collected module must own a top-level runnable `def main()`. The source filename
-does not select the entrypoint.
+At the recorded Gate 6K baseline, every module retains its slash-normalized
+root-relative identity. Project imports prefer `name.trb` over
+`name/index.trb`, preserve the then-current missing import and cycle
+diagnostics, and cannot escape the source root. Exactly one collected module
+must own a top-level runnable `def main()`. The source filename does not select
+the entrypoint.
 
 Permanent coverage must include defaults, JSONC string/comment boundaries,
 strict config fields and types, root-contained paths, spaces, deterministic
@@ -114,9 +115,8 @@ and intermediate cleanup.
 
 ## Registered corpus and scale workload
 
-The checked-in
-[`configured-project`](../corpus/gate6k/configured-project/trbconfig.jsonc)
-fixture places `main()` in `application.trb`, proves root-relative direct-file
+At the recorded Gate 6K source revision, the `configured-project` fixture
+places `main()` in `application.trb`, proves root-relative direct-file
 precedence, retains an unimported production source, and includes a test-only
 module that must not enter the Native executable. It prints exactly
 `configured-project-ok`. Its ordered seven-file manifest is 600 bytes with
@@ -129,6 +129,13 @@ SHA-256:
 Each manifest line is lowercase file SHA-256, two spaces, a `./`-prefixed
 relative path, and LF, sorted bytewise by relative path. The manifest itself is
 not part of the seven-file bundle.
+
+TypeRB 0.4 treats `name.trb` and `name/index.trb` as the same authored import
+root and rejects a graph that contains both. The
+[current fixture](../corpus/gate6k/configured-project/trbconfig.jsonc) therefore
+keeps a nonconflicting nested support module instead of recreating the recorded
+precedence pair. Native adoption of the corresponding rejection is tracked in
+[issue #97](https://github.com/type-rb/type-rb-native/issues/97).
 
 The scale workload regenerates the exact Gate 6H graph below `src/`: one entry
 plus 1,024 imported modules. Its ordered 94,322-byte source-content manifest

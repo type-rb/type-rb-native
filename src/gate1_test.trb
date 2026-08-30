@@ -1,24 +1,12 @@
-import {
-	ComparisonOperator,
-	FloatBinaryOperator,
-	Gate1Block,
-	Gate1Function,
-	Gate1Instruction,
-	Gate1Module,
-	Gate1Parameter,
-	Gate1Terminator,
-	IntegerBinaryOperator,
-	ScalarType,
-	verify_gate1_mir,
-} from gate1_mir
+import { ComparisonOperator, FloatBinaryOperator, Gate1Block, Gate1Function, Gate1Instruction, Gate1Module, Gate1Parameter, Gate1Terminator, IntegerBinaryOperator, ScalarType, verify_gate1_mir } from gate1_mir
 import { build_gate1_executable } from gate1_toolchain
 import { decode_gate1_snapshot } from gate1_snapshot
 import { NativeSource } from native_mir
 import { emit_qbe } from qbe
 import { SourceOrigin } from snapshot
-import { create_directory, read_text } from trb/std/filesystem
-import { environment, run } from trb/std/process
-import { Result } from trb/std/result
+import trb/std/filesystem
+import trb/std/process
+import trb/std/result
 import { describe, expect, test } from trb/std/test
 
 def _gate1_origin(line: Integer): SourceOrigin
@@ -386,11 +374,11 @@ def _gate1_arithmetic_module(overflow: Boolean): Gate1Module
 end
 
 def _gate1_fixture_source(): String
-	root := environment("TYPE_RB_NATIVE_ROOT")
+	root := Process.environment("TYPE_RB_NATIVE_ROOT")
 	if root == nil
 		return ""
 	end
-	case read_text(root + "/fixtures/gate1/valid/scalar-call.json")
+	case FileSystem.read_text(root + "/fixtures/gate1/valid/scalar-call.json")
 	when Result::Ok(source)
 		return source
 	when Result::Err(_error)
@@ -435,11 +423,11 @@ describe("Gate 1 scalar QBE path") do
 	end
 
 	test("rejects version 2 unknown fields deterministically") do
-		root := environment("TYPE_RB_NATIVE_ROOT")
+		root := Process.environment("TYPE_RB_NATIVE_ROOT")
 		if root == nil
 			expect(false).to_be_true()
 		else
-			source := case read_text(root + "/fixtures/gate1/invalid/unknown-field.json")
+			source := case FileSystem.read_text(root + "/fixtures/gate1/invalid/unknown-field.json")
 			when Result::Ok(value)
 				value
 			when Result::Err(_error)
@@ -456,12 +444,12 @@ describe("Gate 1 scalar QBE path") do
 	end
 
 	test("builds and runs the Darwin arm64 executable when QBE is configured") do
-		qbe_command := environment("TYPE_RB_NATIVE_QBE")
+		qbe_command := Process.environment("TYPE_RB_NATIVE_QBE")
 		if qbe_command == nil
 			expect(true).to_be_true()
 		else
 			workspace := "/tmp/type-rb-native-gate1-integration"
-			case create_directory(workspace)
+			case FileSystem.create_directory(workspace)
 			when Result::Ok(_unit)
 			when Result::Err(_error)
 			end
@@ -473,7 +461,7 @@ describe("Gate 1 scalar QBE path") do
 					workspace + "/sample",
 				)
 			when Result::Ok(report)
-				case run(report.output_path, [])
+				case Process.run(report.output_path, [])
 				when Result::Ok(process_result)
 					expect(process_result.success).to_be_true()
 					expect(process_result.stdout).to_equal("ok\n")
@@ -488,14 +476,14 @@ describe("Gate 1 scalar QBE path") do
 	end
 
 	test("builds the version 2 data fixture when QBE is configured") do
-		qbe_command := environment("TYPE_RB_NATIVE_QBE")
+		qbe_command := Process.environment("TYPE_RB_NATIVE_QBE")
 		if qbe_command == nil
 			expect(true).to_be_true()
 		else
 			case decode_gate1_snapshot(_gate1_fixture_source())
 			when Result::Ok(native_module)
 				workspace := "/tmp/type-rb-native-gate1-fixture"
-				case create_directory(workspace)
+				case FileSystem.create_directory(workspace)
 				when Result::Ok(_unit)
 				when Result::Err(_error)
 				end
@@ -507,7 +495,7 @@ describe("Gate 1 scalar QBE path") do
 						workspace + "/sample",
 					)
 				when Result::Ok(report)
-					case run(report.output_path, [])
+					case Process.run(report.output_path, [])
 					when Result::Ok(process_result)
 						expect(process_result.success).to_be_true()
 						expect(process_result.stdout).to_equal("ok\n")
@@ -524,12 +512,12 @@ describe("Gate 1 scalar QBE path") do
 	end
 
 	test("executes every checked Integer operator and rejects overflow") do
-		qbe_command := environment("TYPE_RB_NATIVE_QBE")
+		qbe_command := Process.environment("TYPE_RB_NATIVE_QBE")
 		if qbe_command == nil
 			expect(true).to_be_true()
 		else
 			workspace := "/tmp/type-rb-native-gate1-arithmetic"
-			case create_directory(workspace)
+			case FileSystem.create_directory(workspace)
 			when Result::Ok(_unit)
 			when Result::Err(_error)
 			end
@@ -541,7 +529,7 @@ describe("Gate 1 scalar QBE path") do
 					workspace + "/success",
 				)
 			when Result::Ok(report)
-				case run(report.output_path, [])
+				case Process.run(report.output_path, [])
 				when Result::Ok(process_result)
 					expect(process_result.success).to_be_true()
 					expect(process_result.stdout).to_equal("ok\n")
@@ -559,7 +547,7 @@ describe("Gate 1 scalar QBE path") do
 					workspace + "/overflow",
 				)
 			when Result::Ok(report)
-				case run(report.output_path, [])
+				case Process.run(report.output_path, [])
 				when Result::Ok(process_result)
 					expect(process_result.status).to_equal(2)
 					expect(process_result.stdout).to_equal("")

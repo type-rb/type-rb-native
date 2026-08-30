@@ -1,8 +1,8 @@
 import { decode_gate1_snapshot } from gate1_snapshot
 import { build_gate1_executable } from gate1_toolchain
-import { create_directory } from trb/std/filesystem
-import { environment, run } from trb/std/process
-import { Result } from trb/std/result
+import trb/std/filesystem
+import trb/std/process
+import trb/std/result
 import { describe, expect, test } from trb/std/test
 
 record Gate1Observation
@@ -24,7 +24,7 @@ record Gate1DifferentialExpectation
 end
 
 def _gate1_observe(command: String): Result<Gate1Observation, String>
-	case run("/usr/bin/env", ["GOTRACEBACK=none", command])
+	case Process.run("/usr/bin/env", ["GOTRACEBACK=none", command])
 	when Result::Ok(process)
 		return Result<Gate1Observation, String>::Ok(
 			Gate1Observation.new(
@@ -39,9 +39,9 @@ def _gate1_observe(command: String): Result<Gate1Observation, String>
 end
 
 def _gate1_differential_case(name: String): Result<Gate1DifferentialPair, String>
-	root := environment("TYPE_RB_NATIVE_ROOT")
-	reference_trb := environment("TYPE_RB_NATIVE_REFERENCE_TRB")
-	qbe := environment("TYPE_RB_NATIVE_QBE")
+	root := Process.environment("TYPE_RB_NATIVE_ROOT")
+	reference_trb := Process.environment("TYPE_RB_NATIVE_REFERENCE_TRB")
+	qbe := Process.environment("TYPE_RB_NATIVE_QBE")
 	if root == nil
 		return Result<Gate1DifferentialPair, String>::Err("TYPE_RB_NATIVE_ROOT is unavailable")
 	end
@@ -53,11 +53,11 @@ def _gate1_differential_case(name: String): Result<Gate1DifferentialPair, String
 	end
 	config := root + "/corpus/gate1/" + name + "/trbconfig.jsonc"
 	workspace := "/tmp/type-rb-native-gate1-differential-" + name
-	case create_directory(workspace)
+	case FileSystem.create_directory(workspace)
 	when Result::Ok(_unit)
 	when Result::Err(_error)
 	end
-	snapshot_process := case run(reference_trb, ["compiler", "bootstrap-snapshot", "--config", config])
+	snapshot_process := case Process.run(reference_trb, ["compiler", "bootstrap-snapshot", "--config", config])
 	when Result::Ok(process)
 		process
 	when Result::Err(error)
@@ -81,7 +81,7 @@ def _gate1_differential_case(name: String): Result<Gate1DifferentialPair, String
 		return Result<Gate1DifferentialPair, String>::Err("native-build: " + error.phase + ": " + error.message)
 	end
 	reference_output := workspace + "/reference"
-	reference_build := case run(
+	reference_build := case Process.run(
 			reference_trb,
 			["build", "--compile", "--config", config, "--outfile", reference_output],
 		)
@@ -102,7 +102,7 @@ end
 
 describe("Gate 1 source-connected differential corpus") do
 	test("matches optimized Go output and process failure behavior") do
-		if environment("TYPE_RB_NATIVE_REFERENCE_TRB") == nil || environment("TYPE_RB_NATIVE_QBE") == nil
+		if Process.environment("TYPE_RB_NATIVE_REFERENCE_TRB") == nil || Process.environment("TYPE_RB_NATIVE_QBE") == nil
 			expect(true).to_be_true()
 		else
 			expectations: Array<Gate1DifferentialExpectation> := [
@@ -168,8 +168,8 @@ describe("Gate 1 source-connected differential corpus") do
 	end
 
 	test("rejects unsupported source explicitly at the producer boundary") do
-		root := environment("TYPE_RB_NATIVE_ROOT")
-		reference_trb := environment("TYPE_RB_NATIVE_REFERENCE_TRB")
+		root := Process.environment("TYPE_RB_NATIVE_ROOT")
+		reference_trb := Process.environment("TYPE_RB_NATIVE_REFERENCE_TRB")
 		if root == nil
 			expect(true).to_be_true()
 		else
@@ -177,7 +177,7 @@ describe("Gate 1 source-connected differential corpus") do
 				expect(true).to_be_true()
 			else
 				config := root + "/corpus/gate1/unsupported-dynamic-output/trbconfig.jsonc"
-				case run(reference_trb, ["compiler", "bootstrap-snapshot", "--config", config])
+				case Process.run(reference_trb, ["compiler", "bootstrap-snapshot", "--config", config])
 				when Result::Ok(process)
 					expect(process.success).to_be_false()
 					expect(process.stderr.include?("bootstrap snapshot v2 does not support dynamic puts() output")).to_be_true()
