@@ -18,8 +18,8 @@ It does not contain a published performance result.
 - `4GB` process-tree memory limit;
 - wall-time limits of `300s` for `fannkuch-redux` and `n-body`, and `600s`
   for `spectral-norm`;
-- default BenchExec container networking disabled and `/` visible read-only;
-  and
+- default BenchExec container networking disabled, `/` visible read-only, and
+  `/home` isolated through a non-persistent overlay; and
 - swap disabled and Linux page cache dropped before every measured process.
 
 Candidate order rotates by one position per round. Every candidate therefore

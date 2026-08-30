@@ -23,9 +23,10 @@ Fresh-process runtime uses BenchExec
 [`runexec` `3.35`](https://github.com/sosy-lab/benchexec/releases/tag/3.35),
 pinned by official release asset and SHA-256. `runexec` measures the complete
 process tree under Linux cgroups. Its default container has no external network
-access, and the controller exposes `/` read-only. The formal path rejects any
-other BenchExec version, non-Linux-arm64 host, or requested CPU outside the
-delegated set.
+access. The controller exposes `/` read-only and overrides `/home` with an
+isolated overlay so BenchExec can create its container home without changing
+the host filesystem. The formal path rejects any other BenchExec version,
+non-Linux-arm64 host, or requested CPU outside the delegated set.
 
 Each case has exactly seven candidates: identical TypeRB source through Native
 and Go, then the pinned C, C++, Go, Rust, and Java context implementations.
