@@ -1,0 +1,78 @@
+import { gate6m_candidate_within_percent, gate6m_failure_classes, gate6m_failure_modes, gate6m_first_line, gate6m_float_spread_within_percent, gate6m_integer_spread_within_percent, gate6m_median_float, gate6m_median_integer, gate6m_portable_arguments, gate6m_portable_expected_stdout, go_build_arguments, verify_portable_qbe } from main
+import trb/std/result
+import { describe, expect, test } from trb/std/test
+
+describe("Gate 6M benchmark policy") do
+	test("computes registered odd medians without mutating input") do
+		floats := [5.0, 1.0, 4.0, 2.0, 3.0]
+		integers := [50, 10, 40, 20, 30]
+		expect(gate6m_median_float(floats)).to_equal(3.0)
+		expect(gate6m_median_integer(integers)).to_equal(30)
+		expect(floats[0]).to_equal(5.0)
+		expect(integers[0]).to_equal(50)
+	end
+
+	test("enforces compiler, Go parity, and adjacent spread boundaries") do
+		expect(gate6m_candidate_within_percent(100.0, 115.0, 115.0)).to_be_true()
+		expect(gate6m_candidate_within_percent(100.0, 115.001, 115.0)).to_be_false()
+		expect(gate6m_candidate_within_percent(100.0, 125.0, 125.0)).to_be_true()
+		expect(gate6m_candidate_within_percent(100.0, 125.001, 125.0)).to_be_false()
+		expect(gate6m_float_spread_within_percent(100.0, 125.0, 125.0)).to_be_true()
+		expect(gate6m_float_spread_within_percent(125.001, 100.0, 125.0)).to_be_false()
+		expect(gate6m_integer_spread_within_percent(100, 125, 125)).to_be_true()
+		expect(gate6m_integer_spread_within_percent(126, 100, 125)).to_be_false()
+	end
+
+	test("pins the portable workload and runtime failure classes") do
+		expect(gate6m_portable_arguments()).to_equal(["144"])
+		expect(gate6m_portable_expected_stdout()).to_equal(
+			"2\n1\n144\n12\n0\n0\n0\n9007199254740991\n-9007199254740991\n-2\nnan\n",
+		)
+		expect(gate6m_failure_modes()).to_equal(
+			["invalid-format", "sign-only", "integer-range", "nan", "infinity", "float-range"],
+		)
+		expect(gate6m_failure_classes()).to_equal(
+			[
+				"panic: invalid Integer",
+				"panic: invalid Integer",
+				"panic: Integer is outside the portable range",
+				"panic: Float cannot be converted to Integer",
+				"panic: Float cannot be converted to Integer",
+				"panic: Integer is outside the portable range",
+			],
+		)
+		expect(gate6m_first_line("panic: invalid Integer\n\ngoroutine 1 [running]:\n")).to_equal(
+			"panic: invalid Integer",
+		)
+	end
+
+	test("requires every portable-entry runtime boundary in QBE") do
+		qbe := (
+			"storel %process_argc, $g4_process_argc\n" +
+			"function l $g4_process_argv()\n" +
+			"function l $g4_string_to_integer(l %string)\n" +
+			"function l $g4_integer_to_string(l %value)\n" +
+			"function l $g4_float_to_integer(d %value)\n" +
+			"%root =d call $sqrt(d %value)\n"
+		)
+		case verify_portable_qbe(qbe)
+		when Result::Ok(_value)
+			expect(true).to_be_true()
+		when Result::Err(error)
+			puts(error)
+			expect(false).to_be_true()
+		end
+		case verify_portable_qbe(qbe.replace_all("=d call $sqrt(d ", "=d copy "))
+		when Result::Ok(_value)
+			expect(false).to_be_true()
+		when Result::Err(error)
+			expect(error).to_equal("portable-entry QBE is missing =d call $sqrt(d ")
+		end
+	end
+
+	test("pins the optimized Go build boundary") do
+		expect(go_build_arguments("/tmp/project/trbconfig.jsonc", "/tmp/program")).to_equal(
+			["build", "--compile", "--config", "/tmp/project/trbconfig.jsonc", "--outfile", "/tmp/program"],
+		)
+	end
+end

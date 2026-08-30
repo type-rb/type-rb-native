@@ -10,9 +10,10 @@ internal package, runtime, and external-library choices are fixed by
 
 ## Status
 
-Gate 6M is in progress. This document defines the implementation and evidence
-boundary; it does not claim a result before the registered Darwin and Linux
-evidence is complete.
+Gate 6M measurement is in progress. The portable compiler/runtime slice is
+merged at TypeRB Native revision
+`4a34ad49052cacd0b5a411b2d0846a5afe09aa97`; this document does not claim a
+gate result before the registered Darwin and Linux evidence is complete.
 
 The fixed compiler baseline is TypeRB Native main revision
 `71495bbf18f0820891ea086104ca7da808bfd25f`. The semantic oracle is TypeRB
@@ -101,3 +102,9 @@ fixed points, commands, compiler and tool versions, target inspection,
 external dependencies, process boundaries, and intermediate cleanup. Gate 6M
 claims capability and non-inferiority only; cross-language benchmark results
 remain a later independently registered experiment.
+
+The TypeRB-authored
+[Gate 6M benchmark controller](../tools/gate6m-benchmark/README.md) owns the
+Darwin fixed-point, differential, timing, RSS, size, dependency, and process
+inventory procedure. Linux arm64 correctness and combined target size remain
+a separate pinned-runner evidence step.
