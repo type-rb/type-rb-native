@@ -249,6 +249,7 @@ jobs:
           QBE: ${{ steps.qbe.outputs.path }}
         run: |
           mkdir -p "$RUNNER_TEMP/gate6m-linux-controller"
+          set +e
           /bin/sh tools/gate6m-linux.sh \
             "$GITHUB_WORKSPACE/.gate6m-candidate" \
             "$RUNNER_TEMP/release/type-rb-native-bootstrap-linux-arm64" \
@@ -261,11 +262,15 @@ jobs:
             "$RUNNER_TEMP/gate6m-linux-compiler" \
             > "$RUNNER_TEMP/gate6m-linux-controller/stdout" \
             2> "$RUNNER_TEMP/gate6m-linux-controller/stderr"
+          controller_status=$?
+          set -e
+          printf '%s\n' "$controller_status" > "$RUNNER_TEMP/gate6m-linux-controller/status"
           printf 'gate6m-linux: passed\n' > "$RUNNER_TEMP/gate6m-linux-controller/expected"
-          cmp "$RUNNER_TEMP/gate6m-linux-controller/expected" "$RUNNER_TEMP/gate6m-linux-controller/stdout"
-          test ! -s "$RUNNER_TEMP/gate6m-linux-controller/stderr"
           mkdir -p "$RUNNER_TEMP/gate6m-linux-evidence/controller"
           cp -R "$RUNNER_TEMP/gate6m-linux-controller/." "$RUNNER_TEMP/gate6m-linux-evidence/controller/"
+          test "$controller_status" -eq 0
+          cmp "$RUNNER_TEMP/gate6m-linux-controller/expected" "$RUNNER_TEMP/gate6m-linux-controller/stdout"
+          test ! -s "$RUNNER_TEMP/gate6m-linux-controller/stderr"
 
       - name: Record exact Linux workflow context
         if: always()
