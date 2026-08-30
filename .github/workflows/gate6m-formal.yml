@@ -1,0 +1,340 @@
+name: Formal Gate 6M evidence
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  BASELINE_REVISION: 71495bbf18f0820891ea086104ca7da808bfd25f
+  CANDIDATE_REVISION: 4a34ad49052cacd0b5a411b2d0846a5afe09aa97
+  TYPE_RB_REVISION: 2cf63e95b4fc1a92f6094e2c89c47fb75262adae
+  RELEASE_TAG: bootstrap-seed-2026-08-30
+
+jobs:
+  verify-darwin:
+    name: Measure Darwin arm64
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - name: Check out the exact evidence tooling revision
+        uses: actions/checkout@v5
+
+      - name: Check out the fixed Native baseline
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ env.BASELINE_REVISION }}
+          path: .gate6m-baseline
+
+      - name: Check out the fixed Native candidate
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ env.CANDIDATE_REVISION }}
+          path: .gate6m-candidate
+
+      - name: Check out the pinned TypeRB compiler
+        uses: actions/checkout@v5
+        with:
+          repository: type-rb/type-rb
+          ref: ${{ env.TYPE_RB_REVISION }}
+          path: .type-rb
+
+      - name: Set up Go for the differential oracle
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: .type-rb/go.mod
+          cache-dependency-path: .type-rb/go.sum
+
+      - name: Build and verify the pinned TypeRB compiler
+        run: |
+          test "$(cat TYPE_RB_REVISION)" = "$TYPE_RB_REVISION"
+          test "$(git -C .type-rb rev-parse HEAD)" = "$TYPE_RB_REVISION"
+          go build -C .type-rb -o "$RUNNER_TEMP/trb" ./cmd/trb
+          test "$("$RUNNER_TEMP/trb" version)" = 0.4.3-dev
+
+      - name: Build pinned QBE 1.3
+        id: qbe
+        run: |
+          curl -L https://c9x.me/compile/release/qbe-1.3.tar.xz -o "$RUNNER_TEMP/qbe-1.3.tar.xz"
+          echo "d587905d620dc5e1d2bfa7c2cc642b9b837aa89a3188c6e37b53d756cf66e320  $RUNNER_TEMP/qbe-1.3.tar.xz" | shasum -a 256 -c -
+          tar -C "$RUNNER_TEMP" -xf "$RUNNER_TEMP/qbe-1.3.tar.xz"
+          make -C "$RUNNER_TEMP/qbe-1.3"
+          echo "path=$RUNNER_TEMP/qbe-1.3/qbe" >> "$GITHUB_OUTPUT"
+
+      - name: Download the immutable Darwin previous-Native seed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/release"
+          gh release download "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$RUNNER_TEMP/release" \
+            --pattern type-rb-native-bootstrap-darwin-arm64
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" \
+            > "$RUNNER_TEMP/release/release.json"
+          jq -e \
+            --arg tag "$RELEASE_TAG" \
+            '.immutable == true and .draft == false and .prerelease == true and .tag_name == $tag' \
+            "$RUNNER_TEMP/release/release.json"
+          chmod 0755 "$RUNNER_TEMP/release/type-rb-native-bootstrap-darwin-arm64"
+
+      - name: Build the TypeRB-authored measurement controller
+        run: |
+          mkdir -p "$RUNNER_TEMP/gate6m-darwin-evidence"
+          "$RUNNER_TEMP/trb" build --compile \
+            --config tools/gate6m-benchmark/trbconfig.jsonc \
+            --outfile "$RUNNER_TEMP/gate6m-benchmark" \
+            > "$RUNNER_TEMP/gate6m-darwin-evidence/controller-build.stdout" \
+            2> "$RUNNER_TEMP/gate6m-darwin-evidence/controller-build.stderr"
+          test -x "$RUNNER_TEMP/gate6m-benchmark"
+          printf 'executable -> %s\n' "$RUNNER_TEMP/gate6m-benchmark" \
+            > "$RUNNER_TEMP/gate6m-darwin-evidence/controller-build.expected"
+          cmp \
+            "$RUNNER_TEMP/gate6m-darwin-evidence/controller-build.expected" \
+            "$RUNNER_TEMP/gate6m-darwin-evidence/controller-build.stdout"
+          test ! -s "$RUNNER_TEMP/gate6m-darwin-evidence/controller-build.stderr"
+
+      - name: Run the registered Darwin comparison
+        env:
+          QBE: ${{ steps.qbe.outputs.path }}
+        run: |
+          evidence="$RUNNER_TEMP/gate6m-darwin-evidence"
+          raw="$evidence/raw.csv"
+          inventory="$evidence/process-inventory.txt"
+          workspace="$RUNNER_TEMP/gate6m-darwin-workspace"
+          seed="$RUNNER_TEMP/release/type-rb-native-bootstrap-darwin-arm64"
+          seed_provenance="https://github.com/type-rb/type-rb-native/releases/download/$RELEASE_TAG/type-rb-native-bootstrap-darwin-arm64"
+          "$RUNNER_TEMP/gate6m-benchmark" \
+            "$GITHUB_WORKSPACE/.gate6m-candidate" \
+            "$GITHUB_WORKSPACE/.gate6m-baseline" \
+            "$seed" \
+            "$seed_provenance" \
+            "$RUNNER_TEMP/gate6m-benchmark" \
+            "$RUNNER_TEMP/trb" \
+            "$QBE" \
+            /usr/bin/cc \
+            "$(command -v go)" \
+            "$workspace" \
+            "$raw" \
+            "$inventory" \
+            > "$evidence/controller.stdout" \
+            2> "$evidence/controller.stderr"
+          printf '%s\n%s\n' "$raw" "$inventory" > "$evidence/controller.expected"
+          cmp "$evidence/controller.expected" "$evidence/controller.stdout"
+          test ! -s "$evidence/controller.stderr"
+          test "$(sed -n '1p' "$raw")" = 'metric,case,candidate,iteration,value,status'
+          test "$(wc -l < "$raw" | tr -d ' ')" -eq 231
+          test -s "$inventory"
+          test "$(awk -F, '$1 == "emitted-qbe-sha256" && $3 == "candidate" {print $5}' "$raw")" = \
+            8ccd78fedd787e20494cf73b81a02e8ef71af08362bbedcb4d63a63658eb6ded
+          test "$(awk -F, '$1 == "application-qbe-sha256" && $3 == "portable-entry" {print $5}' "$raw")" = \
+            9e885e1d7dc973e2b28ed04fedf56f166465ac3d00ffb727348c6fc5467763c3
+          compiler_size=$(awk -F, '$1 == "compiler-size-raw-observed" && $3 == "candidate" {print $5}' "$raw")
+          test -n "$compiler_size"
+          test "$compiler_size" -le 310000
+          {
+            printf 'platform=darwin-arm64\n'
+            printf 'raw_compiler_bytes=%s\n' "$compiler_size"
+            printf 'raw_compiler_limit_bytes=310000\n'
+          } > "$evidence/compiler-size.txt"
+          test -z "$(git -C .gate6m-baseline status --porcelain)"
+          test -z "$(git -C .gate6m-candidate status --porcelain)"
+
+      - name: Record exact Darwin workflow context
+        if: always()
+        run: |
+          evidence="$RUNNER_TEMP/gate6m-darwin-evidence"
+          mkdir -p "$evidence"
+          {
+            printf 'workflow_revision=%s\n' "$GITHUB_SHA"
+            printf 'workflow_ref=%s\n' "$GITHUB_REF"
+            printf 'workflow_run_id=%s\n' "$GITHUB_RUN_ID"
+            printf 'workflow_run_attempt=%s\n' "$GITHUB_RUN_ATTEMPT"
+            printf 'baseline_revision=%s\n' "$BASELINE_REVISION"
+            printf 'candidate_revision=%s\n' "$CANDIDATE_REVISION"
+            printf 'type_rb_revision=%s\n' "$TYPE_RB_REVISION"
+            printf 'release_tag=%s\n' "$RELEASE_TAG"
+            printf 'runner_image=macos-15\n'
+            uname -a
+            if test -x "$RUNNER_TEMP/trb"; then "$RUNNER_TEMP/trb" version; fi
+            if command -v go > /dev/null 2>&1; then go version; fi
+            if test -x "$RUNNER_TEMP/qbe-1.3/qbe"; then "$RUNNER_TEMP/qbe-1.3/qbe" -h; fi
+            /usr/bin/cc --version
+          } > "$evidence/workflow-context.txt" 2>&1
+          if test -f "$RUNNER_TEMP/qbe-1.3.tar.xz"; then
+            shasum -a 256 "$RUNNER_TEMP/qbe-1.3.tar.xz" > "$evidence/qbe-source-sha256.txt"
+            wc -c "$RUNNER_TEMP/qbe-1.3.tar.xz" > "$evidence/qbe-source-size.txt"
+          fi
+          if test -f "$RUNNER_TEMP/release/release.json"; then
+            cp "$RUNNER_TEMP/release/release.json" "$evidence/release.json"
+          fi
+
+      - name: Upload Darwin evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate6m-formal-evidence-darwin-arm64
+          path: ${{ runner.temp }}/gate6m-darwin-evidence
+          if-no-files-found: error
+          retention-days: 30
+
+  verify-linux:
+    name: Verify Linux arm64
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    steps:
+      - name: Check out the exact evidence tooling revision
+        uses: actions/checkout@v5
+
+      - name: Check out the fixed Native candidate
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ env.CANDIDATE_REVISION }}
+          path: .gate6m-candidate
+
+      - name: Check out the pinned TypeRB compiler
+        uses: actions/checkout@v5
+        with:
+          repository: type-rb/type-rb
+          ref: ${{ env.TYPE_RB_REVISION }}
+          path: .type-rb
+
+      - name: Set up Go for the differential oracle
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: .type-rb/go.mod
+          cache-dependency-path: .type-rb/go.sum
+
+      - name: Build and verify the pinned TypeRB compiler
+        run: |
+          test "$(cat TYPE_RB_REVISION)" = "$TYPE_RB_REVISION"
+          test "$(git -C .type-rb rev-parse HEAD)" = "$TYPE_RB_REVISION"
+          go build -C .type-rb -o "$RUNNER_TEMP/trb" ./cmd/trb
+          test "$("$RUNNER_TEMP/trb" version)" = 0.4.3-dev
+
+      - name: Install Linux evidence tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y binutils strace
+
+      - name: Build pinned QBE 1.3
+        id: qbe
+        run: |
+          curl -L https://c9x.me/compile/release/qbe-1.3.tar.xz -o "$RUNNER_TEMP/qbe-1.3.tar.xz"
+          echo "d587905d620dc5e1d2bfa7c2cc642b9b837aa89a3188c6e37b53d756cf66e320  $RUNNER_TEMP/qbe-1.3.tar.xz" | sha256sum -c -
+          tar -C "$RUNNER_TEMP" -xf "$RUNNER_TEMP/qbe-1.3.tar.xz"
+          make -C "$RUNNER_TEMP/qbe-1.3"
+          echo "path=$RUNNER_TEMP/qbe-1.3/qbe" >> "$GITHUB_OUTPUT"
+
+      - name: Download the immutable Linux previous-Native seed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/release"
+          gh release download "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$RUNNER_TEMP/release" \
+            --pattern type-rb-native-bootstrap-linux-arm64
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" \
+            > "$RUNNER_TEMP/release/release.json"
+          jq -e \
+            --arg tag "$RELEASE_TAG" \
+            '.immutable == true and .draft == false and .prerelease == true and .tag_name == $tag' \
+            "$RUNNER_TEMP/release/release.json"
+          chmod 0755 "$RUNNER_TEMP/release/type-rb-native-bootstrap-linux-arm64"
+
+      - name: Run the registered Linux verification
+        env:
+          QBE: ${{ steps.qbe.outputs.path }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/gate6m-linux-controller"
+          /bin/sh tools/gate6m-linux.sh \
+            "$GITHUB_WORKSPACE/.gate6m-candidate" \
+            "$RUNNER_TEMP/release/type-rb-native-bootstrap-linux-arm64" \
+            "$QBE" \
+            /usr/bin/cc \
+            "$RUNNER_TEMP/trb" \
+            "$(command -v go)" \
+            "$RUNNER_TEMP/gate6m-linux-workspace" \
+            "$RUNNER_TEMP/gate6m-linux-evidence" \
+            "$RUNNER_TEMP/gate6m-linux-compiler" \
+            > "$RUNNER_TEMP/gate6m-linux-controller/stdout" \
+            2> "$RUNNER_TEMP/gate6m-linux-controller/stderr"
+          printf 'gate6m-linux: passed\n' > "$RUNNER_TEMP/gate6m-linux-controller/expected"
+          cmp "$RUNNER_TEMP/gate6m-linux-controller/expected" "$RUNNER_TEMP/gate6m-linux-controller/stdout"
+          test ! -s "$RUNNER_TEMP/gate6m-linux-controller/stderr"
+          mkdir -p "$RUNNER_TEMP/gate6m-linux-evidence/controller"
+          cp -R "$RUNNER_TEMP/gate6m-linux-controller/." "$RUNNER_TEMP/gate6m-linux-evidence/controller/"
+
+      - name: Record exact Linux workflow context
+        if: always()
+        run: |
+          evidence="$RUNNER_TEMP/gate6m-linux-evidence"
+          mkdir -p "$evidence"
+          {
+            printf 'workflow_revision=%s\n' "$GITHUB_SHA"
+            printf 'workflow_ref=%s\n' "$GITHUB_REF"
+            printf 'workflow_run_id=%s\n' "$GITHUB_RUN_ID"
+            printf 'workflow_run_attempt=%s\n' "$GITHUB_RUN_ATTEMPT"
+            printf 'candidate_revision=%s\n' "$CANDIDATE_REVISION"
+            printf 'type_rb_revision=%s\n' "$TYPE_RB_REVISION"
+            printf 'release_tag=%s\n' "$RELEASE_TAG"
+            printf 'runner_image=ubuntu-24.04-arm\n'
+          } > "$evidence/workflow-context.txt"
+          if test -f "$RUNNER_TEMP/qbe-1.3.tar.xz"; then
+            sha256sum "$RUNNER_TEMP/qbe-1.3.tar.xz" > "$evidence/qbe-source-sha256.txt"
+            wc -c "$RUNNER_TEMP/qbe-1.3.tar.xz" > "$evidence/qbe-source-size.txt"
+          fi
+          if test -f "$RUNNER_TEMP/release/release.json"; then
+            cp "$RUNNER_TEMP/release/release.json" "$evidence/release.json"
+          fi
+
+      - name: Upload Linux evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate6m-formal-evidence-linux-arm64
+          path: ${{ runner.temp }}/gate6m-linux-evidence
+          if-no-files-found: error
+          retention-days: 30
+
+  verify-combined-size:
+    name: Verify combined compiler size
+    needs:
+      - verify-darwin
+      - verify-linux
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Download target evidence
+        uses: actions/download-artifact@v5
+        with:
+          pattern: gate6m-formal-evidence-*-arm64
+          path: ${{ runner.temp }}/target-evidence
+
+      - name: Enforce and record the aggregate bound
+        run: |
+          darwin="$RUNNER_TEMP/target-evidence/gate6m-formal-evidence-darwin-arm64/compiler-size.txt"
+          linux="$RUNNER_TEMP/target-evidence/gate6m-formal-evidence-linux-arm64/compiler-size.txt"
+          test -f "$darwin"
+          test -f "$linux"
+          darwin_size=$(awk -F= '$1 == "raw_compiler_bytes" {print $2}' "$darwin")
+          linux_size=$(awk -F= '$1 == "raw_compiler_bytes" {print $2}' "$linux")
+          test "$darwin_size" -le 310000
+          test "$linux_size" -le 310000
+          combined_size=$((darwin_size + linux_size))
+          test "$combined_size" -le 620000
+          {
+            printf 'darwin_arm64_raw_bytes=%s\n' "$darwin_size"
+            printf 'linux_arm64_raw_bytes=%s\n' "$linux_size"
+            printf 'combined_raw_bytes=%s\n' "$combined_size"
+            printf 'combined_raw_limit_bytes=620000\n'
+          } > "$RUNNER_TEMP/combined-size.txt"
+
+      - name: Upload aggregate size evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate6m-formal-evidence-combined-size
+          path: ${{ runner.temp }}/combined-size.txt
+          if-no-files-found: error
+          retention-days: 30
