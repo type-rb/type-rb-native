@@ -111,6 +111,19 @@ records the complete commands and tool versions, and requires exact published
 output for every small input. This is a correctness and toolchain-capability
 check, not a performance result.
 
+The preregistered
+[`formal runtime controller`](../tools/benchmarksgame-formal/README.md) pins
+BenchExec `runexec` 3.35, runs correctness before timing, rotates all seven
+candidates through two warmup and eleven retained rounds, and preserves every
+failure and raw process-tree metric. One-core and four-core lanes are separate.
+This controller measures complete fresh processes only; compiler measurements
+and artifact/distribution inventory remain a separate controller and no formal
+performance values have been published yet. See
+[Decision 0024](decisions/0024-benchexec-runtime-controller.md). The
+dispatch-only [Linux arm64 workflow](../.github/workflows/benchmarksgame-formal.yml)
+isolates each case on a fresh runner and retains both lane result trees even if
+one lane reports failed observations.
+
 Builds use release optimization without unsafe fast-math substitutions: C and
 C++ use `-O3`, Go uses `go build -trimpath`, Rust uses `rustc -C opt-level=3`,
 and Java uses `javac` followed by the same recorded JVM for every run. The
@@ -121,12 +134,12 @@ versions and complete command lines are result inputs. Raw and stripped
 artifacts are distinct; Java application size and required JRE distribution
 size are both explicit.
 
-Formal context runs use a pinned BenchExec release on an otherwise idle Linux
-arm64 host. The harness checks cgroup support, validates all output before
-timing, clears the declared caches between programs, excludes the first
-measurement, retains eleven runs, prevents network access during execution,
-and records every timeout or failure. One-core and four-core results use the
-same binaries and inputs.
+Formal context runs use pinned BenchExec `runexec` 3.35 on an otherwise idle
+Linux arm64 host. The harness checks cgroup support, validates all output
+before timing, drops the Linux page cache before every measured process, uses
+two warmup and eleven retained rounds, prevents network access during
+execution, and records every timeout or failure. One-core and four-core results
+use the same binaries and inputs.
 
 ## Interpretation limits
 
