@@ -101,5 +101,7 @@ runner omits it, prepares one seven-candidate catalog, probes BenchExec and
 cgroup isolation, runs both lanes on that same host, and uploads all raw
 evidence even when a measurement fails. The delegation helper records the
 exact cgroup path and controller state before and after the narrowly scoped
-change. Merging the controller does not itself publish or schedule a
-performance claim.
+change. A non-measured discovery probe lets BenchExec create its transient
+`benchexec.slice`; the helper then verifies and, when necessary, enables the
+same controller on that nested boundary before the strict probe. Merging the
+controller does not itself publish or schedule a performance claim.
