@@ -176,6 +176,20 @@ def validate_repository_values(
     if checkout_revisions != [type_rb_revision]:
         raise ValidationError("gate-zero reference checkout is not the single exact TypeRB revision")
 
+    benchmark_workflow = _require_text(
+        root / ".github/workflows/benchmarksgame-formal.yml",
+        [
+            f"TYPE_RB_REVISION: {type_rb_revision}",
+            "ref: ${{ env.TYPE_RB_REVISION }}",
+        ],
+        "formal benchmark reference checkout",
+    )
+    benchmark_revisions = re.findall(
+        r"(?m)^\s*TYPE_RB_REVISION:\s*([0-9a-f]{40})\s*$", benchmark_workflow
+    )
+    if benchmark_revisions != [type_rb_revision]:
+        raise ValidationError("formal benchmark does not pin the exact TypeRB revision")
+
     if reference_trb is not None:
         try:
             completed = subprocess.run(
