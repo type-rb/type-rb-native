@@ -656,6 +656,31 @@ all four primary medians and at least 98.19% smaller when stripped. Exact
 fixed points, the 573,720-byte combined compiler size, LLD, libm, failure
 classes, and process boundaries are retained with the raw evidence.
 
+Gate 6N is the Linux amd64 target-chain slice registered in
+[issue #128](https://github.com/type-rb/type-rb-native/issues/128) and
+specified by
+[Decision 0025](decisions/0025-linux-amd64-target-profile.md). The internal
+`linux-amd64-v0` profile maps to QBE `amd64_sysv`, the System V AMD64 ABI, and
+the existing explicit Linux LLD/libm policy without forking the shared
+frontend, target-neutral QBE, managed runtime, or TypeRB behavior.
+
+Because the immutable experimental seed release has no amd64 compiler asset,
+the registered recovery verifies its exact 658,639-byte target-neutral root
+QBE, creates one root-era x86 compiler, and performs two Go-free current-source
+transitions before entering the ordinary B2/B3/B4 candidate chain. Setup
+identities and processes remain separate from candidate claims and candidate
+measurements.
+
+Two warmups and seven interleaved compiler observations compare the
+Native-owned build with the equivalent external emit-QBE/QBE/CC recipe under a
+25% time and RSS bound, while adjacent candidate medians remain within 10% and
+each compiler stays at or below 310,000 bytes. Two warmups and at least eleven
+interleaved application observations apply the existing 25% build/runtime
+time/RSS bounds against optimized Go and require at least an 80% stripped-size
+improvement. Exact fixed-point, complete corpus, ELF, dependency, and process
+evidence remain mandatory before Linux amd64 is recorded as a result. See the
+[Gate 6N plan](gate-6-linux-amd64.md).
+
 This gate is not authorization to ship. It evaluates:
 
 - broader configured and packaged multi-module applications beyond the

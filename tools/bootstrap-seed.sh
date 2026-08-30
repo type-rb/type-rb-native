@@ -9,7 +9,7 @@ MAX_COMPILER_SIZE=310000
 usage() {
 	cat >&2 <<'EOF'
 usage: bootstrap-seed.sh --mode initial|previous --input PATH --qbe PATH --cc PATH
-       --profile darwin-arm64-v0|linux-arm64-v0 --runner-image LABEL
+       --profile darwin-arm64-v0|linux-arm64-v0|linux-amd64-v0 --runner-image LABEL
        --workspace PATH --output PATH --evidence PATH --metadata PATH
        --asset-name NAME [--repository-root PATH]
        [--input-role ordinary|transition]
@@ -191,6 +191,12 @@ linux-arm64-v0)
 	qbe_target=arm64
 	expected_runner=ubuntu-24.04-arm
 	;;
+linux-amd64-v0)
+	os=linux
+	architecture=amd64
+	qbe_target=amd64_sysv
+	expected_runner=ubuntu-24.04
+	;;
 *) usage ;;
 esac
 
@@ -200,10 +206,17 @@ if test "$os" = darwin; then
 	test "$(uname -m)" = arm64 || fail "Darwin profile requires arm64"
 else
 	test "$(uname -s)" = Linux || fail "Linux profile requires Linux"
-	case "$(uname -m)" in
-	aarch64 | arm64) ;;
-	*) fail "Linux profile requires arm64" ;;
-	esac
+	if test "$architecture" = arm64; then
+		case "$(uname -m)" in
+		aarch64 | arm64) ;;
+		*) fail "Linux arm64 profile requires arm64" ;;
+		esac
+	else
+		case "$(uname -m)" in
+		x86_64 | amd64) ;;
+		*) fail "Linux amd64 profile requires amd64" ;;
+		esac
+	fi
 	command -v ld.lld >/dev/null 2>&1 || fail "ld.lld is required on Linux"
 fi
 
