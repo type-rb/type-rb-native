@@ -240,10 +240,14 @@ and
 
 Current development pins TypeRB `0.4.1-dev` at an exact revision and maps its
 declaration-root imports onto the self-hosted record-and-function subset. The
-reference source pin is independent from the immutable previous-Native seed;
-neither implies stable Native version compatibility. See the
-[TypeRB compatibility mapping](docs/type-rb-compatibility.md) and
-[registered revalidation](https://github.com/type-rb/type-rb-native/issues/97).
+immutable previous-Native seed builds exact current B2/B3/B4 fixed points on
+Darwin and Linux arm64. Adjacent elapsed and RSS spreads are at most 3.54% and
+0.36%, and the current platform compilers total 518,344 bytes. The seed remains
+unchanged; this does not imply stable Native version compatibility. See the
+[TypeRB compatibility mapping](docs/type-rb-compatibility.md),
+[registered revalidation](https://github.com/type-rb/type-rb-native/issues/97),
+and
+[recorded result](results/2026-08-30-typerb-0-4-compatibility-darwin-linux-arm64/README.md).
 
 Upward configured project discovery, production runtime integration,
 package/native-library boundaries, incremental builds, toolchain discovery,
@@ -342,6 +346,7 @@ repository.
 - [Architecture](docs/architecture.md)
 - [Development and validation plan](docs/experiment-plan.md)
 - [TypeRB compatibility mapping](docs/type-rb-compatibility.md)
+- [TypeRB 0.4 compatibility Darwin/Linux arm64 result](results/2026-08-30-typerb-0-4-compatibility-darwin-linux-arm64/README.md)
 - [Gate 1 QBE vertical slice](docs/gate-1-qbe.md)
 - [Gate 1 QBE Darwin arm64 result](results/2026-08-28-gate1-qbe-darwin-arm64/README.md)
 - [Gate 2 heap-free aggregate value model](docs/gate-2-aggregates.md)

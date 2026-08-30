@@ -6,10 +6,12 @@ current source and semantic oracle is TypeRB
 `TYPE_RB_REVISION`. This is an exact development pin, not a supported version
 range.
 
-The compatibility work is registered in
-[issue #97](https://github.com/type-rb/type-rb-native/issues/97). The issue
-owns the complete cross-target fixed-point and measurement criteria. This
-document records the implementation boundary independently of those results.
+The compatibility work was registered in
+[issue #97](https://github.com/type-rb/type-rb-native/issues/97). Its
+[Darwin/Linux arm64 result](../results/2026-08-30-typerb-0-4-compatibility-darwin-linux-arm64/README.md)
+passes the selected-reference, previous-seed, exact fixed-point, process,
+elapsed-time, peak-RSS, and compiler-size criteria. This document records the
+implementation boundary independently of those measurements.
 
 ## Current declaration-import mapping
 
@@ -57,5 +59,7 @@ The reference pin and a Native bootstrap seed answer different questions:
   replacing or relabelling the seed.
 
 A later seed is warranted only by a concrete distribution need demonstrated by
-the completed compatibility chain. Native SemVer, TypeRB compatibility ranges,
+the completed compatibility chain. The existing attested seed reaches the
+current exact fixed point on both targets, so no replacement seed is warranted
+merely to align revision strings. Native SemVer, TypeRB compatibility ranges,
 installation policy, and support promises remain deferred.

@@ -569,6 +569,16 @@ no application primary-metric improvement; stable versions, compatibility,
 installation, tool bundling, and support remain deferred. See the
 [Gate 6L plan](gate-6-bootstrap-seed-distribution.md).
 
+The first post-seed source compatibility revalidation is registered in
+[issue #97](https://github.com/type-rb/type-rb-native/issues/97). It advances
+the exact TypeRB reference to `0.4.1-dev`, migrates repository source and the
+self-hosted declaration-import subset, then uses the immutable Gate 6L seed to
+close current Darwin/Linux arm64 B1/B2/B3/B4 chains. The seed identity and
+current fixed-point identity remain separate. The
+[recorded result](../results/2026-08-30-typerb-0-4-compatibility-darwin-linux-arm64/README.md)
+passes the same two-warmup, seven-observation, 25%, 2x, 310,000-byte, and
+620,000-byte bounds without publishing a replacement seed.
+
 This gate is not authorization to ship. It evaluates:
 
 - broader configured and packaged multi-module applications beyond the
