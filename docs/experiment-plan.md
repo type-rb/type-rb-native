@@ -622,6 +622,31 @@ allocated and reclaimed, final live bytes and both RSS trend values are zero,
 and ASan/LSan, Valgrind, exact fixed-point, process, and compiler-size checks
 pass. Persistent Web and Job resource lifecycles remain deferred.
 
+Gate 6M is the portable benchmark-entry primitive slice registered in
+[issue #113](https://github.com/type-rb/type-rb-native/issues/113) and
+specified by
+[Decision 0021](decisions/0021-portable-benchmark-entry-primitives.md). It
+implements the existing `Process.argv()`, `String#to_i()`, `Integer#to_s()`,
+`Float#to_i()`, and `Math.sqrt()` contracts in the ordinary self-hosted
+frontend and runtime. Exact standard-package roots are compiler-owned internal
+identities; `sqrt` uses an explicitly linked system libm dependency.
+
+The shared successful and failing corpus compares Native with the pinned
+optimized Go backend. It fixes process-argument freshness, decimal syntax and
+portable boundaries, canonical text, finite truncation, NaN and infinity
+rejection, widening, and negative square root. Candidate Darwin and Linux
+arm64 B2/B3/B4 chains and target-neutral QBE must converge from the immutable
+previous-Native seed without Go in the ordinary chain.
+
+Two warmups and seven alternating compiler observations bound candidate time
+and RSS to +15% of the fixed current-main baseline and retain the 310,000-byte
+per-target and 620,000-byte combined ceilings. Two warmups and at least eleven
+application observations bound Native build time, build RSS, runtime, and
+runtime RSS to within 25% of optimized Go while requiring an 80% stripped-size
+improvement. See the
+[Gate 6M plan](gate-6-portable-benchmark-entry.md). This prerequisite does not
+stand in for the later cross-language benchmark result.
+
 This gate is not authorization to ship. It evaluates:
 
 - broader configured and packaged multi-module applications beyond the

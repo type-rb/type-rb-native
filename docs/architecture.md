@@ -313,6 +313,18 @@ libraries, GitHub release retention, and attestation infrastructure remain
 explicit dependencies. See
 [Decision 0019](decisions/0019-experimental-bootstrap-seed-distribution.md).
 
+Gate 6M introduces two exact portable standard-package roots without making
+the project module graph a package manager. Private compiler identities map
+`trb/std/process` and `trb/std/math` to their existing `Process` and `Math`
+declarations. Managed runtime helpers copy process arguments and implement
+checked numeric text and narrowing operations; `Math.sqrt` crosses an explicit
+C ABI and system-libm boundary. The portable-entry runtime slice is selected
+as one unit when any registered process or conversion primitive is used and is
+omitted otherwise, while the Native-owned link command supplies `-lm`
+consistently on both registered profiles. These are internal lowering and
+dependency choices rather than new TypeRB APIs or stable Native ABI. See
+[Decision 0021](decisions/0021-portable-benchmark-entry-primitives.md).
+
 ## Stability and promotion
 
 No MIR, ABI profile, snapshot, object, cache, command, or runtime API in this

@@ -200,7 +200,8 @@ else
 	/usr/bin/strip --strip-all "$workspace/compiler.stripped"
 fi
 stripped_compiler_size=$(file_size "$workspace/compiler.stripped")
-test "$stripped_compiler_size" -le "$MAX_COMPILER_SIZE" || fail "stripped compiler exceeds 310,000 bytes"
+printf '%s\n' "$stripped_compiler_size" > "$evidence/compiler-size-bytes.txt"
+test "$stripped_compiler_size" -le "$MAX_COMPILER_SIZE" || fail "stripped compiler exceeds 310,000 bytes: $stripped_compiler_size"
 
 stdout=$evidence/stdout.txt
 runtime_log=$evidence/runtime-stderr.txt
