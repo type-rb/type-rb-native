@@ -14,7 +14,7 @@ current Linux arm64 linker recipe is fixed by
 
 Gate 6M measurement is in progress. The portable compiler/runtime slice is
 merged at TypeRB Native revision
-`4a34ad49052cacd0b5a411b2d0846a5afe09aa97`; this document does not claim a
+`97b3ac2aa1d88cbb7782602589ad70686593ddab`; this document does not claim a
 gate result before the registered Darwin and Linux evidence is complete.
 
 The fixed compiler baseline is TypeRB Native main revision

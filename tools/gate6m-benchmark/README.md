@@ -52,7 +52,7 @@ gate6m-benchmark \
 
 `BASELINE_ROOT` must be a clean exact checkout of
 `71495bbf18f0820891ea086104ca7da808bfd25f`. `CANDIDATE_ROOT` must be a clean
-exact checkout of `4a34ad49052cacd0b5a411b2d0846a5afe09aa97`. `SEED` must be the
+exact checkout of `97b3ac2aa1d88cbb7782602589ad70686593ddab`. `SEED` must be the
 259,032-byte Darwin asset from the immutable experimental bootstrap release,
 with SHA-256
 `ef438d13598c534766334b408a39715c56ff1b69db528910ebf7d90ec7720b65`.
