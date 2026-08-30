@@ -96,7 +96,10 @@ The dispatch-only
 [`benchmarksgame-formal.yml`](../../.github/workflows/benchmarksgame-formal.yml)
 workflow assigns each case to a fresh `ubuntu-24.04-arm` runner. It closes the
 current self-hosted Native compiler chain from the immutable published seed,
-prepares one seven-candidate catalog, probes BenchExec and cgroup isolation,
-runs both lanes on that same host, and uploads all raw evidence even when a
-measurement fails. Merging the controller does not itself publish or schedule
-a performance claim.
+enables the current systemd user service's `cpuset` delegation when the hosted
+runner omits it, prepares one seven-candidate catalog, probes BenchExec and
+cgroup isolation, runs both lanes on that same host, and uploads all raw
+evidence even when a measurement fails. The delegation helper records the
+exact cgroup path and controller state before and after the narrowly scoped
+change. Merging the controller does not itself publish or schedule a
+performance claim.
