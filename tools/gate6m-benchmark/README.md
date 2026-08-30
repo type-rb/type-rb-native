@@ -63,3 +63,28 @@ The controller is an observer compiled from TypeRB source, not a child of
 either ordinary compiler chain. Linux arm64 correctness and asset-size
 evidence run separately because this controller intentionally uses Darwin's
 `/usr/bin/time -l`, Mach-O inspection, and linker policy.
+
+## Formal pinned-runner procedure
+
+The manually dispatched
+[`gate6m-formal.yml`](../../.github/workflows/gate6m-formal.yml) workflow owns
+the registered run. It executes this controller on the `macos-15` arm64 hosted
+runner with the exact baseline, candidate, TypeRB, QBE, and published-seed
+identities above. A successful controller invocation must print only the two
+requested evidence paths; the workflow independently requires the complete
+raw observation count, registered fixed-point hashes, the compiler-size bound,
+empty controller stderr, and clean source checkouts.
+
+The workflow runs [`gate6m-linux.sh`](../gate6m-linux.sh) independently on
+`ubuntu-24.04-arm`. That verifier raises the immutable Linux seed through two
+Go-free setup transitions, closes the candidate B2/B3/B4 chain with the shared
+bootstrap verifier, checks target-neutral fixed-point QBE, and compares the
+portable success and runtime-failure projects with the pinned Go oracle. It
+also records Linux process traces, ELF metadata, undefined symbols, the `libm`
+and `sqrt` boundary, deterministic application bytes, and the raw compiler
+size. A final job enforces the registered 620,000-byte combined Darwin and
+Linux compiler bound.
+
+The formal workflow uploads raw target evidence and the aggregate size record.
+Its presence defines the reproducible procedure; a gate result is claimed only
+after a completed run has been reviewed and committed under `results/`.

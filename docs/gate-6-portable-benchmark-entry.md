@@ -106,5 +106,11 @@ remain a later independently registered experiment.
 The TypeRB-authored
 [Gate 6M benchmark controller](../tools/gate6m-benchmark/README.md) owns the
 Darwin fixed-point, differential, timing, RSS, size, dependency, and process
-inventory procedure. Linux arm64 correctness and combined target size remain
-a separate pinned-runner evidence step.
+inventory procedure. The manually dispatched
+[formal Gate 6M workflow](../.github/workflows/gate6m-formal.yml) runs that
+controller on `macos-15`, runs the separate
+[Linux arm64 verifier](../tools/gate6m-linux.sh) on `ubuntu-24.04-arm`, and
+enforces the combined target-size bound. The workflow and verifier are pinned
+to the registered candidate, TypeRB oracle, QBE source release, and immutable
+previous-Native seed; they do not change this document's in-progress status
+until the resulting artifacts are reviewed and committed.
