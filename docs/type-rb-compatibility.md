@@ -12,9 +12,11 @@ The declaration-import compatibility work was registered in
 passes the selected `0.4.1-dev` reference, previous-seed, exact fixed-point,
 process, elapsed-time, peak-RSS, and compiler-size criteria. The `0.4.3-dev`
 successor is registered in
-[issue #106](https://github.com/type-rb/type-rb-native/issues/106). This
-document records the implementation boundary independently of those
-measurements.
+[issue #106](https://github.com/type-rb/type-rb-native/issues/106), and its
+[Darwin/Linux arm64 result](../results/2026-08-30-typerb-0-4-3-compatibility-darwin-linux-arm64/README.md)
+passes the selected-reference, explicit setup-transition, exact fixed-point,
+process, elapsed-time, peak-RSS, and compiler-size criteria. This document
+records the implementation boundary independently of those measurements.
 
 ## TypeRB 0.4.3 semantic revalidation
 
@@ -91,9 +93,10 @@ The reference pin and a Native bootstrap seed answer different questions:
   they do not replace or relabel the seed.
 
 A later seed is warranted only by a concrete distribution need demonstrated by
-the compatibility chain. The existing attested seed reached the exact
-`0.4.1-dev` fixed point on both targets; the `0.4.3-dev` revalidation must prove
-that it still reaches the new exact fixed point before drawing the same
-conclusion. Revision alignment alone does not warrant replacing or relabelling
-the seed. Native SemVer, TypeRB compatibility ranges, installation policy, and
-support promises remain deferred.
+the compatibility chain. The existing attested seed reaches the exact
+`0.4.3-dev` fixed point on both targets through two setup-only transitions.
+That confirms bootstrap feasibility without making the older embedded runtime
+free: a future seed containing the current runtime can remove both transitions.
+Revision alignment alone does not warrant replacing or relabelling the seed.
+Native SemVer, TypeRB compatibility ranges, installation policy, and support
+promises remain deferred.

@@ -589,6 +589,11 @@ link policy, two separately identified Go-free setup transitions carry current
 source and runtime before candidate B2. Candidate B2/B3/B4 exactness and all
 registered time, RSS, process, and size boundaries remain unchanged and
 independent of the reference revision.
+The
+[recorded result](../results/2026-08-30-typerb-0-4-3-compatibility-darwin-linux-arm64/README.md)
+passes both targets: candidate B2/B3/B4 and cross-target QBE are exact, all
+adjacent candidate spreads remain below 1.89%, and the combined compilers use
+544,712 of the registered 620,000 bytes.
 
 The ordinary-path runtime memory stability stage is registered in
 [issue #104](https://github.com/type-rb/type-rb-native/issues/104). It replaces
