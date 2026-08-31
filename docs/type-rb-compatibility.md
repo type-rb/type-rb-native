@@ -10,7 +10,10 @@ The machine-readable
 [`compatibility/current.json`](../compatibility/current.json) records this
 exact mapping beside the independent Native `0.1.0-dev` implementation
 identity. Its strict schema and CI validation keep TypeRB, bootstrap, MIR,
-runtime ABI, backend, target, and evidence identities separate. See
+runtime ABI, backend, target, and evidence identities separate. The current
+target list contains the experimental Darwin arm64 and Linux arm64 seed
+profiles plus the independently recovered and verified experimental Linux
+amd64 profile. See
 [Native versioning and compatibility](versioning.md) for bump and release
 rules.
 
@@ -106,6 +109,13 @@ the compatibility chain. The existing attested seed reaches the exact
 That confirms bootstrap feasibility without making the older embedded runtime
 free: a future seed containing the current runtime can remove both transitions.
 Revision alignment alone does not warrant replacing or relabelling the seed.
+The Linux amd64 target demonstrates the complementary case: it is recovered
+from the immutable seed release's target-neutral root QBE, not from an amd64
+seed executable. Its exact current chain and workflow are therefore recorded
+as target-chain evidence in compatibility schema version 2, while the
+immutable seed manifest remains unchanged. See the
+[Gate 6N result](../results/2026-08-31-gate6n-linux-amd64/README.md) and
+[Decision 0026](decisions/0026-recovered-target-chain-evidence.md).
 Native SemVer is now independently defined for experimental development, but
 TypeRB compatibility ranges, stable installation policy, and support promises
 remain deferred. The current schema can express only this exact verified

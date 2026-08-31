@@ -293,15 +293,17 @@ is kept in separate one-core and four-core lanes. See the
 [benchmark plan](docs/benchmarksgame.md) and
 [Decision 0023](docs/decisions/0023-reproducible-benchmark-layers.md).
 
-Gate 6N is registered under
-[issue #128](https://github.com/type-rb/type-rb-native/issues/128). The shared
-self-hosted compiler now has an internal `linux-amd64-v0` profile that maps to
-QBE `amd64_sysv`, the System V AMD64 ABI, and the existing explicit Linux
-LLD/libm link boundary. Formal root recovery, exact fixed-point, correctness,
-process, ELF, independent monotonic-time/GNU-time-RSS measurement, current
-Linux arm64 regression, cross-architecture QBE, performance, and size evidence
-remains in progress; Linux amd64 is not a supported target. See the
-[Gate 6N plan](docs/gate-6-linux-amd64.md) and
+Gate 6N passes every frozen condition for the internal
+`linux-amd64-v0` profile. The exact merged compiler closes a 240,888-byte
+Go-free B2/B3/B4 fixed point, emits byte-identical target-neutral compiler and
+portable-application QBE across Linux amd64 and arm64, and retains explicit
+QBE, system CC, assembler, LLD, libm, and dynamic-library boundaries. On the
+registered identical-source application, Native builds 77.60% faster with
+21.00% less peak RSS, runs 53.22% faster with 73.84% less peak RSS, and is
+99.26% smaller when stripped than optimized Go. Linux amd64 remains
+experimental and unsupported. See the
+[recorded result](results/2026-08-31-gate6n-linux-amd64/README.md),
+[Gate 6N plan](docs/gate-6-linux-amd64.md), and
 [Decision 0025](docs/decisions/0025-linux-amd64-target-profile.md).
 
 Upward configured project discovery, persistent service runtime integration,
@@ -439,6 +441,7 @@ repository.
 - [Gate 6L durable bootstrap seed Darwin/Linux arm64 result](results/2026-08-30-gate6l-bootstrap-seed-darwin-linux-arm64/README.md)
 - [Gate 6M portable benchmark-entry primitives](docs/gate-6-portable-benchmark-entry.md)
 - [Gate 6M portable benchmark-entry Darwin/Linux arm64 result](results/2026-08-31-gate6m-portable-benchmark-entry-darwin-linux-arm64/README.md)
+- [Gate 6N Linux amd64 target-chain result](results/2026-08-31-gate6n-linux-amd64/README.md)
 - [Gate 6N Linux amd64 target chain](docs/gate-6-linux-amd64.md)
 - [Reproducible language benchmark plan](docs/benchmarksgame.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
@@ -464,6 +467,7 @@ repository.
 - [Decision 0021: Portable benchmark-entry primitives](docs/decisions/0021-portable-benchmark-entry-primitives.md)
 - [Decision 0022: Linux arm64 LLD linker](docs/decisions/0022-linux-arm64-lld-linker.md)
 - [Decision 0023: Reproducible benchmark layers](docs/decisions/0023-reproducible-benchmark-layers.md)
+- [Decision 0026: Separate recovered target chains from seed assets](docs/decisions/0026-recovered-target-chain-evidence.md)
 - [Decision 0024: BenchExec fresh-process runtime controller](docs/decisions/0024-benchexec-runtime-controller.md)
 - [Decision 0025: Linux amd64 target profile](docs/decisions/0025-linux-amd64-target-profile.md)
 - [Contributing](CONTRIBUTING.md)

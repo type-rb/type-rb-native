@@ -23,7 +23,7 @@ from compatibility_manifest import (  # noqa: E402
 class CompatibilityManifestTest(unittest.TestCase):
     def setUp(self) -> None:
         self.manifest = load_json_strict(ROOT / "compatibility/current.json")
-        self.schema = load_json_strict(ROOT / "compatibility/schema-v1.json")
+        self.schema = load_json_strict(ROOT / "compatibility/schema-v2.json")
 
     def validate(self, manifest: dict) -> None:
         validate_manifest_data(ROOT, manifest, self.schema)
@@ -89,6 +89,27 @@ class CompatibilityManifestTest(unittest.TestCase):
         escaped["evidence"]["compatibility"]["result"] = "results/../../README.md"
         with self.assertRaisesRegex(ValidationError, "escapes the repository"):
             self.validate(escaped)
+
+    def test_current_target_profiles_are_unique(self) -> None:
+        duplicated = copy.deepcopy(self.manifest)
+        duplicate = copy.deepcopy(duplicated["targets"][-1])
+        duplicate["qbeTarget"] = "amd64_apple"
+        duplicated["targets"].append(duplicate)
+        with self.assertRaisesRegex(ValidationError, "target profiles must be unique"):
+            self.validate(duplicated)
+
+    def test_recovered_targets_require_exact_target_chain_evidence(self) -> None:
+        mutations = [
+            lambda value: value["evidence"]["targetChains"].clear(),
+            lambda value: value["evidence"]["targetChains"][0].update(
+                profile="linux-riscv64-v0"
+            ),
+        ]
+        for mutate in mutations:
+            changed = copy.deepcopy(self.manifest)
+            mutate(changed)
+            with self.assertRaisesRegex(ValidationError, "exactly cover"):
+                self.validate(changed)
 
 
 if __name__ == "__main__":
