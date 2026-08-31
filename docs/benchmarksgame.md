@@ -8,10 +8,15 @@ context.
 
 ## Status
 
-The capability corpus is implemented. All three small correctness inputs pass
-through the pinned Go reference compiler and the ordinary self-hosted Native
-compiler with byte-identical published output. Formal performance evidence has
-not yet been collected.
+The capability corpus and first formal fresh-process runtime layer are
+complete. All three performance inputs pass through the pinned Go reference
+compiler, ordinary self-hosted Native compiler, and five pinned context
+implementations with exact published output. The
+[recorded Linux arm64 result](../results/2026-08-31-benchmarksgame-runtime-linux-arm64/README.md)
+retains every registered observation and finds that Native is substantially
+smaller and lighter than TypeRB Go but 2.44x to 4.68x slower on these numeric
+kernels. Formal compiler/build and complete distribution measurements remain
+unimplemented.
 
 ## Pinned upstream boundary
 
@@ -116,9 +121,11 @@ The preregistered
 BenchExec `runexec` 3.35, runs correctness before timing, rotates all seven
 candidates through two warmup and eleven retained rounds, and preserves every
 failure and raw process-tree metric. One-core and four-core lanes are separate.
-This controller measures complete fresh processes only; compiler measurements
-and artifact/distribution inventory remain a separate controller and no formal
-performance values have been published yet. See
+This controller measures complete fresh processes only. Its first
+[formal result](../results/2026-08-31-benchmarksgame-runtime-linux-arm64/README.md)
+publishes all one-core and four-core raw observations, independently reproduced
+medians, and exact artifact identities. Compiler measurements and complete
+artifact/distribution inventory remain a separate controller. See
 [Decision 0024](decisions/0024-benchexec-runtime-controller.md). The
 dispatch-only [Linux arm64 workflow](../.github/workflows/benchmarksgame-formal.yml)
 isolates each case on a fresh runner and retains both lane result trees even if
