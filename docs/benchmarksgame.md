@@ -163,6 +163,13 @@ stripped application-size limits before runtime timing. This optimization A/B
 contract does not replace or revise the published cross-language inputs or
 results.
 
+The first [formal optimization result](../results/2026-08-31-native-numeric-inline-linux-arm64/README.md)
+passes that contract. Its bounded numeric-only reserve reduces the exact
+`spectral-norm` wall and CPU medians by 20.61% and 20.62%, keeps both control
+programs slightly faster than the frozen Native baseline, closes an exact
+self-hosted fixed point, and remains within every registered compiler, QBE,
+and application-size limit.
+
 Builds use release optimization without unsafe fast-math substitutions: C and
 C++ use `-O3`, Go uses `go build -trimpath`, Rust uses `rustc -C opt-level=3`,
 and Java uses `javac` followed by the same recorded JVM for every run. The
