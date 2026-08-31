@@ -453,6 +453,63 @@ def gate4_ascii_code(character: String): Integer
 	if character == "\t"
 		return 9
 	end
+	if character == " "
+		return 32
+	end
+	if character == "$"
+		return 36
+	end
+	if character == "%"
+		return 37
+	end
+	if character == "("
+		return 40
+	end
+	if character == ")"
+		return 41
+	end
+	if character == ","
+		return 44
+	end
+	if character == "="
+		return 61
+	end
+	if character == "@"
+		return 64
+	end
+	if character == "_"
+		return 95
+	end
+	if character == "{"
+		return 123
+	end
+	if character == "}"
+		return 125
+	end
+	mut lowercase_index := 0
+	lowercase := "abcdefghijklmnopqrstuvwxyz"
+	while lowercase_index < lowercase.size()
+		if lowercase[lowercase_index] == character
+			return lowercase_index + 97
+		end
+		lowercase_index += 1
+	end
+	mut uppercase_index := 0
+	uppercase := "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	while uppercase_index < uppercase.size()
+		if uppercase[uppercase_index] == character
+			return uppercase_index + 65
+		end
+		uppercase_index += 1
+	end
+	mut digit_index := 0
+	digits := "0123456789"
+	while digit_index < digits.size()
+		if digits[digit_index] == character
+			return digit_index + 48
+		end
+		digit_index += 1
+	end
 	alphabet := " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
 	mut index := 0
 	while index < alphabet.size()
@@ -601,6 +658,143 @@ def gate4_float_literal_in_range(value: String): Boolean
 	return false
 end
 
+def gate4_static_string_bytes(value: String): Array<Integer>
+	mut bytes: Array<Integer> := []
+	mut index := 0
+	while index < value.size()
+		code := gate4_ascii_code(value[index])
+		if code < 0
+			return []
+		end
+		bytes.push(code)
+		index += 1
+	end
+	return bytes
+end
+
+def gate4_static_bytes_hash(bytes: Array<Integer>, index: Integer): Integer
+	return ((bytes[index] * 257 + bytes[index + 1]) * 257 + bytes[index + 2]) % 512
+end
+
+def gate4_encode_static_bytes(bytes: Array<Integer>): Array<Integer>
+	mut positions: Array<Integer> := []
+	while positions.size() < 512
+		positions.push(- 1)
+	end
+	mut encoded: Array<Integer> := []
+	mut index := 0
+	while index < bytes.size()
+		mut match_length := 0
+		mut match_distance := 0
+		if index + 2 < bytes.size()
+			hash := gate4_static_bytes_hash(bytes, index)
+			previous := positions[hash]
+			if previous >= 0
+				distance := index - previous
+				if distance <= 65535
+					mut limit := bytes.size() - index
+					if limit > 130
+						limit = 130
+					end
+					mut length := 0
+					mut matching := true
+					while matching
+						if length >= limit
+							matching = false
+						else
+							if bytes[previous + length] == bytes[index + length]
+								length += 1
+							else
+								matching = false
+							end
+						end
+					end
+					if length >= 4
+						match_length = length
+						match_distance = distance
+					end
+				end
+			end
+		end
+
+		mut consumed := 1
+		if match_length >= 4
+			encoded.push(128 + match_length - 3)
+			encoded.push(match_distance / 256)
+			encoded.push(match_distance % 256)
+			consumed = match_length
+		else
+			encoded.push(bytes[index])
+		end
+
+		mut update := index
+		while update < index + consumed
+			if update + 2 < bytes.size()
+				positions[gate4_static_bytes_hash(bytes, update)] = update
+			end
+			update += 1
+		end
+		index += consumed
+	end
+	return encoded
+end
+
+def gate4_encode_static_string(value: String): Array<Integer>
+	return gate4_encode_static_bytes(gate4_static_string_bytes(value))
+end
+
+def gate4_emit_static_byte_data(
+		mut output: Gate4Output,
+		symbol: String,
+		bytes: Array<Integer>,
+	)
+	gate4_output_line(output, "data $" + symbol + " = {")
+	mut line := "\tb"
+	mut line_bytes := 0
+	mut index := 0
+	while index < bytes.size()
+		line += " " + gate4_integer_string(bytes[index])
+		line_bytes += 1
+		if line_bytes == 16
+			gate4_output_line(output, line + ",")
+			line = "\tb"
+			line_bytes = 0
+		end
+		index += 1
+	end
+	if line_bytes > 0
+		gate4_output_line(output, line + ",")
+	end
+	gate4_output_line(output, "\tb 0 }")
+	return
+end
+
+def gate4_emit_static_string_decoder(
+		mut output: Gate4Output,
+		compressed_tokens: Array<Integer>,
+		compressed_sizes: Array<Integer>,
+		decoded_sizes: Array<Integer>,
+	)
+	gate4_output_line(
+		output,
+		"function $g4_static_string_decode(l %target, l %encoded, l %encoded_length, l %decoded_length) {\n@start\n\tstorel 0, %target\n\t%length_address =l add %target, 8\n\tstorel %decoded_length, %length_address\n\t%output =l add %target, 16\n\tjmp @loop\n@loop\n\t%input_index =l phi @start 0, @literal %literal_next_input, @match_done %match_next_input\n\t%output_index =l phi @start 0, @literal %literal_next_output, @match_done %match_next_output\n\t%done =w cslel %encoded_length, %input_index\n\tjnz %done, @terminate, @read\n@read\n\t%encoded_address =l add %encoded, %input_index\n\t%header =w loadub %encoded_address\n\t%is_match =w csgtw %header, 127\n\tjnz %is_match, @match, @literal\n@literal\n\t%literal_address =l add %output, %output_index\n\tstoreb %header, %literal_address\n\t%literal_next_input =l add %input_index, 1\n\t%literal_next_output =l add %output_index, 1\n\tjmp @loop\n@match\n\t%high_address =l add %encoded_address, 1\n\t%low_address =l add %encoded_address, 2\n\t%high =w loadub %high_address\n\t%low =w loadub %low_address\n\t%high_long =l extuw %high\n\t%low_long =l extuw %low\n\t%high_shifted =l shl %high_long, 8\n\t%distance =l or %high_shifted, %low_long\n\t%match_length_word =w sub %header, 125\n\t%match_length =l extuw %match_length_word\n\tjmp @copy\n@copy\n\t%copy_index =l phi @match 0, @copy_byte %copy_next\n\t%copy_done =w cslel %match_length, %copy_index\n\tjnz %copy_done, @match_done, @copy_byte\n@copy_byte\n\t%source_base =l sub %output_index, %distance\n\t%source_index =l add %source_base, %copy_index\n\t%source_address =l add %output, %source_index\n\t%value =w loadub %source_address\n\t%destination_index =l add %output_index, %copy_index\n\t%destination_address =l add %output, %destination_index\n\tstoreb %value, %destination_address\n\t%copy_next =l add %copy_index, 1\n\tjmp @copy\n@match_done\n\t%match_next_input =l add %input_index, 3\n\t%match_next_output =l add %output_index, %match_length\n\tjmp @loop\n@terminate\n\t%terminator =l add %output, %decoded_length\n\tstoreb 0, %terminator\n\tret\n}",
+	)
+	gate4_output_line(output, "\nfunction $g4_static_strings_initialize() {\n@start")
+	mut index := 0
+	while index < compressed_tokens.size()
+		token := gate4_integer_string(compressed_tokens[index])
+		gate4_output_line(
+			output,
+			"\tcall $g4_static_string_decode(l $g4s" + token + ", l $g4c" + token +
+			", l " + gate4_integer_string(compressed_sizes[index]) +
+			", l " + gate4_integer_string(decoded_sizes[index]) + ")",
+		)
+		index += 1
+	end
+	gate4_output_line(output, "\tret\n}")
+	return
+end
+
 def gate4_emit_static_strings(
 		mut state: Gate4Compiler,
 		mut output: Gate4Output,
@@ -608,6 +802,9 @@ def gate4_emit_static_strings(
 	deduplicate := gate4_compiler_entry_function(state) >= 0
 	mut canonical_values: Array<String> := []
 	mut canonical_tokens: Array<Integer> := []
+	mut compressed_tokens: Array<Integer> := []
+	mut compressed_sizes: Array<Integer> := []
+	mut decoded_sizes: Array<Integer> := []
 	mut token_index := 0
 	while token_index < state.token_count[0]
 		if gate4_load_integer(state.token_kinds, token_index) == 3
@@ -629,42 +826,79 @@ def gate4_emit_static_strings(
 			if !found
 				canonical_values.push(value)
 				canonical_tokens.push(token_index)
-				gate4_output_line(
-					output,
-					"data $g4s" + gate4_integer_string(token_index) +
-					" = align 8 { l 0, l " + gate4_integer_string(value.size()) + ",",
-				)
-				mut line := "\tb"
-				mut line_bytes := 0
-				mut character_index := 0
-				while character_index < value.size()
-					code := gate4_ascii_code(value[character_index])
-					if code < 0
-						gate4_diagnostic(
-							state,
-							"TRBN4005",
-							gate4_load_integer(state.token_lines, token_index),
-							"Gate 4 QBE emission supports ASCII String literals only",
-						)
-					else
-						line += " " + gate4_integer_string(code)
-						line_bytes += 1
-						if line_bytes == 16
-							gate4_output_line(output, line + ",")
-							line = "\tb"
-							line_bytes = 0
-						end
+				mut bytes: Array<Integer> := []
+				mut has_static_bytes := false
+				mut compressed: Array<Integer> := []
+				if value.size() >= 256
+					bytes = gate4_static_string_bytes(value)
+					if bytes.size() == value.size()
+						has_static_bytes = true
+						compressed = gate4_encode_static_bytes(bytes)
 					end
-					character_index += 1
 				end
-				if line_bytes > 0
-					gate4_output_line(output, line + ",")
+				mut use_compressed := false
+				if compressed.size() > 0
+					if compressed.size() < value.size()
+						use_compressed = true
+					end
 				end
-				gate4_output_line(output, "\tb 0 }")
+				if use_compressed
+					gate4_output_line(
+						output,
+						"data $g4s" + gate4_integer_string(token_index) + " = align 8 { z " +
+						gate4_integer_string(value.size() + 17) + " }",
+					)
+					gate4_emit_static_byte_data(output, "g4c" + gate4_integer_string(token_index), compressed)
+					compressed_tokens.push(token_index)
+					compressed_sizes.push(compressed.size())
+					decoded_sizes.push(value.size())
+					output.runtime_flags[2] = 1
+				else
+					gate4_output_line(
+						output,
+						"data $g4s" + gate4_integer_string(token_index) +
+						" = align 8 { l 0, l " + gate4_integer_string(value.size()) + ",",
+					)
+					mut line := "\tb"
+					mut line_bytes := 0
+					mut character_index := 0
+					while character_index < value.size()
+						mut code := 0
+						if has_static_bytes
+							code = bytes[character_index]
+						else
+							code = gate4_ascii_code(value[character_index])
+						end
+						if code < 0
+							gate4_diagnostic(
+								state,
+								"TRBN4005",
+								gate4_load_integer(state.token_lines, token_index),
+								"Gate 4 QBE emission supports ASCII String literals only",
+							)
+						else
+							line += " " + gate4_integer_string(code)
+							line_bytes += 1
+							if line_bytes == 16
+								gate4_output_line(output, line + ",")
+								line = "\tb"
+								line_bytes = 0
+							end
+						end
+						character_index += 1
+					end
+					if line_bytes > 0
+						gate4_output_line(output, line + ",")
+					end
+					gate4_output_line(output, "\tb 0 }")
+				end
 			end
 			gate4_store_integer(state.token_lines, token_index, canonical)
 		end
 		token_index += 1
+	end
+	if compressed_tokens.size() > 0
+		gate4_emit_static_string_decoder(output, compressed_tokens, compressed_sizes, decoded_sizes)
 	end
 	gate4_output_line(output, "")
 	return !gate4_has_diagnostic(state)
@@ -2435,6 +2669,9 @@ end
 def gate4_emit_target_entry(mut output: Gate4Output)
 	gate4_output_line(output, "\nexport function w $main(w %argc, l %argv) {")
 	gate4_output_line(output, "@start")
+	if output.runtime_flags[2] == 1
+		gate4_output_line(output, "\tcall $g4_static_strings_initialize()")
+	end
 	if output.runtime_flags[1] == 1
 		gate4_emit_process_arguments(output)
 	end
@@ -2536,6 +2773,9 @@ def gate4_emit_entry(state: Gate4Compiler, mut output: Gate4Output)
 	else
 		gate4_output_line(output, "export function w $main(w %argc, l %argv) {")
 		gate4_output_line(output, "@start")
+		if output.runtime_flags[2] == 1
+			gate4_output_line(output, "\tcall $g4_static_strings_initialize()")
+		end
 		if output.runtime_flags[1] == 1
 			gate4_emit_process_arguments(output)
 		end
@@ -2552,7 +2792,7 @@ def gate4_emit_entry(state: Gate4Compiler, mut output: Gate4Output)
 end
 
 def gate4_emit_qbe(mut state: Gate4Compiler): Gate4Output
-	mut output := gate4_output_new(state.token_count[0] * 24 + 4096, [0, 0])
+	mut output := gate4_output_new(state.token_count[0] * 24 + 4096, [0, 0, 0])
 	gate4_emit_static_strings(state, output)
 	gate4_emit_record_descriptors(state, output)
 	compiler_runtime := gate4_compiler_entry_function(state) >= 0

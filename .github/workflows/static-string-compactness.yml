@@ -1,0 +1,500 @@
+name: Static String compactness A/B
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/static-string-compactness.yml
+      - compiler/gate4/conformance/**
+      - compiler/gate4/src/compiler.trb
+      - compiler/gate4/src/compiler_test.trb
+
+permissions:
+  contents: read
+
+env:
+  BASELINE_REVISION: 22c2c488dd8cfd946d6c7b16bf7c301012f17e44
+  RELEASE_TAG: bootstrap-seed-2026-08-30
+  QBE_VERSION: "1.3"
+  QBE_ARCHIVE_SHA256: d587905d620dc5e1d2bfa7c2cc642b9b837aa89a3188c6e37b53d756cf66e320
+
+jobs:
+  compare-target:
+    name: Compare ${{ matrix.target }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            profile: darwin-arm64-v0
+            target: darwin-arm64
+            asset: type-rb-native-bootstrap-darwin-arm64
+            seed_sha256: ef438d13598c534766334b408a39715c56ff1b69db528910ebf7d90ec7720b65
+            compiler_limit: 285000
+          - runner: ubuntu-24.04-arm
+            profile: linux-arm64-v0
+            target: linux-arm64
+            asset: type-rb-native-bootstrap-linux-arm64
+            seed_sha256: b4307c244edc9e4da620f2a7c1b03a733e575da032efefae615f9edf75048a37
+            compiler_limit: 255000
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Check out the exact candidate revision
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Materialize the registered current-main baseline
+        run: |
+          git cat-file -e "$BASELINE_REVISION^{commit}"
+          git merge-base --is-ancestor "$BASELINE_REVISION" HEAD
+          git worktree add --detach "$RUNNER_TEMP/baseline-source" "$BASELINE_REVISION"
+          test "$(git -C "$RUNNER_TEMP/baseline-source" rev-parse HEAD)" = "$BASELINE_REVISION"
+
+      - name: Install the Linux linker and process tracer
+        if: matrix.profile == 'linux-arm64-v0'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lld strace
+
+      - name: Build pinned QBE 1.3
+        id: qbe
+        run: |
+          curl -L "https://c9x.me/compile/release/qbe-$QBE_VERSION.tar.xz" \
+            -o "$RUNNER_TEMP/qbe-$QBE_VERSION.tar.xz"
+          if command -v sha256sum >/dev/null 2>&1; then
+            echo "$QBE_ARCHIVE_SHA256  $RUNNER_TEMP/qbe-$QBE_VERSION.tar.xz" | sha256sum -c -
+          else
+            echo "$QBE_ARCHIVE_SHA256  $RUNNER_TEMP/qbe-$QBE_VERSION.tar.xz" | shasum -a 256 -c -
+          fi
+          tar -C "$RUNNER_TEMP" -xf "$RUNNER_TEMP/qbe-$QBE_VERSION.tar.xz"
+          make -C "$RUNNER_TEMP/qbe-$QBE_VERSION"
+          echo "path=$RUNNER_TEMP/qbe-$QBE_VERSION/qbe" >> "$GITHUB_OUTPUT"
+
+      - name: Download and verify the immutable Native seed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_ASSET: ${{ matrix.asset }}
+          TARGET_SHA256: ${{ matrix.seed_sha256 }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/release"
+          gh release download "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$RUNNER_TEMP/release" \
+            --pattern "$TARGET_ASSET"
+          if command -v sha256sum >/dev/null 2>&1; then
+            echo "$TARGET_SHA256  $RUNNER_TEMP/release/$TARGET_ASSET" | sha256sum -c -
+          else
+            echo "$TARGET_SHA256  $RUNNER_TEMP/release/$TARGET_ASSET" | shasum -a 256 -c -
+          fi
+          chmod 0755 "$RUNNER_TEMP/release/$TARGET_ASSET"
+
+      - name: Build setup-only A/B transitions
+        env:
+          QBE: ${{ steps.qbe.outputs.path }}
+          PROFILE: ${{ matrix.profile }}
+          TARGET_ASSET: ${{ matrix.asset }}
+        run: |
+          seed="$RUNNER_TEMP/release/$TARGET_ASSET"
+          for role in baseline candidate; do
+            if test "$role" = baseline; then
+              source_root="$RUNNER_TEMP/baseline-source"
+            else
+              source_root="$GITHUB_WORKSPACE"
+            fi
+            transition="$RUNNER_TEMP/$role-transition"
+            mkdir -p "$transition/first" "$transition/current"
+            "$seed" build "$source_root/compiler/gate4/src/compiler.trb" \
+              --output "$transition/first/compiler" \
+              --qbe "$QBE" --cc /usr/bin/cc --target "$PROFILE"
+            "$transition/first/compiler" build "$source_root/compiler/gate4/src/compiler.trb" \
+              --output "$transition/current/compiler" \
+              --qbe "$QBE" --cc /usr/bin/cc --target "$PROFILE"
+          done
+
+      - name: Close exact measured A/B chains
+        env:
+          QBE: ${{ steps.qbe.outputs.path }}
+          PROFILE: ${{ matrix.profile }}
+        run: |
+          /bin/sh "$RUNNER_TEMP/baseline-source/tools/bootstrap-seed.sh" \
+            --mode previous \
+            --input "$RUNNER_TEMP/baseline-transition/current/compiler" \
+            --input-role transition \
+            --qbe "$QBE" \
+            --cc /usr/bin/cc \
+            --profile "$PROFILE" \
+            --runner-image "${{ matrix.runner }}" \
+            --workspace "$RUNNER_TEMP/baseline-bootstrap-workspace" \
+            --output "$RUNNER_TEMP/baseline-compiler" \
+            --evidence "$RUNNER_TEMP/baseline-bootstrap-evidence" \
+            --metadata "$RUNNER_TEMP/baseline-bootstrap-metadata.json" \
+            --asset-name static-string-compactness-baseline \
+            --repository-root "$RUNNER_TEMP/baseline-source"
+
+          /bin/sh tools/bootstrap-seed.sh \
+            --mode previous \
+            --input "$RUNNER_TEMP/candidate-transition/current/compiler" \
+            --input-role transition \
+            --qbe "$QBE" \
+            --cc /usr/bin/cc \
+            --profile "$PROFILE" \
+            --runner-image "${{ matrix.runner }}" \
+            --workspace "$RUNNER_TEMP/candidate-bootstrap-workspace" \
+            --output "$RUNNER_TEMP/candidate-compiler" \
+            --evidence "$RUNNER_TEMP/candidate-bootstrap-evidence" \
+            --metadata "$RUNNER_TEMP/candidate-bootstrap-metadata.json" \
+            --asset-name static-string-compactness-candidate
+
+      - name: Enforce compiler size and build-cost bounds
+        env:
+          COMPILER_LIMIT: ${{ matrix.compiler_limit }}
+          PROFILE: ${{ matrix.profile }}
+          QBE: ${{ steps.qbe.outputs.path }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          evidence="$RUNNER_TEMP/comparison-evidence"
+          observations="$evidence/interleaved-measurements.csv"
+          mkdir -p "$evidence" "$RUNNER_TEMP/interleaved-builds"
+          printf 'metric\tstage\tbaseline\tcandidate\tcandidate_baseline_ratio\tmaximum\tstatus\n' \
+            > "$evidence/comparison.tsv"
+          printf 'phase,round,order,role,stage,elapsed_seconds,peak_rss_bytes,status\n' \
+            > "$observations"
+          printf 'metric\tstage\trole\tbaseline_median\tmaximum_observation\tratio\tmaximum\tstatus\n' \
+            > "$evidence/catastrophic.tsv"
+          {
+            printf 'decision_series=two-warmup-seven-retained-interleaved-a-b\n'
+            printf 'first_position=alternates-each-round\n'
+            printf 'bootstrap_series=closure-evidence-only\n'
+          } > "$evidence/measurement-policy.txt"
+
+          observe() {
+            phase=$1
+            round=$2
+            order=$3
+            role=$4
+            stage=$5
+            case "$role" in
+              baseline)
+                source_root="$RUNNER_TEMP/baseline-source"
+                ;;
+              candidate)
+                source_root="$GITHUB_WORKSPACE"
+                ;;
+            esac
+            case "$stage" in
+              b2-b3)
+                seed="$RUNNER_TEMP/$role-bootstrap-workspace/b2/compiler"
+                expected="$RUNNER_TEMP/$role-bootstrap-workspace/b3/compiler"
+                ;;
+              b3-b4)
+                seed="$RUNNER_TEMP/$role-bootstrap-workspace/b3/compiler"
+                expected="$RUNNER_TEMP/$role-bootstrap-workspace/b4/compiler"
+                ;;
+            esac
+            directory="$RUNNER_TEMP/interleaved-builds/$phase-$round-$stage-$role"
+            mkdir -p "$directory"
+            output="$directory/compiler"
+            stdout="$directory/stdout"
+            stderr="$directory/stderr"
+            time_log="$directory/time.txt"
+            elapsed=0
+            rss=0
+            status=0
+            if test "$TARGET" = darwin-arm64; then
+              set +e
+              /usr/bin/time -p -l \
+                "$seed" build "$source_root/compiler/gate4/src/compiler.trb" \
+                --output "$output" --qbe "$QBE" --cc /usr/bin/cc --target "$PROFILE" \
+                > "$stdout" 2> "$time_log"
+              status=$?
+              set -e
+              elapsed=$(awk '$1 == "real" { print $2; exit }' "$time_log")
+              rss=$(awk '/maximum resident set size/ { print $1; exit }' "$time_log")
+            else
+              set +e
+              /usr/bin/time -f '%e %M' -o "$time_log" \
+                "$seed" build "$source_root/compiler/gate4/src/compiler.trb" \
+                --output "$output" --qbe "$QBE" --cc /usr/bin/cc --target "$PROFILE" \
+                > "$stdout" 2> "$stderr"
+              status=$?
+              set -e
+              elapsed=$(awk '{ print $1 }' "$time_log")
+              rss_kib=$(awk '{ print $2 }' "$time_log")
+              case "$rss_kib" in
+                '' | *[!0-9]*) rss=0 ;;
+                *) rss=$((rss_kib * 1024)) ;;
+              esac
+              test ! -s "$stderr"
+            fi
+            printf '%s,%s,%s,%s,%s,%s,%s,%s\n' \
+              "$phase" "$round" "$order" "$role" "$stage" \
+              "${elapsed:-0}" "${rss:-0}" "$status" >> "$observations"
+            test "$status" -eq 0
+            test ! -s "$stdout"
+            awk -v elapsed="$elapsed" -v rss="$rss" \
+              'BEGIN { exit !(elapsed > 0 && rss > 0) }'
+            cmp "$expected" "$output"
+          }
+
+          run_round() {
+            phase=$1
+            round=$2
+            if test $((round % 2)) -eq 1; then
+              roles='baseline candidate'
+            else
+              roles='candidate baseline'
+            fi
+            for stage in b2-b3 b3-b4; do
+              order=1
+              for role in $roles; do
+                observe "$phase" "$round" "$order" "$role" "$stage"
+                order=$((order + 1))
+              done
+            done
+          }
+
+          round=1
+          while test "$round" -le 2; do
+            run_round warmup "$round"
+            round=$((round + 1))
+          done
+          round=1
+          while test "$round" -le 7; do
+            run_round retained "$round"
+            round=$((round + 1))
+          done
+
+          median() {
+            role=$1
+            stage=$2
+            column=$3
+            awk -F, -v role="$role" -v stage="$stage" -v column="$column" '
+              NR > 1 && $1 == "retained" && $4 == role && $5 == stage && $8 == 0 {
+                print $column
+                count += 1
+              }
+              END { if (count != 7) exit 1 }
+            ' "$observations" | LC_ALL=C sort -n | sed -n '4p'
+          }
+
+          compare() {
+            name=$1
+            stage=$2
+            baseline=$3
+            candidate=$4
+            maximum=$5
+            ratio=$(awk -v baseline="$baseline" -v candidate="$candidate" \
+              'BEGIN { printf "%.6f", candidate / baseline }')
+            status=pass
+            if ! awk -v ratio="$ratio" -v maximum="$maximum" \
+              'BEGIN { exit !(ratio <= maximum) }'; then
+              status=fail
+            fi
+            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+              "$name" "$stage" "$baseline" "$candidate" "$ratio" "$maximum" "$status" \
+              >> "$evidence/comparison.tsv"
+            test "$status" = pass
+          }
+
+          require_below_catastrophic() {
+            name=$1
+            stage=$2
+            role=$3
+            column=$4
+            baseline_median=$5
+            maximum_observation=$(awk -F, -v role="$role" -v stage="$stage" -v column="$column" '
+              NR > 1 && $1 == "retained" && $4 == role && $5 == stage && $8 == 0 {
+                if (!found || $column > maximum) maximum = $column
+                found = 1
+              }
+              END { if (!found) exit 1; print maximum }
+            ' "$observations")
+            ratio=$(awk -v baseline="$baseline_median" -v maximum="$maximum_observation" \
+              'BEGIN { printf "%.6f", maximum / baseline }')
+            status=pass
+            if ! awk -v ratio="$ratio" 'BEGIN { exit !(ratio <= 2.0) }'; then
+              status=fail
+            fi
+            printf '%s\t%s\t%s\t%s\t%s\t%s\t2.0\t%s\n' \
+              "$name" "$stage" "$role" "$baseline_median" "$maximum_observation" \
+              "$ratio" "$status" >> "$evidence/catastrophic.tsv"
+            test "$status" = pass
+          }
+
+          baseline_size=$(wc -c < "$RUNNER_TEMP/baseline-compiler" | tr -d ' ')
+          candidate_size=$(wc -c < "$RUNNER_TEMP/candidate-compiler" | tr -d ' ')
+          test "$candidate_size" -le "$COMPILER_LIMIT"
+          compare compiler_bytes fixed-point "$baseline_size" "$candidate_size" 0.95
+          for stage in b2-b3 b3-b4; do
+            baseline_elapsed=$(median baseline "$stage" 6)
+            candidate_elapsed=$(median candidate "$stage" 6)
+            baseline_rss=$(median baseline "$stage" 7)
+            candidate_rss=$(median candidate "$stage" 7)
+            compare build_elapsed "$stage" "$baseline_elapsed" "$candidate_elapsed" 1.05
+            compare build_peak_rss "$stage" "$baseline_rss" "$candidate_rss" 1.05
+            for role in baseline candidate; do
+              require_below_catastrophic build_elapsed "$stage" "$role" 6 "$baseline_elapsed"
+              require_below_catastrophic build_peak_rss "$stage" "$role" 7 "$baseline_rss"
+            done
+          done
+
+          fixed_qbe_size=$(awk -F= '$1 == "fixed_point_qbe_size" {print $2}' \
+            "$RUNNER_TEMP/candidate-bootstrap-evidence/identities.txt")
+          fixed_qbe_sha256=$(awk -F= '$1 == "fixed_point_qbe_sha256" {print $2}' \
+            "$RUNNER_TEMP/candidate-bootstrap-evidence/identities.txt")
+          {
+            printf 'target=%s\n' "$TARGET"
+            printf 'baseline_compiler_bytes=%s\n' "$baseline_size"
+            printf 'candidate_compiler_bytes=%s\n' "$candidate_size"
+            printf 'candidate_compiler_limit=%s\n' "$COMPILER_LIMIT"
+            printf 'fixed_point_qbe_size=%s\n' "$fixed_qbe_size"
+            printf 'fixed_point_qbe_sha256=%s\n' "$fixed_qbe_sha256"
+          } > "$evidence/identities.txt"
+
+      - name: Verify conditional output and long-literal execution
+        env:
+          QBE: ${{ steps.qbe.outputs.path }}
+          PROFILE: ${{ matrix.profile }}
+        run: |
+          evidence="$RUNNER_TEMP/application-evidence"
+          workspace="$RUNNER_TEMP/applications"
+          mkdir -p "$evidence" "$workspace/baseline/no-long" "$workspace/candidate/no-long"
+          short_source=compiler/gate4/conformance/valid/strings-calls.trb
+          for role in baseline candidate; do
+            compiler="$RUNNER_TEMP/$role-compiler"
+            directory="$workspace/$role/no-long"
+            "$compiler" emit-qbe "$short_source" > "$directory/program.ssa"
+            "$compiler" build "$short_source" \
+              --output "$directory/program" --qbe "$QBE" --cc /usr/bin/cc --target "$PROFILE"
+          done
+          cmp "$workspace/baseline/no-long/program.ssa" "$workspace/candidate/no-long/program.ssa"
+          cmp "$workspace/baseline/no-long/program" "$workspace/candidate/no-long/program"
+          if grep -F 'g4_static_string_decode' "$workspace/candidate/no-long/program.ssa" >/dev/null; then
+            printf 'no-long-literal control emitted the decoder\n' >&2
+            exit 1
+          fi
+
+          long_source="$workspace/long-static-string.trb"
+          {
+            printf 'def main()\n\tvalue := "'
+            index=0
+            while test "$index" -lt 512; do
+              printf 'abcdefghijklmnopqrstuvwxyz012345'
+              index=$((index + 1))
+            done
+            printf '"\n\tputs(value.size().to_s())\n\treturn\nend\n'
+          } > "$long_source"
+          printf '16384\n' > "$workspace/long-static-string.out"
+
+          mkdir -p "$workspace/baseline/long" "$workspace/candidate/long"
+          for role in baseline candidate; do
+            compiler="$RUNNER_TEMP/$role-compiler"
+            directory="$workspace/$role/long"
+            "$compiler" emit-qbe "$long_source" > "$directory/first.ssa"
+            "$compiler" emit-qbe "$long_source" > "$directory/second.ssa"
+            cmp "$directory/first.ssa" "$directory/second.ssa"
+            "$compiler" build "$long_source" \
+              --output "$directory/program" --qbe "$QBE" --cc /usr/bin/cc --target "$PROFILE"
+            "$directory/program" > "$directory/stdout" 2> "$directory/stderr"
+            cmp "$workspace/long-static-string.out" "$directory/stdout"
+            test ! -s "$directory/stderr"
+          done
+          if grep -F 'g4_static_string_decode' "$workspace/baseline/long/first.ssa" >/dev/null; then
+            printf 'baseline unexpectedly contains the candidate decoder\n' >&2
+            exit 1
+          fi
+          grep -F 'function $g4_static_string_decode' "$workspace/candidate/long/first.ssa" >/dev/null
+          grep -F 'call $g4_static_strings_initialize()' "$workspace/candidate/long/first.ssa" >/dev/null
+          test "$(grep -c 'call \$g4_static_string_decode' "$workspace/candidate/long/first.ssa")" -eq 1
+
+          baseline_long_size=$(wc -c < "$workspace/baseline/long/program" | tr -d ' ')
+          candidate_long_size=$(wc -c < "$workspace/candidate/long/program" | tr -d ' ')
+          test "$candidate_long_size" -lt "$baseline_long_size"
+          {
+            printf 'case\tartifact\tbaseline_bytes\tcandidate_bytes\tstatus\n'
+            printf 'no-long\tqbe\t%s\t%s\texact\n' \
+              "$(wc -c < "$workspace/baseline/no-long/program.ssa" | tr -d ' ')" \
+              "$(wc -c < "$workspace/candidate/no-long/program.ssa" | tr -d ' ')"
+            printf 'no-long\texecutable\t%s\t%s\texact\n' \
+              "$(wc -c < "$workspace/baseline/no-long/program" | tr -d ' ')" \
+              "$(wc -c < "$workspace/candidate/no-long/program" | tr -d ' ')"
+            printf 'long\tqbe\t%s\t%s\tpass\n' \
+              "$(wc -c < "$workspace/baseline/long/first.ssa" | tr -d ' ')" \
+              "$(wc -c < "$workspace/candidate/long/first.ssa" | tr -d ' ')"
+            printf 'long\texecutable\t%s\t%s\tpass\n' \
+              "$baseline_long_size" "$candidate_long_size"
+          } > "$evidence/sizes.tsv"
+          if test "$PROFILE" = linux-arm64-v0; then
+            readelf -W -l "$workspace/candidate/long/program" > "$evidence/executable-segments.txt"
+            grep 'GNU_STACK' "$evidence/executable-segments.txt" >/dev/null
+            if grep 'GNU_STACK.*E' "$evidence/executable-segments.txt" >/dev/null; then
+              printf 'long-literal application requests an executable stack\n' >&2
+              exit 1
+            fi
+          else
+            otool -l "$workspace/candidate/long/program" > "$evidence/executable-segments.txt"
+          fi
+
+      - name: Upload target evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-string-compactness-${{ matrix.target }}
+          path: |
+            ${{ runner.temp }}/comparison-evidence
+            ${{ runner.temp }}/application-evidence
+            ${{ runner.temp }}/baseline-bootstrap-evidence
+            ${{ runner.temp }}/candidate-bootstrap-evidence
+            ${{ runner.temp }}/baseline-bootstrap-metadata.json
+            ${{ runner.temp }}/candidate-bootstrap-metadata.json
+          if-no-files-found: error
+          retention-days: 30
+
+  verify-cross-target:
+    name: Verify cross-target identity and combined size
+    if: always()
+    needs: compare-target
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Download target evidence
+        uses: actions/download-artifact@v5
+        with:
+          pattern: static-string-compactness-*
+          path: ${{ runner.temp }}/target-evidence
+
+      - name: Enforce the cross-target contract
+        run: |
+          darwin="$RUNNER_TEMP/target-evidence/static-string-compactness-darwin-arm64/comparison-evidence/identities.txt"
+          linux="$RUNNER_TEMP/target-evidence/static-string-compactness-linux-arm64/comparison-evidence/identities.txt"
+          test -f "$darwin"
+          test -f "$linux"
+          darwin_size=$(awk -F= '$1 == "candidate_compiler_bytes" {print $2}' "$darwin")
+          linux_size=$(awk -F= '$1 == "candidate_compiler_bytes" {print $2}' "$linux")
+          test "$darwin_size" -le 285000
+          test "$linux_size" -le 255000
+          combined=$((darwin_size + linux_size))
+          test "$combined" -le 540000
+          darwin_qbe_size=$(awk -F= '$1 == "fixed_point_qbe_size" {print $2}' "$darwin")
+          linux_qbe_size=$(awk -F= '$1 == "fixed_point_qbe_size" {print $2}' "$linux")
+          darwin_qbe_sha256=$(awk -F= '$1 == "fixed_point_qbe_sha256" {print $2}' "$darwin")
+          linux_qbe_sha256=$(awk -F= '$1 == "fixed_point_qbe_sha256" {print $2}' "$linux")
+          test "$darwin_qbe_size" = "$linux_qbe_size"
+          test "$darwin_qbe_sha256" = "$linux_qbe_sha256"
+          {
+            printf 'darwin_arm64_compiler_bytes=%s\n' "$darwin_size"
+            printf 'linux_arm64_compiler_bytes=%s\n' "$linux_size"
+            printf 'combined_compiler_bytes=%s\n' "$combined"
+            printf 'combined_compiler_limit=540000\n'
+            printf 'target_neutral_qbe_bytes=%s\n' "$darwin_qbe_size"
+            printf 'target_neutral_qbe_sha256=%s\n' "$darwin_qbe_sha256"
+          } > "$RUNNER_TEMP/cross-target.txt"
+
+      - name: Upload cross-target evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-string-compactness-cross-target
+          path: ${{ runner.temp }}/cross-target.txt
+          if-no-files-found: error
+          retention-days: 30

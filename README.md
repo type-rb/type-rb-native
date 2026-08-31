@@ -259,6 +259,17 @@ range. See the
 and
 [recorded result](results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/README.md).
 
+Profitable static Strings of at least 256 bytes now use a deterministic,
+dependency-free bounded-backreference representation. They expand once into
+zero-filled static storage before entry, require no heap allocation, and emit
+no decoder for programs without a profitable literal. The exact Darwin/Linux
+arm64 compiler pair decreases from 567,824 to 535,304 bytes, build-time and RSS
+medians remain within their registered 5% bound, and both targets emit the same
+869,699-byte fixed-point QBE. See the
+[registered compactness scope](https://github.com/type-rb/type-rb-native/issues/146)
+and
+[formal static String compactness result](results/2026-08-31-static-string-compactness-darwin-linux-arm64/README.md).
+
 The ordinary self-hosted runtime now reclaims dynamic Strings, Arrays, and
 managed records through an exact-root non-moving collector. The registered
 300,000,000-iteration Linux soak allocates and reclaims 42,300,000,000 managed
@@ -491,6 +502,7 @@ repository.
 - [Formal Native numeric-inline A/B result on Linux arm64](results/2026-08-31-native-numeric-inline-linux-arm64/README.md)
 - [Formal Native Array-address A/B result on Linux arm64](results/2026-08-31-native-array-address-linux-arm64/README.md)
 - [Rejected Native scalar-leaf inlining result on Linux arm64](results/2026-08-31-native-scalar-leaf-inline-linux-arm64/README.md)
+- [Formal static String compactness A/B result on Darwin/Linux arm64](results/2026-08-31-static-string-compactness-darwin-linux-arm64/README.md)
 - [Formal TypeRB backend-pair build controller](tools/benchmarksgame-build-formal/README.md)
 - [Formal Native runtime optimization A/B controller](tools/native-runtime-ab/README.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
