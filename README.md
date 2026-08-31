@@ -281,6 +281,17 @@ lifecycles. See the
 [runtime memory design](docs/runtime-memory-stability.md) and
 [recorded result](results/2026-08-30-runtime-memory-stability-darwin-linux-arm64/README.md).
 
+A second layer now exercises one single-threaded persistent worker lifecycle
+without adding Native-only TypeRB syntax or a public Web/Job API. One identical
+TypeRB source drives Native and optimized Go through success, retry, terminal
+failure, cancellation, and a bounded 64-entry retained-payload cache. CI runs a
+40,000-batch smoke on Darwin and Linux arm64; the manual Linux formal workflow
+registers 460,800,000 original jobs, 33,926,400,576 managed bytes, sampled GC
+state, RSS/descriptor/thread series, ASan/LSan, and Valgrind. Formal evidence is
+pending and no persistent-service result is claimed yet. See
+[issue #150](https://github.com/type-rb/type-rb-native/issues/150) and the
+[persistent worker harness](tools/runtime-worker-soak/README.md).
+
 Gate 6M is complete under
 [issue #113](https://github.com/type-rb/type-rb-native/issues/113). The
 ordinary self-hosted application path now implements the existing portable
@@ -465,6 +476,7 @@ repository.
 - [Gate 3 managed runtime](docs/gate-3-managed-runtime.md)
 - [Ordinary runtime memory stability](docs/runtime-memory-stability.md)
 - [Ordinary runtime memory stability Darwin/Linux arm64 result](results/2026-08-30-runtime-memory-stability-darwin-linux-arm64/README.md)
+- [Persistent worker memory lifecycle harness](tools/runtime-worker-soak/README.md)
 - [Gate 4 behavioral self-hosting](docs/gate-4-self-hosting.md)
 - [Gate 5 matched self-hosted compiler baseline](docs/gate-5-matched-compiler.md)
 - [Gate 5 matched compiler Darwin arm64 result](results/2026-08-29-gate5-matched-compiler-darwin-arm64/README.md)

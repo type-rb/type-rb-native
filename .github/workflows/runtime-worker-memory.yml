@@ -1,0 +1,299 @@
+name: Persistent worker memory lifecycle
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/runtime-worker-memory.yml
+      - compiler/gate4/src/compiler.trb
+      - compiler/gate4/src/compiler_test.trb
+      - tools/runtime-worker-soak/**
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/runtime-worker-memory.yml
+      - compiler/gate4/src/compiler.trb
+      - compiler/gate4/src/compiler_test.trb
+      - tools/runtime-worker-soak/**
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Exact published Native seed used to close the current compiler chain
+        required: true
+        default: bootstrap-seed-2026-08-30
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  TYPE_RB_REVISION: 5dc09070cf7f88a569279f5e63982a6de59d692c
+  TYPE_RB_VERSION: 0.4.4-dev
+  QBE_VERSION: "1.3"
+  QBE_ARCHIVE_SHA256: d587905d620dc5e1d2bfa7c2cc642b9b837aa89a3188c6e37b53d756cf66e320
+  RELEASE_TAG: bootstrap-seed-2026-08-30
+
+jobs:
+  verify-target:
+    name: Verify ${{ matrix.target }} persistent worker memory
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            profile: darwin-arm64-v0
+            target: darwin-arm64
+            asset: type-rb-native-bootstrap-darwin-arm64
+          - runner: ubuntu-24.04-arm
+            profile: linux-arm64-v0
+            target: linux-arm64
+            asset: type-rb-native-bootstrap-linux-arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Check out the exact candidate revision
+        uses: actions/checkout@v5
+
+      - name: Check out the pinned TypeRB compiler
+        uses: actions/checkout@v5
+        with:
+          repository: type-rb/type-rb
+          ref: ${{ env.TYPE_RB_REVISION }}
+          path: .type-rb
+
+      - name: Set up Go for the exact reference compiler
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: .type-rb/go.mod
+          cache-dependency-path: .type-rb/go.sum
+
+      - name: Build and verify the pinned TypeRB compiler
+        run: |
+          test "$(cat TYPE_RB_REVISION)" = "$TYPE_RB_REVISION"
+          test "$(git -C .type-rb rev-parse HEAD)" = "$TYPE_RB_REVISION"
+          go build -C .type-rb -o "$RUNNER_TEMP/trb" ./cmd/trb
+          test "$("$RUNNER_TEMP/trb" version)" = "$TYPE_RB_VERSION"
+
+      - name: Install Linux memory oracles
+        if: matrix.profile == 'linux-arm64-v0'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang libclang-rt-dev lld valgrind
+
+      - name: Build pinned QBE 1.3
+        id: qbe
+        run: |
+          archive="$RUNNER_TEMP/qbe-$QBE_VERSION.tar.xz"
+          curl --fail --location --show-error \
+            "https://c9x.me/compile/release/qbe-$QBE_VERSION.tar.xz" \
+            -o "$archive"
+          if command -v sha256sum > /dev/null 2>&1; then
+            printf '%s  %s\n' "$QBE_ARCHIVE_SHA256" "$archive" | sha256sum -c -
+          else
+            printf '%s  %s\n' "$QBE_ARCHIVE_SHA256" "$archive" | shasum -a 256 -c -
+          fi
+          tar -C "$RUNNER_TEMP" -xf "$archive"
+          make -C "$RUNNER_TEMP/qbe-$QBE_VERSION"
+          test -x "$RUNNER_TEMP/qbe-$QBE_VERSION/qbe"
+          printf 'path=%s\n' "$RUNNER_TEMP/qbe-$QBE_VERSION/qbe" >> "$GITHUB_OUTPUT"
+
+      - name: Download and verify the published ordinary Native seed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+          TARGET_ASSET: ${{ matrix.asset }}
+        run: |
+          release_tag=${INPUT_RELEASE_TAG:-$RELEASE_TAG}
+          mkdir -p "$RUNNER_TEMP/release"
+          gh release download "$release_tag" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$RUNNER_TEMP/release" \
+            --pattern "$TARGET_ASSET"
+          gh release download "$release_tag" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$RUNNER_TEMP/release" \
+            --pattern SHA256SUMS
+          expected=$(awk -v asset="$TARGET_ASSET" '$2 == asset {print $1}' "$RUNNER_TEMP/release/SHA256SUMS")
+          test -n "$expected"
+          if command -v sha256sum > /dev/null 2>&1; then
+            actual=$(sha256sum "$RUNNER_TEMP/release/$TARGET_ASSET" | awk '{print $1}')
+          else
+            actual=$(shasum -a 256 "$RUNNER_TEMP/release/$TARGET_ASSET" | awk '{print $1}')
+          fi
+          test "$actual" = "$expected"
+          chmod 0755 "$RUNNER_TEMP/release/$TARGET_ASSET"
+          printf 'release_tag=%s\n' "$release_tag" > "$RUNNER_TEMP/release/selection.txt"
+
+      - name: Close the adjacent current-source Native fixed point
+        env:
+          PUBLISHED_SEED: ${{ runner.temp }}/release/${{ matrix.asset }}
+          PROFILE: ${{ matrix.profile }}
+        run: |
+          mkdir -p \
+            "$RUNNER_TEMP/chain/first" \
+            "$RUNNER_TEMP/chain/second" \
+            "$RUNNER_TEMP/chain/third" \
+            "$RUNNER_TEMP/build-evidence"
+          "$PUBLISHED_SEED" build compiler/gate4/src/compiler.trb \
+            --output "$RUNNER_TEMP/chain/first/compiler" \
+            --qbe "${{ steps.qbe.outputs.path }}" \
+            --cc /usr/bin/cc \
+            --target "$PROFILE"
+          "$RUNNER_TEMP/chain/first/compiler" build compiler/gate4/src/compiler.trb \
+            --output "$RUNNER_TEMP/chain/second/compiler" \
+            --qbe "${{ steps.qbe.outputs.path }}" \
+            --cc /usr/bin/cc \
+            --target "$PROFILE"
+          "$RUNNER_TEMP/chain/second/compiler" build compiler/gate4/src/compiler.trb \
+            --output "$RUNNER_TEMP/chain/third/compiler" \
+            --qbe "${{ steps.qbe.outputs.path }}" \
+            --cc /usr/bin/cc \
+            --target "$PROFILE"
+          cmp "$RUNNER_TEMP/chain/second/compiler" "$RUNNER_TEMP/chain/third/compiler"
+          "$RUNNER_TEMP/chain/third/compiler" emit-qbe compiler/gate4/src/compiler.trb \
+            > "$RUNNER_TEMP/build-evidence/compiler-first.ssa"
+          "$RUNNER_TEMP/chain/third/compiler" emit-qbe compiler/gate4/src/compiler.trb \
+            > "$RUNNER_TEMP/build-evidence/compiler-second.ssa"
+          cmp \
+            "$RUNNER_TEMP/build-evidence/compiler-first.ssa" \
+            "$RUNNER_TEMP/build-evidence/compiler-second.ssa"
+          {
+            printf 'profile=%s\n' "$PROFILE"
+            printf 'first_size=%s\n' "$(wc -c < "$RUNNER_TEMP/chain/first/compiler" | tr -d ' ')"
+            printf 'second_size=%s\n' "$(wc -c < "$RUNNER_TEMP/chain/second/compiler" | tr -d ' ')"
+            printf 'third_size=%s\n' "$(wc -c < "$RUNNER_TEMP/chain/third/compiler" | tr -d ' ')"
+          } > "$RUNNER_TEMP/build-evidence/chain.txt"
+          if command -v sha256sum > /dev/null 2>&1; then
+            sha256sum \
+              "$RUNNER_TEMP/chain/second/compiler" \
+              "$RUNNER_TEMP/chain/third/compiler" \
+              "$RUNNER_TEMP/build-evidence/compiler-first.ssa" \
+              > "$RUNNER_TEMP/build-evidence/SHA256SUMS"
+          else
+            shasum -a 256 \
+              "$RUNNER_TEMP/chain/second/compiler" \
+              "$RUNNER_TEMP/chain/third/compiler" \
+              "$RUNNER_TEMP/build-evidence/compiler-first.ssa" \
+              > "$RUNNER_TEMP/build-evidence/SHA256SUMS"
+          fi
+
+      - name: Run the persistent-worker smoke
+        run: |
+          /bin/sh tools/runtime-worker-soak/runtime-worker-soak.sh \
+            smoke \
+            "$RUNNER_TEMP/chain/third/compiler" \
+            "${{ steps.qbe.outputs.path }}" \
+            /usr/bin/cc \
+            "$RUNNER_TEMP/trb" \
+            "${{ matrix.profile }}" \
+            "$RUNNER_TEMP/worker-smoke-workspace" \
+            "$RUNNER_TEMP/worker-smoke-evidence"
+
+      - name: Run the dedicated ASan and LSan oracle
+        if: github.event_name == 'workflow_dispatch' && matrix.profile == 'linux-arm64-v0'
+        run: |
+          /bin/sh tools/runtime-worker-soak/runtime-worker-soak.sh \
+            asan \
+            "$RUNNER_TEMP/chain/third/compiler" \
+            "${{ steps.qbe.outputs.path }}" \
+            /usr/bin/clang \
+            - \
+            "${{ matrix.profile }}" \
+            "$RUNNER_TEMP/worker-asan-workspace" \
+            "$RUNNER_TEMP/worker-asan-evidence"
+
+      - name: Run the Valgrind Memcheck oracle
+        if: github.event_name == 'workflow_dispatch' && matrix.profile == 'linux-arm64-v0'
+        run: |
+          /bin/sh tools/runtime-worker-soak/runtime-worker-soak.sh \
+            valgrind \
+            "$RUNNER_TEMP/chain/third/compiler" \
+            "${{ steps.qbe.outputs.path }}" \
+            /usr/bin/cc \
+            - \
+            "${{ matrix.profile }}" \
+            "$RUNNER_TEMP/worker-valgrind-workspace" \
+            "$RUNNER_TEMP/worker-valgrind-evidence"
+
+      - name: Run the 460,800,000-job formal lifecycle
+        if: github.event_name == 'workflow_dispatch' && matrix.profile == 'linux-arm64-v0'
+        run: |
+          /bin/sh tools/runtime-worker-soak/runtime-worker-soak.sh \
+            formal \
+            "$RUNNER_TEMP/chain/third/compiler" \
+            "${{ steps.qbe.outputs.path }}" \
+            /usr/bin/cc \
+            "$RUNNER_TEMP/trb" \
+            "${{ matrix.profile }}" \
+            "$RUNNER_TEMP/worker-formal-workspace" \
+            "$RUNNER_TEMP/worker-formal-evidence"
+
+      - name: Record exact workflow context
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/workflow-evidence"
+          {
+            printf 'repository_revision=%s\n' "$GITHUB_SHA"
+            printf 'repository_ref=%s\n' "$GITHUB_REF"
+            printf 'workflow=%s\n' .github/workflows/runtime-worker-memory.yml
+            printf 'workflow_run_id=%s\n' "$GITHUB_RUN_ID"
+            printf 'runner=%s\n' '${{ matrix.runner }}'
+            printf 'profile=%s\n' '${{ matrix.profile }}'
+            printf 'type_rb_revision=%s\n' "$TYPE_RB_REVISION"
+            printf 'type_rb_version=%s\n' "$TYPE_RB_VERSION"
+          } > "$RUNNER_TEMP/workflow-evidence/context.txt"
+
+      - name: Upload target evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-worker-${{ matrix.target }}
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            ${{ runner.temp }}/build-evidence
+            ${{ runner.temp }}/release/selection.txt
+            ${{ runner.temp }}/worker-smoke-evidence
+            ${{ runner.temp }}/worker-asan-evidence
+            ${{ runner.temp }}/worker-valgrind-evidence
+            ${{ runner.temp }}/worker-formal-evidence
+            ${{ runner.temp }}/workflow-evidence
+
+  verify-cross-target:
+    name: Verify shared portable evidence and combined size
+    needs: verify-target
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download both target evidence sets
+        uses: actions/download-artifact@v5
+        with:
+          pattern: runtime-worker-*
+          path: evidence
+
+      - name: Compare target-neutral QBE and enforce combined size
+        run: |
+          cmp \
+            evidence/runtime-worker-darwin-arm64/build-evidence/compiler-first.ssa \
+            evidence/runtime-worker-linux-arm64/build-evidence/compiler-first.ssa
+          cmp \
+            evidence/runtime-worker-darwin-arm64/worker-smoke-evidence/program.ssa \
+            evidence/runtime-worker-linux-arm64/worker-smoke-evidence/program.ssa
+          darwin_size=$(cat evidence/runtime-worker-darwin-arm64/worker-smoke-evidence/compiler-size-bytes.txt)
+          linux_size=$(cat evidence/runtime-worker-linux-arm64/worker-smoke-evidence/compiler-size-bytes.txt)
+          combined_size=$((darwin_size + linux_size))
+          test "$darwin_size" -le 290000
+          test "$linux_size" -le 260000
+          test "$combined_size" -le 550000
+          {
+            printf 'darwin_stripped_compiler_bytes=%s\n' "$darwin_size"
+            printf 'linux_stripped_compiler_bytes=%s\n' "$linux_size"
+            printf 'combined_stripped_compiler_bytes=%s\n' "$combined_size"
+            printf 'combined_limit_bytes=550000\n'
+          } > evidence/cross-target-summary.txt
+
+      - name: Upload cross-target summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-worker-cross-target
+          retention-days: 30
+          path: evidence/cross-target-summary.txt
