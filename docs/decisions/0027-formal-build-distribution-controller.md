@@ -31,8 +31,9 @@ every measured process.
 
 BenchExec `runexec` 3.35 measures the complete compiler process tree on the same
 four logical CPUs with a 4 GB memory limit and a 300 second wall limit. `/` is
-read-only, `/home` and `/tmp` are isolated overlays, and only the registered
-measurement workspace is writable. Every observation records status or signal,
+read-only, `/home` is an isolated overlay, `/tmp` uses BenchExec's default hidden
+writable temporary-directory mode, and only the registered measurement
+workspace is otherwise writable. Every observation records status or signal,
 termination reason, wall time, CPU time, peak process-tree memory, compiler log,
 artifact size and SHA-256, and a post-build small-input correctness check.
 Failures remain in the raw schedule and prevent a passing median.

@@ -92,6 +92,9 @@ if test "${1:-}" = --version; then
 	printf 'runexec 3.35-test\n'
 	exit 0
 fi
+if test -n "${FAKE_RUNEXEC_ARGS_LOG:-}"; then
+	printf '%s\n' "$*" >> "$FAKE_RUNEXEC_ARGS_LOG"
+fi
 output=
 while test "$#" -gt 0; do
 	case "$1" in
@@ -148,6 +151,7 @@ EOF
 chmod 0755 "$cache_control"
 
 PATH="$test_root:$PATH" \
+	FAKE_RUNEXEC_ARGS_LOG="$test_root/runexec-args.log" \
 	/bin/sh "$script_directory/build-controller.sh" \
 	test "$fake_runexec" fannkuch-redux \
 	"$test_root/native-compiler" "$test_root/trb" "$test_root/qbe" "$test_root/cc" "$test_root/go" \
@@ -161,6 +165,17 @@ test "$(wc -l < "$test_root/pass-evidence/medians.tsv" | tr -d ' ')" -eq 3 || fa
 test "$(find "$test_root/pass-evidence/observations" -name runexec.stdout -type f | wc -l | tr -d ' ')" -eq 26 ||
 	fail "observation count differs"
 test "$(wc -l < "$test_root/pass-evidence/artifacts.tsv" | tr -d ' ')" -eq 5 || fail "artifact inventory differs"
+test "$(grep -F -- '--overlay-dir /home' "$test_root/runexec-args.log" | wc -l | tr -d ' ')" -eq 26 ||
+	fail "home overlay policy differs"
+if grep -F -- '--overlay-dir /tmp' "$test_root/runexec-args.log" >/dev/null; then
+	fail "temporary directory must use BenchExec default hidden mode"
+fi
+grep '^tmp_filesystem=benchexec-default-hidden$' "$test_root/pass-evidence/environment.txt" >/dev/null ||
+	fail "temporary directory evidence differs"
+if grep -F -- '--overlay-dir /tmp' \
+	"$script_directory/../../.github/workflows/benchmarksgame-build-formal.yml" >/dev/null; then
+	fail "host probe must use BenchExec default hidden temporary directory"
+fi
 
 awk -F '\t' '
 	NR == 2 && !($1 == "warmup" && $2 == 1 && $4 == 1 && $6 == "typerb-native") { exit 1 }
