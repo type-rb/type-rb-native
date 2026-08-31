@@ -285,13 +285,18 @@ Linux evidence observes the explicit LLD and dynamic libm boundaries. See the
 [Decision 0022](docs/decisions/0022-linux-arm64-lld-linker.md), and
 [recorded result](results/2026-08-31-gate6m-portable-benchmark-entry-darwin-linux-arm64/README.md).
 
-The first reproducible language-benchmark corpus now admits the published
-`fannkuch-redux`, `n-body`, and `spectral-norm` specifications without adding
-Native-only language behavior. The exact same TypeRB sources pass the pinned
-Go and self-hosted Native paths, while cross-language implementation context
-is kept in separate one-core and four-core lanes. See the
-[benchmark plan](docs/benchmarksgame.md) and
-[Decision 0023](docs/decisions/0023-reproducible-benchmark-layers.md).
+The first formal language-benchmark runtime result retains all 462 registered
+samples for `fannkuch-redux`, `n-body`, and `spectral-norm`. The exact same
+TypeRB sources pass through pinned Go and self-hosted Native paths, but Native
+runs 2.44x to 4.68x slower on these numeric kernels. Native simultaneously
+uses 82.46% to 86.55% less peak RSS and produces raw applications at least
+99.21% smaller than TypeRB Go. Pinned C, C++, Go, Rust, and Java programs remain
+separate one-core/four-core implementation context; no composite language
+score is claimed. See the
+[recorded runtime result](results/2026-08-31-benchmarksgame-runtime-linux-arm64/README.md),
+[benchmark plan](docs/benchmarksgame.md),
+[Decision 0023](docs/decisions/0023-reproducible-benchmark-layers.md), and
+[Decision 0024](docs/decisions/0024-benchexec-runtime-controller.md).
 
 Gate 6N passes every frozen condition for the internal
 `linux-amd64-v0` profile. The exact merged compiler closes a 240,888-byte
@@ -444,6 +449,7 @@ repository.
 - [Gate 6N Linux amd64 target-chain result](results/2026-08-31-gate6n-linux-amd64/README.md)
 - [Gate 6N Linux amd64 target chain](docs/gate-6-linux-amd64.md)
 - [Reproducible language benchmark plan](docs/benchmarksgame.md)
+- [Formal Benchmarks Game runtime result on Linux arm64](results/2026-08-31-benchmarksgame-runtime-linux-arm64/README.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
 - [Decision 0003: Gate 1 QBE and Darwin arm64 profile](docs/decisions/0003-gate-1-qbe-target.md)
@@ -467,9 +473,9 @@ repository.
 - [Decision 0021: Portable benchmark-entry primitives](docs/decisions/0021-portable-benchmark-entry-primitives.md)
 - [Decision 0022: Linux arm64 LLD linker](docs/decisions/0022-linux-arm64-lld-linker.md)
 - [Decision 0023: Reproducible benchmark layers](docs/decisions/0023-reproducible-benchmark-layers.md)
-- [Decision 0026: Separate recovered target chains from seed assets](docs/decisions/0026-recovered-target-chain-evidence.md)
 - [Decision 0024: BenchExec fresh-process runtime controller](docs/decisions/0024-benchexec-runtime-controller.md)
 - [Decision 0025: Linux amd64 target profile](docs/decisions/0025-linux-amd64-target-profile.md)
+- [Decision 0026: Separate recovered target chains from seed assets](docs/decisions/0026-recovered-target-chain-evidence.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 
