@@ -17,8 +17,9 @@ The valid cases cover:
   construction, indexing, growth, and mutation in `valid/records-arrays.trb`;
 - managed String concatenation and content inequality in
   `valid/strings-calls.trb`;
-- deterministic dependency-free compression, initialization, indexing, and
-  equality for multiple long static Strings in `valid/static-strings.trb`;
+- deterministic dependency-free compression, initialization, indexing,
+  escapes, terminating zero, and equality
+  for multiple long static Strings in `valid/static-strings.trb`;
 - finite binary64 literals, signed zero, subnormal and underflow behavior,
   infinity, NaN, mixed Integer widening, arithmetic, comparisons, calls,
   mutable locals, and record fields in `valid/float-scalars.trb`;

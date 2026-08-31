@@ -1,4 +1,4 @@
-import { Gate4Compiler, Gate4Output, Gate4ProjectSources, gate4_add_module, gate4_build_symbol_index, gate4_character_in, gate4_check, gate4_compiler_new, gate4_emit_qbe, gate4_encode_static_string, gate4_find_field, gate4_find_function_in_module, gate4_find_import_binding, gate4_find_module, gate4_find_record_in_module, gate4_find_record_type, gate4_float_literal_in_range, gate4_has_diagnostic, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_local_find, gate4_locals_new, gate4_number_is_float, gate4_number_without_underscores, gate4_parse_module, gate4_parse_project_config, gate4_resolve, gate4_string_bucket, gate4_symbol_bucket_count } from compiler
+import { Gate4Compiler, Gate4Output, Gate4ProjectSources, gate4_add_module, gate4_build_symbol_index, gate4_character_in, gate4_check, gate4_compiler_new, gate4_emit_qbe, gate4_encode_static_string, gate4_find_field, gate4_find_function_in_module, gate4_find_import_binding, gate4_find_module, gate4_find_record_in_module, gate4_find_record_type, gate4_float_literal_in_range, gate4_has_diagnostic, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_local_find, gate4_locals_new, gate4_number_is_float, gate4_number_without_underscores, gate4_parse_module, gate4_parse_project_config, gate4_resolve, gate4_string_bucket, gate4_string_starts_at, gate4_symbol_bucket_count } from compiler
 import { gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage
 import { native_create_directory, native_read_text, native_write_text } from native_file_system
 import trb/std/process
@@ -53,6 +53,18 @@ def gate4_repeat_text(fragment: String, count: Integer): String
 		index += 1
 	end
 	return writer.to_s()
+end
+
+def gate4_occurrence_count(value: String, needle: String): Integer
+	mut count := 0
+	mut index := 0
+	while index + needle.size() <= value.size()
+		if gate4_string_starts_at(value, index, needle)
+			count += 1
+		end
+		index += 1
+	end
+	return count
 end
 
 describe("Gate 4 TypeRB frontend") do
@@ -1290,6 +1302,11 @@ describe("Gate 4 TypeRB frontend") do
 		expect(encoded[2]).to_equal(0)
 		expect(encoded[3]).to_equal(1)
 
+		incompressible := "aaabaacaadaaeaafaagaahaaiaajaakaalaamaanaaoaapabbabcabdabeabfabgabhabiabjabkablabmabnaboabpacbaccacdaceacfacgachaciacjackaclacmacnacoacpadbadcaddadeadfadgadhadiadjadkadladmadnadoadpaebaecaedaeeaefaegaehaeiaejaekaelaemaenaeoaepafbafcafdafeaffafgafhafiafjafk"
+		incompressible_encoded := gate4_encode_static_string(incompressible)
+		expect(incompressible.size()).to_equal(256)
+		expect(incompressible_encoded.size()).to_equal(incompressible.size())
+
 		below := gate4_repeat_text("abcd", 63) + "abc"
 		below_source := "def main()\n\tvalue := \"" + below + "\"\n\tputs(value)\n\treturn\nend\n"
 		mut below_state := gate4_compiler_new(below_source.size() + 1)
@@ -1312,7 +1329,18 @@ describe("Gate 4 TypeRB frontend") do
 		expect(boundary_qbe.include?(" = align 8 { z 273 }")).to_be_true()
 		expect(boundary_qbe.include?("data $g4c")).to_be_true()
 		expect(boundary_qbe.include?("function $g4_static_string_decode")).to_be_true()
+		expect(boundary_qbe.include?("\tstoreb 0, %terminator")).to_be_true()
 		expect(boundary_qbe.include?("\tcall $g4_static_strings_initialize()")).to_be_true()
+
+		deduplicated_source := "def compiler_main(source: String, mode: String, with_path: Boolean): Integer\n\tfirst := \"" + boundary + "\"\n\tsecond := \"" + boundary + "\"\n\tif first == second\n\t\treturn 0\n\telse\n\t\treturn 1\n\tend\nend\n\ndef main()\n\treturn\nend\n"
+		mut deduplicated_state := gate4_compiler_new(deduplicated_source.size() + 1)
+		expect(gate4_lex(deduplicated_state, deduplicated_source)).to_be_true()
+		expect(gate4_parse_module(deduplicated_state, 0, deduplicated_state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(deduplicated_state)).to_be_true()
+		expect(gate4_check(deduplicated_state)).to_be_true()
+		deduplicated_qbe := gate4_output_source(gate4_emit_qbe(deduplicated_state))
+		expect(gate4_occurrence_count(deduplicated_qbe, " = align 8 { z 273 }")).to_equal(1)
+		expect(gate4_occurrence_count(deduplicated_qbe, "call $g4_static_string_decode")).to_equal(1)
 	end
 
 	test("emits deterministic QBE and executes the registered source subset") do
