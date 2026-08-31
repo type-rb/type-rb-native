@@ -296,7 +296,11 @@ score is claimed. See the
 [recorded runtime result](results/2026-08-31-benchmarksgame-runtime-linux-arm64/README.md),
 [benchmark plan](docs/benchmarksgame.md),
 [Decision 0023](docs/decisions/0023-reproducible-benchmark-layers.md), and
-[Decision 0024](docs/decisions/0024-benchexec-runtime-controller.md).
+[Decision 0024](docs/decisions/0024-benchexec-runtime-controller.md). The
+separate [formal build controller](tools/benchmarksgame-build-formal/README.md)
+now preregisters compiler wall/CPU/RSS, artifact, process-closure, and
+distribution evidence without publishing a build result; see
+[Decision 0027](docs/decisions/0027-formal-build-distribution-controller.md).
 
 Gate 6N passes every frozen condition for the internal
 `linux-amd64-v0` profile. The exact merged compiler closes a 240,888-byte
@@ -450,6 +454,7 @@ repository.
 - [Gate 6N Linux amd64 target chain](docs/gate-6-linux-amd64.md)
 - [Reproducible language benchmark plan](docs/benchmarksgame.md)
 - [Formal Benchmarks Game runtime result on Linux arm64](results/2026-08-31-benchmarksgame-runtime-linux-arm64/README.md)
+- [Formal TypeRB backend-pair build controller](tools/benchmarksgame-build-formal/README.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
 - [Decision 0003: Gate 1 QBE and Darwin arm64 profile](docs/decisions/0003-gate-1-qbe-target.md)
@@ -476,6 +481,7 @@ repository.
 - [Decision 0024: BenchExec fresh-process runtime controller](docs/decisions/0024-benchexec-runtime-controller.md)
 - [Decision 0025: Linux amd64 target profile](docs/decisions/0025-linux-amd64-target-profile.md)
 - [Decision 0026: Separate recovered target chains from seed assets](docs/decisions/0026-recovered-target-chain-evidence.md)
+- [Decision 0027: Formal build and distribution controller](docs/decisions/0027-formal-build-distribution-controller.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 
