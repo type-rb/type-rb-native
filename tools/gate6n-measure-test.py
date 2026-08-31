@@ -174,6 +174,24 @@ class Gate6NMeasureTest(unittest.TestCase):
             self.assertFalse(stdout.exists())
             self.assertFalse(stderr.exists())
 
+    def test_rejects_out_of_range_repetition_counts(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="gate6n-measure-test-") as temporary:
+            root = Path(temporary)
+            for repetitions in (0, 1_001):
+                result, record, stdout, stderr = self.run_controller(
+                    root,
+                    f"invalid-{repetitions}",
+                    "-",
+                    [sys.executable, "-c", "print('unreachable')"],
+                    repetitions=repetitions,
+                )
+                self.assertEqual(result.returncode, 64)
+                self.assertEqual(result.stdout, b"")
+                self.assertIn(b"usage: gate6n-measure.py", result.stderr)
+                self.assertFalse(record.exists())
+                self.assertFalse(stdout.exists())
+                self.assertFalse(stderr.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
