@@ -31,7 +31,10 @@ The valid cases cover:
   `valid/float-arrays.trb`, starting at its updated Native B2;
 - shared outer Integer Array identity across aliases and mutable parameters,
   including growth, element mutation, and parameter-local rebinding in
-  `valid/array-aliases.trb`; and
+  `valid/array-aliases.trb`;
+- managed record-field and Array-element aliases retained through owner
+  reassignment, lexical-block exit, loop-root compaction, and forced
+  collection in `valid/managed-alias-roots.trb`; and
 - the compiler source closure itself, exercised by the bootstrap test outside
   this directory.
 

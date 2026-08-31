@@ -1238,15 +1238,15 @@ def gate4_emit_root_value(
 	return
 end
 
-def gate4_emit_alias_root(
+def gate4_note_managed_alias(
 		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
-		operand: String,
 		type_name: String,
 	)
 	if gate4_type_is_managed(type_name)
+		# The owner remains reachable through its caller, allocation, or managed
+		# local root until the alias is consumed. Loop compaction transfers an
+		# alias retained as a local, so a duplicate temporary root is unnecessary.
 		context.temporary_roots_used[0] = 1
-		gate4_output_line(output, "\tcall $g4_gc_temp_push(l " + operand + ")")
 	end
 	return
 end
@@ -1842,7 +1842,7 @@ def gate4_emit_postfix(
 						output,
 						"\t" + operand + " =" + gate4_qbe_type(field_type) + " " + gate4_qbe_load(field_type) + " " + address,
 					)
-					gate4_emit_alias_root(context, output, operand, field_type)
+					gate4_note_managed_alias(context, field_type)
 					value = gate4_emitted_value(
 						operand,
 						field_type,
@@ -1891,7 +1891,7 @@ def gate4_emit_postfix(
 							"\t" + operand + " =" + gate4_qbe_type(element_type) + " " +
 							gate4_qbe_load(element_type) + " " + address,
 						)
-						gate4_emit_alias_root(context, output, operand, element_type)
+						gate4_note_managed_alias(context, element_type)
 						value = gate4_emitted_value(
 							operand,
 							element_type,

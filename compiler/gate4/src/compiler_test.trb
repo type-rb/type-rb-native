@@ -1282,7 +1282,7 @@ describe("Gate 4 TypeRB frontend") do
 		expect(qbe.include?("\t%temporary_roots =l loadl $g4_gc_temp_count")).to_be_true()
 		expect(qbe.include?("\tstorel %temporary_roots, $g4_gc_temp_count")).to_be_true()
 		expect(qbe.include?("\tcall $g4_gc_temp_reset(l %temporary_roots)")).to_be_false()
-		expect(qbe.include?("\tcall $g4_gc_temp_push(l %t")).to_be_true()
+		expect(qbe.include?("\tcall $g4_gc_temp_push(l %t")).to_be_false()
 		expect(
 			qbe.include?(
 				"\tstorel %temporary_roots, $g4_gc_temp_count\n\t%return_result =l loadl %return_value\n\tcall $g4_gc_temp_push(l %return_result)\n\tret %return_result\n",
@@ -1291,6 +1291,20 @@ describe("Gate 4 TypeRB frontend") do
 		expect(qbe.include?("$g4_gc_roots")).to_be_false()
 		expect(qbe.include?("$g4_gc_frame_enter")).to_be_false()
 		expect(qbe.include?("$g4_gc_frame_leave")).to_be_false()
+	end
+
+	test("keeps managed owners rooted without duplicating roots for loaded aliases") do
+		source := "record Box\n\tvalues: Array<String>\nend\n\ndef first(box: Box): String\n\treturn box.values[0]\nend\n\ndef main()\n\tvalues := [\"kept\"]\n\tbox := Box.new(values: values)\n\tputs(first(box))\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		qbe := gate4_output_source(gate4_emit_qbe(state))
+		expect(gate4_occurrence_count(qbe, "call $g4_gc_temp_push")).to_equal(2)
+		expect(qbe.include?("\tcall $g4_gc_temp_push(l %t")).to_be_false()
+		expect(qbe.include?("\tcall $g4_gc_temp_push(l %object)")).to_be_true()
+		expect(qbe.include?("\tcall $g4_gc_temp_push(l %return_result)")).to_be_true()
 	end
 
 	test("emits an opt-in sampled managed-runtime trace without changing stats v1") do
