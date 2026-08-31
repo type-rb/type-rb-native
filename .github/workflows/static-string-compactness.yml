@@ -1,7 +1,13 @@
-name: Static String compactness A/B
+name: Static String compactness regression
 
 on:
   workflow_dispatch:
+    inputs:
+      baseline_revision:
+        description: Exact baseline revision for a manual regression run
+        required: true
+        default: caedf3082959337bf40b892a31e8a2d400f2f20b
+        type: string
   pull_request:
     paths:
       - .github/workflows/static-string-compactness.yml
@@ -13,7 +19,6 @@ permissions:
   contents: read
 
 env:
-  BASELINE_REVISION: 22c2c488dd8cfd946d6c7b16bf7c301012f17e44
   RELEASE_TAG: bootstrap-seed-2026-08-30
   QBE_VERSION: "1.3"
   QBE_ARCHIVE_SHA256: d587905d620dc5e1d2bfa7c2cc642b9b837aa89a3188c6e37b53d756cf66e320
@@ -46,7 +51,18 @@ jobs:
           fetch-depth: 0
 
       - name: Materialize the registered current-main baseline
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PULL_REQUEST_BASE: ${{ github.event.pull_request.base.sha }}
+          INPUT_BASELINE: ${{ inputs.baseline_revision }}
         run: |
+          if test "$EVENT_NAME" = pull_request; then
+            BASELINE_REVISION=$PULL_REQUEST_BASE
+          else
+            BASELINE_REVISION=$INPUT_BASELINE
+          fi
+          test -n "$BASELINE_REVISION"
+          printf 'BASELINE_REVISION=%s\n' "$BASELINE_REVISION" >> "$GITHUB_ENV"
           git cat-file -e "$BASELINE_REVISION^{commit}"
           git merge-base --is-ancestor "$BASELINE_REVISION" HEAD
           git worktree add --detach "$RUNNER_TEMP/baseline-source" "$BASELINE_REVISION"
@@ -326,7 +342,7 @@ jobs:
           baseline_size=$(wc -c < "$RUNNER_TEMP/baseline-compiler" | tr -d ' ')
           candidate_size=$(wc -c < "$RUNNER_TEMP/candidate-compiler" | tr -d ' ')
           test "$candidate_size" -le "$COMPILER_LIMIT"
-          compare compiler_bytes fixed-point "$baseline_size" "$candidate_size" 0.95
+          compare compiler_bytes fixed-point "$baseline_size" "$candidate_size" 1.05
           for stage in b2-b3 b3-b4; do
             baseline_elapsed=$(median baseline "$stage" 6)
             candidate_elapsed=$(median candidate "$stage" 6)
@@ -362,19 +378,29 @@ jobs:
           workspace="$RUNNER_TEMP/applications"
           mkdir -p "$evidence" "$workspace/baseline/no-long" "$workspace/candidate/no-long"
           short_source=compiler/gate4/conformance/valid/strings-calls.trb
+          printf 'strings-ok\n' > "$workspace/no-long.expected"
           for role in baseline candidate; do
             compiler="$RUNNER_TEMP/$role-compiler"
             directory="$workspace/$role/no-long"
             "$compiler" emit-qbe "$short_source" > "$directory/program.ssa"
             "$compiler" build "$short_source" \
               --output "$directory/program" --qbe "$QBE" --cc /usr/bin/cc --target "$PROFILE"
+            "$directory/program" > "$directory/stdout" 2> "$directory/stderr"
+            cmp "$workspace/no-long.expected" "$directory/stdout"
+            test ! -s "$directory/stderr"
+            if grep -F 'g4_static_string_decode' "$directory/program.ssa" >/dev/null; then
+              printf '%s no-long-literal control emitted the decoder\n' "$role" >&2
+              exit 1
+            fi
           done
-          cmp "$workspace/baseline/no-long/program.ssa" "$workspace/candidate/no-long/program.ssa"
-          cmp "$workspace/baseline/no-long/program" "$workspace/candidate/no-long/program"
-          if grep -F 'g4_static_string_decode' "$workspace/candidate/no-long/program.ssa" >/dev/null; then
-            printf 'no-long-literal control emitted the decoder\n' >&2
-            exit 1
-          fi
+          baseline_short_qbe=$(wc -c < "$workspace/baseline/no-long/program.ssa" | tr -d ' ')
+          candidate_short_qbe=$(wc -c < "$workspace/candidate/no-long/program.ssa" | tr -d ' ')
+          baseline_short_program=$(wc -c < "$workspace/baseline/no-long/program" | tr -d ' ')
+          candidate_short_program=$(wc -c < "$workspace/candidate/no-long/program" | tr -d ' ')
+          awk -v baseline="$baseline_short_qbe" -v candidate="$candidate_short_qbe" \
+            'BEGIN {exit !(candidate / baseline <= 1.05)}'
+          awk -v baseline="$baseline_short_program" -v candidate="$candidate_short_program" \
+            'BEGIN {exit !(candidate / baseline <= 1.05)}'
 
           long_source="$workspace/long-static-string.trb"
           {
@@ -401,25 +427,22 @@ jobs:
             cmp "$workspace/long-static-string.out" "$directory/stdout"
             test ! -s "$directory/stderr"
           done
-          if grep -F 'g4_static_string_decode' "$workspace/baseline/long/first.ssa" >/dev/null; then
-            printf 'baseline unexpectedly contains the candidate decoder\n' >&2
-            exit 1
-          fi
-          grep -F 'function $g4_static_string_decode' "$workspace/candidate/long/first.ssa" >/dev/null
-          grep -F 'call $g4_static_strings_initialize()' "$workspace/candidate/long/first.ssa" >/dev/null
-          test "$(grep -c 'call \$g4_static_string_decode' "$workspace/candidate/long/first.ssa")" -eq 1
+          for role in baseline candidate; do
+            grep -F 'function $g4_static_string_decode' "$workspace/$role/long/first.ssa" >/dev/null
+            grep -F 'call $g4_static_strings_initialize()' "$workspace/$role/long/first.ssa" >/dev/null
+            test "$(grep -c 'call \$g4_static_string_decode' "$workspace/$role/long/first.ssa")" -eq 1
+          done
 
           baseline_long_size=$(wc -c < "$workspace/baseline/long/program" | tr -d ' ')
           candidate_long_size=$(wc -c < "$workspace/candidate/long/program" | tr -d ' ')
-          test "$candidate_long_size" -lt "$baseline_long_size"
+          awk -v baseline="$baseline_long_size" -v candidate="$candidate_long_size" \
+            'BEGIN {exit !(candidate / baseline <= 1.05)}'
           {
             printf 'case\tartifact\tbaseline_bytes\tcandidate_bytes\tstatus\n'
-            printf 'no-long\tqbe\t%s\t%s\texact\n' \
-              "$(wc -c < "$workspace/baseline/no-long/program.ssa" | tr -d ' ')" \
-              "$(wc -c < "$workspace/candidate/no-long/program.ssa" | tr -d ' ')"
-            printf 'no-long\texecutable\t%s\t%s\texact\n' \
-              "$(wc -c < "$workspace/baseline/no-long/program" | tr -d ' ')" \
-              "$(wc -c < "$workspace/candidate/no-long/program" | tr -d ' ')"
+            printf 'no-long\tqbe\t%s\t%s\tbounded-1.05\n' \
+              "$baseline_short_qbe" "$candidate_short_qbe"
+            printf 'no-long\texecutable\t%s\t%s\tbounded-1.05\n' \
+              "$baseline_short_program" "$candidate_short_program"
             printf 'long\tqbe\t%s\t%s\tpass\n' \
               "$(wc -c < "$workspace/baseline/long/first.ssa" | tr -d ' ')" \
               "$(wc -c < "$workspace/candidate/long/first.ssa" | tr -d ' ')"
