@@ -10,7 +10,7 @@ Gate 6M implementation, plus the immutable Darwin arm64 compiler from
 harness:
 
 1. verifies the revisions, clean compiler closures, seed, portable success and
-   failure corpora, and pinned TypeRB `0.4.3-dev` oracle;
+   failure corpora, and the current pinned TypeRB `0.4.4-dev` oracle;
 2. raises the published seed into each source revision through two explicit,
    untimed, Go-free setup transitions, then closes independent B2/B3/B4 chains;
 3. requires exact B2/B3/B4 bytes and registered target-neutral fixed-point QBE
@@ -56,8 +56,12 @@ exact checkout of `97b3ac2aa1d88cbb7782602589ad70686593ddab`. `SEED` must be the
 259,032-byte Darwin asset from the immutable experimental bootstrap release,
 with SHA-256
 `ef438d13598c534766334b408a39715c56ff1b69db528910ebf7d90ec7720b65`.
-`REFERENCE_TRB` must report `0.4.3-dev`; one inherited Go cache policy applies
+`REFERENCE_TRB` must report `0.4.4-dev`; one inherited Go cache policy applies
 to every warmup and observation.
+
+The retained Gate 6M result used the then-current `0.4.3-dev` oracle. Current
+reruns intentionally follow the repository's exact compatibility pin without
+changing the historical result identity.
 
 The controller is an observer compiled from TypeRB source, not a child of
 either ordinary compiler chain. Linux arm64 correctness and asset-size
