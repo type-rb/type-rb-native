@@ -1,9 +1,9 @@
-name: Managed alias root A/B
+name: Managed Array growth A/B
 
 on:
   pull_request:
     paths:
-      - .github/workflows/managed-alias-roots.yml
+      - .github/workflows/managed-array-growth.yml
       - compiler/gate4/conformance/**
       - compiler/gate4/src/compiler.trb
       - compiler/gate4/src/compiler_test.trb
@@ -13,7 +13,7 @@ on:
     branches:
       - main
     paths:
-      - .github/workflows/managed-alias-roots.yml
+      - .github/workflows/managed-array-growth.yml
       - compiler/gate4/conformance/**
       - compiler/gate4/src/compiler.trb
       - compiler/gate4/src/compiler_test.trb
@@ -25,7 +25,7 @@ permissions:
   contents: read
 
 env:
-  BASELINE_REVISION: d12559371410626a1ae8c52df7f1874919c6cb66
+  BASELINE_REVISION: bde9eeea0819cab21f0cca0d7cf8e1253c3439cd
   TYPE_RB_REVISION: 5dc09070cf7f88a569279f5e63982a6de59d692c
   TYPE_RB_VERSION: 0.4.4-dev
   RELEASE_TAG: bootstrap-seed-2026-08-30
@@ -144,7 +144,7 @@ jobs:
             --output "$RUNNER_TEMP/baseline-compiler" \
             --evidence "$RUNNER_TEMP/baseline-bootstrap-evidence" \
             --metadata "$RUNNER_TEMP/baseline-bootstrap-metadata.json" \
-            --asset-name managed-alias-roots-baseline \
+            --asset-name managed-array-growth-baseline \
             --repository-root "$RUNNER_TEMP/baseline-source"
 
           /bin/sh tools/bootstrap-seed.sh \
@@ -159,13 +159,13 @@ jobs:
             --output "$RUNNER_TEMP/candidate-compiler" \
             --evidence "$RUNNER_TEMP/candidate-bootstrap-evidence" \
             --metadata "$RUNNER_TEMP/candidate-bootstrap-metadata.json" \
-            --asset-name managed-alias-roots-candidate
+            --asset-name managed-array-growth-candidate
 
           cp "$RUNNER_TEMP/candidate-compiler" "$RUNNER_TEMP/candidate-compiler.stripped"
           strip --strip-all "$RUNNER_TEMP/candidate-compiler.stripped"
           test "$(wc -c < "$RUNNER_TEMP/candidate-compiler.stripped" | tr -d ' ')" -le 255000
 
-      - name: Build and inventory the identical worker programs
+      - name: Build and inventory the worker programs
         env:
           QBE: ${{ steps.qbe.outputs.path }}
         run: |
@@ -200,18 +200,54 @@ jobs:
 
           baseline_calls=$(grep -F -c 'call $g4_gc_temp_push' "$applications/baseline/program.ssa")
           candidate_calls=$(grep -F -c 'call $g4_gc_temp_push' "$applications/candidate/program.ssa")
-          test "$baseline_calls" -eq 17
+          test "$baseline_calls" -eq 4
           test "$candidate_calls" -eq 4
+
+          extract_array_helper() {
+            helper=$1
+            source=$2
+            output=$3
+            awk -v declaration="function \$$helper(" '
+              index($0, declaration) == 1 { capture = 1 }
+              capture { print }
+              capture && $0 == "}" { exit }
+            ' "$source" > "$output"
+            test -s "$output"
+          }
+          extract_array_helper g4_array_push_paced \
+            "$applications/baseline/program.ssa" "$evidence/baseline-managed-push.ssa"
+          extract_array_helper g4_array_push_paced \
+            "$applications/candidate/program.ssa" "$evidence/candidate-managed-push.ssa"
+          extract_array_helper g4_array_push \
+            "$applications/baseline/program.ssa" "$evidence/baseline-scalar-push.ssa"
+          extract_array_helper g4_array_push \
+            "$applications/candidate/program.ssa" "$evidence/candidate-scalar-push.ssa"
+
+          test "$(grep -F -c '%new_capacity =l mul %capacity, 2' \
+            "$evidence/baseline-managed-push.ssa")" -eq 1
+          test "$(grep -F -c 'mul %capacity, 4' \
+            "$evidence/baseline-managed-push.ssa")" -eq 0
+          test "$(grep -F -c '%doubled =l mul %capacity, 2' \
+            "$evidence/candidate-managed-push.ssa")" -eq 1
+          test "$(grep -F -c '%quadrupled =l mul %capacity, 4' \
+            "$evidence/candidate-managed-push.ssa")" -eq 1
+          test "$(grep -F -c '%new_capacity =l phi @double %doubled, @quadruple %quadrupled' \
+            "$evidence/candidate-managed-push.ssa")" -eq 1
+          cmp "$evidence/baseline-scalar-push.ssa" "$evidence/candidate-scalar-push.ssa"
           baseline_size=$(wc -c < "$applications/baseline/program" | tr -d ' ')
           candidate_size=$(wc -c < "$applications/candidate/program" | tr -d ' ')
           test "$candidate_size" -le "$((baseline_size + 64))"
           {
             printf 'baseline_gc_temp_push_calls=%s\n' "$baseline_calls"
             printf 'candidate_gc_temp_push_calls=%s\n' "$candidate_calls"
+            printf 'baseline_managed_growth_factor=2\n'
+            printf 'candidate_managed_growth_factor=4\n'
+            printf 'baseline_scalar_growth_factor=2\n'
+            printf 'candidate_scalar_growth_factor=2\n'
             printf 'baseline_executable_bytes=%s\n' "$baseline_size"
             printf 'candidate_executable_bytes=%s\n' "$candidate_size"
             printf 'maximum_candidate_executable_bytes=%s\n' "$((baseline_size + 64))"
-          } > "$evidence/lowering-and-size.txt"
+          } > "$evidence/growth-and-size.txt"
 
           cp "$source" "$applications/typerb-go/src/main.trb"
           cp tools/runtime-worker-soak/trbconfig.jsonc "$applications/typerb-go/trbconfig.jsonc"
@@ -233,10 +269,105 @@ jobs:
 
           printf 'case\tcandidate\tcommand\tinput\texpected\n' > "$RUNNER_TEMP/catalog.tsv"
           for role in baseline candidate typerb-go; do
-            printf 'worker-managed-alias-roots\t%s\t%s\tworker\t%s\n' \
+            printf 'worker-managed-array-growth\t%s\t%s\tworker\t%s\n' \
               "$role" "$applications/$role/program" "$applications/expected.txt" \
               >> "$RUNNER_TEMP/catalog.tsv"
           done
+
+      - name: Verify managed Array growth boundaries under collection
+        env:
+          QBE: ${{ steps.qbe.outputs.path }}
+        run: |
+          fixture=compiler/gate4/conformance/valid/managed-array-growth.trb
+          expected=compiler/gate4/conformance/valid/managed-array-growth.out
+          workspace="$RUNNER_TEMP/managed-array-growth-boundaries"
+          evidence="$RUNNER_TEMP/managed-array-growth-evidence"
+          mkdir -p "$workspace/typerb-go/src" "$evidence/observations"
+
+          "$RUNNER_TEMP/candidate-compiler" check "$fixture" \
+            > "$evidence/native-check.stdout" 2> "$evidence/native-check.stderr"
+          test "$(cat "$evidence/native-check.stdout")" = ok
+          test ! -s "$evidence/native-check.stderr"
+          "$RUNNER_TEMP/candidate-compiler" build "$fixture" \
+            --output "$workspace/native" --qbe "$QBE" --cc /usr/bin/cc \
+            --target linux-arm64-v0
+
+          cp "$fixture" "$workspace/typerb-go/src/main.trb"
+          cp tools/runtime-worker-soak/trbconfig.jsonc "$workspace/typerb-go/trbconfig.jsonc"
+          "$RUNNER_TEMP/trb" check --config "$workspace/typerb-go/trbconfig.jsonc" \
+            > "$evidence/go-check.stdout" 2> "$evidence/go-check.stderr"
+          test "$(cat "$evidence/go-check.stdout")" = 'checked 1 file(s) for mode go'
+          test ! -s "$evidence/go-check.stderr"
+          "$RUNNER_TEMP/trb" build --compile \
+            --config "$workspace/typerb-go/trbconfig.jsonc" \
+            --outfile "$workspace/typerb-go/program" \
+            > "$evidence/go-build.stdout" 2> "$evidence/go-build.stderr"
+          test ! -s "$evidence/go-build.stderr"
+
+          stat_value() {
+            key=$1
+            path=$2
+            awk -F, -v wanted="$key" '
+              $1 == "type-rb-native-gc-stat-v1" && $2 == wanted {
+                count += 1
+                value = $3
+              }
+              END {
+                if (count != 1 || value !~ /^[0-9]+$/) exit 1
+                print value
+              }
+            ' "$path"
+          }
+          verify_stats() {
+            path=$1
+            collections=$(stat_value collections "$path")
+            automatic=$(stat_value automatic-collections "$path")
+            allocated=$(stat_value allocated-bytes "$path")
+            reclaimed=$(stat_value reclaimed-bytes "$path")
+            live=$(stat_value live-bytes "$path")
+            peak=$(stat_value peak-heap-bytes "$path")
+            test "$collections" -eq "$((automatic + 1))"
+            test "$automatic" -ge 1
+            test "$allocated" -eq "$reclaimed"
+            test "$live" -eq 0
+            test "$peak" -le 4194304
+          }
+
+          TYPE_RB_NATIVE_RUNTIME_STATS=1 "$workspace/native" \
+            > "$evidence/aggregate-native.stdout" 2> "$evidence/aggregate-native.stderr"
+          "$workspace/typerb-go/program" \
+            > "$evidence/aggregate-go.stdout" 2> "$evidence/aggregate-go.stderr"
+          cmp "$expected" "$evidence/aggregate-native.stdout"
+          cmp "$evidence/aggregate-native.stdout" "$evidence/aggregate-go.stdout"
+          test ! -s "$evidence/aggregate-go.stderr"
+          verify_stats "$evidence/aggregate-native.stderr"
+
+          printf 'length\tcollections\tautomatic_collections\tallocated_bytes\treclaimed_bytes\tlive_bytes\tpeak_heap_bytes\n' \
+            > "$evidence/boundary-memory.tsv"
+          for length in 0 1 4 5 15 16 17 63 64 65 127 128 129 255 256 257; do
+            observation="$evidence/observations/$length"
+            mkdir -p "$observation"
+            TYPE_RB_NATIVE_RUNTIME_STATS=1 "$workspace/native" "$length" \
+              > "$observation/native.stdout" 2> "$observation/native.stderr"
+            "$workspace/typerb-go/program" "$length" \
+              > "$observation/go.stdout" 2> "$observation/go.stderr"
+            cmp "$expected" "$observation/native.stdout"
+            cmp "$observation/native.stdout" "$observation/go.stdout"
+            test ! -s "$observation/go.stderr"
+            verify_stats "$observation/native.stderr"
+            collections=$(stat_value collections "$observation/native.stderr")
+            automatic=$(stat_value automatic-collections "$observation/native.stderr")
+            allocated=$(stat_value allocated-bytes "$observation/native.stderr")
+            reclaimed=$(stat_value reclaimed-bytes "$observation/native.stderr")
+            live=$(stat_value live-bytes "$observation/native.stderr")
+            peak=$(stat_value peak-heap-bytes "$observation/native.stderr")
+            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+              "$length" "$collections" "$automatic" "$allocated" \
+              "$reclaimed" "$live" "$peak" >> "$evidence/boundary-memory.tsv"
+          done
+          test "$(wc -l < "$evidence/boundary-memory.tsv" | tr -d ' ')" -eq 17
+          sha256sum "$fixture" "$expected" "$workspace/native" \
+            "$workspace/typerb-go/program" > "$evidence/SHA256SUMS"
 
       - name: Run the revised managed-memory smoke
         env:
@@ -299,7 +430,7 @@ jobs:
         run: |
           /bin/sh tools/native-runtime-ab/runtime-controller.sh \
             formal "$(command -v runexec)" "$RUNNER_TEMP/catalog.tsv" \
-            worker-managed-alias-roots "$CORE" \
+            worker-managed-array-growth "$CORE" \
             tools/benchmarksgame-formal/cache-control-linux.sh \
             "$RUNNER_TEMP/runtime-workspace" \
             "$RUNNER_TEMP/runtime-evidence"
@@ -322,7 +453,7 @@ jobs:
             runexec --version
           } > "$evidence/environment.txt" 2>&1
           sha256sum \
-            .github/workflows/managed-alias-roots.yml \
+            .github/workflows/managed-array-growth.yml \
             tools/native-runtime-ab/runtime-controller.sh \
             tools/native-runtime-ab/summarize.awk \
             tools/runtime-worker-soak/workload.trb \
@@ -336,7 +467,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: managed-alias-roots-${{ github.run_id }}-${{ github.run_attempt }}
+          name: managed-array-growth-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/application-evidence
             ${{ runner.temp }}/applications
@@ -347,6 +478,7 @@ jobs:
             ${{ runner.temp }}/catalog.tsv
             ${{ runner.temp }}/host-evidence
             ${{ runner.temp }}/runtime-evidence
+            ${{ runner.temp }}/managed-array-growth-evidence
             ${{ runner.temp }}/worker-smoke-evidence
             ${{ runner.temp }}/workflow-evidence
           if-no-files-found: error

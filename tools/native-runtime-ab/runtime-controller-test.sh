@@ -83,6 +83,10 @@ case "$program_name" in
 			wall=0.095
 			cpu=0.090
 		fi
+		if test "${FAKE_GROWTH:-0}" = 1; then
+			wall=0.085
+			cpu=0.080
+		fi
 		;;
 	typerb-go) wall=0.080; cpu=0.075 ;;
 	esac
@@ -194,6 +198,23 @@ test "$(awk -F= '$1 == "maximum_candidate_go_ratio" { print $2 }' "$test_root/al
 	fail "managed-alias Go threshold differs"
 test "$(awk -F '\t' '$2 == "walltime-vs-typerb-go" { print $5 }' "$test_root/alias-evidence/evaluation.tsv")" = 1.187500 ||
 	fail "managed-alias Go wall-time ratio differs"
+
+growth_catalog=$test_root/growth-catalog.tsv
+sed 's/worker-literal-concat/worker-managed-array-growth/g' "$worker_catalog" > "$growth_catalog"
+FAKE_GROWTH=1 /bin/sh "$script_directory/runtime-controller.sh" \
+	test "$fake_runexec" "$growth_catalog" worker-managed-array-growth 0 "$cache_control" \
+	"$test_root/growth-workspace" "$test_root/growth-evidence" \
+	> "$test_root/growth.stdout" 2> "$test_root/growth.stderr"
+test "$(cat "$test_root/growth.stdout")" = 'native-runtime-ab: worker-managed-array-growth passed'
+test ! -s "$test_root/growth.stderr" || fail "managed-growth controller wrote stderr"
+test "$(awk -F= '$1 == "maximum_candidate_ratio" { print $2 }' "$test_root/growth-evidence/environment.txt")" = 0.95 ||
+	fail "managed-growth baseline threshold differs"
+test "$(awk -F= '$1 == "maximum_candidate_go_ratio" { print $2 }' "$test_root/growth-evidence/environment.txt")" = 1.15 ||
+	fail "managed-growth Go threshold differs"
+test "$(awk -F '\t' '$2 == "walltime" { print $5 }' "$test_root/growth-evidence/evaluation.tsv")" = 0.425000 ||
+	fail "managed-growth baseline wall-time ratio differs"
+test "$(awk -F '\t' '$2 == "walltime-vs-typerb-go" { print $5 }' "$test_root/growth-evidence/evaluation.tsv")" = 1.062500 ||
+	fail "managed-growth Go wall-time ratio differs"
 
 set +e
 FAKE_REGRESSION=1 /bin/sh "$script_directory/runtime-controller.sh" \

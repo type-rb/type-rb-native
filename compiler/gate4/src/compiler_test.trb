@@ -1219,6 +1219,23 @@ describe("Gate 4 TypeRB frontend") do
 		expect(qbe.include?("%index =l phi @negative %adjusted_negative, @check %adjusted_positive\n\t%valid =w cultl %index, %length\n\tjnz %valid, @load, @fail")).to_be_true()
 	end
 
+	test("widens only managed Array geometric growth") do
+		source := "def main()\n\tmut managed: Array<String> := []\n\tmanaged.push(\"value\")\n\tmut scalar: Array<Integer> := []\n\tscalar.push(1)\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		qbe := gate4_output_source(gate4_emit_qbe(state))
+		expect(qbe.include?("function $g4_array_push_paced(l %array, l %value) {")).to_be_true()
+		expect(
+			qbe.include?(
+				"%managed_slot =l add %descriptor, 8\n\t%managed =l loadl %managed_slot\n\t%scalar =w ceql %managed, 0\n\tjnz %scalar, @double, @quadruple\n@double\n\t%doubled =l mul %capacity, 2\n\tjmp @grow\n@quadruple\n\t%quadrupled =l mul %capacity, 4\n\tjmp @grow\n@grow\n\t%new_capacity =l phi @double %doubled, @quadruple %quadrupled",
+			),
+		).to_be_true()
+		expect(qbe.include?("call $g4_array_push_paced(l ")).to_be_true()
+	end
+
 	test("emits direct binary64 cells for Float Arrays") do
 		source := "record Floats\n\tvalues: Array<Float>\nend\n\ndef carry(values: Array<Float>): Array<Float>\n\treturn values\nend\n\ndef main()\n\tmut values := [1, 2.5]\n\tvalues.push(3)\n\tvalues[0] += 0.5\n\tbox := Floats.new(values: values)\n\tresult := carry(box.values)\n\tvalue := result[- 1]\n\treturn\nend\n"
 		mut state := gate4_compiler_new(source.size() + 1)
