@@ -216,6 +216,23 @@ test "$(awk -F '\t' '$2 == "walltime" { print $5 }' "$test_root/growth-evidence/
 test "$(awk -F '\t' '$2 == "walltime-vs-typerb-go" { print $5 }' "$test_root/growth-evidence/evaluation.tsv")" = 1.062500 ||
 	fail "managed-growth Go wall-time ratio differs"
 
+scalar_growth_catalog=$test_root/scalar-growth-catalog.tsv
+sed 's/worker-literal-concat/worker-scalar-array-growth/g' "$worker_catalog" > "$scalar_growth_catalog"
+FAKE_GROWTH=1 /bin/sh "$script_directory/runtime-controller.sh" \
+	test "$fake_runexec" "$scalar_growth_catalog" worker-scalar-array-growth 0 "$cache_control" \
+	"$test_root/scalar-growth-workspace" "$test_root/scalar-growth-evidence" \
+	> "$test_root/scalar-growth.stdout" 2> "$test_root/scalar-growth.stderr"
+test "$(cat "$test_root/scalar-growth.stdout")" = 'native-runtime-ab: worker-scalar-array-growth passed'
+test ! -s "$test_root/scalar-growth.stderr" || fail "scalar-growth controller wrote stderr"
+test "$(awk -F= '$1 == "maximum_candidate_ratio" { print $2 }' "$test_root/scalar-growth-evidence/environment.txt")" = 0.95 ||
+	fail "scalar-growth baseline threshold differs"
+test "$(awk -F= '$1 == "maximum_candidate_go_ratio" { print $2 }' "$test_root/scalar-growth-evidence/environment.txt")" = 1.10 ||
+	fail "scalar-growth Go threshold differs"
+test "$(awk -F '\t' '$2 == "walltime" { print $5 }' "$test_root/scalar-growth-evidence/evaluation.tsv")" = 0.425000 ||
+	fail "scalar-growth baseline wall-time ratio differs"
+test "$(awk -F '\t' '$2 == "walltime-vs-typerb-go" { print $5 }' "$test_root/scalar-growth-evidence/evaluation.tsv")" = 1.062500 ||
+	fail "scalar-growth Go wall-time ratio differs"
+
 set +e
 FAKE_REGRESSION=1 /bin/sh "$script_directory/runtime-controller.sh" \
 	test "$fake_runexec" "$catalog" spectral-norm 0 "$cache_control" \

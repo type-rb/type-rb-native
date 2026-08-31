@@ -37,7 +37,10 @@ The valid cases cover:
   collection in `valid/managed-alias-roots.trb`;
 - managed Array element order, positive and negative indexing, mutation,
   nesting, and forced collection across geometric growth boundaries in
-  `valid/managed-array-growth.trb`, with scalar Array growth as a control; and
+  `valid/managed-array-growth.trb`, with scalar Array growth as a control;
+- Integer Array order, aliases, nested retention, mutation, append, negative
+  indexing, and forced collection across scalar geometric growth
+  boundaries in `valid/scalar-array-growth.trb`; and
 - the compiler source closure itself, exercised by the bootstrap test outside
   this directory.
 
