@@ -143,6 +143,33 @@ and [build workflow](../.github/workflows/benchmarksgame-build-formal.yml)
 isolate each case on a fresh runner and retain complete result trees even when
 an observation fails.
 
+## Native optimization A/B procedure
+
+The cross-language result is a durable reference point, not a convenient
+same-host baseline for each compiler optimization. The separate
+[`native-runtime-ab` controller](../tools/native-runtime-ab/README.md) compares
+one exact Native baseline with one Native candidate on the same fresh Linux
+arm64 host. It keeps the authored TypeRB source identical, alternates the two
+executables for two warmups and eleven retained observations, and retains the
+same status, output, wall-time, CPU-time, peak-memory, cache, and process
+evidence used by the broader runtime layer.
+
+The initial contract is registered by
+[issue #138](https://github.com/type-rb/type-rb-native/issues/138). It uses the
+full `spectral-norm` performance input and bounded `fannkuch-redux` and
+`n-body` non-regression controls. It also closes both self-hosted compiler
+chains, compares compiler build cost and size, and enforces QBE plus raw and
+stripped application-size limits before runtime timing. This optimization A/B
+contract does not replace or revise the published cross-language inputs or
+results.
+
+The first [formal optimization result](../results/2026-08-31-native-numeric-inline-linux-arm64/README.md)
+passes that contract. Its bounded numeric-only reserve reduces the exact
+`spectral-norm` wall and CPU medians by 20.61% and 20.62%, keeps both control
+programs slightly faster than the frozen Native baseline, closes an exact
+self-hosted fixed point, and remains within every registered compiler, QBE,
+and application-size limit.
+
 Builds use release optimization without unsafe fast-math substitutions: C and
 C++ use `-O3`, Go uses `go build -trimpath`, Rust uses `rustc -C opt-level=3`,
 and Java uses `javac` followed by the same recorded JVM for every run. The
