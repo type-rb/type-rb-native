@@ -15,8 +15,8 @@ implementations with exact published output. The
 [recorded Linux arm64 result](../results/2026-08-31-benchmarksgame-runtime-linux-arm64/README.md)
 retains every registered observation and finds that Native is substantially
 smaller and lighter than TypeRB Go but 2.44x to 4.68x slower on these numeric
-kernels. Formal compiler/build and complete distribution measurements remain
-unimplemented.
+kernels. The independent formal compiler/build/distribution controller is
+implemented but has not produced a formal result.
 
 ## Pinned upstream boundary
 
@@ -125,8 +125,14 @@ This controller measures complete fresh processes only. Its first
 [formal result](../results/2026-08-31-benchmarksgame-runtime-linux-arm64/README.md)
 publishes all one-core and four-core raw observations, independently reproduced
 medians, and exact artifact identities. Compiler measurements and complete
-artifact/distribution inventory remain a separate controller. See
-[Decision 0024](decisions/0024-benchexec-runtime-controller.md). The
+artifact/distribution inventory use the separate
+[formal build controller](../tools/benchmarksgame-build-formal/README.md). It
+measures alternating clean outputs through both TypeRB backends, verifies every
+measured artifact, process-traces representative builds, and separates
+controlled payloads from platform prerequisites and deploy artifacts. Merging
+the controller does not publish a value. See
+[Decision 0024](decisions/0024-benchexec-runtime-controller.md) and
+[Decision 0027](decisions/0027-formal-build-distribution-controller.md). The
 dispatch-only [Linux arm64 workflow](../.github/workflows/benchmarksgame-formal.yml)
 isolates each case on a fresh runner and retains both lane result trees even if
 one lane reports failed observations.
