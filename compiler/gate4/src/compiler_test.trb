@@ -1219,7 +1219,7 @@ describe("Gate 4 TypeRB frontend") do
 		expect(qbe.include?("%index =l phi @negative %adjusted_negative, @check %adjusted_positive\n\t%valid =w cultl %index, %length\n\tjnz %valid, @load, @fail")).to_be_true()
 	end
 
-	test("widens only managed Array geometric growth") do
+	test("uses fixed quadruple growth for traced non-Float Arrays") do
 		source := "def main()\n\tmut managed: Array<String> := []\n\tmanaged.push(\"value\")\n\tmut scalar: Array<Integer> := []\n\tscalar.push(1)\n\treturn\nend\n"
 		mut state := gate4_compiler_new(source.size() + 1)
 		expect(gate4_lex(state, source)).to_be_true()
@@ -1230,9 +1230,11 @@ describe("Gate 4 TypeRB frontend") do
 		expect(qbe.include?("function $g4_array_push_paced(l %array, l %value) {")).to_be_true()
 		expect(
 			qbe.include?(
-				"%managed_slot =l add %descriptor, 8\n\t%managed =l loadl %managed_slot\n\t%scalar =w ceql %managed, 0\n\tjnz %scalar, @double, @quadruple\n@double\n\t%doubled =l mul %capacity, 2\n\tjmp @grow\n@quadruple\n\t%quadrupled =l mul %capacity, 4\n\tjmp @grow\n@grow\n\t%new_capacity =l phi @double %doubled, @quadruple %quadrupled",
+				"%full =w ceql %length, %capacity\n\tjnz %full, @grow, @store\n@grow\n\t%new_capacity =l mul %capacity, 4\n\t%new_bytes =l mul %new_capacity, 8",
 			),
 		).to_be_true()
+		expect(qbe.include?("%managed_slot =l add %descriptor, 8")).to_be_false()
+		expect(qbe.include?("function $g4_array_push(l %array, l %value) {")).to_be_true()
 		expect(qbe.include?("call $g4_array_push_paced(l ")).to_be_true()
 	end
 
