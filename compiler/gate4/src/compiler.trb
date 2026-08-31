@@ -453,6 +453,63 @@ def gate4_ascii_code(character: String): Integer
 	if character == "\t"
 		return 9
 	end
+	if character == " "
+		return 32
+	end
+	if character == "$"
+		return 36
+	end
+	if character == "%"
+		return 37
+	end
+	if character == "("
+		return 40
+	end
+	if character == ")"
+		return 41
+	end
+	if character == ","
+		return 44
+	end
+	if character == "="
+		return 61
+	end
+	if character == "@"
+		return 64
+	end
+	if character == "_"
+		return 95
+	end
+	if character == "{"
+		return 123
+	end
+	if character == "}"
+		return 125
+	end
+	mut lowercase_index := 0
+	lowercase := "abcdefghijklmnopqrstuvwxyz"
+	while lowercase_index < lowercase.size()
+		if lowercase[lowercase_index] == character
+			return lowercase_index + 97
+		end
+		lowercase_index += 1
+	end
+	mut uppercase_index := 0
+	uppercase := "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	while uppercase_index < uppercase.size()
+		if uppercase[uppercase_index] == character
+			return uppercase_index + 65
+		end
+		uppercase_index += 1
+	end
+	mut digit_index := 0
+	digits := "0123456789"
+	while digit_index < digits.size()
+		if digits[digit_index] == character
+			return digit_index + 48
+		end
+		digit_index += 1
+	end
 	alphabet := " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
 	mut index := 0
 	while index < alphabet.size()
@@ -616,12 +673,12 @@ def gate4_static_string_bytes(value: String): Array<Integer>
 end
 
 def gate4_static_bytes_hash(bytes: Array<Integer>, index: Integer): Integer
-	return ((bytes[index] * 257 + bytes[index + 1]) * 257 + bytes[index + 2]) % 4096
+	return ((bytes[index] * 257 + bytes[index + 1]) * 257 + bytes[index + 2]) % 512
 end
 
 def gate4_encode_static_bytes(bytes: Array<Integer>): Array<Integer>
 	mut positions: Array<Integer> := []
-	while positions.size() < 4096
+	while positions.size() < 512
 		positions.push(- 1)
 	end
 	mut encoded: Array<Integer> := []
@@ -769,20 +826,15 @@ def gate4_emit_static_strings(
 			if !found
 				canonical_values.push(value)
 				canonical_tokens.push(token_index)
-				bytes := gate4_static_string_bytes(value)
-				ascii := bytes.size() == value.size()
+				mut bytes: Array<Integer> := []
+				mut has_static_bytes := false
 				mut compressed: Array<Integer> := []
-				if ascii
-					if value.size() >= 256
+				if value.size() >= 256
+					bytes = gate4_static_string_bytes(value)
+					if bytes.size() == value.size()
+						has_static_bytes = true
 						compressed = gate4_encode_static_bytes(bytes)
 					end
-				else
-					gate4_diagnostic(
-						state,
-						"TRBN4005",
-						gate4_load_integer(state.token_lines, token_index),
-						"Gate 4 QBE emission supports ASCII String literals only",
-					)
 				end
 				mut use_compressed := false
 				if compressed.size() > 0
@@ -811,8 +863,21 @@ def gate4_emit_static_strings(
 					mut line_bytes := 0
 					mut character_index := 0
 					while character_index < value.size()
-						if ascii
-							line += " " + gate4_integer_string(bytes[character_index])
+						mut code := - 1
+						if has_static_bytes
+							code = bytes[character_index]
+						else
+							code = gate4_ascii_code(value[character_index])
+						end
+						if code < 0
+							gate4_diagnostic(
+								state,
+								"TRBN4005",
+								gate4_load_integer(state.token_lines, token_index),
+								"Gate 4 QBE emission supports ASCII String literals only",
+							)
+						else
+							line += " " + gate4_integer_string(code)
 							line_bytes += 1
 							if line_bytes == 16
 								gate4_output_line(output, line + ",")
