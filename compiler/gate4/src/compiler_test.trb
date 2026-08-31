@@ -1,4 +1,4 @@
-import { Gate4Compiler, Gate4Output, Gate4ProjectSources, gate4_add_module, gate4_build_symbol_index, gate4_character_in, gate4_check, gate4_compiler_new, gate4_emit_qbe, gate4_find_field, gate4_find_function_in_module, gate4_find_import_binding, gate4_find_module, gate4_find_record_in_module, gate4_find_record_type, gate4_float_literal_in_range, gate4_has_diagnostic, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_local_find, gate4_locals_new, gate4_number_is_float, gate4_number_without_underscores, gate4_parse_module, gate4_parse_project_config, gate4_resolve, gate4_string_bucket, gate4_symbol_bucket_count } from compiler
+import { Gate4Compiler, Gate4Output, Gate4ProjectSources, gate4_add_module, gate4_build_symbol_index, gate4_character_in, gate4_check, gate4_compiler_new, gate4_emit_qbe, gate4_encode_static_string, gate4_find_field, gate4_find_function_in_module, gate4_find_import_binding, gate4_find_module, gate4_find_record_in_module, gate4_find_record_type, gate4_float_literal_in_range, gate4_has_diagnostic, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_local_find, gate4_locals_new, gate4_number_is_float, gate4_number_without_underscores, gate4_parse_module, gate4_parse_project_config, gate4_resolve, gate4_string_bucket, gate4_symbol_bucket_count } from compiler
 import { gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage
 import { native_create_directory, native_read_text, native_write_text } from native_file_system
 import trb/std/process
@@ -42,6 +42,16 @@ def gate4_scale_test_source(count: Integer): String
 		index += 1
 	end
 	writer.append("def main()\n\tvalue := f" + (count - 1).to_s() + "(1)\n\treturn\nend\n")
+	return writer.to_s()
+end
+
+def gate4_repeat_text(fragment: String, count: Integer): String
+	mut writer := StringBuilder.new()
+	mut index := 0
+	while index < count
+		writer.append(fragment)
+		index += 1
+	end
 	return writer.to_s()
 end
 
@@ -978,7 +988,8 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_check(state)).to_be_true()
 		emitted := gate4_emit_qbe(state)
 		expect(emitted.runtime_flags[1]).to_equal(1)
-		expect(emitted.runtime_flags.size()).to_equal(2)
+		expect(emitted.runtime_flags[2]).to_equal(0)
+		expect(emitted.runtime_flags.size()).to_equal(3)
 		qbe := gate4_output_source(emitted)
 		expect(qbe.include?("storel %process_argc, $g4_process_argc")).to_be_true()
 		expect(qbe.include?("function l $g4_process_argv()")).to_be_true()
@@ -1268,6 +1279,40 @@ describe("Gate 4 TypeRB frontend") do
 		expect(qbe.include?("$g4_gc_roots")).to_be_false()
 		expect(qbe.include?("$g4_gc_frame_enter")).to_be_false()
 		expect(qbe.include?("$g4_gc_frame_leave")).to_be_false()
+	end
+
+	test("compresses only profitable static Strings at the registered boundary") do
+		overlapping := gate4_repeat_text("a", 300)
+		encoded := gate4_encode_static_string(overlapping)
+		expect(encoded.size() < overlapping.size()).to_be_true()
+		expect(encoded[0]).to_equal(97)
+		expect(encoded[1]).to_equal(255)
+		expect(encoded[2]).to_equal(0)
+		expect(encoded[3]).to_equal(1)
+
+		below := gate4_repeat_text("abcd", 63) + "abc"
+		below_source := "def main()\n\tvalue := \"" + below + "\"\n\tputs(value)\n\treturn\nend\n"
+		mut below_state := gate4_compiler_new(below_source.size() + 1)
+		expect(gate4_lex(below_state, below_source)).to_be_true()
+		expect(gate4_parse_module(below_state, 0, below_state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(below_state)).to_be_true()
+		expect(gate4_check(below_state)).to_be_true()
+		below_qbe := gate4_output_source(gate4_emit_qbe(below_state))
+		expect(below_qbe.include?("g4_static_string_decode")).to_be_false()
+		expect(below_qbe.include?("g4_static_strings_initialize")).to_be_false()
+
+		boundary := gate4_repeat_text("abcd", 64)
+		boundary_source := "def main()\n\tvalue := \"" + boundary + "\"\n\tputs(value)\n\treturn\nend\n"
+		mut boundary_state := gate4_compiler_new(boundary_source.size() + 1)
+		expect(gate4_lex(boundary_state, boundary_source)).to_be_true()
+		expect(gate4_parse_module(boundary_state, 0, boundary_state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(boundary_state)).to_be_true()
+		expect(gate4_check(boundary_state)).to_be_true()
+		boundary_qbe := gate4_output_source(gate4_emit_qbe(boundary_state))
+		expect(boundary_qbe.include?(" = align 8 { z 273 }")).to_be_true()
+		expect(boundary_qbe.include?("data $g4c")).to_be_true()
+		expect(boundary_qbe.include?("function $g4_static_string_decode")).to_be_true()
+		expect(boundary_qbe.include?("\tcall $g4_static_strings_initialize()")).to_be_true()
 	end
 
 	test("emits deterministic QBE and executes the registered source subset") do
