@@ -240,15 +240,20 @@ def validate_repository_values(
     if manifest["backend"] != expected_backend:
         raise ValidationError("backend identity disagrees with the retained release manifest")
 
-    expected_targets = _expected_targets(seed_manifest)
-    if manifest["targets"] != expected_targets:
+    seed_targets = _expected_targets(seed_manifest)
+    current_targets = manifest["targets"]
+    current_profiles = [target["profile"] for target in current_targets]
+    if len(current_profiles) != len(set(current_profiles)):
+        raise ValidationError("target profiles must be unique")
+    if current_targets[: len(seed_targets)] != seed_targets:
         raise ValidationError("target profiles disagree with the retained release manifest")
+    recovered_targets = current_targets[len(seed_targets) :]
 
     compiler_source = _require_text(
         root / "compiler/gate4/src/compiler.trb",
         [
-            *[f'b \\"{target["profile"]}\\"' for target in expected_targets],
-            *[f'b \\"{target["qbeTarget"]}\\"' for target in expected_targets],
+            *[f'b \\"{target["profile"]}\\"' for target in current_targets],
+            *[f'b \\"{target["qbeTarget"]}\\"' for target in current_targets],
         ],
         "self-hosted target profile",
     )
@@ -256,7 +261,7 @@ def validate_repository_values(
         raise ValidationError("self-hosted compiler source is empty")
 
     bootstrap_tool = (root / "tools/bootstrap-seed.sh").read_text(encoding="utf-8")
-    for target in expected_targets:
+    for target in current_targets:
         mapping = re.compile(
             rf"(?m)^{re.escape(target['profile'])}\)\n"
             rf"\s*os={re.escape(target['os'])}\n"
@@ -306,6 +311,27 @@ def validate_repository_values(
     if not bootstrap_evidence["release"].endswith("/" + seed["releaseTag"]):
         raise ValidationError("bootstrap evidence release disagrees with bootstrap.seed.releaseTag")
 
+    target_chain_evidence = manifest["evidence"]["targetChains"]
+    evidence_profiles = [entry["profile"] for entry in target_chain_evidence]
+    recovered_profiles = [target["profile"] for target in recovered_targets]
+    if evidence_profiles != recovered_profiles:
+        raise ValidationError(
+            "target-chain evidence must exactly cover targets recovered outside the seed manifest"
+        )
+    if len(evidence_profiles) != len(set(evidence_profiles)):
+        raise ValidationError("target-chain evidence profiles must be unique")
+    for entry in target_chain_evidence:
+        evidence_path = _repository_path(root, entry["result"])
+        _require_text(
+            evidence_path,
+            [
+                entry["profile"],
+                entry["nativeRevision"],
+                entry["workflow"],
+            ],
+            f"target-chain evidence for {entry['profile']}",
+        )
+
 
 def validate_manifest_data(
     root: Path,
@@ -331,7 +357,7 @@ def main() -> int:
     arguments = parse_arguments()
     root = arguments.root.resolve()
     manifest_path = arguments.manifest or root / "compatibility/current.json"
-    schema_path = arguments.schema or root / "compatibility/schema-v1.json"
+    schema_path = arguments.schema or root / "compatibility/schema-v2.json"
     try:
         manifest = load_json_strict(manifest_path)
         schema = load_json_strict(schema_path)

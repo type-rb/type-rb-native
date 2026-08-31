@@ -29,6 +29,11 @@ The implementation version is stored in `NATIVE_VERSION`. TypeRB compatibility
 is declared separately in strict versioned JSON. Schema version 1 permits only
 one exact TypeRB version and full Git revision. It has no range syntax.
 
+[Decision 0026](0026-recovered-target-chain-evidence.md) subsequently defines
+schema version 2. It preserves the exact TypeRB identity and independent Native
+versioning established here while separating immutable seed assets from
+independently recovered current target chains.
+
 The record separates compiler protocol, bootstrap snapshot and seed formats,
 Native MIR, runtime ABI, backend, target profiles, and evidence. Unversioned
 internal surfaces use an explicit unstable status and `null` version instead

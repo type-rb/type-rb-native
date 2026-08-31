@@ -598,11 +598,14 @@ adjacent candidate spreads remain below 1.89%, and the combined compilers use
 Independent experimental Native versioning and exact TypeRB compatibility
 metadata are defined in
 [Decision 0020](decisions/0020-independent-native-versioning.md). Native begins
-at `0.1.0-dev`; strict schema version 1 declares only the exact verified TypeRB
+at `0.1.0-dev`; strict schema version 2 declares only the exact verified TypeRB
 version and revision while keeping compiler protocol, bootstrap, Native MIR,
-runtime ABI, backend, target profiles, and evidence separate. CI validates the
-record against canonical repository inputs. Stable distribution, installation,
-support ranges, and deprecation guarantees remain outside this decision.
+runtime ABI, backend, target profiles, and evidence separate. It also
+distinguishes immutable seed assets from independently
+[recovered target-chain evidence](decisions/0026-recovered-target-chain-evidence.md).
+CI validates the record against canonical repository inputs. Stable
+distribution, installation, support ranges, and deprecation guarantees remain
+outside this decision.
 
 The ordinary-path runtime memory stability stage is registered in
 [issue #104](https://github.com/type-rb/type-rb-native/issues/104). It replaces
@@ -682,9 +685,14 @@ uses an independent direct GNU time invocation, with complete per-observation
 status, output, and artifact evidence. The portable bootstrap harness's legacy
 combined time/RSS observations are retained only for its existing profiles;
 the Gate 6N adjacent-build decision uses the independent controller series.
-Exact fixed-point, current Linux arm64 regression, cross-architecture
-target-neutral QBE, complete corpus, ELF, dependency, and process evidence
-remain mandatory before Linux amd64 is recorded as a result. See the
+The
+[recorded Gate 6N result](../results/2026-08-31-gate6n-linux-amd64/README.md)
+passes the exact fixed-point, current Linux arm64 regression,
+cross-architecture target-neutral QBE, complete corpus, ELF, dependency,
+process, measurement, and size criteria. The 240,888-byte compiler is
+effectively level with the external compiler recipe, while the bounded
+identical-source Native application is faster, lighter, and 99.26% smaller
+than optimized Go when stripped. See the
 [Gate 6N plan](gate-6-linux-amd64.md).
 
 This gate is not authorization to ship. It evaluates:

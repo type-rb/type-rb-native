@@ -12,12 +12,20 @@ The canonical inputs are:
   source and semantic oracle;
 - [`compatibility/current.json`](../compatibility/current.json), declaring the
   exact verified combination; and
-- [`compatibility/schema-v1.json`](../compatibility/schema-v1.json), defining
+- [`compatibility/schema-v2.json`](../compatibility/schema-v2.json), defining
   the strict machine-readable shape.
 
-The compatibility record is descriptive, not a dependency resolver. Version 1
+The compatibility record is descriptive, not a dependency resolver. Version 2
 allows only `supportMode: "exact"`. A TypeRB version or revision absent from the
 record is not claimed to work, even if it happens to compile.
+
+Schema version 2 separates target executables present in the immutable seed
+manifest from additional current target chains recovered from an attested
+target-neutral root. Every recovered target requires its own exact Native
+revision, result path, workflow run, and profile identity. This prevents a
+newly verified target from being mislabeled as an asset in an older immutable
+seed release. Schema version 1 remains retained for historical records but
+cannot express recovered target-chain evidence.
 
 ## Independent identities
 
@@ -61,8 +69,9 @@ Native and TypeRB changes are reviewed independently.
   two numbers remain unrelated.
 
 A compatibility range may be introduced only by a later reviewed schema and
-decision backed by conformance evidence for every claimed boundary. Version 1
-cannot express a range, so tooling must fail instead of inferring one.
+decision backed by conformance evidence for every claimed boundary. Current
+schema version 2 cannot express a range, so tooling must fail instead of
+inferring one.
 
 ## Releases, deprecation, and security fixes
 

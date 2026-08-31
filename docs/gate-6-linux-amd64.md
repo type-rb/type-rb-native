@@ -8,9 +8,11 @@ and recovery boundary is defined by
 
 ## Status
 
-In progress. The registered profile and permanent target-selection tests are
-implemented. No Linux amd64 fixed-point or performance result is claimed until
-the fresh hosted workflow and raw evidence pass every frozen condition.
+Passed on the exact merged `main` revision
+`f7e6b02b38c77d0ea6f7da210e91575a4fa1cdf9`. The fresh hosted amd64
+verifier, current-revision arm64 regression, same-attempt cross-target QBE
+comparison, and every frozen measurement bound succeeded. See the
+[recorded result](../results/2026-08-31-gate6n-linux-amd64/README.md).
 
 ## Target boundary
 
@@ -125,6 +127,9 @@ inaccessible prior-attempt artifact.
 3. Close exact candidates and the complete Linux amd64 correctness corpus.
 4. Run and audit the frozen compiler and application measurements.
 5. Commit raw evidence and a reviewed result before closing issue #128.
+
+All five steps are complete in the recorded result. The profile remains
+experimental and is not promoted to supported-target status by this gate.
 
 ## Deferred scope
 
