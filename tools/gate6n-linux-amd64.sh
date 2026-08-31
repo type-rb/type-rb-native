@@ -65,11 +65,56 @@ require_tool_observed() {
 	grep -E "$pattern" "$trace" > /dev/null || fail "$label was not observed"
 }
 
-require_exact_tool_observed() {
+write_successful_exec_inventory() {
 	trace=$1
+	inventory=$2
+	awk '
+		function executable_path(line, path) {
+			path = line
+			sub(/^.*execve\("/, "", path)
+			sub(/".*$/, "", path)
+			return path
+		}
+		{
+			pid = $1
+			if (index($0, "execve(\"") != 0) {
+				path = executable_path($0)
+				if ($0 ~ /<unfinished \.\.\.>$/) {
+					pending[pid] = path
+				} else if ($0 ~ /= 0$/) {
+					print path
+				}
+				next
+			}
+			if ($0 ~ /<\.\.\. execve resumed>/) {
+				if ($0 ~ /= 0$/ && pid in pending) {
+					print pending[pid]
+				}
+				delete pending[pid]
+			}
+		}
+	' "$trace" > "$inventory"
+}
+
+require_exact_tool_observed() {
+	inventory=$1
 	tool=$2
 	label=$3
-	grep -F "execve(\"$tool\"" "$trace" > /dev/null || fail "$label was not observed at $tool"
+	grep -Fx "$tool" "$inventory" > /dev/null ||
+		fail "$label was not observed at $tool"
+}
+
+require_exact_assembler_observed() {
+	inventory=$1
+	label=$2
+	if grep -Fx "$assembler_command" "$inventory" > /dev/null; then
+		return
+	fi
+	if test -n "$architecture_assembler_command" &&
+		grep -Fx "$architecture_assembler_command" "$inventory" > /dev/null; then
+		return
+	fi
+	fail "$label assembler was not observed at a registered path"
 }
 
 require_closed_ordinary_trace() {
@@ -77,18 +122,19 @@ require_closed_ordinary_trace() {
 	compiler=$2
 	label=$3
 	inventory=$trace.executables
-	sed -n 's/.*execve("\([^"]*\)".*/\1/p' "$trace" > "$inventory"
+	write_successful_exec_inventory "$trace" "$inventory"
 	test -s "$inventory" || fail "$label process inventory is empty"
 	while IFS= read -r executable; do
 		case "$executable" in
-		"$compiler" | "$qbe" | "$cc" | */cc1 | */collect2 | */as | */x86_64-linux-gnu-as | */ld.lld) ;;
+		"$compiler" | "$qbe" | "$cc" | "$cc1_command" | "$collect2_command" | \
+			"$assembler_command" | "$architecture_assembler_command" | "$ld_lld_command") ;;
 		*) fail "$label launched an unregistered executable: $executable" ;;
 		esac
 	done < "$inventory"
-	require_exact_tool_observed "$trace" "$qbe" "$label QBE"
-	require_exact_tool_observed "$trace" "$cc" "$label CC"
-	require_tool_observed "$trace" 'execve\("[^"]*/(as|x86_64-linux-gnu-as)"' "$label assembler"
-	require_tool_observed "$trace" 'execve\("[^"]*/ld\.lld"' "$label LLD"
+	require_exact_tool_observed "$inventory" "$qbe" "$label QBE"
+	require_exact_tool_observed "$inventory" "$cc" "$label CC"
+	require_exact_assembler_observed "$inventory" "$label"
+	require_exact_tool_observed "$inventory" "$ld_lld_command" "$label LLD"
 	require_forbidden_processes_absent "$trace" "$label"
 	if grep -F -- '--source-content' "$trace" > /dev/null; then
 		fail "$label used the hidden source-content adapter"
@@ -134,6 +180,7 @@ output_compiler=$9
 script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 verifier_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
 external_recipe=$verifier_root/tools/gate6n-external-build.sh
+measurement_controller=$verifier_root/tools/gate6n-measure.py
 
 test "$(uname -s)" = Linux || fail "Linux is required"
 case "$(uname -m)" in
@@ -141,9 +188,11 @@ x86_64 | amd64) ;;
 *) fail "Linux amd64 is required" ;;
 esac
 
-for command_name in awk cmp cut date file find git grep jq ld.lld ldd nm readelf sed sha256sum strace strings strip; do
+for command_name in as awk cmp cp cut file find git grep jq ld.lld ldd nm python3 readelf sed sha256sum strace strings strip; do
 	command -v "$command_name" > /dev/null 2>&1 || fail "$command_name is required"
 done
+python_command=$(command -v python3)
+test -x "$python_command" || fail "resolved Python command is not executable"
 
 run_formal_evidence() {
 record_native_elf() {
@@ -215,38 +264,268 @@ printf '%s\n' "$go_ldd_status" > "$evidence/go-elf/ldd.status"
 measurements=$evidence/measurements.csv
 measurement_logs=$evidence/measurement-logs
 mkdir -p "$measurement_logs"
-printf 'stage,candidate,iteration,elapsed_seconds,peak_rss_bytes,status\n' > "$measurements"
+printf 'stage,candidate,iteration,elapsed_seconds,elapsed_status,peak_rss_bytes,rss_status,observer_status\n' \
+	> "$measurements"
+
+record_input_identity() {
+	input=$1
+	output=$2
+	if test -f "$input"; then
+		{
+			printf 'path=%s\n' "$input"
+			printf 'exists=true\n'
+			printf 'executable=%s\n' "$(test -x "$input" && printf true || printf false)"
+			printf 'size=%s\n' "$(file_size "$input")"
+			printf 'sha256=%s\n' "$(sha256 "$input")"
+		} > "$output"
+	else
+		{
+			printf 'path=%s\n' "$input"
+			printf 'exists=false\n'
+		} > "$output"
+	fi
+}
 
 measure_command() {
 	stage=$1
 	candidate=$2
 	iteration=$3
-	shift 3
+	artifact=$4
+	probe_expected=$5
+	probe_argument=$6
+	shift 6
+	measurement_input=$1
 	log_prefix=$measurement_logs/$stage-$candidate-$iteration
-	started=$(date +%s%N)
+	if test "$artifact" != -; then
+		rm -f "$artifact"
+	fi
+	set +e
+	"$python_command" "$measurement_controller" \
+		"$log_prefix.elapsed.json" \
+		"$log_prefix.elapsed.stdout" \
+		"$log_prefix.elapsed.stderr" \
+		"$artifact" -- "$@" \
+		> "$log_prefix.observer.stdout" \
+		2> "$log_prefix.observer.stderr"
+	measurement_observer_status=$?
+	set -e
+	measurement_elapsed=0
+	measurement_elapsed_status=255
+	if test "$measurement_observer_status" -eq 0 &&
+		jq -e '
+			.schemaVersion == 1 and
+			.clock == "time.monotonic_ns" and
+			.clockInfo.monotonic == true and
+			.clockInfo.adjustable == false and
+			(.clockInfo.implementation | type) == "string" and
+			(.clockInfo.implementation | length) > 0 and
+			(.clockInfo.resolutionSeconds | type) == "number" and
+			.clockInfo.resolutionSeconds > 0 and
+			(.elapsedNanoseconds | type) == "number" and
+			.elapsedNanoseconds > 0 and
+			(.elapsedSeconds | type) == "string" and
+			(.elapsedSeconds | test("^[0-9]+[.][0-9]{9}$")) and
+			(.status | type) == "number" and
+			.status == (.status | floor) and
+			.inputExecutableBefore.exists == true and
+			.inputExecutableBefore.executable == true and
+			.inputExecutableBefore.sha256 == .inputExecutableAfter.sha256
+		' "$log_prefix.elapsed.json" > /dev/null 2>&1; then
+		measurement_elapsed=$(jq -r '.elapsedSeconds' "$log_prefix.elapsed.json")
+		measurement_elapsed_status=$(jq -r '.status' "$log_prefix.elapsed.json")
+		measurement_elapsed_nanoseconds=$(jq -r '.elapsedNanoseconds' "$log_prefix.elapsed.json")
+		expected_elapsed=$(awk -v value="$measurement_elapsed_nanoseconds" \
+			'BEGIN { printf "%.9f", value / 1000000000 }')
+		if test "$measurement_elapsed" != "$expected_elapsed"; then
+			measurement_observer_status=65
+		fi
+	else
+		measurement_observer_status=65
+	fi
+
+	if test "$probe_expected" != -; then
+		set +e
+		"$artifact" "$probe_argument" \
+			> "$log_prefix.elapsed-probe.stdout" \
+			2> "$log_prefix.elapsed-probe.stderr"
+		measurement_elapsed_probe_status=$?
+		set -e
+		printf '%s\n' "$measurement_elapsed_probe_status" > "$log_prefix.elapsed-probe.status"
+	fi
+
+	if test "$artifact" != -; then
+		rm -f "$artifact"
+	fi
+	record_input_identity "$measurement_input" "$log_prefix.rss-input-before.txt"
 	set +e
 	/usr/bin/time -f '%M' -o "$log_prefix.rss-kib" \
-		"$@" > "$log_prefix.stdout" 2> "$log_prefix.stderr"
-	measurement_status=$?
+		"$@" > "$log_prefix.rss.stdout" 2> "$log_prefix.rss.stderr"
+	measurement_rss_status=$?
 	set -e
-	finished=$(date +%s%N)
-	measurement_elapsed=$(awk -v started="$started" -v finished="$finished" \
-		'BEGIN { printf "%.9f", (finished - started) / 1000000000 }')
-	rss_kib=$(tr -d '[:space:]' < "$log_prefix.rss-kib")
+	record_input_identity "$measurement_input" "$log_prefix.rss-input-after.txt"
+	rss_kib=
+	if test -r "$log_prefix.rss-kib"; then
+		rss_kib=$(tr -d '[:space:]' < "$log_prefix.rss-kib")
+	fi
 	case "$rss_kib" in
 	'' | *[!0-9]*) measurement_rss=0 ;;
 	*) measurement_rss=$((rss_kib * 1024)) ;;
 	esac
-	printf '%s,%s,%s,%s,%s,%s\n' \
-		"$stage" "$candidate" "$iteration" "$measurement_elapsed" "$measurement_rss" "$measurement_status" \
+	if test "$artifact" != -; then
+		if test -f "$artifact"; then
+			{
+				printf 'exists=true\n'
+				printf 'executable=%s\n' "$(test -x "$artifact" && printf true || printf false)"
+				printf 'size=%s\n' "$(file_size "$artifact")"
+				printf 'sha256=%s\n' "$(sha256 "$artifact")"
+			} > "$log_prefix.rss-artifact.txt"
+		else
+			printf 'exists=false\n' > "$log_prefix.rss-artifact.txt"
+		fi
+	fi
+	if test "$probe_expected" != -; then
+		set +e
+		"$artifact" "$probe_argument" \
+			> "$log_prefix.rss-probe.stdout" \
+			2> "$log_prefix.rss-probe.stderr"
+		measurement_rss_probe_status=$?
+		set -e
+		printf '%s\n' "$measurement_rss_probe_status" > "$log_prefix.rss-probe.status"
+	fi
+	printf '%s,%s,%s,%s,%s,%s,%s,%s\n' \
+		"$stage" "$candidate" "$iteration" "$measurement_elapsed" \
+		"$measurement_elapsed_status" "$measurement_rss" "$measurement_rss_status" \
+		"$measurement_observer_status" \
 		>> "$measurements"
 }
 
 require_measurement_success() {
 	label=$1
-	test "$measurement_status" -eq 0 || fail "$label failed with status $measurement_status"
+	test "$measurement_observer_status" -eq 0 ||
+		fail "$label elapsed observer failed with status $measurement_observer_status"
+	require_empty_file "$measurement_logs/$stage-$candidate-$iteration.observer.stdout" \
+		"$label elapsed observer wrote stdout"
+	require_empty_file "$measurement_logs/$stage-$candidate-$iteration.observer.stderr" \
+		"$label elapsed observer wrote stderr"
+	test "$measurement_elapsed_status" -eq 0 ||
+		fail "$label elapsed command failed with status $measurement_elapsed_status"
+	test "$measurement_rss_status" -eq 0 ||
+		fail "$label RSS command failed with status $measurement_rss_status"
+	elapsed_input_sha256=$(jq -r '.inputExecutableAfter.sha256 // ""' "$log_prefix.elapsed.json")
+	rss_input_before_sha256=$(awk -F= '$1 == "sha256" {print $2}' "$log_prefix.rss-input-before.txt")
+	rss_input_after_sha256=$(awk -F= '$1 == "sha256" {print $2}' "$log_prefix.rss-input-after.txt")
+	test -n "$elapsed_input_sha256" || fail "$label elapsed input identity is missing"
+	test "$elapsed_input_sha256" = "$rss_input_before_sha256" ||
+		fail "$label input executable changed between elapsed and RSS observations"
+	test "$rss_input_before_sha256" = "$rss_input_after_sha256" ||
+		fail "$label input executable changed during the RSS observation"
+	grep -Fx 'executable=true' "$log_prefix.rss-input-before.txt" > /dev/null ||
+		fail "$label RSS input is not executable"
+	awk -v value="$measurement_elapsed" 'BEGIN { exit !(value > 0) }' ||
+		fail "$label did not report positive monotonic elapsed time"
 	test "$measurement_rss" -gt 0 || fail "$label did not report peak RSS"
 }
+
+require_measured_empty_output() {
+	label=$1
+	require_empty_file "$log_prefix.elapsed.stdout" "$label elapsed command wrote stdout"
+	require_empty_file "$log_prefix.elapsed.stderr" "$label elapsed command wrote stderr"
+	require_empty_file "$log_prefix.rss.stdout" "$label RSS command wrote stdout"
+	require_empty_file "$log_prefix.rss.stderr" "$label RSS command wrote stderr"
+}
+
+require_measured_artifact_exact() {
+	expected=$1
+	label=$2
+	expected_sha256=$(sha256 "$expected")
+	test "$(jq -r '.artifact.exists // false' "$log_prefix.elapsed.json")" = true ||
+		fail "$label elapsed command did not publish an artifact"
+	test "$(jq -r '.artifact.executable // false' "$log_prefix.elapsed.json")" = true ||
+		fail "$label elapsed command artifact is not executable"
+	test "$(jq -r '.artifact.sha256 // ""' "$log_prefix.elapsed.json")" = "$expected_sha256" ||
+		fail "$label elapsed command artifact bytes differ"
+	grep -Fx 'exists=true' "$log_prefix.rss-artifact.txt" > /dev/null ||
+		fail "$label RSS command did not publish an artifact"
+	grep -Fx 'executable=true' "$log_prefix.rss-artifact.txt" > /dev/null ||
+		fail "$label RSS command artifact is not executable"
+	grep -Fx "sha256=$expected_sha256" "$log_prefix.rss-artifact.txt" > /dev/null ||
+		fail "$label RSS command artifact bytes differ"
+	cmp "$expected" "$artifact" > /dev/null || fail "$label final artifact bytes differ"
+}
+
+require_measured_artifact_published() {
+	label=$1
+	test "$(jq -r '.artifact.exists // false' "$log_prefix.elapsed.json")" = true ||
+		fail "$label elapsed command did not publish an artifact"
+	test "$(jq -r '.artifact.executable // false' "$log_prefix.elapsed.json")" = true ||
+		fail "$label elapsed command artifact is not executable"
+	test "$(jq -r '.artifact.size // 0' "$log_prefix.elapsed.json")" -gt 0 ||
+		fail "$label elapsed command artifact is empty"
+	grep -Fx 'exists=true' "$log_prefix.rss-artifact.txt" > /dev/null ||
+		fail "$label RSS command did not publish an artifact"
+	grep -Fx 'executable=true' "$log_prefix.rss-artifact.txt" > /dev/null ||
+		fail "$label RSS command artifact is not executable"
+	test -s "$artifact" || fail "$label final artifact is empty"
+}
+
+require_measured_probe() {
+	label=$1
+	for phase in elapsed rss; do
+		test "$(cat "$log_prefix.$phase-probe.status")" -eq 0 ||
+			fail "$label $phase artifact probe failed"
+		cmp "$probe_expected" "$log_prefix.$phase-probe.stdout" > /dev/null ||
+			fail "$label $phase artifact probe stdout differs"
+		require_empty_file "$log_prefix.$phase-probe.stderr" \
+			"$label $phase artifact probe wrote stderr"
+	done
+}
+
+adjacent_b2=$workspace/bootstrap/b2/compiler
+adjacent_b3=$workspace/bootstrap/b3/compiler
+adjacent_b4=$workspace/bootstrap/b4/compiler
+for adjacent_compiler in "$adjacent_b2" "$adjacent_b3" "$adjacent_b4"; do
+	test -x "$adjacent_compiler" || fail "adjacent compiler input is not executable"
+done
+adjacent_b2_b3_directory=$workspace/measured-adjacent-b2-b3
+adjacent_b3_b4_directory=$workspace/measured-adjacent-b3-b4
+mkdir -p "$adjacent_b2_b3_directory" "$adjacent_b3_b4_directory"
+
+round=0
+while test "$round" -lt 9; do
+	if test "$round" -lt 2; then
+		iteration=$((round - 2))
+	else
+		iteration=$((round - 1))
+	fi
+	order='b2-b3 b3-b4'
+	if test $((round % 2)) -ne 0; then
+		order='b3-b4 b2-b3'
+	fi
+	for candidate in $order; do
+		if test "$candidate" = b2-b3; then
+			seed=$adjacent_b2
+			expected=$adjacent_b3
+			measured_output=$adjacent_b2_b3_directory/compiler
+			label='B2-to-B3 adjacent compiler build'
+		else
+			seed=$adjacent_b3
+			expected=$adjacent_b4
+			measured_output=$adjacent_b3_b4_directory/compiler
+			label='B3-to-B4 adjacent compiler build'
+		fi
+		measure_command adjacent-build "$candidate" "$iteration" \
+			"$measured_output" - - \
+			"$seed" build "$compiler_entry" \
+				--output "$measured_output" \
+				--qbe "$qbe" --cc "$cc" --target "$PROFILE"
+		require_measurement_success "$label observation $iteration"
+		require_measured_empty_output "$label observation $iteration"
+		require_measured_artifact_exact "$expected" "$label observation $iteration"
+	done
+	round=$((round + 1))
+done
+require_no_intermediates "$adjacent_b2_b3_directory"
+require_no_intermediates "$adjacent_b3_b4_directory"
 
 compiler_native_directory=$workspace/measured-compiler-native
 compiler_external_directory=$workspace/measured-compiler-external
@@ -268,27 +547,23 @@ while test "$round" -lt 9; do
 	for candidate in $order; do
 		if test "$candidate" = native; then
 			measure_command compiler-build native "$iteration" \
+				"$compiler_native_output" - - \
 				"$output_compiler" build "$compiler_entry" \
 					--output "$compiler_native_output" \
 					--qbe "$qbe" --cc "$cc" --target "$PROFILE"
 			require_measurement_success "Native compiler build observation $iteration"
-			require_empty_file "$measurement_logs/compiler-build-native-$iteration.stdout" \
-				"Native compiler build observation $iteration wrote stdout"
-			require_empty_file "$measurement_logs/compiler-build-native-$iteration.stderr" \
-				"Native compiler build observation $iteration wrote stderr"
-			cmp "$output_compiler" "$compiler_native_output" > /dev/null ||
-				fail "Native measured compiler bytes differ at observation $iteration"
+			require_measured_empty_output "Native compiler build observation $iteration"
+			require_measured_artifact_exact "$output_compiler" \
+				"Native compiler build observation $iteration"
 		else
 			measure_command compiler-build external "$iteration" \
+				"$compiler_external_output" - - \
 				/bin/sh "$external_recipe" "$output_compiler" "$compiler_entry" \
 				"$compiler_external_output" "$qbe" "$cc"
 			require_measurement_success "external compiler recipe observation $iteration"
-			require_empty_file "$measurement_logs/compiler-build-external-$iteration.stdout" \
-				"external compiler recipe observation $iteration wrote stdout"
-			require_empty_file "$measurement_logs/compiler-build-external-$iteration.stderr" \
-				"external compiler recipe observation $iteration wrote stderr"
-			cmp "$output_compiler" "$compiler_external_output" > /dev/null ||
-				fail "external measured compiler bytes differ at observation $iteration"
+			require_measured_empty_output "external compiler recipe observation $iteration"
+			require_measured_artifact_exact "$output_compiler" \
+				"external compiler recipe observation $iteration"
 		fi
 	done
 	round=$((round + 1))
@@ -328,41 +603,37 @@ while test "$round" -lt 13; do
 	for candidate in $order; do
 		if test "$candidate" = native; then
 			measure_command application-build native "$iteration" \
+				"$application_native_output" "$expected_stdout" 144 \
 				"$output_compiler" build "$portable_config" \
 					--output "$application_native_output" \
 					--qbe "$qbe" --cc "$cc" --target "$PROFILE"
 			require_measurement_success "Native application build observation $iteration"
-			require_empty_file "$measurement_logs/application-build-native-$iteration.stdout" \
-				"Native application build observation $iteration wrote stdout"
-			require_empty_file "$measurement_logs/application-build-native-$iteration.stderr" \
-				"Native application build observation $iteration wrote stderr"
-			cmp "$native_application" "$application_native_output" > /dev/null ||
-				fail "Native measured application bytes differ at observation $iteration"
+			require_measured_empty_output "Native application build observation $iteration"
+			require_measured_artifact_exact "$native_application" \
+				"Native application build observation $iteration"
+			require_measured_probe "Native application build observation $iteration"
 		else
 			measure_command application-build go "$iteration" \
+				"$application_go_output" "$expected_stdout" 144 \
 				"$reference_trb" build --compile --config "$portable_config" \
 				--outfile "$application_go_output"
 			require_measurement_success "optimized Go application build observation $iteration"
 			printf 'executable -> %s\n' "$application_go_output" \
 				> "$measurement_logs/application-build-go-$iteration.expected"
 			cmp "$measurement_logs/application-build-go-$iteration.expected" \
-				"$measurement_logs/application-build-go-$iteration.stdout" > /dev/null ||
-				fail "optimized Go build stdout differs at observation $iteration"
-			require_empty_file "$measurement_logs/application-build-go-$iteration.stderr" \
-				"optimized Go application build observation $iteration wrote stderr"
+				"$log_prefix.elapsed.stdout" > /dev/null ||
+				fail "optimized Go elapsed build stdout differs at observation $iteration"
+			cmp "$measurement_logs/application-build-go-$iteration.expected" \
+				"$log_prefix.rss.stdout" > /dev/null ||
+				fail "optimized Go RSS build stdout differs at observation $iteration"
+			require_empty_file "$log_prefix.elapsed.stderr" \
+				"optimized Go elapsed application build observation $iteration wrote stderr"
+			require_empty_file "$log_prefix.rss.stderr" \
+				"optimized Go RSS application build observation $iteration wrote stderr"
+			require_measured_artifact_published \
+				"optimized Go application build observation $iteration"
+			require_measured_probe "optimized Go application build observation $iteration"
 		fi
-		executable=$application_native_output
-		if test "$candidate" = go; then
-			executable=$application_go_output
-		fi
-		"$executable" 144 \
-			> "$measurement_logs/application-build-$candidate-$iteration.runtime.stdout" \
-			2> "$measurement_logs/application-build-$candidate-$iteration.runtime.stderr" ||
-			fail "$candidate measured application failed at observation $iteration"
-		cmp "$expected_stdout" "$measurement_logs/application-build-$candidate-$iteration.runtime.stdout" > /dev/null ||
-			fail "$candidate measured application stdout differs at observation $iteration"
-		require_empty_file "$measurement_logs/application-build-$candidate-$iteration.runtime.stderr" \
-			"$candidate measured application wrote runtime stderr at observation $iteration"
 	done
 	round=$((round + 1))
 done
@@ -384,12 +655,16 @@ while test "$round" -lt 13; do
 		if test "$candidate" = go; then
 			executable=$go_application
 		fi
-		measure_command application-runtime "$candidate" "$iteration" "$executable" 144
+		measure_command application-runtime "$candidate" "$iteration" - - - "$executable" 144
 		require_measurement_success "$candidate application runtime observation $iteration"
-		cmp "$expected_stdout" "$measurement_logs/application-runtime-$candidate-$iteration.stdout" > /dev/null ||
-			fail "$candidate runtime stdout differs at observation $iteration"
-		require_empty_file "$measurement_logs/application-runtime-$candidate-$iteration.stderr" \
-			"$candidate runtime observation $iteration wrote stderr"
+		cmp "$expected_stdout" "$log_prefix.elapsed.stdout" > /dev/null ||
+			fail "$candidate elapsed runtime stdout differs at observation $iteration"
+		cmp "$expected_stdout" "$log_prefix.rss.stdout" > /dev/null ||
+			fail "$candidate RSS runtime stdout differs at observation $iteration"
+		require_empty_file "$log_prefix.elapsed.stderr" \
+			"$candidate elapsed runtime observation $iteration wrote stderr"
+		require_empty_file "$log_prefix.rss.stderr" \
+			"$candidate RSS runtime observation $iteration wrote stderr"
 	done
 	round=$((round + 1))
 done
@@ -399,7 +674,7 @@ retained_count() {
 	stage=$2
 	candidate=$3
 	awk -F, -v stage="$stage" -v candidate="$candidate" \
-		'NR > 1 && $1 == stage && $2 == candidate && $3 > 0 && $6 == 0 {count += 1} END {print count + 0}' \
+		'NR > 1 && $1 == stage && $2 == candidate && $3 > 0 && $5 == 0 && $7 == 0 && $8 == 0 {count += 1} END {print count + 0}' \
 		"$csv"
 }
 
@@ -412,16 +687,8 @@ median_value() {
 	test "$count" -gt 0 || fail "no retained $stage $candidate measurements"
 	position=$(((count + 1) / 2))
 	awk -F, -v stage="$stage" -v candidate="$candidate" -v column="$column" \
-		'NR > 1 && $1 == stage && $2 == candidate && $3 > 0 && $6 == 0 {print $column}' \
+		'NR > 1 && $1 == stage && $2 == candidate && $3 > 0 && $5 == 0 && $7 == 0 && $8 == 0 {print $column}' \
 		"$csv" | LC_ALL=C sort -n | sed -n "${position}p"
-}
-
-bootstrap_median() {
-	stage=$1
-	column=$2
-	awk -F, -v stage="$stage" -v column="$column" \
-		'NR > 1 && $1 == stage && $5 == 0 {print $column}' "$evidence/bootstrap/measurements.csv" |
-		LC_ALL=C sort -n | sed -n '4p'
 }
 
 require_native_within_strongest() {
@@ -456,19 +723,14 @@ require_observations_below_catastrophic() {
 	column=$3
 	baseline=$4
 	awk -F, -v stage="$stage" -v candidate="$candidate" -v column="$column" -v baseline="$baseline" \
-		'NR > 1 && $1 == stage && $2 == candidate && $3 > 0 && $column > baseline * 2 {exit 1}' \
+		'NR > 1 && $1 == stage && $2 == candidate && $3 > 0 && $5 == 0 && $7 == 0 && $8 == 0 && $column > baseline * 2 {exit 1}' \
 		"$measurements" || fail "$stage $candidate observation exceeds the catastrophic bound"
 }
 
-require_bootstrap_observations_below_catastrophic() {
-	column=$1
-	baseline=$2
-	awk -F, -v column="$column" -v baseline="$baseline" \
-		'NR > 1 && ($1 == "b2-b3" || $1 == "b3-b4") && $2 > 0 && $5 == 0 && $column > baseline * 2 {exit 1}' \
-		"$evidence/bootstrap/measurements.csv" ||
-		fail "adjacent compiler observation exceeds the catastrophic bound"
-}
-
+test "$(retained_count "$measurements" adjacent-build b2-b3)" -eq 7 ||
+	fail "B2-to-B3 adjacent compiler measurement count differs"
+test "$(retained_count "$measurements" adjacent-build b3-b4)" -eq 7 ||
+	fail "B3-to-B4 adjacent compiler measurement count differs"
 test "$(retained_count "$measurements" compiler-build native)" -eq 7 ||
 	fail "Native compiler measurement count differs"
 test "$(retained_count "$measurements" compiler-build external)" -eq 7 ||
@@ -484,20 +746,20 @@ test "$(retained_count "$measurements" application-runtime go)" -eq 11 ||
 
 compiler_native_time=$(median_value "$measurements" compiler-build native 4)
 compiler_external_time=$(median_value "$measurements" compiler-build external 4)
-compiler_native_rss=$(median_value "$measurements" compiler-build native 5)
-compiler_external_rss=$(median_value "$measurements" compiler-build external 5)
+compiler_native_rss=$(median_value "$measurements" compiler-build native 6)
+compiler_external_rss=$(median_value "$measurements" compiler-build external 6)
 application_native_build_time=$(median_value "$measurements" application-build native 4)
 application_go_build_time=$(median_value "$measurements" application-build go 4)
-application_native_build_rss=$(median_value "$measurements" application-build native 5)
-application_go_build_rss=$(median_value "$measurements" application-build go 5)
+application_native_build_rss=$(median_value "$measurements" application-build native 6)
+application_go_build_rss=$(median_value "$measurements" application-build go 6)
 application_native_runtime_time=$(median_value "$measurements" application-runtime native 4)
 application_go_runtime_time=$(median_value "$measurements" application-runtime go 4)
-application_native_runtime_rss=$(median_value "$measurements" application-runtime native 5)
-application_go_runtime_rss=$(median_value "$measurements" application-runtime go 5)
-adjacent_b2_b3_time=$(bootstrap_median b2-b3 3)
-adjacent_b3_b4_time=$(bootstrap_median b3-b4 3)
-adjacent_b2_b3_rss=$(bootstrap_median b2-b3 4)
-adjacent_b3_b4_rss=$(bootstrap_median b3-b4 4)
+application_native_runtime_rss=$(median_value "$measurements" application-runtime native 6)
+application_go_runtime_rss=$(median_value "$measurements" application-runtime go 6)
+adjacent_b2_b3_time=$(median_value "$measurements" adjacent-build b2-b3 4)
+adjacent_b3_b4_time=$(median_value "$measurements" adjacent-build b3-b4 4)
+adjacent_b2_b3_rss=$(median_value "$measurements" adjacent-build b2-b3 6)
+adjacent_b3_b4_rss=$(median_value "$measurements" adjacent-build b3-b4 6)
 
 require_native_within_strongest "compiler build time" \
 	"$compiler_native_time" "$compiler_external_time" 125
@@ -518,21 +780,35 @@ adjacent_strongest_time=$(awk -v a="$adjacent_b2_b3_time" -v b="$adjacent_b3_b4_
 	'BEGIN {if (a < b) print a; else print b}')
 adjacent_strongest_rss=$(awk -v a="$adjacent_b2_b3_rss" -v b="$adjacent_b3_b4_rss" \
 	'BEGIN {if (a < b) print a; else print b}')
+compiler_strongest_time=$(awk -v a="$compiler_native_time" -v b="$compiler_external_time" \
+	'BEGIN {if (a < b) print a; else print b}')
+compiler_strongest_rss=$(awk -v a="$compiler_native_rss" -v b="$compiler_external_rss" \
+	'BEGIN {if (a < b) print a; else print b}')
+application_build_strongest_time=$(awk -v a="$application_native_build_time" -v b="$application_go_build_time" \
+	'BEGIN {if (a < b) print a; else print b}')
+application_build_strongest_rss=$(awk -v a="$application_native_build_rss" -v b="$application_go_build_rss" \
+	'BEGIN {if (a < b) print a; else print b}')
+application_runtime_strongest_time=$(awk -v a="$application_native_runtime_time" -v b="$application_go_runtime_time" \
+	'BEGIN {if (a < b) print a; else print b}')
+application_runtime_strongest_rss=$(awk -v a="$application_native_runtime_rss" -v b="$application_go_runtime_rss" \
+	'BEGIN {if (a < b) print a; else print b}')
 
-require_observations_below_catastrophic compiler-build native 4 "$compiler_external_time"
-require_observations_below_catastrophic compiler-build native 5 "$compiler_external_rss"
+require_observations_below_catastrophic compiler-build native 4 "$compiler_strongest_time"
+require_observations_below_catastrophic compiler-build native 6 "$compiler_strongest_rss"
 require_observations_below_catastrophic compiler-build external 4 "$compiler_external_time"
-require_observations_below_catastrophic compiler-build external 5 "$compiler_external_rss"
-require_observations_below_catastrophic application-build native 4 "$application_go_build_time"
-require_observations_below_catastrophic application-build native 5 "$application_go_build_rss"
+require_observations_below_catastrophic compiler-build external 6 "$compiler_external_rss"
+require_observations_below_catastrophic application-build native 4 "$application_build_strongest_time"
+require_observations_below_catastrophic application-build native 6 "$application_build_strongest_rss"
 require_observations_below_catastrophic application-build go 4 "$application_go_build_time"
-require_observations_below_catastrophic application-build go 5 "$application_go_build_rss"
-require_observations_below_catastrophic application-runtime native 4 "$application_go_runtime_time"
-require_observations_below_catastrophic application-runtime native 5 "$application_go_runtime_rss"
+require_observations_below_catastrophic application-build go 6 "$application_go_build_rss"
+require_observations_below_catastrophic application-runtime native 4 "$application_runtime_strongest_time"
+require_observations_below_catastrophic application-runtime native 6 "$application_runtime_strongest_rss"
 require_observations_below_catastrophic application-runtime go 4 "$application_go_runtime_time"
-require_observations_below_catastrophic application-runtime go 5 "$application_go_runtime_rss"
-require_bootstrap_observations_below_catastrophic 3 "$adjacent_strongest_time"
-require_bootstrap_observations_below_catastrophic 4 "$adjacent_strongest_rss"
+require_observations_below_catastrophic application-runtime go 6 "$application_go_runtime_rss"
+require_observations_below_catastrophic adjacent-build b2-b3 4 "$adjacent_strongest_time"
+require_observations_below_catastrophic adjacent-build b2-b3 6 "$adjacent_strongest_rss"
+require_observations_below_catastrophic adjacent-build b3-b4 4 "$adjacent_strongest_time"
+require_observations_below_catastrophic adjacent-build b3-b4 6 "$adjacent_strongest_rss"
 
 strip --strip-all -o "$workspace/native-first/program.stripped" "$native_application"
 strip --strip-all -o "$workspace/go/program.stripped" "$go_application"
@@ -561,6 +837,9 @@ EOF
 	printf 'root_qbe_sha256=%s\n' "$(sha256 "$root_qbe")"
 	printf 'qbe_binary_sha256=%s\n' "$(sha256 "$qbe")"
 	printf 'candidate_compiler_sha256=%s\n' "$(sha256 "$output_compiler")"
+	printf 'measurement_controller_sha256=%s\n' "$(sha256 "$measurement_controller")"
+	printf 'python_command=%s\n' "$python_command"
+	printf 'python_command_sha256=%s\n' "$(sha256 "$python_command")"
 	printf 'candidate_fixed_point_qbe_sha256=%s\n' \
 		"$(awk -F= '$1 == "fixed_point_qbe_sha256" {print $2}' "$evidence/bootstrap/identities.txt")"
 	printf 'portable_entry_qbe_sha256=%s\n' \
@@ -583,6 +862,14 @@ EOF
 	"$reference_trb" version
 	"$go_command" version
 	"$go_command" env GOCACHE GOENV GOOS GOARCH
+	"$python_command" --version
+	"$python_command" -c \
+		'import json, time; info = time.get_clock_info("monotonic"); print(json.dumps({"implementation": info.implementation, "resolutionSeconds": info.resolution, "monotonic": info.monotonic, "adjustable": info.adjustable}, sort_keys=True))'
+	printf 'cc1_command=%s\n' "$cc1_command"
+	printf 'collect2_command=%s\n' "$collect2_command"
+	printf 'assembler_command=%s\n' "$assembler_command"
+	printf 'architecture_assembler_command=%s\n' "$architecture_assembler_command"
+	printf 'ld_lld_command=%s\n' "$ld_lld_command"
 	"$cc" --version
 	ld.lld --version
 	"$qbe" -h
@@ -608,9 +895,32 @@ test -x "$cc" || fail "CC is not executable"
 test -x "$reference_trb" || fail "reference trb is not executable"
 test -x "$go_command" || fail "Go is not executable"
 test -x "$external_recipe" || fail "external comparison recipe is not executable"
+test -f "$measurement_controller" || fail "monotonic measurement controller does not exist"
 file -L "$qbe" | grep -F 'ELF ' > /dev/null || fail "QBE must be a direct ELF executable"
 file -L "$cc" | grep -F 'ELF ' > /dev/null || fail "CC must be a direct ELF executable"
 test "$(command -v go)" = "$go_command" || fail "Go command does not match PATH"
+
+resolve_cc_program() {
+	program_name=$1
+	program_path=$("$cc" "-print-prog-name=$program_name" 2> /dev/null || true)
+	case "$program_path" in
+	*/*) printf '%s\n' "$program_path" ;;
+	'') ;;
+	*) command -v "$program_path" 2> /dev/null || true ;;
+	esac
+}
+cc1_command=$(resolve_cc_program cc1)
+collect2_command=$(resolve_cc_program collect2)
+assembler_command=$(command -v as)
+architecture_assembler_command=$(command -v x86_64-linux-gnu-as 2> /dev/null || true)
+ld_lld_command=$(command -v ld.lld)
+test -x "$assembler_command" || fail "resolved assembler is not executable"
+test -x "$ld_lld_command" || fail "resolved LLD is not executable"
+for compiler_program in "$cc1_command" "$collect2_command" "$architecture_assembler_command"; do
+	if test -n "$compiler_program"; then
+		test -x "$compiler_program" || fail "resolved compiler child is not executable: $compiler_program"
+	fi
+done
 test ! -e "$workspace" || fail "workspace already exists"
 test ! -e "$evidence" || fail "evidence path already exists"
 test ! -e "$output_compiler" || fail "output compiler already exists"
@@ -967,12 +1277,10 @@ require_empty_file "$evidence/applications/native-trace.stdout" \
 	"traced Native portable-entry build wrote stdout"
 require_empty_file "$evidence/applications/native-trace.stderr" \
 	"traced Native portable-entry build wrote stderr"
-require_forbidden_processes_absent "$evidence/applications/native-build-process.trace" \
-	"ordinary Native application build"
-require_tool_observed "$evidence/applications/native-build-process.trace" 'execve\("[^"]*/ld\.lld"' \
-	"ordinary Native application LLD"
-grep execve "$evidence/applications/native-build-process.trace" \
-	> "$evidence/applications/native-build-process-inventory.txt"
+require_closed_ordinary_trace "$evidence/applications/native-build-process.trace" \
+	"$output_compiler" "ordinary Native application build"
+cp "$evidence/applications/native-build-process.trace.executables" \
+	"$evidence/applications/native-build-process-inventory.txt"
 cmp "$native_application" "$native_application_traced" > /dev/null ||
 	fail "traced Native portable-entry bytes differ"
 

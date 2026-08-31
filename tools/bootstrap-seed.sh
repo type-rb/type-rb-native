@@ -13,6 +13,8 @@ usage: bootstrap-seed.sh --mode initial|previous --input PATH --qbe PATH --cc PA
        --workspace PATH --output PATH --evidence PATH --metadata PATH
        --asset-name NAME [--repository-root PATH]
        [--input-role ordinary|transition]
+
+       linux-amd64-v0 requires --mode previous --input-role transition
 EOF
 	exit 64
 }
@@ -165,6 +167,12 @@ test "$mode" = initial || test "$mode" = previous || usage
 test "$input_role" = ordinary || test "$input_role" = transition || usage
 if test "$input_role" = transition; then
 	test "$mode" = previous || usage
+fi
+if test "$profile" = linux-amd64-v0; then
+	# There is no published amd64 platform seed. This profile may only verify
+	# the setup-only transition produced by the Gate 6N target-specific path.
+	test "$mode" = previous || usage
+	test "$input_role" = transition || usage
 fi
 test -n "$input" && test -n "$qbe" && test -n "$cc" || usage
 test -n "$profile" && test -n "$runner_image" || usage
@@ -469,8 +477,10 @@ measure_build() {
 			> "$stdout_log" 2> "$time_log"
 		measurement_status=$?
 		set -e
-		elapsed=$(awk '$1 == "real" { print $2; exit }' "$time_log")
-		rss=$(awk '/maximum resident set size/ { print $1; exit }' "$time_log")
+		if test -r "$time_log"; then
+			elapsed=$(awk '$1 == "real" { print $2; exit }' "$time_log")
+			rss=$(awk '/maximum resident set size/ { print $1; exit }' "$time_log")
+		fi
 	else
 		set +e
 		/usr/bin/time -f '%e %M' -o "$time_log" \
@@ -479,8 +489,11 @@ measure_build() {
 			> "$stdout_log" 2> "$measurement_directory/stderr"
 		measurement_status=$?
 		set -e
-		elapsed=$(awk '{ print $1 }' "$time_log")
-		rss_kib=$(awk '{ print $2 }' "$time_log")
+		rss_kib=
+		if test -r "$time_log"; then
+			elapsed=$(awk '{ print $1 }' "$time_log")
+			rss_kib=$(awk '{ print $2 }' "$time_log")
+		fi
 		case "$rss_kib" in
 		'' | *[!0-9]*) rss=0 ;;
 		*) rss=$((rss_kib * 1024)) ;;
@@ -492,7 +505,8 @@ measure_build() {
 	if test "$os" != darwin; then
 		require_empty_file "$measurement_directory/stderr" "measured build stderr differs"
 	fi
-	test -n "$elapsed" && test -n "$rss" || fail "could not parse time output"
+	awk -v elapsed="$elapsed" -v rss="$rss" \
+		'BEGIN {exit !(elapsed > 0 && rss > 0)}' || fail "could not parse time output"
 	require_empty_file "$stdout_log" "measured build stdout differs"
 	cmp "$expected_compiler" "$measured_output" >/dev/null || fail "measured compiler bytes differ"
 	require_no_intermediates "$measurement_directory"
@@ -514,88 +528,101 @@ warmup_build() {
 	done
 }
 
-if test "$input_role" = ordinary; then
-	warmup_build b1-b2 "$b1" "$b2"
-fi
-warmup_build b2-b3 "$b2" "$b3"
-warmup_build b3-b4 "$b3" "$b4"
-
-iteration=1
-while test "$iteration" -le 7; do
+if test "$profile" = linux-amd64-v0; then
+	cat > "$evidence/measurement-policy.txt" <<'EOF'
+policy=external-gate6n-controller
+legacy-bootstrap-observations=excluded
+EOF
+	cat > "$evidence/medians.txt" <<'EOF'
+b1-b2 excluded=setup-only-transition
+b2-b3 excluded=external-gate6n-controller
+b3-b4 excluded=external-gate6n-controller
+EOF
+else
+	printf 'policy=bootstrap-seed-legacy\n' > "$evidence/measurement-policy.txt"
 	if test "$input_role" = ordinary; then
-		measure_build b1-b2 "$iteration" "$b1" "$b2"
+		warmup_build b1-b2 "$b1" "$b2"
 	fi
-	measure_build b2-b3 "$iteration" "$b2" "$b3"
-	measure_build b3-b4 "$iteration" "$b3" "$b4"
-	iteration=$((iteration + 1))
-done
+	warmup_build b2-b3 "$b2" "$b3"
+	warmup_build b3-b4 "$b3" "$b4"
 
-median_value() {
-	stage=$1
-	column=$2
-	awk -F, -v wanted="$stage" -v selected="$column" \
-		'NR > 1 && $1 == wanted && $5 == 0 { print $selected }' "$measurements" |
-		LC_ALL=C sort -n | sed -n '4p'
-}
+	iteration=1
+	while test "$iteration" -le 7; do
+		if test "$input_role" = ordinary; then
+			measure_build b1-b2 "$iteration" "$b1" "$b2"
+		fi
+		measure_build b2-b3 "$iteration" "$b2" "$b3"
+		measure_build b3-b4 "$iteration" "$b3" "$b4"
+		iteration=$((iteration + 1))
+	done
 
-median_b2_b3_time=$(median_value b2-b3 3)
-median_b3_b4_time=$(median_value b3-b4 3)
-median_b2_b3_rss=$(median_value b2-b3 4)
-median_b3_b4_rss=$(median_value b3-b4 4)
+	median_value() {
+		stage=$1
+		column=$2
+		awk -F, -v wanted="$stage" -v selected="$column" \
+			'NR > 1 && $1 == wanted && $5 == 0 { print $selected }' "$measurements" |
+			LC_ALL=C sort -n | sed -n '4p'
+	}
 
-require_within_25_percent() {
-	label=$1
-	first=$2
-	second=$3
-	third=$4
-	awk -v first="$first" -v second="$second" -v third="$third" 'BEGIN {
-		minimum = first
-		if (second < minimum) minimum = second
-		if (third < minimum) minimum = third
-		maximum = first
-		if (second > maximum) maximum = second
-		if (third > maximum) maximum = third
-		exit !(maximum <= minimum * 1.25 && maximum <= minimum * 2.0)
-	}' || fail "$label adjacent medians exceed the registered bound: $first, $second, $third"
-}
+	median_b2_b3_time=$(median_value b2-b3 3)
+	median_b3_b4_time=$(median_value b3-b4 3)
+	median_b2_b3_rss=$(median_value b2-b3 4)
+	median_b3_b4_rss=$(median_value b3-b4 4)
 
-require_pair_within_25_percent() {
-	label=$1
-	first=$2
-	second=$3
-	awk -v first="$first" -v second="$second" 'BEGIN {
-		minimum = first
-		if (second < minimum) minimum = second
-		maximum = first
-		if (second > maximum) maximum = second
-		exit !(maximum <= minimum * 1.25)
-	}' || fail "$label candidate medians exceed the registered bound: $first, $second"
-}
+	require_within_25_percent() {
+		label=$1
+		first=$2
+		second=$3
+		third=$4
+		awk -v first="$first" -v second="$second" -v third="$third" 'BEGIN {
+			minimum = first
+			if (second < minimum) minimum = second
+			if (third < minimum) minimum = third
+			maximum = first
+			if (second > maximum) maximum = second
+			if (third > maximum) maximum = third
+			exit !(maximum <= minimum * 1.25 && maximum <= minimum * 2.0)
+		}' || fail "$label adjacent medians exceed the registered bound: $first, $second, $third"
+	}
 
-if test "$input_role" = ordinary; then
-	median_b1_b2_time=$(median_value b1-b2 3)
-	median_b1_b2_rss=$(median_value b1-b2 4)
-	cat > "$evidence/medians.txt" <<EOF
+	require_pair_within_25_percent() {
+		label=$1
+		first=$2
+		second=$3
+		awk -v first="$first" -v second="$second" 'BEGIN {
+			minimum = first
+			if (second < minimum) minimum = second
+			maximum = first
+			if (second > maximum) maximum = second
+			exit !(maximum <= minimum * 1.25)
+		}' || fail "$label candidate medians exceed the registered bound: $first, $second"
+	}
+
+	if test "$input_role" = ordinary; then
+		median_b1_b2_time=$(median_value b1-b2 3)
+		median_b1_b2_rss=$(median_value b1-b2 4)
+		cat > "$evidence/medians.txt" <<EOF
 b1-b2 elapsed_seconds=$median_b1_b2_time peak_rss_bytes=$median_b1_b2_rss
 b2-b3 elapsed_seconds=$median_b2_b3_time peak_rss_bytes=$median_b2_b3_rss
 b3-b4 elapsed_seconds=$median_b3_b4_time peak_rss_bytes=$median_b3_b4_rss
 EOF
 
-	require_within_25_percent elapsed \
-		"$median_b1_b2_time" "$median_b2_b3_time" "$median_b3_b4_time"
-	require_within_25_percent rss \
-		"$median_b1_b2_rss" "$median_b2_b3_rss" "$median_b3_b4_rss"
-else
-	cat > "$evidence/medians.txt" <<EOF
+		require_within_25_percent elapsed \
+			"$median_b1_b2_time" "$median_b2_b3_time" "$median_b3_b4_time"
+		require_within_25_percent rss \
+			"$median_b1_b2_rss" "$median_b2_b3_rss" "$median_b3_b4_rss"
+	else
+		cat > "$evidence/medians.txt" <<EOF
 b1-b2 excluded=setup-only-transition
 b2-b3 elapsed_seconds=$median_b2_b3_time peak_rss_bytes=$median_b2_b3_rss
 b3-b4 elapsed_seconds=$median_b3_b4_time peak_rss_bytes=$median_b3_b4_rss
 EOF
 
-	require_pair_within_25_percent elapsed \
-		"$median_b2_b3_time" "$median_b3_b4_time"
-	require_pair_within_25_percent rss \
-		"$median_b2_b3_rss" "$median_b3_b4_rss"
+		require_pair_within_25_percent elapsed \
+			"$median_b2_b3_time" "$median_b3_b4_time"
+		require_pair_within_25_percent rss \
+			"$median_b2_b3_rss" "$median_b3_b4_rss"
+	fi
 fi
 
 trace_directory=$workspace/trace

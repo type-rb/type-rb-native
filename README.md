@@ -298,8 +298,9 @@ Gate 6N is registered under
 self-hosted compiler now has an internal `linux-amd64-v0` profile that maps to
 QBE `amd64_sysv`, the System V AMD64 ABI, and the existing explicit Linux
 LLD/libm link boundary. Formal root recovery, exact fixed-point, correctness,
-process, ELF, performance, and size evidence remains in progress; Linux amd64
-is not a supported target. See the
+process, ELF, independent monotonic-time/GNU-time-RSS measurement, current
+Linux arm64 regression, cross-architecture QBE, performance, and size evidence
+remains in progress; Linux amd64 is not a supported target. See the
 [Gate 6N plan](docs/gate-6-linux-amd64.md) and
 [Decision 0025](docs/decisions/0025-linux-amd64-target-profile.md).
 

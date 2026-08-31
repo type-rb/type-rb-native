@@ -677,8 +677,14 @@ Native-owned build with the equivalent external emit-QBE/QBE/CC recipe under a
 each compiler stays at or below 310,000 bytes. Two warmups and at least eleven
 interleaved application observations apply the existing 25% build/runtime
 time/RSS bounds against optimized Go and require at least an 80% stripped-size
-improvement. Exact fixed-point, complete corpus, ELF, dependency, and process
-evidence remain mandatory before Linux amd64 is recorded as a result. See the
+improvement. Elapsed time uses a direct monotonic process observer and peak RSS
+uses an independent direct GNU time invocation, with complete per-observation
+status, output, and artifact evidence. The portable bootstrap harness's legacy
+combined time/RSS observations are retained only for its existing profiles;
+the Gate 6N adjacent-build decision uses the independent controller series.
+Exact fixed-point, current Linux arm64 regression, cross-architecture
+target-neutral QBE, complete corpus, ELF, dependency, and process evidence
+remain mandatory before Linux amd64 is recorded as a result. See the
 [Gate 6N plan](gate-6-linux-amd64.md).
 
 This gate is not authorization to ship. It evaluates:

@@ -74,7 +74,9 @@ The hosted verifier must require:
 - process traces that include QBE, the explicit C driver, assembler, and LLD
   but exclude Go, the reference compiler, recovery generators, and shell
   children from the ordinary Native chain; and
-- unchanged Darwin arm64 and Linux arm64 regression evidence.
+- unchanged Darwin arm64 and current-revision Linux arm64 regression evidence,
+  including identical target-neutral compiler and portable-application QBE
+  across the two Linux architectures.
 
 ## Registered measurements
 
@@ -88,15 +90,33 @@ medians must remain within 10%. A time or RSS value above 2x the strongest
 applicable same-runner baseline is catastrophic. Each candidate compiler must
 remain at or below 310,000 raw bytes.
 
+Elapsed time and peak RSS are independent process executions. A repository
+measurement observer launches the requested command directly and brackets it
+with Python's nanosecond monotonic clock; its own startup is outside the timed
+interval, while target launch, wait, and output draining define one whole
+fresh-process observation. GNU time separately launches the same command
+directly for orchestration-root peak RSS. Both series receive the registered
+warmups and retained observations. Child status, stdout, stderr, command
+arguments, input-executable identity before and after execution, and immediate
+build-artifact identity are retained before a failed observation stops the
+gate. The portable bootstrap harness's legacy combined time/RSS observations
+are excluded for this profile; only the Gate 6N controller's independent,
+interleaved adjacent-build series decides the registered 10% and 2x bounds.
+
 One unchanged portable application uses two warmups and at least eleven
 interleaved Native/optimized-Go observations. Native build time, build peak
 RSS, runtime, and runtime peak RSS must each remain within 25% of the stronger
 result, and the stripped Native application must remain at least 80% smaller.
-The complete Native, QBE, C-driver, LLD, dynamic-library, Go toolchain, and Go
-runtime boundaries are reported separately.
+The complete Native, QBE, C-driver, LLD, dynamic-library, Go toolchain, Go
+runtime, and measurement-observer boundaries are reported separately.
 
 The bounds remain frozen after formal observation. A miss keeps the gate open
 for diagnosis and optimization.
+
+Cross-target comparison requires both producer jobs and their raw artifacts
+from the current workflow attempt. A failed partial rerun is diagnostic only;
+formal evidence is rerun with all jobs so neither architecture refers to an
+inaccessible prior-attempt artifact.
 
 ## Delivery sequence
 
