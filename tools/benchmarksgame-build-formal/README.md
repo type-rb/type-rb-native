@@ -31,11 +31,13 @@ returns failure.
 ## Distribution boundary
 
 Preflight builds are process-traced outside timing. Evidence records the raw
-trace, successfully executed tools, tool versions, dynamic dependencies, raw
-and stripped compilers/applications, the complete pinned Go `GOROOT` apparent
-size and file count, and payload totals. Native compiler plus QBE and reference
-`trb` plus Go are reported separately. The platform C driver, assembler,
-linker, and shared libraries remain explicit external host prerequisites.
+trace, candidate-scoped successfully executed tools (including split
+`unfinished`/`resumed` strace records), per-tool dynamic dependencies, tool
+versions, raw and stripped compilers/applications, the complete pinned Go
+`GOROOT` apparent size and file count, and payload totals. Native compiler plus
+QBE and reference `trb` plus Go are reported separately. The platform C driver,
+assembler, linker, and shared libraries remain explicit external host
+prerequisites.
 
 The workflow is dispatch-only. Merging it neither schedules a formal run nor
 publishes a value. A formal invocation has this shape:
