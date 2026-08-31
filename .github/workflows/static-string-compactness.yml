@@ -183,6 +183,7 @@ jobs:
             printf 'decision_series=two-warmup-seven-retained-interleaved-a-b\n'
             printf 'first_position=alternates-each-round\n'
             printf 'bootstrap_series=closure-evidence-only\n'
+            printf 'fixed_point_adjacencies=pooled-b2-b3-and-b3-b4-byte-identical-builds\n'
           } > "$evidence/measurement-policy.txt"
 
           observe() {
@@ -295,6 +296,24 @@ jobs:
             ' "$observations" | LC_ALL=C sort -n | sed -n '4p'
           }
 
+          fixed_point_median() {
+            role=$1
+            column=$2
+            awk -F, -v role="$role" -v column="$column" '
+              NR > 1 && $1 == "retained" && $4 == role && $8 == 0 {
+                print $column
+                count += 1
+              }
+              END { if (count != 14) exit 1 }
+            ' "$observations" | LC_ALL=C sort -n | awk '
+              { value[NR] = $1 }
+              END {
+                if (NR != 14) exit 1
+                printf "%.6f\n", (value[7] + value[8]) / 2
+              }
+            '
+          }
+
           compare() {
             name=$1
             stage=$2
@@ -343,13 +362,15 @@ jobs:
           candidate_size=$(wc -c < "$RUNNER_TEMP/candidate-compiler" | tr -d ' ')
           test "$candidate_size" -le "$COMPILER_LIMIT"
           compare compiler_bytes fixed-point "$baseline_size" "$candidate_size" 1.05
+          baseline_elapsed=$(fixed_point_median baseline 6)
+          candidate_elapsed=$(fixed_point_median candidate 6)
+          baseline_rss=$(fixed_point_median baseline 7)
+          candidate_rss=$(fixed_point_median candidate 7)
+          compare build_elapsed fixed-point-build "$baseline_elapsed" "$candidate_elapsed" 1.05
+          compare build_peak_rss fixed-point-build "$baseline_rss" "$candidate_rss" 1.05
           for stage in b2-b3 b3-b4; do
             baseline_elapsed=$(median baseline "$stage" 6)
-            candidate_elapsed=$(median candidate "$stage" 6)
             baseline_rss=$(median baseline "$stage" 7)
-            candidate_rss=$(median candidate "$stage" 7)
-            compare build_elapsed "$stage" "$baseline_elapsed" "$candidate_elapsed" 1.05
-            compare build_peak_rss "$stage" "$baseline_rss" "$candidate_rss" 1.05
             for role in baseline candidate; do
               require_below_catastrophic build_elapsed "$stage" "$role" 6 "$baseline_elapsed"
               require_below_catastrophic build_peak_rss "$stage" "$role" 7 "$baseline_rss"
