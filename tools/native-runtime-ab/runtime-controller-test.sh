@@ -16,12 +16,14 @@ trap 'exit 143' TERM
 
 baseline_program=$test_root/baseline-program
 candidate_program=$test_root/candidate-program
+typerb_go_program=$test_root/typerb-go-program
 cat > "$baseline_program" <<'EOF'
 #!/bin/sh
 printf '%s-output\n' "$1"
 EOF
 cp "$baseline_program" "$candidate_program"
-chmod 0755 "$baseline_program" "$candidate_program"
+cp "$baseline_program" "$typerb_go_program"
+chmod 0755 "$baseline_program" "$candidate_program" "$typerb_go_program"
 
 fake_runexec=$test_root/runexec
 cat > "$fake_runexec" <<'EOF'
@@ -46,7 +48,8 @@ while test "$#" -gt 0; do
 	esac
 done
 test -n "$output"
-candidate=$(basename "$1" | sed 's/-program$//')
+program_name=$(basename "$1")
+candidate=$(printf '%s\n' "$program_name" | sed 's/-worker-program$//; s/-program$//')
 case "$candidate" in
 baseline)
 	wall=0.200
@@ -62,7 +65,21 @@ candidate)
 		cpu=0.210
 	fi
 	;;
+typerb-go)
+	wall=0.100
+	cpu=0.095
+	memory=1200
+	;;
 *) exit 64 ;;
+esac
+case "$program_name" in
+*-worker-program)
+	case "$candidate" in
+	baseline) wall=0.200; cpu=0.190 ;;
+	candidate) wall=0.120; cpu=0.115 ;;
+	typerb-go) wall=0.080; cpu=0.075 ;;
+	esac
+	;;
 esac
 payload=$output.payload
 set +e
@@ -107,6 +124,7 @@ test "$(cat "$test_root/pass.stdout")" = 'native-runtime-ab: spectral-norm passe
 test ! -s "$test_root/pass.stderr" || fail "passing controller wrote stderr"
 test "$(wc -l < "$test_root/pass-evidence/raw.tsv" | tr -d ' ')" -eq 27 || fail "raw row count differs"
 test "$(wc -l < "$test_root/pass-evidence/medians.tsv" | tr -d ' ')" -eq 3 || fail "median row count differs"
+test "$(wc -l < "$test_root/pass-evidence/catastrophic.tsv" | tr -d ' ')" -eq 7 || fail "catastrophic row count differs"
 test "$(find "$test_root/pass-evidence/observations" -name runexec.stdout -type f | wc -l | tr -d ' ')" -eq 26 ||
 	fail "observation count differs"
 awk -F '\t' '
@@ -122,6 +140,38 @@ awk -F '\t' '
 ' "$test_root/pass-evidence/medians.tsv" || fail "median values differ"
 test "$(awk -F '\t' '$2 == "walltime" { print $5 }' "$test_root/pass-evidence/evaluation.tsv")" = 0.750000 ||
 	fail "wall-time ratio differs"
+
+worker_expected=$test_root/worker-expected.txt
+printf 'native-worker-phase\nnative-worker-ok\n' > "$worker_expected"
+for worker_candidate in baseline candidate typerb-go; do
+	worker_program=$test_root/$worker_candidate-worker-program
+	cat > "$worker_program" <<'EOF'
+#!/bin/sh
+printf 'native-worker-phase\nnative-worker-ok\n'
+EOF
+	chmod 0755 "$worker_program"
+done
+worker_catalog=$test_root/worker-catalog.tsv
+printf 'case\tcandidate\tcommand\tinput\texpected\n' > "$worker_catalog"
+for worker_candidate in baseline candidate typerb-go; do
+	printf 'worker-literal-concat\t%s\t%s\tworker\t%s\n' \
+		"$worker_candidate" "$test_root/$worker_candidate-worker-program" "$worker_expected" \
+		>> "$worker_catalog"
+done
+/bin/sh "$script_directory/runtime-controller.sh" \
+	test "$fake_runexec" "$worker_catalog" worker-literal-concat 0 "$cache_control" \
+	"$test_root/worker-workspace" "$test_root/worker-evidence" \
+	> "$test_root/worker.stdout" 2> "$test_root/worker.stderr"
+test "$(cat "$test_root/worker.stdout")" = 'native-runtime-ab: worker-literal-concat passed'
+test ! -s "$test_root/worker.stderr" || fail "worker controller wrote stderr"
+test "$(wc -l < "$test_root/worker-evidence/raw.tsv" | tr -d ' ')" -eq 40 || fail "worker raw row count differs"
+test "$(wc -l < "$test_root/worker-evidence/medians.tsv" | tr -d ' ')" -eq 4 || fail "worker median row count differs"
+test "$(wc -l < "$test_root/worker-evidence/evaluation.tsv" | tr -d ' ')" -eq 5 || fail "worker evaluation row count differs"
+test "$(wc -l < "$test_root/worker-evidence/catastrophic.tsv" | tr -d ' ')" -eq 10 || fail "worker catastrophic row count differs"
+test "$(awk -F '\t' '$2 == "walltime" { print $5 }' "$test_root/worker-evidence/evaluation.tsv")" = 0.600000 ||
+	fail "worker baseline wall-time ratio differs"
+test "$(awk -F '\t' '$2 == "walltime-vs-typerb-go" { print $5 }' "$test_root/worker-evidence/evaluation.tsv")" = 1.500000 ||
+	fail "worker Go wall-time ratio differs"
 
 set +e
 FAKE_REGRESSION=1 /bin/sh "$script_directory/runtime-controller.sh" \

@@ -7,7 +7,8 @@ separated from the broader cross-language benchmark.
 
 ## Fixed contract
 
-- candidates in rotation order: `baseline`, then `candidate`;
+- candidates in rotation order: `baseline`, then `candidate`, with
+  `typerb-go` added only for the literal-String worker comparison;
 - BenchExec `runexec` 3.35 on Linux arm64;
 - one explicitly selected logical CPU;
 - two warmup rounds followed by eleven retained rounds;
@@ -17,7 +18,9 @@ separated from the broader cross-language benchmark.
 - exact status-zero, empty-stderr, and stdout-oracle checks before and during
   timing; and
 - raw wall time, CPU time, process-tree peak memory, exit state, and output for
-  every observation.
+  every observation; and
+- every role's retained wall, CPU, and peak-memory observation at no more than
+  2.00x that role's retained median.
 
 The five-column TSV catalog is:
 
@@ -35,10 +38,16 @@ The currently registered cases and thresholds are:
 | `fannkuch-redux` | 10 | 0.97 |
 | `n-body` | 1,000,000 | 1.02 |
 | `spectral-norm` | 5,500 | 1.02 |
+| `worker-literal-concat` | one phase, 400,000 batches | 0.70 |
 
 These inputs are the Array-address optimization contract registered in
 [issue #140](https://github.com/type-rb/type-rb-native/issues/140). They do not
 replace the full cross-language benchmark inputs or its published results.
+
+The `worker-literal-concat` case is registered in
+[issue #152](https://github.com/type-rb/type-rb-native/issues/152). It also
+requires candidate wall and CPU medians to remain within 2.00x the exact
+optimized-Go medians. All three programs use the same authored TypeRB source.
 
 ## Invocation
 

@@ -133,8 +133,9 @@ paths. Native and optimized Go compile the exact same TypeRB source.
 
 The [persistent worker harness](../tools/runtime-worker-soak/README.md) runs a
 40,000-batch CI smoke on Darwin and Linux arm64. Its dispatch-only Linux formal
-mode runs 60 phases of 60,000 batches: 460,800,000 original jobs,
-489,600,000 processed attempts, and exactly 33,926,400,576 managed bytes. It
+mode now runs 60 phases of 120,000 batches: 921,600,000 original jobs,
+979,200,000 processed attempts, and exactly 32,832,000,576 managed bytes after
+literal-only String concatenation has moved out of the runtime. It
 retains the sampled internal GC trace, 250 ms Native and Go RSS/descriptor/thread
 series, ASan/LSan output, and Valgrind leak-class inventory. Formal acceptance
 requires at least 400 complete GC observations, no more than 128 KiB post-sweep

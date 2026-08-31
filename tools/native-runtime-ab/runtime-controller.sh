@@ -6,10 +6,8 @@ BENCH_EXEC_VERSION=3.35
 MEMORY_LIMIT=4GB
 WARMUP_ROUNDS=2
 RETAINED_ROUNDS=11
-TOTAL_CANDIDATES=2
 CATALOG_HEADER='case\tcandidate\tcommand\tinput\texpected'
 RAW_HEADER='phase\tround\tretained_index\torder\tcase\tcandidate\tverdict\treturnvalue\texitsignal\tterminationreason\twalltime_seconds\tcputime_seconds\tmemory_bytes'
-CANDIDATES='baseline candidate'
 
 usage() {
 	cat >&2 <<'EOF'
@@ -87,22 +85,36 @@ test | formal) ;;
 esac
 case "$case_name" in
 fannkuch-redux)
+	total_candidates=2
+	candidates='baseline candidate'
 	walltime_limit=60s
 	formal_input=10
 	formal_expected_sha256=26f4debed9b9f8db7609e17f35756a3f72c1d85d40977a4377a1ef34ffc4d4c8
 	maximum_ratio=0.97
 	;;
 n-body)
+	total_candidates=2
+	candidates='baseline candidate'
 	walltime_limit=60s
 	formal_input=1000000
 	formal_expected_sha256=3fb938822f2b87322baee13eea59620bab076cca553f7e01214dbc674bd09387
 	maximum_ratio=1.02
 	;;
 spectral-norm)
+	total_candidates=2
+	candidates='baseline candidate'
 	walltime_limit=120s
 	formal_input=5500
 	formal_expected_sha256=f9d5b5e3eb7657cf1bbba4cc856651864df9cd9fd9a6be9b9bc5fcbb67150deb
 	maximum_ratio=1.02
+	;;
+worker-literal-concat)
+	total_candidates=3
+	candidates='baseline candidate typerb-go'
+	walltime_limit=120s
+	formal_input=worker
+	formal_expected_sha256=a9573e85b80396055215ddf53485572f06b4be54c2899b525e614ff023b6f76d
+	maximum_ratio=0.70
 	;;
 *) usage ;;
 esac
@@ -139,7 +151,8 @@ expected_header=$(printf "$CATALOG_HEADER")
 test "$actual_header" = "$expected_header" || fail "catalog header differs"
 awk -F '\t' 'NR > 1 && NF != 5 { exit 1 }' "$catalog" || fail "catalog rows must have five fields"
 catalog_rows=$(awk -F '\t' -v wanted="$case_name" 'NR > 1 && $1 == wanted { count += 1 } END { print count + 0 }' "$catalog")
-test "$catalog_rows" -eq "$TOTAL_CANDIDATES" || fail "$case_name must have two candidates"
+test "$catalog_rows" -eq "$total_candidates" ||
+	fail "$case_name must have $total_candidates candidates"
 
 mkdir -p "$workspace" "$evidence/correctness" "$evidence/observations"
 case_catalog=$workspace/catalog.tsv
@@ -147,7 +160,7 @@ awk -F '\t' -v wanted="$case_name" 'NR > 1 && $1 == wanted { print }' "$catalog"
 
 tab=$(printf '\t')
 candidate_position=1
-for expected_candidate in $CANDIDATES; do
+for expected_candidate in $candidates; do
 	row=$(sed -n "${candidate_position}p" "$case_catalog")
 	IFS="$tab" read -r row_case actual_candidate command input expected <<EOF
 $row
@@ -171,7 +184,11 @@ done
 	printf 'walltime_limit=%s\n' "$walltime_limit"
 	printf 'warmup_rounds=%s\n' "$WARMUP_ROUNDS"
 	printf 'retained_rounds=%s\n' "$RETAINED_ROUNDS"
+	printf 'candidates=%s\n' "$candidates"
 	printf 'maximum_candidate_ratio=%s\n' "$maximum_ratio"
+	if test "$case_name" = worker-literal-concat; then
+		printf 'maximum_candidate_go_ratio=2.00\n'
+	fi
 	printf 'runexec=%s\n' "$runexec"
 	printf 'runexec_version=%s\n' "$runexec_version"
 	printf 'allowed_cores=%s\n' "$allowed_cores"
@@ -226,8 +243,8 @@ while test "$round" -le "$total_rounds"; do
 		retained_index=$((round - WARMUP_ROUNDS))
 	fi
 	order=1
-	while test "$order" -le "$TOTAL_CANDIDATES"; do
-		candidate_position=$(((round + order - 2) % TOTAL_CANDIDATES + 1))
+	while test "$order" -le "$total_candidates"; do
+		candidate_position=$(((round + order - 2) % total_candidates + 1))
 		row=$(sed -n "${candidate_position}p" "$case_catalog")
 		IFS="$tab" read -r row_case candidate command input expected <<EOF
 $row
@@ -303,36 +320,88 @@ EOF
 done
 
 script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-awk -f "$script_directory/summarize.awk" "$raw" > "$evidence/medians.tsv" ||
+awk -v candidates="$candidates" -v retained_rounds="$RETAINED_ROUNDS" \
+	-f "$script_directory/summarize.awk" "$raw" > "$evidence/medians.tsv" ||
 	fail "measurement summary could not be generated"
 
+catastrophic=$evidence/catastrophic.tsv
+printf 'case\tcandidate\tmetric\tmedian\tmaximum_observation\tmaximum_median_ratio\tmaximum_ratio\tstatus\n' \
+	> "$catastrophic"
+catastrophic_failures=0
+for measured_candidate in $candidates; do
+	for metric in walltime cputime memory; do
+		case "$metric" in
+		walltime) raw_column=11; median_column=5 ;;
+		cputime) raw_column=12; median_column=6 ;;
+		memory) raw_column=13; median_column=7 ;;
+		esac
+		median=$(awk -F '\t' -v column="$median_column" -v wanted="$measured_candidate" \
+			'$2 == wanted && $8 == "pass" { print $column }' "$evidence/medians.tsv")
+		maximum=$(awk -F '\t' -v column="$raw_column" -v wanted="$measured_candidate" \
+			'$1 == "retained" && $6 == wanted && $7 == "pass" {
+				if (!found || $column + 0 > maximum + 0) maximum = $column
+				found = 1
+			} END { if (found) print maximum }' "$raw")
+		status=pass
+		ratio=
+		if test -z "$median" || test -z "$maximum"; then
+			status=incomplete
+			catastrophic_failures=$((catastrophic_failures + 1))
+		else
+			ratio=$(awk -v median="$median" -v maximum="$maximum" \
+				'BEGIN { printf "%.6f", maximum / median }')
+			if ! awk -v ratio="$ratio" 'BEGIN { exit !(ratio <= 2.00) }'; then
+				status=fail
+				catastrophic_failures=$((catastrophic_failures + 1))
+			fi
+		fi
+		printf '%s\t%s\t%s\t%s\t%s\t%s\t2.00\t%s\n' \
+			"$case_name" "$measured_candidate" "$metric" "$median" "$maximum" "$ratio" "$status" \
+			>> "$catastrophic"
+	done
+done
+
 evaluation=$evidence/evaluation.tsv
-printf 'case\tmetric\tbaseline\tcandidate\tcandidate_baseline_ratio\tmaximum_ratio\tstatus\n' > "$evaluation"
+printf 'case\tmetric\treference\tsubject\tsubject_reference_ratio\tmaximum_ratio\tstatus\n' > "$evaluation"
 evaluation_failures=0
+references=baseline
+if test "$case_name" = worker-literal-concat; then
+	references='baseline typerb-go'
+fi
 for metric in walltime cputime; do
 	case "$metric" in
 	walltime) column=5 ;;
 	cputime) column=6 ;;
 	esac
-	baseline=$(awk -F '\t' -v column="$column" '$2 == "baseline" && $8 == "pass" { print $column }' "$evidence/medians.tsv")
 	candidate=$(awk -F '\t' -v column="$column" '$2 == "candidate" && $8 == "pass" { print $column }' "$evidence/medians.tsv")
-	status=pass
-	ratio=
-	if test -z "$baseline" || test -z "$candidate"; then
-		status=incomplete
-		evaluation_failures=$((evaluation_failures + 1))
-	else
-		ratio=$(awk -v baseline="$baseline" -v candidate="$candidate" 'BEGIN { printf "%.6f", candidate / baseline }')
-		if ! awk -v ratio="$ratio" -v maximum="$maximum_ratio" 'BEGIN { exit !(ratio <= maximum) }'; then
-			status=fail
-			evaluation_failures=$((evaluation_failures + 1))
+	for reference in $references; do
+		baseline=$(awk -F '\t' -v column="$column" -v wanted="$reference" \
+			'$2 == wanted && $8 == "pass" { print $column }' "$evidence/medians.tsv")
+		comparison_maximum=$maximum_ratio
+		metric_label=$metric
+		if test "$reference" = typerb-go; then
+			comparison_maximum=2.00
+			metric_label=$metric-vs-typerb-go
 		fi
-	fi
-	printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-		"$case_name" "$metric" "$baseline" "$candidate" "$ratio" "$maximum_ratio" "$status" \
-		>> "$evaluation"
+		status=pass
+		ratio=
+		if test -z "$baseline" || test -z "$candidate"; then
+			status=incomplete
+			evaluation_failures=$((evaluation_failures + 1))
+		else
+			ratio=$(awk -v baseline="$baseline" -v candidate="$candidate" 'BEGIN { printf "%.6f", candidate / baseline }')
+			if ! awk -v ratio="$ratio" -v maximum="$comparison_maximum" 'BEGIN { exit !(ratio <= maximum) }'; then
+				status=fail
+				evaluation_failures=$((evaluation_failures + 1))
+			fi
+		fi
+		printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+			"$case_name" "$metric_label" "$baseline" "$candidate" "$ratio" \
+			"$comparison_maximum" "$status" >> "$evaluation"
+	done
 done
 
 test "$measurement_failures" -eq 0 || fail "$measurement_failures measured runs failed; raw evidence is retained"
+test "$catastrophic_failures" -eq 0 || fail "$case_name catastrophic observation threshold failed"
 test "$evaluation_failures" -eq 0 || fail "$case_name performance threshold failed"
 printf 'native-runtime-ab: %s passed\n' "$case_name"

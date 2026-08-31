@@ -7,7 +7,7 @@ MAX_LINUX_COMPILER_SIZE=260000
 MAX_PEAK_HEAP_BYTES=4194304
 MAX_SMOKE_SECONDS=2.25
 MIN_FORMAL_ALLOCATED_BYTES=32212254720
-EXPECTED_FORMAL_ALLOCATED_BYTES=33926400576
+EXPECTED_FORMAL_ALLOCATED_BYTES=32832000576
 STAT_PREFIX=type-rb-native-gc-stat-v1
 PHASE_MARKER=native-worker-phase
 SUCCESS_MARKER=native-worker-ok
@@ -182,7 +182,7 @@ smoke)
 	;;
 formal)
 	phases=60
-	batches=60000
+	batches=120000
 	minimum_trace_observations=400
 	build_reference=1
 	;;
@@ -228,12 +228,12 @@ test -f "$template" || fail "workload template is missing"
 test -f "$config_template" || fail "reference configuration is missing"
 test -f "$trace_analyzer" || fail "GC trace analyzer is missing"
 test -f "$process_analyzer" || fail "process-series analyzer is missing"
-test "$(grep -F -c 'run_worker_lifecycle(60, 60000, 128)' "$template")" -eq 1 ||
+test "$(grep -F -c 'run_worker_lifecycle(60, 120000, 128)' "$template")" -eq 1 ||
 	fail "registered workload invocation is not unique"
 
 mkdir -p "$workspace/native" "$workspace/reference/src" "$evidence"
 source=$workspace/workload.trb
-sed "s/run_worker_lifecycle(60, 60000, 128)/run_worker_lifecycle($phases, $batches, 128)/" \
+sed "s/run_worker_lifecycle(60, 120000, 128)/run_worker_lifecycle($phases, $batches, 128)/" \
 	"$template" > "$source"
 cp "$source" "$workspace/reference/src/main.trb"
 cp "$config_template" "$workspace/reference/trbconfig.jsonc"

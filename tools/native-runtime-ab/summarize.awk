@@ -2,7 +2,9 @@ BEGIN {
 	FS = "\t"
 	OFS = "\t"
 	expected_header = "phase\tround\tretained_index\torder\tcase\tcandidate\tverdict\treturnvalue\texitsignal\tterminationreason\twalltime_seconds\tcputime_seconds\tmemory_bytes"
-	candidate_count = split("baseline candidate", candidates, " ")
+	if (candidates == "") candidates = "baseline candidate"
+	if (retained_rounds == 0) retained_rounds = 11
+	candidate_count = split(candidates, candidate_names, " ")
 }
 
 NR == 1 {
@@ -50,8 +52,8 @@ END {
 	if (NR < 2) exit 2
 	print "case", "candidate", "retained", "passed", "walltime_median_seconds", "cputime_median_seconds", "memory_median_bytes", "status"
 	for (candidate_index = 1; candidate_index <= candidate_count; candidate_index += 1) {
-		candidate = candidates[candidate_index]
-		if (!(candidate in seen) || total[candidate] != 11 || passed[candidate] != 11) {
+		candidate = candidate_names[candidate_index]
+		if (!(candidate in seen) || total[candidate] != retained_rounds || passed[candidate] != retained_rounds) {
 			print case_name, candidate, total[candidate] + 0, passed[candidate] + 0, "", "", "", "incomplete"
 			continue
 		}
