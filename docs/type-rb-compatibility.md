@@ -2,7 +2,7 @@
 
 TypeRB Native follows exact reference revisions while it is experimental. The
 current source and semantic oracle is TypeRB
-`2cf63e95b4fc1a92f6094e2c89c47fb75262adae` (`0.4.3-dev`), recorded in
+`5dc09070cf7f88a569279f5e63982a6de59d692c` (`0.4.4-dev`), recorded in
 `TYPE_RB_REVISION`. This is an exact development pin, not a supported version
 range.
 
@@ -28,6 +28,35 @@ successor is registered in
 passes the selected-reference, explicit setup-transition, exact fixed-point,
 process, elapsed-time, peak-RSS, and compiler-size criteria. This document
 records the implementation boundary independently of those measurements.
+The current scoped-file successor is registered in
+[issue #144](https://github.com/type-rb/type-rb-native/issues/144), and its
+[Darwin/Linux arm64 result](../results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/README.md)
+passes the selected-reference, migration, exact-baseline, target-regression,
+fixed-point, process, resource, and size criteria.
+
+## TypeRB 0.4.4 source compatibility revalidation
+
+The selected revision contains the TypeRB 0.4.3 release, the advance to
+`0.4.4-dev`, receiver-only canonical built-in ownership, scoped file and
+directory APIs, repeated scalar CLI options, corrected safe-navigation
+evaluation, CLI application failures, and a focused undeclared-value
+diagnostic correction.
+
+Native does not currently use the changed CLI or safe-navigation surfaces. Its
+direct source break was removal of `trb/std/filesystem`. All 39 affected root,
+compiler-test, and historical benchmark-controller sources now use identical
+repository-owned support. Reads are scoped and bounded to 67,108,864 bytes by
+default, writes use `FileMode::Write`, and recursive test-directory creation
+invokes exact `/bin/mkdir -p` through shell-free `Process.run`. This support is
+not imported by the canonical self-hosted compiler closure and does not add a
+Native compatibility alias to TypeRB.
+
+The selected formatter and checker pass every checked-in configured project.
+Executable tests cover successful and oversized bounded reads, truncating
+writes, recursive and idempotent directory creation, and deterministic failure
+fields. Existing Linux amd64 and arm64 regressions retain exact target-neutral
+QBE. The Darwin and Linux arm64 previous-Native chains produce compiler and QBE
+identities that are byte-identical to the registered Native baseline.
 
 ## TypeRB 0.4.3 semantic revalidation
 
@@ -105,7 +134,7 @@ The reference pin and a Native bootstrap seed answer different questions:
 
 A later seed is warranted only by a concrete distribution need demonstrated by
 the compatibility chain. The existing attested seed reaches the exact
-`0.4.3-dev` fixed point on both targets through two setup-only transitions.
+`0.4.4-dev` fixed point on both targets through two setup-only transitions.
 That confirms bootstrap feasibility without making the older embedded runtime
 free: a future seed containing the current runtime can remove both transitions.
 Revision alignment alone does not warrant replacing or relabelling the seed.

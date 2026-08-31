@@ -23,7 +23,7 @@ The fixed compiler baseline is TypeRB Native main revision
 `71495bbf18f0820891ea086104ca7da808bfd25f`. The semantic oracle is TypeRB
 `0.4.3-dev` at revision
 `2cf63e95b4fc1a92f6094e2c89c47fb75262adae`, as declared by the compatibility
-manifest.
+record retained for that Gate 6M result.
 
 ## Included portable surface
 

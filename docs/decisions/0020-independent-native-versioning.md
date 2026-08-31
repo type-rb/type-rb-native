@@ -8,7 +8,7 @@ Accepted for experimental development.
 
 TypeRB Native has a durable previous-Native seed and an ordinary Go-free
 bootstrap path. It has also revalidated the current TypeRB-authored compiler
-against an exact TypeRB `0.4.3-dev` reference revision on Darwin and Linux
+against an exact TypeRB `0.4.4-dev` reference revision on Darwin and Linux
 arm64. The implementation, runtime, target profiles, and distribution can
 change without a TypeRB language release, while TypeRB syntax or semantics can
 advance without requiring the same Native implementation version.
@@ -86,5 +86,5 @@ drift rather than a convention that can become stale silently.
 
 ### Declare a TypeRB version range now
 
-Rejected. Only exact `0.4.3-dev` evidence exists for the current record. A
+Rejected. Only exact `0.4.4-dev` evidence exists for the current record. A
 range would imply unmeasured support at its boundaries.
