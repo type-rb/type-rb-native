@@ -1,9 +1,9 @@
-name: Scalar Array growth A/B
+name: Non-Float Array push fast path A/B
 
 on:
   pull_request:
     paths:
-      - .github/workflows/scalar-array-growth.yml
+      - .github/workflows/array-push-fast-path.yml
       - compiler/gate4/conformance/**
       - compiler/gate4/src/compiler.trb
       - compiler/gate4/src/compiler_test.trb
@@ -13,7 +13,7 @@ on:
     branches:
       - main
     paths:
-      - .github/workflows/scalar-array-growth.yml
+      - .github/workflows/array-push-fast-path.yml
       - compiler/gate4/conformance/**
       - compiler/gate4/src/compiler.trb
       - compiler/gate4/src/compiler_test.trb
@@ -25,7 +25,7 @@ permissions:
   contents: read
 
 env:
-  BASELINE_REVISION: 9ecf634d65b3a29ac4eefe27301c06bc738241e1
+  BASELINE_REVISION: 1b8b20478109473f8cf2d871f7a89cda8ed76ba1
   TYPE_RB_REVISION: 5dc09070cf7f88a569279f5e63982a6de59d692c
   TYPE_RB_VERSION: 0.4.4-dev
   RELEASE_TAG: bootstrap-seed-2026-08-30
@@ -144,7 +144,7 @@ jobs:
             --output "$RUNNER_TEMP/baseline-compiler" \
             --evidence "$RUNNER_TEMP/baseline-bootstrap-evidence" \
             --metadata "$RUNNER_TEMP/baseline-bootstrap-metadata.json" \
-            --asset-name scalar-array-growth-baseline \
+            --asset-name array-push-fast-path-baseline \
             --repository-root "$RUNNER_TEMP/baseline-source"
 
           /bin/sh tools/bootstrap-seed.sh \
@@ -159,7 +159,7 @@ jobs:
             --output "$RUNNER_TEMP/candidate-compiler" \
             --evidence "$RUNNER_TEMP/candidate-bootstrap-evidence" \
             --metadata "$RUNNER_TEMP/candidate-bootstrap-metadata.json" \
-            --asset-name scalar-array-growth-candidate
+            --asset-name array-push-fast-path-candidate
 
           cp "$RUNNER_TEMP/candidate-compiler" "$RUNNER_TEMP/candidate-compiler.stripped"
           strip --strip-all "$RUNNER_TEMP/candidate-compiler.stripped"
@@ -225,19 +225,36 @@ jobs:
             extract_array_helper g4_array_push_d \
               "$applications/$role/float-arrays.ssa" "$evidence/$role-float-push.ssa"
           done
+          extract_array_helper g4_array_grow_paced \
+            "$applications/candidate/program.ssa" "$evidence/candidate-paced-grow.ssa"
 
-          test "$(grep -F -c '%managed_slot =l add %descriptor, 8' \
-            "$evidence/baseline-paced-push.ssa")" -eq 1
-          test "$(grep -F -c '%doubled =l mul %capacity, 2' \
-            "$evidence/baseline-paced-push.ssa")" -eq 1
-          test "$(grep -F -c '%quadrupled =l mul %capacity, 4' \
-            "$evidence/baseline-paced-push.ssa")" -eq 1
           test "$(grep -F -c '%new_capacity =l mul %capacity, 4' \
+            "$evidence/baseline-paced-push.ssa")" -eq 1
+          test "$(grep -F -c 'call $g4_gc_maybe_collect(l %growth)' \
+            "$evidence/baseline-paced-push.ssa")" -eq 1
+          test "$(grep -F -c 'call $g4_array_grow_paced' \
+            "$applications/baseline/program.ssa")" -eq 0
+          test "$(grep -F -c \
+            'call $g4_array_grow_paced(l %array, l %value, l %length, l %capacity)' \
             "$evidence/candidate-paced-push.ssa")" -eq 1
-          test "$(grep -F -c '%managed_slot =l add %descriptor, 8' \
+          test "$(grep -F -c 'call $g4_gc_maybe_collect' \
             "$evidence/candidate-paced-push.ssa")" -eq 0
-          test "$(grep -F -c '%new_capacity =l mul %capacity, 2' \
+          test "$(grep -F -c 'call $realloc' \
             "$evidence/candidate-paced-push.ssa")" -eq 0
+          test "$(grep -F -c '%offset =l shl %length, 3' \
+            "$evidence/candidate-paced-push.ssa")" -eq 1
+          test "$(grep -F -c '%new_capacity =l shl %capacity, 2' \
+            "$evidence/candidate-paced-grow.ssa")" -eq 1
+          test "$(grep -F -c '%new_bytes =l shl %new_capacity, 3' \
+            "$evidence/candidate-paced-grow.ssa")" -eq 1
+          test "$(grep -F -c '%old_bytes =l shl %capacity, 3' \
+            "$evidence/candidate-paced-grow.ssa")" -eq 1
+          test "$(grep -F -c 'call $g4_gc_maybe_collect(l %growth)' \
+            "$evidence/candidate-paced-grow.ssa")" -eq 1
+          test "$(grep -F -c 'call $realloc' \
+            "$evidence/candidate-paced-grow.ssa")" -eq 1
+          test "$(grep -F -c 'storel %new_data, %data_slot' \
+            "$evidence/candidate-paced-grow.ssa")" -eq 1
           cmp "$evidence/baseline-generic-push.ssa" "$evidence/candidate-generic-push.ssa"
           cmp "$evidence/baseline-float-push.ssa" "$evidence/candidate-float-push.ssa"
           test "$(grep -F -c '%new_capacity =l mul %capacity, 2' \
@@ -246,21 +263,27 @@ jobs:
             "$evidence/candidate-float-push.ssa")" -eq 1
           baseline_size=$(wc -c < "$applications/baseline/program" | tr -d ' ')
           candidate_size=$(wc -c < "$applications/candidate/program" | tr -d ' ')
-          test "$candidate_size" -le "$((baseline_size + 64))"
+          test "$candidate_size" -le "$((baseline_size + 128))"
+          baseline_qbe_size=$(wc -c < "$applications/baseline/program.ssa" | tr -d ' ')
+          candidate_qbe_size=$(wc -c < "$applications/candidate/program.ssa" | tr -d ' ')
           {
             printf 'baseline_gc_temp_push_calls=%s\n' "$baseline_calls"
             printf 'candidate_gc_temp_push_calls=%s\n' "$candidate_calls"
-            printf 'baseline_managed_growth_factor=4\n'
-            printf 'baseline_scalar_growth_factor=2\n'
+            printf 'baseline_paced_growth_factor=4\n'
             printf 'candidate_paced_growth_factor=4\n'
+            printf 'candidate_fast_helper_slow_calls=1\n'
+            printf 'candidate_fast_helper_realloc_calls=0\n'
+            printf 'candidate_slow_path_realloc_calls=1\n'
             printf 'baseline_generic_growth_factor=2\n'
             printf 'candidate_generic_growth_factor=2\n'
             printf 'baseline_float_growth_factor=2\n'
             printf 'candidate_float_growth_factor=2\n'
+            printf 'baseline_qbe_bytes=%s\n' "$baseline_qbe_size"
+            printf 'candidate_qbe_bytes=%s\n' "$candidate_qbe_size"
             printf 'baseline_executable_bytes=%s\n' "$baseline_size"
             printf 'candidate_executable_bytes=%s\n' "$candidate_size"
-            printf 'maximum_candidate_executable_bytes=%s\n' "$((baseline_size + 64))"
-          } > "$evidence/growth-and-size.txt"
+            printf 'maximum_candidate_executable_bytes=%s\n' "$((baseline_size + 128))"
+          } > "$evidence/push-path-and-size.txt"
 
           cp "$source" "$applications/typerb-go/src/main.trb"
           cp tools/runtime-worker-soak/trbconfig.jsonc "$applications/typerb-go/trbconfig.jsonc"
@@ -282,19 +305,19 @@ jobs:
 
           printf 'case\tcandidate\tcommand\tinput\texpected\n' > "$RUNNER_TEMP/catalog.tsv"
           for role in baseline candidate typerb-go; do
-            printf 'worker-scalar-array-growth\t%s\t%s\tworker\t%s\n' \
+            printf 'worker-array-push-fast-path\t%s\t%s\tworker\t%s\n' \
               "$role" "$applications/$role/program" "$applications/expected.txt" \
               >> "$RUNNER_TEMP/catalog.tsv"
           done
 
-      - name: Verify scalar Array growth boundaries under collection
+      - name: Verify Array push boundaries under collection
         env:
           QBE: ${{ steps.qbe.outputs.path }}
         run: |
           fixture=compiler/gate4/conformance/valid/scalar-array-growth.trb
           expected=compiler/gate4/conformance/valid/scalar-array-growth.out
-          workspace="$RUNNER_TEMP/scalar-array-growth-boundaries"
-          evidence="$RUNNER_TEMP/scalar-array-growth-evidence"
+          workspace="$RUNNER_TEMP/array-push-boundaries"
+          evidence="$RUNNER_TEMP/array-push-boundary-evidence"
           mkdir -p "$workspace/typerb-go/src" "$evidence/observations"
 
           "$RUNNER_TEMP/candidate-compiler" check "$fixture" \
@@ -444,7 +467,7 @@ jobs:
         run: |
           /bin/sh tools/native-runtime-ab/runtime-controller.sh \
             formal "$(command -v runexec)" "$RUNNER_TEMP/catalog.tsv" \
-            worker-scalar-array-growth "$CORE" \
+            worker-array-push-fast-path "$CORE" \
             tools/benchmarksgame-formal/cache-control-linux.sh \
             "$RUNNER_TEMP/runtime-workspace" \
             "$RUNNER_TEMP/runtime-evidence"
@@ -467,7 +490,7 @@ jobs:
             runexec --version
           } > "$evidence/environment.txt" 2>&1
           sha256sum \
-            .github/workflows/scalar-array-growth.yml \
+            .github/workflows/array-push-fast-path.yml \
             tools/native-runtime-ab/runtime-controller.sh \
             tools/native-runtime-ab/summarize.awk \
             tools/runtime-worker-soak/workload.trb \
@@ -481,7 +504,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: scalar-array-growth-${{ github.run_id }}-${{ github.run_attempt }}
+          name: array-push-fast-path-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/application-evidence
             ${{ runner.temp }}/applications
@@ -492,7 +515,7 @@ jobs:
             ${{ runner.temp }}/catalog.tsv
             ${{ runner.temp }}/host-evidence
             ${{ runner.temp }}/runtime-evidence
-            ${{ runner.temp }}/scalar-array-growth-evidence
+            ${{ runner.temp }}/array-push-boundary-evidence
             ${{ runner.temp }}/worker-smoke-evidence
             ${{ runner.temp }}/workflow-evidence
           if-no-files-found: error

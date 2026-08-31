@@ -135,7 +135,7 @@ worker-managed-array-growth)
 	maximum_ratio=0.95
 	maximum_go_ratio=1.15
 	;;
-worker-scalar-array-growth)
+worker-array-push-fast-path)
 	total_candidates=3
 	candidates='baseline candidate typerb-go'
 	walltime_limit=120s
