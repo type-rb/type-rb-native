@@ -1173,6 +1173,17 @@ describe("Gate 4 TypeRB frontend") do
 		expect(qbe.include?("call $g4_array_address")).to_be_false()
 	end
 
+	test("keeps array addressing outside loops out of the scalar reserve") do
+		source := "def main()\n\tvalues := [1]\n\tvalue := values[0]\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		qbe := gate4_output_source(gate4_emit_qbe(state))
+		expect(qbe.include?("call $g4_array_address")).to_be_true()
+	end
+
 	test("emits direct binary64 cells for Float Arrays") do
 		source := "record Floats\n\tvalues: Array<Float>\nend\n\ndef carry(values: Array<Float>): Array<Float>\n\treturn values\nend\n\ndef main()\n\tmut values := [1, 2.5]\n\tvalues.push(3)\n\tvalues[0] += 0.5\n\tbox := Floats.new(values: values)\n\tresult := carry(box.values)\n\tvalue := result[- 1]\n\treturn\nend\n"
 		mut state := gate4_compiler_new(source.size() + 1)
