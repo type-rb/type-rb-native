@@ -115,6 +115,16 @@ worker-literal-concat)
 	formal_input=worker
 	formal_expected_sha256=a9573e85b80396055215ddf53485572f06b4be54c2899b525e614ff023b6f76d
 	maximum_ratio=0.70
+	maximum_go_ratio=2.00
+	;;
+worker-managed-alias-roots)
+	total_candidates=3
+	candidates='baseline candidate typerb-go'
+	walltime_limit=120s
+	formal_input=worker
+	formal_expected_sha256=a9573e85b80396055215ddf53485572f06b4be54c2899b525e614ff023b6f76d
+	maximum_ratio=0.80
+	maximum_go_ratio=1.25
 	;;
 *) usage ;;
 esac
@@ -186,8 +196,8 @@ done
 	printf 'retained_rounds=%s\n' "$RETAINED_ROUNDS"
 	printf 'candidates=%s\n' "$candidates"
 	printf 'maximum_candidate_ratio=%s\n' "$maximum_ratio"
-	if test "$case_name" = worker-literal-concat; then
-		printf 'maximum_candidate_go_ratio=2.00\n'
+	if test "$total_candidates" -eq 3; then
+		printf 'maximum_candidate_go_ratio=%s\n' "$maximum_go_ratio"
 	fi
 	printf 'runexec=%s\n' "$runexec"
 	printf 'runexec_version=%s\n' "$runexec_version"
@@ -365,7 +375,7 @@ evaluation=$evidence/evaluation.tsv
 printf 'case\tmetric\treference\tsubject\tsubject_reference_ratio\tmaximum_ratio\tstatus\n' > "$evaluation"
 evaluation_failures=0
 references=baseline
-if test "$case_name" = worker-literal-concat; then
+if test "$total_candidates" -eq 3; then
 	references='baseline typerb-go'
 fi
 for metric in walltime cputime; do
@@ -380,7 +390,7 @@ for metric in walltime cputime; do
 		comparison_maximum=$maximum_ratio
 		metric_label=$metric
 		if test "$reference" = typerb-go; then
-			comparison_maximum=2.00
+			comparison_maximum=$maximum_go_ratio
 			metric_label=$metric-vs-typerb-go
 		fi
 		status=pass

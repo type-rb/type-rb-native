@@ -1,9 +1,9 @@
-name: Literal String concatenation A/B
+name: Managed alias root A/B
 
 on:
   pull_request:
     paths:
-      - .github/workflows/literal-string-concat.yml
+      - .github/workflows/managed-alias-roots.yml
       - compiler/gate4/conformance/**
       - compiler/gate4/src/compiler.trb
       - compiler/gate4/src/compiler_test.trb
@@ -13,7 +13,7 @@ on:
     branches:
       - main
     paths:
-      - .github/workflows/literal-string-concat.yml
+      - .github/workflows/managed-alias-roots.yml
       - compiler/gate4/conformance/**
       - compiler/gate4/src/compiler.trb
       - compiler/gate4/src/compiler_test.trb
@@ -25,7 +25,7 @@ permissions:
   contents: read
 
 env:
-  BASELINE_REVISION: 67535126c9c6d14d966262af5afbfc2809d805fa
+  BASELINE_REVISION: d12559371410626a1ae8c52df7f1874919c6cb66
   TYPE_RB_REVISION: 5dc09070cf7f88a569279f5e63982a6de59d692c
   TYPE_RB_VERSION: 0.4.4-dev
   RELEASE_TAG: bootstrap-seed-2026-08-30
@@ -144,7 +144,7 @@ jobs:
             --output "$RUNNER_TEMP/baseline-compiler" \
             --evidence "$RUNNER_TEMP/baseline-bootstrap-evidence" \
             --metadata "$RUNNER_TEMP/baseline-bootstrap-metadata.json" \
-            --asset-name literal-string-concat-baseline \
+            --asset-name managed-alias-roots-baseline \
             --repository-root "$RUNNER_TEMP/baseline-source"
 
           /bin/sh tools/bootstrap-seed.sh \
@@ -159,7 +159,7 @@ jobs:
             --output "$RUNNER_TEMP/candidate-compiler" \
             --evidence "$RUNNER_TEMP/candidate-bootstrap-evidence" \
             --metadata "$RUNNER_TEMP/candidate-bootstrap-metadata.json" \
-            --asset-name literal-string-concat-candidate
+            --asset-name managed-alias-roots-candidate
 
           cp "$RUNNER_TEMP/candidate-compiler" "$RUNNER_TEMP/candidate-compiler.stripped"
           strip --strip-all "$RUNNER_TEMP/candidate-compiler.stripped"
@@ -198,16 +198,16 @@ jobs:
               "$directory/program.stripped" > "$directory/SHA256SUMS"
           done
 
-          baseline_calls=$(grep -F -c 'call $g4_string_concat' "$applications/baseline/program.ssa")
-          candidate_calls=$(grep -F -c 'call $g4_string_concat' "$applications/candidate/program.ssa")
-          test "$baseline_calls" -eq 2
-          test "$candidate_calls" -eq 1
+          baseline_calls=$(grep -F -c 'call $g4_gc_temp_push' "$applications/baseline/program.ssa")
+          candidate_calls=$(grep -F -c 'call $g4_gc_temp_push' "$applications/candidate/program.ssa")
+          test "$baseline_calls" -eq 17
+          test "$candidate_calls" -eq 4
           baseline_size=$(wc -c < "$applications/baseline/program" | tr -d ' ')
           candidate_size=$(wc -c < "$applications/candidate/program" | tr -d ' ')
           test "$candidate_size" -le "$((baseline_size + 64))"
           {
-            printf 'baseline_dynamic_concat_calls=%s\n' "$baseline_calls"
-            printf 'candidate_dynamic_concat_calls=%s\n' "$candidate_calls"
+            printf 'baseline_gc_temp_push_calls=%s\n' "$baseline_calls"
+            printf 'candidate_gc_temp_push_calls=%s\n' "$candidate_calls"
             printf 'baseline_executable_bytes=%s\n' "$baseline_size"
             printf 'candidate_executable_bytes=%s\n' "$candidate_size"
             printf 'maximum_candidate_executable_bytes=%s\n' "$((baseline_size + 64))"
@@ -233,7 +233,7 @@ jobs:
 
           printf 'case\tcandidate\tcommand\tinput\texpected\n' > "$RUNNER_TEMP/catalog.tsv"
           for role in baseline candidate typerb-go; do
-            printf 'worker-literal-concat\t%s\t%s\tworker\t%s\n' \
+            printf 'worker-managed-alias-roots\t%s\t%s\tworker\t%s\n' \
               "$role" "$applications/$role/program" "$applications/expected.txt" \
               >> "$RUNNER_TEMP/catalog.tsv"
           done
@@ -299,7 +299,7 @@ jobs:
         run: |
           /bin/sh tools/native-runtime-ab/runtime-controller.sh \
             formal "$(command -v runexec)" "$RUNNER_TEMP/catalog.tsv" \
-            worker-literal-concat "$CORE" \
+            worker-managed-alias-roots "$CORE" \
             tools/benchmarksgame-formal/cache-control-linux.sh \
             "$RUNNER_TEMP/runtime-workspace" \
             "$RUNNER_TEMP/runtime-evidence"
@@ -322,7 +322,7 @@ jobs:
             runexec --version
           } > "$evidence/environment.txt" 2>&1
           sha256sum \
-            .github/workflows/literal-string-concat.yml \
+            .github/workflows/managed-alias-roots.yml \
             tools/native-runtime-ab/runtime-controller.sh \
             tools/native-runtime-ab/summarize.awk \
             tools/runtime-worker-soak/workload.trb \
@@ -336,7 +336,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: literal-string-concat-${{ github.run_id }}-${{ github.run_attempt }}
+          name: managed-alias-roots-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/application-evidence
             ${{ runner.temp }}/applications

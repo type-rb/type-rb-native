@@ -76,7 +76,14 @@ case "$program_name" in
 *-worker-program)
 	case "$candidate" in
 	baseline) wall=0.200; cpu=0.190 ;;
-	candidate) wall=0.120; cpu=0.115 ;;
+	candidate)
+		wall=0.120
+		cpu=0.115
+		if test "${FAKE_ALIAS:-0}" = 1; then
+			wall=0.095
+			cpu=0.090
+		fi
+		;;
 	typerb-go) wall=0.080; cpu=0.075 ;;
 	esac
 	;;
@@ -172,6 +179,21 @@ test "$(awk -F '\t' '$2 == "walltime" { print $5 }' "$test_root/worker-evidence/
 	fail "worker baseline wall-time ratio differs"
 test "$(awk -F '\t' '$2 == "walltime-vs-typerb-go" { print $5 }' "$test_root/worker-evidence/evaluation.tsv")" = 1.500000 ||
 	fail "worker Go wall-time ratio differs"
+
+alias_catalog=$test_root/alias-catalog.tsv
+sed 's/worker-literal-concat/worker-managed-alias-roots/g' "$worker_catalog" > "$alias_catalog"
+FAKE_ALIAS=1 /bin/sh "$script_directory/runtime-controller.sh" \
+	test "$fake_runexec" "$alias_catalog" worker-managed-alias-roots 0 "$cache_control" \
+	"$test_root/alias-workspace" "$test_root/alias-evidence" \
+	> "$test_root/alias.stdout" 2> "$test_root/alias.stderr"
+test "$(cat "$test_root/alias.stdout")" = 'native-runtime-ab: worker-managed-alias-roots passed'
+test ! -s "$test_root/alias.stderr" || fail "managed-alias controller wrote stderr"
+test "$(awk -F= '$1 == "maximum_candidate_ratio" { print $2 }' "$test_root/alias-evidence/environment.txt")" = 0.80 ||
+	fail "managed-alias baseline threshold differs"
+test "$(awk -F= '$1 == "maximum_candidate_go_ratio" { print $2 }' "$test_root/alias-evidence/environment.txt")" = 1.25 ||
+	fail "managed-alias Go threshold differs"
+test "$(awk -F '\t' '$2 == "walltime-vs-typerb-go" { print $5 }' "$test_root/alias-evidence/evaluation.tsv")" = 1.187500 ||
+	fail "managed-alias Go wall-time ratio differs"
 
 set +e
 FAKE_REGRESSION=1 /bin/sh "$script_directory/runtime-controller.sh" \
