@@ -377,6 +377,24 @@ jobs:
           evidence="$RUNNER_TEMP/application-evidence"
           workspace="$RUNNER_TEMP/applications"
           mkdir -p "$evidence" "$workspace/baseline/no-long" "$workspace/candidate/no-long"
+          printf 'case\tartifact\tbaseline_bytes\tcandidate_bytes\tadded_bytes\tmaximum_added_bytes\tstatus\n' \
+            > "$evidence/sizes.tsv"
+          require_additive_bound() {
+            case_name=$1
+            artifact=$2
+            baseline=$3
+            candidate=$4
+            maximum=$5
+            added=$((candidate - baseline))
+            status=pass
+            if test "$added" -gt "$maximum"; then
+              status=fail
+            fi
+            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+              "$case_name" "$artifact" "$baseline" "$candidate" "$added" "$maximum" "$status" \
+              >> "$evidence/sizes.tsv"
+            test "$status" = pass
+          }
           short_source=compiler/gate4/conformance/valid/strings-calls.trb
           printf 'strings-ok\n' > "$workspace/no-long.expected"
           for role in baseline candidate; do
@@ -397,10 +415,9 @@ jobs:
           candidate_short_qbe=$(wc -c < "$workspace/candidate/no-long/program.ssa" | tr -d ' ')
           baseline_short_program=$(wc -c < "$workspace/baseline/no-long/program" | tr -d ' ')
           candidate_short_program=$(wc -c < "$workspace/candidate/no-long/program" | tr -d ' ')
-          awk -v baseline="$baseline_short_qbe" -v candidate="$candidate_short_qbe" \
-            'BEGIN {exit !(candidate / baseline <= 1.05)}'
-          awk -v baseline="$baseline_short_program" -v candidate="$candidate_short_program" \
-            'BEGIN {exit !(candidate / baseline <= 1.05)}'
+          require_additive_bound no-long qbe "$baseline_short_qbe" "$candidate_short_qbe" 4096
+          require_additive_bound no-long executable \
+            "$baseline_short_program" "$candidate_short_program" 1024
 
           long_source="$workspace/long-static-string.trb"
           {
@@ -435,27 +452,21 @@ jobs:
 
           baseline_long_size=$(wc -c < "$workspace/baseline/long/program" | tr -d ' ')
           candidate_long_size=$(wc -c < "$workspace/candidate/long/program" | tr -d ' ')
-          awk -v baseline="$baseline_long_size" -v candidate="$candidate_long_size" \
-            'BEGIN {exit !(candidate / baseline <= 1.05)}'
-          {
-            printf 'case\tartifact\tbaseline_bytes\tcandidate_bytes\tstatus\n'
-            printf 'no-long\tqbe\t%s\t%s\tbounded-1.05\n' \
-              "$baseline_short_qbe" "$candidate_short_qbe"
-            printf 'no-long\texecutable\t%s\t%s\tbounded-1.05\n' \
-              "$baseline_short_program" "$candidate_short_program"
-            printf 'long\tqbe\t%s\t%s\tpass\n' \
-              "$(wc -c < "$workspace/baseline/long/first.ssa" | tr -d ' ')" \
-              "$(wc -c < "$workspace/candidate/long/first.ssa" | tr -d ' ')"
-            printf 'long\texecutable\t%s\t%s\tpass\n' \
-              "$baseline_long_size" "$candidate_long_size"
-          } > "$evidence/sizes.tsv"
+          baseline_long_qbe=$(wc -c < "$workspace/baseline/long/first.ssa" | tr -d ' ')
+          candidate_long_qbe=$(wc -c < "$workspace/candidate/long/first.ssa" | tr -d ' ')
+          require_additive_bound long qbe "$baseline_long_qbe" "$candidate_long_qbe" 4096
+          require_additive_bound long executable "$baseline_long_size" "$candidate_long_size" 1024
           if test "$PROFILE" = linux-arm64-v0; then
             readelf -W -l "$workspace/candidate/long/program" > "$evidence/executable-segments.txt"
-            grep 'GNU_STACK' "$evidence/executable-segments.txt" >/dev/null
-            if grep 'GNU_STACK.*E' "$evidence/executable-segments.txt" >/dev/null; then
-              printf 'long-literal application requests an executable stack\n' >&2
-              exit 1
-            fi
+            awk '
+              $1 == "GNU_STACK" {
+                count += 1
+                for (field = 2; field <= NF; field += 1) {
+                  if ($field ~ /^[RWE]+$/ && $field ~ /E/) executable = 1
+                }
+              }
+              END {exit !(count == 1 && !executable)}
+            ' "$evidence/executable-segments.txt"
           else
             otool -l "$workspace/candidate/long/program" > "$evidence/executable-segments.txt"
           fi
