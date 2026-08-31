@@ -177,6 +177,10 @@ the target-neutral unsigned bounds predicate in the shared Array-address
 helper. `fannkuch-redux` is the required performance signal; `n-body` and
 `spectral-norm` are bounded non-regression controls. The workflow additionally
 retains the exact QBE-generated helper assembly for both candidates.
+The [formal result](../results/2026-08-31-native-array-address-linux-arm64/README.md)
+passes every registered bound: wall and CPU medians improve by 4.67% to 7.97%
+across the three cases, while compiler, QBE, and application artifacts all
+become smaller.
 
 Builds use release optimization without unsafe fast-math substitutions: C and
 C++ use `-O3`, Go uses `go build -trimpath`, Rust uses `rustc -C opt-level=3`,

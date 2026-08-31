@@ -319,6 +319,14 @@ and application artifact within its registered compactness limit. See the
 [recorded optimization result](results/2026-08-31-native-numeric-inline-linux-arm64/README.md)
 and [formal A/B controller](tools/native-runtime-ab/README.md).
 
+The second formal Native-to-Native optimization A/B result collapses the
+shared Array-address bounds predicate to one unsigned comparison after the
+existing negative-index adjustment. Exact source behavior and fixed-point
+closure pass; wall and CPU medians improve by 4.67% to 7.97% across all three
+registered numeric programs; and compiler, QBE, and application artifacts all
+shrink. See the
+[recorded Array-address result](results/2026-08-31-native-array-address-linux-arm64/README.md).
+
 Gate 6N passes every frozen condition for the internal
 `linux-amd64-v0` profile. The exact merged compiler closes a 240,888-byte
 Go-free B2/B3/B4 fixed point, emits byte-identical target-neutral compiler and
@@ -473,6 +481,7 @@ repository.
 - [Formal Benchmarks Game runtime result on Linux arm64](results/2026-08-31-benchmarksgame-runtime-linux-arm64/README.md)
 - [Formal Benchmarks Game build result on Linux arm64](results/2026-08-31-benchmarksgame-build-linux-arm64/README.md)
 - [Formal Native numeric-inline A/B result on Linux arm64](results/2026-08-31-native-numeric-inline-linux-arm64/README.md)
+- [Formal Native Array-address A/B result on Linux arm64](results/2026-08-31-native-array-address-linux-arm64/README.md)
 - [Formal TypeRB backend-pair build controller](tools/benchmarksgame-build-formal/README.md)
 - [Formal Native runtime optimization A/B controller](tools/native-runtime-ab/README.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)

@@ -1,0 +1,2503 @@
+data $g4s92 = align 8 { l 0, l 0,
+	b 0 }
+data $g4s101 = align 8 { l 0, l 1,
+	b 45,
+	b 0 }
+data $g4s154 = align 8 { l 0, l 1,
+	b 48,
+	b 0 }
+data $g4s169 = align 8 { l 0, l 1,
+	b 46,
+	b 0 }
+
+data $g4_desc_record0 = align 8 { l 1, l 7, l 56, l 8, l 16, l 24, l 32, l 40, l 48, l 56 }
+
+data $g4_newline = { b 10 }
+data $g4_character_cache = align 8 { z 2048 }
+data $g4_string_storage = align 8 { l 0, l 0, l 0 }
+data $g4_temporary_storage = align 8 { l 0, l 0 }
+data $g4_allocation_error = { b 112 97 110 105 99 58 32 97 108 108 111 99 97 116 105 111 110 32 102 97 105 108 101 100 10 }
+data $g4_bounds_error = { b 112 97 110 105 99 58 32 105 110 100 101 120 32 105 115 32 111 117 116 32 111 102 32 98 111 117 110 100 115 10 }
+data $g4_integer_error = { b 112 97 110 105 99 58 32 73 110 116 101 103 101 114 32 111 112 101 114 97 116 105 111 110 32 102 97 105 108 101 100 10 }
+data $g4_integer_range_error = { b "panic: Integer is outside the portable range", b 10 }
+data $g4_division_error = { b "panic: division by zero", b 10 }
+data $g4_usage_error = { b "usage: compiler {check|emit-qbe} SOURCE", b 10, b "       compiler build SOURCE --output OUTPUT --qbe QBE --cc CC", b 10 }
+data $g4_file_error = { b "compiler: cannot read source file: " }
+data $g4_check = { b "check", b 0 }
+data $g4_emit = { b "emit-qbe", b 0 }
+data $g4_build = { b "build", b 0 }
+data $g4_output_flag = { b "--output", b 0 }
+data $g4_qbe_flag = { b "--qbe", b 0 }
+data $g4_cc_flag = { b "--cc", b 0 }
+data $g4_target_option = { b "--target", b 0 }
+data $g4_source_arg = { b "--source-content", b 0 }
+data $g4_rb = { b "rb", b 0 }
+data $g4_wb = { b "wb", b 0 }
+data $g4_ssa_suffix = { b ".trbn.ssa", b 0 }
+data $g4_asm_suffix = { b ".trbn.s", b 0 }
+data $g4_temp_suffix = { b ".trbn.XXXXXX", b 0 }
+data $g4_slash = { b "/", b 0 }
+data $g4_target_flag = { b "-t", b 0 }
+data $g4_profile_darwin_arm64 = { b "darwin-arm64-v0", b 0 }
+data $g4_profile_linux_arm64 = { b "linux-arm64-v0", b 0 }
+data $g4_profile_linux_amd64 = { b "linux-amd64-v0", b 0 }
+data $g4_qbe_darwin_arm64 = { b "arm64_apple", b 0 }
+data $g4_qbe_linux_arm64 = { b "arm64", b 0 }
+data $g4_qbe_linux_amd64 = { b "amd64_sysv", b 0 }
+data $g4_o_flag = { b "-o", b 0 }
+data $g4_math_library = { b "-lm", b 0 }
+data $g4_dead_strip_darwin = { b "-Wl,-dead_strip,-x", b 0 }
+data $g4_dead_strip_linux = { b "-Wl,--gc-sections,--strip-all", b 0 }
+data $g4_selected_qbe_target = align 8 { l $g4_qbe_darwin_arm64 }
+data $g4_selected_dead_strip = align 8 { l $g4_dead_strip_darwin }
+data $g4_target_error = { b "compiler: unsupported target profile", b 10 }
+data $g4_intermediate_error = { b "compiler: cannot create intermediate file", b 10 }
+data $g4_qbe_error = { b "compiler: qbe failed", b 10 }
+data $g4_cc_error = { b "compiler: cc failed", b 10 }
+data $g4_publish_error = { b "compiler: cannot publish output", b 10 }
+
+function $g4_fail(l %message, l %size) {
+@start
+	call $write(w 2, l %message, l %size)
+	call $exit(w 2)
+	hlt
+}
+
+function l $g4_alloc(l %size) {
+@start
+	%pointer =l call $calloc(l 1, l %size)
+	%failed =w ceql %pointer, 0
+	jnz %failed, @fail, @ok
+@fail
+	call $g4_fail(l $g4_allocation_error, l 26)
+	hlt
+@ok
+	ret %pointer
+}
+
+function l $g4_string_alloc(l %size) {
+@start
+	%result =l call $g4_gc_alloc(l $g4_desc_string, l %size, l 0)
+	ret %result
+}
+
+function l $g4_temp_alloc(l %size) {
+@start
+	%storage =l loadl $g4_temporary_storage
+	%missing =w ceql %storage, 0
+	jnz %missing, @initialize, @allocate
+@initialize
+	%allocated =l call $calloc(l 1, l 1048576)
+	%failed =w ceql %allocated, 0
+	jnz %failed, @allocation_failed, @initialized
+@allocation_failed
+	call $g4_fail(l $g4_allocation_error, l 26)
+	hlt
+@initialized
+	storel %allocated, $g4_temporary_storage
+	jmp @allocate
+@allocate
+	%base =l loadl $g4_temporary_storage
+	%used_address =l add $g4_temporary_storage, 8
+	%used =l loadl %used_address
+	%with_padding =l add %size, 7
+	%aligned =l and %with_padding, -8
+	%next =l add %used, %aligned
+	%overflow =w csltl 1048576, %next
+	jnz %overflow, @capacity_failed, @ready
+@capacity_failed
+	call $g4_fail(l $g4_allocation_error, l 26)
+	hlt
+@ready
+	%result =l add %base, %used
+	storel %next, %used_address
+	ret %result
+}
+
+function $g4_temp_reset() {
+@start
+	%used_address =l add $g4_temporary_storage, 8
+	storel 0, %used_address
+	ret
+}
+
+function l $g4_string_from_c(l %source) {
+@start
+	%length =l call $strlen(l %source)
+	%size =l add %length, 9
+	%string =l call $g4_string_alloc(l %size)
+	%length_address =l add %string, 8
+	storel %length, %length_address
+	%data =l add %string, 16
+	call $memcpy(l %data, l %source, l %length)
+	%end =l add %data, %length
+	storeb 0, %end
+	ret %string
+}
+
+function l $g4_read_file(l %p) {
+@start
+	%f =l call $fopen(l %p, l $g4_rb)
+	%fm =w ceql %f, 0
+	jnz %fm, @fail, @seek
+@seek
+	%es =w call $fseek(l %f, l 0, w 2)
+	%ef =w cnew %es, 0
+	jnz %ef, @close, @len
+@len
+	%n =l call $ftell(l %f)
+	%neg =w csltl %n, 0
+	jnz %neg, @close, @rewind
+@rewind
+	%rs =w call $fseek(l %f, l 0, w 0)
+	%rf =w cnew %rs, 0
+	jnz %rf, @close, @alloc
+@alloc
+	%sz =l add %n, 9
+	%s =l call $g4_string_alloc(l %sz)
+	%length_address =l add %s, 8
+	storel %n, %length_address
+	%d =l add %s, 16
+	%got =l call $fread(l %d, l 1, l %n, l %f)
+	%cs =w call $fclose(l %f)
+	%rfe =w cnel %got, %n
+	%cfe =w cnew %cs, 0
+	%bad =w or %rfe, %cfe
+	jnz %bad, @fail, @done
+@done
+	%e =l add %d, %n
+	storeb 0, %e
+	%file_root =l add $g4_gc_global_roots, 8
+	storel %s, %file_root
+	ret %s
+@close
+	%ignored =w call $fclose(l %f)
+	jmp @fail
+@fail
+	ret 0
+}
+
+function l $g4_file_exists(l %path) {
+@start
+	%data =l add %path, 16
+	%status =w call $access(l %data, w 0)
+	%ok =w ceqw %status, 0
+	%result =l extuw %ok
+	ret %result
+}
+
+function l $g4_read_source(l %path) {
+@start
+	%data =l add %path, 16
+	%source =l call $g4_read_file(l %data)
+	ret %source
+}
+
+function w $g4_run(l %program, l %args) {
+@start
+	%pid =w call $fork()
+	%ff =w csltw %pid, 0
+	jnz %ff, @fail, @child_check
+@child_check
+	%child =w ceqw %pid, 0
+	jnz %child, @child, @parent
+@child
+	%ignored =w call $execv(l %program, l %args)
+	call $exit(w 127)
+	hlt
+@parent
+	%sp =l alloc8 8
+	storew 0, %sp
+	%waited =w call $waitpid(w %pid, l %sp, w 0)
+	%wf =w csltw %waited, 0
+	jnz %wf, @fail, @status
+@status
+	%st =w loadw %sp
+	%sig =w and %st, 127
+	%signaled =w cnew %sig, 0
+	jnz %signaled, @signal, @exited
+@signal
+	%sr =w add %sig, 128
+	ret %sr
+@exited
+	%shifted =w shr %st, 8
+	%code =w and %shifted, 255
+	ret %code
+@fail
+	ret 127
+}
+
+function w $g4_run_qbe(l %qbe, l %ssa, l %assembly) {
+@start
+	%target =l loadl $g4_selected_qbe_target
+	%a =l alloc8 56
+	storel %qbe, %a
+	%a1 =l add %a, 8
+	storel $g4_target_flag, %a1
+	%a2 =l add %a, 16
+	storel %target, %a2
+	%a3 =l add %a, 24
+	storel $g4_o_flag, %a3
+	%a4 =l add %a, 32
+	storel %assembly, %a4
+	%a5 =l add %a, 40
+	storel %ssa, %a5
+	%a6 =l add %a, 48
+	storel 0, %a6
+	%r =w call $g4_run(l %qbe, l %a)
+	ret %r
+}
+
+function w $g4_run_cc(l %cc, l %assembly, l %output) {
+@start
+	%dead_strip =l loadl $g4_selected_dead_strip
+	%a =l alloc8 56
+	storel %cc, %a
+	%a1 =l add %a, 8
+	storel %assembly, %a1
+	%a2 =l add %a, 16
+	storel %dead_strip, %a2
+	%a3 =l add %a, 24
+	storel $g4_math_library, %a3
+	%a4 =l add %a, 32
+	storel $g4_o_flag, %a4
+	%a5 =l add %a, 40
+	storel %output, %a5
+	%a6 =l add %a, 48
+	storel 0, %a6
+	%r =w call $g4_run(l %cc, l %a)
+	ret %r
+}
+
+function $g4_cleanup(l %ssa, l %assembly) {
+@start
+	%i0 =w call $unlink(l %ssa)
+	%i1 =w call $unlink(l %assembly)
+	ret
+}
+
+function $g4_cleanup_output(l %output, l %directory) {
+@start
+	%i0 =w call $unlink(l %output)
+	%i1 =w call $rmdir(l %directory)
+	ret
+}
+
+function l $g4_string_concat(l %left, l %right) {
+@start
+	%left_length_address =l add %left, 8
+	%right_length_address =l add %right, 8
+	%left_length =l loadl %left_length_address
+	%right_length =l loadl %right_length_address
+	%length =l add %left_length, %right_length
+	%size =l add %length, 9
+	%string =l call $g4_string_alloc(l %size)
+	%length_address =l add %string, 8
+	storel %length, %length_address
+	%data =l add %string, 16
+	%left_data =l add %left, 16
+	call $memcpy(l %data, l %left_data, l %left_length)
+	%right_target =l add %data, %left_length
+	%right_data =l add %right, 16
+	call $memcpy(l %right_target, l %right_data, l %right_length)
+	%end =l add %data, %length
+	storeb 0, %end
+	ret %string
+}
+
+function l $g4_string_equal(l %left, l %right) {
+@start
+	%left_length_address =l add %left, 8
+	%right_length_address =l add %right, 8
+	%left_length =l loadl %left_length_address
+	%right_length =l loadl %right_length_address
+	%same_length =w ceql %left_length, %right_length
+	jnz %same_length, @compare, @different
+@compare
+	%left_data =l add %left, 16
+	%right_data =l add %right, 16
+	%comparison =w call $memcmp(l %left_data, l %right_data, l %left_length)
+	%equal =w ceqw %comparison, 0
+	%result =l extuw %equal
+	ret %result
+@different
+	ret 0
+}
+
+function l $g4_string_index(l %string, l %requested) {
+@start
+	%length_address =l add %string, 8
+	%length =l loadl %length_address
+	%negative =w csltl %requested, 0
+	jnz %negative, @negative, @check
+@negative
+	%adjusted_negative =l add %length, %requested
+	jmp @bounds
+@check
+	%adjusted_positive =l copy %requested
+	jmp @bounds
+@bounds
+	%index =l phi @negative %adjusted_negative, @check %adjusted_positive
+	%below =w csltl %index, 0
+	%above =w cslel %length, %index
+	%invalid =w or %below, %above
+	jnz %invalid, @fail, @load
+@fail
+	call $g4_fail(l $g4_bounds_error, l 30)
+	hlt
+@load
+	%data =l add %string, 16
+	%address =l add %data, %index
+	%character =w loadub %address
+	%result =l call $g4_string_alloc(l 10)
+	%result_length =l add %result, 8
+	storel 1, %result_length
+	%result_data =l add %result, 16
+	storeb %character, %result_data
+	%result_end =l add %result_data, 1
+	storeb 0, %result_end
+	ret %result
+}
+
+function $g4_puts(l %string) {
+@start
+	%length_address =l add %string, 8
+	%length =l loadl %length_address
+	%data =l add %string, 16
+	call $write(w 1, l %data, l %length)
+	call $write(w 1, l $g4_newline, l 1)
+	ret
+}
+
+function $g4_eputs(l %string) {
+@start
+	%length_address =l add %string, 8
+	%length =l loadl %length_address
+	%data =l add %string, 16
+	call $write(w 2, l %data, l %length)
+	call $write(w 2, l $g4_newline, l 1)
+	ret
+}
+
+function l $g4_array_new(l %descriptor) {
+@start
+	%array =l call $g4_gc_alloc(l %descriptor, l 24, l 32)
+	%data =l call $calloc(l 4, l 8)
+	%failed =w ceql %data, 0
+	jnz %failed, @fail, @initialize
+@fail
+	call $g4_fail(l $g4_allocation_error, l 26)
+	hlt
+@initialize
+	%heap =l loadl $g4_gc_heap_bytes
+	%heap_with_data =l add %heap, 32
+	storel %heap_with_data, $g4_gc_heap_bytes
+	%allocated =l loadl $g4_gc_allocated_bytes
+	%allocated_with_data =l add %allocated, 32
+	storel %allocated_with_data, $g4_gc_allocated_bytes
+	call $g4_gc_update_peak(l %heap_with_data)
+	%length =l add %array, 8
+	storel 0, %length
+	%capacity =l add %array, 16
+	storel 4, %capacity
+	%data_slot =l add %array, 24
+	storel %data, %data_slot
+	ret %array
+}
+
+function $g4_array_push(l %array, l %value) {
+@start
+	%length_slot =l add %array, 8
+	%length =l loadl %length_slot
+	%capacity_slot =l add %array, 16
+	%capacity =l loadl %capacity_slot
+	%full =w ceql %length, %capacity
+	jnz %full, @grow, @store
+@grow
+	%new_capacity =l mul %capacity, 2
+	%new_bytes =l mul %new_capacity, 8
+	%old_bytes =l mul %capacity, 8
+	%growth =l sub %new_bytes, %old_bytes
+	%data_slot =l add %array, 24
+	%data =l loadl %data_slot
+	%new_data =l call $realloc(l %data, l %new_bytes)
+	%failed =w ceql %new_data, 0
+	jnz %failed, @fail, @grown
+@fail
+	call $g4_fail(l $g4_allocation_error, l 26)
+	hlt
+@grown
+	%heap_before =l loadl $g4_gc_heap_bytes
+	%heap_after =l add %heap_before, %growth
+	storel %heap_after, $g4_gc_heap_bytes
+	%allocated_before =l loadl $g4_gc_allocated_bytes
+	%allocated_after =l add %allocated_before, %growth
+	storel %allocated_after, $g4_gc_allocated_bytes
+	call $g4_gc_update_peak(l %heap_after)
+	storel %new_capacity, %capacity_slot
+	storel %new_data, %data_slot
+	jmp @store
+@store
+	%current_data_slot =l add %array, 24
+	%current_data =l loadl %current_data_slot
+	%offset =l mul %length, 8
+	%target =l add %current_data, %offset
+	storel %value, %target
+	%new_length =l add %length, 1
+	storel %new_length, %length_slot
+	ret
+}
+
+function l $g4_array_address(l %array, l %requested) {
+@start
+	%length_slot =l add %array, 8
+	%length =l loadl %length_slot
+	%negative =w csltl %requested, 0
+	jnz %negative, @negative, @check
+@negative
+	%adjusted_negative =l add %length, %requested
+	jmp @bounds
+@check
+	%adjusted_positive =l copy %requested
+	jmp @bounds
+@bounds
+	%index =l phi @negative %adjusted_negative, @check %adjusted_positive
+	%below =w csltl %index, 0
+	%above =w cslel %length, %index
+	%invalid =w or %below, %above
+	jnz %invalid, @fail, @load
+@fail
+	call $g4_fail(l $g4_bounds_error, l 30)
+	hlt
+@load
+	%data_slot =l add %array, 24
+	%data =l loadl %data_slot
+	%offset =l mul %index, 8
+	%address =l add %data, %offset
+	ret %address
+}
+
+function l $g4_integer_add(l %left, l %right) {
+@start
+	%result =l add %left, %right
+	%too_high =w csgtl %result, 9007199254740991
+	jnz %too_high, @fail, @check_low
+@check_low
+	%too_low =w csltl %result, -9007199254740991
+	jnz %too_low, @fail, @ok
+@fail
+	call $g4_fail(l $g4_integer_range_error, l 45)
+	hlt
+@ok
+	ret %result
+}
+
+function l $g4_integer_subtract(l %left, l %right) {
+@start
+	%result =l sub %left, %right
+	%too_high =w csgtl %result, 9007199254740991
+	jnz %too_high, @fail, @check_low
+@check_low
+	%too_low =w csltl %result, -9007199254740991
+	jnz %too_low, @fail, @ok
+@fail
+	call $g4_fail(l $g4_integer_range_error, l 45)
+	hlt
+@ok
+	ret %result
+}
+
+function l $g4_integer_multiply(l %left, l %right) {
+@start
+	%left_zero =w ceql %left, 0
+	jnz %left_zero, @zero, @left_sign
+@left_sign
+	%left_positive =w csgtl %left, 0
+	jnz %left_positive, @left_positive, @left_negative
+@left_positive
+	%right_positive =w csgtl %right, 0
+	jnz %right_positive, @positive_positive, @positive_nonpositive
+@positive_positive
+	%positive_limit =l div 9007199254740991, %right
+	%positive_overflow =w csgtl %left, %positive_limit
+	jnz %positive_overflow, @fail, @multiply
+@positive_nonpositive
+	%right_zero =w ceql %right, 0
+	jnz %right_zero, @zero, @positive_negative
+@positive_negative
+	%negative_limit =l div -9007199254740991, %left
+	%negative_overflow =w csltl %right, %negative_limit
+	jnz %negative_overflow, @fail, @multiply
+@left_negative
+	%right_positive_two =w csgtl %right, 0
+	jnz %right_positive_two, @negative_positive, @negative_nonpositive
+@negative_positive
+	%negative_limit_two =l div -9007199254740991, %right
+	%negative_overflow_two =w csltl %left, %negative_limit_two
+	jnz %negative_overflow_two, @fail, @multiply
+@negative_nonpositive
+	%right_zero_two =w ceql %right, 0
+	jnz %right_zero_two, @zero, @negative_negative
+@negative_negative
+	%positive_limit_two =l div 9007199254740991, %right
+	%positive_overflow_two =w csltl %left, %positive_limit_two
+	jnz %positive_overflow_two, @fail, @multiply
+@multiply
+	%result =l mul %left, %right
+	ret %result
+@zero
+	ret 0
+@fail
+	call $g4_fail(l $g4_integer_range_error, l 45)
+	hlt
+}
+
+function l $g4_integer_divide(l %left, l %right) {
+@start
+	%zero =w ceql %right, 0
+	jnz %zero, @fail, @ok
+@fail
+	call $g4_fail(l $g4_division_error, l 24)
+	hlt
+@ok
+	%result =l div %left, %right
+	ret %result
+}
+
+function l $g4_integer_remainder(l %left, l %right) {
+@start
+	%zero =w ceql %right, 0
+	jnz %zero, @fail, @ok
+@fail
+	call $g4_fail(l $g4_division_error, l 24)
+	hlt
+@ok
+	%result =l rem %left, %right
+	ret %result
+}
+
+data $g4_gc_heap = align 8 { l 0 }
+data $g4_gc_global_roots = align 8 { z 96 }
+data $g4_gc_temp_data = align 8 { l 0 }
+data $g4_gc_temp_count = align 8 { l 0 }
+data $g4_gc_temp_capacity = align 8 { l 0 }
+data $g4_gc_heap_bytes = align 8 { l 0 }
+data $g4_gc_heap_target = align 8 { l 1048576 }
+data $g4_gc_collection_count = align 8 { l 0 }
+data $g4_gc_automatic_collection_count = align 8 { l 0 }
+data $g4_gc_allocated_bytes = align 8 { l 0 }
+data $g4_gc_reclaimed_bytes = align 8 { l 0 }
+data $g4_gc_peak_heap_bytes = align 8 { l 0 }
+data $g4_desc_string = align 8 { l 0 }
+data $g4_desc_array_scalar = align 8 { l 2, l 0 }
+data $g4_desc_array_managed = align 8 { l 2, l 1 }
+data $g4_desc_project_sources = align 8 { l 1, l 3, l 24, l 8, l 16, l 24 }
+data $g4_gc_stats_environment = { b "TYPE_RB_NATIVE_RUNTIME_STATS", b 0 }
+data $g4_gc_report_collections = { b "type-rb-native-gc-stat-v1,collections," }
+data $g4_gc_report_automatic = { b "type-rb-native-gc-stat-v1,automatic-collections," }
+data $g4_gc_report_allocated = { b "type-rb-native-gc-stat-v1,allocated-bytes," }
+data $g4_gc_report_reclaimed = { b "type-rb-native-gc-stat-v1,reclaimed-bytes," }
+data $g4_gc_report_live = { b "type-rb-native-gc-stat-v1,live-bytes," }
+data $g4_gc_report_peak = { b "type-rb-native-gc-stat-v1,peak-heap-bytes," }
+
+function $g4_gc_update_peak(l %candidate) {
+@start
+	%peak =l loadl $g4_gc_peak_heap_bytes
+	%greater =w csgtl %candidate, %peak
+	jnz %greater, @store, @finish
+@store
+	storel %candidate, $g4_gc_peak_heap_bytes
+	ret
+@finish
+	ret
+}
+
+function $g4_gc_maybe_collect(l %additional) {
+@start
+	%before =l loadl $g4_gc_heap_bytes
+	%projected =l add %before, %additional
+	%target =l loadl $g4_gc_heap_target
+	%over =w csgtl %projected, %target
+	jnz %over, @collect, @finish
+@collect
+	call $g4_gc_collect(w 1)
+@finish
+	ret
+}
+
+function $g4_gc_temp_push(l %value) {
+@start
+	%count =l loadl $g4_gc_temp_count
+	%capacity =l loadl $g4_gc_temp_capacity
+	%full =w ceql %count, %capacity
+	jnz %full, @grow, @store
+@grow
+	%empty =w ceql %capacity, 0
+	jnz %empty, @minimum, @double
+@minimum
+	%minimum =l copy 64
+	jmp @allocate
+@double
+	%doubled =l mul %capacity, 2
+	jmp @allocate
+@allocate
+	%next_capacity =l phi @minimum %minimum, @double %doubled
+	%bytes =l mul %next_capacity, 8
+	%data =l loadl $g4_gc_temp_data
+	%new_data =l call $realloc(l %data, l %bytes)
+	%failed =w ceql %new_data, 0
+	jnz %failed, @fail, @grown
+@fail
+	call $g4_fail(l $g4_allocation_error, l 26)
+	hlt
+@grown
+	storel %new_data, $g4_gc_temp_data
+	storel %next_capacity, $g4_gc_temp_capacity
+	jmp @store
+@store
+	%current_data =l loadl $g4_gc_temp_data
+	%offset =l mul %count, 8
+	%slot =l add %current_data, %offset
+	storel %value, %slot
+	%next_count =l add %count, 1
+	storel %next_count, $g4_gc_temp_count
+	ret
+}
+
+function $g4_gc_temp_reset(l %base) {
+@start
+	storel %base, $g4_gc_temp_count
+	ret
+}
+
+function l $g4_gc_alloc(l %descriptor, l %payload_size, l %reserved_size) {
+@start
+	%total =l add %payload_size, 16
+	%projected =l add %total, %reserved_size
+	call $g4_gc_maybe_collect(l %projected)
+	%base =l call $malloc(l %total)
+	%failed =w ceql %base, 0
+	jnz %failed, @fail, @initialize
+@fail
+	call $g4_fail(l $g4_allocation_error, l 26)
+	hlt
+@initialize
+	%head =l loadl $g4_gc_heap
+	storel %head, %base
+	%object =l add %base, 8
+	storel %descriptor, %object
+	%payload =l add %object, 8
+	call $memset(l %payload, w 0, l %payload_size)
+	%bytes =l loadl $g4_gc_heap_bytes
+	%updated =l add %bytes, %total
+	storel %updated, $g4_gc_heap_bytes
+	%allocated =l loadl $g4_gc_allocated_bytes
+	%new_allocated =l add %allocated, %total
+	storel %new_allocated, $g4_gc_allocated_bytes
+	call $g4_gc_update_peak(l %updated)
+	storel %base, $g4_gc_heap
+	call $g4_gc_temp_push(l %object)
+	ret %object
+}
+
+function $g4_gc_scan_fixed(l %object, l %descriptor) {
+@start
+	%count_address =l add %descriptor, 8
+	%count =l loadl %count_address
+	jmp @loop
+@loop
+	%index =l phi @start 0, @visit %next
+	%done =w cslel %count, %index
+	jnz %done, @finish, @visit
+@visit
+	%scaled =l mul %index, 8
+	%entries =l add %descriptor, 24
+	%entry =l add %entries, %scaled
+	%offset =l loadl %entry
+	%field =l add %object, %offset
+	%reference =l loadl %field
+	call $g4_gc_mark(l %reference)
+	%next =l add %index, 1
+	jmp @loop
+@finish
+	ret
+}
+
+function $g4_gc_scan_array(l %object, l %descriptor) {
+@start
+	%managed_address =l add %descriptor, 8
+	%managed =l loadl %managed_address
+	%scalar =w ceql %managed, 0
+	jnz %scalar, @finish, @prepare
+@prepare
+	%length_address =l add %object, 8
+	%length =l loadl %length_address
+	%data_address =l add %object, 24
+	%data =l loadl %data_address
+	jmp @loop
+@loop
+	%index =l phi @prepare 0, @visit %next
+	%done =w cslel %length, %index
+	jnz %done, @finish, @visit
+@visit
+	%scaled =l mul %index, 8
+	%entry =l add %data, %scaled
+	%reference =l loadl %entry
+	call $g4_gc_mark(l %reference)
+	%next =l add %index, 1
+	jmp @loop
+@finish
+	ret
+}
+
+function $g4_gc_mark(l %object) {
+@start
+	%nil =w ceql %object, 0
+	jnz %nil, @finish, @descriptor
+@descriptor
+	%descriptor_mark =l loadl %object
+	%static =w ceql %descriptor_mark, 0
+	jnz %static, @finish, @check_mark
+@check_mark
+	%mark =l and %descriptor_mark, 1
+	%seen =w cnel %mark, 0
+	jnz %seen, @finish, @dispatch
+@dispatch
+	%marked_descriptor =l or %descriptor_mark, 1
+	storel %marked_descriptor, %object
+	%descriptor =l and %descriptor_mark, -2
+	%kind =l loadl %descriptor
+	%fixed =w ceql %kind, 1
+	jnz %fixed, @fixed, @check_array
+@fixed
+	call $g4_gc_scan_fixed(l %object, l %descriptor)
+	ret
+@check_array
+	%array =w ceql %kind, 2
+	jnz %array, @array, @finish
+@array
+	call $g4_gc_scan_array(l %object, l %descriptor)
+@finish
+	ret
+}
+
+function $g4_gc_mark_roots() {
+@start
+	%temp_count =l loadl $g4_gc_temp_count
+	%temp_data =l loadl $g4_gc_temp_data
+	jmp @temp_loop
+@temp_loop
+	%temp_index =l phi @start 0, @temp %next_temp
+	%temps_done =w cslel %temp_count, %temp_index
+	jnz %temps_done, @globals, @temp
+@temp
+	%temp_scaled =l mul %temp_index, 8
+	%temp_slot =l add %temp_data, %temp_scaled
+	%temp_reference =l loadl %temp_slot
+	call $g4_gc_mark(l %temp_reference)
+	%next_temp =l add %temp_index, 1
+	jmp @temp_loop
+@globals
+	jmp @global_loop
+@global_loop
+	%global_index =l phi @globals 0, @global %next_global
+	%globals_done =w cslel 12, %global_index
+	jnz %globals_done, @finish, @global
+@global
+	%global_scaled =l mul %global_index, 8
+	%global_slot =l add $g4_gc_global_roots, %global_scaled
+	%global_reference =l loadl %global_slot
+	call $g4_gc_mark(l %global_reference)
+	%next_global =l add %global_index, 1
+	jmp @global_loop
+@finish
+	ret
+}
+
+function $g4_gc_sweep() {
+@start
+	%head =l loadl $g4_gc_heap
+	jmp @loop
+@loop
+	%current =l phi @start %head, @advance %next
+	%previous =l phi @start 0, @advance %next_previous
+	%done =w ceql %current, 0
+	jnz %done, @finish, @object
+@object
+	%next =l loadl %current
+	%descriptor_address =l add %current, 8
+	%descriptor_mark =l loadl %descriptor_address
+	%mark =l and %descriptor_mark, 1
+	%live =w cnel %mark, 0
+	jnz %live, @keep, @release
+@keep
+	%descriptor =l and %descriptor_mark, -2
+	storel %descriptor, %descriptor_address
+	jmp @advance
+@release
+	%released_descriptor =l and %descriptor_mark, -2
+	%kind =l loadl %released_descriptor
+	%array =w ceql %kind, 2
+	jnz %array, @release_array, @check_fixed
+@release_array
+	%data_address =l add %current, 32
+	%data =l loadl %data_address
+	%capacity_address =l add %current, 24
+	%capacity =l loadl %capacity_address
+	%backing_bytes =l mul %capacity, 8
+	%heap_with_backing =l loadl $g4_gc_heap_bytes
+	%heap_without_backing =l sub %heap_with_backing, %backing_bytes
+	storel %heap_without_backing, $g4_gc_heap_bytes
+	%reclaimed_before_backing =l loadl $g4_gc_reclaimed_bytes
+	%reclaimed_with_backing =l add %reclaimed_before_backing, %backing_bytes
+	storel %reclaimed_with_backing, $g4_gc_reclaimed_bytes
+	%has_data =w cnel %data, 0
+	jnz %has_data, @free_data, @array_ready
+@free_data
+	call $free(l %data)
+	jmp @array_ready
+@array_ready
+	%array_size =l copy 40
+	jmp @unlink
+@check_fixed
+	%fixed =w ceql %kind, 1
+	jnz %fixed, @fixed_size, @string_size
+@fixed_size
+	%payload_size_address =l add %released_descriptor, 16
+	%payload_size =l loadl %payload_size_address
+	%fixed_size =l add %payload_size, 16
+	jmp @unlink
+@string_size
+	%length_address =l add %current, 16
+	%length =l loadl %length_address
+	%string_size =l add %length, 25
+	jmp @unlink
+@unlink
+	%size =l phi @array_ready %array_size, @fixed_size %fixed_size, @string_size %string_size
+	%at_head =w ceql %previous, 0
+	jnz %at_head, @unlink_head, @unlink_after
+@unlink_head
+	storel %next, $g4_gc_heap
+	jmp @account
+@unlink_after
+	storel %next, %previous
+@account
+	%bytes =l loadl $g4_gc_heap_bytes
+	%remaining =l sub %bytes, %size
+	storel %remaining, $g4_gc_heap_bytes
+	%reclaimed =l loadl $g4_gc_reclaimed_bytes
+	%new_reclaimed =l add %reclaimed, %size
+	storel %new_reclaimed, $g4_gc_reclaimed_bytes
+	call $free(l %current)
+	jmp @advance
+@advance
+	%next_previous =l phi @keep %current, @account %previous
+	jmp @loop
+@finish
+	ret
+}
+
+function $g4_gc_collect(w %automatic) {
+@start
+	call $g4_gc_mark_roots()
+	call $g4_gc_sweep()
+	%count =l loadl $g4_gc_collection_count
+	%next_count =l add %count, 1
+	storel %next_count, $g4_gc_collection_count
+	jnz %automatic, @automatic, @pace
+@automatic
+	%automatic_count =l loadl $g4_gc_automatic_collection_count
+	%next_automatic =l add %automatic_count, 1
+	storel %next_automatic, $g4_gc_automatic_collection_count
+@pace
+	%live =l loadl $g4_gc_heap_bytes
+	%doubled =l mul %live, 2
+	%candidate =l add %doubled, 65536
+	%small =w csltl %candidate, 1048576
+	jnz %small, @minimum, @candidate
+@minimum
+	storel 1048576, $g4_gc_heap_target
+	ret
+@candidate
+	storel %candidate, $g4_gc_heap_target
+	ret
+}
+
+function $g4_gc_report(l %label, l %label_size, l %value) {
+@start
+	call $write(w 2, l %label, l %label_size)
+	%buffer =l alloc8 32
+	%end =l add %buffer, 32
+	%cursor_slot =l alloc8 8
+	%value_slot =l alloc8 8
+	storel %end, %cursor_slot
+	storel %value, %value_slot
+	%zero =w ceql %value, 0
+	jnz %zero, @zero, @loop
+@zero
+	%zero_cursor =l sub %end, 1
+	storeb 48, %zero_cursor
+	storel %zero_cursor, %cursor_slot
+	jmp @write
+@loop
+	%current =l loadl %value_slot
+	%done =w ceql %current, 0
+	jnz %done, @write, @digit
+@digit
+	%remainder =l rem %current, 10
+	%digit =l add %remainder, 48
+	%digit_byte =w copy %digit
+	%cursor =l loadl %cursor_slot
+	%next_cursor =l sub %cursor, 1
+	storeb %digit_byte, %next_cursor
+	storel %next_cursor, %cursor_slot
+	%remaining =l div %current, 10
+	storel %remaining, %value_slot
+	jmp @loop
+@write
+	%start =l loadl %cursor_slot
+	%size =l sub %end, %start
+	call $write(w 2, l %start, l %size)
+	call $write(w 2, l $g4_newline, l 1)
+	ret
+}
+
+function $g4_gc_finish() {
+@start
+	%enabled =l call $getenv(l $g4_gc_stats_environment)
+	%disabled =w ceql %enabled, 0
+	jnz %disabled, @finish, @report
+@report
+	storel 0, $g4_gc_temp_count
+	call $memset(l $g4_gc_global_roots, w 0, l 96)
+	call $g4_gc_collect(w 0)
+	%collections =l loadl $g4_gc_collection_count
+	call $g4_gc_report(l $g4_gc_report_collections, l 38, l %collections)
+	%automatic =l loadl $g4_gc_automatic_collection_count
+	call $g4_gc_report(l $g4_gc_report_automatic, l 48, l %automatic)
+	%allocated =l loadl $g4_gc_allocated_bytes
+	call $g4_gc_report(l $g4_gc_report_allocated, l 42, l %allocated)
+	%reclaimed =l loadl $g4_gc_reclaimed_bytes
+	call $g4_gc_report(l $g4_gc_report_reclaimed, l 42, l %reclaimed)
+	%live =l loadl $g4_gc_heap_bytes
+	call $g4_gc_report(l $g4_gc_report_live, l 37, l %live)
+	%peak =l loadl $g4_gc_peak_heap_bytes
+	call $g4_gc_report(l $g4_gc_report_peak, l 42, l %peak)
+@finish
+	ret
+}
+
+
+function $g4_gc_temp_reserve(l %required) {
+@start
+	%capacity =l loadl $g4_gc_temp_capacity
+	%enough =w cslel %required, %capacity
+	jnz %enough, @finish, @initial
+@initial
+	%empty =w ceql %capacity, 0
+	jnz %empty, @minimum, @existing
+@minimum
+	%minimum =l copy 64
+	jmp @grow
+@existing
+	%existing =l copy %capacity
+	jmp @grow
+@grow
+	%current =l phi @minimum %minimum, @existing %existing, @double %doubled
+	%large_enough =w cslel %required, %current
+	jnz %large_enough, @allocate, @double
+@double
+	%doubled =l mul %current, 2
+	jmp @grow
+@allocate
+	%bytes =l mul %current, 8
+	%data =l loadl $g4_gc_temp_data
+	%new_data =l call $realloc(l %data, l %bytes)
+	%failed =w ceql %new_data, 0
+	jnz %failed, @fail, @ready
+@fail
+	call $g4_fail(l $g4_allocation_error, l 26)
+	hlt
+@ready
+	storel %new_data, $g4_gc_temp_data
+	storel %current, $g4_gc_temp_capacity
+@finish
+	ret
+}
+
+
+function $g4_array_push_paced(l %array, l %value) {
+@start
+	%length_slot =l add %array, 8
+	%length =l loadl %length_slot
+	%capacity_slot =l add %array, 16
+	%capacity =l loadl %capacity_slot
+	%full =w ceql %length, %capacity
+	jnz %full, @grow, @store
+@grow
+	%new_capacity =l mul %capacity, 2
+	%new_bytes =l mul %new_capacity, 8
+	%old_bytes =l mul %capacity, 8
+	%growth =l sub %new_bytes, %old_bytes
+	call $g4_gc_maybe_collect(l %growth)
+	%data_slot =l add %array, 24
+	%data =l loadl %data_slot
+	%new_data =l call $realloc(l %data, l %new_bytes)
+	%failed =w ceql %new_data, 0
+	jnz %failed, @fail, @grown
+@fail
+	call $g4_fail(l $g4_allocation_error, l 26)
+	hlt
+@grown
+	%heap_before =l loadl $g4_gc_heap_bytes
+	%heap_after =l add %heap_before, %growth
+	storel %heap_after, $g4_gc_heap_bytes
+	%allocated_before =l loadl $g4_gc_allocated_bytes
+	%allocated_after =l add %allocated_before, %growth
+	storel %allocated_after, $g4_gc_allocated_bytes
+	call $g4_gc_update_peak(l %heap_after)
+	storel %new_capacity, %capacity_slot
+	storel %new_data, %data_slot
+	jmp @store
+@store
+	%current_data_slot =l add %array, 24
+	%current_data =l loadl %current_data_slot
+	%offset =l mul %length, 8
+	%target =l add %current_data, %offset
+	storel %value, %target
+	%new_length =l add %length, 1
+	storel %new_length, %length_slot
+	ret
+}
+
+function l $g4f0(d %p0) {
+@start
+	%temporary_roots =l loadl $g4_gc_temp_count
+	%return_value =l alloc8 8
+	%v0 =l alloc8 8
+	%v1 =l alloc8 8
+	%v2 =l alloc8 8
+	%v3 =l alloc8 8
+	%v4 =l alloc8 8
+	%v5 =l alloc8 8
+	%root_capacity =l add %temporary_roots, 2
+	call $g4_gc_temp_reserve(l %root_capacity)
+	stored %p0, %v0
+	%t0 =d loadd %v0
+	stored %t0, %v1
+	storel $g4s92, %v2
+	%t1 =d loadd %v1
+	%t3 =w cltd %t1, d_0.0
+	%t2 =l extuw %t3
+	%t4 =w cnel %t2, 0
+	jnz %t4, @l0, @l1
+@l0
+	%t5 =l loadl %v2
+	storel $g4s101, %v2
+	%t6 =d loadd %v1
+	%t7 =d loadd %v1
+	%t8 =d sub d_-0.0, %t7
+	stored %t8, %v1
+	jmp @l2
+@l1
+	jmp @l2
+@l2
+	%t9 =d loadd %v1
+	%t10 =d mul %t9, d_1000000000.0
+	%t11 =d add %t10, d_0.5
+	%t12 =l call $g4_float_to_integer(d %t11)
+	storel %t12, %v3
+	%t13 =l loadl %v3
+	%t15 =w ceql 1000000000, 0
+	jnz %t15, @l3, @l4
+@l3
+	call $g4_fail(l $g4_division_error, l 24)
+	hlt
+@l4
+	%t14 =l div %t13, 1000000000
+	storel %t14, %v4
+	%t16 =l loadl %v3
+	%t18 =w ceql 1000000000, 0
+	jnz %t18, @l5, @l6
+@l5
+	call $g4_fail(l $g4_division_error, l 24)
+	hlt
+@l6
+	%t17 =l rem %t16, 1000000000
+	%t19 =l call $g4_integer_to_string(l %t17)
+	storel %t19, %v5
+	jmp @l7
+@l7
+	%t20 =l loadl $g4_gc_temp_data
+	%t21 =l mul %temporary_roots, 8
+	%t22 =l add %t20, %t21
+	%t23 =l loadl %v2
+	storel %t23, %t22
+	%t25 =l add %t22, 8
+	%t24 =l loadl %v5
+	storel %t24, %t25
+	%t26 =l add %temporary_roots, 2
+	storel %t26, $g4_gc_temp_count
+	%t27 =l loadl %v5
+	%t28 =l add %t27, 8
+	%t29 =l loadl %t28
+	%t31 =w csltl %t29, 9
+	%t30 =l extuw %t31
+	%t32 =w cnel %t30, 0
+	jnz %t32, @l8, @l9
+@l8
+	%t33 =l loadl %v5
+	%t34 =l loadl %v5
+	%t35 =l call $g4_string_concat(l $g4s154, l %t34)
+	storel %t35, %v5
+	jmp @l7
+@l9
+	%t36 =l loadl %v2
+	%t37 =l loadl %v4
+	%t38 =l call $g4_integer_to_string(l %t37)
+	%t39 =l call $g4_string_concat(l %t36, l %t38)
+	%t40 =l call $g4_string_concat(l %t39, l $g4s169)
+	%t41 =l loadl %v5
+	%t42 =l call $g4_string_concat(l %t40, l %t41)
+	storel %t42, %return_value
+	jmp @return
+@return
+	storel %temporary_roots, $g4_gc_temp_count
+	%return_result =l loadl %return_value
+	call $g4_gc_temp_push(l %return_result)
+	ret %return_result
+}
+
+function $g4f1(l %p0, d %p1, d %p2, d %p3, d %p4, d %p5, d %p6, d %p7) {
+@start
+	%temporary_roots =l loadl $g4_gc_temp_count
+	%v0 =l alloc8 8
+	%v1 =l alloc8 8
+	%v2 =l alloc8 8
+	%v3 =l alloc8 8
+	%v4 =l alloc8 8
+	%v5 =l alloc8 8
+	%v6 =l alloc8 8
+	%v7 =l alloc8 8
+	storel %p0, %v0
+	stored %p1, %v1
+	stored %p2, %v2
+	stored %p3, %v3
+	stored %p4, %v4
+	stored %p5, %v5
+	stored %p6, %v6
+	stored %p7, %v7
+	%t0 =l loadl %v0
+	%t1 =l add %t0, 8
+	%t2 =l loadl %t1
+	call $g4_gc_temp_push(l %t2)
+	%t3 =d loadd %v1
+	call $g4_array_push_d(l %t2, d %t3)
+	%t4 =l loadl %v0
+	%t5 =l add %t4, 16
+	%t6 =l loadl %t5
+	call $g4_gc_temp_push(l %t6)
+	%t7 =d loadd %v2
+	call $g4_array_push_d(l %t6, d %t7)
+	%t8 =l loadl %v0
+	%t9 =l add %t8, 24
+	%t10 =l loadl %t9
+	call $g4_gc_temp_push(l %t10)
+	%t11 =d loadd %v3
+	call $g4_array_push_d(l %t10, d %t11)
+	%t12 =l loadl %v0
+	%t13 =l add %t12, 32
+	%t14 =l loadl %t13
+	call $g4_gc_temp_push(l %t14)
+	%t15 =d loadd %v4
+	call $g4_array_push_d(l %t14, d %t15)
+	%t16 =l loadl %v0
+	%t17 =l add %t16, 40
+	%t18 =l loadl %t17
+	call $g4_gc_temp_push(l %t18)
+	%t19 =d loadd %v5
+	call $g4_array_push_d(l %t18, d %t19)
+	%t20 =l loadl %v0
+	%t21 =l add %t20, 48
+	%t22 =l loadl %t21
+	call $g4_gc_temp_push(l %t22)
+	%t23 =d loadd %v6
+	call $g4_array_push_d(l %t22, d %t23)
+	%t24 =l loadl %v0
+	%t25 =l add %t24, 56
+	%t26 =l loadl %t25
+	call $g4_gc_temp_push(l %t26)
+	%t27 =d loadd %v7
+	call $g4_array_push_d(l %t26, d %t27)
+	jmp @return
+@return
+	storel %temporary_roots, $g4_gc_temp_count
+	ret
+}
+
+function l $g4f2() {
+@start
+	%temporary_roots =l loadl $g4_gc_temp_count
+	%return_value =l alloc8 8
+	%v0 =l alloc8 8
+	%v1 =l alloc8 8
+	%v2 =l alloc8 8
+	%v3 =l alloc8 8
+	%root_capacity =l add %temporary_roots, 1
+	call $g4_gc_temp_reserve(l %root_capacity)
+	stored d_3.141592653589793, %v0
+	%t0 =d loadd %v0
+	%t1 =d mul d_4.0, %t0
+	%t2 =d loadd %v0
+	%t3 =d mul %t1, %t2
+	stored %t3, %v1
+	stored d_365.24, %v2
+	%t4 =l call $g4_gc_alloc(l $g4_desc_record0, l 56, l 0)
+	%t5 =l call $g4_array_new(l $g4_desc_array_scalar)
+	%t6 =l add %t4, 8
+	storel %t5, %t6
+	%t7 =l call $g4_array_new(l $g4_desc_array_scalar)
+	%t8 =l add %t4, 16
+	storel %t7, %t8
+	%t9 =l call $g4_array_new(l $g4_desc_array_scalar)
+	%t10 =l add %t4, 24
+	storel %t9, %t10
+	%t11 =l call $g4_array_new(l $g4_desc_array_scalar)
+	%t12 =l add %t4, 32
+	storel %t11, %t12
+	%t13 =l call $g4_array_new(l $g4_desc_array_scalar)
+	%t14 =l add %t4, 40
+	storel %t13, %t14
+	%t15 =l call $g4_array_new(l $g4_desc_array_scalar)
+	%t16 =l add %t4, 48
+	storel %t15, %t16
+	%t17 =l call $g4_array_new(l $g4_desc_array_scalar)
+	%t18 =l add %t4, 56
+	storel %t17, %t18
+	storel %t4, %v3
+	%t19 =l loadl %v3
+	%t20 =d loadd %v1
+	call $g4f1(l %t19, d d_0.0, d d_0.0, d d_0.0, d d_0.0, d d_0.0, d d_0.0, d %t20)
+	%t21 =l loadl %v3
+	%t22 =d sub d_-0.0, d_1.16032004402742839
+	%t23 =d sub d_-0.0, d_0.103622044471123109
+	%t24 =d loadd %v2
+	%t25 =d mul d_0.00166007664274403694, %t24
+	%t26 =d loadd %v2
+	%t27 =d mul d_0.00769901118419740425, %t26
+	%t28 =d sub d_-0.0, d_0.0000690460016972063023
+	%t29 =d loadd %v2
+	%t30 =d mul %t28, %t29
+	%t31 =d loadd %v1
+	%t32 =d mul d_0.000954791938424326609, %t31
+	call $g4f1(l %t21, d d_4.84143144246472090, d %t22, d %t23, d %t25, d %t27, d %t30, d %t32)
+	%t33 =l loadl %v3
+	%t34 =d sub d_-0.0, d_0.403523417114321381
+	%t35 =d sub d_-0.0, d_0.00276742510726862411
+	%t36 =d loadd %v2
+	%t37 =d mul %t35, %t36
+	%t38 =d loadd %v2
+	%t39 =d mul d_0.00499852801234917238, %t38
+	%t40 =d loadd %v2
+	%t41 =d mul d_0.0000230417297573962925, %t40
+	%t42 =d loadd %v1
+	%t43 =d mul d_0.000285885980666130812, %t42
+	call $g4f1(l %t33, d d_8.34336671824457987, d d_4.12479856412430479, d %t34, d %t37, d %t39, d %t41, d %t43)
+	%t44 =l loadl %v3
+	%t45 =d sub d_-0.0, d_15.1111514016986312
+	%t46 =d sub d_-0.0, d_0.223307578892655734
+	%t47 =d loadd %v2
+	%t48 =d mul d_0.00296460137564761618, %t47
+	%t49 =d loadd %v2
+	%t50 =d mul d_0.00237847173959480950, %t49
+	%t51 =d sub d_-0.0, d_0.0000296589568540237556
+	%t52 =d loadd %v2
+	%t53 =d mul %t51, %t52
+	%t54 =d loadd %v1
+	%t55 =d mul d_0.0000436624404335156298, %t54
+	call $g4f1(l %t44, d d_12.8943695621391310, d %t45, d %t46, d %t48, d %t50, d %t53, d %t55)
+	%t56 =l loadl %v3
+	%t57 =d sub d_-0.0, d_25.9193146099879641
+	%t58 =d loadd %v2
+	%t59 =d mul d_0.00268067772490389322, %t58
+	%t60 =d loadd %v2
+	%t61 =d mul d_0.00162824170038242295, %t60
+	%t62 =d sub d_-0.0, d_0.0000951592254519715870
+	%t63 =d loadd %v2
+	%t64 =d mul %t62, %t63
+	%t65 =d loadd %v1
+	%t66 =d mul d_0.0000515138902046611451, %t65
+	call $g4f1(l %t56, d d_15.3796971148509165, d %t57, d d_0.179258772950371181, d %t59, d %t61, d %t64, d %t66)
+	%t67 =l loadl %v3
+	storel %t67, %return_value
+	jmp @return
+@return
+	storel %temporary_roots, $g4_gc_temp_count
+	%return_result =l loadl %return_value
+	call $g4_gc_temp_push(l %return_result)
+	ret %return_result
+}
+
+function $g4f3(l %p0) {
+@start
+	%temporary_roots =l loadl $g4_gc_temp_count
+	%v0 =l alloc8 8
+	%v1 =l alloc8 8
+	%v2 =l alloc8 8
+	%v3 =l alloc8 8
+	%v4 =l alloc8 8
+	%v5 =l alloc8 8
+	%v6 =l alloc8 8
+	%v7 =l alloc8 8
+	%v8 =l alloc8 8
+	%v9 =l alloc8 8
+	%v10 =l alloc8 8
+	%root_capacity =l add %temporary_roots, 4
+	call $g4_gc_temp_reserve(l %root_capacity)
+	storel %p0, %v0
+	%t0 =l loadl %v0
+	%t1 =l add %t0, 32
+	%t2 =l loadl %t1
+	call $g4_gc_temp_push(l %t2)
+	storel %t2, %v1
+	%t3 =l loadl %v0
+	%t4 =l add %t3, 40
+	%t5 =l loadl %t4
+	call $g4_gc_temp_push(l %t5)
+	storel %t5, %v2
+	%t6 =l loadl %v0
+	%t7 =l add %t6, 48
+	%t8 =l loadl %t7
+	call $g4_gc_temp_push(l %t8)
+	storel %t8, %v3
+	%t9 =l loadl %v0
+	%t10 =l add %t9, 56
+	%t11 =l loadl %t10
+	call $g4_gc_temp_push(l %t11)
+	storel %t11, %v4
+	%t12 =d sltof 0
+	stored %t12, %v5
+	%t13 =d sltof 0
+	stored %t13, %v6
+	%t14 =d sltof 0
+	stored %t14, %v7
+	storel 0, %v8
+	jmp @l0
+@l0
+	%t15 =l loadl $g4_gc_temp_data
+	%t16 =l mul %temporary_roots, 8
+	%t17 =l add %t15, %t16
+	%t18 =l loadl %v1
+	storel %t18, %t17
+	%t20 =l add %t17, 8
+	%t19 =l loadl %v2
+	storel %t19, %t20
+	%t22 =l add %t17, 16
+	%t21 =l loadl %v3
+	storel %t21, %t22
+	%t24 =l add %t17, 24
+	%t23 =l loadl %v4
+	storel %t23, %t24
+	%t25 =l add %temporary_roots, 4
+	storel %t25, $g4_gc_temp_count
+	%t26 =l loadl %v8
+	%t27 =l loadl %v4
+	%t28 =l add %t27, 8
+	%t29 =l loadl %t28
+	%t31 =w csltl %t26, %t29
+	%t30 =l extuw %t31
+	%t32 =w cnel %t30, 0
+	jnz %t32, @l1, @l2
+@l1
+	%t33 =d loadd %v5
+	%t34 =l loadl %v1
+	%t35 =l loadl %v8
+	%t36 =l call $g4_array_address(l %t34, l %t35)
+	%t37 =d loadd %t36
+	%t38 =l loadl %v4
+	%t39 =l loadl %v8
+	%t40 =l call $g4_array_address(l %t38, l %t39)
+	%t41 =d loadd %t40
+	%t42 =d mul %t37, %t41
+	%t43 =d add %t33, %t42
+	stored %t43, %v5
+	%t44 =d loadd %v6
+	%t45 =l loadl %v2
+	%t46 =l loadl %v8
+	%t47 =l call $g4_array_address(l %t45, l %t46)
+	%t48 =d loadd %t47
+	%t49 =l loadl %v4
+	%t50 =l loadl %v8
+	%t51 =l call $g4_array_address(l %t49, l %t50)
+	%t52 =d loadd %t51
+	%t53 =d mul %t48, %t52
+	%t54 =d add %t44, %t53
+	stored %t54, %v6
+	%t55 =d loadd %v7
+	%t56 =l loadl %v3
+	%t57 =l loadl %v8
+	%t58 =l call $g4_array_address(l %t56, l %t57)
+	%t59 =d loadd %t58
+	%t60 =l loadl %v4
+	%t61 =l loadl %v8
+	%t62 =l call $g4_array_address(l %t60, l %t61)
+	%t63 =d loadd %t62
+	%t64 =d mul %t59, %t63
+	%t65 =d add %t55, %t64
+	stored %t65, %v7
+	%t66 =l loadl %v8
+	%t67 =l add %t66, 1
+	%t68 =w csgtl %t67, 9007199254740991
+	jnz %t68, @l4, @l3
+@l3
+	%t69 =w csltl %t67, -9007199254740991
+	jnz %t69, @l4, @l5
+@l4
+	call $g4_fail(l $g4_integer_range_error, l 45)
+	hlt
+@l5
+	storel %t67, %v8
+	jmp @l0
+@l2
+	stored d_3.141592653589793, %v9
+	%t70 =d loadd %v9
+	%t71 =d mul d_4.0, %t70
+	%t72 =d loadd %v9
+	%t73 =d mul %t71, %t72
+	stored %t73, %v10
+	%t74 =l loadl %v1
+	%t75 =l call $g4_array_address(l %t74, l 0)
+	%t76 =d loadd %t75
+	%t77 =d loadd %v5
+	%t78 =d sub d_-0.0, %t77
+	%t79 =d loadd %v10
+	%t80 =d div %t78, %t79
+	stored %t80, %t75
+	%t81 =l loadl %v2
+	%t82 =l call $g4_array_address(l %t81, l 0)
+	%t83 =d loadd %t82
+	%t84 =d loadd %v6
+	%t85 =d sub d_-0.0, %t84
+	%t86 =d loadd %v10
+	%t87 =d div %t85, %t86
+	stored %t87, %t82
+	%t88 =l loadl %v3
+	%t89 =l call $g4_array_address(l %t88, l 0)
+	%t90 =d loadd %t89
+	%t91 =d loadd %v7
+	%t92 =d sub d_-0.0, %t91
+	%t93 =d loadd %v10
+	%t94 =d div %t92, %t93
+	stored %t94, %t89
+	jmp @return
+@return
+	storel %temporary_roots, $g4_gc_temp_count
+	ret
+}
+
+function $g4f4(l %p0, d %p1) {
+@start
+	%temporary_roots =l loadl $g4_gc_temp_count
+	%v0 =l alloc8 8
+	%v1 =l alloc8 8
+	%v2 =l alloc8 8
+	%v3 =l alloc8 8
+	%v4 =l alloc8 8
+	%v5 =l alloc8 8
+	%v6 =l alloc8 8
+	%v7 =l alloc8 8
+	%v8 =l alloc8 8
+	%v9 =l alloc8 8
+	%v10 =l alloc8 8
+	%v11 =l alloc8 8
+	%v12 =l alloc8 8
+	%v13 =l alloc8 8
+	%v14 =l alloc8 8
+	%v15 =l alloc8 8
+	%v16 =l alloc8 8
+	%root_capacity =l add %temporary_roots, 7
+	call $g4_gc_temp_reserve(l %root_capacity)
+	storel %p0, %v0
+	stored %p1, %v1
+	%t0 =l loadl %v0
+	%t1 =l add %t0, 8
+	%t2 =l loadl %t1
+	call $g4_gc_temp_push(l %t2)
+	storel %t2, %v2
+	%t3 =l loadl %v0
+	%t4 =l add %t3, 16
+	%t5 =l loadl %t4
+	call $g4_gc_temp_push(l %t5)
+	storel %t5, %v3
+	%t6 =l loadl %v0
+	%t7 =l add %t6, 24
+	%t8 =l loadl %t7
+	call $g4_gc_temp_push(l %t8)
+	storel %t8, %v4
+	%t9 =l loadl %v0
+	%t10 =l add %t9, 32
+	%t11 =l loadl %t10
+	call $g4_gc_temp_push(l %t11)
+	storel %t11, %v5
+	%t12 =l loadl %v0
+	%t13 =l add %t12, 40
+	%t14 =l loadl %t13
+	call $g4_gc_temp_push(l %t14)
+	storel %t14, %v6
+	%t15 =l loadl %v0
+	%t16 =l add %t15, 48
+	%t17 =l loadl %t16
+	call $g4_gc_temp_push(l %t17)
+	storel %t17, %v7
+	%t18 =l loadl %v0
+	%t19 =l add %t18, 56
+	%t20 =l loadl %t19
+	call $g4_gc_temp_push(l %t20)
+	storel %t20, %v8
+	storel 0, %v9
+	jmp @l0
+@l0
+	%t21 =l loadl $g4_gc_temp_data
+	%t22 =l mul %temporary_roots, 8
+	%t23 =l add %t21, %t22
+	%t24 =l loadl %v2
+	storel %t24, %t23
+	%t26 =l add %t23, 8
+	%t25 =l loadl %v3
+	storel %t25, %t26
+	%t28 =l add %t23, 16
+	%t27 =l loadl %v4
+	storel %t27, %t28
+	%t30 =l add %t23, 24
+	%t29 =l loadl %v5
+	storel %t29, %t30
+	%t32 =l add %t23, 32
+	%t31 =l loadl %v6
+	storel %t31, %t32
+	%t34 =l add %t23, 40
+	%t33 =l loadl %v7
+	storel %t33, %t34
+	%t36 =l add %t23, 48
+	%t35 =l loadl %v8
+	storel %t35, %t36
+	%t37 =l add %temporary_roots, 7
+	storel %t37, $g4_gc_temp_count
+	%t38 =l loadl %v9
+	%t39 =l loadl %v8
+	%t40 =l add %t39, 8
+	%t41 =l loadl %t40
+	%t43 =w csltl %t38, %t41
+	%t42 =l extuw %t43
+	%t44 =w cnel %t42, 0
+	jnz %t44, @l1, @l2
+@l1
+	%t45 =l loadl %v9
+	%t46 =l add %t45, 1
+	%t47 =w csgtl %t46, 9007199254740991
+	jnz %t47, @l4, @l3
+@l3
+	%t48 =w csltl %t46, -9007199254740991
+	jnz %t48, @l4, @l5
+@l4
+	call $g4_fail(l $g4_integer_range_error, l 45)
+	hlt
+@l5
+	storel %t46, %v10
+	jmp @l6
+@l6
+	%t49 =l loadl $g4_gc_temp_data
+	%t50 =l mul %temporary_roots, 8
+	%t51 =l add %t49, %t50
+	%t52 =l loadl %v2
+	storel %t52, %t51
+	%t54 =l add %t51, 8
+	%t53 =l loadl %v3
+	storel %t53, %t54
+	%t56 =l add %t51, 16
+	%t55 =l loadl %v4
+	storel %t55, %t56
+	%t58 =l add %t51, 24
+	%t57 =l loadl %v5
+	storel %t57, %t58
+	%t60 =l add %t51, 32
+	%t59 =l loadl %v6
+	storel %t59, %t60
+	%t62 =l add %t51, 40
+	%t61 =l loadl %v7
+	storel %t61, %t62
+	%t64 =l add %t51, 48
+	%t63 =l loadl %v8
+	storel %t63, %t64
+	%t65 =l add %temporary_roots, 7
+	storel %t65, $g4_gc_temp_count
+	%t66 =l loadl %v10
+	%t67 =l loadl %v8
+	%t68 =l add %t67, 8
+	%t69 =l loadl %t68
+	%t71 =w csltl %t66, %t69
+	%t70 =l extuw %t71
+	%t72 =w cnel %t70, 0
+	jnz %t72, @l7, @l8
+@l7
+	%t73 =l loadl %v2
+	%t74 =l loadl %v9
+	%t75 =l call $g4_array_address(l %t73, l %t74)
+	%t76 =d loadd %t75
+	%t77 =l loadl %v2
+	%t78 =l loadl %v10
+	%t79 =l call $g4_array_address(l %t77, l %t78)
+	%t80 =d loadd %t79
+	%t81 =d sub %t76, %t80
+	stored %t81, %v11
+	%t82 =l loadl %v3
+	%t83 =l loadl %v9
+	%t84 =l call $g4_array_address(l %t82, l %t83)
+	%t85 =d loadd %t84
+	%t86 =l loadl %v3
+	%t87 =l loadl %v10
+	%t88 =l call $g4_array_address(l %t86, l %t87)
+	%t89 =d loadd %t88
+	%t90 =d sub %t85, %t89
+	stored %t90, %v12
+	%t91 =l loadl %v4
+	%t92 =l loadl %v9
+	%t93 =l call $g4_array_address(l %t91, l %t92)
+	%t94 =d loadd %t93
+	%t95 =l loadl %v4
+	%t96 =l loadl %v10
+	%t97 =l call $g4_array_address(l %t95, l %t96)
+	%t98 =d loadd %t97
+	%t99 =d sub %t94, %t98
+	stored %t99, %v13
+	%t100 =d loadd %v11
+	%t101 =d loadd %v11
+	%t102 =d mul %t100, %t101
+	%t103 =d loadd %v12
+	%t104 =d loadd %v12
+	%t105 =d mul %t103, %t104
+	%t106 =d add %t102, %t105
+	%t107 =d loadd %v13
+	%t108 =d loadd %v13
+	%t109 =d mul %t107, %t108
+	%t110 =d add %t106, %t109
+	stored %t110, %v14
+	%t111 =d loadd %v14
+	%t112 =d call $sqrt(d %t111)
+	stored %t112, %v15
+	%t113 =d loadd %v1
+	%t114 =d loadd %v14
+	%t115 =d loadd %v15
+	%t116 =d mul %t114, %t115
+	%t117 =d div %t113, %t116
+	stored %t117, %v16
+	%t118 =l loadl %v5
+	%t119 =l loadl %v9
+	%t120 =l call $g4_array_address(l %t118, l %t119)
+	%t121 =d loadd %t120
+	%t122 =d loadd %v11
+	%t123 =l loadl %v8
+	%t124 =l loadl %v10
+	%t125 =l call $g4_array_address(l %t123, l %t124)
+	%t126 =d loadd %t125
+	%t127 =d mul %t122, %t126
+	%t128 =d loadd %v16
+	%t129 =d mul %t127, %t128
+	%t130 =d sub %t121, %t129
+	stored %t130, %t120
+	%t131 =l loadl %v6
+	%t132 =l loadl %v9
+	%t133 =l call $g4_array_address(l %t131, l %t132)
+	%t134 =d loadd %t133
+	%t135 =d loadd %v12
+	%t136 =l loadl %v8
+	%t137 =l loadl %v10
+	%t138 =l call $g4_array_address(l %t136, l %t137)
+	%t139 =d loadd %t138
+	%t140 =d mul %t135, %t139
+	%t141 =d loadd %v16
+	%t142 =d mul %t140, %t141
+	%t143 =d sub %t134, %t142
+	stored %t143, %t133
+	%t144 =l loadl %v7
+	%t145 =l loadl %v9
+	%t146 =l call $g4_array_address(l %t144, l %t145)
+	%t147 =d loadd %t146
+	%t148 =d loadd %v13
+	%t149 =l loadl %v8
+	%t150 =l loadl %v10
+	%t151 =l call $g4_array_address(l %t149, l %t150)
+	%t152 =d loadd %t151
+	%t153 =d mul %t148, %t152
+	%t154 =d loadd %v16
+	%t155 =d mul %t153, %t154
+	%t156 =d sub %t147, %t155
+	stored %t156, %t146
+	%t157 =l loadl %v5
+	%t158 =l loadl %v10
+	%t159 =l call $g4_array_address(l %t157, l %t158)
+	%t160 =d loadd %t159
+	%t161 =d loadd %v11
+	%t162 =l loadl %v8
+	%t163 =l loadl %v9
+	%t164 =l call $g4_array_address(l %t162, l %t163)
+	%t165 =d loadd %t164
+	%t166 =d mul %t161, %t165
+	%t167 =d loadd %v16
+	%t168 =d mul %t166, %t167
+	%t169 =d add %t160, %t168
+	stored %t169, %t159
+	%t170 =l loadl %v6
+	%t171 =l loadl %v10
+	%t172 =l call $g4_array_address(l %t170, l %t171)
+	%t173 =d loadd %t172
+	%t174 =d loadd %v12
+	%t175 =l loadl %v8
+	%t176 =l loadl %v9
+	%t177 =l call $g4_array_address(l %t175, l %t176)
+	%t178 =d loadd %t177
+	%t179 =d mul %t174, %t178
+	%t180 =d loadd %v16
+	%t181 =d mul %t179, %t180
+	%t182 =d add %t173, %t181
+	stored %t182, %t172
+	%t183 =l loadl %v7
+	%t184 =l loadl %v10
+	%t185 =l call $g4_array_address(l %t183, l %t184)
+	%t186 =d loadd %t185
+	%t187 =d loadd %v13
+	%t188 =l loadl %v8
+	%t189 =l loadl %v9
+	%t190 =l call $g4_array_address(l %t188, l %t189)
+	%t191 =d loadd %t190
+	%t192 =d mul %t187, %t191
+	%t193 =d loadd %v16
+	%t194 =d mul %t192, %t193
+	%t195 =d add %t186, %t194
+	stored %t195, %t185
+	%t196 =l loadl %v10
+	%t197 =l add %t196, 1
+	%t198 =w csgtl %t197, 9007199254740991
+	jnz %t198, @l10, @l9
+@l9
+	%t199 =w csltl %t197, -9007199254740991
+	jnz %t199, @l10, @l11
+@l10
+	call $g4_fail(l $g4_integer_range_error, l 45)
+	hlt
+@l11
+	storel %t197, %v10
+	jmp @l6
+@l8
+	%t200 =l loadl %v9
+	%t201 =l add %t200, 1
+	%t202 =w csgtl %t201, 9007199254740991
+	jnz %t202, @l13, @l12
+@l12
+	%t203 =w csltl %t201, -9007199254740991
+	jnz %t203, @l13, @l14
+@l13
+	call $g4_fail(l $g4_integer_range_error, l 45)
+	hlt
+@l14
+	storel %t201, %v9
+	jmp @l0
+@l2
+	%t204 =l loadl %v9
+	storel 0, %v9
+	jmp @l15
+@l15
+	%t205 =l loadl $g4_gc_temp_data
+	%t206 =l mul %temporary_roots, 8
+	%t207 =l add %t205, %t206
+	%t208 =l loadl %v2
+	storel %t208, %t207
+	%t210 =l add %t207, 8
+	%t209 =l loadl %v3
+	storel %t209, %t210
+	%t212 =l add %t207, 16
+	%t211 =l loadl %v4
+	storel %t211, %t212
+	%t214 =l add %t207, 24
+	%t213 =l loadl %v5
+	storel %t213, %t214
+	%t216 =l add %t207, 32
+	%t215 =l loadl %v6
+	storel %t215, %t216
+	%t218 =l add %t207, 40
+	%t217 =l loadl %v7
+	storel %t217, %t218
+	%t220 =l add %t207, 48
+	%t219 =l loadl %v8
+	storel %t219, %t220
+	%t221 =l add %temporary_roots, 7
+	storel %t221, $g4_gc_temp_count
+	%t222 =l loadl %v9
+	%t223 =l loadl %v8
+	%t224 =l add %t223, 8
+	%t225 =l loadl %t224
+	%t227 =w csltl %t222, %t225
+	%t226 =l extuw %t227
+	%t228 =w cnel %t226, 0
+	jnz %t228, @l16, @l17
+@l16
+	%t229 =l loadl %v2
+	%t230 =l loadl %v9
+	%t231 =l call $g4_array_address(l %t229, l %t230)
+	%t232 =d loadd %t231
+	%t233 =d loadd %v1
+	%t234 =l loadl %v5
+	%t235 =l loadl %v9
+	%t236 =l call $g4_array_address(l %t234, l %t235)
+	%t237 =d loadd %t236
+	%t238 =d mul %t233, %t237
+	%t239 =d add %t232, %t238
+	stored %t239, %t231
+	%t240 =l loadl %v3
+	%t241 =l loadl %v9
+	%t242 =l call $g4_array_address(l %t240, l %t241)
+	%t243 =d loadd %t242
+	%t244 =d loadd %v1
+	%t245 =l loadl %v6
+	%t246 =l loadl %v9
+	%t247 =l call $g4_array_address(l %t245, l %t246)
+	%t248 =d loadd %t247
+	%t249 =d mul %t244, %t248
+	%t250 =d add %t243, %t249
+	stored %t250, %t242
+	%t251 =l loadl %v4
+	%t252 =l loadl %v9
+	%t253 =l call $g4_array_address(l %t251, l %t252)
+	%t254 =d loadd %t253
+	%t255 =d loadd %v1
+	%t256 =l loadl %v7
+	%t257 =l loadl %v9
+	%t258 =l call $g4_array_address(l %t256, l %t257)
+	%t259 =d loadd %t258
+	%t260 =d mul %t255, %t259
+	%t261 =d add %t254, %t260
+	stored %t261, %t253
+	%t262 =l loadl %v9
+	%t263 =l add %t262, 1
+	%t264 =w csgtl %t263, 9007199254740991
+	jnz %t264, @l19, @l18
+@l18
+	%t265 =w csltl %t263, -9007199254740991
+	jnz %t265, @l19, @l20
+@l19
+	call $g4_fail(l $g4_integer_range_error, l 45)
+	hlt
+@l20
+	storel %t263, %v9
+	jmp @l15
+@l17
+	jmp @return
+@return
+	storel %temporary_roots, $g4_gc_temp_count
+	ret
+}
+
+function d $g4f5(l %p0) {
+@start
+	%temporary_roots =l loadl $g4_gc_temp_count
+	%return_value =l alloc8 8
+	%v0 =l alloc8 8
+	%v1 =l alloc8 8
+	%v2 =l alloc8 8
+	%v3 =l alloc8 8
+	%v4 =l alloc8 8
+	%v5 =l alloc8 8
+	%v6 =l alloc8 8
+	%v7 =l alloc8 8
+	%v8 =l alloc8 8
+	%v9 =l alloc8 8
+	%v10 =l alloc8 8
+	%v11 =l alloc8 8
+	%v12 =l alloc8 8
+	%v13 =l alloc8 8
+	%v14 =l alloc8 8
+	%root_capacity =l add %temporary_roots, 7
+	call $g4_gc_temp_reserve(l %root_capacity)
+	storel %p0, %v0
+	%t0 =l loadl %v0
+	%t1 =l add %t0, 8
+	%t2 =l loadl %t1
+	call $g4_gc_temp_push(l %t2)
+	storel %t2, %v1
+	%t3 =l loadl %v0
+	%t4 =l add %t3, 16
+	%t5 =l loadl %t4
+	call $g4_gc_temp_push(l %t5)
+	storel %t5, %v2
+	%t6 =l loadl %v0
+	%t7 =l add %t6, 24
+	%t8 =l loadl %t7
+	call $g4_gc_temp_push(l %t8)
+	storel %t8, %v3
+	%t9 =l loadl %v0
+	%t10 =l add %t9, 32
+	%t11 =l loadl %t10
+	call $g4_gc_temp_push(l %t11)
+	storel %t11, %v4
+	%t12 =l loadl %v0
+	%t13 =l add %t12, 40
+	%t14 =l loadl %t13
+	call $g4_gc_temp_push(l %t14)
+	storel %t14, %v5
+	%t15 =l loadl %v0
+	%t16 =l add %t15, 48
+	%t17 =l loadl %t16
+	call $g4_gc_temp_push(l %t17)
+	storel %t17, %v6
+	%t18 =l loadl %v0
+	%t19 =l add %t18, 56
+	%t20 =l loadl %t19
+	call $g4_gc_temp_push(l %t20)
+	storel %t20, %v7
+	%t21 =d sltof 0
+	stored %t21, %v8
+	storel 0, %v9
+	jmp @l0
+@l0
+	%t22 =l loadl $g4_gc_temp_data
+	%t23 =l mul %temporary_roots, 8
+	%t24 =l add %t22, %t23
+	%t25 =l loadl %v1
+	storel %t25, %t24
+	%t27 =l add %t24, 8
+	%t26 =l loadl %v2
+	storel %t26, %t27
+	%t29 =l add %t24, 16
+	%t28 =l loadl %v3
+	storel %t28, %t29
+	%t31 =l add %t24, 24
+	%t30 =l loadl %v4
+	storel %t30, %t31
+	%t33 =l add %t24, 32
+	%t32 =l loadl %v5
+	storel %t32, %t33
+	%t35 =l add %t24, 40
+	%t34 =l loadl %v6
+	storel %t34, %t35
+	%t37 =l add %t24, 48
+	%t36 =l loadl %v7
+	storel %t36, %t37
+	%t38 =l add %temporary_roots, 7
+	storel %t38, $g4_gc_temp_count
+	%t39 =l loadl %v9
+	%t40 =l loadl %v7
+	%t41 =l add %t40, 8
+	%t42 =l loadl %t41
+	%t44 =w csltl %t39, %t42
+	%t43 =l extuw %t44
+	%t45 =w cnel %t43, 0
+	jnz %t45, @l1, @l2
+@l1
+	%t46 =d loadd %v8
+	%t47 =l loadl %v7
+	%t48 =l loadl %v9
+	%t49 =l call $g4_array_address(l %t47, l %t48)
+	%t50 =d loadd %t49
+	%t51 =d mul d_0.5, %t50
+	%t52 =l loadl %v4
+	%t53 =l loadl %v9
+	%t54 =l call $g4_array_address(l %t52, l %t53)
+	%t55 =d loadd %t54
+	%t56 =l loadl %v4
+	%t57 =l loadl %v9
+	%t58 =l call $g4_array_address(l %t56, l %t57)
+	%t59 =d loadd %t58
+	%t60 =d mul %t55, %t59
+	%t61 =l loadl %v5
+	%t62 =l loadl %v9
+	%t63 =l call $g4_array_address(l %t61, l %t62)
+	%t64 =d loadd %t63
+	%t65 =l loadl %v5
+	%t66 =l loadl %v9
+	%t67 =l call $g4_array_address(l %t65, l %t66)
+	%t68 =d loadd %t67
+	%t69 =d mul %t64, %t68
+	%t70 =d add %t60, %t69
+	%t71 =l loadl %v6
+	%t72 =l loadl %v9
+	%t73 =l call $g4_array_address(l %t71, l %t72)
+	%t74 =d loadd %t73
+	%t75 =l loadl %v6
+	%t76 =l loadl %v9
+	%t77 =l call $g4_array_address(l %t75, l %t76)
+	%t78 =d loadd %t77
+	%t79 =d mul %t74, %t78
+	%t80 =d add %t70, %t79
+	%t81 =d mul %t51, %t80
+	%t82 =d add %t46, %t81
+	stored %t82, %v8
+	%t83 =l loadl %v9
+	%t84 =l add %t83, 1
+	%t85 =w csgtl %t84, 9007199254740991
+	jnz %t85, @l4, @l3
+@l3
+	%t86 =w csltl %t84, -9007199254740991
+	jnz %t86, @l4, @l5
+@l4
+	call $g4_fail(l $g4_integer_range_error, l 45)
+	hlt
+@l5
+	storel %t84, %v10
+	jmp @l6
+@l6
+	%t87 =l loadl $g4_gc_temp_data
+	%t88 =l mul %temporary_roots, 8
+	%t89 =l add %t87, %t88
+	%t90 =l loadl %v1
+	storel %t90, %t89
+	%t92 =l add %t89, 8
+	%t91 =l loadl %v2
+	storel %t91, %t92
+	%t94 =l add %t89, 16
+	%t93 =l loadl %v3
+	storel %t93, %t94
+	%t96 =l add %t89, 24
+	%t95 =l loadl %v4
+	storel %t95, %t96
+	%t98 =l add %t89, 32
+	%t97 =l loadl %v5
+	storel %t97, %t98
+	%t100 =l add %t89, 40
+	%t99 =l loadl %v6
+	storel %t99, %t100
+	%t102 =l add %t89, 48
+	%t101 =l loadl %v7
+	storel %t101, %t102
+	%t103 =l add %temporary_roots, 7
+	storel %t103, $g4_gc_temp_count
+	%t104 =l loadl %v10
+	%t105 =l loadl %v7
+	%t106 =l add %t105, 8
+	%t107 =l loadl %t106
+	%t109 =w csltl %t104, %t107
+	%t108 =l extuw %t109
+	%t110 =w cnel %t108, 0
+	jnz %t110, @l7, @l8
+@l7
+	%t111 =l loadl %v1
+	%t112 =l loadl %v9
+	%t113 =l call $g4_array_address(l %t111, l %t112)
+	%t114 =d loadd %t113
+	%t115 =l loadl %v1
+	%t116 =l loadl %v10
+	%t117 =l call $g4_array_address(l %t115, l %t116)
+	%t118 =d loadd %t117
+	%t119 =d sub %t114, %t118
+	stored %t119, %v11
+	%t120 =l loadl %v2
+	%t121 =l loadl %v9
+	%t122 =l call $g4_array_address(l %t120, l %t121)
+	%t123 =d loadd %t122
+	%t124 =l loadl %v2
+	%t125 =l loadl %v10
+	%t126 =l call $g4_array_address(l %t124, l %t125)
+	%t127 =d loadd %t126
+	%t128 =d sub %t123, %t127
+	stored %t128, %v12
+	%t129 =l loadl %v3
+	%t130 =l loadl %v9
+	%t131 =l call $g4_array_address(l %t129, l %t130)
+	%t132 =d loadd %t131
+	%t133 =l loadl %v3
+	%t134 =l loadl %v10
+	%t135 =l call $g4_array_address(l %t133, l %t134)
+	%t136 =d loadd %t135
+	%t137 =d sub %t132, %t136
+	stored %t137, %v13
+	%t138 =d loadd %v11
+	%t139 =d loadd %v11
+	%t140 =d mul %t138, %t139
+	%t141 =d loadd %v12
+	%t142 =d loadd %v12
+	%t143 =d mul %t141, %t142
+	%t144 =d add %t140, %t143
+	%t145 =d loadd %v13
+	%t146 =d loadd %v13
+	%t147 =d mul %t145, %t146
+	%t148 =d add %t144, %t147
+	%t149 =d call $sqrt(d %t148)
+	stored %t149, %v14
+	%t150 =d loadd %v8
+	%t151 =l loadl %v7
+	%t152 =l loadl %v9
+	%t153 =l call $g4_array_address(l %t151, l %t152)
+	%t154 =d loadd %t153
+	%t155 =l loadl %v7
+	%t156 =l loadl %v10
+	%t157 =l call $g4_array_address(l %t155, l %t156)
+	%t158 =d loadd %t157
+	%t159 =d mul %t154, %t158
+	%t160 =d loadd %v14
+	%t161 =d div %t159, %t160
+	%t162 =d sub %t150, %t161
+	stored %t162, %v8
+	%t163 =l loadl %v10
+	%t164 =l add %t163, 1
+	%t165 =w csgtl %t164, 9007199254740991
+	jnz %t165, @l10, @l9
+@l9
+	%t166 =w csltl %t164, -9007199254740991
+	jnz %t166, @l10, @l11
+@l10
+	call $g4_fail(l $g4_integer_range_error, l 45)
+	hlt
+@l11
+	storel %t164, %v10
+	jmp @l6
+@l8
+	%t167 =l loadl %v9
+	%t168 =l add %t167, 1
+	%t169 =w csgtl %t168, 9007199254740991
+	jnz %t169, @l13, @l12
+@l12
+	%t170 =w csltl %t168, -9007199254740991
+	jnz %t170, @l13, @l14
+@l13
+	call $g4_fail(l $g4_integer_range_error, l 45)
+	hlt
+@l14
+	storel %t168, %v9
+	jmp @l0
+@l2
+	%t171 =d loadd %v8
+	stored %t171, %return_value
+	jmp @return
+@return
+	storel %temporary_roots, $g4_gc_temp_count
+	%return_result =d loadd %return_value
+	ret %return_result
+}
+
+function $g4f6() {
+@start
+	%temporary_roots =l loadl $g4_gc_temp_count
+	%v0 =l alloc8 8
+	%v1 =l alloc8 8
+	%v2 =l alloc8 8
+	%v3 =l alloc8 8
+	%root_capacity =l add %temporary_roots, 2
+	call $g4_gc_temp_reserve(l %root_capacity)
+	%t0 =l call $g4_process_argv()
+	storel %t0, %v0
+	storel 1000, %v1
+	%t1 =l loadl %v0
+	%t2 =l add %t1, 8
+	%t3 =l loadl %t2
+	%t5 =w csgtl %t3, 0
+	%t4 =l extuw %t5
+	%t6 =w cnel %t4, 0
+	jnz %t6, @l0, @l1
+@l0
+	%t7 =l loadl %v1
+	%t8 =l loadl %v0
+	%t9 =l call $g4_array_address(l %t8, l 0)
+	%t10 =l loadl %t9
+	call $g4_gc_temp_push(l %t10)
+	%t11 =l call $g4_string_to_integer(l %t10)
+	storel %t11, %v1
+	jmp @l2
+@l1
+	jmp @l2
+@l2
+	%t12 =l call $g4f2()
+	storel %t12, %v2
+	%t13 =l loadl %v2
+	call $g4f3(l %t13)
+	%t14 =l loadl %v2
+	%t15 =d call $g4f5(l %t14)
+	%t16 =l call $g4f0(d %t15)
+	call $g4_puts(l %t16)
+	storel 0, %v3
+	jmp @l3
+@l3
+	%t17 =l loadl $g4_gc_temp_data
+	%t18 =l mul %temporary_roots, 8
+	%t19 =l add %t17, %t18
+	%t20 =l loadl %v0
+	storel %t20, %t19
+	%t22 =l add %t19, 8
+	%t21 =l loadl %v2
+	storel %t21, %t22
+	%t23 =l add %temporary_roots, 2
+	storel %t23, $g4_gc_temp_count
+	%t24 =l loadl %v3
+	%t25 =l loadl %v1
+	%t27 =w csltl %t24, %t25
+	%t26 =l extuw %t27
+	%t28 =w cnel %t26, 0
+	jnz %t28, @l4, @l5
+@l4
+	%t29 =l loadl %v2
+	call $g4f4(l %t29, d d_0.01)
+	%t30 =l loadl %v3
+	%t31 =l add %t30, 1
+	%t32 =w csgtl %t31, 9007199254740991
+	jnz %t32, @l7, @l6
+@l6
+	%t33 =w csltl %t31, -9007199254740991
+	jnz %t33, @l7, @l8
+@l7
+	call $g4_fail(l $g4_integer_range_error, l 45)
+	hlt
+@l8
+	storel %t31, %v3
+	jmp @l3
+@l5
+	%t34 =l loadl %v2
+	%t35 =d call $g4f5(l %t34)
+	%t36 =l call $g4f0(d %t35)
+	call $g4_puts(l %t36)
+	jmp @return
+@return
+	storel %temporary_roots, $g4_gc_temp_count
+	ret
+}
+
+export function w $main(w %argc, l %argv) {
+@start
+	%process_argc =l extsw %argc
+	storel %process_argc, $g4_process_argc
+	storel %argv, $g4_process_argv_pointer
+	call $g4f6()
+	call $g4_gc_finish()
+	ret 0
+}
+
+function $g4_array_push_d(l %array, d %value) {
+@start
+	%length_slot =l add %array, 8
+	%length =l loadl %length_slot
+	%capacity_slot =l add %array, 16
+	%capacity =l loadl %capacity_slot
+	%full =w ceql %length, %capacity
+	jnz %full, @grow, @store
+@grow
+	%new_capacity =l mul %capacity, 2
+	%new_bytes =l mul %new_capacity, 8
+	%old_bytes =l mul %capacity, 8
+	%growth =l sub %new_bytes, %old_bytes
+	call $g4_gc_maybe_collect(l %growth)
+	%data_slot =l add %array, 24
+	%data =l loadl %data_slot
+	%new_data =l call $realloc(l %data, l %new_bytes)
+	%failed =w ceql %new_data, 0
+	jnz %failed, @fail, @grown
+@fail
+	call $g4_fail(l $g4_allocation_error, l 26)
+	hlt
+@grown
+	%heap_before =l loadl $g4_gc_heap_bytes
+	%heap_after =l add %heap_before, %growth
+	storel %heap_after, $g4_gc_heap_bytes
+	%allocated_before =l loadl $g4_gc_allocated_bytes
+	%allocated_after =l add %allocated_before, %growth
+	storel %allocated_after, $g4_gc_allocated_bytes
+	call $g4_gc_update_peak(l %heap_after)
+	storel %new_capacity, %capacity_slot
+	storel %new_data, %data_slot
+	jmp @store
+@store
+	%current_data_slot =l add %array, 24
+	%current_data =l loadl %current_data_slot
+	%offset =l mul %length, 8
+	%target =l add %current_data, %offset
+	stored %value, %target
+	%new_length =l add %length, 1
+	storel %new_length, %length_slot
+	ret
+}
+
+data $g4_process_argc = align 8 { l 0 }
+data $g4_process_argv_pointer = align 8 { l 0 }
+
+function l $g4_process_argv() {
+@start
+	%array =l call $g4_array_new(l $g4_desc_array_managed)
+	%argc =l loadl $g4_process_argc
+	%argv =l loadl $g4_process_argv_pointer
+	jmp @loop
+@loop
+	%index =l phi @start 1, @append %next
+	%done =w cslel %argc, %index
+	jnz %done, @finish, @load
+@load
+	%offset =l mul %index, 8
+	%cell =l add %argv, %offset
+	%source =l loadl %cell
+	%string =l call $g4_string_from_c(l %source)
+	call $g4_array_push_paced(l %array, l %string)
+	jmp @append
+@append
+	%next =l add %index, 1
+	jmp @loop
+@finish
+	ret %array
+}
+
+data $g4_invalid_integer_error = { b "panic: invalid Integer", b 10 }
+
+function l $g4_string_to_integer(l %string) {
+@start
+	%length_address =l add %string, 8
+	%length =l loadl %length_address
+	%empty =w ceql %length, 0
+	jnz %empty, @invalid, @first
+@first
+	%parse_start_slot =l alloc8 8
+	%data =l add %string, 16
+	%first =w loadub %data
+	%plus =w ceqw %first, 43
+	%minus =w ceqw %first, 45
+	%signed =w or %plus, %minus
+	jnz %signed, @signed, @unsigned
+@signed
+	%sign_only =w ceql %length, 1
+	jnz %sign_only, @invalid, @signed_start
+@signed_start
+	%signed_index =l copy 1
+	storel %signed_index, %parse_start_slot
+	jmp @validate
+@unsigned
+	%unsigned_index =l copy 0
+	storel %unsigned_index, %parse_start_slot
+	jmp @validate
+@validate
+	%validation_index =l phi @signed_start %signed_index, @unsigned %unsigned_index, @validate_next %validation_next
+	%validation_done =w cslel %length, %validation_index
+	jnz %validation_done, @parse_start, @validate_digit
+@validate_digit
+	%validation_address =l add %data, %validation_index
+	%validation_character =w loadub %validation_address
+	%validation_below =w csltw %validation_character, 48
+	%validation_above =w csgtw %validation_character, 57
+	%validation_invalid =w or %validation_below, %validation_above
+	jnz %validation_invalid, @invalid, @validate_next
+@validate_next
+	%validation_next =l add %validation_index, 1
+	jmp @validate
+@parse_start
+	%parse_begin =l loadl %parse_start_slot
+	jmp @parse
+@parse
+	%parse_index =l phi @parse_start %parse_begin, @parse_next %next_index
+	%accumulator =l phi @parse_start 0, @parse_next %next_accumulator
+	%parse_done =w cslel %length, %parse_index
+	jnz %parse_done, @sign, @parse_digit
+@parse_digit
+	%parse_address =l add %data, %parse_index
+	%parse_character =w loadub %parse_address
+	%digit_word =w sub %parse_character, 48
+	%digit =l extuw %digit_word
+	%large_prefix =w csgtl %accumulator, 900719925474099
+	%limit_prefix =w ceql %accumulator, 900719925474099
+	%large_digit =w csgtl %digit, 1
+	%limit_overflow =w and %limit_prefix, %large_digit
+	%overflow =w or %large_prefix, %limit_overflow
+	jnz %overflow, @range, @accumulate
+@accumulate
+	%scaled =l mul %accumulator, 10
+	%next_accumulator =l add %scaled, %digit
+	jmp @parse_next
+@parse_next
+	%next_index =l add %parse_index, 1
+	jmp @parse
+@sign
+	jnz %minus, @negative, @positive
+@negative
+	%negative_result =l sub 0, %accumulator
+	ret %negative_result
+@positive
+	ret %accumulator
+@invalid
+	call $g4_fail(l $g4_invalid_integer_error, l 23)
+	hlt
+@range
+	call $g4_fail(l $g4_integer_range_error, l 45)
+	hlt
+}
+
+function l $g4_integer_to_string(l %value) {
+@start
+	%buffer =l alloc8 32
+	%end =l add %buffer, 32
+	%cursor_slot =l alloc8 8
+	storel %end, %cursor_slot
+	%negative =w csltl %value, 0
+	jnz %negative, @negative_value, @positive_value
+@negative_value
+	%negative_magnitude =l sub 0, %value
+	jmp @magnitude
+@positive_value
+	%positive_magnitude =l copy %value
+	jmp @magnitude
+@magnitude
+	%magnitude_value =l phi @negative_value %negative_magnitude, @positive_value %positive_magnitude
+	%zero =w ceql %magnitude_value, 0
+	jnz %zero, @zero_digit, @digits
+@zero_digit
+	%zero_cursor =l sub %end, 1
+	storeb 48, %zero_cursor
+	storel %zero_cursor, %cursor_slot
+	jmp @sign
+@digits
+	%current =l phi @magnitude %magnitude_value, @digit %remaining
+	%done =w ceql %current, 0
+	jnz %done, @sign, @digit
+@digit
+	%remainder =l rem %current, 10
+	%digit_value =l add %remainder, 48
+	%digit_byte =w copy %digit_value
+	%cursor =l loadl %cursor_slot
+	%next_cursor =l sub %cursor, 1
+	storeb %digit_byte, %next_cursor
+	storel %next_cursor, %cursor_slot
+	%remaining =l div %current, 10
+	jmp @digits
+@sign
+	jnz %negative, @negative_sign, @finish
+@negative_sign
+	%sign_cursor =l loadl %cursor_slot
+	%before_sign =l sub %sign_cursor, 1
+	storeb 45, %before_sign
+	storel %before_sign, %cursor_slot
+	jmp @finish
+@finish
+	%start =l loadl %cursor_slot
+	%length =l sub %end, %start
+	%size =l add %length, 9
+	%string =l call $g4_string_alloc(l %size)
+	%length_address =l add %string, 8
+	storel %length, %length_address
+	%data =l add %string, 16
+	call $memcpy(l %data, l %start, l %length)
+	%terminator =l add %data, %length
+	storeb 0, %terminator
+	ret %string
+}
+
+data $g4_float_integer_error = { b "panic: Float cannot be converted to Integer", b 10 }
+
+function l $g4_float_to_integer(d %value) {
+@start
+	%self_difference =d sub %value, %value
+	%finite =w ceqd %self_difference, %self_difference
+	jnz %finite, @range, @nonfinite
+@range
+	%too_high =w cgtd %value, d_9007199254740991.0
+	%too_low =w cltd %value, d_-9007199254740991.0
+	%outside =w or %too_high, %too_low
+	jnz %outside, @outside, @convert
+@convert
+	%result =l dtosi %value
+	ret %result
+@nonfinite
+	call $g4_fail(l $g4_float_integer_error, l 44)
+	hlt
+@outside
+	call $g4_fail(l $g4_integer_range_error, l 45)
+	hlt
+}
