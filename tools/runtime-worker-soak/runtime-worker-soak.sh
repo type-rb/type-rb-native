@@ -142,7 +142,9 @@ run_sampled_process() {
 		rss_kib=$(awk '$1 == "VmRSS:" {print $2}' "/proc/$program_pid/status" 2> /dev/null || true)
 		threads=$(awk '$1 == "Threads:" {print $2}' "/proc/$program_pid/status" 2> /dev/null || true)
 		fd_count=$(find "/proc/$program_pid/fd" -mindepth 1 -maxdepth 1 -print 2> /dev/null | wc -l | tr -d ' ')
-		if test -n "$rss_kib" && test -n "$threads"; then
+		final_state=$(awk '$1 == "State:" {print $2}' "/proc/$program_pid/status" 2> /dev/null || true)
+		if test -n "$rss_kib" && test -n "$threads" && test "$fd_count" -gt 0 && \
+			test -n "$final_state" && test "$final_state" != Z && kill -0 "$program_pid" 2> /dev/null; then
 			now_uptime=$(awk '{print $1}' /proc/uptime)
 			elapsed=$(awk -v start="$start_uptime" -v now="$now_uptime" 'BEGIN {printf "%.2f", now - start}')
 			completed=$(awk -v marker="$PHASE_MARKER" '$0 == marker {count += 1} END {print count + 0}' "$stdout")

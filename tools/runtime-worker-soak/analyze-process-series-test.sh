@@ -38,4 +38,10 @@ if awk -v enforce_native=1 -f "$analyzer" "$temporary/header.csv" > /dev/null 2>
 	exit 1
 fi
 
+sed 's/2.00,12582912,13,3,1/2.00,12582912,13,0,1/' "$temporary/valid.csv" > "$temporary/exit-race.csv"
+if awk -v enforce_native=1 -f "$analyzer" "$temporary/exit-race.csv" > /dev/null 2>&1; then
+	printf 'exit-boundary mutation unexpectedly passed\n' >&2
+	exit 1
+fi
+
 printf 'analyze-process-series-test: passed\n'

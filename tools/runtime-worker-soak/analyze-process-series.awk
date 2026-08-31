@@ -15,6 +15,10 @@ NR == 1 {
 		print "invalid process sample at line " NR > "/dev/stderr"
 		exit 2
 	}
+	if ($4 + 0 == 0 || $5 + 0 == 0) {
+		print "process sample was captured across the exit boundary at line " NR > "/dev/stderr"
+		exit 2
+	}
 	all_count += 1
 	if ($2 + 0 > maximum_rss) {
 		maximum_rss = $2 + 0
