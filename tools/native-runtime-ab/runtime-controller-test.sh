@@ -233,6 +233,23 @@ test "$(awk -F '\t' '$2 == "walltime" { print $5 }' "$test_root/push-path-eviden
 test "$(awk -F '\t' '$2 == "walltime-vs-typerb-go" { print $5 }' "$test_root/push-path-evidence/evaluation.tsv")" = 1.062500 ||
 	fail "push-path Go wall-time ratio differs"
 
+root_push_catalog=$test_root/root-push-catalog.tsv
+sed 's/worker-literal-concat/worker-gc-temp-push-fast-path/g' "$worker_catalog" > "$root_push_catalog"
+FAKE_GROWTH=1 /bin/sh "$script_directory/runtime-controller.sh" \
+	test "$fake_runexec" "$root_push_catalog" worker-gc-temp-push-fast-path 0 "$cache_control" \
+	"$test_root/root-push-workspace" "$test_root/root-push-evidence" \
+	> "$test_root/root-push.stdout" 2> "$test_root/root-push.stderr"
+test "$(cat "$test_root/root-push.stdout")" = 'native-runtime-ab: worker-gc-temp-push-fast-path passed'
+test ! -s "$test_root/root-push.stderr" || fail "root-push controller wrote stderr"
+test "$(awk -F= '$1 == "maximum_candidate_ratio" { print $2 }' "$test_root/root-push-evidence/environment.txt")" = 0.985 ||
+	fail "root-push baseline threshold differs"
+test "$(awk -F= '$1 == "maximum_candidate_go_ratio" { print $2 }' "$test_root/root-push-evidence/environment.txt")" = 1.10 ||
+	fail "root-push Go threshold differs"
+test "$(awk -F '\t' '$2 == "walltime" { print $5 }' "$test_root/root-push-evidence/evaluation.tsv")" = 0.425000 ||
+	fail "root-push baseline wall-time ratio differs"
+test "$(awk -F '\t' '$2 == "walltime-vs-typerb-go" { print $5 }' "$test_root/root-push-evidence/evaluation.tsv")" = 1.062500 ||
+	fail "root-push Go wall-time ratio differs"
+
 set +e
 FAKE_REGRESSION=1 /bin/sh "$script_directory/runtime-controller.sh" \
 	test "$fake_runexec" "$catalog" spectral-norm 0 "$cache_control" \
