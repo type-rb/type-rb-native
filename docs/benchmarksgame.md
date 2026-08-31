@@ -8,15 +8,17 @@ context.
 
 ## Status
 
-The capability corpus and first formal fresh-process runtime layer are
-complete. All three performance inputs pass through the pinned Go reference
-compiler, ordinary self-hosted Native compiler, and five pinned context
-implementations with exact published output. The
+The capability corpus and the first formal runtime and build/distribution
+layers are complete. All three performance inputs pass through the pinned Go
+reference compiler, ordinary self-hosted Native compiler, and five pinned
+context implementations with exact published output. The
 [recorded Linux arm64 result](../results/2026-08-31-benchmarksgame-runtime-linux-arm64/README.md)
 retains every registered observation and finds that Native is substantially
 smaller and lighter than TypeRB Go but 2.44x to 4.68x slower on these numeric
-kernels. The independent formal compiler/build/distribution controller is
-implemented but has not produced a formal result.
+kernels. The independent
+[build result](../results/2026-08-31-benchmarksgame-build-linux-arm64/README.md)
+finds that Native compiles the same sources 2.29x to 2.58x faster, uses about
+51% less compiler RSS, and reduces the controlled raw build payload by 99.64%.
 
 ## Pinned upstream boundary
 
@@ -86,8 +88,8 @@ per-case distribution are reported; no aggregate score is calculated.
 
 [`tools/benchmarksgame-verify.sh`](../tools/benchmarksgame-verify.sh) owns the
 fast correctness boundary and is run by ordinary pull-request CI. The formal
-measurement controller will extend this boundary without changing its sources
-or oracles.
+measurement controllers extend this boundary without changing its sources or
+oracles.
 
 ## Cross-language context selection
 
@@ -129,13 +131,17 @@ artifact/distribution inventory use the separate
 [formal build controller](../tools/benchmarksgame-build-formal/README.md). It
 measures alternating clean outputs through both TypeRB backends, verifies every
 measured artifact, process-traces representative builds, and separates
-controlled payloads from platform prerequisites and deploy artifacts. Merging
-the controller does not publish a value. See
+controlled payloads from platform prerequisites and deploy artifacts. Its
+first
+[formal result](../results/2026-08-31-benchmarksgame-build-linux-arm64/README.md)
+publishes all raw observations, independently reproduced medians, artifact
+variants, process closure, dynamic dependencies, and distribution totals. See
 [Decision 0024](decisions/0024-benchexec-runtime-controller.md) and
 [Decision 0027](decisions/0027-formal-build-distribution-controller.md). The
-dispatch-only [Linux arm64 workflow](../.github/workflows/benchmarksgame-formal.yml)
-isolates each case on a fresh runner and retains both lane result trees even if
-one lane reports failed observations.
+dispatch-only [runtime workflow](../.github/workflows/benchmarksgame-formal.yml)
+and [build workflow](../.github/workflows/benchmarksgame-build-formal.yml)
+isolate each case on a fresh runner and retain complete result trees even when
+an observation fails.
 
 Builds use release optimization without unsafe fast-math substitutions: C and
 C++ use `-O3`, Go uses `go build -trimpath`, Rust uses `rustc -C opt-level=3`,

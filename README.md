@@ -296,10 +296,17 @@ score is claimed. See the
 [recorded runtime result](results/2026-08-31-benchmarksgame-runtime-linux-arm64/README.md),
 [benchmark plan](docs/benchmarksgame.md),
 [Decision 0023](docs/decisions/0023-reproducible-benchmark-layers.md), and
-[Decision 0024](docs/decisions/0024-benchexec-runtime-controller.md). The
-separate [formal build controller](tools/benchmarksgame-build-formal/README.md)
-now preregisters compiler wall/CPU/RSS, artifact, process-closure, and
-distribution evidence without publishing a build result; see
+[Decision 0024](docs/decisions/0024-benchexec-runtime-controller.md).
+
+The separate formal backend-pair build result retains all 66 registered
+compiler samples. Native compiles the same three TypeRB sources 2.29x to 2.58x
+faster than the optimized Go path, uses 6.14x to 6.41x less compiler CPU and
+about 51% less peak RSS, and produces raw applications at least 99.21% smaller.
+The Native compiler-plus-QBE controlled payload is 982,816 bytes, 99.64% below
+reference `trb` plus the complete pinned Go root. Successful process traces
+retain QBE, assembler, C driver, LLD, and shared-library boundaries. See the
+[recorded build result](results/2026-08-31-benchmarksgame-build-linux-arm64/README.md),
+[formal build controller](tools/benchmarksgame-build-formal/README.md), and
 [Decision 0027](docs/decisions/0027-formal-build-distribution-controller.md).
 
 Gate 6N passes every frozen condition for the internal
@@ -454,6 +461,7 @@ repository.
 - [Gate 6N Linux amd64 target chain](docs/gate-6-linux-amd64.md)
 - [Reproducible language benchmark plan](docs/benchmarksgame.md)
 - [Formal Benchmarks Game runtime result on Linux arm64](results/2026-08-31-benchmarksgame-runtime-linux-arm64/README.md)
+- [Formal Benchmarks Game build result on Linux arm64](results/2026-08-31-benchmarksgame-build-linux-arm64/README.md)
 - [Formal TypeRB backend-pair build controller](tools/benchmarksgame-build-formal/README.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
