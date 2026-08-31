@@ -295,6 +295,10 @@ measure_command() {
 	probe_argument=$6
 	shift 6
 	measurement_input=$1
+	measurement_repetitions=1
+	if test "$stage" = application-runtime; then
+		measurement_repetitions=32
+	fi
 	log_prefix=$measurement_logs/$stage-$candidate-$iteration
 	if test "$artifact" != -; then
 		rm -f "$artifact"
@@ -304,7 +308,7 @@ measure_command() {
 		"$log_prefix.elapsed.json" \
 		"$log_prefix.elapsed.stdout" \
 		"$log_prefix.elapsed.stderr" \
-		"$artifact" -- "$@" \
+		"$artifact" "$measurement_repetitions" -- "$@" \
 		> "$log_prefix.observer.stdout" \
 		2> "$log_prefix.observer.stderr"
 	measurement_observer_status=$?
@@ -321,6 +325,11 @@ measure_command() {
 			(.clockInfo.implementation | length) > 0 and
 			(.clockInfo.resolutionSeconds | type) == "number" and
 			.clockInfo.resolutionSeconds > 0 and
+			(.repetitions | type) == "number" and
+			.repetitions == (.repetitions | floor) and
+			.repetitions >= 1 and
+			.completedRepetitions == .repetitions and
+			.outputsIdentical == true and
 			(.elapsedNanoseconds | type) == "number" and
 			.elapsedNanoseconds > 0 and
 			(.elapsedSeconds | type) == "string" and
