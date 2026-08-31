@@ -1313,6 +1313,17 @@ describe("Gate 4 TypeRB frontend") do
 		expect(qbe.include?("type-rb-native-gc-stat-v2")).to_be_false()
 	end
 
+	test("folds literal-only String concatenation and preserves postfix binding") do
+		source := "def main()\n\tdirect := \"a\" + \"b\" + \"c\"\n\tdynamic := direct + \"d\"\n\tpostfix := \"a\" + \"b\".size().to_s()\n\tputs(dynamic)\n\tputs(postfix)\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		qbe := gate4_output_source(gate4_emit_qbe(state))
+		expect(gate4_occurrence_count(qbe, "call $g4_string_concat")).to_equal(2)
+	end
+
 	test("compresses only profitable static Strings at the registered boundary") do
 		overlapping := gate4_repeat_text("a", 300)
 		encoded := gate4_encode_static_string(overlapping)

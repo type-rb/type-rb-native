@@ -19,8 +19,9 @@ The harness has four modes:
 - `smoke` runs 40,000 batches in one phase, compares exact Native and Go
   output, and checks collector accounting, the 4 MiB managed-heap bound, and
   the sampled internal trace;
-- `formal` runs 60 phases of 60,000 batches on Linux arm64, allocating exactly
-  33,926,400,576 managed bytes. It samples Native and Go RSS, descriptors, and
+- `formal` runs 60 phases of 120,000 batches on Linux arm64, allocating exactly
+  32,832,000,576 managed bytes after literal-only String concatenation has
+  moved out of the runtime. It samples Native and Go RSS, descriptors, and
   threads every 250 ms. Native RSS must remain below 64 MiB, temporal-quartile
   growth below 8 MiB, fitted growth below 1 MiB per minute, and post-warmup
   descriptor and thread counts must not grow;

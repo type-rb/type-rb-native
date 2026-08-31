@@ -17,6 +17,8 @@ The valid cases cover:
   construction, indexing, growth, and mutation in `valid/records-arrays.trb`;
 - managed String concatenation and content inequality in
   `valid/strings-calls.trb`;
+- compile-time literal-only String concatenation, dynamic controls, decoded
+  escapes, chains, and postfix binding in `valid/literal-string-concat.trb`;
 - deterministic dependency-free compression, initialization, indexing,
   escapes, terminating zero, and equality
   for multiple long static Strings in `valid/static-strings.trb`;
