@@ -32,12 +32,12 @@ The currently registered cases and thresholds are:
 
 | Case | Input | Maximum candidate/baseline wall and CPU ratio |
 | --- | ---: | ---: |
-| `fannkuch-redux` | 10 | 1.02 |
+| `fannkuch-redux` | 10 | 0.97 |
 | `n-body` | 1,000,000 | 1.02 |
-| `spectral-norm` | 5,500 | 0.90 |
+| `spectral-norm` | 5,500 | 1.02 |
 
-These inputs are the bounded scalar-leaf inlining contract registered in
-[issue #142](https://github.com/type-rb/type-rb-native/issues/142). They do not
+These inputs are the Array-address optimization contract registered in
+[issue #140](https://github.com/type-rb/type-rb-native/issues/140). They do not
 replace the full cross-language benchmark inputs or its published results.
 
 ## Invocation
