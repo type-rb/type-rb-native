@@ -327,6 +327,13 @@ registered numeric programs; and compiler, QBE, and application artifacts all
 shrink. See the
 [recorded Array-address result](results/2026-08-31-native-array-address-linux-arm64/README.md).
 
+A subsequent bounded scalar-leaf inlining candidate passed correctness,
+fixed-point, and target-neutral-QBE regressions but was rejected before formal
+runtime timing. Its Linux arm64 self-hosted compiler grew by 2.20%, exceeding
+the preregistered 0.1% maximum. The implementation was reverted and the bound
+was not weakened. See the
+[recorded rejected result](results/2026-08-31-native-scalar-leaf-inline-linux-arm64/README.md).
+
 Gate 6N passes every frozen condition for the internal
 `linux-amd64-v0` profile. The exact merged compiler closes a 240,888-byte
 Go-free B2/B3/B4 fixed point, emits byte-identical target-neutral compiler and
@@ -482,6 +489,7 @@ repository.
 - [Formal Benchmarks Game build result on Linux arm64](results/2026-08-31-benchmarksgame-build-linux-arm64/README.md)
 - [Formal Native numeric-inline A/B result on Linux arm64](results/2026-08-31-native-numeric-inline-linux-arm64/README.md)
 - [Formal Native Array-address A/B result on Linux arm64](results/2026-08-31-native-array-address-linux-arm64/README.md)
+- [Rejected Native scalar-leaf inlining result on Linux arm64](results/2026-08-31-native-scalar-leaf-inline-linux-arm64/README.md)
 - [Formal TypeRB backend-pair build controller](tools/benchmarksgame-build-formal/README.md)
 - [Formal Native runtime optimization A/B controller](tools/native-runtime-ab/README.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
