@@ -3,7 +3,7 @@
 set -eu
 
 usage() {
-	printf '%s\n' 'usage: verify-build-trace.sh TRACE COMPILER QBE CC' >&2
+	printf '%s\n' 'usage: verify-build-trace.sh TRACE COMPILER QBE CC setup|ordinary' >&2
 	exit 64
 }
 
@@ -27,13 +27,16 @@ require_observed() {
 		fail "$label was not observed at $program"
 }
 
-test "$#" -eq 4 || usage
+test "$#" -eq 5 || usage
 
 trace=$1
 compiler=$2
 qbe=$3
 cc=$4
+role=$5
 inventory=$trace.executables
+
+test "$role" = setup || test "$role" = ordinary || usage
 
 test "$(uname -s)" = Linux || fail "Linux is required"
 for command_name in awk file grep ld.lld; do
@@ -49,6 +52,7 @@ done
 collect2=$(resolve_cc_program collect2)
 assembler=$(resolve_cc_program as)
 system_assembler=$(command -v as)
+system_linker=$(resolve_cc_program ld)
 linker=$(command -v ld.lld)
 
 awk '
@@ -81,6 +85,10 @@ while IFS= read -r executable; do
 	case "$executable" in
 	"$compiler" | "$qbe" | "$cc" | "$collect2" | "$assembler" | \
 		"$system_assembler" | "$linker") ;;
+	"$system_linker")
+		test "$role" = setup ||
+			fail "ordinary build launched the system linker: $executable"
+		;;
 	*) fail "unregistered executable: $executable" ;;
 	esac
 done < "$inventory"
@@ -93,7 +101,12 @@ if ! grep -Fx "$assembler" "$inventory" > /dev/null &&
 	! grep -Fx "$system_assembler" "$inventory" > /dev/null; then
 	fail "assembler was not observed at a registered path"
 fi
-require_observed "$linker" LLD
+if test "$role" = ordinary; then
+	require_observed "$linker" LLD
+elif ! grep -Fx "$linker" "$inventory" > /dev/null &&
+	! grep -Fx "$system_linker" "$inventory" > /dev/null; then
+	fail "setup linker was not observed at a registered path"
+fi
 
 if grep -E 'execve\("[^"]*/(go|trb|sh|bash|dash|zsh)"|compiler-recovery' \
 	"$trace" > /dev/null; then

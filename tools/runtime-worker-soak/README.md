@@ -51,8 +51,9 @@ targets, and enforces the 550,000-byte combined stripped compiler limit. A
 manual formal run additionally executes the sanitizer, Memcheck, and long-lived
 Linux process oracles. Every Linux setup and ordinary compiler generation is
 process-traced; the verifier requires the exact Native compiler, QBE, C driver,
-assembler, `collect2`, and LLD paths, rejects any other successful executable,
-and rejects Go, reference TypeRB, shell, recovery-generator, and hidden
-source-content paths. Compiler build/RSS comparison with current main remains
-the responsibility of the companion static-compactness workflow whenever the
-compiler source changes.
+assembler, `collect2`, and registered linker paths. Setup transitions may use
+the published seed's system linker, while every B2/B3/B4 generation requires
+LLD. The verifier rejects any other successful executable and rejects Go,
+reference TypeRB, shell, recovery-generator, and hidden source-content paths.
+Compiler build/RSS comparison with current main remains the responsibility of
+the companion static-compactness workflow whenever the compiler source changes.
