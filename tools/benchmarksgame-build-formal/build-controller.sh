@@ -328,8 +328,11 @@ export TMPDIR=/tmp
 	"$reference_trb" check --config "$config"
 ) > "$evidence/preflight/typerb-go/check.stdout" \
 	2> "$evidence/preflight/typerb-go/check.stderr"
-test ! -s "$evidence/preflight/typerb-native/check.stdout" || fail "Native preflight check wrote stdout"
+test "$(cat "$evidence/preflight/typerb-native/check.stdout")" = ok ||
+	fail "Native preflight check stdout differs"
 test ! -s "$evidence/preflight/typerb-native/check.stderr" || fail "Native preflight check wrote stderr"
+test "$(cat "$evidence/preflight/typerb-go/check.stdout")" = 'checked 1 file(s) for mode go' ||
+	fail "Go preflight check stdout differs"
 test ! -s "$evidence/preflight/typerb-go/check.stderr" || fail "Go preflight check wrote stderr"
 
 printf 'candidate\tbuild_status\tbuild_stderr_empty\tprogram_status\tprogram_stderr_empty\tprogram_stdout_exact\n' \

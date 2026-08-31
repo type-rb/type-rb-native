@@ -19,7 +19,16 @@ candidate=$(basename "$0")
 command=${1:-}
 shift || true
 case "$command" in
-check) exit 0 ;;
+check)
+	if test "${FAKE_BAD_CHECK_CANDIDATE:-}" = "$candidate"; then
+		printf 'unexpected\n'
+	elif test "$candidate" = native-compiler; then
+		printf 'ok\n'
+	else
+		printf 'checked 1 file(s) for mode go\n'
+	fi
+	exit 0
+	;;
 build) ;;
 *) exit 64 ;;
 esac
@@ -226,5 +235,21 @@ test "$incorrect_status" -ne 0 || fail "incorrect preflight program reached timi
 test ! -e "$test_root/incorrect-evidence/raw.tsv" || fail "timing data exists after preflight failure"
 test "$(find "$test_root/incorrect-evidence/observations" -name runexec.stdout -type f | wc -l | tr -d ' ')" -eq 0 ||
 	fail "runexec started after preflight failure"
+
+set +e
+PATH="$test_root:$PATH" \
+	FAKE_BAD_CHECK_CANDIDATE=native-compiler \
+	/bin/sh "$script_directory/build-controller.sh" \
+	test "$fake_runexec" fannkuch-redux \
+	"$test_root/native-compiler" "$test_root/trb" "$test_root/qbe" "$test_root/cc" "$test_root/go" \
+	linux-arm64-v0 0,1,2,3 "$cache_control" \
+	"$test_root/check-workspace" "$test_root/check-evidence" \
+	> "$test_root/check.stdout" 2> "$test_root/check.stderr"
+check_status=$?
+set -e
+test "$check_status" -ne 0 || fail "unexpected check output reached build preflight"
+grep 'Native preflight check stdout differs' "$test_root/check.stderr" >/dev/null ||
+	fail "unexpected check output diagnostic differs"
+test ! -e "$test_root/check-evidence/raw.tsv" || fail "timing data exists after check-output failure"
 
 printf 'benchmarksgame-build-controller-test: passed\n'
