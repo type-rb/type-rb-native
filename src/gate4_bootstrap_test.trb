@@ -3,7 +3,7 @@ import { build_gate4_bootstrap_executable } from gate3_toolchain
 import { build_gate4_generation } from gate4_toolchain
 import { build_gate5_matched_go_compiler } from gate5_matched_driver
 import { gate6f_flatten_compiler_source } from gate6f_compiler_source
-import trb/std/filesystem
+import { native_create_directory, native_read_text, native_write_text } from native_file_system
 import trb/std/process
 import trb/std/result
 import { describe, expect, test } from trb/std/test
@@ -17,7 +17,7 @@ def _gate4_environment(name: String): String
 end
 
 def _gate4_read(path: String): Result<String, String>
-	case FileSystem.read_text(path)
+	case native_read_text(path)
 	when Result::Ok(source)
 		return Result<String, String>::Ok(source)
 	when Result::Err(error)
@@ -80,7 +80,7 @@ def _gate6_reset_directory(path: String): Result<Boolean, String>
 	if !remove.success
 		return Result<Boolean, String>::Err("cannot reset " + path + ": " + remove.stderr)
 	end
-	case FileSystem.create_directory(path)
+	case native_create_directory(path)
 	when Result::Ok(_unit)
 		return Result<Boolean, String>::Ok(true)
 	when Result::Err(error)
@@ -207,7 +207,7 @@ def _gate6_verify_build_case(
 	)
 	recipe_qbe := recipe_directory + "/program.ssa"
 	recipe_assembly := recipe_directory + "/program.s"
-	case FileSystem.write_text(recipe_qbe, qbe_source)
+	case native_write_text(recipe_qbe, qbe_source)
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
@@ -262,7 +262,7 @@ def _gate4_execute_qbe(
 	qbe_path := workspace + "/conformance-" + case_name + ".ssa"
 	assembly_path := workspace + "/conformance-" + case_name + ".s"
 	executable_path := workspace + "/conformance-" + case_name
-	case FileSystem.write_text(qbe_path, qbe_source)
+	case native_write_text(qbe_path, qbe_source)
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		return Result<String, String>::Err(error.operation + ": " + error.message)
@@ -276,7 +276,7 @@ def _gate4_execute_qbe(
 	if !qbe_process.success
 		return Result<String, String>::Err("QBE rejected " + case_name + ": " + qbe_process.stderr)
 	end
-	case FileSystem.write_text(assembly_path, qbe_process.stdout)
+	case native_write_text(assembly_path, qbe_process.stdout)
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		return Result<String, String>::Err(error.operation + ": " + error.message)
@@ -842,21 +842,21 @@ def _gate4_build_cycle(
 		puts(error.phase + ": " + error.message + "\n" + error.stderr)
 		return false
 	end
-	b1_qbe := case FileSystem.read_text(b1.qbe_ir_path)
+	b1_qbe := case native_read_text(b1.qbe_ir_path)
 	when Result::Ok(source)
 		source
 	when Result::Err(error)
 		puts(error.operation + ": " + error.message)
 		return false
 	end
-	b2_qbe := case FileSystem.read_text(b2.qbe_ir_path)
+	b2_qbe := case native_read_text(b2.qbe_ir_path)
 	when Result::Ok(source)
 		source
 	when Result::Err(error)
 		puts(error.operation + ": " + error.message)
 		return false
 	end
-	b3_qbe := case FileSystem.read_text(b3.qbe_ir_path)
+	b3_qbe := case native_read_text(b3.qbe_ir_path)
 	when Result::Ok(source)
 		source
 	when Result::Err(error)
@@ -966,12 +966,12 @@ def _gate6_verify_file_cli(workspace: String): Result<Boolean, String>
 	invalid_path := workspace + "/gate6-invalid.trb"
 	missing_path := workspace + "/gate6-missing.trb"
 	large_path := workspace + "/gate6-large.trb"
-	case FileSystem.write_text(valid_path, valid_source)
+	case native_write_text(valid_path, valid_source)
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
 	end
-	case FileSystem.write_text(invalid_path, "def main()\n\tmissing()\n\treturn\nend\n")
+	case native_write_text(invalid_path, "def main()\n\tmissing()\n\treturn\nend\n")
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
@@ -980,7 +980,7 @@ def _gate6_verify_file_cli(workspace: String): Result<Boolean, String>
 	while padding.size() < 524288
 		padding += padding
 	end
-	case FileSystem.write_text(large_path, "def main()" + padding + "\n\treturn\nend\n")
+	case native_write_text(large_path, "def main()" + padding + "\n\treturn\nend\n")
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
@@ -1108,12 +1108,12 @@ def _gate6_verify_build_cli(workspace: String, qbe: String): Result<Boolean, Str
 	try _gate6_reset_directory(failure_directory)
 	source_path := source_directory + "/input program.trb"
 	output_path := output_directory + "/program"
-	case FileSystem.write_text(source_path, "def main()\n\tputs(\"ok\")\n\treturn\nend\n")
+	case native_write_text(source_path, "def main()\n\tputs(\"ok\")\n\treturn\nend\n")
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
 	end
-	case FileSystem.write_text(output_path, "stale output")
+	case native_write_text(output_path, "stale output")
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
@@ -1187,7 +1187,7 @@ def _gate6_verify_build_cli(workspace: String, qbe: String): Result<Boolean, Str
 
 	qbe_failure_tool := failure_directory + "/qbe failure tool"
 	cc_failure_tool := failure_directory + "/cc failure tool"
-	case FileSystem.write_text(
+	case native_write_text(
 			qbe_failure_tool,
 			"#!/bin/sh\nprintf 'qbe child stderr\\n' >&2\nexit 23\n",
 		)
@@ -1195,7 +1195,7 @@ def _gate6_verify_build_cli(workspace: String, qbe: String): Result<Boolean, Str
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
 	end
-	case FileSystem.write_text(
+	case native_write_text(
 			cc_failure_tool,
 			"#!/bin/sh\nprintf 'cc child stderr\\n' >&2\nexit 24\n",
 		)
@@ -1292,7 +1292,7 @@ end
 
 def _gate6_copy_source(source: String, destination: String): Result<Boolean, String>
 	contents := try _gate4_read(source)
-	case FileSystem.write_text(destination, contents)
+	case native_write_text(destination, contents)
 	when Result::Ok(_unit)
 		return Result<Boolean, String>::Ok(true)
 	when Result::Err(error)
@@ -1301,7 +1301,7 @@ def _gate6_copy_source(source: String, destination: String): Result<Boolean, Str
 end
 
 def _gate6_write_source(path: String, source: String): Result<Boolean, String>
-	case FileSystem.write_text(path, source)
+	case native_write_text(path, source)
 	when Result::Ok(_unit)
 		return Result<Boolean, String>::Ok(true)
 	when Result::Err(error)
@@ -1648,7 +1648,7 @@ def _gate6_verify_file_root_modules(
 	if !created.success
 		return Result<Boolean, String>::Err("cannot create precedence fixture")
 	end
-	case FileSystem.write_text(
+	case native_write_text(
 			precedence + "/main.trb",
 			"import { choice } from choice.trb\n\ndef main()\n\tputs(choice())\n\treturn\nend\n",
 		)
@@ -1656,12 +1656,12 @@ def _gate6_verify_file_root_modules(
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
 	end
-	case FileSystem.write_text(precedence + "/choice.trb", "def choice(): String\n\treturn \"direct\"\nend\n")
+	case native_write_text(precedence + "/choice.trb", "def choice(): String\n\treturn \"direct\"\nend\n")
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
 	end
-	case FileSystem.write_text(precedence + "/choice/index.trb", "def choice(): String\n\treturn \"index\"\nend\n")
+	case native_write_text(precedence + "/choice/index.trb", "def choice(): String\n\treturn \"index\"\nend\n")
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
@@ -1813,7 +1813,7 @@ def _gate6_verify_file_root_modules(
 
 	cycle := workspace + "/gate6-file-root-cycle"
 	try _gate6_reset_directory(cycle)
-	case FileSystem.write_text(
+	case native_write_text(
 			cycle + "/main.trb",
 			"import { answer } from a\n\ndef main()\n\tputs(answer())\n\treturn\nend\n",
 		)
@@ -1821,12 +1821,12 @@ def _gate6_verify_file_root_modules(
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
 	end
-	case FileSystem.write_text(cycle + "/a.trb", "import { helper } from b\n\ndef answer(): String\n\treturn helper()\nend\n")
+	case native_write_text(cycle + "/a.trb", "import { helper } from b\n\ndef answer(): String\n\treturn helper()\nend\n")
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
 	end
-	case FileSystem.write_text(cycle + "/b.trb", "import { answer } from a\n\ndef helper(): String\n\treturn \"cycle\"\nend\n\ndef observe(): String\n\treturn answer()\nend\n")
+	case native_write_text(cycle + "/b.trb", "import { answer } from a\n\ndef helper(): String\n\treturn \"cycle\"\nend\n\ndef observe(): String\n\treturn answer()\nend\n")
 	when Result::Ok(_unit)
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
@@ -1951,11 +1951,11 @@ describe("Gate 4 reference bootstrap") do
 			expect(true).to_be_true()
 		else
 			workspace := "/tmp/type-rb-native-gate4-bootstrap"
-			case FileSystem.create_directory(workspace)
+			case native_create_directory(workspace)
 			when Result::Ok(_unit)
 			when Result::Err(_error)
 			end
-			compiler_source := case FileSystem.read_text(root + "/compiler/gate4/src/compiler.trb")
+			compiler_source := case native_read_text(root + "/compiler/gate4/src/compiler.trb")
 			when Result::Ok(source)
 				source
 			when Result::Err(error)
@@ -1963,7 +1963,7 @@ describe("Gate 4 reference bootstrap") do
 				expect(false).to_be_true()
 				""
 			end
-			storage_source := case FileSystem.read_text(root + "/compiler/gate4/src/storage.trb")
+			storage_source := case native_read_text(root + "/compiler/gate4/src/storage.trb")
 			when Result::Ok(source)
 				source
 			when Result::Err(error)
@@ -1971,7 +1971,7 @@ describe("Gate 4 reference bootstrap") do
 				expect(false).to_be_true()
 				""
 			end
-			path_source := case FileSystem.read_text(root + "/compiler/gate4/src/path.trb")
+			path_source := case native_read_text(root + "/compiler/gate4/src/path.trb")
 			when Result::Ok(source)
 				source
 			when Result::Err(error)
@@ -1991,26 +1991,26 @@ describe("Gate 4 reference bootstrap") do
 				expect(false).to_be_true()
 				""
 			end
-			case FileSystem.write_text(workspace + "/compiler-recovery.trb", recovery_source)
+			case native_write_text(workspace + "/compiler-recovery.trb", recovery_source)
 			when Result::Ok(_unit)
 			when Result::Err(error)
 				puts(error.operation + ": " + error.message)
 				expect(false).to_be_true()
 			end
 			compiler_path := workspace + "/compiler.trb"
-			case FileSystem.write_text(compiler_path, compiler_source)
+			case native_write_text(compiler_path, compiler_source)
 			when Result::Ok(_unit)
 			when Result::Err(error)
 				puts(error.operation + ": " + error.message)
 				expect(false).to_be_true()
 			end
-			case FileSystem.write_text(workspace + "/storage.trb", storage_source)
+			case native_write_text(workspace + "/storage.trb", storage_source)
 			when Result::Ok(_unit)
 			when Result::Err(error)
 				puts(error.operation + ": " + error.message)
 				expect(false).to_be_true()
 			end
-			case FileSystem.write_text(workspace + "/path.trb", path_source)
+			case native_write_text(workspace + "/path.trb", path_source)
 			when Result::Ok(_unit)
 			when Result::Err(error)
 				puts(error.operation + ": " + error.message)
