@@ -293,6 +293,17 @@ is kept in separate one-core and four-core lanes. See the
 [benchmark plan](docs/benchmarksgame.md) and
 [Decision 0023](docs/decisions/0023-reproducible-benchmark-layers.md).
 
+Gate 6N is registered under
+[issue #128](https://github.com/type-rb/type-rb-native/issues/128). The shared
+self-hosted compiler now has an internal `linux-amd64-v0` profile that maps to
+QBE `amd64_sysv`, the System V AMD64 ABI, and the existing explicit Linux
+LLD/libm link boundary. Formal root recovery, exact fixed-point, correctness,
+process, ELF, independent monotonic-time/GNU-time-RSS measurement, current
+Linux arm64 regression, cross-architecture QBE, performance, and size evidence
+remains in progress; Linux amd64 is not a supported target. See the
+[Gate 6N plan](docs/gate-6-linux-amd64.md) and
+[Decision 0025](docs/decisions/0025-linux-amd64-target-profile.md).
+
 Upward configured project discovery, persistent service runtime integration,
 package/native-library boundaries, incremental builds, toolchain discovery,
 debugging, maintenance evaluation, and additional primary targets remain in
@@ -428,6 +439,7 @@ repository.
 - [Gate 6L durable bootstrap seed Darwin/Linux arm64 result](results/2026-08-30-gate6l-bootstrap-seed-darwin-linux-arm64/README.md)
 - [Gate 6M portable benchmark-entry primitives](docs/gate-6-portable-benchmark-entry.md)
 - [Gate 6M portable benchmark-entry Darwin/Linux arm64 result](results/2026-08-31-gate6m-portable-benchmark-entry-darwin-linux-arm64/README.md)
+- [Gate 6N Linux amd64 target chain](docs/gate-6-linux-amd64.md)
 - [Reproducible language benchmark plan](docs/benchmarksgame.md)
 - [Decision 0001: Experimental native toolchain boundary](docs/decisions/0001-experimental-native-toolchain.md)
 - [Decision 0002: TypeRB-owned self-hosting](docs/decisions/0002-typerb-owned-self-hosting.md)
@@ -453,6 +465,7 @@ repository.
 - [Decision 0022: Linux arm64 LLD linker](docs/decisions/0022-linux-arm64-lld-linker.md)
 - [Decision 0023: Reproducible benchmark layers](docs/decisions/0023-reproducible-benchmark-layers.md)
 - [Decision 0024: BenchExec fresh-process runtime controller](docs/decisions/0024-benchexec-runtime-controller.md)
+- [Decision 0025: Linux amd64 target profile](docs/decisions/0025-linux-amd64-target-profile.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 

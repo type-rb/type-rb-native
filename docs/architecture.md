@@ -327,6 +327,15 @@ consistently on both registered profiles. These are internal lowering and
 dependency choices rather than new TypeRB APIs or stable Native ABI. See
 [Decision 0021](decisions/0021-portable-benchmark-entry-primitives.md).
 
+Gate 6N adds an internal Linux amd64 profile behind the same self-hosted
+frontend, target-neutral QBE emission, and managed runtime. The immutable
+target-neutral root QBE recovers one root-era x86 compiler, followed by two
+Go-free current-source transitions and the ordinary exact candidate chain.
+The profile selects QBE `amd64_sysv`, the System V ABI, and the existing
+explicit Linux LLD/libm link policy. This is a second-architecture experiment,
+not a stable target or a target-specific semantic fork. See
+[Decision 0025](decisions/0025-linux-amd64-target-profile.md).
+
 ## Stability and promotion
 
 No MIR, ABI profile, snapshot, object, cache, command, or runtime API in this
