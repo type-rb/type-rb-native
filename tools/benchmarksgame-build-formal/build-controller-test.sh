@@ -61,6 +61,16 @@ else
 	printf '228\\nPfannkuchen(7) = 16\\n'
 fi
 PROGRAM
+if test "${FAKE_VARY_ARTIFACT_CANDIDATE:-}" = "$candidate"; then
+	counter_directory=${FAKE_VARIANT_COUNTER_DIR:?}
+	mkdir -p "$counter_directory"
+	counter_path=$counter_directory/$candidate
+	variant=0
+	if test -f "$counter_path"; then variant=$(cat "$counter_path"); fi
+	variant=$((variant + 1))
+	printf '%s\n' "$variant" > "$counter_path"
+	printf '# variant %s\n' "$variant" >> "$output"
+fi
 chmod 0755 "$output"
 if test "$candidate" = trb; then printf 'executable -> %s\n' "$output"; fi
 EOF
@@ -161,6 +171,8 @@ chmod 0755 "$cache_control"
 
 PATH="$test_root:$PATH" \
 	FAKE_RUNEXEC_ARGS_LOG="$test_root/runexec-args.log" \
+	FAKE_VARY_ARTIFACT_CANDIDATE=trb \
+	FAKE_VARIANT_COUNTER_DIR="$test_root/variant-counters" \
 	/bin/sh "$script_directory/build-controller.sh" \
 	test "$fake_runexec" fannkuch-redux \
 	"$test_root/native-compiler" "$test_root/trb" "$test_root/qbe" "$test_root/cc" "$test_root/go" \
@@ -194,10 +206,17 @@ awk -F '\t' '
 awk -F '\t' '
 	$2 == "typerb-native" {
 		found += 1
-		if (!($3 == 11 && $4 == 11 && $5 == 0.1 && $6 == 0.01 && $7 == 1001 && $10 == "pass")) exit 1
+		if (!($3 == 11 && $4 == 11 && $5 == 0.1 && $6 == 0.01 && $7 == 1001 && $11 == 1 && $12 == "true" && $13 != "" && $14 == "pass")) exit 1
 	}
 	END { exit !(found == 1) }
 ' "$test_root/pass-evidence/medians.tsv" || fail "median values differ"
+awk -F '\t' '
+	$2 == "typerb-go" {
+		found += 1
+		if (!($3 == 11 && $4 == 11 && $11 == 11 && $12 == "false" && $13 == "" && $14 == "pass")) exit 1
+	}
+	END { exit !(found == 1) }
+' "$test_root/pass-evidence/medians.tsv" || fail "artifact variant summary differs"
 
 set +e
 PATH="$test_root:$PATH" \

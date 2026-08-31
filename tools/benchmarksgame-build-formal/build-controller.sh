@@ -590,7 +590,7 @@ fi
 if test "$measurement_failures" -ne 0; then
 	fail "$measurement_failures measured builds failed; raw evidence is retained"
 fi
-if awk -F '\t' 'NR > 1 && $10 != "pass" { exit 1 }' "$evidence/medians.tsv"; then :; else
+if awk -F '\t' 'NR > 1 && $14 != "pass" { exit 1 }' "$evidence/medians.tsv"; then :; else
 	fail "retained artifacts or medians are incomplete"
 fi
 printf 'benchmarksgame-build-controller: %s passed\n' "$case_name"

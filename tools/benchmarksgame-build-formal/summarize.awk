@@ -23,17 +23,21 @@ NR == 1 {
 	wall[$6, sample_index] = $11 + 0
 	cpu[$6, sample_index] = $12 + 0
 	memory[$6, sample_index] = $13 + 0
-	if (!(($6) in artifact_hash)) {
-		artifact_hash[$6] = $15
-		artifact_bytes[$6] = $14
-	} else if (artifact_hash[$6] != $15 || artifact_bytes[$6] != $14) {
-		artifact_mismatch[$6] = 1
+	artifact[$6, sample_index] = $14 + 0
+	if (!(($6) in artifact_min) || $14 + 0 < artifact_min[$6]) artifact_min[$6] = $14 + 0
+	if (!(($6) in artifact_max) || $14 + 0 > artifact_max[$6]) artifact_max[$6] = $14 + 0
+	variant_key = $6 SUBSEP $14 SUBSEP $15
+	if (!(variant_key in artifact_variant)) {
+		artifact_variant[variant_key] = 1
+		artifact_variant_count[$6] += 1
 	}
+	if (!(($6) in artifact_hash)) artifact_hash[$6] = $15
 }
 
 function metric_value(candidate, metric, sample) {
 	if (metric == "wall") return wall[candidate, sample]
 	if (metric == "cpu") return cpu[candidate, sample]
+	if (metric == "artifact") return artifact[candidate, sample]
 	return memory[candidate, sample]
 }
 
@@ -54,17 +58,21 @@ function median(candidate, metric, count,    sample, position, value, result) {
 
 END {
 	if (NR < 2) exit 2
-	print "case", "candidate", "retained", "passed", "walltime_median_seconds", "cputime_median_seconds", "memory_median_bytes", "artifact_bytes", "artifact_sha256", "status"
+	print "case", "candidate", "retained", "passed", "walltime_median_seconds", "cputime_median_seconds", "memory_median_bytes", "artifact_bytes_median", "artifact_bytes_min", "artifact_bytes_max", "artifact_variant_count", "artifact_reproducible", "artifact_sha256", "status"
 	for (candidate_index = 1; candidate_index <= candidate_count; candidate_index += 1) {
 		candidate = candidates[candidate_index]
-		if (!(candidate in seen) || total[candidate] != 11 || passed[candidate] != 11 || artifact_mismatch[candidate]) {
-			print case_name, candidate, total[candidate] + 0, passed[candidate] + 0, "", "", "", "", "", "incomplete"
+		if (!(candidate in seen) || total[candidate] != 11 || passed[candidate] != 11 || artifact_variant_count[candidate] < 1) {
+			print case_name, candidate, total[candidate] + 0, passed[candidate] + 0, "", "", "", "", "", "", "", "", "", "incomplete"
 			continue
 		}
+		artifact_reproducible = artifact_variant_count[candidate] == 1 ? "true" : "false"
+		summary_hash = artifact_reproducible == "true" ? artifact_hash[candidate] : ""
 		print case_name, candidate, total[candidate], passed[candidate], \
 			median(candidate, "wall", passed[candidate]), \
 			median(candidate, "cpu", passed[candidate]), \
 			median(candidate, "memory", passed[candidate]), \
-			artifact_bytes[candidate], artifact_hash[candidate], "pass"
+			median(candidate, "artifact", passed[candidate]), \
+			artifact_min[candidate], artifact_max[candidate], \
+			artifact_variant_count[candidate], artifact_reproducible, summary_hash, "pass"
 	}
 }

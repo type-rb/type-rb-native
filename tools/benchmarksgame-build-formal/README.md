@@ -20,7 +20,10 @@ It does not contain a performance result.
   temporary directory, and one writable measurement workspace.
 
 Each observation retains the raw BenchExec log and metrics, build artifact
-size/hash, and an untimed post-build correctness result. A failed build,
+size/hash, and an untimed post-build correctness result. Summaries report the
+artifact-size median and range, distinct byte-variant count, and whether all
+retained artifacts are byte-identical. Artifact variation remains evidence; it
+does not discard otherwise correct compiler measurements. A failed build,
 timeout, signal, missing metric, missing artifact, or incorrect generated
 program remains in `raw.tsv`. The complete schedule runs before the controller
 returns failure.

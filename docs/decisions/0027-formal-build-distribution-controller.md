@@ -38,6 +38,12 @@ termination reason, wall time, CPU time, peak process-tree memory, compiler log,
 artifact size and SHA-256, and a post-build small-input correctness check.
 Failures remain in the raw schedule and prevent a passing median.
 
+Every retained artifact hash remains in raw evidence. The summary reports its
+size median and range, the number of distinct size/hash variants, and whether
+all retained artifacts are byte-identical. A byte-varying but correct compiler
+result is reported as non-reproducible instead of being reclassified as a
+missing timing result.
+
 Before timing, both backends must check, build, and execute the case correctly.
 Those representative builds are process-traced outside the measured schedule.
 The trace, resolved executable inventory, tool versions, and dynamic-library
