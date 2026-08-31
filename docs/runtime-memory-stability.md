@@ -53,6 +53,13 @@ and reclaimed bytes, final live bytes, and peak managed heap to stderr after
 the authored `main` frame has returned. Ordinary programs do not emit the
 report, and TypeRB gains no source-visible GC operation.
 
+The separate `TYPE_RB_NATIVE_RUNTIME_TRACE` switch is also internal evidence
+machinery and is read once at process startup. It samples every 64th automatic
+collection and the final manual collection, reporting the collection number,
+automatic/manual role, post-sweep live bytes, next heap target, logical-root
+count, and root capacity. It leaves the stats v1 schema unchanged and has no
+output or behavioral effect when disabled.
+
 The exact-root buffer is one raw runtime allocation whose capacity follows
 maximum logical root depth rather than cumulative allocation. The registered
 workload stays at its initial 64-word, 512-byte capacity, which remains globally
@@ -115,6 +122,26 @@ ceiling cannot substitute for either trend limit. The dedicated sanitizer link
 intercepts allocator and linked-toolchain behavior; it is not described as
 instrumenting QBE instructions.
 
+## Persistent worker extension
+
+[Issue #150](https://github.com/type-rb/type-rb-native/issues/150) registers a
+second, persistent-process verification layer without adding a public Web or
+Job API. Its [single authored workload](../tools/runtime-worker-soak/workload.trb)
+keeps one worker state alive, retains a bounded 64-entry recent-payload cache,
+and processes deterministic success, retry, terminal-failure, and cancellation
+paths. Native and optimized Go compile the exact same TypeRB source.
+
+The [persistent worker harness](../tools/runtime-worker-soak/README.md) runs a
+40,000-batch CI smoke on Darwin and Linux arm64. Its dispatch-only Linux formal
+mode runs 60 phases of 60,000 batches: 460,800,000 original jobs,
+489,600,000 processed attempts, and exactly 33,926,400,576 managed bytes. It
+retains the sampled internal GC trace, 250 ms Native and Go RSS/descriptor/thread
+series, ASan/LSan output, and Valgrind leak-class inventory. Formal acceptance
+requires at least 400 complete GC observations, no more than 128 KiB post-sweep
+live bytes at any sampled automatic collection, a fixed 64-word root capacity,
+zero final live bytes and roots, a Native RSS maximum below 64 MiB, both existing
+RSS trend limits, and no post-warmup descriptor or thread growth.
+
 ## Current status
 
 The reviewed
@@ -129,3 +156,13 @@ Persistent service lifecycles, concurrent mutation, closure cycles in the
 self-hosted subset, finalizers, weak references, and non-memory resource
 cleanup remain separate work. The bounded allocation result must not be
 presented as proof for those later surfaces.
+
+The persistent worker extension narrows the first item to the registered
+single-threaded worker lifecycle. The
+[formal result](../results/2026-09-01-persistent-worker-memory-darwin-linux-arm64/README.md)
+processes 460,800,000 original jobs, allocates and reclaims 33,926,400,576
+managed bytes, ends with zero live bytes, retains a fixed 64-word root buffer,
+and records flat Native RSS quartiles with stable descriptor and thread counts.
+ASan/LSan and Memcheck report no leak or memory error. This evidence is not a
+claim about concurrency, real network servers, finalizers, weak references, or
+arbitrary external-resource cleanup.

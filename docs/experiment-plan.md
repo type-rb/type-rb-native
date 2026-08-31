@@ -649,6 +649,18 @@ allocated and reclaimed, final live bytes and both RSS trend values are zero,
 and ASan/LSan, Valgrind, exact fixed-point, process, and compiler-size checks
 pass. Persistent Web and Job resource lifecycles remain deferred.
 
+The next persistent-process layer is registered separately in
+[issue #150](https://github.com/type-rb/type-rb-native/issues/150). It uses one
+authored worker lifecycle for both Native and optimized Go, a bounded 64-entry
+state cache, explicit retry/failure/cancellation paths, and a sampled internal
+collector trace. CI runs the 40,000-batch smoke on Darwin and Linux arm64. The
+manual Linux arm64 workflow runs 460,800,000 original jobs, samples RSS,
+descriptors, and threads every 250 ms, and retains ASan/LSan and Valgrind
+oracles. This layer verifies a single-threaded persistent worker process; it
+does not introduce a public TypeRB service API or stand in for concurrency and
+external-resource lifecycle work. See the
+[persistent worker harness](../tools/runtime-worker-soak/README.md).
+
 Gate 6M is the portable benchmark-entry primitive slice registered in
 [issue #113](https://github.com/type-rb/type-rb-native/issues/113) and
 specified by

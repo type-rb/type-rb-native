@@ -1293,6 +1293,26 @@ describe("Gate 4 TypeRB frontend") do
 		expect(qbe.include?("$g4_gc_frame_leave")).to_be_false()
 	end
 
+	test("emits an opt-in sampled managed-runtime trace without changing stats v1") do
+		source := "def main()\n\tmut value := \"seed\"\n\tmut index := 0\n\twhile index < 2\n\t\tvalue += \"x\"\n\t\tindex += 1\n\tend\n\tputs(value)\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		qbe := gate4_output_source(gate4_emit_qbe(state))
+		expect(qbe.include?("TYPE_RB_NATIVE_RUNTIME_TRACE")).to_be_true()
+		expect(qbe.include?("function $g4_gc_trace_initialize()")).to_be_true()
+		expect(qbe.include?("function $g4_gc_trace(w %automatic, l %collection)")).to_be_true()
+		expect(qbe.include?("\t%remainder =l rem %collection, 64")).to_be_true()
+		expect(qbe.include?("type-rb-native-gc-trace-v1,root-capacity,")).to_be_true()
+		expect(qbe.include?("\tcall $g4_gc_trace(w %automatic, l %next_count)")).to_be_true()
+		expect(qbe.include?("@start\n\tcall $g4_gc_trace_initialize()\n\tcall $g4f0()")).to_be_true()
+		expect(qbe.include?("%disabled =w and %stats_disabled, %trace_disabled")).to_be_true()
+		expect(qbe.include?("type-rb-native-gc-stat-v1,collections,")).to_be_true()
+		expect(qbe.include?("type-rb-native-gc-stat-v2")).to_be_false()
+	end
+
 	test("compresses only profitable static Strings at the registered boundary") do
 		overlapping := gate4_repeat_text("a", 300)
 		encoded := gate4_encode_static_string(overlapping)
