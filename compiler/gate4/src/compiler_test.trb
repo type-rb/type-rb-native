@@ -21,6 +21,26 @@ def gate4_output_source(output: Gate4Output): String
 	return writer.to_s()
 end
 
+def gate4_test_occurrences(value: String, needle: String): Integer
+	mut count := 0
+	mut index := 0
+	while index + needle.size() <= value.size()
+		mut matched := true
+		mut offset := 0
+		while offset < needle.size()
+			if value[index + offset] != needle[offset]
+				matched = false
+			end
+			offset += 1
+		end
+		if matched
+			count += 1
+		end
+		index += 1
+	end
+	return count
+end
+
 def gate4_required_test_source(path: String): String
 	case FileSystem.read_text(path)
 	when Result::Ok(source)
@@ -42,6 +62,18 @@ def gate4_scale_test_source(count: Integer): String
 		index += 1
 	end
 	writer.append("def main()\n\tvalue := f" + (count - 1).to_s() + "(1)\n\treturn\nend\n")
+	return writer.to_s()
+end
+
+def gate4_large_scalar_inline_test_source(): String
+	mut writer := StringBuilder.new()
+	writer.append("def scalar(value: Integer): Integer\n\treturn value + 1\nend\n\n")
+	mut index := 1
+	while index < 32
+		writer.append("def filler" + index.to_s() + "(value: Integer): Integer\n\treturn value\nend\n\n")
+		index += 1
+	end
+	writer.append("def main()\n\tmut index := 0\n\twhile index < 1\n\t\tvalue := scalar(index)\n\t\tindex += value\n\tend\n\treturn\nend\n")
 	return writer.to_s()
 end
 
@@ -1182,6 +1214,60 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_check(state)).to_be_true()
 		qbe := gate4_output_source(gate4_emit_qbe(state))
 		expect(qbe.include?("call $g4_array_address")).to_be_true()
+	end
+
+	test("inlines only eligible scalar leaf calls inside loops") do
+		eligible_source := "def scalar(left: Integer, right: Integer): Integer\n\tsum := left + right\n\treturn sum * 2\nend\n\ndef main()\n\tmut index := 0\n\twhile index < 1\n\t\tvalue := scalar(index, 1)\n\t\tindex += value\n\tend\n\treturn\nend\n"
+		mut eligible := gate4_compiler_new(eligible_source.size() + 1)
+		expect(gate4_lex(eligible, eligible_source)).to_be_true()
+		expect(gate4_parse_module(eligible, 0, eligible.entry_module[0])).to_be_true()
+		expect(gate4_resolve(eligible)).to_be_true()
+		expect(gate4_check(eligible)).to_be_true()
+		eligible_qbe := gate4_output_source(gate4_emit_qbe(eligible))
+		expect(eligible_qbe.include?("call $g4f0")).to_be_false()
+
+		non_loop_source := "def scalar(value: Integer): Integer\n\treturn value + 1\nend\n\ndef main()\n\tvalue := scalar(1)\n\treturn\nend\n"
+		mut non_loop := gate4_compiler_new(non_loop_source.size() + 1)
+		expect(gate4_lex(non_loop, non_loop_source)).to_be_true()
+		expect(gate4_parse_module(non_loop, 0, non_loop.entry_module[0])).to_be_true()
+		expect(gate4_resolve(non_loop)).to_be_true()
+		expect(gate4_check(non_loop)).to_be_true()
+		expect(gate4_output_source(gate4_emit_qbe(non_loop)).include?("call $g4f0")).to_be_true()
+
+		ineligible_source := "def choose(value: Integer): Integer\n\tif value > 0\n\t\treturn value\n\telse\n\t\treturn 0\n\tend\nend\n\ndef main()\n\tmut index := 0\n\twhile index < 1\n\t\tvalue := choose(index)\n\t\tindex += value + 1\n\tend\n\treturn\nend\n"
+		mut ineligible := gate4_compiler_new(ineligible_source.size() + 1)
+		expect(gate4_lex(ineligible, ineligible_source)).to_be_true()
+		expect(gate4_parse_module(ineligible, 0, ineligible.entry_module[0])).to_be_true()
+		expect(gate4_resolve(ineligible)).to_be_true()
+		expect(gate4_check(ineligible)).to_be_true()
+		expect(gate4_output_source(gate4_emit_qbe(ineligible)).include?("call $g4f0")).to_be_true()
+
+		delegating_source := "def increment(value: Integer): Integer\n\treturn value + 1\nend\n\ndef delegating(value: Integer): Integer\n\treturn increment(value)\nend\n\ndef main()\n\tmut index := 0\n\twhile index < 1\n\t\tindex = delegating(index)\n\tend\n\treturn\nend\n"
+		mut delegating := gate4_compiler_new(delegating_source.size() + 1)
+		expect(gate4_lex(delegating, delegating_source)).to_be_true()
+		expect(gate4_parse_module(delegating, 0, delegating.entry_module[0])).to_be_true()
+		expect(gate4_resolve(delegating)).to_be_true()
+		expect(gate4_check(delegating)).to_be_true()
+		expect(gate4_output_source(gate4_emit_qbe(delegating)).include?("call $g4f1")).to_be_true()
+	end
+
+	test("limits scalar leaf inlining to two call sites per small program") do
+		source := "def scalar(value: Integer): Integer\n\treturn value + 1\nend\n\ndef main()\n\tmut index := 0\n\twhile index < 1\n\t\tfirst := scalar(index)\n\t\tsecond := scalar(index)\n\t\tthird := scalar(index)\n\t\tindex += first + second + third\n\tend\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		qbe := gate4_output_source(gate4_emit_qbe(state))
+		expect(gate4_test_occurrences(qbe, "call $g4f0")).to_equal(1)
+
+		large_source := gate4_large_scalar_inline_test_source()
+		mut large := gate4_compiler_new(large_source.size() + 1)
+		expect(gate4_lex(large, large_source)).to_be_true()
+		expect(gate4_parse_module(large, 0, large.entry_module[0])).to_be_true()
+		expect(gate4_resolve(large)).to_be_true()
+		expect(gate4_check(large)).to_be_true()
+		expect(gate4_output_source(gate4_emit_qbe(large)).include?("call $g4f0")).to_be_true()
 	end
 
 	test("collapses shared Array bounds checks into one unsigned comparison") do
