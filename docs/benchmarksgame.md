@@ -182,6 +182,15 @@ passes every registered bound: wall and CPU medians improve by 4.67% to 7.97%
 across the three cases, while compiler, QBE, and application artifacts all
 become smaller.
 
+The next contract, registered by
+[issue #142](https://github.com/type-rb/type-rb-native/issues/142), evaluated
+bounded scalar-leaf inlining at two hot loop call sites. Its
+[formal result](../results/2026-08-31-native-scalar-leaf-inline-linux-arm64/README.md)
+is a rejection: correctness, fixed-point, and cross-target QBE regressions
+passed, but the Linux arm64 self-hosted compiler grew by 2.20% against a
+pre-registered 0.1% maximum. The workflow stopped before runtime timing, the
+implementation was reverted, and the threshold was not relaxed.
+
 Builds use release optimization without unsafe fast-math substitutions: C and
 C++ use `-O3`, Go uses `go build -trimpath`, Rust uses `rustc -C opt-level=3`,
 and Java uses `javac` followed by the same recorded JVM for every run. The
