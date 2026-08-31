@@ -364,23 +364,25 @@ for compiler_pair in "b2:$b2" "b3:$b3" "b4:$b4"; do
 	done
 done
 
-runtime_invalid=$corpus_root/runtime-invalid/float-array-bounds.trb
 runtime_expected=$workspace/runtime-invalid.expected
 printf 'panic: index is out of bounds\n' > "$runtime_expected"
-for compiler_pair in "b2:$b2" "b3:$b3" "b4:$b4"; do
-	compiler_label=$(printf '%s\n' "$compiler_pair" | cut -d: -f1)
-	compiler=$(printf '%s\n' "$compiler_pair" | cut -d: -f2-)
-	case_directory=$workspace/corpus/$compiler_label-runtime-invalid
-	mkdir -p "$case_directory"
-	"$compiler" build "$runtime_invalid" --output "$case_directory/program" --qbe "$qbe" --cc "$cc" --target "$profile"
-	set +e
-	"$case_directory/program" > "$case_directory/stdout" 2> "$case_directory/stderr"
-	runtime_status=$?
-	set -e
-	test "$runtime_status" -eq 2 || fail "runtime failure status differs"
-	require_empty_file "$case_directory/stdout" "runtime failure stdout differs"
-	cmp "$runtime_expected" "$case_directory/stderr" >/dev/null || fail "runtime failure stderr differs"
-	require_no_intermediates "$case_directory"
+for runtime_invalid in "$corpus_root"/runtime-invalid/*.trb; do
+	runtime_case=$(basename -- "$runtime_invalid" .trb)
+	for compiler_pair in "b2:$b2" "b3:$b3" "b4:$b4"; do
+		compiler_label=$(printf '%s\n' "$compiler_pair" | cut -d: -f1)
+		compiler=$(printf '%s\n' "$compiler_pair" | cut -d: -f2-)
+		case_directory=$workspace/corpus/$compiler_label-runtime-invalid-$runtime_case
+		mkdir -p "$case_directory"
+		"$compiler" build "$runtime_invalid" --output "$case_directory/program" --qbe "$qbe" --cc "$cc" --target "$profile"
+		set +e
+		"$case_directory/program" > "$case_directory/stdout" 2> "$case_directory/stderr"
+		runtime_status=$?
+		set -e
+		test "$runtime_status" -eq 2 || fail "runtime failure status differs: $runtime_case"
+		require_empty_file "$case_directory/stdout" "runtime failure stdout differs: $runtime_case"
+		cmp "$runtime_expected" "$case_directory/stderr" >/dev/null || fail "runtime failure stderr differs: $runtime_case"
+		require_no_intermediates "$case_directory"
+	done
 done
 
 mkdir -p "$workspace/configured/b2" "$workspace/configured/b3" "$workspace/configured/b4"

@@ -170,6 +170,14 @@ programs slightly faster than the frozen Native baseline, closes an exact
 self-hosted fixed point, and remains within every registered compiler, QBE,
 and application-size limit.
 
+The current contract is registered by
+[issue #140](https://github.com/type-rb/type-rb-native/issues/140). It advances
+the exact Native baseline to the accepted numeric-inline result and evaluates
+the target-neutral unsigned bounds predicate in the shared Array-address
+helper. `fannkuch-redux` is the required performance signal; `n-body` and
+`spectral-norm` are bounded non-regression controls. The workflow additionally
+retains the exact QBE-generated helper assembly for both candidates.
+
 Builds use release optimization without unsafe fast-math substitutions: C and
 C++ use `-O3`, Go uses `go build -trimpath`, Rust uses `rustc -C opt-level=3`,
 and Java uses `javac` followed by the same recorded JVM for every run. The

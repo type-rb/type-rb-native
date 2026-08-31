@@ -90,19 +90,19 @@ fannkuch-redux)
 	walltime_limit=60s
 	formal_input=10
 	formal_expected_sha256=26f4debed9b9f8db7609e17f35756a3f72c1d85d40977a4377a1ef34ffc4d4c8
-	maximum_ratio=1.05
+	maximum_ratio=0.97
 	;;
 n-body)
 	walltime_limit=60s
 	formal_input=1000000
 	formal_expected_sha256=3fb938822f2b87322baee13eea59620bab076cca553f7e01214dbc674bd09387
-	maximum_ratio=1.05
+	maximum_ratio=1.02
 	;;
 spectral-norm)
 	walltime_limit=120s
 	formal_input=5500
 	formal_expected_sha256=f9d5b5e3eb7657cf1bbba4cc856651864df9cd9fd9a6be9b9bc5fcbb67150deb
-	maximum_ratio=0.80
+	maximum_ratio=1.02
 	;;
 *) usage ;;
 esac
