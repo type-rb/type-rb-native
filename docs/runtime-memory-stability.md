@@ -158,6 +158,11 @@ cleanup remain separate work. The bounded allocation result must not be
 presented as proof for those later surfaces.
 
 The persistent worker extension narrows the first item to the registered
-single-threaded worker lifecycle. Its formal workflow evidence is not a claim
-about concurrency, real network servers, finalizers, weak references, or
+single-threaded worker lifecycle. The
+[formal result](../results/2026-09-01-persistent-worker-memory-darwin-linux-arm64/README.md)
+processes 460,800,000 original jobs, allocates and reclaims 33,926,400,576
+managed bytes, ends with zero live bytes, retains a fixed 64-word root buffer,
+and records flat Native RSS quartiles with stable descriptor and thread counts.
+ASan/LSan and Memcheck report no leak or memory error. This evidence is not a
+claim about concurrency, real network servers, finalizers, weak references, or
 arbitrary external-resource cleanup.

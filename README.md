@@ -285,12 +285,16 @@ A second layer now exercises one single-threaded persistent worker lifecycle
 without adding Native-only TypeRB syntax or a public Web/Job API. One identical
 TypeRB source drives Native and optimized Go through success, retry, terminal
 failure, cancellation, and a bounded 64-entry retained-payload cache. CI runs a
-40,000-batch smoke on Darwin and Linux arm64; the manual Linux formal workflow
-registers 460,800,000 original jobs, 33,926,400,576 managed bytes, sampled GC
-state, RSS/descriptor/thread series, ASan/LSan, and Valgrind. Formal evidence is
-pending and no persistent-service result is claimed yet. See
-[issue #150](https://github.com/type-rb/type-rb-native/issues/150) and the
-[persistent worker harness](tools/runtime-worker-soak/README.md).
+40,000-batch smoke on Darwin and Linux arm64. The formal Linux run processes
+460,800,000 original jobs, allocates and reclaims 33,926,400,576 managed bytes,
+ends with zero live bytes, keeps a 1,048,574-byte peak, and records flat
+2,338,816-byte RSS quartiles with stable descriptors and threads. ASan/LSan and
+Memcheck report no leak or memory error. Native takes 46.37 seconds versus
+14.67 seconds for the exact optimized-Go control in this allocation-heavy
+workload. This is a bounded single-threaded non-I/O worker result, not a general
+persistent-service claim. See [issue #150](https://github.com/type-rb/type-rb-native/issues/150),
+the [persistent worker harness](tools/runtime-worker-soak/README.md), and the
+[recorded result](results/2026-09-01-persistent-worker-memory-darwin-linux-arm64/README.md).
 
 Gate 6M is complete under
 [issue #113](https://github.com/type-rb/type-rb-native/issues/113). The
@@ -477,6 +481,7 @@ repository.
 - [Ordinary runtime memory stability](docs/runtime-memory-stability.md)
 - [Ordinary runtime memory stability Darwin/Linux arm64 result](results/2026-08-30-runtime-memory-stability-darwin-linux-arm64/README.md)
 - [Persistent worker memory lifecycle harness](tools/runtime-worker-soak/README.md)
+- [Persistent worker memory lifecycle Darwin/Linux arm64 result](results/2026-09-01-persistent-worker-memory-darwin-linux-arm64/README.md)
 - [Gate 4 behavioral self-hosting](docs/gate-4-self-hosting.md)
 - [Gate 5 matched self-hosted compiler baseline](docs/gate-5-matched-compiler.md)
 - [Gate 5 matched compiler Darwin arm64 result](results/2026-08-29-gate5-matched-compiler-darwin-arm64/README.md)
