@@ -691,9 +691,11 @@ Native-owned build with the equivalent external emit-QBE/QBE/CC recipe under a
 each compiler stays at or below 310,000 bytes. Two warmups and at least eleven
 interleaved application observations apply the existing 25% build/runtime
 time/RSS bounds against optimized Go and require at least an 80% stripped-size
-improvement. Elapsed time uses a direct monotonic process observer and peak RSS
-uses an independent direct GNU time invocation, with complete per-observation
-status, output, and artifact evidence. The portable bootstrap harness's legacy
+improvement. Elapsed time uses a direct monotonic process observer; the
+roughly one-millisecond runtime case batches 32 direct launches per observation
+and requires their status and output to agree. Peak RSS uses an independent
+single-process GNU time invocation, with complete per-observation status,
+output, and artifact evidence. The portable bootstrap harness's legacy
 combined time/RSS observations are retained only for its existing profiles;
 the Gate 6N adjacent-build decision uses the independent controller series.
 The
