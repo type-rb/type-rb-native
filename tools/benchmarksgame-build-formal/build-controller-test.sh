@@ -160,6 +160,24 @@ printf 'memory=100%sB\n' "$number"
 EOF
 chmod 0755 "$fake_runexec"
 
+cat > "$test_root/process.trace" <<'EOF'
+100  execve("/direct", ["/direct"], 0xffff) = 0
+101  execve("/missing", ["/missing"], 0xffff) = -1 ENOENT (No such file or directory)
+102  execve("/split", ["/split"], 0xffff <unfinished ...>
+102  <... execve resumed>) = 0
+103  execve("/split-missing", ["/split-missing"], 0xffff <unfinished ...>
+103  <... execve resumed>) = -1 ENOENT (No such file or directory)
+104  execve("/unfinished", ["/unfinished"], 0xffff <unfinished ...>
+EOF
+cat > "$test_root/process-executables.expected" <<'EOF'
+/direct
+/split
+EOF
+awk -f "$script_directory/trace-executables.awk" "$test_root/process.trace" \
+	> "$test_root/process-executables.actual"
+cmp "$test_root/process-executables.expected" "$test_root/process-executables.actual" ||
+	fail "process trace executable extraction differs"
+
 cache_control=$test_root/cache-control
 cat > "$cache_control" <<'EOF'
 #!/bin/sh
@@ -186,6 +204,10 @@ test "$(wc -l < "$test_root/pass-evidence/medians.tsv" | tr -d ' ')" -eq 3 || fa
 test "$(find "$test_root/pass-evidence/observations" -name runexec.stdout -type f | wc -l | tr -d ' ')" -eq 26 ||
 	fail "observation count differs"
 test "$(wc -l < "$test_root/pass-evidence/artifacts.tsv" | tr -d ' ')" -eq 5 || fail "artifact inventory differs"
+test "$(wc -l < "$test_root/pass-evidence/distribution/dependencies.tsv" | tr -d ' ')" -eq 3 ||
+	fail "dependency inventory differs"
+test "$(wc -l < "$test_root/pass-evidence/distribution/process-executables.tsv" | tr -d ' ')" -eq 6 ||
+	fail "process executable inventory differs"
 test "$(grep -F -- '--overlay-dir /home' "$test_root/runexec-args.log" | wc -l | tr -d ' ')" -eq 26 ||
 	fail "home overlay policy differs"
 if grep -F -- '--overlay-dir /tmp' "$test_root/runexec-args.log" >/dev/null; then

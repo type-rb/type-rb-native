@@ -112,11 +112,16 @@ record_file() {
 record_dependencies() {
 	label=$1
 	path=$2
+	scope=$3
+	resolved=$(resolve_executable "$path") || fail "cannot resolve dependency component: $path"
+	output=$evidence/distribution/dependencies/$label.txt
 	if test "$mode" = formal; then
-		ldd "$path" > "$evidence/distribution/dependencies/$label.txt" 2>&1 || true
+		ldd "$resolved" > "$output" 2>&1 || true
 	else
-		printf 'not-collected-in-test-mode\n' > "$evidence/distribution/dependencies/$label.txt"
+		printf 'not-collected-in-test-mode\n' > "$output"
 	fi
+	printf '%s\t%s\t%s\t%s\n' "$scope" "$label" "$resolved" "dependencies/$label.txt" \
+		>> "$evidence/distribution/dependencies.tsv"
 }
 
 clean_output() {
@@ -497,6 +502,7 @@ awk -f "$script_directory/summarize.awk" "$summary" > "$evidence/medians.tsv" ||
 	fail "measurement summary could not be generated"
 
 printf 'candidate\tkind\tbytes\tsha256\n' > "$evidence/artifacts.tsv"
+printf 'scope\tlabel\tpath\tevidence\n' > "$evidence/distribution/dependencies.tsv"
 for candidate in $CANDIDATES; do
 	program=$workspace/artifacts/$candidate/program
 	test -x "$program" || continue
@@ -510,7 +516,7 @@ for candidate in $CANDIDATES; do
 	fi
 	printf '%s\traw\t%s\t%s\n' "$candidate" "$(file_size "$raw")" "$(sha256 "$raw")" >> "$evidence/artifacts.tsv"
 	printf '%s\tstripped\t%s\t%s\n' "$candidate" "$(file_size "$stripped")" "$(sha256 "$stripped")" >> "$evidence/artifacts.tsv"
-	record_dependencies "$candidate-program" "$program"
+	record_dependencies "$candidate-program" "$program" deploy-artifact
 done
 
 printf 'scope\tcomponent\tpath\tbytes\tsha256\n' > "$evidence/distribution/files.tsv"
@@ -521,18 +527,28 @@ record_file go-controlled go-command "$go_tool"
 record_file native-host-prerequisite cc "$cc"
 
 if test "$mode" = formal; then
-	for trace in "$evidence"/distribution/process-traces/*.trace; do
-		sed -n 's/.*execve("\([^"]*\)".*= 0$/\1/p' "$trace"
-	done | LC_ALL=C sort -u > "$evidence/distribution/process-executables.txt"
-	while IFS= read -r executable; do
+	printf 'candidate\tpath\n' > "$evidence/distribution/process-executables.tsv"
+	for candidate in $CANDIDATES; do
+		trace=$evidence/distribution/process-traces/$candidate.trace
+		awk -f "$script_directory/trace-executables.awk" "$trace" |
+			awk -v candidate="$candidate" '{ print candidate "\t" $0 }'
+	done | LC_ALL=C sort -u >> "$evidence/distribution/process-executables.tsv"
+	observed_index=0
+	tab=$(printf '\t')
+	sed '1d' "$evidence/distribution/process-executables.tsv" |
+	while IFS="$tab" read -r observed_candidate executable; do
 		test -n "$executable" || continue
 		resolved=$(resolve_executable "$executable" 2>/dev/null || true)
 		if test -n "$resolved" && test -f "$resolved"; then
+			observed_index=$((observed_index + 1))
+			observed_label=$(printf 'observed-%03d' "$observed_index")
+			observed_scope=observed-$observed_candidate-build-closure
 			printf '%s\t%s\t%s\t%s\t%s\n' \
-				observed-build-closure executable "$resolved" "$(file_size "$resolved")" "$(sha256 "$resolved")" \
+				"$observed_scope" executable "$resolved" "$(file_size "$resolved")" "$(sha256 "$resolved")" \
 				>> "$evidence/distribution/files.tsv"
+			record_dependencies "$observed_label" "$resolved" "$observed_scope"
 		fi
-	done < "$evidence/distribution/process-executables.txt"
+	done
 	go_root=$($go_tool env GOROOT)
 	test -d "$go_root" || fail "Go root is not a directory"
 	go_root_bytes=$(directory_apparent_size "$go_root")
@@ -541,14 +557,16 @@ if test "$mode" = formal; then
 	printf 'go-controlled\tgo-root\t%s\t%s\t%s\n' "$go_root" "$go_root_bytes" "$go_root_files" \
 		>> "$evidence/distribution/directories.tsv"
 	for label_path in \
-		"native-compiler:$native_compiler" \
-		"qbe:$qbe" \
-		"reference-trb:$reference_trb" \
-		"go:$go_tool" \
-		"cc:$cc"; do
-		label=${label_path%%:*}
-		path=${label_path#*:}
-		record_dependencies "$label" "$path"
+		"native-controlled:native-compiler:$native_compiler" \
+		"native-controlled:qbe:$qbe" \
+		"go-controlled:reference-trb:$reference_trb" \
+		"go-controlled:go:$go_tool" \
+		"native-host-prerequisite:cc:$cc"; do
+		dependency_scope=${label_path%%:*}
+		label_and_path=${label_path#*:}
+		label=${label_and_path%%:*}
+		path=${label_and_path#*:}
+		record_dependencies "$label" "$path" "$dependency_scope"
 	done
 	for candidate in $CANDIDATES; do
 		trace=$evidence/distribution/process-traces/$candidate.trace
@@ -583,8 +601,9 @@ else
 	printf 'test-mode\tgo-root\t%s\t0\t0\n' "$($go_tool env GOROOT)" >> "$evidence/distribution/directories.tsv"
 	printf 'scope\tkind\tbytes\n' > "$evidence/distribution/payload-totals.tsv"
 	printf 'test-mode inventory only\n' > "$evidence/distribution/boundary.txt"
-	printf '%s\n' "$native_compiler" "$reference_trb" "$qbe" "$cc" "$go_tool" | LC_ALL=C sort -u \
-		> "$evidence/distribution/process-executables.txt"
+	printf 'candidate\tpath\n' > "$evidence/distribution/process-executables.tsv"
+	printf 'test-mode\t%s\n' "$native_compiler" "$reference_trb" "$qbe" "$cc" "$go_tool" |
+		LC_ALL=C sort -u >> "$evidence/distribution/process-executables.tsv"
 fi
 
 if test "$measurement_failures" -ne 0; then

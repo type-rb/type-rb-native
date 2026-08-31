@@ -46,8 +46,10 @@ missing timing result.
 
 Before timing, both backends must check, build, and execute the case correctly.
 Those representative builds are process-traced outside the measured schedule.
-The trace, resolved executable inventory, tool versions, and dynamic-library
-inventories describe the observed build closure.
+The trace parser joins concurrent `unfinished` and successful `resumed`
+`execve` records before producing a candidate-scoped resolved executable
+inventory. Tool versions and a dynamic-library record for every resolved
+observed executable describe the build closure.
 
 Distribution evidence uses three explicit scopes rather than one ambiguous
 number:
