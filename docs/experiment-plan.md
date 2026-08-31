@@ -606,6 +606,19 @@ B2/B3/B4 compilers and target-neutral QBE are exact within the candidate and
 against the registered Native baseline; the worst candidate build/RSS median
 ratio is 1.0004 and the combined compilers use 567,824 bytes.
 
+The compiler compactness follow-up registered in
+[issue #146](https://github.com/type-rb/type-rb-native/issues/146) changes only
+the representation of profitable static Strings of at least 256 bytes. A
+deterministic bounded-backreference encoder in the self-hosted compiler emits
+dependency-free data that expands once into zero-filled static storage before
+entry; the decoder and initialization call are omitted when unused. The
+[formal Darwin/Linux arm64 result](../results/2026-08-31-static-string-compactness-darwin-linux-arm64/README.md)
+passes exact fixed-point and target-neutral-QBE checks, all registered
+correctness and process boundaries, and the 5% build-time/RSS caps. The
+Darwin/Linux compiler pair decreases from 567,824 to 535,304 bytes, while the
+16 KiB application fixture's QBE decreases by 61.62% and its executables by
+24.50% and 49.04% respectively.
+
 Independent experimental Native versioning and exact TypeRB compatibility
 metadata are defined in
 [Decision 0020](decisions/0020-independent-native-versioning.md). Native begins
