@@ -248,6 +248,12 @@ jobs:
             'call $g4_gc_temp_grow(l %value, l %count, l %capacity)' \
             "$evidence/candidate-temp-push.ssa")" -eq 1
           test "$(grep -F -c 'call $realloc' "$evidence/candidate-temp-push.ssa")" -eq 0
+          test "$(grep -F -c '%nil =w ceql %value, 0' \
+            "$evidence/candidate-temp-push.ssa")" -eq 1
+          test "$(grep -F -c '%static =w ceql %descriptor_mark, 0' \
+            "$evidence/candidate-temp-push.ssa")" -eq 1
+          test "$(grep -F -c '%offset =l shl %count, 3' \
+            "$evidence/candidate-temp-push.ssa")" -eq 1
           test "$(grep -F -c '%minimum =l copy 64' \
             "$evidence/candidate-temp-grow.ssa")" -eq 1
           test "$(grep -F -c '%doubled =l mul %capacity, 2' \
@@ -279,6 +285,9 @@ jobs:
             printf 'candidate_temp_push_growth_calls=1\n'
             printf 'candidate_temp_push_realloc_calls=0\n'
             printf 'candidate_temp_grow_realloc_calls=1\n'
+            printf 'candidate_temp_push_nil_elision_checks=1\n'
+            printf 'candidate_temp_push_static_elision_checks=1\n'
+            printf 'candidate_temp_push_offset_operation=shift-left-3\n'
             printf 'baseline_temp_push_growth_register_saves=6\n'
             printf 'candidate_temp_push_growth_register_saves=0\n'
             printf 'minimum_root_capacity=64\n'
@@ -322,20 +331,31 @@ jobs:
           evidence="$RUNNER_TEMP/temp-root-boundary-evidence"
           mkdir -p "$evidence"
           for role in baseline candidate; do
+            expected_initial_count=2
+            if [ "$role" = candidate ]; then
+              expected_initial_count=0
+            fi
             source="$RUNNER_TEMP/applications/$role/program.ssa"
             boundary="$evidence/$role.ssa"
             awk '/^function .*\$g4f0\(/ { exit } { print }' "$source" > "$boundary"
             printf '%s\n' \
               'export function w $main(w %argc, l %argv) {' \
               '@start' \
+              '  %static =l alloc8 8' \
+              '  storel 0, %static' \
+              '  call $g4_gc_temp_push(l 0)' \
+              '  call $g4_gc_temp_push(l %static)' \
+              '  %initial_count =l loadl $g4_gc_temp_count' \
+              '  call $g4_gc_temp_reset(l 0)' \
+              '  %object =l alloc8 8' \
+              '  storel 1, %object' \
               '	jmp @loop' \
               '@loop' \
               '	%index =l phi @start 0, @push %next' \
               '	%done =w cslel 129, %index' \
               '	jnz %done, @verify, @push' \
               '@push' \
-              '	%value =l add %index, 1' \
-              '	call $g4_gc_temp_push(l %value)' \
+              '	call $g4_gc_temp_push(l %object)' \
               '	%next =l add %index, 1' \
               '	jmp @loop' \
               '@verify' \
@@ -346,9 +366,11 @@ jobs:
               '	%last =l loadl %last_address' \
               '	%count_ok =w ceql %count, 129' \
               '	%capacity_ok =w ceql %capacity, 256' \
-              '	%last_ok =w ceql %last, 129' \
-              '	%count_capacity_ok =w and %count_ok, %capacity_ok' \
-              '	%all_ok =w and %count_capacity_ok, %last_ok' \
+              "  %initial_ok =w ceql %initial_count, $expected_initial_count" \
+              '  %last_ok =w ceql %last, %object' \
+              '  %count_capacity_ok =w and %count_ok, %capacity_ok' \
+              '  %roots_ok =w and %initial_ok, %last_ok' \
+              '  %all_ok =w and %count_capacity_ok, %roots_ok' \
               '	jnz %all_ok, @success, @fail' \
               '@success' \
               '	call $g4_gc_temp_reset(l 0)' \
@@ -364,7 +386,7 @@ jobs:
             test ! -s "$evidence/$role.stdout"
             test ! -s "$evidence/$role.stderr"
           done
-          printf 'pushes=129\nexpected_count=129\nexpected_capacity=256\nexpected_last_root=129\n' \
+          printf 'baseline_nil_and_static_roots=2\ncandidate_nil_and_static_roots=0\npushes=129\nexpected_count=129\nexpected_capacity=256\nexpected_last_root=managed-object\n' \
             > "$evidence/boundary.txt"
           sha256sum "$evidence"/baseline.ssa "$evidence"/candidate.ssa \
             "$evidence"/baseline "$evidence"/candidate > "$evidence/SHA256SUMS"
