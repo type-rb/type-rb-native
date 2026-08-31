@@ -124,7 +124,7 @@ jobs:
           chmod 0755 "$RUNNER_TEMP/release/$TARGET_ASSET"
           printf 'release_tag=%s\n' "$release_tag" > "$RUNNER_TEMP/release/selection.txt"
 
-      - name: Close the adjacent current-source Native fixed point
+      - name: Close the current-source Native fixed point after compatibility transitions
         env:
           PUBLISHED_SEED: ${{ runner.temp }}/release/${{ matrix.asset }}
           PROFILE: ${{ matrix.profile }}
@@ -133,6 +133,8 @@ jobs:
             "$RUNNER_TEMP/chain/first" \
             "$RUNNER_TEMP/chain/second" \
             "$RUNNER_TEMP/chain/third" \
+            "$RUNNER_TEMP/chain/fourth" \
+            "$RUNNER_TEMP/chain/fifth" \
             "$RUNNER_TEMP/build-evidence"
           "$PUBLISHED_SEED" build compiler/gate4/src/compiler.trb \
             --output "$RUNNER_TEMP/chain/first/compiler" \
@@ -149,30 +151,45 @@ jobs:
             --qbe "${{ steps.qbe.outputs.path }}" \
             --cc /usr/bin/cc \
             --target "$PROFILE"
-          cmp "$RUNNER_TEMP/chain/second/compiler" "$RUNNER_TEMP/chain/third/compiler"
-          "$RUNNER_TEMP/chain/third/compiler" emit-qbe compiler/gate4/src/compiler.trb \
+          "$RUNNER_TEMP/chain/third/compiler" build compiler/gate4/src/compiler.trb \
+            --output "$RUNNER_TEMP/chain/fourth/compiler" \
+            --qbe "${{ steps.qbe.outputs.path }}" \
+            --cc /usr/bin/cc \
+            --target "$PROFILE"
+          "$RUNNER_TEMP/chain/fourth/compiler" build compiler/gate4/src/compiler.trb \
+            --output "$RUNNER_TEMP/chain/fifth/compiler" \
+            --qbe "${{ steps.qbe.outputs.path }}" \
+            --cc /usr/bin/cc \
+            --target "$PROFILE"
+          cmp "$RUNNER_TEMP/chain/third/compiler" "$RUNNER_TEMP/chain/fourth/compiler"
+          cmp "$RUNNER_TEMP/chain/fourth/compiler" "$RUNNER_TEMP/chain/fifth/compiler"
+          "$RUNNER_TEMP/chain/fifth/compiler" emit-qbe compiler/gate4/src/compiler.trb \
             > "$RUNNER_TEMP/build-evidence/compiler-first.ssa"
-          "$RUNNER_TEMP/chain/third/compiler" emit-qbe compiler/gate4/src/compiler.trb \
+          "$RUNNER_TEMP/chain/fifth/compiler" emit-qbe compiler/gate4/src/compiler.trb \
             > "$RUNNER_TEMP/build-evidence/compiler-second.ssa"
           cmp \
             "$RUNNER_TEMP/build-evidence/compiler-first.ssa" \
             "$RUNNER_TEMP/build-evidence/compiler-second.ssa"
           {
             printf 'profile=%s\n' "$PROFILE"
-            printf 'first_size=%s\n' "$(wc -c < "$RUNNER_TEMP/chain/first/compiler" | tr -d ' ')"
-            printf 'second_size=%s\n' "$(wc -c < "$RUNNER_TEMP/chain/second/compiler" | tr -d ' ')"
-            printf 'third_size=%s\n' "$(wc -c < "$RUNNER_TEMP/chain/third/compiler" | tr -d ' ')"
+            printf 'setup_first_size=%s\n' "$(wc -c < "$RUNNER_TEMP/chain/first/compiler" | tr -d ' ')"
+            printf 'setup_current_runtime_size=%s\n' "$(wc -c < "$RUNNER_TEMP/chain/second/compiler" | tr -d ' ')"
+            printf 'b2_size=%s\n' "$(wc -c < "$RUNNER_TEMP/chain/third/compiler" | tr -d ' ')"
+            printf 'b3_size=%s\n' "$(wc -c < "$RUNNER_TEMP/chain/fourth/compiler" | tr -d ' ')"
+            printf 'b4_size=%s\n' "$(wc -c < "$RUNNER_TEMP/chain/fifth/compiler" | tr -d ' ')"
           } > "$RUNNER_TEMP/build-evidence/chain.txt"
           if command -v sha256sum > /dev/null 2>&1; then
             sha256sum \
-              "$RUNNER_TEMP/chain/second/compiler" \
               "$RUNNER_TEMP/chain/third/compiler" \
+              "$RUNNER_TEMP/chain/fourth/compiler" \
+              "$RUNNER_TEMP/chain/fifth/compiler" \
               "$RUNNER_TEMP/build-evidence/compiler-first.ssa" \
               > "$RUNNER_TEMP/build-evidence/SHA256SUMS"
           else
             shasum -a 256 \
-              "$RUNNER_TEMP/chain/second/compiler" \
               "$RUNNER_TEMP/chain/third/compiler" \
+              "$RUNNER_TEMP/chain/fourth/compiler" \
+              "$RUNNER_TEMP/chain/fifth/compiler" \
               "$RUNNER_TEMP/build-evidence/compiler-first.ssa" \
               > "$RUNNER_TEMP/build-evidence/SHA256SUMS"
           fi
@@ -181,7 +198,7 @@ jobs:
         run: |
           /bin/sh tools/runtime-worker-soak/runtime-worker-soak.sh \
             smoke \
-            "$RUNNER_TEMP/chain/third/compiler" \
+            "$RUNNER_TEMP/chain/fifth/compiler" \
             "${{ steps.qbe.outputs.path }}" \
             /usr/bin/cc \
             "$RUNNER_TEMP/trb" \
@@ -194,7 +211,7 @@ jobs:
         run: |
           /bin/sh tools/runtime-worker-soak/runtime-worker-soak.sh \
             asan \
-            "$RUNNER_TEMP/chain/third/compiler" \
+            "$RUNNER_TEMP/chain/fifth/compiler" \
             "${{ steps.qbe.outputs.path }}" \
             /usr/bin/clang \
             - \
@@ -207,7 +224,7 @@ jobs:
         run: |
           /bin/sh tools/runtime-worker-soak/runtime-worker-soak.sh \
             valgrind \
-            "$RUNNER_TEMP/chain/third/compiler" \
+            "$RUNNER_TEMP/chain/fifth/compiler" \
             "${{ steps.qbe.outputs.path }}" \
             /usr/bin/cc \
             - \
@@ -220,7 +237,7 @@ jobs:
         run: |
           /bin/sh tools/runtime-worker-soak/runtime-worker-soak.sh \
             formal \
-            "$RUNNER_TEMP/chain/third/compiler" \
+            "$RUNNER_TEMP/chain/fifth/compiler" \
             "${{ steps.qbe.outputs.path }}" \
             /usr/bin/cc \
             "$RUNNER_TEMP/trb" \
