@@ -313,7 +313,7 @@ export TMPDIR=/tmp
 	printf 'output_policy=deleted-before-every-observation\n'
 	printf 'root_filesystem=read-only\n'
 	printf 'home_filesystem=isolated-overlay\n'
-	printf 'tmp_filesystem=isolated-overlay\n'
+	printf 'tmp_filesystem=benchexec-default-hidden\n'
 	printf 'writable_workspace=%s\n' "$workspace"
 	printf 'source_sha256=%s\n' "$(sha256 "$source")"
 	printf 'expected_sha256=%s\n' "$(sha256 "$expected")"
@@ -403,7 +403,6 @@ while test "$round" -le "$total_rounds"; do
 					--cores "$cores" \
 					--read-only-dir / \
 					--overlay-dir /home \
-					--overlay-dir /tmp \
 					--full-access-dir "$workspace" \
 					--output "$observation/run.log" \
 					-- "$native_compiler" build "$source" \
@@ -419,7 +418,6 @@ while test "$round" -le "$total_rounds"; do
 					--cores "$cores" \
 					--read-only-dir / \
 					--overlay-dir /home \
-					--overlay-dir /tmp \
 					--full-access-dir "$workspace" \
 					--output "$observation/run.log" \
 					-- "$reference_trb" build --compile --config "$config" --outfile "$program"

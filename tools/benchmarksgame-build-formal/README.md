@@ -16,8 +16,8 @@ It does not contain a performance result.
 - two warmup rounds followed by eleven retained alternating rounds;
 - persistent, explicit Go build/module caches populated by the warmups;
 - a deleted output and Linux page-cache reset before every observation; and
-- read-only `/`, isolated `/home` and `/tmp`, and one writable measurement
-  workspace.
+- read-only `/`, an isolated `/home`, BenchExec's default hidden writable
+  temporary directory, and one writable measurement workspace.
 
 Each observation retains the raw BenchExec log and metrics, build artifact
 size/hash, and an untimed post-build correctness result. A failed build,
