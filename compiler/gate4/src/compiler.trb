@@ -1024,13 +1024,15 @@ def gate4_emit_label(mut context: Gate4EmitContext): String
 end
 
 def gate4_take_inline_budget(mut context: Gate4EmitContext): Boolean
+	# Keep lexical-loop capacity independent from the bounded scalar-helper reserve.
+	mut budget_index := 0
 	if context.loop_depth[0] <= 0
+		budget_index = 1
+	end
+	if context.inline_budget[budget_index] <= 0
 		return false
 	end
-	if context.inline_budget[0] <= 0
-		return false
-	end
-	context.inline_budget[0] = context.inline_budget[0] - 1
+	context.inline_budget[budget_index] = context.inline_budget[budget_index] - 1
 	return true
 end
 
@@ -2553,12 +2555,14 @@ def gate4_emit_qbe(mut state: Gate4Compiler): Gate4Output
 	gate4_emit_record_descriptors(state, output)
 	compiler_runtime := gate4_compiler_entry_function(state) >= 0
 	gate4_emit_runtime(output, compiler_runtime)
-	mut inline_budget := [0]
+	mut inline_budget := [0, 0]
 	if state.function_count[0] <= 32
 		inline_budget[0] = 64
+		inline_budget[1] = 16
 	else
 		if state.function_count[0] <= 96
 			inline_budget[0] = 32
+			inline_budget[1] = 8
 		end
 	end
 	mut function_index := 0

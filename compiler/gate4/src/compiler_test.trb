@@ -1147,6 +1147,32 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_load_string(arity_state.diagnostic_messages, 0)).to_equal("call argument count does not match Process")
 	end
 
+	test("inlines bounded scalar helpers outside lexical loops") do
+		source := "def scalar(value: Integer): Integer\n\tsum := value + 1\n\tproduct := sum * 2\n\treturn product / 2\nend\n\ndef main()\n\tmut values: Array<Integer> := [0]\n\tmut index := 0\n\twhile index < 1\n\t\tvalues[0] = scalar(index)\n\t\tindex += 1\n\tend\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		qbe := gate4_output_source(gate4_emit_qbe(state))
+		expect(qbe.include?("call $g4_integer_add")).to_be_false()
+		expect(qbe.include?("call $g4_integer_multiply")).to_be_false()
+		expect(qbe.include?("call $g4_integer_divide")).to_be_false()
+		expect(qbe.include?("call $g4_array_address")).to_be_false()
+	end
+
+	test("keeps the loop reserve independent when the non-loop reserve is exhausted") do
+		source := "def scalar(value: Integer): Integer\n\tmut result := value\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\treturn result\nend\n\ndef main()\n\tmut values: Array<Integer> := [0]\n\tmut index := 0\n\twhile index < 1\n\t\tvalues[0] = scalar(index)\n\t\tindex += 1\n\tend\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		qbe := gate4_output_source(gate4_emit_qbe(state))
+		expect(qbe.include?("call $g4_integer_add")).to_be_true()
+		expect(qbe.include?("call $g4_array_address")).to_be_false()
+	end
+
 	test("emits direct binary64 cells for Float Arrays") do
 		source := "record Floats\n\tvalues: Array<Float>\nend\n\ndef carry(values: Array<Float>): Array<Float>\n\treturn values\nend\n\ndef main()\n\tmut values := [1, 2.5]\n\tvalues.push(3)\n\tvalues[0] += 0.5\n\tbox := Floats.new(values: values)\n\tresult := carry(box.values)\n\tvalue := result[- 1]\n\treturn\nend\n"
 		mut state := gate4_compiler_new(source.size() + 1)
