@@ -152,6 +152,23 @@ awk -F '\t' '
 test "$(awk -F '\t' '$2 == "walltime" { print $5 }' "$test_root/pass-evidence/evaluation.tsv")" = 0.750000 ||
 	fail "wall-time ratio differs"
 
+fannkuch_expected=$test_root/fannkuch-expected.txt
+printf 'fannkuch-redux-output\n' > "$fannkuch_expected"
+fannkuch_catalog=$test_root/fannkuch-catalog.tsv
+printf 'case\tcandidate\tcommand\tinput\texpected\n' > "$fannkuch_catalog"
+printf 'fannkuch-redux\tbaseline\t%s\tfannkuch-redux\t%s\n' \
+	"$baseline_program" "$fannkuch_expected" >> "$fannkuch_catalog"
+printf 'fannkuch-redux\tcandidate\t%s\tfannkuch-redux\t%s\n' \
+	"$candidate_program" "$fannkuch_expected" >> "$fannkuch_catalog"
+/bin/sh "$script_directory/runtime-controller.sh" \
+	test "$fake_runexec" "$fannkuch_catalog" fannkuch-redux 0 "$cache_control" \
+	"$test_root/fannkuch-workspace" "$test_root/fannkuch-evidence" \
+	> "$test_root/fannkuch.stdout" 2> "$test_root/fannkuch.stderr"
+test "$(cat "$test_root/fannkuch.stdout")" = 'native-runtime-ab: fannkuch-redux passed'
+test ! -s "$test_root/fannkuch.stderr" || fail "fannkuch controller wrote stderr"
+test "$(awk -F= '$1 == "maximum_candidate_ratio" { print $2 }' "$test_root/fannkuch-evidence/environment.txt")" = 0.95 ||
+	fail "fannkuch threshold differs"
+
 worker_expected=$test_root/worker-expected.txt
 printf 'native-worker-phase\nnative-worker-ok\n' > "$worker_expected"
 for worker_candidate in baseline candidate typerb-go; do

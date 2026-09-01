@@ -1496,6 +1496,65 @@ describe("Gate 4 TypeRB frontend") do
 		expect(call_qbe.include?("%root_capacity =l add %temporary_roots, 1")).to_be_true()
 	end
 
+	test("defers managed root publication until a safe-point-free loop exits") do
+		source := "def observe(value: Array<String>)\n\treturn\nend\n\ndef carry(limit: Integer): String\n\tmut values: Array<String> := []\n\tvalues.push(\"kept\")\n\tmut index := 0\n\twhile index < limit\n\t\tindex += 1\n\tend\n\tvalues.push(\"after\")\n\treturn values[0]\nend\n\ndef call_in_loop(limit: Integer): String\n\tmut values: Array<String> := [\"kept\"]\n\tmut index := 0\n\twhile index < limit\n\t\tobserve(values)\n\t\tindex += 1\n\tend\n\treturn values[0]\nend\n\ndef main()\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		qbe := gate4_output_source(gate4_emit_qbe(state))
+		expect(qbe.include?("function l $g4f1(l %p0) {\n@start")).to_be_true()
+		expect(qbe.include?("%root_capacity =l add %temporary_roots, 1")).to_be_true()
+		expect(
+			qbe.include?(
+				"@l0\n\t%t7 =l loadl %v2\n\t%t8 =l loadl %v0",
+			),
+		).to_be_true()
+		expect(
+			qbe.include?(
+				"@l2\n\t%t2 =l loadl $g4_gc_temp_data" +
+				"\n\t%t3 =l mul %temporary_roots, 8" +
+				"\n\t%t4 =l add %t2, %t3" +
+				"\n\t%t5 =l loadl %v1" +
+				"\n\tstorel %t5, %t4" +
+				"\n\t%t6 =l add %temporary_roots, 1" +
+				"\n\tstorel %t6, $g4_gc_temp_count" +
+				"\n\t%t16 =l loadl %v1" +
+				"\n\tcall $g4_array_push_paced(l %t16, l $g4s64)",
+			),
+		).to_be_true()
+		expect(
+			qbe.include?(
+				"@l0\n\t%t1 =l loadl $g4_gc_temp_data" +
+				"\n\t%t2 =l mul %temporary_roots, 8" +
+				"\n\t%t3 =l add %t1, %t2" +
+				"\n\t%t4 =l loadl %v1" +
+				"\n\tstorel %t4, %t3" +
+				"\n\t%t5 =l add %temporary_roots, 1" +
+				"\n\tstorel %t5, $g4_gc_temp_count" +
+				"\n\t%t6 =l loadl %v2",
+			),
+		).to_be_true()
+	end
+
+	test("keeps managed root publication at every GC-safe loop header") do
+		source := "def observe_loop_value(value: Array<String>)\n\treturn\nend\n\ndef make_loop_values(): Array<String>\n\treturn [\"made\"]\nend\n\ndef grow_in_loop(limit: Integer): String\n\tmut values: Array<String> := [\"kept\"]\n\tmut index := 0\n\twhile index < limit\n\t\tvalues.push(\"grown\")\n\t\tindex += 1\n\tend\n\treturn values[0]\nend\n\ndef allocate_in_loop(limit: Integer): String\n\tmut values: Array<String> := [\"kept\"]\n\tmut index := 0\n\twhile index < limit\n\t\tmade: Array<String> := []\n\t\tif made.size() > 0\n\t\t\tputs(\"unexpected\")\n\t\tend\n\t\tindex += 1\n\tend\n\treturn values[0]\nend\n\ndef managed_result_in_loop(limit: Integer): String\n\tmut values: Array<String> := [\"kept\"]\n\tmut index := 0\n\twhile index < limit\n\t\tmade := make_loop_values()\n\t\tif made.size() == 0\n\t\t\tputs(\"unexpected\")\n\t\tend\n\t\tindex += 1\n\tend\n\treturn values[0]\nend\n\ndef opaque_call_in_loop(limit: Integer): String\n\tmut values: Array<String> := [\"kept\"]\n\tmut index := 0\n\twhile index < limit\n\t\tobserve_loop_value(values)\n\t\tindex += 1\n\tend\n\treturn values[0]\nend\n\ndef main()\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		qbe := gate4_output_source(gate4_emit_qbe(state))
+		expect(
+			gate4_occurrence_count(qbe, "@l0\n\t%t1 =l loadl $g4_gc_temp_data"),
+		).to_equal(4)
+		expect(qbe.include?("@l1\n\t%t11 =l loadl %v1\n\tcall $g4_array_push_paced")).to_be_true()
+		expect(qbe.include?("@l1\n\t%t11 =l call $g4_array_new")).to_be_true()
+		expect(qbe.include?("@l1\n\t%t11 =l call $g4f1()")).to_be_true()
+		expect(qbe.include?("@l1\n\t%t11 =l loadl %v1\n\tcall $g4f0(l %t11)")).to_be_true()
+	end
+
 	test("reuses two recent Array headers until an explicit invalidation boundary") do
 		mut context := gate4_emit_context_new(16, [64, 16, 2])
 		mut output := gate4_output_new(16, [0, 0, 0, 0])

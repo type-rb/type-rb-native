@@ -91,6 +91,7 @@ record Gate4EmitContext
 	slot_count: Array<Integer>
 	managed_local_high_water: Array<Integer>
 	temporary_roots_used: Array<Integer>
+	gc_safe_point_count: Array<Integer>
 	temporary_count: Array<Integer>
 	label_count: Array<Integer>
 	loop_depth: Array<Integer>
@@ -412,6 +413,7 @@ def gate4_emit_context_new(capacity: Integer, inline_budget: Array<Integer>): Ga
 		slot_count: [0],
 		managed_local_high_water: [0],
 		temporary_roots_used: [0],
+		gc_safe_point_count: [0],
 		temporary_count: [0],
 		label_count: [0],
 		loop_depth: [0],
@@ -427,6 +429,40 @@ def gate4_output_line(mut output: Gate4Output, line: String)
 	index := output.count[0]
 	gate4_store_string(output.lines, index, line)
 	output.count[0] = index + 1
+	return
+end
+
+def gate4_output_insert(mut output: Gate4Output, at: Integer, inserted: Gate4Output)
+	inserted_count := inserted.count[0]
+	if inserted_count == 0
+		return
+	end
+	original_count := output.count[0]
+	mut index := original_count
+	while index > at
+		source := index - 1
+		gate4_store_string(
+			output.lines,
+			source + inserted_count,
+			gate4_load_string(output.lines, source),
+		)
+		index -= 1
+	end
+	index = 0
+	while index < inserted_count
+		gate4_store_string(output.lines, at + index, gate4_load_string(inserted.lines, index))
+		index += 1
+	end
+	output.count[0] = original_count + inserted_count
+	return
+end
+
+def gate4_output_append(mut output: Gate4Output, appended: Gate4Output)
+	mut index := 0
+	while index < appended.count[0]
+		gate4_output_line(output, gate4_load_string(appended.lines, index))
+		index += 1
+	end
 	return
 end
 
@@ -1110,6 +1146,7 @@ def gate4_note_temporary_root(mut context: Gate4EmitContext)
 end
 
 def gate4_note_gc_safe_point(mut context: Gate4EmitContext)
+	context.gc_safe_point_count[0] = context.gc_safe_point_count[0] + 1
 	if context.temporary_roots_used[0] == 1
 		context.temporary_roots_used[0] = 2
 	end
@@ -1268,6 +1305,7 @@ def gate4_emit_root_value(
 	if gate4_type_is_managed(type_name)
 		# Managed results are produced by allocation or by calls whose allocation
 		# behavior is intentionally opaque at this boundary.
+		gate4_note_gc_safe_point(context)
 		context.temporary_roots_used[0] = 2
 	end
 	return
@@ -2820,7 +2858,13 @@ def gate4_emit_block(
 						gate4_invalidate_array_header_cache(context)
 						gate4_output_line(output, "\tjmp " + header)
 						gate4_output_line(output, header)
-						gate4_emit_loop_root_compaction(context, output)
+						mut root_publication := gate4_output_new(
+							context.local_count[0] * 4 + 16,
+							output.runtime_flags,
+						)
+						gate4_emit_loop_root_compaction(context, root_publication)
+						root_publication_at := output.count[0]
+						safe_points_before := context.gc_safe_point_count[0]
 						gate4_advance(position)
 						context.loop_depth[0] = context.loop_depth[0] + 1
 						condition_value := gate4_emit_expression(state, position, context, output, 1, "Boolean")
@@ -2839,6 +2883,11 @@ def gate4_emit_block(
 						gate4_expect(state, position, "end")
 						gate4_finish_statement(state, position)
 						gate4_output_line(output, done)
+						if context.gc_safe_point_count[0] == safe_points_before
+							gate4_output_append(output, root_publication)
+						else
+							gate4_output_insert(output, root_publication_at, root_publication)
+						end
 						gate4_invalidate_array_header_cache(context)
 						context.loop_depth[0] = context.loop_depth[0] - 1
 					else

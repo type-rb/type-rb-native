@@ -35,6 +35,8 @@ The valid cases cover:
 - managed record-field and Array-element aliases retained through owner
   reassignment, lexical-block exit, loop-root compaction, and forced
   collection in `valid/managed-alias-roots.trb`;
+- safe-point-free zero-iteration, nested, and early-return loops followed by
+  collection pressure in `valid/safe-point-free-loop-roots.trb`;
 - managed Array element order, positive and negative indexing, mutation,
   nesting, and forced collection across geometric growth boundaries in
   `valid/managed-array-growth.trb`, with scalar Array growth as a control;
