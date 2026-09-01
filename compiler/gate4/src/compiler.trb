@@ -95,6 +95,8 @@ record Gate4EmitContext
 	label_count: Array<Integer>
 	loop_depth: Array<Integer>
 	inline_budget: Array<Integer>
+	scalar_inline_depth: Array<Integer>
+	scalar_inline_range_failure_used: Array<Integer>
 	array_bounds_failure_used: Array<Integer>
 end
 
@@ -413,6 +415,8 @@ def gate4_emit_context_new(capacity: Integer, inline_budget: Array<Integer>): Ga
 		label_count: [0],
 		loop_depth: [0],
 		inline_budget: inline_budget,
+		scalar_inline_depth: [0],
+		scalar_inline_range_failure_used: [0],
 		array_bounds_failure_used: [0],
 	)
 end
@@ -1277,6 +1281,24 @@ def gate4_take_inline_budget(mut context: Gate4EmitContext): Boolean
 	return true
 end
 
+def gate4_integer_range_failure_label(mut context: Gate4EmitContext): String
+	if context.scalar_inline_depth[0] > 0
+		context.scalar_inline_range_failure_used[0] = 1
+		return "@scalar_inline_integer_range_failure"
+	end
+	return gate4_emit_label(context)
+end
+
+def gate4_emit_integer_range_failure(mut output: Gate4Output, failure: String)
+	if failure == "@scalar_inline_integer_range_failure"
+		return
+	end
+	gate4_output_line(output, failure)
+	gate4_output_line(output, "\tcall $g4_fail(l $g4_integer_range_error, l 45)")
+	gate4_output_line(output, "\thlt")
+	return
+end
+
 def gate4_emit_checked_integer_add(
 		mut context: Gate4EmitContext,
 		mut output: Gate4Output,
@@ -1287,7 +1309,7 @@ def gate4_emit_checked_integer_add(
 	too_high := gate4_emit_temporary(context)
 	too_low := gate4_emit_temporary(context)
 	check_low := gate4_emit_label(context)
-	failure := gate4_emit_label(context)
+	failure := gate4_integer_range_failure_label(context)
 	complete := gate4_emit_label(context)
 	gate4_output_line(output, "\t" + result + " =l add " + left + ", " + right)
 	gate4_output_line(output, "\t" + too_high + " =w csgtl " + result + ", 9007199254740991")
@@ -1295,9 +1317,7 @@ def gate4_emit_checked_integer_add(
 	gate4_output_line(output, check_low)
 	gate4_output_line(output, "\t" + too_low + " =w csltl " + result + ", -9007199254740991")
 	gate4_output_line(output, "\tjnz " + too_low + ", " + failure + ", " + complete)
-	gate4_output_line(output, failure)
-	gate4_output_line(output, "\tcall $g4_fail(l $g4_integer_range_error, l 45)")
-	gate4_output_line(output, "\thlt")
+	gate4_emit_integer_range_failure(output, failure)
 	gate4_output_line(output, complete)
 	return
 end
@@ -1312,7 +1332,7 @@ def gate4_emit_checked_integer_subtract(
 	too_high := gate4_emit_temporary(context)
 	too_low := gate4_emit_temporary(context)
 	check_low := gate4_emit_label(context)
-	failure := gate4_emit_label(context)
+	failure := gate4_integer_range_failure_label(context)
 	complete := gate4_emit_label(context)
 	gate4_output_line(output, "\t" + result + " =l sub " + left + ", " + right)
 	gate4_output_line(output, "\t" + too_high + " =w csgtl " + result + ", 9007199254740991")
@@ -1320,9 +1340,7 @@ def gate4_emit_checked_integer_subtract(
 	gate4_output_line(output, check_low)
 	gate4_output_line(output, "\t" + too_low + " =w csltl " + result + ", -9007199254740991")
 	gate4_output_line(output, "\tjnz " + too_low + ", " + failure + ", " + complete)
-	gate4_output_line(output, failure)
-	gate4_output_line(output, "\tcall $g4_fail(l $g4_integer_range_error, l 45)")
-	gate4_output_line(output, "\thlt")
+	gate4_emit_integer_range_failure(output, failure)
 	gate4_output_line(output, complete)
 	return
 end
@@ -1339,7 +1357,7 @@ def gate4_emit_checked_integer_multiply(
 			too_high := gate4_emit_temporary(context)
 			too_low := gate4_emit_temporary(context)
 			check_low := gate4_emit_label(context)
-			failure := gate4_emit_label(context)
+			failure := gate4_integer_range_failure_label(context)
 			complete := gate4_emit_label(context)
 			gate4_output_line(output, "\t" + result + " =l mul " + left + ", " + right)
 			gate4_output_line(output, "\t" + too_high + " =w csgtl " + result + ", 9007199254740991")
@@ -1347,9 +1365,7 @@ def gate4_emit_checked_integer_multiply(
 			gate4_output_line(output, check_low)
 			gate4_output_line(output, "\t" + too_low + " =w csltl " + result + ", -9007199254740991")
 			gate4_output_line(output, "\tjnz " + too_low + ", " + failure + ", " + complete)
-			gate4_output_line(output, failure)
-			gate4_output_line(output, "\tcall $g4_fail(l $g4_integer_range_error, l 45)")
-			gate4_output_line(output, "\thlt")
+			gate4_emit_integer_range_failure(output, failure)
 			gate4_output_line(output, complete)
 			return
 		end
@@ -1764,6 +1780,8 @@ def gate4_emit_scalar_leaf_inline(
 	): Gate4EmittedValue
 	saved_module := state.active_module[0]
 	saved_local_count := context.local_count[0]
+	saved_inline_depth := context.scalar_inline_depth[0]
+	context.scalar_inline_depth[0] = saved_inline_depth + 1
 	state.active_module[0] = gate4_load_integer(state.function_modules, function_index)
 	parameter_start := gate4_load_integer(state.function_parameter_starts, function_index)
 	parameter_count := gate4_load_integer(state.function_parameter_counts, function_index)
@@ -1798,6 +1816,7 @@ def gate4_emit_scalar_leaf_inline(
 		end
 	end
 	context.local_count[0] = saved_local_count
+	context.scalar_inline_depth[0] = saved_inline_depth
 	state.active_module[0] = saved_module
 	return result
 end
@@ -2862,6 +2881,11 @@ def gate4_emit_function(
 	if context.array_bounds_failure_used[0] == 1
 		gate4_output_line(output, "@array_bounds_failure")
 		gate4_output_line(output, "\tcall $g4_fail(l $g4_bounds_error, l 30)")
+		gate4_output_line(output, "\thlt")
+	end
+	if context.scalar_inline_range_failure_used[0] == 1
+		gate4_output_line(output, "@scalar_inline_integer_range_failure")
+		gate4_output_line(output, "\tcall $g4_fail(l $g4_integer_range_error, l 45)")
 		gate4_output_line(output, "\thlt")
 	end
 	gate4_output_line(output, "@return")
