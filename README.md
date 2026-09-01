@@ -426,6 +426,18 @@ applications become smaller, while every correctness, fixed-point, build,
 memory, compactness, and catastrophic limit passes. See the
 [recorded bounded literal Integer-add result](results/2026-09-02-native-bounded-literal-integer-add-linux-arm64/README.md).
 
+The next accepted candidate removes negative-index normalization only for
+Array accesses driven by a narrowly proven zero-based unit-step induction
+local. The unsigned upper-bounds comparison remains, while reassignment,
+non-unit updates, nested control flow, dynamic indices, and ordinary negative
+indexing retain the general path. On the registered `spectral-norm` signal,
+wall and CPU medians improve by 5.00%; `fannkuch-redux` and `n-body` remain
+neutral. The fixed compiler stays below its absolute and relative limits, all
+three applications are byte-neutral or smaller, and every correctness,
+fixed-point, build, memory, compactness, and catastrophic limit passes. See
+the
+[recorded nonnegative loop-index result](results/2026-09-02-native-nonnegative-loop-index-linux-arm64/README.md).
+
 Gate 6N passes every frozen condition for the internal
 `linux-amd64-v0` profile. The exact merged compiler closes a 240,888-byte
 Go-free B2/B3/B4 fixed point, emits byte-identical target-neutral compiler and
@@ -592,6 +604,7 @@ repository.
 - [Formal safe-point-free loop-root result on Linux arm64](results/2026-09-02-native-safe-point-free-loop-roots-linux-arm64/README.md)
 - [Formal bounded Integer-multiply result on Linux arm64](results/2026-09-02-native-bounded-integer-multiply-linux-arm64/README.md)
 - [Formal bounded literal Integer-add result on Linux arm64](results/2026-09-02-native-bounded-literal-integer-add-linux-arm64/README.md)
+- [Formal nonnegative loop-index result on Linux arm64](results/2026-09-02-native-nonnegative-loop-index-linux-arm64/README.md)
 - [Formal static String compactness A/B result on Darwin/Linux arm64](results/2026-08-31-static-string-compactness-darwin-linux-arm64/README.md)
 - [Formal TypeRB backend-pair build controller](tools/benchmarksgame-build-formal/README.md)
 - [Formal Native runtime optimization A/B controller](tools/native-runtime-ab/README.md)

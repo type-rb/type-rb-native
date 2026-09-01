@@ -1277,6 +1277,54 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_occurrence_count(qbe, "call $g4_fail(l $g4_bounds_error")).to_equal(2)
 	end
 
+	test("omits negative Array-index normalization only for proven induction locals") do
+		proven_source := "def main()\n\tmut values: Array<Integer> := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tvalues[index] = values[index] + 1\n\t\tindex += 1\n\tend\n\treturn\nend\n"
+		mut proven := gate4_compiler_new(proven_source.size() + 1)
+		expect(gate4_lex(proven, proven_source)).to_be_true()
+		expect(gate4_parse_module(proven, 0, proven.entry_module[0])).to_be_true()
+		expect(gate4_resolve(proven)).to_be_true()
+		expect(gate4_check(proven)).to_be_true()
+		proven_qbe := gate4_output_source(gate4_emit_qbe(proven))
+		expect(gate4_occurrence_count(proven_qbe, " =l sar ")).to_equal(0)
+		expect(gate4_occurrence_count(proven_qbe, " =w cultl ")).to_equal(2)
+
+		reassigned_source := "def main()\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tvalue := values[index]\n\t\tindex =- 1\n\tend\n\treturn\nend\n"
+		mut reassigned := gate4_compiler_new(reassigned_source.size() + 1)
+		expect(gate4_lex(reassigned, reassigned_source)).to_be_true()
+		expect(gate4_parse_module(reassigned, 0, reassigned.entry_module[0])).to_be_true()
+		expect(gate4_resolve(reassigned)).to_be_true()
+		expect(gate4_check(reassigned)).to_be_true()
+		reassigned_qbe := gate4_output_source(gate4_emit_qbe(reassigned))
+		expect(gate4_occurrence_count(reassigned_qbe, " =l sar ")).to_equal(1)
+
+		non_unit_source := "def main()\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tvalue := values[index]\n\t\tindex += 2\n\tend\n\treturn\nend\n"
+		mut non_unit := gate4_compiler_new(non_unit_source.size() + 1)
+		expect(gate4_lex(non_unit, non_unit_source)).to_be_true()
+		expect(gate4_parse_module(non_unit, 0, non_unit.entry_module[0])).to_be_true()
+		expect(gate4_resolve(non_unit)).to_be_true()
+		expect(gate4_check(non_unit)).to_be_true()
+		non_unit_qbe := gate4_output_source(gate4_emit_qbe(non_unit))
+		expect(gate4_occurrence_count(non_unit_qbe, " =l sar ")).to_equal(1)
+
+		nested_source := "def main()\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tif index == 0\n\t\t\tvalue := values[index]\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
+		mut nested := gate4_compiler_new(nested_source.size() + 1)
+		expect(gate4_lex(nested, nested_source)).to_be_true()
+		expect(gate4_parse_module(nested, 0, nested.entry_module[0])).to_be_true()
+		expect(gate4_resolve(nested)).to_be_true()
+		expect(gate4_check(nested)).to_be_true()
+		nested_qbe := gate4_output_source(gate4_emit_qbe(nested))
+		expect(gate4_occurrence_count(nested_qbe, " =l sar ")).to_equal(1)
+
+		function_scoped_source := "def first(values: Array<Integer>)\n\tmut index := 0\n\twhile index < values.size()\n\t\tvalue := values[index]\n\t\tindex += 1\n\tend\n\treturn\nend\n\ndef unrelated()\n\tmut index := 0\n\tindex =- 1\n\treturn\nend\n\ndef main()\n\tfirst([10, 20])\n\treturn\nend\n"
+		mut function_scoped := gate4_compiler_new(function_scoped_source.size() + 1)
+		expect(gate4_lex(function_scoped, function_scoped_source)).to_be_true()
+		expect(gate4_parse_module(function_scoped, 0, function_scoped.entry_module[0])).to_be_true()
+		expect(gate4_resolve(function_scoped)).to_be_true()
+		expect(gate4_check(function_scoped)).to_be_true()
+		function_scoped_qbe := gate4_output_source(gate4_emit_qbe(function_scoped))
+		expect(gate4_occurrence_count(function_scoped_qbe, " =l sar ")).to_equal(0)
+	end
+
 	test("falls back to shared Array addressing after the loop budget") do
 		mut source := "def main()\n\tvalues := [1]\n\tmut index := 0\n\tmut value := 0\n\twhile index < 1\n"
 		mut access_count := 0
@@ -1616,7 +1664,7 @@ describe("Gate 4 TypeRB frontend") do
 	end
 
 	test("reuses two recent Array headers until an explicit invalidation boundary") do
-		mut context := gate4_emit_context_new(16, [64, 16, 2])
+		mut context := gate4_emit_context_new(16, [64, 16, 2], 16)
 		mut output := gate4_output_new(16, [0, 0, 0, 0])
 		context.loop_depth[0] = 1
 		mut local_index := 0
@@ -1657,7 +1705,7 @@ describe("Gate 4 TypeRB frontend") do
 	end
 
 	test("keeps Array header loads local outside owned-managed loops") do
-		mut context := gate4_emit_context_new(16, [64, 16, 2])
+		mut context := gate4_emit_context_new(16, [64, 16, 2], 16)
 		mut output := gate4_output_new(16, [0, 0, 0, 0])
 		first_length := gate4_emit_array_header(context, output, "%first", "", 1, "8", "%la0", "%l0")
 		second_length := gate4_emit_array_header(context, output, "%second", "", 1, "8", "%la1", "%l1")

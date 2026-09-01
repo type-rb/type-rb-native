@@ -308,6 +308,25 @@ pass. This candidate becomes the next accepted Native baseline. The next
 complete cross-language snapshot will measure the remaining distance to the
 minimum objective of matching or beating Pure Go.
 
+The following contract, registered by
+[issue #188](https://github.com/type-rb/type-rb-native/issues/188), targets
+negative-index normalization in hot Array loops. It recognizes only a mutable
+Integer local initialized from zero immediately before a non-nested loop whose
+only assignments to that local are exact unit increments. Eligible inline
+Array accesses may omit the three negative-index normalization operations but
+must retain the unsigned upper-bounds comparison and failure path. The
+dedicated formal contract requires at least a 2% `spectral-norm` wall-time and
+CPU-time improvement without relaxing the default 5% signal floor used by
+other optimization contracts. Negative indexing and every unproved index keep
+the general path. Its
+[formal result](../results/2026-09-02-native-nonnegative-loop-index-linux-arm64/README.md)
+passes every frozen condition. `spectral-norm` wall and CPU medians improve by
+5.00%; `fannkuch-redux` and `n-body` remain neutral; application artifacts are
+byte-neutral or smaller; and the fixed compiler remains within both size
+limits. This candidate becomes the next accepted Native baseline. A fresh
+complete cross-language snapshot will measure the remaining distance to the
+minimum objective of matching or beating Pure Go.
+
 Builds use release optimization without unsafe fast-math substitutions: C and
 C++ use `-O3`, Go uses `go build -trimpath`, Rust uses `rustc -C opt-level=3`,
 and Java uses `javac` followed by the same recorded JVM for every run. The
