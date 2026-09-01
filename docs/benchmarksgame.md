@@ -294,6 +294,20 @@ all three applications. This candidate becomes the next accepted Native
 baseline. The next complete cross-language snapshot will measure the remaining
 distance to the minimum objective of matching or beating Pure Go.
 
+The next contract, registered by
+[issue #186](https://github.com/type-rb/type-rb-native/issues/186), removes the
+impossible lower portable-range check from one already budgeted checked
+Integer addition when either emitted operand is an unsigned decimal literal
+no greater than 1024. Its
+[formal result](../results/2026-09-02-native-bounded-literal-integer-add-linux-arm64/README.md)
+passes every frozen condition. Median wall time improves by 2.85% for
+`fannkuch-redux`, 1.26% for `n-body`, and 9.25% for `spectral-norm`; the fixed
+compiler and every registered application shrink; memory is neutral; and all
+correctness, fixed-point, build-cost, compactness, and catastrophic limits
+pass. This candidate becomes the next accepted Native baseline. The next
+complete cross-language snapshot will measure the remaining distance to the
+minimum objective of matching or beating Pure Go.
+
 Builds use release optimization without unsafe fast-math substitutions: C and
 C++ use `-O3`, Go uses `go build -trimpath`, Rust uses `rustc -C opt-level=3`,
 and Java uses `javac` followed by the same recorded JVM for every run. The
