@@ -414,7 +414,7 @@ def gate4_emit_context_new(capacity: Integer, inline_budget: Array<Integer>): Ga
 		temporary_roots_used: [0],
 		temporary_count: [0],
 		label_count: [0],
-		loop_depth: [0],
+		loop_depth: [0, - 1],
 		inline_budget: inline_budget,
 		scalar_inline_depth: [0],
 		scalar_inline_range_failure_used: [0],
@@ -1444,6 +1444,7 @@ end
 def gate4_invalidate_array_header_cache(mut context: Gate4EmitContext)
 	context.array_header_cache[0][0] = ""
 	context.array_header_cache[1][0] = ""
+	context.loop_depth[1] =- 1
 	return
 end
 
@@ -2487,6 +2488,37 @@ def gate4_emit_primary(
 		end
 		found_local := gate4_emit_find_local(context, name)
 		if found_local >= 0
+			slot := gate4_load_string(context.local_slots, found_local)
+			mut cached_headers := false
+			if context.loop_depth[1] == found_local
+				if context.array_header_cache[0][0] == slot
+					if gate4_token_is(state, position[0], ".")
+						if gate4_token_is(state, position[0] + 1, "size")
+							if gate4_token_is(state, position[0] + 2, "(")
+								cached_headers = true
+							end
+						end
+					else
+						if gate4_token_is(state, position[0], "[")
+							if context.loop_depth[0] > 0
+								if context.inline_budget[0] > 0
+									cached_headers = true
+								end
+							end
+						end
+					end
+				end
+			end
+			if cached_headers
+				return gate4_emitted_value(
+					"",
+					gate4_load_string(context.local_types, found_local),
+					0,
+					name,
+					gate4_load_integer(context.local_mutable, found_local),
+					slot,
+				)
+			end
 			return gate4_emit_loaded_local(context, output, found_local)
 		end
 		standard_package := gate4_standard_package_import(state, state.active_module[0], name)
@@ -2880,6 +2912,7 @@ def gate4_emit_block(
 						gate4_invalidate_array_header_cache(context)
 						array_local := gate4_loop_array_header_local(state, context, position[0])
 						if array_local >= 0
+							context.loop_depth[1] = array_local
 							key := gate4_load_string(context.local_slots, array_local)
 							array := gate4_emit_temporary(context)
 							gate4_output_line(output, "\t" + array + " =l loadl " + key)
