@@ -48,7 +48,10 @@ formal modes also require the pinned reference TypeRB compiler:
 
 The CI workflow runs smoke on Darwin and Linux arm64, proves an adjacent Native
 compiler fixed point, compares target-neutral compiler and workload QBE across
-targets, and enforces the 550,000-byte combined stripped compiler limit. A
+targets, and enforces 300,000-byte Darwin, 260,000-byte Linux, and 560,000-byte
+combined stripped compiler limits. The Darwin allowance accounts for the
+platform's 16 KiB executable-segment granularity while keeping the portable
+compiler source and Linux artifact under the stricter fixed-point bound. A
 manual formal run additionally executes the sanitizer, Memcheck, and long-lived
 Linux process oracles. Every Linux setup and ordinary compiler generation is
 process-traced; the verifier requires the exact Native compiler, QBE, C driver,
