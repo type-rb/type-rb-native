@@ -53,6 +53,12 @@ results. The same experiment limits the fixed-point Linux arm64 compiler to
 time, and peak RSS to 1.05x; and n-body QBE plus executables to 1.01x. The two
 control applications must remain byte-identical.
 
+Both compiler revisions are closed from their exact source trees, while one
+candidate-revision bootstrap observer measures both chains. This keeps the
+wall, CPU, and RSS columns identical across the A/B pair even when the frozen
+baseline predates a newly added evidence column; the observer does not replace
+either compiler or source tree.
+
 Each worker case is registered by its linked public experiment and also
 compares candidate wall and CPU medians with an exact optimized-Go control.
 All three programs use the same authored TypeRB source. The temporary-root
