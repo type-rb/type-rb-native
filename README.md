@@ -416,6 +416,16 @@ correctness, fixed-point, build, memory, compactness, and catastrophic limit
 passes. See the
 [recorded bounded Integer-multiply result](results/2026-09-02-native-bounded-integer-multiply-linux-arm64/README.md).
 
+The next accepted candidate specializes one already budgeted checked Integer
+addition when either emitted operand is an unsigned decimal literal no greater
+than 1024. It canonicalizes that literal to the right and removes only the
+lower portable-range check that cannot fail; the upper check and all general
+paths remain. Median wall time improves by 2.85% for `fannkuch-redux`, 1.26%
+for `n-body`, and 9.25% for `spectral-norm`. The fixed compiler and all three
+applications become smaller, while every correctness, fixed-point, build,
+memory, compactness, and catastrophic limit passes. See the
+[recorded bounded literal Integer-add result](results/2026-09-02-native-bounded-literal-integer-add-linux-arm64/README.md).
+
 Gate 6N passes every frozen condition for the internal
 `linux-amd64-v0` profile. The exact merged compiler closes a 240,888-byte
 Go-free B2/B3/B4 fixed point, emits byte-identical target-neutral compiler and
@@ -581,6 +591,7 @@ repository.
 - [Rejected loop-invariant Array-length result on Linux arm64](results/2026-09-01-rejected-loop-invariant-array-length-linux-arm64/README.md)
 - [Formal safe-point-free loop-root result on Linux arm64](results/2026-09-02-native-safe-point-free-loop-roots-linux-arm64/README.md)
 - [Formal bounded Integer-multiply result on Linux arm64](results/2026-09-02-native-bounded-integer-multiply-linux-arm64/README.md)
+- [Formal bounded literal Integer-add result on Linux arm64](results/2026-09-02-native-bounded-literal-integer-add-linux-arm64/README.md)
 - [Formal static String compactness A/B result on Darwin/Linux arm64](results/2026-08-31-static-string-compactness-darwin-linux-arm64/README.md)
 - [Formal TypeRB backend-pair build controller](tools/benchmarksgame-build-formal/README.md)
 - [Formal Native runtime optimization A/B controller](tools/native-runtime-ab/README.md)

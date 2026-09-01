@@ -1210,6 +1210,48 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_occurrence_count(qbe, "%right_zero =w ceql %right, 0")).to_equal(1)
 	end
 
+	test("omits only the impossible lower check for bounded nonnegative literal addition") do
+		source := "def add_right(value: Integer): Integer\n\treturn value + 1\nend\n\ndef add_left(value: Integer): Integer\n\treturn 1 + value\nend\n\ndef add_limit(value: Integer): Integer\n\treturn value + 1024\nend\n\ndef add_large(value: Integer): Integer\n\treturn value + 1025\nend\n\ndef add_dynamic(left: Integer, right: Integer): Integer\n\treturn left + right\nend\n\ndef main()\n\tfirst := add_right(1)\n\tsecond := add_left(first)\n\tthird := add_limit(second)\n\tfourth := add_large(third)\n\tvalue := add_dynamic(fourth, 1)\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		qbe := gate4_output_source(gate4_emit_qbe(state))
+		expect(
+			gate4_occurrence_count(
+				qbe,
+				"%t1 =l add %t0, 1\n" +
+				"\t%t2 =w csgtl %t1, 9007199254740991\n" +
+				"\tjnz %t2, @l0, @l1",
+			),
+		).to_equal(2)
+		expect(
+			qbe.include?(
+				"%t1 =l add %t0, 1024\n" +
+				"\t%t2 =w csgtl %t1, 9007199254740991\n" +
+				"\tjnz %t2, @l0, @l1\n" +
+				"@l0\n\tcall $g4_fail",
+			),
+		).to_be_true()
+		expect(
+			qbe.include?(
+				"%t1 =l add %t0, 1025\n" +
+				"\t%t2 =w csgtl %t1, 9007199254740991\n" +
+				"\tjnz %t2, @l0, @l2\n" +
+				"@l2\n\t%t3 =w csltl %t1, -9007199254740991",
+			),
+		).to_be_true()
+		expect(
+			qbe.include?(
+				"%t2 =l add %t0, %t1\n" +
+				"\t%t3 =w csgtl %t2, 9007199254740991\n" +
+				"\tjnz %t3, @l0, @l2\n" +
+				"@l2\n\t%t4 =w csltl %t2, -9007199254740991",
+			),
+		).to_be_true()
+	end
+
 	test("keeps the loop reserve independent when the non-loop reserve is exhausted") do
 		source := "def scalar(value: Integer): Integer\n\tmut result := value\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\treturn result\nend\n\ndef main()\n\tmut values: Array<Integer> := [0]\n\tmut index := 0\n\twhile index < 1\n\t\tvalues[0] = scalar(index)\n\t\tindex += 1\n\tend\n\treturn\nend\n"
 		mut state := gate4_compiler_new(source.size() + 1)
@@ -1279,7 +1321,7 @@ describe("Gate 4 TypeRB frontend") do
 		expect(eligible_qbe.include?("@scalar_inline_integer_range_failure")).to_be_true()
 		expect(
 			gate4_occurrence_count(eligible_qbe, "@scalar_inline_integer_range_failure"),
-		).to_equal(5)
+		).to_equal(4)
 
 		non_loop_source := "def scalar(value: Integer): Integer\n\treturn value + 1\nend\n\ndef main()\n\tvalue := scalar(1)\n\treturn\nend\n"
 		mut non_loop := gate4_compiler_new(non_loop_source.size() + 1)
@@ -1528,26 +1570,26 @@ describe("Gate 4 TypeRB frontend") do
 		).to_be_true()
 		expect(
 			qbe.include?(
-				"@l2\n\t%t11 =l loadl $g4_gc_temp_data" +
-				"\n\t%t12 =l mul %temporary_roots, 8" +
-				"\n\t%t13 =l add %t11, %t12" +
-				"\n\t%t14 =l loadl %v1" +
-				"\n\tstorel %t14, %t13" +
-				"\n\t%t15 =l add %temporary_roots, 1" +
-				"\n\tstorel %t15, $g4_gc_temp_count" +
-				"\n\t%t16 =l loadl %v1" +
-				"\n\tcall $g4_array_push_paced(l %t16, l $g4s64)",
+				"@l2\n\t%t10 =l loadl $g4_gc_temp_data" +
+				"\n\t%t11 =l mul %temporary_roots, 8" +
+				"\n\t%t12 =l add %t10, %t11" +
+				"\n\t%t13 =l loadl %v1" +
+				"\n\tstorel %t13, %t12" +
+				"\n\t%t14 =l add %temporary_roots, 1" +
+				"\n\tstorel %t14, $g4_gc_temp_count" +
+				"\n\t%t15 =l loadl %v1" +
+				"\n\tcall $g4_array_push_paced(l %t15, l $g4s64)",
 			),
 		).to_be_true()
 		expect(
 			qbe.include?(
-				"@l0\n\t%t11 =l loadl $g4_gc_temp_data" +
-				"\n\t%t12 =l mul %temporary_roots, 8" +
-				"\n\t%t13 =l add %t11, %t12" +
-				"\n\t%t14 =l loadl %v1" +
-				"\n\tstorel %t14, %t13" +
-				"\n\t%t15 =l add %temporary_roots, 1" +
-				"\n\tstorel %t15, $g4_gc_temp_count" +
+				"@l0\n\t%t10 =l loadl $g4_gc_temp_data" +
+				"\n\t%t11 =l mul %temporary_roots, 8" +
+				"\n\t%t12 =l add %t10, %t11" +
+				"\n\t%t13 =l loadl %v1" +
+				"\n\tstorel %t13, %t12" +
+				"\n\t%t14 =l add %temporary_roots, 1" +
+				"\n\tstorel %t14, $g4_gc_temp_count" +
 				"\n\t%t1 =l loadl %v2",
 			),
 		).to_be_true()
@@ -1562,10 +1604,10 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_check(state)).to_be_true()
 		qbe := gate4_output_source(gate4_emit_qbe(state))
 		expect(
-			gate4_occurrence_count(qbe, "@l0\n\t%t11 =l loadl $g4_gc_temp_data"),
+			gate4_occurrence_count(qbe, "@l0\n\t%t10 =l loadl $g4_gc_temp_data"),
 		).to_equal(2)
 		expect(
-			gate4_occurrence_count(qbe, "@l0\n\t%t17 =l loadl $g4_gc_temp_data"),
+			gate4_occurrence_count(qbe, "@l0\n\t%t16 =l loadl $g4_gc_temp_data"),
 		).to_equal(2)
 		expect(qbe.include?("@l1\n\t%t6 =l loadl %v1\n\tcall $g4_array_push_paced")).to_be_true()
 		expect(qbe.include?("@l1\n\t%t6 =l call $g4_array_new")).to_be_true()
