@@ -1463,6 +1463,39 @@ describe("Gate 4 TypeRB frontend") do
 		expect(qbe.include?("\tcall $g4_gc_temp_push(l %return_result)")).to_be_true()
 	end
 
+	test("omits managed root publication only without GC safe points") do
+		prefix := "record FloatBucket\n\tvalues: Array<Float>\nend\n\n"
+		no_safe_point := prefix + "def sum(bucket: FloatBucket): Float\n\tmut values := bucket.values\n\tmut total: Float := 0\n\tmut index := 0\n\twhile index < values.size()\n\t\ttotal += values[index]\n\t\tindex += 1\n\tend\n\treturn total\nend\n\ndef main()\n\treturn\nend\n"
+		mut no_safe_point_state := gate4_compiler_new(no_safe_point.size() + 1)
+		expect(gate4_lex(no_safe_point_state, no_safe_point)).to_be_true()
+		expect(gate4_parse_module(no_safe_point_state, 0, no_safe_point_state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(no_safe_point_state)).to_be_true()
+		expect(gate4_check(no_safe_point_state)).to_be_true()
+		no_safe_point_qbe := gate4_output_source(gate4_emit_qbe(no_safe_point_state))
+		expect(no_safe_point_qbe.include?("%temporary_roots =l loadl $g4_gc_temp_count")).to_be_false()
+		expect(no_safe_point_qbe.include?("%root_capacity =l add %temporary_roots, 1")).to_be_false()
+
+		allocation := prefix + "def append(bucket: FloatBucket)\n\tmut values := bucket.values\n\tmut index := 0\n\twhile index < 1\n\t\tvalues.push(1.0)\n\t\tindex += 1\n\tend\n\treturn\nend\n\ndef main()\n\treturn\nend\n"
+		mut allocation_state := gate4_compiler_new(allocation.size() + 1)
+		expect(gate4_lex(allocation_state, allocation)).to_be_true()
+		expect(gate4_parse_module(allocation_state, 0, allocation_state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(allocation_state)).to_be_true()
+		expect(gate4_check(allocation_state)).to_be_true()
+		allocation_qbe := gate4_output_source(gate4_emit_qbe(allocation_state))
+		expect(allocation_qbe.include?("%temporary_roots =l loadl $g4_gc_temp_count")).to_be_true()
+		expect(allocation_qbe.include?("%root_capacity =l add %temporary_roots, 1")).to_be_true()
+
+		call := prefix + "def observe(_value: Float)\n\treturn\nend\n\ndef visit(bucket: FloatBucket)\n\tmut values := bucket.values\n\tmut index := 0\n\twhile index < values.size()\n\t\tobserve(values[index])\n\t\tindex += 1\n\tend\n\treturn\nend\n\ndef main()\n\treturn\nend\n"
+		mut call_state := gate4_compiler_new(call.size() + 1)
+		expect(gate4_lex(call_state, call)).to_be_true()
+		expect(gate4_parse_module(call_state, 0, call_state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(call_state)).to_be_true()
+		expect(gate4_check(call_state)).to_be_true()
+		call_qbe := gate4_output_source(gate4_emit_qbe(call_state))
+		expect(call_qbe.include?("%temporary_roots =l loadl $g4_gc_temp_count")).to_be_true()
+		expect(call_qbe.include?("%root_capacity =l add %temporary_roots, 1")).to_be_true()
+	end
+
 	test("emits an opt-in sampled managed-runtime trace without changing stats v1") do
 		source := "def main()\n\tmut value := \"seed\"\n\tmut index := 0\n\twhile index < 2\n\t\tvalue += \"x\"\n\t\tindex += 1\n\tend\n\tputs(value)\n\treturn\nend\n"
 		mut state := gate4_compiler_new(source.size() + 1)
