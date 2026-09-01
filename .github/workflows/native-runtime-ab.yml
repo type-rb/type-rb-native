@@ -1,4 +1,4 @@
-name: Native runtime optimization A/B
+name: Safe-point and Array-header A/B
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ permissions:
   contents: read
 
 env:
-  BASELINE_REVISION: 769233b05203937e9f8986b7a8558df6e2f98c5c
+  BASELINE_REVISION: c562d56b8fdafcd7b9a679eeac58932b3023267d
   RELEASE_TAG: bootstrap-seed-2026-08-30
   SEED_SHA256: b4307c244edc9e4da620f2a7c1b03a733e575da032efefae615f9edf75048a37
   QBE_VERSION: "1.3"
@@ -182,7 +182,7 @@ jobs:
             "$(wc -c < "$RUNNER_TEMP/candidate-compiler" | tr -d ' ')" \
             1.03
           candidate_compiler_bytes=$(wc -c < "$RUNNER_TEMP/candidate-compiler" | tr -d ' ')
-          compare compiler_bytes absolute 262000 "$candidate_compiler_bytes" 1.00
+          compare compiler_bytes absolute 255000 "$candidate_compiler_bytes" 1.00
           for stage in b2-b3 b3-b4; do
             compare build_walltime "$stage" \
               "$(metric "$RUNNER_TEMP/baseline-bootstrap-evidence/medians.txt" "$stage" elapsed_seconds)" \
@@ -280,11 +280,6 @@ jobs:
             if test "$case_name" = n-body; then
               qbe_maximum=1.01
               executable_maximum=1.01
-            else
-              cmp "$root/baseline/$case_name/program.ssa" "$root/candidate/$case_name/program.ssa"
-              cmp "$root/baseline/$case_name/program.s" "$root/candidate/$case_name/program.s"
-              cmp "$root/baseline/$case_name/program" "$root/candidate/$case_name/program"
-              cmp "$root/baseline/$case_name/program.stripped" "$root/candidate/$case_name/program.stripped"
             fi
             record_size "$case_name" qbe \
               "$root/baseline/$case_name/program.ssa" \
@@ -360,14 +355,18 @@ jobs:
         env:
           CORE: ${{ steps.host.outputs.core }}
         run: |
+          measurement_failed=0
           for case_name in fannkuch-redux n-body spectral-norm; do
-            /bin/sh tools/native-runtime-ab/runtime-controller.sh \
+            if ! /bin/sh tools/native-runtime-ab/runtime-controller.sh \
               formal "$(command -v runexec)" "$RUNNER_TEMP/catalog.tsv" \
               "$case_name" "$CORE" \
               tools/benchmarksgame-formal/cache-control-linux.sh \
               "$RUNNER_TEMP/runtime-$case_name-workspace" \
-              "$RUNNER_TEMP/runtime-$case_name-evidence"
+              "$RUNNER_TEMP/runtime-$case_name-evidence"; then
+              measurement_failed=1
+            fi
           done
+          test "$measurement_failed" -eq 0
 
       - name: Record exact workflow identities
         if: always()
