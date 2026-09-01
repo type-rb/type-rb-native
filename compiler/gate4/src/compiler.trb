@@ -1977,7 +1977,7 @@ def gate4_emit_direct_call(
 	end
 	if state.function_count[0] <= 32
 		if gate4_scalar_leaf_inline_eligible(state, function_index)
-			gate4_output_line(output, "# gate4 retained scalar call")
+			output.runtime_flags[4] = 1
 		end
 	end
 	if result_type == "Void"
@@ -2784,13 +2784,6 @@ def gate4_emit_function(
 		mut output: Gate4Output,
 		inline_budget: Array<Integer>,
 	)
-	mut marked_scalar_leaf := false
-	if state.function_count[0] <= 32
-		if gate4_scalar_leaf_inline_eligible(state, function_index)
-			marked_scalar_leaf = true
-			gate4_output_line(output, "# gate4 scalar leaf begin")
-		end
-	end
 	state.active_module[0] = gate4_load_integer(state.function_modules, function_index)
 	mut context := gate4_emit_context_new(state.token_count[0] + 1, inline_budget)
 	mut body := gate4_output_new(state.token_count[0] * 8 + 1024, output.runtime_flags)
@@ -2918,9 +2911,6 @@ def gate4_emit_function(
 		gate4_output_line(output, "\tret %return_result")
 	end
 	gate4_output_line(output, "}\n")
-	if marked_scalar_leaf
-		gate4_output_line(output, "# gate4 scalar leaf end")
-	end
 	gate4_reset_temporary_storage()
 	return
 end
@@ -3111,48 +3101,8 @@ def gate4_emit_entry(state: Gate4Compiler, mut output: Gate4Output)
 	return
 end
 
-def gate4_elide_dead_scalar_leaf_functions(
-		state: Gate4Compiler,
-		output: Gate4Output,
-	): Gate4Output
-	if state.function_count[0] > 32
-		return output
-	end
-	mut retained := false
-	mut line_index := 0
-	while line_index < output.count[0]
-		if gate4_load_string(output.lines, line_index) == "# gate4 retained scalar call"
-			retained = true
-		end
-		line_index += 1
-	end
-	mut compact := gate4_output_new(output.count[0] + 1, output.runtime_flags)
-	mut skipping := false
-	line_index = 0
-	while line_index < output.count[0]
-		line := gate4_load_string(output.lines, line_index)
-		if line == "# gate4 scalar leaf begin"
-			if !retained
-				skipping = true
-			end
-		else
-			if line == "# gate4 scalar leaf end"
-				skipping = false
-			else
-				if line != "# gate4 retained scalar call"
-					if !skipping
-						gate4_output_line(compact, line)
-					end
-				end
-			end
-		end
-		line_index += 1
-	end
-	return compact
-end
-
 def gate4_emit_qbe(mut state: Gate4Compiler): Gate4Output
-	mut output := gate4_output_new(state.token_count[0] * 24 + 4096, [0, 0, 0, 0])
+	mut output := gate4_output_new(state.token_count[0] * 24 + 4096, [0, 0, 0, 0, 0])
 	gate4_emit_static_strings(state, output)
 	gate4_emit_record_descriptors(state, output)
 	compiler_runtime := gate4_compiler_entry_function(state) >= 0
@@ -3176,9 +3126,27 @@ def gate4_emit_qbe(mut state: Gate4Compiler): Gate4Output
 			function_index = 5
 		end
 	end
+	first_function := function_index
 	while function_index < state.function_count[0]
-		gate4_emit_function(state, function_index, output, inline_budget)
+		mut deferred := false
+		if state.function_count[0] <= 32
+			if gate4_scalar_leaf_inline_eligible(state, function_index)
+				deferred = true
+			end
+		end
+		if !deferred
+			gate4_emit_function(state, function_index, output, inline_budget)
+		end
 		function_index += 1
+	end
+	if output.runtime_flags[4] == 1
+		function_index = first_function
+		while function_index < state.function_count[0]
+			if gate4_scalar_leaf_inline_eligible(state, function_index)
+				gate4_emit_function(state, function_index, output, inline_budget)
+			end
+			function_index += 1
+		end
 	end
 	gate4_emit_entry(state, output)
 	if output.runtime_flags[3] == 1
@@ -3196,7 +3164,7 @@ def gate4_emit_qbe(mut state: Gate4Compiler): Gate4Output
 		gate4_emit_integer_to_string_runtime(output)
 		gate4_emit_float_to_integer_runtime(output)
 	end
-	return gate4_elide_dead_scalar_leaf_functions(state, output)
+	return output
 end
 
 def gate4_eputs(_value: String)
