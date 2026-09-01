@@ -153,6 +153,15 @@ worker-gc-temp-push-fast-path)
 	maximum_ratio=0.985
 	maximum_go_ratio=1.10
 	;;
+worker-managed-initialization)
+	total_candidates=3
+	candidates='baseline candidate typerb-go'
+	walltime_limit=120s
+	formal_input=worker
+	formal_expected_sha256=a9573e85b80396055215ddf53485572f06b4be54c2899b525e614ff023b6f76d
+	maximum_ratio=0.995
+	maximum_go_ratio=1.10
+	;;
 *) usage ;;
 esac
 

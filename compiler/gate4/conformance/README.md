@@ -35,6 +35,9 @@ The valid cases cover:
 - managed record-field and Array-element aliases retained through owner
   reassignment, lexical-block exit, loop-root compaction, and forced
   collection in `valid/managed-alias-roots.trb`;
+- managed record fields initialized safely before an allocating constructor
+  expression can force collection, with scalar-only records as a control, in
+  `valid/managed-initialization.trb`;
 - managed Array element order, positive and negative indexing, mutation,
   nesting, and forced collection across geometric growth boundaries in
   `valid/managed-array-growth.trb`, with scalar Array growth as a control;

@@ -1241,6 +1241,39 @@ describe("Gate 4 TypeRB frontend") do
 		expect(qbe.include?("call $g4_array_push_paced(l ")).to_be_true()
 	end
 
+	test("initializes only managed record fields before allocating expressions") do
+		source := "record ManagedBox\n\tlabel: String\n\tvalues: Array<String>\n\tcount: Integer\nend\n\nrecord ScalarBox\n\tcount: Integer\n\tready: Boolean\nend\n\ndef append(value: String): String\n\treturn \"prefix-\" + value\nend\n\ndef main()\n\tmanaged := ManagedBox.new(label: append(\"value\"), values: [\"kept\"], count: 1)\n\tscalar := ScalarBox.new(count: managed.count, ready: true)\n\tif scalar.ready\n\t\tputs(managed.label)\n\tend\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		qbe := gate4_output_source(gate4_emit_qbe(state))
+		expect(qbe.include?("%payload =l add %object, 8")).to_be_false()
+		expect(qbe.include?("call $memset(l %payload, w 0, l %payload_size)")).to_be_false()
+		expect(qbe.include?("%data =l call $calloc(l 4, l 8)")).to_be_false()
+		expect(
+			qbe.include?(
+				"%data =l call $malloc(l 32)\n\t%failed =w ceql %data, 0\n\tjnz %failed, @fail, @initialize\n@fail\n\tcall $g4_fail(l $g4_allocation_error, l 26)\n\thlt\n@initialize\n\t%heap =l loadl $g4_gc_heap_bytes",
+			),
+		).to_be_true()
+		expect(
+			qbe.include?(
+				"\tcall $g4_gc_update_peak(l %heap_with_data)\n\t%length =l add %array, 8\n\tstorel 0, %length\n\t%capacity =l add %array, 16\n\tstorel 4, %capacity\n\t%data_slot =l add %array, 24\n\tstorel %data, %data_slot\n\tret %array",
+			),
+		).to_be_true()
+		expect(
+			qbe.include?(
+				"%t0 =l call $g4_gc_alloc(l $g4_desc_record0, l 24, l 0)\n\t%t1 =l add %t0, 8\n\tstorel 0, %t1\n\t%t2 =l add %t0, 16\n\tstorel 0, %t2\n\t%t3 =l call $g4f0(l $g4s68)",
+			),
+		).to_be_true()
+		expect(
+			qbe.include?(
+				"%t8 =l call $g4_gc_alloc(l $g4_desc_record1, l 16, l 0)\n\t%t9 =l loadl %v0",
+			),
+		).to_be_true()
+	end
+
 	test("splits temporary-root push storage from growth") do
 		source := "def keep(value: String): String\n\treturn value\nend\n\ndef main()\n\tputs(keep(\"kept\"))\n\treturn\nend\n"
 		mut state := gate4_compiler_new(source.size() + 1)

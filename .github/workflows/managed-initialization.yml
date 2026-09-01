@@ -1,0 +1,524 @@
+name: Managed allocation initialization A/B
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/managed-initialization.yml
+      - compiler/gate4/conformance/**
+      - compiler/gate4/src/compiler.trb
+      - compiler/gate4/src/compiler_test.trb
+      - tools/native-runtime-ab/**
+      - tools/runtime-worker-soak/**
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/managed-initialization.yml
+      - compiler/gate4/conformance/**
+      - compiler/gate4/src/compiler.trb
+      - compiler/gate4/src/compiler_test.trb
+      - tools/native-runtime-ab/**
+      - tools/runtime-worker-soak/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  BASELINE_REVISION: 7223c236f2f6e680620b04bc2778be941f504cb5
+  TYPE_RB_REVISION: 5dc09070cf7f88a569279f5e63982a6de59d692c
+  TYPE_RB_VERSION: 0.4.4-dev
+  RELEASE_TAG: bootstrap-seed-2026-08-30
+  SEED_SHA256: b4307c244edc9e4da620f2a7c1b03a733e575da032efefae615f9edf75048a37
+  QBE_VERSION: "1.3"
+  QBE_ARCHIVE_SHA256: d587905d620dc5e1d2bfa7c2cc642b9b837aa89a3188c6e37b53d756cf66e320
+  BENCH_EXEC_VERSION: "3.35"
+  BENCH_EXEC_DEB_SHA256: b6e42daf63a0284b597f1d05f0daf7690381f7ca9ebe21d0b5083495d01bbfe0
+
+jobs:
+  compare:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+    steps:
+      - name: Check out the exact candidate revision
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Check out and build the exact TypeRB compiler
+        uses: actions/checkout@v5
+        with:
+          repository: type-rb/type-rb
+          ref: ${{ env.TYPE_RB_REVISION }}
+          path: .type-rb
+
+      - name: Set up Go for the exact semantic oracle
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: .type-rb/go.mod
+          cache-dependency-path: .type-rb/go.sum
+
+      - name: Verify the candidate and semantic-oracle identities
+        run: |
+          test "$(cat TYPE_RB_REVISION)" = "$TYPE_RB_REVISION"
+          test "$(git -C .type-rb rev-parse HEAD)" = "$TYPE_RB_REVISION"
+          go build -C .type-rb -o "$RUNNER_TEMP/trb" ./cmd/trb
+          test "$("$RUNNER_TEMP/trb" version)" = "$TYPE_RB_VERSION"
+          git cat-file -e "$BASELINE_REVISION^{commit}"
+          git merge-base --is-ancestor "$BASELINE_REVISION" HEAD
+          git worktree add --detach "$RUNNER_TEMP/baseline-source" "$BASELINE_REVISION"
+          test "$(git -C "$RUNNER_TEMP/baseline-source" rev-parse HEAD)" = "$BASELINE_REVISION"
+
+      - name: Install the registered Linux measurement toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential jq lld strace
+          curl -L \
+            "https://github.com/sosy-lab/benchexec/releases/download/$BENCH_EXEC_VERSION/benchexec_$BENCH_EXEC_VERSION-1_all.deb" \
+            -o "$RUNNER_TEMP/benchexec_$BENCH_EXEC_VERSION-1_all.deb"
+          echo "$BENCH_EXEC_DEB_SHA256  $RUNNER_TEMP/benchexec_$BENCH_EXEC_VERSION-1_all.deb" |
+            sha256sum -c -
+          sudo apt-get install -y --install-recommends \
+            "$RUNNER_TEMP/benchexec_$BENCH_EXEC_VERSION-1_all.deb"
+          test "$(runexec --version)" = "runexec $BENCH_EXEC_VERSION"
+
+      - name: Build pinned QBE 1.3
+        id: qbe
+        run: |
+          curl -L "https://c9x.me/compile/release/qbe-$QBE_VERSION.tar.xz" \
+            -o "$RUNNER_TEMP/qbe-$QBE_VERSION.tar.xz"
+          echo "$QBE_ARCHIVE_SHA256  $RUNNER_TEMP/qbe-$QBE_VERSION.tar.xz" |
+            sha256sum -c -
+          tar -C "$RUNNER_TEMP" -xf "$RUNNER_TEMP/qbe-$QBE_VERSION.tar.xz"
+          make -C "$RUNNER_TEMP/qbe-$QBE_VERSION"
+          echo "path=$RUNNER_TEMP/qbe-$QBE_VERSION/qbe" >> "$GITHUB_OUTPUT"
+
+      - name: Download and verify the immutable Linux Native seed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/release"
+          gh release download "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$RUNNER_TEMP/release" \
+            --pattern type-rb-native-bootstrap-linux-arm64
+          echo "$SEED_SHA256  $RUNNER_TEMP/release/type-rb-native-bootstrap-linux-arm64" |
+            sha256sum -c -
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" \
+            > "$RUNNER_TEMP/release/release.json"
+          jq -e \
+            --arg tag "$RELEASE_TAG" \
+            '.immutable == true and .draft == false and .prerelease == true and .tag_name == $tag' \
+            "$RUNNER_TEMP/release/release.json"
+          chmod 0755 "$RUNNER_TEMP/release/type-rb-native-bootstrap-linux-arm64"
+
+      - name: Close exact baseline and candidate fixed points
+        env:
+          QBE: ${{ steps.qbe.outputs.path }}
+        run: |
+          seed="$RUNNER_TEMP/release/type-rb-native-bootstrap-linux-arm64"
+          mkdir -p \
+            "$RUNNER_TEMP/transition/first" \
+            "$RUNNER_TEMP/transition/current" \
+            "$RUNNER_TEMP/transition/baseline"
+          "$seed" build compiler/gate4/src/compiler.trb \
+            --output "$RUNNER_TEMP/transition/first/compiler" \
+            --qbe "$QBE" --cc /usr/bin/cc --target linux-arm64-v0
+          "$RUNNER_TEMP/transition/first/compiler" build compiler/gate4/src/compiler.trb \
+            --output "$RUNNER_TEMP/transition/current/compiler" \
+            --qbe "$QBE" --cc /usr/bin/cc --target linux-arm64-v0
+          "$RUNNER_TEMP/transition/current/compiler" build \
+            "$RUNNER_TEMP/baseline-source/compiler/gate4/src/compiler.trb" \
+            --output "$RUNNER_TEMP/transition/baseline/compiler" \
+            --qbe "$QBE" --cc /usr/bin/cc --target linux-arm64-v0
+
+          /bin/sh "$RUNNER_TEMP/baseline-source/tools/bootstrap-seed.sh" \
+            --mode previous \
+            --input "$RUNNER_TEMP/transition/baseline/compiler" \
+            --input-role transition \
+            --qbe "$QBE" \
+            --cc /usr/bin/cc \
+            --profile linux-arm64-v0 \
+            --runner-image ubuntu-24.04-arm \
+            --workspace "$RUNNER_TEMP/baseline-bootstrap-workspace" \
+            --output "$RUNNER_TEMP/baseline-compiler" \
+            --evidence "$RUNNER_TEMP/baseline-bootstrap-evidence" \
+            --metadata "$RUNNER_TEMP/baseline-bootstrap-metadata.json" \
+            --asset-name managed-initialization-baseline \
+            --repository-root "$RUNNER_TEMP/baseline-source"
+
+          /bin/sh tools/bootstrap-seed.sh \
+            --mode previous \
+            --input "$RUNNER_TEMP/transition/current/compiler" \
+            --input-role transition \
+            --qbe "$QBE" \
+            --cc /usr/bin/cc \
+            --profile linux-arm64-v0 \
+            --runner-image ubuntu-24.04-arm \
+            --workspace "$RUNNER_TEMP/candidate-bootstrap-workspace" \
+            --output "$RUNNER_TEMP/candidate-compiler" \
+            --evidence "$RUNNER_TEMP/candidate-bootstrap-evidence" \
+            --metadata "$RUNNER_TEMP/candidate-bootstrap-metadata.json" \
+            --asset-name managed-initialization-candidate
+
+          cp "$RUNNER_TEMP/candidate-compiler" "$RUNNER_TEMP/candidate-compiler.stripped"
+          strip --strip-all "$RUNNER_TEMP/candidate-compiler.stripped"
+          test "$(wc -c < "$RUNNER_TEMP/candidate-compiler.stripped" | tr -d ' ')" -le 255000
+
+      - name: Enforce adjacent compiler build and compactness bounds
+        run: |
+          evidence="$RUNNER_TEMP/compiler-comparison-evidence"
+          mkdir -p "$evidence"
+          cp "$RUNNER_TEMP/baseline-compiler" "$RUNNER_TEMP/baseline-compiler.stripped"
+          strip --strip-all "$RUNNER_TEMP/baseline-compiler.stripped"
+          baseline_size=$(wc -c < "$RUNNER_TEMP/baseline-compiler.stripped" | tr -d ' ')
+          candidate_size=$(wc -c < "$RUNNER_TEMP/candidate-compiler.stripped" | tr -d ' ')
+          test "$((baseline_size + candidate_size))" -le 550000
+
+          median_value() {
+            file=$1
+            stage=$2
+            column=$3
+            awk -F, -v wanted="$stage" -v selected="$column" \
+              'NR > 1 && $1 == wanted && $5 == 0 { print $selected }' "$file" |
+              LC_ALL=C sort -n | sed -n '4p'
+          }
+          printf 'stage,baseline_elapsed_seconds,candidate_elapsed_seconds,elapsed_ratio,baseline_peak_rss_bytes,candidate_peak_rss_bytes,rss_ratio\n' \
+            > "$evidence/adjacent-builds.csv"
+          for stage in b2-b3 b3-b4; do
+            baseline_time=$(median_value \
+              "$RUNNER_TEMP/baseline-bootstrap-evidence/measurements.csv" "$stage" 3)
+            candidate_time=$(median_value \
+              "$RUNNER_TEMP/candidate-bootstrap-evidence/measurements.csv" "$stage" 3)
+            baseline_rss=$(median_value \
+              "$RUNNER_TEMP/baseline-bootstrap-evidence/measurements.csv" "$stage" 4)
+            candidate_rss=$(median_value \
+              "$RUNNER_TEMP/candidate-bootstrap-evidence/measurements.csv" "$stage" 4)
+            elapsed_ratio=$(awk -v subject="$candidate_time" -v reference="$baseline_time" \
+              'BEGIN { printf "%.6f", subject / reference }')
+            rss_ratio=$(awk -v subject="$candidate_rss" -v reference="$baseline_rss" \
+              'BEGIN { printf "%.6f", subject / reference }')
+            awk -v ratio="$elapsed_ratio" 'BEGIN { exit !(ratio <= 1.05) }'
+            awk -v ratio="$rss_ratio" 'BEGIN { exit !(ratio <= 1.05) }'
+            printf '%s,%s,%s,%s,%s,%s,%s\n' \
+              "$stage" "$baseline_time" "$candidate_time" "$elapsed_ratio" \
+              "$baseline_rss" "$candidate_rss" "$rss_ratio" \
+              >> "$evidence/adjacent-builds.csv"
+          done
+          printf 'baseline_stripped_bytes=%s\ncandidate_stripped_bytes=%s\ncombined_stripped_bytes=%s\nmaximum_combined_stripped_bytes=550000\n' \
+            "$baseline_size" "$candidate_size" "$((baseline_size + candidate_size))" \
+            > "$evidence/compiler-sizes.txt"
+
+      - name: Build and inventory the worker programs
+        env:
+          QBE: ${{ steps.qbe.outputs.path }}
+        run: |
+          evidence="$RUNNER_TEMP/application-evidence"
+          applications="$RUNNER_TEMP/applications"
+          mkdir -p "$evidence" "$applications/baseline" "$applications/candidate" \
+            "$applications/typerb-go/src"
+          template=tools/runtime-worker-soak/workload.trb
+          source="$applications/workload.trb"
+          test "$(grep -F -c 'run_worker_lifecycle(60, 120000, 128)' "$template")" -eq 1
+          sed 's/run_worker_lifecycle(60, 120000, 128)/run_worker_lifecycle(1, 400000, 128)/' \
+            "$template" > "$source"
+          printf 'native-worker-phase\nnative-worker-ok\n' > "$applications/expected.txt"
+
+          for role in baseline candidate; do
+            compiler="$RUNNER_TEMP/$role-compiler"
+            directory="$applications/$role"
+            "$compiler" check "$source" > "$directory/check.stdout" 2> "$directory/check.stderr"
+            test "$(cat "$directory/check.stdout")" = ok
+            test ! -s "$directory/check.stderr"
+            "$compiler" emit-qbe "$source" > "$directory/program.ssa"
+            "$compiler" emit-qbe "$source" > "$directory/program-repeated.ssa"
+            cmp "$directory/program.ssa" "$directory/program-repeated.ssa"
+            "$compiler" build "$source" --output "$directory/program" \
+              --qbe "$QBE" --cc /usr/bin/cc --target linux-arm64-v0
+            "$directory/program" worker > "$directory/stdout" 2> "$directory/stderr"
+            cmp "$applications/expected.txt" "$directory/stdout"
+            test ! -s "$directory/stderr"
+            cp "$directory/program" "$directory/program.stripped"
+            strip --strip-all "$directory/program.stripped"
+
+            "$compiler" emit-qbe compiler/gate4/conformance/valid/float-arrays.trb \
+              > "$directory/float-arrays.ssa"
+            "$compiler" build compiler/gate4/conformance/valid/float-arrays.trb \
+              --output "$directory/float-arrays" \
+              --qbe "$QBE" --cc /usr/bin/cc --target linux-arm64-v0
+            "$directory/float-arrays" \
+              > "$directory/float-arrays.stdout" 2> "$directory/float-arrays.stderr"
+            cmp compiler/gate4/conformance/valid/float-arrays.out \
+              "$directory/float-arrays.stdout"
+            test ! -s "$directory/float-arrays.stderr"
+
+            sha256sum "$directory/program.ssa" "$directory/program-repeated.ssa" \
+              "$directory/float-arrays.ssa" "$directory/program" \
+              "$directory/program.stripped" > "$directory/SHA256SUMS"
+          done
+
+          baseline_size=$(wc -c < "$applications/baseline/program.stripped" | tr -d ' ')
+          candidate_size=$(wc -c < "$applications/candidate/program.stripped" | tr -d ' ')
+          test "$candidate_size" -le "$((baseline_size + 64))"
+          baseline_qbe_size=$(wc -c < "$applications/baseline/program.ssa" | tr -d ' ')
+          candidate_qbe_size=$(wc -c < "$applications/candidate/program.ssa" | tr -d ' ')
+          test "$candidate_qbe_size" -le "$((baseline_qbe_size + 160))"
+          printf 'baseline_qbe_bytes=%s\ncandidate_qbe_bytes=%s\nmaximum_candidate_qbe_bytes=%s\nbaseline_stripped_bytes=%s\ncandidate_stripped_bytes=%s\nmaximum_candidate_stripped_bytes=%s\n' \
+            "$baseline_qbe_size" "$candidate_qbe_size" "$((baseline_qbe_size + 160))" \
+            "$baseline_size" "$candidate_size" "$((baseline_size + 64))" \
+            > "$evidence/application-sizes.txt"
+
+          cp "$source" "$applications/typerb-go/src/main.trb"
+          cp tools/runtime-worker-soak/trbconfig.jsonc "$applications/typerb-go/trbconfig.jsonc"
+          "$RUNNER_TEMP/trb" check --config "$applications/typerb-go/trbconfig.jsonc" \
+            > "$applications/typerb-go/check.stdout" 2> "$applications/typerb-go/check.stderr"
+          test "$(cat "$applications/typerb-go/check.stdout")" = 'checked 1 file(s) for mode go'
+          test ! -s "$applications/typerb-go/check.stderr"
+          "$RUNNER_TEMP/trb" build --compile \
+            --config "$applications/typerb-go/trbconfig.jsonc" \
+            --outfile "$applications/typerb-go/program" \
+            > "$applications/typerb-go/build.stdout" 2> "$applications/typerb-go/build.stderr"
+          test ! -s "$applications/typerb-go/build.stderr"
+          "$applications/typerb-go/program" worker \
+            > "$applications/typerb-go/stdout" 2> "$applications/typerb-go/stderr"
+          cmp "$applications/expected.txt" "$applications/typerb-go/stdout"
+          test ! -s "$applications/typerb-go/stderr"
+          sha256sum "$source" "$applications/expected.txt" "$applications/typerb-go/program" \
+            > "$evidence/SHA256SUMS"
+
+          printf 'case\tcandidate\tcommand\tinput\texpected\n' > "$RUNNER_TEMP/catalog.tsv"
+          for role in baseline candidate typerb-go; do
+            printf 'worker-managed-initialization\t%s\t%s\tworker\t%s\n' \
+              "$role" "$applications/$role/program" "$applications/expected.txt" \
+              >> "$RUNNER_TEMP/catalog.tsv"
+          done
+
+      - name: Verify managed allocation initialization boundaries
+        env:
+          QBE: ${{ steps.qbe.outputs.path }}
+        run: |
+          evidence="$RUNNER_TEMP/managed-initialization-boundary-evidence"
+          mkdir -p "$evidence"
+          source=compiler/gate4/conformance/valid/managed-initialization.trb
+          expected=compiler/gate4/conformance/valid/managed-initialization.out
+
+          extract_helper() {
+            helper_name=$1
+            helper_source=$2
+            helper_output=$3
+            awk -v declaration="function \$$helper_name(" '
+              index($0, declaration) == 1 { capture = 1 }
+              capture { print }
+              capture && $0 == "}" { exit }
+            ' "$helper_source" > "$helper_output"
+            test -s "$helper_output"
+          }
+          call_count() {
+            pattern=$1
+            file=$2
+            awk -v wanted="$pattern" 'index($0, wanted) { count += 1 } END { print count + 0 }' "$file"
+          }
+          line_number() {
+            pattern=$1
+            file=$2
+            awk -v wanted="$pattern" 'index($0, wanted) { print NR; exit }' "$file"
+          }
+          stat_value() {
+            key=$1
+            file=$2
+            awk -F, -v wanted="$key" '$2 == wanted { print $3 }' "$file"
+          }
+
+          for role in baseline candidate; do
+            compiler="$RUNNER_TEMP/$role-compiler"
+            "$compiler" check "$source" > "$evidence/$role.check.stdout" \
+              2> "$evidence/$role.check.stderr"
+            test "$(cat "$evidence/$role.check.stdout")" = ok
+            test ! -s "$evidence/$role.check.stderr"
+            "$compiler" emit-qbe "$source" > "$evidence/$role.ssa"
+            "$compiler" emit-qbe "$source" > "$evidence/$role.repeated.ssa"
+            cmp "$evidence/$role.ssa" "$evidence/$role.repeated.ssa"
+            "$compiler" build "$source" --output "$evidence/$role" \
+              --qbe "$QBE" --cc /usr/bin/cc --target linux-arm64-v0
+            TYPE_RB_NATIVE_RUNTIME_STATS=1 "$evidence/$role" \
+              > "$evidence/$role.stdout" 2> "$evidence/$role.stderr"
+            cmp "$expected" "$evidence/$role.stdout"
+            automatic=$(stat_value automatic-collections "$evidence/$role.stderr")
+            allocated=$(stat_value allocated-bytes "$evidence/$role.stderr")
+            reclaimed=$(stat_value reclaimed-bytes "$evidence/$role.stderr")
+            live=$(stat_value live-bytes "$evidence/$role.stderr")
+            test "$automatic" -gt 0
+            test "$allocated" -eq "$reclaimed"
+            test "$live" -eq 0
+
+            extract_helper g4_gc_alloc "$evidence/$role.ssa" \
+              "$evidence/$role-gc-alloc.ssa"
+            extract_helper g4_array_new "$evidence/$role.ssa" \
+              "$evidence/$role-array-new.ssa"
+            awk '/^function \$g4f1\(/ { capture = 1 } capture { print } capture && $0 == "}" { exit }' \
+              "$evidence/$role.ssa" > "$evidence/$role-main.ssa"
+            test -s "$evidence/$role-main.ssa"
+          done
+          cmp "$evidence/baseline.stderr" "$evidence/candidate.stderr"
+
+          test "$(call_count 'call $memset' "$evidence/baseline-gc-alloc.ssa")" -eq 1
+          test "$(call_count 'call $memset' "$evidence/candidate-gc-alloc.ssa")" -eq 0
+          test "$(call_count 'call $calloc(l 4, l 8)' "$evidence/baseline-array-new.ssa")" -eq 1
+          test "$(call_count 'call $calloc(l 4, l 8)' "$evidence/candidate-array-new.ssa")" -eq 0
+          test "$(call_count 'call $malloc(l 32)' "$evidence/baseline-array-new.ssa")" -eq 0
+          test "$(call_count 'call $malloc(l 32)' "$evidence/candidate-array-new.ssa")" -eq 1
+          candidate_malloc_line=$(line_number 'call $malloc(l 32)' \
+            "$evidence/candidate-array-new.ssa")
+          candidate_failure_branch_line=$(line_number 'jnz %failed, @fail, @initialize' \
+            "$evidence/candidate-array-new.ssa")
+          candidate_failure_line=$(line_number 'call $g4_fail(l $g4_allocation_error' \
+            "$evidence/candidate-array-new.ssa")
+          candidate_initialize_line=$(line_number '@initialize' \
+            "$evidence/candidate-array-new.ssa")
+          candidate_length_line=$(line_number 'storel 0, %length' \
+            "$evidence/candidate-array-new.ssa")
+          candidate_capacity_line=$(line_number 'storel 4, %capacity' \
+            "$evidence/candidate-array-new.ssa")
+          candidate_data_line=$(line_number 'storel %data, %data_slot' \
+            "$evidence/candidate-array-new.ssa")
+          test "$candidate_malloc_line" -lt "$candidate_failure_branch_line"
+          test "$candidate_failure_branch_line" -lt "$candidate_failure_line"
+          test "$candidate_failure_line" -lt "$candidate_initialize_line"
+          test "$candidate_initialize_line" -lt "$candidate_length_line"
+          test "$candidate_length_line" -lt "$candidate_capacity_line"
+          test "$candidate_capacity_line" -lt "$candidate_data_line"
+
+          baseline_prezeros=$(awk '
+            index($0, "call $g4f0") { allocating_expression = 1 }
+            !allocating_expression && index($0, "storel 0,") { count += 1 }
+            END { print count + 0 }
+          ' "$evidence/baseline-main.ssa")
+          candidate_prezeros=$(awk '
+            index($0, "call $g4f0") { allocating_expression = 1 }
+            !allocating_expression && index($0, "storel 0,") { count += 1 }
+            END { print count + 0 }
+          ' "$evidence/candidate-main.ssa")
+          candidate_total_zeros=$(call_count 'storel 0,' "$evidence/candidate-main.ssa")
+          test "$baseline_prezeros" -eq 0
+          test "$candidate_prezeros" -eq 2
+          test "$candidate_total_zeros" -eq 2
+          printf 'baseline_allocator_memset_calls=1\ncandidate_allocator_memset_calls=0\nbaseline_initial_array_calloc_calls=1\ncandidate_initial_array_calloc_calls=0\ncandidate_initial_array_malloc_calls=1\nmanaged_record_prezeros=2\nscalar_record_prezeros=0\n' \
+            > "$evidence/boundary.txt"
+          sha256sum "$evidence"/baseline.ssa "$evidence"/candidate.ssa \
+            "$evidence"/baseline "$evidence"/candidate > "$evidence/SHA256SUMS"
+
+      - name: Run the revised managed-memory smoke
+        env:
+          QBE: ${{ steps.qbe.outputs.path }}
+        run: |
+          /bin/sh tools/runtime-worker-soak/runtime-worker-soak.sh \
+            smoke \
+            "$RUNNER_TEMP/candidate-compiler" \
+            "$QBE" \
+            /usr/bin/cc \
+            "$RUNNER_TEMP/trb" \
+            linux-arm64-v0 \
+            "$RUNNER_TEMP/worker-smoke-workspace" \
+            "$RUNNER_TEMP/worker-smoke-evidence"
+
+      - name: Configure and probe the isolated measurement host
+        id: host
+        run: |
+          evidence="$RUNNER_TEMP/host-evidence"
+          mkdir -p "$evidence"
+          sudo swapoff -a
+          /bin/sh tools/benchmarksgame-formal/delegate-cpuset-linux.sh \
+            "$evidence/cpuset-before-discovery.txt"
+          set +e
+          python3 -m benchexec.check_cgroups \
+            > "$evidence/cpuset-discovery.stdout" 2> "$evidence/cpuset-discovery.stderr"
+          discovery_status=$?
+          set -e
+          printf 'status=%s\n' "$discovery_status" > "$evidence/cpuset-discovery.status"
+          /bin/sh tools/benchmarksgame-formal/delegate-cpuset-linux.sh \
+            "$evidence/cpuset-after-discovery.txt"
+          python3 -m benchexec.check_cgroups \
+            > "$evidence/check-cgroups.stdout" 2> "$evidence/check-cgroups.stderr"
+          allowed=$(awk -F: \
+            '$1 == "Cpus_allowed_list" { gsub(/[[:space:]]/, "", $2); print $2 }' \
+            /proc/self/status)
+          test -n "$allowed"
+          printf '%s\n' "$allowed" | awk -F, '{
+            for (group_index = 1; group_index <= NF; group_index += 1) {
+              part_count = split($group_index, bounds, "-")
+              first = bounds[1] + 0
+              last = part_count == 1 ? first : bounds[2] + 0
+              for (cpu = first; cpu <= last; cpu += 1) print cpu
+            }
+          }' > "$evidence/allowed-cpus.txt"
+          core=$(sed -n '1p' "$evidence/allowed-cpus.txt")
+          test -n "$core"
+          echo "core=$core" >> "$GITHUB_OUTPUT"
+          printf 'allowed=%s\ncore=%s\n' "$allowed" "$core" > "$evidence/allocation.txt"
+          /bin/sh tools/benchmarksgame-formal/cache-control-linux.sh "$evidence/cache-probe.txt"
+          runexec --quiet --memlimit 64MB --walltimelimit 10s --cores "$core" \
+            --read-only-dir / --overlay-dir /home --output "$evidence/runexec-probe.log" \
+            -- /bin/true > "$evidence/runexec-probe.stdout" 2> "$evidence/runexec-probe.stderr"
+          grep '^returnvalue=0$' "$evidence/runexec-probe.stdout"
+          test ! -s "$evidence/runexec-probe.stderr"
+
+      - name: Measure baseline, candidate, and exact Go
+        env:
+          CORE: ${{ steps.host.outputs.core }}
+        run: |
+          /bin/sh tools/native-runtime-ab/runtime-controller.sh \
+            formal "$(command -v runexec)" "$RUNNER_TEMP/catalog.tsv" \
+            worker-managed-initialization "$CORE" \
+            tools/benchmarksgame-formal/cache-control-linux.sh \
+            "$RUNNER_TEMP/runtime-workspace" \
+            "$RUNNER_TEMP/runtime-evidence"
+
+      - name: Record exact identities and temporary-file closure
+        if: always()
+        run: |
+          evidence="$RUNNER_TEMP/workflow-evidence"
+          mkdir -p "$evidence"
+          {
+            printf 'candidate_revision=%s\n' "$GITHUB_SHA"
+            printf 'baseline_revision=%s\n' "$BASELINE_REVISION"
+            printf 'type_rb_revision=%s\n' "$TYPE_RB_REVISION"
+            printf 'type_rb_version=%s\n' "$TYPE_RB_VERSION"
+            printf 'workflow_run_id=%s\n' "$GITHUB_RUN_ID"
+            printf 'workflow_run_attempt=%s\n' "$GITHUB_RUN_ATTEMPT"
+            uname -a
+            /usr/bin/cc --version
+            ld.lld --version
+            runexec --version
+          } > "$evidence/environment.txt" 2>&1
+          sha256sum \
+            .github/workflows/managed-initialization.yml \
+            tools/native-runtime-ab/runtime-controller.sh \
+            tools/native-runtime-ab/summarize.awk \
+            tools/runtime-worker-soak/workload.trb \
+            "$RUNNER_TEMP/qbe-$QBE_VERSION.tar.xz" \
+            "$RUNNER_TEMP/release/type-rb-native-bootstrap-linux-arm64" \
+            > "$evidence/SHA256SUMS"
+          find "$RUNNER_TEMP" -name '*.trbn.*' -print | sort > "$evidence/temp-inventory.txt"
+          test ! -s "$evidence/temp-inventory.txt"
+
+      - name: Upload complete comparison evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: managed-initialization-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/application-evidence
+            ${{ runner.temp }}/applications
+            ${{ runner.temp }}/baseline-bootstrap-evidence
+            ${{ runner.temp }}/baseline-bootstrap-metadata.json
+            ${{ runner.temp }}/candidate-bootstrap-evidence
+            ${{ runner.temp }}/candidate-bootstrap-metadata.json
+            ${{ runner.temp }}/catalog.tsv
+            ${{ runner.temp }}/compiler-comparison-evidence
+            ${{ runner.temp }}/host-evidence
+            ${{ runner.temp }}/runtime-evidence
+            ${{ runner.temp }}/managed-initialization-boundary-evidence
+            ${{ runner.temp }}/worker-smoke-evidence
+            ${{ runner.temp }}/workflow-evidence
+          if-no-files-found: error
+          retention-days: 30

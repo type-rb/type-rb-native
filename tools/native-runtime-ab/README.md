@@ -43,6 +43,7 @@ The currently registered cases and thresholds are:
 | `worker-managed-array-growth` | one phase, 400,000 batches | 0.95 |
 | `worker-array-push-fast-path` | one phase, 400,000 batches | 0.95 |
 | `worker-gc-temp-push-fast-path` | one phase, 400,000 batches | 0.985 |
+| `worker-managed-initialization` | one phase, 400,000 batches | 0.995 |
 
 The three numeric inputs are the Array-address optimization contract registered
 in [issue #140](https://github.com/type-rb/type-rb-native/issues/140). None of
@@ -53,7 +54,9 @@ Each worker case is registered by its linked public experiment and also
 compares candidate wall and CPU medians with an exact optimized-Go control.
 All three programs use the same authored TypeRB source. The temporary-root
 push split is registered in
-[issue #162](https://github.com/type-rb/type-rb-native/issues/162).
+[issue #162](https://github.com/type-rb/type-rb-native/issues/162). Managed
+allocation initialization is registered in
+[issue #164](https://github.com/type-rb/type-rb-native/issues/164).
 
 ## Invocation
 

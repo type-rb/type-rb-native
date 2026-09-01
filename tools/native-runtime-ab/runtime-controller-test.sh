@@ -250,6 +250,23 @@ test "$(awk -F '\t' '$2 == "walltime" { print $5 }' "$test_root/root-push-eviden
 test "$(awk -F '\t' '$2 == "walltime-vs-typerb-go" { print $5 }' "$test_root/root-push-evidence/evaluation.tsv")" = 1.062500 ||
 	fail "root-push Go wall-time ratio differs"
 
+initialization_catalog=$test_root/initialization-catalog.tsv
+sed 's/worker-literal-concat/worker-managed-initialization/g' "$worker_catalog" > "$initialization_catalog"
+FAKE_GROWTH=1 /bin/sh "$script_directory/runtime-controller.sh" \
+	test "$fake_runexec" "$initialization_catalog" worker-managed-initialization 0 "$cache_control" \
+	"$test_root/initialization-workspace" "$test_root/initialization-evidence" \
+	> "$test_root/initialization.stdout" 2> "$test_root/initialization.stderr"
+test "$(cat "$test_root/initialization.stdout")" = 'native-runtime-ab: worker-managed-initialization passed'
+test ! -s "$test_root/initialization.stderr" || fail "managed-initialization controller wrote stderr"
+test "$(awk -F= '$1 == "maximum_candidate_ratio" { print $2 }' "$test_root/initialization-evidence/environment.txt")" = 0.995 ||
+	fail "managed-initialization baseline threshold differs"
+test "$(awk -F= '$1 == "maximum_candidate_go_ratio" { print $2 }' "$test_root/initialization-evidence/environment.txt")" = 1.10 ||
+	fail "managed-initialization Go threshold differs"
+test "$(awk -F '\t' '$2 == "walltime" { print $5 }' "$test_root/initialization-evidence/evaluation.tsv")" = 0.425000 ||
+	fail "managed-initialization baseline wall-time ratio differs"
+test "$(awk -F '\t' '$2 == "walltime-vs-typerb-go" { print $5 }' "$test_root/initialization-evidence/evaluation.tsv")" = 1.062500 ||
+	fail "managed-initialization Go wall-time ratio differs"
+
 set +e
 FAKE_REGRESSION=1 /bin/sh "$script_directory/runtime-controller.sh" \
 	test "$fake_runexec" "$catalog" spectral-norm 0 "$cache_control" \
