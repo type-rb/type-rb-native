@@ -6,6 +6,7 @@ BENCH_EXEC_VERSION=3.35
 MEMORY_LIMIT=4GB
 WARMUP_ROUNDS=2
 RETAINED_ROUNDS=11
+CONTRACT=${NATIVE_RUNTIME_AB_CONTRACT:-default}
 CATALOG_HEADER='case\tcandidate\tcommand\tinput\texpected'
 RAW_HEADER='phase\tround\tretained_index\torder\tcase\tcandidate\tverdict\treturnvalue\texitsignal\tterminationreason\twalltime_seconds\tcputime_seconds\tmemory_bytes'
 
@@ -164,6 +165,15 @@ worker-gc-temp-push-fast-path)
 	;;
 *) usage ;;
 esac
+case "$CONTRACT" in
+default) ;;
+nonnegative-loop-index)
+	if test "$case_name" = spectral-norm; then
+		maximum_ratio=0.98
+	fi
+	;;
+*) fail "unknown measurement contract: $CONTRACT" ;;
+esac
 
 test -x "$runexec" || fail "runexec is not executable"
 test -f "$catalog" || fail "catalog does not exist"
@@ -224,6 +234,7 @@ done
 
 {
 	printf 'mode=%s\n' "$mode"
+	printf 'contract=%s\n' "$CONTRACT"
 	printf 'case=%s\n' "$case_name"
 	printf 'core=%s\n' "$core"
 	printf 'memory_limit=%s\n' "$MEMORY_LIMIT"

@@ -426,6 +426,15 @@ applications become smaller, while every correctness, fixed-point, build,
 memory, compactness, and catastrophic limit passes. See the
 [recorded bounded literal Integer-add result](results/2026-09-02-native-bounded-literal-integer-add-linux-arm64/README.md).
 
+The next registered candidate removes negative-index normalization only for
+Array accesses driven by a narrowly proven zero-based unit-step induction
+local. The unsigned upper-bounds comparison remains, while reassignment,
+non-unit updates, nested control flow, dynamic indices, and ordinary negative
+indexing retain the general path. Its dedicated Linux arm64 A/B contract is
+registered in
+[issue #188](https://github.com/type-rb/type-rb-native/issues/188); formal
+evidence is required before it can become the next accepted baseline.
+
 Gate 6N passes every frozen condition for the internal
 `linux-amd64-v0` profile. The exact merged compiler closes a 240,888-byte
 Go-free B2/B3/B4 fixed point, emits byte-identical target-neutral compiler and

@@ -153,6 +153,20 @@ test "$(awk -F '\t' '$2 == "walltime" { print $5 }' "$test_root/pass-evidence/ev
 	fail "wall-time ratio differs"
 test "$(awk -F= '$1 == "maximum_candidate_ratio" { print $2 }' "$test_root/pass-evidence/environment.txt")" = 0.95 ||
 	fail "spectral-norm threshold differs"
+test "$(awk -F= '$1 == "contract" { print $2 }' "$test_root/pass-evidence/environment.txt")" = default ||
+	fail "default contract differs"
+
+NATIVE_RUNTIME_AB_CONTRACT=nonnegative-loop-index \
+	/bin/sh "$script_directory/runtime-controller.sh" \
+	test "$fake_runexec" "$catalog" spectral-norm 0 "$cache_control" \
+	"$test_root/nonnegative-index-workspace" "$test_root/nonnegative-index-evidence" \
+	> "$test_root/nonnegative-index.stdout" 2> "$test_root/nonnegative-index.stderr"
+test "$(cat "$test_root/nonnegative-index.stdout")" = 'native-runtime-ab: spectral-norm passed'
+test ! -s "$test_root/nonnegative-index.stderr" || fail "nonnegative-index controller wrote stderr"
+test "$(awk -F= '$1 == "contract" { print $2 }' "$test_root/nonnegative-index-evidence/environment.txt")" = nonnegative-loop-index ||
+	fail "nonnegative-index contract differs"
+test "$(awk -F= '$1 == "maximum_candidate_ratio" { print $2 }' "$test_root/nonnegative-index-evidence/environment.txt")" = 0.98 ||
+	fail "nonnegative-index threshold differs"
 
 fannkuch_expected=$test_root/fannkuch-expected.txt
 printf 'fannkuch-redux-output\n' > "$fannkuch_expected"

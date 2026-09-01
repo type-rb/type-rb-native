@@ -45,9 +45,15 @@ The currently registered cases and thresholds are:
 | `worker-dynamic-array-address` | one phase, 400,000 batches | 0.95 |
 | `worker-gc-temp-push-fast-path` | one phase, 400,000 batches | 0.985 |
 
-The three numeric inputs apply the one-sided checked-Integer addition contract
-for bounded nonnegative literals registered in
-[issue #186](https://github.com/type-rb/type-rb-native/issues/186).
+The default `spectral-norm` threshold remains `0.95`. The named
+`nonnegative-loop-index` contract registered in
+[issue #188](https://github.com/type-rb/type-rb-native/issues/188) uses a
+dedicated `0.98` `spectral-norm` threshold while leaving both other numeric
+thresholds unchanged. This additive contract does not relax the default or any
+worker contract. The selected contract is recorded in `environment.txt`.
+
+The three numeric inputs currently apply the proven nonnegative loop-index
+contract registered in issue #188.
 They do not replace the full cross-language benchmark inputs or its published
 results. The same experiment limits the fixed-point Linux arm64 compiler to
 1.01x the exact baseline and 255,000 bytes; adjacent bootstrap wall time, CPU
