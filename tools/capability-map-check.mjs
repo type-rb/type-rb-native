@@ -27,6 +27,9 @@ for (const area of catalog.areas) {
     if (item.evidence && item.status !== 'verified' && item.status !== 'partial') {
       failures.push(`evidence requires verified or partial status: ${item.title}`);
     }
+    if (item.status === 'verified' && !item.evidence) {
+      failures.push(`verified capability requires public evidence: ${item.title}`);
+    }
     if (item.evidence && !item.evidence.url.startsWith('https://github.com/type-rb/type-rb-native/')) {
       failures.push(`non-public evidence URL: ${item.title}`);
     }
