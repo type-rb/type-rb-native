@@ -269,6 +269,19 @@ and the implementation was reverted. Retaining both length and data was also
 rejected earlier because register pressure exceeded the application-size
 limit.
 
+The next contract, registered by
+[issue #182](https://github.com/type-rb/type-rb-native/issues/182), moves
+managed-root publication from a loop header to its exit only when emitted-code
+analysis proves the loop cannot start collection. Its
+[formal result](../results/2026-09-02-native-safe-point-free-loop-roots-linux-arm64/README.md)
+passes every frozen condition. `fannkuch-redux` wall and CPU medians improve by
+12.46% and 12.47%; `n-body` and `spectral-norm` remain neutral; and the exact
+self-hosted fixed point, build cost, compiler size, application size,
+correctness, memory, and catastrophic bounds all pass. This candidate becomes
+the next accepted Native baseline. A fresh complete cross-language snapshot,
+not the Native-to-Native A/B ratio, determines the remaining distance to the
+minimum objective of matching or beating Pure Go.
+
 Builds use release optimization without unsafe fast-math substitutions: C and
 C++ use `-O3`, Go uses `go build -trimpath`, Rust uses `rustc -C opt-level=3`,
 and Java uses `javac` followed by the same recorded JVM for every run. The

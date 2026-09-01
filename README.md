@@ -397,6 +397,15 @@ CPU medians by only about 0.6% against a frozen 3% requirement. The threshold
 was not relaxed and the implementation was reverted. See the
 [recorded rejected result](results/2026-09-01-rejected-loop-invariant-array-length-linux-arm64/README.md).
 
+The next accepted candidate moves managed-root publication from a loop header
+to its exit only when emitted-code analysis proves that no path through the
+condition or body can start collection. It passes every frozen condition:
+`fannkuch-redux` wall and CPU medians improve by 12.46% and 12.47%, while
+`n-body` and `spectral-norm` remain neutral. Exact fixed-point, build-cost,
+compiler-size, application-size, correctness, and catastrophic limits all
+pass. See the
+[recorded safe-point-free loop-root result](results/2026-09-02-native-safe-point-free-loop-roots-linux-arm64/README.md).
+
 Gate 6N passes every frozen condition for the internal
 `linux-amd64-v0` profile. The exact merged compiler closes a 240,888-byte
 Go-free B2/B3/B4 fixed point, emits byte-identical target-neutral compiler and
@@ -560,6 +569,7 @@ repository.
 - [Rejected no-GC-safe-point root-publication result on Linux arm64](results/2026-09-01-rejected-no-gc-root-publication-linux-arm64/README.md)
 - [Formal safe Array-header reuse result on Linux arm64](results/2026-09-01-native-safe-array-headers-linux-arm64/README.md)
 - [Rejected loop-invariant Array-length result on Linux arm64](results/2026-09-01-rejected-loop-invariant-array-length-linux-arm64/README.md)
+- [Formal safe-point-free loop-root result on Linux arm64](results/2026-09-02-native-safe-point-free-loop-roots-linux-arm64/README.md)
 - [Formal static String compactness A/B result on Darwin/Linux arm64](results/2026-08-31-static-string-compactness-darwin-linux-arm64/README.md)
 - [Formal TypeRB backend-pair build controller](tools/benchmarksgame-build-formal/README.md)
 - [Formal Native runtime optimization A/B controller](tools/native-runtime-ab/README.md)
