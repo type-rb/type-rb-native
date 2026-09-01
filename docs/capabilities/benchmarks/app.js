@@ -36,6 +36,14 @@ function formatBytes(value) {
   return `${(value / 1024).toFixed(value >= 100 * 1024 ? 0 : 1)} KiB`;
 }
 
+function runtimeComparison(value, best, metric) {
+  const ratio = value / best;
+  if (metric === 'memoryBytes') {
+    return ratio === 1 ? 'lowest RSS (1.00×)' : `${ratio.toFixed(2)}× the lowest RSS`;
+  }
+  return ratio === 1 ? 'best time (1.00×)' : `${ratio.toFixed(2)}× the best time`;
+}
+
 const element = (name, className, text) => {
   const node = document.createElement(name);
   if (className) node.className = className;
@@ -125,7 +133,7 @@ function renderRuntime() {
 
   document.querySelector('#runtime-chart').replaceChildren(...rows.map((row) => {
     const value = row[state.runtimeMetric];
-    const comparison = value === fastest ? 'fastest' : `${(value / fastest).toFixed(2)}× fastest`;
+    const comparison = runtimeComparison(value, fastest, state.runtimeMetric);
     const item = element('div', `comparison-row candidate-${row.candidate}`);
     const label = element('div', 'candidate-label');
     label.append(element('strong', '', row.label), element('small', '', comparison));

@@ -19,6 +19,42 @@ kernels. The independent
 [build result](../results/2026-08-31-benchmarksgame-build-linux-arm64/README.md)
 finds that Native compiles the same sources 2.29x to 2.58x faster, uses about
 51% less compiler RSS, and reduces the controlled raw build payload by 99.64%.
+This is a complete historical snapshot, not a measurement of the latest `main`.
+Accepted Native optimizations after its measured revision remain in separate
+A/B records until a complete current-revision run replaces the snapshot.
+
+## Runtime objective and benchmark expansion
+
+The long-term execution objective is to match or exceed established statically
+typed language implementations on representative portable workloads. The
+identical-TypeRB Go path remains the primary backend control because it holds
+source and semantics constant; it does not define the final Native performance
+ceiling. Cross-language rows remain exact implementation context rather than a
+composite language ranking.
+
+The current three cases are the first numeric slice, not a broad application
+suite. Expansion proceeds in this order:
+
+1. rerun all three runtime and build cases from one current Native revision and
+   one current compatible TypeRB Go revision before replacing the published
+   snapshot;
+2. add allocation and collection pressure, with `binary-trees` as the first
+   candidate once its specification is expressible without semantic changes;
+3. add byte, String, and I/O workloads from `fasta` and
+   `reverse-complement`, followed by Hash and String pressure from
+   `k-nucleotide` and binary-output numeric work from `mandelbrot`;
+4. admit `regex-redux` and `pidigits` only after the corresponding portable
+   Regex and arbitrary-precision surfaces exist; and
+5. keep persistent worker, eventual Web/Job service, leak, latency, and soak
+   measurements in a separate application-lifecycle layer.
+
+Each addition must pin its upstream specification, license, source revision,
+input, exact output, toolchains, and measurement policy before results are
+reviewed. Pull-request optimization checks may use bounded Native-to-Native A/B
+runs, while the larger cross-language suite runs periodically from a complete
+revision. Profiles and generated-code evidence select optimization work; the
+project does not weaken TypeRB semantics or trade away its measured build-time
+and compactness advantages merely to improve a benchmark.
 
 ## Pinned upstream boundary
 

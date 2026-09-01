@@ -2,12 +2,14 @@
 
 ## Engineering objective
 
-Build a TypeRB-specific native AOT pipeline that ultimately matches or improves
-the optimized Go backend across these primary outcomes:
+Build a TypeRB-specific native AOT pipeline with these primary outcomes:
 
-1. End-to-end application build time.
-2. Generated-program execution time.
-3. Deployed executable size.
+1. End-to-end application build time that matches or improves the optimized Go
+   backend.
+2. Generated-program execution time that matches or improves established
+   statically typed language implementations across representative portable
+   workloads.
+3. Deployed executable size that matches or improves the optimized Go backend.
 
 The compiler and runtime are implemented in TypeRB, reproduce themselves, and
 must retain competitive build time and generated-code behavior once the
@@ -18,9 +20,12 @@ Secondary outcomes include compiler and runtime peak memory, startup latency,
 toolchain distribution size, portability, diagnostics, correctness risk, and
 maintenance cost.
 
-The comparison baseline is an optimized release executable produced by the
-reference compiler's Go backend. The experiment does not compare against an
-intentionally unstripped, cold, or otherwise disadvantaged Go configuration.
+The identical-source comparison baseline is an optimized release executable
+produced by the reference compiler's Go backend. It isolates backend and
+runtime changes, but it is not the final execution-performance ceiling.
+Cross-language runtime context uses pinned established implementations without
+an intentionally unoptimized, unstripped, cold, or otherwise disadvantaged
+configuration.
 
 ## Principles
 

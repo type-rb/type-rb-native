@@ -36,6 +36,9 @@ TypeRB version and revision backed by current evidence. See
 - Compare multiple machine-code strategies behind the same MIR and semantics.
 - Measure complete toolchains, including code generation, linking, runtime,
   sidecars, and distribution size.
+- Match or exceed established statically typed language implementations on
+  representative portable runtime workloads, while keeping the same-source Go
+  path as a backend control rather than the final execution-performance ceiling.
 - Preserve a credible path to a native implementation that is at least as
   practical as the Go backend, and use measured regressions to direct
   optimization work rather than treating early gates as disposable demos.
