@@ -45,13 +45,13 @@ The currently registered cases and thresholds are:
 | `worker-dynamic-array-address` | one phase, 400,000 batches | 0.95 |
 | `worker-gc-temp-push-fast-path` | one phase, 400,000 batches | 0.985 |
 
-The three numeric inputs apply the bounded checked-Integer multiplication
-contract registered in
-[issue #184](https://github.com/type-rb/type-rb-native/issues/184).
+The three numeric inputs apply the one-sided checked-Integer addition contract
+for bounded nonnegative literals registered in
+[issue #186](https://github.com/type-rb/type-rb-native/issues/186).
 They do not replace the full cross-language benchmark inputs or its published
 results. The same experiment limits the fixed-point Linux arm64 compiler to
 1.01x the exact baseline and 255,000 bytes; adjacent bootstrap wall time, CPU
-time, and peak RSS to 1.05x; every application's QBE to 1.01x; and every raw
+time, and peak RSS to 1.05x; every application's QBE to 1.00x; and every raw
 and stripped executable to 1.001x.
 
 Both compiler revisions are closed from their exact source trees, while one

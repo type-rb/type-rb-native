@@ -1332,17 +1332,25 @@ def gate4_emit_checked_integer_add(
 		left: String,
 		right: String,
 	)
+	mut nonnegative_literal := gate4_small_nonnegative_integer_operand(right)
+	if !nonnegative_literal
+		nonnegative_literal = gate4_small_nonnegative_integer_operand(left)
+	end
 	too_high := gate4_emit_temporary(context)
-	too_low := gate4_emit_temporary(context)
-	check_low := gate4_emit_label(context)
 	failure := gate4_integer_range_failure_label(context)
 	complete := gate4_emit_label(context)
 	gate4_output_line(output, "\t" + result + " =l add " + left + ", " + right)
 	gate4_output_line(output, "\t" + too_high + " =w csgtl " + result + ", 9007199254740991")
-	gate4_output_line(output, "\tjnz " + too_high + ", " + failure + ", " + check_low)
-	gate4_output_line(output, check_low)
-	gate4_output_line(output, "\t" + too_low + " =w csltl " + result + ", -9007199254740991")
-	gate4_output_line(output, "\tjnz " + too_low + ", " + failure + ", " + complete)
+	if nonnegative_literal
+		gate4_output_line(output, "\tjnz " + too_high + ", " + failure + ", " + complete)
+	else
+		too_low := gate4_emit_temporary(context)
+		check_low := gate4_emit_label(context)
+		gate4_output_line(output, "\tjnz " + too_high + ", " + failure + ", " + check_low)
+		gate4_output_line(output, check_low)
+		gate4_output_line(output, "\t" + too_low + " =w csltl " + result + ", -9007199254740991")
+		gate4_output_line(output, "\tjnz " + too_low + ", " + failure + ", " + complete)
+	end
 	gate4_emit_integer_range_failure(output, failure)
 	gate4_output_line(output, complete)
 	return

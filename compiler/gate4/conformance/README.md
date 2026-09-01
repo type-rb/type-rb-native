@@ -50,7 +50,10 @@ The valid cases cover:
   leaf call in `valid/scalar-leaf-inline.trb`;
 - checked Integer multiplication at the bounded nonnegative fast-entry
   threshold, its safe slow path, negative operands, zero, and the portable
-  extrema in `valid/integer-multiply-fast-path.trb`; and
+  extrema in `valid/integer-multiply-fast-path.trb`;
+- one-sided checked Integer addition for bounded nonnegative literals on
+  either side, including the classifier boundary, its dynamic fallback, zero,
+  and the portable extrema in `valid/integer-literal-add-one-sided.trb`; and
 - the compiler source closure itself, exercised by the bootstrap test outside
   this directory.
 
@@ -76,6 +79,9 @@ Negative, zero, maximum, safe slow-path, and overflow behavior are fixed by
 `valid/integer-multiply-fast-path.trb` and
 `runtime-invalid/integer-multiply-fast-path-overflow.trb`; status, empty
 stdout, and panic text must agree across the updated B2/B3/B4 compilers.
+The bounded literal-addition entry is likewise paired with
+`runtime-invalid/integer-literal-add-one-sided-overflow.trb` so the removed
+lower check cannot weaken the retained upper-bound failure.
 
 The `mutations` directory contains a base program and two independently changed
 sources. All three must produce distinct QBE and distinct runtime output. This
