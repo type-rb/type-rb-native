@@ -91,6 +91,7 @@ record Gate4EmitContext
 	slot_count: Array<Integer>
 	managed_local_high_water: Array<Integer>
 	temporary_roots_used: Array<Integer>
+	gc_safe_points_used: Array<Integer>
 	temporary_count: Array<Integer>
 	label_count: Array<Integer>
 	loop_depth: Array<Integer>
@@ -411,6 +412,7 @@ def gate4_emit_context_new(capacity: Integer, inline_budget: Array<Integer>): Ga
 		slot_count: [0],
 		managed_local_high_water: [0],
 		temporary_roots_used: [0],
+		gc_safe_points_used: [0],
 		temporary_count: [0],
 		label_count: [0],
 		loop_depth: [0],
@@ -1101,11 +1103,14 @@ def gate4_type_is_managed(type_name: String): Boolean
 end
 
 def gate4_emit_array_push(
+		mut context: Gate4EmitContext,
 		mut output: Gate4Output,
 		array: String,
 		element_type: String,
 		operand: String,
 	)
+	# Growing an Array may collect before its backing storage is reallocated.
+	context.gc_safe_points_used[0] = 1
 	if element_type == "Float"
 		output.runtime_flags[0] = 1
 		gate4_output_line(
@@ -1155,6 +1160,7 @@ def gate4_emit_loop_root_compaction(mut context: Gate4EmitContext, mut output: G
 		gate4_output_line(output, "\tcall $g4_gc_temp_reset(l %temporary_roots)")
 		return
 	end
+	gate4_output_line(output, "# gate4 managed-root publication begin")
 	data := gate4_emit_temporary(context)
 	base_offset := gate4_emit_temporary(context)
 	base := gate4_emit_temporary(context)
@@ -1194,6 +1200,7 @@ def gate4_emit_loop_root_compaction(mut context: Gate4EmitContext, mut output: G
 		"\t" + root_count + " =l add %temporary_roots, " + gate4_integer_string(managed_count),
 	)
 	gate4_output_line(output, "\tstorel " + root_count + ", $g4_gc_temp_count")
+	gate4_output_line(output, "# gate4 managed-root publication end")
 	return
 end
 
@@ -1245,6 +1252,9 @@ def gate4_emit_root_value(
 	)
 	if gate4_type_is_managed(type_name)
 		context.temporary_roots_used[0] = 1
+		# Managed results are produced by allocation or by calls whose allocation
+		# behavior is intentionally opaque at this boundary.
+		context.gc_safe_points_used[0] = 1
 	end
 	return
 end
@@ -1604,7 +1614,7 @@ def gate4_emit_array_literal(
 				operand = converted
 			end
 		end
-		gate4_emit_array_push(output, array, element_type, operand)
+		gate4_emit_array_push(context, output, array, element_type, operand)
 		index += 1
 	end
 	return gate4_emitted_value(array, gate4_array_type(element_type), 0, "", 1, "")
@@ -1981,12 +1991,16 @@ def gate4_emit_direct_call(
 		end
 	end
 	if result_type == "Void"
+		# Until interprocedural no-allocation summaries exist, every ordinary
+		# TypeRB call remains a conservative GC safe point.
+		context.gc_safe_points_used[0] = 1
 		gate4_output_line(
 			output,
 			"\tcall $g4f" + gate4_integer_string(function_index) + "(" + arguments + ")",
 		)
 		return gate4_emitted_value("", "Void", 0, "", 0, "")
 	end
+	context.gc_safe_points_used[0] = 1
 	result := gate4_emit_temporary(context)
 	gate4_output_line(
 		output,
@@ -2071,7 +2085,7 @@ def gate4_emit_method_call(
 		value := gate4_emit_expression(state, position, context, output, 1, element_type)
 		gate4_skip_newlines(state, position)
 		gate4_expect(state, position, ")")
-		gate4_emit_array_push(output, receiver.operand, element_type, value.operand)
+		gate4_emit_array_push(context, output, receiver.operand, element_type, value.operand)
 		return gate4_emitted_value("", "Void", 0, "", 0, "")
 	end
 	if method == "to_i"
@@ -2840,7 +2854,12 @@ def gate4_emit_function(
 		"function " + result_prefix + "$g4f" + gate4_integer_string(function_index) + "(" + parameters + ") {",
 	)
 	gate4_output_line(output, "@start")
-	uses_temporary_roots := context.temporary_roots_used[0] == 1
+	mut uses_temporary_roots := context.temporary_roots_used[0] == 1
+	if context.gc_safe_points_used[0] == 0
+		# No operation in this function can start collection, so managed aliases
+		# remain reachable without publishing or restoring a temporary-root frame.
+		uses_temporary_roots = false
+	end
 	managed_local_count := context.managed_local_high_water[0]
 	if uses_temporary_roots
 		gate4_output_line(output, "\t%temporary_roots =l loadl $g4_gc_temp_count")
@@ -2868,17 +2887,28 @@ def gate4_emit_function(
 		end
 	end
 	mut body_index := 0
+	mut inside_root_publication := false
 	while body_index < body.count[0]
 		line := gate4_load_string(body.lines, body_index)
-		if uses_temporary_roots
-			if line == "\tcall $g4_gc_temp_reset(l %temporary_roots)"
-				gate4_output_line(output, "\tstorel %temporary_roots, $g4_gc_temp_count")
-			else
-				gate4_output_line(output, line)
-			end
+		if line == "# gate4 managed-root publication begin"
+			inside_root_publication = true
 		else
-			if line != "\tcall $g4_gc_temp_reset(l %temporary_roots)"
-				gate4_output_line(output, line)
+			if line == "# gate4 managed-root publication end"
+				inside_root_publication = false
+			else
+				if uses_temporary_roots
+					if line == "\tcall $g4_gc_temp_reset(l %temporary_roots)"
+						gate4_output_line(output, "\tstorel %temporary_roots, $g4_gc_temp_count")
+					else
+						gate4_output_line(output, line)
+					end
+				else
+					if !inside_root_publication
+						if line != "\tcall $g4_gc_temp_reset(l %temporary_roots)"
+							gate4_output_line(output, line)
+						end
+					end
+				end
 			end
 		end
 		body_index += 1
