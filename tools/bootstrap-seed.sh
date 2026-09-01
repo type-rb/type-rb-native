@@ -456,7 +456,7 @@ require_empty_file "$space_directory/stderr" "space-bearing project stderr diffe
 require_no_intermediates "$space_directory"
 
 measurements=$evidence/measurements.csv
-printf 'stage,iteration,elapsed_seconds,peak_rss_bytes,status\n' > "$measurements"
+printf 'stage,iteration,elapsed_seconds,peak_rss_bytes,status,cpu_seconds\n' > "$measurements"
 
 measure_build() {
 	stage=$1
@@ -470,6 +470,7 @@ measure_build() {
 	stdout_log=$measurement_directory/stdout
 	elapsed=0
 	rss=0
+	cpu=0
 	measurement_status=0
 	if test "$os" = darwin; then
 		set +e
@@ -482,10 +483,15 @@ measure_build() {
 		if test -r "$time_log"; then
 			elapsed=$(awk '$1 == "real" { print $2; exit }' "$time_log")
 			rss=$(awk '/maximum resident set size/ { print $1; exit }' "$time_log")
+			cpu=$(awk '
+				$1 == "user" { user = $2 }
+				$1 == "sys" { system_time = $2 }
+				END { printf "%.2f", user + system_time }
+			' "$time_log")
 		fi
 	else
 		set +e
-		/usr/bin/time -f '%e %M' -o "$time_log" \
+		/usr/bin/time -f '%e %M %U %S' -o "$time_log" \
 			"$seed" build "$compiler_entry" --output "$measured_output" \
 			--qbe "$qbe" --cc "$cc" --target "$profile" \
 			> "$stdout_log" 2> "$measurement_directory/stderr"
@@ -495,20 +501,21 @@ measure_build() {
 		if test -r "$time_log"; then
 			elapsed=$(awk '{ print $1 }' "$time_log")
 			rss_kib=$(awk '{ print $2 }' "$time_log")
+			cpu=$(awk '{ printf "%.2f", $3 + $4 }' "$time_log")
 		fi
 		case "$rss_kib" in
 		'' | *[!0-9]*) rss=0 ;;
 		*) rss=$((rss_kib * 1024)) ;;
 		esac
 	fi
-	printf '%s,%s,%s,%s,%s\n' \
-		"$stage" "$iteration" "${elapsed:-0}" "${rss:-0}" "$measurement_status" >> "$measurements"
+	printf '%s,%s,%s,%s,%s,%s\n' \
+		"$stage" "$iteration" "${elapsed:-0}" "${rss:-0}" "$measurement_status" "${cpu:-0}" >> "$measurements"
 	test "$measurement_status" -eq 0 || fail "measured build failed for $stage observation $iteration"
 	if test "$os" != darwin; then
 		require_empty_file "$measurement_directory/stderr" "measured build stderr differs"
 	fi
-	awk -v elapsed="$elapsed" -v rss="$rss" \
-		'BEGIN {exit !(elapsed > 0 && rss > 0)}' || fail "could not parse time output"
+	awk -v elapsed="$elapsed" -v rss="$rss" -v cpu="$cpu" \
+		'BEGIN {exit !(elapsed > 0 && rss > 0 && cpu > 0)}' || fail "could not parse time output"
 	require_empty_file "$stdout_log" "measured build stdout differs"
 	cmp "$expected_compiler" "$measured_output" >/dev/null || fail "measured compiler bytes differ"
 	require_no_intermediates "$measurement_directory"
@@ -570,6 +577,8 @@ else
 	median_b3_b4_time=$(median_value b3-b4 3)
 	median_b2_b3_rss=$(median_value b2-b3 4)
 	median_b3_b4_rss=$(median_value b3-b4 4)
+	median_b2_b3_cpu=$(median_value b2-b3 6)
+	median_b3_b4_cpu=$(median_value b3-b4 6)
 
 	require_within_25_percent() {
 		label=$1
@@ -603,27 +612,32 @@ else
 	if test "$input_role" = ordinary; then
 		median_b1_b2_time=$(median_value b1-b2 3)
 		median_b1_b2_rss=$(median_value b1-b2 4)
+		median_b1_b2_cpu=$(median_value b1-b2 6)
 		cat > "$evidence/medians.txt" <<EOF
-b1-b2 elapsed_seconds=$median_b1_b2_time peak_rss_bytes=$median_b1_b2_rss
-b2-b3 elapsed_seconds=$median_b2_b3_time peak_rss_bytes=$median_b2_b3_rss
-b3-b4 elapsed_seconds=$median_b3_b4_time peak_rss_bytes=$median_b3_b4_rss
+b1-b2 elapsed_seconds=$median_b1_b2_time peak_rss_bytes=$median_b1_b2_rss cpu_seconds=$median_b1_b2_cpu
+b2-b3 elapsed_seconds=$median_b2_b3_time peak_rss_bytes=$median_b2_b3_rss cpu_seconds=$median_b2_b3_cpu
+b3-b4 elapsed_seconds=$median_b3_b4_time peak_rss_bytes=$median_b3_b4_rss cpu_seconds=$median_b3_b4_cpu
 EOF
 
 		require_within_25_percent elapsed \
 			"$median_b1_b2_time" "$median_b2_b3_time" "$median_b3_b4_time"
 		require_within_25_percent rss \
 			"$median_b1_b2_rss" "$median_b2_b3_rss" "$median_b3_b4_rss"
+		require_within_25_percent cpu \
+			"$median_b1_b2_cpu" "$median_b2_b3_cpu" "$median_b3_b4_cpu"
 	else
 		cat > "$evidence/medians.txt" <<EOF
 b1-b2 excluded=setup-only-transition
-b2-b3 elapsed_seconds=$median_b2_b3_time peak_rss_bytes=$median_b2_b3_rss
-b3-b4 elapsed_seconds=$median_b3_b4_time peak_rss_bytes=$median_b3_b4_rss
+b2-b3 elapsed_seconds=$median_b2_b3_time peak_rss_bytes=$median_b2_b3_rss cpu_seconds=$median_b2_b3_cpu
+b3-b4 elapsed_seconds=$median_b3_b4_time peak_rss_bytes=$median_b3_b4_rss cpu_seconds=$median_b3_b4_cpu
 EOF
 
 		require_pair_within_25_percent elapsed \
 			"$median_b2_b3_time" "$median_b3_b4_time"
 		require_pair_within_25_percent rss \
 			"$median_b2_b3_rss" "$median_b3_b4_rss"
+		require_pair_within_25_percent cpu \
+			"$median_b2_b3_cpu" "$median_b3_b4_cpu"
 	fi
 fi
 

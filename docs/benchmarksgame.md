@@ -246,6 +246,18 @@ QBE and executable, and passes all correctness, fixed-point, build, and
 compactness limits. It nevertheless misses the preregistered 15% performance
 signal. The threshold was not relaxed, and the implementation was reverted.
 
+The combined contract registered by
+[issue #176](https://github.com/type-rb/type-rb-native/issues/176) retains that
+safe-point-aware analysis and adds a bounded two-entry Array-header cache for
+owned loops. Its
+[formal result](../results/2026-09-01-native-safe-array-headers-linux-arm64/README.md)
+passes every frozen condition. `n-body` wall and CPU medians improve by 28.36%
+and 28.50%; `fannkuch-redux` improves by 7.46%; and `spectral-norm` remains
+neutral. The self-hosted fixed point, build cost, compiler size, application
+size, correctness, and catastrophic bounds all pass. This candidate becomes
+the next accepted Native baseline; it does not change the explicit objective
+of matching or beating the separately measured Pure Go implementations.
+
 Builds use release optimization without unsafe fast-math substitutions: C and
 C++ use `-O3`, Go uses `go build -trimpath`, Rust uses `rustc -C opt-level=3`,
 and Java uses `javac` followed by the same recorded JVM for every run. The

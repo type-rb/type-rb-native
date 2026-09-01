@@ -98,6 +98,7 @@ record Gate4EmitContext
 	scalar_inline_depth: Array<Integer>
 	scalar_inline_range_failure_used: Array<Integer>
 	array_bounds_failure_used: Array<Integer>
+	array_header_cache: Array<Array<String>>
 end
 
 record Gate4EmittedValue
@@ -418,6 +419,7 @@ def gate4_emit_context_new(capacity: Integer, inline_budget: Array<Integer>): Ga
 		scalar_inline_depth: [0],
 		scalar_inline_range_failure_used: [0],
 		array_bounds_failure_used: [0],
+		array_header_cache: [["", "", ""], ["", "", ""]],
 	)
 end
 
@@ -1100,12 +1102,30 @@ def gate4_type_is_managed(type_name: String): Boolean
 	return gate4_string_starts_with(type_name, "Record#")
 end
 
+def gate4_note_temporary_root(mut context: Gate4EmitContext)
+	if context.temporary_roots_used[0] == 0
+		context.temporary_roots_used[0] = 1
+	end
+	return
+end
+
+def gate4_note_gc_safe_point(mut context: Gate4EmitContext)
+	if context.temporary_roots_used[0] == 1
+		context.temporary_roots_used[0] = 2
+	end
+	return
+end
+
 def gate4_emit_array_push(
+		mut context: Gate4EmitContext,
 		mut output: Gate4Output,
 		array: String,
 		element_type: String,
 		operand: String,
 	)
+	# Growing an Array may collect before its backing storage is reallocated.
+	gate4_note_gc_safe_point(context)
+	gate4_invalidate_array_header_cache(context)
 	if element_type == "Float"
 		output.runtime_flags[0] = 1
 		gate4_output_line(
@@ -1155,6 +1175,7 @@ def gate4_emit_loop_root_compaction(mut context: Gate4EmitContext, mut output: G
 		gate4_output_line(output, "\tcall $g4_gc_temp_reset(l %temporary_roots)")
 		return
 	end
+	gate4_output_line(output, "{")
 	data := gate4_emit_temporary(context)
 	base_offset := gate4_emit_temporary(context)
 	base := gate4_emit_temporary(context)
@@ -1168,7 +1189,7 @@ def gate4_emit_loop_root_compaction(mut context: Gate4EmitContext, mut output: G
 		inherited := gate4_load_integer(context.local_inherited, local_index)
 		if gate4_type_is_managed(type_name)
 			if inherited == 0
-				context.temporary_roots_used[0] = 1
+				gate4_note_temporary_root(context)
 				value := gate4_emit_temporary(context)
 				mut slot := base
 				if managed_index > 0
@@ -1194,6 +1215,7 @@ def gate4_emit_loop_root_compaction(mut context: Gate4EmitContext, mut output: G
 		"\t" + root_count + " =l add %temporary_roots, " + gate4_integer_string(managed_count),
 	)
 	gate4_output_line(output, "\tstorel " + root_count + ", $g4_gc_temp_count")
+	gate4_output_line(output, "}")
 	return
 end
 
@@ -1244,7 +1266,9 @@ def gate4_emit_root_value(
 		type_name: String,
 	)
 	if gate4_type_is_managed(type_name)
-		context.temporary_roots_used[0] = 1
+		# Managed results are produced by allocation or by calls whose allocation
+		# behavior is intentionally opaque at this boundary.
+		context.temporary_roots_used[0] = 2
 	end
 	return
 end
@@ -1257,7 +1281,7 @@ def gate4_note_managed_alias(
 		# The owner remains reachable through its caller, allocation, or managed
 		# local root until the alias is consumed. Loop compaction transfers an
 		# alias retained as a local, so a duplicate temporary root is unnecessary.
-		context.temporary_roots_used[0] = 1
+		gate4_note_temporary_root(context)
 	end
 	return
 end
@@ -1417,36 +1441,130 @@ def gate4_emit_checked_integer_remainder(
 	return
 end
 
+def gate4_invalidate_array_header_cache(mut context: Gate4EmitContext)
+	context.array_header_cache[0][0] = ""
+	context.array_header_cache[1][0] = ""
+	return
+end
+
+def gate4_emit_array_header(
+		mut context: Gate4EmitContext,
+		mut output: Gate4Output,
+		array: String,
+		key: String,
+		cache_index: Integer,
+		offset: String,
+		address: String,
+		value: String,
+	): String
+	use_cache := key != ""
+	mut caches := context.array_header_cache
+	mut cache := caches[0]
+	if use_cache
+		if cache[0] != key
+			previous_cache := cache
+			cache = caches[1]
+			if cache[0] != key
+				cache[0] = key
+				cache[1] = ""
+				cache[2] = ""
+			end
+			caches[1] = previous_cache
+			caches[0] = cache
+		end
+		cached := cache[cache_index]
+		if cached != ""
+			return cached
+		end
+	end
+	mut resolved_address := address
+	mut resolved_value := value
+	if resolved_value == ""
+		resolved_address = gate4_emit_temporary(context)
+		resolved_value = gate4_emit_temporary(context)
+	end
+	gate4_output_line(output, "\t" + resolved_address + " =l add " + array + ", " + offset)
+	gate4_output_line(output, "\t" + resolved_value + " =l loadl " + resolved_address)
+	if use_cache
+		cache[cache_index] = resolved_value
+	end
+	return resolved_value
+end
+
 def gate4_emit_array_address(
 		mut context: Gate4EmitContext,
 		mut output: Gate4Output,
 		array: String,
+		array_key: String,
 		requested: String,
 	): String
-	length := gate4_emit_temporary(context)
+	mut use_cache := false
+	if array_key != ""
+		# Restrict header reuse to loops that own managed locals. Inherited-only
+		# loops remain unchanged so call-heavy kernels do not extend temporary live
+		# ranges without an owning Array allocation to amortize them.
+		if context.loop_depth[0] > 0
+			use_cache = gate4_owned_managed_local_count(context) >= 1
+		end
+	end
+	mut length := ""
+	mut length_address := ""
+	mut resolved_length := ""
+	if use_cache
+		resolved_length = gate4_emit_array_header(context, output, array, array_key, 1, "8", "", "")
+	else
+		length = gate4_emit_temporary(context)
+	end
 	negative_mask := gate4_emit_temporary(context)
 	adjustment := gate4_emit_temporary(context)
 	index := gate4_emit_temporary(context)
 	valid := gate4_emit_temporary(context)
-	data_slot := gate4_emit_temporary(context)
-	data := gate4_emit_temporary(context)
+	mut data_slot := ""
+	mut data := ""
+	if !use_cache
+		data_slot = gate4_emit_temporary(context)
+		data = gate4_emit_temporary(context)
+	end
 	offset := gate4_emit_temporary(context)
 	address := gate4_emit_temporary(context)
 	load_label := gate4_emit_label(context)
-	length_address := gate4_emit_temporary(context)
-	gate4_output_line(output, "\t" + length_address + " =l add " + array + ", 8")
-	gate4_output_line(output, "\t" + length + " =l loadl " + length_address)
+	if !use_cache
+		length_address = gate4_emit_temporary(context)
+		resolved_length = gate4_emit_array_header(
+			context,
+			output,
+			array,
+			"",
+			1,
+			"8",
+			length_address,
+			length,
+		)
+	end
 	gate4_output_line(output, "\t" + negative_mask + " =l sar " + requested + ", 63")
-	gate4_output_line(output, "\t" + adjustment + " =l and " + length + ", " + negative_mask)
+	gate4_output_line(output, "\t" + adjustment + " =l and " + resolved_length + ", " + negative_mask)
 	gate4_output_line(output, "\t" + index + " =l add " + requested + ", " + adjustment)
-	gate4_output_line(output, "\t" + valid + " =w cultl " + index + ", " + length)
+	gate4_output_line(output, "\t" + valid + " =w cultl " + index + ", " + resolved_length)
 	gate4_output_line(output, "\tjnz " + valid + ", " + load_label + ", @array_bounds_failure")
 	context.array_bounds_failure_used[0] = 1
 	gate4_output_line(output, load_label)
-	gate4_output_line(output, "\t" + data_slot + " =l add " + array + ", 24")
-	gate4_output_line(output, "\t" + data + " =l loadl " + data_slot)
+	mut resolved_data := ""
+	if use_cache
+		resolved_data = gate4_emit_array_header(context, output, array, array_key, 2, "24", "", "")
+	else
+		resolved_data = gate4_emit_array_header(
+			context,
+			output,
+			array,
+			"",
+			2,
+			"24",
+			data_slot,
+			data,
+		)
+	end
 	gate4_output_line(output, "\t" + offset + " =l mul " + index + ", 8")
-	gate4_output_line(output, "\t" + address + " =l add " + data + ", " + offset)
+	gate4_output_line(output, "\t" + address + " =l add " + resolved_data + ", " + offset)
 	return address
 end
 
@@ -1604,7 +1722,7 @@ def gate4_emit_array_literal(
 				operand = converted
 			end
 		end
-		gate4_emit_array_push(output, array, element_type, operand)
+		gate4_emit_array_push(context, output, array, element_type, operand)
 		index += 1
 	end
 	return gate4_emitted_value(array, gate4_array_type(element_type), 0, "", 1, "")
@@ -1760,17 +1878,6 @@ def gate4_scalar_leaf_inline_eligible(state: Gate4Compiler, function_index: Inte
 	return false
 end
 
-def gate4_take_scalar_leaf_inline_budget(mut context: Gate4EmitContext): Boolean
-	if context.loop_depth[0] <= 0
-		return false
-	end
-	if context.inline_budget[2] <= 0
-		return false
-	end
-	context.inline_budget[2] = context.inline_budget[2] - 1
-	return true
-end
-
 def gate4_emit_scalar_leaf_inline(
 		mut state: Gate4Compiler,
 		function_index: Integer,
@@ -1884,15 +1991,18 @@ def gate4_emit_direct_call(
 	if function_index >= 0
 		if state.function_count[0] <= 32
 			if gate4_scalar_leaf_inline_eligible(state, function_index)
-				if gate4_take_scalar_leaf_inline_budget(context)
-					return gate4_emit_scalar_leaf_direct_call(
-						state,
-						position,
-						function_index,
-						parameter_start,
-						context,
-						output,
-					)
+				if context.loop_depth[0] > 0
+					if context.inline_budget[2] > 0
+						context.inline_budget[2] = context.inline_budget[2] - 1
+						return gate4_emit_scalar_leaf_direct_call(
+							state,
+							position,
+							function_index,
+							parameter_start,
+							context,
+							output,
+						)
+					end
 				end
 			end
 		end
@@ -1926,6 +2036,11 @@ def gate4_emit_direct_call(
 		end
 	end
 	gate4_expect(state, position, ")")
+	if callee.category != 5
+		# An opaque call may mutate an aliased Array header. Arguments have already
+		# consumed any cached header values needed before this invalidation point.
+		gate4_invalidate_array_header_cache(context)
+	end
 	if callee.category == 4
 		output.runtime_flags[1] = 1
 		result := gate4_emit_temporary(context)
@@ -1980,6 +2095,9 @@ def gate4_emit_direct_call(
 			context.inline_budget[2] =- 1
 		end
 	end
+	# Until interprocedural no-allocation summaries exist, every ordinary
+	# TypeRB call remains a conservative GC safe point.
+	gate4_note_gc_safe_point(context)
 	if result_type == "Void"
 		gate4_output_line(
 			output,
@@ -2071,7 +2189,7 @@ def gate4_emit_method_call(
 		value := gate4_emit_expression(state, position, context, output, 1, element_type)
 		gate4_skip_newlines(state, position)
 		gate4_expect(state, position, ")")
-		gate4_emit_array_push(output, receiver.operand, element_type, value.operand)
+		gate4_emit_array_push(context, output, receiver.operand, element_type, value.operand)
 		return gate4_emitted_value("", "Void", 0, "", 0, "")
 	end
 	if method == "to_i"
@@ -2173,7 +2291,13 @@ def gate4_emit_postfix(
 							end
 						end
 						if inline_address
-							address = gate4_emit_array_address(context, output, value.operand, index.operand)
+							address = gate4_emit_array_address(
+								context,
+								output,
+								value.operand,
+								value.address,
+								index.operand,
+							)
 						else
 							output.runtime_flags[3] = 1
 							address = gate4_emit_temporary(context)
@@ -2495,22 +2619,7 @@ def gate4_emit_binary(
 end
 
 def gate4_binary_result_type_name(operator: String, left: String, right: String): String
-	if operator == "=="
-		return "Boolean"
-	end
-	if operator == "!="
-		return "Boolean"
-	end
-	if operator == "<"
-		return "Boolean"
-	end
-	if operator == "<="
-		return "Boolean"
-	end
-	if operator == ">"
-		return "Boolean"
-	end
-	if operator == ">="
+	if gate4_binary_precedence(operator) == 1
 		return "Boolean"
 	end
 	if left == "Float"
@@ -2623,6 +2732,12 @@ def gate4_emit_simple_statement(
 			gate4_output_line(output, "\t" + gate4_qbe_store(left.type_name) + " " + result.operand + ", " + left.address)
 		end
 	end
+	if gate4_array_element_type(left.type_name) != ""
+		# Rebinding an Array local or field invalidates the header associated with
+		# its stable source address. Element writes have scalar or managed element
+		# types and keep the Array header itself unchanged.
+		gate4_invalidate_array_header_cache(context)
+	end
 	return gate4_finish_statement(state, position)
 end
 
@@ -2662,6 +2777,7 @@ def gate4_emit_block(
 					when_false := gate4_emit_label(context)
 					join := gate4_emit_label(context)
 					gate4_emit_temporary_root_reset(context, output)
+					gate4_invalidate_array_header_cache(context)
 					gate4_output_line(output, "\tjnz " + condition + ", " + when_true + ", " + when_false)
 					gate4_output_line(output, when_true)
 					saved_count := context.local_count[0]
@@ -2671,6 +2787,7 @@ def gate4_emit_block(
 						gate4_emit_temporary_root_reset(context, output)
 						gate4_output_line(output, "\tjmp " + join)
 					end
+					gate4_invalidate_array_header_cache(context)
 					gate4_output_line(output, when_false)
 					mut false_terminated := 0
 					if gate4_token_is(state, position[0], "else")
@@ -2694,11 +2811,13 @@ def gate4_emit_block(
 					else
 						gate4_output_line(output, join)
 					end
+					gate4_invalidate_array_header_cache(context)
 				else
 					if gate4_token_is(state, position[0], "while")
 						header := gate4_emit_label(context)
 						body := gate4_emit_label(context)
 						done := gate4_emit_label(context)
+						gate4_invalidate_array_header_cache(context)
 						gate4_output_line(output, "\tjmp " + header)
 						gate4_output_line(output, header)
 						gate4_emit_loop_root_compaction(context, output)
@@ -2720,6 +2839,7 @@ def gate4_emit_block(
 						gate4_expect(state, position, "end")
 						gate4_finish_statement(state, position)
 						gate4_output_line(output, done)
+						gate4_invalidate_array_header_cache(context)
 						context.loop_depth[0] = context.loop_depth[0] - 1
 					else
 						if gate4_token_is(state, position[0], "return")
@@ -2840,7 +2960,9 @@ def gate4_emit_function(
 		"function " + result_prefix + "$g4f" + gate4_integer_string(function_index) + "(" + parameters + ") {",
 	)
 	gate4_output_line(output, "@start")
-	uses_temporary_roots := context.temporary_roots_used[0] == 1
+	# State 2 combines a managed temporary with a following collection safe
+	# point. Either condition alone does not require publishing the frame.
+	uses_temporary_roots := context.temporary_roots_used[0] == 2
 	managed_local_count := context.managed_local_high_water[0]
 	if uses_temporary_roots
 		gate4_output_line(output, "\t%temporary_roots =l loadl $g4_gc_temp_count")
@@ -2868,17 +2990,28 @@ def gate4_emit_function(
 		end
 	end
 	mut body_index := 0
+	mut inside_root_publication := false
 	while body_index < body.count[0]
 		line := gate4_load_string(body.lines, body_index)
-		if uses_temporary_roots
-			if line == "\tcall $g4_gc_temp_reset(l %temporary_roots)"
-				gate4_output_line(output, "\tstorel %temporary_roots, $g4_gc_temp_count")
-			else
-				gate4_output_line(output, line)
-			end
+		if line == "{"
+			inside_root_publication = true
 		else
-			if line != "\tcall $g4_gc_temp_reset(l %temporary_roots)"
-				gate4_output_line(output, line)
+			if line == "}"
+				inside_root_publication = false
+			else
+				if uses_temporary_roots
+					if line == "\tcall $g4_gc_temp_reset(l %temporary_roots)"
+						gate4_output_line(output, "\tstorel %temporary_roots, $g4_gc_temp_count")
+					else
+						gate4_output_line(output, line)
+					end
+				else
+					if !inside_root_publication
+						if line != "\tcall $g4_gc_temp_reset(l %temporary_roots)"
+							gate4_output_line(output, line)
+						end
+					end
+				end
 			end
 		end
 		body_index += 1

@@ -41,6 +41,9 @@ The valid cases cover:
 - Integer Array order, aliases, nested retention, mutation, append, negative
   indexing, and forced collection across scalar geometric growth
   boundaries in `valid/scalar-array-growth.trb`;
+- repeated Array-header reads in an owned-managed loop, with exact invalidation
+  after an opaque mutating call and local Array rebinding in
+  `valid/array-header-cache-invalidation.trb`;
 - left-to-right, exactly-once argument evaluation through a bounded scalar
   leaf call in `valid/scalar-leaf-inline.trb`; and
 - the compiler source closure itself, exercised by the bootstrap test outside
