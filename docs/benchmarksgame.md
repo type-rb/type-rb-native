@@ -12,16 +12,16 @@ The capability corpus and the first formal runtime and build/distribution
 layers are complete. All three performance inputs pass through the pinned Go
 reference compiler, ordinary self-hosted Native compiler, and five pinned
 context implementations with exact published output. The
-[recorded Linux arm64 result](../results/2026-08-31-benchmarksgame-runtime-linux-arm64/README.md)
-retains every registered observation and finds that Native is substantially
-smaller and lighter than TypeRB Go but 2.44x to 4.68x slower on these numeric
-kernels. The independent
-[build result](../results/2026-08-31-benchmarksgame-build-linux-arm64/README.md)
-finds that Native compiles the same sources 2.29x to 2.58x faster, uses about
-51% less compiler RSS, and reduces the controlled raw build payload by 99.64%.
-This is a complete historical snapshot, not a measurement of the latest `main`.
-Accepted Native optimizations after its measured revision remain in separate
-A/B records until a complete current-revision run replaces the snapshot.
+[current Linux arm64 result](../results/2026-09-01-benchmarksgame-runtime-safe-array-headers-linux-arm64/README.md)
+retains every registered observation and measures accepted revision `473a6de`.
+Native is substantially smaller and lighter than TypeRB Go but remains 2.59x
+to 4.09x slower than Pure Go across these numeric kernels. Pure Go parity or
+better is the minimum runtime objective. The independent
+[build result](../results/2026-09-01-benchmarksgame-build-safe-array-headers-linux-arm64/README.md)
+finds that Native compiles the same sources 2.34x to 2.62x faster, uses about
+51% less compiler RSS, and reduces the controlled raw build payload by 99.65%.
+This internally consistent snapshot replaces the preceding complete result;
+later focused A/B records remain separate until another complete rerun.
 
 ## Runtime objective and benchmark expansion
 
@@ -159,8 +159,8 @@ The preregistered
 BenchExec `runexec` 3.35, runs correctness before timing, rotates all seven
 candidates through two warmup and eleven retained rounds, and preserves every
 failure and raw process-tree metric. One-core and four-core lanes are separate.
-This controller measures complete fresh processes only. Its first
-[formal result](../results/2026-08-31-benchmarksgame-runtime-linux-arm64/README.md)
+This controller measures complete fresh processes only. Its current
+[formal result](../results/2026-09-01-benchmarksgame-runtime-safe-array-headers-linux-arm64/README.md)
 publishes all one-core and four-core raw observations, independently reproduced
 medians, and exact artifact identities. Compiler measurements and complete
 artifact/distribution inventory use the separate
@@ -168,8 +168,8 @@ artifact/distribution inventory use the separate
 measures alternating clean outputs through both TypeRB backends, verifies every
 measured artifact, process-traces representative builds, and separates
 controlled payloads from platform prerequisites and deploy artifacts. Its
-first
-[formal result](../results/2026-08-31-benchmarksgame-build-linux-arm64/README.md)
+current
+[formal result](../results/2026-09-01-benchmarksgame-build-safe-array-headers-linux-arm64/README.md)
 publishes all raw observations, independently reproduced medians, artifact
 variants, process closure, dynamic dependencies, and distribution totals. See
 [Decision 0024](decisions/0024-benchexec-runtime-controller.md) and

@@ -1,4 +1,4 @@
-import { benchmarkData } from './data.js';
+import { benchmarkData } from './data.js?v=2026-09-01-473a6de';
 
 const caseLabels = {
   'fannkuch-redux': 'fannkuch-redux',
@@ -71,13 +71,13 @@ const evidenceLink = (url, label = 'Source') => {
 function renderSummary() {
   const runtime = benchmarkData.runtime.records;
   const build = benchmarkData.build.records;
-  const nativeGoRatios = [];
+  const nativePureGoRatios = [];
   for (const caseName of Object.keys(caseLabels)) {
     for (const lane of Object.keys(laneLabels)) {
       const rows = runtime.filter((row) => row.case === caseName && row.lane === lane);
       const native = rows.find((row) => row.candidate === 'typerb-native');
-      const go = rows.find((row) => row.candidate === 'typerb-go');
-      nativeGoRatios.push(native.wallSeconds / go.wallSeconds);
+      const pureGo = rows.find((row) => row.candidate === 'go');
+      nativePureGoRatios.push(native.wallSeconds / pureGo.wallSeconds);
     }
   }
   const reductions = Object.keys(caseLabels).map((caseName) => {
@@ -89,7 +89,7 @@ function renderSummary() {
   const cards = [
     [`${benchmarkData.runtime.retained + benchmarkData.build.retained}`, 'retained samples', 'All passed', 'total'],
     [`${Object.keys(caseLabels).length}`, 'exact programs', 'No composite score', ''],
-    [`${Math.min(...nativeGoRatios).toFixed(2)}–${Math.max(...nativeGoRatios).toFixed(2)}×`, 'Native / TypeRB Go runtime', 'Numeric kernels', 'caution'],
+    [`${Math.min(...nativePureGoRatios).toFixed(2)}–${Math.max(...nativePureGoRatios).toFixed(2)}×`, 'Native / Pure Go runtime', 'Parity or better is the target', 'caution'],
     [`${Math.min(...reductions).toFixed(2)}%`, 'minimum raw size reduction', 'Native applications', 'positive'],
   ];
   document.querySelector('#benchmark-summary').replaceChildren(...cards.map(([value, label, note, kind]) => {
