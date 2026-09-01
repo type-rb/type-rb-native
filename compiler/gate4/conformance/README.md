@@ -71,8 +71,8 @@ element rejection, mutable Array invariance, immutable mutation rejection, and
 unsupported-method rejection. Each source in `runtime-invalid` has an exact
 `.stderr` sidecar. The directory covers positive and too-negative Array bounds
 failures, checked Integer overflow through an inlined scalar leaf, and the
-bounded nonnegative multiplication entry at its exact threshold. Negative,
-zero, maximum, safe slow-path, and overflow behavior are fixed by
+bounded nonnegative multiplication entry at its exact power-of-two threshold.
+Negative, zero, maximum, safe slow-path, and overflow behavior are fixed by
 `valid/integer-multiply-fast-path.trb` and
 `runtime-invalid/integer-multiply-fast-path-overflow.trb`; status, empty
 stdout, and panic text must agree across the updated B2/B3/B4 compilers.
