@@ -98,7 +98,7 @@ record Gate4EmitContext
 	scalar_inline_depth: Array<Integer>
 	scalar_inline_range_failure_used: Array<Integer>
 	array_bounds_failure_used: Array<Integer>
-	array_header_cache: Array<String>
+	array_header_cache: Array<Array<String>>
 end
 
 record Gate4EmittedValue
@@ -419,7 +419,7 @@ def gate4_emit_context_new(capacity: Integer, inline_budget: Array<Integer>): Ga
 		scalar_inline_depth: [0],
 		scalar_inline_range_failure_used: [0],
 		array_bounds_failure_used: [0],
-		array_header_cache: ["", "", "", "", "", ""],
+		array_header_cache: [["", "", ""], ["", "", ""]],
 	)
 end
 
@@ -1442,20 +1442,9 @@ def gate4_emit_checked_integer_remainder(
 end
 
 def gate4_invalidate_array_header_cache(mut context: Gate4EmitContext)
-	mut cache := context.array_header_cache
-	cache[0] = ""
-	cache[3] = ""
+	context.array_header_cache[0][0] = ""
+	context.array_header_cache[1][0] = ""
 	return
-end
-
-def gate4_array_header_cache_active(context: Gate4EmitContext): Boolean
-	# Restrict header reuse to loops that own managed locals. Inherited-only
-	# loops remain unchanged so call-heavy kernels do not extend temporary live
-	# ranges without an owning Array allocation to amortize them.
-	if context.loop_depth[0] == 0
-		return false
-	end
-	return gate4_owned_managed_local_count(context) >= 1
 end
 
 def gate4_emit_array_header(
@@ -1469,27 +1458,19 @@ def gate4_emit_array_header(
 		value: String,
 	): String
 	use_cache := key != ""
+	mut caches := context.array_header_cache
+	mut cache := caches[0]
 	if use_cache
-		mut cache := context.array_header_cache
 		if cache[0] != key
-			if cache[3] == key
-				previous_key := cache[0]
-				previous_length := cache[1]
-				previous_data := cache[2]
-				cache[0] = cache[3]
-				cache[1] = cache[4]
-				cache[2] = cache[5]
-				cache[3] = previous_key
-				cache[4] = previous_length
-				cache[5] = previous_data
-			else
-				cache[3] = cache[0]
-				cache[4] = cache[1]
-				cache[5] = cache[2]
-			cache[0] = key
-			cache[1] = ""
-			cache[2] = ""
+			previous_cache := cache
+			cache = caches[1]
+			if cache[0] != key
+				cache[0] = key
+				cache[1] = ""
+				cache[2] = ""
 			end
+			caches[1] = previous_cache
+			caches[0] = cache
 		end
 		cached := cache[cache_index]
 		if cached != ""
@@ -1505,7 +1486,6 @@ def gate4_emit_array_header(
 	gate4_output_line(output, "\t" + resolved_address + " =l add " + array + ", " + offset)
 	gate4_output_line(output, "\t" + resolved_value + " =l loadl " + resolved_address)
 	if use_cache
-		mut cache := context.array_header_cache
 		cache[cache_index] = resolved_value
 	end
 	return resolved_value
@@ -1520,7 +1500,12 @@ def gate4_emit_array_address(
 	): String
 	mut use_cache := false
 	if array_key != ""
-		use_cache = gate4_array_header_cache_active(context)
+		# Restrict header reuse to loops that own managed locals. Inherited-only
+		# loops remain unchanged so call-heavy kernels do not extend temporary live
+		# ranges without an owning Array allocation to amortize them.
+		if context.loop_depth[0] > 0
+			use_cache = gate4_owned_managed_local_count(context) >= 1
+		end
 	end
 	mut length := ""
 	mut length_address := ""
@@ -1893,17 +1878,6 @@ def gate4_scalar_leaf_inline_eligible(state: Gate4Compiler, function_index: Inte
 	return false
 end
 
-def gate4_take_scalar_leaf_inline_budget(mut context: Gate4EmitContext): Boolean
-	if context.loop_depth[0] <= 0
-		return false
-	end
-	if context.inline_budget[2] <= 0
-		return false
-	end
-	context.inline_budget[2] = context.inline_budget[2] - 1
-	return true
-end
-
 def gate4_emit_scalar_leaf_inline(
 		mut state: Gate4Compiler,
 		function_index: Integer,
@@ -2017,15 +1991,18 @@ def gate4_emit_direct_call(
 	if function_index >= 0
 		if state.function_count[0] <= 32
 			if gate4_scalar_leaf_inline_eligible(state, function_index)
-				if gate4_take_scalar_leaf_inline_budget(context)
-					return gate4_emit_scalar_leaf_direct_call(
-						state,
-						position,
-						function_index,
-						parameter_start,
-						context,
-						output,
-					)
+				if context.loop_depth[0] > 0
+					if context.inline_budget[2] > 0
+						context.inline_budget[2] -= 1
+						return gate4_emit_scalar_leaf_direct_call(
+							state,
+							position,
+							function_index,
+							parameter_start,
+							context,
+							output,
+						)
+					end
 				end
 			end
 		end
@@ -2118,17 +2095,16 @@ def gate4_emit_direct_call(
 			context.inline_budget[2] =- 1
 		end
 	end
+	# Until interprocedural no-allocation summaries exist, every ordinary
+	# TypeRB call remains a conservative GC safe point.
+	gate4_note_gc_safe_point(context)
 	if result_type == "Void"
-		# Until interprocedural no-allocation summaries exist, every ordinary
-		# TypeRB call remains a conservative GC safe point.
-		gate4_note_gc_safe_point(context)
 		gate4_output_line(
 			output,
 			"\tcall $g4f" + gate4_integer_string(function_index) + "(" + arguments + ")",
 		)
 		return gate4_emitted_value("", "Void", 0, "", 0, "")
 	end
-	gate4_note_gc_safe_point(context)
 	result := gate4_emit_temporary(context)
 	gate4_output_line(
 		output,
