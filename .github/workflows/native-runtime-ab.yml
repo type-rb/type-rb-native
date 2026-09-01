@@ -98,10 +98,7 @@ jobs:
             --output "$RUNNER_TEMP/transition/baseline/compiler" \
             --qbe "$QBE" --cc /usr/bin/cc --target linux-arm64-v0
 
-          # Use one observer for both source revisions. The baseline compiler
-          # and repository root remain exact; only the candidate's measurement
-          # controller adds the CPU column consumed below.
-          /bin/sh tools/bootstrap-seed.sh \
+          /bin/sh "$RUNNER_TEMP/baseline-source/tools/bootstrap-seed.sh" \
             --mode previous \
             --input "$RUNNER_TEMP/transition/baseline/compiler" \
             --input-role transition \
@@ -136,7 +133,6 @@ jobs:
           mkdir -p "$evidence"
           printf 'metric\tstage\tbaseline\tcandidate\tcandidate_baseline_ratio\tmaximum_ratio\tstatus\n' \
             > "$evidence/comparison.tsv"
-          comparison_failed=0
 
           compare() {
             metric=$1
@@ -144,23 +140,17 @@ jobs:
             baseline=$3
             candidate=$4
             maximum=$5
-            ratio=$(awk -v baseline="$baseline" -v candidate="$candidate" 'BEGIN {
-              if (baseline !~ /^[0-9]+([.][0-9]+)?$/ ||
-                  candidate !~ /^[0-9]+([.][0-9]+)?$/ || baseline <= 0 || candidate <= 0) {
-                print "invalid"
-              } else {
-                printf "%.6f", candidate / baseline
-              }
-            }')
+            ratio=$(awk -v baseline="$baseline" -v candidate="$candidate" \
+              'BEGIN { printf "%.6f", candidate / baseline }')
             status=pass
-            if test "$ratio" = invalid || ! awk -v ratio="$ratio" -v maximum="$maximum" \
-              'BEGIN { exit !(ratio + 0 <= maximum + 0) }'; then
+            if ! awk -v ratio="$ratio" -v maximum="$maximum" \
+              'BEGIN { exit !(ratio <= maximum) }'; then
               status=fail
-              comparison_failed=1
             fi
             printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
               "$metric" "$stage" "$baseline" "$candidate" "$ratio" "$maximum" "$status" \
               >> "$evidence/comparison.tsv"
+            test "$status" = pass
           }
 
           metric() {
@@ -197,7 +187,6 @@ jobs:
               "$(metric "$RUNNER_TEMP/candidate-bootstrap-evidence/medians.txt" "$stage" peak_rss_bytes)" \
               1.05
           done
-          test "$comparison_failed" -eq 0
 
       - name: Build and inventory the exact A/B applications
         env:
