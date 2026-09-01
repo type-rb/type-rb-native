@@ -406,6 +406,16 @@ compiler-size, application-size, correctness, and catastrophic limits all
 pass. See the
 [recorded safe-point-free loop-root result](results/2026-09-02-native-safe-point-free-loop-roots-linux-arm64/README.md).
 
+The following accepted candidate adds a bounded fast entry to checked Integer
+multiplication. Nonnegative operands that fit 26 bits multiply directly;
+every other pair keeps the exact existing overflow path. On the registered
+`spectral-norm` signal, wall and CPU medians improve by 27.82% and 27.83%,
+while `fannkuch-redux` and `n-body` remain neutral. The fixed compiler and all
+three executable sizes remain unchanged, generated QBE shrinks, and every
+correctness, fixed-point, build, memory, compactness, and catastrophic limit
+passes. See the
+[recorded bounded Integer-multiply result](results/2026-09-02-native-bounded-integer-multiply-linux-arm64/README.md).
+
 Gate 6N passes every frozen condition for the internal
 `linux-amd64-v0` profile. The exact merged compiler closes a 240,888-byte
 Go-free B2/B3/B4 fixed point, emits byte-identical target-neutral compiler and
@@ -570,6 +580,7 @@ repository.
 - [Formal safe Array-header reuse result on Linux arm64](results/2026-09-01-native-safe-array-headers-linux-arm64/README.md)
 - [Rejected loop-invariant Array-length result on Linux arm64](results/2026-09-01-rejected-loop-invariant-array-length-linux-arm64/README.md)
 - [Formal safe-point-free loop-root result on Linux arm64](results/2026-09-02-native-safe-point-free-loop-roots-linux-arm64/README.md)
+- [Formal bounded Integer-multiply result on Linux arm64](results/2026-09-02-native-bounded-integer-multiply-linux-arm64/README.md)
 - [Formal static String compactness A/B result on Darwin/Linux arm64](results/2026-08-31-static-string-compactness-darwin-linux-arm64/README.md)
 - [Formal TypeRB backend-pair build controller](tools/benchmarksgame-build-formal/README.md)
 - [Formal Native runtime optimization A/B controller](tools/native-runtime-ab/README.md)

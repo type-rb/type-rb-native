@@ -282,6 +282,18 @@ the next accepted Native baseline. A fresh complete cross-language snapshot,
 not the Native-to-Native A/B ratio, determines the remaining distance to the
 minimum objective of matching or beating Pure Go.
 
+The following contract, registered by
+[issue #184](https://github.com/type-rb/type-rb-native/issues/184), adds a
+bounded direct entry to checked Integer multiplication while preserving the
+existing exact path for every other operand pair. Its
+[formal result](../results/2026-09-02-native-bounded-integer-multiply-linux-arm64/README.md)
+passes every frozen condition. `spectral-norm` wall and CPU medians improve by
+27.82% and 27.83%; `fannkuch-redux` and `n-body` remain neutral; the fixed
+compiler and executable sizes remain unchanged; and generated QBE shrinks for
+all three applications. This candidate becomes the next accepted Native
+baseline. The next complete cross-language snapshot will measure the remaining
+distance to the minimum objective of matching or beating Pure Go.
+
 Builds use release optimization without unsafe fast-math substitutions: C and
 C++ use `-O3`, Go uses `go build -trimpath`, Rust uses `rustc -C opt-level=3`,
 and Java uses `javac` followed by the same recorded JVM for every run. The
