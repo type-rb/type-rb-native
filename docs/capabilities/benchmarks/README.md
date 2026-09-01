@@ -34,3 +34,9 @@ Keep focused optimization measurements and partial reruns in their own result
 records. Do not mix them into this cross-language snapshot. The explorer shows
 one internally consistent selected snapshot; the linked result directories
 remain the historical and reproducible source of truth.
+
+The Pages workflow remains deliberately lightweight: pull requests verify the
+committed data and site structure, matching pushes to `main` publish the new
+snapshot, and a manual workflow dispatch redeploys the current committed site.
+Formal runtime and build measurements stay in their separate dispatch-only
+workflows and never run as ordinary pull-request CI.

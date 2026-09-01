@@ -35,6 +35,7 @@ for (const required of ['× the best time', '× the lowest RSS']) {
   if (!app.includes(required)) fail(`benchmark comparison copy is missing ${required}`);
 }
 if (app.includes('× fastest')) fail('benchmark comparison uses the ambiguous “× fastest” wording');
+if (!app.includes('cpuSeconds: runtimeMetrics.cpuSeconds')) fail('build comparison omits CPU time');
 
 if (failures.length > 0) {
   failures.forEach((message) => console.error(`FAIL ${message}`));

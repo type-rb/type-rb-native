@@ -14,6 +14,7 @@ const runtimeMetrics = {
 };
 const buildMetrics = {
   wallSeconds: runtimeMetrics.wallSeconds,
+  cpuSeconds: runtimeMetrics.cpuSeconds,
   memoryBytes: runtimeMetrics.memoryBytes,
   artifactBytes: { label: 'Raw application', short: 'Size', format: formatBytes },
 };
@@ -162,6 +163,7 @@ function renderRuntime() {
 
 function buildOutcome(native, go, field) {
   if (field === 'wallSeconds') return `${(go[field] / native[field]).toFixed(2)}× faster`;
+  if (field === 'cpuSeconds') return `${(native[field] / go[field]).toFixed(2)}× Go CPU time`;
   return `${((1 - native[field] / go[field]) * 100).toFixed(2)}% less`;
 }
 
