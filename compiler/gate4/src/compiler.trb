@@ -1977,10 +1977,7 @@ def gate4_emit_direct_call(
 	end
 	if state.function_count[0] <= 32
 		if gate4_scalar_leaf_inline_eligible(state, function_index)
-			gate4_output_line(
-				output,
-				"# gate4 retained scalar call " + gate4_integer_string(function_index),
-			)
+			gate4_output_line(output, "# gate4 retained scalar call")
 		end
 	end
 	if result_type == "Void"
@@ -2787,6 +2784,13 @@ def gate4_emit_function(
 		mut output: Gate4Output,
 		inline_budget: Array<Integer>,
 	)
+	mut marked_scalar_leaf := false
+	if state.function_count[0] <= 32
+		if gate4_scalar_leaf_inline_eligible(state, function_index)
+			marked_scalar_leaf = true
+			gate4_output_line(output, "# gate4 scalar leaf begin")
+		end
+	end
 	state.active_module[0] = gate4_load_integer(state.function_modules, function_index)
 	mut context := gate4_emit_context_new(state.token_count[0] + 1, inline_budget)
 	mut body := gate4_output_new(state.token_count[0] * 8 + 1024, output.runtime_flags)
@@ -2914,6 +2918,9 @@ def gate4_emit_function(
 		gate4_output_line(output, "\tret %return_result")
 	end
 	gate4_output_line(output, "}\n")
+	if marked_scalar_leaf
+		gate4_output_line(output, "# gate4 scalar leaf end")
+	end
 	gate4_reset_temporary_storage()
 	return
 end
@@ -3111,57 +3118,31 @@ def gate4_elide_dead_scalar_leaf_functions(
 	if state.function_count[0] > 32
 		return output
 	end
-	retained := gate4_integer_storage(state.function_count[0] + 1)
-	mut function_index := 0
-	while function_index < state.function_count[0]
-		gate4_store_integer(retained, function_index, 0)
-		if gate4_scalar_leaf_inline_eligible(state, function_index)
-			marker := "# gate4 retained scalar call " + gate4_integer_string(function_index)
-			mut line_index := 0
-			while line_index < output.count[0]
-				if gate4_load_string(output.lines, line_index) == marker
-					gate4_store_integer(retained, function_index, 1)
-					line_index = output.count[0]
-				else
-					line_index += 1
-				end
-			end
+	mut retained := false
+	mut line_index := 0
+	while line_index < output.count[0]
+		if gate4_load_string(output.lines, line_index) == "# gate4 retained scalar call"
+			retained = true
 		end
-		function_index += 1
+		line_index += 1
 	end
 	mut compact := gate4_output_new(output.count[0] + 1, output.runtime_flags)
 	mut skipping := false
-	mut line_index := 0
+	line_index = 0
 	while line_index < output.count[0]
 		line := gate4_load_string(output.lines, line_index)
-		if skipping
-			if line == "}\n"
-				skipping = false
+		if line == "# gate4 scalar leaf begin"
+			if !retained
+				skipping = true
 			end
 		else
-			if !gate4_string_starts_with(line, "# gate4 retained scalar call ")
-				mut dead_index := 0
-				mut dead := false
-				while dead_index < state.function_count[0]
-					if gate4_load_integer(retained, dead_index) == 0
-						if gate4_scalar_leaf_inline_eligible(state, dead_index)
-							mut result_prefix := ""
-							result_type := gate4_load_string(state.function_result_types, dead_index)
-							if result_type != "Void"
-								result_prefix = gate4_qbe_type(result_type) + " "
-							end
-							prefix := "function " + result_prefix + "$g4f" + gate4_integer_string(dead_index) + "("
-							if gate4_string_starts_with(line, prefix)
-								dead = true
-							end
-						end
+			if line == "# gate4 scalar leaf end"
+				skipping = false
+			else
+				if line != "# gate4 retained scalar call"
+					if !skipping
+						gate4_output_line(compact, line)
 					end
-					dead_index += 1
-				end
-				if dead
-					skipping = true
-				else
-					gate4_output_line(compact, line)
 				end
 			end
 		end
