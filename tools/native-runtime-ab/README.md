@@ -42,6 +42,7 @@ The currently registered cases and thresholds are:
 | `worker-managed-alias-roots` | one phase, 400,000 batches | 0.80 |
 | `worker-managed-array-growth` | one phase, 400,000 batches | 0.95 |
 | `worker-array-push-fast-path` | one phase, 400,000 batches | 0.95 |
+| `worker-dynamic-array-address` | one phase, 400,000 batches | 0.95 |
 | `worker-gc-temp-push-fast-path` | one phase, 400,000 batches | 0.985 |
 
 The three numeric inputs are the Array-address optimization contract registered
@@ -54,6 +55,8 @@ compares candidate wall and CPU medians with an exact optimized-Go control.
 All three programs use the same authored TypeRB source. The temporary-root
 push split is registered in
 [issue #162](https://github.com/type-rb/type-rb-native/issues/162).
+The dynamic Array-address split is registered in
+[issue #166](https://github.com/type-rb/type-rb-native/issues/166).
 
 ## Invocation
 
