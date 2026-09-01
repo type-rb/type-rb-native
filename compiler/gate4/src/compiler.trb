@@ -419,7 +419,7 @@ def gate4_emit_context_new(capacity: Integer, inline_budget: Array<Integer>): Ga
 		scalar_inline_depth: [0],
 		scalar_inline_range_failure_used: [0],
 		array_bounds_failure_used: [0],
-		array_header_cache: ["", "", ""],
+		array_header_cache: ["", "", "", "", "", ""],
 	)
 end
 
@@ -1442,7 +1442,9 @@ def gate4_emit_checked_integer_remainder(
 end
 
 def gate4_invalidate_array_header_cache(mut context: Gate4EmitContext)
-	context.array_header_cache[0] = ""
+	mut cache := context.array_header_cache
+	cache[0] = ""
+	cache[3] = ""
 	return
 end
 
@@ -1468,14 +1470,30 @@ def gate4_emit_array_header(
 	): String
 	use_cache := key != ""
 	if use_cache
-		if context.array_header_cache[0] == key
-			cached := context.array_header_cache[cache_index]
-			if cached != ""
-				return cached
+		mut cache := context.array_header_cache
+		if cache[0] != key
+			if cache[3] == key
+				previous_key := cache[0]
+				previous_length := cache[1]
+				previous_data := cache[2]
+				cache[0] = cache[3]
+				cache[1] = cache[4]
+				cache[2] = cache[5]
+				cache[3] = previous_key
+				cache[4] = previous_length
+				cache[5] = previous_data
+			else
+				cache[3] = cache[0]
+				cache[4] = cache[1]
+				cache[5] = cache[2]
+			cache[0] = key
+			cache[1] = ""
+			cache[2] = ""
 			end
-		else
-			context.array_header_cache[0] = key
-			context.array_header_cache[2] = ""
+		end
+		cached := cache[cache_index]
+		if cached != ""
+			return cached
 		end
 	end
 	mut resolved_address := address
@@ -1487,7 +1505,8 @@ def gate4_emit_array_header(
 	gate4_output_line(output, "\t" + resolved_address + " =l add " + array + ", " + offset)
 	gate4_output_line(output, "\t" + resolved_value + " =l loadl " + resolved_address)
 	if use_cache
-		context.array_header_cache[cache_index] = resolved_value
+		mut cache := context.array_header_cache
+		cache[cache_index] = resolved_value
 	end
 	return resolved_value
 end
