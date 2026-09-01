@@ -1,4 +1,4 @@
-import { Gate4Compiler, Gate4Output, Gate4ProjectSources, gate4_add_module, gate4_build_symbol_index, gate4_character_in, gate4_check, gate4_compiler_new, gate4_emit_qbe, gate4_encode_static_string, gate4_find_field, gate4_find_function_in_module, gate4_find_import_binding, gate4_find_module, gate4_find_record_in_module, gate4_find_record_type, gate4_float_literal_in_range, gate4_has_diagnostic, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_local_find, gate4_locals_new, gate4_number_is_float, gate4_number_without_underscores, gate4_parse_module, gate4_parse_project_config, gate4_resolve, gate4_string_bucket, gate4_string_starts_at, gate4_symbol_bucket_count } from compiler
+import { Gate4Compiler, Gate4Output, Gate4ProjectSources, gate4_add_module, gate4_build_symbol_index, gate4_character_in, gate4_check, gate4_compiler_new, gate4_emit_array_header, gate4_emit_context_new, gate4_emit_qbe, gate4_encode_static_string, gate4_find_field, gate4_find_function_in_module, gate4_find_import_binding, gate4_find_module, gate4_find_record_in_module, gate4_find_record_type, gate4_float_literal_in_range, gate4_has_diagnostic, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_local_find, gate4_locals_new, gate4_number_is_float, gate4_number_without_underscores, gate4_output_new, gate4_parse_module, gate4_parse_project_config, gate4_resolve, gate4_string_bucket, gate4_string_starts_at, gate4_symbol_bucket_count } from compiler
 import { gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage
 import { native_create_directory, native_read_text, native_write_text } from native_file_system
 import trb/std/process
@@ -1494,6 +1494,43 @@ describe("Gate 4 TypeRB frontend") do
 		call_qbe := gate4_output_source(gate4_emit_qbe(call_state))
 		expect(call_qbe.include?("%temporary_roots =l loadl $g4_gc_temp_count")).to_be_true()
 		expect(call_qbe.include?("%root_capacity =l add %temporary_roots, 1")).to_be_true()
+	end
+
+	test("reuses cached Array headers until an explicit invalidation boundary") do
+		mut context := gate4_emit_context_new(16, [64, 16, 2])
+		mut output := gate4_output_new(16, [0, 0, 0, 0])
+		context.loop_depth[0] = 1
+		mut local_index := 0
+		while local_index < 1
+			gate4_store_string(context.local_types, local_index, "Array<Integer>")
+			gate4_store_integer(context.local_inherited, local_index, 0)
+			local_index += 1
+		end
+		context.local_count[0] = 1
+		first_length := gate4_emit_array_header(context, output, "%first", "%v0", 1, "8", "%la0", "%l0")
+		expect(output.count[0]).to_equal(2)
+		cached_length := gate4_emit_array_header(context, output, "%second", "%v0", 1, "8", "%la1", "%l1")
+		expect(cached_length).to_equal(first_length)
+		expect(output.count[0]).to_equal(2)
+		first_data := gate4_emit_array_header(context, output, "%first", "%v0", 2, "24", "%da0", "%d0")
+		expect(output.count[0]).to_equal(4)
+		cached_data := gate4_emit_array_header(context, output, "%second", "%v0", 2, "24", "%da1", "%d1")
+		expect(cached_data).to_equal(first_data)
+		expect(output.count[0]).to_equal(4)
+
+		context.array_header_cache[0] = ""
+		refreshed_length := gate4_emit_array_header(context, output, "%third", "%v0", 1, "8", "%la2", "%l2")
+		expect(refreshed_length == first_length).to_be_false()
+		expect(output.count[0]).to_equal(6)
+	end
+
+	test("keeps Array header loads local outside owned-managed loops") do
+		mut context := gate4_emit_context_new(16, [64, 16, 2])
+		mut output := gate4_output_new(16, [0, 0, 0, 0])
+		first_length := gate4_emit_array_header(context, output, "%first", "%v0", 1, "8", "%la0", "%l0")
+		second_length := gate4_emit_array_header(context, output, "%second", "%v0", 1, "8", "%la1", "%l1")
+		expect(second_length == first_length).to_be_false()
+		expect(output.count[0]).to_equal(4)
 	end
 
 	test("emits an opt-in sampled managed-runtime trace without changing stats v1") do
