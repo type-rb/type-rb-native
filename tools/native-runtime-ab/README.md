@@ -52,8 +52,13 @@ dedicated `0.98` `spectral-norm` threshold while leaving both other numeric
 thresholds unchanged. This additive contract does not relax the default or any
 worker contract. The selected contract is recorded in `environment.txt`.
 
-The three numeric inputs currently apply the proven nonnegative loop-index
-contract registered in issue #188.
+The named `lexical-loop-index` contract registered in
+[issue #190](https://github.com/type-rb/type-rb-native/issues/190) requires
+`n-body` wall and CPU medians at or below `0.95`, while treating
+`fannkuch-redux` and `spectral-norm` as `1.02` non-regression controls. It does
+not change either the default or the retained issue #188 contract. The three
+numeric inputs currently apply the lexical loop-index contract registered in
+issue #190.
 They do not replace the full cross-language benchmark inputs or its published
 results. The same experiment limits the fixed-point Linux arm64 compiler to
 1.01x the exact baseline and 255,000 bytes; adjacent bootstrap wall time, CPU

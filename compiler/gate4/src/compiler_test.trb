@@ -1315,6 +1315,51 @@ describe("Gate 4 TypeRB frontend") do
 		nested_qbe := gate4_output_source(gate4_emit_qbe(nested))
 		expect(gate4_occurrence_count(nested_qbe, " =l sar ")).to_equal(1)
 
+		safe_nested_source := "def main()\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tmut pass := 0\n\t\twhile pass < 1\n\t\t\tvalue := values[index]\n\t\t\tpass += 1\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
+		mut safe_nested := gate4_compiler_new(safe_nested_source.size() + 1)
+		expect(gate4_lex(safe_nested, safe_nested_source)).to_be_true()
+		expect(gate4_parse_module(safe_nested, 0, safe_nested.entry_module[0])).to_be_true()
+		expect(gate4_resolve(safe_nested)).to_be_true()
+		expect(gate4_check(safe_nested)).to_be_true()
+		safe_nested_qbe := gate4_output_source(gate4_emit_qbe(safe_nested))
+		expect(gate4_occurrence_count(safe_nested_qbe, " =l sar ")).to_equal(0)
+
+		later_reset_source := "def main()\n\tvalues := [10, 20]\n\tmut value := 0\n\tmut index := 0\n\twhile index < values.size()\n\t\tvalue = values[index]\n\t\tindex += 1\n\tend\n\tindex = 0\n\twhile index < values.size()\n\t\tvalue = values[index]\n\t\tindex += 1\n\tend\n\treturn\nend\n"
+		mut later_reset := gate4_compiler_new(later_reset_source.size() + 1)
+		expect(gate4_lex(later_reset, later_reset_source)).to_be_true()
+		expect(gate4_parse_module(later_reset, 0, later_reset.entry_module[0])).to_be_true()
+		expect(gate4_resolve(later_reset)).to_be_true()
+		expect(gate4_check(later_reset)).to_be_true()
+		later_reset_qbe := gate4_output_source(gate4_emit_qbe(later_reset))
+		expect(gate4_occurrence_count(later_reset_qbe, " =l sar ")).to_equal(1)
+
+		nested_reassigned_source := "def main()\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tif true\n\t\t\tvalue := values[index]\n\t\t\tindex = 0\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
+		mut nested_reassigned := gate4_compiler_new(nested_reassigned_source.size() + 1)
+		expect(gate4_lex(nested_reassigned, nested_reassigned_source)).to_be_true()
+		expect(gate4_parse_module(nested_reassigned, 0, nested_reassigned.entry_module[0])).to_be_true()
+		expect(gate4_resolve(nested_reassigned)).to_be_true()
+		expect(gate4_check(nested_reassigned)).to_be_true()
+		nested_reassigned_qbe := gate4_output_source(gate4_emit_qbe(nested_reassigned))
+		expect(gate4_occurrence_count(nested_reassigned_qbe, " =l sar ")).to_equal(1)
+
+		nested_non_unit_source := "def main()\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tmut pass := 0\n\t\twhile pass < 1\n\t\t\tvalue := values[index]\n\t\t\tindex += 2\n\t\t\tpass += 1\n\t\tend\n\tend\n\treturn\nend\n"
+		mut nested_non_unit := gate4_compiler_new(nested_non_unit_source.size() + 1)
+		expect(gate4_lex(nested_non_unit, nested_non_unit_source)).to_be_true()
+		expect(gate4_parse_module(nested_non_unit, 0, nested_non_unit.entry_module[0])).to_be_true()
+		expect(gate4_resolve(nested_non_unit)).to_be_true()
+		expect(gate4_check(nested_non_unit)).to_be_true()
+		nested_non_unit_qbe := gate4_output_source(gate4_emit_qbe(nested_non_unit))
+		expect(gate4_occurrence_count(nested_non_unit_qbe, " =l sar ")).to_equal(1)
+
+		shadowed_source := "def main()\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tif true\n\t\t\tmut index := 0\n\t\t\tvalue := values[index]\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
+		mut shadowed := gate4_compiler_new(shadowed_source.size() + 1)
+		expect(gate4_lex(shadowed, shadowed_source)).to_be_true()
+		expect(gate4_parse_module(shadowed, 0, shadowed.entry_module[0])).to_be_true()
+		expect(gate4_resolve(shadowed)).to_be_true()
+		expect(gate4_check(shadowed)).to_be_false()
+		expect(gate4_load_string(shadowed.diagnostic_codes, 0)).to_equal("TRBN4003")
+		expect(gate4_load_string(shadowed.diagnostic_messages, 0)).to_equal("duplicate local declaration index")
+
 		function_scoped_source := "def first(values: Array<Integer>)\n\tmut index := 0\n\twhile index < values.size()\n\t\tvalue := values[index]\n\t\tindex += 1\n\tend\n\treturn\nend\n\ndef unrelated()\n\tmut index := 0\n\tindex =- 1\n\treturn\nend\n\ndef main()\n\tfirst([10, 20])\n\treturn\nend\n"
 		mut function_scoped := gate4_compiler_new(function_scoped_source.size() + 1)
 		expect(gate4_lex(function_scoped, function_scoped_source)).to_be_true()

@@ -327,6 +327,17 @@ limits. This candidate becomes the next accepted Native baseline. A fresh
 complete cross-language snapshot will measure the remaining distance to the
 minimum objective of matching or beating Pure Go.
 
+The following contract, registered by
+[issue #190](https://github.com/type-rb/type-rb-native/issues/190), bounds the
+same nonnegative proof to the matching lexical loop. It may retain an outer
+fact through safe nested loops and ignore unrelated mutations after the loop,
+but direct reassignment, non-unit updates, shadowing, resets as initializers,
+derived locals, and all unproved indices keep the general path. `n-body` is
+the required signal at `0.95x` wall and CPU; `fannkuch-redux` and
+`spectral-norm` are `1.02x` non-regression controls. All existing exact-output,
+fixed-point, compiler-size, build-cost, application-size, memory,
+catastrophic, process-boundary, and cleanup requirements remain mandatory.
+
 Builds use release optimization without unsafe fast-math substitutions: C and
 C++ use `-O3`, Go uses `go build -trimpath`, Rust uses `rustc -C opt-level=3`,
 and Java uses `javac` followed by the same recorded JVM for every run. The

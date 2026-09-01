@@ -172,6 +172,14 @@ nonnegative-loop-index)
 		maximum_ratio=0.98
 	fi
 	;;
+lexical-loop-index)
+	if test "$case_name" = n-body; then
+		maximum_ratio=0.95
+	fi
+	if test "$case_name" = spectral-norm; then
+		maximum_ratio=1.02
+	fi
+	;;
 *) fail "unknown measurement contract: $CONTRACT" ;;
 esac
 
