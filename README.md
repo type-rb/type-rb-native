@@ -380,6 +380,14 @@ but missed the preregistered 15% performance signal. The threshold was not
 relaxed and the implementation was reverted. See the
 [recorded rejected result](results/2026-09-01-rejected-no-gc-root-publication-linux-arm64/README.md).
 
+The subsequent combined candidate retains safe-point-aware root elision and
+adds conservative reuse of the two most recent Array-header pairs in owned
+loops. It passes every frozen condition: `n-body` wall and CPU medians improve
+by 28.36% and 28.50%, `fannkuch-redux` improves by 7.46%, and `spectral-norm`
+remains neutral. Exact fixed-point, build-cost, compiler-size, application-size,
+correctness, and catastrophic limits all pass. See the
+[recorded safe Array-header result](results/2026-09-01-native-safe-array-headers-linux-arm64/README.md).
+
 Gate 6N passes every frozen condition for the internal
 `linux-amd64-v0` profile. The exact merged compiler closes a 240,888-byte
 Go-free B2/B3/B4 fixed point, emits byte-identical target-neutral compiler and
@@ -541,6 +549,7 @@ repository.
 - [Formal Native Array-address A/B result on Linux arm64](results/2026-08-31-native-array-address-linux-arm64/README.md)
 - [Rejected Native scalar-leaf inlining result on Linux arm64](results/2026-08-31-native-scalar-leaf-inline-linux-arm64/README.md)
 - [Rejected no-GC-safe-point root-publication result on Linux arm64](results/2026-09-01-rejected-no-gc-root-publication-linux-arm64/README.md)
+- [Formal safe Array-header reuse result on Linux arm64](results/2026-09-01-native-safe-array-headers-linux-arm64/README.md)
 - [Formal static String compactness A/B result on Darwin/Linux arm64](results/2026-08-31-static-string-compactness-darwin-linux-arm64/README.md)
 - [Formal TypeRB backend-pair build controller](tools/benchmarksgame-build-formal/README.md)
 - [Formal Native runtime optimization A/B controller](tools/native-runtime-ab/README.md)
