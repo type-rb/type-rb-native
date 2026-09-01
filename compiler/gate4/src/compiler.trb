@@ -3127,12 +3127,15 @@ def gate4_emit_qbe(mut state: Gate4Compiler): Gate4Output
 			function_index = 5
 		end
 	end
-	first_function := function_index
+	mut deferred_function :=- 1
 	while function_index < function_count
 		mut deferred := false
 		if function_count <= 32
-			if gate4_scalar_leaf_inline_eligible(state, function_index)
-				deferred = true
+			if deferred_function < 0
+				if gate4_scalar_leaf_inline_eligible(state, function_index)
+					deferred_function = function_index
+					deferred = true
+				end
 			end
 		end
 		if !deferred
@@ -3140,13 +3143,9 @@ def gate4_emit_qbe(mut state: Gate4Compiler): Gate4Output
 		end
 		function_index += 1
 	end
-	if inline_budget[2] == - 1
-		function_index = first_function
-		while function_index < function_count
-			if gate4_scalar_leaf_inline_eligible(state, function_index)
-				gate4_emit_function(state, function_index, output, inline_budget)
-			end
-			function_index += 1
+	if deferred_function >= 0
+		if inline_budget[2] == - 1
+			gate4_emit_function(state, deferred_function, output, inline_budget)
 		end
 	end
 	gate4_emit_entry(state, output)
