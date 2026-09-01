@@ -1,15 +1,31 @@
-name: Temporary GC root push fast path A/B
+name: Dynamic Array address inline A/B
 
-# This frozen one-slice comparison remains reproducible at its accepted ref.
-# Successor runtime slices carry their own exact baseline and size boundary.
 on:
+  pull_request:
+    paths:
+      - .github/workflows/dynamic-array-address.yml
+      - compiler/gate4/conformance/**
+      - compiler/gate4/src/compiler.trb
+      - compiler/gate4/src/compiler_test.trb
+      - tools/native-runtime-ab/**
+      - tools/runtime-worker-soak/**
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/dynamic-array-address.yml
+      - compiler/gate4/conformance/**
+      - compiler/gate4/src/compiler.trb
+      - compiler/gate4/src/compiler_test.trb
+      - tools/native-runtime-ab/**
+      - tools/runtime-worker-soak/**
   workflow_dispatch:
 
 permissions:
   contents: read
 
 env:
-  BASELINE_REVISION: 4d451fb932422dad37dab600b7a6deafd9f99e2a
+  BASELINE_REVISION: 7223c236f2f6e680620b04bc2778be941f504cb5
   TYPE_RB_REVISION: 5dc09070cf7f88a569279f5e63982a6de59d692c
   TYPE_RB_VERSION: 0.4.4-dev
   RELEASE_TAG: bootstrap-seed-2026-08-30
@@ -128,7 +144,7 @@ jobs:
             --output "$RUNNER_TEMP/baseline-compiler" \
             --evidence "$RUNNER_TEMP/baseline-bootstrap-evidence" \
             --metadata "$RUNNER_TEMP/baseline-bootstrap-metadata.json" \
-            --asset-name gc-temp-push-fast-path-baseline \
+            --asset-name dynamic-array-address-baseline \
             --repository-root "$RUNNER_TEMP/baseline-source"
 
           /bin/sh tools/bootstrap-seed.sh \
@@ -143,11 +159,91 @@ jobs:
             --output "$RUNNER_TEMP/candidate-compiler" \
             --evidence "$RUNNER_TEMP/candidate-bootstrap-evidence" \
             --metadata "$RUNNER_TEMP/candidate-bootstrap-metadata.json" \
-            --asset-name gc-temp-push-fast-path-candidate
+            --asset-name dynamic-array-address-candidate
 
-          cp "$RUNNER_TEMP/candidate-compiler" "$RUNNER_TEMP/candidate-compiler.stripped"
-          strip --strip-all "$RUNNER_TEMP/candidate-compiler.stripped"
-          test "$(wc -c < "$RUNNER_TEMP/candidate-compiler.stripped" | tr -d ' ')" -le 255000
+          comparison="$RUNNER_TEMP/compiler-comparison-evidence"
+          mkdir -p "$comparison"
+          for role in baseline candidate; do
+            cp "$RUNNER_TEMP/$role-compiler" "$RUNNER_TEMP/$role-compiler.stripped"
+            strip --strip-all "$RUNNER_TEMP/$role-compiler.stripped"
+          done
+          baseline_compiler_size=$(wc -c < "$RUNNER_TEMP/baseline-compiler.stripped" | tr -d ' ')
+          candidate_compiler_size=$(wc -c < "$RUNNER_TEMP/candidate-compiler.stripped" | tr -d ' ')
+          test "$candidate_compiler_size" -le "$((baseline_compiler_size + 64))"
+          test "$candidate_compiler_size" -le 255000
+
+          median_value() {
+            measurements=$1
+            stage=$2
+            column=$3
+            awk -F, -v wanted="$stage" -v selected="$column" \
+              'NR > 1 && $1 == wanted && $5 == 0 { print $selected }' "$measurements" |
+              LC_ALL=C sort -n | sed -n '4p'
+          }
+          require_ratio() {
+            label=$1
+            candidate=$2
+            baseline=$3
+            awk -v candidate="$candidate" -v baseline="$baseline" \
+              'BEGIN { exit !(candidate <= baseline * 1.05) }' || {
+              printf '%s exceeds 1.05: candidate=%s baseline=%s\n' \
+                "$label" "$candidate" "$baseline" >&2
+              exit 1
+            }
+          }
+          require_observations_below_catastrophic() {
+            measurements=$1
+            stage=$2
+            baseline_time=$3
+            baseline_rss=$4
+            awk -F, -v wanted="$stage" -v time="$baseline_time" -v rss="$baseline_rss" '
+              NR > 1 && $1 == wanted && $5 == 0 {
+                if ($3 > time * 2.00 || $4 > rss * 2.00) exit 1
+              }
+            ' "$measurements"
+          }
+
+          baseline_measurements="$RUNNER_TEMP/baseline-bootstrap-evidence/measurements.csv"
+          candidate_measurements="$RUNNER_TEMP/candidate-bootstrap-evidence/measurements.csv"
+          report="$comparison/adjacent-builds.txt"
+          : > "$report"
+          for stage in b2-b3 b3-b4; do
+            test "$(awk -F, -v wanted="$stage" \
+              'NR > 1 && $1 == wanted && $5 == 0 { count += 1 } END { print count + 0 }' \
+              "$baseline_measurements")" -eq 7
+            test "$(awk -F, -v wanted="$stage" \
+              'NR > 1 && $1 == wanted && $5 == 0 { count += 1 } END { print count + 0 }' \
+              "$candidate_measurements")" -eq 7
+            baseline_time=$(median_value "$baseline_measurements" "$stage" 3)
+            candidate_time=$(median_value "$candidate_measurements" "$stage" 3)
+            baseline_rss=$(median_value "$baseline_measurements" "$stage" 4)
+            candidate_rss=$(median_value "$candidate_measurements" "$stage" 4)
+            test -n "$baseline_time"
+            test -n "$candidate_time"
+            test -n "$baseline_rss"
+            test -n "$candidate_rss"
+            require_ratio "$stage elapsed time" "$candidate_time" "$baseline_time"
+            require_ratio "$stage peak RSS" "$candidate_rss" "$baseline_rss"
+            require_observations_below_catastrophic \
+              "$baseline_measurements" "$stage" "$baseline_time" "$baseline_rss"
+            require_observations_below_catastrophic \
+              "$candidate_measurements" "$stage" "$baseline_time" "$baseline_rss"
+            {
+              printf '%s_baseline_elapsed_seconds=%s\n' "$stage" "$baseline_time"
+              printf '%s_candidate_elapsed_seconds=%s\n' "$stage" "$candidate_time"
+              printf '%s_baseline_peak_rss_bytes=%s\n' "$stage" "$baseline_rss"
+              printf '%s_candidate_peak_rss_bytes=%s\n' "$stage" "$candidate_rss"
+            } >> "$report"
+          done
+          {
+            printf 'baseline_stripped_compiler_bytes=%s\n' "$baseline_compiler_size"
+            printf 'candidate_stripped_compiler_bytes=%s\n' "$candidate_compiler_size"
+            printf 'maximum_candidate_stripped_compiler_bytes=%s\n' \
+              "$((baseline_compiler_size + 64))"
+            printf 'absolute_candidate_stripped_compiler_limit_bytes=255000\n'
+            printf 'maximum_candidate_build_ratio=1.05\n'
+            printf 'catastrophic_observation_ratio=2.00\n'
+          } >> "$report"
 
       - name: Build and inventory the worker programs
         env:
@@ -171,6 +267,8 @@ jobs:
             test "$(cat "$directory/check.stdout")" = ok
             test ! -s "$directory/check.stderr"
             "$compiler" emit-qbe "$source" > "$directory/program.ssa"
+            "$compiler" emit-qbe "$source" > "$directory/program-repeated.ssa"
+            cmp "$directory/program.ssa" "$directory/program-repeated.ssa"
             "$compiler" emit-qbe compiler/gate4/conformance/valid/float-arrays.trb \
               > "$directory/float-arrays.ssa"
             "$compiler" build "$source" --output "$directory/program" \
@@ -180,108 +278,80 @@ jobs:
             test ! -s "$directory/stderr"
             cp "$directory/program" "$directory/program.stripped"
             strip --strip-all "$directory/program.stripped"
-            sha256sum "$directory/program.ssa" "$directory/float-arrays.ssa" \
+            sha256sum "$directory/program.ssa" "$directory/program-repeated.ssa" \
+              "$directory/float-arrays.ssa" \
               "$directory/program" "$directory/program.stripped" \
               > "$directory/SHA256SUMS"
           done
 
-          baseline_calls=$(grep -F -c 'call $g4_gc_temp_push' "$applications/baseline/program.ssa")
-          candidate_calls=$(grep -F -c 'call $g4_gc_temp_push' "$applications/candidate/program.ssa")
-          test "$baseline_calls" -eq 4
-          test "$candidate_calls" -eq 4
+          baseline_root_calls=$(grep -F -c 'call $g4_gc_temp_push' "$applications/baseline/program.ssa")
+          candidate_root_calls=$(grep -F -c 'call $g4_gc_temp_push' "$applications/candidate/program.ssa")
+          test "$baseline_root_calls" -eq 4
+          test "$candidate_root_calls" -eq 4
 
-          extract_runtime_helper() {
+          extract_array_helper() {
             helper_name=$1
             helper_source=$2
             helper_output=$3
-            awk -v declaration="function \$$helper_name(" '
+            awk -v declaration="function l \$$helper_name(" '
               index($0, declaration) == 1 { capture = 1 }
               capture { print }
               capture && $0 == "}" { exit }
             ' "$helper_source" > "$helper_output"
             test -s "$helper_output"
           }
-          extract_assembly_helper() {
-            helper_name=$1
-            helper_source=$2
-            helper_output=$3
-            awk -v declaration="$helper_name:" -v ending="end function $helper_name" '
-              $0 == declaration { capture = 1 }
-              capture { print }
-              capture && index($0, ending) > 0 { exit }
-            ' "$helper_source" > "$helper_output"
-            test -s "$helper_output"
-          }
           for role in baseline candidate; do
-            "$QBE" -t arm64 -o "$applications/$role/program.s" \
-              "$applications/$role/program.ssa"
-            extract_runtime_helper g4_gc_temp_push \
-              "$applications/$role/program.ssa" "$evidence/$role-temp-push.ssa"
-            extract_runtime_helper g4_gc_temp_reserve \
-              "$applications/$role/program.ssa" "$evidence/$role-temp-reserve.ssa"
-            extract_assembly_helper g4_gc_temp_push \
-              "$applications/$role/program.s" "$evidence/$role-temp-push.s"
+            extract_array_helper g4_array_address \
+              "$applications/$role/float-arrays.ssa" "$evidence/$role-array-address.ssa"
           done
-          extract_runtime_helper g4_gc_temp_grow \
-            "$applications/candidate/program.ssa" "$evidence/candidate-temp-grow.ssa"
+          cmp "$evidence/baseline-array-address.ssa" "$evidence/candidate-array-address.ssa"
 
-          test "$(grep -F -c 'call $realloc' "$evidence/baseline-temp-push.ssa")" -eq 1
-          test "$(grep -F -c 'call $g4_gc_temp_grow' \
-            "$evidence/baseline-temp-push.ssa")" -eq 0
-          test "$(grep -F -c \
-            'call $g4_gc_temp_grow(l %value, l %count, l %capacity)' \
-            "$evidence/candidate-temp-push.ssa")" -eq 1
-          test "$(grep -F -c 'call $realloc' "$evidence/candidate-temp-push.ssa")" -eq 0
-          test "$(grep -F -c '%nil =w ceql %value, 0' \
-            "$evidence/candidate-temp-push.ssa")" -eq 1
-          test "$(grep -F -c '%static =w ceql %descriptor_mark, 0' \
-            "$evidence/candidate-temp-push.ssa")" -eq 1
-          test "$(grep -F -c '%offset =l shl %count, 3' \
-            "$evidence/candidate-temp-push.ssa")" -eq 1
-          test "$(grep -F -c '%minimum =l copy 64' \
-            "$evidence/candidate-temp-grow.ssa")" -eq 1
-          test "$(grep -F -c '%doubled =l mul %capacity, 2' \
-            "$evidence/candidate-temp-grow.ssa")" -eq 1
-          test "$(grep -F -c 'call $realloc' "$evidence/candidate-temp-grow.ssa")" -eq 1
-          test "$(grep -F -c 'storel %new_data, $g4_gc_temp_data' \
-            "$evidence/candidate-temp-grow.ssa")" -eq 1
-          test "$(grep -F -c 'storel %next_capacity, $g4_gc_temp_capacity' \
-            "$evidence/candidate-temp-grow.ssa")" -eq 1
-          test "$(grep -F -c 'storel %value, %slot' \
-            "$evidence/candidate-temp-grow.ssa")" -eq 1
-          test "$(grep -F -c 'storel %next_count, $g4_gc_temp_count' \
-            "$evidence/candidate-temp-grow.ssa")" -eq 1
-          cmp "$evidence/baseline-temp-reserve.ssa" "$evidence/candidate-temp-reserve.ssa"
-          test "$(grep -E -c '[[:space:]](str|ldr)[[:space:]]+x(19|20|21),[[:space:]]*\[x29' \
-            "$evidence/baseline-temp-push.s")" -eq 6
-          test "$(grep -E -c '[[:space:]](str|ldr)[[:space:]]+x(19|20|21),[[:space:]]*\[x29' \
-            "$evidence/candidate-temp-push.s")" -eq 0
+          count_calls() {
+            needle=$1
+            source_path=$2
+            awk -v needle="$needle" \
+              'index($0, needle) { count += 1 } END { print count + 0 }' "$source_path"
+          }
+          baseline_address_calls=$(count_calls 'call $g4_array_address' \
+            "$applications/baseline/program.ssa")
+          candidate_address_calls=$(count_calls 'call $g4_array_address' \
+            "$applications/candidate/program.ssa")
+          baseline_address_definitions=$(count_calls 'function l $g4_array_address' \
+            "$applications/baseline/program.ssa")
+          candidate_address_definitions=$(count_calls 'function l $g4_array_address' \
+            "$applications/candidate/program.ssa")
+          baseline_bounds_failures=$(count_calls 'call $g4_fail(l $g4_bounds_error' \
+            "$applications/baseline/program.ssa")
+          candidate_bounds_failures=$(count_calls 'call $g4_fail(l $g4_bounds_error' \
+            "$applications/candidate/program.ssa")
+          test "$baseline_address_calls" -eq 3
+          test "$candidate_address_calls" -eq 0
+          test "$baseline_address_definitions" -eq 1
+          test "$candidate_address_definitions" -eq 0
+          test "$candidate_bounds_failures" -eq "$baseline_bounds_failures"
 
-          baseline_size=$(wc -c < "$applications/baseline/program" | tr -d ' ')
-          candidate_size=$(wc -c < "$applications/candidate/program" | tr -d ' ')
-          test "$candidate_size" -le "$((baseline_size + 128))"
           baseline_qbe_size=$(wc -c < "$applications/baseline/program.ssa" | tr -d ' ')
           candidate_qbe_size=$(wc -c < "$applications/candidate/program.ssa" | tr -d ' ')
+          test "$candidate_qbe_size" -le "$((baseline_qbe_size + 1400))"
+          baseline_size=$(wc -c < "$applications/baseline/program.stripped" | tr -d ' ')
+          candidate_size=$(wc -c < "$applications/candidate/program.stripped" | tr -d ' ')
+          test "$candidate_size" -le "$((baseline_size + 128))"
           {
-            printf 'baseline_gc_temp_push_calls=%s\n' "$baseline_calls"
-            printf 'candidate_gc_temp_push_calls=%s\n' "$candidate_calls"
-            printf 'baseline_temp_push_realloc_calls=1\n'
-            printf 'candidate_temp_push_growth_calls=1\n'
-            printf 'candidate_temp_push_realloc_calls=0\n'
-            printf 'candidate_temp_grow_realloc_calls=1\n'
-            printf 'candidate_temp_push_nil_elision_checks=1\n'
-            printf 'candidate_temp_push_static_elision_checks=1\n'
-            printf 'candidate_temp_push_offset_operation=shift-left-3\n'
-            printf 'baseline_temp_push_growth_register_saves=6\n'
-            printf 'candidate_temp_push_growth_register_saves=0\n'
-            printf 'minimum_root_capacity=64\n'
-            printf 'subsequent_root_growth_factor=2\n'
+            printf 'baseline_gc_temp_push_calls=%s\n' "$baseline_root_calls"
+            printf 'candidate_gc_temp_push_calls=%s\n' "$candidate_root_calls"
+            printf 'baseline_array_address_calls=%s\n' "$baseline_address_calls"
+            printf 'candidate_array_address_calls=%s\n' "$candidate_address_calls"
+            printf 'baseline_array_address_definitions=%s\n' "$baseline_address_definitions"
+            printf 'candidate_array_address_definitions=%s\n' "$candidate_address_definitions"
+            printf 'baseline_bounds_failure_calls=%s\n' "$baseline_bounds_failures"
+            printf 'candidate_bounds_failure_calls=%s\n' "$candidate_bounds_failures"
             printf 'baseline_qbe_bytes=%s\n' "$baseline_qbe_size"
             printf 'candidate_qbe_bytes=%s\n' "$candidate_qbe_size"
-            printf 'baseline_executable_bytes=%s\n' "$baseline_size"
-            printf 'candidate_executable_bytes=%s\n' "$candidate_size"
-            printf 'maximum_candidate_executable_bytes=%s\n' "$((baseline_size + 128))"
-          } > "$evidence/root-push-path-and-size.txt"
+            printf 'maximum_candidate_qbe_bytes=%s\n' "$((baseline_qbe_size + 1400))"
+            printf 'baseline_stripped_executable_bytes=%s\n' "$baseline_size"
+            printf 'candidate_stripped_executable_bytes=%s\n' "$candidate_size"
+            printf 'maximum_candidate_stripped_executable_bytes=%s\n' "$((baseline_size + 128))"
+          } > "$evidence/address-inline-and-size.txt"
 
           cp "$source" "$applications/typerb-go/src/main.trb"
           cp tools/runtime-worker-soak/trbconfig.jsonc "$applications/typerb-go/trbconfig.jsonc"
@@ -303,77 +373,106 @@ jobs:
 
           printf 'case\tcandidate\tcommand\tinput\texpected\n' > "$RUNNER_TEMP/catalog.tsv"
           for role in baseline candidate typerb-go; do
-            printf 'worker-gc-temp-push-fast-path\t%s\t%s\tworker\t%s\n' \
+            printf 'worker-dynamic-array-address\t%s\t%s\tworker\t%s\n' \
               "$role" "$applications/$role/program" "$applications/expected.txt" \
               >> "$RUNNER_TEMP/catalog.tsv"
           done
 
-      - name: Verify temporary-root growth boundaries
+      - name: Verify dynamic Array address boundaries under collection
         env:
           QBE: ${{ steps.qbe.outputs.path }}
         run: |
-          evidence="$RUNNER_TEMP/temp-root-boundary-evidence"
-          mkdir -p "$evidence"
-          for role in baseline candidate; do
-            expected_initial_count=2
-            if [ "$role" = candidate ]; then
-              expected_initial_count=0
-            fi
-            source="$RUNNER_TEMP/applications/$role/program.ssa"
-            boundary="$evidence/$role.ssa"
-            awk '/^function .*\$g4f0\(/ { exit } { print }' "$source" > "$boundary"
-            printf '%s\n' \
-              'export function w $main(w %argc, l %argv) {' \
-              '@start' \
-              '  %static =l alloc8 8' \
-              '  storel 0, %static' \
-              '  call $g4_gc_temp_push(l 0)' \
-              '  call $g4_gc_temp_push(l %static)' \
-              '  %initial_count =l loadl $g4_gc_temp_count' \
-              '  call $g4_gc_temp_reset(l 0)' \
-              '  %object =l alloc8 8' \
-              '  storel 1, %object' \
-              '	jmp @loop' \
-              '@loop' \
-              '	%index =l phi @start 0, @push %next' \
-              '	%done =w cslel 129, %index' \
-              '	jnz %done, @verify, @push' \
-              '@push' \
-              '	call $g4_gc_temp_push(l %object)' \
-              '	%next =l add %index, 1' \
-              '	jmp @loop' \
-              '@verify' \
-              '	%count =l loadl $g4_gc_temp_count' \
-              '	%capacity =l loadl $g4_gc_temp_capacity' \
-              '	%data =l loadl $g4_gc_temp_data' \
-              '	%last_address =l add %data, 1024' \
-              '	%last =l loadl %last_address' \
-              '	%count_ok =w ceql %count, 129' \
-              '	%capacity_ok =w ceql %capacity, 256' \
-              "  %initial_ok =w ceql %initial_count, $expected_initial_count" \
-              '  %last_ok =w ceql %last, %object' \
-              '  %count_capacity_ok =w and %count_ok, %capacity_ok' \
-              '  %roots_ok =w and %initial_ok, %last_ok' \
-              '  %all_ok =w and %count_capacity_ok, %roots_ok' \
-              '	jnz %all_ok, @success, @fail' \
-              '@success' \
-              '	call $g4_gc_temp_reset(l 0)' \
-              '	ret 0' \
-              '@fail' \
-              '	call $g4_gc_temp_reset(l 0)' \
-              '	ret 1' \
-              '}' >> "$boundary"
-            "$QBE" -t arm64 -o "$evidence/$role.s" "$boundary"
-            /usr/bin/cc -x assembler "$evidence/$role.s" -fuse-ld=lld \
-              -Wl,--gc-sections,--strip-all -o "$evidence/$role"
-            "$evidence/$role" > "$evidence/$role.stdout" 2> "$evidence/$role.stderr"
-            test ! -s "$evidence/$role.stdout"
-            test ! -s "$evidence/$role.stderr"
+          fixture=compiler/gate4/conformance/valid/scalar-array-growth.trb
+          expected=compiler/gate4/conformance/valid/scalar-array-growth.out
+          workspace="$RUNNER_TEMP/dynamic-array-address-boundaries"
+          evidence="$RUNNER_TEMP/dynamic-array-address-boundary-evidence"
+          mkdir -p "$workspace/typerb-go/src" "$evidence/observations"
+
+          "$RUNNER_TEMP/candidate-compiler" check "$fixture" \
+            > "$evidence/native-check.stdout" 2> "$evidence/native-check.stderr"
+          test "$(cat "$evidence/native-check.stdout")" = ok
+          test ! -s "$evidence/native-check.stderr"
+          "$RUNNER_TEMP/candidate-compiler" build "$fixture" \
+            --output "$workspace/native" --qbe "$QBE" --cc /usr/bin/cc \
+            --target linux-arm64-v0
+
+          cp "$fixture" "$workspace/typerb-go/src/main.trb"
+          cp tools/runtime-worker-soak/trbconfig.jsonc "$workspace/typerb-go/trbconfig.jsonc"
+          "$RUNNER_TEMP/trb" check --config "$workspace/typerb-go/trbconfig.jsonc" \
+            > "$evidence/go-check.stdout" 2> "$evidence/go-check.stderr"
+          test "$(cat "$evidence/go-check.stdout")" = 'checked 1 file(s) for mode go'
+          test ! -s "$evidence/go-check.stderr"
+          "$RUNNER_TEMP/trb" build --compile \
+            --config "$workspace/typerb-go/trbconfig.jsonc" \
+            --outfile "$workspace/typerb-go/program" \
+            > "$evidence/go-build.stdout" 2> "$evidence/go-build.stderr"
+          test ! -s "$evidence/go-build.stderr"
+
+          stat_value() {
+            key=$1
+            path=$2
+            awk -F, -v wanted="$key" '
+              $1 == "type-rb-native-gc-stat-v1" && $2 == wanted {
+                count += 1
+                value = $3
+              }
+              END {
+                if (count != 1 || value !~ /^[0-9]+$/) exit 1
+                print value
+              }
+            ' "$path"
+          }
+          verify_stats() {
+            path=$1
+            collections=$(stat_value collections "$path")
+            automatic=$(stat_value automatic-collections "$path")
+            allocated=$(stat_value allocated-bytes "$path")
+            reclaimed=$(stat_value reclaimed-bytes "$path")
+            live=$(stat_value live-bytes "$path")
+            peak=$(stat_value peak-heap-bytes "$path")
+            test "$collections" -eq "$((automatic + 1))"
+            test "$automatic" -ge 1
+            test "$allocated" -eq "$reclaimed"
+            test "$live" -eq 0
+            test "$peak" -le 4194304
+          }
+
+          TYPE_RB_NATIVE_RUNTIME_STATS=1 "$workspace/native" \
+            > "$evidence/aggregate-native.stdout" 2> "$evidence/aggregate-native.stderr"
+          "$workspace/typerb-go/program" \
+            > "$evidence/aggregate-go.stdout" 2> "$evidence/aggregate-go.stderr"
+          cmp "$expected" "$evidence/aggregate-native.stdout"
+          cmp "$evidence/aggregate-native.stdout" "$evidence/aggregate-go.stdout"
+          test ! -s "$evidence/aggregate-go.stderr"
+          verify_stats "$evidence/aggregate-native.stderr"
+
+          printf 'length\tcollections\tautomatic_collections\tallocated_bytes\treclaimed_bytes\tlive_bytes\tpeak_heap_bytes\n' \
+            > "$evidence/boundary-memory.tsv"
+          for length in 0 1 4 5 15 16 17 63 64 65 127 128 129 255 256 257 \
+            511 512 513 1023 1024 1025; do
+            observation="$evidence/observations/$length"
+            mkdir -p "$observation"
+            TYPE_RB_NATIVE_RUNTIME_STATS=1 "$workspace/native" "$length" \
+              > "$observation/native.stdout" 2> "$observation/native.stderr"
+            "$workspace/typerb-go/program" "$length" \
+              > "$observation/go.stdout" 2> "$observation/go.stderr"
+            cmp "$expected" "$observation/native.stdout"
+            cmp "$observation/native.stdout" "$observation/go.stdout"
+            test ! -s "$observation/go.stderr"
+            verify_stats "$observation/native.stderr"
+            collections=$(stat_value collections "$observation/native.stderr")
+            automatic=$(stat_value automatic-collections "$observation/native.stderr")
+            allocated=$(stat_value allocated-bytes "$observation/native.stderr")
+            reclaimed=$(stat_value reclaimed-bytes "$observation/native.stderr")
+            live=$(stat_value live-bytes "$observation/native.stderr")
+            peak=$(stat_value peak-heap-bytes "$observation/native.stderr")
+            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+              "$length" "$collections" "$automatic" "$allocated" \
+              "$reclaimed" "$live" "$peak" >> "$evidence/boundary-memory.tsv"
           done
-          printf 'baseline_nil_and_static_roots=2\ncandidate_nil_and_static_roots=0\npushes=129\nexpected_count=129\nexpected_capacity=256\nexpected_last_root=managed-object\n' \
-            > "$evidence/boundary.txt"
-          sha256sum "$evidence"/baseline.ssa "$evidence"/candidate.ssa \
-            "$evidence"/baseline "$evidence"/candidate > "$evidence/SHA256SUMS"
+          test "$(wc -l < "$evidence/boundary-memory.tsv" | tr -d ' ')" -eq 23
+          sha256sum "$fixture" "$expected" "$workspace/native" \
+            "$workspace/typerb-go/program" > "$evidence/SHA256SUMS"
 
       - name: Run the revised managed-memory smoke
         env:
@@ -436,7 +535,7 @@ jobs:
         run: |
           /bin/sh tools/native-runtime-ab/runtime-controller.sh \
             formal "$(command -v runexec)" "$RUNNER_TEMP/catalog.tsv" \
-            worker-gc-temp-push-fast-path "$CORE" \
+            worker-dynamic-array-address "$CORE" \
             tools/benchmarksgame-formal/cache-control-linux.sh \
             "$RUNNER_TEMP/runtime-workspace" \
             "$RUNNER_TEMP/runtime-evidence"
@@ -459,7 +558,7 @@ jobs:
             runexec --version
           } > "$evidence/environment.txt" 2>&1
           sha256sum \
-            .github/workflows/gc-temp-push-fast-path.yml \
+            .github/workflows/dynamic-array-address.yml \
             tools/native-runtime-ab/runtime-controller.sh \
             tools/native-runtime-ab/summarize.awk \
             tools/runtime-worker-soak/workload.trb \
@@ -473,7 +572,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: gc-temp-push-fast-path-${{ github.run_id }}-${{ github.run_attempt }}
+          name: dynamic-array-address-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/application-evidence
             ${{ runner.temp }}/applications
@@ -482,9 +581,10 @@ jobs:
             ${{ runner.temp }}/candidate-bootstrap-evidence
             ${{ runner.temp }}/candidate-bootstrap-metadata.json
             ${{ runner.temp }}/catalog.tsv
+            ${{ runner.temp }}/compiler-comparison-evidence
             ${{ runner.temp }}/host-evidence
             ${{ runner.temp }}/runtime-evidence
-            ${{ runner.temp }}/temp-root-boundary-evidence
+            ${{ runner.temp }}/dynamic-array-address-boundary-evidence
             ${{ runner.temp }}/worker-smoke-evidence
             ${{ runner.temp }}/workflow-evidence
           if-no-files-found: error
