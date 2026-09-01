@@ -91,7 +91,6 @@ record Gate4EmitContext
 	slot_count: Array<Integer>
 	managed_local_high_water: Array<Integer>
 	temporary_roots_used: Array<Integer>
-	gc_safe_point_count: Array<Integer>
 	temporary_count: Array<Integer>
 	label_count: Array<Integer>
 	loop_depth: Array<Integer>
@@ -271,9 +270,11 @@ def gate4_build_symbol_index(
 	end
 	mut element := 0
 	while element < element_count
-		module_index := gate4_load_integer(modules, element)
-		name := gate4_load_string(names, element)
-		bucket = gate4_symbol_bucket(module_index, name, bucket_count)
+		bucket = gate4_symbol_bucket(
+			gate4_load_integer(modules, element),
+			gate4_load_string(names, element),
+			bucket_count,
+		)
 		gate4_store_integer(symbol_index.next, element, gate4_load_integer(symbol_index.heads, bucket))
 		gate4_store_integer(symbol_index.heads, bucket, element)
 		element += 1
@@ -318,8 +319,7 @@ def gate4_build_name_index(
 	end
 	mut element := 0
 	while element < element_count
-		name := gate4_load_string(names, element)
-		bucket = gate4_string_bucket(name, bucket_count)
+		bucket = gate4_string_bucket(gate4_load_string(names, element), bucket_count)
 		gate4_store_integer(symbol_index.next, element, gate4_load_integer(symbol_index.heads, bucket))
 		gate4_store_integer(symbol_index.heads, bucket, element)
 		element += 1
@@ -338,8 +338,7 @@ def gate4_add_name_index(
 		return
 	end
 	element := element_count - 1
-	name := gate4_load_string(names, element)
-	bucket := gate4_string_bucket(name, bucket_count)
+	bucket := gate4_string_bucket(gate4_load_string(names, element), bucket_count)
 	gate4_store_integer(symbol_index.next, element, gate4_load_integer(symbol_index.heads, bucket))
 	gate4_store_integer(symbol_index.heads, bucket, element)
 	return
@@ -371,7 +370,7 @@ def gate4_add_module(mut state: Gate4Compiler, name: String, filename: String): 
 	gate4_store_string(state.module_files, index, filename)
 	gate4_store_integer(state.module_import_starts, index, state.import_count[0])
 	gate4_store_integer(state.module_import_counts, index, 0)
-	state.module_count[0] = index + 1
+	state.module_count[0] += 1
 	gate4_add_name_index(state.module_lookup, state.module_names, state.module_count[0])
 	return index
 end
@@ -412,8 +411,9 @@ def gate4_emit_context_new(capacity: Integer, inline_budget: Array<Integer>): Ga
 		local_count: [0],
 		slot_count: [0],
 		managed_local_high_water: [0],
-		temporary_roots_used: [0],
-		gc_safe_point_count: [0],
+		# The second cell is a monotonic GC-safe-point counter used while
+		# deciding whether loop-root publication may move to the exit.
+		temporary_roots_used: [0, 0],
 		temporary_count: [0],
 		label_count: [0],
 		loop_depth: [0],
@@ -429,15 +429,6 @@ def gate4_output_line(mut output: Gate4Output, line: String)
 	index := output.count[0]
 	gate4_store_string(output.lines, index, line)
 	output.count[0] = index + 1
-	return
-end
-
-def gate4_output_append(mut output: Gate4Output, appended: Gate4Output)
-	mut index := 0
-	while index < appended.count[0]
-		gate4_output_line(output, gate4_load_string(appended.lines, index))
-		index += 1
-	end
 	return
 end
 
@@ -934,8 +925,7 @@ def gate4_emit_record_descriptors(state: Gate4Compiler, mut output: Gate4Output)
 		mut entries := ""
 		mut field_offset := 0
 		while field_offset < field_count
-			field_type := gate4_load_string(state.field_types, field_start + field_offset)
-			if gate4_type_is_managed(field_type)
+			if gate4_type_is_managed(gate4_load_string(state.field_types, field_start + field_offset))
 				entries += ", l " + gate4_integer_string(8 + field_offset * 8)
 				managed_count += 1
 			end
@@ -1113,17 +1103,17 @@ def gate4_type_is_managed(type_name: String): Boolean
 	return gate4_string_starts_with(type_name, "Record#")
 end
 
-def gate4_note_temporary_root(mut context: Gate4EmitContext)
-	if context.temporary_roots_used[0] == 0
-		context.temporary_roots_used[0] = 1
-	end
-	return
-end
-
-def gate4_note_gc_safe_point(mut context: Gate4EmitContext)
-	context.gc_safe_point_count[0] = context.gc_safe_point_count[0] + 1
-	if context.temporary_roots_used[0] == 1
-		context.temporary_roots_used[0] = 2
+def gate4_note_gc_state(mut context: Gate4EmitContext, safe_point: Boolean)
+	mut roots := context.temporary_roots_used
+	if safe_point
+		roots[1] += 1
+		if roots[0] == 1
+			roots[0] = 2
+		end
+	else
+		if roots[0] == 0
+			roots[0] = 1
+		end
 	end
 	return
 end
@@ -1136,7 +1126,7 @@ def gate4_emit_array_push(
 		operand: String,
 	)
 	# Growing an Array may collect before its backing storage is reallocated.
-	gate4_note_gc_safe_point(context)
+	gate4_note_gc_state(context, true)
 	gate4_invalidate_array_header_cache(context)
 	if element_type == "Float"
 		output.runtime_flags[0] = 1
@@ -1158,14 +1148,21 @@ def gate4_emit_temporary(mut context: Gate4EmitContext): String
 	return "%t" + gate4_integer_string(index)
 end
 
+def gate4_output_append(mut output: Gate4Output, appended: Gate4Output)
+	mut index := 0
+	while index < appended.count[0]
+		gate4_output_line(output, gate4_load_string(appended.lines, index))
+		index += 1
+	end
+	return
+end
+
 def gate4_owned_managed_local_count(context: Gate4EmitContext): Integer
 	mut count := 0
 	mut local_index := 0
 	while local_index < context.local_count[0]
-		type_name := gate4_load_string(context.local_types, local_index)
-		inherited := gate4_load_integer(context.local_inherited, local_index)
-		if gate4_type_is_managed(type_name)
-			if inherited == 0
+		if gate4_type_is_managed(gate4_load_string(context.local_types, local_index))
+			if gate4_load_integer(context.local_inherited, local_index) == 0
 				count += 1
 			end
 		end
@@ -1193,11 +1190,9 @@ def gate4_emit_loop_root_compaction(mut context: Gate4EmitContext, mut output: G
 	mut local_index := 0
 	mut managed_index := 0
 	while local_index < context.local_count[0]
-		type_name := gate4_load_string(context.local_types, local_index)
-		inherited := gate4_load_integer(context.local_inherited, local_index)
-		if gate4_type_is_managed(type_name)
-			if inherited == 0
-				gate4_note_temporary_root(context)
+		if gate4_type_is_managed(gate4_load_string(context.local_types, local_index))
+			if gate4_load_integer(context.local_inherited, local_index) == 0
+				gate4_note_gc_state(context, false)
 				value := gate4_emit_temporary(context)
 				mut slot := base
 				if managed_index > 0
@@ -1274,7 +1269,7 @@ def gate4_emit_root_value(
 	if gate4_type_is_managed(type_name)
 		# Managed results are produced by allocation or by calls whose allocation
 		# behavior is intentionally opaque at this boundary.
-		gate4_note_gc_safe_point(context)
+		gate4_note_gc_state(context, true)
 		context.temporary_roots_used[0] = 2
 	end
 	return
@@ -1288,7 +1283,7 @@ def gate4_note_managed_alias(
 		# The owner remains reachable through its caller, allocation, or managed
 		# local root until the alias is consumed. Loop compaction transfers an
 		# alias retained as a local, so a duplicate temporary root is unnecessary.
-		gate4_note_temporary_root(context)
+		gate4_note_gc_state(context, false)
 	end
 	return
 end
@@ -1598,7 +1593,7 @@ def gate4_emit_add_local(
 		inherited = 1
 	end
 	gate4_store_integer(context.local_inherited, index, inherited)
-	context.local_count[0] = index + 1
+	context.local_count[0] += 1
 	if gate4_type_is_managed(type_name)
 		if inherited == 0
 			# Lexical blocks restore local_count, so retain the maximum active
@@ -1626,7 +1621,7 @@ def gate4_emit_add_direct_local(
 	gate4_store_integer(context.local_mutable, index, 0)
 	gate4_store_integer(context.local_inherited, index, 1)
 	gate4_store_integer(context.local_direct, index, 1)
-	context.local_count[0] = index + 1
+	context.local_count[0] += 1
 	return
 end
 
@@ -2104,7 +2099,7 @@ def gate4_emit_direct_call(
 	end
 	# Until interprocedural no-allocation summaries exist, every ordinary
 	# TypeRB call remains a conservative GC safe point.
-	gate4_note_gc_safe_point(context)
+	gate4_note_gc_state(context, true)
 	if result_type == "Void"
 		gate4_output_line(
 			output,
@@ -2158,8 +2153,10 @@ def gate4_emit_record_new(
 				gate4_load_string(state.field_types, field_start + field_offset),
 			)
 			address := gate4_emit_address(context, output, record_value, 8 + field_offset * 8)
-			field_type := gate4_load_string(state.field_types, field_start + field_offset)
-			gate4_output_line(output, "\t" + gate4_qbe_store(field_type) + " " + value.operand + ", " + address)
+			gate4_output_line(
+				output,
+				"\t" + gate4_qbe_store(gate4_load_string(state.field_types, field_start + field_offset)) + " " + value.operand + ", " + address,
+			)
 			field_offset += 1
 			if gate4_token_is(state, position[0], ",")
 				gate4_advance(position)
@@ -2358,8 +2355,7 @@ def gate4_emit_primary(
 	end
 	if kind == 3
 		gate4_advance(position)
-		canonical := gate4_load_integer(state.token_lines, token_index)
-		return gate4_emitted_value("$g4s" + gate4_integer_string(canonical), "String", 0, "", 0, "")
+		return gate4_emitted_value("$g4s" + gate4_integer_string(gate4_load_integer(state.token_lines, token_index)), "String", 0, "", 0, "")
 	end
 	if gate4_token_is(state, token_index, "[")
 		return gate4_emit_array_literal(state, position, context, output, expected)
@@ -2824,18 +2820,13 @@ def gate4_emit_block(
 						gate4_invalidate_array_header_cache(context)
 						gate4_output_line(output, "\tjmp " + header)
 						gate4_output_line(output, header)
-						mut root_publication := gate4_output_new(
-							context.local_count[0] * 4 + 16,
-							output.runtime_flags,
-						)
-						gate4_emit_loop_root_compaction(context, root_publication)
 						mut loop_output := gate4_output_new(
 							state.token_count[0] * 8 + 1024,
 							output.runtime_flags,
 						)
-						safe_points_before := context.gc_safe_point_count[0]
+						safe_points_before := context.temporary_roots_used[1]
 						gate4_advance(position)
-						context.loop_depth[0] = context.loop_depth[0] + 1
+						context.loop_depth[0] += 1
 						condition_value := gate4_emit_expression(state, position, context, loop_output, 1, "Boolean")
 						gate4_finish_statement(state, position)
 						condition := gate4_emit_condition(context, loop_output, condition_value.operand)
@@ -2850,15 +2841,15 @@ def gate4_emit_block(
 						gate4_expect(state, position, "end")
 						gate4_finish_statement(state, position)
 						gate4_output_line(loop_output, done)
-						if context.gc_safe_point_count[0] == safe_points_before
+						if context.temporary_roots_used[1] == safe_points_before
 							gate4_output_append(output, loop_output)
-							gate4_output_append(output, root_publication)
+							gate4_emit_loop_root_compaction(context, output)
 						else
-							gate4_output_append(output, root_publication)
+							gate4_emit_loop_root_compaction(context, output)
 							gate4_output_append(output, loop_output)
 						end
 						gate4_invalidate_array_header_cache(context)
-						context.loop_depth[0] = context.loop_depth[0] - 1
+						context.loop_depth[0] -= 1
 					else
 						if gate4_token_is(state, position[0], "return")
 							gate4_advance(position)
@@ -2933,8 +2924,9 @@ def gate4_emit_function(
 		if parameters != ""
 			parameters += ", "
 		end
-		parameter_type := gate4_load_string(state.parameter_types, parameter_start + parameter_index)
-		parameters += gate4_qbe_type(parameter_type) + " %p" + gate4_integer_string(parameter_index)
+		parameters += gate4_qbe_type(
+			gate4_load_string(state.parameter_types, parameter_start + parameter_index),
+		) + " %p" + gate4_integer_string(parameter_index)
 		parameter_index += 1
 	end
 	mut result_prefix := ""
@@ -4506,20 +4498,20 @@ def gate4_token_is(state: Gate4Compiler, index: Integer, text: String): Boolean
 end
 
 def gate4_advance(mut position: Array<Integer>)
-	position[0] = position[0] + 1
+	position[0] += 1
 	return
 end
 
 def gate4_skip_newlines(state: Gate4Compiler, mut position: Array<Integer>)
 	while gate4_load_integer(state.token_kinds, position[0]) == 4
-		position[0] = position[0] + 1
+		position[0] += 1
 	end
 	return
 end
 
 def gate4_expect(mut state: Gate4Compiler, mut position: Array<Integer>, text: String): Boolean
 	if gate4_token_is(state, position[0], text)
-		position[0] = position[0] + 1
+		position[0] += 1
 		return true
 	end
 	gate4_diagnostic(
@@ -4534,7 +4526,7 @@ end
 def gate4_expect_identifier(mut state: Gate4Compiler, mut position: Array<Integer>): String
 	if gate4_load_integer(state.token_kinds, position[0]) == 1
 		value := gate4_load_string(state.token_texts, position[0])
-		position[0] = position[0] + 1
+		position[0] += 1
 		return value
 	end
 	gate4_diagnostic(state, "TRBN4002", gate4_load_integer(state.token_lines, position[0]), "expected an identifier")
@@ -5295,7 +5287,6 @@ end
 
 def gate4_ascii_fold(value: String): String
 	upper := "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	lower := "abcdefghijklmnopqrstuvwxyz"
 	mut result := ""
 	mut index := 0
 	while index < value.size()
@@ -5304,7 +5295,7 @@ def gate4_ascii_fold(value: String): String
 		mut letter := 0
 		while letter < upper.size()
 			if upper[letter] == character
-				folded = lower[letter]
+				folded = "abcdefghijklmnopqrstuvwxyz"[letter]
 				letter = upper.size()
 			else
 				letter += 1
@@ -6028,8 +6019,11 @@ def gate4_find_visible_record(mut state: Gate4Compiler, module_index: Integer, n
 	if target < 0
 		return - 1
 	end
-	declaration := gate4_load_string(state.import_declarations, import_index)
-	resolved := gate4_find_record_in_module(state, target, declaration)
+	resolved := gate4_find_record_in_module(
+		state,
+		target,
+		gate4_load_string(state.import_declarations, import_index),
+	)
 	if resolved >= 0
 		gate4_store_integer(state.import_used, import_index, 1)
 	end
@@ -6049,8 +6043,11 @@ def gate4_find_visible_function(mut state: Gate4Compiler, module_index: Integer,
 	if target < 0
 		return - 1
 	end
-	declaration := gate4_load_string(state.import_declarations, import_index)
-	resolved := gate4_find_function_in_module(state, target, declaration)
+	resolved := gate4_find_function_in_module(
+		state,
+		target,
+		gate4_load_string(state.import_declarations, import_index),
+	)
 	if resolved >= 0
 		gate4_store_integer(state.import_used, import_index, 1)
 	end
@@ -6217,7 +6214,7 @@ def gate4_local_add(
 	gate4_store_string(locals.names, index, name)
 	gate4_store_string(locals.types, index, type_name)
 	gate4_store_integer(locals.mutable, index, mutable)
-	locals.count[0] = index + 1
+	locals.count[0] += 1
 	return true
 end
 
@@ -6232,7 +6229,7 @@ def gate4_resolution_local_add(
 		gate4_store_string(locals.names, index, name)
 		gate4_store_string(locals.types, index, type_name)
 		gate4_store_integer(locals.mutable, index, mutable)
-		locals.count[0] = index + 1
+		locals.count[0] += 1
 	end
 	return
 end
@@ -7394,10 +7391,10 @@ def gate4_check_declaration(
 		end
 	end
 	gate4_expect(state, position, ":=")
-	value := gate4_check_expression(state, position, locals, 1, declared_type)
+	value_type := gate4_check_expression(state, position, locals, 1, declared_type).type_name
 	mut local_type := declared_type
 	if local_type == ""
-		local_type = value.type_name
+		local_type = value_type
 	end
 	if local_type == "Void"
 		gate4_diagnostic(state, "TRBN4004", line, "local binding cannot have type Void")
@@ -7427,8 +7424,8 @@ def gate4_check_simple_statement(
 				gate4_diagnostic(state, "TRBN4004", line, "assignment target is immutable")
 			end
 			gate4_advance(position)
-			right := gate4_check_expression(state, position, locals, 1, left.type_name)
-			gate4_binary_result_type(state, compound, left.type_name, right.type_name, line)
+			right_type := gate4_check_expression(state, position, locals, 1, left.type_name).type_name
+			gate4_binary_result_type(state, compound, left.type_name, right_type, line)
 		end
 	end
 	return gate4_finish_statement(state, position)
