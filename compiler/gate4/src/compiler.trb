@@ -1975,6 +1975,14 @@ def gate4_emit_direct_call(
 		gate4_output_line(output, "\tcall $g4_temp_reset()")
 		return gate4_emitted_value("", "Void", 0, "", 0, "")
 	end
+	if state.function_count[0] <= 32
+		if gate4_scalar_leaf_inline_eligible(state, function_index)
+			gate4_output_line(
+				output,
+				"# gate4 retained scalar call " + gate4_integer_string(function_index),
+			)
+		end
+	end
 	if result_type == "Void"
 		gate4_output_line(
 			output,
@@ -3096,6 +3104,72 @@ def gate4_emit_entry(state: Gate4Compiler, mut output: Gate4Output)
 	return
 end
 
+def gate4_elide_dead_scalar_leaf_functions(
+		state: Gate4Compiler,
+		output: Gate4Output,
+	): Gate4Output
+	if state.function_count[0] > 32
+		return output
+	end
+	retained := gate4_integer_storage(state.function_count[0] + 1)
+	mut function_index := 0
+	while function_index < state.function_count[0]
+		gate4_store_integer(retained, function_index, 0)
+		if gate4_scalar_leaf_inline_eligible(state, function_index)
+			marker := "# gate4 retained scalar call " + gate4_integer_string(function_index)
+			mut line_index := 0
+			while line_index < output.count[0]
+				if gate4_load_string(output.lines, line_index) == marker
+					gate4_store_integer(retained, function_index, 1)
+					line_index = output.count[0]
+				else
+					line_index += 1
+				end
+			end
+		end
+		function_index += 1
+	end
+	mut compact := gate4_output_new(output.count[0] + 1, output.runtime_flags)
+	mut skipping := false
+	mut line_index := 0
+	while line_index < output.count[0]
+		line := gate4_load_string(output.lines, line_index)
+		if skipping
+			if line == "}\n"
+				skipping = false
+			end
+		else
+			if !gate4_string_starts_with(line, "# gate4 retained scalar call ")
+				mut dead_index := 0
+				mut dead := false
+				while dead_index < state.function_count[0]
+					if gate4_load_integer(retained, dead_index) == 0
+						if gate4_scalar_leaf_inline_eligible(state, dead_index)
+							mut result_prefix := ""
+							result_type := gate4_load_string(state.function_result_types, dead_index)
+							if result_type != "Void"
+								result_prefix = gate4_qbe_type(result_type) + " "
+							end
+							prefix := "function " + result_prefix + "$g4f" + gate4_integer_string(dead_index) + "("
+							if gate4_string_starts_with(line, prefix)
+								dead = true
+							end
+						end
+					end
+					dead_index += 1
+				end
+				if dead
+					skipping = true
+				else
+					gate4_output_line(compact, line)
+				end
+			end
+		end
+		line_index += 1
+	end
+	return compact
+end
+
 def gate4_emit_qbe(mut state: Gate4Compiler): Gate4Output
 	mut output := gate4_output_new(state.token_count[0] * 24 + 4096, [0, 0, 0, 0])
 	gate4_emit_static_strings(state, output)
@@ -3106,7 +3180,7 @@ def gate4_emit_qbe(mut state: Gate4Compiler): Gate4Output
 	if state.function_count[0] <= 32
 		inline_budget[0] = 64
 		inline_budget[1] = 6
-		inline_budget[2] = 1
+		inline_budget[2] = 2
 	else
 		if state.function_count[0] <= 96
 			inline_budget[0] = 32
@@ -3141,7 +3215,7 @@ def gate4_emit_qbe(mut state: Gate4Compiler): Gate4Output
 		gate4_emit_integer_to_string_runtime(output)
 		gate4_emit_float_to_integer_runtime(output)
 	end
-	return output
+	return gate4_elide_dead_scalar_leaf_functions(state, output)
 end
 
 def gate4_eputs(_value: String)
