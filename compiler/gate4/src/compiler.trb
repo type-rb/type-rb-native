@@ -86,6 +86,7 @@ record Gate4EmitContext
 	local_slots: Gate4StringStorage
 	local_mutable: Gate4IntegerStorage
 	local_inherited: Gate4IntegerStorage
+	local_direct: Gate4IntegerStorage
 	local_count: Array<Integer>
 	slot_count: Array<Integer>
 	managed_local_high_water: Array<Integer>
@@ -403,6 +404,7 @@ def gate4_emit_context_new(capacity: Integer, inline_budget: Array<Integer>): Ga
 		local_slots: gate4_string_storage(capacity),
 		local_mutable: gate4_integer_storage(capacity),
 		local_inherited: gate4_integer_storage(capacity),
+		local_direct: gate4_integer_storage(capacity),
 		local_count: [0],
 		slot_count: [0],
 		managed_local_high_water: [0],
@@ -1449,6 +1451,7 @@ def gate4_emit_add_local(
 	gate4_store_string(context.local_types, index, type_name)
 	gate4_store_string(context.local_slots, index, slot)
 	gate4_store_integer(context.local_mutable, index, mutable)
+	gate4_store_integer(context.local_direct, index, 0)
 	mut inherited := 0
 	if inherited_root
 		inherited = 1
@@ -1469,13 +1472,40 @@ def gate4_emit_add_local(
 	return slot
 end
 
+def gate4_emit_add_direct_local(
+		mut context: Gate4EmitContext,
+		name: String,
+		type_name: String,
+		operand: String,
+	)
+	index := context.local_count[0]
+	gate4_store_string(context.local_names, index, name)
+	gate4_store_string(context.local_types, index, type_name)
+	gate4_store_string(context.local_slots, index, operand)
+	gate4_store_integer(context.local_mutable, index, 0)
+	gate4_store_integer(context.local_inherited, index, 1)
+	gate4_store_integer(context.local_direct, index, 1)
+	context.local_count[0] = index + 1
+	return
+end
+
 def gate4_emit_loaded_local(
 		mut context: Gate4EmitContext,
 		mut output: Gate4Output,
 		index: Integer,
 	): Gate4EmittedValue
-	operand := gate4_emit_temporary(context)
 	type_name := gate4_load_string(context.local_types, index)
+	if gate4_load_integer(context.local_direct, index) == 1
+		return gate4_emitted_value(
+			gate4_load_string(context.local_slots, index),
+			type_name,
+			0,
+			gate4_load_string(context.local_names, index),
+			0,
+			"",
+		)
+	end
+	operand := gate4_emit_temporary(context)
 	gate4_output_line(
 		output,
 		"\t" + operand + " =" + gate4_qbe_type(type_name) + " " + gate4_qbe_load(type_name) + " " +
@@ -1564,6 +1594,214 @@ def gate4_emit_array_literal(
 	return gate4_emitted_value(array, gate4_array_type(element_type), 0, "", 1, "")
 end
 
+def gate4_inline_scalar_type(type_name: String): Boolean
+	if type_name == "Integer"
+		return true
+	end
+	if type_name == "Float"
+		return true
+	end
+	return type_name == "Boolean"
+end
+
+def gate4_inline_statement_end(state: Gate4Compiler, start: Integer, finish: Integer): Integer
+	mut index := start
+	mut depth := 0
+	while index < finish
+		kind := gate4_load_integer(state.token_kinds, index)
+		if kind == 4
+			if depth == 0
+				return index
+			end
+		else
+			if gate4_token_is(state, index, "(")
+				depth += 1
+			else
+				if gate4_token_is(state, index, ")")
+					depth -= 1
+				end
+			end
+		end
+		index += 1
+	end
+	return finish
+end
+
+def gate4_inline_scalar_expression_allowed(
+		state: Gate4Compiler,
+		start: Integer,
+		finish: Integer,
+	): Boolean
+	mut index := start
+	mut depth := 0
+	mut found := false
+	while index < finish
+		kind := gate4_load_integer(state.token_kinds, index)
+		text := gate4_load_string(state.token_texts, index)
+		if kind == 4
+			if depth <= 0
+				return false
+			end
+		else
+			if kind == 1
+				if index + 1 < finish
+					if gate4_token_is(state, index + 1, "(")
+						return false
+					end
+				end
+			else
+				if kind != 2
+					mut allowed := gate4_binary_precedence(text) > 0
+					if text == "!"
+						allowed = true
+					end
+					if text == "("
+						allowed = true
+						depth += 1
+					end
+					if text == ")"
+						if depth <= 0
+							return false
+						end
+						allowed = true
+						depth -= 1
+					end
+					if !allowed
+						return false
+					end
+				end
+			end
+			found = true
+		end
+		index += 1
+	end
+	if depth != 0
+		return false
+	end
+	return found
+end
+
+def gate4_inline_skip_newlines(state: Gate4Compiler, start: Integer, finish: Integer): Integer
+	mut index := start
+	while index < finish
+		if gate4_load_integer(state.token_kinds, index) != 4
+			return index
+		end
+		index += 1
+	end
+	return index
+end
+
+def gate4_scalar_leaf_inline_eligible(state: Gate4Compiler, function_index: Integer): Boolean
+	if !gate4_inline_scalar_type(gate4_load_string(state.function_result_types, function_index))
+		return false
+	end
+	parameter_start := gate4_load_integer(state.function_parameter_starts, function_index)
+	parameter_finish := parameter_start + gate4_load_integer(state.function_parameter_counts, function_index)
+	mut parameter_index := parameter_start
+	while parameter_index < parameter_finish
+		if gate4_load_integer(state.parameter_mutable, parameter_index) != 0
+			return false
+		end
+		if !gate4_inline_scalar_type(gate4_load_string(state.parameter_types, parameter_index))
+			return false
+		end
+		parameter_index += 1
+	end
+	mut index := gate4_load_integer(state.function_body_starts, function_index)
+	finish := gate4_load_integer(state.function_body_ends, function_index)
+	while index < finish
+		index = gate4_inline_skip_newlines(state, index, finish)
+		if index >= finish
+			return false
+		end
+		if gate4_token_is(state, index, "return")
+			expression_start := index + 1
+			statement_end := gate4_inline_statement_end(state, expression_start, finish)
+			if !gate4_inline_scalar_expression_allowed(state, expression_start, statement_end)
+				return false
+			end
+			index = statement_end
+			index = gate4_inline_skip_newlines(state, index, finish)
+			return index == finish
+		end
+		if gate4_load_integer(state.token_kinds, index) != 1
+			return false
+		end
+		if index + 1 >= finish
+			return false
+		end
+		if !gate4_token_is(state, index + 1, ":=")
+			return false
+		end
+		expression_start := index + 2
+		statement_end := gate4_inline_statement_end(state, expression_start, finish)
+		if !gate4_inline_scalar_expression_allowed(state, expression_start, statement_end)
+			return false
+		end
+		index = statement_end
+	end
+	return false
+end
+
+def gate4_take_scalar_leaf_inline_budget(mut context: Gate4EmitContext): Boolean
+	if context.loop_depth[0] <= 0
+		return false
+	end
+	if context.inline_budget[2] <= 0
+		return false
+	end
+	context.inline_budget[2] = context.inline_budget[2] - 1
+	return true
+end
+
+def gate4_emit_scalar_leaf_inline(
+		mut state: Gate4Compiler,
+		function_index: Integer,
+		argument_operands: Array<String>,
+		mut context: Gate4EmitContext,
+		mut output: Gate4Output,
+	): Gate4EmittedValue
+	saved_module := state.active_module[0]
+	saved_local_count := context.local_count[0]
+	state.active_module[0] = gate4_load_integer(state.function_modules, function_index)
+	parameter_start := gate4_load_integer(state.function_parameter_starts, function_index)
+	parameter_count := gate4_load_integer(state.function_parameter_counts, function_index)
+	mut parameter_index := 0
+	while parameter_index < parameter_count
+		declaration_index := parameter_start + parameter_index
+		gate4_emit_add_direct_local(
+			context,
+			gate4_load_string(state.parameter_names, declaration_index),
+			gate4_load_string(state.parameter_types, declaration_index),
+			argument_operands[parameter_index],
+		)
+		parameter_index += 1
+	end
+	mut position := [gate4_load_integer(state.function_body_starts, function_index)]
+	gate4_skip_newlines(state, position)
+	result_type := gate4_load_string(state.function_result_types, function_index)
+	mut result := gate4_emitted_value("", "Invalid", 0, "", 0, "")
+	mut complete := false
+	while !complete
+		if gate4_token_is(state, position[0], "return")
+			gate4_advance(position)
+			result = gate4_emit_expression(state, position, context, output, 1, result_type)
+			gate4_finish_statement(state, position)
+			complete = true
+		else
+			name := gate4_expect_identifier(state, position)
+			gate4_expect(state, position, ":=")
+			value := gate4_emit_expression(state, position, context, output, 1, "")
+			gate4_emit_add_direct_local(context, name, value.type_name, value.operand)
+			gate4_finish_statement(state, position)
+		end
+	end
+	context.local_count[0] = saved_local_count
+	state.active_module[0] = saved_module
+	return result
+end
+
 def gate4_emit_direct_call(
 		mut state: Gate4Compiler,
 		mut position: Array<Integer>,
@@ -1588,6 +1826,7 @@ def gate4_emit_direct_call(
 		result_type = gate4_load_string(state.function_result_types, function_index)
 	end
 	mut arguments := ""
+	mut argument_operands: Array<String> := []
 	mut argument_count := 0
 	mut finished := false
 	while !finished
@@ -1606,6 +1845,7 @@ def gate4_emit_direct_call(
 				arguments += ", "
 			end
 			arguments += gate4_qbe_type(value.type_name) + " " + value.operand
+			argument_operands.push(value.operand)
 			argument_count += 1
 			if gate4_token_is(state, position[0], ",")
 				gate4_advance(position)
@@ -1616,6 +1856,21 @@ def gate4_emit_direct_call(
 		end
 	end
 	gate4_expect(state, position, ")")
+	if function_index >= 0
+		if state.function_count[0] <= 32
+			if gate4_scalar_leaf_inline_eligible(state, function_index)
+				if gate4_take_scalar_leaf_inline_budget(context)
+					return gate4_emit_scalar_leaf_inline(
+						state,
+						function_index,
+						argument_operands,
+						context,
+						output,
+					)
+				end
+			end
+		end
+	end
 	if callee.category == 4
 		output.runtime_flags[1] = 1
 		result := gate4_emit_temporary(context)
@@ -2787,10 +3042,11 @@ def gate4_emit_qbe(mut state: Gate4Compiler): Gate4Output
 	gate4_emit_record_descriptors(state, output)
 	compiler_runtime := gate4_compiler_entry_function(state) >= 0
 	gate4_emit_runtime(output, compiler_runtime)
-	mut inline_budget := [0, 0]
+	mut inline_budget := [0, 0, 0]
 	if state.function_count[0] <= 32
 		inline_budget[0] = 64
 		inline_budget[1] = 6
+		inline_budget[2] = 2
 	else
 		if state.function_count[0] <= 96
 			inline_budget[0] = 32

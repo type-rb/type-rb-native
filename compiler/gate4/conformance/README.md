@@ -40,7 +40,9 @@ The valid cases cover:
   `valid/managed-array-growth.trb`, with scalar Array growth as a control;
 - Integer Array order, aliases, nested retention, mutation, append, negative
   indexing, and forced collection across scalar geometric growth
-  boundaries in `valid/scalar-array-growth.trb`; and
+  boundaries in `valid/scalar-array-growth.trb`;
+- left-to-right, exactly-once argument evaluation through a bounded scalar
+  leaf call in `valid/scalar-leaf-inline.trb`; and
 - the compiler source closure itself, exercised by the bootstrap test outside
   this directory.
 
@@ -58,9 +60,10 @@ rather than target or QBE fallback behavior.
 
 The candidate-only Float Array diagnostics additionally preserve incompatible
 element rejection, mutable Array invariance, immutable mutation rejection, and
-unsupported-method rejection. The `runtime-invalid` directory contains a
-well-typed Float Array bounds case whose exact nonzero status and panic text
-must agree across the updated B2/B3/B4 compilers.
+unsupported-method rejection. Each source in `runtime-invalid` has an exact
+`.stderr` sidecar. The directory covers positive and too-negative Array bounds
+failures plus checked Integer overflow through an inlined scalar leaf; status,
+empty stdout, and panic text must agree across the updated B2/B3/B4 compilers.
 
 The `mutations` directory contains a base program and two independently changed
 sources. All three must produce distinct QBE and distinct runtime output. This
