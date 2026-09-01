@@ -151,6 +151,8 @@ awk -F '\t' '
 ' "$test_root/pass-evidence/medians.tsv" || fail "median values differ"
 test "$(awk -F '\t' '$2 == "walltime" { print $5 }' "$test_root/pass-evidence/evaluation.tsv")" = 0.750000 ||
 	fail "wall-time ratio differs"
+test "$(awk -F= '$1 == "maximum_candidate_ratio" { print $2 }' "$test_root/pass-evidence/environment.txt")" = 0.95 ||
+	fail "spectral-norm threshold differs"
 
 fannkuch_expected=$test_root/fannkuch-expected.txt
 printf 'fannkuch-redux-output\n' > "$fannkuch_expected"
@@ -166,7 +168,7 @@ printf 'fannkuch-redux\tcandidate\t%s\tfannkuch-redux\t%s\n' \
 	> "$test_root/fannkuch.stdout" 2> "$test_root/fannkuch.stderr"
 test "$(cat "$test_root/fannkuch.stdout")" = 'native-runtime-ab: fannkuch-redux passed'
 test ! -s "$test_root/fannkuch.stderr" || fail "fannkuch controller wrote stderr"
-test "$(awk -F= '$1 == "maximum_candidate_ratio" { print $2 }' "$test_root/fannkuch-evidence/environment.txt")" = 0.95 ||
+test "$(awk -F= '$1 == "maximum_candidate_ratio" { print $2 }' "$test_root/fannkuch-evidence/environment.txt")" = 1.02 ||
 	fail "fannkuch threshold differs"
 
 worker_expected=$test_root/worker-expected.txt

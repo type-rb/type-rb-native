@@ -35,9 +35,9 @@ The currently registered cases and thresholds are:
 
 | Case | Input | Maximum candidate/baseline wall and CPU ratio |
 | --- | ---: | ---: |
-| `fannkuch-redux` | 10 | 0.95 |
+| `fannkuch-redux` | 10 | 1.02 |
 | `n-body` | 1,000,000 | 1.02 |
-| `spectral-norm` | 5,500 | 1.02 |
+| `spectral-norm` | 5,500 | 0.95 |
 | `worker-literal-concat` | one phase, 400,000 batches | 0.70 |
 | `worker-managed-alias-roots` | one phase, 400,000 batches | 0.80 |
 | `worker-managed-array-growth` | one phase, 400,000 batches | 0.95 |
@@ -45,13 +45,13 @@ The currently registered cases and thresholds are:
 | `worker-dynamic-array-address` | one phase, 400,000 batches | 0.95 |
 | `worker-gc-temp-push-fast-path` | one phase, 400,000 batches | 0.985 |
 
-The three numeric inputs apply the safe-point-free loop-root publication
+The three numeric inputs apply the bounded checked-Integer multiplication
 contract registered in
-[issue #182](https://github.com/type-rb/type-rb-native/issues/182).
+[issue #184](https://github.com/type-rb/type-rb-native/issues/184).
 They do not replace the full cross-language benchmark inputs or its published
 results. The same experiment limits the fixed-point Linux arm64 compiler to
-1.02x the exact baseline and 260,000 bytes; adjacent bootstrap wall time, CPU
-time, and peak RSS to 1.05x; every application's QBE to 1.005x; and every raw
+1.01x the exact baseline and 255,000 bytes; adjacent bootstrap wall time, CPU
+time, and peak RSS to 1.05x; every application's QBE to 1.01x; and every raw
 and stripped executable to 1.001x.
 
 Both compiler revisions are closed from their exact source trees, while one
