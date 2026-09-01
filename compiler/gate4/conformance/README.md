@@ -47,7 +47,10 @@ The valid cases cover:
   after an opaque mutating call and local Array rebinding in
   `valid/array-header-cache-invalidation.trb`;
 - left-to-right, exactly-once argument evaluation through a bounded scalar
-  leaf call in `valid/scalar-leaf-inline.trb`; and
+  leaf call in `valid/scalar-leaf-inline.trb`;
+- checked Integer multiplication at the bounded nonnegative fast-entry
+  threshold, its safe slow path, negative operands, zero, and the portable
+  extrema in `valid/integer-multiply-fast-path.trb`; and
 - the compiler source closure itself, exercised by the bootstrap test outside
   this directory.
 
@@ -67,8 +70,12 @@ The candidate-only Float Array diagnostics additionally preserve incompatible
 element rejection, mutable Array invariance, immutable mutation rejection, and
 unsupported-method rejection. Each source in `runtime-invalid` has an exact
 `.stderr` sidecar. The directory covers positive and too-negative Array bounds
-failures plus checked Integer overflow through an inlined scalar leaf; status,
-empty stdout, and panic text must agree across the updated B2/B3/B4 compilers.
+failures, checked Integer overflow through an inlined scalar leaf, and the
+bounded nonnegative multiplication entry at its exact power-of-two threshold.
+Negative, zero, maximum, safe slow-path, and overflow behavior are fixed by
+`valid/integer-multiply-fast-path.trb` and
+`runtime-invalid/integer-multiply-fast-path-overflow.trb`; status, empty
+stdout, and panic text must agree across the updated B2/B3/B4 compilers.
 
 The `mutations` directory contains a base program and two independently changed
 sources. All three must produce distinct QBE and distinct runtime output. This

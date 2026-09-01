@@ -1195,6 +1195,21 @@ describe("Gate 4 TypeRB frontend") do
 		expect(qbe.include?("call $g4_array_address")).to_be_false()
 	end
 
+	test("routes dynamic Integer multiplication through the bounded checked entry") do
+		source := "def multiply(left: Integer, right: Integer): Integer\n\treturn left * right\nend\n\ndef main()\n\tvalue := multiply(2, 3)\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		qbe := gate4_output_source(gate4_emit_qbe(state))
+		expect(qbe.include?("call $g4_integer_multiply(l ")).to_be_true()
+		expect(qbe.include?("%c =l or %left, %right")).to_be_true()
+		expect(qbe.include?("%u =l shr %c, 26")).to_be_true()
+		expect(qbe.include?("jnz %u, @left_sign, @multiply")).to_be_true()
+		expect(gate4_occurrence_count(qbe, "%right_zero =w ceql %right, 0")).to_equal(1)
+	end
+
 	test("keeps the loop reserve independent when the non-loop reserve is exhausted") do
 		source := "def scalar(value: Integer): Integer\n\tmut result := value\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\treturn result\nend\n\ndef main()\n\tmut values: Array<Integer> := [0]\n\tmut index := 0\n\twhile index < 1\n\t\tvalues[0] = scalar(index)\n\t\tindex += 1\n\tend\n\treturn\nend\n"
 		mut state := gate4_compiler_new(source.size() + 1)
