@@ -388,6 +388,13 @@ remains neutral. Exact fixed-point, build-cost, compiler-size, application-size,
 correctness, and catastrophic limits all pass. See the
 [recorded safe Array-header result](results/2026-09-01-native-safe-array-headers-linux-arm64/README.md).
 
+A bounded follow-up moved one stable Array length into a loop preheader. It
+passed correctness, fixed-point, build-cost, compiler-size, application-size,
+memory, and control limits, but improved the required `spectral-norm` wall and
+CPU medians by only about 0.6% against a frozen 3% requirement. The threshold
+was not relaxed and the implementation was reverted. See the
+[recorded rejected result](results/2026-09-01-rejected-loop-invariant-array-length-linux-arm64/README.md).
+
 Gate 6N passes every frozen condition for the internal
 `linux-amd64-v0` profile. The exact merged compiler closes a 240,888-byte
 Go-free B2/B3/B4 fixed point, emits byte-identical target-neutral compiler and
@@ -550,6 +557,7 @@ repository.
 - [Rejected Native scalar-leaf inlining result on Linux arm64](results/2026-08-31-native-scalar-leaf-inline-linux-arm64/README.md)
 - [Rejected no-GC-safe-point root-publication result on Linux arm64](results/2026-09-01-rejected-no-gc-root-publication-linux-arm64/README.md)
 - [Formal safe Array-header reuse result on Linux arm64](results/2026-09-01-native-safe-array-headers-linux-arm64/README.md)
+- [Rejected loop-invariant Array-length result on Linux arm64](results/2026-09-01-rejected-loop-invariant-array-length-linux-arm64/README.md)
 - [Formal static String compactness A/B result on Darwin/Linux arm64](results/2026-08-31-static-string-compactness-darwin-linux-arm64/README.md)
 - [Formal TypeRB backend-pair build controller](tools/benchmarksgame-build-formal/README.md)
 - [Formal Native runtime optimization A/B controller](tools/native-runtime-ab/README.md)

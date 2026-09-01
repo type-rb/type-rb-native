@@ -258,6 +258,17 @@ size, correctness, and catastrophic bounds all pass. This candidate becomes
 the next accepted Native baseline; it does not change the explicit objective
 of matching or beating the separately measured Pure Go implementations.
 
+The follow-up registered by
+[issue #179](https://github.com/type-rb/type-rb-native/issues/179) evaluated a
+bounded loop-preheader Array-header hoist. Its final length-only
+[formal result](../results/2026-09-01-rejected-loop-invariant-array-length-linux-arm64/README.md)
+passes every correctness, fixed-point, build, compactness, memory, and control
+condition, but improves the required `spectral-norm` wall and CPU medians by
+only about 0.6% against the frozen 3% signal. The threshold was not relaxed,
+and the implementation was reverted. Retaining both length and data was also
+rejected earlier because register pressure exceeded the application-size
+limit.
+
 Builds use release optimization without unsafe fast-math substitutions: C and
 C++ use `-O3`, Go uses `go build -trimpath`, Rust uses `rustc -C opt-level=3`,
 and Java uses `javac` followed by the same recorded JVM for every run. The
