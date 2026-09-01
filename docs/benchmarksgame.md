@@ -227,6 +227,25 @@ passed, but the Linux arm64 self-hosted compiler grew by 2.20% against a
 pre-registered 0.1% maximum. The workflow stopped before runtime timing, the
 implementation was reverted, and the threshold was not relaxed.
 
+A redesigned one-site scalar-leaf contract, registered by
+[issue #172](https://github.com/type-rb/type-rb-native/issues/172), then passed
+every frozen condition. Its
+[authoritative run](https://github.com/type-rb/type-rb-native/actions/runs/33481712297)
+improves `spectral-norm` wall and CPU medians by 11.81% and 11.82%, preserves
+both non-regression controls, and keeps the fixed compiler at 252,816 bytes.
+The implementation is retained and becomes the baseline for the next complete
+cross-language snapshot.
+
+The next contract, registered by
+[issue #174](https://github.com/type-rb/type-rb-native/issues/174), evaluated
+whether functions with no collection safe point could omit redundant managed
+root publication. Its
+[formal result](../results/2026-09-01-rejected-no-gc-root-publication-linux-arm64/README.md)
+improves `n-body` wall and CPU medians by about 12.7%, shrinks its generated
+QBE and executable, and passes all correctness, fixed-point, build, and
+compactness limits. It nevertheless misses the preregistered 15% performance
+signal. The threshold was not relaxed, and the implementation was reverted.
+
 Builds use release optimization without unsafe fast-math substitutions: C and
 C++ use `-O3`, Go uses `go build -trimpath`, Rust uses `rustc -C opt-level=3`,
 and Java uses `javac` followed by the same recorded JVM for every run. The
