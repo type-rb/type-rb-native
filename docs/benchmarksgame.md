@@ -258,13 +258,6 @@ size, correctness, and catastrophic bounds all pass. This candidate becomes
 the next accepted Native baseline; it does not change the explicit objective
 of matching or beating the separately measured Pure Go implementations.
 
-The next contract, registered by
-[issue #179](https://github.com/type-rb/type-rb-native/issues/179), evaluates a
-bounded loop-preheader hoist for one profitable Array length/data pair. It
-requires a `spectral-norm` wall and CPU improvement while retaining explicit
-mutation and opaque-call controls, exact fixed-point closure, bounded compiler
-growth, and effectively unchanged application executables.
-
 Builds use release optimization without unsafe fast-math substitutions: C and
 C++ use `-O3`, Go uses `go build -trimpath`, Rust uses `rustc -C opt-level=3`,
 and Java uses `javac` followed by the same recorded JVM for every run. The

@@ -1546,36 +1546,6 @@ describe("Gate 4 TypeRB frontend") do
 		expect(output.count[0]).to_equal(4)
 	end
 
-	test("hoists one stable Array header pair out of a bounded loop") do
-		source := "def sum(values: Array<Integer>): Integer\n\tmut total := 0\n\tmut index := 0\n\twhile index < values.size()\n\t\ttotal += values[index]\n\t\tindex += 1\n\tend\n\treturn total\nend\n\ndef main()\n\treturn\nend\n"
-		mut state := gate4_compiler_new(source.size() + 1)
-		expect(gate4_lex(state, source)).to_be_true()
-		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
-		expect(gate4_resolve(state)).to_be_true()
-		expect(gate4_check(state)).to_be_true()
-		qbe := gate4_output_source(gate4_emit_qbe(state))
-		hoist := "\t%t0 =l loadl %v0\n\t%t1 =l add %t0, 8\n\t%t2 =l loadl %t1\n\t%t3 =l add %t0, 24\n\t%t4 =l loadl %t3\n\tjmp @l0"
-		expect(qbe.include?(hoist)).to_be_true()
-
-		managed_call := "def observe(values: Array<Integer>): Integer\n\treturn values.size()\nend\n\ndef sum(values: Array<Integer>): Integer\n\tmut total := 0\n\tmut index := 0\n\twhile index < values.size()\n\t\ttotal += values[index]\n\t\ttotal += observe(values)\n\t\tindex += 1\n\tend\n\treturn total\nend\n\ndef main()\n\treturn\nend\n"
-		mut managed_call_state := gate4_compiler_new(managed_call.size() + 1)
-		expect(gate4_lex(managed_call_state, managed_call)).to_be_true()
-		expect(gate4_parse_module(managed_call_state, 0, managed_call_state.entry_module[0])).to_be_true()
-		expect(gate4_resolve(managed_call_state)).to_be_true()
-		expect(gate4_check(managed_call_state)).to_be_true()
-		managed_call_qbe := gate4_output_source(gate4_emit_qbe(managed_call_state))
-		expect(managed_call_qbe.include?(hoist)).to_be_false()
-
-		mutation := "def sum(mut values: Array<Integer>): Integer\n\tmut index := 0\n\twhile index < values.size()\n\t\tvalues.push(index)\n\t\tindex += 1\n\tend\n\treturn values.size()\nend\n\ndef main()\n\treturn\nend\n"
-		mut mutation_state := gate4_compiler_new(mutation.size() + 1)
-		expect(gate4_lex(mutation_state, mutation)).to_be_true()
-		expect(gate4_parse_module(mutation_state, 0, mutation_state.entry_module[0])).to_be_true()
-		expect(gate4_resolve(mutation_state)).to_be_true()
-		expect(gate4_check(mutation_state)).to_be_true()
-		mutation_qbe := gate4_output_source(gate4_emit_qbe(mutation_state))
-		expect(mutation_qbe.include?(hoist)).to_be_false()
-	end
-
 	test("emits an opt-in sampled managed-runtime trace without changing stats v1") do
 		source := "def main()\n\tmut value := \"seed\"\n\tmut index := 0\n\twhile index < 2\n\t\tvalue += \"x\"\n\t\tindex += 1\n\tend\n\tputs(value)\n\treturn\nend\n"
 		mut state := gate4_compiler_new(source.size() + 1)
