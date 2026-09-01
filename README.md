@@ -315,27 +315,29 @@ Linux evidence observes the explicit LLD and dynamic libm boundaries. See the
 [Decision 0022](docs/decisions/0022-linux-arm64-lld-linker.md), and
 [recorded result](results/2026-08-31-gate6m-portable-benchmark-entry-darwin-linux-arm64/README.md).
 
-The first formal language-benchmark runtime result retains all 462 registered
+The current formal language-benchmark runtime result retains all 462 registered
 samples for `fannkuch-redux`, `n-body`, and `spectral-norm`. The exact same
-TypeRB sources pass through pinned Go and self-hosted Native paths, but Native
-runs 2.44x to 4.68x slower on these numeric kernels. Native simultaneously
-uses 82.46% to 86.55% less peak RSS and produces raw applications at least
-99.21% smaller than TypeRB Go. Pinned C, C++, Go, Rust, and Java programs remain
-separate one-core/four-core implementation context; no composite language
-score is claimed. See the
-[recorded runtime result](results/2026-08-31-benchmarksgame-runtime-linux-arm64/README.md),
+TypeRB sources pass through pinned Go and self-hosted Native paths. Native is
+1.48x to 2.19x slower than TypeRB Go and 2.59x to 4.09x slower than the pinned
+Pure Go implementations on these numeric kernels. It simultaneously uses
+82.47% to 86.90% less peak RSS than TypeRB Go and produces raw applications at
+least 99.19% smaller. Pure Go parity or better is the minimum Native runtime
+objective. Pinned C, C++, Go, Rust, and Java programs remain separate
+one-core/four-core implementation context; no composite language score is
+claimed. See the
+[recorded runtime result](results/2026-09-01-benchmarksgame-runtime-safe-array-headers-linux-arm64/README.md),
 [benchmark plan](docs/benchmarksgame.md),
 [Decision 0023](docs/decisions/0023-reproducible-benchmark-layers.md), and
 [Decision 0024](docs/decisions/0024-benchexec-runtime-controller.md).
 
-The separate formal backend-pair build result retains all 66 registered
-compiler samples. Native compiles the same three TypeRB sources 2.29x to 2.58x
-faster than the optimized Go path, uses 6.14x to 6.41x less compiler CPU and
-about 51% less peak RSS, and produces raw applications at least 99.21% smaller.
-The Native compiler-plus-QBE controlled payload is 982,816 bytes, 99.64% below
+The current formal backend-pair build result retains all 66 registered
+compiler samples. Native compiles the same three TypeRB sources 2.34x to 2.62x
+faster than the optimized Go path, uses 5.89x to 6.32x less compiler CPU and
+about 51% less peak RSS, and produces raw applications at least 99.19% smaller.
+The Native compiler-plus-QBE controlled payload is 969,600 bytes, 99.65% below
 reference `trb` plus the complete pinned Go root. Successful process traces
 retain QBE, assembler, C driver, LLD, and shared-library boundaries. See the
-[recorded build result](results/2026-08-31-benchmarksgame-build-linux-arm64/README.md),
+[recorded build result](results/2026-09-01-benchmarksgame-build-safe-array-headers-linux-arm64/README.md),
 [formal build controller](tools/benchmarksgame-build-formal/README.md), and
 [Decision 0027](docs/decisions/0027-formal-build-distribution-controller.md).
 
@@ -550,8 +552,8 @@ repository.
 - [Gate 6N Linux amd64 target-chain result](results/2026-08-31-gate6n-linux-amd64/README.md)
 - [Gate 6N Linux amd64 target chain](docs/gate-6-linux-amd64.md)
 - [Reproducible language benchmark plan](docs/benchmarksgame.md)
-- [Formal Benchmarks Game runtime result on Linux arm64](results/2026-08-31-benchmarksgame-runtime-linux-arm64/README.md)
-- [Formal Benchmarks Game build result on Linux arm64](results/2026-08-31-benchmarksgame-build-linux-arm64/README.md)
+- [Current formal Benchmarks Game runtime result on Linux arm64](results/2026-09-01-benchmarksgame-runtime-safe-array-headers-linux-arm64/README.md)
+- [Current formal Benchmarks Game build result on Linux arm64](results/2026-09-01-benchmarksgame-build-safe-array-headers-linux-arm64/README.md)
 - [Formal Native numeric-inline A/B result on Linux arm64](results/2026-08-31-native-numeric-inline-linux-arm64/README.md)
 - [Formal Native Array-address A/B result on Linux arm64](results/2026-08-31-native-array-address-linux-arm64/README.md)
 - [Rejected Native scalar-leaf inlining result on Linux arm64](results/2026-08-31-native-scalar-leaf-inline-linux-arm64/README.md)
