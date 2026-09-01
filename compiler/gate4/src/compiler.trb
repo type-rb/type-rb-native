@@ -1802,6 +1802,43 @@ def gate4_emit_scalar_leaf_inline(
 	return result
 end
 
+def gate4_emit_scalar_leaf_direct_call(
+		mut state: Gate4Compiler,
+		mut position: Array<Integer>,
+		function_index: Integer,
+		parameter_start: Integer,
+		mut context: Gate4EmitContext,
+		mut output: Gate4Output,
+	): Gate4EmittedValue
+	mut argument_operands: Array<String> := []
+	mut argument_count := 0
+	mut finished := false
+	while !finished
+		if gate4_token_is(state, position[0], ")")
+			finished = true
+		else
+			expected := gate4_load_string(state.parameter_types, parameter_start + argument_count)
+			value := gate4_emit_expression(state, position, context, output, 1, expected)
+			argument_operands.push(value.operand)
+			argument_count += 1
+			if gate4_token_is(state, position[0], ",")
+				gate4_advance(position)
+				gate4_skip_newlines(state, position)
+			else
+				finished = true
+			end
+		end
+	end
+	gate4_expect(state, position, ")")
+	return gate4_emit_scalar_leaf_inline(
+		state,
+		function_index,
+		argument_operands,
+		context,
+		output,
+	)
+end
+
 def gate4_emit_direct_call(
 		mut state: Gate4Compiler,
 		mut position: Array<Integer>,
@@ -1825,8 +1862,23 @@ def gate4_emit_direct_call(
 		parameter_start = gate4_load_integer(state.function_parameter_starts, function_index)
 		result_type = gate4_load_string(state.function_result_types, function_index)
 	end
+	if function_index >= 0
+		if state.function_count[0] <= 32
+			if gate4_scalar_leaf_inline_eligible(state, function_index)
+				if gate4_take_scalar_leaf_inline_budget(context)
+					return gate4_emit_scalar_leaf_direct_call(
+						state,
+						position,
+						function_index,
+						parameter_start,
+						context,
+						output,
+					)
+				end
+			end
+		end
+	end
 	mut arguments := ""
-	mut argument_operands: Array<String> := []
 	mut argument_count := 0
 	mut finished := false
 	while !finished
@@ -1845,7 +1897,6 @@ def gate4_emit_direct_call(
 				arguments += ", "
 			end
 			arguments += gate4_qbe_type(value.type_name) + " " + value.operand
-			argument_operands.push(value.operand)
 			argument_count += 1
 			if gate4_token_is(state, position[0], ",")
 				gate4_advance(position)
@@ -1856,21 +1907,6 @@ def gate4_emit_direct_call(
 		end
 	end
 	gate4_expect(state, position, ")")
-	if function_index >= 0
-		if state.function_count[0] <= 32
-			if gate4_scalar_leaf_inline_eligible(state, function_index)
-				if gate4_take_scalar_leaf_inline_budget(context)
-					return gate4_emit_scalar_leaf_inline(
-						state,
-						function_index,
-						argument_operands,
-						context,
-						output,
-					)
-				end
-			end
-		end
-	end
 	if callee.category == 4
 		output.runtime_flags[1] = 1
 		result := gate4_emit_temporary(context)
