@@ -1,0 +1,51 @@
+name: Capability map Pages
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/capability-map-pages.yml
+      - docs/capabilities/**
+      - tools/capability-map-check.mjs
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/capability-map-pages.yml
+      - docs/capabilities/**
+      - tools/capability-map-check.mjs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out TypeRB Native
+        uses: actions/checkout@v5
+
+      - name: Check the capability catalog
+        run: node tools/capability-map-check.mjs
+
+      - name: Upload the GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: docs/capabilities
+
+  deploy:
+    if: github.event_name == 'push'
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      pages: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
