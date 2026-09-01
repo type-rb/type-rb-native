@@ -432,31 +432,6 @@ def gate4_output_line(mut output: Gate4Output, line: String)
 	return
 end
 
-def gate4_output_insert(mut output: Gate4Output, at: Integer, inserted: Gate4Output)
-	inserted_count := inserted.count[0]
-	if inserted_count == 0
-		return
-	end
-	original_count := output.count[0]
-	mut index := original_count
-	while index > at
-		source := index - 1
-		gate4_store_string(
-			output.lines,
-			source + inserted_count,
-			gate4_load_string(output.lines, source),
-		)
-		index -= 1
-	end
-	index = 0
-	while index < inserted_count
-		gate4_store_string(output.lines, at + index, gate4_load_string(inserted.lines, index))
-		index += 1
-	end
-	output.count[0] = original_count + inserted_count
-	return
-end
-
 def gate4_output_append(mut output: Gate4Output, appended: Gate4Output)
 	mut index := 0
 	while index < appended.count[0]
@@ -1183,10 +1158,6 @@ def gate4_emit_temporary(mut context: Gate4EmitContext): String
 	return "%t" + gate4_integer_string(index)
 end
 
-def gate4_emit_temporary_root_reset(mut context: Gate4EmitContext, mut output: Gate4Output)
-	return
-end
-
 def gate4_owned_managed_local_count(context: Gate4EmitContext): Integer
 	mut count := 0
 	mut local_index := 0
@@ -1298,8 +1269,6 @@ end
 
 def gate4_emit_root_value(
 		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
-		operand: String,
 		type_name: String,
 	)
 	if gate4_type_is_managed(type_name)
@@ -1749,7 +1718,7 @@ def gate4_emit_array_literal(
 		output,
 		"\t" + array + " =l call $g4_array_new(l " + descriptor + ")",
 	)
-	gate4_emit_root_value(context, output, array, gate4_array_type(element_type))
+	gate4_emit_root_value(context, gate4_array_type(element_type))
 	mut index := 0
 	while index < operands.size()
 		mut operand := operands[index]
@@ -2083,7 +2052,7 @@ def gate4_emit_direct_call(
 		output.runtime_flags[1] = 1
 		result := gate4_emit_temporary(context)
 		gate4_output_line(output, "\t" + result + " =l call $g4_process_argv()")
-		gate4_emit_root_value(context, output, result, result_type)
+		gate4_emit_root_value(context, result_type)
 		return gate4_emitted_value(result, result_type, 0, "", 1, "")
 	end
 	if callee.category == 5
@@ -2100,19 +2069,19 @@ def gate4_emit_direct_call(
 		if callee.name == "gate4_read_source"
 			result := gate4_emit_temporary(context)
 			gate4_output_line(output, "\t" + result + " =l call $g4_read_source(" + arguments + ")")
-			gate4_emit_root_value(context, output, result, "String")
+			gate4_emit_root_value(context, "String")
 			return gate4_emitted_value(result, "String", 0, "", 0, "")
 		end
 		if callee.name == "gate4_source_slice"
 			result := gate4_emit_temporary(context)
 			gate4_output_line(output, "\t" + result + " =l call $g4_source_slice(" + arguments + ")")
-			gate4_emit_root_value(context, output, result, "String")
+			gate4_emit_root_value(context, "String")
 			return gate4_emitted_value(result, "String", 0, "", 0, "")
 		end
 		if callee.name == "gate4_collect_project_sources"
 			result := gate4_emit_temporary(context)
 			gate4_output_line(output, "\t" + result + " =l call $g4_collect_project_sources(" + arguments + ")")
-			gate4_emit_root_value(context, output, result, result_type)
+			gate4_emit_root_value(context, result_type)
 			return gate4_emitted_value(result, result_type, 0, "", 0, "")
 		end
 	end
@@ -2149,7 +2118,7 @@ def gate4_emit_direct_call(
 		"\t" + result + " =" + gate4_qbe_type(result_type) + " call $g4f" +
 		gate4_integer_string(function_index) + "(" + arguments + ")",
 	)
-	gate4_emit_root_value(context, output, result, result_type)
+	gate4_emit_root_value(context, result_type)
 	return gate4_emitted_value(result, result_type, 0, "", 0, "")
 end
 
@@ -2169,7 +2138,7 @@ def gate4_emit_record_new(
 		"\t" + record_value + " =l call $g4_gc_alloc(l $g4_desc_record" +
 		gate4_integer_string(record_index) + ", l " + gate4_integer_string(field_count * 8) + ", l 0)",
 	)
-	gate4_emit_root_value(context, output, record_value, gate4_record_type(record_index))
+	gate4_emit_root_value(context, gate4_record_type(record_index))
 	gate4_advance(position)
 	gate4_skip_newlines(state, position)
 	mut field_offset := 0
@@ -2249,7 +2218,7 @@ def gate4_emit_method_call(
 			output,
 			"\t" + result + " =l call $g4_integer_to_string(l " + receiver.operand + ")",
 		)
-		gate4_emit_root_value(context, output, result, "String")
+		gate4_emit_root_value(context, "String")
 		return gate4_emitted_value(result, "String", 0, "", 0, "")
 	end
 	return gate4_emitted_value("", "Invalid", 0, "", 0, "")
@@ -2318,7 +2287,7 @@ def gate4_emit_postfix(
 							output,
 							"\t" + result + " =l call $g4_string_index(l " + value.operand + ", l " + index.operand + ")",
 						)
-						gate4_emit_root_value(context, output, result, "String")
+						gate4_emit_root_value(context, "String")
 						value = gate4_emitted_value(result, "String", 0, "", 0, "")
 					else
 						mut address := ""
@@ -2520,7 +2489,7 @@ def gate4_emit_binary(
 				output,
 				"\t" + result + " =l call $g4_string_concat(l " + left.operand + ", l " + right.operand + ")",
 			)
-			gate4_emit_root_value(context, output, result, "String")
+			gate4_emit_root_value(context, "String")
 		else
 			if result_type == "Float"
 				gate4_output_line(output, "\t" + result + " =d add " + left_operand + ", " + right_operand)
@@ -2814,7 +2783,6 @@ def gate4_emit_block(
 					when_true := gate4_emit_label(context)
 					when_false := gate4_emit_label(context)
 					join := gate4_emit_label(context)
-					gate4_emit_temporary_root_reset(context, output)
 					gate4_invalidate_array_header_cache(context)
 					gate4_output_line(output, "\tjnz " + condition + ", " + when_true + ", " + when_false)
 					gate4_output_line(output, when_true)
@@ -2822,7 +2790,6 @@ def gate4_emit_block(
 					true_terminated := gate4_emit_block(state, position, context, output, result_type)
 					context.local_count[0] = saved_count
 					if true_terminated == 0
-						gate4_emit_temporary_root_reset(context, output)
 						gate4_output_line(output, "\tjmp " + join)
 					end
 					gate4_invalidate_array_header_cache(context)
@@ -2835,7 +2802,6 @@ def gate4_emit_block(
 						context.local_count[0] = saved_count
 					end
 					if false_terminated == 0
-						gate4_emit_temporary_root_reset(context, output)
 						gate4_output_line(output, "\tjmp " + join)
 					end
 					gate4_expect(state, position, "end")
@@ -2863,30 +2829,33 @@ def gate4_emit_block(
 							output.runtime_flags,
 						)
 						gate4_emit_loop_root_compaction(context, root_publication)
-						root_publication_at := output.count[0]
+						mut loop_output := gate4_output_new(
+							state.token_count[0] * 8 + 1024,
+							output.runtime_flags,
+						)
 						safe_points_before := context.gc_safe_point_count[0]
 						gate4_advance(position)
 						context.loop_depth[0] = context.loop_depth[0] + 1
-						condition_value := gate4_emit_expression(state, position, context, output, 1, "Boolean")
+						condition_value := gate4_emit_expression(state, position, context, loop_output, 1, "Boolean")
 						gate4_finish_statement(state, position)
-						condition := gate4_emit_condition(context, output, condition_value.operand)
-						gate4_emit_temporary_root_reset(context, output)
-						gate4_output_line(output, "\tjnz " + condition + ", " + body + ", " + done)
-						gate4_output_line(output, body)
+						condition := gate4_emit_condition(context, loop_output, condition_value.operand)
+						gate4_output_line(loop_output, "\tjnz " + condition + ", " + body + ", " + done)
+						gate4_output_line(loop_output, body)
 						saved_count := context.local_count[0]
-						body_terminated := gate4_emit_block(state, position, context, output, result_type)
+						body_terminated := gate4_emit_block(state, position, context, loop_output, result_type)
 						context.local_count[0] = saved_count
 						if body_terminated == 0
-							gate4_emit_temporary_root_reset(context, output)
-							gate4_output_line(output, "\tjmp " + header)
+							gate4_output_line(loop_output, "\tjmp " + header)
 						end
 						gate4_expect(state, position, "end")
 						gate4_finish_statement(state, position)
-						gate4_output_line(output, done)
+						gate4_output_line(loop_output, done)
 						if context.gc_safe_point_count[0] == safe_points_before
+							gate4_output_append(output, loop_output)
 							gate4_output_append(output, root_publication)
 						else
-							gate4_output_insert(output, root_publication_at, root_publication)
+							gate4_output_append(output, root_publication)
+							gate4_output_append(output, loop_output)
 						end
 						gate4_invalidate_array_header_cache(context)
 						context.loop_depth[0] = context.loop_depth[0] - 1
