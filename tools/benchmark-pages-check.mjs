@@ -28,6 +28,13 @@ const html = await readFile(resolve(root, 'docs/capabilities/benchmarks/index.ht
 for (const required of ['TypeRB Native Benchmarks', 'id="runtime-chart"', 'id="build-grid"', './app.js']) {
   if (!html.includes(required)) fail(`benchmark page is missing ${required}`);
 }
+if (!html.includes('Shorter bars are better')) fail('benchmark page does not explain bar direction');
+
+const app = await readFile(resolve(root, 'docs/capabilities/benchmarks/app.js'), 'utf8');
+for (const required of ['× the best time', '× the lowest RSS']) {
+  if (!app.includes(required)) fail(`benchmark comparison copy is missing ${required}`);
+}
+if (app.includes('× fastest')) fail('benchmark comparison uses the ambiguous “× fastest” wording');
 
 if (failures.length > 0) {
   failures.forEach((message) => console.error(`FAIL ${message}`));
