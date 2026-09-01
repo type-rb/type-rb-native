@@ -468,6 +468,7 @@ repository.
 
 ## Documentation
 
+- [Capability map](docs/capabilities/README.md)
 - [Architecture](docs/architecture.md)
 - [Development and validation plan](docs/experiment-plan.md)
 - [Native versioning and compatibility](docs/versioning.md)

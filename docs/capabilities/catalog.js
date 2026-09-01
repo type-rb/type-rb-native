@@ -1,0 +1,137 @@
+const repository = 'https://github.com/type-rb/type-rb-native/blob/main/';
+
+const capability = (title, status, scopes, description, evidence) => ({
+  title,
+  status,
+  scopes,
+  description,
+  evidence: evidence
+    ? { label: evidence[0], url: repository + evidence[1] }
+    : null,
+});
+
+export const catalog = {
+  schemaVersion: 1,
+  updatedAt: '2026-09-01',
+  areas: [
+    {
+      id: 'language',
+      title: 'Language and type system',
+      description: 'Portable TypeRB semantics expressed through the Native frontend and runtime.',
+      items: [
+        capability('Functions, branches, and loops', 'verified', ['parity'], 'Execute the bounded control-flow and direct-call surface with deterministic failures.', ['Gate 1', 'docs/gate-1-qbe.md']),
+        capability('Checked Integer and binary64 Float', 'verified', ['parity', 'ecosystem'], 'Preserve portable Integer bounds and the selected Float behavior.', ['Gate 1 / Gate 6I', 'docs/gate-6-float.md']),
+        capability('Records, enums, Result, and try', 'verified', ['parity', 'production'], 'Lower aggregate values, tagged values, calls, returns, and Result propagation.', ['Gate 2', 'docs/gate-2-aggregates.md']),
+        capability('Managed String, Array, and closures', 'verified', ['parity', 'production', 'ecosystem'], 'Execute managed UTF-8 strings, mutable arrays, and captured closures.', ['Gate 3', 'docs/gate-3-managed-runtime.md']),
+        capability('Complete TypeRB syntax and diagnostics', 'partial', ['parity', 'production', 'ecosystem'], 'The self-hosted frontend is intentionally bounded and does not yet cover the complete reference surface.'),
+        capability('Generics', 'unassessed', ['parity', 'production', 'ecosystem'], 'Inventory generic declarations, specialization, inference, and diagnostics against the reference compiler.'),
+        capability('Classes, interfaces, and dispatch', 'unassessed', ['parity', 'production', 'ecosystem'], 'Define and verify the abstraction and dispatch surface needed by representative packages.'),
+        capability('Concurrency semantics', 'open', ['parity', 'production', 'ecosystem'], 'Implement portable tasks, cancellation, synchronization, and failure behavior.'),
+      ],
+    },
+    {
+      id: 'compiler',
+      title: 'Compiler and projects',
+      description: 'Self-hosting, project builds, diagnostics, and fast development iteration.',
+      items: [
+        capability('TypeRB-authored self-hosted compiler', 'verified', ['parity', 'production'], 'The lexer, parser, resolver, checker, emitter, and driver reach a reproducible fixed point.', ['Gate 4 / Gate 5', 'docs/gate-5-matched-compiler.md']),
+        capability('File-oriented check and build', 'verified', ['parity', 'production'], 'Read source files and own the QBE and C-toolchain process boundary.', ['Gate 6A / Gate 6B', 'docs/gate-6-single-file-build.md']),
+        capability('Multi-file module graph', 'verified', ['parity', 'production'], 'Load explicit imports and deterministic transitive module closures.', ['Gate 6E–6H', 'docs/gate-6-module-graph.md']),
+        capability('Configured project build', 'verified', ['parity', 'production'], 'Load a bounded trbconfig.jsonc source set and build its unique main entry.', ['Gate 6K', 'docs/gate-6-configured-project.md']),
+        capability('Upward project discovery', 'open', ['parity', 'production', 'ecosystem'], 'Discover the project root and configuration from a working directory.'),
+        capability('Incremental build and cache', 'open', ['production', 'ecosystem'], 'Reuse unchanged parsing, checking, code generation, and external-tool outputs.'),
+        capability('Source maps and debug information', 'open', ['parity', 'production', 'ecosystem'], 'Map native diagnostics and failures back to TypeRB source locations.'),
+        capability('Editor and LSP workflow', 'unassessed', ['production', 'ecosystem'], 'Connect Native checks, builds, runs, and diagnostics to editor workflows.'),
+      ],
+    },
+    {
+      id: 'runtime',
+      title: 'Runtime and process lifecycle',
+      description: 'Memory, resources, and process behavior from short-lived tools to persistent services.',
+      items: [
+        capability('Exact-root tracing collector', 'verified', ['parity', 'production', 'ecosystem'], 'Reclaim managed records, strings, arrays, and closure cycles with exact roots.', ['Gate 3', 'docs/gate-3-managed-runtime.md']),
+        capability('Ordinary runtime memory stability', 'verified', ['production', 'ecosystem'], 'Complete the registered allocation soak with zero final live bytes and flat RSS.', ['Runtime memory result', 'docs/runtime-memory-stability.md']),
+        capability('Bounded persistent worker lifecycle', 'verified', ['production'], 'Exercise success, retry, terminal failure, cancellation, and bounded retained state.', ['Persistent worker result', 'results/2026-09-01-persistent-worker-memory-darwin-linux-arm64/README.md']),
+        capability('I/O resource ownership', 'open', ['production', 'ecosystem'], 'Guarantee close, cancellation, timeout, and failure behavior for files, sockets, streams, and connections.'),
+        capability('Multithreading and scheduling', 'open', ['production', 'ecosystem'], 'Define parallel execution, synchronization, collector interaction, and runtime shutdown.'),
+        capability('Persistent service lifecycle', 'open', ['production', 'ecosystem'], 'Verify graceful shutdown, backpressure, retained-state policy, and long-running resource stability.'),
+        capability('Foreign-memory ownership', 'unassessed', ['production', 'ecosystem'], 'Define how managed and native ownership cross an adapter boundary.'),
+      ],
+    },
+    {
+      id: 'standard-library',
+      title: 'Standard library',
+      description: 'General-purpose APIs expected by portable programs and application packages.',
+      items: [
+        capability('Arguments, numeric conversion, and Math.sqrt', 'verified', ['parity', 'ecosystem'], 'Provide the portable entry primitives used by the registered language benchmarks.', ['Gate 6M', 'docs/gate-6-portable-benchmark-entry.md']),
+        capability('String and Array APIs', 'partial', ['parity', 'production', 'ecosystem'], 'The native path has a measured core, but not the complete standard API surface.'),
+        capability('Hash, Set, and Queue', 'open', ['parity', 'production', 'ecosystem'], 'Provide common collections, iteration, equality, hashing, and failure behavior.'),
+        capability('JSON, CSV, and encodings', 'open', ['production', 'ecosystem'], 'Parse, generate, validate, and stream common structured-data formats.'),
+        capability('Date, time, and time zones', 'open', ['production', 'ecosystem'], 'Provide clocks, durations, calendars, parsing, formatting, and time-zone data.'),
+        capability('Regular expressions and Unicode', 'unassessed', ['parity', 'production', 'ecosystem'], 'Define Unicode-aware text processing and regular-expression coverage.'),
+        capability('Filesystem, paths, and temporary files', 'partial', ['parity', 'production', 'ecosystem'], 'Compiler-owned scoped filesystem operations exist; a general-purpose API remains incomplete.'),
+        capability('Cryptography, secure random, and compression', 'open', ['production', 'ecosystem'], 'Expose safe adapters for common cryptographic and compression operations.'),
+        capability('HTTP client and WebSocket', 'open', ['production', 'ecosystem'], 'Support TLS, timeout, streaming, cancellation, and connection reuse.'),
+      ],
+    },
+    {
+      id: 'production-applications',
+      title: 'Production application platform',
+      description: 'The broadly reusable pieces needed to build and operate a representative full-stack service.',
+      items: [
+        capability('HTTP server, router, and middleware', 'open', ['production', 'ecosystem'], 'Own request lifecycles, routing, middleware composition, streaming, and shutdown.'),
+        capability('JSON API and validation', 'open', ['production', 'ecosystem'], 'Decode requests, validate typed input, map failures, and serialize responses.'),
+        capability('HTML rendering and static assets', 'open', ['production', 'ecosystem'], 'Render server-side HTML and serve versioned static assets with cache policy.'),
+        capability('Database driver, pool, and transactions', 'open', ['production', 'ecosystem'], 'Manage database connections, pooling, transactions, timeout, and cancellation.'),
+        capability('ORM, query API, and migrations', 'open', ['production', 'ecosystem'], 'Provide typed queries, associations, schema migration, and transaction integration.'),
+        capability('Authentication, sessions, and cookies', 'open', ['production', 'ecosystem'], 'Compose password, federated identity, session storage, and secure-cookie boundaries.'),
+        capability('Background jobs and scheduling', 'partial', ['production', 'ecosystem'], 'A bounded worker lifecycle is measured, but no general application API exists.'),
+        capability('Mail, object storage, and uploads', 'unassessed', ['production', 'ecosystem'], 'Define portable streaming and adapter boundaries for external services.'),
+        capability('Configuration and secrets', 'open', ['production', 'ecosystem'], 'Load typed environment configuration without embedding secret-provider policy in the runtime.'),
+        capability('Logging, metrics, and tracing', 'open', ['production', 'ecosystem'], 'Provide structured logs, health signals, metrics, and distributed tracing adapters.'),
+        capability('Testing, fixtures, and mocks', 'open', ['production', 'ecosystem'], 'Support fast unit, integration, HTTP, process, and database tests.'),
+      ],
+    },
+    {
+      id: 'packages',
+      title: 'Packages and native integration',
+      description: 'Reproducible package graphs and safe extension boundaries for non-standard functionality.',
+      items: [
+        capability('TypeRB package resolution', 'open', ['parity', 'production', 'ecosystem'], 'Carry a pinned package graph into Native project builds.'),
+        capability('C ABI and shared-library adapter', 'open', ['production', 'ecosystem'], 'Type symbols, calling conventions, errors, and resource lifetimes.'),
+        capability('Package-owned native adapter', 'open', ['production', 'ecosystem'], 'Let a package own a bounded dependency on a database, TLS, image, or system library.'),
+        capability('Extension sandbox and security', 'unassessed', ['production', 'ecosystem'], 'Constrain compiler extensions and build hooks by explicit capabilities.'),
+        capability('Package build and publish CI', 'open', ['production', 'ecosystem'], 'Verify target artifacts, compatibility evidence, and reproducible package publication.'),
+      ],
+    },
+    {
+      id: 'targets',
+      title: 'Targets and distribution',
+      description: 'Platform profiles, bootstrap artifacts, installation, updates, and support boundaries.',
+      items: [
+        capability('Darwin arm64 profile', 'verified', ['parity', 'production', 'ecosystem'], 'Retain self-hosting, application correctness, and measured toolchain evidence.', ['Recorded gates', 'README.md']),
+        capability('Linux arm64 profile', 'verified', ['parity', 'production', 'ecosystem'], 'Close the registered Go-free replacement chain and application checks.', ['Gate 6D', 'docs/gate-6-linux-arm64.md']),
+        capability('Linux amd64 experimental profile', 'verified', ['parity', 'production', 'ecosystem'], 'Verify target-neutral QBE and a Go-free fixed point without claiming support.', ['Gate 6N', 'docs/gate-6-linux-amd64.md']),
+        capability('Immutable bootstrap seed', 'verified', ['parity', 'ecosystem'], 'Publish attested compiler assets, a strict manifest, checksums, and post-publication verification.', ['Gate 6L', 'docs/gate-6-bootstrap-seed-distribution.md']),
+        capability('Exact TypeRB compatibility manifest', 'verified', ['parity', 'production'], 'Pin the exact TypeRB version and revision backed by current evidence.', ['Compatibility mapping', 'docs/type-rb-compatibility.md']),
+        capability('Windows target', 'open', ['production', 'ecosystem'], 'Define and verify ABI, linker, runtime, CI, and distribution behavior.'),
+        capability('Installation, update, and tool discovery', 'open', ['production', 'ecosystem'], 'Provide a reproducible path that does not require manual QBE and C-toolchain arguments.'),
+        capability('Stable release and support policy', 'open', ['production', 'ecosystem'], 'Define support ranges, deprecation, security updates, rollback, and lifecycle promises.'),
+      ],
+    },
+    {
+      id: 'quality',
+      title: 'Performance, quality, and operations',
+      description: 'Whole-toolchain evidence, service behavior, security, debugging, and maintenance cost.',
+      items: [
+        capability('Reproducible benchmark controllers', 'verified', ['parity', 'ecosystem'], 'Retain raw build, runtime, RSS, artifact, and process-boundary observations.', ['Benchmark policy', 'docs/benchmarksgame.md']),
+        capability('Compiler build time and distribution size', 'verified', ['parity', 'production', 'ecosystem'], 'The registered compiler and application build cases materially outperform the optimized Go path.', ['Formal build result', 'results/2026-08-31-benchmarksgame-build-linux-arm64/README.md']),
+        capability('Numeric runtime performance', 'partial', ['production', 'ecosystem'], 'Several native optimizations are accepted, but registered numeric kernels still expose important gaps.', ['Formal runtime result', 'results/2026-08-31-benchmarksgame-runtime-linux-arm64/README.md']),
+        capability('Service throughput and tail latency', 'open', ['production', 'ecosystem'], 'Measure representative HTTP, database, and worker workloads end to end.'),
+        capability('Debugger, profiler, and crash reports', 'open', ['production', 'ecosystem'], 'Provide source-level debugging, CPU and heap profiles, and symbolized failures.'),
+        capability('Security hardening', 'unassessed', ['production', 'ecosystem'], 'Systematize fuzzing, supply-chain controls, dependency maintenance, and release response.'),
+        capability('Maintenance cost evaluation', 'open', ['production', 'ecosystem'], 'Measure the ongoing cost of compiler, runtime, target, package, and compatibility work.'),
+      ],
+    },
+  ],
+};
