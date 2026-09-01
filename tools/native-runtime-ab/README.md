@@ -36,8 +36,8 @@ The currently registered cases and thresholds are:
 | Case | Input | Maximum candidate/baseline wall and CPU ratio |
 | --- | ---: | ---: |
 | `fannkuch-redux` | 10 | 1.02 |
-| `n-body` | 1,000,000 | 0.85 |
-| `spectral-norm` | 5,500 | 1.02 |
+| `n-body` | 1,000,000 | 1.02 |
+| `spectral-norm` | 5,500 | 0.97 |
 | `worker-literal-concat` | one phase, 400,000 batches | 0.70 |
 | `worker-managed-alias-roots` | one phase, 400,000 batches | 0.80 |
 | `worker-managed-array-growth` | one phase, 400,000 batches | 0.95 |
@@ -45,14 +45,14 @@ The currently registered cases and thresholds are:
 | `worker-dynamic-array-address` | one phase, 400,000 batches | 0.95 |
 | `worker-gc-temp-push-fast-path` | one phase, 400,000 batches | 0.985 |
 
-The three numeric inputs apply the combined safe-point and bounded Array-header
-contract registered in
-[issue #176](https://github.com/type-rb/type-rb-native/issues/176).
+The three numeric inputs apply the bounded loop-invariant Array-header contract
+registered in
+[issue #179](https://github.com/type-rb/type-rb-native/issues/179).
 They do not replace the full cross-language benchmark inputs or its published
 results. The same experiment limits the fixed-point Linux arm64 compiler to
-1.03x the exact baseline and 255,000 bytes; adjacent bootstrap wall time, CPU
-time, and peak RSS to 1.05x; n-body QBE plus executables to 1.01x; and the two
-control applications' QBE plus executables to 1.001x.
+1.02x the exact baseline and 260,000 bytes; adjacent bootstrap wall time, CPU
+time, and peak RSS to 1.05x; each application's QBE to 1.005x; and raw plus
+stripped executables to 1.001x.
 
 Both compiler revisions are closed from their exact source trees, while one
 candidate-revision bootstrap observer measures both chains. This keeps the

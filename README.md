@@ -388,6 +388,12 @@ remains neutral. Exact fixed-point, build-cost, compiler-size, application-size,
 correctness, and catastrophic limits all pass. See the
 [recorded safe Array-header result](results/2026-09-01-native-safe-array-headers-linux-arm64/README.md).
 
+The next Native-to-Native contract evaluates a bounded loop-preheader hoist
+for one stable Array length/data pair. It keeps mutation and opaque-call
+boundaries conservative, requires a measurable `spectral-norm` improvement,
+and retains strict compiler and application compactness limits. See the
+[registered contract](https://github.com/type-rb/type-rb-native/issues/179).
+
 Gate 6N passes every frozen condition for the internal
 `linux-amd64-v0` profile. The exact merged compiler closes a 240,888-byte
 Go-free B2/B3/B4 fixed point, emits byte-identical target-neutral compiler and

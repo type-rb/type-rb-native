@@ -1447,6 +1447,158 @@ def gate4_invalidate_array_header_cache(mut context: Gate4EmitContext)
 	return
 end
 
+def gate4_loop_finish(state: Gate4Compiler, start: Integer): Integer
+	mut index := start + 1
+	mut depth := 0
+	while index < state.token_count[0]
+		if index - start > 256
+			return start
+		end
+		if gate4_token_is(state, index, "if")
+			depth += 1
+		else
+			if gate4_token_is(state, index, "while")
+				depth += 1
+			else
+				if gate4_token_is(state, index, "end")
+					if depth == 0
+						return index
+					end
+					depth -= 1
+				end
+			end
+		end
+		index += 1
+	end
+	return start
+end
+
+def gate4_loop_calls_preserve_array_headers(
+		mut state: Gate4Compiler,
+		start: Integer,
+		finish: Integer,
+	): Boolean
+	mut index := start
+	while index < finish
+		if gate4_token_is(state, index, "(")
+			previous := index - 1
+			if previous >= start
+				if gate4_load_integer(state.token_kinds, previous) == 1
+					name := gate4_load_string(state.token_texts, previous)
+					mut safe := false
+					if previous > start
+						if gate4_token_is(state, previous - 1, ".")
+							safe = name == "size"
+							if name == "sqrt"
+								if previous - 2 >= start
+									safe = gate4_token_is(state, previous - 2, "Math")
+								end
+							end
+						end
+					end
+					if !safe
+						function_index := gate4_find_visible_function(state, state.active_module[0], name)
+						if function_index >= 0
+							safe = gate4_scalar_leaf_inline_eligible(state, function_index)
+						end
+					end
+					if !safe
+						return false
+					end
+				end
+			end
+		end
+		index += 1
+	end
+	return true
+end
+
+def gate4_loop_array_header_local(
+		mut state: Gate4Compiler,
+		context: Gate4EmitContext,
+		start: Integer,
+	): Integer
+	if state.function_count[0] > 32
+		return - 1
+	end
+	if context.local_count[0] > 16
+		return - 1
+	end
+	finish := gate4_loop_finish(state, start)
+	if finish <= start
+		return - 1
+	end
+	if !gate4_loop_calls_preserve_array_headers(state, start, finish)
+		return - 1
+	end
+	mut best :=- 1
+	mut best_score := 1
+	mut local_index := 0
+	while local_index < context.local_count[0]
+		if gate4_array_element_type(gate4_load_string(context.local_types, local_index)) != ""
+			name := gate4_load_string(context.local_names, local_index)
+			mut score := 0
+			mut stable := true
+			mut token_index := start
+			while token_index < finish
+				if gate4_token_is(state, token_index, name)
+					if gate4_token_is(state, token_index + 1, "[")
+						score += 2
+					else
+						if gate4_token_is(state, token_index + 1, ".")
+							if gate4_token_is(state, token_index + 2, "size")
+								score += 1
+							end
+						else
+							next_token := gate4_load_string(state.token_texts, token_index + 1)
+							if next_token == "="
+								stable = false
+							end
+							if gate4_compound_operator(next_token) != ""
+								stable = false
+							end
+						end
+					end
+				end
+				token_index += 1
+			end
+			if stable
+				if score > best_score
+					best = local_index
+					best_score = score
+				end
+			end
+		end
+		local_index += 1
+	end
+	return best
+end
+
+def gate4_emit_loop_array_header_hoist(
+		mut state: Gate4Compiler,
+		start: Integer,
+		mut context: Gate4EmitContext,
+		mut output: Gate4Output,
+	)
+	local_index := gate4_loop_array_header_local(state, context, start)
+	if local_index < 0
+		return
+	end
+	key := gate4_load_string(context.local_slots, local_index)
+	mut array := key
+	if gate4_load_integer(context.local_direct, local_index) == 0
+		array = gate4_emit_temporary(context)
+		gate4_output_line(output, "\t" + array + " =l loadl " + key)
+	end
+	mut cache := context.array_header_cache[0]
+	cache[0] = key
+	cache[1] = ""
+	cache[2] = ""
+	gate4_emit_array_header(context, output, array, key, 1, "8", "", "")
+	gate4_emit_array_header(context, output, array, key, 2, "24", "", "")
+	return
+end
+
 def gate4_emit_array_header(
 		mut context: Gate4EmitContext,
 		mut output: Gate4Output,
@@ -1462,15 +1614,21 @@ def gate4_emit_array_header(
 	mut cache := caches[0]
 	if use_cache
 		if cache[0] != key
-			previous_cache := cache
 			cache = caches[1]
 			if cache[0] != key
 				cache[0] = key
 				cache[1] = ""
 				cache[2] = ""
 			end
-			caches[1] = previous_cache
-			caches[0] = cache
+			mut promote := context.loop_depth[0] <= 0
+			if caches[0][0] == ""
+				promote = true
+			end
+			if promote
+				previous_cache := caches[0]
+				caches[1] = previous_cache
+				caches[0] = cache
+			end
 		end
 		cached := cache[cache_index]
 		if cached != ""
@@ -1505,6 +1663,9 @@ def gate4_emit_array_address(
 		# ranges without an owning Array allocation to amortize them.
 		if context.loop_depth[0] > 0
 			use_cache = gate4_owned_managed_local_count(context) >= 1
+		end
+		if context.array_header_cache[0][0] == array_key
+			use_cache = true
 		end
 	end
 	mut length := ""
@@ -1630,13 +1791,17 @@ def gate4_emit_loaded_local(
 	): Gate4EmittedValue
 	type_name := gate4_load_string(context.local_types, index)
 	if gate4_load_integer(context.local_direct, index) == 1
+		mut address := ""
+		if gate4_array_element_type(type_name) != ""
+			address = gate4_load_string(context.local_slots, index)
+		end
 		return gate4_emitted_value(
 			gate4_load_string(context.local_slots, index),
 			type_name,
 			0,
 			gate4_load_string(context.local_names, index),
 			0,
-			"",
+			address,
 		)
 	end
 	operand := gate4_emit_temporary(context)
@@ -2178,10 +2343,20 @@ def gate4_emit_method_call(
 	gate4_skip_newlines(state, position)
 	if method == "size"
 		gate4_expect(state, position, ")")
-		length_address := gate4_emit_temporary(context)
-		result := gate4_emit_temporary(context)
-		gate4_output_line(output, "\t" + length_address + " =l add " + receiver.operand + ", 8")
-		gate4_output_line(output, "\t" + result + " =l loadl " + length_address)
+		mut key := ""
+		if gate4_array_element_type(receiver.type_name) != ""
+			if receiver.address != ""
+				if context.loop_depth[0] > 0
+					if gate4_owned_managed_local_count(context) >= 1
+						key = receiver.address
+					end
+				end
+				if context.array_header_cache[0][0] == receiver.address
+					key = receiver.address
+				end
+			end
+		end
+		result := gate4_emit_array_header(context, output, receiver.operand, key, 1, "8", "", "")
 		return gate4_emitted_value(result, "Integer", 0, "", 0, "")
 	end
 	if method == "push"
@@ -2818,6 +2993,7 @@ def gate4_emit_block(
 						body := gate4_emit_label(context)
 						done := gate4_emit_label(context)
 						gate4_invalidate_array_header_cache(context)
+						gate4_emit_loop_array_header_hoist(state, position[0], context, output)
 						gate4_output_line(output, "\tjmp " + header)
 						gate4_output_line(output, header)
 						gate4_emit_loop_root_compaction(context, output)
