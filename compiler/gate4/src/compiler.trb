@@ -432,6 +432,16 @@ def gate4_output_line(mut output: Gate4Output, line: String)
 	return
 end
 
+def gate4_output_branch(
+		mut output: Gate4Output,
+		condition: String,
+		when_true: String,
+		when_false: String,
+	)
+	gate4_output_line(output, "\tjnz " + condition + ", " + when_true + ", " + when_false)
+	return
+end
+
 def gate4_integer_string(value: Integer): String
 	if value == 0
 		return "0"
@@ -1332,24 +1342,20 @@ def gate4_emit_checked_integer_add(
 		left: String,
 		right: String,
 	)
-	mut nonnegative_literal := gate4_small_nonnegative_integer_operand(right)
-	if !nonnegative_literal
-		nonnegative_literal = gate4_small_nonnegative_integer_operand(left)
-	end
 	too_high := gate4_emit_temporary(context)
 	failure := gate4_integer_range_failure_label(context)
 	complete := gate4_emit_label(context)
 	gate4_output_line(output, "\t" + result + " =l add " + left + ", " + right)
 	gate4_output_line(output, "\t" + too_high + " =w csgtl " + result + ", 9007199254740991")
-	if nonnegative_literal
-		gate4_output_line(output, "\tjnz " + too_high + ", " + failure + ", " + complete)
+	if gate4_small_nonnegative_integer_operand(right)
+		gate4_output_branch(output, too_high, failure, complete)
 	else
 		too_low := gate4_emit_temporary(context)
 		check_low := gate4_emit_label(context)
-		gate4_output_line(output, "\tjnz " + too_high + ", " + failure + ", " + check_low)
+		gate4_output_branch(output, too_high, failure, check_low)
 		gate4_output_line(output, check_low)
 		gate4_output_line(output, "\t" + too_low + " =w csltl " + result + ", -9007199254740991")
-		gate4_output_line(output, "\tjnz " + too_low + ", " + failure + ", " + complete)
+		gate4_output_branch(output, too_low, failure, complete)
 	end
 	gate4_emit_integer_range_failure(output, failure)
 	gate4_output_line(output, complete)
@@ -1370,10 +1376,10 @@ def gate4_emit_checked_integer_subtract(
 	complete := gate4_emit_label(context)
 	gate4_output_line(output, "\t" + result + " =l sub " + left + ", " + right)
 	gate4_output_line(output, "\t" + too_high + " =w csgtl " + result + ", 9007199254740991")
-	gate4_output_line(output, "\tjnz " + too_high + ", " + failure + ", " + check_low)
+	gate4_output_branch(output, too_high, failure, check_low)
 	gate4_output_line(output, check_low)
 	gate4_output_line(output, "\t" + too_low + " =w csltl " + result + ", -9007199254740991")
-	gate4_output_line(output, "\tjnz " + too_low + ", " + failure + ", " + complete)
+	gate4_output_branch(output, too_low, failure, complete)
 	gate4_emit_integer_range_failure(output, failure)
 	gate4_output_line(output, complete)
 	return
@@ -1395,10 +1401,10 @@ def gate4_emit_checked_integer_multiply(
 			complete := gate4_emit_label(context)
 			gate4_output_line(output, "\t" + result + " =l mul " + left + ", " + right)
 			gate4_output_line(output, "\t" + too_high + " =w csgtl " + result + ", 9007199254740991")
-			gate4_output_line(output, "\tjnz " + too_high + ", " + failure + ", " + check_low)
+			gate4_output_branch(output, too_high, failure, check_low)
 			gate4_output_line(output, check_low)
 			gate4_output_line(output, "\t" + too_low + " =w csltl " + result + ", -9007199254740991")
-			gate4_output_line(output, "\tjnz " + too_low + ", " + failure + ", " + complete)
+			gate4_output_branch(output, too_low, failure, complete)
 			gate4_emit_integer_range_failure(output, failure)
 			gate4_output_line(output, complete)
 			return
@@ -1422,7 +1428,7 @@ def gate4_emit_checked_integer_divide(
 	failure := gate4_emit_label(context)
 	complete := gate4_emit_label(context)
 	gate4_output_line(output, "\t" + zero + " =w ceql " + right + ", 0")
-	gate4_output_line(output, "\tjnz " + zero + ", " + failure + ", " + complete)
+	gate4_output_branch(output, zero, failure, complete)
 	gate4_output_line(output, failure)
 	gate4_output_line(output, "\tcall $g4_fail(l $g4_division_error, l 24)")
 	gate4_output_line(output, "\thlt")
@@ -1442,7 +1448,7 @@ def gate4_emit_checked_integer_remainder(
 	failure := gate4_emit_label(context)
 	complete := gate4_emit_label(context)
 	gate4_output_line(output, "\t" + zero + " =w ceql " + right + ", 0")
-	gate4_output_line(output, "\tjnz " + zero + ", " + failure + ", " + complete)
+	gate4_output_branch(output, zero, failure, complete)
 	gate4_output_line(output, failure)
 	gate4_output_line(output, "\tcall $g4_fail(l $g4_division_error, l 24)")
 	gate4_output_line(output, "\thlt")
@@ -1555,7 +1561,7 @@ def gate4_emit_array_address(
 	gate4_output_line(output, "\t" + adjustment + " =l and " + resolved_length + ", " + negative_mask)
 	gate4_output_line(output, "\t" + index + " =l add " + requested + ", " + adjustment)
 	gate4_output_line(output, "\t" + valid + " =w cultl " + index + ", " + resolved_length)
-	gate4_output_line(output, "\tjnz " + valid + ", " + load_label + ", @array_bounds_failure")
+	gate4_output_branch(output, valid, load_label, "@array_bounds_failure")
 	context.array_bounds_failure_used[0] = 1
 	gate4_output_line(output, load_label)
 	mut resolved_data := ""
@@ -2500,7 +2506,11 @@ def gate4_emit_binary(
 				return gate4_emitted_value(result, result_type, 0, "", 0, "")
 			end
 			if gate4_take_inline_budget(context)
-				gate4_emit_checked_integer_add(context, output, result, left.operand, right.operand)
+				if gate4_small_nonnegative_integer_operand(left_operand)
+					left_operand = right.operand
+					right_operand = left.operand
+				end
+				gate4_emit_checked_integer_add(context, output, result, left_operand, right_operand)
 			else
 				gate4_output_line(
 					output,
@@ -2788,7 +2798,7 @@ def gate4_emit_block(
 					when_false := gate4_emit_label(context)
 					join := gate4_emit_label(context)
 					gate4_invalidate_array_header_cache(context)
-					gate4_output_line(output, "\tjnz " + condition + ", " + when_true + ", " + when_false)
+					gate4_output_branch(output, condition, when_true, when_false)
 					gate4_output_line(output, when_true)
 					saved_count := context.local_count[0]
 					true_terminated := gate4_emit_block(state, position, context, output, result_type)
@@ -2838,7 +2848,7 @@ def gate4_emit_block(
 						condition_value := gate4_emit_expression(state, position, context, loop_output, 1, "Boolean")
 						gate4_finish_statement(state, position)
 						condition := gate4_emit_condition(context, loop_output, condition_value.operand)
-						gate4_output_line(loop_output, "\tjnz " + condition + ", " + body + ", " + done)
+						gate4_output_branch(loop_output, condition, body, done)
 						gate4_output_line(loop_output, body)
 						saved_count := context.local_count[0]
 						body_terminated := gate4_emit_block(state, position, context, loop_output, result_type)
