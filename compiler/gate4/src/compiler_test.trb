@@ -1196,8 +1196,36 @@ describe("Gate 4 TypeRB frontend") do
 		expect(qbe.include?("call $g4_array_address")).to_be_false()
 	end
 
-	test("keeps array addressing outside loops out of the scalar reserve") do
-		source := "def main()\n\tvalues := [1]\n\tvalue := values[0]\n\treturn\nend\n"
+	test("spends the loop inline budget on dynamic Array reads and mutation") do
+		source := "def main()\n\tmut values: Array<Integer> := [10, 20]\n\tindices := [1, - 2]\n\tmut position := 0\n\twhile position < indices.size()\n\t\tindex := indices[position]\n\t\tvalues[index] = values[index] + 1\n\t\tposition += 1\n\tend\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		qbe := gate4_output_source(gate4_emit_qbe(state))
+		expect(gate4_occurrence_count(qbe, "call $g4_array_address")).to_equal(0)
+	end
+
+	test("falls back to shared Array addressing after the loop budget") do
+		mut source := "def main()\n\tvalues := [1]\n\tmut index := 0\n\tmut value := 0\n\twhile index < 1\n"
+		mut access_count := 0
+		while access_count < 65
+			source += "\t\tvalue = values[index]\n"
+			access_count += 1
+		end
+		source += "\t\tindex += 1\n\tend\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		qbe := gate4_output_source(gate4_emit_qbe(state))
+		expect(gate4_occurrence_count(qbe, "call $g4_array_address")).to_equal(1)
+	end
+
+	test("keeps dynamic Array addressing outside loops shared") do
+		source := "def index(): Integer\n\treturn 0\nend\n\ndef main()\n\tvalues := [1]\n\tvalue := values[index()]\n\treturn\nend\n"
 		mut state := gate4_compiler_new(source.size() + 1)
 		expect(gate4_lex(state, source)).to_be_true()
 		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
