@@ -233,6 +233,23 @@ test "$(awk -F '\t' '$2 == "walltime" { print $5 }' "$test_root/push-path-eviden
 test "$(awk -F '\t' '$2 == "walltime-vs-typerb-go" { print $5 }' "$test_root/push-path-evidence/evaluation.tsv")" = 1.062500 ||
 	fail "push-path Go wall-time ratio differs"
 
+dynamic_address_catalog=$test_root/dynamic-address-catalog.tsv
+sed 's/worker-literal-concat/worker-dynamic-array-address/g' "$worker_catalog" > "$dynamic_address_catalog"
+FAKE_GROWTH=1 /bin/sh "$script_directory/runtime-controller.sh" \
+	test "$fake_runexec" "$dynamic_address_catalog" worker-dynamic-array-address 0 "$cache_control" \
+	"$test_root/dynamic-address-workspace" "$test_root/dynamic-address-evidence" \
+	> "$test_root/dynamic-address.stdout" 2> "$test_root/dynamic-address.stderr"
+test "$(cat "$test_root/dynamic-address.stdout")" = 'native-runtime-ab: worker-dynamic-array-address passed'
+test ! -s "$test_root/dynamic-address.stderr" || fail "dynamic-address controller wrote stderr"
+test "$(awk -F= '$1 == "maximum_candidate_ratio" { print $2 }' "$test_root/dynamic-address-evidence/environment.txt")" = 0.95 ||
+	fail "dynamic-address baseline threshold differs"
+test "$(awk -F= '$1 == "maximum_candidate_go_ratio" { print $2 }' "$test_root/dynamic-address-evidence/environment.txt")" = 1.10 ||
+	fail "dynamic-address Go threshold differs"
+test "$(awk -F '\t' '$2 == "walltime" { print $5 }' "$test_root/dynamic-address-evidence/evaluation.tsv")" = 0.425000 ||
+	fail "dynamic-address baseline wall-time ratio differs"
+test "$(awk -F '\t' '$2 == "walltime-vs-typerb-go" { print $5 }' "$test_root/dynamic-address-evidence/evaluation.tsv")" = 1.062500 ||
+	fail "dynamic-address Go wall-time ratio differs"
+
 root_push_catalog=$test_root/root-push-catalog.tsv
 sed 's/worker-literal-concat/worker-gc-temp-push-fast-path/g' "$worker_catalog" > "$root_push_catalog"
 FAKE_GROWTH=1 /bin/sh "$script_directory/runtime-controller.sh" \
