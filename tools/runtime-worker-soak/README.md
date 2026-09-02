@@ -48,7 +48,11 @@ formal modes also require the pinned reference TypeRB compiler:
 
 The CI workflow runs smoke on Darwin and Linux arm64, proves an adjacent Native
 compiler fixed point, compares target-neutral compiler and workload QBE across
-targets, and enforces the 550,000-byte combined stripped compiler limit. A
+targets, and enforces the structural Native MIR transition limits from
+`tools/native-mir-transition-policy.sh`. The current combined stripped-compiler
+ceiling is 574,000 bytes. Its 17,000-byte-per-target allowance is temporary and
+must be recovered when portable range, index, and induction ownership has moved
+out of the direct emitter, before the next portable fact family begins. A
 manual formal run additionally executes the sanitizer, Memcheck, and long-lived
 Linux process oracles. Every Linux setup and ordinary compiler generation is
 process-traced; the verifier requires the exact Native compiler, QBE, C driver,

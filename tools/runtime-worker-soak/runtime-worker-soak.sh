@@ -2,8 +2,15 @@
 
 set -eu
 
-MAX_DARWIN_COMPILER_SIZE=290000
-MAX_LINUX_COMPILER_SIZE=260000
+script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+. "$script_directory/../native-mir-transition-policy.sh"
+native_mir_foundation_marker_valid "$script_directory/../.." || {
+	printf '%s\n' 'runtime-worker-soak: invalid Native MIR foundation marker' >&2
+	exit 1
+}
+
+MAX_DARWIN_COMPILER_SIZE=$NATIVE_MIR_DARWIN_COMPILER_LIMIT
+MAX_LINUX_COMPILER_SIZE=$NATIVE_MIR_LINUX_COMPILER_LIMIT
 MAX_PEAK_HEAP_BYTES=4194304
 MAX_SMOKE_SECONDS=2.25
 MIN_FORMAL_ALLOCATED_BYTES=32212254720
@@ -219,7 +226,6 @@ fi
 test ! -e "$workspace" || fail "workspace already exists"
 test ! -e "$evidence" || fail "evidence path already exists"
 
-script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 template=$script_directory/workload.trb
 config_template=$script_directory/trbconfig.jsonc
 trace_analyzer=$script_directory/analyze-gc-trace.awk
