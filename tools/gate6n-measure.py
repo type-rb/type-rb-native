@@ -5,7 +5,8 @@
 The measured command is executed directly, without an intermediary shell.  Peak
 RSS is intentionally measured by a separate GNU time invocation owned by the
 Gate 6N harness so elapsed time and orchestration-root RSS remain independent
-observations.
+observations. Repeated elapsed measurements retain both the raw batch duration
+and its per-process normalization.
 """
 
 from __future__ import annotations
@@ -96,6 +97,9 @@ def main(arguments: list[str]) -> int:
         stdout_path.write_bytes(first_stdout)
         stderr_path.write_bytes(first_stderr)
         elapsed_nanoseconds = finished - started
+        elapsed_per_repetition_seconds = (
+            elapsed_nanoseconds / repetitions / 1_000_000_000
+        )
         record: dict[str, object] = {
             "schemaVersion": 1,
             "clock": "time.monotonic_ns",
@@ -111,6 +115,7 @@ def main(arguments: list[str]) -> int:
             "outputsIdentical": True,
             "elapsedNanoseconds": elapsed_nanoseconds,
             "elapsedSeconds": f"{elapsed_nanoseconds / 1_000_000_000:.9f}",
+            "elapsedPerRepetitionSeconds": f"{elapsed_per_repetition_seconds:.9f}",
             "status": first_status,
             "inputExecutableBefore": input_before,
             "inputExecutableAfter": input_after,
