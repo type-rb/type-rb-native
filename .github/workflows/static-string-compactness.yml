@@ -12,8 +12,10 @@ on:
     paths:
       - .github/workflows/static-string-compactness.yml
       - compiler/gate4/conformance/**
+      - compiler/gate4/native-mir-foundation-v1.txt
       - compiler/gate4/src/compiler.trb
       - compiler/gate4/src/compiler_test.trb
+      - tools/native-mir-transition-policy.sh
 
 permissions:
   contents: read
@@ -36,13 +38,11 @@ jobs:
             target: darwin-arm64
             asset: type-rb-native-bootstrap-darwin-arm64
             seed_sha256: ef438d13598c534766334b408a39715c56ff1b69db528910ebf7d90ec7720b65
-            compiler_limit: 285000
           - runner: ubuntu-24.04-arm
             profile: linux-arm64-v0
             target: linux-arm64
             asset: type-rb-native-bootstrap-linux-arm64
             seed_sha256: b4307c244edc9e4da620f2a7c1b03a733e575da032efefae615f9edf75048a37
-            compiler_limit: 255000
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Check out the exact candidate revision
@@ -165,13 +165,25 @@ jobs:
 
       - name: Enforce compiler size and build-cost bounds
         env:
-          COMPILER_LIMIT: ${{ matrix.compiler_limit }}
           PROFILE: ${{ matrix.profile }}
           QBE: ${{ steps.qbe.outputs.path }}
           TARGET: ${{ matrix.target }}
         run: |
+          . tools/native-mir-transition-policy.sh
+          native_mir_foundation_marker_valid "$GITHUB_WORKSPACE"
           evidence="$RUNNER_TEMP/comparison-evidence"
           observations="$evidence/interleaved-measurements.csv"
+          compiler_limit=$(native_mir_target_compiler_limit "$PROFILE")
+          compiler_ratio_limit=$(native_mir_compiler_ratio_limit \
+            "$GITHUB_WORKSPACE" "$RUNNER_TEMP/baseline-source")
+          build_ratio_limit=$(native_mir_build_ratio_limit \
+            "$GITHUB_WORKSPACE" "$RUNNER_TEMP/baseline-source")
+          if native_mir_foundation_transition \
+            "$GITHUB_WORKSPACE" "$RUNNER_TEMP/baseline-source"; then
+            policy_mode=foundation-transition
+          else
+            policy_mode=ordinary
+          fi
           mkdir -p "$evidence" "$RUNNER_TEMP/interleaved-builds"
           printf 'metric\tstage\tbaseline\tcandidate\tcandidate_baseline_ratio\tmaximum\tstatus\n' \
             > "$evidence/comparison.tsv"
@@ -184,6 +196,11 @@ jobs:
             printf 'first_position=alternates-each-round\n'
             printf 'bootstrap_series=closure-evidence-only\n'
             printf 'fixed_point_adjacencies=pooled-b2-b3-and-b3-b4-byte-identical-builds\n'
+            printf 'native_mir_policy_mode=%s\n' "$policy_mode"
+            printf 'compiler_ratio_limit=%s\n' "$compiler_ratio_limit"
+            printf 'build_ratio_limit=%s\n' "$build_ratio_limit"
+            printf 'rss_ratio_limit=%s\n' "$NATIVE_MIR_RSS_RATIO_LIMIT"
+            printf 'catastrophic_ratio_limit=%s\n' "$NATIVE_MIR_CATASTROPHIC_RATIO_LIMIT"
           } > "$evidence/measurement-policy.txt"
 
           observe() {
@@ -349,25 +366,30 @@ jobs:
             ratio=$(awk -v baseline="$baseline_median" -v maximum="$maximum_observation" \
               'BEGIN { printf "%.6f", maximum / baseline }')
             status=pass
-            if ! awk -v ratio="$ratio" 'BEGIN { exit !(ratio <= 2.0) }'; then
+            if ! awk -v ratio="$ratio" -v maximum="$NATIVE_MIR_CATASTROPHIC_RATIO_LIMIT" \
+              'BEGIN { exit !(ratio <= maximum) }'; then
               status=fail
             fi
-            printf '%s\t%s\t%s\t%s\t%s\t%s\t2.0\t%s\n' \
+            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
               "$name" "$stage" "$role" "$baseline_median" "$maximum_observation" \
-              "$ratio" "$status" >> "$evidence/catastrophic.tsv"
+              "$ratio" "$NATIVE_MIR_CATASTROPHIC_RATIO_LIMIT" "$status" \
+              >> "$evidence/catastrophic.tsv"
             test "$status" = pass
           }
 
           baseline_size=$(wc -c < "$RUNNER_TEMP/baseline-compiler" | tr -d ' ')
           candidate_size=$(wc -c < "$RUNNER_TEMP/candidate-compiler" | tr -d ' ')
-          test "$candidate_size" -le "$COMPILER_LIMIT"
-          compare compiler_bytes fixed-point "$baseline_size" "$candidate_size" 1.05
+          test "$candidate_size" -le "$compiler_limit"
+          compare compiler_bytes fixed-point \
+            "$baseline_size" "$candidate_size" "$compiler_ratio_limit"
           baseline_elapsed=$(fixed_point_median baseline 6)
           candidate_elapsed=$(fixed_point_median candidate 6)
           baseline_rss=$(fixed_point_median baseline 7)
           candidate_rss=$(fixed_point_median candidate 7)
-          compare build_elapsed fixed-point-build "$baseline_elapsed" "$candidate_elapsed" 1.05
-          compare build_peak_rss fixed-point-build "$baseline_rss" "$candidate_rss" 1.05
+          compare build_elapsed fixed-point-build \
+            "$baseline_elapsed" "$candidate_elapsed" "$build_ratio_limit"
+          compare build_peak_rss fixed-point-build \
+            "$baseline_rss" "$candidate_rss" "$NATIVE_MIR_RSS_RATIO_LIMIT"
           for stage in b2-b3 b3-b4; do
             baseline_elapsed=$(median baseline "$stage" 6)
             baseline_rss=$(median baseline "$stage" 7)
@@ -385,7 +407,10 @@ jobs:
             printf 'target=%s\n' "$TARGET"
             printf 'baseline_compiler_bytes=%s\n' "$baseline_size"
             printf 'candidate_compiler_bytes=%s\n' "$candidate_size"
-            printf 'candidate_compiler_limit=%s\n' "$COMPILER_LIMIT"
+            printf 'candidate_compiler_limit=%s\n' "$compiler_limit"
+            printf 'native_mir_policy_mode=%s\n' "$policy_mode"
+            printf 'compiler_ratio_limit=%s\n' "$compiler_ratio_limit"
+            printf 'build_ratio_limit=%s\n' "$build_ratio_limit"
             printf 'fixed_point_qbe_size=%s\n' "$fixed_qbe_size"
             printf 'fixed_point_qbe_sha256=%s\n' "$fixed_qbe_sha256"
           } > "$evidence/identities.txt"
@@ -513,6 +538,9 @@ jobs:
     needs: compare-target
     runs-on: ubuntu-24.04-arm
     steps:
+      - name: Check out the exact candidate revision
+        uses: actions/checkout@v5
+
       - name: Download target evidence
         uses: actions/download-artifact@v5
         with:
@@ -521,16 +549,18 @@ jobs:
 
       - name: Enforce the cross-target contract
         run: |
+          . tools/native-mir-transition-policy.sh
+          native_mir_foundation_marker_valid "$GITHUB_WORKSPACE"
           darwin="$RUNNER_TEMP/target-evidence/static-string-compactness-darwin-arm64/comparison-evidence/identities.txt"
           linux="$RUNNER_TEMP/target-evidence/static-string-compactness-linux-arm64/comparison-evidence/identities.txt"
           test -f "$darwin"
           test -f "$linux"
           darwin_size=$(awk -F= '$1 == "candidate_compiler_bytes" {print $2}' "$darwin")
           linux_size=$(awk -F= '$1 == "candidate_compiler_bytes" {print $2}' "$linux")
-          test "$darwin_size" -le 285000
-          test "$linux_size" -le 255000
+          test "$darwin_size" -le "$NATIVE_MIR_DARWIN_COMPILER_LIMIT"
+          test "$linux_size" -le "$NATIVE_MIR_LINUX_COMPILER_LIMIT"
           combined=$((darwin_size + linux_size))
-          test "$combined" -le 540000
+          test "$combined" -le "$NATIVE_MIR_COMBINED_COMPILER_LIMIT"
           darwin_qbe_size=$(awk -F= '$1 == "fixed_point_qbe_size" {print $2}' "$darwin")
           linux_qbe_size=$(awk -F= '$1 == "fixed_point_qbe_size" {print $2}' "$linux")
           darwin_qbe_sha256=$(awk -F= '$1 == "fixed_point_qbe_sha256" {print $2}' "$darwin")
@@ -541,7 +571,7 @@ jobs:
             printf 'darwin_arm64_compiler_bytes=%s\n' "$darwin_size"
             printf 'linux_arm64_compiler_bytes=%s\n' "$linux_size"
             printf 'combined_compiler_bytes=%s\n' "$combined"
-            printf 'combined_compiler_limit=540000\n'
+            printf 'combined_compiler_limit=%s\n' "$NATIVE_MIR_COMBINED_COMPILER_LIMIT"
             printf 'target_neutral_qbe_bytes=%s\n' "$darwin_qbe_size"
             printf 'target_neutral_qbe_sha256=%s\n' "$darwin_qbe_sha256"
           } > "$RUNNER_TEMP/cross-target.txt"

@@ -80,8 +80,19 @@ temporary compiler-size envelope only under all of these conditions:
 4. retain measurements at each migration checkpoint; and
 5. do not present the temporary envelope as a relaxed final compactness goal.
 
-No numeric structural envelope is selected by this decision. The first MIR
-foundation issue selects it from the measured skeleton rather than an estimate.
+Issue #197 selected the first structural envelope from the measured minimal
+foundation: 302,000 bytes on Darwin arm64, 272,000 bytes on Linux arm64, and
+574,000 bytes combined. Only the baseline-to-foundation transition may use the
+measured 1.07 compiler-size and 1.12 build-time ratios; subsequent ordinary
+changes return to the 1.05 relative limits. RSS remains limited to 1.05 and
+every retained observation remains subject to the 2.0 catastrophic limit. The
+checked-in policy and foundation marker make that exceptional transition
+machine-readable.
+
+The 17,000-byte-per-target allowance is not an optimization budget. It must be
+fully recovered by the end of the portable range, index, and induction
+migration, before work begins on the next portable fact family. Removing the
+superseded direct-emitter ownership is part of completing that migration.
 
 ## Initial scope
 
