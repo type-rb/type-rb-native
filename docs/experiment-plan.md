@@ -105,15 +105,18 @@ The 255,000-byte ceiling and similar historical bounds registered for ordinary
 local optimization candidates were not silently relaxed. The first structural
 MIR issue measured the minimal skeleton before freezing separate ceilings of
 302,000 bytes on Darwin arm64, 272,000 bytes on Linux arm64, and 574,000 bytes
-combined. Only that measured transition may use the registered `1.07x`
-compiler-size and `1.12x` build-time ratios; later ordinary changes return to
-`1.05x`. RSS, fixed-point, generated-QBE/application identity, catastrophic,
-process, stack, and cleanup bounds remain independently enforced. The
-17,000-byte-per-target allowance must be recovered by the end of portable
-range, index, and induction migration, before the next fact family. The
-long-term Go-competitive build and generated-artifact objectives remain
-mandatory. See the
-[recorded foundation result](../results/2026-09-02-native-mir-foundation-linux-arm64/README.md).
+combined. The later scalar-connection measurement freezes the next temporary
+envelope at 317,000, 290,000, and 607,000 bytes respectively. The exact
+foundation transition alone may use its `1.07x` compiler-size and `1.12x`
+build-time ratios; the exact scalar-connection transition alone may use
+`1.07x` and `1.15x`. Later ordinary changes return to `1.05x`. RSS,
+fixed-point, generated-QBE/application identity, catastrophic, process, stack,
+and cleanup bounds remain independently enforced. The complete temporary
+increase must be recovered by the end of portable range, index, and induction
+migration, before the next fact family. The long-term Go-competitive build and
+generated-artifact objectives remain mandatory. See the
+[recorded foundation result](../results/2026-09-02-native-mir-foundation-linux-arm64/README.md)
+and [scalar-connection freeze](https://github.com/type-rb/type-rb-native/issues/221).
 
 The accepted ownership and exact-consumption slices reach revision
 `993f563e3e4654c62d18b49d147bd3a7f1b6e2f2`. Structured checking derives the

@@ -235,6 +235,14 @@ if test -n "$repository_root_override"; then
 else
 	repository_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
 fi
+transition_policy=$repository_root/tools/native-mir-transition-policy.sh
+scalar_connection_marker=$repository_root/compiler/gate4/native-mir-scalar-connection-v1.txt
+if test -f "$transition_policy" && test -f "$scalar_connection_marker"; then
+	. "$transition_policy"
+	if native_mir_transition_markers_valid "$repository_root"; then
+		MAX_COMPILER_SIZE=$(native_mir_target_compiler_limit "$profile")
+	fi
+fi
 compiler_entry=$repository_root/compiler/gate4/src/compiler.trb
 configured_project=$repository_root/corpus/gate6k/configured-project/trbconfig.jsonc
 
@@ -640,6 +648,7 @@ EOF
 			"$median_b2_b3_cpu" "$median_b3_b4_cpu"
 	fi
 fi
+printf 'compiler_size_limit=%s\n' "$MAX_COMPILER_SIZE" >> "$evidence/measurement-policy.txt"
 
 trace_directory=$workspace/trace
 mkdir -p "$trace_directory"
@@ -681,6 +690,7 @@ require_no_intermediates "$trace_directory"
 	printf 'mode=%s\n' "$mode"
 	printf 'profile=%s\n' "$profile"
 	printf 'runner_image=%s\n' "$runner_image"
+	printf 'compiler_size_limit=%s\n' "$MAX_COMPILER_SIZE"
 	printf 'repository_revision=%s\n' "$(git -C "$repository_root" rev-parse HEAD)"
 	printf 'type_rb_revision=%s\n' "$(tr -d '\n' < "$repository_root/TYPE_RB_REVISION")"
 	uname -a
@@ -713,6 +723,7 @@ fi
 	printf 'b4_sha256=%s\n' "$(sha256 "$b4")"
 	printf 'fixed_point_qbe_size=%s\n' "$fixed_point_qbe_size"
 	printf 'fixed_point_qbe_sha256=%s\n' "$fixed_point_qbe_sha256"
+	printf 'compiler_size_limit=%s\n' "$MAX_COMPILER_SIZE"
 } > "$evidence/identities.txt"
 
 {

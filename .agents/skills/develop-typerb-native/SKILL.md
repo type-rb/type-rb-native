@@ -127,15 +127,15 @@ a time.
   RSS, fixed-point, and generated-application guardrails. Do not silently reuse
   or relax an optimization threshold. The final build-time and generated-size
   objectives relative to the Go backend remain unchanged.
-- While the first foundation is present, use
-  `tools/native-mir-transition-policy.sh` as the single CI source for its
-  measured absolute ceilings. Apply the 1.07 compiler-size and 1.12 build-time
-  ratios only when the candidate introduces the foundation marker over a
-  baseline without it; use the ordinary 1.05 ratios for later changes. Do not
-  spend the 17,000-byte-per-target allowance on unrelated work. Remove the
-  marker and restore the pre-foundation absolute ceilings after portable range,
-  index, and induction ownership has left the direct emitter, before starting
-  the next portable fact family.
+- While the MIR migration is present, use
+  `tools/native-mir-transition-policy.sh` as the single CI source for measured
+  absolute ceilings and exceptional transition ratios. Apply an exceptional
+  ratio only when the candidate introduces its exact validated marker over a
+  baseline without it; use the ordinary 1.05 ratios for every later change.
+  Do not spend either measured structural allowance on unrelated work. Remove
+  the markers and restore the pre-foundation absolute ceilings after portable
+  range, index, and induction ownership has left the direct emitter, before
+  starting the next portable fact family.
 
 ## Verify
 

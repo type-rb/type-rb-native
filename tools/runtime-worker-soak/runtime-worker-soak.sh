@@ -4,8 +4,8 @@ set -eu
 
 script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 . "$script_directory/../native-mir-transition-policy.sh"
-native_mir_foundation_marker_valid "$script_directory/../.." || {
-	printf '%s\n' 'runtime-worker-soak: invalid Native MIR foundation marker' >&2
+native_mir_transition_markers_valid "$script_directory/../.." || {
+	printf '%s\n' 'runtime-worker-soak: invalid Native MIR transition markers' >&2
 	exit 1
 }
 
