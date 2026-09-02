@@ -95,19 +95,21 @@ remain at or below 310,000 raw bytes.
 Elapsed time and peak RSS are independent process executions. A repository
 measurement observer launches the requested command directly and brackets it
 with Python's nanosecond monotonic clock; its own startup is outside the timed
-interval. Compiler and application build elapsed observations contain one
-direct process. Because the portable application otherwise completes in about
-one millisecond, each application-runtime elapsed observation batches 32
-direct fresh-process launches under one monotonic interval. Every launch must
-return identical status, stdout, and stderr. GNU time separately launches the
-same command once for orchestration-root peak RSS. Both series receive the
-registered warmups and retained observations. Repetition count, child status,
-stdout, stderr, command arguments, input-executable identity before and after
-execution, and immediate build-artifact identity are retained before a failed
-observation stops the gate. The portable bootstrap harness's legacy combined
-time/RSS observations are excluded for this profile; only the Gate 6N
-controller's independent, interleaved adjacent-build series decides the
-registered 10% and 2x bounds.
+interval. Compiler elapsed observations contain one direct process. Each
+application-build elapsed observation batches eight direct launches, and the
+roughly one-millisecond application-runtime case batches 32 direct launches.
+The raw batch duration and its per-launch normalization are both retained; the
+normalized value enters the eleven-observation median, 25% comparison, and 2x
+catastrophic bound. Every launch must return identical status, stdout, and
+stderr, and a build batch must leave the expected immediate artifact. GNU time
+separately launches the same command once for orchestration-root peak RSS.
+Both series receive the registered warmups and retained observations.
+Repetition count, child status, stdout, stderr, command arguments,
+input-executable identity before and after execution, and immediate
+build-artifact identity are retained before a failed observation stops the
+gate. The portable bootstrap harness's legacy combined time/RSS observations
+are excluded for this profile; only the Gate 6N controller's independent,
+interleaved adjacent-build series decides the registered 10% and 2x bounds.
 
 One unchanged portable application uses two warmups and at least eleven
 interleaved Native/optimized-Go observations. Native build time, build peak

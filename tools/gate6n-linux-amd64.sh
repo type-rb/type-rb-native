@@ -10,6 +10,8 @@ ROOT_QBE_SHA256=62db3c31527a670c3050051a9fa27bf142b6c5deaab81ef8234104bd467aa95a
 MAX_COMPILER_SIZE=310000
 PROFILE=linux-amd64-v0
 RUNNER_IMAGE=ubuntu-24.04
+APPLICATION_BUILD_ELAPSED_REPETITIONS=8
+APPLICATION_RUNTIME_ELAPSED_REPETITIONS=32
 
 usage() {
 	cat >&2 <<'EOF'
@@ -264,7 +266,7 @@ printf '%s\n' "$go_ldd_status" > "$evidence/go-elf/ldd.status"
 measurements=$evidence/measurements.csv
 measurement_logs=$evidence/measurement-logs
 mkdir -p "$measurement_logs"
-printf 'stage,candidate,iteration,elapsed_seconds,elapsed_status,peak_rss_bytes,rss_status,observer_status\n' \
+printf 'stage,candidate,iteration,elapsed_seconds_per_repetition,elapsed_status,peak_rss_bytes,rss_status,observer_status\n' \
 	> "$measurements"
 
 record_input_identity() {
@@ -296,9 +298,10 @@ measure_command() {
 	shift 6
 	measurement_input=$1
 	measurement_repetitions=1
-	if test "$stage" = application-runtime; then
-		measurement_repetitions=32
-	fi
+	case "$stage" in
+	application-build) measurement_repetitions=$APPLICATION_BUILD_ELAPSED_REPETITIONS ;;
+	application-runtime) measurement_repetitions=$APPLICATION_RUNTIME_ELAPSED_REPETITIONS ;;
+	esac
 	log_prefix=$measurement_logs/$stage-$candidate-$iteration
 	if test "$artifact" != -; then
 		rm -f "$artifact"
@@ -334,17 +337,20 @@ measure_command() {
 			.elapsedNanoseconds > 0 and
 			(.elapsedSeconds | type) == "string" and
 			(.elapsedSeconds | test("^[0-9]+[.][0-9]{9}$")) and
+			(.elapsedPerRepetitionSeconds | type) == "string" and
+			(.elapsedPerRepetitionSeconds | test("^[0-9]+[.][0-9]{9}$")) and
 			(.status | type) == "number" and
 			.status == (.status | floor) and
 			.inputExecutableBefore.exists == true and
 			.inputExecutableBefore.executable == true and
 			.inputExecutableBefore.sha256 == .inputExecutableAfter.sha256
 		' "$log_prefix.elapsed.json" > /dev/null 2>&1; then
-		measurement_elapsed=$(jq -r '.elapsedSeconds' "$log_prefix.elapsed.json")
+		measurement_elapsed=$(jq -r '.elapsedPerRepetitionSeconds' "$log_prefix.elapsed.json")
 		measurement_elapsed_status=$(jq -r '.status' "$log_prefix.elapsed.json")
 		measurement_elapsed_nanoseconds=$(jq -r '.elapsedNanoseconds' "$log_prefix.elapsed.json")
 		expected_elapsed=$(awk -v value="$measurement_elapsed_nanoseconds" \
-			'BEGIN { printf "%.9f", value / 1000000000 }')
+			-v repetitions="$measurement_repetitions" \
+			'BEGIN { printf "%.9f", value / repetitions / 1000000000 }')
 		if test "$measurement_elapsed" != "$expected_elapsed"; then
 			measurement_observer_status=65
 		fi
@@ -847,6 +853,10 @@ EOF
 	printf 'qbe_binary_sha256=%s\n' "$(sha256 "$qbe")"
 	printf 'candidate_compiler_sha256=%s\n' "$(sha256 "$output_compiler")"
 	printf 'measurement_controller_sha256=%s\n' "$(sha256 "$measurement_controller")"
+	printf 'application_build_elapsed_repetitions=%s\n' \
+		"$APPLICATION_BUILD_ELAPSED_REPETITIONS"
+	printf 'application_runtime_elapsed_repetitions=%s\n' \
+		"$APPLICATION_RUNTIME_ELAPSED_REPETITIONS"
 	printf 'python_command=%s\n' "$python_command"
 	printf 'python_command_sha256=%s\n' "$(sha256 "$python_command")"
 	printf 'candidate_fixed_point_qbe_sha256=%s\n' \

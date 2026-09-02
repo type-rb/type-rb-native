@@ -71,6 +71,10 @@ class Gate6NMeasureTest(unittest.TestCase):
             self.assertEqual(measurement["completedRepetitions"], 1)
             self.assertTrue(measurement["outputsIdentical"])
             self.assertGreater(measurement["elapsedNanoseconds"], 0)
+            self.assertEqual(
+                measurement["elapsedPerRepetitionSeconds"],
+                measurement["elapsedSeconds"],
+            )
             self.assertIsNone(measurement["artifact"])
             self.assertEqual(
                 measurement["inputExecutableBefore"]["sha256"],
@@ -147,6 +151,10 @@ class Gate6NMeasureTest(unittest.TestCase):
             self.assertEqual(measurement["completedRepetitions"], 4)
             self.assertTrue(measurement["outputsIdentical"])
             self.assertGreater(measurement["elapsedNanoseconds"], 0)
+            self.assertEqual(
+                measurement["elapsedPerRepetitionSeconds"],
+                f"{measurement['elapsedNanoseconds'] / 4 / 1_000_000_000:.9f}",
+            )
 
     def test_rejects_inconsistent_repeated_output(self) -> None:
         with tempfile.TemporaryDirectory(prefix="gate6n-measure-test-") as temporary:
