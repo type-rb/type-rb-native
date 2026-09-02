@@ -1,0 +1,74 @@
+name: Documentation and development metadata
+
+on:
+  pull_request:
+    paths:
+      - "**/*.md"
+      - .agents/**
+      - docs/**
+      - results/**
+      - .github/workflows/documentation.yml
+  push:
+    branches:
+      - main
+    paths:
+      - "**/*.md"
+      - .agents/**
+      - docs/**
+      - results/**
+      - .github/workflows/documentation.yml
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out TypeRB Native
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Check changed text
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          if test "$EVENT_NAME" = pull_request; then
+            range="$BASE_SHA...HEAD"
+          else
+            range="$BEFORE_SHA...HEAD"
+          fi
+          git diff --check "$range"
+
+      - name: Check development skill metadata
+        shell: bash
+        run: |
+          shopt -s nullglob
+          skills=(.agents/skills/*/SKILL.md)
+          test "${#skills[@]}" -gt 0
+          for skill in "${skills[@]}"; do
+            test "$(sed -n '1p' "$skill")" = "---"
+            boundary=$(grep -n '^---$' "$skill" | sed -n '2s/:.*//p')
+            test -n "$boundary"
+            name=$(sed -n "2,$((boundary - 1))s/^name: //p" "$skill")
+            description=$(sed -n "2,$((boundary - 1))s/^description: //p" "$skill")
+            test "$name" = "$(basename "$(dirname "$skill")")"
+            test -n "$description"
+          done
+
+      - name: Check public path hygiene
+        run: |
+          if git grep -n -E '/Users/|/private/tmp/' -- \
+            '*.md' '.agents/**' 'docs/**' ':!results/**'; then
+            printf 'public documentation contains a local workspace path\n' >&2
+            exit 1
+          fi
+
+      - name: Check generated documentation applications
+        run: |
+          node tools/capability-map-check.mjs
+          node tools/benchmark-pages-data.mjs --check
+          node tools/benchmark-pages-check.mjs

@@ -33,6 +33,8 @@ TypeRB version and revision backed by current evidence. See
 - Reach reproducible self-hosting: a native TypeRB compiler builds the next
   equivalent native TypeRB compiler from TypeRB source.
 - Design a small Native MIR, target ABI profiles, data layout, and runtime.
+- Keep TypeRB semantic facts and reusable optimization decisions in Native MIR
+  rather than in a particular backend emitter.
 - Compare multiple machine-code strategies behind the same MIR and semantics.
 - Measure complete toolchains, including code generation, linking, runtime,
   sidecars, and distribution size.
@@ -318,26 +320,25 @@ Linux evidence observes the explicit LLD and dynamic libm boundaries. See the
 The current formal language-benchmark runtime result retains all 462 registered
 samples for `fannkuch-redux`, `n-body`, and `spectral-norm`. The exact same
 TypeRB sources pass through pinned Go and self-hosted Native paths. Native is
-1.48x to 2.19x slower than TypeRB Go and 2.59x to 4.09x slower than the pinned
-Pure Go implementations on these numeric kernels. It simultaneously uses
-82.47% to 86.90% less peak RSS than TypeRB Go and produces raw applications at
-least 99.19% smaller. Pure Go parity or better is the minimum Native runtime
-objective. Pinned C, C++, Go, Rust, and Java programs remain separate
-one-core/four-core implementation context; no composite language score is
-claimed. See the
-[recorded runtime result](results/2026-09-01-benchmarksgame-runtime-safe-array-headers-linux-arm64/README.md),
+8.1% faster than TypeRB Go on `spectral-norm`, but remains 1.85x to 1.86x
+slower on `fannkuch-redux` and `n-body`. It is 1.61x to 3.45x slower than the
+pinned Pure Go implementations and uses 82.65% to 83.07% less peak RSS than
+TypeRB Go. Pure Go parity or better is the minimum Native runtime objective.
+Pinned C, C++, Go, Rust, and Java programs remain separate one-core/four-core
+implementation context; no composite language score is claimed. See the
+[recorded runtime result](results/2026-09-02-benchmarksgame-runtime-lexical-loop-index-linux-arm64/README.md),
 [benchmark plan](docs/benchmarksgame.md),
 [Decision 0023](docs/decisions/0023-reproducible-benchmark-layers.md), and
 [Decision 0024](docs/decisions/0024-benchexec-runtime-controller.md).
 
 The current formal backend-pair build result retains all 66 registered
-compiler samples. Native compiles the same three TypeRB sources 2.34x to 2.62x
-faster than the optimized Go path, uses 5.89x to 6.32x less compiler CPU and
-about 51% less peak RSS, and produces raw applications at least 99.19% smaller.
-The Native compiler-plus-QBE controlled payload is 969,600 bytes, 99.65% below
+compiler samples. Native compiles the same three TypeRB sources 2.34x to 2.43x
+faster than the optimized Go path, uses 5.67x to 6.34x less compiler CPU and
+about 51% less peak RSS, and produces raw applications at least 99.20% smaller.
+The Native compiler-plus-QBE controlled payload is 969,512 bytes, 99.65% below
 reference `trb` plus the complete pinned Go root. Successful process traces
 retain QBE, assembler, C driver, LLD, and shared-library boundaries. See the
-[recorded build result](results/2026-09-01-benchmarksgame-build-safe-array-headers-linux-arm64/README.md),
+[recorded build result](results/2026-09-02-benchmarksgame-build-lexical-loop-index-linux-arm64/README.md),
 [formal build controller](tools/benchmarksgame-build-formal/README.md), and
 [Decision 0027](docs/decisions/0027-formal-build-distribution-controller.md).
 
@@ -513,6 +514,15 @@ reference compiler may produce that bridge. Later gates replace the bridge's
 frontend side with a TypeRB implementation in this repository. Native MIR
 remains internal here.
 
+The early snapshot path established a distinct Native MIR, while the later
+self-hosted compiler reached closure with a compact direct-QBE emitter. The
+next optimizer phase restores the intended boundary in that self-hosted path:
+range, index, loop, call-effect, Array-header, and GC-safety knowledge belongs
+to verified target-independent MIR analysis. QBE remains the first adapter and
+may perform backend legalization and instruction selection, but it does not own
+those TypeRB facts. See
+[Decision 0028](docs/decisions/0028-native-mir-optimization-boundary.md).
+
 The intended bootstrap sequence is:
 
 ```text
@@ -624,8 +634,8 @@ repository.
 - [Gate 6N Linux amd64 target-chain result](results/2026-08-31-gate6n-linux-amd64/README.md)
 - [Gate 6N Linux amd64 target chain](docs/gate-6-linux-amd64.md)
 - [Reproducible language benchmark plan](docs/benchmarksgame.md)
-- [Current formal Benchmarks Game runtime result on Linux arm64](results/2026-09-01-benchmarksgame-runtime-safe-array-headers-linux-arm64/README.md)
-- [Current formal Benchmarks Game build result on Linux arm64](results/2026-09-01-benchmarksgame-build-safe-array-headers-linux-arm64/README.md)
+- [Current formal Benchmarks Game runtime result on Linux arm64](results/2026-09-02-benchmarksgame-runtime-lexical-loop-index-linux-arm64/README.md)
+- [Current formal Benchmarks Game build result on Linux arm64](results/2026-09-02-benchmarksgame-build-lexical-loop-index-linux-arm64/README.md)
 - [Formal Native numeric-inline A/B result on Linux arm64](results/2026-08-31-native-numeric-inline-linux-arm64/README.md)
 - [Formal Native Array-address A/B result on Linux arm64](results/2026-08-31-native-array-address-linux-arm64/README.md)
 - [Rejected Native scalar-leaf inlining result on Linux arm64](results/2026-08-31-native-scalar-leaf-inline-linux-arm64/README.md)

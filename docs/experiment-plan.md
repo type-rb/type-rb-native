@@ -36,6 +36,8 @@ configuration.
 - Unsupported behavior fails explicitly.
 - Measurements include serialization, lowering, optimization, code generation,
   assembly, linking, runtime, and required external components.
+- TypeRB semantic analysis and reusable optimization decisions belong to
+  verified Native MIR and target-independent passes, not to a backend emitter.
 - Quality and performance targets are recorded before reviewing a result.
 - Microbenchmarks diagnose a phase; representative programs determine
   viability.
@@ -69,6 +71,49 @@ baseline. It is not a path to the required Go-independent compiler and is not
 a gate deliverable. A C emitter is likewise deferred unless later profiling
 shows that it answers a specific question more cheaply than the selected
 backend. Neither is built merely to populate a comparison table.
+
+## Self-hosted MIR optimization transition
+
+The early bootstrap path proved a distinct Native MIR. The compact self-hosted
+compiler later reached closure through direct QBE emission, with several local
+semantic facts represented in emitter state. Before adding broader range,
+alias, effect, or loop optimization, the self-hosted path restores the intended
+MIR boundary described by
+[Decision 0028](decisions/0028-native-mir-optimization-boundary.md).
+
+The transition is incremental but has one target architecture:
+
+1. Complete already registered narrow emitter experiments and preserve their
+   accepted or rejected evidence.
+2. Define the smallest Native MIR value, block, operation, origin, and verifier
+   subset that can carry one current hot scalar/Array loop vertically.
+3. Represent only the facts needed by that slice, beginning with Integer range
+   or nonnegativity, index validity, loop induction/bounds, call allocation and
+   mutation effects, Array-header stability, and GC safety.
+4. Run target-independent transforms over verified MIR and lower the result
+   through the existing QBE ABI without source-pattern discovery in the
+   adapter.
+5. Move existing optimization families into this path and remove their
+   superseded emitter ownership before adding broader analysis.
+
+Each slice retains source origins, exact TypeRB behavior, deterministic output,
+self-hosted fixed points, the complete conformance corpus, and registered
+application outputs. A no-optimization or unchanged region must remain a useful
+differential control while the slice is introduced.
+
+The 255,000-byte ceiling and similar bounds registered for ordinary local
+optimization candidates are not silently relaxed. The first structural MIR
+issue measures a minimal skeleton and then freezes a separate temporary
+compiler-size envelope before implementation is judged. That issue must also
+freeze build-time, RSS, fixed-point, generated-QBE/application-size, and
+catastrophic bounds, plus a removal condition for the old emitter logic. The
+long-term Go-competitive build and generated-artifact objectives remain
+mandatory.
+
+LLVM remains deferred until the shared path and benchmark corpus cover scalar,
+Array, allocation, and I/O behavior. Its first role is a bounded
+optimization-ceiling comparison over the same MIR and ABI, not a second copy of
+TypeRB semantic analysis.
 
 ## Gates
 
