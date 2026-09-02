@@ -1,72 +1,81 @@
 # Native MIR optimization transition status
 
 Status: experimental, accepted through revision
-`993f563e3e4654c62d18b49d147bd3a7f1b6e2f2`.
+`1ec464ec3794b11945b3cc5333a7d9f7d2975619`.
 
-The self-hosted compiler now derives and consumes two related portable
-optimization decisions above the QBE adapter. During structured type checking,
-it recognizes an exact mutable local initialized to literal zero and updated
-only by a checked unit step. It also derives an active loop base plus a small
-nonnegative literal and records that fact with an explicit dependency on its
-enclosing verified loop. The facts live in dedicated, target-neutral checked-
-program storage. Every checked Array-index postfix stores its exact fact origin.
-A target-independent resolver follows any enclosing-loop dependency before the
-QBE Array-address adapter requests only the final fact at the same postfix. The
-adapter no longer scans source tokens, carries range state through emitted
-expression values, or resolves nested fact dependencies, and omits only the
-impossible negative-index normalization.
+The ordinary self-hosted frontend now builds one compiler-owned Native MIR
+module for selected immutable scalar-leaf functions. The structured checker
+stages typed value and instruction rows during its existing traversal, publishes
+only complete functions, and verifies the complete module before QBE emission.
+The verified subset covers `Integer`, `Float`, and `Boolean` parameters and
+results, exact scalar literals, unary operations, numeric and comparison binary
+operations, checked Integer failure edges, and Integer-to-Float conversion.
 
-These are compact derivation and consumption slices, not the completed shared-
-MIR architecture. The general function/block/value MIR is not yet the ordinary
-QBE input. General control/value lowering, a reusable expression-origin and
-range representation, and replacement of the broader emitted-value
-representation remain the next structural checkpoints. The former emitted-
-value range-fact propagation is no longer part of that remaining work.
+Both ordinary function emission and bounded loop-local inlining consume these
+verified rows. Exact call arguments bind their checked literal facts before
+entering the MIR adapter. The adapter assigns QBE temporaries and uses the
+existing ABI, but it no longer scans a scalar function body or parses an
+emitted operand to recover the selected TypeRB semantics. The former
+token-body eligibility scan and token-driven scalar-leaf emitter have been
+removed.
+
+This is the first ordinary frontend-to-MIR replacement boundary, not complete
+compiler lowering. Functions with mutable state, control flow, calls, managed
+values, Arrays, records, or unsupported expressions retain the accepted direct
+path. The already accepted nonnegative induction and exact Array-index facts
+still live in separate checked-program storage. Moving that control flow and
+fact family through the same verified MIR, then deleting the temporary
+token-index carrier, is the next removal-backed checkpoint.
 
 ## Retained boundary
 
-- literal-zero unit-step loops and their proven small nonnegative derived
-  indices retain their previously accepted optimized QBE;
-- reassignment, non-unit updates, conditional nesting that changes the local,
-  and loop-external negative indexing retain the general path;
-- invalidating an enclosing induction candidate also invalidates every nested
-  fact that depends on it;
-- focused positive and negative controls plus 24 current conformance, mutation,
-  and benchmark programs remain byte-identical against accepted QBE;
-- Darwin and Linux arm64 emit byte-identical target-neutral compiler QBE; and
-- the complete Native gates, Linux amd64 and arm64 regressions, persistent-
-  worker checks, fixed points, process boundaries, cleanup checks, and
-  executable-stack policy pass.
+- selected scalar leaves produce the accepted QBE for ordinary calls and
+  inlining while their semantics come only from verified Native MIR;
+- unsupported candidates retain the direct path without a second analyzer or
+  partial MIR publication;
+- forged literal facts, value identities, types, origins, failure targets, and
+  operation shapes are rejected deterministically;
+- checked Integer overflow, Float behavior, Boolean results, diagnostics,
+  source order, and evaluation order remain unchanged;
+- adjacent self-hosted generations emit byte-identical target-neutral compiler
+  QBE on Darwin arm64 and Linux arm64; and
+- the complete Native suite, Linux amd64 and arm64 regressions, process and
+  cleanup boundaries, executable-stack policy, persistent-worker memory, and
+  managed-runtime allocation smoke pass.
 
-The accepted static comparison records a 299,656-byte Darwin arm64 compiler, a
-271,784-byte Linux arm64 compiler, and 571,440 bytes combined. The portable
-compiler QBE decreases by 1,053 bytes to 955,161 bytes with SHA-256
-`4ce9d74c3c2450af89e1f9c7c005d359fe14a3296be1cc1690e386f82482e6fe`.
-The independent persistent-worker paths record 299,696 and 271,776-byte
-compilers, 571,472 bytes combined. All values remain below the separately
-registered 302,000, 272,000, and 574,000-byte temporary MIR ceilings.
+## Measured transition envelope
 
-Compared with the accepted pre-slice Linux compiler, the current static
-artifact has recovered 160 bytes and retains only 40 bytes of structural cost.
-The final resolver slice alone recovered 144 bytes relative to its predecessor.
-This does not expand the temporary MIR allowance: the complete portable range,
-index, and induction migration must still recover that allowance before another
-portable fact family begins. The final Go-competitive build-time,
-distribution-size, and generated-code goals are unchanged.
+The accepted fixed compiler QBE is 1,022,022 bytes with SHA-256
+`41e6092c341116fd17d390a1904d19a6d46e117626d6bfd7bc49ad0d14bc5832`.
+The fixed compilers are 316,184 bytes on Darwin arm64 and 289,440 bytes on
+Linux arm64, 605,624 bytes combined. These remain below the pre-registered
+317,000, 290,000, and 607,000-byte temporary ceilings.
+
+In the final exact-head comparison, Darwin compiler/build/RSS ratios are
+1.055157/1.055882/1.000397 and Linux arm64 ratios are
+1.065371/1.105263/1.001748. They remain below the one-time scalar-connection
+limits of 1.07 compiler size, 1.15 build time, and 1.05 RSS. Later ordinary
+changes return to the 1.05 compiler/build/RSS ratios; every retained
+observation remains subject to the unchanged 2.0 catastrophic bound.
+
+The managed-runtime smoke records a 316,224-byte stripped Darwin compiler,
+0.77-second runtime, zero final live managed bytes, and a 1,048,513-byte peak
+managed heap. Independent persistent-worker checks pass on Darwin arm64 and
+Linux arm64.
+
+The temporary MIR allowance is migration space, not a new final size target.
+It must be recovered by deleting superseded direct-emitter ownership by the end
+of portable range, index, and induction migration. The final Go-competitive
+build-time and generated-artifact objectives and the Pure Go-or-better
+generated-program runtime objective remain unchanged.
 
 Public evidence:
 
 - [Decision 0028](decisions/0028-native-mir-optimization-boundary.md)
-- [MIR foundation result](../results/2026-09-02-native-mir-foundation-linux-arm64/README.md)
-- [ownership issue #201](https://github.com/type-rb/type-rb-native/issues/201)
-- [accepted pull request #202](https://github.com/type-rb/type-rb-native/pull/202)
-- [derived ownership issue #204](https://github.com/type-rb/type-rb-native/issues/204)
-- [accepted pull request #205](https://github.com/type-rb/type-rb-native/pull/205)
-- [exact index-consumption issue #209](https://github.com/type-rb/type-rb-native/issues/209)
-- [accepted pull request #210](https://github.com/type-rb/type-rb-native/pull/210)
-- [target-independent resolver issue #212](https://github.com/type-rb/type-rb-native/issues/212)
-- [accepted pull request #213](https://github.com/type-rb/type-rb-native/pull/213)
-- [static cross-target run](https://github.com/type-rb/type-rb-native/actions/runs/33642222492)
-- [target regressions run](https://github.com/type-rb/type-rb-native/actions/runs/33642222266)
-- [persistent-worker run](https://github.com/type-rb/type-rb-native/actions/runs/33642222441)
-- [complete Native gates run](https://github.com/type-rb/type-rb-native/actions/runs/33642222395)
+- [scalar connection issue #218](https://github.com/type-rb/type-rb-native/issues/218)
+- [measured envelope issue #221](https://github.com/type-rb/type-rb-native/issues/221)
+- [accepted pull request #220](https://github.com/type-rb/type-rb-native/pull/220)
+- [final static comparison](https://github.com/type-rb/type-rb-native/actions/runs/33676174683)
+- [Linux target regressions](https://github.com/type-rb/type-rb-native/actions/runs/33676174697)
+- [persistent-worker checks](https://github.com/type-rb/type-rb-native/actions/runs/33676174785)
+- [complete Native gates](https://github.com/type-rb/type-rb-native/actions/runs/33676174660)
