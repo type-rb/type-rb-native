@@ -144,11 +144,21 @@ a time.
   finishing the current fact family. Do not use section granularity to excuse
   code growth or to begin another semantic family early.
 - For each successive structural slice, first retain a rejected diagnostic run
-  under the current policy, then register the exact measured revision, target
-  sizes, one-time ratios, superseded ownership, and recovery point in a new
-  validated marker. A marker transition is exceptional only while the baseline
-  lacks that exact marker. Do not extend its limits after a marked candidate
-  fails, and do not use it to carry the next fact family.
+  under the current policy, then measure the complete local candidate and
+  register its exact source digests, target sizes, one-time ratios, superseded
+  ownership, and recovery point in a new validated marker before publishing
+  the candidate. Use an exact public revision when one already exists; exact
+  source digests are the pre-publication identity when publishing first would
+  make the measurement policy retrospective. A marker transition is
+  exceptional only while the baseline lacks that exact marker. Do not extend
+  its limits after a marked candidate fails, and do not use it to carry the
+  next fact family.
+- The `native-mir-array-reduction-v1` allowance applies only to the exact
+  two-phi `Array<Integer>` reduction slice and its removal of token/control and
+  mutable-stack emission ownership. Keep the ordinary 1.05 compiler, build,
+  and RSS ratios and the 2.0 catastrophic bound. Recover the complete
+  portable-range/index/induction family increase before starting another
+  portable fact family.
 
 ## Verify
 

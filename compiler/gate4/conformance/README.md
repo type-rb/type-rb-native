@@ -49,6 +49,8 @@ The valid cases cover:
 - zero-based and bounded-derived unit-step induction loops whose nested Array
   reads retain the unsigned upper-bounds check, followed by a reset and
   ordinary negative indexing in `valid/nonnegative-loop-index.trb`;
+- verified two-phi `Array<Integer>` reduction, including the empty identity,
+  in `valid/integer-array-reduction.trb`;
 - left-to-right, exactly-once argument evaluation through a bounded scalar
   leaf call in `valid/scalar-leaf-inline.trb`;
 - checked Integer multiplication at the bounded nonnegative fast-entry
@@ -85,6 +87,9 @@ stdout, and panic text must agree across the updated B2/B3/B4 compilers.
 The bounded literal-addition entry is likewise paired with
 `runtime-invalid/integer-literal-add-one-sided-overflow.trb` so the removed
 lower check cannot weaken the retained upper-bound failure.
+The verified reduction accumulator is paired with
+`runtime-invalid/integer-array-reduction-overflow.trb` so its phi lowering
+cannot weaken checked Integer addition.
 
 The `mutations` directory contains a base program and two independently changed
 sources. All three must produce distinct QBE and distinct runtime output. This

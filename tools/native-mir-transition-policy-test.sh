@@ -15,12 +15,20 @@ baseline=$test_root/baseline
 mkdir -p "$candidate/compiler/gate4" "$baseline/compiler/gate4"
 cp "$script_directory/../$NATIVE_MIR_INDUCTION_PHI_MARKER" \
 	"$candidate/$NATIVE_MIR_INDUCTION_PHI_MARKER"
+cp "$script_directory/../$NATIVE_MIR_ARRAY_REDUCTION_MARKER" \
+	"$candidate/$NATIVE_MIR_ARRAY_REDUCTION_MARKER"
 
-test "$(native_mir_target_compiler_limit darwin-arm64-v0)" = 334000
-test "$(native_mir_target_compiler_limit linux-arm64-v0)" = 310000
+test "$(native_mir_target_compiler_limit darwin-arm64-v0)" = 350000
+test "$(native_mir_target_compiler_limit linux-arm64-v0)" = 317000
 test "$(native_mir_target_compiler_limit linux-amd64-v0)" = 310000
-test "$NATIVE_MIR_COMBINED_COMPILER_LIMIT" = 644000
+test "$NATIVE_MIR_COMBINED_COMPILER_LIMIT" = 667000
+test "$(native_mir_target_text_limit darwin-arm64-v0)" = 250904
+test "$(native_mir_target_text_limit linux-arm64-v0)" = 253424
+test "$NATIVE_MIR_TARGET_NEUTRAL_QBE_LIMIT" = 1120000
 if native_mir_target_compiler_limit unknown-target >/dev/null; then
+	exit 1
+fi
+if native_mir_target_text_limit linux-amd64-v0 >/dev/null; then
 	exit 1
 fi
 
@@ -63,9 +71,17 @@ cp "$candidate/$NATIVE_MIR_CONTROL_FLOW_MARKER" \
 if native_mir_control_flow_transition "$candidate" "$baseline"; then
 	exit 1
 fi
-test "$(native_mir_transition_mode "$candidate" "$baseline")" = ordinary
+native_mir_array_reduction_marker_valid "$candidate"
+native_mir_array_reduction_transition "$candidate" "$baseline"
+test "$(native_mir_transition_mode "$candidate" "$baseline")" = array-reduction-transition
 test "$(native_mir_compiler_ratio_limit "$candidate" "$baseline")" = 1.05
 test "$(native_mir_build_ratio_limit "$candidate" "$baseline")" = 1.05
+
+cp "$candidate/$NATIVE_MIR_ARRAY_REDUCTION_MARKER" \
+	"$baseline/$NATIVE_MIR_ARRAY_REDUCTION_MARKER"
+if native_mir_array_reduction_transition "$candidate" "$baseline"; then
+	exit 1
+fi
 
 native_mir_transition_markers_valid "$candidate"
 native_mir_induction_phi_recovery "$candidate" "$baseline"
@@ -105,6 +121,12 @@ fi
 printf 'policy=native-mir-induction-phi-v1\n' \
 	> "$candidate/$NATIVE_MIR_INDUCTION_PHI_MARKER"
 if native_mir_induction_phi_marker_valid "$candidate"; then
+	exit 1
+fi
+
+printf 'policy=native-mir-array-reduction-v1\n' \
+	> "$candidate/$NATIVE_MIR_ARRAY_REDUCTION_MARKER"
+if native_mir_array_reduction_marker_valid "$candidate"; then
 	exit 1
 fi
 

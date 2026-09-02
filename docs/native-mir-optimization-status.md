@@ -1,14 +1,14 @@
 # Native MIR optimization transition status
 
-Status: experimental, accepted through revision
-`1c5120841124405d88d85a0147406216cca8b30b`.
+Status: experimental. The checked-in scope includes the accepted induction-phi
+recovery and the measured `Array<Integer>` reduction slice from issue #230.
 
 The ordinary self-hosted frontend now builds one compiler-owned Native MIR
 module for selected immutable scalar-leaf functions and one exact
-`Array<Integer>` induction helper. The structured checker stages typed values,
-instructions, blocks, block parameters, and failure edges during its existing
-traversal, publishes only complete functions, and verifies the complete module
-before QBE emission.
+`Array<Integer>` induction/reduction helper family. The structured checker
+stages typed values, instructions, blocks, block parameters, and failure edges
+during its existing traversal, publishes only complete functions, and verifies
+the complete module before QBE emission.
 The verified subset covers `Integer`, `Float`, and `Boolean` parameters and
 results, exact scalar literals, unary operations, numeric and comparison binary
 operations, checked Integer failure edges, and Integer-to-Float conversion.
@@ -26,10 +26,12 @@ lowering. The selected helper carries entry, loop header, body, backedge, exit,
 checked-Integer failure, and Array-bounds failure through verified MIR. Its
 canonical zero-origin/unit-step induction proof authorizes omission of negative
 index normalization without a token-side fact carrier. Its verified header
-block parameter now lowers directly to a QBE `phi`; the former induction
-`alloc8`, header `loadl`, and backedge `storel` are absent. Calls, records,
-managed values, nested loops, and unsupported helper shapes retain the accepted
-direct path without partial MIR publication.
+block parameters lower directly to QBE `phi` instructions for both the index
+and reduction accumulator. The former induction and accumulator `alloc8`,
+`loadl`, and `storel` traffic is absent. Checked accumulator addition retains
+its explicit Integer failure edge, and indexed access retains its Array-bounds
+failure edge. Calls, records, managed values, nested loops, and unsupported
+helper shapes retain the accepted direct path without partial MIR publication.
 
 ## Retained boundary
 
@@ -49,8 +51,8 @@ direct path without partial MIR publication.
 
 ## Measured transition envelope
 
-The accepted fixed compilers are 332,696 Darwin arm64 bytes and 308,592 Linux
-arm64 bytes, 641,288 bytes combined. The QBE-phi recovery leaves the page-aligned
+The induction-phi recovery fixed compilers are 332,696 Darwin arm64 bytes and
+308,592 Linux arm64 bytes, 641,288 bytes combined. It leaves the page-aligned
 Darwin artifact unchanged, reduces the Linux artifact by 64 bytes, and reduces
 the same-run Mach-O `__text` section from 243,648 to 243,568 bytes and ELF
 `.text` section from 246,240 to 246,144 bytes. The target-neutral fixed compiler
@@ -65,6 +67,17 @@ ratios of 1.052223/1.067669/1.000199 and Linux arm64 ratios of
 1.066390/1.076923/0.999461. They pass the registered transition limits. Later
 ordinary changes return to the 1.05 compiler/build/RSS ratios; every retained
 observation remains subject to the unchanged 2.0 catastrophic bound.
+
+Issue #230 then measures the complete two-phi reduction candidate at 349,216
+Darwin arm64 bytes and 315,936 Linux arm64 bytes, 665,152 bytes combined. Its
+Mach-O `__text` and ELF `.text` sections are 250,904 and 253,424 bytes. Both
+targets emit byte-identical target-neutral compiler QBE of 1,119,461 bytes with
+SHA-256
+`f1840baf7324ac3d926a42c64a604316fba1d97cce892a10654acdfc91452ef5`.
+The checked-in marker freezes ceilings of 350,000, 317,000, 667,000, and
+1,120,000 bytes respectively. It grants no relative-ratio exception: the
+ordinary 1.05 compiler/build/RSS limits and 2.0 catastrophic bound remain in
+force.
 
 The earlier managed-runtime smoke records a 332,736-byte stripped Darwin
 compiler, 0.70-second runtime, zero final live managed bytes, and a
@@ -90,6 +103,7 @@ Public evidence:
 - [control-flow pull request #224](https://github.com/type-rb/type-rb-native/pull/224)
 - [induction-phi recovery issue #227](https://github.com/type-rb/type-rb-native/issues/227)
 - [induction-phi pull request #228](https://github.com/type-rb/type-rb-native/pull/228)
+- [Array reduction issue #230](https://github.com/type-rb/type-rb-native/issues/230)
 - [accepted pull request #220](https://github.com/type-rb/type-rb-native/pull/220)
 - [final static comparison](https://github.com/type-rb/type-rb-native/actions/runs/33682830363)
 - [Linux target regressions](https://github.com/type-rb/type-rb-native/actions/runs/33682830410)

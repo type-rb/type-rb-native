@@ -186,6 +186,11 @@ jobs:
             "$GITHUB_WORKSPACE" "$RUNNER_TEMP/baseline-source"; then
             induction_phi_recovery=1
           fi
+          array_reduction_transition=0
+          if native_mir_array_reduction_transition \
+            "$GITHUB_WORKSPACE" "$RUNNER_TEMP/baseline-source"; then
+            array_reduction_transition=1
+          fi
           mkdir -p "$evidence" "$RUNNER_TEMP/interleaved-builds"
           printf 'metric\tstage\tbaseline\tcandidate\tcandidate_baseline_ratio\tmaximum\tstatus\n' \
             > "$evidence/comparison.tsv"
@@ -200,6 +205,7 @@ jobs:
             printf 'fixed_point_adjacencies=pooled-b2-b3-and-b3-b4-byte-identical-builds\n'
             printf 'native_mir_policy_mode=%s\n' "$policy_mode"
             printf 'induction_phi_recovery=%s\n' "$induction_phi_recovery"
+            printf 'array_reduction_transition=%s\n' "$array_reduction_transition"
             printf 'compiler_ratio_limit=%s\n' "$compiler_ratio_limit"
             printf 'build_ratio_limit=%s\n' "$build_ratio_limit"
             printf 'rss_ratio_limit=%s\n' "$NATIVE_MIR_RSS_RATIO_LIMIT"
@@ -409,6 +415,14 @@ jobs:
             if test "$candidate_text_size" -ge "$baseline_text_size"; then
               text_status=fail
             fi
+          else
+            if test "$array_reduction_transition" -eq 1; then
+              text_status=pass
+              text_limit=$(native_mir_target_text_limit "$PROFILE")
+              if test "$candidate_text_size" -gt "$text_limit"; then
+                text_status=fail
+              fi
+            fi
           fi
           printf '%s\t%s\t%s\t%s\n' \
             "$TARGET" "$baseline_text_size" "$candidate_text_size" "$text_status" \
@@ -446,6 +460,10 @@ jobs:
           if test "$induction_phi_recovery" -eq 1; then
             test "$fixed_qbe_size" -lt "$baseline_fixed_qbe_size"
             test "$fixed_qbe_size" -lt 1089635
+          else
+            if test "$array_reduction_transition" -eq 1; then
+              test "$fixed_qbe_size" -le "$NATIVE_MIR_TARGET_NEUTRAL_QBE_LIMIT"
+            fi
           fi
           {
             printf 'target=%s\n' "$TARGET"
@@ -456,6 +474,7 @@ jobs:
             printf 'candidate_text_bytes=%s\n' "$candidate_text_size"
             printf 'native_mir_policy_mode=%s\n' "$policy_mode"
             printf 'induction_phi_recovery=%s\n' "$induction_phi_recovery"
+            printf 'array_reduction_transition=%s\n' "$array_reduction_transition"
             printf 'compiler_ratio_limit=%s\n' "$compiler_ratio_limit"
             printf 'build_ratio_limit=%s\n' "$build_ratio_limit"
             printf 'baseline_fixed_point_qbe_size=%s\n' "$baseline_fixed_qbe_size"
@@ -611,7 +630,10 @@ jobs:
           linux_text_size=$(awk -F= '$1 == "candidate_text_bytes" {print $2}' "$linux")
           darwin_recovery=$(awk -F= '$1 == "induction_phi_recovery" {print $2}' "$darwin")
           linux_recovery=$(awk -F= '$1 == "induction_phi_recovery" {print $2}' "$linux")
+          darwin_reduction=$(awk -F= '$1 == "array_reduction_transition" {print $2}' "$darwin")
+          linux_reduction=$(awk -F= '$1 == "array_reduction_transition" {print $2}' "$linux")
           test "$darwin_recovery" = "$linux_recovery"
+          test "$darwin_reduction" = "$linux_reduction"
           test "$darwin_size" -le "$NATIVE_MIR_DARWIN_COMPILER_LIMIT"
           test "$linux_size" -le "$NATIVE_MIR_LINUX_COMPILER_LIMIT"
           combined=$((darwin_size + linux_size))
@@ -626,6 +648,9 @@ jobs:
           linux_qbe_sha256=$(awk -F= '$1 == "fixed_point_qbe_sha256" {print $2}' "$linux")
           test "$darwin_qbe_size" = "$linux_qbe_size"
           test "$darwin_qbe_sha256" = "$linux_qbe_sha256"
+          if test "$darwin_reduction" -eq 1; then
+            test "$darwin_qbe_size" -le "$NATIVE_MIR_TARGET_NEUTRAL_QBE_LIMIT"
+          fi
           {
             printf 'darwin_arm64_compiler_bytes=%s\n' "$darwin_size"
             printf 'linux_arm64_compiler_bytes=%s\n' "$linux_size"
@@ -635,6 +660,7 @@ jobs:
             printf 'darwin_arm64_text_bytes=%s\n' "$darwin_text_size"
             printf 'linux_arm64_text_bytes=%s\n' "$linux_text_size"
             printf 'induction_phi_recovery=%s\n' "$darwin_recovery"
+            printf 'array_reduction_transition=%s\n' "$darwin_reduction"
             printf 'target_neutral_qbe_bytes=%s\n' "$darwin_qbe_size"
             printf 'target_neutral_qbe_sha256=%s\n' "$darwin_qbe_sha256"
           } > "$RUNNER_TEMP/cross-target.txt"
