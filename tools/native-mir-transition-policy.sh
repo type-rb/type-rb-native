@@ -8,6 +8,7 @@
 NATIVE_MIR_FOUNDATION_MARKER=compiler/gate4/native-mir-foundation-v1.txt
 NATIVE_MIR_SCALAR_CONNECTION_MARKER=compiler/gate4/native-mir-scalar-connection-v1.txt
 NATIVE_MIR_CONTROL_FLOW_MARKER=compiler/gate4/native-mir-control-flow-v1.txt
+NATIVE_MIR_INDUCTION_PHI_MARKER=compiler/gate4/native-mir-induction-phi-v1.txt
 NATIVE_MIR_DARWIN_COMPILER_LIMIT=334000
 NATIVE_MIR_LINUX_COMPILER_LIMIT=310000
 # Linux amd64 remains below its pre-existing ceiling; the control-flow
@@ -85,10 +86,28 @@ native_mir_control_flow_marker_valid() {
 		test "$(grep -Fxc 'recovery_before=next-portable-fact-family' "$native_mir_marker")" -eq 1
 }
 
+native_mir_induction_phi_marker_valid() {
+	native_mir_marker=$1/$NATIVE_MIR_INDUCTION_PHI_MARKER
+	test -f "$native_mir_marker" &&
+		test "$(grep -Fxc 'policy=native-mir-induction-phi-v1' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'baseline_revision=58836d6177cfa32d32fcb17805f37149de2dc49a' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'diagnostic_revision=746be6fafeb181b92776fc24c887031f80d2dcaa' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'local_darwin_arm64_baseline_text_bytes=243648' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'local_darwin_arm64_candidate_text_bytes=243568' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'baseline_target_neutral_qbe_bytes=1089635' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'diagnostic_target_neutral_qbe_bytes=1089474' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'complete_compiler_signal=no-growth-per-bounded-slice' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'code_section_signal=strict-shrink-per-arm64-target' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'cumulative_recovery=complete-compiler-artifacts-shrink-before-family-completion' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'recovery_family=portable-range-index-induction' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'recovery_before=next-portable-fact-family' "$native_mir_marker")" -eq 1
+}
+
 native_mir_transition_markers_valid() {
 	native_mir_foundation_marker_valid "$1" &&
 		native_mir_scalar_connection_marker_valid "$1" &&
-		native_mir_control_flow_marker_valid "$1"
+		native_mir_control_flow_marker_valid "$1" &&
+		native_mir_induction_phi_marker_valid "$1"
 }
 
 native_mir_target_compiler_limit() {
@@ -119,6 +138,13 @@ native_mir_control_flow_transition() {
 	native_mir_baseline_root=$2
 	native_mir_control_flow_marker_valid "$native_mir_candidate_root" &&
 		test ! -f "$native_mir_baseline_root/$NATIVE_MIR_CONTROL_FLOW_MARKER"
+}
+
+native_mir_induction_phi_recovery() {
+	native_mir_candidate_root=$1
+	native_mir_baseline_root=$2
+	native_mir_induction_phi_marker_valid "$native_mir_candidate_root" &&
+		test ! -f "$native_mir_baseline_root/$NATIVE_MIR_INDUCTION_PHI_MARKER"
 }
 
 native_mir_transition_mode() {

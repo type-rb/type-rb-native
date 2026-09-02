@@ -51,6 +51,11 @@ TypeRB backend or product commitment.
   marker before changing its limits. After the marker reaches the baseline,
   ordinary relative limits apply again; do not begin another fact family until
   the registered direct-emitter recovery is complete.
+- For a bounded removal slice whose complete compiler is unchanged only by
+  executable-format alignment, require strict same-run code-section and
+  target-neutral-QBE shrinkage plus complete-compiler non-growth on every
+  registered target. Keep cumulative complete-artifact shrinkage mandatory
+  before the current MIR fact family is declared recovered.
 - Record benchmark inputs, commands, revisions, hardware, operating system,
   toolchain versions, cache state, repetitions, and raw results. Include every
   required sidecar, linker, and runtime in size comparisons.
