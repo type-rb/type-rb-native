@@ -483,6 +483,17 @@ allowance must be recovered as portable range, index, and induction ownership
 moves out of the direct emitter. See the
 [recorded foundation result](results/2026-09-02-native-mir-foundation-linux-arm64/README.md).
 
+The first ordinary optimization fact now crosses that boundary at accepted
+revision `a9224bffcd6c28c9cf1dfce85ecb80c1ae096280`. Structured checking records
+only the exact literal-zero, checked-unit-step nonnegative induction fact in
+target-neutral checked-program storage; the QBE Array-address adapter consumes
+the fact without reconstructing it from source tokens. The accepted static
+compilers are 299,656 bytes on Darwin arm64 and 271,944 bytes on Linux arm64,
+571,600 bytes combined, and the target-neutral compiler QBE is byte-identical
+across both targets. General function/block/value MIR lowering, the derived
+fact path, and removal of the temporary emitted-value carrier remain open. See
+the [current Native MIR optimization status](docs/native-mir-optimization-status.md).
+
 Gate 6N passes every frozen condition for the internal
 `linux-amd64-v0` profile. The exact merged compiler closes a 240,888-byte
 Go-free B2/B3/B4 fixed point, emits byte-identical target-neutral compiler and
