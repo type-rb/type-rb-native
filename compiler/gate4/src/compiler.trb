@@ -71,7 +71,8 @@ end
 record Gate4CheckedValue
 	type_name: String
 	category: Integer
-	name: String
+	# Exact token index; the portable Integer maximum represents no source value.
+	origin: Integer
 	mutable: Integer
 end
 
@@ -200,14 +201,6 @@ def gate4_mir_origin_valid(source: Integer, line: Integer, source_count: Integer
 		end
 	end
 	return false
-end
-
-def gate4_mir_type_valid(value_type: Integer): Boolean
-	# 1 Integer, 2 Boolean, 3 Array<Integer>, 4 Array element address.
-	if value_type < 1
-		return false
-	end
-	return value_type <= 4
 end
 
 def gate4_mir_function_index(native_module: Gate4MirModule, function_id: Integer): Integer
@@ -755,7 +748,10 @@ def gate4_verify_mir(native_module: Gate4MirModule): String
 		if value[1] < 0
 			return "MIR value identity is invalid"
 		end
-		if !gate4_mir_type_valid(value[2])
+		if value[2] < 1
+			return "MIR value type is invalid"
+		end
+		if value[2] > 4
 			return "MIR value type is invalid"
 		end
 		if !gate4_mir_origin_valid(value[3], value[4], native_module.source_count)
@@ -3115,7 +3111,16 @@ def gate4_emit_binary(
 		left: Gate4EmittedValue,
 		right: Gate4EmittedValue,
 	): Gate4EmittedValue
-	result_type := gate4_binary_result_type_name(operator, left.type_name, right.type_name)
+	mut result_type := left.type_name
+	if right.type_name == "Float"
+		result_type = "Float"
+	end
+	if left.type_name == "Float"
+		result_type = "Float"
+	end
+	if gate4_binary_precedence(operator) == 1
+		result_type = "Boolean"
+	end
 	result := gate4_emit_temporary(context)
 	mut left_operand := left.operand
 	mut right_operand := right.operand
@@ -3270,19 +3275,6 @@ def gate4_emit_binary(
 	)
 	gate4_output_line(output, "\t" + result + " =l extuw " + word)
 	return gate4_emitted_value(result, "Boolean", 0, "", 0, "")
-end
-
-def gate4_binary_result_type_name(operator: String, left: String, right: String): String
-	if gate4_binary_precedence(operator) == 1
-		return "Boolean"
-	end
-	if left == "Float"
-		return "Float"
-	end
-	if right == "Float"
-		return "Float"
-	end
-	return left
 end
 
 def gate4_emit_expression(
@@ -5933,14 +5925,6 @@ def gate4_path_root_key(name: String): String
 	return gate4_ascii_fold(without_underscores)
 end
 
-def gate4_import_root_segment(module_name: String): String
-	mut logical := module_name
-	if gate4_path_basename(logical) == "index"
-		logical = gate4_path_directory(logical)
-	end
-	return gate4_path_basename(logical)
-end
-
 def gate4_standard_package_target(path: String): Integer
 	if path == "trb/std/process"
 		return - 2
@@ -6936,7 +6920,11 @@ def gate4_resolve_bare_imports(mut state: Gate4Compiler): Boolean
 					return false
 				end
 			else
-				segment := gate4_import_root_segment(gate4_load_string(state.module_names, target))
+				mut segment := gate4_load_string(state.module_names, target)
+				if gate4_path_basename(segment) == "index"
+					segment = gate4_path_directory(segment)
+				end
+				segment = gate4_path_basename(segment)
 				wanted := gate4_path_root_key(segment)
 				mut matches := 0
 				mut declaration := ""
@@ -7331,13 +7319,13 @@ end
 def gate4_checked_value(
 		type_name: String,
 		category: Integer,
-		name: String,
+		origin: Integer,
 		mutable: Integer,
 	): Gate4CheckedValue
 	return Gate4CheckedValue.new(
 		type_name: type_name,
 		category: category,
-		name: name,
+		origin: origin,
 		mutable: mutable,
 	)
 end
@@ -7348,7 +7336,7 @@ def gate4_type_diagnostic(
 		message: String,
 	): Gate4CheckedValue
 	gate4_diagnostic(state, "TRBN4004", line, message)
-	return gate4_checked_value("Invalid", 0, "", 0)
+	return gate4_checked_value("Invalid", 0, 9007199254740991, 0)
 end
 
 def gate4_numeric_type(type_name: String): Boolean
@@ -7424,7 +7412,7 @@ def gate4_check_array_literal(
 		end
 	end
 	if !gate4_expect(state, position, "]")
-		return gate4_checked_value("Invalid", 0, "", 0)
+		return gate4_checked_value("Invalid", 0, 9007199254740991, 0)
 	end
 	if element_type == ""
 		return gate4_type_diagnostic(state, line, "empty Array literal requires a contextual type")
@@ -7434,7 +7422,7 @@ def gate4_check_array_literal(
 		return gate4_type_diagnostic(state, line, "unsupported Array element type " + element_type)
 	end
 	gate4_check_expected(state, result_type, expected, line)
-	return gate4_checked_value(result_type, 0, "", 1)
+	return gate4_checked_value(result_type, 0, 9007199254740991, 1)
 end
 
 def gate4_check_primary(
@@ -7443,25 +7431,26 @@ def gate4_check_primary(
 		mut locals: Gate4Locals,
 		expected: String,
 	): Gate4CheckedValue
-	line := gate4_load_integer(state.token_lines, position[0])
-	kind := gate4_load_integer(state.token_kinds, position[0])
+	origin := position[0]
+	line := gate4_load_integer(state.token_lines, origin)
+	kind := gate4_load_integer(state.token_kinds, origin)
 	if kind == 2
-		literal := gate4_load_string(state.token_texts, position[0])
+		literal := gate4_load_string(state.token_texts, origin)
 		gate4_advance(position)
 		if gate4_number_is_float(literal)
 			if !gate4_float_literal_in_range(literal)
 				return gate4_type_diagnostic(state, line, "Float literal is outside the finite binary64 range")
 			end
-			return gate4_checked_value("Float", 0, "", 0)
+			return gate4_checked_value("Float", 0, origin, 0)
 		end
 		if !gate4_integer_literal_in_range(literal)
 			return gate4_type_diagnostic(state, line, "Integer literal is outside the portable range")
 		end
-		return gate4_checked_value("Integer", 0, literal, 0)
+		return gate4_checked_value("Integer", 0, origin, 0)
 	end
 	if kind == 3
 		gate4_advance(position)
-		return gate4_checked_value("String", 0, "", 0)
+		return gate4_checked_value("String", 0, origin, 0)
 	end
 	if gate4_token_is(state, position[0], "[")
 		return gate4_check_array_literal(state, position, locals, expected)
@@ -7484,7 +7473,7 @@ def gate4_check_primary(
 		)
 		gate4_check_expected(state, value.type_name, "Boolean", line)
 		gate4_check_expected(state, "Boolean", expected, line)
-		return gate4_checked_value("Boolean", 0, "", 0)
+		return gate4_checked_value("Boolean", 0, 9007199254740991, 0)
 	end
 	if gate4_token_is(state, position[0], "-")
 		gate4_advance(position)
@@ -7497,7 +7486,7 @@ def gate4_check_primary(
 		if !gate4_numeric_type(value.type_name)
 			return gate4_type_diagnostic(state, line, "unary - requires Integer or Float")
 		end
-		return gate4_checked_value(value.type_name, 0, "", 0)
+		return gate4_checked_value(value.type_name, 0, 9007199254740991, 0)
 	end
 	if gate4_token_is(state, position[0], "+")
 		gate4_advance(position)
@@ -7510,38 +7499,38 @@ def gate4_check_primary(
 		if !gate4_numeric_type(value.type_name)
 			return gate4_type_diagnostic(state, line, "unary + requires Integer or Float")
 		end
-		return gate4_checked_value(value.type_name, 0, "", 0)
+		return gate4_checked_value(value.type_name, 0, 9007199254740991, 0)
 	end
 	if kind == 1
-		name := gate4_load_string(state.token_texts, position[0])
+		name := gate4_load_string(state.token_texts, origin)
 		gate4_advance(position)
 		if name == "true"
-			return gate4_checked_value("Boolean", 0, "", 0)
+			return gate4_checked_value("Boolean", 0, origin, 0)
 		end
 		if name == "false"
-			return gate4_checked_value("Boolean", 0, "", 0)
+			return gate4_checked_value("Boolean", 0, origin, 0)
 		end
 		local_index := gate4_local_find(locals, name)
 		if local_index >= 0
 			return gate4_checked_value(
 				gate4_load_string(locals.types, local_index),
 				0,
-				name,
+				origin,
 				gate4_load_integer(locals.mutable, local_index),
 			)
 		end
 		standard_package := gate4_standard_package_import(state, state.active_module[0], name)
 		if standard_package < - 1
-			return gate4_checked_value(gate4_standard_package_root(standard_package), 2 - standard_package, name, 0)
+			return gate4_checked_value(gate4_standard_package_root(standard_package), 2 - standard_package, origin, 0)
 		end
 		if name == "puts"
-			return gate4_checked_value("", 1, name, 0)
+			return gate4_checked_value("", 1, origin, 0)
 		end
 		if gate4_find_visible_function(state, state.active_module[0], name) >= 0
-			return gate4_checked_value("", 1, name, 0)
+			return gate4_checked_value("", 1, origin, 0)
 		end
 		if gate4_find_visible_record(state, state.active_module[0], name) >= 0
-			return gate4_checked_value("", 2, name, 0)
+			return gate4_checked_value("", 2, origin, 0)
 		end
 		return gate4_type_diagnostic(state, line, "unresolved value " + name)
 	end
@@ -7552,24 +7541,25 @@ def gate4_check_call(
 		mut state: Gate4Compiler,
 		mut position: Array<Integer>,
 		mut locals: Gate4Locals,
-		callee: Gate4CheckedValue,
+		callee_category: Integer,
+		callee_name: String,
 	): Gate4CheckedValue
 	line := gate4_load_integer(state.token_lines, position[0])
 	gate4_advance(position)
 	gate4_skip_newlines(state, position)
-	mut function_index := gate4_find_visible_function(state, state.active_module[0], callee.name)
+	mut function_index := gate4_find_visible_function(state, state.active_module[0], callee_name)
 	mut parameter_start := 0
 	mut parameter_count := 1
 	mut result_type := "Void"
-	if callee.name == "puts"
+	if callee_name == "puts"
 		function_index =- 1
 	else
-		if callee.category == 4
+		if callee_category == 4
 			function_index =- 1
 			parameter_count = 0
 			result_type = "Array<String>"
 		else
-			if callee.category == 5
+			if callee_category == 5
 				function_index =- 1
 				result_type = "Float"
 			else
@@ -7590,14 +7580,14 @@ def gate4_check_call(
 			finished = true
 		else
 			mut argument_expected := "Invalid"
-			if callee.category >= 4
+			if callee_category >= 4
 				argument_expected = ""
 			end
 			if argument_count < parameter_count
-				if callee.category == 5
+				if callee_category == 5
 					argument_expected = "Float"
 				else
-					if callee.name == "puts"
+					if callee_name == "puts"
 						argument_expected = "String"
 					else
 						argument_expected = gate4_load_string(state.parameter_types, parameter_start + argument_count)
@@ -7616,9 +7606,9 @@ def gate4_check_call(
 	end
 	gate4_expect(state, position, ")")
 	if argument_count != parameter_count
-		gate4_diagnostic(state, "TRBN4004", line, "call argument count does not match " + callee.name)
+		gate4_diagnostic(state, "TRBN4004", line, "call argument count does not match " + callee_name)
 	end
-	return gate4_checked_value(result_type, 0, "", 0)
+	return gate4_checked_value(result_type, 0, 9007199254740991, 0)
 end
 
 def gate4_check_record_new(
@@ -7667,7 +7657,7 @@ def gate4_check_record_new(
 	if argument_index != field_count
 		gate4_diagnostic(state, "TRBN4004", line, "record field count does not match " + record_name)
 	end
-	return gate4_checked_value(gate4_record_type(record_index), 0, "", 1)
+	return gate4_checked_value(gate4_record_type(record_index), 0, 9007199254740991, 1)
 end
 
 def gate4_check_method_call(
@@ -7683,10 +7673,10 @@ def gate4_check_method_call(
 	if method == "size"
 		gate4_expect(state, position, ")")
 		if receiver.type_name == "String"
-			return gate4_checked_value("Integer", 0, "", 0)
+			return gate4_checked_value("Integer", 0, 9007199254740991, 0)
 		end
 		if gate4_array_element_type(receiver.type_name) != ""
-			return gate4_checked_value("Integer", 0, "", 0)
+			return gate4_checked_value("Integer", 0, 9007199254740991, 0)
 		end
 		return gate4_type_diagnostic(state, line, "size is unavailable on " + gate4_type_display(state, receiver.type_name))
 	end
@@ -7701,21 +7691,21 @@ def gate4_check_method_call(
 		gate4_check_expression(state, position, locals, 1, element_type)
 		gate4_skip_newlines(state, position)
 		gate4_expect(state, position, ")")
-		return gate4_checked_value("Void", 0, "", 0)
+		return gate4_checked_value("Void", 0, 9007199254740991, 0)
 	end
 	if method == "to_i"
 		gate4_expect(state, position, ")")
 		if receiver.type_name == "String"
-			return gate4_checked_value("Integer", 0, "", 0)
+			return gate4_checked_value("Integer", 0, 9007199254740991, 0)
 		end
 		if receiver.type_name == "Float"
-			return gate4_checked_value("Integer", 0, "", 0)
+			return gate4_checked_value("Integer", 0, 9007199254740991, 0)
 		end
 	end
 	if method == "to_s"
 		gate4_expect(state, position, ")")
 		if receiver.type_name == "Integer"
-			return gate4_checked_value("String", 0, "", 0)
+			return gate4_checked_value("String", 0, 9007199254740991, 0)
 		end
 	end
 	return gate4_type_diagnostic(state, line, "unsupported method " + method)
@@ -7727,7 +7717,7 @@ def gate4_check_postfix(
 		mut locals: Gate4Locals,
 		initial: Gate4CheckedValue,
 	): Gate4CheckedValue
-	mut value := gate4_checked_value(initial.type_name, initial.category, initial.name, initial.mutable)
+	mut value := gate4_checked_value(initial.type_name, initial.category, initial.origin, initial.mutable)
 	mut scanning := true
 	while scanning
 		if gate4_token_is(state, position[0], "(")
@@ -7739,7 +7729,13 @@ def gate4_check_postfix(
 				)
 				scanning = false
 			else
-				value = gate4_check_call(state, position, locals, value)
+				value = gate4_check_call(
+					state,
+					position,
+					locals,
+					value.category,
+					gate4_load_string(state.token_texts, value.origin),
+				)
 			end
 		else
 			if gate4_token_is(state, position[0], ".")
@@ -7762,7 +7758,12 @@ def gate4_check_postfix(
 					else
 						if value.category == 2
 							if member == "new"
-								value = gate4_check_record_new(state, position, locals, value.name)
+								value = gate4_check_record_new(
+									state,
+									position,
+									locals,
+									gate4_load_string(state.token_texts, value.origin),
+								)
 							else
 								value = gate4_type_diagnostic(
 									state,
@@ -7797,7 +7798,7 @@ def gate4_check_postfix(
 							value = gate4_checked_value(
 								gate4_load_string(state.field_types, field_index),
 								0,
-								member,
+								9007199254740991,
 								value.mutable,
 							)
 						end
@@ -7811,7 +7812,7 @@ def gate4_check_postfix(
 					gate4_store_integer(state.mir_nonnegative_facts, position[0], index.mutable)
 					gate4_expect(state, position, "]")
 					if value.type_name == "String"
-						value = gate4_checked_value("String", 0, "", 0)
+						value = gate4_checked_value("String", 0, 9007199254740991, 0)
 					else
 						element_type := gate4_array_element_type(value.type_name)
 						if element_type == ""
@@ -7822,7 +7823,7 @@ def gate4_check_postfix(
 							)
 							scanning = false
 						else
-							value = gate4_checked_value(element_type, 0, "", value.mutable)
+							value = gate4_checked_value(element_type, 0, 9007199254740991, value.mutable)
 						end
 					end
 				else
@@ -7964,12 +7965,16 @@ def gate4_check_expression(
 			mut fact := 0
 			if operator == "+"
 				if value.mutable < 0
-					if gate4_small_nonnegative_integer_operand(right.name)
-						fact = value.mutable
+					if right.origin != 9007199254740991
+						if gate4_small_nonnegative_integer_operand(
+								gate4_load_string(state.token_texts, right.origin),
+							)
+							fact = value.mutable
+						end
 					end
 				end
 			end
-			value = gate4_checked_value(result_type, 0, "", fact)
+			value = gate4_checked_value(result_type, 0, 9007199254740991, fact)
 		end
 	end
 	gate4_check_expected(state, value.type_name, expected, line)
@@ -8020,11 +8025,12 @@ def gate4_check_declaration(
 	value_type := value.type_name
 	mut fact := 0
 	if mutable == 1
-		if value.name == "0"
-			fact = 2
-		else
-			if value.mutable < 0
-				fact = value.mutable
+		if value.mutable < 0
+			fact = value.mutable
+		end
+		if value.origin != 9007199254740991
+			if gate4_load_string(state.token_texts, value.origin) == "0"
+				fact = 2
 			end
 		end
 	end
