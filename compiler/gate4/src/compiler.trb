@@ -11,7 +11,7 @@ record Gate4Compiler
 	token_texts: Gate4StringStorage
 	token_lines: Gate4IntegerStorage
 	token_count: Array<Integer>
-	mir_loop_facts: Gate4IntegerStorage
+	mir_nonnegative_facts: Gate4IntegerStorage
 	module_names: Gate4StringStorage
 	module_files: Gate4StringStorage
 	module_count: Array<Integer>
@@ -801,7 +801,7 @@ def gate4_compiler_new(capacity: Integer): Gate4Compiler
 		token_texts: gate4_string_storage(capacity),
 		token_lines: gate4_integer_storage(capacity),
 		token_count: [0],
-		mir_loop_facts: gate4_integer_storage(capacity),
+		mir_nonnegative_facts: gate4_integer_storage(capacity),
 		module_names: gate4_string_storage(capacity),
 		module_files: gate4_string_storage(capacity),
 		module_count: [0],
@@ -2921,7 +2921,6 @@ def gate4_emit_postfix(
 				if gate4_token_is(state, position[0], "[")
 					gate4_advance(position)
 					index := gate4_emit_expression(state, position, context, output, 1, "Integer")
-					gate4_expect(state, position, "]")
 					if value.type_name == "String"
 						result := gate4_emit_temporary(context)
 						gate4_output_line(
@@ -2939,13 +2938,17 @@ def gate4_emit_postfix(
 							end
 						end
 						if inline_address
+							mut fact := gate4_load_integer(state.mir_nonnegative_facts, position[0])
+							while fact < 0
+								fact = gate4_load_integer(state.mir_nonnegative_facts, - fact)
+							end
 							address = gate4_emit_array_address(
 								context,
 								output,
 								value.operand,
 								value.address,
 								index.operand,
-								index.mutable,
+								fact,
 							)
 						else
 							output.runtime_flags[3] = 1
@@ -2972,6 +2975,7 @@ def gate4_emit_postfix(
 							address,
 						)
 					end
+					gate4_expect(state, position, "]")
 				else
 					scanning = false
 				end
@@ -3139,13 +3143,6 @@ def gate4_emit_binary(
 		end
 	end
 	if operator == "+"
-		mut nonnegative := left.mutable
-		if nonnegative != 2
-			nonnegative = 0
-		end
-		if !gate4_small_nonnegative_integer_operand(right.operand)
-			nonnegative = 0
-		end
 		if left.type_name == "String"
 			gate4_output_line(
 				output,
@@ -3167,7 +3164,7 @@ def gate4_emit_binary(
 				gate4_emit_integer_call(output, result, "add", left.operand, right.operand)
 			end
 		end
-		return gate4_emitted_value(result, result_type, 0, "", nonnegative, "")
+		return gate4_emitted_value(result, result_type, 0, "", 0, "")
 	end
 	if operator == "-"
 		if result_type == "Float"
@@ -3472,12 +3469,6 @@ def gate4_emit_block(
 					gate4_invalidate_array_header_cache(context)
 				else
 					if gate4_token_is(state, position[0], "while")
-						mut mir_fact := gate4_load_integer(state.mir_loop_facts, position[0])
-						while mir_fact < 0
-							mir_fact = gate4_load_integer(state.mir_loop_facts, - mir_fact)
-						end
-						mir_nonnegative_local := context.local_count[0] - mir_fact
-						gate4_store_integer(context.local_mutable, mir_nonnegative_local, 2)
 						header := gate4_emit_label(context)
 						body := gate4_emit_label(context)
 						done := gate4_emit_label(context)
@@ -3514,7 +3505,6 @@ def gate4_emit_block(
 						end
 						gate4_invalidate_array_header_cache(context)
 						context.loop_depth[0] = context.loop_depth[0] - 1
-						gate4_store_integer(context.local_mutable, mir_nonnegative_local, 1)
 					else
 						if gate4_token_is(state, position[0], "return")
 							gate4_advance(position)
@@ -7828,7 +7818,8 @@ def gate4_check_postfix(
 				if gate4_token_is(state, position[0], "[")
 					line := gate4_load_integer(state.token_lines, position[0])
 					gate4_advance(position)
-					gate4_check_expression(state, position, locals, 1, "Integer")
+					index := gate4_check_expression(state, position, locals, 1, "Integer")
+					gate4_store_integer(state.mir_nonnegative_facts, position[0], index.mutable)
 					gate4_expect(state, position, "]")
 					if value.type_name == "String"
 						value = gate4_checked_value("String", 0, "", 0)
@@ -8041,7 +8032,7 @@ def gate4_check_declaration(
 	mut fact := 0
 	if mutable == 1
 		if value.name == "0"
-			fact = 1
+			fact = 2
 		else
 			if value.mutable < 0
 				fact = value.mutable
@@ -8155,7 +8146,7 @@ def gate4_check_block(
 								line = position[1]
 								gate4_store_integer(locals.mutable, candidate, - loop_start)
 							end
-							gate4_store_integer(state.mir_loop_facts, loop_start, line)
+							gate4_store_integer(state.mir_nonnegative_facts, loop_start, line)
 							line = gate4_load_integer(state.token_lines, position[0])
 							gate4_advance(position)
 							condition := gate4_check_expression(state, position, locals, 1, "Boolean")
@@ -8166,7 +8157,7 @@ def gate4_check_block(
 							locals.count[0] = saved_count
 							if active
 								if gate4_load_integer(locals.mutable, candidate) >= 0
-									gate4_store_integer(state.mir_loop_facts, loop_start, 0)
+									gate4_store_integer(state.mir_nonnegative_facts, loop_start, 0)
 								end
 								gate4_store_integer(locals.mutable, candidate, 1)
 							end
