@@ -483,18 +483,21 @@ allowance must be recovered as portable range, index, and induction ownership
 moves out of the direct emitter. See the
 [recorded foundation result](results/2026-09-02-native-mir-foundation-linux-arm64/README.md).
 
-The first two ordinary optimization facts now cross that boundary at accepted
-revision `cfcb587550b21736173d25ffc3c05adb246fa592`. Structured checking records
-the exact literal-zero, checked-unit-step nonnegative induction fact and the
+The current portable range/index/induction slice reaches accepted revision
+`c958426eb4a778f9019120b0f540bc9590f7db85`. Structured checking records the
+exact literal-zero, checked-unit-step nonnegative induction fact and the
 derived active-base-plus-small-nonnegative-literal fact in target-neutral
 checked-program storage. Nested facts retain an explicit dependency on the
-enclosing verified loop, and the QBE Array-address adapter consumes the chain
-without reconstructing it from source tokens or rescanning the lexical loop.
-The accepted static compilers are 299,656 bytes on Darwin arm64 and 271,928
-bytes on Linux arm64, 571,584 bytes combined, and the target-neutral compiler
-QBE is byte-identical across both targets. General function/block/value MIR
-lowering, a general expression-origin/range representation, and removal of the
-temporary emitted-value carrier remain open. See the
+enclosing verified loop. Each checked Array-index postfix now records its exact
+fact origin, and the QBE Array-address adapter consumes that origin at the same
+postfix without reconstructing it from source tokens, rescanning the lexical
+loop, or carrying range state through emitted expression values. The accepted
+static compilers remain 299,656 bytes on Darwin arm64 and 271,928 bytes on
+Linux arm64, 571,584 bytes combined. Target-neutral compiler QBE is
+byte-identical across both targets and decreases by 1,025 bytes to 955,189
+bytes. General function/block/value MIR lowering, a reusable expression-origin
+and range model, and replacement of the broader emitted-value representation
+remain open. See the
 [current Native MIR optimization status](docs/native-mir-optimization-status.md).
 
 Gate 6N passes every frozen condition for the internal
