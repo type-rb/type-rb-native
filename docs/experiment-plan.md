@@ -106,17 +106,22 @@ local optimization candidates were not silently relaxed. The first structural
 MIR issue measured the minimal skeleton before freezing separate ceilings of
 302,000 bytes on Darwin arm64, 272,000 bytes on Linux arm64, and 574,000 bytes
 combined. The later scalar-connection measurement freezes the next temporary
-envelope at 317,000, 290,000, and 607,000 bytes respectively. The exact
-foundation transition alone may use its `1.07x` compiler-size and `1.12x`
-build-time ratios; the exact scalar-connection transition alone may use
-`1.07x` and `1.15x`. Later ordinary changes return to `1.05x`. RSS,
+envelope at 317,000, 290,000, and 607,000 bytes respectively. The first
+complete control-flow connection was then measured at 332,696 Darwin arm64
+bytes, 308,656 Linux arm64 bytes, and 641,352 bytes combined before issue #225
+froze ceilings of 334,000, 310,000, and 644,000 bytes. The exact foundation
+transition alone may use its `1.07x` compiler-size and `1.12x` build-time
+ratios; the exact scalar-connection transition alone may use `1.07x` and
+`1.15x`; and the exact control-flow transition alone may use `1.08x` and
+`1.25x`. Later ordinary changes return to `1.05x`. RSS,
 fixed-point, generated-QBE/application identity, catastrophic, process, stack,
 and cleanup bounds remain independently enforced. The complete temporary
 increase must be recovered by the end of portable range, index, and induction
 migration, before the next fact family. The long-term Go-competitive build and
 generated-artifact objectives remain mandatory. See the
-[recorded foundation result](../results/2026-09-02-native-mir-foundation-linux-arm64/README.md)
-and [scalar-connection freeze](https://github.com/type-rb/type-rb-native/issues/221).
+[recorded foundation result](../results/2026-09-02-native-mir-foundation-linux-arm64/README.md),
+[scalar-connection freeze](https://github.com/type-rb/type-rb-native/issues/221),
+and [control-flow freeze](https://github.com/type-rb/type-rb-native/issues/225).
 
 The accepted ownership and exact-consumption slices reach revision
 `993f563e3e4654c62d18b49d147bd3a7f1b6e2f2`. Structured checking derives the
@@ -134,6 +139,13 @@ incremental connection: general function/block/value MIR lowering, a reusable
 expression-origin/range model, and replacement of the broader emitted-value
 representation are still due.
 See the [current transition status](native-mir-optimization-status.md).
+
+The next vertical slice carries one complete `Array<Integer>` induction helper
+through MIR blocks and block parameters. It verifies its zero origin, checked
+unit step, loop comparison, exact Array load, backedge, exit, overflow trap,
+and bounds trap before MIR-only QBE emission. Unsupported helpers remain
+direct. Completion requires deleting the corresponding token fact and emission
+ownership; the measured envelope cannot fund another fact family.
 
 LLVM remains deferred until the shared path and benchmark corpus cover scalar,
 Array, allocation, and I/O behavior. Its first role is a bounded

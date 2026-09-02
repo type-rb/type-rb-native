@@ -136,6 +136,12 @@ a time.
   the markers and restore the pre-foundation absolute ceilings after portable
   range, index, and induction ownership has left the direct emitter, before
   starting the next portable fact family.
+- For each successive structural slice, first retain a rejected diagnostic run
+  under the current policy, then register the exact measured revision, target
+  sizes, one-time ratios, superseded ownership, and recovery point in a new
+  validated marker. A marker transition is exceptional only while the baseline
+  lacks that exact marker. Do not extend its limits after a marked candidate
+  fails, and do not use it to carry the next fact family.
 
 ## Verify
 
