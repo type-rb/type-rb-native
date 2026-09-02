@@ -2214,22 +2214,6 @@ def gate4_emit_array_address(
 	return address
 end
 
-def gate4_mir_nonnegative_loop_local(
-		state: Gate4Compiler,
-		loop_start: Integer,
-		context: Gate4EmitContext,
-	): Integer
-	unavailable := context.local_count[0]
-	mut fact := gate4_load_integer(state.mir_loop_facts, loop_start)
-	while fact > 1
-		fact = gate4_load_integer(state.mir_loop_facts, fact - 2)
-	end
-	if fact == 1
-		return unavailable - 1
-	end
-	return unavailable
-end
-
 def gate4_emit_add_local(
 		mut context: Gate4EmitContext,
 		mut output: Gate4Output,
@@ -3488,11 +3472,11 @@ def gate4_emit_block(
 					gate4_invalidate_array_header_cache(context)
 				else
 					if gate4_token_is(state, position[0], "while")
-						mir_nonnegative_local := gate4_mir_nonnegative_loop_local(
-							state,
-							position[0],
-							context,
-						)
+						mut mir_fact := gate4_load_integer(state.mir_loop_facts, position[0])
+						while mir_fact < 0
+							mir_fact = gate4_load_integer(state.mir_loop_facts, - mir_fact)
+						end
+						mir_nonnegative_local := context.local_count[0] - mir_fact
 						gate4_store_integer(context.local_mutable, mir_nonnegative_local, 2)
 						header := gate4_emit_label(context)
 						body := gate4_emit_label(context)
@@ -7999,7 +7983,7 @@ def gate4_check_expression(
 			# a backend-neutral loop fact and its enclosing-loop dependency.
 			mut fact := 0
 			if operator == "+"
-				if value.mutable > 1
+				if value.mutable < 0
 					if gate4_small_nonnegative_integer_operand(right.name)
 						fact = value.mutable
 					end
@@ -8056,13 +8040,11 @@ def gate4_check_declaration(
 	value_type := value.type_name
 	mut fact := 0
 	if mutable == 1
-		if value_type == "Integer"
-			if value.name == "0"
-				fact = 1
-			else
-				if value.mutable > 1
-					fact = value.mutable
-				end
+		if value.name == "0"
+			fact = 1
+		else
+			if value.mutable < 0
+				fact = value.mutable
 			end
 		end
 	end
@@ -8078,11 +8060,11 @@ def gate4_check_declaration(
 		fact = 0
 	end
 	finished := gate4_finish_statement(state, position)
-	if fact > 0
-		# Encode adjacency in checker-local state until the following loop is
-		# consumed, then retain only the verified fact or enclosing dependency.
+	if fact != 0
+		# Encode adjacency in checker-local state and carry the fact in the
+		# shared checker cursor until the following loop consumes it.
 		gate4_store_integer(locals.mutable, locals.count[0] - 1, position[0] + 3)
-		gate4_store_integer(state.mir_loop_facts, position[0], fact)
+		position[1] = fact
 	end
 	return finished
 end
@@ -8137,7 +8119,7 @@ def gate4_check_block(
 					if gate4_token_is(state, position[0], "if")
 						mut fact_index := 0
 						while fact_index < locals.count[0]
-							if gate4_load_integer(locals.mutable, fact_index) > 1
+							if gate4_load_integer(locals.mutable, fact_index) < 0
 								gate4_store_integer(locals.mutable, fact_index, 1)
 							end
 							fact_index += 1
@@ -8166,14 +8148,15 @@ def gate4_check_block(
 							if candidate >= 0
 								active = gate4_load_integer(locals.mutable, candidate) == loop_start + 3
 							end
+							mut line := 0
 							if active
 								# The active marker also names this loop so a nested fact can
 								# retain its checker-derived dependency without source recovery.
-								gate4_store_integer(locals.mutable, candidate, loop_start + 2)
-							else
-								gate4_store_integer(state.mir_loop_facts, loop_start, 0)
+								line = position[1]
+								gate4_store_integer(locals.mutable, candidate, - loop_start)
 							end
-							line := gate4_load_integer(state.token_lines, position[0])
+							gate4_store_integer(state.mir_loop_facts, loop_start, line)
+							line = gate4_load_integer(state.token_lines, position[0])
 							gate4_advance(position)
 							condition := gate4_check_expression(state, position, locals, 1, "Boolean")
 							gate4_check_expected(state, condition.type_name, "Boolean", line)
@@ -8182,7 +8165,7 @@ def gate4_check_block(
 							gate4_check_block(state, position, locals, result_type)
 							locals.count[0] = saved_count
 							if active
-								if gate4_load_integer(locals.mutable, candidate) <= 1
+								if gate4_load_integer(locals.mutable, candidate) >= 0
 									gate4_store_integer(state.mir_loop_facts, loop_start, 0)
 								end
 								gate4_store_integer(locals.mutable, candidate, 1)
@@ -8216,7 +8199,7 @@ def gate4_check_block(
 										gate4_load_string(state.token_texts, statement_start),
 									)
 									if tracked >= 0
-										if gate4_load_integer(locals.mutable, tracked) > 1
+										if gate4_load_integer(locals.mutable, tracked) < 0
 											assignment := gate4_load_string(state.token_texts, statement_start + 1)
 											mut valid := assignment != "="
 											if assignment.size() == 2
@@ -8264,7 +8247,8 @@ def gate4_check_function(mut state: Gate4Compiler, function_index: Integer): Boo
 		)
 		parameter_index += 1
 	end
-	mut position := [gate4_load_integer(state.function_body_starts, function_index)]
+	# The second cursor cell carries one adjacent declaration fact into a loop.
+	mut position := [gate4_load_integer(state.function_body_starts, function_index), 0]
 	gate4_check_block(state, position, locals, gate4_load_string(state.function_result_types, function_index))
 	if position[0] != gate4_load_integer(state.function_body_ends, function_index)
 		gate4_diagnostic(
