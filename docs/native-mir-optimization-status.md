@@ -1,7 +1,7 @@
 # Native MIR optimization transition status
 
 Status: experimental, accepted through revision
-`8a7bfd89c67f232f2c0ead5687418b5d754b07f4`.
+`1c5120841124405d88d85a0147406216cca8b30b`.
 
 The ordinary self-hosted frontend now builds one compiler-owned Native MIR
 module for selected immutable scalar-leaf functions and one exact
@@ -25,9 +25,11 @@ This is an ordinary frontend-to-MIR replacement boundary, not complete compiler
 lowering. The selected helper carries entry, loop header, body, backedge, exit,
 checked-Integer failure, and Array-bounds failure through verified MIR. Its
 canonical zero-origin/unit-step induction proof authorizes omission of negative
-index normalization without a token-side fact carrier. Calls, records, managed
-values, nested loops, and unsupported helper shapes retain the accepted direct
-path without partial MIR publication.
+index normalization without a token-side fact carrier. Its verified header
+block parameter now lowers directly to a QBE `phi`; the former induction
+`alloc8`, header `loadl`, and backedge `storel` are absent. Calls, records,
+managed values, nested loops, and unsupported helper shapes retain the accepted
+direct path without partial MIR publication.
 
 ## Retained boundary
 
@@ -47,11 +49,14 @@ path without partial MIR publication.
 
 ## Measured transition envelope
 
-The accepted fixed compilers are 332,696 Darwin arm64 bytes and 308,656 Linux
-arm64 bytes, 641,352 bytes combined. Linux amd64 is 268,008 bytes and needs no
-additional allowance. The target-neutral fixed compiler QBE is 1,089,635 bytes
-with SHA-256
-`a1b26e9ed6d40edf1a1da2cab4de7cd18847e2d0bbe7917b178887f929e38c30`.
+The accepted fixed compilers are 332,696 Darwin arm64 bytes and 308,592 Linux
+arm64 bytes, 641,288 bytes combined. The QBE-phi recovery leaves the page-aligned
+Darwin artifact unchanged, reduces the Linux artifact by 64 bytes, and reduces
+the same-run Mach-O `__text` section from 243,648 to 243,568 bytes and ELF
+`.text` section from 246,240 to 246,144 bytes. The target-neutral fixed compiler
+QBE decreases from 1,089,635 to 1,089,474 bytes with SHA-256
+`575cb66c6b894650a2c89f9d5bb1abd9b11d1ec919ab89acecca88c532566979`.
+Linux amd64 remains below its unchanged ceiling.
 Issue #225 freezes temporary ceilings of 334,000, 310,000, and 644,000 bytes for
 Darwin arm64, Linux arm64, and their combined size. Only the exact
 control-flow-marker transition may use 1.08 compiler-size and 1.25 build-time
@@ -61,12 +66,13 @@ ratios of 1.052223/1.067669/1.000199 and Linux arm64 ratios of
 ordinary changes return to the 1.05 compiler/build/RSS ratios; every retained
 observation remains subject to the unchanged 2.0 catastrophic bound.
 
-The managed-runtime smoke records a 332,736-byte stripped Darwin compiler,
-0.70-second runtime, zero final live managed bytes, and a 1,048,513-byte peak
-managed heap. Independent persistent-worker checks record 332,736 and 308,648
-stripped compiler bytes on Darwin and Linux arm64, reclaim all 182,400,576
-allocated bytes, finish at zero live managed bytes, and share identical
-target-neutral workload QBE.
+The earlier managed-runtime smoke records a 332,736-byte stripped Darwin
+compiler, 0.70-second runtime, zero final live managed bytes, and a
+1,048,513-byte peak managed heap. Current persistent-worker checks record
+332,736 and 308,584 stripped compiler bytes on Darwin and Linux arm64, reclaim
+all 182,400,576 allocated bytes, finish at zero live managed bytes with a
+1,047,808-byte peak managed heap, and share identical target-neutral workload
+QBE.
 
 The temporary MIR allowance is migration space, not a new final size target.
 It must be recovered by deleting superseded direct-emitter ownership by the end
@@ -82,8 +88,14 @@ Public evidence:
 - [control-flow transition issue #223](https://github.com/type-rb/type-rb-native/issues/223)
 - [control-flow envelope issue #225](https://github.com/type-rb/type-rb-native/issues/225)
 - [control-flow pull request #224](https://github.com/type-rb/type-rb-native/pull/224)
+- [induction-phi recovery issue #227](https://github.com/type-rb/type-rb-native/issues/227)
+- [induction-phi pull request #228](https://github.com/type-rb/type-rb-native/pull/228)
 - [accepted pull request #220](https://github.com/type-rb/type-rb-native/pull/220)
 - [final static comparison](https://github.com/type-rb/type-rb-native/actions/runs/33682830363)
 - [Linux target regressions](https://github.com/type-rb/type-rb-native/actions/runs/33682830410)
 - [persistent-worker checks](https://github.com/type-rb/type-rb-native/actions/runs/33682830450)
 - [complete Native gates](https://github.com/type-rb/type-rb-native/actions/runs/33682830403)
+- [induction-phi static comparison](https://github.com/type-rb/type-rb-native/actions/runs/33688825454)
+- [induction-phi target regressions](https://github.com/type-rb/type-rb-native/actions/runs/33688825377)
+- [induction-phi persistent-worker checks](https://github.com/type-rb/type-rb-native/actions/runs/33688825485)
+- [induction-phi complete Native gates](https://github.com/type-rb/type-rb-native/actions/runs/33688825371)
