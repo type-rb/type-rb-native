@@ -33,6 +33,8 @@ TypeRB version and revision backed by current evidence. See
 - Reach reproducible self-hosting: a native TypeRB compiler builds the next
   equivalent native TypeRB compiler from TypeRB source.
 - Design a small Native MIR, target ABI profiles, data layout, and runtime.
+- Keep TypeRB semantic facts and reusable optimization decisions in Native MIR
+  rather than in a particular backend emitter.
 - Compare multiple machine-code strategies behind the same MIR and semantics.
 - Measure complete toolchains, including code generation, linking, runtime,
   sidecars, and distribution size.
@@ -492,6 +494,15 @@ of the reference compiler's internal typed IR. During early gates the Go
 reference compiler may produce that bridge. Later gates replace the bridge's
 frontend side with a TypeRB implementation in this repository. Native MIR
 remains internal here.
+
+The early snapshot path established a distinct Native MIR, while the later
+self-hosted compiler reached closure with a compact direct-QBE emitter. The
+next optimizer phase restores the intended boundary in that self-hosted path:
+range, index, loop, call-effect, Array-header, and GC-safety knowledge belongs
+to verified target-independent MIR analysis. QBE remains the first adapter and
+may perform backend legalization and instruction selection, but it does not own
+those TypeRB facts. See
+[Decision 0028](docs/decisions/0028-native-mir-optimization-boundary.md).
 
 The intended bootstrap sequence is:
 
