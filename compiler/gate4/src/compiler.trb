@@ -95,7 +95,6 @@ record Gate4EmitContext
 	temporary_count: Array<Integer>
 	label_count: Array<Integer>
 	loop_depth: Array<Integer>
-	function_end: Integer
 	inline_budget: Array<Integer>
 	scalar_inline_depth: Array<Integer>
 	scalar_inline_range_failure_used: Array<Integer>
@@ -1029,7 +1028,6 @@ end
 def gate4_emit_context_new(
 		capacity: Integer,
 		inline_budget: Array<Integer>,
-		function_end: Integer,
 	): Gate4EmitContext
 	return Gate4EmitContext.new(
 		local_names: gate4_string_storage(capacity),
@@ -1047,7 +1045,6 @@ def gate4_emit_context_new(
 		temporary_count: [0],
 		label_count: [0],
 		loop_depth: [0],
-		function_end: function_end,
 		inline_budget: inline_budget,
 		scalar_inline_depth: [0],
 		scalar_inline_range_failure_used: [0],
@@ -2217,77 +2214,6 @@ def gate4_emit_array_address(
 	return address
 end
 
-# This target-independent pass lowers only the verified induction property for
-# the first ownership slice. The QBE adapter receives the resulting fact and
-# never inspects source tokens to reconstruct it.
-def gate4_mir_unit_step_loop_valid(
-		state: Gate4Compiler,
-		loop_start: Integer,
-		function_end: Integer,
-		name: String,
-	): Boolean
-	mut depth := 1
-	mut index := loop_start + 1
-	while index < function_end
-		token := gate4_load_string(state.token_texts, index)
-		if token == "if"
-			depth += 1
-		end
-		if token == "while"
-			depth += 1
-		end
-		if token == "end"
-			depth -= 1
-			if depth == 0
-				return true
-			end
-		end
-		if token == name
-			assignment := gate4_load_string(state.token_texts, index + 1)
-			if assignment == "="
-				return false
-			end
-			if assignment.size() == 2
-				mut valid := assignment == "+="
-				if valid
-					valid = gate4_load_string(state.token_texts, index + 2) == "1"
-				end
-				if valid
-					valid = gate4_load_integer(state.token_kinds, index + 3) == 4
-				end
-				if !valid
-					return false
-				end
-			end
-		end
-		index += 1
-	end
-	return false
-end
-
-def gate4_mir_nonnegative_loop_local(
-		state: Gate4Compiler,
-		loop_start: Integer,
-		context: Gate4EmitContext,
-	): Integer
-	unavailable := context.local_count[0]
-	if gate4_load_integer(state.mir_loop_facts, loop_start) == 1
-		return unavailable - 1
-	end
-	previous := loop_start - 2
-	if gate4_load_string(state.token_texts, previous) != "0"
-		if gate4_load_integer(context.local_mutable, unavailable - 1) == 3
-			if gate4_token_is(state, previous - 5, "mut")
-				name := gate4_load_string(context.local_names, unavailable - 1)
-				if gate4_mir_unit_step_loop_valid(state, loop_start, context.function_end, name)
-					return unavailable - 1
-				end
-			end
-		end
-	end
-	return unavailable
-end
-
 def gate4_emit_add_local(
 		mut context: Gate4EmitContext,
 		mut output: Gate4Output,
@@ -3438,9 +3364,6 @@ def gate4_emit_declaration(
 	end
 	gate4_expect(state, position, ":=")
 	value := gate4_emit_expression(state, position, context, output, 1, declared_type)
-	if value.mutable == 2
-		mutable = 3
-	end
 	mut local_type := declared_type
 	if local_type == ""
 		local_type = value.type_name
@@ -3549,11 +3472,11 @@ def gate4_emit_block(
 					gate4_invalidate_array_header_cache(context)
 				else
 					if gate4_token_is(state, position[0], "while")
-						mir_nonnegative_local := gate4_mir_nonnegative_loop_local(
-							state,
-							position[0],
-							context,
-						)
+						mut mir_fact := gate4_load_integer(state.mir_loop_facts, position[0])
+						while mir_fact < 0
+							mir_fact = gate4_load_integer(state.mir_loop_facts, - mir_fact)
+						end
+						mir_nonnegative_local := context.local_count[0] - mir_fact
 						gate4_store_integer(context.local_mutable, mir_nonnegative_local, 2)
 						header := gate4_emit_label(context)
 						body := gate4_emit_label(context)
@@ -3645,7 +3568,6 @@ def gate4_emit_function(
 	mut context := gate4_emit_context_new(
 		state.token_count[0] + 1,
 		inline_budget,
-		gate4_load_integer(state.function_body_ends, function_index),
 	)
 	mut body := gate4_output_new(state.token_count[0] * 8 + 1024, output.runtime_flags)
 	parameter_start := gate4_load_integer(state.function_parameter_starts, function_index)
@@ -7556,7 +7478,7 @@ def gate4_check_primary(
 		if !gate4_integer_literal_in_range(literal)
 			return gate4_type_diagnostic(state, line, "Integer literal is outside the portable range")
 		end
-		return gate4_checked_value("Integer", 0, "", 0)
+		return gate4_checked_value("Integer", 0, literal, 0)
 	end
 	if kind == 3
 		gate4_advance(position)
@@ -8057,7 +7979,17 @@ def gate4_check_expression(
 			gate4_skip_newlines(state, position)
 			right := gate4_check_expression(state, position, locals, precedence + 1, "")
 			result_type := gate4_binary_result_type(state, operator, value.type_name, right.type_name, line)
-			value = gate4_checked_value(result_type, 0, "", 0)
+			# The compact origin marker exists only while structured checking derives
+			# a backend-neutral loop fact and its enclosing-loop dependency.
+			mut fact := 0
+			if operator == "+"
+				if value.mutable < 0
+					if gate4_small_nonnegative_integer_operand(right.name)
+						fact = value.mutable
+					end
+				end
+			end
+			value = gate4_checked_value(result_type, 0, "", fact)
 		end
 	end
 	gate4_check_expected(state, value.type_name, expected, line)
@@ -8104,7 +8036,18 @@ def gate4_check_declaration(
 		end
 	end
 	gate4_expect(state, position, ":=")
-	value_type := gate4_check_expression(state, position, locals, 1, declared_type).type_name
+	value := gate4_check_expression(state, position, locals, 1, declared_type)
+	value_type := value.type_name
+	mut fact := 0
+	if mutable == 1
+		if value.name == "0"
+			fact = 1
+		else
+			if value.mutable < 0
+				fact = value.mutable
+			end
+		end
+	end
 	mut local_type := declared_type
 	if local_type == ""
 		local_type = value_type
@@ -8112,8 +8055,18 @@ def gate4_check_declaration(
 	if local_type == "Void"
 		gate4_diagnostic(state, "TRBN4004", line, "local binding cannot have type Void")
 	end
-	gate4_local_add(state, locals, name, local_type, mutable, line)
-	return gate4_finish_statement(state, position)
+	added := gate4_local_add(state, locals, name, local_type, mutable, line)
+	if !added
+		fact = 0
+	end
+	finished := gate4_finish_statement(state, position)
+	if fact != 0
+		# Encode adjacency in checker-local state and carry the fact in the
+		# shared checker cursor until the following loop consumes it.
+		gate4_store_integer(locals.mutable, locals.count[0] - 1, position[0] + 3)
+		position[1] = fact
+	end
+	return finished
 end
 
 def gate4_check_simple_statement(
@@ -8164,6 +8117,13 @@ def gate4_check_block(
 					complete = true
 				else
 					if gate4_token_is(state, position[0], "if")
+						mut fact_index := 0
+						while fact_index < locals.count[0]
+							if gate4_load_integer(locals.mutable, fact_index) < 0
+								gate4_store_integer(locals.mutable, fact_index, 1)
+							end
+							fact_index += 1
+						end
 						line := gate4_load_integer(state.token_lines, position[0])
 						gate4_advance(position)
 						condition := gate4_check_expression(state, position, locals, 1, "Boolean")
@@ -8183,21 +8143,20 @@ def gate4_check_block(
 					else
 						if gate4_token_is(state, position[0], "while")
 							loop_start := position[0]
-							gate4_store_integer(state.mir_loop_facts, loop_start, 0)
-							previous := loop_start - 2
-							if gate4_load_string(state.token_texts, previous) == "0"
-								if gate4_token_is(state, previous - 3, "mut")
-									if gate4_mir_unit_step_loop_valid(
-											state,
-											loop_start,
-											state.token_count[0],
-											gate4_load_string(state.token_texts, previous - 2),
-										)
-										gate4_store_integer(state.mir_loop_facts, loop_start, 1)
-									end
-								end
+							candidate := locals.count[0] - 1
+							mut active := false
+							if candidate >= 0
+								active = gate4_load_integer(locals.mutable, candidate) == loop_start + 3
 							end
-							line := gate4_load_integer(state.token_lines, position[0])
+							mut line := 0
+							if active
+								# The active marker also names this loop so a nested fact can
+								# retain its checker-derived dependency without source recovery.
+								line = position[1]
+								gate4_store_integer(locals.mutable, candidate, - loop_start)
+							end
+							gate4_store_integer(state.mir_loop_facts, loop_start, line)
+							line = gate4_load_integer(state.token_lines, position[0])
 							gate4_advance(position)
 							condition := gate4_check_expression(state, position, locals, 1, "Boolean")
 							gate4_check_expected(state, condition.type_name, "Boolean", line)
@@ -8205,6 +8164,12 @@ def gate4_check_block(
 							saved_count := locals.count[0]
 							gate4_check_block(state, position, locals, result_type)
 							locals.count[0] = saved_count
+							if active
+								if gate4_load_integer(locals.mutable, candidate) >= 0
+									gate4_store_integer(state.mir_loop_facts, loop_start, 0)
+								end
+								gate4_store_integer(locals.mutable, candidate, 1)
+							end
 							gate4_expect(state, position, "end")
 							gate4_finish_statement(state, position)
 						else
@@ -8227,7 +8192,30 @@ def gate4_check_block(
 								if gate4_declaration_start(state, position[0])
 									gate4_check_declaration(state, position, locals)
 								else
+									statement_start := position[0]
 									gate4_check_simple_statement(state, position, locals)
+									tracked := gate4_local_find(
+										locals,
+										gate4_load_string(state.token_texts, statement_start),
+									)
+									if tracked >= 0
+										if gate4_load_integer(locals.mutable, tracked) < 0
+											assignment := gate4_load_string(state.token_texts, statement_start + 1)
+											mut valid := assignment != "="
+											if assignment.size() == 2
+												valid = assignment == "+="
+												if valid
+													valid = gate4_load_string(state.token_texts, statement_start + 2) == "1"
+												end
+												if valid
+													valid = gate4_load_integer(state.token_kinds, statement_start + 3) == 4
+												end
+											end
+											if !valid
+												gate4_store_integer(locals.mutable, tracked, 1)
+											end
+										end
+									end
 								end
 							end
 						end
@@ -8259,7 +8247,8 @@ def gate4_check_function(mut state: Gate4Compiler, function_index: Integer): Boo
 		)
 		parameter_index += 1
 	end
-	mut position := [gate4_load_integer(state.function_body_starts, function_index)]
+	# The second cursor cell carries one adjacent declaration fact into a loop.
+	mut position := [gate4_load_integer(state.function_body_starts, function_index), 0]
 	gate4_check_block(state, position, locals, gate4_load_string(state.function_result_types, function_index))
 	if position[0] != gate4_load_integer(state.function_body_ends, function_index)
 		gate4_diagnostic(
