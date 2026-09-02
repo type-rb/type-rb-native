@@ -115,17 +115,19 @@ long-term Go-competitive build and generated-artifact objectives remain
 mandatory. See the
 [recorded foundation result](../results/2026-09-02-native-mir-foundation-linux-arm64/README.md).
 
-The first two accepted ownership slices reach revision
-`cfcb587550b21736173d25ffc3c05adb246fa592`. Structured checking derives the
+The accepted ownership and exact-consumption slices reach revision
+`c958426eb4a778f9019120b0f540bc9590f7db85`. Structured checking derives the
 exact literal-zero, checked-unit-step nonnegative induction fact and the active
 base plus small nonnegative literal fact into dedicated checked-program
-storage. Nested facts depend explicitly on the enclosing verified loop. The QBE
-adapter consumes that chain without source-token proof or a whole-loop lexical
-scan. The ordinary static compilers measure 299,656 Darwin arm64 bytes and
-271,928 Linux arm64 bytes, 571,584 combined. This remains an incremental
-connection: general function/block/value MIR lowering, a general expression-
-origin/range representation, and removal of the temporary emitted-value carrier
-are still due. See the [current transition status](native-mir-optimization-status.md).
+storage. Nested facts depend explicitly on the enclosing verified loop. Each
+checked Array-index postfix stores its exact fact origin, and the QBE adapter
+consumes that origin at the same postfix without source-token proof, a
+whole-loop lexical scan, or emitted-value range propagation. The ordinary
+static compilers remain 299,656 Darwin arm64 bytes and 271,928 Linux arm64
+bytes, 571,584 combined. This is still an incremental connection: general
+function/block/value MIR lowering, a reusable expression-origin/range model,
+and replacement of the broader emitted-value representation are still due.
+See the [current transition status](native-mir-optimization-status.md).
 
 LLVM remains deferred until the shared path and benchmark corpus cover scalar,
 Array, allocation, and I/O behavior. Its first role is a bounded
