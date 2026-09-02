@@ -204,13 +204,7 @@ def gate4_mir_empty_facts(): Gate4MirFacts
 end
 
 def gate4_mir_origin_error(origin: Gate4MirOrigin, source_count: Integer): String
-	if origin.source < 0
-		return "MIR origin is invalid"
-	end
-	if origin.source >= source_count
-		return "MIR origin is invalid"
-	end
-	if origin.line <= 0
+	if origin.source < 0 || origin.source >= source_count || origin.line <= 0
 		return "MIR origin is invalid"
 	end
 	return ""
@@ -218,10 +212,7 @@ end
 
 def gate4_mir_value_type_valid(value_type: Integer): Boolean
 	# 1 Integer, 2 Boolean, 3 Array<Integer>, 4 Array element address.
-	if value_type < 1
-		return false
-	end
-	return value_type <= 4
+	return value_type >= 1 && value_type <= 4
 end
 
 def gate4_mir_find_integer(values: Array<Integer>, value: Integer): Integer
@@ -337,13 +328,7 @@ def gate4_mir_instruction_error(
 		first_set := instruction.first != - 1
 		second_set := instruction.second != - 1
 		failure_set := instruction.failure != - 1
-		if first_set
-			return "MIR Integer constant shape differs"
-		end
-		if second_set
-			return "MIR Integer constant shape differs"
-		end
-		if failure_set
+		if first_set || second_set || failure_set
 			return "MIR Integer constant shape differs"
 		end
 		return ""
@@ -355,54 +340,30 @@ def gate4_mir_instruction_error(
 		result_differs := instruction.result.value_type != 1
 		first_differs := gate4_mir_value_type(value_ids, value_types, instruction.first) != 1
 		second_differs := gate4_mir_value_type(value_ids, value_types, instruction.second) != 1
-		if result_differs
-			return "MIR checked Integer add type differs"
-		end
-		if first_differs
-			return "MIR checked Integer add type differs"
-		end
-		if second_differs
+		if result_differs || first_differs || second_differs
 			return "MIR checked Integer add type differs"
 		end
 		return gate4_mir_failure_error(function, instruction.failure)
 	end
 	if instruction.kind == 3
-		if instruction.literal != 0
-			return "MIR Integer comparison shape differs"
-		end
-		if instruction.failure != - 1
+		if instruction.literal != 0 || instruction.failure != - 1
 			return "MIR Integer comparison shape differs"
 		end
 		result_differs := instruction.result.value_type != 2
 		first_differs := gate4_mir_value_type(value_ids, value_types, instruction.first) != 1
 		second_differs := gate4_mir_value_type(value_ids, value_types, instruction.second) != 1
-		if result_differs
-			return "MIR Integer comparison type differs"
-		end
-		if first_differs
-			return "MIR Integer comparison type differs"
-		end
-		if second_differs
+		if result_differs || first_differs || second_differs
 			return "MIR Integer comparison type differs"
 		end
 		return ""
 	end
 	if instruction.kind == 4
-		if instruction.second != - 1
-			return "MIR Array length shape differs"
-		end
-		if instruction.literal != 0
-			return "MIR Array length shape differs"
-		end
-		if instruction.failure != - 1
+		if instruction.second != - 1 || instruction.literal != 0 || instruction.failure != - 1
 			return "MIR Array length shape differs"
 		end
 		result_differs := instruction.result.value_type != 1
 		array_differs := gate4_mir_value_type(value_ids, value_types, instruction.first) != 3
-		if result_differs
-			return "MIR Array length type differs"
-		end
-		if array_differs
+		if result_differs || array_differs
 			return "MIR Array length type differs"
 		end
 		return ""
@@ -414,13 +375,7 @@ def gate4_mir_instruction_error(
 		result_differs := instruction.result.value_type != 4
 		array_differs := gate4_mir_value_type(value_ids, value_types, instruction.first) != 3
 		index_differs := gate4_mir_value_type(value_ids, value_types, instruction.second) != 1
-		if result_differs
-			return "MIR Array address type differs"
-		end
-		if array_differs
-			return "MIR Array address type differs"
-		end
-		if index_differs
+		if result_differs || array_differs || index_differs
 			return "MIR Array address type differs"
 		end
 		return gate4_mir_failure_error(function, instruction.failure)
@@ -443,16 +398,7 @@ def gate4_mir_terminator_error(
 		alternate_set := terminator.alternate != - 1
 		alternate_arguments_set := terminator.alternate_arguments.size() != 0
 		value_set := terminator.value != - 1
-		if condition_set
-			return "MIR jump shape differs"
-		end
-		if alternate_set
-			return "MIR jump shape differs"
-		end
-		if alternate_arguments_set
-			return "MIR jump shape differs"
-		end
-		if value_set
+		if condition_set || alternate_set || alternate_arguments_set || value_set
 			return "MIR jump shape differs"
 		end
 		return gate4_mir_target_arguments_error(
@@ -494,25 +440,12 @@ def gate4_mir_terminator_error(
 		alternate_set := terminator.alternate != - 1
 		arguments_set := terminator.arguments.size() != 0
 		alternate_arguments_set := terminator.alternate_arguments.size() != 0
-		if condition_set
+		target_shape_set := condition_set || target_set || alternate_set
+		if target_shape_set || arguments_set || alternate_arguments_set
 			return "MIR return shape differs"
 		end
-		if target_set
-			return "MIR return shape differs"
-		end
-		if alternate_set
-			return "MIR return shape differs"
-		end
-		if arguments_set
-			return "MIR return shape differs"
-		end
-		if alternate_arguments_set
-			return "MIR return shape differs"
-		end
-		if terminator.value >= 0
-			if gate4_mir_value_type(value_ids, value_types, terminator.value) == 0
-				return "MIR return value is undefined"
-			end
+		if terminator.value >= 0 && gate4_mir_value_type(value_ids, value_types, terminator.value) == 0
+			return "MIR return value is undefined"
 		end
 		return ""
 	end
@@ -523,22 +456,9 @@ def gate4_mir_terminator_error(
 		arguments_set := terminator.arguments.size() != 0
 		alternate_arguments_set := terminator.alternate_arguments.size() != 0
 		value_set := terminator.value != - 1
-		if condition_set
-			return "MIR trap shape differs"
-		end
-		if target_set
-			return "MIR trap shape differs"
-		end
-		if alternate_set
-			return "MIR trap shape differs"
-		end
-		if arguments_set
-			return "MIR trap shape differs"
-		end
-		if alternate_arguments_set
-			return "MIR trap shape differs"
-		end
-		if value_set
+		target_shape_set := condition_set || target_set || alternate_set
+		argument_shape_set := arguments_set || alternate_arguments_set
+		if target_shape_set || argument_shape_set || value_set
 			return "MIR trap shape differs"
 		end
 		return ""
@@ -547,10 +467,7 @@ def gate4_mir_terminator_error(
 end
 
 def gate4_mir_function_error(function: Gate4MirFunction, source_count: Integer): String
-	if function.id < 0
-		return "MIR function identity or origin is invalid"
-	end
-	if gate4_mir_origin_error(function.origin, source_count) != ""
+	if function.id < 0 || gate4_mir_origin_error(function.origin, source_count) != ""
 		return "MIR function identity or origin is invalid"
 	end
 	if function.blocks.size() == 0
@@ -575,10 +492,7 @@ def gate4_mir_function_error(function: Gate4MirFunction, source_count: Integer):
 	mut block_index := 0
 	while block_index < function.blocks.size()
 		block := function.blocks[block_index]
-		if block.id < 0
-			return "MIR block identifier is invalid or duplicated"
-		end
-		if gate4_mir_find_integer(block_ids, block.id) >= 0
+		if block.id < 0 || gate4_mir_find_integer(block_ids, block.id) >= 0
 			return "MIR block identifier is invalid or duplicated"
 		end
 		if gate4_mir_origin_error(block.origin, source_count) != ""
