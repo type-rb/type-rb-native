@@ -341,16 +341,24 @@ application-size, memory, catastrophic, process-boundary, and cleanup
 requirements. The complete evidence is retained in the
 [lexical loop-index result](../results/2026-09-02-native-lexical-loop-index-linux-arm64/README.md).
 
-The next contract, registered by
+The accepted contract registered by
 [issue #192](https://github.com/type-rb/type-rb-native/issues/192), evaluates a
 bounded propagation of that fact through checked addition of a small
 nonnegative literal. A derived mutable local declared immediately before its
 matching unit-step loop may use the proof; ordinary mutable locals, dynamic or
 negative additions, overflow, reassignment, non-unit updates, and unproved
-indices retain the general path. `n-body` must reach `0.96x` wall and CPU,
-both controls remain at `1.02x`, and all existing correctness, fixed-point,
-compiler-size, build-cost, application-size, memory, catastrophic, process,
-and cleanup conditions remain mandatory.
+indices retain the general path. The exact formal result passes at `0.913171x`
+wall and `0.912856x` CPU for `n-body`, preserves both `1.02x` controls, shrinks
+the fixed compiler and affected application artifacts, and passes all
+correctness, fixed-point, compiler-size, build-cost, application-size, memory,
+catastrophic, process, and cleanup conditions. The complete evidence is
+retained in the
+[derived loop-index result](../results/2026-09-02-native-derived-loop-index-linux-arm64/README.md).
+
+This closes the preregistered direct-emitter semantic-analysis experiments.
+Further portable facts and transforms move to verified Native MIR analysis and
+target-independent passes under
+[Decision 0028](decisions/0028-native-mir-optimization-boundary.md).
 
 Builds use release optimization without unsafe fast-math substitutions: C and
 C++ use `-O3`, Go uses `go build -trimpath`, Rust uses `rustc -C opt-level=3`,
