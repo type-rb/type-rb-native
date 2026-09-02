@@ -97,6 +97,18 @@ a time.
   failure. Test paths containing spaces, existing-output replacement, each
   phase failure, and that compiler diagnostics launch no external tool.
 - Preserve source origins and exact TypeRB semantics through every lowering.
+- Keep semantic analysis above backend emission. Represent proven Integer
+  ranges, index properties, loop structure, call effects, Array-header
+  stability, and GC safety as verified Native MIR facts or analysis results;
+  target-independent passes consume those facts, and backend adapters consume
+  the resulting MIR. Do not add new non-trivial source-pattern analysis to the
+  QBE emitter. An already registered narrow emitter experiment may be completed
+  as migration evidence, but follow-on generalization belongs in MIR.
+- Migrate the current direct-QBE self-hosted path through bounded vertical
+  slices. Define the smallest useful MIR operation and fact subset, verify it,
+  lower it through the existing QBE ABI, and remove the superseded emitter
+  ownership before expanding the subset. Do not build a general optimizer or a
+  second production backend ahead of the measured workload.
 - Treat the portable Integer range and its failure classes as correctness
   constraints. Backend optimization may inline or outline checks under a
   deterministic code-size policy, but it must not substitute machine-word
@@ -109,6 +121,12 @@ a time.
 - Add only the feature set required by the active gate. Record a new decision
   before changing language semantics, ownership boundaries, self-hosting
   criteria, or backend selection policy.
+- Keep per-optimization compactness limits unchanged. For a structural Native
+  MIR foundation, measure the minimal skeleton first and pre-register a
+  separate temporary compiler-size envelope, its removal condition, and build,
+  RSS, fixed-point, and generated-application guardrails. Do not silently reuse
+  or relax an optimization threshold. The final build-time and generated-size
+  objectives relative to the Go backend remain unchanged.
 
 ## Verify
 
@@ -143,6 +161,11 @@ paths, and decisions that need maintainer discussion. If the maintainer has
 given standing direction to continue, pre-register the next bounded slice and
 proceed; gate completion alone is not a reason to stop. Stop before work that
 requires an unresolved language, ownership, release, or product decision.
+
+Do not add LLVM merely to continue local optimization work. First cover scalar,
+Array, allocation, and I/O behavior through the shared MIR and benchmark corpus;
+then use a bounded LLVM adapter as an optimization-ceiling comparison unless a
+different measured backend question has become more important.
 
 Use GitHub issue-closing keywords only in the reviewed result pull request that
 actually completes a gate. Never put a closing keyword next to the gate issue

@@ -34,6 +34,20 @@ TypeRB backend or product commitment.
 - Put backend-specific lowering behind a common verified Native MIR boundary.
   Same-target comparisons use the same ABI profile. Do not duplicate the
   frontend or runtime semantics for each backend candidate.
+- Put TypeRB semantic facts and optimization decisions in Native MIR analysis
+  and target-independent passes. Backend adapters may legalize and select
+  instructions, but must not rediscover Integer ranges, index validity, loop
+  structure, call effects, Array-header stability, or GC safety from source or
+  backend text.
+- Treat the current self-hosted direct-QBE path as migration evidence rather
+  than the target optimizer architecture. Finish already registered narrow
+  experiments, but do not add new non-trivial semantic analysis to its emitter.
+- Keep ordinary optimization candidates inside their registered compactness
+  bounds. A Native MIR foundation may use a separately pre-registered,
+  temporary compiler-size envelope only after measuring the smallest useful
+  skeleton; record build time, RSS, and size throughout, remove superseded
+  emitter logic, and preserve the final Go-competitive build and artifact
+  goals.
 - Record benchmark inputs, commands, revisions, hardware, operating system,
   toolchain versions, cache state, repetitions, and raw results. Include every
   required sidecar, linker, and runtime in size comparisons.

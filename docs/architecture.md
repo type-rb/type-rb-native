@@ -158,6 +158,39 @@ Backend-specific instructions, object-format details, and linker behavior stay
 below the MIR boundary. Existing backends must not force backend-specific
 concepts into portable TypeRB source.
 
+### Optimization ownership
+
+Native MIR owns facts whose validity follows from TypeRB semantics and verified
+control flow. This includes Integer ranges and nonnegativity, index validity,
+loop induction and bounds, call allocation and mutation effects, Array-header
+stability, and GC safe-point requirements. Target-independent passes consume
+those facts to retain, move, combine, or remove semantic operations such as
+range checks, negative-index normalization, bounds checks, header loads, and
+root publication.
+
+A backend adapter consumes verified MIR after those decisions. It may legalize
+operations for a target ABI, choose backend instructions, assign backend
+temporaries, and apply a backend-local peephole that does not require recovering
+TypeRB semantics. It must not inspect source tokens or emitted backend text to
+rediscover portable facts. Adding a second adapter before this boundary exists
+would duplicate optimizer behavior and make a backend comparison ambiguous.
+
+The self-hosted compiler initially reached fixed-point closure with analysis
+interleaved into direct QBE emission. That implementation remains valuable
+migration and benchmark evidence, but it is not the target organization. The
+migration proceeds as bounded vertical slices: define and verify a minimal MIR
+operation/fact subset, lower it through the existing QBE ABI, move the matching
+optimization ownership above the adapter, and remove the superseded emitter
+logic before broadening the subset.
+
+Ordinary optimization experiments keep their pre-registered compactness caps.
+A structural MIR slice may use a distinct temporary compiler-size envelope
+only after the smallest useful skeleton has been measured and the envelope,
+build/RSS limits, removal condition, and final compactness target have been
+registered publicly. This temporary allowance does not weaken the end goal of
+matching or improving the Go backend's build time and generated artifact size.
+See [Decision 0028](decisions/0028-native-mir-optimization-boundary.md).
+
 ## Backend adapters
 
 Candidate adapters consume the same verified, target-neutral MIR subset. QBE
