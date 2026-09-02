@@ -1416,10 +1416,7 @@ def gate4_emit_checked_integer_multiply(
 			return
 		end
 	end
-	gate4_output_line(
-		output,
-		"\t" + result + " =l call $g4_integer_multiply(l " + left + ", l " + right + ")",
-	)
+	gate4_emit_integer_call(output, result, "multiply", left, right)
 	return
 end
 
@@ -1602,29 +1599,36 @@ def gate4_nonnegative_loop_local(
 	): Integer
 	unavailable := context.local_count[0]
 	previous := loop_start - 2
+	mut declaration_offset := 3
 	if gate4_load_string(state.token_texts, previous) != "0"
+		declaration_offset = 5
+		# Marker 3 retains a proven bounded-add initializer only until this
+		# matching loop has validated the derived local's updates.
+		if gate4_load_integer(context.local_mutable, unavailable - 1) != 3
+			return unavailable
+		end
+	end
+	if !gate4_token_is(state, previous - declaration_offset, "mut")
 		return unavailable
 	end
-	if !gate4_token_is(state, previous - 3, "mut")
-		return unavailable
-	end
-	name := gate4_load_string(state.token_texts, previous - 2)
+	name := gate4_load_string(context.local_names, unavailable - 1)
 	mut depth := 1
 	mut index := loop_start + 1
 	while index < context.function_end
-		if gate4_token_is(state, index, "if")
+		token := gate4_load_string(state.token_texts, index)
+		if token == "if"
 			depth += 1
 		end
-		if gate4_token_is(state, index, "while")
+		if token == "while"
 			depth += 1
 		end
-		if gate4_token_is(state, index, "end")
+		if token == "end"
 			depth -= 1
 			if depth == 0
 				return unavailable - 1
 			end
 		end
-		if gate4_load_string(state.token_texts, index) == name
+		if token == name
 			assignment := gate4_load_string(state.token_texts, index + 1)
 			if assignment == "="
 				return unavailable
@@ -2526,6 +2530,20 @@ def gate4_emit_primary(
 	return gate4_emitted_value("", "Invalid", 0, "", 0, "")
 end
 
+def gate4_emit_integer_call(
+		mut output: Gate4Output,
+		result: String,
+		operation: String,
+		left: String,
+		right: String,
+	)
+	gate4_output_line(
+		output,
+		"\t" + result + " =l call $g4_integer_" + operation + "(l " + left + ", l " + right + ")",
+	)
+	return
+end
+
 def gate4_emit_binary(
 		mut context: Gate4EmitContext,
 		mut output: Gate4Output,
@@ -2557,6 +2575,13 @@ def gate4_emit_binary(
 		end
 	end
 	if operator == "+"
+		mut nonnegative := left.mutable
+		if nonnegative != 2
+			nonnegative = 0
+		end
+		if !gate4_small_nonnegative_integer_operand(right.operand)
+			nonnegative = 0
+		end
 		if left.type_name == "String"
 			gate4_output_line(
 				output,
@@ -2575,13 +2600,10 @@ def gate4_emit_binary(
 				end
 				gate4_emit_checked_integer_add(context, output, result, left_operand, right_operand)
 			else
-				gate4_output_line(
-					output,
-					"\t" + result + " =l call $g4_integer_add(l " + left.operand + ", l " + right.operand + ")",
-				)
+				gate4_emit_integer_call(output, result, "add", left.operand, right.operand)
 			end
 		end
-		return gate4_emitted_value(result, result_type, 0, "", 0, "")
+		return gate4_emitted_value(result, result_type, 0, "", nonnegative, "")
 	end
 	if operator == "-"
 		if result_type == "Float"
@@ -2591,10 +2613,7 @@ def gate4_emit_binary(
 		if gate4_take_inline_budget(context)
 			gate4_emit_checked_integer_subtract(context, output, result, left.operand, right.operand)
 		else
-			gate4_output_line(
-				output,
-				"\t" + result + " =l call $g4_integer_subtract(l " + left.operand + ", l " + right.operand + ")",
-			)
+			gate4_emit_integer_call(output, result, "subtract", left.operand, right.operand)
 		end
 		return gate4_emitted_value(result, result_type, 0, "", 0, "")
 	end
@@ -2614,10 +2633,7 @@ def gate4_emit_binary(
 		if gate4_take_inline_budget(context)
 			gate4_emit_checked_integer_divide(context, output, result, left.operand, right.operand)
 		else
-			gate4_output_line(
-				output,
-				"\t" + result + " =l call $g4_integer_divide(l " + left.operand + ", l " + right.operand + ")",
-			)
+			gate4_emit_integer_call(output, result, "divide", left.operand, right.operand)
 		end
 		return gate4_emitted_value(result, result_type, 0, "", 0, "")
 	end
@@ -2625,10 +2641,7 @@ def gate4_emit_binary(
 		if gate4_take_inline_budget(context)
 			gate4_emit_checked_integer_remainder(context, output, result, left.operand, right.operand)
 		else
-			gate4_output_line(
-				output,
-				"\t" + result + " =l call $g4_integer_remainder(l " + left.operand + ", l " + right.operand + ")",
-			)
+			gate4_emit_integer_call(output, result, "remainder", left.operand, right.operand)
 		end
 		return gate4_emitted_value(result, result_type, 0, "", 0, "")
 	end
@@ -2787,6 +2800,9 @@ def gate4_emit_declaration(
 	end
 	gate4_expect(state, position, ":=")
 	value := gate4_emit_expression(state, position, context, output, 1, declared_type)
+	if value.mutable == 2
+		mutable = 3
+	end
 	mut local_type := declared_type
 	if local_type == ""
 		local_type = value.type_name

@@ -449,6 +449,16 @@ correctness, compactness, fixed-point, build, memory, catastrophic, process,
 and cleanup bound. See the
 [recorded lexical loop-index result](results/2026-09-02-native-lexical-loop-index-linux-arm64/README.md).
 
+The next bounded candidate propagates the active nonnegative loop-index fact
+through checked addition of a small nonnegative literal. This targets derived
+unit-step inner-loop indices while retaining the general path for ordinary
+mutable locals, dynamic or negative additions, overflow, reassignment,
+non-unit updates, and every unproved Array access. Issue
+[#192](https://github.com/type-rb/type-rb-native/issues/192) freezes a 4%
+`n-body` wall and CPU signal, both non-regression controls, and every existing
+correctness, compactness, fixed-point, build, memory, catastrophic, process,
+and cleanup requirement before formal measurement.
+
 Gate 6N passes every frozen condition for the internal
 `linux-amd64-v0` profile. The exact merged compiler closes a 240,888-byte
 Go-free B2/B3/B4 fixed point, emits byte-identical target-neutral compiler and

@@ -198,6 +198,28 @@ test "$(awk -F= '$1 == "contract" { print $2 }' "$test_root/lexical-nbody-eviden
 test "$(awk -F= '$1 == "maximum_candidate_ratio" { print $2 }' "$test_root/lexical-nbody-evidence/environment.txt")" = 0.95 ||
 	fail "lexical n-body threshold differs"
 
+NATIVE_RUNTIME_AB_CONTRACT=derived-loop-index \
+	/bin/sh "$script_directory/runtime-controller.sh" \
+	test "$fake_runexec" "$nbody_catalog" n-body 0 "$cache_control" \
+	"$test_root/derived-nbody-workspace" "$test_root/derived-nbody-evidence" \
+	> "$test_root/derived-nbody.stdout" 2> "$test_root/derived-nbody.stderr"
+test "$(cat "$test_root/derived-nbody.stdout")" = 'native-runtime-ab: n-body passed'
+test ! -s "$test_root/derived-nbody.stderr" || fail "derived n-body controller wrote stderr"
+test "$(awk -F= '$1 == "contract" { print $2 }' "$test_root/derived-nbody-evidence/environment.txt")" = derived-loop-index ||
+	fail "derived n-body contract differs"
+test "$(awk -F= '$1 == "maximum_candidate_ratio" { print $2 }' "$test_root/derived-nbody-evidence/environment.txt")" = 0.96 ||
+	fail "derived n-body threshold differs"
+
+NATIVE_RUNTIME_AB_CONTRACT=derived-loop-index \
+	/bin/sh "$script_directory/runtime-controller.sh" \
+	test "$fake_runexec" "$catalog" spectral-norm 0 "$cache_control" \
+	"$test_root/derived-spectral-workspace" "$test_root/derived-spectral-evidence" \
+	> "$test_root/derived-spectral.stdout" 2> "$test_root/derived-spectral.stderr"
+test "$(cat "$test_root/derived-spectral.stdout")" = 'native-runtime-ab: spectral-norm passed'
+test ! -s "$test_root/derived-spectral.stderr" || fail "derived spectral controller wrote stderr"
+test "$(awk -F= '$1 == "maximum_candidate_ratio" { print $2 }' "$test_root/derived-spectral-evidence/environment.txt")" = 1.02 ||
+	fail "derived spectral threshold differs"
+
 fannkuch_expected=$test_root/fannkuch-expected.txt
 printf 'fannkuch-redux-output\n' > "$fannkuch_expected"
 fannkuch_catalog=$test_root/fannkuch-catalog.tsv

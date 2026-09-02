@@ -341,6 +341,17 @@ application-size, memory, catastrophic, process-boundary, and cleanup
 requirements. The complete evidence is retained in the
 [lexical loop-index result](../results/2026-09-02-native-lexical-loop-index-linux-arm64/README.md).
 
+The next contract, registered by
+[issue #192](https://github.com/type-rb/type-rb-native/issues/192), evaluates a
+bounded propagation of that fact through checked addition of a small
+nonnegative literal. A derived mutable local declared immediately before its
+matching unit-step loop may use the proof; ordinary mutable locals, dynamic or
+negative additions, overflow, reassignment, non-unit updates, and unproved
+indices retain the general path. `n-body` must reach `0.96x` wall and CPU,
+both controls remain at `1.02x`, and all existing correctness, fixed-point,
+compiler-size, build-cost, application-size, memory, catastrophic, process,
+and cleanup conditions remain mandatory.
+
 Builds use release optimization without unsafe fast-math substitutions: C and
 C++ use `-O3`, Go uses `go build -trimpath`, Rust uses `rustc -C opt-level=3`,
 and Java uses `javac` followed by the same recorded JVM for every run. The
