@@ -115,6 +115,16 @@ long-term Go-competitive build and generated-artifact objectives remain
 mandatory. See the
 [recorded foundation result](../results/2026-09-02-native-mir-foundation-linux-arm64/README.md).
 
+The first accepted ownership slice is revision
+`a9224bffcd6c28c9cf1dfce85ecb80c1ae096280`. Structured checking derives the
+exact literal-zero, checked-unit-step nonnegative induction fact into dedicated
+checked-program storage, and the QBE adapter consumes it without source-token
+proof. The ordinary static compilers measure 299,656 Darwin arm64 bytes and
+271,944 Linux arm64 bytes, 571,600 combined. This remains an incremental
+connection: general function/block/value MIR lowering, the derived-index fact,
+and removal of the temporary emitted-value carrier are still due. See the
+[current transition status](native-mir-optimization-status.md).
+
 LLVM remains deferred until the shared path and benchmark corpus cover scalar,
 Array, allocation, and I/O behavior. Its first role is a bounded
 optimization-ceiling comparison over the same MIR and ABI, not a second copy of
