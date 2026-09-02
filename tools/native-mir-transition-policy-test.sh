@@ -13,6 +13,8 @@ trap 'exit 143' TERM
 candidate=$test_root/candidate
 baseline=$test_root/baseline
 mkdir -p "$candidate/compiler/gate4" "$baseline/compiler/gate4"
+cp "$script_directory/../$NATIVE_MIR_INDUCTION_PHI_MARKER" \
+	"$candidate/$NATIVE_MIR_INDUCTION_PHI_MARKER"
 
 test "$(native_mir_target_compiler_limit darwin-arm64-v0)" = 334000
 test "$(native_mir_target_compiler_limit linux-arm64-v0)" = 310000
@@ -65,6 +67,18 @@ test "$(native_mir_transition_mode "$candidate" "$baseline")" = ordinary
 test "$(native_mir_compiler_ratio_limit "$candidate" "$baseline")" = 1.05
 test "$(native_mir_build_ratio_limit "$candidate" "$baseline")" = 1.05
 
+native_mir_transition_markers_valid "$candidate"
+native_mir_induction_phi_recovery "$candidate" "$baseline"
+test "$(native_mir_transition_mode "$candidate" "$baseline")" = ordinary
+test "$(native_mir_compiler_ratio_limit "$candidate" "$baseline")" = 1.05
+test "$(native_mir_build_ratio_limit "$candidate" "$baseline")" = 1.05
+
+cp "$candidate/$NATIVE_MIR_INDUCTION_PHI_MARKER" \
+	"$baseline/$NATIVE_MIR_INDUCTION_PHI_MARKER"
+if native_mir_induction_phi_recovery "$candidate" "$baseline"; then
+	exit 1
+fi
+
 rm -f "$candidate/$NATIVE_MIR_FOUNDATION_MARKER"
 if native_mir_foundation_transition "$candidate" "$baseline"; then
 	exit 1
@@ -85,6 +99,12 @@ fi
 printf 'policy=native-mir-control-flow-v1\n' \
 	> "$candidate/$NATIVE_MIR_CONTROL_FLOW_MARKER"
 if native_mir_control_flow_marker_valid "$candidate"; then
+	exit 1
+fi
+
+printf 'policy=native-mir-induction-phi-v1\n' \
+	> "$candidate/$NATIVE_MIR_INDUCTION_PHI_MARKER"
+if native_mir_induction_phi_marker_valid "$candidate"; then
 	exit 1
 fi
 

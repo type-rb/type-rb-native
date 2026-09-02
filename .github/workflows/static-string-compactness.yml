@@ -13,6 +13,7 @@ on:
       - .github/workflows/static-string-compactness.yml
       - compiler/gate4/conformance/**
       - compiler/gate4/native-mir-foundation-v1.txt
+      - compiler/gate4/native-mir-induction-phi-v1.txt
       - compiler/gate4/src/compiler.trb
       - compiler/gate4/src/compiler_test.trb
       - tools/native-mir-transition-policy.sh
@@ -180,6 +181,11 @@ jobs:
             "$GITHUB_WORKSPACE" "$RUNNER_TEMP/baseline-source")
           policy_mode=$(native_mir_transition_mode \
             "$GITHUB_WORKSPACE" "$RUNNER_TEMP/baseline-source")
+          induction_phi_recovery=0
+          if native_mir_induction_phi_recovery \
+            "$GITHUB_WORKSPACE" "$RUNNER_TEMP/baseline-source"; then
+            induction_phi_recovery=1
+          fi
           mkdir -p "$evidence" "$RUNNER_TEMP/interleaved-builds"
           printf 'metric\tstage\tbaseline\tcandidate\tcandidate_baseline_ratio\tmaximum\tstatus\n' \
             > "$evidence/comparison.tsv"
@@ -193,6 +199,7 @@ jobs:
             printf 'bootstrap_series=closure-evidence-only\n'
             printf 'fixed_point_adjacencies=pooled-b2-b3-and-b3-b4-byte-identical-builds\n'
             printf 'native_mir_policy_mode=%s\n' "$policy_mode"
+            printf 'induction_phi_recovery=%s\n' "$induction_phi_recovery"
             printf 'compiler_ratio_limit=%s\n' "$compiler_ratio_limit"
             printf 'build_ratio_limit=%s\n' "$build_ratio_limit"
             printf 'rss_ratio_limit=%s\n' "$NATIVE_MIR_RSS_RATIO_LIMIT"
@@ -375,7 +382,42 @@ jobs:
 
           baseline_size=$(wc -c < "$RUNNER_TEMP/baseline-compiler" | tr -d ' ')
           candidate_size=$(wc -c < "$RUNNER_TEMP/candidate-compiler" | tr -d ' ')
+          compiler_text_size() {
+            compiler=$1
+            if test "$TARGET" = darwin-arm64; then
+              text_hex=$(otool -l "$compiler" | awk '
+                $1 == "sectname" && $2 == "__text" { text = 1; next }
+                text && $1 == "size" { print $2; exit }
+              ')
+            else
+              text_hex=$(readelf -SW "$compiler" | awk '
+                $2 == ".text" { print "0x" $6; exit }
+              ')
+            fi
+            case "$text_hex" in
+              0x[0-9a-fA-F]*) printf '%d\n' "$text_hex" ;;
+              *) return 1 ;;
+            esac
+          }
+          baseline_text_size=$(compiler_text_size "$RUNNER_TEMP/baseline-compiler")
+          candidate_text_size=$(compiler_text_size "$RUNNER_TEMP/candidate-compiler")
+          printf 'target\tbaseline_text_bytes\tcandidate_text_bytes\tstatus\n' \
+            > "$evidence/code-sections.tsv"
+          text_status=observed
+          if test "$induction_phi_recovery" -eq 1; then
+            text_status=pass
+            if test "$candidate_text_size" -ge "$baseline_text_size"; then
+              text_status=fail
+            fi
+          fi
+          printf '%s\t%s\t%s\t%s\n' \
+            "$TARGET" "$baseline_text_size" "$candidate_text_size" "$text_status" \
+            >> "$evidence/code-sections.tsv"
+          test "$text_status" != fail
           test "$candidate_size" -le "$compiler_limit"
+          if test "$induction_phi_recovery" -eq 1; then
+            test "$candidate_size" -le "$baseline_size"
+          fi
           compare compiler_bytes fixed-point \
             "$baseline_size" "$candidate_size" "$compiler_ratio_limit"
           baseline_elapsed=$(fixed_point_median baseline 6)
@@ -395,18 +437,28 @@ jobs:
             done
           done
 
+          baseline_fixed_qbe_size=$(awk -F= '$1 == "fixed_point_qbe_size" {print $2}' \
+            "$RUNNER_TEMP/baseline-bootstrap-evidence/identities.txt")
           fixed_qbe_size=$(awk -F= '$1 == "fixed_point_qbe_size" {print $2}' \
             "$RUNNER_TEMP/candidate-bootstrap-evidence/identities.txt")
           fixed_qbe_sha256=$(awk -F= '$1 == "fixed_point_qbe_sha256" {print $2}' \
             "$RUNNER_TEMP/candidate-bootstrap-evidence/identities.txt")
+          if test "$induction_phi_recovery" -eq 1; then
+            test "$fixed_qbe_size" -lt "$baseline_fixed_qbe_size"
+            test "$fixed_qbe_size" -lt 1089635
+          fi
           {
             printf 'target=%s\n' "$TARGET"
             printf 'baseline_compiler_bytes=%s\n' "$baseline_size"
             printf 'candidate_compiler_bytes=%s\n' "$candidate_size"
             printf 'candidate_compiler_limit=%s\n' "$compiler_limit"
+            printf 'baseline_text_bytes=%s\n' "$baseline_text_size"
+            printf 'candidate_text_bytes=%s\n' "$candidate_text_size"
             printf 'native_mir_policy_mode=%s\n' "$policy_mode"
+            printf 'induction_phi_recovery=%s\n' "$induction_phi_recovery"
             printf 'compiler_ratio_limit=%s\n' "$compiler_ratio_limit"
             printf 'build_ratio_limit=%s\n' "$build_ratio_limit"
+            printf 'baseline_fixed_point_qbe_size=%s\n' "$baseline_fixed_qbe_size"
             printf 'fixed_point_qbe_size=%s\n' "$fixed_qbe_size"
             printf 'fixed_point_qbe_sha256=%s\n' "$fixed_qbe_sha256"
           } > "$evidence/identities.txt"
@@ -553,10 +605,21 @@ jobs:
           test -f "$linux"
           darwin_size=$(awk -F= '$1 == "candidate_compiler_bytes" {print $2}' "$darwin")
           linux_size=$(awk -F= '$1 == "candidate_compiler_bytes" {print $2}' "$linux")
+          darwin_baseline_size=$(awk -F= '$1 == "baseline_compiler_bytes" {print $2}' "$darwin")
+          linux_baseline_size=$(awk -F= '$1 == "baseline_compiler_bytes" {print $2}' "$linux")
+          darwin_text_size=$(awk -F= '$1 == "candidate_text_bytes" {print $2}' "$darwin")
+          linux_text_size=$(awk -F= '$1 == "candidate_text_bytes" {print $2}' "$linux")
+          darwin_recovery=$(awk -F= '$1 == "induction_phi_recovery" {print $2}' "$darwin")
+          linux_recovery=$(awk -F= '$1 == "induction_phi_recovery" {print $2}' "$linux")
+          test "$darwin_recovery" = "$linux_recovery"
           test "$darwin_size" -le "$NATIVE_MIR_DARWIN_COMPILER_LIMIT"
           test "$linux_size" -le "$NATIVE_MIR_LINUX_COMPILER_LIMIT"
           combined=$((darwin_size + linux_size))
           test "$combined" -le "$NATIVE_MIR_COMBINED_COMPILER_LIMIT"
+          baseline_combined=$((darwin_baseline_size + linux_baseline_size))
+          if test "$darwin_recovery" -eq 1; then
+            test "$combined" -le "$baseline_combined"
+          fi
           darwin_qbe_size=$(awk -F= '$1 == "fixed_point_qbe_size" {print $2}' "$darwin")
           linux_qbe_size=$(awk -F= '$1 == "fixed_point_qbe_size" {print $2}' "$linux")
           darwin_qbe_sha256=$(awk -F= '$1 == "fixed_point_qbe_sha256" {print $2}' "$darwin")
@@ -566,8 +629,12 @@ jobs:
           {
             printf 'darwin_arm64_compiler_bytes=%s\n' "$darwin_size"
             printf 'linux_arm64_compiler_bytes=%s\n' "$linux_size"
+            printf 'baseline_combined_compiler_bytes=%s\n' "$baseline_combined"
             printf 'combined_compiler_bytes=%s\n' "$combined"
             printf 'combined_compiler_limit=%s\n' "$NATIVE_MIR_COMBINED_COMPILER_LIMIT"
+            printf 'darwin_arm64_text_bytes=%s\n' "$darwin_text_size"
+            printf 'linux_arm64_text_bytes=%s\n' "$linux_text_size"
+            printf 'induction_phi_recovery=%s\n' "$darwin_recovery"
             printf 'target_neutral_qbe_bytes=%s\n' "$darwin_qbe_size"
             printf 'target_neutral_qbe_sha256=%s\n' "$darwin_qbe_sha256"
           } > "$RUNNER_TEMP/cross-target.txt"

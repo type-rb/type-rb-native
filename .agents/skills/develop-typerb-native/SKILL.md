@@ -136,6 +136,13 @@ a time.
   the markers and restore the pre-foundation absolute ceilings after portable
   range, index, and induction ownership has left the direct emitter, before
   starting the next portable fact family.
+- A bounded removal may fail to change a complete executable because Mach-O or
+  ELF segments are aligned more coarsely than the removed code. Pre-register
+  that case explicitly: require strict same-run per-target code-section and
+  target-neutral-QBE reductions, require every complete compiler to be no
+  larger, and retain cumulative complete-artifact shrinkage as a condition for
+  finishing the current fact family. Do not use section granularity to excuse
+  code growth or to begin another semantic family early.
 - For each successive structural slice, first retain a rejected diagnostic run
   under the current policy, then register the exact measured revision, target
   sizes, one-time ratios, superseded ownership, and recovery point in a new

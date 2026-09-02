@@ -2363,7 +2363,7 @@ def gate4_emit_checked_integer_add(
 		left: String,
 		right: String,
 		right_nonnegative: Boolean,
-	)
+	): String
 	too_high := gate4_emit_temporary(context)
 	failure := gate4_integer_range_failure_label(context)
 	complete := gate4_emit_label(context)
@@ -2381,7 +2381,7 @@ def gate4_emit_checked_integer_add(
 	end
 	gate4_emit_integer_range_failure(output, failure)
 	gate4_output_line(output, complete)
-	return
+	return complete
 end
 
 def gate4_emit_checked_integer_subtract(
@@ -2992,14 +2992,15 @@ def gate4_emit_induction_mir(
 	body := state.scalar_mir.blocks[function[6] + 2]
 	zero_instruction := state.scalar_mir.instructions[entry[5]]
 	zero := gate4_number_without_underscores(state.scalar_mir.literal_texts[zero_instruction[4]])
-	index_slot := gate4_emit_add_local(context, output, "", "Integer", 1, zero, false)
 	header_label := gate4_emit_label(context)
 	body_label := gate4_emit_label(context)
 	exit_label := gate4_emit_label(context)
+	index := gate4_emit_temporary(context)
+	advanced := gate4_emit_temporary(context)
 	gate4_output_line(output, "\tjmp " + header_label)
 	gate4_output_line(output, header_label)
-	index := gate4_emit_temporary(context)
-	gate4_output_line(output, "\t" + index + " =l loadl " + index_slot)
+	phi_line := output.count[0]
+	gate4_output_line(output, "")
 	length_address := gate4_emit_temporary(context)
 	length := gate4_emit_temporary(context)
 	gate4_output_line(output, "\t" + length_address + " =l add %p0, 8")
@@ -3030,17 +3031,19 @@ def gate4_emit_induction_mir(
 	gate4_output_line(output, "\t" + loaded + " =l loadl " + address)
 	one_instruction := state.scalar_mir.instructions[body[5] + 2]
 	one := gate4_number_without_underscores(state.scalar_mir.literal_texts[one_instruction[4]])
-	add_instruction := state.scalar_mir.instructions[body[5] + 3]
-	advanced := gate4_emit_binary_with_facts(
+	increment_predecessor := gate4_emit_checked_integer_add(
 		context,
 		output,
-		gate4_scalar_binary_operator(add_instruction[4]),
-		gate4_emitted_value(index, "Integer", 0, "", 0, ""),
-		gate4_emitted_value(one, "Integer", 0, "", 0, ""),
-		true,
+		advanced,
+		index,
+		one,
 		true,
 	)
-	gate4_output_line(output, "\tstorel " + advanced.operand + ", " + index_slot)
+	gate4_store_string(
+		output.lines,
+		phi_line,
+		"\t" + index + " =l phi @start " + zero + ", " + increment_predecessor + " " + advanced,
+	)
 	gate4_output_line(output, "\tjmp " + header_label)
 	gate4_output_line(output, exit_label)
 	gate4_output_line(output, "\tjmp @return")
