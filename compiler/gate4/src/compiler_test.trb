@@ -1,4 +1,4 @@
-import { Gate4Compiler, Gate4MirModule, Gate4Output, Gate4ProjectSources, gate4_add_module, gate4_build_symbol_index, gate4_character_in, gate4_check, gate4_check_expression, gate4_check_primary, gate4_compiler_new, gate4_emit_array_header, gate4_emit_context_new, gate4_emit_qbe, gate4_encode_static_string, gate4_find_field, gate4_find_function_in_module, gate4_find_import_binding, gate4_find_module, gate4_find_record_in_module, gate4_find_record_type, gate4_float_literal_in_range, gate4_has_diagnostic, gate4_invalidate_array_header_cache, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_local_add, gate4_local_find, gate4_locals_new, gate4_mir_nonnegative_fact, gate4_number_is_float, gate4_number_without_underscores, gate4_output_new, gate4_parse_module, gate4_parse_project_config, gate4_resolve, gate4_string_bucket, gate4_string_starts_at, gate4_symbol_bucket_count, gate4_verify_mir } from compiler
+import { Gate4Compiler, Gate4MirModule, Gate4Output, Gate4ProjectSources, gate4_add_module, gate4_build_symbol_index, gate4_character_in, gate4_check, gate4_check_expression, gate4_check_primary, gate4_compiler_new, gate4_emit_array_header, gate4_emit_context_new, gate4_emit_qbe, gate4_encode_static_string, gate4_find_field, gate4_find_function_in_module, gate4_find_import_binding, gate4_find_module, gate4_find_record_in_module, gate4_find_record_type, gate4_float_literal_in_range, gate4_has_diagnostic, gate4_invalidate_array_header_cache, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_local_add, gate4_local_find, gate4_locals_new, gate4_mir_function_index, gate4_mir_nonnegative_fact, gate4_number_is_float, gate4_number_without_underscores, gate4_output_new, gate4_parse_module, gate4_parse_project_config, gate4_resolve, gate4_string_bucket, gate4_string_starts_at, gate4_symbol_bucket_count, gate4_verify_mir } from compiler
 import { gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage
 import { native_create_directory, native_read_text, native_write_text } from native_file_system
 import trb/std/process
@@ -92,8 +92,8 @@ def gate4_mir_test_module(
 		facts.push([1, 2, 1])
 	end
 	return Gate4MirModule.new(
-		source_count: 1,
-		entry_function: 1,
+		source_count: [1],
+		entry_function: [1],
 		functions: [[1, 10, 0, 1, 0, 1, 0, 5]],
 		blocks: [
 			[10, 0, 2, 1, 0, 0, 1, 1, - 1, 11, - 1, 1, 1, 0, 0, - 1],
@@ -123,6 +123,7 @@ def gate4_mir_test_module(
 		],
 		arguments: [0, 1, 2, 2, 5, 8],
 		facts: facts,
+		literal_texts: [],
 	)
 end
 
@@ -142,6 +143,26 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_verify_mir(native_module)).to_equal(
 			"MIR input cannot supply optimization facts",
 		)
+	end
+
+	test("lowers, verifies, and selects complete checked scalar leaf MIR") do
+		source := "def scalar(value: Integer, scale: Float, enabled: Boolean): Float\n\tnext := value + 1\n\tconverted: Float := next\n\tproduct := converted * scale\n\tselected := enabled == true\n\tinverted := !selected\n\toffset := - value\n\tif_unused := inverted != false\n\treturn product + offset\nend\n\ndef delegated(value: Integer): Integer\n\treturn scalar(value, 1.0, true).to_i()\nend\n\ndef mutable_leaf(value: Integer): Integer\n\tmut result := value\n\treturn result\nend\n\ndef main()\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		expect(gate4_verify_mir(state.scalar_mir)).to_equal("")
+		expect(gate4_mir_function_index(state.scalar_mir, 0) >= 0).to_be_true()
+		expect(gate4_mir_function_index(state.scalar_mir, 1)).to_equal(- 1)
+		expect(gate4_mir_function_index(state.scalar_mir, 2)).to_equal(- 1)
+		expect(state.scalar_mir.literal_texts.size()).to_equal(3)
+		mut literal_index := 0
+		while state.scalar_mir.instructions[literal_index][0] != 6
+			literal_index += 1
+		end
+		state.scalar_mir.instructions[literal_index][2] = 0
+		expect(gate4_verify_mir(state.scalar_mir)).to_equal("MIR Integer literal fact differs")
 	end
 
 	test("strictly decodes the configured-project projection and comments") do
@@ -1331,33 +1352,33 @@ describe("Gate 4 TypeRB frontend") do
 		expect(
 			gate4_occurrence_count(
 				qbe,
-				"%t1 =l add %t0, 1\n" +
-				"\t%t2 =w csgtl %t1, 9007199254740991\n" +
-				"\tjnz %t2, @l0, @l1",
+				"%t0 =l add %p0, 1\n" +
+				"\t%t1 =w csgtl %t0, 9007199254740991\n" +
+				"\tjnz %t1, @l0, @l1",
 			),
 		).to_equal(2)
 		expect(
 			qbe.include?(
-				"%t1 =l add %t0, 1024\n" +
-				"\t%t2 =w csgtl %t1, 9007199254740991\n" +
-				"\tjnz %t2, @l0, @l1\n" +
+				"%t0 =l add %p0, 1024\n" +
+				"\t%t1 =w csgtl %t0, 9007199254740991\n" +
+				"\tjnz %t1, @l0, @l1\n" +
 				"@l0\n\tcall $g4_fail",
 			),
 		).to_be_true()
 		expect(
 			qbe.include?(
-				"%t1 =l add %t0, 1025\n" +
-				"\t%t2 =w csgtl %t1, 9007199254740991\n" +
-				"\tjnz %t2, @l0, @l2\n" +
-				"@l2\n\t%t3 =w csltl %t1, -9007199254740991",
+				"%t0 =l add %p0, 1025\n" +
+				"\t%t1 =w csgtl %t0, 9007199254740991\n" +
+				"\tjnz %t1, @l0, @l2\n" +
+				"@l2\n\t%t2 =w csltl %t0, -9007199254740991",
 			),
 		).to_be_true()
 		expect(
 			qbe.include?(
-				"%t2 =l add %t0, %t1\n" +
-				"\t%t3 =w csgtl %t2, 9007199254740991\n" +
-				"\tjnz %t3, @l0, @l2\n" +
-				"@l2\n\t%t4 =w csltl %t2, -9007199254740991",
+				"%t0 =l add %p0, %p1\n" +
+				"\t%t1 =w csgtl %t0, 9007199254740991\n" +
+				"\tjnz %t1, @l0, @l2\n" +
+				"@l2\n\t%t2 =w csltl %t0, -9007199254740991",
 			),
 		).to_be_true()
 	end

@@ -142,6 +142,15 @@ test ! -e "$workspace" || fail "workspace already exists"
 test ! -e "$evidence" || fail "evidence path already exists"
 
 script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+repository_root=$(CDPATH= cd -- "$script_directory/../.." && pwd)
+transition_policy=$repository_root/tools/native-mir-transition-policy.sh
+scalar_connection_marker=$repository_root/compiler/gate4/native-mir-scalar-connection-v1.txt
+if test -f "$transition_policy" && test -f "$scalar_connection_marker"; then
+	. "$transition_policy"
+	if native_mir_transition_markers_valid "$repository_root"; then
+		MAX_COMPILER_SIZE=$(native_mir_target_compiler_limit "$profile")
+	fi
+fi
 template=$script_directory/workload.trb
 analyzer=$script_directory/analyze-rss.awk
 test -f "$template" || fail "workload template is missing"
@@ -201,7 +210,8 @@ else
 fi
 stripped_compiler_size=$(file_size "$workspace/compiler.stripped")
 printf '%s\n' "$stripped_compiler_size" > "$evidence/compiler-size-bytes.txt"
-test "$stripped_compiler_size" -le "$MAX_COMPILER_SIZE" || fail "stripped compiler exceeds 310,000 bytes: $stripped_compiler_size"
+test "$stripped_compiler_size" -le "$MAX_COMPILER_SIZE" ||
+	fail "stripped compiler exceeds $MAX_COMPILER_SIZE bytes: $stripped_compiler_size"
 
 stdout=$evidence/stdout.txt
 runtime_log=$evidence/runtime-stderr.txt
@@ -313,6 +323,7 @@ fi
 	printf 'iterations_per_phase=%s\n' "$iterations"
 	printf 'compiler_size=%s\n' "$(file_size "$compiler")"
 	printf 'stripped_compiler_size=%s\n' "$stripped_compiler_size"
+	printf 'compiler_size_limit=%s\n' "$MAX_COMPILER_SIZE"
 	printf 'compiler_sha256=%s\n' "$(sha256 "$compiler")"
 	printf 'qbe_sha256=%s\n' "$(sha256 "$qbe")"
 	printf 'workload_sha256=%s\n' "$(sha256 "$source")"

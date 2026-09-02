@@ -82,17 +82,21 @@ temporary compiler-size envelope only under all of these conditions:
 
 Issue #197 selected the first structural envelope from the measured minimal
 foundation: 302,000 bytes on Darwin arm64, 272,000 bytes on Linux arm64, and
-574,000 bytes combined. Only the baseline-to-foundation transition may use the
-measured 1.07 compiler-size and 1.12 build-time ratios; subsequent ordinary
-changes return to the 1.05 relative limits. RSS remains limited to 1.05 and
-every retained observation remains subject to the 2.0 catastrophic limit. The
-checked-in policy and foundation marker make that exceptional transition
-machine-readable.
+574,000 bytes combined. Issue #221 then measured the smallest complete scalar
+connection after rejecting an additive flat carrier and a two-pass checker.
+It freezes the connection envelope at 317,000 Darwin arm64 bytes, 290,000
+Linux arm64 bytes, and 607,000 bytes combined. Only the exact
+foundation-to-connection transition may use its 1.07 compiler-size and 1.15
+build-time ratios; subsequent ordinary changes return to the 1.05 relative
+limits. RSS remains limited to 1.05 and every retained observation remains
+subject to the 2.0 catastrophic limit. The checked-in policy and two exact
+markers make both exceptional transitions machine-readable.
 
-The 17,000-byte-per-target allowance is not an optimization budget. It must be
-fully recovered by the end of the portable range, index, and induction
-migration, before work begins on the next portable fact family. Removing the
-superseded direct-emitter ownership is part of completing that migration.
+Neither allowance is an optimization budget. The complete increase above the
+pre-MIR compiler must be recovered by the end of the portable range, index,
+and induction migration, before work begins on the next portable fact family.
+Removing superseded direct-emitter ownership is part of completing that
+migration.
 
 ## Initial scope
 
