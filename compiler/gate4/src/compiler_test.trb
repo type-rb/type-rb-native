@@ -1,4 +1,4 @@
-import { Gate4Compiler, Gate4MirModule, Gate4Output, Gate4ProjectSources, gate4_add_module, gate4_build_symbol_index, gate4_character_in, gate4_check, gate4_compiler_new, gate4_emit_array_header, gate4_emit_context_new, gate4_emit_qbe, gate4_encode_static_string, gate4_find_field, gate4_find_function_in_module, gate4_find_import_binding, gate4_find_module, gate4_find_record_in_module, gate4_find_record_type, gate4_float_literal_in_range, gate4_has_diagnostic, gate4_invalidate_array_header_cache, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_local_find, gate4_locals_new, gate4_number_is_float, gate4_number_without_underscores, gate4_output_new, gate4_parse_module, gate4_parse_project_config, gate4_resolve, gate4_string_bucket, gate4_string_starts_at, gate4_symbol_bucket_count, gate4_verify_mir } from compiler
+import { Gate4Compiler, Gate4MirModule, Gate4Output, Gate4ProjectSources, gate4_add_module, gate4_build_symbol_index, gate4_character_in, gate4_check, gate4_compiler_new, gate4_emit_array_header, gate4_emit_context_new, gate4_emit_qbe, gate4_encode_static_string, gate4_find_field, gate4_find_function_in_module, gate4_find_import_binding, gate4_find_module, gate4_find_record_in_module, gate4_find_record_type, gate4_float_literal_in_range, gate4_has_diagnostic, gate4_invalidate_array_header_cache, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_local_find, gate4_locals_new, gate4_mir_nonnegative_fact, gate4_number_is_float, gate4_number_without_underscores, gate4_output_new, gate4_parse_module, gate4_parse_project_config, gate4_resolve, gate4_string_bucket, gate4_string_starts_at, gate4_symbol_bucket_count, gate4_verify_mir } from compiler
 import { gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage
 import { native_create_directory, native_read_text, native_write_text } from native_file_system
 import trb/std/process
@@ -1359,6 +1359,23 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_parse_module(direct_derived, 0, direct_derived.entry_module[0])).to_be_true()
 		expect(gate4_resolve(direct_derived)).to_be_true()
 		expect(gate4_check(direct_derived)).to_be_true()
+		mut verified_index_facts := 0
+		mut unresolved_index_facts := 0
+		mut fact_index := 0
+		while fact_index < direct_derived.token_count[0]
+			if gate4_load_string(direct_derived.token_texts, fact_index) == "]"
+				fact := gate4_mir_nonnegative_fact(direct_derived, fact_index)
+				if fact == 2
+					verified_index_facts += 1
+				end
+				if fact < 0
+					unresolved_index_facts += 1
+				end
+			end
+			fact_index += 1
+		end
+		expect(verified_index_facts).to_equal(1)
+		expect(unresolved_index_facts).to_equal(0)
 		direct_derived_qbe := gate4_output_source(gate4_emit_qbe(direct_derived))
 		expect(gate4_occurrence_count(direct_derived_qbe, " =l sar ")).to_equal(0)
 
