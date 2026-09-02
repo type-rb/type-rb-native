@@ -136,6 +136,484 @@ record Gate4ProjectSources
 	error: String
 end
 
+# The self-hosted optimizer MIR begins as an intentionally small, unconnected
+# foundation. Integer kind identifiers keep this bootstrap representation
+# compact while the verifier owns every mapping and invariant.
+record Gate4MirOrigin
+	source: Integer
+	line: Integer
+end
+
+record Gate4MirValue
+	id: Integer
+	value_type: Integer
+	origin: Gate4MirOrigin
+end
+
+record Gate4MirInstruction
+	kind: Integer
+	result: Gate4MirValue
+	first: Integer
+	second: Integer
+	literal: Integer
+	failure: Integer
+	origin: Gate4MirOrigin
+end
+
+record Gate4MirTerminator
+	kind: Integer
+	condition: Integer
+	target: Integer
+	alternate: Integer
+	arguments: Array<Integer>
+	alternate_arguments: Array<Integer>
+	value: Integer
+	origin: Gate4MirOrigin
+end
+
+record Gate4MirBlock
+	id: Integer
+	parameters: Array<Gate4MirValue>
+	instructions: Array<Gate4MirInstruction>
+	terminator: Gate4MirTerminator
+	origin: Gate4MirOrigin
+end
+
+record Gate4MirFunction
+	id: Integer
+	parameters: Array<Gate4MirValue>
+	blocks: Array<Gate4MirBlock>
+	entry: Integer
+	origin: Gate4MirOrigin
+end
+
+record Gate4MirFacts
+	value_ids: Array<Integer>
+	kinds: Array<Integer>
+end
+
+record Gate4MirModule
+	source_count: Integer
+	functions: Array<Gate4MirFunction>
+	entry_function: Integer
+	facts: Gate4MirFacts
+end
+
+def gate4_mir_empty_facts(): Gate4MirFacts
+	return Gate4MirFacts.new(value_ids: [], kinds: [])
+end
+
+def gate4_mir_origin_error(origin: Gate4MirOrigin, source_count: Integer): String
+	if origin.source < 0 || origin.source >= source_count || origin.line <= 0
+		return "MIR origin is invalid"
+	end
+	return ""
+end
+
+def gate4_mir_value_type_valid(value_type: Integer): Boolean
+	# 1 Integer, 2 Boolean, 3 Array<Integer>, 4 Array element address.
+	return value_type >= 1 && value_type <= 4
+end
+
+def gate4_mir_find_integer(values: Array<Integer>, value: Integer): Integer
+	mut index := 0
+	while index < values.size()
+		if values[index] == value
+			return index
+		end
+		index += 1
+	end
+	return - 1
+end
+
+def gate4_mir_block_index(function: Gate4MirFunction, block_id: Integer): Integer
+	mut index := 0
+	while index < function.blocks.size()
+		if function.blocks[index].id == block_id
+			return index
+		end
+		index += 1
+	end
+	return - 1
+end
+
+def gate4_mir_value_type(
+		value_ids: Array<Integer>,
+		value_types: Array<Integer>,
+		value_id: Integer,
+	): Integer
+	index := gate4_mir_find_integer(value_ids, value_id)
+	if index < 0
+		return 0
+	end
+	return value_types[index]
+end
+
+def gate4_mir_add_value(
+		mut value_ids: Array<Integer>,
+		mut value_types: Array<Integer>,
+		value: Gate4MirValue,
+		source_count: Integer,
+	): String
+	if value.id < 0
+		return "MIR value identifier is invalid"
+	end
+	if !gate4_mir_value_type_valid(value.value_type)
+		return "MIR value type is invalid"
+	end
+	if gate4_mir_origin_error(value.origin, source_count) != ""
+		return "MIR value origin is invalid"
+	end
+	if gate4_mir_find_integer(value_ids, value.id) >= 0
+		return "MIR value is defined more than once"
+	end
+	value_ids.push(value.id)
+	value_types.push(value.value_type)
+	return ""
+end
+
+def gate4_mir_target_arguments_error(
+		function: Gate4MirFunction,
+		target: Integer,
+		arguments: Array<Integer>,
+		value_ids: Array<Integer>,
+		value_types: Array<Integer>,
+	): String
+	block_index := gate4_mir_block_index(function, target)
+	if block_index < 0
+		return "MIR terminator target does not exist"
+	end
+	parameters := function.blocks[block_index].parameters
+	if arguments.size() != parameters.size()
+		return "MIR block argument arity differs"
+	end
+	mut index := 0
+	while index < arguments.size()
+		if gate4_mir_value_type(value_ids, value_types, arguments[index]) == 0
+			return "MIR block argument is undefined"
+		end
+		if gate4_mir_value_type(value_ids, value_types, arguments[index]) != parameters[index].value_type
+			return "MIR block argument type differs"
+		end
+		index += 1
+	end
+	return ""
+end
+
+def gate4_mir_failure_error(function: Gate4MirFunction, failure: Integer): String
+	block_index := gate4_mir_block_index(function, failure)
+	if block_index < 0
+		return "MIR failure target does not exist"
+	end
+	if function.blocks[block_index].terminator.kind != 4
+		return "MIR failure target is not a trap block"
+	end
+	return ""
+end
+
+def gate4_mir_instruction_error(
+		function: Gate4MirFunction,
+		instruction: Gate4MirInstruction,
+		value_ids: Array<Integer>,
+		value_types: Array<Integer>,
+		source_count: Integer,
+	): String
+	if gate4_mir_origin_error(instruction.origin, source_count) != ""
+		return "MIR instruction origin is invalid"
+	end
+	if instruction.kind == 1
+		if instruction.result.value_type != 1
+			return "MIR Integer constant result type differs"
+		end
+		first_set := instruction.first != - 1
+		second_set := instruction.second != - 1
+		failure_set := instruction.failure != - 1
+		if first_set || second_set || failure_set
+			return "MIR Integer constant shape differs"
+		end
+		return ""
+	end
+	if instruction.kind == 2
+		if instruction.literal != 0
+			return "MIR checked Integer add shape differs"
+		end
+		result_differs := instruction.result.value_type != 1
+		first_differs := gate4_mir_value_type(value_ids, value_types, instruction.first) != 1
+		second_differs := gate4_mir_value_type(value_ids, value_types, instruction.second) != 1
+		if result_differs || first_differs || second_differs
+			return "MIR checked Integer add type differs"
+		end
+		return gate4_mir_failure_error(function, instruction.failure)
+	end
+	if instruction.kind == 3
+		if instruction.literal != 0 || instruction.failure != - 1
+			return "MIR Integer comparison shape differs"
+		end
+		result_differs := instruction.result.value_type != 2
+		first_differs := gate4_mir_value_type(value_ids, value_types, instruction.first) != 1
+		second_differs := gate4_mir_value_type(value_ids, value_types, instruction.second) != 1
+		if result_differs || first_differs || second_differs
+			return "MIR Integer comparison type differs"
+		end
+		return ""
+	end
+	if instruction.kind == 4
+		if instruction.second != - 1 || instruction.literal != 0 || instruction.failure != - 1
+			return "MIR Array length shape differs"
+		end
+		result_differs := instruction.result.value_type != 1
+		array_differs := gate4_mir_value_type(value_ids, value_types, instruction.first) != 3
+		if result_differs || array_differs
+			return "MIR Array length type differs"
+		end
+		return ""
+	end
+	if instruction.kind == 5
+		if instruction.literal != 0
+			return "MIR Array address shape differs"
+		end
+		result_differs := instruction.result.value_type != 4
+		array_differs := gate4_mir_value_type(value_ids, value_types, instruction.first) != 3
+		index_differs := gate4_mir_value_type(value_ids, value_types, instruction.second) != 1
+		if result_differs || array_differs || index_differs
+			return "MIR Array address type differs"
+		end
+		return gate4_mir_failure_error(function, instruction.failure)
+	end
+	return "MIR instruction kind is unsupported"
+end
+
+def gate4_mir_terminator_error(
+		function: Gate4MirFunction,
+		terminator: Gate4MirTerminator,
+		value_ids: Array<Integer>,
+		value_types: Array<Integer>,
+		source_count: Integer,
+	): String
+	if gate4_mir_origin_error(terminator.origin, source_count) != ""
+		return "MIR terminator origin is invalid"
+	end
+	if terminator.kind == 1
+		condition_set := terminator.condition != - 1
+		alternate_set := terminator.alternate != - 1
+		alternate_arguments_set := terminator.alternate_arguments.size() != 0
+		value_set := terminator.value != - 1
+		if condition_set || alternate_set || alternate_arguments_set || value_set
+			return "MIR jump shape differs"
+		end
+		return gate4_mir_target_arguments_error(
+			function,
+			terminator.target,
+			terminator.arguments,
+			value_ids,
+			value_types,
+		)
+	end
+	if terminator.kind == 2
+		if terminator.value != - 1
+			return "MIR branch shape differs"
+		end
+		if gate4_mir_value_type(value_ids, value_types, terminator.condition) != 2
+			return "MIR branch condition is not Boolean"
+		end
+		first := gate4_mir_target_arguments_error(
+			function,
+			terminator.target,
+			terminator.arguments,
+			value_ids,
+			value_types,
+		)
+		if first != ""
+			return first
+		end
+		return gate4_mir_target_arguments_error(
+			function,
+			terminator.alternate,
+			terminator.alternate_arguments,
+			value_ids,
+			value_types,
+		)
+	end
+	if terminator.kind == 3
+		condition_set := terminator.condition != - 1
+		target_set := terminator.target != - 1
+		alternate_set := terminator.alternate != - 1
+		arguments_set := terminator.arguments.size() != 0
+		alternate_arguments_set := terminator.alternate_arguments.size() != 0
+		target_shape_set := condition_set || target_set || alternate_set
+		if target_shape_set || arguments_set || alternate_arguments_set
+			return "MIR return shape differs"
+		end
+		if terminator.value >= 0 && gate4_mir_value_type(value_ids, value_types, terminator.value) == 0
+			return "MIR return value is undefined"
+		end
+		return ""
+	end
+	if terminator.kind == 4
+		condition_set := terminator.condition != - 1
+		target_set := terminator.target != - 1
+		alternate_set := terminator.alternate != - 1
+		arguments_set := terminator.arguments.size() != 0
+		alternate_arguments_set := terminator.alternate_arguments.size() != 0
+		value_set := terminator.value != - 1
+		target_shape_set := condition_set || target_set || alternate_set
+		argument_shape_set := arguments_set || alternate_arguments_set
+		if target_shape_set || argument_shape_set || value_set
+			return "MIR trap shape differs"
+		end
+		return ""
+	end
+	return "MIR terminator kind is unsupported"
+end
+
+def gate4_mir_function_error(function: Gate4MirFunction, source_count: Integer): String
+	if function.id < 0 || gate4_mir_origin_error(function.origin, source_count) != ""
+		return "MIR function identity or origin is invalid"
+	end
+	if function.blocks.size() == 0
+		return "MIR function has no blocks"
+	end
+	if gate4_mir_block_index(function, function.entry) < 0
+		return "MIR function entry block does not exist"
+	end
+
+	mut block_ids: Array<Integer> := []
+	mut value_ids: Array<Integer> := []
+	mut value_types: Array<Integer> := []
+	mut index := 0
+	while index < function.parameters.size()
+		error := gate4_mir_add_value(value_ids, value_types, function.parameters[index], source_count)
+		if error != ""
+			return error
+		end
+		index += 1
+	end
+
+	mut block_index := 0
+	while block_index < function.blocks.size()
+		block := function.blocks[block_index]
+		if block.id < 0 || gate4_mir_find_integer(block_ids, block.id) >= 0
+			return "MIR block identifier is invalid or duplicated"
+		end
+		if gate4_mir_origin_error(block.origin, source_count) != ""
+			return "MIR block origin is invalid"
+		end
+		block_ids.push(block.id)
+		index = 0
+		while index < block.parameters.size()
+			error := gate4_mir_add_value(value_ids, value_types, block.parameters[index], source_count)
+			if error != ""
+				return error
+			end
+			index += 1
+		end
+		index = 0
+		while index < block.instructions.size()
+			error := gate4_mir_add_value(
+				value_ids,
+				value_types,
+				block.instructions[index].result,
+				source_count,
+			)
+			if error != ""
+				return error
+			end
+			index += 1
+		end
+		block_index += 1
+	end
+
+	block_index = 0
+	while block_index < function.blocks.size()
+		block := function.blocks[block_index]
+		# Function and block parameters dominate the block. Other values become
+		# visible only after their defining instruction; block arguments carry
+		# values across control-flow edges.
+		mut available_ids: Array<Integer> := []
+		mut available_types: Array<Integer> := []
+		index = 0
+		while index < function.parameters.size()
+			available_ids.push(function.parameters[index].id)
+			available_types.push(function.parameters[index].value_type)
+			index += 1
+		end
+		index = 0
+		while index < block.parameters.size()
+			available_ids.push(block.parameters[index].id)
+			available_types.push(block.parameters[index].value_type)
+			index += 1
+		end
+		index = 0
+		while index < block.instructions.size()
+			error := gate4_mir_instruction_error(
+				function,
+				block.instructions[index],
+				available_ids,
+				available_types,
+				source_count,
+			)
+			if error != ""
+				return error
+			end
+			available_ids.push(block.instructions[index].result.id)
+			available_types.push(block.instructions[index].result.value_type)
+			index += 1
+		end
+		error := gate4_mir_terminator_error(
+			function,
+			block.terminator,
+			available_ids,
+			available_types,
+			source_count,
+		)
+		if error != ""
+			return error
+		end
+		block_index += 1
+	end
+	return ""
+end
+
+def gate4_verify_mir(native_module: Gate4MirModule): String
+	if native_module.source_count <= 0
+		return "MIR module has no sources"
+	end
+	if native_module.functions.size() == 0
+		return "MIR module has no functions"
+	end
+	if native_module.facts.value_ids.size() != native_module.facts.kinds.size()
+		return "MIR fact carrier is malformed"
+	end
+	# The foundation accepts only facts produced by a later verified analysis.
+	# No source token, snapshot, or caller can pre-populate this carrier.
+	if native_module.facts.value_ids.size() != 0
+		return "MIR input cannot supply optimization facts"
+	end
+
+	mut function_ids: Array<Integer> := []
+	mut entry_found := false
+	mut index := 0
+	while index < native_module.functions.size()
+		function := native_module.functions[index]
+		if gate4_mir_find_integer(function_ids, function.id) >= 0
+			return "MIR function identifier is duplicated"
+		end
+		function_ids.push(function.id)
+		if function.id == native_module.entry_function
+			entry_found = true
+		end
+		error := gate4_mir_function_error(function, native_module.source_count)
+		if error != ""
+			return error
+		end
+		index += 1
+	end
+	if !entry_found
+		return "MIR entry function does not exist"
+	end
+	return ""
+end
+
 def gate4_reset_temporary_storage()
 	return
 end
