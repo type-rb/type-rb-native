@@ -11,6 +11,7 @@ record Gate4Compiler
 	token_texts: Gate4StringStorage
 	token_lines: Gate4IntegerStorage
 	token_count: Array<Integer>
+	mir_loop_facts: Gate4IntegerStorage
 	module_names: Gate4StringStorage
 	module_files: Gate4StringStorage
 	module_count: Array<Integer>
@@ -100,7 +101,6 @@ record Gate4EmitContext
 	scalar_inline_range_failure_used: Array<Integer>
 	array_bounds_failure_used: Array<Integer>
 	array_header_cache: Array<Array<String>>
-	mir_loop_facts: Gate4IntegerStorage
 end
 
 record Gate4EmittedValue
@@ -749,7 +749,8 @@ def gate4_verify_mir(native_module: Gate4MirModule): String
 		if value.size() != 5
 			return "MIR value row size differs"
 		end
-		if gate4_mir_function_index(native_module, value[0]) < 0
+		function_index := gate4_mir_function_index(native_module, value[0])
+		if function_index < 0
 			return "MIR value identity is invalid"
 		end
 		if value[1] < 0
@@ -771,7 +772,7 @@ def gate4_verify_mir(native_module: Gate4MirModule): String
 			end
 			previous += 1
 		end
-		function := native_module.functions[gate4_mir_function_index(native_module, value[0])]
+		function := native_module.functions[function_index]
 		if gate4_mir_definition_count(native_module, function, value[1]) != 1
 			return "MIR value definition count differs"
 		end
@@ -801,6 +802,7 @@ def gate4_compiler_new(capacity: Integer): Gate4Compiler
 		token_texts: gate4_string_storage(capacity),
 		token_lines: gate4_integer_storage(capacity),
 		token_count: [0],
+		mir_loop_facts: gate4_integer_storage(capacity),
 		module_names: gate4_string_storage(capacity),
 		module_files: gate4_string_storage(capacity),
 		module_count: [0],
@@ -1051,7 +1053,6 @@ def gate4_emit_context_new(
 		scalar_inline_range_failure_used: [0],
 		array_bounds_failure_used: [0],
 		array_header_cache: [["", "", ""], ["", "", ""]],
-		mir_loop_facts: gate4_integer_storage(capacity),
 	)
 end
 
@@ -2264,54 +2265,25 @@ def gate4_mir_unit_step_loop_valid(
 	return false
 end
 
-def gate4_analyze_mir_loop_facts(
-		state: Gate4Compiler,
-		function_index: Integer,
-		mut facts: Gate4IntegerStorage,
-	)
-	mut index := gate4_load_integer(state.function_body_starts, function_index)
-	finish := gate4_load_integer(state.function_body_ends, function_index)
-	while index < finish
-		if gate4_token_is(state, index, "while")
-			gate4_store_integer(facts, index, 0)
-			previous := index - 2
-			if gate4_load_string(state.token_texts, previous) == "0"
-				if gate4_token_is(state, previous - 3, "mut")
-					if gate4_mir_unit_step_loop_valid(
-							state,
-							index,
-							finish,
-							gate4_load_string(state.token_texts, previous - 2),
-						)
-						gate4_store_integer(facts, index, 1)
-					end
-				end
-			end
-		end
-		index += 1
-	end
-	return
-end
-
-def gate4_derived_nonnegative_loop_local(
+def gate4_mir_nonnegative_loop_local(
 		state: Gate4Compiler,
 		loop_start: Integer,
 		context: Gate4EmitContext,
 	): Integer
 	unavailable := context.local_count[0]
-	previous := loop_start - 2
-	if gate4_load_string(state.token_texts, previous) == "0"
-		return unavailable
-	end
-	if gate4_load_integer(context.local_mutable, unavailable - 1) != 3
-		return unavailable
-	end
-	if !gate4_token_is(state, previous - 5, "mut")
-		return unavailable
-	end
-	name := gate4_load_string(context.local_names, unavailable - 1)
-	if gate4_mir_unit_step_loop_valid(state, loop_start, context.function_end, name)
+	if gate4_load_integer(state.mir_loop_facts, loop_start) == 1
 		return unavailable - 1
+	end
+	previous := loop_start - 2
+	if gate4_load_string(state.token_texts, previous) != "0"
+		if gate4_load_integer(context.local_mutable, unavailable - 1) == 3
+			if gate4_token_is(state, previous - 5, "mut")
+				name := gate4_load_string(context.local_names, unavailable - 1)
+				if gate4_mir_unit_step_loop_valid(state, loop_start, context.function_end, name)
+					return unavailable - 1
+				end
+			end
+		end
 	end
 	return unavailable
 end
@@ -3577,14 +3549,11 @@ def gate4_emit_block(
 					gate4_invalidate_array_header_cache(context)
 				else
 					if gate4_token_is(state, position[0], "while")
-						mut mir_nonnegative_local := gate4_derived_nonnegative_loop_local(
+						mir_nonnegative_local := gate4_mir_nonnegative_loop_local(
 							state,
 							position[0],
 							context,
 						)
-						if gate4_load_integer(context.mir_loop_facts, position[0]) == 1
-							mir_nonnegative_local = context.local_count[0] - 1
-						end
 						gate4_store_integer(context.local_mutable, mir_nonnegative_local, 2)
 						header := gate4_emit_label(context)
 						body := gate4_emit_label(context)
@@ -3678,7 +3647,6 @@ def gate4_emit_function(
 		inline_budget,
 		gate4_load_integer(state.function_body_ends, function_index),
 	)
-	gate4_analyze_mir_loop_facts(state, function_index, context.mir_loop_facts)
 	mut body := gate4_output_new(state.token_count[0] * 8 + 1024, output.runtime_flags)
 	parameter_start := gate4_load_integer(state.function_parameter_starts, function_index)
 	parameter_count := gate4_load_integer(state.function_parameter_counts, function_index)
@@ -8214,6 +8182,21 @@ def gate4_check_block(
 						gate4_finish_statement(state, position)
 					else
 						if gate4_token_is(state, position[0], "while")
+							loop_start := position[0]
+							gate4_store_integer(state.mir_loop_facts, loop_start, 0)
+							previous := loop_start - 2
+							if gate4_load_string(state.token_texts, previous) == "0"
+								if gate4_token_is(state, previous - 3, "mut")
+									if gate4_mir_unit_step_loop_valid(
+											state,
+											loop_start,
+											state.token_count[0],
+											gate4_load_string(state.token_texts, previous - 2),
+										)
+										gate4_store_integer(state.mir_loop_facts, loop_start, 1)
+									end
+								end
+							end
 							line := gate4_load_integer(state.token_lines, position[0])
 							gate4_advance(position)
 							condition := gate4_check_expression(state, position, locals, 1, "Boolean")
