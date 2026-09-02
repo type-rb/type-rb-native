@@ -1,4 +1,4 @@
-import { Gate4Compiler, Gate4MirModule, Gate4Output, Gate4ProjectSources, gate4_add_module, gate4_build_symbol_index, gate4_character_in, gate4_check, gate4_compiler_new, gate4_emit_array_header, gate4_emit_context_new, gate4_emit_qbe, gate4_encode_static_string, gate4_find_field, gate4_find_function_in_module, gate4_find_import_binding, gate4_find_module, gate4_find_record_in_module, gate4_find_record_type, gate4_float_literal_in_range, gate4_has_diagnostic, gate4_invalidate_array_header_cache, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_local_find, gate4_locals_new, gate4_mir_nonnegative_fact, gate4_number_is_float, gate4_number_without_underscores, gate4_output_new, gate4_parse_module, gate4_parse_project_config, gate4_resolve, gate4_string_bucket, gate4_string_starts_at, gate4_symbol_bucket_count, gate4_verify_mir } from compiler
+import { Gate4Compiler, Gate4MirModule, Gate4Output, Gate4ProjectSources, gate4_add_module, gate4_build_symbol_index, gate4_character_in, gate4_check, gate4_check_expression, gate4_check_primary, gate4_compiler_new, gate4_emit_array_header, gate4_emit_context_new, gate4_emit_qbe, gate4_encode_static_string, gate4_find_field, gate4_find_function_in_module, gate4_find_import_binding, gate4_find_module, gate4_find_record_in_module, gate4_find_record_type, gate4_float_literal_in_range, gate4_has_diagnostic, gate4_invalidate_array_header_cache, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_local_add, gate4_local_find, gate4_locals_new, gate4_mir_nonnegative_fact, gate4_number_is_float, gate4_number_without_underscores, gate4_output_new, gate4_parse_module, gate4_parse_project_config, gate4_resolve, gate4_string_bucket, gate4_string_starts_at, gate4_symbol_bucket_count, gate4_verify_mir } from compiler
 import { gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage
 import { native_create_directory, native_read_text, native_write_text } from native_file_system
 import trb/std/process
@@ -811,6 +811,51 @@ describe("Gate 4 TypeRB frontend") do
 				"9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999.0",
 			),
 		).to_be_false()
+	end
+
+	test("carries exact checked source origins without preserving computed text") do
+		mut literal_state := gate4_compiler_new(4)
+		expect(gate4_lex(literal_state, "1")).to_be_true()
+		mut literal_position := [0]
+		mut literal_locals := gate4_locals_new(4)
+		literal := gate4_check_primary(literal_state, literal_position, literal_locals, "Integer")
+		expect(literal.origin).to_equal(0)
+		expect(gate4_load_string(literal_state.token_texts, literal.origin)).to_equal("1")
+
+		mut identifier_state := gate4_compiler_new(8)
+		expect(gate4_lex(identifier_state, "value")).to_be_true()
+		mut identifier_position := [0]
+		mut identifier_locals := gate4_locals_new(4)
+		expect(gate4_local_add(identifier_state, identifier_locals, "value", "Integer", 0, 1)).to_be_true()
+		identifier := gate4_check_primary(identifier_state, identifier_position, identifier_locals, "Integer")
+		expect(identifier.origin).to_equal(0)
+		expect(gate4_load_string(identifier_state.token_texts, identifier.origin)).to_equal("value")
+
+		mut parenthesized_state := gate4_compiler_new(8)
+		expect(gate4_lex(parenthesized_state, "(1)")).to_be_true()
+		mut parenthesized_position := [0]
+		mut parenthesized_locals := gate4_locals_new(4)
+		parenthesized := gate4_check_primary(
+			parenthesized_state,
+			parenthesized_position,
+			parenthesized_locals,
+			"Integer",
+		)
+		expect(parenthesized.origin).to_equal(1)
+
+		mut computed_state := gate4_compiler_new(8)
+		expect(gate4_lex(computed_state, "1 + 2")).to_be_true()
+		mut computed_position := [0]
+		mut computed_locals := gate4_locals_new(4)
+		computed := gate4_check_expression(computed_state, computed_position, computed_locals, 1, "Integer")
+		expect(computed.origin).to_equal(9007199254740991)
+
+		mut unary_state := gate4_compiler_new(8)
+		expect(gate4_lex(unary_state, "- 1")).to_be_true()
+		mut unary_position := [0]
+		mut unary_locals := gate4_locals_new(4)
+		unary := gate4_check_primary(unary_state, unary_position, unary_locals, "Integer")
+		expect(unary.origin).to_equal(9007199254740991)
 	end
 
 	test("checks a generated declaration-chain scale probe") do
