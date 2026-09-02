@@ -470,6 +470,19 @@ optimization moves to verified Native MIR analysis and target-independent
 passes under
 [Decision 0028](docs/decisions/0028-native-mir-optimization-boundary.md).
 
+The first self-hosted MIR foundation is accepted at revision
+`f94c44f8817a26fcb8b89ecbd2dfe39dec05681e`. It adds a compact TypeRB-owned
+function, block, value, instruction, origin, and verifier subset for one checked
+scalar/Array loop without connecting ordinary QBE emission or changing any
+existing generated application. Formal Linux arm64 evidence measured the fixed
+compiler at 271,744 bytes, adjacent build wall and CPU at no more than
+`1.087912x` and `1.088889x`, and peak RSS at no more than `1.002738x` of the
+pre-foundation baseline. Existing application QBE and executables remain
+byte-identical. The separately enforced 17,000-byte-per-target structural
+allowance must be recovered as portable range, index, and induction ownership
+moves out of the direct emitter. See the
+[recorded foundation result](results/2026-09-02-native-mir-foundation-linux-arm64/README.md).
+
 Gate 6N passes every frozen condition for the internal
 `linux-amd64-v0` profile. The exact merged compiler closes a 240,888-byte
 Go-free B2/B3/B4 fixed point, emits byte-identical target-neutral compiler and
@@ -516,11 +529,12 @@ remains internal here.
 
 The early snapshot path established a distinct Native MIR, while the later
 self-hosted compiler reached closure with a compact direct-QBE emitter. The
-next optimizer phase restores the intended boundary in that self-hosted path:
-range, index, loop, call-effect, Array-header, and GC-safety knowledge belongs
-to verified target-independent MIR analysis. QBE remains the first adapter and
-may perform backend legalization and instruction selection, but it does not own
-those TypeRB facts. See
+measured self-hosted MIR foundation now restores the representation and
+verification boundary; bounded vertical slices must next move range, index,
+loop, call-effect, Array-header, and GC-safety knowledge into verified
+target-independent MIR analysis. QBE remains the first adapter and may perform
+backend legalization and instruction selection, but it does not own those
+TypeRB facts. See
 [Decision 0028](docs/decisions/0028-native-mir-optimization-boundary.md).
 
 The intended bootstrap sequence is:

@@ -12,7 +12,7 @@ const capability = (title, status, scopes, description, evidence) => ({
 
 export const catalog = {
   schemaVersion: 1,
-  updatedAt: '2026-09-01',
+  updatedAt: '2026-09-02',
   areas: [
     {
       id: 'language',
@@ -35,6 +35,7 @@ export const catalog = {
       description: 'Self-hosting, project builds, diagnostics, and fast development iteration.',
       items: [
         capability('TypeRB-authored self-hosted compiler', 'verified', ['parity', 'production'], 'The lexer, parser, resolver, checker, emitter, and driver reach a reproducible fixed point.', ['Gate 4 / Gate 5', 'docs/gate-5-matched-compiler.md']),
+        capability('Verified self-hosted Native MIR foundation', 'partial', ['parity', 'production'], 'A measured TypeRB-owned MIR model and verifier now preserve functions, blocks, values, checked failure edges, origins, and an empty input-fact boundary. Ordinary QBE emission is not connected to it yet.', ['Native MIR foundation result', 'results/2026-09-02-native-mir-foundation-linux-arm64/README.md']),
         capability('File-oriented check and build', 'verified', ['parity', 'production'], 'Read source files and own the QBE and C-toolchain process boundary.', ['Gate 6A / Gate 6B', 'docs/gate-6-single-file-build.md']),
         capability('Multi-file module graph', 'verified', ['parity', 'production'], 'Load explicit imports and deterministic transitive module closures.', ['Gate 6E–6H', 'docs/gate-6-module-graph.md']),
         capability('Configured project build', 'verified', ['parity', 'production'], 'Load a bounded trbconfig.jsonc source set and build its unique main entry.', ['Gate 6K', 'docs/gate-6-configured-project.md']),
