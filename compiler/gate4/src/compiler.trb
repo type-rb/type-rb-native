@@ -85,7 +85,7 @@ record Gate4EmitContext
 	local_types: Gate4StringStorage
 	local_slots: Gate4StringStorage
 	local_mutable: Gate4IntegerStorage
-	local_nonnegative: Gate4IntegerStorage
+	local_nonnegative: Array<Integer>
 	local_inherited: Gate4IntegerStorage
 	local_direct: Gate4IntegerStorage
 	local_count: Array<Integer>
@@ -101,7 +101,7 @@ record Gate4EmitContext
 	scalar_inline_range_failure_used: Array<Integer>
 	array_bounds_failure_used: Array<Integer>
 	array_header_cache: Array<Array<String>>
-	mir_loop_facts: Gate4IntegerStorage
+	mir_loop_facts: Array<Integer>
 end
 
 record Gate4EmittedValue
@@ -1073,7 +1073,7 @@ def gate4_emit_context_new(
 		local_types: gate4_string_storage(capacity),
 		local_slots: gate4_string_storage(capacity),
 		local_mutable: gate4_integer_storage(capacity),
-		local_nonnegative: gate4_integer_storage(capacity),
+		local_nonnegative: [],
 		local_inherited: gate4_integer_storage(capacity),
 		local_direct: gate4_integer_storage(capacity),
 		local_count: [0],
@@ -1091,7 +1091,7 @@ def gate4_emit_context_new(
 		scalar_inline_range_failure_used: [0],
 		array_bounds_failure_used: [0],
 		array_header_cache: [["", "", ""], ["", "", ""]],
-		mir_loop_facts: gate4_integer_storage(capacity),
+		mir_loop_facts: [],
 	)
 end
 
@@ -2329,15 +2329,14 @@ end
 def gate4_analyze_mir_loop_facts(
 		state: Gate4Compiler,
 		function_index: Integer,
-		mut facts: Gate4IntegerStorage,
+		mut facts: Array<Integer>,
 	)
 	mut index := gate4_load_integer(state.function_body_starts, function_index)
 	finish := gate4_load_integer(state.function_body_ends, function_index)
 	while index < finish
 		if gate4_token_is(state, index, "while")
-			gate4_store_integer(facts, index, 0)
 			if gate4_mir_literal_zero_induction_fact(state, index, finish)
-				gate4_store_integer(facts, index, 1)
+				facts.push(index)
 			end
 		end
 		index += 1
@@ -2369,6 +2368,15 @@ def gate4_derived_nonnegative_loop_local(
 	return unavailable
 end
 
+def gate4_reset_local_nonnegative(mut context: Gate4EmitContext, index: Integer)
+	if index < context.local_nonnegative.size()
+		context.local_nonnegative[index] = 0
+	else
+		context.local_nonnegative.push(0)
+	end
+	return
+end
+
 def gate4_emit_add_local(
 		mut context: Gate4EmitContext,
 		mut output: Gate4Output,
@@ -2386,7 +2394,7 @@ def gate4_emit_add_local(
 	gate4_store_string(context.local_types, index, type_name)
 	gate4_store_string(context.local_slots, index, slot)
 	gate4_store_integer(context.local_mutable, index, mutable)
-	gate4_store_integer(context.local_nonnegative, index, 0)
+	gate4_reset_local_nonnegative(context, index)
 	gate4_store_integer(context.local_direct, index, 0)
 	mut inherited := 0
 	if inherited_root
@@ -2419,7 +2427,7 @@ def gate4_emit_add_direct_local(
 	gate4_store_string(context.local_types, index, type_name)
 	gate4_store_string(context.local_slots, index, operand)
 	gate4_store_integer(context.local_mutable, index, 0)
-	gate4_store_integer(context.local_nonnegative, index, 0)
+	gate4_reset_local_nonnegative(context, index)
 	gate4_store_integer(context.local_inherited, index, 1)
 	gate4_store_integer(context.local_direct, index, 1)
 	context.local_count[0] = index + 1
@@ -2449,7 +2457,7 @@ def gate4_emit_loaded_local(
 		gate4_load_string(context.local_slots, index),
 	)
 	mut mutable := gate4_load_integer(context.local_mutable, index)
-	if gate4_load_integer(context.local_nonnegative, index) == 1
+	if context.local_nonnegative[index] == 1
 		mutable = 2
 	end
 	return gate4_emitted_value(
@@ -3643,9 +3651,15 @@ def gate4_emit_block(
 						)
 						gate4_store_integer(context.local_mutable, derived_nonnegative_local, 2)
 						mut mir_nonnegative_local := context.local_count[0]
-						if gate4_load_integer(context.mir_loop_facts, position[0]) == 1
-							mir_nonnegative_local = context.local_count[0] - 1
-							gate4_store_integer(context.local_nonnegative, mir_nonnegative_local, 1)
+						mut fact_index := 0
+						while fact_index < context.mir_loop_facts.size()
+							if context.mir_loop_facts[fact_index] == position[0]
+								mir_nonnegative_local = context.local_count[0] - 1
+							end
+							fact_index += 1
+						end
+						if mir_nonnegative_local < context.local_count[0]
+							context.local_nonnegative[mir_nonnegative_local] = 1
 						end
 						header := gate4_emit_label(context)
 						body := gate4_emit_label(context)
@@ -3684,7 +3698,9 @@ def gate4_emit_block(
 						gate4_invalidate_array_header_cache(context)
 						context.loop_depth[0] = context.loop_depth[0] - 1
 						gate4_store_integer(context.local_mutable, derived_nonnegative_local, 1)
-						gate4_store_integer(context.local_nonnegative, mir_nonnegative_local, 0)
+						if mir_nonnegative_local < context.local_nonnegative.size()
+							context.local_nonnegative[mir_nonnegative_local] = 0
+						end
 					else
 						if gate4_token_is(state, position[0], "return")
 							gate4_advance(position)
