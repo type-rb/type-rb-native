@@ -85,6 +85,7 @@ record Gate4EmitContext
 	local_types: Gate4StringStorage
 	local_slots: Gate4StringStorage
 	local_mutable: Gate4IntegerStorage
+	local_nonnegative: Gate4IntegerStorage
 	local_inherited: Gate4IntegerStorage
 	local_direct: Gate4IntegerStorage
 	local_count: Array<Integer>
@@ -100,6 +101,7 @@ record Gate4EmitContext
 	scalar_inline_range_failure_used: Array<Integer>
 	array_bounds_failure_used: Array<Integer>
 	array_header_cache: Array<Array<String>>
+	mir_loop_facts: Gate4IntegerStorage
 end
 
 record Gate4EmittedValue
@@ -1071,6 +1073,7 @@ def gate4_emit_context_new(
 		local_types: gate4_string_storage(capacity),
 		local_slots: gate4_string_storage(capacity),
 		local_mutable: gate4_integer_storage(capacity),
+		local_nonnegative: gate4_integer_storage(capacity),
 		local_inherited: gate4_integer_storage(capacity),
 		local_direct: gate4_integer_storage(capacity),
 		local_count: [0],
@@ -1088,6 +1091,7 @@ def gate4_emit_context_new(
 		scalar_inline_range_failure_used: [0],
 		array_bounds_failure_used: [0],
 		array_header_cache: [["", "", ""], ["", "", ""]],
+		mir_loop_facts: gate4_integer_storage(capacity),
 	)
 end
 
@@ -2252,29 +2256,18 @@ def gate4_emit_array_address(
 	return address
 end
 
-def gate4_nonnegative_loop_local(
+# This target-independent pass lowers only the verified induction property for
+# the first ownership slice. The QBE adapter receives the resulting fact and
+# never inspects source tokens to reconstruct it.
+def gate4_mir_unit_step_loop_valid(
 		state: Gate4Compiler,
 		loop_start: Integer,
-		context: Gate4EmitContext,
-	): Integer
-	unavailable := context.local_count[0]
-	previous := loop_start - 2
-	mut declaration_offset := 3
-	if gate4_load_string(state.token_texts, previous) != "0"
-		declaration_offset = 5
-		# Marker 3 retains a proven bounded-add initializer only until this
-		# matching loop has validated the derived local's updates.
-		if gate4_load_integer(context.local_mutable, unavailable - 1) != 3
-			return unavailable
-		end
-	end
-	if !gate4_token_is(state, previous - declaration_offset, "mut")
-		return unavailable
-	end
-	name := gate4_load_string(context.local_names, unavailable - 1)
+		function_end: Integer,
+		name: String,
+	): Boolean
 	mut depth := 1
 	mut index := loop_start + 1
-	while index < context.function_end
+	while index < function_end
 		token := gate4_load_string(state.token_texts, index)
 		if token == "if"
 			depth += 1
@@ -2285,27 +2278,93 @@ def gate4_nonnegative_loop_local(
 		if token == "end"
 			depth -= 1
 			if depth == 0
-				return unavailable - 1
+				return true
 			end
 		end
 		if token == name
 			assignment := gate4_load_string(state.token_texts, index + 1)
 			if assignment == "="
-				return unavailable
+				return false
 			end
 			if assignment.size() == 2
 				if assignment != "+="
-					return unavailable
+					return false
 				end
 				if gate4_load_string(state.token_texts, index + 2) != "1"
-					return unavailable
+					return false
 				end
 				if gate4_load_integer(state.token_kinds, index + 3) != 4
-					return unavailable
+					return false
 				end
 			end
 		end
 		index += 1
+	end
+	return false
+end
+
+def gate4_mir_literal_zero_induction_fact(
+		state: Gate4Compiler,
+		loop_start: Integer,
+		function_end: Integer,
+	): Boolean
+	previous := loop_start - 2
+	if previous < 3
+		return false
+	end
+	if gate4_load_string(state.token_texts, previous) != "0"
+		return false
+	end
+	if !gate4_token_is(state, previous - 3, "mut")
+		return false
+	end
+	return gate4_mir_unit_step_loop_valid(
+		state,
+		loop_start,
+		function_end,
+		gate4_load_string(state.token_texts, previous - 2),
+	)
+end
+
+def gate4_analyze_mir_loop_facts(
+		state: Gate4Compiler,
+		function_index: Integer,
+		mut facts: Gate4IntegerStorage,
+	)
+	mut index := gate4_load_integer(state.function_body_starts, function_index)
+	finish := gate4_load_integer(state.function_body_ends, function_index)
+	while index < finish
+		if gate4_token_is(state, index, "while")
+			gate4_store_integer(facts, index, 0)
+			if gate4_mir_literal_zero_induction_fact(state, index, finish)
+				gate4_store_integer(facts, index, 1)
+			end
+		end
+		index += 1
+	end
+	return
+end
+
+def gate4_derived_nonnegative_loop_local(
+		state: Gate4Compiler,
+		loop_start: Integer,
+		context: Gate4EmitContext,
+	): Integer
+	unavailable := context.local_count[0]
+	previous := loop_start - 2
+	if gate4_load_string(state.token_texts, previous) == "0"
+		return unavailable
+	end
+	# Marker 3 remains only for the derived-index migration checkpoint.
+	if gate4_load_integer(context.local_mutable, unavailable - 1) != 3
+		return unavailable
+	end
+	if !gate4_token_is(state, previous - 5, "mut")
+		return unavailable
+	end
+	name := gate4_load_string(context.local_names, unavailable - 1)
+	if gate4_mir_unit_step_loop_valid(state, loop_start, context.function_end, name)
+		return unavailable - 1
 	end
 	return unavailable
 end
@@ -2327,6 +2386,7 @@ def gate4_emit_add_local(
 	gate4_store_string(context.local_types, index, type_name)
 	gate4_store_string(context.local_slots, index, slot)
 	gate4_store_integer(context.local_mutable, index, mutable)
+	gate4_store_integer(context.local_nonnegative, index, 0)
 	gate4_store_integer(context.local_direct, index, 0)
 	mut inherited := 0
 	if inherited_root
@@ -2359,6 +2419,7 @@ def gate4_emit_add_direct_local(
 	gate4_store_string(context.local_types, index, type_name)
 	gate4_store_string(context.local_slots, index, operand)
 	gate4_store_integer(context.local_mutable, index, 0)
+	gate4_store_integer(context.local_nonnegative, index, 0)
 	gate4_store_integer(context.local_inherited, index, 1)
 	gate4_store_integer(context.local_direct, index, 1)
 	context.local_count[0] = index + 1
@@ -2387,12 +2448,16 @@ def gate4_emit_loaded_local(
 		"\t" + operand + " =" + gate4_qbe_type(type_name) + " " + gate4_qbe_load(type_name) + " " +
 		gate4_load_string(context.local_slots, index),
 	)
+	mut mutable := gate4_load_integer(context.local_mutable, index)
+	if gate4_load_integer(context.local_nonnegative, index) == 1
+		mutable = 2
+	end
 	return gate4_emitted_value(
 		operand,
 		type_name,
 		0,
 		gate4_load_string(context.local_names, index),
-		gate4_load_integer(context.local_mutable, index),
+		mutable,
 		gate4_load_string(context.local_slots, index),
 	)
 end
@@ -3571,12 +3636,17 @@ def gate4_emit_block(
 					gate4_invalidate_array_header_cache(context)
 				else
 					if gate4_token_is(state, position[0], "while")
-						nonnegative_local := gate4_nonnegative_loop_local(
+						derived_nonnegative_local := gate4_derived_nonnegative_loop_local(
 							state,
 							position[0],
 							context,
 						)
-						gate4_store_integer(context.local_mutable, nonnegative_local, 2)
+						gate4_store_integer(context.local_mutable, derived_nonnegative_local, 2)
+						mut mir_nonnegative_local := context.local_count[0]
+						if gate4_load_integer(context.mir_loop_facts, position[0]) == 1
+							mir_nonnegative_local = context.local_count[0] - 1
+							gate4_store_integer(context.local_nonnegative, mir_nonnegative_local, 1)
+						end
 						header := gate4_emit_label(context)
 						body := gate4_emit_label(context)
 						done := gate4_emit_label(context)
@@ -3613,7 +3683,8 @@ def gate4_emit_block(
 						end
 						gate4_invalidate_array_header_cache(context)
 						context.loop_depth[0] = context.loop_depth[0] - 1
-						gate4_store_integer(context.local_mutable, nonnegative_local, 1)
+						gate4_store_integer(context.local_mutable, derived_nonnegative_local, 1)
+						gate4_store_integer(context.local_nonnegative, mir_nonnegative_local, 0)
 					else
 						if gate4_token_is(state, position[0], "return")
 							gate4_advance(position)
@@ -3669,6 +3740,7 @@ def gate4_emit_function(
 		inline_budget,
 		gate4_load_integer(state.function_body_ends, function_index),
 	)
+	gate4_analyze_mir_loop_facts(state, function_index, context.mir_loop_facts)
 	mut body := gate4_output_new(state.token_count[0] * 8 + 1024, output.runtime_flags)
 	parameter_start := gate4_load_integer(state.function_parameter_starts, function_index)
 	parameter_count := gate4_load_integer(state.function_parameter_counts, function_index)
