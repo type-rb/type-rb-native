@@ -101,14 +101,19 @@ self-hosted fixed points, the complete conformance corpus, and registered
 application outputs. A no-optimization or unchanged region must remain a useful
 differential control while the slice is introduced.
 
-The 255,000-byte ceiling and similar bounds registered for ordinary local
-optimization candidates are not silently relaxed. The first structural MIR
-issue measures a minimal skeleton and then freezes a separate temporary
-compiler-size envelope before implementation is judged. That issue must also
-freeze build-time, RSS, fixed-point, generated-QBE/application-size, and
-catastrophic bounds, plus a removal condition for the old emitter logic. The
+The 255,000-byte ceiling and similar historical bounds registered for ordinary
+local optimization candidates were not silently relaxed. The first structural
+MIR issue measured the minimal skeleton before freezing separate ceilings of
+302,000 bytes on Darwin arm64, 272,000 bytes on Linux arm64, and 574,000 bytes
+combined. Only that measured transition may use the registered `1.07x`
+compiler-size and `1.12x` build-time ratios; later ordinary changes return to
+`1.05x`. RSS, fixed-point, generated-QBE/application identity, catastrophic,
+process, stack, and cleanup bounds remain independently enforced. The
+17,000-byte-per-target allowance must be recovered by the end of portable
+range, index, and induction migration, before the next fact family. The
 long-term Go-competitive build and generated-artifact objectives remain
-mandatory.
+mandatory. See the
+[recorded foundation result](../results/2026-09-02-native-mir-foundation-linux-arm64/README.md).
 
 LLVM remains deferred until the shared path and benchmark corpus cover scalar,
 Array, allocation, and I/O behavior. Its first role is a bounded
