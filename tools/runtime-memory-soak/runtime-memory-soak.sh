@@ -144,8 +144,8 @@ test ! -e "$evidence" || fail "evidence path already exists"
 script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repository_root=$(CDPATH= cd -- "$script_directory/../.." && pwd)
 transition_policy=$repository_root/tools/native-mir-transition-policy.sh
-scalar_connection_marker=$repository_root/compiler/gate4/native-mir-scalar-connection-v1.txt
-if test -f "$transition_policy" && test -f "$scalar_connection_marker"; then
+control_flow_marker=$repository_root/compiler/gate4/native-mir-control-flow-v1.txt
+if test -f "$transition_policy" && test -f "$control_flow_marker"; then
 	. "$transition_policy"
 	if native_mir_transition_markers_valid "$repository_root"; then
 		MAX_COMPILER_SIZE=$(native_mir_target_compiler_limit "$profile")

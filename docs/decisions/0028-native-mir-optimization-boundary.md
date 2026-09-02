@@ -89,12 +89,21 @@ Linux arm64 bytes, and 607,000 bytes combined. Only the exact
 foundation-to-connection transition may use its 1.07 compiler-size and 1.15
 build-time ratios; subsequent ordinary changes return to the 1.05 relative
 limits. RSS remains limited to 1.05 and every retained observation remains
-subject to the 2.0 catastrophic limit. The checked-in policy and two exact
-markers make both exceptional transitions machine-readable.
+subject to the 2.0 catastrophic limit.
 
-Neither allowance is an optimization budget. The complete increase above the
-pre-MIR compiler must be recovered by the end of the portable range, index,
-and induction migration, before work begins on the next portable fact family.
+Issue #225 measures the first complete control-flow connection before changing
+the policy. It freezes 334,000 Darwin arm64 bytes, 310,000 Linux arm64 bytes,
+and 644,000 bytes combined. Linux amd64 remains at 310,000 bytes. Only the exact
+scalar-to-control-flow transition may use 1.08 compiler-size and 1.25 build-time
+ratios; the measured maximum build ratio is 1.233645. RSS and all correctness,
+fixed-point, artifact, process, cleanup, and catastrophic requirements remain
+unchanged. The checked-in policy and three exact markers make each exceptional
+transition machine-readable.
+
+None of these allowances is an optimization budget. The complete increase
+above the pre-MIR compiler must be recovered by the end of the portable range,
+index, and induction migration, before work begins on the next portable fact
+family.
 Removing superseded direct-emitter ownership is part of completing that
 migration.
 

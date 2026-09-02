@@ -189,6 +189,13 @@ only after the smallest useful skeleton has been measured and the envelope,
 build/RSS limits, removal condition, and final compactness target have been
 registered publicly. This temporary allowance does not weaken the end goal of
 matching or improving the Go backend's build time and generated artifact size.
+Each successive structural slice uses a validated marker that names its exact
+accepted baseline, measured source revision, and one-time relative limits. Once
+that marker exists in the baseline, later changes automatically return to the
+ordinary limits.
+The first complete control-flow slice must delete its superseded Array
+induction token facts and direct emission before the migration expands beyond
+the portable range, index, and induction family.
 See [Decision 0028](decisions/0028-native-mir-optimization-boundary.md).
 
 ## Backend adapters

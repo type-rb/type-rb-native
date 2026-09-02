@@ -47,7 +47,10 @@ TypeRB backend or product commitment.
   temporary compiler-size envelope only after measuring the smallest useful
   skeleton; record build time, RSS, and size throughout, remove superseded
   emitter logic, and preserve the final Go-competitive build and artifact
-  goals.
+  goals. Register each successive structural transition with an exact validated
+  marker before changing its limits. After the marker reaches the baseline,
+  ordinary relative limits apply again; do not begin another fact family until
+  the registered direct-emitter recovery is complete.
 - Record benchmark inputs, commands, revisions, hardware, operating system,
   toolchain versions, cache state, repetitions, and raw results. Include every
   required sidecar, linker, and runtime in size comparisons.
