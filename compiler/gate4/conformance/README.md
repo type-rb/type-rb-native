@@ -46,9 +46,9 @@ The valid cases cover:
 - repeated Array-header reads in an owned-managed loop, with exact invalidation
   after an opaque mutating call and local Array rebinding in
   `valid/array-header-cache-invalidation.trb`;
-- a zero-based unit-step induction loop whose nested Array reads retain the
-  unsigned upper-bounds check, followed by a reset and ordinary negative
-  indexing in `valid/nonnegative-loop-index.trb`;
+- zero-based and bounded-derived unit-step induction loops whose nested Array
+  reads retain the unsigned upper-bounds check, followed by a reset and
+  ordinary negative indexing in `valid/nonnegative-loop-index.trb`;
 - left-to-right, exactly-once argument evaluation through a bounded scalar
   leaf call in `valid/scalar-leaf-inline.trb`;
 - checked Integer multiplication at the bounded nonnegative fast-entry

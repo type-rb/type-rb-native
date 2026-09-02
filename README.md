@@ -450,6 +450,26 @@ correctness, compactness, fixed-point, build, memory, catastrophic, process,
 and cleanup bound. See the
 [recorded lexical loop-index result](results/2026-09-02-native-lexical-loop-index-linux-arm64/README.md).
 
+The accepted derived loop-index candidate propagates the active nonnegative
+loop-index fact
+through checked addition of a small nonnegative literal. This targets derived
+unit-step inner-loop indices while retaining the general path for ordinary
+mutable locals, dynamic or negative additions, overflow, reassignment,
+non-unit updates, and every unproved Array access. Issue
+[#192](https://github.com/type-rb/type-rb-native/issues/192) froze a 4%
+`n-body` wall and CPU signal. The formal result passes at `0.913171x` wall and
+`0.912856x` CPU, preserves both controls, shrinks the fixed compiler and
+`n-body` artifacts, and passes every existing correctness, compactness,
+fixed-point, build, memory, catastrophic, process, and cleanup requirement.
+See the
+[recorded derived loop-index result](results/2026-09-02-native-derived-loop-index-linux-arm64/README.md).
+
+This closes the preregistered direct-emitter semantic-analysis experiments.
+Further portable range, induction, Array-header, allocation, and GC-safety
+optimization moves to verified Native MIR analysis and target-independent
+passes under
+[Decision 0028](docs/decisions/0028-native-mir-optimization-boundary.md).
+
 Gate 6N passes every frozen condition for the internal
 `linux-amd64-v0` profile. The exact merged compiler closes a 240,888-byte
 Go-free B2/B3/B4 fixed point, emits byte-identical target-neutral compiler and
@@ -626,6 +646,8 @@ repository.
 - [Formal bounded Integer-multiply result on Linux arm64](results/2026-09-02-native-bounded-integer-multiply-linux-arm64/README.md)
 - [Formal bounded literal Integer-add result on Linux arm64](results/2026-09-02-native-bounded-literal-integer-add-linux-arm64/README.md)
 - [Formal nonnegative loop-index result on Linux arm64](results/2026-09-02-native-nonnegative-loop-index-linux-arm64/README.md)
+- [Formal lexical loop-index result on Linux arm64](results/2026-09-02-native-lexical-loop-index-linux-arm64/README.md)
+- [Formal derived loop-index result on Linux arm64](results/2026-09-02-native-derived-loop-index-linux-arm64/README.md)
 - [Formal static String compactness A/B result on Darwin/Linux arm64](results/2026-08-31-static-string-compactness-darwin-linux-arm64/README.md)
 - [Formal TypeRB backend-pair build controller](tools/benchmarksgame-build-formal/README.md)
 - [Formal Native runtime optimization A/B controller](tools/native-runtime-ab/README.md)
