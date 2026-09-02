@@ -16,6 +16,7 @@ mkdir -p "$candidate/compiler/gate4" "$baseline/compiler/gate4"
 
 test "$(native_mir_target_compiler_limit darwin-arm64-v0)" = 317000
 test "$(native_mir_target_compiler_limit linux-arm64-v0)" = 290000
+test "$(native_mir_target_compiler_limit linux-amd64-v0)" = 310000
 test "$NATIVE_MIR_COMBINED_COMPILER_LIMIT" = 607000
 if native_mir_target_compiler_limit unknown-target >/dev/null; then
 	exit 1

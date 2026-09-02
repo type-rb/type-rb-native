@@ -8,6 +8,9 @@ NATIVE_MIR_FOUNDATION_MARKER=compiler/gate4/native-mir-foundation-v1.txt
 NATIVE_MIR_SCALAR_CONNECTION_MARKER=compiler/gate4/native-mir-scalar-connection-v1.txt
 NATIVE_MIR_DARWIN_COMPILER_LIMIT=317000
 NATIVE_MIR_LINUX_COMPILER_LIMIT=290000
+# Gate 6N retains its pre-existing amd64 ceiling; the MIR envelope does not
+# grant that target any additional space.
+NATIVE_MIR_LINUX_AMD64_COMPILER_LIMIT=310000
 NATIVE_MIR_COMBINED_COMPILER_LIMIT=607000
 NATIVE_MIR_FOUNDATION_COMPILER_RATIO_LIMIT=1.07
 NATIVE_MIR_FOUNDATION_BUILD_RATIO_LIMIT=1.12
@@ -63,6 +66,7 @@ native_mir_target_compiler_limit() {
 	case "$1" in
 	darwin-arm64-v0) printf '%s\n' "$NATIVE_MIR_DARWIN_COMPILER_LIMIT" ;;
 	linux-arm64-v0) printf '%s\n' "$NATIVE_MIR_LINUX_COMPILER_LIMIT" ;;
+	linux-amd64-v0) printf '%s\n' "$NATIVE_MIR_LINUX_AMD64_COMPILER_LIMIT" ;;
 	*) return 1 ;;
 	esac
 }
