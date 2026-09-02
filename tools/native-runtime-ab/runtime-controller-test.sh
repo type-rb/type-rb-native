@@ -168,6 +168,36 @@ test "$(awk -F= '$1 == "contract" { print $2 }' "$test_root/nonnegative-index-ev
 test "$(awk -F= '$1 == "maximum_candidate_ratio" { print $2 }' "$test_root/nonnegative-index-evidence/environment.txt")" = 0.98 ||
 	fail "nonnegative-index threshold differs"
 
+NATIVE_RUNTIME_AB_CONTRACT=lexical-loop-index \
+	/bin/sh "$script_directory/runtime-controller.sh" \
+	test "$fake_runexec" "$catalog" spectral-norm 0 "$cache_control" \
+	"$test_root/lexical-spectral-workspace" "$test_root/lexical-spectral-evidence" \
+	> "$test_root/lexical-spectral.stdout" 2> "$test_root/lexical-spectral.stderr"
+test "$(cat "$test_root/lexical-spectral.stdout")" = 'native-runtime-ab: spectral-norm passed'
+test ! -s "$test_root/lexical-spectral.stderr" || fail "lexical spectral controller wrote stderr"
+test "$(awk -F= '$1 == "contract" { print $2 }' "$test_root/lexical-spectral-evidence/environment.txt")" = lexical-loop-index ||
+	fail "lexical spectral contract differs"
+test "$(awk -F= '$1 == "maximum_candidate_ratio" { print $2 }' "$test_root/lexical-spectral-evidence/environment.txt")" = 1.02 ||
+	fail "lexical spectral threshold differs"
+
+nbody_expected=$test_root/nbody-expected.txt
+printf 'n-body-output\n' > "$nbody_expected"
+nbody_catalog=$test_root/nbody-catalog.tsv
+printf 'case\tcandidate\tcommand\tinput\texpected\n' > "$nbody_catalog"
+printf 'n-body\tbaseline\t%s\tn-body\t%s\n' "$baseline_program" "$nbody_expected" >> "$nbody_catalog"
+printf 'n-body\tcandidate\t%s\tn-body\t%s\n' "$candidate_program" "$nbody_expected" >> "$nbody_catalog"
+NATIVE_RUNTIME_AB_CONTRACT=lexical-loop-index \
+	/bin/sh "$script_directory/runtime-controller.sh" \
+	test "$fake_runexec" "$nbody_catalog" n-body 0 "$cache_control" \
+	"$test_root/lexical-nbody-workspace" "$test_root/lexical-nbody-evidence" \
+	> "$test_root/lexical-nbody.stdout" 2> "$test_root/lexical-nbody.stderr"
+test "$(cat "$test_root/lexical-nbody.stdout")" = 'native-runtime-ab: n-body passed'
+test ! -s "$test_root/lexical-nbody.stderr" || fail "lexical n-body controller wrote stderr"
+test "$(awk -F= '$1 == "contract" { print $2 }' "$test_root/lexical-nbody-evidence/environment.txt")" = lexical-loop-index ||
+	fail "lexical n-body contract differs"
+test "$(awk -F= '$1 == "maximum_candidate_ratio" { print $2 }' "$test_root/lexical-nbody-evidence/environment.txt")" = 0.95 ||
+	fail "lexical n-body threshold differs"
+
 fannkuch_expected=$test_root/fannkuch-expected.txt
 printf 'fannkuch-redux-output\n' > "$fannkuch_expected"
 fannkuch_catalog=$test_root/fannkuch-catalog.tsv

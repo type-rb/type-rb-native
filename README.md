@@ -438,6 +438,17 @@ fixed-point, build, memory, compactness, and catastrophic limit passes. See
 the
 [recorded nonnegative loop-index result](results/2026-09-02-native-nonnegative-loop-index-linux-arm64/README.md).
 
+The next accepted candidate keeps that proof only through the matching
+lexical loop rather than scanning to the containing function. Safe nested
+loops and unrelated later resets may therefore retain the outer nonnegative
+fact, while every direct reassignment, non-unit update, shadowing declaration,
+derived index, and unproved access remains on the general path. The Linux
+arm64 result improves `n-body` wall time and CPU time by 12.2%, preserves both
+controls, shrinks every affected application, and passes every existing
+correctness, compactness, fixed-point, build, memory, catastrophic, process,
+and cleanup bound. See the
+[recorded lexical loop-index result](results/2026-09-02-native-lexical-loop-index-linux-arm64/README.md).
+
 Gate 6N passes every frozen condition for the internal
 `linux-amd64-v0` profile. The exact merged compiler closes a 240,888-byte
 Go-free B2/B3/B4 fixed point, emits byte-identical target-neutral compiler and
