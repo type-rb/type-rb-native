@@ -68,8 +68,8 @@ ratios of 1.052223/1.067669/1.000199 and Linux arm64 ratios of
 ordinary changes return to the 1.05 compiler/build/RSS ratios; every retained
 observation remains subject to the unchanged 2.0 catastrophic bound.
 
-Issue #230 then measures the compact complete two-phi reduction candidate at
-349,232 Darwin arm64 bytes and 314,544 Linux arm64 bytes, 663,776 bytes
+Issue #230 then measures the accepted compact two-phi reduction candidate at
+349,224 Darwin arm64 bytes and 314,544 Linux arm64 bytes, 663,768 bytes
 combined. Its Mach-O `__text` and ELF `.text` sections are 249,488 and 252,032
 bytes. Both targets emit byte-identical target-neutral compiler QBE of
 1,112,077 bytes with
@@ -105,6 +105,7 @@ Public evidence:
 - [induction-phi recovery issue #227](https://github.com/type-rb/type-rb-native/issues/227)
 - [induction-phi pull request #228](https://github.com/type-rb/type-rb-native/pull/228)
 - [Array reduction issue #230](https://github.com/type-rb/type-rb-native/issues/230)
+- [Array reduction pull request #231](https://github.com/type-rb/type-rb-native/pull/231)
 - [accepted pull request #220](https://github.com/type-rb/type-rb-native/pull/220)
 - [final static comparison](https://github.com/type-rb/type-rb-native/actions/runs/33682830363)
 - [Linux target regressions](https://github.com/type-rb/type-rb-native/actions/runs/33682830410)
@@ -114,3 +115,9 @@ Public evidence:
 - [induction-phi target regressions](https://github.com/type-rb/type-rb-native/actions/runs/33688825377)
 - [induction-phi persistent-worker checks](https://github.com/type-rb/type-rb-native/actions/runs/33688825485)
 - [induction-phi complete Native gates](https://github.com/type-rb/type-rb-native/actions/runs/33688825371)
+- [Array reduction static comparison](https://github.com/type-rb/type-rb-native/actions/runs/33697599532)
+- [Array reduction target regressions](https://github.com/type-rb/type-rb-native/actions/runs/33697599529)
+- [Array reduction persistent-worker checks](https://github.com/type-rb/type-rb-native/actions/runs/33697599556)
+- [Array reduction complete Native gates](https://github.com/type-rb/type-rb-native/actions/runs/33697599531)
+- [current formal runtime result](../results/2026-09-03-benchmarksgame-runtime-native-mir-induction-phi-linux-arm64/README.md)
+- [current formal build result](../results/2026-09-03-benchmarksgame-build-native-mir-induction-phi-linux-arm64/README.md)

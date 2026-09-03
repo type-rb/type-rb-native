@@ -29,6 +29,9 @@ for (const required of ['TypeRB Native Benchmarks', 'id="runtime-chart"', 'id="b
   if (!html.includes(required)) fail(`benchmark page is missing ${required}`);
 }
 if (!html.includes('Shorter bars are better')) fail('benchmark page does not explain bar direction');
+if (/\d+\.\d+[×x] to \d+\.\d+[×x] slower than Pure Go/.test(html)) {
+  fail('benchmark introduction duplicates a generated runtime range');
+}
 
 const app = await readFile(resolve(root, 'docs/capabilities/benchmarks/app.js'), 'utf8');
 for (const required of ['× the best time', '× the lowest RSS']) {

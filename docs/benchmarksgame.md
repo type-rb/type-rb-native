@@ -12,14 +12,14 @@ The capability corpus and the first formal runtime and build/distribution
 layers are complete. All three performance inputs pass through the pinned Go
 reference compiler, ordinary self-hosted Native compiler, and five pinned
 context implementations with exact published output. The
-[current Linux arm64 result](../results/2026-09-02-benchmarksgame-runtime-lexical-loop-index-linux-arm64/README.md)
-retains every registered observation and measures accepted revision `aad4954`.
+[current Linux arm64 result](../results/2026-09-03-benchmarksgame-runtime-native-mir-induction-phi-linux-arm64/README.md)
+retains every registered observation and measures accepted revision `9dcae12`.
 Native is substantially smaller and lighter than TypeRB Go but remains 1.61x
 to 3.45x slower than Pure Go across these numeric kernels. Pure Go parity or
 better is the minimum runtime objective. The independent
-[build result](../results/2026-09-02-benchmarksgame-build-lexical-loop-index-linux-arm64/README.md)
-finds that Native compiles the same sources 2.34x to 2.43x faster, uses about
-51% less compiler RSS, and reduces the controlled raw build payload by 99.65%.
+[build result](../results/2026-09-03-benchmarksgame-build-native-mir-induction-phi-linux-arm64/README.md)
+finds that Native compiles the same sources 2.42x to 2.61x faster, uses about
+51% less compiler RSS, and reduces the controlled raw build payload by 99.63%.
 This internally consistent snapshot replaces the preceding complete result;
 later focused A/B records remain separate until another complete rerun.
 
@@ -160,7 +160,7 @@ BenchExec `runexec` 3.35, runs correctness before timing, rotates all seven
 candidates through two warmup and eleven retained rounds, and preserves every
 failure and raw process-tree metric. One-core and four-core lanes are separate.
 This controller measures complete fresh processes only. Its current
-[formal result](../results/2026-09-02-benchmarksgame-runtime-lexical-loop-index-linux-arm64/README.md)
+[formal result](../results/2026-09-03-benchmarksgame-runtime-native-mir-induction-phi-linux-arm64/README.md)
 publishes all one-core and four-core raw observations, independently reproduced
 medians, and exact artifact identities. Compiler measurements and complete
 artifact/distribution inventory use the separate
@@ -169,7 +169,7 @@ measures alternating clean outputs through both TypeRB backends, verifies every
 measured artifact, process-traces representative builds, and separates
 controlled payloads from platform prerequisites and deploy artifacts. Its
 current
-[formal result](../results/2026-09-02-benchmarksgame-build-lexical-loop-index-linux-arm64/README.md)
+[formal result](../results/2026-09-03-benchmarksgame-build-native-mir-induction-phi-linux-arm64/README.md)
 publishes all raw observations, independently reproduced medians, artifact
 variants, process closure, dynamic dependencies, and distribution totals. See
 [Decision 0024](decisions/0024-benchexec-runtime-controller.md) and

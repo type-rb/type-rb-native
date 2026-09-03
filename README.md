@@ -320,25 +320,25 @@ Linux evidence observes the explicit LLD and dynamic libm boundaries. See the
 The current formal language-benchmark runtime result retains all 462 registered
 samples for `fannkuch-redux`, `n-body`, and `spectral-norm`. The exact same
 TypeRB sources pass through pinned Go and self-hosted Native paths. Native is
-8.1% faster than TypeRB Go on `spectral-norm`, but remains 1.85x to 1.86x
+8.2% faster than TypeRB Go on `spectral-norm`, but remains 1.69x to 1.84x
 slower on `fannkuch-redux` and `n-body`. It is 1.61x to 3.45x slower than the
-pinned Pure Go implementations and uses 82.65% to 83.07% less peak RSS than
+pinned Pure Go implementations and uses 82.63% to 83.90% less peak RSS than
 TypeRB Go. Pure Go parity or better is the minimum Native runtime objective.
 Pinned C, C++, Go, Rust, and Java programs remain separate one-core/four-core
 implementation context; no composite language score is claimed. See the
-[recorded runtime result](results/2026-09-02-benchmarksgame-runtime-lexical-loop-index-linux-arm64/README.md),
+[recorded runtime result](results/2026-09-03-benchmarksgame-runtime-native-mir-induction-phi-linux-arm64/README.md),
 [benchmark plan](docs/benchmarksgame.md),
 [Decision 0023](docs/decisions/0023-reproducible-benchmark-layers.md), and
 [Decision 0024](docs/decisions/0024-benchexec-runtime-controller.md).
 
 The current formal backend-pair build result retains all 66 registered
-compiler samples. Native compiles the same three TypeRB sources 2.34x to 2.43x
-faster than the optimized Go path, uses 5.67x to 6.34x less compiler CPU and
+compiler samples. Native compiles the same three TypeRB sources 2.42x to 2.61x
+faster than the optimized Go path, uses 5.82x to 6.43x less compiler CPU and
 about 51% less peak RSS, and produces raw applications at least 99.20% smaller.
-The Native compiler-plus-QBE controlled payload is 969,512 bytes, 99.65% below
+The Native compiler-plus-QBE controlled payload is 1,023,232 bytes, 99.63% below
 reference `trb` plus the complete pinned Go root. Successful process traces
 retain QBE, assembler, C driver, LLD, and shared-library boundaries. See the
-[recorded build result](results/2026-09-02-benchmarksgame-build-lexical-loop-index-linux-arm64/README.md),
+[recorded build result](results/2026-09-03-benchmarksgame-build-native-mir-induction-phi-linux-arm64/README.md),
 [formal build controller](tools/benchmarksgame-build-formal/README.md), and
 [Decision 0027](docs/decisions/0027-formal-build-distribution-controller.md).
 
@@ -667,8 +667,8 @@ repository.
 - [Gate 6N Linux amd64 target-chain result](results/2026-08-31-gate6n-linux-amd64/README.md)
 - [Gate 6N Linux amd64 target chain](docs/gate-6-linux-amd64.md)
 - [Reproducible language benchmark plan](docs/benchmarksgame.md)
-- [Current formal Benchmarks Game runtime result on Linux arm64](results/2026-09-02-benchmarksgame-runtime-lexical-loop-index-linux-arm64/README.md)
-- [Current formal Benchmarks Game build result on Linux arm64](results/2026-09-02-benchmarksgame-build-lexical-loop-index-linux-arm64/README.md)
+- [Current formal Benchmarks Game runtime result on Linux arm64](results/2026-09-03-benchmarksgame-runtime-native-mir-induction-phi-linux-arm64/README.md)
+- [Current formal Benchmarks Game build result on Linux arm64](results/2026-09-03-benchmarksgame-build-native-mir-induction-phi-linux-arm64/README.md)
 - [Formal Native numeric-inline A/B result on Linux arm64](results/2026-08-31-native-numeric-inline-linux-arm64/README.md)
 - [Formal Native Array-address A/B result on Linux arm64](results/2026-08-31-native-array-address-linux-arm64/README.md)
 - [Rejected Native scalar-leaf inlining result on Linux arm64](results/2026-08-31-native-scalar-leaf-inline-linux-arm64/README.md)
