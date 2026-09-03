@@ -346,8 +346,8 @@ native_mir_stable_array_header_marker_valid() {
 	test -f "$native_mir_marker" &&
 		test "$(grep -Fxc 'policy=native-mir-stable-array-header-v1' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'baseline_revision=00009fa304a36b9cba70b123120a469347b3882d' "$native_mir_marker")" -eq 1 &&
-		test "$(grep -Fxc 'compiler_source_sha256=99c170e5f226ac2487952a7bc854b9375028ad1c0be005ec8e6521693272b04e' "$native_mir_marker")" -eq 1 &&
-		test "$(grep -Fxc 'compiler_test_source_sha256=d126c024a9eb4f5b95870deeca92cc7da8ac1ec3e17fcec0b03a6655963dab55' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'compiler_source_sha256=1304342068fa3507e3817c8cbe6b7d88cba70cca338880d6ef2ef0ca70a45f3a' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'compiler_test_source_sha256=d3edc5d720079b32fc3b673277cf507b550e68bfa2e61c76b7603054802ed0a8' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'valid_source_sha256=194afa0b18286c3555010bf63827a5b7da6c40d1abf8816347ed16e8be2ccdaf' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'valid_expected_stdout_sha256=7ab27073a8c012277824faf4e80bed5760f565ec435cc04bb82749baa122b1d8' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'measure_source_sha256=f03adc024300e0be5d8304ebd1000a5a390d9f8acaceadf3c10375643e27a45e' "$native_mir_marker")" -eq 1 &&
@@ -359,9 +359,9 @@ native_mir_stable_array_header_marker_valid() {
 		test "$(grep -Fxc 'nbody_expected_stdout_sha256=3e6c9ef9d26cfe312a4cd8e1b81b3f671b88fbce84de543e8c23c206a942504d' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'local_darwin_arm64_baseline_compiler_bytes=349200' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'local_darwin_arm64_candidate_compiler_bytes=349208' "$native_mir_marker")" -eq 1 &&
-		test "$(grep -Fxc 'local_darwin_arm64_candidate_compiler_text_bytes=250600' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'local_darwin_arm64_candidate_compiler_text_bytes=250508' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'baseline_target_neutral_qbe_bytes=1108565' "$native_mir_marker")" -eq 1 &&
-		test "$(grep -Fxc 'local_candidate_target_neutral_qbe_bytes=1118242' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'local_candidate_target_neutral_qbe_bytes=1117994' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'local_baseline_spectral_qbe_bytes=52343' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'local_candidate_spectral_qbe_bytes=52219' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'local_darwin_arm64_baseline_spectral_text_bytes=10732' "$native_mir_marker")" -eq 1 &&
