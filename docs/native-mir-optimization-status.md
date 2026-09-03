@@ -86,17 +86,18 @@ ordinary 1.05 compiler/build/RSS limits and 2.0 catastrophic bound remain in
 force.
 
 Issue #232 registers the first explicit optimization pass over this verified
-graph. The local Darwin arm64 fixed compiler remains 349,224 bytes. The pass
-adds 2,167 bytes of target-neutral compiler QBE and 564 bytes of compiler
-`__text` inside the existing temporary envelope, while the selected generated
-workload removes 335 bytes of QBE and 72 bytes of `__text`. On 21 alternating
+graph. The compact local Darwin arm64 fixed compiler remains 349,224 bytes.
+After removing the adapter's redundant reads of verifier-proven canonical
+zero and unit values, the compiler itself removes 1,377 bytes of
+target-neutral QBE and 208 bytes of compiler `__text`; the selected generated
+workload removes another 335 bytes of QBE and 72 bytes of `__text`. On 21 alternating
 retained direct-process observations, the selected workload records
 candidate/baseline ratios of 0.599452 wall time, 0.561763 CPU time, and
 0.992754 peak RSS. Formal CI requires both arm64 compilers to remain
 non-growing, generated QBE and both generated code sections to shrink
 strictly, wall and CPU ratios to remain at most 0.75, and RSS to remain at most
-1.05. The pass cost remains part of the existing range/index/induction
-recovery obligation rather than a new allowance.
+1.05. The broader temporary MIR envelope remains subject to the existing
+range/index/induction recovery obligation; this pass adds no new allowance.
 
 The earlier managed-runtime smoke records a 332,736-byte stripped Darwin
 compiler, 0.70-second runtime, zero final live managed bytes, and a

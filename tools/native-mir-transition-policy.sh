@@ -143,16 +143,16 @@ native_mir_array_loop_recovery_marker_valid() {
 	test -f "$native_mir_marker" &&
 		test "$(grep -Fxc 'policy=native-mir-array-loop-recovery-v1' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'baseline_revision=05a35fc355fa5e08cea1c0bfb2ea0face0864746' "$native_mir_marker")" -eq 1 &&
-		test "$(grep -Fxc 'compiler_source_sha256=3657767e283f095689c959e1ec2155b0550f1d7cbda9327d27876ef59c5a023a' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'compiler_source_sha256=94d37d0ff9b3d9eade169e52579805e985d322edc78cf220c10dedc2ea84d211' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'compiler_test_source_sha256=9948921b2df5daae631ee9885a892d8ff5e044bce5ff8cd6c2238f612cd6d89b' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'workload_sha256=8d44d0c770dddf80fcf28a59be23ca357ca6ad6239fd00973e1291e7646537ca' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'expected_stdout_sha256=9fd097355fb6760a1f6b0a5ebb7648aff35896da9dccaeea40e03f72eaa94ece' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'local_darwin_arm64_baseline_compiler_bytes=349224' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'local_darwin_arm64_candidate_compiler_bytes=349224' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'baseline_target_neutral_qbe_bytes=1112077' "$native_mir_marker")" -eq 1 &&
-		test "$(grep -Fxc 'local_candidate_target_neutral_qbe_bytes=1114244' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'local_candidate_target_neutral_qbe_bytes=1110700' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'local_darwin_arm64_baseline_text_bytes=249488' "$native_mir_marker")" -eq 1 &&
-		test "$(grep -Fxc 'local_darwin_arm64_candidate_text_bytes=250052' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'local_darwin_arm64_candidate_text_bytes=249280' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'target_neutral_qbe_limit=1115000' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'darwin_arm64_text_limit=250100' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'linux_arm64_text_limit=253424' "$native_mir_marker")" -eq 1 &&

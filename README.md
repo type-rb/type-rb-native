@@ -507,9 +507,9 @@ The first target-independent pass over the complete verified
 redundant-check decisions before QBE lowering. On the registered focused
 workload, local direct-process measurements reduce wall time by about 40% and
 CPU time by about 44% with unchanged median RSS. The generated workload QBE
-and machine-code section both shrink; the small compiler-code cost remains
-inside the existing temporary MIR envelope and must still be recovered before
-the next portable fact family. See
+and machine-code section both shrink, as do the compiler QBE and code section.
+The broader temporary MIR envelope must still be recovered before the next
+portable fact family. See
 [issue #232](https://github.com/type-rb/type-rb-native/issues/232) and the
 [current Native MIR optimization status](docs/native-mir-optimization-status.md).
 

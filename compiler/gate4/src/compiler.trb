@@ -3078,19 +3078,13 @@ def gate4_emit_induction_mir(
 		mut output: Gate4Output,
 	)
 	function := state.scalar_mir.functions[gate4_mir_function_index(state.scalar_mir, function_index)]
-	entry := state.scalar_mir.blocks[function[6]]
 	header := state.scalar_mir.blocks[function[6] + 1]
 	body := state.scalar_mir.blocks[function[6] + 2]
-	reduction := header[4] == 2
-	zero_instruction := state.scalar_mir.instructions[entry[5]]
-	zero := gate4_number_without_underscores(state.scalar_mir.literal_texts[zero_instruction[4]])
-	mut accumulator_zero := ""
-	if reduction
-		accumulator_zero_instruction := state.scalar_mir.instructions[entry[5] + 1]
-		accumulator_zero = gate4_number_without_underscores(
-			state.scalar_mir.literal_texts[accumulator_zero_instruction[4]],
-		)
+	address_instruction := state.scalar_mir.instructions[body[5]]
+	if address_instruction[4] != 2
+		return
 	end
+	reduction := header[4] == 2
 	header_label := gate4_emit_label(context)
 	body_label := gate4_emit_label(context)
 	exit_label := gate4_emit_label(context)
@@ -3131,19 +3125,17 @@ def gate4_emit_induction_mir(
 			false,
 		)
 	end
-	one_instruction := state.scalar_mir.instructions[body[5] + body[6] - 2]
-	one := gate4_number_without_underscores(state.scalar_mir.literal_texts[one_instruction[4]])
-	gate4_output_line(output, "\t" + advanced + " =l add " + index + ", " + one)
+	gate4_output_line(output, "\t" + advanced + " =l add " + index + ", 1")
 	gate4_store_string(
 		output.lines,
 		phi_line,
-		"\t" + index + " =l phi @start " + zero + ", " + increment_predecessor + " " + advanced,
+		"\t" + index + " =l phi @start 0, " + increment_predecessor + " " + advanced,
 	)
 	if reduction
 		gate4_store_string(
 			output.lines,
 			accumulator_phi_line,
-			"\t" + accumulator + " =l phi @start " + accumulator_zero + ", " +
+			"\t" + accumulator + " =l phi @start 0, " +
 			increment_predecessor + " " + accumulated,
 		)
 	end
@@ -4150,10 +4142,6 @@ def gate4_emit_function(
 	if mir_function
 		mir_row := state.scalar_mir.functions[mir_index]
 		control_mir_function = mir_row[7] > 2
-		if control_mir_function
-			mir_body := state.scalar_mir.blocks[mir_row[6] + 2]
-			control_mir_function = state.scalar_mir.instructions[mir_body[5]][4] == 2
-		end
 	end
 	if !mir_function
 		parameter_index = 0
@@ -9790,16 +9778,13 @@ def gate4_check(mut state: Gate4Compiler): Boolean
 	end
 	if !gate4_has_diagnostic(state)
 		if state.scalar_mir.functions.size() > 0
-			mir_error := gate4_verify_mir(state.scalar_mir)
-			if mir_error != ""
-				gate4_diagnostic(state, "TRBN4004", 1, mir_error)
-			end
+			mut mir_error := gate4_verify_mir(state.scalar_mir)
 			if mir_error == ""
 				gate4_optimize_verified_mir(state.scalar_mir)
-				optimized_error := gate4_verify_mir(state.scalar_mir)
-				if optimized_error != ""
-					gate4_diagnostic(state, "TRBN4004", 1, optimized_error)
-				end
+				mir_error = gate4_verify_mir(state.scalar_mir)
+			end
+			if mir_error != ""
+				gate4_diagnostic(state, "TRBN4004", 1, mir_error)
 			end
 		end
 	end
