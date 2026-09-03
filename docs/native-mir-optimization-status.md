@@ -3,7 +3,9 @@
 Status: experimental. The checked-in scope includes the accepted induction-phi
 recovery, the measured `Array<Integer>` reduction slice from issue #230, the
 first target-independent optimization pass registered by issue #232, and the
-exact `Array<Float>` reduction extension registered by issue #235.
+exact `Array<Float>` reduction extension registered by issue #235. Issue #238
+now also selects a target-independent guarded fast path for checked Integer
+multiplication while retaining the exact helper fallback.
 
 The ordinary self-hosted frontend now builds one compiler-owned Native MIR
 module for selected immutable scalar-leaf functions and one exact
@@ -119,6 +121,21 @@ per-element control cost without hiding the smaller gain when memory traffic
 dominates. The frozen 0.75 hot, 0.90 streaming, 1.05 RSS, and 2.0 catastrophic
 bounds all pass.
 
+Issue #238 adds the first checked scalar-arithmetic fast path selected in
+Native MIR. When both operands fit the verified nonnegative 26-bit guard, the
+QBE adapter emits a direct multiplication; negative, large, and overflowing
+operands retain the exact checked helper and failure edge. On Linux arm64,
+spectral-norm at input 5500 records candidate/baseline ratios of 0.846622 wall
+time, 0.846633 CPU time, and 0.999619 median peak RSS across two warmups and
+seven alternating retained observations. The two control workloads remain
+effectively unchanged and emit byte-identical generated QBE and executable
+text. Spectral-norm grows by 248 bytes of target-neutral QBE and by 64 bytes of
+executable text on both arm64 targets. The fixed compiler instead shrinks by
+384 bytes on Linux arm64, remains page-size neutral on Darwin arm64, and emits
+1,109,629 bytes of byte-identical target-neutral compiler QBE across both
+targets. All registered runtime, RSS, fixed-point, build, compactness,
+cross-target, and catastrophic limits pass.
+
 The earlier managed-runtime smoke records a 332,736-byte stripped Darwin
 compiler, 0.70-second runtime, zero final live managed bytes, and a
 1,048,513-byte peak managed heap. Current persistent-worker checks record
@@ -152,6 +169,12 @@ Public evidence:
 - [Float Array-reduction target regressions](https://github.com/type-rb/type-rb-native/actions/runs/33717461392)
 - [Float Array-reduction persistent-memory checks](https://github.com/type-rb/type-rb-native/actions/runs/33717461375)
 - [Float Array-reduction complete Native gates](https://github.com/type-rb/type-rb-native/actions/runs/33717461364)
+- [guarded Integer multiply issue #238](https://github.com/type-rb/type-rb-native/issues/238)
+- [guarded Integer multiply pull request #239](https://github.com/type-rb/type-rb-native/pull/239)
+- [guarded Integer multiply focused evidence](https://github.com/type-rb/type-rb-native/actions/runs/33726990585)
+- [guarded Integer multiply target regressions](https://github.com/type-rb/type-rb-native/actions/runs/33726990510)
+- [guarded Integer multiply persistent-memory checks](https://github.com/type-rb/type-rb-native/actions/runs/33726990515)
+- [guarded Integer multiply complete Native gates](https://github.com/type-rb/type-rb-native/actions/runs/33726990493)
 - [accepted pull request #220](https://github.com/type-rb/type-rb-native/pull/220)
 - [final static comparison](https://github.com/type-rb/type-rb-native/actions/runs/33682830363)
 - [Linux target regressions](https://github.com/type-rb/type-rb-native/actions/runs/33682830410)
