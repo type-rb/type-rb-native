@@ -44,7 +44,7 @@ temporary_output=$temporary_directory/$(basename -- "$output")
 "$qbe" -t amd64_sysv -o "$assembly" "$qbe_source"
 "$cc" -xassembler "$assembly" \
 	-fuse-ld=lld \
-	-Wl,--gc-sections,--strip-all \
+	-Wl,--gc-sections,--strip-all,--no-eh-frame-hdr \
 	-lm \
 	-o "$temporary_output"
 mv "$temporary_output" "$output"

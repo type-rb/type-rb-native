@@ -183,13 +183,41 @@ describe("Gate 4 TypeRB frontend") do
 		qbe := gate4_output_source(gate4_emit_qbe(state))
 		expect(gate4_occurrence_count(qbe, " =w cultl ")).to_equal(1)
 		expect(qbe.include?(", 67108864")).to_be_true()
-		expect(gate4_occurrence_count(qbe, "call $g4_integer_multiply")).to_equal(1)
+		expect(gate4_occurrence_count(qbe, "call $g4_integer_mul")).to_equal(1)
 
-		state.scalar_mir.instructions[instruction_index][4] = 13
+		state.scalar_mir.instructions[instruction_index][4] = 14
 		expect(gate4_verify_mir(state.scalar_mir)).to_equal(
 			"MIR scalar binary type differs",
 		)
 		state.scalar_mir.instructions[instruction_index][4] = 12
+		state.scalar_mir.instructions[instruction_index][5] =- 1
+		expect(gate4_verify_mir(state.scalar_mir)).to_equal("MIR failure target does not exist")
+	end
+
+	test("selects a verified guarded Integer add for loop-local scalar MIR") do
+		source := "def sum(left: Integer, right: Integer): Integer\n\treturn left + right\nend\n\ndef main()\n\tlefts := [1]\n\trights := [2]\n\tmut index := 0\n\twhile index < 1\n\t\tvalue := sum(lefts[index], rights[index])\n\t\tindex += value\n\tend\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		expect(gate4_verify_mir(state.scalar_mir)).to_equal("")
+		function_index := gate4_mir_function_index(state.scalar_mir, 0)
+		expect(function_index >= 0).to_be_true()
+		function := state.scalar_mir.functions[function_index]
+		block := state.scalar_mir.blocks[function[6]]
+		instruction_index := block[5]
+		expect(state.scalar_mir.instructions[instruction_index][0]).to_equal(7)
+		expect(state.scalar_mir.instructions[instruction_index][4]).to_equal(13)
+		qbe := gate4_output_source(gate4_emit_qbe(state))
+		expect(qbe.include?(", 9007199254740992")).to_be_true()
+		expect(qbe.include?("call $g4_integer_add(l ")).to_be_true()
+
+		state.scalar_mir.instructions[instruction_index][4] = 14
+		expect(gate4_verify_mir(state.scalar_mir)).to_equal(
+			"MIR scalar binary type differs",
+		)
+		state.scalar_mir.instructions[instruction_index][4] = 13
 		state.scalar_mir.instructions[instruction_index][5] =- 1
 		expect(gate4_verify_mir(state.scalar_mir)).to_equal("MIR failure target does not exist")
 	end
@@ -1325,6 +1353,11 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_check(compiler_state)).to_be_true()
 		compiler_qbe := gate4_output_source(gate4_emit_qbe(compiler_state))
 		expect(compiler_qbe.include?("data $g4_project_linker_lld = { b \"-fuse-ld=lld\", b 0 }")).to_be_true()
+		expect(
+			compiler_qbe.include?(
+				"data $g4_dead_strip_linux = { b \"-Wl,--gc-sections,--strip-all,--no-eh-frame-hdr\", b 0 }",
+			),
+		).to_be_true()
 		expect(compiler_qbe.include?("data $g4_profile_linux_amd64 = { b \"linux-amd64-v0\", b 0 }")).to_be_true()
 		expect(compiler_qbe.include?("data $g4_qbe_linux_amd64 = { b \"amd64_sysv\", b 0 }")).to_be_true()
 		expect(compiler_qbe.include?("@target_linux_amd64_check")).to_be_true()
@@ -1531,7 +1564,7 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_check(state)).to_be_true()
 		qbe := gate4_output_source(gate4_emit_qbe(state))
 		expect(qbe.include?("call $g4_integer_add")).to_be_false()
-		expect(qbe.include?("call $g4_integer_multiply")).to_be_false()
+		expect(qbe.include?("call $g4_integer_mul")).to_be_false()
 		expect(qbe.include?("call $g4_integer_divide")).to_be_false()
 		expect(qbe.include?("call $g4_array_address")).to_be_false()
 	end
@@ -1544,7 +1577,7 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_true()
 		qbe := gate4_output_source(gate4_emit_qbe(state))
-		expect(qbe.include?("call $g4_integer_multiply(l ")).to_be_true()
+		expect(qbe.include?("call $g4_integer_mul(l ")).to_be_true()
 		expect(qbe.include?("%c =l or %left, %right")).to_be_true()
 		expect(qbe.include?("%u =l shr %c, 26")).to_be_true()
 		expect(qbe.include?("jnz %u, @left_sign, @multiply")).to_be_true()
