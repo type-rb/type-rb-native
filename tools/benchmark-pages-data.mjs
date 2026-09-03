@@ -4,8 +4,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const outputPath = resolve(root, 'docs/capabilities/benchmarks/data.js');
-const runtimeRoot = 'results/2026-09-03-benchmarksgame-runtime-native-mir-induction-phi-linux-arm64';
-const buildRoot = 'results/2026-09-03-benchmarksgame-build-native-mir-induction-phi-linux-arm64';
+const runtimeRoot = 'results/2026-09-03-benchmarksgame-runtime-native-mir-guarded-multiply-linux-arm64';
+const buildRoot = 'results/2026-09-03-benchmarksgame-build-native-mir-guarded-multiply-linux-arm64';
 const cases = ['fannkuch-redux', 'n-body', 'spectral-norm'];
 const lanes = ['one-core', 'four-core'];
 const labels = {
@@ -79,7 +79,7 @@ for (const caseName of cases) {
 
 const dataset = {
   schemaVersion: 1,
-  snapshot: '2026-09-03 · Native 9dcae12',
+  snapshot: '2026-09-03 · Native b82d30f',
   platform: 'Linux arm64 · Ubuntu 24.04 · 4 × Neoverse N2',
   runtime: {
     retained: runtime.reduce((total, row) => total + row.retained, 0),
