@@ -23,6 +23,8 @@ cp "$script_directory/../$NATIVE_MIR_FLOAT_ARRAY_REDUCTION_MARKER" \
 	"$candidate/$NATIVE_MIR_FLOAT_ARRAY_REDUCTION_MARKER"
 cp "$script_directory/../$NATIVE_MIR_GUARDED_MULTIPLY_MARKER" \
 	"$candidate/$NATIVE_MIR_GUARDED_MULTIPLY_MARKER"
+cp "$script_directory/../$NATIVE_MIR_GUARDED_ADD_MARKER" \
+	"$candidate/$NATIVE_MIR_GUARDED_ADD_MARKER"
 
 test "$(native_mir_target_compiler_limit darwin-arm64-v0)" = 350000
 test "$(native_mir_target_compiler_limit linux-arm64-v0)" = 317000
@@ -38,6 +40,11 @@ test "$NATIVE_MIR_GUARDED_MULTIPLY_QBE_LIMIT" = 52950
 test "$NATIVE_MIR_GUARDED_MULTIPLY_SELECTED_CODE_RATIO_LIMIT" = 1.01
 test "$NATIVE_MIR_GUARDED_MULTIPLY_SELECTED_RUNTIME_RATIO_LIMIT" = 0.90
 test "$NATIVE_MIR_GUARDED_MULTIPLY_CONTROL_RATIO_LIMIT" = 1.02
+test "$NATIVE_MIR_GUARDED_ADD_QBE_LIMIT" = 52520
+test "$NATIVE_MIR_GUARDED_ADD_SELECTED_CODE_RATIO_LIMIT" = 1.02
+test "$NATIVE_MIR_GUARDED_ADD_SELECTED_EXECUTABLE_RATIO_LIMIT" = 1.00
+test "$NATIVE_MIR_GUARDED_ADD_SELECTED_RUNTIME_RATIO_LIMIT" = 0.95
+test "$NATIVE_MIR_GUARDED_ADD_CONTROL_RATIO_LIMIT" = 1.02
 if native_mir_target_compiler_limit unknown-target >/dev/null; then
 	exit 1
 fi
@@ -128,6 +135,17 @@ cp "$candidate/$NATIVE_MIR_GUARDED_MULTIPLY_MARKER" \
 if native_mir_guarded_multiply_transition "$candidate" "$baseline"; then
 	exit 1
 fi
+native_mir_guarded_add_marker_valid "$candidate"
+native_mir_guarded_add_transition "$candidate" "$baseline"
+test "$(native_mir_transition_mode "$candidate" "$baseline")" = guarded-add-transition
+test "$(native_mir_compiler_ratio_limit "$candidate" "$baseline")" = 1.05
+test "$(native_mir_build_ratio_limit "$candidate" "$baseline")" = 1.05
+
+cp "$candidate/$NATIVE_MIR_GUARDED_ADD_MARKER" \
+	"$baseline/$NATIVE_MIR_GUARDED_ADD_MARKER"
+if native_mir_guarded_add_transition "$candidate" "$baseline"; then
+	exit 1
+fi
 
 native_mir_transition_markers_valid "$candidate"
 native_mir_induction_phi_recovery "$candidate" "$baseline"
@@ -191,6 +209,12 @@ fi
 printf 'policy=native-mir-guarded-integer-multiply-v1\n' \
 	> "$candidate/$NATIVE_MIR_GUARDED_MULTIPLY_MARKER"
 if native_mir_guarded_multiply_marker_valid "$candidate"; then
+	exit 1
+fi
+
+printf 'policy=native-mir-guarded-integer-add-v1\n' \
+	> "$candidate/$NATIVE_MIR_GUARDED_ADD_MARKER"
+if native_mir_guarded_add_marker_valid "$candidate"; then
 	exit 1
 fi
 

@@ -519,7 +519,9 @@ def gate4_mir_induction_address(
 		return false
 	end
 	if add[4] != 1
-		return false
+		if add[4] != 13
+			return false
+		end
 	end
 	if add[2] != body_value
 		return false
@@ -576,7 +578,9 @@ def gate4_mir_induction_address(
 		return false
 	end
 	if reduction[4] != 1
-		return false
+		if reduction[4] != 13
+			return false
+		end
 	end
 	if reduction[2] != body_accumulator
 		return false
@@ -603,9 +607,15 @@ def gate4_optimize_verified_mir(mut native_module: Gate4MirModule)
 			end
 		end
 		if instruction[0] == 7
-			if instruction[4] == 3
+			if instruction[4] == 1
 				if instruction[5] >= 0
-					instruction[4] = 12
+					instruction[4] = 13
+				end
+			else
+				if instruction[4] == 3
+					if instruction[5] >= 0
+						instruction[4] = 12
+					end
 				end
 			end
 		end
@@ -810,6 +820,10 @@ def gate4_mir_instruction_error(
 		mut operator := instruction[4]
 		if operator == 12
 			operator = 3
+		else
+			if operator == 13
+				operator = 1
+			end
 		end
 		mut numeric := false
 		if first_type == 1
@@ -2918,6 +2932,9 @@ def gate4_scalar_binary_operator(operator_id: Integer): String
 	if operator_id == 12
 		return "*"
 	end
+	if operator_id == 13
+		return "+"
+	end
 	return ""
 end
 
@@ -2974,8 +2991,10 @@ def gate4_emit_scalar_mir(
 			if instruction[0] == 7
 				left_id := instruction[2]
 				right_id := instruction[3]
+				mut guarded_add := instruction[4] == 13
 				mut guarded_multiply := instruction[4] == 12
 				if !inline
+					guarded_add = false
 					guarded_multiply = false
 				end
 				result = gate4_emit_binary_with_facts(
@@ -2986,6 +3005,7 @@ def gate4_emit_scalar_mir(
 					gate4_emitted_value(operands[right_id], types[right_id], 0, "", 0, ""),
 					facts[left_id] == 1,
 					facts[right_id] == 1,
+					guarded_add,
 					guarded_multiply,
 				)
 			else
@@ -3660,6 +3680,7 @@ def gate4_emit_binary_with_facts(
 		right: Gate4EmittedValue,
 		left_nonnegative: Boolean,
 		right_nonnegative: Boolean,
+		guarded_add: Boolean,
 		guarded_multiply: Boolean,
 	): Gate4EmittedValue
 	mut result_type := left.type_name
@@ -3706,24 +3727,48 @@ def gate4_emit_binary_with_facts(
 				gate4_output_line(output, "\t" + result + " =d add " + left_operand + ", " + right_operand)
 				return gate4_emitted_value(result, result_type, 0, "", 0, "")
 			end
-			if gate4_take_inline_budget(context)
-				mut known_nonnegative := right_nonnegative
-				if left_nonnegative
-					left_operand = right.operand
-					right_operand = left.operand
-					known_nonnegative = true
-				end
-				gate4_emit_checked_integer_operation(
-					context,
-					output,
-					result,
-					left_operand,
-					right_operand,
-					"add",
-					known_nonnegative,
-				)
+			mut use_guarded_add := guarded_add
+			if left_nonnegative
+				use_guarded_add = false
+			end
+			if right_nonnegative
+				use_guarded_add = false
+			end
+			if use_guarded_add
+				combined := gate4_emit_temporary(context)
+				small := gate4_emit_temporary(context)
+				slow := gate4_emit_label(context)
+				fast := gate4_emit_label(context)
+				complete := gate4_emit_label(context)
+				gate4_output_line(output, "\t" + combined + " =l or " + left_operand + ", " + right_operand)
+				gate4_output_line(output, "\t" + small + " =w cultl " + combined + ", 4503599627370496")
+				gate4_output_branch(output, small, fast, slow)
+				gate4_output_line(output, slow)
+				gate4_emit_integer_call(output, result, "add", left_operand, right_operand)
+				gate4_output_line(output, "\tjmp " + complete)
+				gate4_output_line(output, fast)
+				gate4_output_line(output, "\t" + result + " =l add " + left_operand + ", " + right_operand)
+				gate4_output_line(output, complete)
 			else
-				gate4_emit_integer_call(output, result, "add", left.operand, right.operand)
+				if gate4_take_inline_budget(context)
+					mut known_nonnegative := right_nonnegative
+					if left_nonnegative
+						left_operand = right.operand
+						right_operand = left.operand
+						known_nonnegative = true
+					end
+					gate4_emit_checked_integer_operation(
+						context,
+						output,
+						result,
+						left_operand,
+						right_operand,
+						"add",
+						known_nonnegative,
+					)
+				else
+					gate4_emit_integer_call(output, result, "add", left.operand, right.operand)
+				end
 			end
 		end
 		return gate4_emitted_value(result, result_type, 0, "", 0, "")
@@ -3883,6 +3928,7 @@ def gate4_emit_binary(
 		right,
 		gate4_small_nonnegative_integer_operand(left.operand),
 		gate4_small_nonnegative_integer_operand(right.operand),
+		false,
 		false,
 	)
 end

@@ -185,11 +185,39 @@ describe("Gate 4 TypeRB frontend") do
 		expect(qbe.include?(", 67108864")).to_be_true()
 		expect(gate4_occurrence_count(qbe, "call $g4_integer_multiply")).to_equal(1)
 
-		state.scalar_mir.instructions[instruction_index][4] = 13
+		state.scalar_mir.instructions[instruction_index][4] = 14
 		expect(gate4_verify_mir(state.scalar_mir)).to_equal(
 			"MIR scalar binary type differs",
 		)
 		state.scalar_mir.instructions[instruction_index][4] = 12
+		state.scalar_mir.instructions[instruction_index][5] =- 1
+		expect(gate4_verify_mir(state.scalar_mir)).to_equal("MIR failure target does not exist")
+	end
+
+	test("selects a verified guarded Integer add for loop-local scalar MIR") do
+		source := "def sum(left: Integer, right: Integer): Integer\n\treturn left + right\nend\n\ndef main()\n\tlefts := [1]\n\trights := [2]\n\tmut index := 0\n\twhile index < 1\n\t\tvalue := sum(lefts[index], rights[index])\n\t\tindex += value\n\tend\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		expect(gate4_verify_mir(state.scalar_mir)).to_equal("")
+		function_index := gate4_mir_function_index(state.scalar_mir, 0)
+		expect(function_index >= 0).to_be_true()
+		function := state.scalar_mir.functions[function_index]
+		block := state.scalar_mir.blocks[function[6]]
+		instruction_index := block[5]
+		expect(state.scalar_mir.instructions[instruction_index][0]).to_equal(7)
+		expect(state.scalar_mir.instructions[instruction_index][4]).to_equal(13)
+		qbe := gate4_output_source(gate4_emit_qbe(state))
+		expect(qbe.include?(", 4503599627370496")).to_be_true()
+		expect(qbe.include?("call $g4_integer_add(l ")).to_be_true()
+
+		state.scalar_mir.instructions[instruction_index][4] = 14
+		expect(gate4_verify_mir(state.scalar_mir)).to_equal(
+			"MIR scalar binary type differs",
+		)
+		state.scalar_mir.instructions[instruction_index][4] = 13
 		state.scalar_mir.instructions[instruction_index][5] =- 1
 		expect(gate4_verify_mir(state.scalar_mir)).to_equal("MIR failure target does not exist")
 	end
