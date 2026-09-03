@@ -402,8 +402,11 @@ def gate4_mir_induction_address(
 	if function[5] != 1
 		return false
 	end
-	if gate4_mir_value_type(native_module, function[0], native_module.arguments[function[4]]) != 3
-		return false
+	array_type := gate4_mir_value_type(native_module, function[0], native_module.arguments[function[4]])
+	if array_type != 3
+		if array_type != 6
+			return false
+		end
 	end
 	entry := native_module.blocks[function[6]]
 	header := native_module.blocks[function[6] + 1]
@@ -541,8 +544,14 @@ def gate4_mir_induction_address(
 		return false
 	end
 	accumulator_zero := native_module.instructions[entry[5] + 1]
-	if !gate4_mir_exact_integer_literal(native_module, accumulator_zero, "0")
-		return false
+	if array_type == 6
+		if !gate4_mir_exact_integer_literal(native_module, accumulator_zero, "0.0")
+			return false
+		end
+	else
+		if !gate4_mir_exact_integer_literal(native_module, accumulator_zero, "0")
+			return false
+		end
 	end
 	header_accumulator := native_module.arguments[header[3] + 1]
 	body_accumulator := native_module.arguments[body[3] + 1]
@@ -681,6 +690,9 @@ def gate4_mir_instruction_error(
 							if first_type == 3
 								return ""
 							end
+							if first_type == 6
+								return ""
+							end
 						end
 					end
 					return "MIR Array length type differs"
@@ -696,9 +708,17 @@ def gate4_mir_instruction_error(
 		if instruction[4] > 2
 			return "MIR Array address shape differs"
 		end
-		if result_type == 4
+		mut address_type := 4
+		if first_type == 6
+			address_type = 7
+		end
+		mut array_type := first_type == 3
+		if first_type == 6
+			array_type = true
+		end
+		if result_type == address_type
 			if first_available
-				if first_type == 3
+				if array_type
 					if second_available
 						if second_type == 1
 							error := gate4_mir_failure_error(native_module, function, instruction[5])
@@ -918,6 +938,11 @@ def gate4_mir_instruction_error(
 					if first_available
 						if first_type == 4
 							if result_type == 1
+								return ""
+							end
+						end
+						if first_type == 7
+							if result_type == 5
 								return ""
 							end
 						end
@@ -1205,7 +1230,7 @@ def gate4_verify_mir(native_module: Gate4MirModule): String
 		if value[2] < 1
 			return "MIR value type is invalid"
 		end
-		if value[2] > 5
+		if value[2] > 7
 			return "MIR value type is invalid"
 		end
 		if !gate4_mir_origin_valid(value[3], value[4], native_module.source_count[0])
@@ -2192,18 +2217,18 @@ def gate4_qbe_type(type_name: String): String
 	return "l"
 end
 
-def gate4_qbe_load(type_name: String): String
+def gate4_qbe_typed_load(type_name: String): String
 	if type_name == "Float"
-		return "loadd"
+		return "d loadd"
 	end
-	return "loadl"
+	return "l loadl"
 end
 
-def gate4_qbe_store(type_name: String): String
+def gate4_qbe_typed_store(type_name: String): String
 	if type_name == "Float"
-		return "stored"
+		return "stored "
 	end
-	return "storel"
+	return "storel "
 end
 
 def gate4_type_is_managed(type_name: String): Boolean
@@ -2734,7 +2759,7 @@ def gate4_emit_add_local(
 			end
 		end
 	end
-	gate4_output_line(output, "\t" + gate4_qbe_store(type_name) + " " + initial + ", " + slot)
+	gate4_output_line(output, "\t" + gate4_qbe_typed_store(type_name) + initial + ", " + slot)
 	return slot
 end
 
@@ -2774,7 +2799,7 @@ def gate4_emit_loaded_local(
 	operand := gate4_emit_temporary(context)
 	gate4_output_line(
 		output,
-		"\t" + operand + " =" + gate4_qbe_type(type_name) + " " + gate4_qbe_load(type_name) + " " +
+		"\t" + operand + " =" + gate4_qbe_typed_load(type_name) + " " +
 		gate4_load_string(context.local_slots, index),
 	)
 	return gate4_emitted_value(
@@ -3084,6 +3109,11 @@ def gate4_emit_induction_mir(
 	if address_instruction[4] != 2
 		return
 	end
+	parameter_start := gate4_load_integer(state.function_parameter_starts, function_index)
+	element_type := gate4_array_element_type(
+		gate4_load_string(state.parameter_types, parameter_start),
+	)
+	float_elements := element_type == "Float"
 	reduction := header[4] == 2
 	header_label := gate4_emit_label(context)
 	body_label := gate4_emit_label(context)
@@ -3113,17 +3143,24 @@ def gate4_emit_induction_mir(
 	gate4_output_line(output, body_label)
 	address := gate4_emit_array_data_address(context, output, data, index)
 	loaded := gate4_emit_temporary(context)
-	gate4_output_line(output, "\t" + loaded + " =l loadl " + address)
+	gate4_output_line(
+		output,
+		"\t" + loaded + " =" + gate4_qbe_typed_load(element_type) + " " + address,
+	)
 	mut increment_predecessor := body_label
 	if reduction
-		increment_predecessor = gate4_emit_checked_integer_add(
-			context,
-			output,
-			accumulated,
-			accumulator,
-			loaded,
-			false,
-		)
+		if float_elements
+			gate4_output_line(output, "\t" + accumulated + " =d add " + accumulator + ", " + loaded)
+		else
+			increment_predecessor = gate4_emit_checked_integer_add(
+				context,
+				output,
+				accumulated,
+				accumulator,
+				loaded,
+				false,
+			)
+		end
 	end
 	gate4_output_line(output, "\t" + advanced + " =l add " + index + ", 1")
 	gate4_store_string(
@@ -3132,20 +3169,23 @@ def gate4_emit_induction_mir(
 		"\t" + index + " =l phi @start 0, " + increment_predecessor + " " + advanced,
 	)
 	if reduction
+		mut initial := "0"
+		if float_elements
+			initial = "d_0.0"
+		end
 		gate4_store_string(
 			output.lines,
 			accumulator_phi_line,
-			"\t" + accumulator + " =l phi @start 0, " +
+			"\t" + accumulator + " =" + gate4_qbe_type(element_type) + " phi @start " + initial + ", " +
 			increment_predecessor + " " + accumulated,
 		)
 	end
 	gate4_output_line(output, "\tjmp " + header_label)
 	gate4_output_line(output, exit_label)
 	if reduction
-		gate4_output_line(output, "\tstorel " + accumulator + ", %return_value")
+		gate4_output_line(output, "\t" + gate4_qbe_typed_store(element_type) + accumulator + ", %return_value")
 	end
 	gate4_output_line(output, "\tjmp @return")
-	return
 end
 
 def gate4_emit_direct_call(
@@ -3336,7 +3376,7 @@ def gate4_emit_record_new(
 			address := gate4_emit_address(context, output, record_value, 8 + field_offset * 8)
 			gate4_output_line(
 				output,
-				"\t" + gate4_qbe_store(gate4_load_string(state.field_types, field_start + field_offset)) + " " + value.operand + ", " + address,
+				"\t" + gate4_qbe_typed_store(gate4_load_string(state.field_types, field_start + field_offset)) + value.operand + ", " + address,
 			)
 			field_offset += 1
 			if gate4_token_is(state, position[0], ",")
@@ -3442,7 +3482,7 @@ def gate4_emit_postfix(
 					field_type := gate4_load_string(state.field_types, field_index)
 					gate4_output_line(
 						output,
-						"\t" + operand + " =" + gate4_qbe_type(field_type) + " " + gate4_qbe_load(field_type) + " " + address,
+						"\t" + operand + " =" + gate4_qbe_typed_load(field_type) + " " + address,
 					)
 					gate4_note_managed_alias(context, field_type)
 					value = gate4_emitted_value(
@@ -3495,8 +3535,7 @@ def gate4_emit_postfix(
 						operand := gate4_emit_temporary(context)
 						gate4_output_line(
 							output,
-							"\t" + operand + " =" + gate4_qbe_type(element_type) + " " +
-							gate4_qbe_load(element_type) + " " + address,
+							"\t" + operand + " =" + gate4_qbe_typed_load(element_type) + " " + address,
 						)
 						gate4_note_managed_alias(context, element_type)
 						value = gate4_emitted_value(
@@ -3938,14 +3977,14 @@ def gate4_emit_simple_statement(
 	if operator == "="
 		gate4_advance(position)
 		right := gate4_emit_expression(state, position, context, output, 1, left.type_name)
-		gate4_output_line(output, "\t" + gate4_qbe_store(left.type_name) + " " + right.operand + ", " + left.address)
+		gate4_output_line(output, "\t" + gate4_qbe_typed_store(left.type_name) + right.operand + ", " + left.address)
 	else
 		compound := gate4_compound_operator(operator)
 		if compound != ""
 			gate4_advance(position)
 			right := gate4_emit_expression(state, position, context, output, 1, left.type_name)
 			result := gate4_emit_binary(context, output, compound, left, right)
-			gate4_output_line(output, "\t" + gate4_qbe_store(left.type_name) + " " + result.operand + ", " + left.address)
+			gate4_output_line(output, "\t" + gate4_qbe_typed_store(left.type_name) + result.operand + ", " + left.address)
 		end
 	end
 	if gate4_array_element_type(left.type_name) != ""
@@ -4072,7 +4111,7 @@ def gate4_emit_block(
 								value := gate4_emit_expression(state, position, context, output, 1, result_type)
 								gate4_output_line(
 									output,
-									"\t" + gate4_qbe_store(result_type) + " " + value.operand + ", %return_value",
+									"\t" + gate4_qbe_typed_store(result_type) + value.operand + ", %return_value",
 								)
 								gate4_output_line(output, "\tjmp @return")
 							end
@@ -4188,7 +4227,7 @@ def gate4_emit_function(
 			)
 			gate4_output_line(
 				body,
-				"\t" + gate4_qbe_store(result_type) + " " + value.operand + ", %return_value",
+				"\t" + gate4_qbe_typed_store(result_type) + value.operand + ", %return_value",
 			)
 			gate4_output_line(body, "\tjmp @return")
 			terminated = 1
@@ -4291,8 +4330,7 @@ def gate4_emit_function(
 	else
 		gate4_output_line(
 			output,
-			"\t%return_result =" + gate4_qbe_type(result_type) + " " +
-			gate4_qbe_load(result_type) + " %return_value",
+			"\t%return_result =" + gate4_qbe_typed_load(result_type) + " %return_value",
 		)
 		if gate4_type_is_managed(result_type)
 			gate4_output_line(output, "\tcall $g4_gc_temp_push(l %return_result)")
@@ -7966,6 +8004,12 @@ def gate4_scalar_mir_type(type_name: String): Integer
 	if type_name == "Array<Integer>"
 		return 3
 	end
+	if type_name == "Array<Float>"
+		return 6
+	end
+	if type_name == "FloatAddress"
+		return 7
+	end
 	if type_name == "Address"
 		return 4
 	end
@@ -8732,10 +8776,15 @@ def gate4_check_postfix(
 					index_id := gate4_checked_mir_value(index)
 					mut lowered := false
 					if locals.mir_state[0] >= 2
-						if value.type_name == "Array<Integer>"
+						element_type := gate4_array_element_type(value.type_name)
+						if element_type != ""
 							if receiver_id >= 0
 								if index_id >= 0
-									address := gate4_scalar_mir_value(state, locals, "Address", value.origin)
+									mut address_type := "Address"
+									if element_type == "Float"
+										address_type = "FloatAddress"
+									end
+									address := gate4_scalar_mir_value(state, locals, address_type, value.origin)
 									locals.mir_instructions.push([
 											5,
 											address,
@@ -8746,7 +8795,7 @@ def gate4_check_postfix(
 											state.active_module[0],
 											line,
 										])
-									loaded := gate4_scalar_mir_value(state, locals, "Integer", value.origin)
+									loaded := gate4_scalar_mir_value(state, locals, element_type, value.origin)
 									locals.mir_instructions.push([
 											10,
 											loaded,
@@ -8757,7 +8806,7 @@ def gate4_check_postfix(
 											state.active_module[0],
 											line,
 										])
-									value = gate4_mir_checked_value("Integer", loaded, value.origin, value.mutable)
+									value = gate4_mir_checked_value(element_type, loaded, value.origin, value.mutable)
 									lowered = true
 								end
 							end
@@ -9009,8 +9058,13 @@ def gate4_check_declaration(
 			fact = value.mutable
 		end
 		if value.origin != 9007199254740991
-			if gate4_load_string(state.token_texts, value.origin) == "0"
+			zero := gate4_load_string(state.token_texts, value.origin)
+			if zero == "0"
 				fact = 2
+			else
+				if zero == "0.0"
+					fact = 2
+				end
 			end
 		end
 	end
@@ -9243,13 +9297,13 @@ def gate4_check_block(
 									gate4_store_integer(locals.mir_values, candidate, header_value + 1)
 									if locals.mir_state[0] == 3
 										accumulator_header := gate4_scalar_mir_value(
-											state, locals, "Integer", loop_start,
+											state, locals, result_type, loop_start,
 										)
 										accumulator_body := gate4_scalar_mir_value(
-											state, locals, "Integer", loop_start,
+											state, locals, result_type, loop_start,
 										)
 										accumulator_exit := gate4_scalar_mir_value(
-											state, locals, "Integer", loop_start,
+											state, locals, result_type, loop_start,
 										)
 										locals.mir_state[14] = accumulator_header
 										locals.mir_state[15] = accumulator_body
@@ -9458,18 +9512,17 @@ def gate4_scalar_mir_begin(
 	end
 	parameter_start := gate4_load_integer(state.function_parameter_starts, function_index)
 	parameter_finish := parameter_start + gate4_load_integer(state.function_parameter_counts, function_index)
-	if result_type == "Integer"
-		if parameter_finish - parameter_start == 1
-			if gate4_load_string(state.parameter_types, parameter_start) == "Array<Integer>"
-				mode = 3
-			end
+	if parameter_finish - parameter_start == 1
+		parameter_type := gate4_load_string(state.parameter_types, parameter_start)
+		if gate4_array_element_type(parameter_type) == result_type
+			mode = 3
 		end
 	end
 	if mode >= 2
 		if parameter_finish - parameter_start != 1
 			return
 		end
-		if gate4_load_string(state.parameter_types, parameter_start) != "Array<Integer>"
+		if gate4_array_element_type(gate4_load_string(state.parameter_types, parameter_start)) == ""
 			return
 		end
 	end
