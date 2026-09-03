@@ -165,7 +165,7 @@ native_mir_array_loop_recovery_marker_valid() {
 		test "$(grep -Fxc 'workload_sha256=8d44d0c770dddf80fcf28a59be23ca357ca6ad6239fd00973e1291e7646537ca' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'expected_stdout_sha256=9fd097355fb6760a1f6b0a5ebb7648aff35896da9dccaeea40e03f72eaa94ece' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'local_darwin_arm64_baseline_compiler_bytes=349224' "$native_mir_marker")" -eq 1 &&
-		test "$(grep -Fxc 'local_darwin_arm64_candidate_compiler_bytes=349208' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'local_darwin_arm64_candidate_compiler_bytes=349224' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'baseline_target_neutral_qbe_bytes=1112077' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'local_candidate_target_neutral_qbe_bytes=1110700' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'local_darwin_arm64_baseline_text_bytes=249488' "$native_mir_marker")" -eq 1 &&
@@ -358,7 +358,7 @@ native_mir_stable_array_header_marker_valid() {
 		test "$(grep -Fxc 'nbody_source_sha256=796fc08a4747102e1ca08fc75cb81cb0a69b65666c11e45baeafcae2a1064b20' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'nbody_expected_stdout_sha256=3e6c9ef9d26cfe312a4cd8e1b81b3f671b88fbce84de543e8c23c206a942504d' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'local_darwin_arm64_baseline_compiler_bytes=349200' "$native_mir_marker")" -eq 1 &&
-		test "$(grep -Fxc 'local_darwin_arm64_candidate_compiler_bytes=349224' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'local_darwin_arm64_candidate_compiler_bytes=349208' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'local_darwin_arm64_candidate_compiler_text_bytes=250876' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'baseline_target_neutral_qbe_bytes=1108565' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'local_candidate_target_neutral_qbe_bytes=1119029' "$native_mir_marker")" -eq 1 &&
