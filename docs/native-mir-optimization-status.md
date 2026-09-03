@@ -5,7 +5,8 @@ recovery, the measured `Array<Integer>` reduction slice from issue #230, the
 first target-independent optimization pass registered by issue #232, and the
 exact `Array<Float>` reduction extension registered by issue #235. Issue #238
 now also selects a target-independent guarded fast path for checked Integer
-multiplication while retaining the exact helper fallback.
+multiplication while retaining the exact helper fallback, and issue #241
+applies the same verified decision boundary to checked Integer addition.
 
 The ordinary self-hosted frontend now builds one compiler-owned Native MIR
 module for selected immutable scalar-leaf functions and one exact
@@ -136,6 +137,23 @@ executable text on both arm64 targets. The fixed compiler instead shrinks by
 targets. All registered runtime, RSS, fixed-point, build, compactness,
 cross-target, and catastrophic limits pass.
 
+Issue #241 adds a checked Integer-add fast path without assuming benchmark-only
+operand values. Portable Integer operands cannot overflow native signed 64-bit
+addition, so the selected MIR operation computes the sum once and accepts it
+when an unsigned result check proves it remains below `2^53`; negative or
+out-of-range results retain the exact checked helper and failure behavior. On
+Linux arm64, `spectral-norm` at input 5500 records candidate/baseline ratios of
+0.932780 wall time, 0.932749 CPU time, and 1.000000 median peak RSS across two
+warmups and seven alternating retained observations. `fannkuch-redux` and
+`n-body` controls remain within 0.999964--1.000891 wall and
+0.999974--1.000890 CPU ratios. The fixed compiler shrinks from 313,896 to
+313,224 bytes on Linux arm64 and from 349,224 to 349,208 bytes on Darwin arm64;
+both targets emit byte-identical 1,108,565-byte compiler QBE. The selected
+application shrinks by 177 QBE bytes and 128 executable bytes while its Linux
+code section grows by 64 bytes, remaining within the frozen 1.02 limit. Every
+registered runtime, RSS, control, compactness, fixed-point, cross-target,
+conformance, and process boundary passes without changing a threshold.
+
 The earlier managed-runtime smoke records a 332,736-byte stripped Darwin
 compiler, 0.70-second runtime, zero final live managed bytes, and a
 1,048,513-byte peak managed heap. Current persistent-worker checks record
@@ -175,6 +193,12 @@ Public evidence:
 - [guarded Integer multiply target regressions](https://github.com/type-rb/type-rb-native/actions/runs/33726990510)
 - [guarded Integer multiply persistent-memory checks](https://github.com/type-rb/type-rb-native/actions/runs/33726990515)
 - [guarded Integer multiply complete Native gates](https://github.com/type-rb/type-rb-native/actions/runs/33726990493)
+- [guarded Integer add issue #241](https://github.com/type-rb/type-rb-native/issues/241)
+- [guarded Integer add pull request #242](https://github.com/type-rb/type-rb-native/pull/242)
+- [guarded Integer add static and focused-runtime evidence](https://github.com/type-rb/type-rb-native/actions/runs/33749003298)
+- [guarded Integer add target regressions](https://github.com/type-rb/type-rb-native/actions/runs/33749003348)
+- [guarded Integer add persistent-memory checks](https://github.com/type-rb/type-rb-native/actions/runs/33749003544)
+- [guarded Integer add complete Native gates](https://github.com/type-rb/type-rb-native/actions/runs/33749003526)
 - [accepted pull request #220](https://github.com/type-rb/type-rb-native/pull/220)
 - [final static comparison](https://github.com/type-rb/type-rb-native/actions/runs/33682830363)
 - [Linux target regressions](https://github.com/type-rb/type-rb-native/actions/runs/33682830410)
@@ -188,5 +212,5 @@ Public evidence:
 - [Array reduction target regressions](https://github.com/type-rb/type-rb-native/actions/runs/33697599529)
 - [Array reduction persistent-worker checks](https://github.com/type-rb/type-rb-native/actions/runs/33697599556)
 - [Array reduction complete Native gates](https://github.com/type-rb/type-rb-native/actions/runs/33697599531)
-- [current formal runtime result](../results/2026-09-03-benchmarksgame-runtime-native-mir-induction-phi-linux-arm64/README.md)
-- [current formal build result](../results/2026-09-03-benchmarksgame-build-native-mir-induction-phi-linux-arm64/README.md)
+- [current complete formal runtime result](../results/2026-09-03-benchmarksgame-runtime-native-mir-guarded-multiply-linux-arm64/README.md)
+- [current complete formal build result](../results/2026-09-03-benchmarksgame-build-native-mir-guarded-multiply-linux-arm64/README.md)
