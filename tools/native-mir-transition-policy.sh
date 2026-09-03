@@ -112,15 +112,15 @@ native_mir_array_reduction_marker_valid() {
 	test -f "$native_mir_marker" &&
 		test "$(grep -Fxc 'policy=native-mir-array-reduction-v1' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'baseline_revision=9dcae126e036d335344907ed4ea091a7f11a2198' "$native_mir_marker")" -eq 1 &&
-		test "$(grep -Fxc 'compiler_source_sha256=0aaa9d32d8c598fdae34c325b11b335e80ea747c7384d2e309ea996fc9477b5f' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'compiler_source_sha256=e04072866919cc4bc36c51601103e8c0e76a8bb282071a5f3a56d839cafc6f89' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'compiler_test_source_sha256=6e7270182cfed988a3dbe6528eea9538d19a897264ead710f0a1112741d6622b' "$native_mir_marker")" -eq 1 &&
-		test "$(grep -Fxc 'darwin_arm64_fixed_compiler_bytes=349216' "$native_mir_marker")" -eq 1 &&
-		test "$(grep -Fxc 'linux_arm64_fixed_compiler_bytes=315936' "$native_mir_marker")" -eq 1 &&
-		test "$(grep -Fxc 'combined_fixed_compiler_bytes=665152' "$native_mir_marker")" -eq 1 &&
-		test "$(grep -Fxc 'target_neutral_qbe_bytes=1119461' "$native_mir_marker")" -eq 1 &&
-		test "$(grep -Fxc 'target_neutral_qbe_sha256=f1840baf7324ac3d926a42c64a604316fba1d97cce892a10654acdfc91452ef5' "$native_mir_marker")" -eq 1 &&
-		test "$(grep -Fxc 'darwin_arm64_text_bytes=250904' "$native_mir_marker")" -eq 1 &&
-		test "$(grep -Fxc 'linux_arm64_text_bytes=253424' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'darwin_arm64_fixed_compiler_bytes=349232' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'linux_arm64_fixed_compiler_bytes=314544' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'combined_fixed_compiler_bytes=663776' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'target_neutral_qbe_bytes=1112077' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'target_neutral_qbe_sha256=8067fe279941819eb7b3a788cbb0fee9ec33e8e8c1aaec0e6a53f7bc43d36207' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'darwin_arm64_text_bytes=249488' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'linux_arm64_text_bytes=252032' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'darwin_arm64_compiler_limit=350000' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'linux_arm64_compiler_limit=317000' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'combined_compiler_limit=667000' "$native_mir_marker")" -eq 1 &&

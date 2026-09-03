@@ -366,6 +366,27 @@ def gate4_mir_failure_error(
 	return ""
 end
 
+def gate4_mir_exact_integer_literal(
+		native_module: Gate4MirModule,
+		instruction: Array<Integer>,
+		text: String,
+	): Boolean
+	if instruction.size() != 8
+		return false
+	end
+	if instruction[0] != 6
+		return false
+	end
+	literal := instruction[4]
+	if literal < 0
+		return false
+	end
+	if literal >= native_module.literal_texts.size()
+		return false
+	end
+	return native_module.literal_texts[literal] == text
+end
+
 def gate4_mir_induction_address(
 		native_module: Gate4MirModule,
 		function: Array<Integer>,
@@ -436,19 +457,7 @@ def gate4_mir_induction_address(
 		return false
 	end
 	zero := native_module.instructions[entry[5]]
-	if zero.size() != 8
-		return false
-	end
-	if zero[0] != 6
-		return false
-	end
-	if zero[4] < 0
-		return false
-	end
-	if zero[4] >= native_module.literal_texts.size()
-		return false
-	end
-	if native_module.literal_texts[zero[4]] != "0"
+	if !gate4_mir_exact_integer_literal(native_module, zero, "0")
 		return false
 	end
 	if native_module.arguments[entry[11]] != zero[1]
@@ -486,22 +495,10 @@ def gate4_mir_induction_address(
 	end
 	one := native_module.instructions[body[5] + body[6] - 2]
 	add := native_module.instructions[body[5] + body[6] - 1]
-	if one.size() != 8
-		return false
-	end
 	if add.size() != 8
 		return false
 	end
-	if one[0] != 6
-		return false
-	end
-	if one[4] < 0
-		return false
-	end
-	if one[4] >= native_module.literal_texts.size()
-		return false
-	end
-	if native_module.literal_texts[one[4]] != "1"
+	if !gate4_mir_exact_integer_literal(native_module, one, "1")
 		return false
 	end
 	if add[0] != 7
@@ -541,16 +538,7 @@ def gate4_mir_induction_address(
 		return false
 	end
 	accumulator_zero := native_module.instructions[entry[5] + 1]
-	if accumulator_zero[0] != 6
-		return false
-	end
-	if accumulator_zero[4] < 0
-		return false
-	end
-	if accumulator_zero[4] >= native_module.literal_texts.size()
-		return false
-	end
-	if native_module.literal_texts[accumulator_zero[4]] != "0"
+	if !gate4_mir_exact_integer_literal(native_module, accumulator_zero, "0")
 		return false
 	end
 	header_accumulator := native_module.arguments[header[3] + 1]
@@ -9249,57 +9237,30 @@ def gate4_check_block(
 								candidate = locals.mir_state[5]
 								active = candidate >= 0
 								if active
-									if locals.mir_state[0] == 2
-										active = locals.count[0] == 2
-									else
-										active = locals.count[0] == 3
-										if active
-											active = locals.mir_state[13] == 2
-										end
-									end
+									active = locals.count[0] == locals.mir_state[0]
 								end
 								if active
-									header_value := locals.mir_state[2]
-									locals.mir_state[2] = header_value + 1
-									body_value := locals.mir_state[2]
-									locals.mir_state[2] = body_value + 1
+									header_value := gate4_scalar_mir_value(
+										state, locals, "Integer", loop_start,
+									)
+									body_value := gate4_scalar_mir_value(
+										state, locals, "Integer", loop_start,
+									)
 									locals.mir_state[12] = body_value
-									locals.mir_value_rows.push([
-											locals.mir_state[1],
-											header_value,
-											1,
-											state.active_module[0],
-											gate4_load_integer(state.token_lines, loop_start),
-										])
-									locals.mir_value_rows.push([
-											locals.mir_state[1],
-											body_value,
-											1,
-											state.active_module[0],
-											gate4_load_integer(state.token_lines, loop_start),
-										])
 									gate4_store_integer(locals.mir_values, candidate, header_value + 1)
 									if locals.mir_state[0] == 3
-										accumulator_header := locals.mir_state[2]
-										locals.mir_state[2] = accumulator_header + 1
-										accumulator_body := locals.mir_state[2]
-										locals.mir_state[2] = accumulator_body + 1
-										accumulator_exit := locals.mir_state[2]
-										locals.mir_state[2] = accumulator_exit + 1
+										accumulator_header := gate4_scalar_mir_value(
+											state, locals, "Integer", loop_start,
+										)
+										accumulator_body := gate4_scalar_mir_value(
+											state, locals, "Integer", loop_start,
+										)
+										accumulator_exit := gate4_scalar_mir_value(
+											state, locals, "Integer", loop_start,
+										)
 										locals.mir_state[14] = accumulator_header
 										locals.mir_state[15] = accumulator_body
 										locals.mir_state[16] = accumulator_exit
-										mut accumulator_value := accumulator_header
-										while accumulator_value <= accumulator_exit
-											locals.mir_value_rows.push([
-													locals.mir_state[1],
-													accumulator_value,
-													1,
-													state.active_module[0],
-													gate4_load_integer(state.token_lines, loop_start),
-												])
-											accumulator_value += 1
-										end
 										gate4_store_integer(
 											locals.mir_values,
 											locals.mir_state[13],
@@ -9369,27 +9330,17 @@ def gate4_check_block(
 								if locals.mir_state[10] < 0
 									gate4_scalar_mir_disable(locals)
 								end
-								if locals.mir_state[0] == 2
-									if locals.count[0] != saved_count + 1
-										gate4_scalar_mir_disable(locals)
-									end
-									if locals.mir_instructions.size() - locals.mir_state[9] != 4
-										gate4_scalar_mir_disable(locals)
-									end
-									if locals.mir_state[18] != 1
-										gate4_scalar_mir_disable(locals)
-									end
-								else
-									if locals.count[0] != saved_count
-										gate4_scalar_mir_disable(locals)
-									end
-									if locals.mir_instructions.size() - locals.mir_state[9] != 5
-										gate4_scalar_mir_disable(locals)
-									end
+								if locals.count[0] != saved_count + 3 - locals.mir_state[0]
+									gate4_scalar_mir_disable(locals)
+								end
+								if locals.mir_instructions.size() - locals.mir_state[9] != locals.mir_state[0] + 2
+									gate4_scalar_mir_disable(locals)
+								end
+								if locals.mir_state[18] != locals.mir_state[0] - 1
+									gate4_scalar_mir_disable(locals)
+								end
+								if locals.mir_state[0] == 3
 									if locals.mir_state[17] < 0
-										gate4_scalar_mir_disable(locals)
-									end
-									if locals.mir_state[18] != 2
 										gate4_scalar_mir_disable(locals)
 									end
 								end

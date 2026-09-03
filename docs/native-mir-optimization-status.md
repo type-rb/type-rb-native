@@ -68,12 +68,13 @@ ratios of 1.052223/1.067669/1.000199 and Linux arm64 ratios of
 ordinary changes return to the 1.05 compiler/build/RSS ratios; every retained
 observation remains subject to the unchanged 2.0 catastrophic bound.
 
-Issue #230 then measures the complete two-phi reduction candidate at 349,216
-Darwin arm64 bytes and 315,936 Linux arm64 bytes, 665,152 bytes combined. Its
-Mach-O `__text` and ELF `.text` sections are 250,904 and 253,424 bytes. Both
-targets emit byte-identical target-neutral compiler QBE of 1,119,461 bytes with
+Issue #230 then measures the compact complete two-phi reduction candidate at
+349,232 Darwin arm64 bytes and 314,544 Linux arm64 bytes, 663,776 bytes
+combined. Its Mach-O `__text` and ELF `.text` sections are 249,488 and 252,032
+bytes. Both targets emit byte-identical target-neutral compiler QBE of
+1,112,077 bytes with
 SHA-256
-`f1840baf7324ac3d926a42c64a604316fba1d97cce892a10654acdfc91452ef5`.
+`8067fe279941819eb7b3a788cbb0fee9ec33e8e8c1aaec0e6a53f7bc43d36207`.
 The checked-in marker freezes ceilings of 350,000, 317,000, 667,000, and
 1,120,000 bytes respectively. It grants no relative-ratio exception: the
 ordinary 1.05 compiler/build/RSS limits and 2.0 catastrophic bound remain in
