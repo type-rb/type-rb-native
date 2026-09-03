@@ -2515,7 +2515,7 @@ def gate4_emit_guarded_integer_operation(
 		operation: String,
 		limit: String,
 		right_nonnegative: Boolean,
-		guarded: Boolean,
+		guarded: Integer,
 	)
 	if right_nonnegative
 		if gate4_take_inline_budget(context)
@@ -2523,7 +2523,7 @@ def gate4_emit_guarded_integer_operation(
 			return
 		end
 	end
-	if !guarded
+	if guarded == 0
 		gate4_emit_integer_call(output, result, operation, left, right)
 		return
 	end
@@ -2532,14 +2532,22 @@ def gate4_emit_guarded_integer_operation(
 	slow := gate4_emit_label(context)
 	fast := gate4_emit_label(context)
 	complete := gate4_emit_label(context)
-	gate4_output_line(output, "\t" + combined + " =l or " + left + ", " + right)
+	if guarded == 13
+		gate4_output_line(output, "\t" + combined + " =l add " + left + ", " + right)
+	else
+		gate4_output_line(output, "\t" + combined + " =l or " + left + ", " + right)
+	end
 	gate4_output_line(output, "\t" + small + " =w cultl " + combined + ", " + limit)
 	gate4_output_branch(output, small, fast, slow)
 	gate4_output_line(output, slow)
 	gate4_emit_integer_call(output, result, operation, left, right)
 	gate4_output_line(output, "\tjmp " + complete)
 	gate4_output_line(output, fast)
-	gate4_output_line(output, "\t" + result + " =l " + operation + " " + left + ", " + right)
+	if guarded == 13
+		gate4_output_line(output, "\t" + result + " =l copy " + combined)
+	else
+		gate4_output_line(output, "\t" + result + " =l " + operation + " " + left + ", " + right)
+	end
 	gate4_output_line(output, complete)
 	return
 end
@@ -2742,23 +2750,6 @@ def gate4_emit_add_local(
 	end
 	gate4_emit_typed_store(output, type_name, initial, slot)
 	return slot
-end
-
-def gate4_emit_add_direct_local(
-		mut context: Gate4EmitContext,
-		name: String,
-		type_name: String,
-		operand: String,
-	)
-	index := context.local_count[0]
-	gate4_store_string(context.local_names, index, name)
-	gate4_store_string(context.local_types, index, type_name)
-	gate4_store_string(context.local_slots, index, operand)
-	gate4_store_integer(context.local_mutable, index, 0)
-	gate4_store_integer(context.local_inherited, index, 1)
-	gate4_store_integer(context.local_direct, index, 1)
-	context.local_count[0] = index + 1
-	return
 end
 
 def gate4_emit_loaded_local(
@@ -3697,9 +3688,9 @@ def gate4_emit_binary_with_facts(
 					left_operand,
 					right_operand,
 					"add",
-					"4503599627370496",
+					"9007199254740992",
 					false,
-					true,
+					13,
 				)
 			else
 				if gate4_take_inline_budget(context)
@@ -3759,7 +3750,7 @@ def gate4_emit_binary_with_facts(
 			"mul",
 			"67108864",
 			right_nonnegative,
-			guarded_operator == 12,
+			guarded_operator,
 		)
 		return gate4_emitted_value(result, result_type, 0, "", 0, "")
 	end
