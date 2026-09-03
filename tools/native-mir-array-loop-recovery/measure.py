@@ -24,7 +24,7 @@ CATASTROPHIC_RATIO_LIMIT = 2.0
 def usage() -> int:
     print(
         "usage: measure.py BASELINE_EXECUTABLE CANDIDATE_EXECUTABLE "
-        "EXPECTED_STDOUT OUTPUT_DIRECTORY",
+        "EXPECTED_STDOUT OUTPUT_DIRECTORY [RUNTIME_RATIO_LIMIT]",
         file=sys.stderr,
     )
     return 64
@@ -103,8 +103,18 @@ def maximum(rows: list[dict[str, object]], role: str, key: str) -> float:
 
 
 def main(arguments: list[str]) -> int:
-    if len(arguments) != 5:
+    if len(arguments) not in (5, 6):
         return usage()
+    runtime_ratio_limit = RUNTIME_RATIO_LIMIT
+    if len(arguments) == 6:
+        try:
+            runtime_ratio_limit = float(arguments[5])
+        except ValueError:
+            print("measure: runtime ratio limit must be numeric", file=sys.stderr)
+            return 64
+        if not 0 < runtime_ratio_limit <= CATASTROPHIC_RATIO_LIMIT:
+            print("measure: runtime ratio limit is outside (0, 2]", file=sys.stderr)
+            return 64
     baseline = Path(arguments[1]).resolve()
     candidate = Path(arguments[2]).resolve()
     expected_path = Path(arguments[3]).resolve()
@@ -192,8 +202,8 @@ def main(arguments: list[str]) -> int:
             "peakRss": maximum(retained, role, "peakRssBytes") / baseline_rss,
         }
     thresholds_pass = (
-        ratios["wall"] <= RUNTIME_RATIO_LIMIT
-        and ratios["cpu"] <= RUNTIME_RATIO_LIMIT
+        ratios["wall"] <= runtime_ratio_limit
+        and ratios["cpu"] <= runtime_ratio_limit
         and ratios["peakRss"] <= RSS_RATIO_LIMIT
         and all(
             value <= CATASTROPHIC_RATIO_LIMIT
@@ -222,8 +232,8 @@ def main(arguments: list[str]) -> int:
         },
         "ratios": ratios,
         "limits": {
-            "wall": RUNTIME_RATIO_LIMIT,
-            "cpu": RUNTIME_RATIO_LIMIT,
+            "wall": runtime_ratio_limit,
+            "cpu": runtime_ratio_limit,
             "peakRss": RSS_RATIO_LIMIT,
             "catastrophic": CATASTROPHIC_RATIO_LIMIT,
         },

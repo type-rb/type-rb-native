@@ -1,12 +1,14 @@
 # Native MIR optimization transition status
 
 Status: experimental. The checked-in scope includes the accepted induction-phi
-recovery, the measured `Array<Integer>` reduction slice from issue #230, and
-the first target-independent optimization pass registered by issue #232.
+recovery, the measured `Array<Integer>` reduction slice from issue #230, the
+first target-independent optimization pass registered by issue #232, and the
+exact `Array<Float>` reduction extension registered by issue #235.
 
 The ordinary self-hosted frontend now builds one compiler-owned Native MIR
 module for selected immutable scalar-leaf functions and one exact
-`Array<Integer>` induction/reduction helper family. The structured checker
+`Array<Integer>` induction/reduction helper family plus its zero-initialized
+`Array<Float>` reduction counterpart. The structured checker
 stages typed values, instructions, blocks, block parameters, and failure edges
 during its existing traversal, publishes only complete functions, and verifies
 the complete module before QBE emission.
@@ -34,7 +36,9 @@ verifier-proven complete induction plan. The QBE adapter then hoists the
 immutable Array length and data pointer, consumes the header's true edge
 instead of repeating the bounds branch, and emits the unit-step induction
 update without a redundant Integer-range branch. Checked accumulator addition
-retains its explicit Integer failure edge. Calls, records, managed values,
+retains its explicit Integer failure edge; the Float reduction lowers a typed
+Float phi, load, addition, and store without changing binary64 semantics.
+Calls, records, managed values,
 nested loops, and unsupported helper shapes retain the accepted direct path
 without partial MIR publication.
 
@@ -99,6 +103,20 @@ strictly, wall and CPU ratios to remain at most 0.75, and RSS to remain at most
 1.05. The broader temporary MIR envelope remains subject to the existing
 range/index/induction recovery obligation; this pass adds no new allowance.
 
+Issue #235 extends that same graph to one exact `Array<Float>` sum without a
+new fact family or a larger envelope. Local Darwin arm64 fixed-point evidence
+keeps the compiler at 349,224 bytes, keeps target-neutral compiler QBE at
+1,114,458 bytes under the recovered 1,115,000-byte limit, and keeps compiler
+`__text` at 249,976 bytes under the recovered 250,100-byte limit. Both focused
+workloads remove 614 bytes of generated QBE and 88 bytes of generated
+`__text`. The hot-small-Array workload records wall/CPU ratios of
+0.492022/0.459168, while the equal-visit streaming control records
+0.869934/0.859483. This distinction is intentional: it exposes the recovered
+per-element control cost without hiding the smaller gain when memory traffic
+dominates. Formal CI freezes limits of 0.75 for the hot workload and 0.90 for
+the streaming control, with the unchanged 1.05 RSS and 2.0 catastrophic
+bounds.
+
 The earlier managed-runtime smoke records a 332,736-byte stripped Darwin
 compiler, 0.70-second runtime, zero final live managed bytes, and a
 1,048,513-byte peak managed heap. Current persistent-worker checks record
@@ -126,6 +144,7 @@ Public evidence:
 - [Array reduction issue #230](https://github.com/type-rb/type-rb-native/issues/230)
 - [Array reduction pull request #231](https://github.com/type-rb/type-rb-native/pull/231)
 - [Array-loop recovery issue #232](https://github.com/type-rb/type-rb-native/issues/232)
+- [Float Array-reduction issue #235](https://github.com/type-rb/type-rb-native/issues/235)
 - [accepted pull request #220](https://github.com/type-rb/type-rb-native/pull/220)
 - [final static comparison](https://github.com/type-rb/type-rb-native/actions/runs/33682830363)
 - [Linux target regressions](https://github.com/type-rb/type-rb-native/actions/runs/33682830410)

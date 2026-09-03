@@ -15,9 +15,11 @@ on:
       - compiler/gate4/native-mir-foundation-v1.txt
       - compiler/gate4/native-mir-induction-phi-v1.txt
       - compiler/gate4/native-mir-array-loop-recovery-v1.txt
+      - compiler/gate4/native-mir-float-array-reduction-v1.txt
       - compiler/gate4/src/compiler.trb
       - compiler/gate4/src/compiler_test.trb
       - tools/native-mir-array-loop-recovery/**
+      - tools/native-mir-float-array-reduction/**
       - tools/native-mir-transition-policy.sh
 
 permissions:
@@ -198,6 +200,11 @@ jobs:
             "$GITHUB_WORKSPACE" "$RUNNER_TEMP/baseline-source"; then
             array_loop_recovery=1
           fi
+          float_array_reduction=0
+          if native_mir_float_array_reduction_transition \
+            "$GITHUB_WORKSPACE" "$RUNNER_TEMP/baseline-source"; then
+            float_array_reduction=1
+          fi
           mkdir -p "$evidence" "$RUNNER_TEMP/interleaved-builds"
           printf 'metric\tstage\tbaseline\tcandidate\tcandidate_baseline_ratio\tmaximum\tstatus\n' \
             > "$evidence/comparison.tsv"
@@ -214,6 +221,7 @@ jobs:
             printf 'induction_phi_recovery=%s\n' "$induction_phi_recovery"
             printf 'array_reduction_transition=%s\n' "$array_reduction_transition"
             printf 'array_loop_recovery=%s\n' "$array_loop_recovery"
+            printf 'float_array_reduction=%s\n' "$float_array_reduction"
             printf 'compiler_ratio_limit=%s\n' "$compiler_ratio_limit"
             printf 'build_ratio_limit=%s\n' "$build_ratio_limit"
             printf 'rss_ratio_limit=%s\n' "$NATIVE_MIR_RSS_RATIO_LIMIT"
@@ -418,7 +426,7 @@ jobs:
           printf 'target\tbaseline_text_bytes\tcandidate_text_bytes\tstatus\n' \
             > "$evidence/code-sections.tsv"
           text_status=observed
-          if test "$array_loop_recovery" -eq 1; then
+          if test "$array_loop_recovery" -eq 1 || test "$float_array_reduction" -eq 1; then
             text_status=pass
             text_limit=$NATIVE_MIR_ARRAY_LOOP_LINUX_TEXT_LIMIT
             if test "$TARGET" = darwin-arm64; then
@@ -448,7 +456,9 @@ jobs:
             >> "$evidence/code-sections.tsv"
           test "$text_status" != fail
           test "$candidate_size" -le "$compiler_limit"
-          if test "$induction_phi_recovery" -eq 1 || test "$array_loop_recovery" -eq 1; then
+          if test "$induction_phi_recovery" -eq 1 || \
+            test "$array_loop_recovery" -eq 1 || \
+            test "$float_array_reduction" -eq 1; then
             test "$candidate_size" -le "$baseline_size"
           fi
           compare compiler_bytes fixed-point \
@@ -476,7 +486,7 @@ jobs:
             "$RUNNER_TEMP/candidate-bootstrap-evidence/identities.txt")
           fixed_qbe_sha256=$(awk -F= '$1 == "fixed_point_qbe_sha256" {print $2}' \
             "$RUNNER_TEMP/candidate-bootstrap-evidence/identities.txt")
-          if test "$array_loop_recovery" -eq 1; then
+          if test "$array_loop_recovery" -eq 1 || test "$float_array_reduction" -eq 1; then
             test "$fixed_qbe_size" -le "$NATIVE_MIR_ARRAY_LOOP_QBE_LIMIT"
           else
             if test "$induction_phi_recovery" -eq 1; then
@@ -499,6 +509,7 @@ jobs:
             printf 'induction_phi_recovery=%s\n' "$induction_phi_recovery"
             printf 'array_reduction_transition=%s\n' "$array_reduction_transition"
             printf 'array_loop_recovery=%s\n' "$array_loop_recovery"
+            printf 'float_array_reduction=%s\n' "$float_array_reduction"
             printf 'compiler_ratio_limit=%s\n' "$compiler_ratio_limit"
             printf 'build_ratio_limit=%s\n' "$build_ratio_limit"
             printf 'baseline_fixed_point_qbe_size=%s\n' "$baseline_fixed_qbe_size"
@@ -675,6 +686,128 @@ jobs:
             "$expected" \
             "$evidence/runtime"
 
+      - name: Verify the Native MIR Float Array reduction
+        env:
+          QBE: ${{ steps.qbe.outputs.path }}
+          PROFILE: ${{ matrix.profile }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          . tools/native-mir-transition-policy.sh
+          if ! native_mir_float_array_reduction_transition \
+            "$GITHUB_WORKSPACE" "$RUNNER_TEMP/baseline-source"; then
+            exit 0
+          fi
+          evidence="$RUNNER_TEMP/float-array-reduction-evidence"
+          workspace="$RUNNER_TEMP/float-array-reduction"
+          mkdir -p "$evidence" "$workspace"
+          printf 'workload\tartifact\tbaseline_bytes\tcandidate_bytes\tstatus\n' \
+            > "$evidence/code-size.tsv"
+          executable_text_size() {
+            executable=$1
+            if test "$TARGET" = darwin-arm64; then
+              text_hex=$(otool -l "$executable" | awk '
+                $1 == "sectname" && $2 == "__text" { text = 1; next }
+                text && $1 == "size" { print $2; exit }
+              ')
+            else
+              text_hex=$(readelf -SW "$executable" | awk '
+                $2 == ".text" { print "0x" $6; exit }
+              ')
+            fi
+            case "$text_hex" in
+              0x[0-9a-fA-F]*) printf '%d\n' "$text_hex" ;;
+              *) return 1 ;;
+            esac
+          }
+          for workload in hot streaming; do
+            case "$workload" in
+              hot)
+                source=tools/native-mir-float-array-reduction/workload.trb
+                expected=tools/native-mir-float-array-reduction/workload.out
+                runtime_limit=0.75
+                ;;
+              streaming)
+                source=tools/native-mir-float-array-reduction/streaming.trb
+                expected=tools/native-mir-float-array-reduction/streaming.out
+                runtime_limit=0.90
+                ;;
+            esac
+            for role in baseline candidate; do
+              directory="$workspace/$workload/$role"
+              compiler="$RUNNER_TEMP/$role-compiler"
+              mkdir -p "$directory"
+              "$compiler" emit-qbe "$source" > "$directory/program.ssa"
+              "$compiler" build "$source" \
+                --output "$directory/program" --qbe "$QBE" --cc /usr/bin/cc --target "$PROFILE"
+            done
+            baseline_qbe=$(wc -c < "$workspace/$workload/baseline/program.ssa" | tr -d ' ')
+            candidate_qbe=$(wc -c < "$workspace/$workload/candidate/program.ssa" | tr -d ' ')
+            baseline_text=$(executable_text_size "$workspace/$workload/baseline/program")
+            candidate_text=$(executable_text_size "$workspace/$workload/candidate/program")
+            qbe_status=pass
+            text_status=pass
+            if test "$candidate_qbe" -ge "$baseline_qbe"; then
+              qbe_status=fail
+            fi
+            if test "$candidate_text" -ge "$baseline_text"; then
+              text_status=fail
+            fi
+            printf '%s\ttarget-neutral-qbe\t%s\t%s\t%s\n' \
+              "$workload" "$baseline_qbe" "$candidate_qbe" "$qbe_status" \
+              >> "$evidence/code-size.tsv"
+            printf '%s\t%s-text\t%s\t%s\t%s\n' \
+              "$workload" "$TARGET" "$baseline_text" "$candidate_text" "$text_status" \
+              >> "$evidence/code-size.tsv"
+            test "$qbe_status" = pass
+            test "$text_status" = pass
+            python3 tools/native-mir-array-loop-recovery/measure.py \
+              "$workspace/$workload/baseline/program" \
+              "$workspace/$workload/candidate/program" \
+              "$expected" \
+              "$evidence/$workload-runtime" \
+              "$runtime_limit"
+          done
+
+          printf 'control\tbaseline_status\tcandidate_status\tstdout_status\tstderr_status\n' \
+            > "$evidence/controls.tsv"
+          for control in empty unsupported nonfinite; do
+            source="tools/native-mir-float-array-reduction/$control.trb"
+            for role in baseline candidate; do
+              compiler="$RUNNER_TEMP/$role-compiler"
+              "$compiler" build "$source" \
+                --output "$workspace/$control-$role" --qbe "$QBE" --cc /usr/bin/cc --target "$PROFILE"
+              set +e
+              "$workspace/$control-$role" \
+                > "$workspace/$control-$role.stdout" \
+                2> "$workspace/$control-$role.stderr"
+              status=$?
+              set -e
+              printf '%s\n' "$status" > "$workspace/$control-$role.status"
+            done
+            baseline_status=$(cat "$workspace/$control-baseline.status")
+            candidate_status=$(cat "$workspace/$control-candidate.status")
+            cmp "$workspace/$control-baseline.stdout" "$workspace/$control-candidate.stdout"
+            cmp "$workspace/$control-baseline.stderr" "$workspace/$control-candidate.stderr"
+            stdout_status=pass
+            stderr_status=pass
+            if test "$control" = nonfinite; then
+              test "$baseline_status" -eq 2
+              test "$candidate_status" -eq 2
+              test ! -s "$workspace/$control-baseline.stdout"
+              cmp tools/native-mir-float-array-reduction/nonfinite.err \
+                "$workspace/$control-baseline.stderr"
+            else
+              test "$baseline_status" -eq 0
+              test "$candidate_status" -eq 0
+              test ! -s "$workspace/$control-baseline.stderr"
+              cmp "tools/native-mir-float-array-reduction/$control.out" \
+                "$workspace/$control-baseline.stdout"
+            fi
+            printf '%s\t%s\t%s\t%s\t%s\n' \
+              "$control" "$baseline_status" "$candidate_status" \
+              "$stdout_status" "$stderr_status" >> "$evidence/controls.tsv"
+          done
+
       - name: Upload target evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -684,6 +817,7 @@ jobs:
             ${{ runner.temp }}/comparison-evidence
             ${{ runner.temp }}/application-evidence
             ${{ runner.temp }}/array-loop-recovery-evidence
+            ${{ runner.temp }}/float-array-reduction-evidence
             ${{ runner.temp }}/baseline-bootstrap-evidence
             ${{ runner.temp }}/candidate-bootstrap-evidence
             ${{ runner.temp }}/baseline-bootstrap-metadata.json
@@ -726,15 +860,20 @@ jobs:
           linux_reduction=$(awk -F= '$1 == "array_reduction_transition" {print $2}' "$linux")
           darwin_loop_recovery=$(awk -F= '$1 == "array_loop_recovery" {print $2}' "$darwin")
           linux_loop_recovery=$(awk -F= '$1 == "array_loop_recovery" {print $2}' "$linux")
+          darwin_float_reduction=$(awk -F= '$1 == "float_array_reduction" {print $2}' "$darwin")
+          linux_float_reduction=$(awk -F= '$1 == "float_array_reduction" {print $2}' "$linux")
           test "$darwin_recovery" = "$linux_recovery"
           test "$darwin_reduction" = "$linux_reduction"
           test "$darwin_loop_recovery" = "$linux_loop_recovery"
+          test "$darwin_float_reduction" = "$linux_float_reduction"
           test "$darwin_size" -le "$NATIVE_MIR_DARWIN_COMPILER_LIMIT"
           test "$linux_size" -le "$NATIVE_MIR_LINUX_COMPILER_LIMIT"
           combined=$((darwin_size + linux_size))
           test "$combined" -le "$NATIVE_MIR_COMBINED_COMPILER_LIMIT"
           baseline_combined=$((darwin_baseline_size + linux_baseline_size))
-          if test "$darwin_recovery" -eq 1 || test "$darwin_loop_recovery" -eq 1; then
+          if test "$darwin_recovery" -eq 1 || \
+            test "$darwin_loop_recovery" -eq 1 || \
+            test "$darwin_float_reduction" -eq 1; then
             test "$combined" -le "$baseline_combined"
           fi
           darwin_qbe_size=$(awk -F= '$1 == "fixed_point_qbe_size" {print $2}' "$darwin")
@@ -743,7 +882,7 @@ jobs:
           linux_qbe_sha256=$(awk -F= '$1 == "fixed_point_qbe_sha256" {print $2}' "$linux")
           test "$darwin_qbe_size" = "$linux_qbe_size"
           test "$darwin_qbe_sha256" = "$linux_qbe_sha256"
-          if test "$darwin_loop_recovery" -eq 1; then
+          if test "$darwin_loop_recovery" -eq 1 || test "$darwin_float_reduction" -eq 1; then
             test "$darwin_qbe_size" -le "$NATIVE_MIR_ARRAY_LOOP_QBE_LIMIT"
           else
             if test "$darwin_reduction" -eq 1; then
@@ -761,6 +900,7 @@ jobs:
             printf 'induction_phi_recovery=%s\n' "$darwin_recovery"
             printf 'array_reduction_transition=%s\n' "$darwin_reduction"
             printf 'array_loop_recovery=%s\n' "$darwin_loop_recovery"
+            printf 'float_array_reduction=%s\n' "$darwin_float_reduction"
             printf 'target_neutral_qbe_bytes=%s\n' "$darwin_qbe_size"
             printf 'target_neutral_qbe_sha256=%s\n' "$darwin_qbe_sha256"
           } > "$RUNNER_TEMP/cross-target.txt"

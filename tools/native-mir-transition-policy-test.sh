@@ -19,6 +19,8 @@ cp "$script_directory/../$NATIVE_MIR_ARRAY_REDUCTION_MARKER" \
 	"$candidate/$NATIVE_MIR_ARRAY_REDUCTION_MARKER"
 cp "$script_directory/../$NATIVE_MIR_ARRAY_LOOP_RECOVERY_MARKER" \
 	"$candidate/$NATIVE_MIR_ARRAY_LOOP_RECOVERY_MARKER"
+cp "$script_directory/../$NATIVE_MIR_FLOAT_ARRAY_REDUCTION_MARKER" \
+	"$candidate/$NATIVE_MIR_FLOAT_ARRAY_REDUCTION_MARKER"
 
 test "$(native_mir_target_compiler_limit darwin-arm64-v0)" = 350000
 test "$(native_mir_target_compiler_limit linux-arm64-v0)" = 317000
@@ -98,6 +100,17 @@ cp "$candidate/$NATIVE_MIR_ARRAY_LOOP_RECOVERY_MARKER" \
 if native_mir_array_loop_recovery_transition "$candidate" "$baseline"; then
 	exit 1
 fi
+native_mir_float_array_reduction_marker_valid "$candidate"
+native_mir_float_array_reduction_transition "$candidate" "$baseline"
+test "$(native_mir_transition_mode "$candidate" "$baseline")" = float-array-reduction-transition
+test "$(native_mir_compiler_ratio_limit "$candidate" "$baseline")" = 1.05
+test "$(native_mir_build_ratio_limit "$candidate" "$baseline")" = 1.05
+
+cp "$candidate/$NATIVE_MIR_FLOAT_ARRAY_REDUCTION_MARKER" \
+	"$baseline/$NATIVE_MIR_FLOAT_ARRAY_REDUCTION_MARKER"
+if native_mir_float_array_reduction_transition "$candidate" "$baseline"; then
+	exit 1
+fi
 
 native_mir_transition_markers_valid "$candidate"
 native_mir_induction_phi_recovery "$candidate" "$baseline"
@@ -149,6 +162,12 @@ fi
 printf 'policy=native-mir-array-loop-recovery-v1\n' \
 	> "$candidate/$NATIVE_MIR_ARRAY_LOOP_RECOVERY_MARKER"
 if native_mir_array_loop_recovery_marker_valid "$candidate"; then
+	exit 1
+fi
+
+printf 'policy=native-mir-float-array-reduction-v1\n' \
+	> "$candidate/$NATIVE_MIR_FLOAT_ARRAY_REDUCTION_MARKER"
+if native_mir_float_array_reduction_marker_valid "$candidate"; then
 	exit 1
 fi
 
