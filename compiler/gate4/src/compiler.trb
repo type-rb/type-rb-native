@@ -2466,18 +2466,19 @@ def gate4_emit_integer_range_failure(mut output: Gate4Output, failure: String)
 	return
 end
 
-def gate4_emit_checked_integer_add(
+def gate4_emit_checked_integer_operation(
 		mut context: Gate4EmitContext,
 		mut output: Gate4Output,
 		result: String,
 		left: String,
 		right: String,
+		operation: String,
 		right_nonnegative: Boolean,
 	): String
 	too_high := gate4_emit_temporary(context)
 	failure := gate4_integer_range_failure_label(context)
 	complete := gate4_emit_label(context)
-	gate4_output_line(output, "\t" + result + " =l add " + left + ", " + right)
+	gate4_output_line(output, "\t" + result + " =l " + operation + " " + left + ", " + right)
 	gate4_output_line(output, "\t" + too_high + " =w csgtl " + result + ", 9007199254740991")
 	if right_nonnegative
 		gate4_output_branch(output, too_high, failure, complete)
@@ -2494,29 +2495,6 @@ def gate4_emit_checked_integer_add(
 	return complete
 end
 
-def gate4_emit_checked_integer_subtract(
-		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
-		result: String,
-		left: String,
-		right: String,
-	)
-	too_high := gate4_emit_temporary(context)
-	too_low := gate4_emit_temporary(context)
-	check_low := gate4_emit_label(context)
-	failure := gate4_integer_range_failure_label(context)
-	complete := gate4_emit_label(context)
-	gate4_output_line(output, "\t" + result + " =l sub " + left + ", " + right)
-	gate4_output_line(output, "\t" + too_high + " =w csgtl " + result + ", 9007199254740991")
-	gate4_output_branch(output, too_high, failure, check_low)
-	gate4_output_line(output, check_low)
-	gate4_output_line(output, "\t" + too_low + " =w csltl " + result + ", -9007199254740991")
-	gate4_output_branch(output, too_low, failure, complete)
-	gate4_emit_integer_range_failure(output, failure)
-	gate4_output_line(output, complete)
-	return
-end
-
 def gate4_emit_checked_integer_multiply(
 		mut context: Gate4EmitContext,
 		mut output: Gate4Output,
@@ -2528,19 +2506,7 @@ def gate4_emit_checked_integer_multiply(
 	)
 	if right_nonnegative
 		if gate4_take_inline_budget(context)
-			too_high := gate4_emit_temporary(context)
-			too_low := gate4_emit_temporary(context)
-			check_low := gate4_emit_label(context)
-			failure := gate4_integer_range_failure_label(context)
-			complete := gate4_emit_label(context)
-			gate4_output_line(output, "\t" + result + " =l mul " + left + ", " + right)
-			gate4_output_line(output, "\t" + too_high + " =w csgtl " + result + ", 9007199254740991")
-			gate4_output_branch(output, too_high, failure, check_low)
-			gate4_output_line(output, check_low)
-			gate4_output_line(output, "\t" + too_low + " =w csltl " + result + ", -9007199254740991")
-			gate4_output_branch(output, too_low, failure, complete)
-			gate4_emit_integer_range_failure(output, failure)
-			gate4_output_line(output, complete)
+			gate4_emit_checked_integer_operation(context, output, result, left, right, "mul", false)
 			return
 		end
 	end
@@ -2565,12 +2531,13 @@ def gate4_emit_checked_integer_multiply(
 	return
 end
 
-def gate4_emit_checked_integer_divide(
+def gate4_emit_checked_integer_division(
 		mut context: Gate4EmitContext,
 		mut output: Gate4Output,
 		result: String,
 		left: String,
 		right: String,
+		operation: String,
 	)
 	zero := gate4_emit_temporary(context)
 	failure := gate4_emit_label(context)
@@ -2581,27 +2548,7 @@ def gate4_emit_checked_integer_divide(
 	gate4_output_line(output, "\tcall $g4_fail(l $g4_division_error, l 24)")
 	gate4_output_line(output, "\thlt")
 	gate4_output_line(output, complete)
-	gate4_output_line(output, "\t" + result + " =l div " + left + ", " + right)
-	return
-end
-
-def gate4_emit_checked_integer_remainder(
-		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
-		result: String,
-		left: String,
-		right: String,
-	)
-	zero := gate4_emit_temporary(context)
-	failure := gate4_emit_label(context)
-	complete := gate4_emit_label(context)
-	gate4_output_line(output, "\t" + zero + " =w ceql " + right + ", 0")
-	gate4_output_branch(output, zero, failure, complete)
-	gate4_output_line(output, failure)
-	gate4_output_line(output, "\tcall $g4_fail(l $g4_division_error, l 24)")
-	gate4_output_line(output, "\thlt")
-	gate4_output_line(output, complete)
-	gate4_output_line(output, "\t" + result + " =l rem " + left + ", " + right)
+	gate4_output_line(output, "\t" + result + " =l " + operation + " " + left + ", " + right)
 	return
 end
 
@@ -3176,12 +3123,13 @@ def gate4_emit_induction_mir(
 		if float_elements
 			gate4_output_line(output, "\t" + accumulated + " =d add " + accumulator + ", " + loaded)
 		else
-			increment_predecessor = gate4_emit_checked_integer_add(
+			increment_predecessor = gate4_emit_checked_integer_operation(
 				context,
 				output,
 				accumulated,
 				accumulator,
 				loaded,
+				"add",
 				false,
 			)
 		end
@@ -3765,12 +3713,13 @@ def gate4_emit_binary_with_facts(
 					right_operand = left.operand
 					known_nonnegative = true
 				end
-				gate4_emit_checked_integer_add(
+				gate4_emit_checked_integer_operation(
 					context,
 					output,
 					result,
 					left_operand,
 					right_operand,
+					"add",
 					known_nonnegative,
 				)
 			else
@@ -3785,7 +3734,15 @@ def gate4_emit_binary_with_facts(
 			return gate4_emitted_value(result, result_type, 0, "", 0, "")
 		end
 		if gate4_take_inline_budget(context)
-			gate4_emit_checked_integer_subtract(context, output, result, left.operand, right.operand)
+			gate4_emit_checked_integer_operation(
+				context,
+				output,
+				result,
+				left.operand,
+				right.operand,
+				"sub",
+				false,
+			)
 		else
 			gate4_emit_integer_call(output, result, "subtract", left.operand, right.operand)
 		end
@@ -3813,7 +3770,14 @@ def gate4_emit_binary_with_facts(
 			return gate4_emitted_value(result, result_type, 0, "", 0, "")
 		end
 		if gate4_take_inline_budget(context)
-			gate4_emit_checked_integer_divide(context, output, result, left.operand, right.operand)
+			gate4_emit_checked_integer_division(
+				context,
+				output,
+				result,
+				left.operand,
+				right.operand,
+				"div",
+			)
 		else
 			gate4_emit_integer_call(output, result, "divide", left.operand, right.operand)
 		end
@@ -3821,7 +3785,14 @@ def gate4_emit_binary_with_facts(
 	end
 	if operator == "%"
 		if gate4_take_inline_budget(context)
-			gate4_emit_checked_integer_remainder(context, output, result, left.operand, right.operand)
+			gate4_emit_checked_integer_division(
+				context,
+				output,
+				result,
+				left.operand,
+				right.operand,
+				"rem",
+			)
 		else
 			gate4_emit_integer_call(output, result, "remainder", left.operand, right.operand)
 		end
