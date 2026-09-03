@@ -190,12 +190,23 @@ build/RSS limits, removal condition, and final compactness target have been
 registered publicly. This temporary allowance does not weaken the end goal of
 matching or improving the Go backend's build time and generated artifact size.
 Each successive structural slice uses a validated marker that names its exact
-accepted baseline, measured source revision, and one-time relative limits. Once
-that marker exists in the baseline, later changes automatically return to the
-ordinary limits.
+accepted baseline, measured candidate identity, and one-time relative limits.
+Before a candidate has a public revision, exact compiler and compiler-test
+source digests identify the measured implementation without making the policy
+retrospective. Once that marker exists in the baseline, later changes
+automatically return to the ordinary limits.
 The first complete control-flow slice must delete its superseded Array
 induction token facts and direct emission before the migration expands beyond
 the portable range, index, and induction family.
+
+The first complete `Array<Integer>` reduction slice extends that same family
+with verified induction and accumulator block parameters. Its measured
+one-time ceilings are 350,000 Darwin arm64 bytes, 317,000 Linux arm64 bytes,
+667,000 bytes combined, and 1,120,000 bytes of target-neutral compiler QBE.
+The measured code-section ceilings are 250,904 Mach-O `__text` bytes and
+253,424 ELF `.text` bytes. Ordinary 1.05 compiler/build/RSS ratios and the 2.0
+catastrophic bound remain in force. This slice must help recover the complete
+family's temporary increase before any new portable fact family begins.
 See [Decision 0028](decisions/0028-native-mir-optimization-boundary.md).
 
 ## Backend adapters

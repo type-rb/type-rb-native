@@ -100,6 +100,18 @@ fixed-point, artifact, process, cleanup, and catastrophic requirements remain
 unchanged. The checked-in policy and three exact markers make each exceptional
 transition machine-readable.
 
+Issue #230 measures the first complete `Array<Integer>` reduction carried by
+verified induction and accumulator block parameters. It freezes one-time
+ceilings of 350,000 Darwin arm64 bytes, 317,000 Linux arm64 bytes, 667,000
+bytes combined, and 1,120,000 bytes of target-neutral compiler QBE. The
+corresponding code-section ceilings are 250,904 Mach-O `__text` bytes and
+253,424 ELF `.text` bytes. Exact compiler and compiler-test source digests
+identify the pre-publication measured candidate. This is not a new ratio
+exception: compiler size, build time, and RSS retain the ordinary 1.05 limit,
+and every retained observation remains subject to the 2.0 catastrophic limit.
+The allowance applies only to removal of reduction token/control and
+mutable-stack emission ownership.
+
 None of these allowances is an optimization budget. The complete increase
 above the pre-MIR compiler must be recovered by the end of the portable range,
 index, and induction migration, before work begins on the next portable fact

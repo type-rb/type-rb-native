@@ -213,6 +213,53 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_verify_mir(state.scalar_mir)).to_equal("MIR instruction origin is invalid")
 	end
 
+	test("lowers one complete Array Integer reduction through two MIR phis") do
+		source := "def sum(values: Array<Integer>): Integer\n\tmut index := 0\n\tmut total := 0\n\twhile index < values.size()\n\t\ttotal += values[index]\n\t\tindex += 1\n\tend\n\treturn total\nend\n\ndef main()\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		expect(gate4_verify_mir(state.scalar_mir)).to_equal("")
+		function_index := gate4_mir_function_index(state.scalar_mir, 0)
+		expect(function_index >= 0).to_be_true()
+		function := state.scalar_mir.functions[function_index]
+		expect(function[7]).to_equal(6)
+		header := state.scalar_mir.blocks[function[6] + 1]
+		body := state.scalar_mir.blocks[function[6] + 2]
+		exit := state.scalar_mir.blocks[function[6] + 3]
+		expect(header[4]).to_equal(2)
+		expect(body[4]).to_equal(2)
+		expect(exit[4]).to_equal(1)
+		qbe := gate4_output_source(gate4_emit_qbe(state))
+		expect(
+			qbe.include?(
+				"function l $g4f0(l %p0) {\n@start\n\t%return_value =l alloc8 8\n" +
+				"\tjmp @l0\n@l0\n\t%t0 =l phi @start 0, ",
+			),
+		).to_be_true()
+		expect(qbe.include?("\t%t2 =l phi @start 0, ")).to_be_true()
+		expect(qbe.include?("\tstorel %t2, %return_value")).to_be_true()
+		expect(qbe.include?("\t%v0 =l alloc8 8")).to_be_false()
+		expect(gate4_occurrence_count(qbe, " =l sar ")).to_equal(0)
+		expect(state.mir_nonnegative_facts.used[0]).to_equal(0)
+
+		state.scalar_mir.arguments[body[11] + 1] = state.scalar_mir.arguments[body[3]]
+		expect(gate4_verify_mir(state.scalar_mir)).to_equal("MIR Array induction proof differs")
+	end
+
+	test("keeps unsupported Array Integer reductions on the direct path") do
+		source := "def nonzero(values: Array<Integer>): Integer\n\tmut index := 0\n\tmut total := 1\n\twhile index < values.size()\n\t\ttotal += values[index]\n\t\tindex += 1\n\tend\n\treturn total\nend\n\ndef reordered(values: Array<Integer>): Integer\n\tmut total := 0\n\tmut index := 0\n\twhile index < values.size()\n\t\tindex += 1\n\t\ttotal += values[index - 1]\n\tend\n\treturn total\nend\n\ndef subtracting(values: Array<Integer>): Integer\n\tmut index := 0\n\tmut total := 0\n\twhile index < values.size()\n\t\ttotal -= values[index]\n\t\tindex += 1\n\tend\n\treturn total\nend\n\ndef main()\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		expect(gate4_mir_function_index(state.scalar_mir, 0)).to_equal(- 1)
+		expect(gate4_mir_function_index(state.scalar_mir, 1)).to_equal(- 1)
+		expect(gate4_mir_function_index(state.scalar_mir, 2)).to_equal(- 1)
+	end
+
 	test("keeps unsupported Array induction helpers on the direct path") do
 		source := "def non_unit(values: Array<Integer>)\n\tmut index := 0\n\twhile index < values.size()\n\t\tvalue := values[index]\n\t\tindex += 2\n\tend\n\treturn\nend\n\ndef nonadjacent(values: Array<Integer>)\n\tmut index := 0\n\tmarker := 0\n\twhile index < values.size()\n\t\tvalue := values[index]\n\t\tindex += 1\n\tend\n\treturn\nend\n\ndef nested(values: Array<Integer>)\n\tmut index := 0\n\twhile index < values.size()\n\t\tif true\n\t\t\tvalue := values[index]\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n\ndef main()\n\treturn\nend\n"
 		mut state := gate4_compiler_new(source.size() + 1)
