@@ -602,6 +602,13 @@ def gate4_optimize_verified_mir(mut native_module: Gate4MirModule)
 				instruction[4] = 2
 			end
 		end
+		if instruction[0] == 7
+			if instruction[4] == 3
+				if instruction[5] >= 0
+					instruction[4] = 12
+				end
+			end
+		end
 		index += 1
 	end
 	return
@@ -800,7 +807,10 @@ def gate4_mir_instruction_error(
 		if !second_available
 			return "MIR scalar binary operand is undefined"
 		end
-		operator := instruction[4]
+		mut operator := instruction[4]
+		if operator == 12
+			operator = 3
+		end
 		mut numeric := false
 		if first_type == 1
 			if second_type == 1
@@ -2514,6 +2524,7 @@ def gate4_emit_checked_integer_multiply(
 		left: String,
 		right: String,
 		right_nonnegative: Boolean,
+		guarded: Boolean,
 	)
 	if right_nonnegative
 		if gate4_take_inline_budget(context)
@@ -2532,6 +2543,23 @@ def gate4_emit_checked_integer_multiply(
 			gate4_output_line(output, complete)
 			return
 		end
+	end
+	if guarded
+		combined := gate4_emit_temporary(context)
+		large := gate4_emit_temporary(context)
+		slow := gate4_emit_label(context)
+		fast := gate4_emit_label(context)
+		complete := gate4_emit_label(context)
+		gate4_output_line(output, "\t" + combined + " =l or " + left + ", " + right)
+		gate4_output_line(output, "\t" + large + " =l shr " + combined + ", 26")
+		gate4_output_branch(output, large, slow, fast)
+		gate4_output_line(output, slow)
+		gate4_emit_integer_call(output, result, "multiply", left, right)
+		gate4_output_line(output, "\tjmp " + complete)
+		gate4_output_line(output, fast)
+		gate4_output_line(output, "\t" + result + " =l mul " + left + ", " + right)
+		gate4_output_line(output, complete)
+		return
 	end
 	gate4_emit_integer_call(output, result, "multiply", left, right)
 	return
@@ -2940,6 +2968,9 @@ def gate4_scalar_binary_operator(operator_id: Integer): String
 	if operator_id == 11
 		return ">="
 	end
+	if operator_id == 12
+		return "*"
+	end
 	return ""
 end
 
@@ -2996,6 +3027,10 @@ def gate4_emit_scalar_mir(
 			if instruction[0] == 7
 				left_id := instruction[2]
 				right_id := instruction[3]
+				mut guarded_multiply := instruction[4] == 12
+				if !inline
+					guarded_multiply = false
+				end
 				result = gate4_emit_binary_with_facts(
 					context,
 					output,
@@ -3004,6 +3039,7 @@ def gate4_emit_scalar_mir(
 					gate4_emitted_value(operands[right_id], types[right_id], 0, "", 0, ""),
 					facts[left_id] == 1,
 					facts[right_id] == 1,
+					guarded_multiply,
 				)
 			else
 				if instruction[0] == 8
@@ -3676,6 +3712,7 @@ def gate4_emit_binary_with_facts(
 		right: Gate4EmittedValue,
 		left_nonnegative: Boolean,
 		right_nonnegative: Boolean,
+		guarded_multiply: Boolean,
 	): Gate4EmittedValue
 	mut result_type := left.type_name
 	if right.type_name == "Float"
@@ -3766,6 +3803,7 @@ def gate4_emit_binary_with_facts(
 			left.operand,
 			right.operand,
 			right_nonnegative,
+			guarded_multiply,
 		)
 		return gate4_emitted_value(result, result_type, 0, "", 0, "")
 	end
@@ -3874,6 +3912,7 @@ def gate4_emit_binary(
 		right,
 		gate4_small_nonnegative_integer_operand(left.operand),
 		gate4_small_nonnegative_integer_operand(right.operand),
+		false,
 	)
 end
 

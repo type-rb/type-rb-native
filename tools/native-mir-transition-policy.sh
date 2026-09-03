@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Frozen by issues #197, #221, #225, #230, #232, and #235 after their measurement runs. The
+# Frozen by issues #197, #221, #225, #230, #232, #235, and #238 for their registered transitions. The
 # allowance is only for the verified MIR foundation, scalar connection, and
 # first complete control-flow connection. It expires with the complete
 # migration of portable range, index, and induction ownership out of the
@@ -12,6 +12,7 @@ NATIVE_MIR_INDUCTION_PHI_MARKER=compiler/gate4/native-mir-induction-phi-v1.txt
 NATIVE_MIR_ARRAY_REDUCTION_MARKER=compiler/gate4/native-mir-array-reduction-v1.txt
 NATIVE_MIR_ARRAY_LOOP_RECOVERY_MARKER=compiler/gate4/native-mir-array-loop-recovery-v1.txt
 NATIVE_MIR_FLOAT_ARRAY_REDUCTION_MARKER=compiler/gate4/native-mir-float-array-reduction-v1.txt
+NATIVE_MIR_GUARDED_MULTIPLY_MARKER=compiler/gate4/native-mir-guarded-integer-multiply-v1.txt
 NATIVE_MIR_DARWIN_COMPILER_LIMIT=350000
 NATIVE_MIR_LINUX_COMPILER_LIMIT=317000
 # Linux amd64 remains below its pre-existing ceiling; the control-flow
@@ -24,6 +25,10 @@ NATIVE_MIR_TARGET_NEUTRAL_QBE_LIMIT=1120000
 NATIVE_MIR_ARRAY_LOOP_QBE_LIMIT=1115000
 NATIVE_MIR_ARRAY_LOOP_DARWIN_TEXT_LIMIT=250100
 NATIVE_MIR_ARRAY_LOOP_LINUX_TEXT_LIMIT=253424
+NATIVE_MIR_GUARDED_MULTIPLY_QBE_LIMIT=52950
+NATIVE_MIR_GUARDED_MULTIPLY_SELECTED_CODE_RATIO_LIMIT=1.01
+NATIVE_MIR_GUARDED_MULTIPLY_SELECTED_RUNTIME_RATIO_LIMIT=0.90
+NATIVE_MIR_GUARDED_MULTIPLY_CONTROL_RATIO_LIMIT=1.02
 NATIVE_MIR_FOUNDATION_COMPILER_RATIO_LIMIT=1.07
 NATIVE_MIR_FOUNDATION_BUILD_RATIO_LIMIT=1.12
 NATIVE_MIR_SCALAR_CONNECTION_COMPILER_RATIO_LIMIT=1.07
@@ -210,6 +215,50 @@ native_mir_float_array_reduction_marker_valid() {
 		test "$(grep -Fxc 'recovery_before=next-portable-fact-family' "$native_mir_marker")" -eq 1
 }
 
+native_mir_guarded_multiply_marker_valid() {
+	native_mir_marker=$1/$NATIVE_MIR_GUARDED_MULTIPLY_MARKER
+	test -f "$native_mir_marker" &&
+		test "$(grep -Fxc 'policy=native-mir-guarded-integer-multiply-v1' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'baseline_revision=538742551ac1c6d030e772abd49a273e6cb783eb' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'compiler_source_sha256=9ebc687c285bd3693be0f1d8dc7e48f6de0ee783d57771e4467da6857d53a9e8' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'compiler_test_source_sha256=7abd4a197c4979c35a494ea6308d519343cc1e8ea1fa97c38a233a1cb572207a' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'valid_source_sha256=96faedf7c940df525cfcf2eacb654088dad5e83f06936c1257c0f5c63739158b' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'valid_expected_stdout_sha256=0985f550314d08663a0d829b2bf6cb8fe671b2e81d9b77f535165696de6801f8' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'overflow_source_sha256=b8772c170dc3cadd3c227fe664295c15aff6e839694ae5737d44c6f4b430cfe0' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'overflow_expected_stderr_sha256=a8e248bcb823b1d6710097f5c88b63fc79c73fa052aefcde3c468cc69d10edec' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'measure_source_sha256=f03adc024300e0be5d8304ebd1000a5a390d9f8acaceadf3c10375643e27a45e' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'spectral_source_sha256=b85e0d8cecf4e7455bdd34a6a02cb3a9a6e7bbe57ec29bb2f1b99afbbb5312f2' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'spectral_expected_stdout_sha256=f9d5b5e3eb7657cf1bbba4cc856651864df9cd9fd9a6be9b9bc5fcbb67150deb' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'fannkuch_source_sha256=6fa788a62edda1755f05bf493f0cebe9903b97be176359b9ceeadea0b1bef92d' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'fannkuch_expected_stdout_sha256=4265a65135c506a68d90d6474003fb9030b7ee244a06c046bd89b3932a28ce20' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'nbody_source_sha256=796fc08a4747102e1ca08fc75cb81cb0a69b65666c11e45baeafcae2a1064b20' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'nbody_expected_stdout_sha256=3e6c9ef9d26cfe312a4cd8e1b81b3f671b88fbce84de543e8c23c206a942504d' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'local_darwin_arm64_baseline_compiler_bytes=349224' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'local_darwin_arm64_candidate_compiler_bytes=349224' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'baseline_target_neutral_qbe_bytes=1110817' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'local_candidate_target_neutral_qbe_bytes=1114772' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'local_baseline_spectral_qbe_bytes=52272' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'local_candidate_spectral_qbe_bytes=52504' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'local_darwin_arm64_baseline_spectral_text_bytes=10620' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'local_darwin_arm64_candidate_spectral_text_bytes=10692' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'target_neutral_qbe_limit=1115000' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'spectral_qbe_limit=52950' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'darwin_arm64_text_limit=250100' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'linux_arm64_text_limit=253424' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'selected_code_section_ratio_limit=1.01' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'selected_runtime_wall_ratio_limit=0.90' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'selected_runtime_cpu_ratio_limit=0.90' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'control_code_section_ratio_limit=1.02' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'control_runtime_wall_ratio_limit=1.02' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'control_runtime_cpu_ratio_limit=1.02' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'runtime_rss_ratio_limit=1.05' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'catastrophic_ratio_limit=2.0' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'complete_compiler_signal=no-growth-per-arm64-target' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'superseded_ownership=loop-local-checked-integer-multiply-helper-selection' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'recovery_family=portable-range-index-induction' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'recovery_before=next-portable-fact-family' "$native_mir_marker")" -eq 1
+}
+
 native_mir_transition_markers_valid() {
 	native_mir_foundation_marker_valid "$1" &&
 		native_mir_scalar_connection_marker_valid "$1" &&
@@ -217,7 +266,8 @@ native_mir_transition_markers_valid() {
 		native_mir_induction_phi_marker_valid "$1" &&
 		native_mir_array_reduction_marker_valid "$1" &&
 		native_mir_array_loop_recovery_marker_valid "$1" &&
-		native_mir_float_array_reduction_marker_valid "$1"
+		native_mir_float_array_reduction_marker_valid "$1" &&
+		native_mir_guarded_multiply_marker_valid "$1"
 }
 
 native_mir_target_compiler_limit() {
@@ -286,6 +336,13 @@ native_mir_float_array_reduction_transition() {
 		test ! -f "$native_mir_baseline_root/$NATIVE_MIR_FLOAT_ARRAY_REDUCTION_MARKER"
 }
 
+native_mir_guarded_multiply_transition() {
+	native_mir_candidate_root=$1
+	native_mir_baseline_root=$2
+	native_mir_guarded_multiply_marker_valid "$native_mir_candidate_root" &&
+		test ! -f "$native_mir_baseline_root/$NATIVE_MIR_GUARDED_MULTIPLY_MARKER"
+}
+
 native_mir_transition_mode() {
 	if native_mir_foundation_transition "$1" "$2"; then
 		printf '%s\n' foundation-transition
@@ -305,7 +362,11 @@ native_mir_transition_mode() {
 						if native_mir_float_array_reduction_transition "$1" "$2"; then
 							printf '%s\n' float-array-reduction-transition
 						else
-							printf '%s\n' ordinary
+							if native_mir_guarded_multiply_transition "$1" "$2"; then
+								printf '%s\n' guarded-multiply-transition
+							else
+								printf '%s\n' ordinary
+							fi
 						fi
 					fi
 				fi

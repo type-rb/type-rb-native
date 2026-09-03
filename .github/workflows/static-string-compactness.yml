@@ -16,10 +16,12 @@ on:
       - compiler/gate4/native-mir-induction-phi-v1.txt
       - compiler/gate4/native-mir-array-loop-recovery-v1.txt
       - compiler/gate4/native-mir-float-array-reduction-v1.txt
+      - compiler/gate4/native-mir-guarded-integer-multiply-v1.txt
       - compiler/gate4/src/compiler.trb
       - compiler/gate4/src/compiler_test.trb
       - tools/native-mir-array-loop-recovery/**
       - tools/native-mir-float-array-reduction/**
+      - tools/native-mir-guarded-multiply/**
       - tools/native-mir-transition-policy.sh
 
 permissions:
@@ -205,6 +207,11 @@ jobs:
             "$GITHUB_WORKSPACE" "$RUNNER_TEMP/baseline-source"; then
             float_array_reduction=1
           fi
+          guarded_multiply=0
+          if native_mir_guarded_multiply_transition \
+            "$GITHUB_WORKSPACE" "$RUNNER_TEMP/baseline-source"; then
+            guarded_multiply=1
+          fi
           mkdir -p "$evidence" "$RUNNER_TEMP/interleaved-builds"
           printf 'metric\tstage\tbaseline\tcandidate\tcandidate_baseline_ratio\tmaximum\tstatus\n' \
             > "$evidence/comparison.tsv"
@@ -222,6 +229,7 @@ jobs:
             printf 'array_reduction_transition=%s\n' "$array_reduction_transition"
             printf 'array_loop_recovery=%s\n' "$array_loop_recovery"
             printf 'float_array_reduction=%s\n' "$float_array_reduction"
+            printf 'guarded_multiply=%s\n' "$guarded_multiply"
             printf 'compiler_ratio_limit=%s\n' "$compiler_ratio_limit"
             printf 'build_ratio_limit=%s\n' "$build_ratio_limit"
             printf 'rss_ratio_limit=%s\n' "$NATIVE_MIR_RSS_RATIO_LIMIT"
@@ -426,7 +434,9 @@ jobs:
           printf 'target\tbaseline_text_bytes\tcandidate_text_bytes\tstatus\n' \
             > "$evidence/code-sections.tsv"
           text_status=observed
-          if test "$array_loop_recovery" -eq 1 || test "$float_array_reduction" -eq 1; then
+          if test "$array_loop_recovery" -eq 1 || \
+            test "$float_array_reduction" -eq 1 || \
+            test "$guarded_multiply" -eq 1; then
             text_status=pass
             text_limit=$NATIVE_MIR_ARRAY_LOOP_LINUX_TEXT_LIMIT
             if test "$TARGET" = darwin-arm64; then
@@ -458,7 +468,8 @@ jobs:
           test "$candidate_size" -le "$compiler_limit"
           if test "$induction_phi_recovery" -eq 1 || \
             test "$array_loop_recovery" -eq 1 || \
-            test "$float_array_reduction" -eq 1; then
+            test "$float_array_reduction" -eq 1 || \
+            test "$guarded_multiply" -eq 1; then
             test "$candidate_size" -le "$baseline_size"
           fi
           compare compiler_bytes fixed-point \
@@ -486,7 +497,9 @@ jobs:
             "$RUNNER_TEMP/candidate-bootstrap-evidence/identities.txt")
           fixed_qbe_sha256=$(awk -F= '$1 == "fixed_point_qbe_sha256" {print $2}' \
             "$RUNNER_TEMP/candidate-bootstrap-evidence/identities.txt")
-          if test "$array_loop_recovery" -eq 1 || test "$float_array_reduction" -eq 1; then
+          if test "$array_loop_recovery" -eq 1 || \
+            test "$float_array_reduction" -eq 1 || \
+            test "$guarded_multiply" -eq 1; then
             test "$fixed_qbe_size" -le "$NATIVE_MIR_ARRAY_LOOP_QBE_LIMIT"
           else
             if test "$induction_phi_recovery" -eq 1; then
@@ -510,6 +523,7 @@ jobs:
             printf 'array_reduction_transition=%s\n' "$array_reduction_transition"
             printf 'array_loop_recovery=%s\n' "$array_loop_recovery"
             printf 'float_array_reduction=%s\n' "$float_array_reduction"
+            printf 'guarded_multiply=%s\n' "$guarded_multiply"
             printf 'compiler_ratio_limit=%s\n' "$compiler_ratio_limit"
             printf 'build_ratio_limit=%s\n' "$build_ratio_limit"
             printf 'baseline_fixed_point_qbe_size=%s\n' "$baseline_fixed_qbe_size"
@@ -808,6 +822,163 @@ jobs:
               "$stdout_status" "$stderr_status" >> "$evidence/controls.tsv"
           done
 
+      - name: Verify the Native MIR guarded Integer multiply
+        env:
+          QBE: ${{ steps.qbe.outputs.path }}
+          PROFILE: ${{ matrix.profile }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          . tools/native-mir-transition-policy.sh
+          if ! native_mir_guarded_multiply_transition \
+            "$GITHUB_WORKSPACE" "$RUNNER_TEMP/baseline-source"; then
+            exit 0
+          fi
+          marker=$NATIVE_MIR_GUARDED_MULTIPLY_MARKER
+          sha256_file() {
+            if command -v sha256sum >/dev/null 2>&1; then
+              sha256sum "$1" | awk '{print $1}'
+            else
+              shasum -a 256 "$1" | awk '{print $1}'
+            fi
+          }
+          require_registered_hash() {
+            key=$1
+            path=$2
+            expected_hash=$(awk -F= -v key="$key" '$1 == key {print $2}' "$marker")
+            test -n "$expected_hash"
+            test "$(sha256_file "$path")" = "$expected_hash"
+          }
+          require_registered_hash compiler_source_sha256 compiler/gate4/src/compiler.trb
+          require_registered_hash compiler_test_source_sha256 compiler/gate4/src/compiler_test.trb
+          require_registered_hash valid_source_sha256 compiler/gate4/conformance/valid/integer-multiply-mir-guarded.trb
+          require_registered_hash valid_expected_stdout_sha256 compiler/gate4/conformance/valid/integer-multiply-mir-guarded.out
+          require_registered_hash overflow_source_sha256 compiler/gate4/conformance/runtime-invalid/integer-multiply-mir-guarded-overflow.trb
+          require_registered_hash overflow_expected_stderr_sha256 compiler/gate4/conformance/runtime-invalid/integer-multiply-mir-guarded-overflow.stderr
+          require_registered_hash measure_source_sha256 tools/native-mir-guarded-multiply/measure.py
+          require_registered_hash spectral_source_sha256 benchmarks/benchmarksgame/spectral-norm/src/main.trb
+          require_registered_hash spectral_expected_stdout_sha256 benchmarks/benchmarksgame/spectral-norm/expected/5500.txt
+          require_registered_hash fannkuch_source_sha256 benchmarks/benchmarksgame/fannkuch-redux/src/main.trb
+          require_registered_hash fannkuch_expected_stdout_sha256 benchmarks/benchmarksgame/fannkuch-redux/expected/12.txt
+          require_registered_hash nbody_source_sha256 benchmarks/benchmarksgame/n-body/src/main.trb
+          require_registered_hash nbody_expected_stdout_sha256 benchmarks/benchmarksgame/n-body/expected/50000000.txt
+          evidence="$RUNNER_TEMP/guarded-multiply-evidence"
+          workspace="$RUNNER_TEMP/guarded-multiply"
+          mkdir -p "$evidence" "$workspace"
+          printf 'case\tartifact\tbaseline_bytes\tcandidate_bytes\tratio\tmaximum\tstatus\n' \
+            > "$evidence/code-size.tsv"
+
+          executable_text_size() {
+            executable=$1
+            if test "$TARGET" = darwin-arm64; then
+              text_hex=$(otool -l "$executable" | awk '
+                $1 == "sectname" && $2 == "__text" { text = 1; next }
+                text && $1 == "size" { print $2; exit }
+              ')
+            else
+              text_hex=$(readelf -SW "$executable" | awk '
+                $2 == ".text" { print "0x" $6; exit }
+              ')
+            fi
+            case "$text_hex" in
+              0x[0-9a-fA-F]*) printf '%d\n' "$text_hex" ;;
+              *) return 1 ;;
+            esac
+          }
+
+          compare_ratio() {
+            case_name=$1
+            artifact=$2
+            baseline=$3
+            candidate=$4
+            maximum=$5
+            ratio=$(awk -v baseline="$baseline" -v candidate="$candidate" \
+              'BEGIN { printf "%.6f", candidate / baseline }')
+            status=pass
+            if ! awk -v ratio="$ratio" -v maximum="$maximum" \
+              'BEGIN { exit !(ratio <= maximum) }'; then
+              status=fail
+            fi
+            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+              "$case_name" "$artifact" "$baseline" "$candidate" \
+              "$ratio" "$maximum" "$status" >> "$evidence/code-size.tsv"
+            test "$status" = pass
+          }
+
+          for case_name in spectral-norm fannkuch-redux n-body; do
+            case "$case_name" in
+              spectral-norm)
+                source=benchmarks/benchmarksgame/spectral-norm/src/main.trb
+                expected=benchmarks/benchmarksgame/spectral-norm/expected/5500.txt
+                input=5500
+                code_limit=$NATIVE_MIR_GUARDED_MULTIPLY_SELECTED_CODE_RATIO_LIMIT
+                runtime_limit=$NATIVE_MIR_GUARDED_MULTIPLY_SELECTED_RUNTIME_RATIO_LIMIT
+                ;;
+              fannkuch-redux)
+                source=benchmarks/benchmarksgame/fannkuch-redux/src/main.trb
+                expected=benchmarks/benchmarksgame/fannkuch-redux/expected/12.txt
+                input=12
+                code_limit=$NATIVE_MIR_GUARDED_MULTIPLY_CONTROL_RATIO_LIMIT
+                runtime_limit=$NATIVE_MIR_GUARDED_MULTIPLY_CONTROL_RATIO_LIMIT
+                ;;
+              n-body)
+                source=benchmarks/benchmarksgame/n-body/src/main.trb
+                expected=benchmarks/benchmarksgame/n-body/expected/50000000.txt
+                input=50000000
+                code_limit=$NATIVE_MIR_GUARDED_MULTIPLY_CONTROL_RATIO_LIMIT
+                runtime_limit=$NATIVE_MIR_GUARDED_MULTIPLY_CONTROL_RATIO_LIMIT
+                ;;
+            esac
+            for role in baseline candidate; do
+              source_root=$GITHUB_WORKSPACE
+              if test "$role" = baseline; then
+                source_root=$RUNNER_TEMP/baseline-source
+              fi
+              directory="$workspace/$case_name/$role"
+              compiler="$RUNNER_TEMP/$role-compiler"
+              mkdir -p "$directory"
+              "$compiler" emit-qbe "$source_root/$source" > "$directory/program.ssa"
+              "$compiler" build "$source_root/$source" \
+                --output "$directory/program" --qbe "$QBE" --cc /usr/bin/cc --target "$PROFILE"
+            done
+            baseline_qbe=$(wc -c < "$workspace/$case_name/baseline/program.ssa" | tr -d ' ')
+            candidate_qbe=$(wc -c < "$workspace/$case_name/candidate/program.ssa" | tr -d ' ')
+            baseline_text=$(executable_text_size "$workspace/$case_name/baseline/program")
+            candidate_text=$(executable_text_size "$workspace/$case_name/candidate/program")
+            compare_ratio "$case_name" target-neutral-qbe \
+              "$baseline_qbe" "$candidate_qbe" "$code_limit"
+            compare_ratio "$case_name" "$TARGET-text" \
+              "$baseline_text" "$candidate_text" "$code_limit"
+            if test "$case_name" = spectral-norm; then
+              test "$candidate_qbe" -le "$NATIVE_MIR_GUARDED_MULTIPLY_QBE_LIMIT"
+              if test "$TARGET" = darwin-arm64; then
+                candidate_qbe_sha256=$(shasum -a 256 "$workspace/$case_name/candidate/program.ssa" | awk '{print $1}')
+              else
+                candidate_qbe_sha256=$(sha256sum "$workspace/$case_name/candidate/program.ssa" | awk '{print $1}')
+              fi
+              {
+                printf 'candidate_spectral_qbe_bytes=%s\n' "$candidate_qbe"
+                printf 'candidate_spectral_qbe_sha256=%s\n' "$candidate_qbe_sha256"
+              } > "$evidence/identities.txt"
+            fi
+            if test "$PROFILE" = linux-arm64-v0; then
+              python3 tools/native-mir-guarded-multiply/measure.py \
+                "$workspace/$case_name/baseline/program" \
+                "$workspace/$case_name/candidate/program" \
+                "$expected" \
+                "$evidence/$case_name-runtime" \
+                "$input" \
+                "$runtime_limit"
+            else
+              for role in baseline candidate; do
+                "$workspace/$case_name/$role/program" "$input" \
+                  > "$workspace/$case_name/$role/stdout" \
+                  2> "$workspace/$case_name/$role/stderr"
+                cmp "$expected" "$workspace/$case_name/$role/stdout"
+                test ! -s "$workspace/$case_name/$role/stderr"
+              done
+            fi
+          done
+
       - name: Upload target evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -818,6 +989,7 @@ jobs:
             ${{ runner.temp }}/application-evidence
             ${{ runner.temp }}/array-loop-recovery-evidence
             ${{ runner.temp }}/float-array-reduction-evidence
+            ${{ runner.temp }}/guarded-multiply-evidence
             ${{ runner.temp }}/baseline-bootstrap-evidence
             ${{ runner.temp }}/candidate-bootstrap-evidence
             ${{ runner.temp }}/baseline-bootstrap-metadata.json
@@ -862,10 +1034,13 @@ jobs:
           linux_loop_recovery=$(awk -F= '$1 == "array_loop_recovery" {print $2}' "$linux")
           darwin_float_reduction=$(awk -F= '$1 == "float_array_reduction" {print $2}' "$darwin")
           linux_float_reduction=$(awk -F= '$1 == "float_array_reduction" {print $2}' "$linux")
+          darwin_guarded_multiply=$(awk -F= '$1 == "guarded_multiply" {print $2}' "$darwin")
+          linux_guarded_multiply=$(awk -F= '$1 == "guarded_multiply" {print $2}' "$linux")
           test "$darwin_recovery" = "$linux_recovery"
           test "$darwin_reduction" = "$linux_reduction"
           test "$darwin_loop_recovery" = "$linux_loop_recovery"
           test "$darwin_float_reduction" = "$linux_float_reduction"
+          test "$darwin_guarded_multiply" = "$linux_guarded_multiply"
           test "$darwin_size" -le "$NATIVE_MIR_DARWIN_COMPILER_LIMIT"
           test "$linux_size" -le "$NATIVE_MIR_LINUX_COMPILER_LIMIT"
           combined=$((darwin_size + linux_size))
@@ -873,7 +1048,8 @@ jobs:
           baseline_combined=$((darwin_baseline_size + linux_baseline_size))
           if test "$darwin_recovery" -eq 1 || \
             test "$darwin_loop_recovery" -eq 1 || \
-            test "$darwin_float_reduction" -eq 1; then
+            test "$darwin_float_reduction" -eq 1 || \
+            test "$darwin_guarded_multiply" -eq 1; then
             test "$combined" -le "$baseline_combined"
           fi
           darwin_qbe_size=$(awk -F= '$1 == "fixed_point_qbe_size" {print $2}' "$darwin")
@@ -882,12 +1058,31 @@ jobs:
           linux_qbe_sha256=$(awk -F= '$1 == "fixed_point_qbe_sha256" {print $2}' "$linux")
           test "$darwin_qbe_size" = "$linux_qbe_size"
           test "$darwin_qbe_sha256" = "$linux_qbe_sha256"
-          if test "$darwin_loop_recovery" -eq 1 || test "$darwin_float_reduction" -eq 1; then
+          if test "$darwin_loop_recovery" -eq 1 || \
+            test "$darwin_float_reduction" -eq 1 || \
+            test "$darwin_guarded_multiply" -eq 1; then
             test "$darwin_qbe_size" -le "$NATIVE_MIR_ARRAY_LOOP_QBE_LIMIT"
           else
             if test "$darwin_reduction" -eq 1; then
               test "$darwin_qbe_size" -le "$NATIVE_MIR_TARGET_NEUTRAL_QBE_LIMIT"
             fi
+          fi
+          candidate_spectral_qbe_bytes=not-applicable
+          candidate_spectral_qbe_sha256=not-applicable
+          if test "$darwin_guarded_multiply" -eq 1; then
+            darwin_guarded="$RUNNER_TEMP/target-evidence/static-string-compactness-darwin-arm64/guarded-multiply-evidence/identities.txt"
+            linux_guarded="$RUNNER_TEMP/target-evidence/static-string-compactness-linux-arm64/guarded-multiply-evidence/identities.txt"
+            test -f "$darwin_guarded"
+            test -f "$linux_guarded"
+            darwin_spectral_qbe_bytes=$(awk -F= '$1 == "candidate_spectral_qbe_bytes" {print $2}' "$darwin_guarded")
+            linux_spectral_qbe_bytes=$(awk -F= '$1 == "candidate_spectral_qbe_bytes" {print $2}' "$linux_guarded")
+            darwin_spectral_qbe_sha256=$(awk -F= '$1 == "candidate_spectral_qbe_sha256" {print $2}' "$darwin_guarded")
+            linux_spectral_qbe_sha256=$(awk -F= '$1 == "candidate_spectral_qbe_sha256" {print $2}' "$linux_guarded")
+            test "$darwin_spectral_qbe_bytes" = "$linux_spectral_qbe_bytes"
+            test "$darwin_spectral_qbe_sha256" = "$linux_spectral_qbe_sha256"
+            test "$darwin_spectral_qbe_bytes" -le "$NATIVE_MIR_GUARDED_MULTIPLY_QBE_LIMIT"
+            candidate_spectral_qbe_bytes=$darwin_spectral_qbe_bytes
+            candidate_spectral_qbe_sha256=$darwin_spectral_qbe_sha256
           fi
           {
             printf 'darwin_arm64_compiler_bytes=%s\n' "$darwin_size"
@@ -901,8 +1096,11 @@ jobs:
             printf 'array_reduction_transition=%s\n' "$darwin_reduction"
             printf 'array_loop_recovery=%s\n' "$darwin_loop_recovery"
             printf 'float_array_reduction=%s\n' "$darwin_float_reduction"
+            printf 'guarded_multiply=%s\n' "$darwin_guarded_multiply"
             printf 'target_neutral_qbe_bytes=%s\n' "$darwin_qbe_size"
             printf 'target_neutral_qbe_sha256=%s\n' "$darwin_qbe_sha256"
+            printf 'candidate_spectral_qbe_bytes=%s\n' "$candidate_spectral_qbe_bytes"
+            printf 'candidate_spectral_qbe_sha256=%s\n' "$candidate_spectral_qbe_sha256"
           } > "$RUNNER_TEMP/cross-target.txt"
 
       - name: Upload cross-target evidence
