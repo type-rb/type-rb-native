@@ -7,6 +7,9 @@ import { gate4_path_basename, gate4_path_directory, gate4_path_join, gate4_strin
 # value: function, id, type, origin source/line; and
 # instruction: kind, result, two operands, literal, failure block, origin.
 # Kinds and types are verifier-owned integers. Input facts must remain empty.
+# A verified pass may mark the complete Array induction plan as optimized
+# (kind 5, mode 2). The verifier re-derives the loop proof before a backend may
+# consume its invariant header and redundant-check decisions.
 record Gate4MirModule
 	source_count: Array<Integer>
 	entry_function: Array<Integer>
@@ -575,6 +578,20 @@ def gate4_mir_induction_address(
 	return true
 end
 
+def gate4_optimize_verified_mir(mut native_module: Gate4MirModule)
+	mut index := 0
+	while index < native_module.instructions.size()
+		mut instruction := native_module.instructions[index]
+		if instruction[0] == 5
+			if instruction[4] == 1
+				instruction[4] = 2
+			end
+		end
+		index += 1
+	end
+	return
+end
+
 def gate4_mir_instruction_error(
 		native_module: Gate4MirModule,
 		function: Array<Integer>,
@@ -676,7 +693,7 @@ def gate4_mir_instruction_error(
 		if instruction[4] < 0
 			return "MIR Array address shape differs"
 		end
-		if instruction[4] > 1
+		if instruction[4] > 2
 			return "MIR Array address shape differs"
 		end
 		if result_type == 4
@@ -688,7 +705,7 @@ def gate4_mir_instruction_error(
 							if error != ""
 								return error
 							end
-							if instruction[4] == 1
+							if instruction[4] >= 1
 								if !gate4_mir_induction_address(native_module, function, block, instruction)
 									return "MIR Array induction proof differs"
 								end
@@ -2592,6 +2609,19 @@ def gate4_emit_array_header(
 	return resolved_value
 end
 
+def gate4_emit_array_data_address(
+		mut context: Gate4EmitContext,
+		mut output: Gate4Output,
+		data: String,
+		index: String,
+	): String
+	offset := gate4_emit_temporary(context)
+	address := gate4_emit_temporary(context)
+	gate4_output_line(output, "\t" + offset + " =l mul " + index + ", 8")
+	gate4_output_line(output, "\t" + address + " =l add " + data + ", " + offset)
+	return address
+end
+
 def gate4_emit_array_address(
 		mut context: Gate4EmitContext,
 		mut output: Gate4Output,
@@ -2626,8 +2656,6 @@ def gate4_emit_array_address(
 		data_slot = gate4_emit_temporary(context)
 		data = gate4_emit_temporary(context)
 	end
-	offset := gate4_emit_temporary(context)
-	address := gate4_emit_temporary(context)
 	load_label := gate4_emit_label(context)
 	if !use_cache
 		length_address = gate4_emit_temporary(context)
@@ -2669,9 +2697,7 @@ def gate4_emit_array_address(
 			data,
 		)
 	end
-	gate4_output_line(output, "\t" + offset + " =l mul " + index + ", 8")
-	gate4_output_line(output, "\t" + address + " =l add " + resolved_data + ", " + offset)
-	return address
+	return gate4_emit_array_data_address(context, output, resolved_data, index)
 end
 
 def gate4_emit_add_local(
@@ -3076,6 +3102,8 @@ def gate4_emit_induction_mir(
 		accumulator = gate4_emit_temporary(context)
 		accumulated = gate4_emit_temporary(context)
 	end
+	length := gate4_emit_array_header(context, output, "%p0", "", 1, "8", "", "")
+	data := gate4_emit_array_header(context, output, "%p0", "", 2, "24", "", "")
 	gate4_output_line(output, "\tjmp " + header_label)
 	gate4_output_line(output, header_label)
 	phi_line := output.count[0]
@@ -3085,36 +3113,16 @@ def gate4_emit_induction_mir(
 		accumulator_phi_line = output.count[0]
 		gate4_output_line(output, "")
 	end
-	length_address := gate4_emit_temporary(context)
-	length := gate4_emit_temporary(context)
-	gate4_output_line(output, "\t" + length_address + " =l add %p0, 8")
-	gate4_output_line(output, "\t" + length + " =l loadl " + length_address)
-	comparison_instruction := state.scalar_mir.instructions[header[5] + 1]
-	comparison := gate4_emit_binary_with_facts(
-		context,
-		output,
-		gate4_scalar_binary_operator(comparison_instruction[4]),
-		gate4_emitted_value(index, "Integer", 0, "", 0, ""),
-		gate4_emitted_value(length, "Integer", 0, "", 0, ""),
-		true,
-		true,
-	)
-	condition := gate4_emit_condition(context, output, comparison.operand)
+	condition := gate4_emit_temporary(context)
+	gate4_output_line(output, "\t" + condition + " =w csltl " + index + ", " + length)
 	gate4_output_branch(output, condition, body_label, exit_label)
 	gate4_output_line(output, body_label)
-	address_instruction := state.scalar_mir.instructions[body[5]]
-	address := gate4_emit_array_address(
-		context,
-		output,
-		"%p0",
-		"",
-		index,
-		address_instruction[4] + 1,
-	)
+	address := gate4_emit_array_data_address(context, output, data, index)
 	loaded := gate4_emit_temporary(context)
 	gate4_output_line(output, "\t" + loaded + " =l loadl " + address)
+	mut increment_predecessor := body_label
 	if reduction
-		gate4_emit_checked_integer_add(
+		increment_predecessor = gate4_emit_checked_integer_add(
 			context,
 			output,
 			accumulated,
@@ -3125,14 +3133,7 @@ def gate4_emit_induction_mir(
 	end
 	one_instruction := state.scalar_mir.instructions[body[5] + body[6] - 2]
 	one := gate4_number_without_underscores(state.scalar_mir.literal_texts[one_instruction[4]])
-	increment_predecessor := gate4_emit_checked_integer_add(
-		context,
-		output,
-		advanced,
-		index,
-		one,
-		true,
-	)
+	gate4_output_line(output, "\t" + advanced + " =l add " + index + ", " + one)
 	gate4_store_string(
 		output.lines,
 		phi_line,
@@ -4149,6 +4150,10 @@ def gate4_emit_function(
 	if mir_function
 		mir_row := state.scalar_mir.functions[mir_index]
 		control_mir_function = mir_row[7] > 2
+		if control_mir_function
+			mir_body := state.scalar_mir.blocks[mir_row[6] + 2]
+			control_mir_function = state.scalar_mir.instructions[mir_body[5]][4] == 2
+		end
 	end
 	if !mir_function
 		parameter_index = 0
@@ -9788,6 +9793,13 @@ def gate4_check(mut state: Gate4Compiler): Boolean
 			mir_error := gate4_verify_mir(state.scalar_mir)
 			if mir_error != ""
 				gate4_diagnostic(state, "TRBN4004", 1, mir_error)
+			end
+			if mir_error == ""
+				gate4_optimize_verified_mir(state.scalar_mir)
+				optimized_error := gate4_verify_mir(state.scalar_mir)
+				if optimized_error != ""
+					gate4_diagnostic(state, "TRBN4004", 1, optimized_error)
+				end
 			end
 		end
 	end

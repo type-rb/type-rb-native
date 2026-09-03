@@ -137,12 +137,17 @@ a time.
   range, index, and induction ownership has left the direct emitter, before
   starting the next portable fact family.
 - A bounded removal may fail to change a complete executable because Mach-O or
-  ELF segments are aligned more coarsely than the removed code. Pre-register
-  that case explicitly: require strict same-run per-target code-section and
-  target-neutral-QBE reductions, require every complete compiler to be no
-  larger, and retain cumulative complete-artifact shrinkage as a condition for
-  finishing the current fact family. Do not use section granularity to excuse
-  code growth or to begin another semantic family early.
+  ELF segments are aligned more coarsely than the removed code. Normally
+  require strict same-run per-target code-section and target-neutral-QBE
+  reductions and require every complete compiler to be no larger. If moving
+  the decision into its first explicit MIR pass instead has a small measured
+  compiler-QBE or code-section cost, register that exact cost before the first
+  hosted candidate, keep it inside the existing temporary envelope without
+  adding or expanding an allowance, require strict generated-workload
+  QBE/code-section shrink plus a material runtime improvement, and keep the
+  complete compiler non-growing. In either case retain cumulative recovery as
+  a condition for finishing the current fact family; do not use section
+  granularity or pass structure to begin another semantic family early.
 - For each successive structural slice, first retain a rejected diagnostic run
   under the current policy, then measure the complete local candidate and
   register its exact source digests, target sizes, one-time ratios, superseded

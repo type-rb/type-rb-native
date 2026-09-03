@@ -1,7 +1,8 @@
 # Native MIR optimization transition status
 
 Status: experimental. The checked-in scope includes the accepted induction-phi
-recovery and the measured `Array<Integer>` reduction slice from issue #230.
+recovery, the measured `Array<Integer>` reduction slice from issue #230, and
+the first target-independent optimization pass registered by issue #232.
 
 The ordinary self-hosted frontend now builds one compiler-owned Native MIR
 module for selected immutable scalar-leaf functions and one exact
@@ -28,10 +29,14 @@ canonical zero-origin/unit-step induction proof authorizes omission of negative
 index normalization without a token-side fact carrier. Its verified header
 block parameters lower directly to QBE `phi` instructions for both the index
 and reduction accumulator. The former induction and accumulator `alloc8`,
-`loadl`, and `storel` traffic is absent. Checked accumulator addition retains
-its explicit Integer failure edge, and indexed access retains its Array-bounds
-failure edge. Calls, records, managed values, nested loops, and unsupported
-helper shapes retain the accepted direct path without partial MIR publication.
+`loadl`, and `storel` traffic is absent. The new pass marks only a
+verifier-proven complete induction plan. The QBE adapter then hoists the
+immutable Array length and data pointer, consumes the header's true edge
+instead of repeating the bounds branch, and emits the unit-step induction
+update without a redundant Integer-range branch. Checked accumulator addition
+retains its explicit Integer failure edge. Calls, records, managed values,
+nested loops, and unsupported helper shapes retain the accepted direct path
+without partial MIR publication.
 
 ## Retained boundary
 
@@ -80,6 +85,19 @@ The checked-in marker freezes ceilings of 350,000, 317,000, 667,000, and
 ordinary 1.05 compiler/build/RSS limits and 2.0 catastrophic bound remain in
 force.
 
+Issue #232 registers the first explicit optimization pass over this verified
+graph. The local Darwin arm64 fixed compiler remains 349,224 bytes. The pass
+adds 2,167 bytes of target-neutral compiler QBE and 564 bytes of compiler
+`__text` inside the existing temporary envelope, while the selected generated
+workload removes 335 bytes of QBE and 72 bytes of `__text`. On 21 alternating
+retained direct-process observations, the selected workload records
+candidate/baseline ratios of 0.599452 wall time, 0.561763 CPU time, and
+0.992754 peak RSS. Formal CI requires both arm64 compilers to remain
+non-growing, generated QBE and both generated code sections to shrink
+strictly, wall and CPU ratios to remain at most 0.75, and RSS to remain at most
+1.05. The pass cost remains part of the existing range/index/induction
+recovery obligation rather than a new allowance.
+
 The earlier managed-runtime smoke records a 332,736-byte stripped Darwin
 compiler, 0.70-second runtime, zero final live managed bytes, and a
 1,048,513-byte peak managed heap. Current persistent-worker checks record
@@ -106,6 +124,7 @@ Public evidence:
 - [induction-phi pull request #228](https://github.com/type-rb/type-rb-native/pull/228)
 - [Array reduction issue #230](https://github.com/type-rb/type-rb-native/issues/230)
 - [Array reduction pull request #231](https://github.com/type-rb/type-rb-native/pull/231)
+- [Array-loop recovery issue #232](https://github.com/type-rb/type-rb-native/issues/232)
 - [accepted pull request #220](https://github.com/type-rb/type-rb-native/pull/220)
 - [final static comparison](https://github.com/type-rb/type-rb-native/actions/runs/33682830363)
 - [Linux target regressions](https://github.com/type-rb/type-rb-native/actions/runs/33682830410)

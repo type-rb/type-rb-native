@@ -101,6 +101,14 @@ self-hosted fixed points, the complete conformance corpus, and registered
 application outputs. A no-optimization or unchanged region must remain a useful
 differential control while the slice is introduced.
 
+For the first explicit pass in an already measured fact family, pre-register
+both sides of the trade: any small compiler-QBE or code-section cost must fit
+the existing temporary envelope with no complete-compiler growth, while the
+selected generated workload must strictly shrink and improve materially in
+wall and CPU time without an RSS regression. The pass cost remains recoverable
+migration space, not permission to expand the envelope or enter another fact
+family.
+
 The 255,000-byte ceiling and similar historical bounds registered for ordinary
 local optimization candidates were not silently relaxed. The first structural
 MIR issue measured the minimal skeleton before freezing separate ceilings of

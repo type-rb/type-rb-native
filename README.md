@@ -502,6 +502,17 @@ expression-origin and range model, and replacement of the broader emitted-value
 representation remain open. See the
 [current Native MIR optimization status](docs/native-mir-optimization-status.md).
 
+The first target-independent pass over the complete verified
+`Array<Integer>` induction/reduction graph now marks its stable-header and
+redundant-check decisions before QBE lowering. On the registered focused
+workload, local direct-process measurements reduce wall time by about 40% and
+CPU time by about 44% with unchanged median RSS. The generated workload QBE
+and machine-code section both shrink; the small compiler-code cost remains
+inside the existing temporary MIR envelope and must still be recovered before
+the next portable fact family. See
+[issue #232](https://github.com/type-rb/type-rb-native/issues/232) and the
+[current Native MIR optimization status](docs/native-mir-optimization-status.md).
+
 Gate 6N passes every frozen condition for the internal
 `linux-amd64-v0` profile. The exact merged compiler closes a 240,888-byte
 Go-free B2/B3/B4 fixed point, emits byte-identical target-neutral compiler and

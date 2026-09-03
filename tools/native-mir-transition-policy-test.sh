@@ -17,6 +17,8 @@ cp "$script_directory/../$NATIVE_MIR_INDUCTION_PHI_MARKER" \
 	"$candidate/$NATIVE_MIR_INDUCTION_PHI_MARKER"
 cp "$script_directory/../$NATIVE_MIR_ARRAY_REDUCTION_MARKER" \
 	"$candidate/$NATIVE_MIR_ARRAY_REDUCTION_MARKER"
+cp "$script_directory/../$NATIVE_MIR_ARRAY_LOOP_RECOVERY_MARKER" \
+	"$candidate/$NATIVE_MIR_ARRAY_LOOP_RECOVERY_MARKER"
 
 test "$(native_mir_target_compiler_limit darwin-arm64-v0)" = 350000
 test "$(native_mir_target_compiler_limit linux-arm64-v0)" = 317000
@@ -25,6 +27,9 @@ test "$NATIVE_MIR_COMBINED_COMPILER_LIMIT" = 667000
 test "$(native_mir_target_text_limit darwin-arm64-v0)" = 250904
 test "$(native_mir_target_text_limit linux-arm64-v0)" = 253424
 test "$NATIVE_MIR_TARGET_NEUTRAL_QBE_LIMIT" = 1120000
+test "$NATIVE_MIR_ARRAY_LOOP_QBE_LIMIT" = 1115000
+test "$NATIVE_MIR_ARRAY_LOOP_DARWIN_TEXT_LIMIT" = 250100
+test "$NATIVE_MIR_ARRAY_LOOP_LINUX_TEXT_LIMIT" = 253424
 if native_mir_target_compiler_limit unknown-target >/dev/null; then
 	exit 1
 fi
@@ -82,6 +87,17 @@ cp "$candidate/$NATIVE_MIR_ARRAY_REDUCTION_MARKER" \
 if native_mir_array_reduction_transition "$candidate" "$baseline"; then
 	exit 1
 fi
+native_mir_array_loop_recovery_marker_valid "$candidate"
+native_mir_array_loop_recovery_transition "$candidate" "$baseline"
+test "$(native_mir_transition_mode "$candidate" "$baseline")" = array-loop-recovery-transition
+test "$(native_mir_compiler_ratio_limit "$candidate" "$baseline")" = 1.05
+test "$(native_mir_build_ratio_limit "$candidate" "$baseline")" = 1.05
+
+cp "$candidate/$NATIVE_MIR_ARRAY_LOOP_RECOVERY_MARKER" \
+	"$baseline/$NATIVE_MIR_ARRAY_LOOP_RECOVERY_MARKER"
+if native_mir_array_loop_recovery_transition "$candidate" "$baseline"; then
+	exit 1
+fi
 
 native_mir_transition_markers_valid "$candidate"
 native_mir_induction_phi_recovery "$candidate" "$baseline"
@@ -127,6 +143,12 @@ fi
 printf 'policy=native-mir-array-reduction-v1\n' \
 	> "$candidate/$NATIVE_MIR_ARRAY_REDUCTION_MARKER"
 if native_mir_array_reduction_marker_valid "$candidate"; then
+	exit 1
+fi
+
+printf 'policy=native-mir-array-loop-recovery-v1\n' \
+	> "$candidate/$NATIVE_MIR_ARRAY_LOOP_RECOVERY_MARKER"
+if native_mir_array_loop_recovery_marker_valid "$candidate"; then
 	exit 1
 fi
 
