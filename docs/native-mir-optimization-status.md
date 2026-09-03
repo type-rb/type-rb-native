@@ -104,18 +104,20 @@ strictly, wall and CPU ratios to remain at most 0.75, and RSS to remain at most
 range/index/induction recovery obligation; this pass adds no new allowance.
 
 Issue #235 extends that same graph to one exact `Array<Float>` sum without a
-new fact family or a larger envelope. Local Darwin arm64 fixed-point evidence
-keeps the compiler at 349,224 bytes, keeps target-neutral compiler QBE at
-1,114,458 bytes under the recovered 1,115,000-byte limit, and keeps compiler
-`__text` at 249,976 bytes under the recovered 250,100-byte limit. Both focused
-workloads remove 614 bytes of generated QBE and 88 bytes of generated
-`__text`. The hot-small-Array workload records wall/CPU ratios of
-0.492022/0.459168, while the equal-visit streaming control records
-0.869934/0.859483. This distinction is intentional: it exposes the recovered
+new fact family or a larger envelope. The accepted fixed compiler remains
+349,224 bytes on Darwin arm64 and shrinks from 314,336 to 314,280 bytes on
+Linux arm64. Compiler code sections shrink from 249,280 to 249,172 bytes and
+from 251,824 to 251,792 bytes respectively. Both targets emit byte-identical
+1,110,817-byte compiler QBE, 117 bytes above the accepted baseline and below
+the unchanged 1,115,000-byte limit. Each focused workload removes 614 bytes of
+generated QBE; generated code shrinks by 88 Darwin and 80 Linux bytes. The
+hot-small-Array wall/CPU ratios are 0.450223/0.448325 on Darwin and
+0.427436/0.426565 on Linux. The equal-visit streaming ratios are
+0.746350/0.746166 and 0.385098/0.383475. Median RSS is unchanged for every
+workload and target. This distinction is intentional: it exposes the recovered
 per-element control cost without hiding the smaller gain when memory traffic
-dominates. Formal CI freezes limits of 0.75 for the hot workload and 0.90 for
-the streaming control, with the unchanged 1.05 RSS and 2.0 catastrophic
-bounds.
+dominates. The frozen 0.75 hot, 0.90 streaming, 1.05 RSS, and 2.0 catastrophic
+bounds all pass.
 
 The earlier managed-runtime smoke records a 332,736-byte stripped Darwin
 compiler, 0.70-second runtime, zero final live managed bytes, and a
@@ -145,6 +147,11 @@ Public evidence:
 - [Array reduction pull request #231](https://github.com/type-rb/type-rb-native/pull/231)
 - [Array-loop recovery issue #232](https://github.com/type-rb/type-rb-native/issues/232)
 - [Float Array-reduction issue #235](https://github.com/type-rb/type-rb-native/issues/235)
+- [Float Array-reduction pull request #236](https://github.com/type-rb/type-rb-native/pull/236)
+- [Float Array-reduction static and focused-runtime evidence](https://github.com/type-rb/type-rb-native/actions/runs/33717461388)
+- [Float Array-reduction target regressions](https://github.com/type-rb/type-rb-native/actions/runs/33717461392)
+- [Float Array-reduction persistent-memory checks](https://github.com/type-rb/type-rb-native/actions/runs/33717461375)
+- [Float Array-reduction complete Native gates](https://github.com/type-rb/type-rb-native/actions/runs/33717461364)
 - [accepted pull request #220](https://github.com/type-rb/type-rb-native/pull/220)
 - [final static comparison](https://github.com/type-rb/type-rb-native/actions/runs/33682830363)
 - [Linux target regressions](https://github.com/type-rb/type-rb-native/actions/runs/33682830410)
