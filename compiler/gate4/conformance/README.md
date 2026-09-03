@@ -46,6 +46,10 @@ The valid cases cover:
 - repeated Array-header reads in an owned-managed loop, with exact invalidation
   after an opaque mutating call and local Array rebinding in
   `valid/array-header-cache-invalidation.trb`;
+- verified stable Array-header reuse in nested loops, including empty input,
+  ordinary positive and negative indexes, growth, parameter rebinding,
+  allocation, ordinary calls, and element mutation through a possible alias in
+  `valid/stable-array-header-mir.trb`;
 - zero-based and bounded-derived unit-step induction loops whose nested Array
   reads retain the unsigned upper-bounds check, followed by a reset and
   ordinary negative indexing in `valid/nonnegative-loop-index.trb`;

@@ -6,7 +6,7 @@ on:
       baseline_revision:
         description: Exact baseline revision for a manual regression run
         required: true
-        default: caedf3082959337bf40b892a31e8a2d400f2f20b
+        default: 00009fa304a36b9cba70b123120a469347b3882d
         type: string
   pull_request:
     paths:
@@ -18,12 +18,14 @@ on:
       - compiler/gate4/native-mir-float-array-reduction-v1.txt
       - compiler/gate4/native-mir-guarded-integer-multiply-v1.txt
       - compiler/gate4/native-mir-guarded-integer-add-v1.txt
+      - compiler/gate4/native-mir-stable-array-header-v1.txt
       - compiler/gate4/src/compiler.trb
       - compiler/gate4/src/compiler_test.trb
       - tools/native-mir-array-loop-recovery/**
       - tools/native-mir-float-array-reduction/**
       - tools/native-mir-guarded-multiply/**
       - tools/native-mir-guarded-add/**
+      - tools/native-mir-stable-array-header/**
       - tools/native-mir-transition-policy.sh
       - tools/native-mir-transition-policy-test.sh
 
@@ -220,6 +222,11 @@ jobs:
             "$GITHUB_WORKSPACE" "$RUNNER_TEMP/baseline-source"; then
             guarded_add=1
           fi
+          stable_array_header=0
+          if native_mir_stable_array_header_transition \
+            "$GITHUB_WORKSPACE" "$RUNNER_TEMP/baseline-source"; then
+            stable_array_header=1
+          fi
           mkdir -p "$evidence" "$RUNNER_TEMP/interleaved-builds"
           printf 'metric\tstage\tbaseline\tcandidate\tcandidate_baseline_ratio\tmaximum\tstatus\n' \
             > "$evidence/comparison.tsv"
@@ -239,6 +246,7 @@ jobs:
             printf 'float_array_reduction=%s\n' "$float_array_reduction"
             printf 'guarded_multiply=%s\n' "$guarded_multiply"
             printf 'guarded_add=%s\n' "$guarded_add"
+            printf 'stable_array_header=%s\n' "$stable_array_header"
             printf 'compiler_ratio_limit=%s\n' "$compiler_ratio_limit"
             printf 'build_ratio_limit=%s\n' "$build_ratio_limit"
             printf 'rss_ratio_limit=%s\n' "$NATIVE_MIR_RSS_RATIO_LIMIT"
@@ -443,30 +451,38 @@ jobs:
           printf 'target\tbaseline_text_bytes\tcandidate_text_bytes\tstatus\n' \
             > "$evidence/code-sections.tsv"
           text_status=observed
-          if test "$array_loop_recovery" -eq 1 || \
-            test "$float_array_reduction" -eq 1 || \
-            test "$guarded_multiply" -eq 1 || \
-            test "$guarded_add" -eq 1; then
+          if test "$stable_array_header" -eq 1; then
             text_status=pass
-            text_limit=$NATIVE_MIR_ARRAY_LOOP_LINUX_TEXT_LIMIT
-            if test "$TARGET" = darwin-arm64; then
-              text_limit=$NATIVE_MIR_ARRAY_LOOP_DARWIN_TEXT_LIMIT
-            fi
+            text_limit=$(native_mir_target_text_limit "$PROFILE")
             if test "$candidate_text_size" -gt "$text_limit"; then
               text_status=fail
             fi
           else
-            if test "$induction_phi_recovery" -eq 1; then
+            if test "$array_loop_recovery" -eq 1 || \
+              test "$float_array_reduction" -eq 1 || \
+              test "$guarded_multiply" -eq 1 || \
+              test "$guarded_add" -eq 1; then
               text_status=pass
-              if test "$candidate_text_size" -ge "$baseline_text_size"; then
+              text_limit=$NATIVE_MIR_ARRAY_LOOP_LINUX_TEXT_LIMIT
+              if test "$TARGET" = darwin-arm64; then
+                text_limit=$NATIVE_MIR_ARRAY_LOOP_DARWIN_TEXT_LIMIT
+              fi
+              if test "$candidate_text_size" -gt "$text_limit"; then
                 text_status=fail
               fi
             else
-              if test "$array_reduction_transition" -eq 1; then
+              if test "$induction_phi_recovery" -eq 1; then
                 text_status=pass
-                text_limit=$(native_mir_target_text_limit "$PROFILE")
-                if test "$candidate_text_size" -gt "$text_limit"; then
+                if test "$candidate_text_size" -ge "$baseline_text_size"; then
                   text_status=fail
+                fi
+              else
+                if test "$array_reduction_transition" -eq 1; then
+                  text_status=pass
+                  text_limit=$(native_mir_target_text_limit "$PROFILE")
+                  if test "$candidate_text_size" -gt "$text_limit"; then
+                    text_status=fail
+                  fi
                 fi
               fi
             fi
@@ -508,18 +524,22 @@ jobs:
             "$RUNNER_TEMP/candidate-bootstrap-evidence/identities.txt")
           fixed_qbe_sha256=$(awk -F= '$1 == "fixed_point_qbe_sha256" {print $2}' \
             "$RUNNER_TEMP/candidate-bootstrap-evidence/identities.txt")
-          if test "$array_loop_recovery" -eq 1 || \
-            test "$float_array_reduction" -eq 1 || \
-            test "$guarded_multiply" -eq 1 || \
-            test "$guarded_add" -eq 1; then
-            test "$fixed_qbe_size" -le "$NATIVE_MIR_ARRAY_LOOP_QBE_LIMIT"
+          if test "$stable_array_header" -eq 1; then
+            test "$fixed_qbe_size" -le "$NATIVE_MIR_TARGET_NEUTRAL_QBE_LIMIT"
           else
-            if test "$induction_phi_recovery" -eq 1; then
-              test "$fixed_qbe_size" -lt "$baseline_fixed_qbe_size"
-              test "$fixed_qbe_size" -lt 1089635
+            if test "$array_loop_recovery" -eq 1 || \
+              test "$float_array_reduction" -eq 1 || \
+              test "$guarded_multiply" -eq 1 || \
+              test "$guarded_add" -eq 1; then
+              test "$fixed_qbe_size" -le "$NATIVE_MIR_ARRAY_LOOP_QBE_LIMIT"
             else
-              if test "$array_reduction_transition" -eq 1; then
-                test "$fixed_qbe_size" -le "$NATIVE_MIR_TARGET_NEUTRAL_QBE_LIMIT"
+              if test "$induction_phi_recovery" -eq 1; then
+                test "$fixed_qbe_size" -lt "$baseline_fixed_qbe_size"
+                test "$fixed_qbe_size" -lt 1089635
+              else
+                if test "$array_reduction_transition" -eq 1; then
+                  test "$fixed_qbe_size" -le "$NATIVE_MIR_TARGET_NEUTRAL_QBE_LIMIT"
+                fi
               fi
             fi
           fi
@@ -537,6 +557,7 @@ jobs:
             printf 'float_array_reduction=%s\n' "$float_array_reduction"
             printf 'guarded_multiply=%s\n' "$guarded_multiply"
             printf 'guarded_add=%s\n' "$guarded_add"
+            printf 'stable_array_header=%s\n' "$stable_array_header"
             printf 'compiler_ratio_limit=%s\n' "$compiler_ratio_limit"
             printf 'build_ratio_limit=%s\n' "$build_ratio_limit"
             printf 'baseline_fixed_point_qbe_size=%s\n' "$baseline_fixed_qbe_size"
@@ -835,7 +856,7 @@ jobs:
               "$stdout_status" "$stderr_status" >> "$evidence/controls.tsv"
           done
 
-      - name: Verify the Native MIR guarded Integer arithmetic
+      - name: Verify the selected Native MIR application optimization
         env:
           QBE: ${{ steps.qbe.outputs.path }}
           PROFILE: ${{ matrix.profile }}
@@ -843,32 +864,50 @@ jobs:
         run: |
           . tools/native-mir-transition-policy.sh
           enforce_executable_ratio=0
-          if native_mir_guarded_add_transition \
+          strict_selected_code=0
+          stable_array_header=0
+          if native_mir_stable_array_header_transition \
             "$GITHUB_WORKSPACE" "$RUNNER_TEMP/baseline-source"; then
-            marker=$NATIVE_MIR_GUARDED_ADD_MARKER
-            fixture=integer-add-mir-guarded
-            evidence="$RUNNER_TEMP/guarded-add-evidence"
-            workspace="$RUNNER_TEMP/guarded-add"
-            qbe_limit=$NATIVE_MIR_GUARDED_ADD_QBE_LIMIT
-            selected_code_limit=$NATIVE_MIR_GUARDED_ADD_SELECTED_CODE_RATIO_LIMIT
-            selected_executable_limit=$NATIVE_MIR_GUARDED_ADD_SELECTED_EXECUTABLE_RATIO_LIMIT
-            selected_runtime_limit=$NATIVE_MIR_GUARDED_ADD_SELECTED_RUNTIME_RATIO_LIMIT
-            control_limit=$NATIVE_MIR_GUARDED_ADD_CONTROL_RATIO_LIMIT
+            marker=$NATIVE_MIR_STABLE_ARRAY_HEADER_MARKER
+            fixture=stable-array-header-mir
+            evidence="$RUNNER_TEMP/stable-array-header-evidence"
+            workspace="$RUNNER_TEMP/stable-array-header"
+            qbe_limit=$NATIVE_MIR_STABLE_ARRAY_HEADER_QBE_LIMIT
+            selected_code_limit=1.00
+            selected_executable_limit=$NATIVE_MIR_STABLE_ARRAY_HEADER_SELECTED_EXECUTABLE_RATIO_LIMIT
+            selected_runtime_limit=$NATIVE_MIR_STABLE_ARRAY_HEADER_SELECTED_RUNTIME_RATIO_LIMIT
+            control_limit=$NATIVE_MIR_STABLE_ARRAY_HEADER_CONTROL_RATIO_LIMIT
             enforce_executable_ratio=1
+            strict_selected_code=1
+            stable_array_header=1
           else
-            if native_mir_guarded_multiply_transition \
+            if native_mir_guarded_add_transition \
               "$GITHUB_WORKSPACE" "$RUNNER_TEMP/baseline-source"; then
-              marker=$NATIVE_MIR_GUARDED_MULTIPLY_MARKER
-              fixture=integer-multiply-mir-guarded
-              evidence="$RUNNER_TEMP/guarded-multiply-evidence"
-              workspace="$RUNNER_TEMP/guarded-multiply"
-              qbe_limit=$NATIVE_MIR_GUARDED_MULTIPLY_QBE_LIMIT
-              selected_code_limit=$NATIVE_MIR_GUARDED_MULTIPLY_SELECTED_CODE_RATIO_LIMIT
-              selected_executable_limit=$NATIVE_MIR_GUARDED_MULTIPLY_CONTROL_RATIO_LIMIT
-              selected_runtime_limit=$NATIVE_MIR_GUARDED_MULTIPLY_SELECTED_RUNTIME_RATIO_LIMIT
-              control_limit=$NATIVE_MIR_GUARDED_MULTIPLY_CONTROL_RATIO_LIMIT
+              marker=$NATIVE_MIR_GUARDED_ADD_MARKER
+              fixture=integer-add-mir-guarded
+              evidence="$RUNNER_TEMP/guarded-add-evidence"
+              workspace="$RUNNER_TEMP/guarded-add"
+              qbe_limit=$NATIVE_MIR_GUARDED_ADD_QBE_LIMIT
+              selected_code_limit=$NATIVE_MIR_GUARDED_ADD_SELECTED_CODE_RATIO_LIMIT
+              selected_executable_limit=$NATIVE_MIR_GUARDED_ADD_SELECTED_EXECUTABLE_RATIO_LIMIT
+              selected_runtime_limit=$NATIVE_MIR_GUARDED_ADD_SELECTED_RUNTIME_RATIO_LIMIT
+              control_limit=$NATIVE_MIR_GUARDED_ADD_CONTROL_RATIO_LIMIT
+              enforce_executable_ratio=1
             else
-              exit 0
+              if native_mir_guarded_multiply_transition \
+                "$GITHUB_WORKSPACE" "$RUNNER_TEMP/baseline-source"; then
+                marker=$NATIVE_MIR_GUARDED_MULTIPLY_MARKER
+                fixture=integer-multiply-mir-guarded
+                evidence="$RUNNER_TEMP/guarded-multiply-evidence"
+                workspace="$RUNNER_TEMP/guarded-multiply"
+                qbe_limit=$NATIVE_MIR_GUARDED_MULTIPLY_QBE_LIMIT
+                selected_code_limit=$NATIVE_MIR_GUARDED_MULTIPLY_SELECTED_CODE_RATIO_LIMIT
+                selected_executable_limit=$NATIVE_MIR_GUARDED_MULTIPLY_CONTROL_RATIO_LIMIT
+                selected_runtime_limit=$NATIVE_MIR_GUARDED_MULTIPLY_SELECTED_RUNTIME_RATIO_LIMIT
+                control_limit=$NATIVE_MIR_GUARDED_MULTIPLY_CONTROL_RATIO_LIMIT
+              else
+                exit 0
+              fi
             fi
           fi
           sha256_file() {
@@ -889,8 +928,10 @@ jobs:
           require_registered_hash compiler_test_source_sha256 compiler/gate4/src/compiler_test.trb
           require_registered_hash valid_source_sha256 "compiler/gate4/conformance/valid/$fixture.trb"
           require_registered_hash valid_expected_stdout_sha256 "compiler/gate4/conformance/valid/$fixture.out"
-          require_registered_hash overflow_source_sha256 "compiler/gate4/conformance/runtime-invalid/$fixture-overflow.trb"
-          require_registered_hash overflow_expected_stderr_sha256 "compiler/gate4/conformance/runtime-invalid/$fixture-overflow.stderr"
+          if test "$stable_array_header" -eq 0; then
+            require_registered_hash overflow_source_sha256 "compiler/gate4/conformance/runtime-invalid/$fixture-overflow.trb"
+            require_registered_hash overflow_expected_stderr_sha256 "compiler/gate4/conformance/runtime-invalid/$fixture-overflow.stderr"
+          fi
           require_registered_hash measure_source_sha256 tools/native-mir-guarded-multiply/measure.py
           require_registered_hash spectral_source_sha256 benchmarks/benchmarksgame/spectral-norm/src/main.trb
           require_registered_hash spectral_expected_stdout_sha256 benchmarks/benchmarksgame/spectral-norm/expected/5500.txt
@@ -988,6 +1029,11 @@ jobs:
               "$baseline_qbe" "$candidate_qbe" "$code_limit"
             compare_ratio "$case_name" "$TARGET-text" \
               "$baseline_text" "$candidate_text" "$code_limit"
+            if test "$case_name" = spectral-norm && \
+              test "$strict_selected_code" -eq 1; then
+              test "$candidate_qbe" -lt "$baseline_qbe"
+              test "$candidate_text" -lt "$baseline_text"
+            fi
             if test "$enforce_executable_ratio" -eq 1; then
               compare_ratio "$case_name" "$TARGET-executable" \
                 "$baseline_executable" "$candidate_executable" "$executable_limit"
@@ -1012,6 +1058,11 @@ jobs:
                 "$evidence/$case_name-runtime" \
                 "$input" \
                 "$runtime_limit"
+              if test "$stable_array_header" -eq 1 && \
+                test "$case_name" != spectral-norm; then
+                python3 -c 'import json,sys; data=json.load(open(sys.argv[1], encoding="utf-8")); raise SystemExit(0 if data["ratios"]["peakRss"] <= 1.02 else 1)' \
+                  "$evidence/$case_name-runtime/summary.json"
+              fi
             else
               for role in baseline candidate; do
                 "$workspace/$case_name/$role/program" "$input" \
@@ -1035,6 +1086,7 @@ jobs:
             ${{ runner.temp }}/float-array-reduction-evidence
             ${{ runner.temp }}/guarded-multiply-evidence
             ${{ runner.temp }}/guarded-add-evidence
+            ${{ runner.temp }}/stable-array-header-evidence
             ${{ runner.temp }}/baseline-bootstrap-evidence
             ${{ runner.temp }}/candidate-bootstrap-evidence
             ${{ runner.temp }}/baseline-bootstrap-metadata.json
@@ -1083,12 +1135,15 @@ jobs:
           linux_guarded_multiply=$(awk -F= '$1 == "guarded_multiply" {print $2}' "$linux")
           darwin_guarded_add=$(awk -F= '$1 == "guarded_add" {print $2}' "$darwin")
           linux_guarded_add=$(awk -F= '$1 == "guarded_add" {print $2}' "$linux")
+          darwin_stable_array_header=$(awk -F= '$1 == "stable_array_header" {print $2}' "$darwin")
+          linux_stable_array_header=$(awk -F= '$1 == "stable_array_header" {print $2}' "$linux")
           test "$darwin_recovery" = "$linux_recovery"
           test "$darwin_reduction" = "$linux_reduction"
           test "$darwin_loop_recovery" = "$linux_loop_recovery"
           test "$darwin_float_reduction" = "$linux_float_reduction"
           test "$darwin_guarded_multiply" = "$linux_guarded_multiply"
           test "$darwin_guarded_add" = "$linux_guarded_add"
+          test "$darwin_stable_array_header" = "$linux_stable_array_header"
           test "$darwin_size" -le "$NATIVE_MIR_DARWIN_COMPILER_LIMIT"
           test "$linux_size" -le "$NATIVE_MIR_LINUX_COMPILER_LIMIT"
           combined=$((darwin_size + linux_size))
@@ -1107,27 +1162,36 @@ jobs:
           linux_qbe_sha256=$(awk -F= '$1 == "fixed_point_qbe_sha256" {print $2}' "$linux")
           test "$darwin_qbe_size" = "$linux_qbe_size"
           test "$darwin_qbe_sha256" = "$linux_qbe_sha256"
-          if test "$darwin_loop_recovery" -eq 1 || \
-            test "$darwin_float_reduction" -eq 1 || \
-            test "$darwin_guarded_multiply" -eq 1 || \
-            test "$darwin_guarded_add" -eq 1; then
-            test "$darwin_qbe_size" -le "$NATIVE_MIR_ARRAY_LOOP_QBE_LIMIT"
+          if test "$darwin_stable_array_header" -eq 1; then
+            test "$darwin_qbe_size" -le "$NATIVE_MIR_TARGET_NEUTRAL_QBE_LIMIT"
           else
-            if test "$darwin_reduction" -eq 1; then
-              test "$darwin_qbe_size" -le "$NATIVE_MIR_TARGET_NEUTRAL_QBE_LIMIT"
+            if test "$darwin_loop_recovery" -eq 1 || \
+              test "$darwin_float_reduction" -eq 1 || \
+              test "$darwin_guarded_multiply" -eq 1 || \
+              test "$darwin_guarded_add" -eq 1; then
+              test "$darwin_qbe_size" -le "$NATIVE_MIR_ARRAY_LOOP_QBE_LIMIT"
+            else
+              if test "$darwin_reduction" -eq 1; then
+                test "$darwin_qbe_size" -le "$NATIVE_MIR_TARGET_NEUTRAL_QBE_LIMIT"
+              fi
             fi
           fi
           candidate_spectral_qbe_bytes=not-applicable
           candidate_spectral_qbe_sha256=not-applicable
           guarded_evidence=not-applicable
           guarded_qbe_limit=0
-          if test "$darwin_guarded_add" -eq 1; then
-            guarded_evidence=guarded-add-evidence
-            guarded_qbe_limit=$NATIVE_MIR_GUARDED_ADD_QBE_LIMIT
+          if test "$darwin_stable_array_header" -eq 1; then
+            guarded_evidence=stable-array-header-evidence
+            guarded_qbe_limit=$NATIVE_MIR_STABLE_ARRAY_HEADER_QBE_LIMIT
           else
-            if test "$darwin_guarded_multiply" -eq 1; then
-              guarded_evidence=guarded-multiply-evidence
-              guarded_qbe_limit=$NATIVE_MIR_GUARDED_MULTIPLY_QBE_LIMIT
+            if test "$darwin_guarded_add" -eq 1; then
+              guarded_evidence=guarded-add-evidence
+              guarded_qbe_limit=$NATIVE_MIR_GUARDED_ADD_QBE_LIMIT
+            else
+              if test "$darwin_guarded_multiply" -eq 1; then
+                guarded_evidence=guarded-multiply-evidence
+                guarded_qbe_limit=$NATIVE_MIR_GUARDED_MULTIPLY_QBE_LIMIT
+              fi
             fi
           fi
           if test "$guarded_evidence" != not-applicable; then
@@ -1159,6 +1223,7 @@ jobs:
             printf 'float_array_reduction=%s\n' "$darwin_float_reduction"
             printf 'guarded_multiply=%s\n' "$darwin_guarded_multiply"
             printf 'guarded_add=%s\n' "$darwin_guarded_add"
+            printf 'stable_array_header=%s\n' "$darwin_stable_array_header"
             printf 'target_neutral_qbe_bytes=%s\n' "$darwin_qbe_size"
             printf 'target_neutral_qbe_sha256=%s\n' "$darwin_qbe_sha256"
             printf 'candidate_spectral_qbe_bytes=%s\n' "$candidate_spectral_qbe_bytes"

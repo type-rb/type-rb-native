@@ -1,4 +1,4 @@
-import { Gate4Compiler, Gate4MirModule, Gate4Output, Gate4ProjectSources, gate4_add_module, gate4_build_symbol_index, gate4_character_in, gate4_check, gate4_check_expression, gate4_check_primary, gate4_compiler_new, gate4_emit_array_header, gate4_emit_context_new, gate4_emit_qbe, gate4_encode_static_string, gate4_find_field, gate4_find_function_in_module, gate4_find_import_binding, gate4_find_module, gate4_find_record_in_module, gate4_find_record_type, gate4_float_literal_in_range, gate4_has_diagnostic, gate4_invalidate_array_header_cache, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_local_add, gate4_local_find, gate4_locals_new, gate4_mir_function_index, gate4_mir_nonnegative_fact, gate4_number_is_float, gate4_number_without_underscores, gate4_optimize_verified_mir, gate4_output_new, gate4_parse_module, gate4_parse_project_config, gate4_resolve, gate4_string_bucket, gate4_string_starts_at, gate4_symbol_bucket_count, gate4_verify_mir } from compiler
+import { Gate4Compiler, Gate4MirModule, Gate4Output, Gate4ProjectSources, gate4_add_module, gate4_build_symbol_index, gate4_character_in, gate4_check, gate4_check_expression, gate4_check_primary, gate4_compiler_new, gate4_emit_array_header, gate4_emit_context_new, gate4_emit_qbe, gate4_encode_static_string, gate4_find_field, gate4_find_function_in_module, gate4_find_import_binding, gate4_find_module, gate4_find_record_in_module, gate4_find_record_type, gate4_float_literal_in_range, gate4_has_diagnostic, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_local_add, gate4_local_find, gate4_locals_new, gate4_mir_function_index, gate4_mir_nonnegative_fact, gate4_number_is_float, gate4_number_without_underscores, gate4_optimize_verified_mir, gate4_output_new, gate4_parse_module, gate4_parse_project_config, gate4_resolve, gate4_string_bucket, gate4_string_starts_at, gate4_symbol_bucket_count, gate4_verify_mir } from compiler
 import { gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage
 import { native_create_directory, native_read_text, native_write_text } from native_file_system
 import trb/std/process
@@ -122,6 +122,7 @@ def gate4_mir_test_module(
 			[2, 8, 5, 7, 0, 13, 0, 4],
 		],
 		arguments: [0, 1, 2, 2, 5, 8],
+		array_candidates: [],
 		facts: facts,
 		literal_texts: [],
 	)
@@ -130,18 +131,36 @@ end
 describe("Gate 4 TypeRB frontend") do
 	test("verifies a checked scalar and Array loop MIR skeleton") do
 		native_module := gate4_mir_test_module(false, false)
-		expect(gate4_verify_mir(native_module)).to_equal("")
+		expect(gate4_verify_mir(native_module, false)).to_equal("")
 	end
 
 	test("rejects an undefined MIR Array index") do
 		native_module := gate4_mir_test_module(false, true)
-		expect(gate4_verify_mir(native_module)).to_equal("MIR Array address type differs")
+		expect(gate4_verify_mir(native_module, false)).to_equal("MIR Array address type differs")
 	end
 
 	test("rejects supplied MIR optimization facts") do
 		native_module := gate4_mir_test_module(true, false)
-		expect(gate4_verify_mir(native_module)).to_equal(
+		expect(gate4_verify_mir(native_module, false)).to_equal(
 			"MIR input cannot supply optimization facts",
+		)
+	end
+
+	test("rejects a forged partial optimized Array-header fact") do
+		mut native_module := gate4_mir_test_module(false, false)
+		native_module.array_candidates.push([0, 1])
+		native_module.facts.push([0, - 1])
+		expect(gate4_verify_mir(native_module, true)).to_equal(
+			"MIR optimized Array-header fact is invalid",
+		)
+	end
+
+	test("rejects a forged complete optimized Array-header fact") do
+		mut native_module := gate4_mir_test_module(false, false)
+		native_module.array_candidates.push([0, 1])
+		native_module.facts.push([0, 2])
+		expect(gate4_verify_mir(native_module, true)).to_equal(
+			"MIR optimized Array-header fact is invalid",
 		)
 	end
 
@@ -152,7 +171,7 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_true()
-		expect(gate4_verify_mir(state.scalar_mir)).to_equal("")
+		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("")
 		expect(gate4_mir_function_index(state.scalar_mir, 0) >= 0).to_be_true()
 		expect(gate4_mir_function_index(state.scalar_mir, 1)).to_equal(- 1)
 		expect(gate4_mir_function_index(state.scalar_mir, 2)).to_equal(- 1)
@@ -162,7 +181,7 @@ describe("Gate 4 TypeRB frontend") do
 			literal_index += 1
 		end
 		state.scalar_mir.instructions[literal_index][2] = 0
-		expect(gate4_verify_mir(state.scalar_mir)).to_equal("MIR Integer literal fact differs")
+		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("MIR Integer literal fact differs")
 	end
 
 	test("selects a verified guarded Integer multiply for loop-local scalar MIR") do
@@ -172,7 +191,7 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_true()
-		expect(gate4_verify_mir(state.scalar_mir)).to_equal("")
+		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("")
 		function_index := gate4_mir_function_index(state.scalar_mir, 0)
 		expect(function_index >= 0).to_be_true()
 		function := state.scalar_mir.functions[function_index]
@@ -186,12 +205,12 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_occurrence_count(qbe, "call $g4_integer_mul")).to_equal(1)
 
 		state.scalar_mir.instructions[instruction_index][4] = 14
-		expect(gate4_verify_mir(state.scalar_mir)).to_equal(
+		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal(
 			"MIR scalar binary type differs",
 		)
 		state.scalar_mir.instructions[instruction_index][4] = 12
 		state.scalar_mir.instructions[instruction_index][5] =- 1
-		expect(gate4_verify_mir(state.scalar_mir)).to_equal("MIR failure target does not exist")
+		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("MIR failure target does not exist")
 	end
 
 	test("selects a verified guarded Integer add for loop-local scalar MIR") do
@@ -201,7 +220,7 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_true()
-		expect(gate4_verify_mir(state.scalar_mir)).to_equal("")
+		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("")
 		function_index := gate4_mir_function_index(state.scalar_mir, 0)
 		expect(function_index >= 0).to_be_true()
 		function := state.scalar_mir.functions[function_index]
@@ -214,12 +233,12 @@ describe("Gate 4 TypeRB frontend") do
 		expect(qbe.include?("call $g4_integer_add(l ")).to_be_true()
 
 		state.scalar_mir.instructions[instruction_index][4] = 14
-		expect(gate4_verify_mir(state.scalar_mir)).to_equal(
+		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal(
 			"MIR scalar binary type differs",
 		)
 		state.scalar_mir.instructions[instruction_index][4] = 13
 		state.scalar_mir.instructions[instruction_index][5] =- 1
-		expect(gate4_verify_mir(state.scalar_mir)).to_equal("MIR failure target does not exist")
+		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("MIR failure target does not exist")
 	end
 
 	test("lowers one complete Array induction helper through verified MIR") do
@@ -229,7 +248,7 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_true()
-		expect(gate4_verify_mir(state.scalar_mir)).to_equal("")
+		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("")
 		function_index := gate4_mir_function_index(state.scalar_mir, 0)
 		expect(function_index >= 0).to_be_true()
 		expect(state.scalar_mir.functions[function_index][7]).to_equal(6)
@@ -261,10 +280,10 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_occurrence_count(qbe, " =l sar ")).to_equal(0)
 		expect(state.mir_nonnegative_facts.used[0]).to_equal(0)
 		state.scalar_mir.instructions[body[5]][4] = 1
-		expect(gate4_verify_mir(state.scalar_mir)).to_equal("")
+		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("")
 		gate4_optimize_verified_mir(state.scalar_mir)
 		expect(state.scalar_mir.instructions[body[5]][4]).to_equal(2)
-		expect(gate4_verify_mir(state.scalar_mir)).to_equal("")
+		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("")
 
 		load := state.scalar_mir.instructions[body[5] + 1]
 		mut value_index := 0
@@ -272,19 +291,19 @@ describe("Gate 4 TypeRB frontend") do
 			value_index += 1
 		end
 		state.scalar_mir.values[value_index][2] = 5
-		expect(gate4_verify_mir(state.scalar_mir)).to_equal("MIR Array load type differs")
+		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("MIR Array load type differs")
 		state.scalar_mir.values[value_index][2] = 1
 		state.scalar_mir.instructions[body[5]][5] = state.scalar_mir.functions[function_index][1] + 3
-		expect(gate4_verify_mir(state.scalar_mir)).to_equal("MIR failure target is not a trap block")
+		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("MIR failure target is not a trap block")
 		state.scalar_mir.instructions[body[5]][5] = state.scalar_mir.functions[function_index][1] + 5
 		state.scalar_mir.instructions[body[5]][3] = state.scalar_mir.arguments[state.scalar_mir.blocks[state.scalar_mir.functions[function_index][6] + 1][3]]
-		expect(gate4_verify_mir(state.scalar_mir)).to_equal("MIR Array address type differs")
+		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("MIR Array address type differs")
 		state.scalar_mir.instructions[body[5]][3] = state.scalar_mir.arguments[body[3]]
 		state.scalar_mir.instructions[body[5] + body[6] - 1][4] = 2
-		expect(gate4_verify_mir(state.scalar_mir)).to_equal("MIR Array induction proof differs")
+		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("MIR Array induction proof differs")
 		state.scalar_mir.instructions[body[5] + body[6] - 1][4] = 1
 		state.scalar_mir.instructions[body[5]][6] = 1
-		expect(gate4_verify_mir(state.scalar_mir)).to_equal("MIR instruction origin is invalid")
+		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("MIR instruction origin is invalid")
 	end
 
 	test("lowers one complete Array Integer reduction through two MIR phis") do
@@ -294,7 +313,7 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_true()
-		expect(gate4_verify_mir(state.scalar_mir)).to_equal("")
+		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("")
 		function_index := gate4_mir_function_index(state.scalar_mir, 0)
 		expect(function_index >= 0).to_be_true()
 		function := state.scalar_mir.functions[function_index]
@@ -333,7 +352,7 @@ describe("Gate 4 TypeRB frontend") do
 		expect(state.mir_nonnegative_facts.used[0]).to_equal(0)
 
 		state.scalar_mir.arguments[body[11] + 1] = state.scalar_mir.arguments[body[3]]
-		expect(gate4_verify_mir(state.scalar_mir)).to_equal("MIR Array induction proof differs")
+		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("MIR Array induction proof differs")
 	end
 
 	test("lowers one complete Array Float reduction through verified MIR") do
@@ -343,7 +362,7 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_true()
-		expect(gate4_verify_mir(state.scalar_mir)).to_equal("")
+		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("")
 		function_index := gate4_mir_function_index(state.scalar_mir, 0)
 		expect(function_index >= 0).to_be_true()
 		function := state.scalar_mir.functions[function_index]
@@ -364,7 +383,7 @@ describe("Gate 4 TypeRB frontend") do
 			value_index += 1
 		end
 		state.scalar_mir.values[value_index][2] = 1
-		expect(gate4_verify_mir(state.scalar_mir)).to_equal("MIR Array load type differs")
+		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("MIR Array load type differs")
 	end
 
 	test("keeps unsupported Array Float reductions on the direct path") do
@@ -376,6 +395,40 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_check(state)).to_be_true()
 		expect(gate4_mir_function_index(state.scalar_mir, 0)).to_equal(- 1)
 		expect(gate4_mir_function_index(state.scalar_mir, 1)).to_equal(- 1)
+	end
+
+	test("selects stable Array headers only across checked effect-free scopes") do
+		source := "def scalar(index: Integer): Float\n\treturn index + 1\nend\n\ndef stable(input: Array<Float>, mut output: Array<Float>)\n\tmut outer := 0\n\twhile outer < input.size()\n\t\tmut total := 0.0\n\t\tmut inner := 0\n\t\twhile inner < input.size()\n\t\t\ttotal += input[inner]\n\t\t\tinner += 1\n\t\tend\n\t\toutput[outer] = total\n\t\touter += 1\n\tend\n\treturn\nend\n\ndef opaque(values: Array<Float>)\n\treturn\nend\n\ndef called(input: Array<Float>): Float\n\tmut index := 0\n\tmut total := 0.0\n\twhile index < input.size()\n\t\topaque(input)\n\t\ttotal += input[index]\n\t\tindex += 1\n\tend\n\treturn total\nend\n\ndef allocated(input: Array<Float>): Float\n\tunused: Array<Float> := []\n\tmut index := 0\n\tmut total: Float := unused.size()\n\twhile index < input.size()\n\t\ttotal += input[index]\n\t\tindex += 1\n\tend\n\treturn total\nend\n\ndef grown(mut input: Array<Float>): Float\n\tinput.push(1.0)\n\treturn input[0]\nend\n\ndef different(left: Array<Float>, right: Array<Float>): Float\n\tmut index := 0\n\tmut total := 0.0\n\twhile index < left.size()\n\t\ttotal += right[index]\n\t\tindex += 1\n\tend\n\treturn total\nend\n\ndef alias_safe(input: Array<Float>, mut output: Array<Float>)\n\tmut index := 0\n\twhile index < input.size()\n\t\toutput[index] = input[index]\n\t\tindex += 1\n\tend\n\treturn\nend\n\ndef main()\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		expect(state.scalar_mir.facts.size()).to_equal(9)
+		expect(state.scalar_mir.facts[1][0]).to_equal(1)
+		expect(state.scalar_mir.facts[1][1] >= 0).to_be_true()
+		expect(state.scalar_mir.facts[3]).to_equal([- 1, - 1])
+		expect(state.scalar_mir.facts[4]).to_equal([- 1, - 1])
+		expect(state.scalar_mir.facts[5]).to_equal([- 1, - 1])
+		expect(state.scalar_mir.facts[6]).to_equal([- 1, - 1])
+		expect(state.scalar_mir.facts[7][0]).to_equal(9)
+		expect(state.scalar_mir.facts[7][1] >= 0).to_be_true()
+		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("")
+	end
+
+	test("publishes a stable Array-header plan without a scalar MIR function") do
+		source := "def copy(input: Array<Float>, mut output: Array<Float>)\n\tmut index := 0\n\twhile index < input.size()\n\t\toutput[index] = input[index]\n\t\tindex += 1\n\tend\n\treturn\nend\n\ndef main()\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		expect(state.scalar_mir.functions.size()).to_equal(0)
+		expect(state.scalar_mir.facts.size()).to_equal(2)
+		expect(state.scalar_mir.facts[0][0]).to_equal(0)
+		expect(state.scalar_mir.facts[0][1] >= 0).to_be_true()
+		qbe := gate4_output_source(gate4_emit_qbe(state))
+		expect(gate4_occurrence_count(qbe, " =w cultl ")).to_equal(1)
 	end
 
 	test("keeps unsupported Array Integer reductions on the direct path") do
@@ -2180,45 +2233,23 @@ describe("Gate 4 TypeRB frontend") do
 		expect(qbe.include?("@l1\n\t%t6 =l loadl %v1\n\tcall $g4f0(l %t6)")).to_be_true()
 	end
 
-	test("reuses two recent Array headers until an explicit invalidation boundary") do
+	test("reuses only a verified stable Array header") do
 		mut context := gate4_emit_context_new(16, [64, 16, 2])
 		mut output := gate4_output_new(16, [0, 0, 0, 0])
-		context.loop_depth[0] = 1
-		mut local_index := 0
-		while local_index < 1
-			gate4_store_string(context.local_types, local_index, "Array<Integer>")
-			gate4_store_integer(context.local_inherited, local_index, 0)
-			local_index += 1
-		end
-		context.local_count[0] = 1
-		first_length := gate4_emit_array_header(context, output, "%first", "%v0", 1, "8", "%la0", "%l0")
+		context.stable_array_header[0] = "%v0"
+		context.stable_array_header[1] = "%length"
+		context.stable_array_header[2] = "%data"
+		expect(
+			gate4_emit_array_header(context, output, "%first", "%v0", 1, "8", "%la0", "%l0"),
+		).to_equal("%length")
+		expect(
+			gate4_emit_array_header(context, output, "%first", "%v0", 2, "24", "%da0", "%d0"),
+		).to_equal("%data")
+		expect(output.count[0]).to_equal(0)
+		expect(
+			gate4_emit_array_header(context, output, "%second", "%v1", 1, "8", "%la1", "%l1"),
+		).to_equal("%l1")
 		expect(output.count[0]).to_equal(2)
-		second_length := gate4_emit_array_header(context, output, "%second", "%v1", 1, "8", "%la1", "%l1")
-		expect(output.count[0]).to_equal(4)
-		cached_first_length := gate4_emit_array_header(context, output, "%first", "%v0", 1, "8", "%la2", "%l2")
-		expect(cached_first_length).to_equal(first_length)
-		expect(output.count[0]).to_equal(4)
-		cached_second_length := gate4_emit_array_header(context, output, "%second", "%v1", 1, "8", "%la3", "%l3")
-		expect(cached_second_length).to_equal(second_length)
-		expect(output.count[0]).to_equal(4)
-		first_data := gate4_emit_array_header(context, output, "%first", "%v0", 2, "24", "%da0", "%d0")
-		expect(output.count[0]).to_equal(6)
-		second_data := gate4_emit_array_header(context, output, "%second", "%v1", 2, "24", "%da1", "%d1")
-		expect(output.count[0]).to_equal(8)
-		cached_first_data := gate4_emit_array_header(context, output, "%first", "%v0", 2, "24", "%da2", "%d2")
-		expect(cached_first_data).to_equal(first_data)
-		expect(output.count[0]).to_equal(8)
-		cached_second_data := gate4_emit_array_header(context, output, "%second", "%v1", 2, "24", "%da3", "%d3")
-		expect(cached_second_data).to_equal(second_data)
-		expect(output.count[0]).to_equal(8)
-
-		gate4_invalidate_array_header_cache(context)
-		refreshed_first_length := gate4_emit_array_header(context, output, "%first", "%v0", 1, "8", "%la4", "%l4")
-		expect(refreshed_first_length == first_length).to_be_false()
-		expect(output.count[0]).to_equal(10)
-		refreshed_second_length := gate4_emit_array_header(context, output, "%second", "%v1", 1, "8", "%la5", "%l5")
-		expect(refreshed_second_length == second_length).to_be_false()
-		expect(output.count[0]).to_equal(12)
 	end
 
 	test("keeps Array header loads local outside owned-managed loops") do
