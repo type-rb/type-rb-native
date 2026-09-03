@@ -112,6 +112,14 @@ and every retained observation remains subject to the 2.0 catastrophic limit.
 The allowance applies only to removal of reduction token/control and
 mutable-stack emission ownership.
 
+Within that already measured envelope, moving a same-family decision into its
+first explicit MIR pass may retain a small pre-registered compiler-QBE or
+code-section cost when the complete compiler does not grow, the generated
+workload QBE and code sections strictly shrink, and a material runtime gain is
+measured without an RSS regression. This does not create another allowance:
+the exact cost remains part of the same recovery obligation and must disappear
+before the next portable fact family.
+
 None of these allowances is an optimization budget. The complete increase
 above the pre-MIR compiler must be recovered by the end of the portable range,
 index, and induction migration, before work begins on the next portable fact

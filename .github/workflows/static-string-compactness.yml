@@ -14,8 +14,10 @@ on:
       - compiler/gate4/conformance/**
       - compiler/gate4/native-mir-foundation-v1.txt
       - compiler/gate4/native-mir-induction-phi-v1.txt
+      - compiler/gate4/native-mir-array-loop-recovery-v1.txt
       - compiler/gate4/src/compiler.trb
       - compiler/gate4/src/compiler_test.trb
+      - tools/native-mir-array-loop-recovery/**
       - tools/native-mir-transition-policy.sh
 
 permissions:
@@ -191,6 +193,11 @@ jobs:
             "$GITHUB_WORKSPACE" "$RUNNER_TEMP/baseline-source"; then
             array_reduction_transition=1
           fi
+          array_loop_recovery=0
+          if native_mir_array_loop_recovery_transition \
+            "$GITHUB_WORKSPACE" "$RUNNER_TEMP/baseline-source"; then
+            array_loop_recovery=1
+          fi
           mkdir -p "$evidence" "$RUNNER_TEMP/interleaved-builds"
           printf 'metric\tstage\tbaseline\tcandidate\tcandidate_baseline_ratio\tmaximum\tstatus\n' \
             > "$evidence/comparison.tsv"
@@ -206,6 +213,7 @@ jobs:
             printf 'native_mir_policy_mode=%s\n' "$policy_mode"
             printf 'induction_phi_recovery=%s\n' "$induction_phi_recovery"
             printf 'array_reduction_transition=%s\n' "$array_reduction_transition"
+            printf 'array_loop_recovery=%s\n' "$array_loop_recovery"
             printf 'compiler_ratio_limit=%s\n' "$compiler_ratio_limit"
             printf 'build_ratio_limit=%s\n' "$build_ratio_limit"
             printf 'rss_ratio_limit=%s\n' "$NATIVE_MIR_RSS_RATIO_LIMIT"
@@ -410,17 +418,28 @@ jobs:
           printf 'target\tbaseline_text_bytes\tcandidate_text_bytes\tstatus\n' \
             > "$evidence/code-sections.tsv"
           text_status=observed
-          if test "$induction_phi_recovery" -eq 1; then
+          if test "$array_loop_recovery" -eq 1; then
             text_status=pass
-            if test "$candidate_text_size" -ge "$baseline_text_size"; then
+            text_limit=$NATIVE_MIR_ARRAY_LOOP_LINUX_TEXT_LIMIT
+            if test "$TARGET" = darwin-arm64; then
+              text_limit=$NATIVE_MIR_ARRAY_LOOP_DARWIN_TEXT_LIMIT
+            fi
+            if test "$candidate_text_size" -gt "$text_limit"; then
               text_status=fail
             fi
           else
-            if test "$array_reduction_transition" -eq 1; then
+            if test "$induction_phi_recovery" -eq 1; then
               text_status=pass
-              text_limit=$(native_mir_target_text_limit "$PROFILE")
-              if test "$candidate_text_size" -gt "$text_limit"; then
+              if test "$candidate_text_size" -ge "$baseline_text_size"; then
                 text_status=fail
+              fi
+            else
+              if test "$array_reduction_transition" -eq 1; then
+                text_status=pass
+                text_limit=$(native_mir_target_text_limit "$PROFILE")
+                if test "$candidate_text_size" -gt "$text_limit"; then
+                  text_status=fail
+                fi
               fi
             fi
           fi
@@ -429,7 +448,7 @@ jobs:
             >> "$evidence/code-sections.tsv"
           test "$text_status" != fail
           test "$candidate_size" -le "$compiler_limit"
-          if test "$induction_phi_recovery" -eq 1; then
+          if test "$induction_phi_recovery" -eq 1 || test "$array_loop_recovery" -eq 1; then
             test "$candidate_size" -le "$baseline_size"
           fi
           compare compiler_bytes fixed-point \
@@ -457,12 +476,16 @@ jobs:
             "$RUNNER_TEMP/candidate-bootstrap-evidence/identities.txt")
           fixed_qbe_sha256=$(awk -F= '$1 == "fixed_point_qbe_sha256" {print $2}' \
             "$RUNNER_TEMP/candidate-bootstrap-evidence/identities.txt")
-          if test "$induction_phi_recovery" -eq 1; then
-            test "$fixed_qbe_size" -lt "$baseline_fixed_qbe_size"
-            test "$fixed_qbe_size" -lt 1089635
+          if test "$array_loop_recovery" -eq 1; then
+            test "$fixed_qbe_size" -le "$NATIVE_MIR_ARRAY_LOOP_QBE_LIMIT"
           else
-            if test "$array_reduction_transition" -eq 1; then
-              test "$fixed_qbe_size" -le "$NATIVE_MIR_TARGET_NEUTRAL_QBE_LIMIT"
+            if test "$induction_phi_recovery" -eq 1; then
+              test "$fixed_qbe_size" -lt "$baseline_fixed_qbe_size"
+              test "$fixed_qbe_size" -lt 1089635
+            else
+              if test "$array_reduction_transition" -eq 1; then
+                test "$fixed_qbe_size" -le "$NATIVE_MIR_TARGET_NEUTRAL_QBE_LIMIT"
+              fi
             fi
           fi
           {
@@ -475,6 +498,7 @@ jobs:
             printf 'native_mir_policy_mode=%s\n' "$policy_mode"
             printf 'induction_phi_recovery=%s\n' "$induction_phi_recovery"
             printf 'array_reduction_transition=%s\n' "$array_reduction_transition"
+            printf 'array_loop_recovery=%s\n' "$array_loop_recovery"
             printf 'compiler_ratio_limit=%s\n' "$compiler_ratio_limit"
             printf 'build_ratio_limit=%s\n' "$build_ratio_limit"
             printf 'baseline_fixed_point_qbe_size=%s\n' "$baseline_fixed_qbe_size"
@@ -584,6 +608,73 @@ jobs:
             otool -l "$workspace/candidate/long/program" > "$evidence/executable-segments.txt"
           fi
 
+      - name: Verify the Native MIR Array-loop recovery
+        env:
+          QBE: ${{ steps.qbe.outputs.path }}
+          PROFILE: ${{ matrix.profile }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          . tools/native-mir-transition-policy.sh
+          if ! native_mir_array_loop_recovery_transition \
+            "$GITHUB_WORKSPACE" "$RUNNER_TEMP/baseline-source"; then
+            exit 0
+          fi
+          evidence="$RUNNER_TEMP/array-loop-recovery-evidence"
+          workspace="$RUNNER_TEMP/array-loop-recovery"
+          source=tools/native-mir-array-loop-recovery/workload.trb
+          expected=tools/native-mir-array-loop-recovery/workload.out
+          mkdir -p "$evidence" "$workspace/baseline" "$workspace/candidate"
+          executable_text_size() {
+            executable=$1
+            if test "$TARGET" = darwin-arm64; then
+              text_hex=$(otool -l "$executable" | awk '
+                $1 == "sectname" && $2 == "__text" { text = 1; next }
+                text && $1 == "size" { print $2; exit }
+              ')
+            else
+              text_hex=$(readelf -SW "$executable" | awk '
+                $2 == ".text" { print "0x" $6; exit }
+              ')
+            fi
+            case "$text_hex" in
+              0x[0-9a-fA-F]*) printf '%d\n' "$text_hex" ;;
+              *) return 1 ;;
+            esac
+          }
+          for role in baseline candidate; do
+            compiler="$RUNNER_TEMP/$role-compiler"
+            directory="$workspace/$role"
+            "$compiler" emit-qbe "$source" > "$directory/program.ssa"
+            "$compiler" build "$source" \
+              --output "$directory/program" --qbe "$QBE" --cc /usr/bin/cc --target "$PROFILE"
+          done
+          baseline_qbe=$(wc -c < "$workspace/baseline/program.ssa" | tr -d ' ')
+          candidate_qbe=$(wc -c < "$workspace/candidate/program.ssa" | tr -d ' ')
+          baseline_text=$(executable_text_size "$workspace/baseline/program")
+          candidate_text=$(executable_text_size "$workspace/candidate/program")
+          qbe_status=pass
+          text_status=pass
+          if test "$candidate_qbe" -ge "$baseline_qbe"; then
+            qbe_status=fail
+          fi
+          if test "$candidate_text" -ge "$baseline_text"; then
+            text_status=fail
+          fi
+          {
+            printf 'artifact\tbaseline_bytes\tcandidate_bytes\tstatus\n'
+            printf 'target-neutral-qbe\t%s\t%s\t%s\n' \
+              "$baseline_qbe" "$candidate_qbe" "$qbe_status"
+            printf '%s-text\t%s\t%s\t%s\n' \
+              "$TARGET" "$baseline_text" "$candidate_text" "$text_status"
+          } > "$evidence/code-size.tsv"
+          test "$qbe_status" = pass
+          test "$text_status" = pass
+          python3 tools/native-mir-array-loop-recovery/measure.py \
+            "$workspace/baseline/program" \
+            "$workspace/candidate/program" \
+            "$expected" \
+            "$evidence/runtime"
+
       - name: Upload target evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -592,6 +683,7 @@ jobs:
           path: |
             ${{ runner.temp }}/comparison-evidence
             ${{ runner.temp }}/application-evidence
+            ${{ runner.temp }}/array-loop-recovery-evidence
             ${{ runner.temp }}/baseline-bootstrap-evidence
             ${{ runner.temp }}/candidate-bootstrap-evidence
             ${{ runner.temp }}/baseline-bootstrap-metadata.json
@@ -632,14 +724,17 @@ jobs:
           linux_recovery=$(awk -F= '$1 == "induction_phi_recovery" {print $2}' "$linux")
           darwin_reduction=$(awk -F= '$1 == "array_reduction_transition" {print $2}' "$darwin")
           linux_reduction=$(awk -F= '$1 == "array_reduction_transition" {print $2}' "$linux")
+          darwin_loop_recovery=$(awk -F= '$1 == "array_loop_recovery" {print $2}' "$darwin")
+          linux_loop_recovery=$(awk -F= '$1 == "array_loop_recovery" {print $2}' "$linux")
           test "$darwin_recovery" = "$linux_recovery"
           test "$darwin_reduction" = "$linux_reduction"
+          test "$darwin_loop_recovery" = "$linux_loop_recovery"
           test "$darwin_size" -le "$NATIVE_MIR_DARWIN_COMPILER_LIMIT"
           test "$linux_size" -le "$NATIVE_MIR_LINUX_COMPILER_LIMIT"
           combined=$((darwin_size + linux_size))
           test "$combined" -le "$NATIVE_MIR_COMBINED_COMPILER_LIMIT"
           baseline_combined=$((darwin_baseline_size + linux_baseline_size))
-          if test "$darwin_recovery" -eq 1; then
+          if test "$darwin_recovery" -eq 1 || test "$darwin_loop_recovery" -eq 1; then
             test "$combined" -le "$baseline_combined"
           fi
           darwin_qbe_size=$(awk -F= '$1 == "fixed_point_qbe_size" {print $2}' "$darwin")
@@ -648,8 +743,12 @@ jobs:
           linux_qbe_sha256=$(awk -F= '$1 == "fixed_point_qbe_sha256" {print $2}' "$linux")
           test "$darwin_qbe_size" = "$linux_qbe_size"
           test "$darwin_qbe_sha256" = "$linux_qbe_sha256"
-          if test "$darwin_reduction" -eq 1; then
-            test "$darwin_qbe_size" -le "$NATIVE_MIR_TARGET_NEUTRAL_QBE_LIMIT"
+          if test "$darwin_loop_recovery" -eq 1; then
+            test "$darwin_qbe_size" -le "$NATIVE_MIR_ARRAY_LOOP_QBE_LIMIT"
+          else
+            if test "$darwin_reduction" -eq 1; then
+              test "$darwin_qbe_size" -le "$NATIVE_MIR_TARGET_NEUTRAL_QBE_LIMIT"
+            fi
           fi
           {
             printf 'darwin_arm64_compiler_bytes=%s\n' "$darwin_size"
@@ -661,6 +760,7 @@ jobs:
             printf 'linux_arm64_text_bytes=%s\n' "$linux_text_size"
             printf 'induction_phi_recovery=%s\n' "$darwin_recovery"
             printf 'array_reduction_transition=%s\n' "$darwin_reduction"
+            printf 'array_loop_recovery=%s\n' "$darwin_loop_recovery"
             printf 'target_neutral_qbe_bytes=%s\n' "$darwin_qbe_size"
             printf 'target_neutral_qbe_sha256=%s\n' "$darwin_qbe_sha256"
           } > "$RUNNER_TEMP/cross-target.txt"

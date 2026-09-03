@@ -1,4 +1,4 @@
-import { Gate4Compiler, Gate4MirModule, Gate4Output, Gate4ProjectSources, gate4_add_module, gate4_build_symbol_index, gate4_character_in, gate4_check, gate4_check_expression, gate4_check_primary, gate4_compiler_new, gate4_emit_array_header, gate4_emit_context_new, gate4_emit_qbe, gate4_encode_static_string, gate4_find_field, gate4_find_function_in_module, gate4_find_import_binding, gate4_find_module, gate4_find_record_in_module, gate4_find_record_type, gate4_float_literal_in_range, gate4_has_diagnostic, gate4_invalidate_array_header_cache, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_local_add, gate4_local_find, gate4_locals_new, gate4_mir_function_index, gate4_mir_nonnegative_fact, gate4_number_is_float, gate4_number_without_underscores, gate4_output_new, gate4_parse_module, gate4_parse_project_config, gate4_resolve, gate4_string_bucket, gate4_string_starts_at, gate4_symbol_bucket_count, gate4_verify_mir } from compiler
+import { Gate4Compiler, Gate4MirModule, Gate4Output, Gate4ProjectSources, gate4_add_module, gate4_build_symbol_index, gate4_character_in, gate4_check, gate4_check_expression, gate4_check_primary, gate4_compiler_new, gate4_emit_array_header, gate4_emit_context_new, gate4_emit_qbe, gate4_encode_static_string, gate4_find_field, gate4_find_function_in_module, gate4_find_import_binding, gate4_find_module, gate4_find_record_in_module, gate4_find_record_type, gate4_float_literal_in_range, gate4_has_diagnostic, gate4_invalidate_array_header_cache, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_local_add, gate4_local_find, gate4_locals_new, gate4_mir_function_index, gate4_mir_nonnegative_fact, gate4_number_is_float, gate4_number_without_underscores, gate4_optimize_verified_mir, gate4_output_new, gate4_parse_module, gate4_parse_project_config, gate4_resolve, gate4_string_bucket, gate4_string_starts_at, gate4_symbol_bucket_count, gate4_verify_mir } from compiler
 import { gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage
 import { native_create_directory, native_read_text, native_write_text } from native_file_system
 import trb/std/process
@@ -176,22 +176,39 @@ describe("Gate 4 TypeRB frontend") do
 		function_index := gate4_mir_function_index(state.scalar_mir, 0)
 		expect(function_index >= 0).to_be_true()
 		expect(state.scalar_mir.functions[function_index][7]).to_equal(6)
+		function := state.scalar_mir.functions[function_index]
+		body := state.scalar_mir.blocks[function[6] + 2]
+		expect(state.scalar_mir.instructions[body[5]][4]).to_equal(2)
 		qbe := gate4_output_source(gate4_emit_qbe(state))
 		expect(qbe.include?("function $g4f0(l %p0)")).to_be_true()
 		expect(
 			qbe.include?(
-				"function $g4f0(l %p0) {\n@start\n\tjmp @l0\n@l0\n" +
-				"\t%t0 =l phi @start 0, @l5 %t1",
+				"function $g4f0(l %p0) {\n@start\n" +
+				"\t%t2 =l add %p0, 8\n\t%t3 =l loadl %t2\n" +
+				"\t%t4 =l add %p0, 24\n\t%t5 =l loadl %t4\n" +
+				"\tjmp @l0\n@l0\n\t%t0 =l phi @start 0, @l1 %t1",
 			),
 		).to_be_true()
-		expect(qbe.include?("\n@l5\n\tjmp @l0\n@l2\n\tjmp @return")).to_be_true()
+		expect(
+			qbe.include?(
+				"@l1\n\t%t7 =l mul %t0, 8\n\t%t8 =l add %t5, %t7\n" +
+				"\t%t9 =l loadl %t8\n\t%t1 =l add %t0, 1\n\tjmp @l0\n" +
+				"@l2\n\tjmp @return",
+			),
+		).to_be_true()
+		expect(qbe.include?("@array_bounds_failure")).to_be_false()
+		expect(qbe.include?("csgtl %t1, 9007199254740991")).to_be_false()
 		expect(qbe.include?("\t%v0 =l alloc8 8")).to_be_false()
 		expect(qbe.include?(" =l loadl %v0")).to_be_false()
 		expect(qbe.include?("storel %t1, %v0")).to_be_false()
 		expect(gate4_occurrence_count(qbe, " =l sar ")).to_equal(0)
 		expect(state.mir_nonnegative_facts.used[0]).to_equal(0)
+		state.scalar_mir.instructions[body[5]][4] = 1
+		expect(gate4_verify_mir(state.scalar_mir)).to_equal("")
+		gate4_optimize_verified_mir(state.scalar_mir)
+		expect(state.scalar_mir.instructions[body[5]][4]).to_equal(2)
+		expect(gate4_verify_mir(state.scalar_mir)).to_equal("")
 
-		body := state.scalar_mir.blocks[state.scalar_mir.functions[function_index][6] + 2]
 		load := state.scalar_mir.instructions[body[5] + 1]
 		mut value_index := 0
 		while state.scalar_mir.values[value_index][1] != load[1]
@@ -231,15 +248,29 @@ describe("Gate 4 TypeRB frontend") do
 		expect(header[4]).to_equal(2)
 		expect(body[4]).to_equal(2)
 		expect(exit[4]).to_equal(1)
+		expect(state.scalar_mir.instructions[body[5]][4]).to_equal(2)
 		qbe := gate4_output_source(gate4_emit_qbe(state))
 		expect(
 			qbe.include?(
 				"function l $g4f0(l %p0) {\n@start\n\t%return_value =l alloc8 8\n" +
-				"\tjmp @l0\n@l0\n\t%t0 =l phi @start 0, ",
+				"\t%t4 =l add %p0, 8\n\t%t5 =l loadl %t4\n" +
+				"\t%t6 =l add %p0, 24\n\t%t7 =l loadl %t6\n" +
+				"\tjmp @l0\n@l0\n\t%t0 =l phi @start 0, @l4 %t1\n" +
+				"\t%t2 =l phi @start 0, @l4 %t3",
 			),
 		).to_be_true()
-		expect(qbe.include?("\t%t2 =l phi @start 0, ")).to_be_true()
+		expect(
+			qbe.include?(
+				"@l1\n\t%t9 =l mul %t0, 8\n\t%t10 =l add %t7, %t9\n" +
+				"\t%t11 =l loadl %t10\n\t%t3 =l add %t2, %t11\n" +
+				"\t%t12 =w csgtl %t3, 9007199254740991",
+			),
+		).to_be_true()
+		expect(qbe.include?("\t%t13 =w csltl %t3, -9007199254740991")).to_be_true()
+		expect(qbe.include?("@l4\n\t%t1 =l add %t0, 1\n\tjmp @l0")).to_be_true()
 		expect(qbe.include?("\tstorel %t2, %return_value")).to_be_true()
+		expect(qbe.include?("@array_bounds_failure")).to_be_false()
+		expect(qbe.include?("csgtl %t1, 9007199254740991")).to_be_false()
 		expect(qbe.include?("\t%v0 =l alloc8 8")).to_be_false()
 		expect(gate4_occurrence_count(qbe, " =l sar ")).to_equal(0)
 		expect(state.mir_nonnegative_facts.used[0]).to_equal(0)
