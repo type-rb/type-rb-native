@@ -1,5 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, writeFileSync, renameSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { acceptance, classify } from './ci-plan.mjs';
 
 function results(plan) {
@@ -62,4 +67,33 @@ test('missing or malformed planning never authorizes skipped validation', () => 
   assert.notDeepEqual(acceptance(needs), []);
   needs.plan.result = 'failure';
   assert.notDeepEqual(acceptance(needs), []);
+});
+
+test('CLI classifies a real source-to-documentation rename and unusual filename', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'native-ci-plan-test-'));
+  const git = (...args) => execFileSync('git', [
+    '-c', 'user.name=CI Test', '-c', 'user.email=ci-test@example.invalid',
+    '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args,
+  ], { cwd: directory, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  try {
+    git('init');
+    mkdirSync(join(directory, 'compiler/gate4/src'), { recursive: true });
+    const source = join(directory, 'compiler/gate4/src/old\nname.trb');
+    writeFileSync(source, 'def main()\n\treturn\nend\n');
+    git('add', '.');
+    git('commit', '-m', 'Initial synthetic fixture');
+    const base = git('rev-parse', 'HEAD');
+    mkdirSync(join(directory, 'docs'));
+    renameSync(source, join(directory, 'docs/example.md'));
+    git('add', '-A');
+    git('commit', '-m', 'Move synthetic fixture');
+    const head = git('rev-parse', 'HEAD');
+    const output = execFileSync(process.execPath,
+      [fileURLToPath(new URL('./ci-plan.mjs', import.meta.url)), base, head, 'false'],
+      { cwd: directory, encoding: 'utf8' });
+    assert.deepEqual(Object.fromEntries(output.trim().split('\n').map(row => row.split('='))),
+      { code: 'true', documentation: 'true', memory: 'true', performance: 'true', draft: 'false' });
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
