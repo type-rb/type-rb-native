@@ -6,8 +6,8 @@ import { gate4_path_basename, gate4_path_directory, gate4_path_join, gate4_strin
 # block: id, origin source/line, parameter and instruction ranges, terminator;
 # value: function, id, type, origin source/line; and
 # instruction: kind, result, two operands, literal, failure block, origin.
-# Checked Array candidates are flat local/access pairs in raw MIR; input
-# facts remain empty until the verified pass publishes them.
+# Array regions retain binding, loop, access, write, and effect operations.
+# The verifier derives their plans; input facts remain empty.
 # A verified pass may mark the complete Array induction plan as optimized
 # (kind 5, mode 2). The verifier re-derives the loop proof before a backend may
 # consume its invariant header and redundant-check decisions.
@@ -19,7 +19,7 @@ record Gate4MirModule
 	values: Array<Array<Integer>>
 	instructions: Array<Array<Integer>>
 	arguments: Array<Integer>
-	array_candidates: Array<Integer>
+	array_regions: Array<Array<Integer>>
 	facts: Array<Integer>
 	literal_texts: Array<String>
 end
@@ -93,6 +93,7 @@ record Gate4Locals
 	mir_value_rows: Array<Array<Integer>>
 	mir_instructions: Array<Array<Integer>>
 	mir_literal_texts: Array<String>
+	mir_array: Array<Integer>
 	mir_state: Array<Integer>
 	count: Array<Integer>
 end
@@ -602,6 +603,200 @@ def gate4_mir_induction_address(
 	return true
 end
 
+def gate4_mir_array_plan(operations: Array<Integer>, mut plan: Array<Integer>): Boolean
+	if operations.size() % 4 != 0
+		return false
+	end
+	mut bindings: Array<Integer> := []
+	mut allocated := 0
+	while allocated <= operations.size()
+		bindings.push(0)
+		allocated += 1
+	end
+	mut binding_count := 0
+	mut loops: Array<Integer> := []
+	mut depth := 0
+	plan[0] =- 1
+	plan[1] =- 1
+	mut blocked := false
+	mut index := 0
+	while index < operations.size()
+		kind := operations[index]
+		first := operations[index + 1]
+		second := operations[index + 2]
+		origin := operations[index + 3]
+		if first < - 4
+			return false
+		end
+		if first > operations.size()
+			return false
+		end
+		if second < - 4
+			return false
+		end
+		if second > operations.size()
+			return false
+		end
+		first_offset := first * 4
+		second_offset := second * 4
+		if origin < 0
+			return false
+		end
+		if kind == 1
+			mut previous := 0
+			while previous < index
+				if operations[previous] == 1
+					if operations[previous + 3] == origin
+						return false
+					end
+				end
+				previous += 4
+			end
+			if first < 0
+				return false
+			end
+			if first != binding_count
+				return false
+			end
+			mut nonnegative := 0
+			if second == - 4
+				nonnegative = 1
+			else
+				if second >= 0
+					if second >= first
+						return false
+					end
+					nonnegative = bindings[second_offset + 2]
+				else
+					if second < - 4
+						return false
+					end
+				end
+			end
+			binding_count += 1
+			bindings[first_offset] = second
+			bindings[first_offset + 1] = origin
+			bindings[first_offset + 2] = nonnegative
+			bindings[first_offset + 3] =- 1
+		else
+			if kind == 2
+				if first >= 0
+					if first >= binding_count
+						return false
+					end
+					if second < 0
+						return false
+					end
+					if second >= binding_count
+						return false
+					end
+					mut bound :=- 1
+					if bindings[first_offset + 2] == 1
+						if bindings[second_offset] == - 2
+							bound = bindings[second_offset + 1]
+						end
+					end
+					bindings[first_offset + 3] = bound
+				else
+					if first != - 1
+						return false
+					end
+					if second != - 1
+						return false
+					end
+				end
+				if depth == loops.size()
+					loops.push(first)
+					loops.push(origin)
+					loops.push(binding_count)
+				else
+					loops[depth] = first
+					loops[depth + 1] = origin
+					loops[depth + 2] = binding_count
+				end
+				depth += 3
+			else
+				if kind == 3
+					if first != 0
+						return false
+					end
+					if second != 0
+						return false
+					end
+					if depth < 3
+						return false
+					end
+					if loops[depth - 2] != origin
+						return false
+					end
+					loop_index := loops[depth - 3]
+					if loop_index >= 0
+						bindings[loop_index * 4 + 3] =- 1
+					end
+					binding_count = loops[depth - 1]
+					depth -= 3
+				else
+					if kind == 6
+						blocked = true
+					else
+						if first < 0
+							return false
+						end
+						if first >= binding_count
+							return false
+						end
+						if kind == 4
+							if second < 0
+								return false
+							end
+							if second >= binding_count
+								return false
+							end
+							if bindings[first_offset] == - 2
+								if bindings[second_offset + 3] == bindings[first_offset + 1]
+									if plan[0] == - 1
+										plan[0] = bindings[first_offset + 1]
+										plan[1] = origin
+									end
+								end
+							end
+						else
+							if kind != 5
+								return false
+							end
+							if second != 0
+								if second != 1
+									return false
+								end
+							end
+							if bindings[first_offset] == - 2
+								return false
+							end
+							if bindings[first_offset] == - 3
+								return false
+							end
+							bindings[first_offset + 3] =- 1
+							if second != 1
+								bindings[first_offset + 2] = 0
+								blocked = true
+							end
+						end
+					end
+				end
+			end
+		end
+		index += 4
+	end
+	if depth != 0
+		return false
+	end
+	if blocked
+		plan[0] =- 1
+		plan[1] =- 1
+	end
+	return true
+end
+
 def gate4_optimize_verified_mir(mut native_module: Gate4MirModule)
 	mut index := 0
 	while index < native_module.instructions.size()
@@ -624,8 +819,20 @@ def gate4_optimize_verified_mir(mut native_module: Gate4MirModule)
 		end
 		index += 1
 	end
-	while native_module.facts.size() < native_module.array_candidates.size()
-		native_module.facts.push(native_module.array_candidates[native_module.facts.size()])
+	index = 0
+	mut plan := [- 1, - 1]
+	while index < native_module.array_regions.size()
+		if !gate4_mir_array_plan(native_module.array_regions[index], plan)
+			return
+		end
+		if native_module.facts.size() == index * 2
+			native_module.facts.push(plan[0])
+			native_module.facts.push(plan[1])
+		else
+			native_module.facts[index * 2] = plan[0]
+			native_module.facts[index * 2 + 1] = plan[1]
+		end
+		index += 1
 	end
 	return
 end
@@ -1200,19 +1407,28 @@ def gate4_verify_mir(native_module: Gate4MirModule, optimized: Boolean): String
 	mut entry_found := false
 	mut index := 0
 	if optimized
-		if native_module.facts.size() != native_module.array_candidates.size()
+		if native_module.facts.size() != native_module.array_regions.size() * 2
 			return "MIR optimized Array-header fact is invalid"
-		end
-		while index < native_module.facts.size()
-			if native_module.facts[index] != native_module.array_candidates[index]
-				return "MIR optimized Array-header fact is invalid"
-			end
-			index += 1
 		end
 	else
 		if native_module.facts.size() != 0
 			return "MIR input cannot supply optimization facts"
 		end
+	end
+	mut plan := [- 1, - 1]
+	while index < native_module.array_regions.size()
+		if !gate4_mir_array_plan(native_module.array_regions[index], plan)
+			return "MIR Array region is invalid"
+		end
+		if optimized
+			if native_module.facts[index * 2] != plan[0]
+				return "MIR optimized Array-header fact is invalid"
+			end
+			if native_module.facts[index * 2 + 1] != plan[1]
+				return "MIR optimized Array-header fact is invalid"
+			end
+		end
+		index += 1
 	end
 	if native_module.functions.size() == 0
 		return ""
@@ -1315,7 +1531,7 @@ def gate4_compiler_new(capacity: Integer): Gate4Compiler
 			values: [],
 			instructions: [],
 			arguments: [],
-			array_candidates: [],
+			array_regions: [],
 			facts: [],
 			literal_texts: [],
 		),
@@ -1538,15 +1754,16 @@ def gate4_locals_new(capacity: Integer): Gate4Locals
 		mir_value_rows: [],
 		mir_instructions: [],
 		mir_literal_texts: [],
+		mir_array: [],
 		# active, function, next value, Integer failure, return value,
 		# induction local, entry instruction count, header condition,
 		# header instruction count, body instruction start, backedge value,
 		# Array-bounds failure, body induction parameter, accumulator local,
 		# header/body/exit accumulator parameters, accumulator backedge,
-		# body statement stage, possible Array-header mutation, Array candidate local/access
+		# body statement stage
 		mir_state: [
 			0, - 1, 0, - 1, - 1, - 1, 0, - 1, 0, 0, - 1, - 1, - 1,
-			- 1, - 1, - 1, - 1, - 1, 0, 0, - 1, - 1,
+			- 1, - 1, - 1, - 1, - 1, 0,
 		],
 		count: [0],
 	)
@@ -2736,6 +2953,7 @@ def gate4_emit_add_local(
 		mutable: Integer,
 		initial: String,
 		inherited_root: Boolean,
+		origin: Integer,
 	): String
 	index := context.local_count[0]
 	slot_index := context.slot_count[0]
@@ -2763,7 +2981,7 @@ def gate4_emit_add_local(
 		end
 	end
 	gate4_emit_typed_store(output, type_name, initial, slot)
-	if context.array_header_local == index
+	if context.array_header_local == origin
 		length := gate4_emit_array_header(context, output, initial, slot, 1, "8", "", "")
 		data := gate4_emit_array_header(context, output, initial, slot, 2, "24", "", "")
 		context.array_header[0] = slot
@@ -3951,6 +4169,7 @@ def gate4_emit_declaration(
 		mut context: Gate4EmitContext,
 		mut output: Gate4Output,
 	): Boolean
+	origin := position[0]
 	mut mutable := 0
 	if gate4_token_is(state, position[0], "mut")
 		mutable = 1
@@ -3969,7 +4188,7 @@ def gate4_emit_declaration(
 	if local_type == ""
 		local_type = value.type_name
 	end
-	gate4_emit_add_local(context, output, name, local_type, mutable, value.operand, false)
+	gate4_emit_add_local(context, output, name, local_type, mutable, value.operand, false, origin)
 	return gate4_finish_statement(state, position)
 end
 
@@ -4196,6 +4415,7 @@ def gate4_emit_function(
 				gate4_load_integer(state.parameter_mutable, declaration_index),
 				"%p" + gate4_integer_string(parameter_index),
 				!gate4_function_reassigns_parameter(state, function_index, parameter_name),
+				state.token_count[0] + declaration_index + 1,
 			)
 			parameter_index += 1
 		end
@@ -7450,6 +7670,42 @@ def gate4_local_find(locals: Gate4Locals, name: String): Integer
 	return - 1
 end
 
+def gate4_array_region_operation(
+		mut locals: Gate4Locals,
+		kind: Integer,
+		first: Integer,
+		second: Integer,
+		origin: Integer,
+	)
+	if locals.mir_array.size() > 0
+		if kind == 6
+			locals.mir_array[0] = 6
+			locals.mir_array[3] = origin
+		end
+		if locals.mir_array[0] == 6
+			return
+		end
+	end
+	locals.mir_array.push(kind)
+	locals.mir_array.push(first)
+	locals.mir_array.push(second)
+	locals.mir_array.push(origin)
+end
+
+def gate4_array_region_binding(
+		mut locals: Gate4Locals,
+		type_name: String,
+		mutable: Integer,
+		initializer: Integer,
+		origin: Integer,
+	)
+	mut tag := initializer
+	if gate4_array_element_type(type_name) != ""
+		tag =- 2 - mutable
+	end
+	gate4_array_region_operation(locals, 1, locals.count[0] - 1, tag, origin)
+end
+
 def gate4_local_add(
 		mut state: Gate4Compiler,
 		mut locals: Gate4Locals,
@@ -8358,7 +8614,7 @@ def gate4_check_primary(
 		return gate4_checked_value("String", 0, origin, 0)
 	end
 	if gate4_token_is(state, position[0], "[")
-		locals.mir_state[19] = 1
+		gate4_array_region_operation(locals, 6, 0, 0, origin)
 		gate4_scalar_mir_disable(locals)
 		return gate4_check_array_literal(state, position, locals, expected)
 	end
@@ -8547,6 +8803,7 @@ def gate4_check_record_new(
 		record_name: String,
 	): Gate4CheckedValue
 	record_index := gate4_find_visible_record(state, state.active_module[0], record_name)
+	gate4_array_region_operation(locals, 6, 0, 0, position[0])
 	line := gate4_load_integer(state.token_lines, position[0])
 	gate4_advance(position)
 	gate4_skip_newlines(state, position)
@@ -8629,7 +8886,7 @@ def gate4_check_method_call(
 		return gate4_type_diagnostic(state, line, "size is unavailable on " + gate4_type_display(state, receiver.type_name))
 	end
 	if method == "push"
-		locals.mir_state[19] = 1
+		gate4_array_region_operation(locals, 6, 0, 0, position[0])
 		element_type := gate4_array_element_type(receiver.type_name)
 		if element_type == ""
 			return gate4_type_diagnostic(state, line, "push is unavailable on " + gate4_type_display(state, receiver.type_name))
@@ -8652,6 +8909,7 @@ def gate4_check_method_call(
 		end
 	end
 	if method == "to_s"
+		gate4_array_region_operation(locals, 6, 0, 0, position[0])
 		gate4_expect(state, position, ")")
 		if receiver.type_name == "Integer"
 			return gate4_checked_value("String", 0, 9007199254740991, 0)
@@ -8670,7 +8928,7 @@ def gate4_check_postfix(
 	mut scanning := true
 	while scanning
 		if gate4_token_is(state, position[0], "(")
-			mut effect_free := value.category >= 4
+			mut effect_free := value.category == 5
 			if value.category == 1
 				callee := gate4_find_visible_function(
 					state,
@@ -8682,7 +8940,7 @@ def gate4_check_postfix(
 				end
 			end
 			if !effect_free
-				locals.mir_state[19] = 1
+				gate4_array_region_operation(locals, 6, 0, 0, position[0])
 			end
 			gate4_scalar_mir_disable(locals)
 			if value.category < 0
@@ -8829,18 +9087,13 @@ def gate4_check_postfix(
 					if !lowered
 						gate4_scalar_mir_disable(locals)
 						gate4_store_integer(state.mir_nonnegative_facts, position[0], index.mutable)
-						if index.mutable < 0
-							loop_start :=- index.mutable
-							array_local := gate4_load_integer(
-								state.mir_nonnegative_facts, loop_start + 2,
-							) - 1
-							if array_local >= 0
-								fact_parameter_name := gate4_load_string(locals.names, array_local)
-								fact_receiver_name := gate4_load_string(state.token_texts, value.origin)
-								if fact_parameter_name == fact_receiver_name
-									if locals.mir_state[20] == - 1
-										locals.mir_state[20] = array_local
-										locals.mir_state[21] = position[0]
+						if value.origin < state.token_count[0]
+							if index.origin < state.token_count[0]
+								array_local := gate4_local_find(locals, gate4_load_string(state.token_texts, value.origin))
+								index_local := gate4_local_find(locals, gate4_load_string(state.token_texts, index.origin))
+								if array_local >= 0
+									if index_local >= 0
+										gate4_array_region_operation(locals, 4, array_local, index_local, position[0])
 									end
 								end
 							end
@@ -8849,6 +9102,7 @@ def gate4_check_postfix(
 					gate4_expect(state, position, "]")
 					if !lowered
 						if value.type_name == "String"
+							gate4_array_region_operation(locals, 6, 0, 0, position[0])
 							value = gate4_checked_value("String", 0, 9007199254740991, 0)
 						else
 							element_type := gate4_array_element_type(value.type_name)
@@ -9000,6 +9254,9 @@ def gate4_check_expression(
 			gate4_skip_newlines(state, position)
 			right := gate4_check_expression(state, position, locals, precedence + 1, "")
 			result_type := gate4_binary_result_type(state, operator, value.type_name, right.type_name, line)
+			if result_type == "String"
+				gate4_array_region_operation(locals, 6, 0, 0, operator_origin)
+			end
 			# The compact origin marker exists only while structured checking derives
 			# a backend-neutral loop fact and its enclosing-loop dependency.
 			mut fact := 0
@@ -9058,6 +9315,7 @@ def gate4_check_declaration(
 		mut position: Array<Integer>,
 		mut locals: Gate4Locals,
 	): Boolean
+	origin := position[0]
 	mut mutable := 0
 	if gate4_token_is(state, position[0], "mut")
 		mutable = 1
@@ -9105,6 +9363,19 @@ def gate4_check_declaration(
 		gate4_diagnostic(state, "TRBN4004", line, "local binding cannot have type Void")
 	end
 	added := gate4_local_add(state, locals, name, local_type, mutable, line)
+	if added
+		mut initializer :=- 1
+		if value.type_name == "Integer"
+			if value.origin != 9007199254740991
+				value_name := gate4_load_string(state.token_texts, value.origin)
+				initializer = gate4_local_find(locals, value_name)
+				if value_name == "0"
+					initializer =- 4
+				end
+			end
+		end
+		gate4_array_region_binding(locals, local_type, mutable, initializer, origin)
+	end
 	if !added
 		fact = 0
 	else
@@ -9184,6 +9455,9 @@ def gate4_check_simple_statement(
 			gate4_advance(position)
 			right := gate4_check_expression(state, position, locals, 1, left.type_name)
 			result_type := gate4_binary_result_type(state, compound, left.type_name, right.type_name, line)
+			if result_type == "String"
+				gate4_array_region_operation(locals, 6, 0, 0, position[0])
+			end
 			if locals.mir_state[0] >= 2
 				local_index := gate4_local_find(locals, gate4_load_string(state.token_texts, left.origin))
 				mut accumulator := false
@@ -9279,6 +9553,7 @@ def gate4_check_block(
 					complete = true
 				else
 					if gate4_token_is(state, position[0], "if")
+						gate4_array_region_operation(locals, 6, 0, 0, position[0])
 						gate4_scalar_mir_disable(locals)
 						mut fact_index := 0
 						while fact_index < locals.count[0]
@@ -9306,28 +9581,23 @@ def gate4_check_block(
 					else
 						if gate4_token_is(state, position[0], "while")
 							loop_start := position[0]
-							if locals.mir_state[0] == 0
-								mut signature := gate4_load_string(state.token_texts, loop_start + 2)
-								signature += gate4_load_string(state.token_texts, loop_start + 5)
+							mut array_index :=- 1
+							mut induction_index :=- 1
+							mut signature := gate4_load_string(state.token_texts, loop_start + 2)
+							signature += gate4_load_string(state.token_texts, loop_start + 5)
+							if gate4_load_integer(state.token_kinds, loop_start + 8) == 4
 								if signature == "<size"
-									array_local := gate4_local_find(
-										locals, gate4_load_string(state.token_texts, loop_start + 3),
-									)
-									if array_local >= 0
-										if gate4_load_integer(locals.mutable, array_local) == 0
-											if gate4_array_element_type(
-													gate4_load_string(locals.types, array_local),
-												) != ""
-												gate4_store_integer(
-													state.mir_nonnegative_facts,
-													loop_start + 2,
-													array_local + 1,
-												)
-											end
-										end
-									end
+									array_index = gate4_local_find(locals, gate4_load_string(state.token_texts, loop_start + 3))
+									induction_index = gate4_local_find(locals, gate4_load_string(state.token_texts, loop_start + 1))
 								end
 							end
+							if array_index < 0
+								induction_index =- 1
+							end
+							if induction_index < 0
+								array_index =- 1
+							end
+							gate4_array_region_operation(locals, 2, induction_index, array_index, loop_start)
 							mut candidate := locals.count[0] - 1
 							mut active := false
 							mut line := 0
@@ -9452,6 +9722,7 @@ def gate4_check_block(
 								end
 							end
 							locals.count[0] = saved_count
+							gate4_array_region_operation(locals, 3, 0, 0, loop_start)
 							gate4_expect(state, position, "end")
 							gate4_finish_statement(state, position)
 							if locals.mir_state[0] >= 2
@@ -9510,8 +9781,25 @@ def gate4_check_block(
 										gate4_load_string(state.token_texts, statement_start),
 									)
 									if tracked >= 0
+										assignment := gate4_load_string(state.token_texts, statement_start + 1)
+										if gate4_load_string(locals.types, tracked) == "Integer"
+											if assignment == "="
+												gate4_array_region_operation(locals, 5, tracked, 0, statement_start)
+											else
+												if gate4_compound_operator(assignment) != ""
+													mut step := 0
+													if assignment == "+="
+														if gate4_load_string(state.token_texts, statement_start + 2) == "1"
+															if gate4_load_integer(state.token_kinds, statement_start + 3) == 4
+																step = 1
+															end
+														end
+													end
+													gate4_array_region_operation(locals, 5, tracked, step, statement_start)
+												end
+											end
+										end
 										if gate4_load_integer(locals.mutable, tracked) < 0
-											assignment := gate4_load_string(state.token_texts, statement_start + 1)
 											mut valid := assignment != "="
 											if assignment.size() == 2
 												valid = assignment == "+="
@@ -9846,6 +10134,13 @@ def gate4_check_function(
 		)
 		if added
 			gate4_scalar_mir_add_parameter(state, locals, parameter_index)
+			gate4_array_region_binding(
+				locals,
+				gate4_load_string(state.parameter_types, parameter_index),
+				gate4_load_integer(state.parameter_mutable, parameter_index),
+				- 1,
+				state.token_count[0] + parameter_index + 1,
+			)
 		end
 		parameter_index += 1
 	end
@@ -9860,12 +10155,15 @@ def gate4_check_function(
 			"checker did not consume the complete function body",
 		)
 	end
-	if locals.mir_state[19] != 0
-		locals.mir_state[20] =- 1
-		locals.mir_state[21] =- 1
+	if locals.mir_array.size() > 0
+		if locals.mir_array[0] == 6
+			state.scalar_mir.array_regions.push([6, 0, 0, locals.mir_array[3]])
+		else
+			state.scalar_mir.array_regions.push(locals.mir_array)
+		end
+	else
+		state.scalar_mir.array_regions.push([])
 	end
-	state.scalar_mir.array_candidates.push(locals.mir_state[20])
-	state.scalar_mir.array_candidates.push(locals.mir_state[21])
 	if !gate4_has_diagnostic(state)
 		mir_error := gate4_scalar_mir_commit(state, function_index, locals)
 		if mir_error != ""
