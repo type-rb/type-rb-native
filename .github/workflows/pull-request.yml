@@ -1,0 +1,111 @@
+name: Pull request validation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.plan.outputs.code }}
+      documentation: ${{ steps.plan.outputs.documentation }}
+      memory: ${{ steps.plan.outputs.memory }}
+      performance: ${{ steps.plan.outputs.performance }}
+      draft: ${{ steps.plan.outputs.draft }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Test routing and fail-closed acceptance
+        run: node --test tools/ci-plan-test.mjs
+      - name: Classify every changed path
+        id: plan
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          IS_DRAFT: ${{ github.event.pull_request.draft }}
+        run: |
+          git diff --check "$BASE_SHA...$HEAD_SHA"
+          node tools/ci-plan.mjs "$BASE_SHA" "$HEAD_SHA" "$IS_DRAFT" >> "$GITHUB_OUTPUT"
+
+  quick:
+    needs: plan
+    if: needs.plan.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
+        with:
+          repository: type-rb/type-rb
+          ref: 5dc09070cf7f88a569279f5e63982a6de59d692c
+          path: .type-rb
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: .type-rb/go.mod
+          cache-dependency-path: .type-rb/go.sum
+      - name: Build the pinned reference compiler
+        run: |
+          test "$(cat TYPE_RB_REVISION)" = "$(git -C .type-rb rev-parse HEAD)"
+          go build -C .type-rb -o "$RUNNER_TEMP/trb" ./cmd/trb
+      - name: Check formatting and core types
+        run: |
+          "$RUNNER_TEMP/trb" fmt --check src compiler corpus tools benchmarks
+          "$RUNNER_TEMP/trb" check
+          "$RUNNER_TEMP/trb" check --config compiler/gate4/trbconfig.jsonc
+          sh tools/native-mir-transition-policy-test.sh
+      - name: Run root units and focused MIR correctness tests
+        env:
+          TYPE_RB_NATIVE_ROOT: ${{ github.workspace }}
+        run: |
+          "$RUNNER_TEMP/trb" test
+          "$RUNNER_TEMP/trb" test --config compiler/gate4/trbconfig.jsonc \
+            -t 'MIR|Array|Integer|Float|scalar|bounds|allocating|induction'
+
+  documentation:
+    needs: plan
+    if: needs.plan.outputs.documentation == 'true'
+    uses: ./.github/workflows/documentation.yml
+
+  native:
+    needs: [plan, quick]
+    if: needs.plan.outputs.code == 'true' && needs.plan.outputs.draft == 'false'
+    uses: ./.github/workflows/gate-zero.yml
+
+  targets:
+    needs: [plan, quick]
+    if: needs.plan.outputs.code == 'true' && needs.plan.outputs.draft == 'false'
+    uses: ./.github/workflows/gate6n-linux-amd64.yml
+
+  memory:
+    needs: [plan, quick]
+    if: needs.plan.outputs.memory == 'true' && needs.plan.outputs.draft == 'false'
+    uses: ./.github/workflows/runtime-worker-memory.yml
+
+  performance:
+    needs: [plan, native, targets, memory]
+    if: >-
+      !cancelled() && needs.plan.outputs.performance == 'true' &&
+      needs.plan.outputs.draft == 'false' && needs.native.result == 'success' &&
+      needs.targets.result == 'success' && needs.memory.result == 'success'
+    uses: ./.github/workflows/static-string-compactness.yml
+
+  acceptance:
+    name: Native CI acceptance
+    if: always()
+    needs: [plan, quick, documentation, native, targets, memory, performance]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Require all applicable authorities, not skipped-job success
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: node tools/ci-plan.mjs accept
