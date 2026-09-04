@@ -1,4 +1,4 @@
-import { Gate4Compiler, Gate4MirModule, Gate4Output, Gate4ProjectSources, gate4_add_module, gate4_build_symbol_index, gate4_character_in, gate4_check, gate4_check_expression, gate4_check_primary, gate4_compiler_new, gate4_emit_array_header, gate4_emit_context_new, gate4_emit_qbe, gate4_encode_static_string, gate4_find_field, gate4_find_function_in_module, gate4_find_import_binding, gate4_find_module, gate4_find_record_in_module, gate4_find_record_type, gate4_float_literal_in_range, gate4_has_diagnostic, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_local_add, gate4_local_find, gate4_locals_new, gate4_mir_function_index, gate4_mir_nonnegative_fact, gate4_number_is_float, gate4_number_without_underscores, gate4_optimize_verified_mir, gate4_output_new, gate4_parse_module, gate4_parse_project_config, gate4_resolve, gate4_string_bucket, gate4_string_starts_at, gate4_symbol_bucket_count, gate4_verify_mir } from compiler
+import { Gate4Compiler, Gate4MirModule, Gate4Output, Gate4ProjectSources, gate4_add_module, gate4_build_symbol_index, gate4_character_in, gate4_check, gate4_check_expression, gate4_check_primary, gate4_compiler_new, gate4_emit_array_header, gate4_emit_context_new, gate4_emit_qbe, gate4_encode_static_string, gate4_find_field, gate4_find_function_in_module, gate4_find_import_binding, gate4_find_module, gate4_find_record_in_module, gate4_find_record_type, gate4_float_literal_in_range, gate4_has_diagnostic, gate4_invalidate_array_header_cache, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_local_add, gate4_local_find, gate4_locals_new, gate4_mir_function_index, gate4_mir_nonnegative_fact, gate4_number_is_float, gate4_number_without_underscores, gate4_optimize_verified_mir, gate4_output_new, gate4_parse_module, gate4_parse_project_config, gate4_resolve, gate4_string_bucket, gate4_string_starts_at, gate4_symbol_bucket_count, gate4_verify_mir } from compiler
 import { gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage
 import { native_create_directory, native_read_text, native_write_text } from native_file_system
 import trb/std/process
@@ -87,9 +87,9 @@ def gate4_mir_test_module(
 	if invalid_index
 		array_index = 99
 	end
-	mut facts: Array<Array<Integer>> := []
+	mut facts: Array<Integer> := []
 	if supplied_fact
-		facts.push([1, 2, 1])
+		facts.push(1)
 	end
 	return Gate4MirModule.new(
 		source_count: [1],
@@ -148,8 +148,10 @@ describe("Gate 4 TypeRB frontend") do
 
 	test("rejects a forged partial optimized Array-header fact") do
 		mut native_module := gate4_mir_test_module(false, false)
-		native_module.array_candidates.push([0, 1])
-		native_module.facts.push([0, - 1])
+		native_module.array_candidates.push(0)
+		native_module.array_candidates.push(1)
+		native_module.facts.push(0)
+		native_module.facts.push(- 1)
 		expect(gate4_verify_mir(native_module, true)).to_equal(
 			"MIR optimized Array-header fact is invalid",
 		)
@@ -157,8 +159,10 @@ describe("Gate 4 TypeRB frontend") do
 
 	test("rejects a forged complete optimized Array-header fact") do
 		mut native_module := gate4_mir_test_module(false, false)
-		native_module.array_candidates.push([0, 1])
-		native_module.facts.push([0, 2])
+		native_module.array_candidates.push(0)
+		native_module.array_candidates.push(1)
+		native_module.facts.push(0)
+		native_module.facts.push(2)
 		expect(gate4_verify_mir(native_module, true)).to_equal(
 			"MIR optimized Array-header fact is invalid",
 		)
@@ -397,22 +401,26 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_mir_function_index(state.scalar_mir, 1)).to_equal(- 1)
 	end
 
-	test("selects stable Array headers only across checked effect-free scopes") do
+	test("selects stable Array headers only across checked header-stable scopes") do
 		source := "def scalar(index: Integer): Float\n\treturn index + 1\nend\n\ndef stable(input: Array<Float>, mut output: Array<Float>)\n\tmut outer := 0\n\twhile outer < input.size()\n\t\tmut total := 0.0\n\t\tmut inner := 0\n\t\twhile inner < input.size()\n\t\t\ttotal += input[inner]\n\t\t\tinner += 1\n\t\tend\n\t\toutput[outer] = total\n\t\touter += 1\n\tend\n\treturn\nend\n\ndef opaque(values: Array<Float>)\n\treturn\nend\n\ndef called(input: Array<Float>): Float\n\tmut index := 0\n\tmut total := 0.0\n\twhile index < input.size()\n\t\topaque(input)\n\t\ttotal += input[index]\n\t\tindex += 1\n\tend\n\treturn total\nend\n\ndef allocated(input: Array<Float>): Float\n\tunused: Array<Float> := []\n\tmut index := 0\n\tmut total: Float := unused.size()\n\twhile index < input.size()\n\t\ttotal += input[index]\n\t\tindex += 1\n\tend\n\treturn total\nend\n\ndef grown(mut input: Array<Float>): Float\n\tinput.push(1.0)\n\treturn input[0]\nend\n\ndef different(left: Array<Float>, right: Array<Float>): Float\n\tmut index := 0\n\tmut total := 0.0\n\twhile index < left.size()\n\t\ttotal += right[index]\n\t\tindex += 1\n\tend\n\treturn total\nend\n\ndef alias_safe(input: Array<Float>, mut output: Array<Float>)\n\tmut index := 0\n\twhile index < input.size()\n\t\toutput[index] = input[index]\n\t\tindex += 1\n\tend\n\treturn\nend\n\ndef main()\n\treturn\nend\n"
 		mut state := gate4_compiler_new(source.size() + 1)
 		expect(gate4_lex(state, source)).to_be_true()
 		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_true()
-		expect(state.scalar_mir.facts.size()).to_equal(9)
-		expect(state.scalar_mir.facts[1][0]).to_equal(1)
-		expect(state.scalar_mir.facts[1][1] >= 0).to_be_true()
-		expect(state.scalar_mir.facts[3]).to_equal([- 1, - 1])
-		expect(state.scalar_mir.facts[4]).to_equal([- 1, - 1])
-		expect(state.scalar_mir.facts[5]).to_equal([- 1, - 1])
-		expect(state.scalar_mir.facts[6]).to_equal([- 1, - 1])
-		expect(state.scalar_mir.facts[7][0]).to_equal(9)
-		expect(state.scalar_mir.facts[7][1] >= 0).to_be_true()
+		expect(state.scalar_mir.facts.size()).to_equal(18)
+		expect(state.scalar_mir.facts[2]).to_equal(0)
+		expect(state.scalar_mir.facts[3] >= 0).to_be_true()
+		expect(state.scalar_mir.facts[6]).to_equal(- 1)
+		expect(state.scalar_mir.facts[7]).to_equal(- 1)
+		expect(state.scalar_mir.facts[8]).to_equal(- 1)
+		expect(state.scalar_mir.facts[9]).to_equal(- 1)
+		expect(state.scalar_mir.facts[10]).to_equal(- 1)
+		expect(state.scalar_mir.facts[11]).to_equal(- 1)
+		expect(state.scalar_mir.facts[12]).to_equal(- 1)
+		expect(state.scalar_mir.facts[13]).to_equal(- 1)
+		expect(state.scalar_mir.facts[14]).to_equal(0)
+		expect(state.scalar_mir.facts[15] >= 0).to_be_true()
 		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("")
 	end
 
@@ -424,11 +432,22 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_true()
 		expect(state.scalar_mir.functions.size()).to_equal(0)
-		expect(state.scalar_mir.facts.size()).to_equal(2)
-		expect(state.scalar_mir.facts[0][0]).to_equal(0)
-		expect(state.scalar_mir.facts[0][1] >= 0).to_be_true()
+		expect(state.scalar_mir.facts.size()).to_equal(4)
+		expect(state.scalar_mir.facts[0]).to_equal(0)
+		expect(state.scalar_mir.facts[1] >= 0).to_be_true()
 		qbe := gate4_output_source(gate4_emit_qbe(state))
 		expect(gate4_occurrence_count(qbe, " =w cultl ")).to_equal(1)
+	end
+
+	test("publishes a stable local Array header across nested numeric loops") do
+		source := "import trb/std/math\n\ndef local_header(input: Array<Float>, mut output: Array<Float>)\n\tvalues := input\n\tmut index := 0\n\twhile index < values.size()\n\t\tmut other := index\n\t\twhile other < values.size()\n\t\t\toutput[index] = Math.sqrt(values[other])\n\t\t\tother += 1\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n\ndef main()\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		expect(state.scalar_mir.facts[0]).to_equal(2)
+		expect(state.scalar_mir.facts[1] >= 0).to_be_true()
 	end
 
 	test("keeps unsupported Array Integer reductions on the direct path") do
@@ -2233,27 +2252,19 @@ describe("Gate 4 TypeRB frontend") do
 		expect(qbe.include?("@l1\n\t%t6 =l loadl %v1\n\tcall $g4f0(l %t6)")).to_be_true()
 	end
 
-	test("reuses only a verified stable Array header") do
-		mut context := gate4_emit_context_new(16, [64, 16, 2], [- 1, - 1])
+	test("preserves a verified stable Array header across fallback invalidations") do
+		mut context := gate4_emit_context_new(16, [64, 16, 2], 0, 1)
 		mut output := gate4_output_new(16, [0, 0, 0, 0])
-		context.stable_array_header[0] = "%v0"
-		context.stable_array_header[1] = "%length"
-		context.stable_array_header[2] = "%data"
-		expect(
-			gate4_emit_array_header(context, output, "%first", "%v0", 1, "8", "%la0", "%l0"),
-		).to_equal("%length")
-		expect(
-			gate4_emit_array_header(context, output, "%first", "%v0", 2, "24", "%da0", "%d0"),
-		).to_equal("%data")
+		context.array_header[0] = "%v0"
+		context.array_header[1] = "%length"
+		length := gate4_emit_array_header(context, output, "%first", "%v0", 1, "8", "%la0", "%l0")
+		gate4_invalidate_array_header_cache(context)
+		expect(gate4_emit_array_header(context, output, "%first", "%v0", 1, "8", "", "")).to_equal(length)
 		expect(output.count[0]).to_equal(0)
-		expect(
-			gate4_emit_array_header(context, output, "%second", "%v1", 1, "8", "%la1", "%l1"),
-		).to_equal("%l1")
-		expect(output.count[0]).to_equal(2)
 	end
 
 	test("keeps Array header loads local outside owned-managed loops") do
-		mut context := gate4_emit_context_new(16, [64, 16, 2], [- 1, - 1])
+		mut context := gate4_emit_context_new(16, [64, 16, 2], - 1, - 1)
 		mut output := gate4_output_new(16, [0, 0, 0, 0])
 		first_length := gate4_emit_array_header(context, output, "%first", "", 1, "8", "%la0", "%l0")
 		second_length := gate4_emit_array_header(context, output, "%second", "", 1, "8", "%la1", "%l1")
