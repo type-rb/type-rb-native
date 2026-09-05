@@ -1353,6 +1353,37 @@ describe("Gate 4 TypeRB frontend") do
 		expect(unary.origin).to_equal(9007199254740991)
 	end
 
+	test("defers contextual conversion until the completed expression") do
+		mut state := gate4_compiler_new(16)
+		expect(gate4_lex(state, "((7)) / 2")).to_be_true()
+		mut position := [0]
+		mut locals := gate4_locals_new(4)
+		value := gate4_check_primary(state, position, locals, "Float")
+		expect(value.type_name).to_equal("Integer")
+		expect(state.diagnostic_count[0]).to_equal(0)
+
+		mut complete_position := [0]
+		complete := gate4_check_expression(state, complete_position, locals, 1, "Float")
+		# Outside active scalar MIR, widening is validated here and emitted later.
+		expect(complete.type_name).to_equal("Integer")
+		expect(state.diagnostic_count[0]).to_equal(0)
+	end
+
+	test("checks contextual postfix results after inferring their receivers") do
+		expressions := ["((7 / 2).to_s())", "(([7]).size()).to_s()", "(\"12\").to_i().to_s()"]
+		mut index := 0
+		while index < expressions.size()
+			mut state := gate4_compiler_new(64)
+			expect(gate4_lex(state, expressions[index])).to_be_true()
+			mut position := [0]
+			mut locals := gate4_locals_new(4)
+			value := gate4_check_expression(state, position, locals, 1, "String")
+			expect(value.type_name).to_equal("String")
+			expect(state.diagnostic_count[0]).to_equal(0)
+			index += 1
+		end
+	end
+
 	test("checks a generated declaration-chain scale probe") do
 		source := gate4_scale_test_source(128)
 		mut state := gate4_compiler_new(source.size() + 1)
