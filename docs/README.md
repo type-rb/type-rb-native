@@ -3,6 +3,8 @@
 Start with the [repository overview](../README.md), the
 [repository organization plan](repository-organization.md), and the
 [current MIR status](native-mir-optimization-status.md).
+The [root source inventory](root-source-inventory.md) maps source ownership,
+dependencies, retained consumers, and staged naming changes.
 The [development history](development-history.md) preserves the former README's
 checkpoint narrative. Entries below are a reference catalog; dated results
 remain tied to their own source revisions and measurement contracts.
