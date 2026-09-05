@@ -6,7 +6,7 @@ import { gate4_path_basename, gate4_path_directory, gate4_path_join, gate4_strin
 # block: id, origin source/line, parameter and instruction ranges, terminator;
 # value: function, id, type, origin source/line; and
 # instruction: kind, result, two operands, literal, failure block, origin.
-# Array regions retain binding, loop, access, write, and effect operations.
+# Array regions retain binding, lexical scope, access, and effect operations.
 # The verifier derives their plans; input facts remain empty.
 # A verified pass may mark the complete Array induction plan as optimized
 # (kind 5, mode 2). The verifier re-derives the loop proof before a backend may
@@ -131,7 +131,6 @@ record Gate4EmitContext
 	scalar_inline_range_failure_used: Array<Integer>
 	array_bounds_failure_used: Array<Integer>
 	array_header_local: Integer
-	array_header_access: Integer
 	array_header: Array<String>
 	array_header_fallback: Array<String>
 end
@@ -603,198 +602,137 @@ def gate4_mir_induction_address(
 	return true
 end
 
-def gate4_mir_array_plan(operations: Array<Integer>, mut plan: Array<Integer>): Boolean
+def gate4_mir_array_binding(
+		operations: Array<Integer>,
+		before: Integer,
+		field: Integer,
+		value: Integer,
+	): Integer
+	mut index := before - 4
+	while index >= 0
+		if operations[index] == 1
+			if operations[index + field] == value
+				return index
+			end
+		end
+		index -= 4
+	end
+	return - 1
+end
+
+# A raw Array region is a sequence of four-cell operations:
+# 1 binding (slot, type, origin): type 0 scalar, 1 immutable Array, 2 mutable Array;
+# 2/3 loop scope entry/exit (0, 0, matching origin);
+# 4 Array access (slot, 0, origin); 6 opaque effect/control (0, 0, origin).
+# The result is one stable binding origin, -1 for no reusable header, or -2
+# for malformed MIR. It never authorizes removing an access check.
+def gate4_mir_array_header(operations: Array<Integer>): Integer
 	if operations.size() % 4 != 0
-		return false
+		return - 2
 	end
-	mut bindings: Array<Integer> := []
-	mut allocated := 0
-	while allocated <= operations.size()
-		bindings.push(0)
-		allocated += 1
-	end
+	# Scope counts prove slot availability; raw declarations retain type and
+	# identity, so no second binding table or Integer-range state is needed.
 	mut binding_count := 0
-	mut loops: Array<Integer> := []
+	mut scopes: Array<Integer> := []
 	mut depth := 0
-	plan[0] =- 1
-	plan[1] =- 1
+	mut selected :=- 1
 	mut blocked := false
 	mut index := 0
 	while index < operations.size()
 		kind := operations[index]
-		first := operations[index + 1]
-		second := operations[index + 2]
+		slot := operations[index + 1]
+		type_id := operations[index + 2]
 		origin := operations[index + 3]
-		if first < - 4
-			return false
-		end
-		if first > operations.size()
-			return false
-		end
-		if second < - 4
-			return false
-		end
-		if second > operations.size()
-			return false
-		end
-		first_offset := first * 4
-		second_offset := second * 4
 		if origin < 0
-			return false
+			return - 2
+		end
+		if slot < 0
+			return - 2
+		end
+		if kind < 1
+			return - 2
+		end
+		if kind > 6
+			return - 2
+		end
+		if kind == 5
+			return - 2
 		end
 		if kind == 1
-			mut previous := 0
-			while previous < index
-				if operations[previous] == 1
-					if operations[previous + 3] == origin
-						return false
-					end
-				end
-				previous += 4
+			if slot != binding_count
+				return - 2
 			end
-			if first < 0
-				return false
+			if type_id < 0
+				return - 2
 			end
-			if first != binding_count
-				return false
+			if type_id > 2
+				return - 2
 			end
-			mut nonnegative := 0
-			if second == - 4
-				nonnegative = 1
-			else
-				if second >= 0
-					if second >= first
-						return false
-					end
-					nonnegative = bindings[second_offset + 2]
-				else
-					if second < - 4
-						return false
-					end
-				end
+			if gate4_mir_array_binding(operations, index, 3, origin) >= 0
+				return - 2
 			end
 			binding_count += 1
-			bindings[first_offset] = second
-			bindings[first_offset + 1] = origin
-			bindings[first_offset + 2] = nonnegative
-			bindings[first_offset + 3] =- 1
 		else
-			if kind == 2
-				if first >= 0
-					if first >= binding_count
-						return false
-					end
-					if second < 0
-						return false
-					end
-					if second >= binding_count
-						return false
-					end
-					mut bound :=- 1
-					if bindings[first_offset + 2] == 1
-						if bindings[second_offset] == - 2
-							bound = bindings[second_offset + 1]
+			if type_id != 0
+				return - 2
+			end
+			if kind == 4
+				if slot >= binding_count
+					return - 2
+				end
+				binding := gate4_mir_array_binding(operations, index, 1, slot)
+				if binding < 0
+					return - 2
+				end
+				binding_type := operations[binding + 2]
+				if binding_type == 0
+					return - 2
+				end
+				if depth > 0
+					if binding_type == 1
+						if selected == - 1
+							selected = operations[binding + 3]
 						end
 					end
-					bindings[first_offset + 3] = bound
-				else
-					if first != - 1
-						return false
-					end
-					if second != - 1
-						return false
-					end
 				end
-				if depth == loops.size()
-					loops.push(first)
-					loops.push(origin)
-					loops.push(binding_count)
-				else
-					loops[depth] = first
-					loops[depth + 1] = origin
-					loops[depth + 2] = binding_count
-				end
-				depth += 3
 			else
-				if kind == 3
-					if first != 0
-						return false
-					end
-					if second != 0
-						return false
-					end
-					if depth < 3
-						return false
-					end
-					if loops[depth - 2] != origin
-						return false
-					end
-					loop_index := loops[depth - 3]
-					if loop_index >= 0
-						bindings[loop_index * 4 + 3] =- 1
-					end
-					binding_count = loops[depth - 1]
-					depth -= 3
-				else
-					if kind == 6
-						blocked = true
-					else
-						if first < 0
-							return false
-						end
-						if first >= binding_count
-							return false
-						end
-						if kind == 4
-							if second < 0
-								return false
-							end
-							if second >= binding_count
-								return false
-							end
-							if bindings[first_offset] == - 2
-								if bindings[second_offset + 3] == bindings[first_offset + 1]
-									if plan[0] == - 1
-										plan[0] = bindings[first_offset + 1]
-										plan[1] = origin
-									end
-								end
-							end
-						else
-							if kind != 5
-								return false
-							end
-							if second != 0
-								if second != 1
-									return false
-								end
-							end
-							if bindings[first_offset] == - 2
-								return false
-							end
-							if bindings[first_offset] == - 3
-								return false
-							end
-							bindings[first_offset + 3] =- 1
-							if second != 1
-								bindings[first_offset + 2] = 0
-								blocked = true
-							end
-						end
-					end
+				if slot != 0
+					return - 2
 				end
 			end
+		end
+		if kind == 2
+			if depth == scopes.size()
+				scopes.push(binding_count)
+				scopes.push(origin)
+			else
+				scopes[depth] = binding_count
+				scopes[depth + 1] = origin
+			end
+			depth += 2
+		end
+		if kind == 3
+			if depth == 0
+				return - 2
+			end
+			if scopes[depth - 1] != origin
+				return - 2
+			end
+			binding_count = scopes[depth - 2]
+			depth -= 2
+		end
+		if kind == 6
+			blocked = true
 		end
 		index += 4
 	end
 	if depth != 0
-		return false
+		return - 2
 	end
 	if blocked
-		plan[0] =- 1
-		plan[1] =- 1
+		return - 1
 	end
-	return true
+	return selected
 end
 
 def gate4_optimize_verified_mir(mut native_module: Gate4MirModule)
@@ -820,17 +758,15 @@ def gate4_optimize_verified_mir(mut native_module: Gate4MirModule)
 		index += 1
 	end
 	index = 0
-	mut plan := [- 1, - 1]
 	while index < native_module.array_regions.size()
-		if !gate4_mir_array_plan(native_module.array_regions[index], plan)
+		header := gate4_mir_array_header(native_module.array_regions[index])
+		if header < - 1
 			return
 		end
-		if native_module.facts.size() == index * 2
-			native_module.facts.push(plan[0])
-			native_module.facts.push(plan[1])
+		if native_module.facts.size() == index
+			native_module.facts.push(header)
 		else
-			native_module.facts[index * 2] = plan[0]
-			native_module.facts[index * 2 + 1] = plan[1]
+			native_module.facts[index] = header
 		end
 		index += 1
 	end
@@ -1407,7 +1343,7 @@ def gate4_verify_mir(native_module: Gate4MirModule, optimized: Boolean): String
 	mut entry_found := false
 	mut index := 0
 	if optimized
-		if native_module.facts.size() != native_module.array_regions.size() * 2
+		if native_module.facts.size() != native_module.array_regions.size()
 			return "MIR optimized Array-header fact is invalid"
 		end
 	else
@@ -1415,16 +1351,13 @@ def gate4_verify_mir(native_module: Gate4MirModule, optimized: Boolean): String
 			return "MIR input cannot supply optimization facts"
 		end
 	end
-	mut plan := [- 1, - 1]
 	while index < native_module.array_regions.size()
-		if !gate4_mir_array_plan(native_module.array_regions[index], plan)
+		header := gate4_mir_array_header(native_module.array_regions[index])
+		if header < - 1
 			return "MIR Array region is invalid"
 		end
 		if optimized
-			if native_module.facts[index * 2] != plan[0]
-				return "MIR optimized Array-header fact is invalid"
-			end
-			if native_module.facts[index * 2 + 1] != plan[1]
+			if native_module.facts[index] != header
 				return "MIR optimized Array-header fact is invalid"
 			end
 		end
@@ -1777,7 +1710,6 @@ def gate4_emit_context_new(
 		capacity: Integer,
 		inline_budget: Array<Integer>,
 		array_header_local: Integer,
-		array_header_access: Integer,
 	): Gate4EmitContext
 	return Gate4EmitContext.new(
 		local_names: gate4_string_storage(capacity),
@@ -1800,7 +1732,6 @@ def gate4_emit_context_new(
 		scalar_inline_range_failure_used: [0],
 		array_bounds_failure_used: [0],
 		array_header_local: array_header_local,
-		array_header_access: array_header_access,
 		array_header: ["@none", "", ""],
 		array_header_fallback: ["@none", "", ""],
 	)
@@ -2865,13 +2796,9 @@ def gate4_emit_array_address(
 		array_key: String,
 		requested: String,
 		requested_nonnegative: Integer,
-		bounded: Boolean,
 	): String
 	mut header := context.array_header
 	mut use_cache := array_key == header[0]
-	if bounded
-		return gate4_emit_array_data_address(context, output, header[2], requested)
-	end
 	cache_enabled := array_key != ""
 	if !use_cache
 		header = context.array_header_fallback
@@ -3695,7 +3622,6 @@ def gate4_emit_postfix(
 							end
 						end
 						if inline_address
-							bounded := context.array_header_access == position[0]
 							address = gate4_emit_array_address(
 								context,
 								output,
@@ -3703,7 +3629,6 @@ def gate4_emit_postfix(
 								value.address,
 								index.operand,
 								gate4_mir_nonnegative_fact(state, position[0]),
-								bounded,
 							)
 						else
 							output.runtime_flags[3] = 1
@@ -4373,8 +4298,7 @@ def gate4_emit_function(
 	mut context := gate4_emit_context_new(
 		state.token_count[0] + 1,
 		inline_budget,
-		state.scalar_mir.facts[function_index * 2],
-		state.scalar_mir.facts[function_index * 2 + 1],
+		state.scalar_mir.facts[function_index],
 	)
 	mut body := gate4_output_new(state.token_count[0] * 8 + 1024, output.runtime_flags)
 	parameter_start := gate4_load_integer(state.function_parameter_starts, function_index)
@@ -7696,12 +7620,11 @@ def gate4_array_region_binding(
 		mut locals: Gate4Locals,
 		type_name: String,
 		mutable: Integer,
-		initializer: Integer,
 		origin: Integer,
 	)
-	mut tag := initializer
+	mut tag := 0
 	if gate4_array_element_type(type_name) != ""
-		tag =- 2 - mutable
+		tag = 1 + mutable
 	end
 	gate4_array_region_operation(locals, 1, locals.count[0] - 1, tag, origin)
 end
@@ -9039,6 +8962,14 @@ def gate4_check_postfix(
 					gate4_advance(position)
 					index := gate4_check_expression(state, position, locals, 1, "Integer")
 					index_id := gate4_checked_mir_value(index)
+					if value.origin < state.token_count[0]
+						array_local := gate4_local_find(locals, gate4_load_string(state.token_texts, value.origin))
+						if array_local >= 0
+							if gate4_array_element_type(gate4_load_string(locals.types, array_local)) != ""
+								gate4_array_region_operation(locals, 4, array_local, 0, position[0])
+							end
+						end
+					end
 					mut lowered := false
 					if locals.mir_state[0] >= 2
 						element_type := gate4_array_element_type(value.type_name)
@@ -9087,17 +9018,6 @@ def gate4_check_postfix(
 					if !lowered
 						gate4_scalar_mir_disable(locals)
 						gate4_store_integer(state.mir_nonnegative_facts, position[0], index.mutable)
-						if value.origin < state.token_count[0]
-							if index.origin < state.token_count[0]
-								array_local := gate4_local_find(locals, gate4_load_string(state.token_texts, value.origin))
-								index_local := gate4_local_find(locals, gate4_load_string(state.token_texts, index.origin))
-								if array_local >= 0
-									if index_local >= 0
-										gate4_array_region_operation(locals, 4, array_local, index_local, position[0])
-									end
-								end
-							end
-						end
 					end
 					gate4_expect(state, position, "]")
 					if !lowered
@@ -9364,17 +9284,7 @@ def gate4_check_declaration(
 	end
 	added := gate4_local_add(state, locals, name, local_type, mutable, line)
 	if added
-		mut initializer :=- 1
-		if value.type_name == "Integer"
-			if value.origin != 9007199254740991
-				value_name := gate4_load_string(state.token_texts, value.origin)
-				initializer = gate4_local_find(locals, value_name)
-				if value_name == "0"
-					initializer =- 4
-				end
-			end
-		end
-		gate4_array_region_binding(locals, local_type, mutable, initializer, origin)
+		gate4_array_region_binding(locals, local_type, mutable, origin)
 	end
 	if !added
 		fact = 0
@@ -9581,23 +9491,7 @@ def gate4_check_block(
 					else
 						if gate4_token_is(state, position[0], "while")
 							loop_start := position[0]
-							mut array_index :=- 1
-							mut induction_index :=- 1
-							mut signature := gate4_load_string(state.token_texts, loop_start + 2)
-							signature += gate4_load_string(state.token_texts, loop_start + 5)
-							if gate4_load_integer(state.token_kinds, loop_start + 8) == 4
-								if signature == "<size"
-									array_index = gate4_local_find(locals, gate4_load_string(state.token_texts, loop_start + 3))
-									induction_index = gate4_local_find(locals, gate4_load_string(state.token_texts, loop_start + 1))
-								end
-							end
-							if array_index < 0
-								induction_index =- 1
-							end
-							if induction_index < 0
-								array_index =- 1
-							end
-							gate4_array_region_operation(locals, 2, induction_index, array_index, loop_start)
+							gate4_array_region_operation(locals, 2, 0, 0, loop_start)
 							mut candidate := locals.count[0] - 1
 							mut active := false
 							mut line := 0
@@ -9782,23 +9676,6 @@ def gate4_check_block(
 									)
 									if tracked >= 0
 										assignment := gate4_load_string(state.token_texts, statement_start + 1)
-										if gate4_load_string(locals.types, tracked) == "Integer"
-											if assignment == "="
-												gate4_array_region_operation(locals, 5, tracked, 0, statement_start)
-											else
-												if gate4_compound_operator(assignment) != ""
-													mut step := 0
-													if assignment == "+="
-														if gate4_load_string(state.token_texts, statement_start + 2) == "1"
-															if gate4_load_integer(state.token_kinds, statement_start + 3) == 4
-																step = 1
-															end
-														end
-													end
-													gate4_array_region_operation(locals, 5, tracked, step, statement_start)
-												end
-											end
-										end
 										if gate4_load_integer(locals.mutable, tracked) < 0
 											mut valid := assignment != "="
 											if assignment.size() == 2
@@ -10138,7 +10015,6 @@ def gate4_check_function(
 				locals,
 				gate4_load_string(state.parameter_types, parameter_index),
 				gate4_load_integer(state.parameter_mutable, parameter_index),
-				- 1,
 				state.token_count[0] + parameter_index + 1,
 			)
 		end

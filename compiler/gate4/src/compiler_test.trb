@@ -146,41 +146,40 @@ describe("Gate 4 TypeRB frontend") do
 		)
 	end
 
-	test("rejects a forged partial optimized Array-header fact") do
+	test("rejects missing or extra optimized Array-header facts") do
 		mut native_module := gate4_mir_test_module(false, false)
-		native_module.array_regions.push([1, 0, - 2, 10, 1, 1, - 4, 11, 2, 1, 0, 12, 4, 0, 1, 13, 5, 1, 1, 14, 3, 0, 0, 12])
+		native_module.array_regions.push([1, 0, 1, 10, 2, 0, 0, 12, 4, 0, 0, 13, 3, 0, 0, 12])
+		expect(gate4_verify_mir(native_module, true)).to_equal("MIR optimized Array-header fact is invalid")
 		native_module.facts.push(10)
-		native_module.facts.push(- 1)
-		expect(gate4_verify_mir(native_module, true)).to_equal(
-			"MIR optimized Array-header fact is invalid",
-		)
+		native_module.facts.push(13)
+		expect(gate4_verify_mir(native_module, true)).to_equal("MIR optimized Array-header fact is invalid")
 	end
 
-	test("rejects a forged complete optimized Array-header fact") do
+	test("rejects a forged optimized Array-header binding identity") do
 		mut native_module := gate4_mir_test_module(false, false)
-		native_module.array_regions.push([1, 0, - 2, 10, 1, 1, - 4, 11, 2, 1, 0, 12, 4, 0, 1, 13, 5, 1, 1, 14, 3, 0, 0, 12])
-		native_module.facts.push(10)
-		native_module.facts.push(14)
-		expect(gate4_verify_mir(native_module, true)).to_equal(
-			"MIR optimized Array-header fact is invalid",
-		)
+		native_module.array_regions.push([1, 0, 1, 10, 2, 0, 0, 12, 4, 0, 0, 13, 3, 0, 0, 12])
+		native_module.facts.push(11)
+		expect(gate4_verify_mir(native_module, true)).to_equal("MIR optimized Array-header fact is invalid")
 	end
 
-	test("derives Array-header facts from raw bindings and operations") do
+	test("derives only Array-header identity from raw bindings and operations") do
 		mut native_module := gate4_mir_test_module(false, false)
-		native_module.array_regions.push([1, 0, - 2, 10, 1, 1, - 4, 11, 2, 1, 0, 12, 4, 0, 1, 13, 5, 1, 1, 14, 3, 0, 0, 12])
+		native_module.array_regions.push([1, 0, 1, 10, 2, 0, 0, 12, 4, 0, 0, 13, 3, 0, 0, 12])
 		expect(gate4_verify_mir(native_module, false)).to_equal("")
 		gate4_optimize_verified_mir(native_module)
-		expect(native_module.facts).to_equal([10, 13])
+		expect(native_module.facts).to_equal([10])
+		expect(gate4_verify_mir(native_module, true)).to_equal("")
+		gate4_optimize_verified_mir(native_module)
+		expect(native_module.facts).to_equal([10])
 		expect(gate4_verify_mir(native_module, true)).to_equal("")
 	end
 
-	test("rejects forged Array-header facts after raw proof operands change") do
-		mut changes := [[2, - 3], [6, - 1], [10, 1], [14, 0], [18, 0]]
+	test("rejects forged Array-header facts after raw bindings change") do
+		changes := [[2, 2], [3, 11]]
 		mut index := 0
 		while index < changes.size()
 			mut native_module := gate4_mir_test_module(false, false)
-			mut region := [1, 0, - 2, 10, 1, 1, - 4, 11, 2, 1, 0, 12, 4, 0, 1, 13, 5, 1, 1, 14, 3, 0, 0, 12]
+			mut region := [1, 0, 1, 10, 2, 0, 0, 12, 4, 0, 0, 13, 3, 0, 0, 12]
 			native_module.array_regions.push(region)
 			gate4_optimize_verified_mir(native_module)
 			region[changes[index][0]] = changes[index][1]
@@ -189,35 +188,44 @@ describe("Gate 4 TypeRB frontend") do
 		end
 	end
 
-	test("rejects forged Array-header facts across writes and effects") do
-		regions := [
-			[1, 0, - 2, 10, 1, 1, - 4, 11, 2, 1, 0, 12, 5, 1, 1, 14, 4, 0, 1, 13, 3, 0, 0, 12],
-			[1, 0, - 2, 10, 1, 1, - 4, 11, 2, 1, 0, 12, 4, 0, 1, 13, 6, 0, 0, 14, 3, 0, 0, 12],
-		]
-		mut index := 0
-		while index < regions.size()
-			mut native_module := gate4_mir_test_module(false, false)
-			native_module.array_regions.push(regions[index])
-			native_module.facts.push(10)
-			native_module.facts.push(13)
-			expect(gate4_verify_mir(native_module, true)).to_equal("MIR optimized Array-header fact is invalid")
-			index += 1
-		end
+	test("rejects forged Array-header facts across opaque effects") do
+		mut native_module := gate4_mir_test_module(false, false)
+		native_module.array_regions.push([1, 0, 1, 10, 2, 0, 0, 12, 4, 0, 0, 13, 3, 0, 0, 12, 6, 0, 0, 14])
+		native_module.facts.push(10)
+		expect(gate4_verify_mir(native_module, true)).to_equal("MIR optimized Array-header fact is invalid")
+	end
+
+	test("retains distinct Array binding identities after lexical slot reuse") do
+		mut native_module := gate4_mir_test_module(false, false)
+		region := [2, 0, 0, 10, 1, 0, 2, 11, 4, 0, 0, 12, 3, 0, 0, 10, 2, 0, 0, 13, 1, 0, 1, 14, 4, 0, 0, 15, 3, 0, 0, 13]
+		native_module.array_regions.push(region)
+		expect(gate4_verify_mir(native_module, false)).to_equal("")
+		gate4_optimize_verified_mir(native_module)
+		expect(native_module.facts).to_equal([14])
+		expect(gate4_verify_mir(native_module, true)).to_equal("")
 	end
 
 	test("rejects malformed raw Array regions") do
 		regions := [
-			[1, 0, - 2],
-			[1, 1, - 2, 10],
-			[1, 0, - 2, 10, 1, 1, - 4, 10],
-			[1, 0, - 2, 10, 1, 1, - 4, 11, 2, 1, 0, 12],
-			[1, 0, - 2, 10, 1, 1, - 4, 11, 2, 1, 0, 12, 4, 0, 99, 13, 3, 0, 0, 12],
+			[1, 0, 1],
+			[1, 1, 1, 10],
+			[1, 0, 1, 10, 1, 1, 0, 10],
+			[1, 0, 1, 10, 2, 0, 0, 12],
+			[1, 0, 1, 10, 4, 99, 0, 13],
 			[3, 0, 0, 12],
-			[1, 0, - 2, 10, 1, 0, - 4, 11],
-			[1, 0, - 2, 10, 2, - 1, - 1, 11, 1, 1, - 4, 12, 3, 0, 0, 11, 4, 0, 1, 13],
-			[1, 9007199254740991, - 2, 10],
+			[2, 0, 0, 12, 3, 0, 0, 13],
+			[1, 0, 1, 10, 1, 0, 0, 11],
+			[1, 0, 1, 10, 2, 0, 0, 11, 1, 1, 1, 12, 3, 0, 0, 11, 4, 1, 0, 13],
+			[1, 9007199254740991, 1, 10],
 			[1, 0, - 9007199254740991, 10],
-			[1, 0, - 2, 10, 5, 0, 1, 11],
+			[1, 0, 3, 10],
+			[1, 0, 1, - 1],
+			[1, 0, 0, 10, 4, 0, 0, 11],
+			[1, 0, 1, 10, 4, 0, 1, 11],
+			[2, 1, 0, 12, 3, 0, 0, 12],
+			[6, 0, 1, 12],
+			[5, 0, 0, 12],
+			[7, 0, 0, 12],
 		]
 		mut index := 0
 		while index < regions.size()
@@ -468,19 +476,15 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_true()
-		expect(state.scalar_mir.facts.size()).to_equal(18)
-		expect(state.scalar_mir.facts[2] >= 0).to_be_true()
-		expect(state.scalar_mir.facts[3] >= 0).to_be_true()
-		expect(state.scalar_mir.facts[6]).to_equal(- 1)
-		expect(state.scalar_mir.facts[7]).to_equal(- 1)
-		expect(state.scalar_mir.facts[8]).to_equal(- 1)
-		expect(state.scalar_mir.facts[9]).to_equal(- 1)
-		expect(state.scalar_mir.facts[10]).to_equal(- 1)
-		expect(state.scalar_mir.facts[11]).to_equal(- 1)
-		expect(state.scalar_mir.facts[12]).to_equal(- 1)
-		expect(state.scalar_mir.facts[13]).to_equal(- 1)
-		expect(state.scalar_mir.facts[14] >= 0).to_be_true()
-		expect(state.scalar_mir.facts[15] >= 0).to_be_true()
+		expect(state.scalar_mir.facts.size()).to_equal(9)
+		expect(state.scalar_mir.facts[1] >= 0).to_be_true()
+		expect(state.scalar_mir.facts[3]).to_equal(- 1)
+		expect(state.scalar_mir.facts[4]).to_equal(- 1)
+		expect(state.scalar_mir.facts[5]).to_equal(- 1)
+		# A different loop bound does not invalidate header reuse. Access
+		# checks still test the indexed Array's own length at runtime.
+		expect(state.scalar_mir.facts[6] >= 0).to_be_true()
+		expect(state.scalar_mir.facts[7] >= 0).to_be_true()
 		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("")
 	end
 
@@ -492,11 +496,11 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_true()
 		expect(state.scalar_mir.functions.size()).to_equal(0)
-		expect(state.scalar_mir.facts.size()).to_equal(4)
+		expect(state.scalar_mir.facts.size()).to_equal(2)
 		expect(state.scalar_mir.facts[0] >= 0).to_be_true()
-		expect(state.scalar_mir.facts[1] >= 0).to_be_true()
+		expect(state.scalar_mir.facts[1]).to_equal(- 1)
 		qbe := gate4_output_source(gate4_emit_qbe(state))
-		expect(gate4_occurrence_count(qbe, " =w cultl ")).to_equal(1)
+		expect(gate4_occurrence_count(qbe, " =w cultl ")).to_equal(2)
 	end
 
 	test("publishes a stable local Array header across nested numeric loops") do
@@ -507,7 +511,7 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_true()
 		expect(state.scalar_mir.facts[0] >= 0).to_be_true()
-		expect(state.scalar_mir.facts[1] >= 0).to_be_true()
+		expect(state.scalar_mir.facts[1]).to_equal(- 1)
 	end
 
 	test("blocks stable Array-header plans across allocating primitives") do
@@ -548,7 +552,9 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_true()
-		expect(state.scalar_mir.facts[1]).to_equal(- 1)
+		expect(state.scalar_mir.facts[0] >= 0).to_be_true()
+		qbe := gate4_output_source(gate4_emit_qbe(state))
+		expect(qbe.include?(", @array_bounds_failure")).to_be_true()
 	end
 
 	test("retains bounds checks when the loop condition extends the Array length") do
@@ -558,7 +564,9 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_true()
-		expect(state.scalar_mir.facts[1]).to_equal(- 1)
+		expect(state.scalar_mir.facts[0] >= 0).to_be_true()
+		qbe := gate4_output_source(gate4_emit_qbe(state))
+		expect(qbe.include?(", @array_bounds_failure")).to_be_true()
 	end
 
 	test("retains bounds checks when a later update invalidates the induction proof") do
@@ -568,7 +576,9 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_true()
-		expect(state.scalar_mir.facts[1]).to_equal(- 1)
+		expect(state.scalar_mir.facts[0] >= 0).to_be_true()
+		qbe := gate4_output_source(gate4_emit_qbe(state))
+		expect(qbe.include?(", @array_bounds_failure")).to_be_true()
 	end
 
 	test("keeps unsupported Array Integer reductions on the direct path") do
@@ -593,13 +603,12 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_mir_function_index(state.scalar_mir, 0)).to_equal(- 1)
 		expect(gate4_mir_function_index(state.scalar_mir, 1)).to_equal(- 1)
 		expect(gate4_mir_function_index(state.scalar_mir, 2)).to_equal(- 1)
-		# The raw region proves the nonadjacent declaration without promoting
-		# the complete function to the induction/reduction MIR family.
-		expect(state.scalar_mir.facts[0]).to_equal(- 1)
-		expect(state.scalar_mir.facts[2] >= 0).to_be_true()
-		expect(state.scalar_mir.facts[3] >= 0).to_be_true()
-		expect(state.scalar_mir.facts[4]).to_equal(- 1)
-		expect(gate4_occurrence_count(gate4_output_source(gate4_emit_qbe(state)), " =l sar ")).to_equal(2)
+		# Header reuse is independent of a unit-step induction proof; it
+		# neither promotes the function nor removes access checks.
+		expect(state.scalar_mir.facts[0] >= 0).to_be_true()
+		expect(state.scalar_mir.facts[1] >= 0).to_be_true()
+		expect(state.scalar_mir.facts[2]).to_equal(- 1)
+		expect(gate4_occurrence_count(gate4_output_source(gate4_emit_qbe(state)), " =l sar ")).to_equal(3)
 	end
 
 	test("strictly decodes the configured-project projection and comments") do
@@ -2380,7 +2389,7 @@ describe("Gate 4 TypeRB frontend") do
 	end
 
 	test("preserves a verified stable Array header across fallback invalidations") do
-		mut context := gate4_emit_context_new(16, [64, 16, 2], 0, 1)
+		mut context := gate4_emit_context_new(16, [64, 16, 2], 0)
 		mut output := gate4_output_new(16, [0, 0, 0, 0])
 		context.array_header[0] = "%v0"
 		context.array_header[1] = "%length"
@@ -2391,7 +2400,7 @@ describe("Gate 4 TypeRB frontend") do
 	end
 
 	test("keeps Array header loads local outside owned-managed loops") do
-		mut context := gate4_emit_context_new(16, [64, 16, 2], - 1, - 1)
+		mut context := gate4_emit_context_new(16, [64, 16, 2], - 1)
 		mut output := gate4_output_new(16, [0, 0, 0, 0])
 		first_length := gate4_emit_array_header(context, output, "%first", "", 1, "8", "%la0", "%l0")
 		second_length := gate4_emit_array_header(context, output, "%second", "", 1, "8", "%la1", "%l1")
