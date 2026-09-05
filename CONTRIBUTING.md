@@ -22,6 +22,12 @@ The proposal should record:
 Small fixes and documentation corrections do not need a separate experiment
 proposal.
 
+Keep implementation drafts in the quick-feedback stage. After local proof,
+negative-case, and compactness review, mark the PR ready to run complete
+correctness and then comparative measurements. See the
+[CI validation stages](docs/ci-validation.md) for routing, manual runs, and
+the fail-closed merge-acceptance check.
+
 ## Correctness
 
 The TypeRB specification and accepted conformance behavior define expected
