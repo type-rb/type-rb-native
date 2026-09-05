@@ -5,6 +5,18 @@ path, including deleted paths and both sides of renames. It has no path filter,
 so a documentation-only change can still complete its merge-acceptance check.
 Unknown non-documentation paths receive full correctness and target checking.
 
+The changed-path inventory streams Git's NUL-delimited output instead of using
+a fixed-size synchronous process buffer. Large evidence snapshots therefore
+retain every path, including code changes after the first megabyte. Git errors
+and incomplete path records fail planning; they do not authorize partial lists.
+
+The three exact static-documentation tools (`tools/capability-map-check.mjs`,
+`tools/benchmark-pages-data.mjs`, and `tools/benchmark-pages-check.mjs`) use the
+documentation authority, which already executes those checks. A snapshot or
+generator-only update does not need compiler or performance matrices. Mixed
+compiler changes, CI-routing changes, and unknown neighboring paths retain the
+normal full authority. Formal benchmark controllers are not documentation tools.
+
 ## Stages
 
 1. **Planning and quick feedback.** Every PR runs routing/acceptance tests and
