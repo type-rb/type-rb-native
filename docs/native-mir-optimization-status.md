@@ -19,6 +19,13 @@ candidates remain rejected. See [the proof, repairs, and accepted
 measurement](native-mir-array-region-repair.md). The remaining direct-path
 cache and the broader MIR migration/recovery obligation are still outstanding.
 
+The header proof is a bounded target-independent region plan, not general
+alias analysis or complete block/value MIR for arbitrary loops. It preserves
+the existing negative-index and bounds behavior and falls back conservatively
+when the immutable-parameter proof does not apply. The complete Array-reduction
+MIR path and the region-plan connection should not be counted as the same
+coverage claim.
+
 [Issue #249](https://github.com/type-rb/type-rb-native/issues/249) is completed by
 [PR #250](https://github.com/type-rb/type-rb-native/pull/250)'s compiler-only
 [block-row construction consolidation](native-mir-block-construction.md).
@@ -245,5 +252,5 @@ Public evidence:
 - [Array reduction target regressions](https://github.com/type-rb/type-rb-native/actions/runs/33697599529)
 - [Array reduction persistent-worker checks](https://github.com/type-rb/type-rb-native/actions/runs/33697599556)
 - [Array reduction complete Native gates](https://github.com/type-rb/type-rb-native/actions/runs/33697599531)
-- [current complete formal runtime result](../results/2026-09-03-benchmarksgame-runtime-native-mir-guarded-multiply-linux-arm64/README.md)
-- [current complete formal build result](../results/2026-09-03-benchmarksgame-build-native-mir-guarded-multiply-linux-arm64/README.md)
+- [current complete formal runtime result](../results/2026-09-05-benchmarksgame-runtime-native-mir-stable-array-headers-accepted-linux-arm64/README.md)
+- [current complete formal build result](../results/2026-09-05-benchmarksgame-build-native-mir-stable-array-headers-accepted-linux-arm64/README.md)

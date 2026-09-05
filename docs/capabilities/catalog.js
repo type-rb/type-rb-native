@@ -12,7 +12,7 @@ const capability = (title, status, scopes, description, evidence) => ({
 
 export const catalog = {
   schemaVersion: 1,
-  updatedAt: '2026-09-03',
+  updatedAt: '2026-09-05',
   areas: [
     {
       id: 'language',
@@ -35,7 +35,7 @@ export const catalog = {
       description: 'Self-hosting, project builds, diagnostics, and fast development iteration.',
       items: [
         capability('TypeRB-authored self-hosted compiler', 'verified', ['parity', 'production'], 'The lexer, parser, resolver, checker, emitter, and driver reach a reproducible fixed point.', ['Gate 4 / Gate 5', 'docs/gate-5-matched-compiler.md']),
-        capability('Verified self-hosted Native MIR foundation', 'partial', ['parity', 'production'], 'Ordinary checking now publishes verified scalar leaves, one complete Array<Integer> induction/reduction helper family, and the same exact zero-initialized Array<Float> reduction into Native MIR. Formal arm64 focused measurements cut the Float reduction wall time by 55–57% for the hot case and 25–61% for the streaming case with unchanged median RSS. MIR also selects exact-fallback guarded Integer multiply and add paths: multiply cuts spectral-norm wall and CPU time by about 15%, and add cuts another 6.7%, without increasing median RSS. A target-independent pass marks proven decisions before QBE mechanically lowers them; broader control flow, managed values, records, and unsupported Array shapes still use the migration path.', ['Current MIR transition status', 'docs/native-mir-optimization-status.md']),
+        capability('Verified self-hosted Native MIR foundation', 'partial', ['parity', 'production'], 'Ordinary checking publishes verified scalar leaves, selected zero-initialized Integer/Float Array reductions, and exact-fallback guarded Integer arithmetic. Bounded region facts now permit header reuse for immutable Array parameters; the accepted focused run cuts spectral-norm wall time by 11.87% with unchanged median RSS and neutral controls. Compiler-only block-row consolidation reduces duplicated layout code without changing generated applications. General control flow, records, allocation, I/O, and broader alias/effect analysis remain incomplete; QBE is not yet a wholly mechanical adapter.', ['Current MIR transition status', 'docs/native-mir-optimization-status.md']),
         capability('File-oriented check and build', 'verified', ['parity', 'production'], 'Read source files and own the QBE and C-toolchain process boundary.', ['Gate 6A / Gate 6B', 'docs/gate-6-single-file-build.md']),
         capability('Multi-file module graph', 'verified', ['parity', 'production'], 'Load explicit imports and deterministic transitive module closures.', ['Gate 6E–6H', 'docs/gate-6-module-graph.md']),
         capability('Configured project build', 'verified', ['parity', 'production'], 'Load a bounded trbconfig.jsonc source set and build its unique main entry.', ['Gate 6K', 'docs/gate-6-configured-project.md']),
@@ -126,8 +126,8 @@ export const catalog = {
       description: 'Whole-toolchain evidence, service behavior, security, debugging, and maintenance cost.',
       items: [
         capability('Reproducible benchmark controllers', 'verified', ['parity', 'ecosystem'], 'Retain raw build, runtime, RSS, artifact, and process-boundary observations.', ['Benchmark policy', 'docs/benchmarksgame.md']),
-        capability('Compiler build time and distribution size', 'verified', ['parity', 'production', 'ecosystem'], 'The current registered compiler and application build cases materially outperform the optimized Go path.', ['Formal build result', 'results/2026-09-03-benchmarksgame-build-native-mir-induction-phi-linux-arm64/README.md']),
-        capability('Numeric runtime performance', 'partial', ['production', 'ecosystem'], 'Native remains 1.61x to 3.45x slower than Pure Go across the current three numeric kernels; Pure Go parity or better is the minimum objective.', ['Formal runtime result', 'results/2026-09-03-benchmarksgame-runtime-native-mir-induction-phi-linux-arm64/README.md']),
+        capability('Compiler build time and distribution size', 'verified', ['parity', 'production', 'ecosystem'], 'The current registered compiler and application build cases materially outperform the optimized Go path.', ['Formal build result', 'results/2026-09-05-benchmarksgame-build-native-mir-stable-array-headers-accepted-linux-arm64/README.md']),
+        capability('Numeric runtime performance', 'partial', ['production', 'ecosystem'], 'Native needs 1.12x to 3.45x the time of Pure Go across the current three numeric kernels; Pure Go parity or better remains the minimum objective. Spectral-norm is closer to parity, while fannkuch-redux and n-body retain large gaps.', ['Formal runtime result', 'results/2026-09-05-benchmarksgame-runtime-native-mir-stable-array-headers-accepted-linux-arm64/README.md']),
         capability('Service throughput and tail latency', 'open', ['production', 'ecosystem'], 'Measure representative HTTP, database, and worker workloads end to end.'),
         capability('Debugger, profiler, and crash reports', 'open', ['production', 'ecosystem'], 'Provide source-level debugging, CPU and heap profiles, and symbolized failures.'),
         capability('Security hardening', 'unassessed', ['production', 'ecosystem'], 'Systematize fuzzing, supply-chain controls, dependency maintenance, and release response.'),

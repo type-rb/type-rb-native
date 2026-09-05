@@ -59,7 +59,7 @@ or service evidence.
 | static-string-compactness-cross-target | 9964246385 | 456 | `6bca69f1210c755cfdc5f496453c3ebd029343599054a90cf68a3f2c85b0bc10` |
 
 `EVIDENCE_SHA256SUMS` inventories the three extracted artifacts, excluding only
-this README and itself. Repository text copies normalize trailing horizontal
+this README and itself. Repository text copies normalize CRLF, trailing horizontal
 whitespace and end-of-file blank lines. The table identifies the original
 GitHub archives. The [rejected `69ff52b5` result](../2026-09-05-native-mir-stable-array-headers-darwin-linux-arm64/README.md)
 retains its failed n-body control and is not relabeled as accepted.

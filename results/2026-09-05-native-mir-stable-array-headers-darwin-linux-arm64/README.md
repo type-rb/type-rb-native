@@ -119,7 +119,7 @@ local failed diagnostic. Nothing in this record converts either failed
 result into acceptance.
 
 `ARTIFACTS.tsv` records the original hosted archives and their GitHub digests.
-Repository copies of `.txt` tool inventories remove trailing horizontal
-whitespace; raw CSV observations, JSON summaries, and program outputs are
+Repository text copies normalize CRLF, trailing horizontal whitespace, and
+end-of-file blank lines. Observation values and program output content are
 unchanged. `EVIDENCE_SHA256SUMS` covers 218 evidence files, excluding only this
 README and the checksum file itself.
