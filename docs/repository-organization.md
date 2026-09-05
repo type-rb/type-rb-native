@@ -17,7 +17,7 @@ guide, not a finding that every gate-numbered file is obsolete.
 
 | Current area | Role and treatment |
 | --- | --- |
-| `compiler/gate4/src/compiler.trb`, `storage.trb`, `path.trb`, `mir.trb`, `literals.trb`, `state.trb`, `parser.trb` | Ordinary self-hosted compiler closure. Shared state/indexes, syntax parsing, MIR model/verifier/passes and shared literal helpers have distinct owners; continue splitting checking, adapter, runtime, and driver responsibilities and remove checkpoint-derived names incrementally. |
+| `compiler/gate4/src/compiler.trb` and its storage/path/MIR/literal/state/parser/resolution/checked-program imports | Ordinary self-hosted compiler closure. Shared state/indexes, syntax, resolution, typed checking/MIR construction and MIR model/verifier/passes have distinct owners; continue splitting adapter, runtime, and driver responsibilities and remove checkpoint-derived names incrementally. |
 | `src/gate0.trb`, `snapshot.trb`, `json_boundary.trb`, `diagnostic.trb`, `native_mir.trb` | Initial snapshot validation/MIR boundary and shared support. Classify callers before separating shared code from recovery-only code. |
 | `src/gate1_*`, `gate2_*`, `gate3_*`, `qbe.trb`, `qbe2.trb`, `qbe3.trb` | Versioned snapshot, MIR, layout, QBE, and managed-runtime paths with differential tests. These are not three successive unused compiler copies. Name retained paths by format/capability and role. |
 | `src/gate4_toolchain.trb`, `matched_go_driver.trb`, `gate6f_compiler_source.trb` and associated tests | Recovery generation, matched reference comparison, and strict compiler-source flattening support. Keep them visibly separate from the ordinary compiler. |
@@ -56,7 +56,7 @@ stay at the entry boundary. Recovery validates the exact entry and MIR imports,
 then derives storage/path/literals/MIR/entry declarations deterministically;
 ordinary self-hosting still uses the canonical file-root closure.
 
-The next O3 slice, [issue #267](https://github.com/type-rb/type-rb-native/issues/267),
+The accepted O3 slice in [PR #268](https://github.com/type-rb/type-rb-native/pull/268)
 moves shared compiler state, symbol/name indexes and diagnostics to `state.trb`,
 and syntax parsing, cursor primitives and operator mapping to `parser.trb`.
 The entry decreases from 8,550 to 7,485 lines. Their dependencies do not point
@@ -65,10 +65,20 @@ stay there. Focused state/parser tests have their own modules, while full
 frontend/adapter integration remains separate. Recovery validates all imported
 boundaries and derives storage/path/literals/MIR/state/parser/entry in that order.
 
-O3 continues incrementally; O4–O5 are not complete. Next, audit resolution and
-checking/MIR construction for another cohesive boundary, alongside adapter,
-runtime and driver extraction and active gate-derived naming. Do not move the
-remaining 7,485 lines into a second catch-all module or wait for full MIR migration.
+The subsequent [semantic frontend slice](https://github.com/type-rb/type-rb-native/issues/269)
+extracts declaration/import/type resolution to `resolution.trb` and typed
+checking/MIR construction to `checked_program.trb`. Shared locals move into
+state and Integer spelling into literals. The entry decreases from 7,485 to
+4,723 lines; the two new modules have 858 and 1,827 lines and no entry dependency.
+Pure block-row and checked-plan tests move with their owner. Per-function and
+whole-program check orchestration remain at the entry to preserve the exact
+temporary-storage intrinsic/lifetime boundary. Nine-module recovery adds
+resolution/checked-program before entry, with all strict prefixes and tests.
+
+O3 continues incrementally; O4–O5 are not complete. Next, audit the QBE output
+and runtime-generation boundary, project configuration and driver dependencies,
+alongside active gate-derived naming. Do not move the remaining 4,723 lines
+into another catch-all module or claim the compiler is fully decomposed.
 
 Follow with the architecture/development-plan documentation cleanup below and
 an evidence-based audit of open issues. Record a concrete dependency or reopen

@@ -1,6 +1,6 @@
 import { Gate4IntegerStorage, Gate4StringStorage, gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage
-import { Gate4MirModule } from mir
 import { gate4_ascii_code } from literals
+import { Gate4MirModule } from mir
 
 record Gate4SymbolIndex
 	heads: Gate4IntegerStorage
@@ -312,4 +312,73 @@ def gate4_diagnostic(mut state: Gate4Compiler, code: String, line: Integer, mess
 		state.diagnostic_count[0] = 1
 	end
 	return
+end
+
+record Gate4Locals
+	names: Gate4StringStorage
+	types: Gate4StringStorage
+	mutable: Gate4IntegerStorage
+	mir_values: Gate4IntegerStorage
+	mir_value_rows: Array<Array<Integer>>
+	mir_instructions: Array<Array<Integer>>
+	mir_literal_texts: Array<String>
+	mir_array: Array<Integer>
+	mir_state: Array<Integer>
+	count: Array<Integer>
+end
+
+def gate4_locals_new(capacity: Integer): Gate4Locals
+	return Gate4Locals.new(
+		names: gate4_string_storage(capacity),
+		types: gate4_string_storage(capacity),
+		mutable: gate4_integer_storage(capacity),
+		mir_values: gate4_integer_storage(capacity),
+		mir_value_rows: [],
+		mir_instructions: [],
+		mir_literal_texts: [],
+		mir_array: [],
+		# active, function, next value, Integer failure, return value,
+		# induction local, entry instruction count, header condition,
+		# header instruction count, body instruction start, backedge value,
+		# Array-bounds failure, body induction parameter, accumulator local,
+		# header/body/exit accumulator parameters, accumulator backedge,
+		# body statement stage
+		mir_state: [
+			0, - 1, 0, - 1, - 1, - 1, 0, - 1, 0, 0, - 1, - 1, - 1,
+			- 1, - 1, - 1, - 1, - 1, 0,
+		],
+		count: [0],
+	)
+end
+
+def gate4_local_find(locals: Gate4Locals, name: String): Integer
+	mut index := locals.count[0] - 1
+	while index >= 0
+		if gate4_load_string(locals.names, index) == name
+			return index
+		end
+		index -= 1
+	end
+	return - 1
+end
+
+def gate4_local_add(
+		mut state: Gate4Compiler,
+		mut locals: Gate4Locals,
+		name: String,
+		type_name: String,
+		mutable: Integer,
+		line: Integer,
+	): Boolean
+	if gate4_local_find(locals, name) >= 0
+		gate4_diagnostic(state, "TRBN4003", line, "duplicate local declaration " + name)
+		return false
+	end
+	index := locals.count[0]
+	gate4_store_string(locals.names, index, name)
+	gate4_store_string(locals.types, index, type_name)
+	gate4_store_integer(locals.mutable, index, mutable)
+	gate4_store_integer(locals.mir_values, index, 0)
+	locals.count[0] = index + 1
+	return true
 end

@@ -47,9 +47,18 @@ MIR model, verifier, and target-independent passes into `mir.trb`, with shared
 numeric helpers in `literals.trb`. The subsequent
 [frontend extraction](https://github.com/type-rb/type-rb-native/issues/267) gives
 shared state and syntax parsing independent owners in `state.trb` and
-`parser.trb`. The entry retains checking/MIR construction and QBE adaptation.
-Explicit imports, independently owned tests, and the strict seven-file
-recovery derivation move together. This is source decomposition,
+`parser.trb`. [PR #268](https://github.com/type-rb/type-rb-native/pull/268) preserves
+both complete compilers and code sections, with 1,115,094-byte shared compiler
+QBE and ordinary build/RSS ratios within 1.05. Its earlier x64 measurement
+rejection is retained separately from the unchanged-head accepted revalidation.
+
+The [semantic frontend extraction](https://github.com/type-rb/type-rb-native/issues/269)
+separates `resolution.trb` and `checked_program.trb`, with shared locals in
+state. The entry retains final checking orchestration and temporary-storage
+lifetime boundaries alongside QBE adaptation, runtime and driver code. Explicit
+imports, independently owned tests, and strict nine-file recovery move together.
+Declaration bodies and optimization ownership are unchanged by these moves.
+This is source decomposition,
 not broader MIR coverage or completion of direct-emitter recovery; see the
 [organization schedule](repository-organization.md).
 
