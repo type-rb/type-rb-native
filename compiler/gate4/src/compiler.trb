@@ -3583,7 +3583,7 @@ def gate4_emit_primary(
 	if gate4_token_is(state, token_index, "(")
 		gate4_advance(position)
 		gate4_skip_newlines(state, position)
-		value := gate4_emit_expression(state, position, context, output, 1, expected)
+		value := gate4_emit_expression_value(state, position, context, output, 1, expected)
 		gate4_skip_newlines(state, position)
 		gate4_expect(state, position, ")")
 		return value
@@ -3938,7 +3938,7 @@ def gate4_emit_binary(
 	)
 end
 
-def gate4_emit_expression(
+def gate4_emit_expression_value(
 		mut state: Gate4Compiler,
 		mut position: Array<Integer>,
 		mut context: Gate4EmitContext,
@@ -3973,6 +3973,19 @@ def gate4_emit_expression(
 			value = gate4_emit_binary(context, output, operator, value, right)
 		end
 	end
+	return value
+end
+
+def gate4_emit_expression(
+		mut state: Gate4Compiler,
+		mut position: Array<Integer>,
+		mut context: Gate4EmitContext,
+		mut output: Gate4Output,
+		minimum_precedence: Integer,
+		expected: String,
+	): Gate4EmittedValue
+	# Grouping preserves inference hints; only the completed expression widens.
+	value := gate4_emit_expression_value(state, position, context, output, minimum_precedence, expected)
 	if expected == "Float"
 		if value.type_name == "Integer"
 			converted := gate4_emit_temporary(context)
@@ -8395,7 +8408,6 @@ def gate4_check_array_literal(
 	if result_type == ""
 		return gate4_type_diagnostic(state, line, "unsupported Array element type " + element_type)
 	end
-	gate4_check_expected(state, result_type, expected, line)
 	return gate4_checked_value(result_type, 0, 9007199254740991, 1)
 end
 
@@ -8435,7 +8447,7 @@ def gate4_check_primary(
 	if gate4_token_is(state, position[0], "(")
 		gate4_advance(position)
 		gate4_skip_newlines(state, position)
-		value := gate4_check_expression(state, position, locals, 1, expected)
+		value := gate4_check_expression_value(state, position, locals, 1, expected)
 		gate4_skip_newlines(state, position)
 		gate4_expect(state, position, ")")
 		return value
@@ -8449,7 +8461,6 @@ def gate4_check_primary(
 			gate4_check_primary(state, position, locals, "Boolean"),
 		)
 		gate4_check_expected(state, value.type_name, "Boolean", line)
-		gate4_check_expected(state, "Boolean", expected, line)
 		return gate4_scalar_mir_unary(state, locals, "!", value, "Boolean", origin)
 	end
 	if gate4_token_is(state, position[0], "-")
@@ -9019,14 +9030,13 @@ def gate4_binary_result_type(
 	return "Invalid"
 end
 
-def gate4_check_expression(
+def gate4_check_expression_value(
 		mut state: Gate4Compiler,
 		mut position: Array<Integer>,
 		mut locals: Gate4Locals,
 		minimum_precedence: Integer,
 		expected: String,
 	): Gate4CheckedValue
-	expression_origin := position[0]
 	line := gate4_load_integer(state.token_lines, position[0])
 	mut value := gate4_check_postfix(
 		state,
@@ -9077,6 +9087,20 @@ def gate4_check_expression(
 			end
 		end
 	end
+	return value
+end
+
+def gate4_check_expression(
+		mut state: Gate4Compiler,
+		mut position: Array<Integer>,
+		mut locals: Gate4Locals,
+		minimum_precedence: Integer,
+		expected: String,
+	): Gate4CheckedValue
+	# Context guides Array literals without coercing a grouped operand early.
+	expression_origin := position[0]
+	line := gate4_load_integer(state.token_lines, expression_origin)
+	mut value := gate4_check_expression_value(state, position, locals, minimum_precedence, expected)
 	gate4_check_expected(state, value.type_name, expected, line)
 	if expected == "Float"
 		if value.type_name == "Integer"
