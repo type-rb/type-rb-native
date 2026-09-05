@@ -4,6 +4,10 @@ The first stable-Array-header candidate is not accepted: review found missing
 independent proof validation and three bounds-check regressions despite its
 green formal run. See [the proof repair](native-mir-array-region-repair.md).
 Its timing observations must not replace the accepted benchmark snapshot.
+The current repair retains access checks and narrows the new proof to immutable
+Array parameters. Shared header loads and MIR parameter registration reduce
+duplicate implementation, but compiler code/QBE sizes still exceed their
+unchanged ceilings; PR #246 remains draft.
 
 Status: experimental. The checked-in scope includes the accepted induction-phi
 recovery, the measured `Array<Integer>` reduction slice from issue #230, the

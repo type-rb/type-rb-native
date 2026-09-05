@@ -16,59 +16,85 @@ decrement that invalidated the next iteration's nonnegative premise.
 
 ## Repair boundary
 
-The checker now records a bounded backend-independent projection of raw local
-bindings and operations. Each operation has four Integer fields: kind, first
-operand, second operand, and source-token origin.
+The current repair proves only header reuse for an immutable Array parameter.
+It does not infer an index range or remove an access check. A parameter already
+dominates its uses and remains in scope for the complete function, so this
+boundary needs neither a second lexical-binding table nor an induction
+interpreter. Local aliases remain outside the new proof.
 
-| Kind | Raw operation | Operands |
+The checker records a backend-independent projection with three Integer cells
+per operation: kind, operand, and origin. Parameters form an ordered prefix;
+their position supplies their function-local ordinal. Parameter origins are
+indexes into the checked declaration table; other origins identify tokens.
+
+| Kind | Raw operation | Operand |
 | --- | --- | --- |
-| 1 | Binding | Local slot, initializer/type tag |
-| 2 | Loop entry | Index slot and Array slot, or `-1, -1` for an unsupported condition |
-| 3 | Loop end | `0, 0`, with the matching entry origin |
-| 4 | Array access | Array slot, index slot |
-| 5 | Integer write | Local slot, exact unit increment (`1`) or other write (`0`) |
-| 6 | Opaque operation | Blocks header reuse for the function |
+| 1 | Parameter | `0` non-Array, `1` immutable Array, `2` mutable Array |
+| 4 | Parameter Array access | Parameter ordinal |
+| 6 | Opaque effect or control | `0`; blocks header reuse for the function |
 
-Binding tags encode an immutable Array (`-2`), mutable Array (`-3`), literal
-Integer zero (`-4`), unknown initializer (`-1`), or an earlier Integer-local
-initializer slot. They describe checked operations, not asserted proof bits.
-Binding origins remain unique when lexical slots are reused.
+The analysis validates row shape, the parameter prefix and origins, access
+references, and known operation kinds. It selects the first accessed immutable
+Array parameter only when no blocking operation is present. The optimizer
+publishes one parameter ordinal per function, or `-1` for no plan. The verifier
+recomputes that result from the raw region; it does not trust a copied producer
+selection. A collapsed opaque region is sufficient to reject the function.
 
-The analysis derives nonnegative induction and the dominating exact Array-length
-condition, tracks writes and lexical scope, and rejects malformed rows. An
-unknown Integer update invalidates the whole plan, including earlier accesses
-whose next iteration could otherwise be unsafe. Conditionals, unproved calls,
-growth, Array and record allocation, argument-vector creation, String indexing
-and concatenation, and allocating Integer-to-String conversion conservatively
-block the function. Only the
-already verified scalar leaves and known nonallocating numeric intrinsics are
-allowed through the call boundary.
+Conditionals, unproved calls, growth, Array and record allocation,
+argument-vector creation, String indexing and concatenation, and allocating
+Integer-to-String conversion block the function. Only already verified scalar
+leaves and known nonallocating numeric intrinsics cross the call boundary.
+Element mutation alone does not change the header. This projection does not
+claim complete function lowering into the general Native MIR.
 
-The optimizer publishes the selected binding identity and access origin. The
-verifier recomputes the plan from the raw region before QBE emission. Other
-statements still use the accepted direct path: this projection does not claim
-complete function lowering into the general Native MIR.
+The QBE adapter loads the selected parameter's length and data pointer in the
+function prologue. Its ordinary index normalization and upper-bounds test stay
+in place; separate previously accepted MIR index proofs remain unchanged.
+Header field loading is shared by induction lowering and the direct adapter,
+and one MIR parameter-registration path supplies both representations.
+
+The remaining direct-path cache is not a function-wide invariant. Entering a
+nested loop must discard it: a later append on that loop's backedge can change
+the previously loaded header. A new executable regression first reads an
+Array in an outer loop and then grows it inside an inner loop. The faulty
+candidate panics; the repaired candidate produces the exact expected total.
+Only the separately verified immutable-parameter header survives invalidation.
 
 ## Remaining acceptance work
 
-The repair checkpoint passes focused proof-tampering and source-regression
-tests, all eleven runtime-invalid fixtures on Native Darwin arm64, and a local
-Native fixed-point check. The 84-test Gate 4 run before the final allocating
-String exclusions also passes; those exclusions have separate focused tests.
-The compiler source digest is
-`7115c75ce67f96349a50151a4b10124749f92cb305d2f593a5cc9a87e3dec316`.
-Its complete Darwin compiler is 349,224 bytes, its code section is 259,800
-bytes, and its target-neutral QBE is 1,149,251 bytes. The latter two exceed
-the unchanged 250,904-byte and 1,120,000-byte ceilings in issue #245. Compact the
-representation and remove duplicated analysis before repeating the complete
-correctness, fixed-point, target, memory, and comparative performance authority.
-Keep the PR in draft and the accepted Pages snapshot unchanged until that
-corrected candidate passes every registered condition.
+The current compiler source SHA-256 is
+`68e26d25c3d9a071b189b9a852c67cf21dee0a7ff6835c333e53cf8820edc5f9`;
+the test source SHA-256 is
+`277c96d81a820cb32931ab81c3bf804a920d4cb30cb04036a2dc68c8d741e9fc`.
+It passes 40 focused MIR/numeric/Array tests, all eleven runtime-invalid and
+22 valid Native fixtures, and an ordinary local Native B1/B2/B3 fixed point.
+The preceding shared-load checkpoint also passed all 86 Gate 4 tests and the
+80 root tests; the final parameter-registration consolidation has the focused
+tests and Native executions above, not a new complete hosted acceptance run.
+
+| Darwin arm64 compiler metric | Initial correctness repair | Current repair | Unchanged ceiling |
+| --- | ---: | ---: | ---: |
+| Complete executable bytes | 349,224 | 349,224 | 350,000 |
+| Code-section bytes | 259,800 | 251,496 | 250,904 |
+| Target-neutral QBE bytes | 1,149,251 | 1,122,601 | 1,120,000 |
+
+The current repair still exceeds the code-section ceiling by 592 bytes and
+the QBE ceiling by 2,601 bytes. Removing the entire fallback cache is not a
+valid shortcut: that diagnostic fits the compiler ceilings but emits 52,356
+bytes of spectral-norm QBE, exceeding its strict-shrink condition, and 68,784
+bytes of n-body QBE, exceeding the control's 1.02 ratio. Keep the shared
+fallback implementation while removing further duplicated ownership.
+
+The current local input-5500 diagnostic retains exact output over two warmups
+and seven alternating retained processes per role: candidate/baseline medians
+are approximately `0.884375x` wall time, `0.880079x` CPU time, and `0.980132x`
+peak RSS. Its spectral-norm QBE is 52,173 bytes and code section is 10,684
+bytes. This is a local selection signal, not formal Linux arm64 evidence or
+accepted performance: compiler compactness still fails.
 
 The existing transition marker still identifies the rejected first candidate;
-this correctness checkpoint does not register a new performance candidate or
-change a limit. A follow-up diagnostic retains the ordinary access check while
-reusing the verified header and still shows a useful local runtime signal.
-The next implementation should test this narrower proof boundary before
-spending more code size on access-check elimination. It must pass the same
-registered acceptance conditions, including the formal Linux arm64 comparison.
+this checkpoint does not change a limit or register a new formal candidate.
+Keep PR #246 in draft and the accepted Pages snapshot unchanged. After local
+eligibility, record the exact corrected identity and repeat complete
+correctness, fixed-point, target, memory, and comparative performance authority
+before acceptance.

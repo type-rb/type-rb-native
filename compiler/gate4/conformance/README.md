@@ -48,7 +48,8 @@ The valid cases cover:
   `valid/array-header-cache-invalidation.trb`;
 - verified stable Array-header reuse in nested loops, including empty input,
   ordinary positive and negative indexes, growth, parameter rebinding,
-  allocation, ordinary calls, and element mutation through a possible alias in
+  allocation, ordinary calls, element mutation through a possible alias, and
+  outer-loop cache invalidation before inner-loop growth in
   `valid/stable-array-header-mir.trb`;
 - zero-based and bounded-derived unit-step induction loops whose nested Array
   reads retain the unsigned upper-bounds check, followed by a reset and
