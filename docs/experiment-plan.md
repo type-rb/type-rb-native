@@ -160,6 +160,22 @@ Array, allocation, and I/O behavior. Its first role is a bounded
 optimization-ceiling comparison over the same MIR and ABI, not a second copy of
 TypeRB semantic analysis.
 
+## Repository organization checkpoints
+
+Repository maintenance is scheduled alongside the MIR transition, not deferred
+until performance parity or product promotion. Follow the
+[organization schedule](repository-organization.md): shorten documentation
+entry points now, inventory and complete the first support-source cleanup
+before the pending checked-binary implementation, then extract compiler
+responsibilities incrementally at accepted ownership checkpoints. The scope
+includes root `src/gateN_*` files, numbered QBE adapters, tests, tooling, and
+implementation symbols as well as `compiler/gate4/`.
+
+Keep these changes independently reviewable and preserve every applicable
+recovery, fixed-point, correctness, measurement, and compactness requirement.
+Historical gate evidence remains intact. A passed optimization checkpoint
+must identify the next bounded organization slice or its explicit blocker.
+
 ## Gates
 
 ### Gate 0: Boundary

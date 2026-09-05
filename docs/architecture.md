@@ -387,6 +387,16 @@ explicit Linux LLD/libm link policy. This is a second-architecture experiment,
 not a stable target or a target-specific semantic fork. See
 [Decision 0025](decisions/0025-linux-amd64-target-profile.md).
 
+## Source organization
+
+Gate-derived implementation names reflect development history rather than
+architectural layers. The [organization schedule](repository-organization.md)
+separates ordinary compiler responsibilities from snapshot/recovery adapters,
+runtime generation, and verification support. It starts with documentation and
+root support-code cleanup, then decomposes the compiler alongside MIR work.
+The schedule preserves the canonical closure, explicit recovery boundary, and
+historical evidence; it does not create a second compiler or wait for promotion.
+
 ## Stability and promotion
 
 No MIR, ABI profile, snapshot, object, cache, command, or runtime API in this
