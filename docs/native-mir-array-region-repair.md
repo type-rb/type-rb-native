@@ -2,8 +2,10 @@
 
 Status: [PR #246](https://github.com/type-rb/type-rb-native/pull/246) remains
 unaccepted. The first candidate, `ce297d4`, fails correctness. Its successor,
-`69ff52b5`, passes correctness but fails the n-body runtime control. The current
-repair restores that control without widening the proof or changing a limit.
+`69ff52b5`, passes correctness but fails the n-body runtime control. The
+two-entry control repair, `7c72eed7`, then fails recovery-bootstrap source
+compatibility. The current repair addresses both failures without widening the
+proof or changing a limit.
 
 ## Review findings
 
@@ -112,19 +114,22 @@ avoiding repeated length loads from an unchanged collection.
 | Darwin arm64 compiler metric | Rejected `69ff52b5` | Current repair | Unchanged ceiling |
 | --- | ---: | ---: | ---: |
 | Complete executable bytes | 349,224 | 349,224 | 350,000 |
-| Code-section bytes | 250,312 | 250,248 | 250,904 |
-| Target-neutral QBE bytes | 1,119,802 | 1,119,987 | 1,120,000 |
+| Code-section bytes | 250,312 | 249,956 | 250,904 |
+| Target-neutral QBE bytes | 1,119,802 | 1,119,022 | 1,120,000 |
 
 The current compiler source SHA-256 is
-`d2706bf577782c7e7693b116deba2fab12575a89a5f597ec081536611260abf1`;
+`c30a4c09afac71bc6adfe4b226198afdc4fc42a0d4776c72c52e7dc7b11cc6c4`;
 the test source SHA-256 is
 `5ba3074304c7832563655f26c495546bdf8db7d78b05e1ea370a217595d0d58f`.
 The ordinary local B1/B2/B3 executable and QBE fixed points are exact. All 22
 valid, three mutation, and eleven runtime-invalid Native programs produce their
-expected output, status, and diagnostics. Root formatting, type checks, and all
-80 root tests pass. The 89-test Gate 4 suite, including self-parsing and
-QBE-backed execution, passes; a final six-test header/relocation rerun also
-passes.
+expected output, status, and diagnostics, with byte-identical QBE to the
+two-entry repair. Root formatting and root/core type checks pass. The 89-test
+Gate 4 suite, including self-parsing and QBE-backed execution, passes. All 80
+root tests also pass with the pinned reference compiler and QBE environment
+explicitly enabled, including recovery, ordinary self-hosted generations, and
+the source differential corpus. An earlier run without that environment did
+not exercise recovery and is not complete bootstrap evidence.
 
 The three application QBE files and Darwin executables are identical before
 and after the compactness refactoring. N-body and fannkuch-redux additionally
@@ -132,6 +137,36 @@ match the original baseline executables exactly. Spectral-norm retains the
 improved candidate executable. The marker retains the original local
 spectral-norm selection diagnostic (`0.884375x` wall, `0.880079x` CPU,
 `0.980132x` RSS) because its measured executable remains byte-identical.
+
+The completed local two-warmup, seven-observation comparisons at the registered
+inputs retain wall/CPU/RSS ratios of `0.876122/0.877501/1.013423` for
+spectral-norm, `1.007125/1.004844/1.000000` for n-body, and
+`1.002086/1.001740/1.000000` for fannkuch-redux. All output and
+retained-observation bounds pass. These are local diagnostics, not hosted
+acceptance evidence.
+
+## Recovery compatibility and earlier CI feedback
+
+The [complete run at `7c72eed7`](https://github.com/type-rb/type-rb-native/actions/runs/33944107173)
+passes quick checks, documentation, Darwin/Linux persistent-memory checks, both
+Linux target regressions, and cross-target QBE identity. Native correctness
+rejects `instruction[4] += literal_base`: snapshot v4 supports a narrower source
+subset than the ordinary Native compiler. The performance matrix correctly
+does not run after this failure. Ordinary Native fixed points do not establish
+recovery compatibility.
+
+The repair spells the relocation as ordinary indexed assignment. Retaining the
+module in one local binding inside MIR commit also removes repeated outer
+field lookups, keeping compiler QBE below its unchanged limit. No MIR fact or
+lowering decision changes. Export of the isolated compiler closure to snapshot
+v4 now succeeds. The fully enabled root suite also executes that snapshot
+through recovery and ordinary self-hosted generations successfully.
+
+CI now performs the existing snapshot-closure check before the expensive root
+suite. Smoke/corpus evidence uploads run only when their producer was not
+skipped; attempted experiments still upload on failure and still reject
+missing evidence. The development skill explicitly requires the pinned
+reference compiler and QBE environment for compiler-source recovery tests.
 
 ## Remaining acceptance work
 

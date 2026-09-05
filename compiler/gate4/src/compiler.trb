@@ -9660,6 +9660,7 @@ def gate4_scalar_mir_commit(
 	if locals.mir_state[0] == 0
 		return ""
 	end
+	mut native_module := state.scalar_mir
 	mode := locals.mir_state[0]
 	return_value := locals.mir_state[4]
 	if mode == 1
@@ -9686,19 +9687,19 @@ def gate4_scalar_mir_commit(
 		entry_block = function_index * 6
 		block_count = 6
 	end
-	argument_base := state.scalar_mir.arguments.size()
-	block_base := state.scalar_mir.blocks.size()
-	instruction_base := state.scalar_mir.instructions.size()
-	literal_base := state.scalar_mir.literal_texts.size()
-	if state.scalar_mir.functions.size() == 0
+	argument_base := native_module.arguments.size()
+	block_base := native_module.blocks.size()
+	instruction_base := native_module.instructions.size()
+	literal_base := native_module.literal_texts.size()
+	if native_module.functions.size() == 0
 		mut source_count := state.module_count[0]
 		if source_count == 0
 			source_count = 1
 		end
-		state.scalar_mir.source_count[0] = source_count
-		state.scalar_mir.entry_function[0] = function_index
+		native_module.source_count[0] = source_count
+		native_module.entry_function[0] = function_index
 	end
-	state.scalar_mir.functions.push([
+	native_module.functions.push([
 			function_index,
 			entry_block,
 			source,
@@ -9710,17 +9711,17 @@ def gate4_scalar_mir_commit(
 		])
 	mut index := 0
 	while index < parameter_count
-		state.scalar_mir.arguments.push(index)
+		native_module.arguments.push(index)
 		index += 1
 	end
 	index = 0
 	while index < locals.mir_value_rows.size()
-		state.scalar_mir.values.push(locals.mir_value_rows[index])
+		native_module.values.push(locals.mir_value_rows[index])
 		index += 1
 	end
 	index = 0
 	while index < locals.mir_literal_texts.size()
-		state.scalar_mir.literal_texts.push(locals.mir_literal_texts[index])
+		native_module.literal_texts.push(locals.mir_literal_texts[index])
 		index += 1
 	end
 	instruction_count := locals.mir_instructions.size()
@@ -9730,86 +9731,86 @@ def gate4_scalar_mir_commit(
 		# Only a literal operand needs relocation into the module's literal table.
 		mut instruction := locals.mir_instructions[index]
 		if instruction[0] == 6
-			instruction[4] += literal_base
+			instruction[4] = instruction[4] + literal_base
 		end
-		state.scalar_mir.instructions.push(instruction)
+		native_module.instructions.push(instruction)
 		index += 1
 	end
 	if mode >= 2
 		header_block := entry_block + 1
 		body_block := entry_block + 2
 		exit_block := entry_block + 3
-		header_parameters := state.scalar_mir.arguments.size()
-		state.scalar_mir.arguments.push(locals.mir_state[12] - 1)
+		header_parameters := native_module.arguments.size()
+		native_module.arguments.push(locals.mir_state[12] - 1)
 		mut block_parameter_count := 1
 		if mode == 3
-			state.scalar_mir.arguments.push(locals.mir_state[14])
+			native_module.arguments.push(locals.mir_state[14])
 			block_parameter_count = 2
 		end
-		body_parameters := state.scalar_mir.arguments.size()
-		state.scalar_mir.arguments.push(locals.mir_state[12])
+		body_parameters := native_module.arguments.size()
+		native_module.arguments.push(locals.mir_state[12])
 		if mode == 3
-			state.scalar_mir.arguments.push(locals.mir_state[15])
+			native_module.arguments.push(locals.mir_state[15])
 		end
-		exit_parameters := state.scalar_mir.arguments.size()
+		exit_parameters := native_module.arguments.size()
 		mut exit_parameter_count := 0
 		if mode == 3
-			state.scalar_mir.arguments.push(locals.mir_state[16])
+			native_module.arguments.push(locals.mir_state[16])
 			exit_parameter_count = 1
 		end
-		entry_argument := state.scalar_mir.arguments.size()
-		state.scalar_mir.arguments.push(locals.mir_instructions[0][1])
+		entry_argument := native_module.arguments.size()
+		native_module.arguments.push(locals.mir_instructions[0][1])
 		if mode == 3
-			state.scalar_mir.arguments.push(locals.mir_instructions[1][1])
+			native_module.arguments.push(locals.mir_instructions[1][1])
 		end
-		body_argument := state.scalar_mir.arguments.size()
-		state.scalar_mir.arguments.push(locals.mir_state[12] - 1)
+		body_argument := native_module.arguments.size()
+		native_module.arguments.push(locals.mir_state[12] - 1)
 		if mode == 3
-			state.scalar_mir.arguments.push(locals.mir_state[14])
+			native_module.arguments.push(locals.mir_state[14])
 		end
-		exit_argument := state.scalar_mir.arguments.size()
+		exit_argument := native_module.arguments.size()
 		if mode == 3
-			state.scalar_mir.arguments.push(locals.mir_state[14])
+			native_module.arguments.push(locals.mir_state[14])
 		end
-		backedge_argument := state.scalar_mir.arguments.size()
-		state.scalar_mir.arguments.push(locals.mir_state[10])
+		backedge_argument := native_module.arguments.size()
+		native_module.arguments.push(locals.mir_state[10])
 		if mode == 3
-			state.scalar_mir.arguments.push(locals.mir_state[17])
+			native_module.arguments.push(locals.mir_state[17])
 		end
-		state.scalar_mir.blocks.push([
+		native_module.blocks.push([
 				entry_block, source, line, entry_argument, 0,
 				instruction_base, locals.mir_state[6],
 				1, - 1, header_block, - 1, entry_argument, block_parameter_count, 0, 0, - 1,
 			])
-		state.scalar_mir.blocks.push([
+		native_module.blocks.push([
 				header_block, source, line, header_parameters, block_parameter_count,
 				instruction_base + locals.mir_state[6], locals.mir_state[8],
 				2, locals.mir_state[7], body_block, exit_block,
 				body_argument, block_parameter_count, exit_argument, exit_parameter_count, - 1,
 			])
-		state.scalar_mir.blocks.push([
+		native_module.blocks.push([
 				body_block, source, line, body_parameters, block_parameter_count,
 				instruction_base + locals.mir_state[9], instruction_count - locals.mir_state[9],
 				1, - 1, header_block, - 1, backedge_argument, block_parameter_count, 0, 0, - 1,
 			])
-		state.scalar_mir.blocks.push([
+		native_module.blocks.push([
 				exit_block, source, line, exit_parameters, exit_parameter_count,
 				instruction_base + instruction_count, 0,
 				3, - 1, - 1, - 1, 0, 0, 0, 0, return_value,
 			])
-		state.scalar_mir.blocks.push([
+		native_module.blocks.push([
 				locals.mir_state[3], source, line, 0, 0,
 				instruction_base + instruction_count, 0,
 				4, - 1, - 1, - 1, 0, 0, 0, 0, - 1,
 			])
-		state.scalar_mir.blocks.push([
+		native_module.blocks.push([
 				locals.mir_state[11], source, line, 0, 0,
 				instruction_base + instruction_count, 0,
 				4, - 1, - 1, - 1, 0, 0, 0, 0, - 1,
 			])
 		return ""
 	end
-	state.scalar_mir.blocks.push([
+	native_module.blocks.push([
 			entry_block,
 			source,
 			line,
@@ -9827,7 +9828,7 @@ def gate4_scalar_mir_commit(
 			0,
 			return_value,
 		])
-	state.scalar_mir.blocks.push([
+	native_module.blocks.push([
 			locals.mir_state[3],
 			source,
 			line,

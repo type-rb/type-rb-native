@@ -5,15 +5,22 @@ independent proof validation and three bounds checks; the `69ff52b5`
 correctness repair subsequently improved spectral-norm by 11.978% on Linux
 arm64 but regressed n-body by 13.161%. See
 [the proof and control repair](native-mir-array-region-repair.md).
-Neither candidate may replace the accepted benchmark snapshot.
+The subsequent `7c72eed7` control repair fails recovery-bootstrap compatibility
+because snapshot v4 rejects its indexed compound assignment; formal performance
+checks are consequently skipped. None of these candidates may replace the
+accepted benchmark snapshot.
 The current repair retains access checks and narrows the new proof to immutable
 Array parameters. Shared header loads, MIR parameter registration, and common
 value/instruction builders remove duplicate implementation. Restoring the
 two-entry recent-header fallback recovers exact baseline n-body output code,
 while function-owned MIR instruction transfer avoids redundant row copies.
-The local compiler fits the unchanged executable, code-section, and QBE
-ceilings. PR #246 is ready for full correctness, target, memory, and formal
-comparative verification; this local eligibility is not accepted performance
+Ordinary indexed assignment repairs snapshot compatibility, and retaining the
+module locally inside commit removes repeated outer field lookups. The local
+compiler fits the unchanged executable, code-section, and QBE ceilings. All
+three completed local runtime comparisons pass, with spectral-norm wall/CPU
+ratios of 0.876122/0.877501 and both controls within 1.02. The recovery-enabled
+80-test root suite and 89-test Gate 4 suite pass. PR #246 still requires fresh
+complete hosted verification; local eligibility is not accepted performance
 evidence.
 
 Status: experimental. The checked-in scope includes the accepted induction-phi
