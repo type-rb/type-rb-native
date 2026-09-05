@@ -1,14 +1,14 @@
 import { decode_gate3_snapshot, decode_gate4_bootstrap_snapshot } from gate3_snapshot
-import { build_gate4_bootstrap_executable } from gate3_toolchain
-import { build_gate4_generation } from gate4_toolchain
+import { build_compiler_recovery_executable } from gate3_toolchain
+import { build_recovery_generation } from recovery_generation
 import { build_matched_go_compiler } from matched_go_driver
-import { gate6f_flatten_compiler_source } from gate6f_compiler_source
+import { flatten_compiler_recovery_source } from compiler_recovery_source
 import { native_create_directory, native_read_text, native_write_text } from native_file_system
 import trb/std/process
 import trb/std/result
 import { describe, expect, test } from trb/std/test
 
-def _gate4_environment(name: String): String
+def _recovery_environment(name: String): String
 	value := Process.environment(name)
 	if value == nil
 		return ""
@@ -16,7 +16,7 @@ def _gate4_environment(name: String): String
 	return value
 end
 
-def _gate4_read(path: String): Result<String, String>
+def _recovery_read(path: String): Result<String, String>
 	case native_read_text(path)
 	when Result::Ok(source)
 		return Result<String, String>::Ok(source)
@@ -25,7 +25,7 @@ def _gate4_read(path: String): Result<String, String>
 	end
 end
 
-def _gate6f_replace_once(source: String, before: String, after: String): Result<String, String>
+def _recovery_replace_once(source: String, before: String, after: String): Result<String, String>
 	if before.empty?()
 		return Result<String, String>::Err("replacement needle is empty")
 	end
@@ -66,7 +66,7 @@ def _gate6f_replace_once(source: String, before: String, after: String): Result<
 	return Result<String, String>::Ok(result)
 end
 
-def _gate6_process(command: String, arguments: Array<String>): Result<Process::Output, String>
+def _recovery_process(command: String, arguments: Array<String>): Result<Process::Output, String>
 	case Process.run(command, arguments)
 	when Result::Ok(process)
 		return Result<Process::Output, String>::Ok(process)
@@ -75,8 +75,8 @@ def _gate6_process(command: String, arguments: Array<String>): Result<Process::O
 	end
 end
 
-def _gate6_reset_directory(path: String): Result<Boolean, String>
-	remove := try _gate6_process("/bin/rm", ["-rf", path])
+def _recovery_reset_directory(path: String): Result<Boolean, String>
+	remove := try _recovery_process("/bin/rm", ["-rf", path])
 	if !remove.success
 		return Result<Boolean, String>::Err("cannot reset " + path + ": " + remove.stderr)
 	end
@@ -88,20 +88,20 @@ def _gate6_reset_directory(path: String): Result<Boolean, String>
 	end
 end
 
-def _gate6_build(
+def _recovery_build(
 		executable: String,
 		source_path: String,
 		output_path: String,
 		qbe: String,
 		cc: String,
 	): Result<Process::Output, String>
-	return _gate6_process(
+	return _recovery_process(
 		executable,
 		["build", source_path, "--output", output_path, "--qbe", qbe, "--cc", cc],
 	)
 end
 
-def _gate6_build_target(
+def _recovery_build_target(
 		executable: String,
 		source_path: String,
 		output_path: String,
@@ -109,7 +109,7 @@ def _gate6_build_target(
 		cc: String,
 		target: String,
 	): Result<Process::Output, String>
-	return _gate6_process(
+	return _recovery_process(
 		executable,
 		[
 			"build",
@@ -126,8 +126,8 @@ def _gate6_build_target(
 	)
 end
 
-def _gate6_require_no_intermediates(directory: String): Result<Boolean, String>
-	find := try _gate6_process("/usr/bin/find", [directory, "-name", "*.trbn.*", "-print"])
+def _recovery_require_no_intermediates(directory: String): Result<Boolean, String>
+	find := try _recovery_process("/usr/bin/find", [directory, "-name", "*.trbn.*", "-print"])
 	if !find.success
 		return Result<Boolean, String>::Err("cannot inspect build intermediates: " + find.stderr)
 	end
@@ -137,23 +137,23 @@ def _gate6_require_no_intermediates(directory: String): Result<Boolean, String>
 	return Result<Boolean, String>::Ok(true)
 end
 
-def _gate6_require_missing(path: String): Result<Boolean, String>
-	probe := try _gate6_process("/bin/test", ["!", "-e", path])
+def _recovery_require_missing(path: String): Result<Boolean, String>
+	probe := try _recovery_process("/bin/test", ["!", "-e", path])
 	if !probe.success
 		return Result<Boolean, String>::Err("unexpected build artifact: " + path)
 	end
 	return Result<Boolean, String>::Ok(true)
 end
 
-def _gate6_require_same(left: String, right: String, context: String): Result<Boolean, String>
-	comparison := try _gate6_process("/usr/bin/cmp", [left, right])
+def _recovery_require_same(left: String, right: String, context: String): Result<Boolean, String>
+	comparison := try _recovery_process("/usr/bin/cmp", [left, right])
 	if !comparison.success
 		return Result<Boolean, String>::Err(context + " executables differ")
 	end
 	return Result<Boolean, String>::Ok(true)
 end
 
-def _gate6_verify_built_program(
+def _recovery_verify_built_program(
 		executable: String,
 		source_path: String,
 		output_path: String,
@@ -161,18 +161,18 @@ def _gate6_verify_built_program(
 		expected_runtime: String,
 		context: String,
 	): Result<Boolean, String>
-	build := try _gate6_build(executable, source_path, output_path, qbe, "/usr/bin/cc")
+	build := try _recovery_build(executable, source_path, output_path, qbe, "/usr/bin/cc")
 	if build.status != 0 || !build.stdout.empty?() || !build.stderr.empty?()
 		return Result<Boolean, String>::Err(context + " build failed: " + build.stderr)
 	end
-	runtime := try _gate6_process(output_path, [])
+	runtime := try _recovery_process(output_path, [])
 	if runtime.status != 0 || runtime.stdout != expected_runtime || !runtime.stderr.empty?()
 		return Result<Boolean, String>::Err(context + " runtime differs: " + runtime.stderr)
 	end
 	return Result<Boolean, String>::Ok(true)
 end
 
-def _gate6_verify_build_case(
+def _recovery_verify_build_case(
 		source_path: String,
 		qbe_source: String,
 		expected_runtime: String,
@@ -183,13 +183,13 @@ def _gate6_verify_build_case(
 	b1_directory := workspace + "/gate6-build-" + case_name + "-b1"
 	b2_directory := workspace + "/gate6-build-" + case_name + "-b2"
 	recipe_directory := workspace + "/gate6-build-" + case_name + "-recipe"
-	try _gate6_reset_directory(b1_directory)
-	try _gate6_reset_directory(b2_directory)
-	try _gate6_reset_directory(recipe_directory)
+	try _recovery_reset_directory(b1_directory)
+	try _recovery_reset_directory(b2_directory)
+	try _recovery_reset_directory(recipe_directory)
 	b1_output := b1_directory + "/program"
 	b2_output := b2_directory + "/program"
 	recipe_output := recipe_directory + "/program"
-	try _gate6_verify_built_program(
+	try _recovery_verify_built_program(
 		workspace + "/b1",
 		source_path,
 		b1_output,
@@ -197,7 +197,7 @@ def _gate6_verify_build_case(
 		expected_runtime,
 		case_name + " B1",
 	)
-	try _gate6_verify_built_program(
+	try _recovery_verify_built_program(
 		workspace + "/b2",
 		source_path,
 		b2_output,
@@ -212,28 +212,28 @@ def _gate6_verify_build_case(
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
 	end
-	qbe_process := try _gate6_process(
+	qbe_process := try _recovery_process(
 		qbe,
 		["-t", "arm64_apple", "-o", recipe_assembly, recipe_qbe],
 	)
 	if !qbe_process.success
 		return Result<Boolean, String>::Err(case_name + " external QBE failed: " + qbe_process.stderr)
 	end
-	cc_process := try _gate6_process(
+	cc_process := try _recovery_process(
 		"/usr/bin/cc",
 		[recipe_assembly, "-Wl,-dead_strip,-x", "-o", recipe_output],
 	)
 	if !cc_process.success
 		return Result<Boolean, String>::Err(case_name + " external cc failed: " + cc_process.stderr)
 	end
-	try _gate6_require_same(b1_output, b2_output, case_name + " B1/B2")
-	try _gate6_require_same(b1_output, recipe_output, case_name + " Native/external")
-	try _gate6_require_no_intermediates(b1_directory)
-	try _gate6_require_no_intermediates(b2_directory)
+	try _recovery_require_same(b1_output, b2_output, case_name + " B1/B2")
+	try _recovery_require_same(b1_output, recipe_output, case_name + " Native/external")
+	try _recovery_require_no_intermediates(b1_directory)
+	try _recovery_require_no_intermediates(b2_directory)
 	return Result<Boolean, String>::Ok(true)
 end
 
-def _gate4_compiler_output(
+def _recovery_compiler_output(
 		executable: String,
 		source: String,
 		mode: String,
@@ -253,7 +253,7 @@ def _gate4_compiler_output(
 	return Result<String, String>::Ok(process.stdout)
 end
 
-def _gate4_execute_qbe(
+def _recovery_execute_qbe(
 		qbe_source: String,
 		qbe: String,
 		workspace: String,
@@ -302,7 +302,7 @@ def _gate4_execute_qbe(
 	return Result<String, String>::Ok(runtime.stdout)
 end
 
-def _gate4_verify_valid_case(
+def _recovery_verify_valid_case(
 		root: String,
 		category: String,
 		case_name: String,
@@ -314,17 +314,17 @@ def _gate4_verify_valid_case(
 		verify_legacy_build: Boolean,
 	): Result<String, String>
 	base := root + "/compiler/gate4/conformance/" + category + "/" + case_name
-	source := try _gate4_read(base + ".trb")
-	expected_runtime := try _gate4_read(base + ".out")
+	source := try _recovery_read(base + ".trb")
+	expected_runtime := try _recovery_read(base + ".out")
 	mut canonical_qbe := ""
 	mut index := 0
 	while index < executables.size()
-		check := try _gate4_compiler_output(executables[index], source, "check")
+		check := try _recovery_compiler_output(executables[index], source, "check")
 		if check != "ok\n"
 			return Result<String, String>::Err(case_name + " check differs at compiler " + index.to_s())
 		end
-		first := try _gate4_compiler_output(executables[index], source, "emit-qbe")
-		second := try _gate4_compiler_output(executables[index], source, "emit-qbe")
+		first := try _recovery_compiler_output(executables[index], source, "emit-qbe")
+		second := try _recovery_compiler_output(executables[index], source, "emit-qbe")
 		if first != second
 			return Result<String, String>::Err(case_name + " QBE is nondeterministic at compiler " + index.to_s())
 		end
@@ -359,12 +359,12 @@ def _gate4_verify_valid_case(
 		end
 		index += 1
 	end
-	actual_runtime := try _gate4_execute_qbe(canonical_qbe, qbe, workspace, category + "-" + case_name)
+	actual_runtime := try _recovery_execute_qbe(canonical_qbe, qbe, workspace, category + "-" + case_name)
 	if actual_runtime != expected_runtime
 		return Result<String, String>::Err(case_name + " runtime output differs")
 	end
 	if verify_legacy_build
-		try _gate6_verify_build_case(
+		try _recovery_verify_build_case(
 			base + ".trb",
 			canonical_qbe,
 			expected_runtime,
@@ -376,7 +376,7 @@ def _gate4_verify_valid_case(
 	return Result<String, String>::Ok(canonical_qbe)
 end
 
-def _gate6_verify_invalid_build_case(
+def _recovery_verify_invalid_build_case(
 		source_path: String,
 		expected: String,
 		workspace: String,
@@ -385,9 +385,9 @@ def _gate6_verify_invalid_build_case(
 	mut compiler_index := 1
 	while compiler_index < 3
 		directory := workspace + "/gate6-build-invalid-" + case_name + "-b" + compiler_index.to_s()
-		try _gate6_reset_directory(directory)
+		try _recovery_reset_directory(directory)
 		output_path := directory + "/program"
-		build := try _gate6_build(
+		build := try _recovery_build(
 			workspace + "/b" + compiler_index.to_s(),
 			source_path,
 			output_path,
@@ -399,14 +399,14 @@ def _gate6_verify_invalid_build_case(
 				case_name + " invalid build differs at compiler " + compiler_index.to_s(),
 			)
 		end
-		try _gate6_require_missing(output_path)
-		try _gate6_require_no_intermediates(directory)
+		try _recovery_require_missing(output_path)
+		try _recovery_require_no_intermediates(directory)
 		compiler_index += 1
 	end
 	return Result<Boolean, String>::Ok(true)
 end
 
-def _gate6j_verify_candidate_builds(
+def _recovery_verify_candidate_builds(
 		executables: Array<String>,
 		source_path: String,
 		expected_runtime: String,
@@ -418,9 +418,9 @@ def _gate6j_verify_candidate_builds(
 	mut index := 0
 	while index < executables.size()
 		directory := workspace + "/gate6j-build-" + case_name + "-" + index.to_s()
-		try _gate6_reset_directory(directory)
+		try _recovery_reset_directory(directory)
 		output := directory + "/program"
-		try _gate6_verify_built_program(
+		try _recovery_verify_built_program(
 			executables[index],
 			source_path,
 			output,
@@ -428,38 +428,38 @@ def _gate6j_verify_candidate_builds(
 			expected_runtime,
 			case_name + " candidate " + index.to_s(),
 		)
-		try _gate6_require_no_intermediates(directory)
+		try _recovery_require_no_intermediates(directory)
 		outputs.push(output)
 		index += 1
 	end
 	index = 1
 	while index < outputs.size()
-		try _gate6_require_same(outputs[0], outputs[index], case_name + " candidate build")
+		try _recovery_require_same(outputs[0], outputs[index], case_name + " candidate build")
 		index += 1
 	end
 	return Result<Boolean, String>::Ok(true)
 end
 
-def _gate6j_verify_invalid_case(
+def _recovery_verify_invalid_case(
 		root: String,
 		case_name: String,
 		executables: Array<String>,
 		workspace: String,
 	): Result<Boolean, String>
 	base := root + "/compiler/gate4/conformance/invalid/" + case_name
-	source := try _gate4_read(base + ".source")
-	expected := try _gate4_read(base + ".diag")
+	source := try _recovery_read(base + ".source")
+	expected := try _recovery_read(base + ".diag")
 	mut index := 0
 	while index < executables.size()
-		check := try _gate4_compiler_output(executables[index], source, "check")
-		emit := try _gate4_compiler_output(executables[index], source, "emit-qbe")
+		check := try _recovery_compiler_output(executables[index], source, "check")
+		emit := try _recovery_compiler_output(executables[index], source, "emit-qbe")
 		if check != expected || emit != expected || emit.include?("export function")
 			return Result<Boolean, String>::Err(
 				case_name + " diagnostic differs at candidate " + index.to_s()
 			)
 		end
-		file_check := try _gate6_process(executables[index], ["check", base + ".source"])
-		file_emit := try _gate6_process(executables[index], ["emit-qbe", base + ".source"])
+		file_check := try _recovery_process(executables[index], ["check", base + ".source"])
+		file_emit := try _recovery_process(executables[index], ["emit-qbe", base + ".source"])
 		if file_check.status != 1 || !file_check.stdout.empty?() || file_check.stderr != expected
 			return Result<Boolean, String>::Err(
 				case_name + " file check differs at candidate " + index.to_s(),
@@ -471,9 +471,9 @@ def _gate6j_verify_invalid_case(
 			)
 		end
 		directory := workspace + "/gate6j-invalid-" + case_name + "-" + index.to_s()
-		try _gate6_reset_directory(directory)
+		try _recovery_reset_directory(directory)
 		output := directory + "/program"
-		build := try _gate6_build(
+		build := try _recovery_build(
 			executables[index],
 			base + ".source",
 			output,
@@ -485,30 +485,30 @@ def _gate6j_verify_invalid_case(
 				case_name + " build differs at candidate " + index.to_s(),
 			)
 		end
-		try _gate6_require_missing(output)
-		try _gate6_require_no_intermediates(directory)
+		try _recovery_require_missing(output)
+		try _recovery_require_no_intermediates(directory)
 		index += 1
 	end
 	return Result<Boolean, String>::Ok(true)
 end
 
-def _gate6j_verify_bounds_failure(
+def _recovery_verify_bounds_failure(
 		root: String,
 		executables: Array<String>,
 		qbe: String,
 		workspace: String,
 	): Result<Boolean, String>
 	source_path := root + "/compiler/gate4/conformance/runtime-invalid/float-array-bounds.trb"
-	source := try _gate4_read(source_path)
+	source := try _recovery_read(source_path)
 	mut canonical_qbe := ""
 	mut outputs: Array<String> := []
 	mut index := 0
 	while index < executables.size()
-		check := try _gate4_compiler_output(executables[index], source, "check")
+		check := try _recovery_compiler_output(executables[index], source, "check")
 		if check != "ok\n"
 			return Result<Boolean, String>::Err("Float Array bounds source check differs")
 		end
-		emission := try _gate4_compiler_output(executables[index], source, "emit-qbe")
+		emission := try _recovery_compiler_output(executables[index], source, "emit-qbe")
 		if index == 0
 			canonical_qbe = emission
 		else
@@ -517,29 +517,29 @@ def _gate6j_verify_bounds_failure(
 			end
 		end
 		directory := workspace + "/gate6j-bounds-" + index.to_s()
-		try _gate6_reset_directory(directory)
+		try _recovery_reset_directory(directory)
 		output := directory + "/program"
-		build := try _gate6_build(executables[index], source_path, output, qbe, "/usr/bin/cc")
+		build := try _recovery_build(executables[index], source_path, output, qbe, "/usr/bin/cc")
 		if build.status != 0 || !build.stdout.empty?() || !build.stderr.empty?()
 			return Result<Boolean, String>::Err("Float Array bounds build failed: " + build.stderr)
 		end
-		runtime := try _gate6_process(output, [])
+		runtime := try _recovery_process(output, [])
 		if runtime.status != 2 || !runtime.stdout.empty?() || runtime.stderr != "panic: index is out of bounds\n"
 			return Result<Boolean, String>::Err("Float Array bounds failure differs")
 		end
-		try _gate6_require_no_intermediates(directory)
+		try _recovery_require_no_intermediates(directory)
 		outputs.push(output)
 		index += 1
 	end
 	index = 1
 	while index < outputs.size()
-		try _gate6_require_same(outputs[0], outputs[index], "Float Array bounds candidate build")
+		try _recovery_require_same(outputs[0], outputs[index], "Float Array bounds candidate build")
 		index += 1
 	end
 	return Result<Boolean, String>::Ok(true)
 end
 
-def _gate4_verify_conformance(
+def _recovery_verify_conformance(
 		root: String,
 		qbe: String,
 		workspace: String,
@@ -565,7 +565,7 @@ def _gate4_verify_conformance(
 	mut float_qbe := ""
 	mut index := 0
 	while index < valid_names.size()
-		valid_qbe := try _gate4_verify_valid_case(
+		valid_qbe := try _recovery_verify_valid_case(
 			root,
 			"valid",
 			valid_names[index],
@@ -613,7 +613,7 @@ def _gate4_verify_conformance(
 		return Result<Boolean, String>::Err("Float call boundary uses the Integer ABI")
 	end
 	candidate_executables := [executables[3], executables[4], executables[5]]
-	float_array_qbe := try _gate4_verify_valid_case(
+	float_array_qbe := try _recovery_verify_valid_case(
 		root,
 		"valid",
 		"float-arrays",
@@ -644,7 +644,7 @@ def _gate4_verify_conformance(
 	if float_array_qbe.include?("$g4_array_push_d(l %array, l %value)")
 		return Result<Boolean, String>::Err("Float Array push uses the Integer ABI")
 	end
-	try _gate6j_verify_candidate_builds(
+	try _recovery_verify_candidate_builds(
 		candidate_executables,
 		root + "/compiler/gate4/conformance/valid/float-arrays.trb",
 		"float-arrays-ok\n",
@@ -660,7 +660,7 @@ def _gate4_verify_conformance(
 	]
 	index = 0
 	while index < gate6j_invalid_names.size()
-		try _gate6j_verify_invalid_case(
+		try _recovery_verify_invalid_case(
 			root,
 			gate6j_invalid_names[index],
 			candidate_executables,
@@ -668,13 +668,13 @@ def _gate4_verify_conformance(
 		)
 		index += 1
 	end
-	try _gate6j_verify_bounds_failure(root, candidate_executables, qbe, workspace)
+	try _recovery_verify_bounds_failure(root, candidate_executables, qbe, workspace)
 	mutation_names := ["base", "literal", "control"]
 	mut mutation_qbe: Array<String> := []
 	index = 0
 	while index < mutation_names.size()
 		mutation_qbe.push(
-			try _gate4_verify_valid_case(
+			try _recovery_verify_valid_case(
 				root,
 				"mutations",
 				mutation_names[index],
@@ -709,15 +709,15 @@ def _gate4_verify_conformance(
 	index = 0
 	while index < invalid_names.size()
 		base := root + "/compiler/gate4/conformance/invalid/" + invalid_names[index]
-		source := try _gate4_read(base + ".source")
-		expected := try _gate4_read(base + ".diag")
+		source := try _recovery_read(base + ".source")
+		expected := try _recovery_read(base + ".diag")
 		if !expected.start_with?("TRBN")
 			return Result<Boolean, String>::Err(invalid_names[index] + " is not classified as a diagnostic")
 		end
 		mut compiler_index := 0
 		while compiler_index < executables.size()
-			check := try _gate4_compiler_output(executables[compiler_index], source, "check")
-			emit := try _gate4_compiler_output(executables[compiler_index], source, "emit-qbe")
+			check := try _recovery_compiler_output(executables[compiler_index], source, "check")
+			emit := try _recovery_compiler_output(executables[compiler_index], source, "emit-qbe")
 			if check != expected || emit != expected || emit.include?("export function")
 				return Result<Boolean, String>::Err(
 					invalid_names[index] + " diagnostic differs at compiler " + compiler_index.to_s()
@@ -751,7 +751,7 @@ def _gate4_verify_conformance(
 			end
 			compiler_index += 1
 		end
-		try _gate6_verify_invalid_build_case(
+		try _recovery_verify_invalid_build_case(
 			base + ".source",
 			expected,
 			workspace,
@@ -762,7 +762,7 @@ def _gate4_verify_conformance(
 	return Result<Boolean, String>::Ok(true)
 end
 
-def _gate6_verify_native_bootstrap_cycle(
+def _recovery_verify_native_bootstrap_cycle(
 		b1_path: String,
 		compiler_path: String,
 		expected_qbe: String,
@@ -776,7 +776,7 @@ def _gate6_verify_native_bootstrap_cycle(
 	]
 	mut directory_index := 0
 	while directory_index < directories.size()
-		try _gate6_reset_directory(directories[directory_index])
+		try _recovery_reset_directory(directories[directory_index])
 		directory_index += 1
 	end
 	outputs := [
@@ -787,20 +787,20 @@ def _gate6_verify_native_bootstrap_cycle(
 	mut seed := b1_path
 	mut generation := 0
 	while generation < outputs.size()
-		build := try _gate6_build(seed, compiler_path, outputs[generation], qbe, "/usr/bin/cc")
+		build := try _recovery_build(seed, compiler_path, outputs[generation], qbe, "/usr/bin/cc")
 		if build.status != 0 || !build.stdout.empty?() || !build.stderr.empty?()
 			return Result<Boolean, String>::Err(
 				"Native bootstrap generation " + generation.to_s() + " failed: " + build.stderr,
 			)
 		end
-		try _gate6_require_no_intermediates(directories[generation])
-		check := try _gate6_process(outputs[generation], ["check", compiler_path])
+		try _recovery_require_no_intermediates(directories[generation])
+		check := try _recovery_process(outputs[generation], ["check", compiler_path])
 		if check.status != 0 || check.stdout != "ok\n" || !check.stderr.empty?()
 			return Result<Boolean, String>::Err(
 				"Native bootstrap generation " + generation.to_s() + " failed source check",
 			)
 		end
-		emission := try _gate6_process(outputs[generation], ["emit-qbe", compiler_path])
+		emission := try _recovery_process(outputs[generation], ["emit-qbe", compiler_path])
 		if emission.status != 0 || emission.stdout != expected_qbe || !emission.stderr.empty?()
 			return Result<Boolean, String>::Err(
 				"Native bootstrap generation " + generation.to_s() + " left the QBE fixed point",
@@ -809,33 +809,33 @@ def _gate6_verify_native_bootstrap_cycle(
 		seed = outputs[generation]
 		generation += 1
 	end
-	try _gate6_require_same(outputs[0], outputs[1], "Native bootstrap B2/B3")
-	try _gate6_require_same(outputs[1], outputs[2], "Native bootstrap B3/B4")
+	try _recovery_require_same(outputs[0], outputs[1], "Native bootstrap B2/B3")
+	try _recovery_require_same(outputs[1], outputs[2], "Native bootstrap B3/B4")
 	return Result<Boolean, String>::Ok(true)
 end
 
-def _gate4_build_cycle(
+def _recovery_build_cycle(
 		b0_path: String,
 		recovery_source: String,
 		compiler_path: String,
 		qbe: String,
 		workspace: String,
 	): Boolean
-	b1 := case build_gate4_generation(b0_path, recovery_source, qbe, "/usr/bin/cc", workspace, "b1")
+	b1 := case build_recovery_generation(b0_path, recovery_source, qbe, "/usr/bin/cc", workspace, "b1")
 	when Result::Ok(report)
 		report
 	when Result::Err(error)
 		puts(error.phase + ": " + error.message + "\n" + error.stderr)
 		return false
 	end
-	b2 := case build_gate4_generation(b1.output_path, recovery_source, qbe, "/usr/bin/cc", workspace, "b2")
+	b2 := case build_recovery_generation(b1.output_path, recovery_source, qbe, "/usr/bin/cc", workspace, "b2")
 	when Result::Ok(report)
 		report
 	when Result::Err(error)
 		puts(error.phase + ": " + error.message + "\n" + error.stderr)
 		return false
 	end
-	b3 := case build_gate4_generation(b2.output_path, recovery_source, qbe, "/usr/bin/cc", workspace, "b3")
+	b3 := case build_recovery_generation(b2.output_path, recovery_source, qbe, "/usr/bin/cc", workspace, "b3")
 	when Result::Ok(report)
 		report
 	when Result::Err(error)
@@ -878,7 +878,7 @@ def _gate4_build_cycle(
 		puts(error.operation + ": " + error.message)
 		return false
 	end
-	case _gate6_verify_native_bootstrap_cycle(
+	case _recovery_verify_native_bootstrap_cycle(
 			b1.output_path,
 			compiler_path,
 			canonical_qbe,
@@ -960,7 +960,7 @@ def _gate4_build_cycle(
 	return true
 end
 
-def _gate6_verify_file_cli(workspace: String): Result<Boolean, String>
+def _recovery_verify_file_cli(workspace: String): Result<Boolean, String>
 	valid_source := "def main()\n\tputs(\"ok\")\n\treturn\nend\n"
 	valid_path := workspace + "/gate6-valid.trb"
 	invalid_path := workspace + "/gate6-invalid.trb"
@@ -1009,7 +1009,7 @@ def _gate6_verify_file_cli(workspace: String): Result<Boolean, String>
 		if emit.status != 0 || emit.stdout.empty?() || !emit.stderr.empty?()
 			return Result<Boolean, String>::Err("file QBE emission failed at compiler " + index.to_s())
 		end
-		hidden_qbe := try _gate4_compiler_output(executable, valid_source, "emit-qbe")
+		hidden_qbe := try _recovery_compiler_output(executable, valid_source, "emit-qbe")
 		if emit.stdout != hidden_qbe
 			return Result<Boolean, String>::Err("file and recovery QBE differ at compiler " + index.to_s())
 		end
@@ -1076,7 +1076,7 @@ def _gate6_verify_file_cli(workspace: String): Result<Boolean, String>
 	return Result<Boolean, String>::Ok(true)
 end
 
-def _gate6_expect_failed_build(
+def _recovery_expect_failed_build(
 		executable: String,
 		source_path: String,
 		output_path: String,
@@ -1087,25 +1087,25 @@ def _gate6_expect_failed_build(
 		directory: String,
 		context: String,
 	): Result<Boolean, String>
-	build := try _gate6_build(executable, source_path, output_path, qbe, cc)
+	build := try _recovery_build(executable, source_path, output_path, qbe, cc)
 	if build.status != expected_status || !build.stdout.empty?() || build.stderr != expected_stderr
 		return Result<Boolean, String>::Err(context + " failure contract differs")
 	end
-	try _gate6_require_missing(output_path)
-	try _gate6_require_no_intermediates(directory)
+	try _recovery_require_missing(output_path)
+	try _recovery_require_no_intermediates(directory)
 	return Result<Boolean, String>::Ok(true)
 end
 
-def _gate6_verify_build_cli(workspace: String, qbe: String): Result<Boolean, String>
+def _recovery_verify_build_cli(workspace: String, qbe: String): Result<Boolean, String>
 	executable := workspace + "/b1"
 	source_directory := workspace + "/gate6 source with spaces"
 	output_directory := workspace + "/gate6 output with spaces"
 	target_output_directory := workspace + "/gate6 target output with spaces"
 	failure_directory := workspace + "/gate6-build-failures"
-	try _gate6_reset_directory(source_directory)
-	try _gate6_reset_directory(output_directory)
-	try _gate6_reset_directory(target_output_directory)
-	try _gate6_reset_directory(failure_directory)
+	try _recovery_reset_directory(source_directory)
+	try _recovery_reset_directory(output_directory)
+	try _recovery_reset_directory(target_output_directory)
+	try _recovery_reset_directory(failure_directory)
 	source_path := source_directory + "/input program.trb"
 	output_path := output_directory + "/program"
 	case native_write_text(source_path, "def main()\n\tputs(\"ok\")\n\treturn\nend\n")
@@ -1118,7 +1118,7 @@ def _gate6_verify_build_cli(workspace: String, qbe: String): Result<Boolean, Str
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
 	end
-	try _gate6_verify_built_program(
+	try _recovery_verify_built_program(
 		executable,
 		source_path,
 		output_path,
@@ -1126,9 +1126,9 @@ def _gate6_verify_build_cli(workspace: String, qbe: String): Result<Boolean, Str
 		"ok\n",
 		"space-bearing atomic replacement",
 	)
-	try _gate6_require_no_intermediates(output_directory)
+	try _recovery_require_no_intermediates(output_directory)
 	target_output_path := target_output_directory + "/program"
-	target_build := try _gate6_build_target(
+	target_build := try _recovery_build_target(
 		executable,
 		source_path,
 		target_output_path,
@@ -1139,15 +1139,15 @@ def _gate6_verify_build_cli(workspace: String, qbe: String): Result<Boolean, Str
 	if target_build.status != 0 || !target_build.stdout.empty?() || !target_build.stderr.empty?()
 		return Result<Boolean, String>::Err("explicit Darwin target build failed: " + target_build.stderr)
 	end
-	target_runtime := try _gate6_process(target_output_path, [])
+	target_runtime := try _recovery_process(target_output_path, [])
 	if target_runtime.status != 0 || target_runtime.stdout != "ok\n" || !target_runtime.stderr.empty?()
 		return Result<Boolean, String>::Err("explicit Darwin target runtime differs")
 	end
-	try _gate6_require_same(output_path, target_output_path, "implicit/explicit Darwin target")
-	try _gate6_require_no_intermediates(target_output_directory)
+	try _recovery_require_same(output_path, target_output_path, "implicit/explicit Darwin target")
+	try _recovery_require_no_intermediates(target_output_directory)
 
 	unsupported_output := failure_directory + "/unsupported-target"
-	unsupported_target := try _gate6_build_target(
+	unsupported_target := try _recovery_build_target(
 		executable,
 		source_path,
 		unsupported_output,
@@ -1161,11 +1161,11 @@ def _gate6_verify_build_cli(workspace: String, qbe: String): Result<Boolean, Str
 	if unsupported_target.stderr != "compiler: unsupported target profile\n"
 		return Result<Boolean, String>::Err("unsupported-target diagnostic differs")
 	end
-	try _gate6_require_missing(unsupported_output)
-	try _gate6_require_no_intermediates(failure_directory)
+	try _recovery_require_missing(unsupported_output)
+	try _recovery_require_no_intermediates(failure_directory)
 
 	usage := "usage: compiler {check|emit-qbe} SOURCE\n       compiler build SOURCE --output OUTPUT --qbe QBE --cc CC\n"
-	invalid_shape := try _gate6_process(
+	invalid_shape := try _recovery_process(
 		executable,
 		["build", source_path, "--output", output_path, "--qbe", qbe],
 	)
@@ -1175,15 +1175,15 @@ def _gate6_verify_build_cli(workspace: String, qbe: String): Result<Boolean, Str
 
 	missing_source := workspace + "/gate6 missing source.trb"
 	missing_output := failure_directory + "/missing-source"
-	missing := try _gate6_build(executable, missing_source, missing_output, qbe, "/usr/bin/cc")
+	missing := try _recovery_build(executable, missing_source, missing_output, qbe, "/usr/bin/cc")
 	if missing.status != 66 || !missing.stdout.empty?()
 		return Result<Boolean, String>::Err("build missing-source status differs")
 	end
 	if missing.stderr != "compiler: cannot read source file: " + missing_source + "\n"
 		return Result<Boolean, String>::Err("build missing-source diagnostic differs")
 	end
-	try _gate6_require_missing(missing_output)
-	try _gate6_require_no_intermediates(failure_directory)
+	try _recovery_require_missing(missing_output)
+	try _recovery_require_no_intermediates(failure_directory)
 
 	qbe_failure_tool := failure_directory + "/qbe failure tool"
 	cc_failure_tool := failure_directory + "/cc failure tool"
@@ -1203,11 +1203,11 @@ def _gate6_verify_build_cli(workspace: String, qbe: String): Result<Boolean, Str
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
 	end
-	chmod := try _gate6_process("/bin/chmod", ["+x", qbe_failure_tool, cc_failure_tool])
+	chmod := try _recovery_process("/bin/chmod", ["+x", qbe_failure_tool, cc_failure_tool])
 	if !chmod.success
 		return Result<Boolean, String>::Err("cannot prepare child failure tools: " + chmod.stderr)
 	end
-	try _gate6_expect_failed_build(
+	try _recovery_expect_failed_build(
 		executable,
 		source_path,
 		failure_directory + "/qbe-failure",
@@ -1218,7 +1218,7 @@ def _gate6_verify_build_cli(workspace: String, qbe: String): Result<Boolean, Str
 		failure_directory,
 		"QBE",
 	)
-	try _gate6_expect_failed_build(
+	try _recovery_expect_failed_build(
 		executable,
 		source_path,
 		failure_directory + "/missing-qbe",
@@ -1229,7 +1229,7 @@ def _gate6_verify_build_cli(workspace: String, qbe: String): Result<Boolean, Str
 		failure_directory,
 		"missing QBE",
 	)
-	try _gate6_expect_failed_build(
+	try _recovery_expect_failed_build(
 		executable,
 		source_path,
 		failure_directory + "/cc-failure",
@@ -1240,7 +1240,7 @@ def _gate6_verify_build_cli(workspace: String, qbe: String): Result<Boolean, Str
 		failure_directory,
 		"cc",
 	)
-	try _gate6_expect_failed_build(
+	try _recovery_expect_failed_build(
 		executable,
 		source_path,
 		failure_directory + "/missing-cc",
@@ -1253,11 +1253,11 @@ def _gate6_verify_build_cli(workspace: String, qbe: String): Result<Boolean, Str
 	)
 
 	missing_parent := workspace + "/gate6-missing-output-parent"
-	remove_parent := try _gate6_process("/bin/rm", ["-rf", missing_parent])
+	remove_parent := try _recovery_process("/bin/rm", ["-rf", missing_parent])
 	if !remove_parent.success
 		return Result<Boolean, String>::Err("cannot reset missing output parent")
 	end
-	intermediate_failure := try _gate6_build(
+	intermediate_failure := try _recovery_build(
 		executable,
 		source_path,
 		missing_parent + "/program",
@@ -1272,8 +1272,8 @@ def _gate6_verify_build_cli(workspace: String, qbe: String): Result<Boolean, Str
 	end
 
 	publish_target := workspace + "/gate6-publish-target"
-	try _gate6_reset_directory(publish_target)
-	publish_failure := try _gate6_build(
+	try _recovery_reset_directory(publish_target)
+	publish_failure := try _recovery_build(
 		executable,
 		source_path,
 		publish_target,
@@ -1286,12 +1286,12 @@ def _gate6_verify_build_cli(workspace: String, qbe: String): Result<Boolean, Str
 	if publish_failure.stderr != "compiler: cannot publish output\n"
 		return Result<Boolean, String>::Err("publish diagnostic differs")
 	end
-	try _gate6_require_no_intermediates(workspace)
+	try _recovery_require_no_intermediates(workspace)
 	return Result<Boolean, String>::Ok(true)
 end
 
-def _gate6_copy_source(source: String, destination: String): Result<Boolean, String>
-	contents := try _gate4_read(source)
+def _recovery_copy_source(source: String, destination: String): Result<Boolean, String>
+	contents := try _recovery_read(source)
 	case native_write_text(destination, contents)
 	when Result::Ok(_unit)
 		return Result<Boolean, String>::Ok(true)
@@ -1300,7 +1300,7 @@ def _gate6_copy_source(source: String, destination: String): Result<Boolean, Str
 	end
 end
 
-def _gate6_write_source(path: String, source: String): Result<Boolean, String>
+def _recovery_write_source(path: String, source: String): Result<Boolean, String>
 	case native_write_text(path, source)
 	when Result::Ok(_unit)
 		return Result<Boolean, String>::Ok(true)
@@ -1314,20 +1314,20 @@ def _prepare_compiler_closure(
 		sources: Array<String>,
 		omitted: String,
 	): Result<Boolean, String>
-	try _gate6_reset_directory(directory)
+	try _recovery_reset_directory(directory)
 	names := ["compiler", "storage", "path", "mir", "literals", "state", "parser", "resolution", "checked_program"]
 	mut index := 0
 	while index < names.size()
 		if names[index] != omitted
-			try _gate6_write_source(directory + "/" + names[index] + ".trb", sources[index])
+			try _recovery_write_source(directory + "/" + names[index] + ".trb", sources[index])
 		end
 		index += 1
 	end
-	try _gate6_write_source(directory + "/unrelated.trb", "@\n")
+	try _recovery_write_source(directory + "/unrelated.trb", "@\n")
 	return Result<Boolean, String>::Ok(true)
 end
 
-def _gate6f_verify_compiler_source_closure(
+def _recovery_verify_compiler_source_closure(
 		executable: String,
 		compiler_path: String,
 		entry: String,
@@ -1341,11 +1341,11 @@ def _gate6f_verify_compiler_source_closure(
 		checked_program: String,
 		workspace: String,
 	): Result<Boolean, String>
-	canonical := try _gate6_process(executable, ["emit-qbe", compiler_path])
+	canonical := try _recovery_process(executable, ["emit-qbe", compiler_path])
 	if canonical.status != 0 || canonical.stdout.empty?() || !canonical.stderr.empty?()
 		return Result<Boolean, String>::Err("cannot emit canonical multi-file compiler QBE")
 	end
-	hidden := try _gate6_process(executable, ["--source-content", "check", entry])
+	hidden := try _recovery_process(executable, ["--source-content", "check", entry])
 	if hidden.status != 0 || !hidden.stderr.empty?()
 		return Result<Boolean, String>::Err("hidden compiler-source probe process differs")
 	end
@@ -1353,22 +1353,22 @@ def _gate6f_verify_compiler_source_closure(
 		return Result<Boolean, String>::Err("hidden source-content adapter loaded compiler modules")
 	end
 
-	storage_mutation := try _gate6f_replace_once(
+	storage_mutation := try _recovery_replace_once(
 		storage,
 		"def gate4_storage_chunk_size(): Integer\n\treturn 256\nend\n",
 		"def gate4_storage_chunk_size(): Integer\n\treturn 128\nend\n",
 	)
-	path_mutation := try _gate6f_replace_once(
+	path_mutation := try _recovery_replace_once(
 		path,
 		"\t\treturn \".\"\n",
 		"\t\treturn \"./\"\n",
 	)
-	mir_mutation := try _gate6f_replace_once(mir, "MIR failure target does not exist", "MIR failure target is absent")
-	literal_mutation := try _gate6f_replace_once(literals, "return parsed <= 1024", "return parsed <= 1023")
-	state_mutation := try _gate6f_replace_once(state, "state.diagnostic_count[0] > 0", "state.diagnostic_count[0] > 1")
-	parser_mutation := try _gate6f_replace_once(parser, "unexpected token ", "unexpected syntax token ")
-	resolution_mutation := try _gate6f_replace_once(resolution, "unresolved function ", "unresolved callable ")
-	checked_program_mutation := try _gate6f_replace_once(checked_program, "unsupported operator ", "unsupported binary operator ")
+	mir_mutation := try _recovery_replace_once(mir, "MIR failure target does not exist", "MIR failure target is absent")
+	literal_mutation := try _recovery_replace_once(literals, "return parsed <= 1024", "return parsed <= 1023")
+	state_mutation := try _recovery_replace_once(state, "state.diagnostic_count[0] > 0", "state.diagnostic_count[0] > 1")
+	parser_mutation := try _recovery_replace_once(parser, "unexpected token ", "unexpected syntax token ")
+	resolution_mutation := try _recovery_replace_once(resolution, "unresolved function ", "unresolved callable ")
+	checked_program_mutation := try _recovery_replace_once(checked_program, "unsupported operator ", "unsupported binary operator ")
 	names := ["compiler", "storage", "path", "mir", "literals", "state", "parser", "resolution", "checked_program"]
 	sources := [entry, storage, path, mir, literals, state, parser, resolution, checked_program]
 	mutations := [entry, storage_mutation, path_mutation, mir_mutation, literal_mutation, state_mutation, parser_mutation, resolution_mutation, checked_program_mutation]
@@ -1378,61 +1378,61 @@ def _gate6f_verify_compiler_source_closure(
 		changed[index] = mutations[index]
 		directory := workspace + "/gate6f-compiler-" + names[index] + "-mutation"
 		try _prepare_compiler_closure(directory, changed, "")
-		emission := try _gate6_process(executable, ["emit-qbe", directory + "/compiler.trb"])
+		emission := try _recovery_process(executable, ["emit-qbe", directory + "/compiler.trb"])
 		if emission.status != 0 || emission.stdout.empty?() || !emission.stderr.empty?()
 			return Result<Boolean, String>::Err(names[index] + " mutation emission failed: " + emission.stderr)
 		end
 		if emission.stdout == canonical.stdout
 			return Result<Boolean, String>::Err(names[index] + " mutation did not change compiler QBE")
 		end
-		try _gate6_require_no_intermediates(directory)
+		try _recovery_require_no_intermediates(directory)
 
 		missing := workspace + "/gate6f-compiler-missing-" + names[index]
 		try _prepare_compiler_closure(missing, sources, names[index])
 		missing_output := missing + "/compiler"
-		missing_build := try _gate6_build(executable, missing + "/compiler.trb", missing_output, missing + "/missing-qbe", missing + "/missing-cc")
+		missing_build := try _recovery_build(executable, missing + "/compiler.trb", missing_output, missing + "/missing-qbe", missing + "/missing-cc")
 		if missing_build.status != 1 || !missing_build.stdout.empty?()
 			return Result<Boolean, String>::Err("missing " + names[index] + " module did not fail before tools")
 		end
 		if !missing_build.stderr.include?("cannot resolve project import " + names[index])
 			return Result<Boolean, String>::Err("missing " + names[index] + " module diagnostic differs: " + missing_build.stderr)
 		end
-		try _gate6_require_missing(missing_output)
-		try _gate6_require_no_intermediates(missing)
+		try _recovery_require_missing(missing_output)
+		try _recovery_require_no_intermediates(missing)
 
 		malformed := workspace + "/gate6f-compiler-malformed-" + names[index]
 		changed[index] = sources[index] + "\n@\n"
 		try _prepare_compiler_closure(malformed, changed, "")
 		malformed_output := malformed + "/compiler"
-		malformed_build := try _gate6_build(executable, malformed + "/compiler.trb", malformed_output, malformed + "/missing-qbe", malformed + "/missing-cc")
+		malformed_build := try _recovery_build(executable, malformed + "/compiler.trb", malformed_output, malformed + "/missing-qbe", malformed + "/missing-cc")
 		if malformed_build.status != 1 || !malformed_build.stdout.empty?()
 			return Result<Boolean, String>::Err("malformed " + names[index] + " module did not fail before tools")
 		end
 		if !malformed_build.stderr.include?("TRBN4001")
 			return Result<Boolean, String>::Err("malformed " + names[index] + " module diagnostic differs: " + malformed_build.stderr)
 		end
-		try _gate6_require_missing(malformed_output)
-		try _gate6_require_no_intermediates(malformed)
+		try _recovery_require_missing(malformed_output)
+		try _recovery_require_no_intermediates(malformed)
 		index += 1
 	end
 
 	unrelated := workspace + "/gate6f-compiler-unrelated"
 	try _prepare_compiler_closure(unrelated, sources, "")
-	unrelated_emission := try _gate6_process(executable, ["emit-qbe", unrelated + "/compiler.trb"])
+	unrelated_emission := try _recovery_process(executable, ["emit-qbe", unrelated + "/compiler.trb"])
 	if unrelated_emission.status != 0 || unrelated_emission.stdout != canonical.stdout || !unrelated_emission.stderr.empty?()
 		return Result<Boolean, String>::Err("unrelated invalid compiler sibling entered the closure")
 	end
 	return Result<Boolean, String>::Ok(true)
 end
 
-def _gate6_expect_file_root_failure(
+def _recovery_expect_file_root_failure(
 		executable: String,
 		project: String,
 		expected: String,
 		label: String,
 	): Result<Boolean, String>
 	output := project + "/program"
-	build := try _gate6_build(
+	build := try _recovery_build(
 		executable,
 		project + "/main.trb",
 		output,
@@ -1445,17 +1445,17 @@ def _gate6_expect_file_root_failure(
 	if !build.stderr.include?(expected)
 		return Result<Boolean, String>::Err(label + " diagnostic differs: " + build.stderr)
 	end
-	try _gate6_require_missing(output)
-	try _gate6_require_no_intermediates(project)
+	try _recovery_require_missing(output)
+	try _recovery_require_no_intermediates(project)
 	return Result<Boolean, String>::Ok(true)
 end
 
-def _gate6_prepare_file_root_project(root: String, project: String): Result<Boolean, String>
-	try _gate6_reset_directory(project)
+def _recovery_prepare_file_root_project(root: String, project: String): Result<Boolean, String>
+	try _recovery_reset_directory(project)
 	directories := [project + "/app", project + "/domain", project + "/shared"]
 	mut index := 0
 	while index < directories.size()
-		created := try _gate6_process("/bin/mkdir", ["-p", directories[index]])
+		created := try _recovery_process("/bin/mkdir", ["-p", directories[index]])
 		if !created.success
 			return Result<Boolean, String>::Err("cannot create file-root fixture directory")
 		end
@@ -1472,13 +1472,13 @@ def _gate6_prepare_file_root_project(root: String, project: String): Result<Bool
 	]
 	index = 0
 	while index < relative.size()
-		try _gate6_copy_source(fixture + "/" + relative[index], project + "/" + relative[index])
+		try _recovery_copy_source(fixture + "/" + relative[index], project + "/" + relative[index])
 		index += 1
 	end
 	return Result<Boolean, String>::Ok(true)
 end
 
-def _gate6h_fixed_width_name(prefix: String, index: Integer): String
+def _recovery_fixed_width_name(prefix: String, index: Integer): String
 	mut digits := index.to_s()
 	while digits.size() < 4
 		digits = "0" + digits
@@ -1486,28 +1486,28 @@ def _gate6h_fixed_width_name(prefix: String, index: Integer): String
 	return prefix + digits
 end
 
-def _gate6h_prepare_module_chain(project: String, count: Integer): Result<String, String>
-	try _gate6_reset_directory(project)
+def _recovery_prepare_module_chain(project: String, count: Integer): Result<String, String>
+	try _recovery_reset_directory(project)
 	mut index := 0
 	while index < count
-		module_name := _gate6h_fixed_width_name("m", index)
-		function_name := _gate6h_fixed_width_name("f", index)
+		module_name := _recovery_fixed_width_name("m", index)
+		function_name := _recovery_fixed_width_name("f", index)
 		mut source := ""
 		if index > 0
-			previous_module := _gate6h_fixed_width_name("m", index - 1)
-			previous_function := _gate6h_fixed_width_name("f", index - 1)
+			previous_module := _recovery_fixed_width_name("m", index - 1)
+			previous_function := _recovery_fixed_width_name("f", index - 1)
 			source += "import { " + previous_function + " } from " + previous_module + "\n\n"
 			source += "def " + function_name + "(): Integer\n\treturn " + previous_function + "() + 1\nend\n"
 		else
 			source = "def " + function_name + "(): Integer\n\treturn 0\nend\n"
 		end
-		try _gate6_write_source(project + "/" + module_name + ".trb", source)
+		try _recovery_write_source(project + "/" + module_name + ".trb", source)
 		index += 1
 	end
-	last_function := _gate6h_fixed_width_name("f", count - 1)
-	last_module := _gate6h_fixed_width_name("m", count - 1)
+	last_function := _recovery_fixed_width_name("f", count - 1)
+	last_module := _recovery_fixed_width_name("m", count - 1)
 	entry := project + "/main.trb"
-	try _gate6_write_source(
+	try _recovery_write_source(
 		entry,
 		"import { " + last_function + " } from " + last_module + "\n\n" +
 		"def main()\n\tif " + last_function + "() == " + (count - 1).to_s() +
@@ -1516,14 +1516,14 @@ def _gate6h_prepare_module_chain(project: String, count: Integer): Result<String
 	return Result<String, String>::Ok(entry)
 end
 
-def _gate6_verify_file_root_modules(
+def _recovery_verify_file_root_modules(
 		root: String,
 		workspace: String,
 		qbe: String,
 		reference_trb: String,
 	): Result<Boolean, String>
 	project := workspace + "/gate6 file root project"
-	try _gate6_prepare_file_root_project(root, project)
+	try _recovery_prepare_file_root_project(root, project)
 	entry := project + "/main.trb"
 	executables := [
 		workspace + "/b1",
@@ -1535,11 +1535,11 @@ def _gate6_verify_file_root_modules(
 	mut canonical_qbe := ""
 	mut index := 0
 	while index < executables.size()
-		check := try _gate6_process(executables[index], ["check", entry])
+		check := try _recovery_process(executables[index], ["check", entry])
 		if check.status != 0 || check.stdout != "ok\n" || !check.stderr.empty?()
 			return Result<Boolean, String>::Err("file-root check failed at compiler " + index.to_s() + ": " + check.stderr)
 		end
-		emission := try _gate6_process(executables[index], ["emit-qbe", entry])
+		emission := try _recovery_process(executables[index], ["emit-qbe", entry])
 		if emission.status != 0 || emission.stdout.empty?() || !emission.stderr.empty?()
 			return Result<Boolean, String>::Err("file-root emission failed at compiler " + index.to_s())
 		end
@@ -1551,9 +1551,9 @@ def _gate6_verify_file_root_modules(
 			end
 		end
 		output_directory := workspace + "/gate6-file-root-output-" + index.to_s()
-		try _gate6_reset_directory(output_directory)
+		try _recovery_reset_directory(output_directory)
 		output := output_directory + "/program"
-		try _gate6_verify_built_program(
+		try _recovery_verify_built_program(
 			executables[index],
 			entry,
 			output,
@@ -1561,47 +1561,47 @@ def _gate6_verify_file_root_modules(
 			"file-root-ok\n",
 			"file-root compiler " + index.to_s(),
 		)
-		try _gate6_require_no_intermediates(output_directory)
+		try _recovery_require_no_intermediates(output_directory)
 		index += 1
 	end
 
 	repeat_a := workspace + "/gate6-file-root-repeat-a"
 	repeat_b := workspace + "/gate6-file-root-repeat-b"
-	try _gate6_reset_directory(repeat_a)
-	try _gate6_reset_directory(repeat_b)
-	try _gate6_verify_built_program(executables[0], entry, repeat_a + "/program", qbe, "file-root-ok\n", "repeat A")
-	try _gate6_verify_built_program(executables[0], entry, repeat_b + "/program", qbe, "file-root-ok\n", "repeat B")
-	try _gate6_require_same(repeat_a + "/program", repeat_b + "/program", "repeated file-root")
+	try _recovery_reset_directory(repeat_a)
+	try _recovery_reset_directory(repeat_b)
+	try _recovery_verify_built_program(executables[0], entry, repeat_a + "/program", qbe, "file-root-ok\n", "repeat A")
+	try _recovery_verify_built_program(executables[0], entry, repeat_b + "/program", qbe, "file-root-ok\n", "repeat B")
+	try _recovery_require_same(repeat_a + "/program", repeat_b + "/program", "repeated file-root")
 
 	reference_output := workspace + "/gate6-reference-file-root"
-	reference_check := try _gate6_process(reference_trb, ["check", entry])
+	reference_check := try _recovery_process(reference_trb, ["check", entry])
 	if reference_check.status != 0
 		return Result<Boolean, String>::Err("reference file-root check failed: " + reference_check.stderr)
 	end
-	reference_build := try _gate6_process(
+	reference_build := try _recovery_process(
 		reference_trb,
 		["build", "--compile", "--outfile", reference_output, entry],
 	)
 	if reference_build.status != 0
 		return Result<Boolean, String>::Err("reference file-root build failed: " + reference_build.stderr)
 	end
-	reference_runtime := try _gate6_process(reference_output, [])
+	reference_runtime := try _recovery_process(reference_output, [])
 	if reference_runtime.status != 0 || reference_runtime.stdout != "file-root-ok\n" || !reference_runtime.stderr.empty?()
 		return Result<Boolean, String>::Err("reference file-root runtime differs")
 	end
 
 	scale_project := workspace + "/gate6h-module-chain"
-	scale_entry := try _gate6h_prepare_module_chain(scale_project, 64)
+	scale_entry := try _recovery_prepare_module_chain(scale_project, 64)
 	mut scale_qbe := ""
 	index = 0
 	while index < executables.size()
-		scale_check := try _gate6_process(executables[index], ["check", scale_entry])
+		scale_check := try _recovery_process(executables[index], ["check", scale_entry])
 		if scale_check.status != 0 || scale_check.stdout != "ok\n" || !scale_check.stderr.empty?()
 			return Result<Boolean, String>::Err(
 				"module-chain check failed at compiler " + index.to_s() + ": " + scale_check.stderr,
 			)
 		end
-		scale_emission := try _gate6_process(executables[index], ["emit-qbe", scale_entry])
+		scale_emission := try _recovery_process(executables[index], ["emit-qbe", scale_entry])
 		if scale_emission.status != 0 || scale_emission.stdout.empty?() || !scale_emission.stderr.empty?()
 			return Result<Boolean, String>::Err("module-chain emission failed at compiler " + index.to_s())
 		end
@@ -1615,7 +1615,7 @@ def _gate6_verify_file_root_modules(
 		index += 1
 	end
 	scale_output := scale_project + "/native-program"
-	try _gate6_verify_built_program(
+	try _recovery_verify_built_program(
 		executables[0],
 		scale_entry,
 		scale_output,
@@ -1624,25 +1624,25 @@ def _gate6_verify_file_root_modules(
 		"64-module Native chain",
 	)
 	scale_reference_output := scale_project + "/reference-program"
-	scale_reference_build := try _gate6_process(
+	scale_reference_build := try _recovery_process(
 		reference_trb,
 		["build", "--compile", "--outfile", scale_reference_output, scale_entry],
 	)
 	if scale_reference_build.status != 0
 		return Result<Boolean, String>::Err("reference module-chain build failed: " + scale_reference_build.stderr)
 	end
-	scale_reference_runtime := try _gate6_process(scale_reference_output, [])
+	scale_reference_runtime := try _recovery_process(scale_reference_output, [])
 	if scale_reference_runtime.status != 0
 		return Result<Boolean, String>::Err("reference module-chain execution failed")
 	end
 	if scale_reference_runtime.stdout != "module-scale-ok\n" || !scale_reference_runtime.stderr.empty?()
 		return Result<Boolean, String>::Err("reference module-chain runtime differs")
 	end
-	try _gate6_require_no_intermediates(scale_project)
+	try _recovery_require_no_intermediates(scale_project)
 
 	precedence := workspace + "/gate6-file-root-precedence"
-	try _gate6_reset_directory(precedence)
-	created := try _gate6_process("/bin/mkdir", ["-p", precedence + "/choice"])
+	try _recovery_reset_directory(precedence)
+	created := try _recovery_process("/bin/mkdir", ["-p", precedence + "/choice"])
 	if !created.success
 		return Result<Boolean, String>::Err("cannot create precedence fixture")
 	end
@@ -1664,7 +1664,7 @@ def _gate6_verify_file_root_modules(
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
 	end
-	try _gate6_verify_built_program(
+	try _recovery_verify_built_program(
 		executables[0],
 		precedence + "/main.trb",
 		precedence + "/program",
@@ -1674,20 +1674,20 @@ def _gate6_verify_file_root_modules(
 	)
 
 	declaration_imports := workspace + "/gate6-file-root-declaration-imports"
-	try _gate6_reset_directory(declaration_imports)
+	try _recovery_reset_directory(declaration_imports)
 	declaration_directories := [
 		declaration_imports + "/services",
 		declaration_imports + "/shared/ui/data_table",
 	]
 	index = 0
 	while index < declaration_directories.size()
-		created := try _gate6_process("/bin/mkdir", ["-p", declaration_directories[index]])
+		created := try _recovery_process("/bin/mkdir", ["-p", declaration_directories[index]])
 		if !created.success
 			return Result<Boolean, String>::Err("cannot create declaration-import fixture")
 		end
 		index += 1
 	end
-	try _gate6_write_source(
+	try _recovery_write_source(
 		declaration_imports + "/main.trb",
 		"import { Response as WebResponse, status_code as read_status } from services/http\n" +
 		"import services/secure_random as Random\n" +
@@ -1699,22 +1699,22 @@ def _gate6_verify_file_root_modules(
 		"\tif table.rows == 42\n\t\tputs(\"declaration-imports-ok\")\n\tend\n" +
 		"\treturn\nend\n",
 	)
-	try _gate6_write_source(
+	try _recovery_write_source(
 		declaration_imports + "/services/http.trb",
 		"record Response\n\tstatus: Integer\nend\n\ndef status_code(): Integer\n\treturn 42\nend\n",
 	)
-	try _gate6_write_source(
+	try _recovery_write_source(
 		declaration_imports + "/services/secure_random.trb",
 		"record SecureRandom\n\tvalue: Integer\nend\n",
 	)
-	try _gate6_write_source(
+	try _recovery_write_source(
 		declaration_imports + "/shared/ui/data_table/index.trb",
 		"record DataTable\n\trows: Integer\nend\n",
 	)
 	mut declaration_qbe := ""
 	index = 0
 	while index < executables.size()
-		declaration_check := try _gate6_process(
+		declaration_check := try _recovery_process(
 			executables[index],
 			["check", declaration_imports + "/main.trb"],
 		)
@@ -1723,7 +1723,7 @@ def _gate6_verify_file_root_modules(
 				"declaration-import check failed at compiler " + index.to_s() + ": " + declaration_check.stderr,
 			)
 		end
-		declaration_emission := try _gate6_process(
+		declaration_emission := try _recovery_process(
 			executables[index],
 			["emit-qbe", declaration_imports + "/main.trb"],
 		)
@@ -1741,7 +1741,7 @@ def _gate6_verify_file_root_modules(
 		end
 		index += 1
 	end
-	try _gate6_verify_built_program(
+	try _recovery_verify_built_program(
 		executables[0],
 		declaration_imports + "/main.trb",
 		declaration_imports + "/native-program",
@@ -1750,7 +1750,7 @@ def _gate6_verify_file_root_modules(
 		"Native declaration imports",
 	)
 	reference_declaration_output := declaration_imports + "/reference-program"
-	reference_declaration_build := try _gate6_process(
+	reference_declaration_build := try _recovery_process(
 		reference_trb,
 		[
 			"build",
@@ -1765,35 +1765,35 @@ def _gate6_verify_file_root_modules(
 			"reference declaration-import build failed: " + reference_declaration_build.stderr,
 		)
 	end
-	reference_declaration_runtime := try _gate6_process(reference_declaration_output, [])
+	reference_declaration_runtime := try _recovery_process(reference_declaration_output, [])
 	if reference_declaration_runtime.status != 0
 		return Result<Boolean, String>::Err("reference declaration-import execution failed")
 	end
 	if reference_declaration_runtime.stdout != "declaration-imports-ok\n" || !reference_declaration_runtime.stderr.empty?()
 		return Result<Boolean, String>::Err("reference declaration-import runtime differs")
 	end
-	try _gate6_require_no_intermediates(declaration_imports)
+	try _recovery_require_no_intermediates(declaration_imports)
 
 	root_conflict := workspace + "/gate6-file-root-root-conflict"
-	try _gate6_reset_directory(root_conflict)
-	created_conflict := try _gate6_process("/bin/mkdir", ["-p", root_conflict + "/choice"])
+	try _recovery_reset_directory(root_conflict)
+	created_conflict := try _recovery_process("/bin/mkdir", ["-p", root_conflict + "/choice"])
 	if !created_conflict.success
 		return Result<Boolean, String>::Err("cannot create root-conflict fixture")
 	end
-	try _gate6_write_source(
+	try _recovery_write_source(
 		root_conflict + "/main.trb",
 		"import { choice as direct_choice } from choice\n" +
 		"import { choice as indexed_choice } from choice/index\n\n" +
 		"def main()\n\tputs(direct_choice() + indexed_choice())\n\treturn\nend\n",
 	)
-	try _gate6_write_source(root_conflict + "/choice.trb", "def choice(): String\n\treturn \"direct\"\nend\n")
-	try _gate6_write_source(
+	try _recovery_write_source(root_conflict + "/choice.trb", "def choice(): String\n\treturn \"direct\"\nend\n")
+	try _recovery_write_source(
 		root_conflict + "/choice/index.trb",
 		"def choice(): String\n\treturn \"index\"\nend\n",
 	)
 	index = 0
 	while index < executables.size()
-		try _gate6_expect_file_root_failure(
+		try _recovery_expect_file_root_failure(
 			executables[index],
 			root_conflict,
 			"define the same import root",
@@ -1801,7 +1801,7 @@ def _gate6_verify_file_root_modules(
 		)
 		index += 1
 	end
-	reference_root_conflict := try _gate6_process(reference_trb, ["check", root_conflict + "/main.trb"])
+	reference_root_conflict := try _recovery_process(reference_trb, ["check", root_conflict + "/main.trb"])
 	if reference_root_conflict.status == 0
 		return Result<Boolean, String>::Err("reference accepted a direct/index root conflict")
 	end
@@ -1810,7 +1810,7 @@ def _gate6_verify_file_root_modules(
 	end
 
 	cycle := workspace + "/gate6-file-root-cycle"
-	try _gate6_reset_directory(cycle)
+	try _recovery_reset_directory(cycle)
 	case native_write_text(
 			cycle + "/main.trb",
 			"import { answer } from a\n\ndef main()\n\tputs(answer())\n\treturn\nend\n",
@@ -1829,7 +1829,7 @@ def _gate6_verify_file_root_modules(
 	when Result::Err(error)
 		return Result<Boolean, String>::Err(error.operation + ": " + error.message)
 	end
-	cycle_build := try _gate6_build(
+	cycle_build := try _recovery_build(
 		executables[0],
 		cycle + "/main.trb",
 		cycle + "/program",
@@ -1842,8 +1842,8 @@ def _gate6_verify_file_root_modules(
 	if !cycle_build.stderr.include?("TRBN4003:1:import cycle through a")
 		return Result<Boolean, String>::Err("file-root cycle diagnostic differs: " + cycle_build.stderr)
 	end
-	try _gate6_require_missing(cycle + "/program")
-	try _gate6_require_no_intermediates(cycle)
+	try _recovery_require_missing(cycle + "/program")
+	try _recovery_require_no_intermediates(cycle)
 
 	failure_names := [
 		"missing-module",
@@ -1920,14 +1920,14 @@ def _gate6_verify_file_root_modules(
 	mut failure_index := 0
 	while failure_index < failure_names.size()
 		failure_project := workspace + "/gate6-file-root-" + failure_names[failure_index]
-		try _gate6_reset_directory(failure_project)
-		try _gate6_write_source(failure_project + "/main.trb", failure_entries[failure_index])
+		try _recovery_reset_directory(failure_project)
+		try _recovery_write_source(failure_project + "/main.trb", failure_entries[failure_index])
 		if !failure_libraries[failure_index].empty?()
-			try _gate6_write_source(failure_project + "/lib.trb", failure_libraries[failure_index])
+			try _recovery_write_source(failure_project + "/lib.trb", failure_libraries[failure_index])
 		end
 		mut compiler_index := 0
 		while compiler_index < executables.size()
-			try _gate6_expect_file_root_failure(
+			try _recovery_expect_file_root_failure(
 				executables[compiler_index],
 				failure_project,
 				failure_diagnostics[failure_index],
@@ -1940,11 +1940,11 @@ def _gate6_verify_file_root_modules(
 	return Result<Boolean, String>::Ok(true)
 end
 
-describe("Gate 4 reference bootstrap") do
+describe("Native compiler recovery") do
 	test("builds B0 from the TypeRB compiler source and executes its checked entry") do
-		root := _gate4_environment("TYPE_RB_NATIVE_ROOT")
-		reference_trb := _gate4_environment("TYPE_RB_NATIVE_REFERENCE_TRB")
-		qbe := _gate4_environment("TYPE_RB_NATIVE_QBE")
+		root := _recovery_environment("TYPE_RB_NATIVE_ROOT")
+		reference_trb := _recovery_environment("TYPE_RB_NATIVE_REFERENCE_TRB")
+		qbe := _recovery_environment("TYPE_RB_NATIVE_QBE")
 		if root.empty?() || reference_trb.empty?() || qbe.empty?()
 			expect(true).to_be_true()
 		else
@@ -2025,7 +2025,7 @@ describe("Gate 4 reference bootstrap") do
 				expect(false).to_be_true()
 				""
 			end
-			recovery_source := case gate6f_flatten_compiler_source(
+			recovery_source := case flatten_compiler_recovery_source(
 					compiler_source,
 					storage_source,
 					path_source,
@@ -2141,7 +2141,7 @@ describe("Gate 4 reference bootstrap") do
 			end
 			case decode_gate4_bootstrap_snapshot(snapshot)
 			when Result::Ok(native_module)
-				case build_gate4_bootstrap_executable(
+				case build_compiler_recovery_executable(
 						native_module,
 						qbe,
 						"/usr/bin/cc",
@@ -2171,7 +2171,7 @@ describe("Gate 4 reference bootstrap") do
 						expect(false).to_be_true()
 					end
 					expect(
-						_gate4_build_cycle(
+						_recovery_build_cycle(
 							workspace + "/b0",
 							recovery_source,
 							compiler_path,
@@ -2179,7 +2179,7 @@ describe("Gate 4 reference bootstrap") do
 							workspace,
 						),
 					).to_be_true()
-					case _gate6f_verify_compiler_source_closure(
+					case _recovery_verify_compiler_source_closure(
 							workspace + "/b1",
 							compiler_path,
 							compiler_source,
@@ -2199,21 +2199,21 @@ describe("Gate 4 reference bootstrap") do
 						puts(error)
 						expect(false).to_be_true()
 					end
-					case _gate6_verify_file_cli(workspace)
+					case _recovery_verify_file_cli(workspace)
 					when Result::Ok(_value)
 						expect(true).to_be_true()
 					when Result::Err(error)
 						puts(error)
 						expect(false).to_be_true()
 					end
-					case _gate6_verify_build_cli(workspace, qbe)
+					case _recovery_verify_build_cli(workspace, qbe)
 					when Result::Ok(_value)
 						expect(true).to_be_true()
 					when Result::Err(error)
 						puts(error)
 						expect(false).to_be_true()
 					end
-					case _gate6_verify_file_root_modules(root, workspace, qbe, reference_trb)
+					case _recovery_verify_file_root_modules(root, workspace, qbe, reference_trb)
 					when Result::Ok(_value)
 						expect(true).to_be_true()
 					when Result::Err(error)
@@ -2240,7 +2240,7 @@ describe("Gate 4 reference bootstrap") do
 						puts(error.operation + ": " + error.message)
 						expect(false).to_be_true()
 					end
-					case _gate4_verify_conformance(root, qbe, workspace, matched_go_compiler)
+					case _recovery_verify_conformance(root, qbe, workspace, matched_go_compiler)
 					when Result::Ok(_value)
 						expect(true).to_be_true()
 					when Result::Err(error)

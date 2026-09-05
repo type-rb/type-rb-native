@@ -3,10 +3,10 @@ import { build_gate1_executable } from gate1_toolchain
 import { decode_gate2_snapshot } from gate2_snapshot
 import { build_gate2_executable } from gate2_toolchain
 import { decode_gate3_snapshot, decode_gate4_bootstrap_snapshot } from gate3_snapshot
-import { build_gate3_executable, build_gate3_instrumented_executable, build_gate4_bootstrap_executable } from gate3_toolchain
-import { build_gate4_generation } from gate4_toolchain
+import { build_compiler_recovery_executable, build_gate3_executable, build_gate3_instrumented_executable } from gate3_toolchain
+import { build_recovery_generation } from recovery_generation
 import { build_matched_go_compiler } from matched_go_driver
-import { Gate6FCompilerSources, gate6f_read_compiler_sources } from gate6f_compiler_source
+import { RecoveryCompilerSources, read_compiler_recovery_sources } from compiler_recovery_source
 import { native_write_text } from native_file_system
 import trb/std/process
 import trb/std/result
@@ -16,8 +16,8 @@ def _gate1_driver_usage(): String
 	return "usage: type-rb-native REFERENCE_TRB CONFIG QBE CC WORKSPACE OUTPUT\n       type-rb-native gate2 REFERENCE_TRB CONFIG QBE CC WORKSPACE OUTPUT\n       type-rb-native gate3 REFERENCE_TRB CONFIG QBE CC WORKSPACE OUTPUT\n       type-rb-native gate3-stats REFERENCE_TRB CONFIG QBE CC WORKSPACE OUTPUT\n       type-rb-native gate4-b0 REFERENCE_TRB COMPILER_ENTRY QBE CC WORKSPACE OUTPUT\n       type-rb-native gate4-generation SEED COMPILER_ENTRY QBE CC WORKSPACE GENERATION\n       type-rb-native gate5-matched-go REFERENCE_TRB COMPILER_ENTRY WORKSPACE"
 end
 
-def _gate6f_read_driver_sources(path: String): Gate6FCompilerSources?
-	case gate6f_read_compiler_sources(path)
+def _read_recovery_driver_sources(path: String): RecoveryCompilerSources?
+	case read_compiler_recovery_sources(path)
 	when Result::Ok(sources)
 		return sources
 	when Result::Err(message)
@@ -26,8 +26,8 @@ def _gate6f_read_driver_sources(path: String): Gate6FCompilerSources?
 	end
 end
 
-def _run_gate4_b0_driver(arguments: Array<String>)
-	sources := _gate6f_read_driver_sources(arguments[2])
+def _run_recovery_seed_driver(arguments: Array<String>)
+	sources := _read_recovery_driver_sources(arguments[2])
 	if sources == nil
 		return
 	end
@@ -118,7 +118,7 @@ def _run_gate4_b0_driver(arguments: Array<String>)
 		return
 	end
 	decode_seconds := Instant.now().duration_since(decode_started).total_seconds()
-	case build_gate4_bootstrap_executable(
+	case build_compiler_recovery_executable(
 			native_module,
 			arguments[3],
 			arguments[4],
@@ -137,12 +137,12 @@ def _run_gate4_b0_driver(arguments: Array<String>)
 	return
 end
 
-def _run_gate4_generation_driver(arguments: Array<String>)
-	sources := _gate6f_read_driver_sources(arguments[2])
+def _run_recovery_generation_driver(arguments: Array<String>)
+	sources := _read_recovery_driver_sources(arguments[2])
 	if sources == nil
 		return
 	end
-	case build_gate4_generation(
+	case build_recovery_generation(
 			arguments[1],
 			sources.flattened,
 			arguments[3],
@@ -162,7 +162,7 @@ def _run_gate4_generation_driver(arguments: Array<String>)
 end
 
 def _run_matched_go_driver(arguments: Array<String>)
-	sources := _gate6f_read_driver_sources(arguments[2])
+	sources := _read_recovery_driver_sources(arguments[2])
 	if sources == nil
 		return
 	end
@@ -373,11 +373,11 @@ def main()
 			return
 		end
 		if arguments[0] == "gate4-b0"
-			_run_gate4_b0_driver(arguments)
+			_run_recovery_seed_driver(arguments)
 			return
 		end
 		if arguments[0] == "gate4-generation"
-			_run_gate4_generation_driver(arguments)
+			_run_recovery_generation_driver(arguments)
 			return
 		end
 	end

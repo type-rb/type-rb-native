@@ -3,7 +3,7 @@ import trb/std/process
 import trb/std/result
 import { Instant } from trb/std/time
 
-record Gate4BuildError
+record RecoveryGenerationError
 	phase: String
 	message: String
 	status: Integer? = nil
@@ -11,7 +11,7 @@ record Gate4BuildError
 	stderr: String = ""
 end
 
-record Gate4BuildReport
+record RecoveryGenerationReport
 	qbe_ir_path: String
 	assembly_path: String
 	output_path: String
@@ -20,27 +20,27 @@ record Gate4BuildReport
 	link_seconds: Float
 end
 
-def build_gate4_generation(
+def build_recovery_generation(
 		seed_path: String,
 		compiler_source: String,
 		qbe_command: String,
 		cc_command: String,
 		workspace: String,
 		generation: String,
-	): Result<Gate4BuildReport, Gate4BuildError>
+	): Result<RecoveryGenerationReport, RecoveryGenerationError>
 	compiler_started := Instant.now()
 	compiler_process := case Process.run(seed_path, ["--source-content", "emit-qbe", compiler_source])
 	when Result::Ok(process)
 		process
 	when Result::Err(error)
-		return Result<Gate4BuildReport, Gate4BuildError>::Err(
-			Gate4BuildError.new(phase: generation + "-compiler", message: error.operation + ": " + error.message)
+		return Result<RecoveryGenerationReport, RecoveryGenerationError>::Err(
+			RecoveryGenerationError.new(phase: generation + "-compiler", message: error.operation + ": " + error.message)
 		)
 	end
 	compiler_seconds := Instant.now().duration_since(compiler_started).total_seconds()
 	if !compiler_process.success
-		return Result<Gate4BuildReport, Gate4BuildError>::Err(
-			Gate4BuildError.new(
+		return Result<RecoveryGenerationReport, RecoveryGenerationError>::Err(
+			RecoveryGenerationError.new(
 				phase: generation + "-compiler",
 				message: "the seed compiler did not emit QBE",
 				status: compiler_process.status,
@@ -55,8 +55,8 @@ def build_gate4_generation(
 	case native_write_text(qbe_ir_path, compiler_process.stdout)
 	when Result::Ok(_unit)
 	when Result::Err(error)
-		return Result<Gate4BuildReport, Gate4BuildError>::Err(
-			Gate4BuildError.new(phase: generation + "-write-qbe", message: error.operation + ": " + error.message)
+		return Result<RecoveryGenerationReport, RecoveryGenerationError>::Err(
+			RecoveryGenerationError.new(phase: generation + "-write-qbe", message: error.operation + ": " + error.message)
 		)
 	end
 	qbe_started := Instant.now()
@@ -64,14 +64,14 @@ def build_gate4_generation(
 	when Result::Ok(process)
 		process
 	when Result::Err(error)
-		return Result<Gate4BuildReport, Gate4BuildError>::Err(
-			Gate4BuildError.new(phase: generation + "-qbe", message: error.operation + ": " + error.message)
+		return Result<RecoveryGenerationReport, RecoveryGenerationError>::Err(
+			RecoveryGenerationError.new(phase: generation + "-qbe", message: error.operation + ": " + error.message)
 		)
 	end
 	qbe_seconds := Instant.now().duration_since(qbe_started).total_seconds()
 	if !qbe_process.success
-		return Result<Gate4BuildReport, Gate4BuildError>::Err(
-			Gate4BuildError.new(
+		return Result<RecoveryGenerationReport, RecoveryGenerationError>::Err(
+			RecoveryGenerationError.new(
 				phase: generation + "-qbe",
 				message: "QBE rejected the compiler output",
 				status: qbe_process.status,
@@ -83,8 +83,8 @@ def build_gate4_generation(
 	case native_write_text(assembly_path, qbe_process.stdout)
 	when Result::Ok(_unit)
 	when Result::Err(error)
-		return Result<Gate4BuildReport, Gate4BuildError>::Err(
-			Gate4BuildError.new(phase: generation + "-write-assembly", message: error.operation + ": " + error.message)
+		return Result<RecoveryGenerationReport, RecoveryGenerationError>::Err(
+			RecoveryGenerationError.new(phase: generation + "-write-assembly", message: error.operation + ": " + error.message)
 		)
 	end
 	link_started := Instant.now()
@@ -92,14 +92,14 @@ def build_gate4_generation(
 	when Result::Ok(process)
 		process
 	when Result::Err(error)
-		return Result<Gate4BuildReport, Gate4BuildError>::Err(
-			Gate4BuildError.new(phase: generation + "-link", message: error.operation + ": " + error.message)
+		return Result<RecoveryGenerationReport, RecoveryGenerationError>::Err(
+			RecoveryGenerationError.new(phase: generation + "-link", message: error.operation + ": " + error.message)
 		)
 	end
 	link_seconds := Instant.now().duration_since(link_started).total_seconds()
 	if !link_process.success
-		return Result<Gate4BuildReport, Gate4BuildError>::Err(
-			Gate4BuildError.new(
+		return Result<RecoveryGenerationReport, RecoveryGenerationError>::Err(
+			RecoveryGenerationError.new(
 				phase: generation + "-link",
 				message: "the system linker rejected the compiler assembly",
 				status: link_process.status,
@@ -108,8 +108,8 @@ def build_gate4_generation(
 			)
 		)
 	end
-	return Result<Gate4BuildReport, Gate4BuildError>::Ok(
-		Gate4BuildReport.new(
+	return Result<RecoveryGenerationReport, RecoveryGenerationError>::Ok(
+		RecoveryGenerationReport.new(
 			qbe_ir_path: qbe_ir_path,
 			assembly_path: assembly_path,
 			output_path: output_path,
