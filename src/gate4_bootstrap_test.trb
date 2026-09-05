@@ -1315,7 +1315,7 @@ def _prepare_compiler_closure(
 		omitted: String,
 	): Result<Boolean, String>
 	try _gate6_reset_directory(directory)
-	names := ["compiler", "storage", "path", "mir", "literals", "state", "parser"]
+	names := ["compiler", "storage", "path", "mir", "literals", "state", "parser", "resolution", "checked_program"]
 	mut index := 0
 	while index < names.size()
 		if names[index] != omitted
@@ -1337,6 +1337,8 @@ def _gate6f_verify_compiler_source_closure(
 		literals: String,
 		state: String,
 		parser: String,
+		resolution: String,
+		checked_program: String,
 		workspace: String,
 	): Result<Boolean, String>
 	canonical := try _gate6_process(executable, ["emit-qbe", compiler_path])
@@ -1365,12 +1367,14 @@ def _gate6f_verify_compiler_source_closure(
 	literal_mutation := try _gate6f_replace_once(literals, "return parsed <= 1024", "return parsed <= 1023")
 	state_mutation := try _gate6f_replace_once(state, "state.diagnostic_count[0] > 0", "state.diagnostic_count[0] > 1")
 	parser_mutation := try _gate6f_replace_once(parser, "unexpected token ", "unexpected syntax token ")
-	names := ["compiler", "storage", "path", "mir", "literals", "state", "parser"]
-	sources := [entry, storage, path, mir, literals, state, parser]
-	mutations := [entry, storage_mutation, path_mutation, mir_mutation, literal_mutation, state_mutation, parser_mutation]
+	resolution_mutation := try _gate6f_replace_once(resolution, "unresolved function ", "unresolved callable ")
+	checked_program_mutation := try _gate6f_replace_once(checked_program, "unsupported operator ", "unsupported binary operator ")
+	names := ["compiler", "storage", "path", "mir", "literals", "state", "parser", "resolution", "checked_program"]
+	sources := [entry, storage, path, mir, literals, state, parser, resolution, checked_program]
+	mutations := [entry, storage_mutation, path_mutation, mir_mutation, literal_mutation, state_mutation, parser_mutation, resolution_mutation, checked_program_mutation]
 	mut index := 1
 	while index < names.size()
-		mut changed := [entry, storage, path, mir, literals, state, parser]
+		mut changed := [entry, storage, path, mir, literals, state, parser, resolution, checked_program]
 		changed[index] = mutations[index]
 		directory := workspace + "/gate6f-compiler-" + names[index] + "-mutation"
 		try _prepare_compiler_closure(directory, changed, "")
@@ -2005,6 +2009,22 @@ describe("Gate 4 reference bootstrap") do
 				expect(false).to_be_true()
 				""
 			end
+			resolution_source := case native_read_text(root + "/compiler/gate4/src/resolution.trb")
+			when Result::Ok(source)
+				source
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+				""
+			end
+			checked_program_source := case native_read_text(root + "/compiler/gate4/src/checked_program.trb")
+			when Result::Ok(source)
+				source
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+				""
+			end
 			recovery_source := case gate6f_flatten_compiler_source(
 					compiler_source,
 					storage_source,
@@ -2013,6 +2033,8 @@ describe("Gate 4 reference bootstrap") do
 					literals_source,
 					state_source,
 					parser_source,
+					resolution_source,
+					checked_program_source,
 				)
 			when Result::Ok(source)
 				source
@@ -2065,6 +2087,18 @@ describe("Gate 4 reference bootstrap") do
 				expect(false).to_be_true()
 			end
 			case native_write_text(workspace + "/parser.trb", parser_source)
+			when Result::Ok(_unit)
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+			end
+			case native_write_text(workspace + "/resolution.trb", resolution_source)
+			when Result::Ok(_unit)
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+			end
+			case native_write_text(workspace + "/checked_program.trb", checked_program_source)
 			when Result::Ok(_unit)
 			when Result::Err(error)
 				puts(error.operation + ": " + error.message)
@@ -2155,6 +2189,8 @@ describe("Gate 4 reference bootstrap") do
 							literals_source,
 							state_source,
 							parser_source,
+							resolution_source,
+							checked_program_source,
 							workspace,
 						)
 					when Result::Ok(_value)

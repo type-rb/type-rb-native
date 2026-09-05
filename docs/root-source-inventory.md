@@ -91,12 +91,14 @@ do not authorize merging the snapshot and ordinary self-hosted MIRs.
   `tools/compatibility_manifest.py` to check supported snapshot versions.
   Its moved path must update that consumer atomically.
 - The ordinary compiler closure is `compiler/gate4/src/compiler.trb` plus its
-  explicit storage/path/MIR/literal/state/parser imports. State depends on the
-  MIR model and shared storage/literal helpers; the parser depends on state and
-  storage, never back on the compiler entry. Root helpers do not become ordinary compiler
+  explicit storage/path/MIR/literal/state/parser/resolution/checked-program
+  imports. State depends on the MIR model and shared storage/literal helpers;
+  resolution consumes shared state and syntax, and checked-program construction
+  consumes resolution, never back on the compiler entry. Root helpers do not become ordinary compiler
   modules just because the reference root project compiles them.
-  `gate6f_compiler_source.trb` validates the entry, MIR, state and parser import prefixes
-  and derives a recovery-only flat source from seven canonical inputs. Compiler module extraction must
+  `gate6f_compiler_source.trb` validates the entry, MIR, state, parser, resolution
+  and checked-program import prefixes and derives a recovery-only flat source
+  from nine canonical inputs. Compiler module extraction must
   update this derivation and its tests together.
 - `tools/bootstrap-seed.sh` and current target/memory/performance workflows
   build the ordinary closure through explicit paths. `tools/gate6*-benchmark`

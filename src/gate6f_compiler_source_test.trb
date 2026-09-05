@@ -1,4 +1,4 @@
-import { compiler_source_has_import, gate6f_compiler_import_prefix, gate6f_flatten_compiler_source, mir_source_import_prefix, parser_source_import_prefix, state_source_import_prefix } from gate6f_compiler_source
+import { checked_program_source_import_prefix, compiler_source_has_import, gate6f_compiler_import_prefix, gate6f_flatten_compiler_source, mir_source_import_prefix, parser_source_import_prefix, resolution_source_import_prefix, state_source_import_prefix } from gate6f_compiler_source
 import trb/std/result
 import { describe, expect, test } from trb/std/test
 
@@ -12,10 +12,10 @@ describe("Gate 6F compiler source closure") do
 
 	test("derives one deterministic recovery source from the canonical modules") do
 		entry := gate6f_compiler_import_prefix() + "def main()\n\treturn\nend\n"
-		case gate6f_flatten_compiler_source(entry, "def storage()\n\treturn\nend\n", "def path()\n\treturn\nend\n", mir_source_import_prefix() + "def mir()\n\treturn\nend\n", "def literals()\n\treturn\nend\n", state_source_import_prefix() + "def state()\n\treturn\nend\n", parser_source_import_prefix() + "def parser()\n\treturn\nend\n")
+		case gate6f_flatten_compiler_source(entry, "def storage()\n\treturn\nend\n", "def path()\n\treturn\nend\n", mir_source_import_prefix() + "def mir()\n\treturn\nend\n", "def literals()\n\treturn\nend\n", state_source_import_prefix() + "def state()\n\treturn\nend\n", parser_source_import_prefix() + "def parser()\n\treturn\nend\n", resolution_source_import_prefix() + "def resolution()\n\treturn\nend\n", checked_program_source_import_prefix() + "def checked_program()\n\treturn\nend\n")
 		when Result::Ok(flattened)
 			expect(flattened).to_equal(
-				"def storage()\n\treturn\nend\n\ndef path()\n\treturn\nend\n\ndef literals()\n\treturn\nend\n\ndef mir()\n\treturn\nend\n\ndef state()\n\treturn\nend\n\ndef parser()\n\treturn\nend\n\ndef main()\n\treturn\nend\n",
+				"def storage()\n\treturn\nend\n\ndef path()\n\treturn\nend\n\ndef literals()\n\treturn\nend\n\ndef mir()\n\treturn\nend\n\ndef state()\n\treturn\nend\n\ndef parser()\n\treturn\nend\n\ndef resolution()\n\treturn\nend\n\ndef checked_program()\n\treturn\nend\n\ndef main()\n\treturn\nend\n",
 			)
 		when Result::Err(message)
 			puts(message)
@@ -24,7 +24,7 @@ describe("Gate 6F compiler source closure") do
 	end
 
 	test("rejects a changed compiler import boundary") do
-		case gate6f_flatten_compiler_source("def main()\n\treturn\nend\n", "", "", "", "", "", "")
+		case gate6f_flatten_compiler_source("def main()\n\treturn\nend\n", "", "", "", "", "", "", resolution_source_import_prefix() + "resolution", checked_program_source_import_prefix() + "checked_program")
 		when Result::Ok(_flattened)
 			expect(false).to_be_true()
 		when Result::Err(message)
@@ -34,7 +34,7 @@ describe("Gate 6F compiler source closure") do
 
 	test("rejects a missing or changed MIR import boundary") do
 		entry := gate6f_compiler_import_prefix() + "def main()\n\treturn\nend\n"
-		case gate6f_flatten_compiler_source(entry, "storage", "path", "import unknown\n", "literals", "", "")
+		case gate6f_flatten_compiler_source(entry, "storage", "path", "import unknown\n", "literals", "", "", resolution_source_import_prefix() + "resolution", checked_program_source_import_prefix() + "checked_program")
 		when Result::Ok(_flattened)
 			expect(false).to_be_true()
 		when Result::Err(message)
@@ -47,17 +47,38 @@ describe("Gate 6F compiler source closure") do
 		invalid := ["", "import unknown\n"]
 		mut index := 0
 		while index < invalid.size()
-			case gate6f_flatten_compiler_source(entry, "storage", "path", mir_source_import_prefix() + "mir", "literals", invalid[index], parser_source_import_prefix() + "parser")
+			case gate6f_flatten_compiler_source(entry, "storage", "path", mir_source_import_prefix() + "mir", "literals", invalid[index], parser_source_import_prefix() + "parser", resolution_source_import_prefix() + "resolution", checked_program_source_import_prefix() + "checked_program")
 			when Result::Ok(_flattened)
 				expect(false).to_be_true()
 			when Result::Err(message)
 				expect(message).to_equal("State source import boundary differs")
 			end
-			case gate6f_flatten_compiler_source(entry, "storage", "path", mir_source_import_prefix() + "mir", "literals", state_source_import_prefix() + "state", invalid[index])
+			case gate6f_flatten_compiler_source(entry, "storage", "path", mir_source_import_prefix() + "mir", "literals", state_source_import_prefix() + "state", invalid[index], resolution_source_import_prefix() + "resolution", checked_program_source_import_prefix() + "checked_program")
 			when Result::Ok(_flattened)
 				expect(false).to_be_true()
 			when Result::Err(message)
 				expect(message).to_equal("Parser source import boundary differs")
+			end
+			index += 1
+		end
+	end
+
+	test("rejects missing or changed semantic frontend import boundaries") do
+		entry := gate6f_compiler_import_prefix() + "entry"
+		invalid := ["", "import unknown\n"]
+		mut index := 0
+		while index < invalid.size()
+			case gate6f_flatten_compiler_source(entry, "storage", "path", mir_source_import_prefix() + "mir", "literals", state_source_import_prefix() + "state", parser_source_import_prefix() + "parser", invalid[index], checked_program_source_import_prefix() + "checked_program")
+			when Result::Ok(_flattened)
+				expect(false).to_be_true()
+			when Result::Err(message)
+				expect(message).to_equal("Resolution source import boundary differs")
+			end
+			case gate6f_flatten_compiler_source(entry, "storage", "path", mir_source_import_prefix() + "mir", "literals", state_source_import_prefix() + "state", parser_source_import_prefix() + "parser", resolution_source_import_prefix() + "resolution", invalid[index])
+			when Result::Ok(_flattened)
+				expect(false).to_be_true()
+			when Result::Err(message)
+				expect(message).to_equal("Checked-program source import boundary differs")
 			end
 			index += 1
 		end
@@ -68,10 +89,10 @@ describe("Gate 6F compiler source closure") do
 		mut invalid_index := 0
 		while invalid_index < invalid.size()
 			mut slot := 0
-			while slot < 7
-				mut sources := ["def main()\n\treturn\nend\n", "storage", "path", "mir", "literals", "state", "parser"]
+			while slot < 9
+				mut sources := ["def main()\n\treturn\nend\n", "storage", "path", "mir", "literals", "state", "parser", "resolution", "checked_program"]
 				sources[slot] = invalid[invalid_index]
-				case gate6f_flatten_compiler_source(gate6f_compiler_import_prefix() + sources[0], sources[1], sources[2], mir_source_import_prefix() + sources[3], sources[4], state_source_import_prefix() + sources[5], parser_source_import_prefix() + sources[6])
+				case gate6f_flatten_compiler_source(gate6f_compiler_import_prefix() + sources[0], sources[1], sources[2], mir_source_import_prefix() + sources[3], sources[4], state_source_import_prefix() + sources[5], parser_source_import_prefix() + sources[6], resolution_source_import_prefix() + sources[7], checked_program_source_import_prefix() + sources[8])
 				when Result::Ok(_flattened)
 					expect(false).to_be_true()
 				when Result::Err(message)
