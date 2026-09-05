@@ -45,6 +45,26 @@ and records the first matched-Go driver move under
 [issue #258](https://github.com/type-rb/type-rb-native/issues/258). Only that
 support module and its test have moved; the other destinations are proposals.
 O3–O5 remain planned, not completed.
+The first O3 candidate is the ordinary compiler's MIR model, verifier, and
+target-independent pass code, currently grouped near the beginning of the
+large `compiler.trb`. Audit its numeric-literal utility dependencies first so
+the extraction does not introduce a compiler/MIR import cycle or duplicate
+semantic predicates. Keep the runtime intrinsics at the entry boundary and
+update strict recovery flattening and its negative tests atomically. This is
+a responsibility extraction, not a line-count-only split or another compiler
+copy. It takes precedence over the next new optimization after the current
+bounded checked-binary checkpoint.
+
+Follow with the architecture/development-plan documentation cleanup below and
+an evidence-based audit of open issues. Record a concrete dependency or reopen
+condition for deferred work; close a rejected bounded experiment only with its
+retained result, not as though the optimization had shipped. Then resume
+general-purpose MIR optimization toward repeatable spectral-norm performance
+at least matching Pure Go. Independent documentation and issue maintenance
+may proceed while code authorities run. Improve a measured CI bottleneck
+without weakening the acceptance authorities or running formal benchmarks for
+documentation-only changes.
+
 Before each code slice, register its exact files, baseline, expected generated
 identity effects, and acceptance checks in a public issue. If O2 encounters a
 correctness or recovery blocker, publish the precise blocker and next repair,
