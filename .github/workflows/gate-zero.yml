@@ -142,6 +142,15 @@ jobs:
             "$RUNNER_TEMP/trb" check --config "$config"
           done
 
+      - name: Verify the Gate 4 compiler closure fits snapshot v4
+        run: |
+          mkdir -p "$RUNNER_TEMP/gate4-compiler"
+          cp compiler/gate4/src/compiler.trb "$RUNNER_TEMP/gate4-compiler/compiler.trb"
+          cp compiler/gate4/src/storage.trb "$RUNNER_TEMP/gate4-compiler/storage.trb"
+          cp compiler/gate4/src/path.trb "$RUNNER_TEMP/gate4-compiler/path.trb"
+          "$RUNNER_TEMP/trb" compiler bootstrap-snapshot --snapshot-version 4 "$RUNNER_TEMP/gate4-compiler/compiler.trb" > "$RUNNER_TEMP/gate4-compiler-snapshot.json"
+          test -s "$RUNNER_TEMP/gate4-compiler-snapshot.json"
+
       - name: Run gate tests, fixtures, and source differential corpus
         env:
           TYPE_RB_NATIVE_ROOT: ${{ github.workspace }}
@@ -159,6 +168,7 @@ jobs:
           "$RUNNER_TEMP/trb" test --config compiler/gate4/trbconfig.jsonc
 
       - name: Run the self-hosted managed-runtime allocation smoke
+        id: allocation_smoke
         run: |
           /bin/sh tools/runtime-memory-soak/runtime-memory-soak.sh \
             smoke \
@@ -170,7 +180,7 @@ jobs:
             "$RUNNER_TEMP/runtime-memory-smoke-evidence"
 
       - name: Upload managed-runtime smoke evidence
-        if: always()
+        if: always() && steps.allocation_smoke.outcome != 'skipped'
         uses: actions/upload-artifact@v4
         with:
           name: runtime-memory-smoke-${{ github.run_id }}-${{ github.run_attempt }}
@@ -179,6 +189,7 @@ jobs:
           retention-days: 30
 
       - name: Run the persistent-worker memory smoke
+        id: worker_smoke
         run: |
           /bin/sh tools/runtime-worker-soak/runtime-worker-soak.sh \
             smoke \
@@ -191,7 +202,7 @@ jobs:
             "$RUNNER_TEMP/runtime-worker-smoke-evidence"
 
       - name: Upload persistent-worker smoke evidence
-        if: always()
+        if: always() && steps.worker_smoke.outcome != 'skipped'
         uses: actions/upload-artifact@v4
         with:
           name: runtime-worker-smoke-${{ github.run_id }}-${{ github.run_attempt }}
@@ -200,6 +211,7 @@ jobs:
           retention-days: 30
 
       - name: Verify the identical-source language benchmark corpus
+        id: benchmark_corpus
         run: |
           /bin/sh tools/benchmarksgame-verify.sh \
             --native-compiler /tmp/type-rb-native-gate4-bootstrap/native-chain-b4/compiler \
@@ -210,22 +222,13 @@ jobs:
             --workspace "$RUNNER_TEMP/benchmarksgame-verify"
 
       - name: Upload language benchmark verification evidence
-        if: always()
+        if: always() && steps.benchmark_corpus.outcome != 'skipped'
         uses: actions/upload-artifact@v4
         with:
           name: benchmarksgame-verify-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/benchmarksgame-verify
           if-no-files-found: error
           retention-days: 30
-
-      - name: Verify the Gate 4 compiler closure fits snapshot v4
-        run: |
-          mkdir -p "$RUNNER_TEMP/gate4-compiler"
-          cp compiler/gate4/src/compiler.trb "$RUNNER_TEMP/gate4-compiler/compiler.trb"
-          cp compiler/gate4/src/storage.trb "$RUNNER_TEMP/gate4-compiler/storage.trb"
-          cp compiler/gate4/src/path.trb "$RUNNER_TEMP/gate4-compiler/path.trb"
-          "$RUNNER_TEMP/trb" compiler bootstrap-snapshot --snapshot-version 4 "$RUNNER_TEMP/gate4-compiler/compiler.trb" > "$RUNNER_TEMP/gate4-compiler-snapshot.json"
-          test -s "$RUNNER_TEMP/gate4-compiler-snapshot.json"
 
       - name: Verify the Go-free Gate 4 bootstrap harness
         run: |

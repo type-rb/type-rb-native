@@ -46,6 +46,11 @@ The valid cases cover:
 - repeated Array-header reads in an owned-managed loop, with exact invalidation
   after an opaque mutating call and local Array rebinding in
   `valid/array-header-cache-invalidation.trb`;
+- verified stable Array-header reuse in nested loops, including empty input,
+  ordinary positive and negative indexes, growth, parameter rebinding,
+  allocation, ordinary calls, element mutation through a possible alias, and
+  outer-loop cache invalidation before inner-loop growth in
+  `valid/stable-array-header-mir.trb`;
 - zero-based and bounded-derived unit-step induction loops whose nested Array
   reads retain the unsigned upper-bounds check, followed by a reset and
   ordinary negative indexing in `valid/nonnegative-loop-index.trb`;
@@ -90,6 +95,10 @@ lower check cannot weaken the retained upper-bound failure.
 The verified reduction accumulator is paired with
 `runtime-invalid/integer-array-reduction-overflow.trb` so its phi lowering
 cannot weaken checked Integer addition.
+The stable-header regressions retain the bounds panic when an index changes
+before its access, the loop bound extends past the Array length, or a later
+decrement invalidates the next iteration's nonnegative-index premise. These
+fixtures deliberately use helpers outside the complete reduction-MIR subset.
 
 The `mutations` directory contains a base program and two independently changed
 sources. All three must produce distinct QBE and distinct runtime output. This
