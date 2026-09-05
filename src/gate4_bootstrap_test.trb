@@ -1315,7 +1315,7 @@ def _prepare_compiler_closure(
 		omitted: String,
 	): Result<Boolean, String>
 	try _gate6_reset_directory(directory)
-	names := ["compiler", "storage", "path", "mir", "literals"]
+	names := ["compiler", "storage", "path", "mir", "literals", "state", "parser"]
 	mut index := 0
 	while index < names.size()
 		if names[index] != omitted
@@ -1335,6 +1335,8 @@ def _gate6f_verify_compiler_source_closure(
 		path: String,
 		mir: String,
 		literals: String,
+		state: String,
+		parser: String,
 		workspace: String,
 	): Result<Boolean, String>
 	canonical := try _gate6_process(executable, ["emit-qbe", compiler_path])
@@ -1361,12 +1363,14 @@ def _gate6f_verify_compiler_source_closure(
 	)
 	mir_mutation := try _gate6f_replace_once(mir, "MIR failure target does not exist", "MIR failure target is absent")
 	literal_mutation := try _gate6f_replace_once(literals, "return parsed <= 1024", "return parsed <= 1023")
-	names := ["compiler", "storage", "path", "mir", "literals"]
-	sources := [entry, storage, path, mir, literals]
-	mutations := [entry, storage_mutation, path_mutation, mir_mutation, literal_mutation]
+	state_mutation := try _gate6f_replace_once(state, "state.diagnostic_count[0] > 0", "state.diagnostic_count[0] > 1")
+	parser_mutation := try _gate6f_replace_once(parser, "unexpected token ", "unexpected syntax token ")
+	names := ["compiler", "storage", "path", "mir", "literals", "state", "parser"]
+	sources := [entry, storage, path, mir, literals, state, parser]
+	mutations := [entry, storage_mutation, path_mutation, mir_mutation, literal_mutation, state_mutation, parser_mutation]
 	mut index := 1
 	while index < names.size()
-		mut changed := [entry, storage, path, mir, literals]
+		mut changed := [entry, storage, path, mir, literals, state, parser]
 		changed[index] = mutations[index]
 		directory := workspace + "/gate6f-compiler-" + names[index] + "-mutation"
 		try _prepare_compiler_closure(directory, changed, "")
@@ -1985,12 +1989,30 @@ describe("Gate 4 reference bootstrap") do
 				expect(false).to_be_true()
 				""
 			end
+			state_source := case native_read_text(root + "/compiler/gate4/src/state.trb")
+			when Result::Ok(source)
+				source
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+				""
+			end
+			parser_source := case native_read_text(root + "/compiler/gate4/src/parser.trb")
+			when Result::Ok(source)
+				source
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+				""
+			end
 			recovery_source := case gate6f_flatten_compiler_source(
 					compiler_source,
 					storage_source,
 					path_source,
 					mir_source,
 					literals_source,
+					state_source,
+					parser_source,
 				)
 			when Result::Ok(source)
 				source
@@ -2031,6 +2053,18 @@ describe("Gate 4 reference bootstrap") do
 				expect(false).to_be_true()
 			end
 			case native_write_text(workspace + "/literals.trb", literals_source)
+			when Result::Ok(_unit)
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+			end
+			case native_write_text(workspace + "/state.trb", state_source)
+			when Result::Ok(_unit)
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+			end
+			case native_write_text(workspace + "/parser.trb", parser_source)
 			when Result::Ok(_unit)
 			when Result::Err(error)
 				puts(error.operation + ": " + error.message)
@@ -2119,6 +2153,8 @@ describe("Gate 4 reference bootstrap") do
 							path_source,
 							mir_source,
 							literals_source,
+							state_source,
+							parser_source,
 							workspace,
 						)
 					when Result::Ok(_value)

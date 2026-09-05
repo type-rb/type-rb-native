@@ -7,15 +7,25 @@ record Gate6FCompilerSources
 	path: String
 	mir: String
 	literals: String
+	state: String
+	parser: String
 	flattened: String
 end
 
 def gate6f_compiler_import_prefix(): String
-	return "import { Gate4IntegerStorage, Gate4StringStorage, gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage\nimport { gate4_path_basename, gate4_path_directory, gate4_path_join, gate4_string_ends_with, gate4_string_starts_with, gate4_string_without_suffix } from path\nimport { Gate4MirModule, gate4_mir_array_element_type, gate4_mir_block_index, gate4_mir_function_index, gate4_mir_value_type, gate4_optimize_verified_mir, gate4_verify_mir } from mir\nimport { gate4_ascii_code, gate4_float_literal_in_range, gate4_integer_literal_in_range, gate4_number_is_float, gate4_number_without_underscores, gate4_small_nonnegative_integer_operand } from literals\n\n"
+	return "import { Gate4IntegerStorage, Gate4StringStorage, gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage\nimport { gate4_path_basename, gate4_path_directory, gate4_path_join, gate4_string_ends_with, gate4_string_starts_with, gate4_string_without_suffix } from path\nimport { gate4_mir_array_element_type, gate4_mir_block_index, gate4_mir_function_index, gate4_mir_value_type, gate4_optimize_verified_mir, gate4_verify_mir } from mir\nimport { gate4_ascii_code, gate4_float_literal_in_range, gate4_integer_literal_in_range, gate4_number_is_float, gate4_number_without_underscores, gate4_small_nonnegative_integer_operand } from literals\nimport { Gate4Compiler, Gate4SymbolIndex, gate4_add_module, gate4_add_name_index, gate4_build_symbol_index, gate4_compiler_new, gate4_diagnostic, gate4_find_module, gate4_find_name, gate4_find_symbol, gate4_has_diagnostic, gate4_symbol_index_new, gate4_terminal_token } from state\nimport { gate4_advance, gate4_binary_operator_id, gate4_binary_precedence, gate4_declaration_start, gate4_expect, gate4_expect_identifier, gate4_finish_statement, gate4_parse_module, gate4_parse_simple_statement_syntax, gate4_parse_type, gate4_skip_newlines, gate4_token_is } from parser\n\n"
 end
 
 def mir_source_import_prefix(): String
 	return "import { gate4_float_literal_in_range, gate4_integer_literal_in_range, gate4_number_is_float, gate4_small_nonnegative_integer_operand } from literals\n\n"
+end
+
+def state_source_import_prefix(): String
+	return "import { Gate4IntegerStorage, Gate4StringStorage, gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage\nimport { Gate4MirModule } from mir\nimport { gate4_ascii_code } from literals\n\n"
+end
+
+def parser_source_import_prefix(): String
+	return "import { gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string } from storage\nimport { Gate4Compiler, gate4_diagnostic, gate4_has_diagnostic, gate4_terminal_token } from state\n\n"
 end
 
 def compiler_source_has_import(source: String): Boolean
@@ -44,6 +54,8 @@ def gate6f_flatten_compiler_source(
 		path: String,
 		mir: String,
 		literals: String,
+		state: String,
+		parser: String,
 	): Result<String, String>
 	prefix := gate6f_compiler_import_prefix()
 	if !entry.start_with?(prefix)
@@ -55,7 +67,17 @@ def gate6f_flatten_compiler_source(
 		return Result<String, String>::Err("MIR source import boundary differs")
 	end
 	mir_core := mir.slice(mir_prefix.size()...mir.size())
-	declarations := [core, storage, path, mir_core, literals]
+	state_prefix := state_source_import_prefix()
+	if !state.start_with?(state_prefix)
+		return Result<String, String>::Err("State source import boundary differs")
+	end
+	state_core := state.slice(state_prefix.size()...state.size())
+	parser_prefix := parser_source_import_prefix()
+	if !parser.start_with?(parser_prefix)
+		return Result<String, String>::Err("Parser source import boundary differs")
+	end
+	parser_core := parser.slice(parser_prefix.size()...parser.size())
+	declarations := [core, storage, path, mir_core, literals, state_core, parser_core]
 	mut index := 0
 	while index < declarations.size()
 		if declarations[index].empty?()
@@ -66,7 +88,7 @@ def gate6f_flatten_compiler_source(
 		end
 		index += 1
 	end
-	return Result<String, String>::Ok(storage + "\n" + path + "\n" + literals + "\n" + mir_core + "\n" + core)
+	return Result<String, String>::Ok(storage + "\n" + path + "\n" + literals + "\n" + mir_core + "\n" + state_core + "\n" + parser_core + "\n" + core)
 end
 
 def gate6f_compiler_directory(path: String): String
@@ -116,7 +138,9 @@ def gate6f_read_compiler_sources(entry_path: String): Result<Gate6FCompilerSourc
 	path := try gate6f_read_required_source(gate6f_compiler_path(directory, "path.trb"))
 	mir := try gate6f_read_required_source(gate6f_compiler_path(directory, "mir.trb"))
 	literals := try gate6f_read_required_source(gate6f_compiler_path(directory, "literals.trb"))
-	flattened := try gate6f_flatten_compiler_source(entry, storage, path, mir, literals)
+	state := try gate6f_read_required_source(gate6f_compiler_path(directory, "state.trb"))
+	parser := try gate6f_read_required_source(gate6f_compiler_path(directory, "parser.trb"))
+	flattened := try gate6f_flatten_compiler_source(entry, storage, path, mir, literals, state, parser)
 	return Result<Gate6FCompilerSources, String>::Ok(
 		Gate6FCompilerSources.new(
 			entry: entry,
@@ -124,6 +148,8 @@ def gate6f_read_compiler_sources(entry_path: String): Result<Gate6FCompilerSourc
 			path: path,
 			mir: mir,
 			literals: literals,
+			state: state,
+			parser: parser,
 			flattened: flattened,
 		),
 	)

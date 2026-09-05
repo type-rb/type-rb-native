@@ -11,13 +11,20 @@ passes its verified result type to the same adapter. Missing, malformed, or
 operator-mismatched plans fail closed. The adapter no longer reconstructs the
 binary result type from emitted operands.
 
-The next bounded prerequisite makes `lower_binary_operand` return only its
+[PR #266](https://github.com/type-rb/type-rb-native/pull/266) makes `lower_binary_operand` return only its
 backend operand. Its checked-program or verified-MIR caller constructs the
 typed result once, rather than repeating metadata construction at seven
 arithmetic/comparison exits. This includes Float and String comparisons whose
 Boolean result must not inherit either operand's type. It is a compactness and
 ownership refinement, not completion of checkpoint 2. The existing strict
 same-run compiler/text/QBE and build-cost requirements remain unchanged.
+
+Its [formal run](https://github.com/type-rb/type-rb-native/actions/runs/33975291847)
+passes all authorities and the stricter registered compactness requirements.
+Complete compilers are 349,224 Darwin arm64 and 313,248 Linux arm64 bytes,
+662,472 combined; code sections are 248,364 and 250,752 bytes. Shared compiler
+QBE is 1,115,506 bytes. Build-time and RSS ratios remain within the ordinary
+1.05 bounds. These are compiler results, not generated-program speedups.
 
 This is not completion of the literal-fact migration: the direct wrapper still
 uses emitted literal spelling until checked/MIR plans own the decisions for
@@ -37,9 +44,12 @@ and compactness results, not generated-program runtime improvements.
 The first organization slice under
 [issue #262](https://github.com/type-rb/type-rb-native/issues/262) separates the
 MIR model, verifier, and target-independent passes into `mir.trb`, with shared
-numeric helpers in `literals.trb`. The entry retains frontend construction and
-QBE adaptation. Explicit imports, independently owned tests, and the strict
-five-file recovery derivation move together. This is source decomposition,
+numeric helpers in `literals.trb`. The subsequent
+[frontend extraction](https://github.com/type-rb/type-rb-native/issues/267) gives
+shared state and syntax parsing independent owners in `state.trb` and
+`parser.trb`. The entry retains checking/MIR construction and QBE adaptation.
+Explicit imports, independently owned tests, and the strict seven-file
+recovery derivation move together. This is source decomposition,
 not broader MIR coverage or completion of direct-emitter recovery; see the
 [organization schedule](repository-organization.md).
 

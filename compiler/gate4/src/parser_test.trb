@@ -1,0 +1,35 @@
+import { gate4_binary_operator_id, gate4_binary_precedence, gate4_skip_newlines, gate4_token_is } from parser
+import { gate4_compiler_new } from state
+import { gate4_store_integer, gate4_store_string } from storage
+import { describe, expect, test } from trb/std/test
+
+describe("Compiler syntax primitives") do
+	test("shares exact binary and compound operator identities with lowering") do
+		operators := ["+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=", "+=", "-=", "*=", "/=", "unknown"]
+		identities := [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 17, 18, 19, 20, 0]
+		precedences := [2, 2, 3, 3, 3, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0]
+		mut index := 0
+		while index < operators.size()
+			expect(gate4_binary_operator_id(operators[index])).to_equal(identities[index])
+			expect(gate4_binary_precedence(operators[index])).to_equal(precedences[index])
+			index += 1
+		end
+	end
+
+	test("distinguishes syntax tokens from string contents without the lexer") do
+		mut state := gate4_compiler_new(4)
+		gate4_store_string(state.token_texts, 0, "import")
+		gate4_store_integer(state.token_kinds, 0, 1)
+		expect(gate4_token_is(state, 0, "import")).to_be_true()
+		gate4_store_integer(state.token_kinds, 0, 3)
+		expect(gate4_token_is(state, 0, "import")).to_be_false()
+		gate4_store_integer(state.token_kinds, 0, 4)
+		gate4_store_integer(state.token_kinds, 1, 4)
+		gate4_store_integer(state.token_kinds, 2, 5)
+		gate4_store_string(state.token_texts, 2, ")")
+		mut position := [0]
+		gate4_skip_newlines(state, position)
+		expect(position[0]).to_equal(2)
+		expect(gate4_token_is(state, position[0], ")")).to_be_true()
+	end
+end
