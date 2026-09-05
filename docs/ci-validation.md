@@ -48,6 +48,32 @@ existing manual and post-merge triggers remain available. Full multi-language
 benchmark refreshes and Pages deployment retain their existing manual controls.
 Manual measurements do not substitute for the current PR acceptance chain.
 
+## Correctness-suite scheduling
+
+The Native gate runs the recovery-enabled root and compiler suites concurrently
+through `tools/ci-run-suites.mjs`, with exactly two process groups. Their project
+output directories and fixed test workspaces are distinct. All seven historical
+tool suites, allocation/worker smoke checks, and language-corpus verification
+remain after the successful join. Comparative performance measurements never
+overlap these correctness suites.
+
+Both suites keep their full commands and all three recovery/QBE environment
+variables. A failure does not skip the other suite's evidence: each gets its
+own stdout/stderr log, exit code or signal, and elapsed time in `status.json`.
+The job uploads `native-suite-evidence` even when a suite fails or is cancelled.
+Cancellation terminates only owned process groups, escalating after a bounded
+grace period. A parent that exits while leaving descendants causes cleanup and
+failure rather than allowing background work into subsequent measurements.
+Log-file setup completes before either process starts.
+
+The controller tests use a mutual-start barrier to prove actual concurrency,
+exercise one/both failures and missing executables, reject absent recovery
+variables, and check cancellation and orphan-descendant cleanup. They run with
+the routing tests, without launching compiler suites for documentation-only
+changes. The scheduling change is registered in
+[issue #263](https://github.com/type-rb/type-rb-native/issues/263); it changes no
+test coverage, benchmark contract, threshold, or draft acceptance rule.
+
 ## Protection and review
 
 The main ruleset requires the uniquely named `Native CI acceptance` check from
