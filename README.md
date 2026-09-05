@@ -85,7 +85,7 @@ See the [development and validation plan](docs/experiment-plan.md).
 
 ## Repository layout
 
-- `compiler/gate4/src/`: the current ordinary self-hosted compiler, not a
+- `compiler/src/`: the current ordinary self-hosted compiler, not a
   frozen Gate 4 implementation.
 - `src/`: snapshot/MIR adapters, runtime generation, recovery/comparison
   support, and tests; gate-numbered names do not mean unused code.

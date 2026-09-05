@@ -118,7 +118,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     }
     process.exitCode = await runSuites({ executable, evidence, suites: [
       { name: 'root', args: ['test'] },
-      { name: 'compiler', args: ['test', '--config', 'compiler/gate4/trbconfig.jsonc'] },
+      { name: 'compiler', args: ['test', '--config', 'compiler/trbconfig.jsonc'] },
     ] });
   } catch (error) {
     console.error(error.message);

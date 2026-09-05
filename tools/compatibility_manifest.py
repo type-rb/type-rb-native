@@ -250,7 +250,7 @@ def validate_repository_values(
     recovered_targets = current_targets[len(seed_targets) :]
 
     compiler_source = _require_text(
-        root / "compiler/gate4/src/compiler.trb",
+        root / "compiler/src/compiler.trb",
         [
             *[f'b \\"{target["profile"]}\\"' for target in current_targets],
             *[f'b \\"{target["qbeTarget"]}\\"' for target in current_targets],

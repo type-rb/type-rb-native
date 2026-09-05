@@ -20,6 +20,10 @@ and [recorded result](../results/2026-08-29-gate6f-multifile-compiler-darwin-lin
 
 ## Compiler closure
 
+This section describes the measured three-module source-era layout.
+The current project has moved to `compiler/` and has additional explicit
+module owners; see the [layout migration](compiler-project-layout.md).
+
 `compiler/gate4/src/compiler.trb` remains the entry. It explicitly imports
 chunked storage records and helpers from `storage.trb` and pure path helpers
 from `path.trb`. The split moves declarations without changing frontend,

@@ -65,7 +65,7 @@ qualified Web API changes outside the current self-hosted subset, shared Array
 alias fixes in the Go backend, nested Go runtime-helper propagation, and the
 distinction between Nil values and Void results.
 
-`compiler/gate4/conformance/valid/array-aliases.trb` turns the relevant Array
+`compiler/conformance/valid/array-aliases.trb` turns the relevant Array
 change into an executable compiler differential. It grows one Integer Array
 through two aliases, mutates it through a mutable parameter, rebinds that
 parameter to a different Array, and then mutates the original through the

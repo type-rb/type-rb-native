@@ -105,6 +105,7 @@ jobs:
           PROFILE: ${{ matrix.profile }}
           TARGET_ASSET: ${{ matrix.asset }}
         run: |
+          . tools/compiler-project.sh
           seed="$RUNNER_TEMP/release/$TARGET_ASSET"
           for role in baseline candidate; do
             if test "$role" = baseline; then
@@ -112,12 +113,13 @@ jobs:
             else
               source_root="$GITHUB_WORKSPACE"
             fi
+            compiler_project=$(native_compiler_project_directory "$source_root")
             transition="$RUNNER_TEMP/$role-transition"
             mkdir -p "$transition/first" "$transition/current"
-            "$seed" build "$source_root/compiler/gate4/src/compiler.trb" \
+            "$seed" build "$compiler_project/src/compiler.trb" \
               --output "$transition/first/compiler" \
               --qbe "$QBE" --cc /usr/bin/cc --target "$PROFILE"
-            "$transition/first/compiler" build "$source_root/compiler/gate4/src/compiler.trb" \
+            "$transition/first/compiler" build "$compiler_project/src/compiler.trb" \
               --output "$transition/current/compiler" \
               --qbe "$QBE" --cc /usr/bin/cc --target "$PROFILE"
           done
@@ -162,6 +164,7 @@ jobs:
           QBE: ${{ steps.qbe.outputs.path }}
           TARGET: ${{ matrix.target }}
         run: |
+          . tools/compiler-project.sh
           . tools/native-mir-transition-policy.sh
           native_mir_transition_markers_valid "$GITHUB_WORKSPACE"
           evidence="$RUNNER_TEMP/comparison-evidence"
@@ -258,6 +261,7 @@ jobs:
                 expected="$RUNNER_TEMP/$role-bootstrap-workspace/b4/compiler"
                 ;;
             esac
+            compiler_project=$(native_compiler_project_directory "$source_root")
             directory="$RUNNER_TEMP/interleaved-builds/$phase-$round-$stage-$role"
             mkdir -p "$directory"
             output="$directory/compiler"
@@ -270,7 +274,7 @@ jobs:
             if test "$TARGET" = darwin-arm64; then
               set +e
               /usr/bin/time -p -l \
-                "$seed" build "$source_root/compiler/gate4/src/compiler.trb" \
+                "$seed" build "$compiler_project/src/compiler.trb" \
                 --output "$output" --qbe "$QBE" --cc /usr/bin/cc --target "$PROFILE" \
                 > "$stdout" 2> "$time_log"
               status=$?
@@ -280,7 +284,7 @@ jobs:
             else
               set +e
               /usr/bin/time -f '%e %M' -o "$time_log" \
-                "$seed" build "$source_root/compiler/gate4/src/compiler.trb" \
+                "$seed" build "$compiler_project/src/compiler.trb" \
                 --output "$output" --qbe "$QBE" --cc /usr/bin/cc --target "$PROFILE" \
                 > "$stdout" 2> "$stderr"
               status=$?
@@ -572,7 +576,7 @@ jobs:
               >> "$evidence/sizes.tsv"
             test "$status" = pass
           }
-          short_source=compiler/gate4/conformance/valid/strings-calls.trb
+          short_source=compiler/conformance/valid/strings-calls.trb
           printf 'strings-ok\n' > "$workspace/no-long.expected"
           for role in baseline candidate; do
             compiler="$RUNNER_TEMP/$role-compiler"
@@ -654,6 +658,7 @@ jobs:
           PROFILE: ${{ matrix.profile }}
           TARGET: ${{ matrix.target }}
         run: |
+          . tools/compiler-project.sh
           . tools/native-mir-transition-policy.sh
           if ! native_mir_array_loop_recovery_transition \
             "$GITHUB_WORKSPACE" "$RUNNER_TEMP/baseline-source"; then
@@ -721,6 +726,7 @@ jobs:
           PROFILE: ${{ matrix.profile }}
           TARGET: ${{ matrix.target }}
         run: |
+          . tools/compiler-project.sh
           . tools/native-mir-transition-policy.sh
           if ! native_mir_float_array_reduction_transition \
             "$GITHUB_WORKSPACE" "$RUNNER_TEMP/baseline-source"; then
@@ -843,6 +849,7 @@ jobs:
           PROFILE: ${{ matrix.profile }}
           TARGET: ${{ matrix.target }}
         run: |
+          . tools/compiler-project.sh
           . tools/native-mir-transition-policy.sh
           enforce_executable_ratio=0
           strict_selected_code=0
@@ -905,13 +912,13 @@ jobs:
             test -n "$expected_hash"
             test "$(sha256_file "$path")" = "$expected_hash"
           }
-          require_registered_hash compiler_source_sha256 compiler/gate4/src/compiler.trb
-          require_registered_hash compiler_test_source_sha256 compiler/gate4/src/compiler_test.trb
-          require_registered_hash valid_source_sha256 "compiler/gate4/conformance/valid/$fixture.trb"
-          require_registered_hash valid_expected_stdout_sha256 "compiler/gate4/conformance/valid/$fixture.out"
+          require_registered_hash compiler_source_sha256 compiler/src/compiler.trb
+          require_registered_hash compiler_test_source_sha256 compiler/src/compiler_test.trb
+          require_registered_hash valid_source_sha256 "compiler/conformance/valid/$fixture.trb"
+          require_registered_hash valid_expected_stdout_sha256 "compiler/conformance/valid/$fixture.out"
           if test "$stable_array_header" -eq 0; then
-            require_registered_hash overflow_source_sha256 "compiler/gate4/conformance/runtime-invalid/$fixture-overflow.trb"
-            require_registered_hash overflow_expected_stderr_sha256 "compiler/gate4/conformance/runtime-invalid/$fixture-overflow.stderr"
+            require_registered_hash overflow_source_sha256 "compiler/conformance/runtime-invalid/$fixture-overflow.trb"
+            require_registered_hash overflow_expected_stderr_sha256 "compiler/conformance/runtime-invalid/$fixture-overflow.stderr"
           fi
           require_registered_hash measure_source_sha256 tools/native-mir-guarded-multiply/measure.py
           require_registered_hash spectral_source_sha256 benchmarks/benchmarksgame/spectral-norm/src/main.trb
@@ -1092,6 +1099,7 @@ jobs:
 
       - name: Enforce the cross-target contract
         run: |
+          . tools/compiler-project.sh
           . tools/native-mir-transition-policy.sh
           native_mir_transition_markers_valid "$GITHUB_WORKSPACE"
           darwin="$RUNNER_TEMP/target-evidence/static-string-compactness-darwin-arm64/comparison-evidence/identities.txt"

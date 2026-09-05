@@ -966,7 +966,7 @@ test "$("$reference_trb" version)" = "$TYPE_RB_VERSION" || fail "reference TypeR
 test "$(file_size "$root_qbe")" -eq "$ROOT_QBE_SIZE" || fail "root QBE size differs"
 test "$(sha256 "$root_qbe")" = "$ROOT_QBE_SHA256" || fail "root QBE digest differs"
 
-compiler_entry=$candidate_root/compiler/gate4/src/compiler.trb
+compiler_entry=$candidate_root/compiler/src/compiler.trb
 portable_config=$candidate_root/corpus/gate6m/portable-entry/trbconfig.jsonc
 portable_source=$candidate_root/corpus/gate6m/portable-entry/src/main.trb
 failure_config=$candidate_root/corpus/gate6m/runtime-failures/trbconfig.jsonc

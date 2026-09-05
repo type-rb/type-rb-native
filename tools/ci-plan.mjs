@@ -14,9 +14,10 @@ export function classify(paths, draft) {
   const code = paths.some(path => !documentation(path));
   const routing = paths.some(path => path.startsWith('.github/workflows/') ||
     path.startsWith('tools/ci-'));
-  const compiler = paths.some(path => path.startsWith('compiler/gate4/') &&
+  const compiler = paths.some(path => path.startsWith('compiler/') &&
     !documentation(path));
-  const policy = paths.some(path => path.startsWith('tools/native-mir-'));
+  const policy = paths.some(path => path.startsWith('tools/native-mir-') ||
+    path.startsWith('tools/compiler-project'));
   const performance = code && (routing || compiler || policy);
   const memory = code && (performance || paths.some(path =>
     path.startsWith('tools/runtime-worker-soak/')));
