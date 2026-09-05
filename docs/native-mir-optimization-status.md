@@ -1,27 +1,28 @@
 # Native MIR optimization transition status
 
-The stable-Array-header work is not accepted: the first candidate failed
-independent proof validation and three bounds checks; the `69ff52b5`
-correctness repair subsequently improved spectral-norm by 11.978% on Linux
-arm64 but regressed n-body by 13.161%. See
-[the proof and control repair](native-mir-array-region-repair.md).
-The subsequent `7c72eed7` control repair fails recovery-bootstrap compatibility
-because snapshot v4 rejects its indexed compound assignment; formal performance
-checks are consequently skipped. None of these candidates may replace the
-accepted benchmark snapshot.
-The current repair retains access checks and narrows the new proof to immutable
-Array parameters. Shared header loads, MIR parameter registration, and common
-value/instruction builders remove duplicate implementation. Restoring the
-two-entry recent-header fallback recovers exact baseline n-body output code,
-while function-owned MIR instruction transfer avoids redundant row copies.
-Ordinary indexed assignment repairs snapshot compatibility, and retaining the
-module locally inside commit removes repeated outer field lookups. The local
-compiler fits the unchanged executable, code-section, and QBE ceilings. All
-three completed local runtime comparisons pass, with spectral-norm wall/CPU
-ratios of 0.876122/0.877501 and both controls within 1.02. The recovery-enabled
-80-test root suite and 89-test Gate 4 suite pass. PR #246 still requires fresh
-complete hosted verification; local eligibility is not accepted performance
-evidence.
+The immutable-parameter Array-header proof is accepted in
+[PR #246](https://github.com/type-rb/type-rb-native/pull/246), merged as
+`5a23176040fee3541ed8578115622ffcd7aa2733`. The complete
+[formal run at `c131c43c`](https://github.com/type-rb/type-rb-native/actions/runs/33946793548)
+passes correctness including recovery, target and process regressions, memory
+smoke, fixed points, build costs, compactness, and the application controls.
+Linux arm64 spectral-norm at input 5500 improves from 4.081215329 to
+3.596905668 seconds: an 11.867% wall-time reduction against the previous Native
+baseline, not against Go. Its CPU ratio is 0.881264 and median RSS is unchanged.
+Fannkuch-redux and n-body retain byte-identical application code and effectively
+unchanged runtime. Both arm64 targets share 1,119,022-byte compiler QBE; their
+complete compilers total 664,480 bytes inside the unchanged 667,000-byte ceiling.
+
+This proof allows header reuse only for an immutable Array parameter; it adds
+no new unchecked access or general alias analysis. All earlier failed
+candidates remain rejected. See [the proof, repairs, and accepted
+measurement](native-mir-array-region-repair.md). The remaining direct-path
+cache and the broader MIR migration/recovery obligation are still outstanding.
+
+[Issue #249](https://github.com/type-rb/type-rb-native/issues/249) follows with
+a compiler-only [block-row construction consolidation](native-mir-block-construction.md).
+It removes eight copies of the 16-cell layout while preserving application
+QBE exactly; it is not a new application optimization or fact family.
 
 Status: experimental. The checked-in scope includes the accepted induction-phi
 recovery, the measured `Array<Integer>` reduction slice from issue #230, the

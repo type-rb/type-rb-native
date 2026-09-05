@@ -1,4 +1,4 @@
-import { Gate4Compiler, Gate4MirModule, Gate4Output, Gate4ProjectSources, gate4_add_module, gate4_build_symbol_index, gate4_character_in, gate4_check, gate4_check_expression, gate4_check_primary, gate4_compiler_new, gate4_emit_array_header, gate4_emit_context_new, gate4_emit_qbe, gate4_encode_static_string, gate4_find_field, gate4_find_function_in_module, gate4_find_import_binding, gate4_find_module, gate4_find_record_in_module, gate4_find_record_type, gate4_float_literal_in_range, gate4_has_diagnostic, gate4_invalidate_array_header_cache, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_local_add, gate4_local_find, gate4_locals_new, gate4_mir_function_index, gate4_mir_nonnegative_fact, gate4_number_is_float, gate4_number_without_underscores, gate4_optimize_verified_mir, gate4_output_new, gate4_parse_module, gate4_parse_project_config, gate4_resolve, gate4_string_bucket, gate4_string_starts_at, gate4_symbol_bucket_count, gate4_verify_mir } from compiler
+import { Gate4Compiler, Gate4MirModule, Gate4Output, Gate4ProjectSources, gate4_add_module, gate4_build_symbol_index, gate4_character_in, gate4_check, gate4_check_expression, gate4_check_primary, gate4_compiler_new, gate4_emit_array_header, gate4_emit_context_new, gate4_emit_qbe, gate4_encode_static_string, gate4_find_field, gate4_find_function_in_module, gate4_find_import_binding, gate4_find_module, gate4_find_record_in_module, gate4_find_record_type, gate4_float_literal_in_range, gate4_has_diagnostic, gate4_invalidate_array_header_cache, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_local_add, gate4_local_find, gate4_locals_new, gate4_mir_block, gate4_mir_function_index, gate4_mir_nonnegative_fact, gate4_number_is_float, gate4_number_without_underscores, gate4_optimize_verified_mir, gate4_output_new, gate4_parse_module, gate4_parse_project_config, gate4_resolve, gate4_string_bucket, gate4_string_starts_at, gate4_symbol_bucket_count, gate4_verify_mir } from compiler
 import { gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage
 import { native_create_directory, native_read_text, native_write_text } from native_file_system
 import trb/std/process
@@ -129,6 +129,22 @@ def gate4_mir_test_module(
 end
 
 describe("Gate 4 TypeRB frontend") do
+	test("constructs independent MIR block rows with exact field order and origins") do
+		mut branch := gate4_mir_block(31, 1, 71, 2, 3, 4, 5, 2, 6, 32, 33, 7, 8, 9, 10, - 1)
+		other := gate4_mir_block(31, 1, 71, 2, 3, 4, 5, 2, 6, 32, 33, 7, 8, 9, 10, - 1)
+		returned := gate4_mir_block(40, 2, 81, 3, 0, 4, 5, 3, - 1, - 1, - 1, 0, 0, 0, 0, 12)
+		trap := gate4_mir_block(41, 2, 82, 8, 0, 9, 0, 4, - 1, - 1, - 1, 0, 0, 0, 0, - 1)
+		expect(branch).to_equal([31, 1, 71, 2, 3, 4, 5, 2, 6, 32, 33, 7, 8, 9, 10, - 1])
+		expect(returned).to_equal([40, 2, 81, 3, 0, 4, 5, 3, - 1, - 1, - 1, 0, 0, 0, 0, 12])
+		expect(trap).to_equal([41, 2, 82, 8, 0, 9, 0, 4, - 1, - 1, - 1, 0, 0, 0, 0, - 1])
+		branch[0] = 99
+		branch[2] = 100
+		branch[11] = 101
+		expect(other).to_equal([31, 1, 71, 2, 3, 4, 5, 2, 6, 32, 33, 7, 8, 9, 10, - 1])
+		expect(returned[0]).to_equal(40)
+		expect(trap[0]).to_equal(41)
+	end
+
 	test("verifies a checked scalar and Array loop MIR skeleton") do
 		native_module := gate4_mir_test_module(false, false)
 		expect(gate4_verify_mir(native_module, false)).to_equal("")
