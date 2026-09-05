@@ -11,6 +11,14 @@ passes its verified result type to the same adapter. Missing, malformed, or
 operator-mismatched plans fail closed. The adapter no longer reconstructs the
 binary result type from emitted operands.
 
+The next bounded prerequisite makes `lower_binary_operand` return only its
+backend operand. Its checked-program or verified-MIR caller constructs the
+typed result once, rather than repeating metadata construction at seven
+arithmetic/comparison exits. This includes Float and String comparisons whose
+Boolean result must not inherit either operand's type. It is a compactness and
+ownership refinement, not completion of checkpoint 2. The existing strict
+same-run compiler/text/QBE and build-cost requirements remain unchanged.
+
 This is not completion of the literal-fact migration: the direct wrapper still
 uses emitted literal spelling until checked/MIR plans own the decisions for
 actually selected inline-call results, including the whole-program two-call

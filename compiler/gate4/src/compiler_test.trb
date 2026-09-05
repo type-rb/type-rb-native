@@ -1,4 +1,4 @@
-import { Gate4Compiler, Gate4Output, Gate4ProjectSources, checked_binary_plan_type, gate4_add_module, gate4_build_symbol_index, gate4_character_in, gate4_check, gate4_check_expression, gate4_check_primary, gate4_compiler_new, gate4_emit_array_header, gate4_emit_context_new, gate4_emit_qbe, gate4_encode_static_string, gate4_find_field, gate4_find_function_in_module, gate4_find_import_binding, gate4_find_module, gate4_find_record_in_module, gate4_find_record_type, gate4_has_diagnostic, gate4_invalidate_array_header_cache, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_local_add, gate4_local_find, gate4_locals_new, gate4_mir_block, gate4_mir_nonnegative_fact, gate4_output_new, gate4_parse_module, gate4_parse_project_config, gate4_resolve, gate4_string_bucket, gate4_string_starts_at, gate4_symbol_bucket_count } from compiler
+import { Gate4Compiler, Gate4Output, Gate4ProjectSources, checked_binary_plan_type, gate4_add_module, gate4_build_symbol_index, gate4_character_in, gate4_check, gate4_check_expression, gate4_check_primary, gate4_compiler_new, gate4_emit_array_header, gate4_emit_context_new, gate4_emit_qbe, gate4_emitted_value, gate4_encode_static_string, gate4_find_field, gate4_find_function_in_module, gate4_find_import_binding, gate4_find_module, gate4_find_record_in_module, gate4_find_record_type, gate4_has_diagnostic, gate4_invalidate_array_header_cache, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_local_add, gate4_local_find, gate4_locals_new, gate4_mir_block, gate4_mir_nonnegative_fact, gate4_output_new, gate4_parse_module, gate4_parse_project_config, gate4_resolve, gate4_string_bucket, gate4_string_starts_at, gate4_symbol_bucket_count, lower_checked_binary } from compiler
 import { gate4_mir_function_index, gate4_optimize_verified_mir, gate4_verify_mir } from mir
 import { gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage
 import { native_create_directory, native_read_text, native_write_text } from native_file_system
@@ -2077,6 +2077,32 @@ describe("Gate 4 TypeRB frontend") do
 			gate4_emit_qbe(state)
 			expect(gate4_load_string(state.diagnostic_codes, 0)).to_equal("TRBN4004")
 			expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("invalid checked binary plan")
+			index += 1
+		end
+	end
+
+	test("constructs binary result metadata once from the checked result type") do
+		operators := ["+", "-", "*", "/", "%", "+", "<", "+", "==", "!="]
+		plans := [17, 18, 19, 20, 21, 33, 56, 65, 54, 55]
+		operand_types := ["Integer", "Integer", "Integer", "Integer", "Integer", "Float", "Float", "String", "String", "String"]
+		operands := ["7", "7", "7", "7", "7", "d_7.0", "d_7.0", "%string", "%string", "%string"]
+		result_types := ["Integer", "Integer", "Integer", "Integer", "Integer", "Float", "Boolean", "String", "Boolean", "Boolean"]
+		mut index := 0
+		while index < plans.size()
+			mut state := gate4_compiler_new(8)
+			expect(gate4_lex(state, operators[index])).to_be_true()
+			gate4_store_integer(state.mir_nonnegative_facts, 0, plans[index])
+			mut context := gate4_emit_context_new(8, [64, 6, 2])
+			mut output := gate4_output_new(256, [0, 0, 0, 0])
+			value := gate4_emitted_value(operands[index], operand_types[index], 0, "", 0, "")
+			result := lower_checked_binary(state, context, output, 0, value, value)
+			expect(result.type_name).to_equal(result_types[index])
+			expect(result.category).to_equal(0)
+			expect(result.name).to_equal("")
+			expect(result.mutable).to_equal(0)
+			expect(result.address).to_equal("")
+			expect(result.operand).to_equal("%t0")
+			expect(state.diagnostic_count[0]).to_equal(0)
 			index += 1
 		end
 	end
