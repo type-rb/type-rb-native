@@ -91,8 +91,11 @@ the remaining direct path is not that finished architecture. The
 [MIR status](native-mir-optimization-status.md) distinguishes implemented
 vertical slices from remaining ownership. In the current source closure,
 `mir.trb` owns the model, verifier, and target-independent passes;
-`literals.trb` owns shared numeric predicates. The compiler entry still owns
-frontend construction and QBE adaptation, alongside the remaining driver code.
+`literals.trb` owns shared numeric predicates. `state.trb` owns shared compiler
+state, symbol indexes and diagnostics, while `parser.trb` owns syntax parsing,
+token/cursor primitives and the shared operator mapping. The compiler entry
+retains lexing and its source-slicing intrinsics, resolution, checking/MIR
+construction, QBE adaptation, runtime generation and the remaining driver code.
 These are single canonical modules with explicit imports, not a second
 compiler implementation. The [organization schedule](repository-organization.md)
 tracks the next responsibility extractions.

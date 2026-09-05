@@ -1,0 +1,315 @@
+import { Gate4IntegerStorage, Gate4StringStorage, gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage
+import { Gate4MirModule } from mir
+import { gate4_ascii_code } from literals
+
+record Gate4SymbolIndex
+	heads: Gate4IntegerStorage
+	next: Gate4IntegerStorage
+end
+
+record Gate4Compiler
+	token_kinds: Gate4IntegerStorage
+	token_texts: Gate4StringStorage
+	token_lines: Gate4IntegerStorage
+	token_count: Array<Integer>
+	mir_nonnegative_facts: Gate4IntegerStorage
+	scalar_mir: Gate4MirModule
+	module_names: Gate4StringStorage
+	module_files: Gate4StringStorage
+	module_count: Array<Integer>
+	module_import_starts: Gate4IntegerStorage
+	module_import_counts: Gate4IntegerStorage
+	module_lookup: Gate4SymbolIndex
+	entry_module: Array<Integer>
+	active_module: Array<Integer>
+	import_modules: Gate4IntegerStorage
+	import_paths: Gate4StringStorage
+	import_symbols: Gate4StringStorage
+	import_declarations: Gate4StringStorage
+	import_kinds: Gate4IntegerStorage
+	import_lines: Gate4IntegerStorage
+	import_targets: Gate4IntegerStorage
+	import_used: Gate4IntegerStorage
+	import_count: Array<Integer>
+	record_names: Gate4StringStorage
+	record_modules: Gate4IntegerStorage
+	record_field_starts: Gate4IntegerStorage
+	record_field_counts: Gate4IntegerStorage
+	record_lines: Gate4IntegerStorage
+	record_count: Array<Integer>
+	field_names: Gate4StringStorage
+	field_types: Gate4StringStorage
+	field_lines: Gate4IntegerStorage
+	field_count: Array<Integer>
+	function_names: Gate4StringStorage
+	function_modules: Gate4IntegerStorage
+	function_parameter_starts: Gate4IntegerStorage
+	function_parameter_counts: Gate4IntegerStorage
+	function_result_types: Gate4StringStorage
+	function_body_starts: Gate4IntegerStorage
+	function_body_ends: Gate4IntegerStorage
+	function_lines: Gate4IntegerStorage
+	function_count: Array<Integer>
+	function_lookup: Gate4SymbolIndex
+	parameter_names: Gate4StringStorage
+	parameter_types: Gate4StringStorage
+	parameter_mutable: Gate4IntegerStorage
+	parameter_lines: Gate4IntegerStorage
+	parameter_count: Array<Integer>
+	diagnostic_codes: Gate4StringStorage
+	diagnostic_lines: Gate4IntegerStorage
+	diagnostic_messages: Gate4StringStorage
+	diagnostic_modules: Gate4IntegerStorage
+	diagnostic_count: Array<Integer>
+end
+
+def gate4_symbol_index_new(capacity: Integer): Gate4SymbolIndex
+	return Gate4SymbolIndex.new(
+		heads: gate4_integer_storage(capacity),
+		next: gate4_integer_storage(capacity),
+	)
+end
+
+def gate4_compiler_new(capacity: Integer): Gate4Compiler
+	return Gate4Compiler.new(
+		token_kinds: gate4_integer_storage(capacity),
+		token_texts: gate4_string_storage(capacity),
+		token_lines: gate4_integer_storage(capacity),
+		token_count: [0],
+		mir_nonnegative_facts: gate4_integer_storage(capacity),
+		scalar_mir: Gate4MirModule.new(
+			source_count: [1],
+			entry_function: [0],
+			functions: [],
+			blocks: [],
+			values: [],
+			instructions: [],
+			arguments: [],
+			array_regions: [],
+			facts: [],
+			literal_texts: [],
+		),
+		module_names: gate4_string_storage(capacity),
+		module_files: gate4_string_storage(capacity),
+		module_count: [0],
+		module_import_starts: gate4_integer_storage(capacity),
+		module_import_counts: gate4_integer_storage(capacity),
+		module_lookup: gate4_symbol_index_new(capacity),
+		entry_module: [0],
+		active_module: [0],
+		import_modules: gate4_integer_storage(capacity),
+		import_paths: gate4_string_storage(capacity),
+		import_symbols: gate4_string_storage(capacity),
+		import_declarations: gate4_string_storage(capacity),
+		import_kinds: gate4_integer_storage(capacity),
+		import_lines: gate4_integer_storage(capacity),
+		import_targets: gate4_integer_storage(capacity),
+		import_used: gate4_integer_storage(capacity),
+		import_count: [0],
+		record_names: gate4_string_storage(capacity),
+		record_modules: gate4_integer_storage(capacity),
+		record_field_starts: gate4_integer_storage(capacity),
+		record_field_counts: gate4_integer_storage(capacity),
+		record_lines: gate4_integer_storage(capacity),
+		record_count: [0],
+		field_names: gate4_string_storage(capacity),
+		field_types: gate4_string_storage(capacity),
+		field_lines: gate4_integer_storage(capacity),
+		field_count: [0],
+		function_names: gate4_string_storage(capacity),
+		function_modules: gate4_integer_storage(capacity),
+		function_parameter_starts: gate4_integer_storage(capacity),
+		function_parameter_counts: gate4_integer_storage(capacity),
+		function_result_types: gate4_string_storage(capacity),
+		function_body_starts: gate4_integer_storage(capacity),
+		function_body_ends: gate4_integer_storage(capacity),
+		function_lines: gate4_integer_storage(capacity),
+		function_count: [0],
+		function_lookup: gate4_symbol_index_new(capacity),
+		parameter_names: gate4_string_storage(capacity),
+		parameter_types: gate4_string_storage(capacity),
+		parameter_mutable: gate4_integer_storage(capacity),
+		parameter_lines: gate4_integer_storage(capacity),
+		parameter_count: [0],
+		diagnostic_codes: gate4_string_storage(1),
+		diagnostic_lines: gate4_integer_storage(1),
+		diagnostic_messages: gate4_string_storage(1),
+		diagnostic_modules: gate4_integer_storage(1),
+		diagnostic_count: [0],
+	)
+end
+
+def gate4_symbol_bucket_count(element_count: Integer): Integer
+	if element_count == 0
+		return 0
+	end
+	mut bucket_count := 16
+	while bucket_count < element_count * 2
+		bucket_count *= 2
+	end
+	return bucket_count
+end
+
+def gate4_string_bucket(name: String, bucket_count: Integer): Integer
+	mut hash := 0
+	mut index := 0
+	while index < name.size()
+		mut code := gate4_ascii_code(name[index])
+		if code < 0
+			code = 0
+		end
+		hash = (hash * 131 + code) % bucket_count
+		index += 1
+	end
+	return hash
+end
+
+def gate4_symbol_bucket(module_index: Integer, name: String, bucket_count: Integer): Integer
+	return (module_index * 257 + name.size()) % bucket_count
+end
+
+def gate4_build_symbol_index(
+		mut symbol_index: Gate4SymbolIndex,
+		modules: Gate4IntegerStorage,
+		names: Gate4StringStorage,
+		element_count: Integer,
+	)
+	bucket_count := gate4_symbol_bucket_count(element_count)
+	mut bucket := 0
+	while bucket < bucket_count
+		gate4_store_integer(symbol_index.heads, bucket, - 1)
+		bucket += 1
+	end
+	mut element := 0
+	while element < element_count
+		bucket = gate4_symbol_bucket(
+			gate4_load_integer(modules, element),
+			gate4_load_string(names, element),
+			bucket_count,
+		)
+		gate4_store_integer(symbol_index.next, element, gate4_load_integer(symbol_index.heads, bucket))
+		gate4_store_integer(symbol_index.heads, bucket, element)
+		element += 1
+	end
+	return
+end
+
+def gate4_find_symbol(
+		symbol_index: Gate4SymbolIndex,
+		modules: Gate4IntegerStorage,
+		names: Gate4StringStorage,
+		module_index: Integer,
+		name: String,
+	): Integer
+	bucket_count := symbol_index.heads.used[0]
+	if bucket_count == 0
+		return - 1
+	end
+	bucket := gate4_symbol_bucket(module_index, name, bucket_count)
+	mut element := gate4_load_integer(symbol_index.heads, bucket)
+	while element >= 0
+		if gate4_load_integer(modules, element) == module_index
+			if gate4_load_string(names, element) == name
+				return element
+			end
+		end
+		element = gate4_load_integer(symbol_index.next, element)
+	end
+	return - 1
+end
+
+def gate4_build_name_index(
+		mut symbol_index: Gate4SymbolIndex,
+		names: Gate4StringStorage,
+		element_count: Integer,
+	)
+	bucket_count := gate4_symbol_bucket_count(element_count)
+	mut bucket := 0
+	while bucket < bucket_count
+		gate4_store_integer(symbol_index.heads, bucket, - 1)
+		bucket += 1
+	end
+	mut element := 0
+	while element < element_count
+		bucket = gate4_string_bucket(gate4_load_string(names, element), bucket_count)
+		gate4_store_integer(symbol_index.next, element, gate4_load_integer(symbol_index.heads, bucket))
+		gate4_store_integer(symbol_index.heads, bucket, element)
+		element += 1
+	end
+	return
+end
+
+def gate4_add_name_index(
+		mut symbol_index: Gate4SymbolIndex,
+		names: Gate4StringStorage,
+		element_count: Integer,
+	)
+	bucket_count := gate4_symbol_bucket_count(element_count)
+	if symbol_index.heads.used[0] != bucket_count
+		gate4_build_name_index(symbol_index, names, element_count)
+		return
+	end
+	element := element_count - 1
+	bucket := gate4_string_bucket(gate4_load_string(names, element), bucket_count)
+	gate4_store_integer(symbol_index.next, element, gate4_load_integer(symbol_index.heads, bucket))
+	gate4_store_integer(symbol_index.heads, bucket, element)
+	return
+end
+
+def gate4_find_name(
+		symbol_index: Gate4SymbolIndex,
+		names: Gate4StringStorage,
+		name: String,
+	): Integer
+	bucket_count := symbol_index.heads.used[0]
+	if bucket_count == 0
+		return - 1
+	end
+	bucket := gate4_string_bucket(name, bucket_count)
+	mut element := gate4_load_integer(symbol_index.heads, bucket)
+	while element >= 0
+		if gate4_load_string(names, element) == name
+			return element
+		end
+		element = gate4_load_integer(symbol_index.next, element)
+	end
+	return - 1
+end
+
+def gate4_add_module(mut state: Gate4Compiler, name: String, filename: String): Integer
+	index := state.module_count[0]
+	gate4_store_string(state.module_names, index, name)
+	gate4_store_string(state.module_files, index, filename)
+	gate4_store_integer(state.module_import_starts, index, state.import_count[0])
+	gate4_store_integer(state.module_import_counts, index, 0)
+	state.module_count[0] = index + 1
+	gate4_add_name_index(state.module_lookup, state.module_names, state.module_count[0])
+	return index
+end
+
+def gate4_find_module(state: Gate4Compiler, name: String): Integer
+	return gate4_find_name(state.module_lookup, state.module_names, name)
+end
+
+def gate4_terminal_token(state: Gate4Compiler, index: Integer): Boolean
+	kind := gate4_load_integer(state.token_kinds, index)
+	if kind == 0
+		return true
+	end
+	return kind == 6
+end
+
+def gate4_has_diagnostic(state: Gate4Compiler): Boolean
+	return state.diagnostic_count[0] > 0
+end
+
+def gate4_diagnostic(mut state: Gate4Compiler, code: String, line: Integer, message: String)
+	if state.diagnostic_count[0] == 0
+		gate4_store_string(state.diagnostic_codes, 0, code)
+		gate4_store_integer(state.diagnostic_lines, 0, line)
+		gate4_store_string(state.diagnostic_messages, 0, message)
+		gate4_store_integer(state.diagnostic_modules, 0, state.active_module[0])
+		state.diagnostic_count[0] = 1
+	end
+	return
+end

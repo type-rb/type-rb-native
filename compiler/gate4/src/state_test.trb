@@ -1,0 +1,30 @@
+import { gate4_add_module, gate4_compiler_new, gate4_find_module, gate4_string_bucket } from state
+import { describe, expect, test } from trb/std/test
+
+describe("Compiler state and symbol indexes") do
+	test("indexes colliding fixed-width module names across deterministic growth") do
+		expect(gate4_string_bucket("aa", 16)).to_equal(gate4_string_bucket("aq", 16))
+		mut state := gate4_compiler_new(128)
+		expect(gate4_find_module(state, "missing")).to_equal(- 1)
+		gate4_add_module(state, "aa", "/first-aa.trb")
+		gate4_add_module(state, "aq", "/aq.trb")
+		gate4_add_module(state, "aa", "/last-aa.trb")
+		expect(state.module_lookup.heads.used[0]).to_equal(16)
+		expect(gate4_find_module(state, "aa")).to_equal(2)
+		expect(gate4_find_module(state, "aq")).to_equal(1)
+		additional := ["ba", "bb", "bc", "bd", "be", "bf"]
+		mut index := 0
+		while index < additional.size()
+			gate4_add_module(state, additional[index], "/" + additional[index] + ".trb")
+			index += 1
+		end
+		expect(state.module_count[0]).to_equal(9)
+		expect(state.module_lookup.heads.used[0]).to_equal(32)
+		index = 0
+		while index < additional.size()
+			expect(gate4_find_module(state, additional[index])).to_equal(index + 3)
+			index += 1
+		end
+		expect(gate4_find_module(state, "missing")).to_equal(- 1)
+	end
+end
