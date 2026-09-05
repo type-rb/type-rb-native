@@ -27,8 +27,15 @@ export async function runSuites({ executable, suites, evidence, cwd = process.cw
   const records = suites.map(s => ({ name: s.name, args: s.args, state: 'pending' }));
   const groups = new Set();
   let cancellation = null;
+  let evidenceError = null;
   let terminated = Promise.resolve();
-  const save = () => fs.writeFileSync(path.join(evidence, 'status.json'), JSON.stringify({ cancellation, suites: records }, null, 2) + '\n');
+  const save = () => {
+    try { fs.writeFileSync(path.join(evidence, 'status.json'), JSON.stringify({ cancellation, suites: records }, null, 2) + '\n'); }
+    catch (error) {
+      evidenceError ??= error;
+      console.error(`Cannot write suite status: ${error.message}`);
+    }
+  };
   const signalGroup = (pid, signal) => {
     try { process.kill(-pid, signal); return true; }
     catch (error) { if (error.code !== 'ESRCH') throw error; return false; }
@@ -47,9 +54,13 @@ export async function runSuites({ executable, suites, evidence, cwd = process.cw
   };
   const onInt = () => cancel('SIGINT');
   const onTerm = () => cancel('SIGTERM');
+  save();
+  if (evidenceError) {
+    for (const fd of files) fs.closeSync(fd);
+    throw evidenceError;
+  }
   process.on('SIGINT', onInt);
   process.on('SIGTERM', onTerm);
-  save();
   try {
     await Promise.all(suites.map((suite, index) => new Promise(resolve => {
       const record = records[index];
@@ -94,6 +105,7 @@ export async function runSuites({ executable, suites, evidence, cwd = process.cw
     process.off('SIGTERM', onTerm);
   }
   if (cancellation) return cancellation === 'SIGINT' ? 130 : 143;
+  if (evidenceError) return 1;
   return records.every(r => r.code === 0 && !r.signal && !r.launchError && !r.orphanedDescendants) ? 0 : 1;
 }
 

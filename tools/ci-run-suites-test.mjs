@@ -103,6 +103,16 @@ test('cancellation terminates owned descendants even after their parent exits', 
   assert.ok(pids.every(pid=>!alive(pid)), 'no owned child or descendant should remain');
 });
 
+test('an unwritable status path fails before launching children', async t => {
+  const dir = workspace(t);
+  fs.mkdirSync(dir + '/status.json');
+  const args = ['-e', `require('fs').writeFileSync(${JSON.stringify(dir + '/started')},'bad')`];
+  await assert.rejects(runSuites({ executable: process.execPath, evidence: dir, suites: [
+    { name: 'root', args }, { name: 'compiler', args },
+  ] }), { code: 'EISDIR' });
+  assert.equal(fs.existsSync(dir + '/started'), false);
+});
+
 test('a normally exiting parent cannot leave a descendant for later CI steps', async t => {
   const dir = workspace(t);
   const pidFile = dir + '/descendant.pid';
