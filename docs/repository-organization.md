@@ -20,7 +20,7 @@ guide, not a finding that every gate-numbered file is obsolete.
 | `compiler/gate4/src/compiler.trb` and its storage/path/MIR/literal/state/parser/resolution/checked-program imports | Ordinary self-hosted compiler closure. Shared state/indexes, syntax, resolution, typed checking/MIR construction and MIR model/verifier/passes have distinct owners; continue splitting adapter, runtime, and driver responsibilities and remove checkpoint-derived names incrementally. |
 | `src/gate0.trb`, `snapshot.trb`, `json_boundary.trb`, `diagnostic.trb`, `native_mir.trb` | Initial snapshot validation/MIR boundary and shared support. Classify callers before separating shared code from recovery-only code. |
 | `src/gate1_*`, `gate2_*`, `gate3_*`, `qbe.trb`, `qbe2.trb`, `qbe3.trb` | Versioned snapshot, MIR, layout, QBE, and managed-runtime paths with differential tests. These are not three successive unused compiler copies. Name retained paths by format/capability and role. |
-| `src/gate4_toolchain.trb`, `matched_go_driver.trb`, `gate6f_compiler_source.trb` and associated tests | Recovery generation, matched reference comparison, and strict compiler-source flattening support. Keep them visibly separate from the ordinary compiler. |
+| `src/recovery_generation.trb`, `matched_go_driver.trb`, `compiler_recovery_source.trb` and associated tests | Recovery generation, matched reference comparison, and strict compiler-source flattening support. Keep them visibly separate from the ordinary compiler. |
 | `src/*_test.trb`, `compiler/gate4/conformance/`, `corpus/` | Active correctness evidence. Relocate with their owners and preserve discovery, negative cases, and coverage. |
 | `tools/`, `.github/workflows/`, compatibility and transition metadata | Current consumers of source paths, names, runtime output, and exact identities. Move references atomically with implementation changes. |
 | `results/`, dated gate plans and accepted decisions | Historical evidence. Preserve gate labels, recorded commands, hashes, and revisions rather than rewriting history to resemble the current layout. |
@@ -42,8 +42,13 @@ bootstrap tooling. A filename search alone cannot establish dead code.
 O1 supplied the initial documentation cleanup. O2's
 [root source inventory](root-source-inventory.md) covers all 45 source files
 and records the first matched-Go driver move under
-[issue #258](https://github.com/type-rb/type-rb-native/issues/258). Only that
-support module and its test have moved; the other destinations are proposals.
+[issue #258](https://github.com/type-rb/type-rb-native/issues/258). The subsequent
+[recovery naming slice](https://github.com/type-rb/type-rb-native/issues/272)
+moves four source/test paths to `compiler_recovery_source{,_test}.trb`,
+`recovery_generation.trb`, and `compiler_recovery_test.trb`, and replaces their
+gate-derived implementation helpers. Its path map distinguishes the retained
+measurement protocols from active implementation names. Other root destinations
+remain proposals rather than completed moves.
 The first O3 slice, registered in
 [issue #262](https://github.com/type-rb/type-rb-native/issues/262), extracts the
 ordinary compiler's MIR model, verifier, and target-independent passes into

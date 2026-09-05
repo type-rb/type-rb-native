@@ -1,7 +1,7 @@
 import { native_read_text } from native_file_system
 import trb/std/result
 
-record Gate6FCompilerSources
+record RecoveryCompilerSources
 	entry: String
 	storage: String
 	path: String
@@ -14,7 +14,7 @@ record Gate6FCompilerSources
 	flattened: String
 end
 
-def gate6f_compiler_import_prefix(): String
+def compiler_source_import_prefix(): String
 	return "import { Gate4IntegerStorage, Gate4StringStorage, gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage\nimport { gate4_path_basename, gate4_path_directory, gate4_path_join, gate4_string_ends_with, gate4_string_starts_with, gate4_string_without_suffix } from path\nimport { gate4_ascii_code, gate4_integer_string, gate4_number_is_float, gate4_number_without_underscores, gate4_small_nonnegative_integer_operand } from literals\nimport { gate4_mir_block_index, gate4_mir_function_index, gate4_mir_value_type, gate4_optimize_verified_mir, gate4_verify_mir } from mir\nimport { Gate4Compiler, Gate4SymbolIndex, gate4_add_module, gate4_add_name_index, gate4_compiler_new, gate4_diagnostic, gate4_find_module, gate4_find_name, gate4_has_diagnostic, gate4_local_add, gate4_locals_new, gate4_symbol_index_new } from state\nimport { gate4_advance, gate4_binary_operator_id, gate4_binary_precedence, gate4_declaration_start, gate4_expect, gate4_expect_identifier, gate4_finish_statement, gate4_parse_module, gate4_parse_simple_statement_syntax, gate4_parse_type, gate4_skip_newlines, gate4_token_is } from parser\nimport { gate4_array_element_type, gate4_array_type, gate4_common_array_element_type, gate4_find_field, gate4_find_function_in_module, gate4_find_record_type, gate4_find_visible_function, gate4_find_visible_record, gate4_import_path_value, gate4_normalize_import_path, gate4_record_type, gate4_resolve, gate4_resolve_type_name, gate4_standard_package_import, gate4_standard_package_root, gate4_standard_package_target, gate4_validate_import_usage } from resolution\nimport { checked_binary_plan_type, gate4_check_block, gate4_mir_add_parameter, gate4_mir_nonnegative_fact, gate4_scalar_leaf_inline_eligible, gate4_scalar_mir_begin, gate4_scalar_mir_commit } from checked_program\n\n"
 end
 
@@ -58,7 +58,7 @@ def compiler_source_has_import(source: String): Boolean
 	return false
 end
 
-def gate6f_flatten_compiler_source(
+def flatten_compiler_recovery_source(
 		entry: String,
 		storage: String,
 		path: String,
@@ -69,7 +69,7 @@ def gate6f_flatten_compiler_source(
 		resolution: String,
 		checked_program: String,
 	): Result<String, String>
-	prefix := gate6f_compiler_import_prefix()
+	prefix := compiler_source_import_prefix()
 	if !entry.start_with?(prefix)
 		return Result<String, String>::Err("compiler entry import boundary differs")
 	end
@@ -113,7 +113,7 @@ def gate6f_flatten_compiler_source(
 	return Result<String, String>::Ok(storage + "\n" + path + "\n" + literals + "\n" + mir_core + "\n" + state_core + "\n" + parser_core + "\n" + resolution_core + "\n" + checked_program_core + "\n" + core)
 end
 
-def gate6f_compiler_directory(path: String): String
+def compiler_source_directory(path: String): String
 	mut slash :=- 1
 	mut index := 0
 	while index < path.size()
@@ -137,14 +137,14 @@ def gate6f_compiler_directory(path: String): String
 	return result
 end
 
-def gate6f_compiler_path(directory: String, filename: String): String
+def compiler_source_path(directory: String, filename: String): String
 	if directory == "/"
 		return directory + filename
 	end
 	return directory + "/" + filename
 end
 
-def gate6f_read_required_source(path: String): Result<String, String>
+def read_required_compiler_source(path: String): Result<String, String>
 	case native_read_text(path)
 	when Result::Ok(source)
 		return Result<String, String>::Ok(source)
@@ -153,20 +153,20 @@ def gate6f_read_required_source(path: String): Result<String, String>
 	end
 end
 
-def gate6f_read_compiler_sources(entry_path: String): Result<Gate6FCompilerSources, String>
-	directory := gate6f_compiler_directory(entry_path)
-	entry := try gate6f_read_required_source(entry_path)
-	storage := try gate6f_read_required_source(gate6f_compiler_path(directory, "storage.trb"))
-	path := try gate6f_read_required_source(gate6f_compiler_path(directory, "path.trb"))
-	mir := try gate6f_read_required_source(gate6f_compiler_path(directory, "mir.trb"))
-	literals := try gate6f_read_required_source(gate6f_compiler_path(directory, "literals.trb"))
-	state := try gate6f_read_required_source(gate6f_compiler_path(directory, "state.trb"))
-	parser := try gate6f_read_required_source(gate6f_compiler_path(directory, "parser.trb"))
-	resolution := try gate6f_read_required_source(gate6f_compiler_path(directory, "resolution.trb"))
-	checked_program := try gate6f_read_required_source(gate6f_compiler_path(directory, "checked_program.trb"))
-	flattened := try gate6f_flatten_compiler_source(entry, storage, path, mir, literals, state, parser, resolution, checked_program)
-	return Result<Gate6FCompilerSources, String>::Ok(
-		Gate6FCompilerSources.new(
+def read_compiler_recovery_sources(entry_path: String): Result<RecoveryCompilerSources, String>
+	directory := compiler_source_directory(entry_path)
+	entry := try read_required_compiler_source(entry_path)
+	storage := try read_required_compiler_source(compiler_source_path(directory, "storage.trb"))
+	path := try read_required_compiler_source(compiler_source_path(directory, "path.trb"))
+	mir := try read_required_compiler_source(compiler_source_path(directory, "mir.trb"))
+	literals := try read_required_compiler_source(compiler_source_path(directory, "literals.trb"))
+	state := try read_required_compiler_source(compiler_source_path(directory, "state.trb"))
+	parser := try read_required_compiler_source(compiler_source_path(directory, "parser.trb"))
+	resolution := try read_required_compiler_source(compiler_source_path(directory, "resolution.trb"))
+	checked_program := try read_required_compiler_source(compiler_source_path(directory, "checked_program.trb"))
+	flattened := try flatten_compiler_recovery_source(entry, storage, path, mir, literals, state, parser, resolution, checked_program)
+	return Result<RecoveryCompilerSources, String>::Ok(
+		RecoveryCompilerSources.new(
 			entry: entry,
 			storage: storage,
 			path: path,
