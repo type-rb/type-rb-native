@@ -19,10 +19,19 @@ candidates remain rejected. See [the proof, repairs, and accepted
 measurement](native-mir-array-region-repair.md). The remaining direct-path
 cache and the broader MIR migration/recovery obligation are still outstanding.
 
-[Issue #249](https://github.com/type-rb/type-rb-native/issues/249) follows with
-a compiler-only [block-row construction consolidation](native-mir-block-construction.md).
+[Issue #249](https://github.com/type-rb/type-rb-native/issues/249) is completed by
+[PR #250](https://github.com/type-rb/type-rb-native/pull/250)'s compiler-only
+[block-row construction consolidation](native-mir-block-construction.md).
 It removes eight copies of the 16-cell layout while preserving application
-QBE exactly; it is not a new application optimization or fact family.
+QBE exactly. Complete compilers now total 662,992 bytes; both target code
+sections and the shared 1,116,173-byte compiler QBE shrink. This is not a new
+application optimization or fact family.
+
+The following [Integer-halving diagnostic](../results/2026-09-05-native-mir-halving-diagnostic-darwin-arm64/README.md)
+is rejected: its shorter generated QBE produces a larger compiler and about
+6.2% more local spectral-norm wall time. No halving change to the active
+compiler, threshold relaxation, or replacement of the accepted benchmark
+snapshot is retained.
 
 Status: experimental. The checked-in scope includes the accepted induction-phi
 recovery, the measured `Array<Integer>` reduction slice from issue #230, the
