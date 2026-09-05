@@ -2512,7 +2512,7 @@ def gate4_function_reassigns_parameter(
 							if next_token == "="
 								return true
 							end
-							if gate4_compound_operator(next_token) != ""
+							if gate4_binary_operator_id(next_token) >= 17
 								return true
 							end
 						end
@@ -3016,6 +3016,7 @@ def gate4_emit_scalar_mir(
 					operator_id,
 					gate4_emitted_value(operands[left_id], types[left_id], 0, "", 0, ""),
 					gate4_emitted_value(operands[right_id], types[right_id], 0, "", 0, ""),
+					result_type,
 					facts[left_id] == 1,
 					facts[right_id] == 1,
 					guarded_operator,
@@ -3689,6 +3690,7 @@ def gate4_emit_binary_with_facts(
 		operator_id: Integer,
 		left: Gate4EmittedValue,
 		right: Gate4EmittedValue,
+		result_type: String,
 		left_nonnegative: Boolean,
 		right_nonnegative: Boolean,
 		guarded_operator: Integer,
@@ -3698,13 +3700,6 @@ def gate4_emit_binary_with_facts(
 	mut float_operands := left_float
 	if right_float
 		float_operands = true
-	end
-	mut result_type := left.type_name
-	if float_operands
-		result_type = "Float"
-	end
-	if operator_id >= 6
-		result_type = "Boolean"
 	end
 	result := gate4_emit_temporary(context)
 	mut left_operand := left.operand
@@ -3721,6 +3716,20 @@ def gate4_emit_binary_with_facts(
 			right_operand = converted_right
 		end
 	end
+	if result_type == "Float"
+		mut operation := "add"
+		if operator_id == 2
+			operation = "sub"
+		end
+		if operator_id == 3
+			operation = "mul"
+		end
+		if operator_id == 4
+			operation = "div"
+		end
+		gate4_output_line(output, "\t" + result + " =d " + operation + " " + left_operand + ", " + right_operand)
+		return gate4_emitted_value(result, result_type, 0, "", 0, "")
+	end
 	if operator_id == 1
 		if left.type_name == "String"
 			gate4_output_line(
@@ -3729,10 +3738,6 @@ def gate4_emit_binary_with_facts(
 			)
 			gate4_emit_root_value(context, "String")
 		else
-			if result_type == "Float"
-				gate4_output_line(output, "\t" + result + " =d add " + left_operand + ", " + right_operand)
-				return gate4_emitted_value(result, result_type, 0, "", 0, "")
-			end
 			mut use_guarded_add := guarded_operator == 13
 			if left_nonnegative
 				use_guarded_add = false
@@ -3777,10 +3782,6 @@ def gate4_emit_binary_with_facts(
 		return gate4_emitted_value(result, result_type, 0, "", 0, "")
 	end
 	if operator_id == 2
-		if result_type == "Float"
-			gate4_output_line(output, "\t" + result + " =d sub " + left_operand + ", " + right_operand)
-			return gate4_emitted_value(result, result_type, 0, "", 0, "")
-		end
 		if gate4_take_inline_budget(context)
 			gate4_emit_checked_integer_operation(
 				context,
@@ -3797,10 +3798,6 @@ def gate4_emit_binary_with_facts(
 		return gate4_emitted_value(result, result_type, 0, "", 0, "")
 	end
 	if operator_id == 3
-		if result_type == "Float"
-			gate4_output_line(output, "\t" + result + " =d mul " + left_operand + ", " + right_operand)
-			return gate4_emitted_value(result, result_type, 0, "", 0, "")
-		end
 		gate4_emit_guarded_integer_operation(
 			context,
 			output,
@@ -3814,10 +3811,12 @@ def gate4_emit_binary_with_facts(
 		)
 		return gate4_emitted_value(result, result_type, 0, "", 0, "")
 	end
-	if operator_id == 4
-		if result_type == "Float"
-			gate4_output_line(output, "\t" + result + " =d div " + left_operand + ", " + right_operand)
-			return gate4_emitted_value(result, result_type, 0, "", 0, "")
+	if operator_id <= 5
+		mut operation := "div"
+		mut helper := "divide"
+		if operator_id == 5
+			operation = "rem"
+			helper = "remainder"
 		end
 		if gate4_take_inline_budget(context)
 			gate4_emit_checked_integer_division(
@@ -3826,25 +3825,10 @@ def gate4_emit_binary_with_facts(
 				result,
 				left.operand,
 				right.operand,
-				"div",
+				operation,
 			)
 		else
-			gate4_emit_integer_call(output, result, "divide", left.operand, right.operand)
-		end
-		return gate4_emitted_value(result, result_type, 0, "", 0, "")
-	end
-	if operator_id == 5
-		if gate4_take_inline_budget(context)
-			gate4_emit_checked_integer_division(
-				context,
-				output,
-				result,
-				left.operand,
-				right.operand,
-				"rem",
-			)
-		else
-			gate4_emit_integer_call(output, result, "remainder", left.operand, right.operand)
+			gate4_emit_integer_call(output, result, helper, left.operand, right.operand)
 		end
 		return gate4_emitted_value(result, result_type, 0, "", 0, "")
 	end
@@ -3871,44 +3855,29 @@ def gate4_emit_binary_with_facts(
 			return gate4_emitted_value(result, "Boolean", 0, "", 0, "")
 		end
 	end
-	mut comparison := "ceql"
-	if float_operands
-		comparison = "ceqd"
-	end
+	mut comparison := "eq"
 	if different
-		if float_operands
-			comparison = "cned"
-		else
-			comparison = "cnel"
-		end
+		comparison = "ne"
 	end
 	if operator_id == 8
-		if float_operands
-			comparison = "cltd"
-		else
-			comparison = "csltl"
-		end
+		comparison = "lt"
 	end
 	if operator_id == 9
-		if float_operands
-			comparison = "cled"
-		else
-			comparison = "cslel"
-		end
+		comparison = "le"
 	end
 	if operator_id == 10
-		if float_operands
-			comparison = "cgtd"
-		else
-			comparison = "csgtl"
-		end
+		comparison = "gt"
 	end
 	if operator_id == 11
-		if float_operands
-			comparison = "cged"
-		else
-			comparison = "csgel"
+		comparison = "ge"
+	end
+	if float_operands
+		comparison = "c" + comparison + "d"
+	else
+		if operator_id >= 8
+			comparison = "s" + comparison
 		end
+		comparison = "c" + comparison + "l"
 	end
 	word := gate4_emit_temporary(context)
 	gate4_output_line(
@@ -3919,19 +3888,36 @@ def gate4_emit_binary_with_facts(
 	return gate4_emitted_value(result, "Boolean", 0, "", 0, "")
 end
 
-def gate4_emit_binary(
+def lower_checked_binary(
+		mut state: Gate4Compiler,
 		mut context: Gate4EmitContext,
 		mut output: Gate4Output,
-		operator: String,
+		origin: Integer,
 		left: Gate4EmittedValue,
 		right: Gate4EmittedValue,
 	): Gate4EmittedValue
+	plan := gate4_load_integer(state.mir_nonnegative_facts, origin)
+	result_type := checked_binary_plan_type(plan)
+	# Verify the checked-origin binding before lowering, without rechecking
+	# operand types or reconstructing the result from emitted values.
+	operator := gate4_load_string(state.token_texts, origin)
+	mut valid := result_type != "Invalid"
+	if valid
+		valid = plan % 16 == gate4_binary_operator_id(operator) % 16
+	end
+	if !valid
+		gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, origin), "invalid checked binary plan")
+		return gate4_emitted_value("0", "Invalid", 0, "", 0, "")
+	end
+	# Literal spelling remains transitional until selected inline-call results
+	# are represented above the adapter; the operator and result type do not.
 	return gate4_emit_binary_with_facts(
 		context,
 		output,
-		gate4_binary_operator_id(operator),
+		plan % 16,
 		left,
 		right,
+		result_type,
 		gate4_small_nonnegative_integer_operand(left.operand),
 		gate4_small_nonnegative_integer_operand(right.operand),
 		0,
@@ -3955,6 +3941,7 @@ def gate4_emit_expression_value(
 	)
 	mut scanning := true
 	while scanning
+		operator_origin := position[0]
 		operator := gate4_load_string(state.token_texts, position[0])
 		precedence := gate4_binary_precedence(operator)
 		if precedence < minimum_precedence
@@ -3970,7 +3957,7 @@ def gate4_emit_expression_value(
 				precedence + 1,
 				"",
 			)
-			value = gate4_emit_binary(context, output, operator, value, right)
+			value = lower_checked_binary(state, context, output, operator_origin, value, right)
 		end
 	end
 	return value
@@ -4031,17 +4018,17 @@ def gate4_emit_simple_statement(
 		mut output: Gate4Output,
 	): Boolean
 	left := gate4_emit_expression(state, position, context, output, 1, "")
+	operator_origin := position[0]
 	operator := gate4_load_string(state.token_texts, position[0])
 	if operator == "="
 		gate4_advance(position)
 		right := gate4_emit_expression(state, position, context, output, 1, left.type_name)
 		gate4_emit_typed_store(output, left.type_name, right.operand, left.address)
 	else
-		compound := gate4_compound_operator(operator)
-		if compound != ""
+		if gate4_binary_operator_id(operator) >= 17
 			gate4_advance(position)
 			right := gate4_emit_expression(state, position, context, output, 1, left.type_name)
-			result := gate4_emit_binary(context, output, compound, left, right)
+			result := lower_checked_binary(state, context, output, operator_origin, left, right)
 			gate4_emit_typed_store(output, left.type_name, result.operand, left.address)
 		end
 	end
@@ -6151,7 +6138,7 @@ def gate4_parse_simple_statement_syntax(mut state: Gate4Compiler, mut position: 
 			return false
 		end
 	else
-		if gate4_compound_operator(operator) != ""
+		if gate4_binary_operator_id(operator) >= 17
 			gate4_advance(position)
 			if !gate4_parse_expression_syntax(state, position, 1)
 				return false
@@ -8224,6 +8211,19 @@ def gate4_binary_operator_id(operator: String): Integer
 	if operator == ">="
 		return 11
 	end
+	# The high tag identifies the four supported compound assignments.
+	if operator == "+="
+		return 17
+	end
+	if operator == "-="
+		return 18
+	end
+	if operator == "*="
+		return 19
+	end
+	if operator == "/="
+		return 20
+	end
 	return 0
 end
 
@@ -8930,12 +8930,38 @@ def gate4_check_postfix(
 	return value
 end
 
+# Binary plans use the existing operator-origin cell: result tag * 16 + op.
+# Tags 1/2/3/4 denote Integer/Float/Boolean/String. Literal, argument, index,
+# and loop origins remain distinct; their existing markers are unchanged.
+def checked_binary_plan_type(plan: Integer): String
+	if plan >= 17
+		if plan <= 21
+			return "Integer"
+		end
+	end
+	if plan >= 33
+		if plan <= 36
+			return "Float"
+		end
+	end
+	if plan >= 54
+		if plan <= 59
+			return "Boolean"
+		end
+	end
+	if plan == 65
+		return "String"
+	end
+	return "Invalid"
+end
+
 def gate4_binary_result_type(
 		mut state: Gate4Compiler,
 		operator: String,
 		left: String,
 		right: String,
 		line: Integer,
+		origin: Integer,
 	): String
 	mut numeric_pair := false
 	if gate4_numeric_type(left)
@@ -8949,78 +8975,49 @@ def gate4_binary_result_type(
 			return "Invalid"
 		end
 	end
-	mut numeric_result := "Integer"
+	mut numeric_tag := 16
 	if left == "Float"
-		numeric_result = "Float"
+		numeric_tag = 32
 	end
 	if right == "Float"
-		numeric_result = "Float"
+		numeric_tag = 32
 	end
-	if operator == "+"
-		if numeric_pair
-			return numeric_result
-		end
-		if left == "String"
-			return "String"
-		end
-	end
-	if operator == "-"
-		if numeric_pair
-			return numeric_result
-		end
-	end
-	if operator == "*"
-		if numeric_pair
-			return numeric_result
-		end
-	end
-	if operator == "/"
-		if numeric_pair
-			return numeric_result
-		end
-	end
-	if operator == "%"
-		if left == "Integer"
-			if right == "Integer"
-				return "Integer"
+	operator_id := gate4_binary_operator_id(operator)
+	mut plan := 0
+	if operator_id >= 1
+		if operator_id <= 4
+			if numeric_pair
+				plan = numeric_tag + operator_id
+			else
+				if operator_id == 1
+					if left == "String"
+						plan = 65
+					end
+				end
+			end
+		else
+			if operator_id == 5
+				if left == "Integer"
+					if right == "Integer"
+						plan = 21
+					end
+				end
+			else
+				if numeric_pair
+					plan = 48 + operator_id
+				else
+					if operator_id <= 7
+						if left == right
+							plan = 48 + operator_id
+						end
+					end
+				end
 			end
 		end
 	end
-	if operator == "=="
-		if numeric_pair
-			return "Boolean"
-		end
-		if left == right
-			return "Boolean"
-		end
-	end
-	if operator == "!="
-		if numeric_pair
-			return "Boolean"
-		end
-		if left == right
-			return "Boolean"
-		end
-	end
-	if operator == "<"
-		if numeric_pair
-			return "Boolean"
-		end
-	end
-	if operator == "<="
-		if numeric_pair
-			return "Boolean"
-		end
-	end
-	if operator == ">"
-		if numeric_pair
-			return "Boolean"
-		end
-	end
-	if operator == ">="
-		if numeric_pair
-			return "Boolean"
-		end
+	if plan != 0
+		gate4_store_integer(state.mir_nonnegative_facts, origin, plan)
+		return checked_binary_plan_type(plan)
 	end
 	mut display_type := left
 	if right == "Float"
@@ -9055,7 +9052,7 @@ def gate4_check_expression_value(
 			gate4_advance(position)
 			gate4_skip_newlines(state, position)
 			right := gate4_check_expression(state, position, locals, precedence + 1, "")
-			result_type := gate4_binary_result_type(state, operator, value.type_name, right.type_name, line)
+			result_type := gate4_binary_result_type(state, operator, value.type_name, right.type_name, line, operator_origin)
 			if result_type == "String"
 				gate4_array_region_operation(locals, 6, 0, operator_origin)
 			end
@@ -9108,22 +9105,6 @@ def gate4_check_expression(
 		end
 	end
 	return value
-end
-
-def gate4_compound_operator(operator: String): String
-	if operator == "+="
-		return "+"
-	end
-	if operator == "-="
-		return "-"
-	end
-	if operator == "*="
-		return "*"
-	end
-	if operator == "/="
-		return "/"
-	end
-	return ""
 end
 
 def gate4_check_declaration(
@@ -9238,6 +9219,7 @@ def gate4_check_simple_statement(
 	): Boolean
 	line := gate4_load_integer(state.token_lines, position[0])
 	left := gate4_check_expression(state, position, locals, 1, "")
+	operator_origin := position[0]
 	operator := gate4_load_string(state.token_texts, position[0])
 	if operator == "="
 		if left.mutable == 0
@@ -9249,14 +9231,14 @@ def gate4_check_simple_statement(
 			gate4_scalar_mir_disable(locals)
 		end
 	else
-		compound := gate4_compound_operator(operator)
-		if compound != ""
+		if gate4_binary_operator_id(operator) >= 17
+			compound := operator[0]
 			if left.mutable == 0
 				gate4_diagnostic(state, "TRBN4004", line, "assignment target is immutable")
 			end
 			gate4_advance(position)
 			right := gate4_check_expression(state, position, locals, 1, left.type_name)
-			result_type := gate4_binary_result_type(state, compound, left.type_name, right.type_name, line)
+			result_type := gate4_binary_result_type(state, compound, left.type_name, right.type_name, line, operator_origin)
 			if result_type == "String"
 				gate4_array_region_operation(locals, 6, 0, position[0])
 			end
