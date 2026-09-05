@@ -17,7 +17,7 @@ guide, not a finding that every gate-numbered file is obsolete.
 
 | Current area | Role and treatment |
 | --- | --- |
-| `compiler/gate4/src/compiler.trb`, `storage.trb`, `path.trb` | Ordinary self-hosted compiler closure. Split by responsibility and eventually remove checkpoint-derived names; retain one canonical implementation. |
+| `compiler/gate4/src/compiler.trb`, `storage.trb`, `path.trb`, `mir.trb`, `literals.trb` | Ordinary self-hosted compiler closure. MIR model/verifier/passes and shared literal helpers have distinct owners; continue splitting frontend, adapter, and driver responsibilities and remove checkpoint-derived names incrementally. |
 | `src/gate0.trb`, `snapshot.trb`, `json_boundary.trb`, `diagnostic.trb`, `native_mir.trb` | Initial snapshot validation/MIR boundary and shared support. Classify callers before separating shared code from recovery-only code. |
 | `src/gate1_*`, `gate2_*`, `gate3_*`, `qbe.trb`, `qbe2.trb`, `qbe3.trb` | Versioned snapshot, MIR, layout, QBE, and managed-runtime paths with differential tests. These are not three successive unused compiler copies. Name retained paths by format/capability and role. |
 | `src/gate4_toolchain.trb`, `matched_go_driver.trb`, `gate6f_compiler_source.trb` and associated tests | Recovery generation, matched reference comparison, and strict compiler-source flattening support. Keep them visibly separate from the ordinary compiler. |
@@ -44,16 +44,22 @@ O1 supplied the initial documentation cleanup. O2's
 and records the first matched-Go driver move under
 [issue #258](https://github.com/type-rb/type-rb-native/issues/258). Only that
 support module and its test have moved; the other destinations are proposals.
-O3–O5 remain planned, not completed.
-The first O3 candidate is the ordinary compiler's MIR model, verifier, and
-target-independent pass code, currently grouped near the beginning of the
-large `compiler.trb`. Audit its numeric-literal utility dependencies first so
-the extraction does not introduce a compiler/MIR import cycle or duplicate
-semantic predicates. Keep the runtime intrinsics at the entry boundary and
-update strict recovery flattening and its negative tests atomically. This is
-a responsibility extraction, not a line-count-only split or another compiler
-copy. It takes precedence over the next new optimization after the current
-bounded checked-binary checkpoint.
+The first O3 slice, registered in
+[issue #262](https://github.com/type-rb/type-rb-native/issues/262), extracts the
+ordinary compiler's MIR model, verifier, and target-independent passes into
+`mir.trb`. Six shared numeric helpers live in `literals.trb`, avoiding a
+compiler/MIR import cycle and duplicate semantic predicates. The entry shrinks
+from 9,965 to 8,546 lines; the remaining size is still a decomposition target,
+not a maintainability goal. Eleven pure tests move with their owners while
+frontend/adapter integration tests remain at the entry. Runtime intrinsics
+stay at the entry boundary. Recovery validates the exact entry and MIR imports,
+then derives storage/path/literals/MIR/entry declarations deterministically;
+ordinary self-hosting still uses the canonical file-root closure.
+
+O3 continues incrementally; O4–O5 are not complete. Next, audit frontend state
+and parsing/checking dependencies for another cohesive extraction, followed by
+adapter/driver ownership and active gate-derived naming. Do not turn the first
+split into a second large catch-all module or wait for full MIR migration.
 
 Follow with the architecture/development-plan documentation cleanup below and
 an evidence-based audit of open issues. Record a concrete dependency or reopen
@@ -121,11 +127,11 @@ for coverage, the benchmark explorer and dated results for performance, the
 MIR status page for active ownership, and issues/decisions for scoped plans.
 
 The historical narrative and documentation catalog now have separate homes.
-The development plan and architecture also contain historical detail: after
-O1, move duplicated completed-gate narrative to the history/reference layer in
-a documentation-only follow-up, retaining normative policy and old anchors or
-explicit migration links. Do not trade one oversized README for multiple
-competing descriptions of current status.
+[PR #261](https://github.com/type-rb/type-rb-native/pull/261) moved detailed
+gate contracts and completed-gate narrative from the development plan and
+architecture into the gate reference, preserving old anchors and exact
+historical content. Maintain that separation; do not trade one oversized
+README for multiple competing descriptions of current status.
 
 Documentation-only changes use the existing lightweight documentation CI.
 Source moves still run their applicable code authorities; do not misclassify a

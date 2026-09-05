@@ -1,0 +1,159 @@
+import { Gate4MirModule, gate4_optimize_verified_mir, gate4_verify_mir } from mir
+import { describe, expect, test } from trb/std/test
+
+def gate4_mir_test_module(
+		supplied_fact: Boolean,
+		invalid_index: Boolean,
+	): Gate4MirModule
+	mut array_index := 5
+	if invalid_index
+		array_index = 99
+	end
+	mut facts: Array<Integer> := []
+	if supplied_fact
+		facts.push(1)
+	end
+	return Gate4MirModule.new(
+		source_count: [1],
+		entry_function: [1],
+		functions: [[1, 10, 0, 1, 0, 1, 0, 5]],
+		blocks: [
+			[10, 0, 2, 1, 0, 0, 1, 1, - 1, 11, - 1, 1, 1, 0, 0, - 1],
+			[11, 0, 3, 2, 1, 1, 2, 2, 4, 12, 14, 3, 1, 4, 0, - 1],
+			[12, 0, 4, 4, 1, 3, 3, 1, - 1, 11, - 1, 5, 1, 0, 0, - 1],
+			[13, 0, 5, 6, 0, 6, 0, 4, - 1, - 1, - 1, 0, 0, 0, 0, - 1],
+			[14, 0, 6, 6, 0, 6, 0, 3, - 1, - 1, - 1, 0, 0, 0, 0, - 1],
+		],
+		values: [
+			[1, 0, 3, 0, 1],
+			[1, 1, 1, 0, 2],
+			[1, 2, 1, 0, 3],
+			[1, 3, 1, 0, 3],
+			[1, 4, 2, 0, 3],
+			[1, 5, 1, 0, 4],
+			[1, 6, 4, 0, 4],
+			[1, 7, 1, 0, 4],
+			[1, 8, 1, 0, 4],
+		],
+		instructions: [
+			[1, 1, - 1, - 1, 0, - 1, 0, 2],
+			[4, 3, 0, - 1, 0, - 1, 0, 3],
+			[3, 4, 2, 3, 0, - 1, 0, 3],
+			[5, 6, 0, array_index, 0, 13, 0, 4],
+			[1, 7, - 1, - 1, 1, - 1, 0, 4],
+			[2, 8, 5, 7, 0, 13, 0, 4],
+		],
+		arguments: [0, 1, 2, 2, 5, 8],
+		array_regions: [],
+		facts: facts,
+		literal_texts: [],
+	)
+end
+
+describe("Native MIR model and verifier") do
+	test("verifies a checked scalar and Array loop MIR skeleton") do
+		native_module := gate4_mir_test_module(false, false)
+		expect(gate4_verify_mir(native_module, false)).to_equal("")
+	end
+
+	test("rejects an undefined MIR Array index") do
+		native_module := gate4_mir_test_module(false, true)
+		expect(gate4_verify_mir(native_module, false)).to_equal("MIR Array address type differs")
+	end
+
+	test("rejects supplied MIR optimization facts") do
+		native_module := gate4_mir_test_module(true, false)
+		expect(gate4_verify_mir(native_module, false)).to_equal(
+			"MIR input cannot supply optimization facts",
+		)
+	end
+
+	test("rejects missing or extra optimized Array-header facts") do
+		mut native_module := gate4_mir_test_module(false, false)
+		native_module.array_regions.push([1, 1, 10, 4, 0, 13])
+		expect(gate4_verify_mir(native_module, true)).to_equal("MIR optimized Array-header fact is invalid")
+		native_module.facts.push(0)
+		native_module.facts.push(13)
+		expect(gate4_verify_mir(native_module, true)).to_equal("MIR optimized Array-header fact is invalid")
+	end
+
+	test("rejects a forged optimized Array-header parameter ordinal") do
+		mut native_module := gate4_mir_test_module(false, false)
+		native_module.array_regions.push([1, 1, 10, 4, 0, 13])
+		native_module.facts.push(11)
+		expect(gate4_verify_mir(native_module, true)).to_equal("MIR optimized Array-header fact is invalid")
+	end
+
+	test("derives only Array-header identity from raw parameters and operations") do
+		mut native_module := gate4_mir_test_module(false, false)
+		native_module.array_regions.push([1, 1, 10, 4, 0, 13])
+		expect(gate4_verify_mir(native_module, false)).to_equal("")
+		gate4_optimize_verified_mir(native_module)
+		expect(native_module.facts).to_equal([0])
+		expect(gate4_verify_mir(native_module, true)).to_equal("")
+		gate4_optimize_verified_mir(native_module)
+		expect(native_module.facts).to_equal([0])
+		expect(gate4_verify_mir(native_module, true)).to_equal("")
+	end
+
+	test("rejects forged Array-header facts after raw parameters or accesses change") do
+		changes := [[1, 2], [7, 1]]
+		mut index := 0
+		while index < changes.size()
+			mut native_module := gate4_mir_test_module(false, false)
+			mut region := [1, 1, 10, 1, 2, 11, 4, 0, 13]
+			native_module.array_regions.push(region)
+			gate4_optimize_verified_mir(native_module)
+			region[changes[index][0]] = changes[index][1]
+			expect(gate4_verify_mir(native_module, true)).to_equal("MIR optimized Array-header fact is invalid")
+			index += 1
+		end
+	end
+
+	test("rejects forged Array-header facts across opaque effects") do
+		mut native_module := gate4_mir_test_module(false, false)
+		native_module.array_regions.push([1, 1, 10, 4, 0, 13, 6, 0, 14])
+		native_module.facts.push(0)
+		expect(gate4_verify_mir(native_module, true)).to_equal("MIR optimized Array-header fact is invalid")
+	end
+
+	test("retains distinct Array parameter identities across repeated accesses") do
+		mut native_module := gate4_mir_test_module(false, false)
+		region := [1, 2, 10, 1, 1, 11, 4, 0, 13, 4, 1, 15, 4, 0, 16]
+		native_module.array_regions.push(region)
+		expect(gate4_verify_mir(native_module, false)).to_equal("")
+		gate4_optimize_verified_mir(native_module)
+		expect(native_module.facts).to_equal([1])
+		expect(gate4_verify_mir(native_module, true)).to_equal("")
+	end
+
+	test("rejects malformed raw Array regions") do
+		regions := [
+			[1, 1],
+			[1, 3, 10],
+			[1, 1, 10, 1, 0, 10],
+			[1, 1, 10, 1, 0, 9],
+			[4, 0, 10, 1, 1, 11],
+			[1, 1, 10, 4, 0, 12, 1, 1, 13],
+			[1, 1, 10, 4, 99, 13],
+			[1, 9007199254740991, 10],
+			[1, - 9007199254740991, 10],
+			[1, 1, - 1],
+			[1, 0, 10, 4, 0, 11],
+			[1, 1, 10, 4, - 1, 11],
+			[6, 1, 12],
+			[2, 0, 12],
+			[3, 0, 12],
+			[5, 0, 12],
+			[7, 0, 12],
+			[0, 0, 12],
+		]
+		mut index := 0
+		while index < regions.size()
+			mut native_module := gate4_mir_test_module(false, false)
+			native_module.array_regions.push(regions[index])
+			expect(gate4_verify_mir(native_module, false)).to_equal("MIR Array region is invalid")
+			index += 1
+		end
+	end
+end

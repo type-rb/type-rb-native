@@ -1309,19 +1309,20 @@ def _gate6_write_source(path: String, source: String): Result<Boolean, String>
 	end
 end
 
-def _gate6f_prepare_compiler_project(
+def _prepare_compiler_closure(
 		directory: String,
-		entry: String,
-		storage: String,
-		path: String,
-		include_storage: Boolean,
+		sources: Array<String>,
+		omitted: String,
 	): Result<Boolean, String>
 	try _gate6_reset_directory(directory)
-	try _gate6_write_source(directory + "/compiler.trb", entry)
-	if include_storage
-		try _gate6_write_source(directory + "/storage.trb", storage)
+	names := ["compiler", "storage", "path", "mir", "literals"]
+	mut index := 0
+	while index < names.size()
+		if names[index] != omitted
+			try _gate6_write_source(directory + "/" + names[index] + ".trb", sources[index])
+		end
+		index += 1
 	end
-	try _gate6_write_source(directory + "/path.trb", path)
 	try _gate6_write_source(directory + "/unrelated.trb", "@\n")
 	return Result<Boolean, String>::Ok(true)
 end
@@ -1332,6 +1333,8 @@ def _gate6f_verify_compiler_source_closure(
 		entry: String,
 		storage: String,
 		path: String,
+		mir: String,
+		literals: String,
 		workspace: String,
 	): Result<Boolean, String>
 	canonical := try _gate6_process(executable, ["emit-qbe", compiler_path])
@@ -1356,74 +1359,61 @@ def _gate6f_verify_compiler_source_closure(
 		"\t\treturn \".\"\n",
 		"\t\treturn \"./\"\n",
 	)
-	mutation_names := ["storage", "path"]
-	mutation_storage := [storage_mutation, storage]
-	mutation_path := [path, path_mutation]
-	mut mutation_index := 0
-	while mutation_index < mutation_names.size()
-		directory := workspace + "/gate6f-compiler-" + mutation_names[mutation_index] + "-mutation"
-		try _gate6f_prepare_compiler_project(
-			directory,
-			entry,
-			mutation_storage[mutation_index],
-			mutation_path[mutation_index],
-			true,
-		)
+	mir_mutation := try _gate6f_replace_once(mir, "MIR failure target does not exist", "MIR failure target is absent")
+	literal_mutation := try _gate6f_replace_once(literals, "return parsed <= 1024", "return parsed <= 1023")
+	names := ["compiler", "storage", "path", "mir", "literals"]
+	sources := [entry, storage, path, mir, literals]
+	mutations := [entry, storage_mutation, path_mutation, mir_mutation, literal_mutation]
+	mut index := 1
+	while index < names.size()
+		mut changed := [entry, storage, path, mir, literals]
+		changed[index] = mutations[index]
+		directory := workspace + "/gate6f-compiler-" + names[index] + "-mutation"
+		try _prepare_compiler_closure(directory, changed, "")
 		emission := try _gate6_process(executable, ["emit-qbe", directory + "/compiler.trb"])
 		if emission.status != 0 || emission.stdout.empty?() || !emission.stderr.empty?()
-			return Result<Boolean, String>::Err(mutation_names[mutation_index] + " mutation emission failed")
+			return Result<Boolean, String>::Err(names[index] + " mutation emission failed: " + emission.stderr)
 		end
 		if emission.stdout == canonical.stdout
-			return Result<Boolean, String>::Err(mutation_names[mutation_index] + " mutation did not change compiler QBE")
+			return Result<Boolean, String>::Err(names[index] + " mutation did not change compiler QBE")
 		end
 		try _gate6_require_no_intermediates(directory)
-		mutation_index += 1
+
+		missing := workspace + "/gate6f-compiler-missing-" + names[index]
+		try _prepare_compiler_closure(missing, sources, names[index])
+		missing_output := missing + "/compiler"
+		missing_build := try _gate6_build(executable, missing + "/compiler.trb", missing_output, missing + "/missing-qbe", missing + "/missing-cc")
+		if missing_build.status != 1 || !missing_build.stdout.empty?()
+			return Result<Boolean, String>::Err("missing " + names[index] + " module did not fail before tools")
+		end
+		if !missing_build.stderr.include?("cannot resolve project import " + names[index])
+			return Result<Boolean, String>::Err("missing " + names[index] + " module diagnostic differs: " + missing_build.stderr)
+		end
+		try _gate6_require_missing(missing_output)
+		try _gate6_require_no_intermediates(missing)
+
+		malformed := workspace + "/gate6f-compiler-malformed-" + names[index]
+		changed[index] = sources[index] + "\n@\n"
+		try _prepare_compiler_closure(malformed, changed, "")
+		malformed_output := malformed + "/compiler"
+		malformed_build := try _gate6_build(executable, malformed + "/compiler.trb", malformed_output, malformed + "/missing-qbe", malformed + "/missing-cc")
+		if malformed_build.status != 1 || !malformed_build.stdout.empty?()
+			return Result<Boolean, String>::Err("malformed " + names[index] + " module did not fail before tools")
+		end
+		if !malformed_build.stderr.include?("TRBN4001")
+			return Result<Boolean, String>::Err("malformed " + names[index] + " module diagnostic differs: " + malformed_build.stderr)
+		end
+		try _gate6_require_missing(malformed_output)
+		try _gate6_require_no_intermediates(malformed)
+		index += 1
 	end
 
 	unrelated := workspace + "/gate6f-compiler-unrelated"
-	try _gate6f_prepare_compiler_project(unrelated, entry, storage, path, true)
+	try _prepare_compiler_closure(unrelated, sources, "")
 	unrelated_emission := try _gate6_process(executable, ["emit-qbe", unrelated + "/compiler.trb"])
 	if unrelated_emission.status != 0 || unrelated_emission.stdout != canonical.stdout || !unrelated_emission.stderr.empty?()
 		return Result<Boolean, String>::Err("unrelated invalid compiler sibling entered the closure")
 	end
-
-	missing := workspace + "/gate6f-compiler-missing-storage"
-	try _gate6f_prepare_compiler_project(missing, entry, storage, path, false)
-	missing_output := missing + "/compiler"
-	missing_build := try _gate6_build(
-		executable,
-		missing + "/compiler.trb",
-		missing_output,
-		missing + "/missing-qbe",
-		missing + "/missing-cc",
-	)
-	if missing_build.status != 1 || !missing_build.stdout.empty?()
-		return Result<Boolean, String>::Err("missing compiler module did not fail before tools")
-	end
-	if !missing_build.stderr.include?("cannot resolve project import storage")
-		return Result<Boolean, String>::Err("missing compiler module diagnostic differs")
-	end
-	try _gate6_require_missing(missing_output)
-	try _gate6_require_no_intermediates(missing)
-
-	malformed := workspace + "/gate6f-compiler-malformed-storage"
-	try _gate6f_prepare_compiler_project(malformed, entry, storage + "\n@\n", path, true)
-	malformed_output := malformed + "/compiler"
-	malformed_build := try _gate6_build(
-		executable,
-		malformed + "/compiler.trb",
-		malformed_output,
-		malformed + "/missing-qbe",
-		malformed + "/missing-cc",
-	)
-	if malformed_build.status != 1 || !malformed_build.stdout.empty?()
-		return Result<Boolean, String>::Err("malformed compiler module did not fail before tools")
-	end
-	if !malformed_build.stderr.include?("TRBN4001")
-		return Result<Boolean, String>::Err("malformed compiler module diagnostic differs")
-	end
-	try _gate6_require_missing(malformed_output)
-	try _gate6_require_no_intermediates(malformed)
 	return Result<Boolean, String>::Ok(true)
 end
 
@@ -1979,10 +1969,28 @@ describe("Gate 4 reference bootstrap") do
 				expect(false).to_be_true()
 				""
 			end
+			mir_source := case native_read_text(root + "/compiler/gate4/src/mir.trb")
+			when Result::Ok(source)
+				source
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+				""
+			end
+			literals_source := case native_read_text(root + "/compiler/gate4/src/literals.trb")
+			when Result::Ok(source)
+				source
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+				""
+			end
 			recovery_source := case gate6f_flatten_compiler_source(
 					compiler_source,
 					storage_source,
 					path_source,
+					mir_source,
+					literals_source,
 				)
 			when Result::Ok(source)
 				source
@@ -2011,6 +2019,18 @@ describe("Gate 4 reference bootstrap") do
 				expect(false).to_be_true()
 			end
 			case native_write_text(workspace + "/path.trb", path_source)
+			when Result::Ok(_unit)
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+			end
+			case native_write_text(workspace + "/mir.trb", mir_source)
+			when Result::Ok(_unit)
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+			end
+			case native_write_text(workspace + "/literals.trb", literals_source)
 			when Result::Ok(_unit)
 			when Result::Err(error)
 				puts(error.operation + ": " + error.message)
@@ -2097,6 +2117,8 @@ describe("Gate 4 reference bootstrap") do
 							compiler_source,
 							storage_source,
 							path_source,
+							mir_source,
+							literals_source,
 							workspace,
 						)
 					when Result::Ok(_value)
