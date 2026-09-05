@@ -1,5 +1,32 @@
 # Native MIR optimization transition status
 
+## Current ownership checkpoint
+
+[PR #260](https://github.com/type-rb/type-rb-native/pull/260) implements the
+first, partial checkpoint of
+[issue #254](https://github.com/type-rb/type-rb-native/issues/254): structured
+checking publishes the binary operator and result type at its exact source
+origin, and direct/compound lowering consumes that checked plan. Scalar MIR
+passes its verified result type to the same adapter. Missing, malformed, or
+operator-mismatched plans fail closed. The adapter no longer reconstructs the
+binary result type from emitted operands.
+
+This is not completion of the literal-fact migration: the direct wrapper still
+uses emitted literal spelling until checked/MIR plans own the decisions for
+actually selected inline-call results, including the whole-program two-call
+budget. An eligible but non-selected call cannot inherit its callee's literal
+proof. The new controls retain that distinction and computed-argument overflow
+failures. No new fact family or application speedup is claimed.
+
+Acceptance remains subject to the preregistered unchanged compactness,
+recovery, fixed-point, target, memory, and build-cost checks. Local application
+QBE equality alone is not formal acceptance. The next organization checkpoint
+extracts a cohesive MIR responsibility from the large compiler entry module,
+with its imports, tests, and recovery derivation moved together; see the
+[organization schedule](repository-organization.md).
+
+## Accepted optimization evidence
+
 The immutable-parameter Array-header proof is accepted in
 [PR #246](https://github.com/type-rb/type-rb-native/pull/246), merged as
 `5a23176040fee3541ed8578115622ffcd7aa2733`. The complete
