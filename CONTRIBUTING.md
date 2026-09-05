@@ -22,6 +22,12 @@ The proposal should record:
 Small fixes and documentation corrections do not need a separate experiment
 proposal.
 
+Follow the [repository organization schedule](docs/repository-organization.md)
+for source moves and naming cleanup. Inventory consumers before removing
+gate-labelled code, keep mechanical changes separate from optimization, and
+preserve recovery and measurement coverage. Keep routine checkpoint narratives
+out of the root README; link to the owning status page or dated evidence.
+
 Keep implementation drafts in the quick-feedback stage. After local proof,
 negative-case, and compactness review, mark the PR ready to run complete
 correctness and then comparative measurements. See the

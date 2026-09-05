@@ -16,6 +16,13 @@ text in English.
 Treat this repository as an experimental research project, not as a supported
 TypeRB backend or product commitment.
 
+Follow `docs/repository-organization.md` for staged source and documentation
+cleanup. Include root gate-numbered files and symbols, not just directories.
+At accepted optimization checkpoints, advance the next bounded organization
+slice or record its concrete blocker; do not defer all cleanup until promotion.
+Keep the README concise and historical evidence immutable. Source moves must
+retain their applicable code/recovery/measurement checks.
+
 - Use `type-rb/type-rb` as the source of truth for TypeRB syntax, semantics,
   diagnostics, packages, and conformance behavior.
 - Do not introduce native-only language semantics or silently weaken portable
