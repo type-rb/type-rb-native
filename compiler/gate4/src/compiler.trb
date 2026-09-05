@@ -7490,18 +7490,19 @@ def gate4_array_region_operation(
 		operand: Integer,
 		origin: Integer,
 	)
-	if locals.mir_array.size() > 0
+	mut operations := locals.mir_array
+	if operations.size() > 0
 		if kind == 6
-			locals.mir_array[0] = 6
-			locals.mir_array[2] = origin
+			operations[0] = 6
+			operations[2] = origin
 		end
-		if locals.mir_array[0] == 6
+		if operations[0] == 6
 			return
 		end
 	end
-	locals.mir_array.push(kind)
-	locals.mir_array.push(operand)
-	locals.mir_array.push(origin)
+	operations.push(kind)
+	operations.push(operand)
+	operations.push(origin)
 end
 
 def gate4_local_add(
@@ -8096,6 +8097,17 @@ def gate4_scalar_mir_value(
 		gate4_scalar_mir_disable(locals)
 		return - 1
 	end
+	return gate4_mir_add_value(state, locals, type_id, gate4_load_integer(state.token_lines, origin))
+end
+
+# Parameter declarations and expressions attach different source tables to the
+# same MIR value layout. Keep identifier allocation and row construction shared.
+def gate4_mir_add_value(
+		state: Gate4Compiler,
+		mut locals: Gate4Locals,
+		type_id: Integer,
+		line: Integer,
+	): Integer
 	value_id := locals.mir_state[2]
 	locals.mir_state[2] = value_id + 1
 	locals.mir_value_rows.push([
@@ -8103,9 +8115,28 @@ def gate4_scalar_mir_value(
 			value_id,
 			type_id,
 			state.active_module[0],
-			gate4_load_integer(state.token_lines, origin),
+			line,
 		])
 	return value_id
+end
+
+# Keep the checked instruction layout and source attachment in one builder.
+# Callers still choose the operation, operands, and explicit failure edge.
+def gate4_scalar_mir_instruction(
+		state: Gate4Compiler,
+		mut locals: Gate4Locals,
+		kind: Integer,
+		result: Integer,
+		first: Integer,
+		second: Integer,
+		operation: Integer,
+		failure: Integer,
+		line: Integer,
+	)
+	locals.mir_instructions.push([
+			kind, result, first, second, operation, failure,
+			state.active_module[0], line,
+		])
 end
 
 def gate4_scalar_mir_literal(
@@ -8127,16 +8158,9 @@ def gate4_scalar_mir_literal(
 		end
 	end
 	locals.mir_literal_texts.push(text)
-	locals.mir_instructions.push([
-			6,
-			value_id,
-			fact,
-			- 1,
-			literal_index,
-			- 1,
-			state.active_module[0],
-			gate4_load_integer(state.token_lines, origin),
-		])
+	gate4_scalar_mir_instruction(
+		state, locals, 6, value_id, fact, - 1, literal_index, - 1, gate4_load_integer(state.token_lines, origin),
+	)
 	return gate4_mir_checked_value(type_name, value_id, origin, 0)
 end
 
@@ -8208,16 +8232,9 @@ def gate4_scalar_mir_binary(
 			failure = locals.mir_state[3]
 		end
 	end
-	locals.mir_instructions.push([
-			7,
-			value_id,
-			left_id,
-			right_id,
-			operator_id,
-			failure,
-			state.active_module[0],
-			gate4_load_integer(state.token_lines, origin),
-		])
+	gate4_scalar_mir_instruction(
+		state, locals, 7, value_id, left_id, right_id, operator_id, failure, gate4_load_integer(state.token_lines, origin),
+	)
 	return gate4_mir_checked_value(result_type, value_id, 9007199254740991, 0)
 end
 
@@ -8250,16 +8267,9 @@ def gate4_scalar_mir_unary(
 		return gate4_checked_value(result_type, 0, 9007199254740991, 0)
 	end
 	result := gate4_scalar_mir_value(state, locals, gate4_scalar_mir_type(result_type), origin)
-	locals.mir_instructions.push([
-			8,
-			result,
-			operand,
-			- 1,
-			operator_id,
-			- 1,
-			state.active_module[0],
-			gate4_load_integer(state.token_lines, origin),
-		])
+	gate4_scalar_mir_instruction(
+		state, locals, 8, result, operand, - 1, operator_id, - 1, gate4_load_integer(state.token_lines, origin),
+	)
 	return gate4_mir_checked_value(result_type, result, 9007199254740991, 0)
 end
 
@@ -8275,16 +8285,9 @@ def gate4_scalar_mir_convert_float(
 		return value
 	end
 	result := gate4_scalar_mir_value(state, locals, 5, origin)
-	locals.mir_instructions.push([
-			9,
-			result,
-			operand,
-			- 1,
-			0,
-			- 1,
-			state.active_module[0],
-			gate4_load_integer(state.token_lines, origin),
-		])
+	gate4_scalar_mir_instruction(
+		state, locals, 9, result, operand, - 1, 0, - 1, gate4_load_integer(state.token_lines, origin),
+	)
 	return gate4_mir_checked_value("Float", result, 9007199254740991, 0)
 end
 
@@ -8665,16 +8668,9 @@ def gate4_check_method_call(
 				receiver_id := gate4_checked_mir_value(receiver)
 				if receiver_id >= 0
 					result := gate4_scalar_mir_value(state, locals, 1, receiver.origin)
-					locals.mir_instructions.push([
-							4,
-							result,
-							receiver_id,
-							- 1,
-							0,
-							- 1,
-							state.active_module[0],
-							line,
-						])
+					gate4_scalar_mir_instruction(
+						state, locals, 4, result, receiver_id, - 1, 0, - 1, line,
+					)
 					return gate4_mir_checked_value("Integer", result, receiver.origin, 0)
 				end
 			end
@@ -8860,32 +8856,18 @@ def gate4_check_postfix(
 										array_type + 1,
 										value.origin,
 									)
-									locals.mir_instructions.push([
-											5,
-											address,
-											receiver_id,
-											index_id,
-											1,
-											locals.mir_state[11],
-											state.active_module[0],
-											line,
-										])
+									gate4_scalar_mir_instruction(
+										state, locals, 5, address, receiver_id, index_id, 1, locals.mir_state[11], line,
+									)
 									loaded := gate4_scalar_mir_value(
 										state,
 										locals,
 										gate4_mir_array_element_type(array_type),
 										value.origin,
 									)
-									locals.mir_instructions.push([
-											10,
-											loaded,
-											address,
-											- 1,
-											0,
-											- 1,
-											state.active_module[0],
-											line,
-										])
+									gate4_scalar_mir_instruction(
+										state, locals, 10, loaded, address, - 1, 0, - 1, line,
+									)
 									value = gate4_mir_checked_value(element_type, loaded, value.origin, value.mutable)
 									lowered = true
 								end
@@ -9650,15 +9632,9 @@ def gate4_mir_add_parameter(
 	if locals.mir_state[0] == 0
 		return
 	end
-	value_id := locals.mir_state[2]
-	locals.mir_state[2] = value_id + 1
-	locals.mir_value_rows.push([
-			locals.mir_state[1],
-			value_id,
-			gate4_scalar_mir_type(type_name),
-			state.active_module[0],
-			gate4_load_integer(state.parameter_lines, parameter_index),
-		])
+	value_id := gate4_mir_add_value(
+		state, locals, gate4_scalar_mir_type(type_name), gate4_load_integer(state.parameter_lines, parameter_index),
+	)
 	gate4_store_integer(locals.mir_values, locals.count[0] - 1, value_id + 1)
 	return
 end

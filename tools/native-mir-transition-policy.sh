@@ -346,10 +346,10 @@ native_mir_stable_array_header_marker_valid() {
 	test -f "$native_mir_marker" &&
 		test "$(grep -Fxc 'policy=native-mir-stable-array-header-v1' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'baseline_revision=00009fa304a36b9cba70b123120a469347b3882d' "$native_mir_marker")" -eq 1 &&
-		test "$(grep -Fxc 'compiler_source_sha256=50cd68b440d3424a8d1a963e499867bc0c786c9881ce98eb0d3e741c9ae4a08c' "$native_mir_marker")" -eq 1 &&
-		test "$(grep -Fxc 'compiler_test_source_sha256=3d4046b4d54c133cb21b9839b805e41f1386fb50a684dc5a7a332785d15dc9e5' "$native_mir_marker")" -eq 1 &&
-		test "$(grep -Fxc 'valid_source_sha256=194afa0b18286c3555010bf63827a5b7da6c40d1abf8816347ed16e8be2ccdaf' "$native_mir_marker")" -eq 1 &&
-		test "$(grep -Fxc 'valid_expected_stdout_sha256=7ab27073a8c012277824faf4e80bed5760f565ec435cc04bb82749baa122b1d8' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'compiler_source_sha256=1c4cefd0de3b1780eb3007aa790db42f3060d91871c99c438a5ef7602bf2ac48' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'compiler_test_source_sha256=277c96d81a820cb32931ab81c3bf804a920d4cb30cb04036a2dc68c8d741e9fc' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'valid_source_sha256=5f127a9254dffe04ef34cb389be507ea4a8b68f4b4a5422e28de65e9ce184af2' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'valid_expected_stdout_sha256=50e882e1bc15d92b00071a4140aaa755caa8d6bdc1a07a19511756dc0578146f' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'measure_source_sha256=f03adc024300e0be5d8304ebd1000a5a390d9f8acaceadf3c10375643e27a45e' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'spectral_source_sha256=b85e0d8cecf4e7455bdd34a6a02cb3a9a6e7bbe57ec29bb2f1b99afbbb5312f2' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'spectral_expected_stdout_sha256=f9d5b5e3eb7657cf1bbba4cc856651864df9cd9fd9a6be9b9bc5fcbb67150deb' "$native_mir_marker")" -eq 1 &&
@@ -358,19 +358,19 @@ native_mir_stable_array_header_marker_valid() {
 		test "$(grep -Fxc 'nbody_source_sha256=796fc08a4747102e1ca08fc75cb81cb0a69b65666c11e45baeafcae2a1064b20' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'nbody_expected_stdout_sha256=3e6c9ef9d26cfe312a4cd8e1b81b3f671b88fbce84de543e8c23c206a942504d' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'local_darwin_arm64_baseline_compiler_bytes=349200' "$native_mir_marker")" -eq 1 &&
-		test "$(grep -Fxc 'local_darwin_arm64_candidate_compiler_bytes=349208' "$native_mir_marker")" -eq 1 &&
-		test "$(grep -Fxc 'local_darwin_arm64_candidate_compiler_text_bytes=250788' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'local_darwin_arm64_candidate_compiler_bytes=349224' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'local_darwin_arm64_candidate_compiler_text_bytes=250312' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'baseline_target_neutral_qbe_bytes=1108565' "$native_mir_marker")" -eq 1 &&
-		test "$(grep -Fxc 'local_candidate_target_neutral_qbe_bytes=1118818' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'local_candidate_target_neutral_qbe_bytes=1119802' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'local_baseline_spectral_qbe_bytes=52343' "$native_mir_marker")" -eq 1 &&
-		test "$(grep -Fxc 'local_candidate_spectral_qbe_bytes=52035' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'local_candidate_spectral_qbe_bytes=52173' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'local_darwin_arm64_baseline_spectral_text_bytes=10732' "$native_mir_marker")" -eq 1 &&
-		test "$(grep -Fxc 'local_darwin_arm64_candidate_spectral_text_bytes=10668' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'local_darwin_arm64_candidate_spectral_text_bytes=10684' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'local_darwin_arm64_baseline_spectral_executable_bytes=50992' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'local_darwin_arm64_candidate_spectral_executable_bytes=50992' "$native_mir_marker")" -eq 1 &&
-		test "$(grep -Fxc 'local_selected_wall_ratio=0.846648' "$native_mir_marker")" -eq 1 &&
-		test "$(grep -Fxc 'local_selected_cpu_ratio=0.846023' "$native_mir_marker")" -eq 1 &&
-		test "$(grep -Fxc 'local_selected_rss_ratio=1.000000' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'local_selected_wall_ratio=0.884375' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'local_selected_cpu_ratio=0.880079' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'local_selected_rss_ratio=0.980132' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'darwin_arm64_compiler_limit=350000' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'linux_arm64_compiler_limit=317000' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'target_neutral_qbe_limit=1120000' "$native_mir_marker")" -eq 1 &&
@@ -384,7 +384,7 @@ native_mir_stable_array_header_marker_valid() {
 		test "$(grep -Fxc 'control_ratio_limit=1.02' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'compiler_build_ratio_limit=1.05' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'catastrophic_ratio_limit=2.0' "$native_mir_marker")" -eq 1 &&
-		test "$(grep -Fxc 'superseded_ownership=direct-emitter-stable-array-header-and-bounds-selection' "$native_mir_marker")" -eq 1 &&
+		test "$(grep -Fxc 'superseded_ownership=direct-emitter-function-wide-array-header-selection' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'recovery_family=portable-range-index-induction' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'recovery_before=next-portable-fact-family' "$native_mir_marker")" -eq 1
 }
