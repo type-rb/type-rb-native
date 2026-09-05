@@ -38,12 +38,21 @@ Manual measurements do not substitute for the current PR acceptance chain.
 
 ## Protection and review
 
-Require the uniquely named `Native CI acceptance` check in the main ruleset
-after its first successful hosted verification. Preserve the existing PR-only,
-no-force-push, and no-deletion rules. Do not require conditionally omitted
-workflow names individually, and do not interpret a green skipped job as an
-accepted compiler. GitHub documents that skipped jobs otherwise count as
+The main ruleset requires the uniquely named `Native CI acceptance` check from
+GitHub Actions. It was activated after
+[the complete hosted verification](https://github.com/type-rb/type-rb-native/actions/runs/33931154436)
+passed at `85a6771f7256594d767bfcc36fab4a803d74b78b`. The existing PR-only,
+no-force-push, and no-deletion rules remain unchanged, with no bypass actors.
+Do not require conditionally omitted workflow names individually, and do not
+interpret a green skipped job as an accepted compiler. GitHub documents that
+skipped jobs otherwise count as
 [successful checks](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-jobs-with-conditions).
+
+The ruleset does not force an up-to-date branch after every unrelated main
+change. Review the base delta before merging; update and revalidate a candidate
+when that delta affects its correctness, measurement baseline, or CI contract.
+This avoids requiring another complete measurement solely for an unrelated
+documentation merge, without treating stale relevant evidence as current.
 
 Tests and an acceptance check cannot replace review of the proof boundary.
 Before requesting the comparative stage, inspect raw MIR, its independent
