@@ -5,24 +5,68 @@ record Gate6FCompilerSources
 	entry: String
 	storage: String
 	path: String
+	mir: String
+	literals: String
 	flattened: String
 end
 
 def gate6f_compiler_import_prefix(): String
-	return "import { Gate4IntegerStorage, Gate4StringStorage, gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage\nimport { gate4_path_basename, gate4_path_directory, gate4_path_join, gate4_string_ends_with, gate4_string_starts_with, gate4_string_without_suffix } from path\n\n"
+	return "import { Gate4IntegerStorage, Gate4StringStorage, gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage\nimport { gate4_path_basename, gate4_path_directory, gate4_path_join, gate4_string_ends_with, gate4_string_starts_with, gate4_string_without_suffix } from path\nimport { Gate4MirModule, gate4_mir_array_element_type, gate4_mir_block_index, gate4_mir_function_index, gate4_mir_value_type, gate4_optimize_verified_mir, gate4_verify_mir } from mir\nimport { gate4_ascii_code, gate4_float_literal_in_range, gate4_integer_literal_in_range, gate4_number_is_float, gate4_number_without_underscores, gate4_small_nonnegative_integer_operand } from literals\n\n"
+end
+
+def mir_source_import_prefix(): String
+	return "import { gate4_float_literal_in_range, gate4_integer_literal_in_range, gate4_number_is_float, gate4_small_nonnegative_integer_operand } from literals\n\n"
+end
+
+def compiler_source_has_import(source: String): Boolean
+	lines := source.split("\n")
+	mut index := 0
+	while index < lines.size()
+		line := lines[index]
+		mut start := 0
+		while start < line.size() && (line[start] == " " || line[start] == "\t" || line[start] == "\r")
+			start += 1
+		end
+		text := line.slice(start...line.size())
+		if text.start_with?("import")
+			if text.size() == 6 || !"_0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz".include?(text[6])
+				return true
+			end
+		end
+		index += 1
+	end
+	return false
 end
 
 def gate6f_flatten_compiler_source(
 		entry: String,
 		storage: String,
 		path: String,
+		mir: String,
+		literals: String,
 	): Result<String, String>
 	prefix := gate6f_compiler_import_prefix()
 	if !entry.start_with?(prefix)
 		return Result<String, String>::Err("compiler entry import boundary differs")
 	end
 	core := entry.slice(prefix.size()...entry.size())
-	return Result<String, String>::Ok(storage + "\n" + path + "\n" + core)
+	mir_prefix := mir_source_import_prefix()
+	if !mir.start_with?(mir_prefix)
+		return Result<String, String>::Err("MIR source import boundary differs")
+	end
+	mir_core := mir.slice(mir_prefix.size()...mir.size())
+	declarations := [core, storage, path, mir_core, literals]
+	mut index := 0
+	while index < declarations.size()
+		if declarations[index].empty?()
+			return Result<String, String>::Err("compiler declaration source is empty")
+		end
+		if compiler_source_has_import(declarations[index])
+			return Result<String, String>::Err("compiler declaration source has an unexpected import")
+		end
+		index += 1
+	end
+	return Result<String, String>::Ok(storage + "\n" + path + "\n" + literals + "\n" + mir_core + "\n" + core)
 end
 
 def gate6f_compiler_directory(path: String): String
@@ -70,12 +114,16 @@ def gate6f_read_compiler_sources(entry_path: String): Result<Gate6FCompilerSourc
 	entry := try gate6f_read_required_source(entry_path)
 	storage := try gate6f_read_required_source(gate6f_compiler_path(directory, "storage.trb"))
 	path := try gate6f_read_required_source(gate6f_compiler_path(directory, "path.trb"))
-	flattened := try gate6f_flatten_compiler_source(entry, storage, path)
+	mir := try gate6f_read_required_source(gate6f_compiler_path(directory, "mir.trb"))
+	literals := try gate6f_read_required_source(gate6f_compiler_path(directory, "literals.trb"))
+	flattened := try gate6f_flatten_compiler_source(entry, storage, path, mir, literals)
 	return Result<Gate6FCompilerSources, String>::Ok(
 		Gate6FCompilerSources.new(
 			entry: entry,
 			storage: storage,
 			path: path,
+			mir: mir,
+			literals: literals,
 			flattened: flattened,
 		),
 	)

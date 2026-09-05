@@ -89,7 +89,15 @@ can eventually refer to authored TypeRB source.
 The target architecture routes every supported function through verified MIR;
 the remaining direct path is not that finished architecture. The
 [MIR status](native-mir-optimization-status.md) distinguishes implemented
-vertical slices from remaining ownership. The ordinary self-hosting sequence
+vertical slices from remaining ownership. In the current source closure,
+`mir.trb` owns the model, verifier, and target-independent passes;
+`literals.trb` owns shared numeric predicates. The compiler entry still owns
+frontend construction and QBE adaptation, alongside the remaining driver code.
+These are single canonical modules with explicit imports, not a second
+compiler implementation. The [organization schedule](repository-organization.md)
+tracks the next responsibility extractions.
+
+The ordinary self-hosting sequence
 starts from a previous Native seed, records any setup-only transitions, and
 then compares repeated full Native-built generations:
 

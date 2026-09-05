@@ -18,11 +18,21 @@ budget. An eligible but non-selected call cannot inherit its callee's literal
 proof. The new controls retain that distinction and computed-argument overflow
 failures. No new fact family or application speedup is claimed.
 
-Acceptance remains subject to the preregistered unchanged compactness,
-recovery, fixed-point, target, memory, and build-cost checks. Local application
-QBE equality alone is not formal acceptance. The next organization checkpoint
-extracts a cohesive MIR responsibility from the large compiler entry module,
-with its imports, tests, and recovery derivation moved together; see the
+The [complete formal run](https://github.com/type-rb/type-rb-native/actions/runs/33966616215)
+passes the preregistered recovery, fixed-point, target, process, memory,
+compactness, and build-cost checks; #260 is merged as `5f262d813533d3b4e044e30e272e8a569536d313`.
+The complete compilers are 349,224 Darwin arm64 and 313,616 Linux arm64 bytes,
+662,840 bytes combined. Both code sections shrink to 248,768 and 251,120 bytes,
+and both targets share 1,116,116-byte compiler QBE. These are compiler-ownership
+and compactness results, not generated-program runtime improvements.
+
+The first organization slice under
+[issue #262](https://github.com/type-rb/type-rb-native/issues/262) separates the
+MIR model, verifier, and target-independent passes into `mir.trb`, with shared
+numeric helpers in `literals.trb`. The entry retains frontend construction and
+QBE adaptation. Explicit imports, independently owned tests, and the strict
+five-file recovery derivation move together. This is source decomposition,
+not broader MIR coverage or completion of direct-emitter recovery; see the
 [organization schedule](repository-organization.md).
 
 ## Accepted optimization evidence

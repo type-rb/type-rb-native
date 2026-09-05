@@ -1,4 +1,5 @@
-import { Gate4Compiler, Gate4MirModule, Gate4Output, Gate4ProjectSources, checked_binary_plan_type, gate4_add_module, gate4_build_symbol_index, gate4_character_in, gate4_check, gate4_check_expression, gate4_check_primary, gate4_compiler_new, gate4_emit_array_header, gate4_emit_context_new, gate4_emit_qbe, gate4_encode_static_string, gate4_find_field, gate4_find_function_in_module, gate4_find_import_binding, gate4_find_module, gate4_find_record_in_module, gate4_find_record_type, gate4_float_literal_in_range, gate4_has_diagnostic, gate4_invalidate_array_header_cache, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_local_add, gate4_local_find, gate4_locals_new, gate4_mir_block, gate4_mir_function_index, gate4_mir_nonnegative_fact, gate4_number_is_float, gate4_number_without_underscores, gate4_optimize_verified_mir, gate4_output_new, gate4_parse_module, gate4_parse_project_config, gate4_resolve, gate4_string_bucket, gate4_string_starts_at, gate4_symbol_bucket_count, gate4_verify_mir } from compiler
+import { Gate4Compiler, Gate4Output, Gate4ProjectSources, checked_binary_plan_type, gate4_add_module, gate4_build_symbol_index, gate4_character_in, gate4_check, gate4_check_expression, gate4_check_primary, gate4_compiler_new, gate4_emit_array_header, gate4_emit_context_new, gate4_emit_qbe, gate4_encode_static_string, gate4_find_field, gate4_find_function_in_module, gate4_find_import_binding, gate4_find_module, gate4_find_record_in_module, gate4_find_record_type, gate4_has_diagnostic, gate4_invalidate_array_header_cache, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_local_add, gate4_local_find, gate4_locals_new, gate4_mir_block, gate4_mir_nonnegative_fact, gate4_output_new, gate4_parse_module, gate4_parse_project_config, gate4_resolve, gate4_string_bucket, gate4_string_starts_at, gate4_symbol_bucket_count } from compiler
+import { gate4_mir_function_index, gate4_optimize_verified_mir, gate4_verify_mir } from mir
 import { gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage
 import { native_create_directory, native_read_text, native_write_text } from native_file_system
 import trb/std/process
@@ -104,55 +105,6 @@ def gate4_large_scalar_inline_test_source(): String
 	return writer.to_s()
 end
 
-def gate4_mir_test_module(
-		supplied_fact: Boolean,
-		invalid_index: Boolean,
-	): Gate4MirModule
-	mut array_index := 5
-	if invalid_index
-		array_index = 99
-	end
-	mut facts: Array<Integer> := []
-	if supplied_fact
-		facts.push(1)
-	end
-	return Gate4MirModule.new(
-		source_count: [1],
-		entry_function: [1],
-		functions: [[1, 10, 0, 1, 0, 1, 0, 5]],
-		blocks: [
-			[10, 0, 2, 1, 0, 0, 1, 1, - 1, 11, - 1, 1, 1, 0, 0, - 1],
-			[11, 0, 3, 2, 1, 1, 2, 2, 4, 12, 14, 3, 1, 4, 0, - 1],
-			[12, 0, 4, 4, 1, 3, 3, 1, - 1, 11, - 1, 5, 1, 0, 0, - 1],
-			[13, 0, 5, 6, 0, 6, 0, 4, - 1, - 1, - 1, 0, 0, 0, 0, - 1],
-			[14, 0, 6, 6, 0, 6, 0, 3, - 1, - 1, - 1, 0, 0, 0, 0, - 1],
-		],
-		values: [
-			[1, 0, 3, 0, 1],
-			[1, 1, 1, 0, 2],
-			[1, 2, 1, 0, 3],
-			[1, 3, 1, 0, 3],
-			[1, 4, 2, 0, 3],
-			[1, 5, 1, 0, 4],
-			[1, 6, 4, 0, 4],
-			[1, 7, 1, 0, 4],
-			[1, 8, 1, 0, 4],
-		],
-		instructions: [
-			[1, 1, - 1, - 1, 0, - 1, 0, 2],
-			[4, 3, 0, - 1, 0, - 1, 0, 3],
-			[3, 4, 2, 3, 0, - 1, 0, 3],
-			[5, 6, 0, array_index, 0, 13, 0, 4],
-			[1, 7, - 1, - 1, 1, - 1, 0, 4],
-			[2, 8, 5, 7, 0, 13, 0, 4],
-		],
-		arguments: [0, 1, 2, 2, 5, 8],
-		array_regions: [],
-		facts: facts,
-		literal_texts: [],
-	)
-end
-
 describe("Gate 4 TypeRB frontend") do
 	test("constructs independent MIR block rows with exact field order and origins") do
 		mut branch := gate4_mir_block(31, 1, 71, 2, 3, 4, 5, 2, 6, 32, 33, 7, 8, 9, 10, - 1)
@@ -168,112 +120,6 @@ describe("Gate 4 TypeRB frontend") do
 		expect(other).to_equal([31, 1, 71, 2, 3, 4, 5, 2, 6, 32, 33, 7, 8, 9, 10, - 1])
 		expect(returned[0]).to_equal(40)
 		expect(trap[0]).to_equal(41)
-	end
-
-	test("verifies a checked scalar and Array loop MIR skeleton") do
-		native_module := gate4_mir_test_module(false, false)
-		expect(gate4_verify_mir(native_module, false)).to_equal("")
-	end
-
-	test("rejects an undefined MIR Array index") do
-		native_module := gate4_mir_test_module(false, true)
-		expect(gate4_verify_mir(native_module, false)).to_equal("MIR Array address type differs")
-	end
-
-	test("rejects supplied MIR optimization facts") do
-		native_module := gate4_mir_test_module(true, false)
-		expect(gate4_verify_mir(native_module, false)).to_equal(
-			"MIR input cannot supply optimization facts",
-		)
-	end
-
-	test("rejects missing or extra optimized Array-header facts") do
-		mut native_module := gate4_mir_test_module(false, false)
-		native_module.array_regions.push([1, 1, 10, 4, 0, 13])
-		expect(gate4_verify_mir(native_module, true)).to_equal("MIR optimized Array-header fact is invalid")
-		native_module.facts.push(0)
-		native_module.facts.push(13)
-		expect(gate4_verify_mir(native_module, true)).to_equal("MIR optimized Array-header fact is invalid")
-	end
-
-	test("rejects a forged optimized Array-header parameter ordinal") do
-		mut native_module := gate4_mir_test_module(false, false)
-		native_module.array_regions.push([1, 1, 10, 4, 0, 13])
-		native_module.facts.push(11)
-		expect(gate4_verify_mir(native_module, true)).to_equal("MIR optimized Array-header fact is invalid")
-	end
-
-	test("derives only Array-header identity from raw parameters and operations") do
-		mut native_module := gate4_mir_test_module(false, false)
-		native_module.array_regions.push([1, 1, 10, 4, 0, 13])
-		expect(gate4_verify_mir(native_module, false)).to_equal("")
-		gate4_optimize_verified_mir(native_module)
-		expect(native_module.facts).to_equal([0])
-		expect(gate4_verify_mir(native_module, true)).to_equal("")
-		gate4_optimize_verified_mir(native_module)
-		expect(native_module.facts).to_equal([0])
-		expect(gate4_verify_mir(native_module, true)).to_equal("")
-	end
-
-	test("rejects forged Array-header facts after raw parameters or accesses change") do
-		changes := [[1, 2], [7, 1]]
-		mut index := 0
-		while index < changes.size()
-			mut native_module := gate4_mir_test_module(false, false)
-			mut region := [1, 1, 10, 1, 2, 11, 4, 0, 13]
-			native_module.array_regions.push(region)
-			gate4_optimize_verified_mir(native_module)
-			region[changes[index][0]] = changes[index][1]
-			expect(gate4_verify_mir(native_module, true)).to_equal("MIR optimized Array-header fact is invalid")
-			index += 1
-		end
-	end
-
-	test("rejects forged Array-header facts across opaque effects") do
-		mut native_module := gate4_mir_test_module(false, false)
-		native_module.array_regions.push([1, 1, 10, 4, 0, 13, 6, 0, 14])
-		native_module.facts.push(0)
-		expect(gate4_verify_mir(native_module, true)).to_equal("MIR optimized Array-header fact is invalid")
-	end
-
-	test("retains distinct Array parameter identities across repeated accesses") do
-		mut native_module := gate4_mir_test_module(false, false)
-		region := [1, 2, 10, 1, 1, 11, 4, 0, 13, 4, 1, 15, 4, 0, 16]
-		native_module.array_regions.push(region)
-		expect(gate4_verify_mir(native_module, false)).to_equal("")
-		gate4_optimize_verified_mir(native_module)
-		expect(native_module.facts).to_equal([1])
-		expect(gate4_verify_mir(native_module, true)).to_equal("")
-	end
-
-	test("rejects malformed raw Array regions") do
-		regions := [
-			[1, 1],
-			[1, 3, 10],
-			[1, 1, 10, 1, 0, 10],
-			[1, 1, 10, 1, 0, 9],
-			[4, 0, 10, 1, 1, 11],
-			[1, 1, 10, 4, 0, 12, 1, 1, 13],
-			[1, 1, 10, 4, 99, 13],
-			[1, 9007199254740991, 10],
-			[1, - 9007199254740991, 10],
-			[1, 1, - 1],
-			[1, 0, 10, 4, 0, 11],
-			[1, 1, 10, 4, - 1, 11],
-			[6, 1, 12],
-			[2, 0, 12],
-			[3, 0, 12],
-			[5, 0, 12],
-			[7, 0, 12],
-			[0, 0, 12],
-		]
-		mut index := 0
-		while index < regions.size()
-			mut native_module := gate4_mir_test_module(false, false)
-			native_module.array_regions.push(regions[index])
-			expect(gate4_verify_mir(native_module, false)).to_equal("MIR Array region is invalid")
-			index += 1
-		end
 	end
 
 	test("lowers, verifies, and selects complete checked scalar leaf MIR") do
@@ -1313,28 +1159,6 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_character_in("a", "0123456789")).to_be_false()
 	end
 
-	test("classifies decimal literals and enforces the finite binary64 boundary") do
-		expect(gate4_number_is_float("1")).to_be_false()
-		expect(gate4_number_is_float("1.0")).to_be_true()
-		expect(gate4_number_without_underscores("1_0.5_0")).to_equal("10.50")
-		expect(gate4_float_literal_in_range("1_0.5_0")).to_be_true()
-		expect(
-			gate4_float_literal_in_range(
-				"179769313486231580793728971405303415079934132710037826936173778980444968292764750946649017977587207096330286416692887910946555547851940402630657488671505820681908902000708383676273854845817711531764475730270069855571366959622842914819860834936475292719074168444365510704342711559699508093042880177904174497791.0",
-			),
-		).to_be_true()
-		expect(
-			gate4_float_literal_in_range(
-				"179769313486231580793728971405303415079934132710037826936173778980444968292764750946649017977587207096330286416692887910946555547851940402630657488671505820681908902000708383676273854845817711531764475730270069855571366959622842914819860834936475292719074168444365510704342711559699508093042880177904174497792.0",
-			),
-		).to_be_false()
-		expect(
-			gate4_float_literal_in_range(
-				"9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999.0",
-			),
-		).to_be_false()
-	end
-
 	test("carries exact checked source origins without preserving computed text") do
 		mut literal_state := gate4_compiler_new(4)
 		expect(gate4_lex(literal_state, "1")).to_be_true()
@@ -1514,16 +1338,25 @@ describe("Gate 4 TypeRB frontend") do
 				gate4_required_test_source(base + "compiler.trb"),
 				gate4_required_test_source(base + "storage.trb"),
 				gate4_required_test_source(base + "path.trb"),
+				gate4_required_test_source(base + "mir.trb"),
+				gate4_required_test_source(base + "literals.trb"),
 			]
-			expect(!sources[0].empty?()).to_be_true()
-			expect(!sources[1].empty?()).to_be_true()
-			expect(!sources[2].empty?()).to_be_true()
-			mut state := gate4_compiler_new(sources[0].size() + sources[1].size() + sources[2].size() + 3)
-			gate4_add_module(state, "compiler", base + "compiler.trb")
-			gate4_add_module(state, "storage", base + "storage.trb")
-			gate4_add_module(state, "path", base + "path.trb")
-			state.entry_module[0] = 0
+			names := ["compiler", "storage", "path", "mir", "literals"]
+			mut capacity := 0
 			mut module_index := 0
+			while module_index < sources.size()
+				expect(!sources[module_index].empty?()).to_be_true()
+				capacity += sources[module_index].size() + 1
+				module_index += 1
+			end
+			mut state := gate4_compiler_new(capacity)
+			module_index = 0
+			while module_index < names.size()
+				gate4_add_module(state, names[module_index], base + names[module_index] + ".trb")
+				module_index += 1
+			end
+			state.entry_module[0] = 0
+			module_index = 0
 			while module_index < sources.size()
 				start := state.token_count[0]
 				expect(gate4_lex_module(state, sources[module_index], module_index)).to_be_true()
@@ -1532,11 +1365,9 @@ describe("Gate 4 TypeRB frontend") do
 			end
 			mut import_index := 0
 			while import_index < state.import_count[0]
-				if gate4_load_string(state.import_paths, import_index) == "storage"
-					gate4_store_integer(state.import_targets, import_index, 1)
-				else
-					gate4_store_integer(state.import_targets, import_index, 2)
-				end
+				target := gate4_find_module(state, gate4_load_string(state.import_paths, import_index))
+				expect(target >= 0).to_be_true()
+				gate4_store_integer(state.import_targets, import_index, target)
 				import_index += 1
 			end
 			expect(gate4_find_record_in_module(state, 0, "Gate4Compiler") >= 0).to_be_true()

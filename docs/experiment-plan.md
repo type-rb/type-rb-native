@@ -131,10 +131,10 @@ TypeRB semantic analysis.
 
 Repository maintenance is scheduled alongside the MIR transition, not deferred
 until performance parity or product promotion. Follow the
-[organization schedule](repository-organization.md): shorten documentation
-entry points now, inventory and complete the first support-source cleanup
-before the pending checked-binary implementation, then extract compiler
-responsibilities incrementally at accepted ownership checkpoints. The scope
+[organization schedule](repository-organization.md): concise documentation
+entry points and the initial support-source inventory/move are complete.
+Compiler decomposition now follows the accepted partial checked-binary
+ownership checkpoint; continue one responsibility at a time. The scope
 includes root `src/gateN_*` files, numbered QBE adapters, tests, tooling, and
 implementation symbols as well as `compiler/gate4/`.
 
