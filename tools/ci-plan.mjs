@@ -2,7 +2,12 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { pathToFileURL } from 'node:url';
 
-const documentation = path => path.endsWith('.md') ||
+const staticDocumentationTools = new Set([
+  'tools/capability-map-check.mjs',
+  'tools/benchmark-pages-data.mjs',
+  'tools/benchmark-pages-check.mjs',
+]);
+const documentation = path => staticDocumentationTools.has(path) || path.endsWith('.md') ||
   ['.agents/', 'docs/', 'results/'].some(prefix => path.startsWith(prefix));
 
 export function classify(paths, draft) {

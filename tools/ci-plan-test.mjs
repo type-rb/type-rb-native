@@ -37,6 +37,19 @@ test('compiler, conformance and CI-routing changes retain the full authority', (
     assert.deepEqual(acceptance(results(plan)), []);
   }
 });
+test('static Pages generators use documentation checks, not compiler matrices', () => {
+  for (const tool of ['tools/capability-map-check.mjs',
+    'tools/benchmark-pages-data.mjs', 'tools/benchmark-pages-check.mjs']) {
+    const plan = classify([tool, 'docs/capabilities/benchmarks/data.js'], false);
+    assert.deepEqual(plan, { code: false, documentation: true,
+      memory: false, performance: false, draft: false });
+    assert.deepEqual(acceptance(results(plan)), []);
+    assert.equal(classify([`${tool}.unknown`], false).code, true);
+    assert.equal(classify([tool, 'compiler/gate4/src/compiler.trb'], false).performance, true);
+    assert.equal(classify([tool, 'tools/ci-plan.mjs'], false).performance, true);
+  }
+  assert.equal(classify(['tools/benchmarksgame-formal/run.sh'], false).code, true);
+});
 test('other executable changes retain complete correctness and target checks', () => {
   const plan = classify(['src/decoder.trb'], false);
   assert.equal(plan.code, true);
