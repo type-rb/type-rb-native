@@ -1,6 +1,7 @@
 # Native MIR block-row construction
 
-Status: local candidate; hosted acceptance remains pending.
+Status: accepted in [PR #250](https://github.com/type-rb/type-rb-native/pull/250),
+merged as `a1c5177583d26bea264b288ca1d8ea54af40afc6`.
 
 [Issue #249](https://github.com/type-rb/type-rb-native/issues/249) and its
 [pre-implementation baseline](https://github.com/type-rb/type-rb-native/issues/249#issuecomment-5549924209)
@@ -49,8 +50,24 @@ Require at least 1,000 bytes of target-neutral compiler-QBE reduction, strict
 same-run code-section shrinkage on both arm64 targets, and non-growing complete
 compilers. Preserve the existing absolute ceilings, 1.05 build-wall/RSS ratios,
 2.0 catastrophic limit, fully enabled recovery tests, fixed points, target and
-memory regressions, and byte-identical generated application QBE. Hosted
-comparisons must confirm the per-target result before acceptance.
+memory regressions, and byte-identical generated application QBE.
+
+The [exact-head formal run](https://github.com/type-rb/type-rb-native/actions/runs/33950334542)
+at `f96552344d546bf0805d6b3a2df7698a04cbc5a9` passes all required checks.
+Direct inspection of both target artifacts additionally confirms the stricter
+issue-specific code-section and QBE shrink conditions, rather than treating
+the ordinary 1.05 CI size allowance as sufficient.
+
+| Target | Complete bytes, before → after | Code bytes, before → after | Build-wall ratio | RSS ratio |
+| --- | ---: | ---: | ---: | ---: |
+| Darwin arm64 | 349,224 → 349,224 | 249,956 → 248,800 | 1.015267 | 1.000596 |
+| Linux arm64 | 315,256 → 313,768 | 252,640 → 251,152 | 1.020921 | 0.998320 |
+
+Both targets emit the same 1,116,173-byte QBE identity recorded above. Complete
+compilers total 662,992 bytes, 1,488 bytes below the same-run baseline. The
+28 retained interleaved build observations per target independently reproduce
+the published medians; all retained and adjacent closure observations pass the
+2.0 catastrophic bound. No marker or numerical limit changes.
 
 This change improves representation ownership and compiler compactness. It
 makes no application-speedup claim and introduces no new semantic fact, ABI,

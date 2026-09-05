@@ -1,0 +1,291 @@
+diff --git a/compiler/gate4/src/compiler.trb b/compiler/gate4/src/compiler.trb
+index 885fba05..ea29a4ac 100644
+--- a/compiler/gate4/src/compiler.trb
++++ b/compiler/gate4/src/compiler.trb
+@@ -673,29 +673,54 @@ def gate4_mir_array_header(operations: Array<Integer>): Integer
+ 	return selected
+ end
+
++def gate4_mir_halving_literal(
++		native_module: Gate4MirModule,
++		instruction_index: Integer,
++		block_start: Integer,
++	): Boolean
++	if instruction_index <= block_start
++		return false
++	end
++	instruction := native_module.instructions[instruction_index]
++	literal := native_module.instructions[instruction_index - 1]
++	if literal[1] != instruction[3]
++		return false
++	end
++	return gate4_mir_exact_integer_literal(native_module, literal, "2")
++end
++
+ def gate4_optimize_verified_mir(mut native_module: Gate4MirModule)
+-	mut index := 0
+-	while index < native_module.instructions.size()
+-		mut instruction := native_module.instructions[index]
+-		if instruction[0] == 5
+-			if instruction[4] == 1
+-				instruction[4] = 2
+-			end
+-		end
+-		if instruction[0] == 7
+-			if instruction[5] >= 0
++	mut block_index := 0
++	while block_index < native_module.blocks.size()
++		block := native_module.blocks[block_index]
++		mut index := block[5]
++		while index < block[5] + block[6]
++			mut instruction := native_module.instructions[index]
++			if instruction[0] == 5
+ 				if instruction[4] == 1
+-					instruction[4] = 13
+-				else
++					instruction[4] = 2
++				end
++			end
++			if instruction[0] == 7
++				if instruction[5] >= 0
++					if instruction[4] == 1
++						instruction[4] = 13
++					end
+ 					if instruction[4] == 3
+ 						instruction[4] = 12
+ 					end
++					if instruction[4] == 4
++						if gate4_mir_halving_literal(native_module, index, block[5])
++							instruction[4] = 14
++						end
++					end
+ 				end
+ 			end
++			index += 1
+ 		end
+-		index += 1
++		block_index += 1
+ 	end
+-	index = 0
++	mut index := 0
+ 	while index < native_module.array_regions.size()
+ 		header := gate4_mir_array_header(native_module.array_regions[index])
+ 		if header < - 1
+@@ -911,6 +936,18 @@ def gate4_mir_instruction_error(
+ 		if operator == 13
+ 			operator = 1
+ 		end
++		if operator == 14
++			if first_type != 1
++				return "MIR Integer halving type differs"
++			end
++			if second_type != 1
++				return "MIR Integer halving type differs"
++			end
++			if !gate4_mir_halving_literal(native_module, instruction_index, block[5])
++				return "MIR Integer halving literal differs"
++			end
++			operator = 4
++		end
+ 		mut numeric := false
+ 		if first_type == 1
+ 			if second_type == 1
+@@ -3693,6 +3730,15 @@ def gate4_emit_binary_with_facts(
+ 		right_nonnegative: Boolean,
+ 		guarded_operator: Integer,
+ 	): Gate4EmittedValue
++	if operator_id == 14
++		sign := gate4_emit_temporary(context)
++		biased := gate4_emit_temporary(context)
++		result := gate4_emit_temporary(context)
++		gate4_output_line(output, "\t" + sign + " =l shr " + left.operand + ", 63")
++		gate4_output_line(output, "\t" + biased + " =l add " + left.operand + ", " + sign)
++		gate4_output_line(output, "\t" + result + " =l sar " + biased + ", 1")
++		return gate4_emitted_value(result, "Integer", 0, "", 0, "")
++	end
+ 	left_float := left.type_name == "Float"
+ 	right_float := right.type_name == "Float"
+ 	mut float_operands := left_float
+@@ -3721,6 +3767,22 @@ def gate4_emit_binary_with_facts(
+ 			right_operand = converted_right
+ 		end
+ 	end
++	if float_operands
++		if operator_id <= 4
++			mut operation := "add"
++			if operator_id == 2
++				operation = "sub"
++			end
++			if operator_id == 3
++				operation = "mul"
++			end
++			if operator_id == 4
++				operation = "div"
++			end
++			gate4_output_line(output, "\t" + result + " =d " + operation + " " + left_operand + ", " + right_operand)
++			return gate4_emitted_value(result, result_type, 0, "", 0, "")
++		end
++	end
+ 	if operator_id == 1
+ 		if left.type_name == "String"
+ 			gate4_output_line(
+@@ -3729,10 +3791,6 @@ def gate4_emit_binary_with_facts(
+ 			)
+ 			gate4_emit_root_value(context, "String")
+ 		else
+-			if result_type == "Float"
+-				gate4_output_line(output, "\t" + result + " =d add " + left_operand + ", " + right_operand)
+-				return gate4_emitted_value(result, result_type, 0, "", 0, "")
+-			end
+ 			mut use_guarded_add := guarded_operator == 13
+ 			if left_nonnegative
+ 				use_guarded_add = false
+@@ -3777,10 +3835,6 @@ def gate4_emit_binary_with_facts(
+ 		return gate4_emitted_value(result, result_type, 0, "", 0, "")
+ 	end
+ 	if operator_id == 2
+-		if result_type == "Float"
+-			gate4_output_line(output, "\t" + result + " =d sub " + left_operand + ", " + right_operand)
+-			return gate4_emitted_value(result, result_type, 0, "", 0, "")
+-		end
+ 		if gate4_take_inline_budget(context)
+ 			gate4_emit_checked_integer_operation(
+ 				context,
+@@ -3797,10 +3851,6 @@ def gate4_emit_binary_with_facts(
+ 		return gate4_emitted_value(result, result_type, 0, "", 0, "")
+ 	end
+ 	if operator_id == 3
+-		if result_type == "Float"
+-			gate4_output_line(output, "\t" + result + " =d mul " + left_operand + ", " + right_operand)
+-			return gate4_emitted_value(result, result_type, 0, "", 0, "")
+-		end
+ 		gate4_emit_guarded_integer_operation(
+ 			context,
+ 			output,
+@@ -3814,37 +3864,17 @@ def gate4_emit_binary_with_facts(
+ 		)
+ 		return gate4_emitted_value(result, result_type, 0, "", 0, "")
+ 	end
+-	if operator_id == 4
+-		if result_type == "Float"
+-			gate4_output_line(output, "\t" + result + " =d div " + left_operand + ", " + right_operand)
+-			return gate4_emitted_value(result, result_type, 0, "", 0, "")
+-		end
+-		if gate4_take_inline_budget(context)
+-			gate4_emit_checked_integer_division(
+-				context,
+-				output,
+-				result,
+-				left.operand,
+-				right.operand,
+-				"div",
+-			)
+-		else
+-			gate4_emit_integer_call(output, result, "divide", left.operand, right.operand)
++	if operator_id <= 5
++		mut operation := "div"
++		mut helper := "divide"
++		if operator_id == 5
++			operation = "rem"
++			helper = "remainder"
+ 		end
+-		return gate4_emitted_value(result, result_type, 0, "", 0, "")
+-	end
+-	if operator_id == 5
+ 		if gate4_take_inline_budget(context)
+-			gate4_emit_checked_integer_division(
+-				context,
+-				output,
+-				result,
+-				left.operand,
+-				right.operand,
+-				"rem",
+-			)
++			gate4_emit_checked_integer_division(context, output, result, left.operand, right.operand, operation)
+ 		else
+-			gate4_emit_integer_call(output, result, "remainder", left.operand, right.operand)
++			gate4_emit_integer_call(output, result, helper, left.operand, right.operand)
+ 		end
+ 		return gate4_emitted_value(result, result_type, 0, "", 0, "")
+ 	end
+diff --git a/compiler/gate4/src/compiler_test.trb b/compiler/gate4/src/compiler_test.trb
+index c2cc3a39..a2d2fda3 100644
+--- a/compiler/gate4/src/compiler_test.trb
++++ b/compiler/gate4/src/compiler_test.trb
+@@ -309,7 +309,7 @@ describe("Gate 4 TypeRB frontend") do
+ 		expect(qbe.include?(", 67108864")).to_be_true()
+ 		expect(gate4_occurrence_count(qbe, "call $g4_integer_mul")).to_equal(1)
+
+-		state.scalar_mir.instructions[instruction_index][4] = 14
++		state.scalar_mir.instructions[instruction_index][4] = 15
+ 		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal(
+ 			"MIR scalar binary type differs",
+ 		)
+@@ -337,7 +337,7 @@ describe("Gate 4 TypeRB frontend") do
+ 		expect(qbe.include?(", 9007199254740992")).to_be_true()
+ 		expect(qbe.include?("call $g4_integer_add(l ")).to_be_true()
+
+-		state.scalar_mir.instructions[instruction_index][4] = 14
++		state.scalar_mir.instructions[instruction_index][4] = 15
+ 		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal(
+ 			"MIR scalar binary type differs",
+ 		)
+@@ -346,6 +346,58 @@ describe("Gate 4 TypeRB frontend") do
+ 		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("MIR failure target does not exist")
+ 	end
+
++	test("selects exact Integer halving from verified same-block literals") do
++		source := "def half(value: Integer): Integer\n\treturn value / 2\nend\n\ndef main()\n\tmut index := 0\n\twhile index < 1\n\t\tputs(half(index).to_s())\n\t\tindex += 1\n\tend\n\tputs(half(- 3).to_s())\nend\n"
++		mut state := gate4_compiler_new(source.size() + 1)
++		expect(gate4_lex(state, source)).to_be_true()
++		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
++		expect(gate4_resolve(state)).to_be_true()
++		expect(gate4_check(state)).to_be_true()
++		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("")
++		function := state.scalar_mir.functions[gate4_mir_function_index(state.scalar_mir, 0)]
++		block := state.scalar_mir.blocks[function[6]]
++		instruction_index := block[5] + 1
++		literal_index := state.scalar_mir.instructions[block[5]][4]
++		expect(state.scalar_mir.instructions[instruction_index][4]).to_equal(14)
++		qbe := gate4_output_source(gate4_emit_qbe(state))
++		expect(gate4_occurrence_count(qbe, " =l sar ")).to_equal(2)
++		expect(gate4_occurrence_count(qbe, ", 63\n")).to_equal(2)
++		state.scalar_mir.literal_texts[literal_index] = "3"
++		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("MIR Integer halving literal differs")
++		state.scalar_mir.literal_texts[literal_index] = "0"
++		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("MIR Integer halving literal differs")
++		state.scalar_mir.literal_texts[literal_index] = "2"
++		state.scalar_mir.instructions[instruction_index][3] = 0
++		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("MIR Integer halving literal differs")
++		state.scalar_mir.instructions[instruction_index][3] = 1
++		state.scalar_mir.instructions[instruction_index][5] =- 1
++		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("MIR failure target does not exist")
++	end
++
++	test("does not borrow an Integer halving definition from another function") do
++		source := "def constant(unused: Integer): Integer\n\treturn 2\nend\n\ndef divide(left: Integer, right: Integer): Integer\n\treturn left / right\nend\n\ndef third(value: Integer): Integer\n\treturn value / 3\nend\n\ndef floating(value: Float): Float\n\treturn value / 2.0\nend\n\ndef main()\n\treturn\nend\n"
++		mut state := gate4_compiler_new(source.size() + 1)
++		expect(gate4_lex(state, source)).to_be_true()
++		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
++		expect(gate4_resolve(state)).to_be_true()
++		expect(gate4_check(state)).to_be_true()
++		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("")
++		mut index := 0
++		while index < state.scalar_mir.instructions.size()
++			expect(state.scalar_mir.instructions[index][4] != 14).to_be_true()
++			index += 1
++		end
++		function := state.scalar_mir.functions[gate4_mir_function_index(state.scalar_mir, 1)]
++		block := state.scalar_mir.blocks[function[6]]
++		state.scalar_mir.instructions[block[5]][4] = 14
++		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("MIR Integer halving literal differs")
++		state.scalar_mir.instructions[block[5]][4] = 4
++		floating := state.scalar_mir.functions[gate4_mir_function_index(state.scalar_mir, 3)]
++		floating_block := state.scalar_mir.blocks[floating[6]]
++		state.scalar_mir.instructions[floating_block[5] + 1][4] = 14
++		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("MIR Integer halving type differs")
++	end
++
+ 	test("lowers one complete Array induction helper through verified MIR") do
+ 		source := "def scan(values: Array<Integer>)\n\tmut index := 0\n\twhile index < values.size()\n\t\tvalue := values[index]\n\t\tindex += 1\n\tend\n\treturn\nend\n\ndef main()\n\tscan([10, 20])\n\treturn\nend\n"
+ 		mut state := gate4_compiler_new(source.size() + 1)
