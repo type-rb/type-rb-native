@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, renameSync, rmSync } from 'node:
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { acceptance, classify } from './ci-plan.mjs';
+import { acceptance, changedPaths, classify } from './ci-plan.mjs';
 
 function results(plan) {
   return {
@@ -93,6 +93,43 @@ test('CLI classifies a real source-to-documentation rename and unusual filename'
       { cwd: directory, encoding: 'utf8' });
     assert.deepEqual(Object.fromEntries(output.trim().split('\n').map(row => row.split('='))),
       { code: 'true', documentation: 'true', memory: 'true', performance: 'true', draft: 'false' });
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('large evidence inventories retain every path and a final code change', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'native-ci-plan-large-test-'));
+  const git = (args, input) => execFileSync('git', [
+    '-c', 'user.name=CI Test', '-c', 'user.email=ci-test@example.invalid',
+    '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args,
+  ], { cwd: directory, encoding: 'utf8', input, stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+  try {
+    git(['init']);
+    const emptyTree = git(['mktree'], '');
+    const base = git(['commit-tree', emptyTree], 'Empty synthetic baseline\n');
+    const blob = git(['hash-object', '-w', '--stdin'], 'Synthetic observation\n');
+    const names = Array.from({ length: 7000 }, (_, i) =>
+      `${String(i).padStart(5, '0')}-${'観測-'.repeat(25)}.txt`);
+    const evidenceTree = git(['mktree'],
+      names.map(name => `100644 blob ${blob}\t${name}\n`).join(''));
+    const docsTree = git(['mktree'], `040000 tree ${evidenceTree}\tresults\n`);
+    const docsHead = git(['commit-tree', docsTree, '-p', base], 'Synthetic evidence\n');
+    const paths = await changedPaths(base, docsHead, directory);
+    assert.equal(paths.length, names.length);
+    assert(Buffer.byteLength(paths.join('\0')) > 1024 * 1024);
+    assert.deepEqual(paths, names.map(name => `results/${name}`));
+    assert.equal(classify(paths, false).code, false);
+
+    // This path sorts after the entire >1 MiB evidence list.
+    const codeTree = git(['mktree'],
+      `040000 tree ${evidenceTree}\tresults\n100644 blob ${blob}\tzz-final-code.trb\n`);
+    const codeHead = git(['commit-tree', codeTree, '-p', base], 'Final synthetic code change\n');
+    const complete = await changedPaths(base, codeHead, directory);
+    assert.equal(complete.length, names.length + 1);
+    assert.equal(complete.at(-1), 'zz-final-code.trb');
+    assert.equal(classify(complete, false).code, true);
+    await assert.rejects(changedPaths(base, '0'.repeat(40), directory), /Git path inventory failed/);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

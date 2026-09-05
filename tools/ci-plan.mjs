@@ -1,4 +1,5 @@
-import { execFileSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { pathToFileURL } from 'node:url';
 
 const documentation = path => path.endsWith('.md') ||
@@ -40,6 +41,28 @@ export function acceptance(needs) {
   });
 }
 
+export async function changedPaths(base, head, cwd) {
+  // Stream the NUL-delimited list: full evidence snapshots can exceed the
+  // synchronous child-process buffer, and truncation could hide a code change.
+  const child = spawn('git', ['diff', '--no-renames', '--name-only', '-z',
+    `${base}...${head}`, '--'], { cwd, stdio: ['ignore', 'pipe', 'inherit'] });
+  const completion = once(child, 'close');
+  child.stdout.setEncoding('utf8');
+  const paths = [];
+  const read = async () => {
+    let pending = '';
+    for await (const chunk of child.stdout) {
+      const parts = (pending + chunk).split('\0');
+      pending = parts.pop();
+      paths.push(...parts);
+    }
+    if (pending !== '') throw new Error('Git path list is not NUL-terminated');
+  };
+  const [, [status, signal]] = await Promise.all([read(), completion]);
+  if (status !== 0) throw new Error(`Git path inventory failed: ${signal ?? status}`);
+  return paths;
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   if (process.argv[2] === 'accept') {
     const errors = acceptance(JSON.parse(process.env.NEEDS_JSON ?? '{}'));
@@ -52,8 +75,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       throw new Error('Usage: ci-plan.mjs BASE_SHA HEAD_SHA true|false');
     }
     // Include both sides of renames, and preserve arbitrary path characters.
-    const paths = execFileSync('git', ['diff', '--no-renames', '--name-only', '-z',
-      `${base}...${head}`, '--'], { encoding: 'utf8' }).split('\0').filter(Boolean);
+    const paths = await changedPaths(base, head);
     for (const [key, value] of Object.entries(classify(paths, draft === 'true'))) {
       console.log(`${key}=${value}`);
     }
