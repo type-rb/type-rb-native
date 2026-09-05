@@ -8,6 +8,8 @@ dependencies, retained consumers, and staged naming changes.
 The [development history](development-history.md) preserves the former README's
 checkpoint narrative. Entries below are a reference catalog; dated results
 remain tied to their own source revisions and measurement contracts.
+The [gate reference](gate-reference.md) preserves detailed gate contracts and
+historical architecture notes removed from the current architecture and plan.
 
 ## Reference catalog
 

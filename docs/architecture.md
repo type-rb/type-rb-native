@@ -28,7 +28,7 @@ The [reference TypeRB repository](https://github.com/type-rb/type-rb) owns:
 
 This repository owns only experimental native concerns:
 
-- an independent TypeRB-authored frontend when the self-hosting gates reach it;
+- the independent TypeRB-authored frontend for the supported Native subset;
 - bootstrap snapshot validation and lowering;
 - Native MIR and its verifier;
 - native data layout and target ABI profiles;
@@ -39,9 +39,9 @@ This repository owns only experimental native concerns:
 
 The normal reference TypeRB build, test, and release paths must not depend on
 this repository. A language-level change discovered here belongs in the
-reference repository's normal design and review process. Until the independent
-frontend exists, the reference implementation may provide a narrow snapshot
-producer on a short-lived, removable experimental surface.
+reference repository's normal design and review process. The reference
+implementation's narrow snapshot producer remains a recovery and differential
+surface, not part of ordinary Native compilation.
 
 ### Reference-repository independence
 
@@ -74,42 +74,36 @@ linker can be a dependency of another self-hosted language implementation.
 ## Pipeline
 
 ```text
-                         reference repository
 TypeRB source
-    -> lossless tokens
-    -> syntax AST
-    -> resolver and type checker
-    -> typed IR
-    -> experimental bootstrap snapshot
-                         native repository
-    -> snapshot verifier
-    -> Native MIR lowering
-    -> MIR verifier
-    -> target-independent optimization
-    -> backend adapter
-    -> object files
-    -> linker + native runtime
+    -> Native file/project loader, lexer, parser, resolver, checker
+    -> verified Native MIR and target-independent passes (supported slices)
+       or the remaining checked direct path (migration work)
+    -> QBE adapter and generated managed runtime
+    -> external QBE, assembler, and linker
     -> executable
 ```
 
 Each boundary must preserve source origins so diagnostics and runtime failures
 can eventually refer to authored TypeRB source.
 
-The bootstrap snapshot is intentionally transitional. After native execution
-and runtime viability are established, the repository gains its own
-TypeRB-authored parser, resolver, checker, and lowering. The reproducible
-self-hosting sequence is:
+The target architecture routes every supported function through verified MIR;
+the remaining direct path is not that finished architecture. The
+[MIR status](native-mir-optimization-status.md) distinguishes implemented
+vertical slices from remaining ownership. The ordinary self-hosting sequence
+starts from a previous Native seed, records any setup-only transitions, and
+then compares repeated full Native-built generations:
 
 ```text
-reference Go compiler -> B0 from TypeRB compiler sources
-B0                    -> B1
-B1                    -> B2
-compare(B1, B2)       -> equivalent under the reproducibility policy
+previous Native seed -> setup transitions -> B2 -> B3 -> B4
+compare(B2, B3, B4)   -> exact same-basename compiler and QBE bytes
 ```
 
 Published native releases use a previously released native compiler as their
 seed. Building the bootstrap seed from Go is a recovery/development path, not
-an ordinary release requirement.
+an ordinary release requirement. Recovery and differential tests use the
+reference frontend's versioned snapshot, strict validation, and the separate
+snapshot-MIR/QBE path. They are mandatory coverage but do not substitute for
+ordinary Native-to-Native generation.
 
 ## Bootstrap snapshot
 
@@ -139,9 +133,9 @@ all structural invariants. Unknown or unsupported input fails explicitly. While
 experimental, producer and consumer revisions may be pinned exactly and the
 format may change without compatibility adapters.
 
-The first backend experiments should use hand-authored fixtures. A producer-side
-bridge should be added to the reference compiler only after those fixtures prove
-that code generation and the minimal runtime are worth connecting.
+Hand-authored fixtures and the producer bridge established this boundary in
+the early gates. Their [contracts](gate-reference.md#gates) remain available;
+they are not unfinished prerequisites for today's ordinary frontend.
 
 ## Native MIR
 
@@ -212,7 +206,8 @@ See [Decision 0028](decisions/0028-native-mir-optimization-boundary.md).
 ## Backend adapters
 
 Candidate adapters consume the same verified, target-neutral MIR subset. QBE
-is tried first to minimize the cost of the initial executable experiment.
+is the current backend; the other entries below describe possible experiments,
+not implemented adapters.
 Target lowering selects a versioned ABI profile for an operating system and
 architecture. Backend comparisons on the same target use the same profile.
 
@@ -297,95 +292,26 @@ Every required component counts toward build time and toolchain distribution
 size. Dynamically supplied system libraries must be identified rather than
 silently excluded from comparisons.
 
-The first Native-owned orchestration boundary is the experimental Gate 6B
-single-file build. The TypeRB-authored compiler invokes explicit QBE and C
-toolchain paths directly with `execv`, never through a shell, and atomically
-publishes the finished executable after cleaning its intermediate QBE IL and
-assembly. This proves ownership of the ordinary build graph without implying
-that toolchain discovery, a stable project command, or a self-contained
-distribution has been designed. See
-[Decision 0009](decisions/0009-native-single-file-build.md).
+The ordinary compiler invokes explicit QBE and C-toolchain paths directly,
+without a shell, and publishes the executable only after successful code
+production and cleanup. Every replacement generation loads the canonical
+TypeRB file-root closure; a derived flat compiler is recovery-only. Repeated
+same-basename generations must reach exact compiler and QBE bytes.
 
-Gate 6C closes that ordinary build graph after an initial seed exists. A
-Native-built compiler becomes the executable seed for the next complete build,
-and repeated same-basename generations must converge to exact bytes while
-retaining the fixed-point QBE and full file-command behavior. Recovery may
-prepare the first seed during the experiment, but its provenance is recorded
-separately and it is not part of the ordinary Native-to-Native chain. See
-[Decision 0010](decisions/0010-native-bootstrap-closure.md).
+Internal profiles cover Darwin arm64, Linux arm64, and Linux amd64. They select
+QBE lowering and explicit linker/libm policy without forking frontend or
+runtime semantics. The experimental immutable seed release supplies verified
+previous-Native assets for arm64; the registered amd64 recovery starts from its
+verified target-neutral root QBE and separately records setup transitions.
+Neither boundary constitutes stable target or distribution support.
 
-Gate 6D applies the same target-neutral compiler source, QBE IL, runtime
-semantics, and Native-to-Native build graph to Linux arm64. Internal versioned
-profiles select QBE's `arm64_apple` or `arm64` lowering and the corresponding
-external linker policy; they do not fork language behavior or enter the
-reference repository. Explicit selection makes the target part of the
-reproducibility record and keeps cross-platform builds from depending on silent
-host inference. Linux arm64 currently selects LLD through the supplied C driver.
-See [Decision 0011](decisions/0011-linux-arm64-target-profile.md) and
-[Decision 0022](decisions/0022-linux-arm64-lld-linker.md).
-
-Gate 6E adds a config-free file-root module graph without changing that process
-boundary. The TypeRB-authored compiler reads the selected entry and only its
-transitive project declaration imports, preserves declaration ownership per
-module, and emits one executable after the complete closure checks
-successfully. The original gate accepted only named imports; the current
-frontend also implements the bounded TypeRB 0.4 declaration-root mapping.
-Unrelated siblings, package discovery, configured projects, and the hidden
-single-source recovery adapter do not enter the original graph. See
-[Decision 0012](decisions/0012-file-root-module-closure.md).
-
-Gate 6F makes that graph reflexive: the canonical TypeRB-authored compiler is
-itself a file-root closure with separate storage and path modules. A temporary
-flat source may prepare the recovery seed, but every ordinary replacement
-generation loads the real closure and reaches exact B2/B3/B4 QBE and bytes.
-See [Decision 0013](decisions/0013-multi-file-self-hosted-compiler.md).
-
-Gate 6G derives a deterministic module-qualified function index from the
-canonical declaration arrays before resolution. Full key comparison preserves
-semantics under collisions, while source-order head insertion preserves the
-previous last-match behavior. The index is TypeRB-owned and internal; it is not
-a public Hash or serialized compiler format. See
-[Decision 0014](decisions/0014-indexed-function-lookup.md).
-
-Gate 6H applies the same internal-derivation rule to file-root module graphs.
-An incrementally maintained module-name index and parsed per-module import
-spans let loading and resolution follow module-owned ranges, while contiguous
-declaration boundaries stop duplicate scans before another module. Canonical
-source-order arrays retain ownership. The private bucket and graph
-accelerators do not stabilize a project, package, module, Hash, or CLI
-contract. See
-[Decision 0015](decisions/0015-indexed-module-graph.md).
-
-Gate 6L makes the first durable previous-Native seed handoff without turning
-the experiment into a stable release. A one-time registered fixed-point QBE
-root produces attested Darwin and Linux arm64 compiler assets in an immutable
-date-labelled prerelease. Fresh consumers verify the manifest, digest, and
-attestation before an ordinary B1-to-B4 chain that contains no Go or reference
-compiler. Compiler binaries stay out of Git history, while QBE, CC, system
-libraries, GitHub release retention, and attestation infrastructure remain
-explicit dependencies. See
-[Decision 0019](decisions/0019-experimental-bootstrap-seed-distribution.md).
-
-Gate 6M introduces two exact portable standard-package roots without making
-the project module graph a package manager. Private compiler identities map
-`trb/std/process` and `trb/std/math` to their existing `Process` and `Math`
-declarations. Managed runtime helpers copy process arguments and implement
-checked numeric text and narrowing operations; `Math.sqrt` crosses an explicit
-C ABI and system-libm boundary. The portable-entry runtime slice is selected
-as one unit when any registered process or conversion primitive is used and is
-omitted otherwise, while the Native-owned link command supplies `-lm`
-consistently on both registered profiles. These are internal lowering and
-dependency choices rather than new TypeRB APIs or stable Native ABI. See
-[Decision 0021](decisions/0021-portable-benchmark-entry-primitives.md).
-
-Gate 6N adds an internal Linux amd64 profile behind the same self-hosted
-frontend, target-neutral QBE emission, and managed runtime. The immutable
-target-neutral root QBE recovers one root-era x86 compiler, followed by two
-Go-free current-source transitions and the ordinary exact candidate chain.
-The profile selects QBE `amd64_sysv`, the System V ABI, and the existing
-explicit Linux LLD/libm link policy. This is a second-architecture experiment,
-not a stable target or a target-specific semantic fork. See
-[Decision 0025](decisions/0025-linux-amd64-target-profile.md).
+File-root and configured-project loading preserve explicit declaration
+ownership and load only the supported closure. Internal indexes accelerate
+lookup without becoming public collections or package APIs. Portable process
+and math roots remain a bounded integration, not a general package manager.
+The [capability map](https://type-rb.github.io/type-rb-native/) records exact
+coverage; [historical architecture checkpoints](gate-reference.md#architecture-checkpoint-history)
+retain the original gate-to-decision mapping and seed provenance.
 
 ## Source organization
 
@@ -408,8 +334,8 @@ runtime and package boundaries, reproducible builds, primary-platform support,
 an end-to-end advantage after the complete toolchain is counted, and a
 reproducible self-hosted compiler build whose ordinary path does not use Go.
 
-The bootstrap bridge remains removable because the independent frontend will
-eventually replace it, not because removal is the default project outcome.
+The bootstrap bridge remains recovery-only and removable when its retained
+consumers have replacements, not because removal is the default project outcome.
 Gates expose correctness, performance, and maintenance problems early enough to
 improve the shared MIR, runtime, backend, or build pipeline before those choices
 become public contracts.
