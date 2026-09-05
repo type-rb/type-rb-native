@@ -151,13 +151,31 @@ jobs:
           "$RUNNER_TEMP/trb" compiler bootstrap-snapshot --snapshot-version 4 "$RUNNER_TEMP/gate4-compiler/compiler.trb" > "$RUNNER_TEMP/gate4-compiler-snapshot.json"
           test -s "$RUNNER_TEMP/gate4-compiler-snapshot.json"
 
-      - name: Run gate tests, fixtures, and source differential corpus
+      - name: Run independent recovery-enabled root and compiler suites
+        id: native_suites
         env:
           TYPE_RB_NATIVE_ROOT: ${{ github.workspace }}
           TYPE_RB_NATIVE_REFERENCE_TRB: ${{ runner.temp }}/trb
           TYPE_RB_NATIVE_QBE: ${{ runner.temp }}/qbe-1.3/qbe
         run: |
-          "$RUNNER_TEMP/trb" test
+          node --test tools/ci-run-suites-test.mjs
+          node tools/ci-run-suites.mjs "$RUNNER_TEMP/trb" "$RUNNER_TEMP/native-suite-evidence"
+
+      - name: Upload joined suite logs and status
+        if: always() && steps.native_suites.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-suite-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/native-suite-evidence
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Run historical tool-suite controls after both suites pass
+        env:
+          TYPE_RB_NATIVE_ROOT: ${{ github.workspace }}
+          TYPE_RB_NATIVE_REFERENCE_TRB: ${{ runner.temp }}/trb
+          TYPE_RB_NATIVE_QBE: ${{ runner.temp }}/qbe-1.3/qbe
+        run: |
           "$RUNNER_TEMP/trb" test --config tools/gate6f-benchmark/trbconfig.jsonc
           "$RUNNER_TEMP/trb" test --config tools/gate6g-benchmark/trbconfig.jsonc
           "$RUNNER_TEMP/trb" test --config tools/gate6h-benchmark/trbconfig.jsonc
@@ -165,7 +183,6 @@ jobs:
           "$RUNNER_TEMP/trb" test --config tools/gate6j-benchmark/trbconfig.jsonc
           "$RUNNER_TEMP/trb" test --config tools/gate6k-benchmark/trbconfig.jsonc
           "$RUNNER_TEMP/trb" test --config tools/gate6m-benchmark/trbconfig.jsonc
-          "$RUNNER_TEMP/trb" test --config compiler/gate4/trbconfig.jsonc
 
       - name: Run the self-hosted managed-runtime allocation smoke
         id: allocation_smoke
