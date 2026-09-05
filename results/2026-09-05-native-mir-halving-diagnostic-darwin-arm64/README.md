@@ -11,6 +11,10 @@ the same-block definition, and the failure edge. A mechanical consolidation of
 Float arithmetic and Integer division/remainder dispatch reduced its cost,
 but the complete candidate still fails both compactness and local runtime.
 
+The retained CSV uses LF line endings; numeric fields and observations are
+unchanged. `EVIDENCE_SHA256SUMS` covers all 42 retained support files and excludes
+only this README and the inventory itself.
+
 ## Identity and scope
 
 - Baseline: accepted `a1c5177583d26bea264b288ca1d8ea54af40afc6` (PR #250).
