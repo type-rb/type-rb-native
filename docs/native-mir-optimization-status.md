@@ -1,15 +1,20 @@
 # Native MIR optimization transition status
 
-The first stable-Array-header candidate is not accepted: review found missing
-independent proof validation and three bounds-check regressions despite its
-green formal run. See [the proof repair](native-mir-array-region-repair.md).
-Its timing observations must not replace the accepted benchmark snapshot.
+The stable-Array-header work is not accepted: the first candidate failed
+independent proof validation and three bounds checks; the `69ff52b5`
+correctness repair subsequently improved spectral-norm by 11.978% on Linux
+arm64 but regressed n-body by 13.161%. See
+[the proof and control repair](native-mir-array-region-repair.md).
+Neither candidate may replace the accepted benchmark snapshot.
 The current repair retains access checks and narrows the new proof to immutable
 Array parameters. Shared header loads, MIR parameter registration, and common
-value/instruction builders remove duplicate implementation. The local compiler
-now fits the unchanged executable, code-section, and QBE ceilings. PR #246 is
-ready for full correctness, target, memory, and formal comparative verification;
-this local eligibility is not accepted performance evidence.
+value/instruction builders remove duplicate implementation. Restoring the
+two-entry recent-header fallback recovers exact baseline n-body output code,
+while function-owned MIR instruction transfer avoids redundant row copies.
+The local compiler fits the unchanged executable, code-section, and QBE
+ceilings. PR #246 is ready for full correctness, target, memory, and formal
+comparative verification; this local eligibility is not accepted performance
+evidence.
 
 Status: experimental. The checked-in scope includes the accepted induction-phi
 recovery, the measured `Array<Integer>` reduction slice from issue #230, the

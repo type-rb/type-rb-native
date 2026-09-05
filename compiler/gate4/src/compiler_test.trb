@@ -255,6 +255,24 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("MIR Integer literal fact differs")
 	end
 
+	test("relocates each committed MIR literal once and preserves its source line") do
+		source := "def first(): Integer\n\treturn 17\nend\n\ndef second(): Integer\n\treturn 29\nend\n\ndef main()\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("")
+		expect(state.scalar_mir.literal_texts.size()).to_equal(2)
+		expect(state.scalar_mir.instructions.size()).to_equal(2)
+		expect(state.scalar_mir.instructions[0][4]).to_equal(0)
+		expect(state.scalar_mir.instructions[1][4]).to_equal(1)
+		expect(state.scalar_mir.literal_texts[0]).to_equal("17")
+		expect(state.scalar_mir.literal_texts[1]).to_equal("29")
+		expect(state.scalar_mir.instructions[0][7]).to_equal(2)
+		expect(state.scalar_mir.instructions[1][7]).to_equal(6)
+	end
+
 	test("selects a verified guarded Integer multiply for loop-local scalar MIR") do
 		source := "def product(left: Integer, right: Integer): Integer\n\treturn left * right\nend\n\ndef main()\n\tmut index := 0\n\twhile index < 1\n\t\tvalue := product(index, index - 1)\n\t\tindex += value + 1\n\tend\n\treturn\nend\n"
 		mut state := gate4_compiler_new(source.size() + 1)
@@ -2387,10 +2405,44 @@ describe("Gate 4 TypeRB frontend") do
 		mut output := gate4_output_new(16, [0, 0, 0, 0])
 		context.array_header[0] = "%v0"
 		context.array_header[1] = "%length"
+		context.array_header[2] = "%data"
 		length := gate4_emit_array_header(context, output, "%first", "%v0", 1, "8")
+		gate4_emit_array_header(context, output, "%second", "%v1", 1, "8")
+		gate4_emit_array_header(context, output, "%third", "%v2", 2, "24")
 		gate4_invalidate_array_header_cache(context)
 		expect(gate4_emit_array_header(context, output, "%first", "%v0", 1, "8")).to_equal(length)
-		expect(output.count[0]).to_equal(0)
+		expect(gate4_emit_array_header(context, output, "%first", "%v0", 2, "24")).to_equal("%data")
+		expect(output.count[0]).to_equal(4)
+	end
+
+	test("reuses both recent Array headers and invalidates both together") do
+		mut context := gate4_emit_context_new(16, [64, 16, 2])
+		mut output := gate4_output_new(16, [0, 0, 0, 0])
+		first_length := gate4_emit_array_header(context, output, "%first", "%v0", 1, "8")
+		second_length := gate4_emit_array_header(context, output, "%second", "%v1", 1, "8")
+		first_data := gate4_emit_array_header(context, output, "%first", "%v0", 2, "24")
+		second_data := gate4_emit_array_header(context, output, "%second", "%v1", 2, "24")
+		expect(gate4_emit_array_header(context, output, "%first", "%v0", 1, "8")).to_equal(first_length)
+		expect(gate4_emit_array_header(context, output, "%second", "%v1", 1, "8")).to_equal(second_length)
+		expect(gate4_emit_array_header(context, output, "%first", "%v0", 2, "24")).to_equal(first_data)
+		expect(gate4_emit_array_header(context, output, "%second", "%v1", 2, "24")).to_equal(second_data)
+		expect(output.count[0]).to_equal(8)
+		gate4_invalidate_array_header_cache(context)
+		expect(gate4_emit_array_header(context, output, "%first", "%v0", 1, "8") == first_length).to_be_false()
+		expect(gate4_emit_array_header(context, output, "%second", "%v1", 2, "24") == second_data).to_be_false()
+		expect(output.count[0]).to_equal(12)
+	end
+
+	test("evicts only the least recently used fallback Array header") do
+		mut context := gate4_emit_context_new(16, [64, 16, 2])
+		mut output := gate4_output_new(16, [0, 0, 0, 0])
+		first_length := gate4_emit_array_header(context, output, "%first", "%v0", 1, "8")
+		second_length := gate4_emit_array_header(context, output, "%second", "%v1", 1, "8")
+		expect(gate4_emit_array_header(context, output, "%first", "%v0", 1, "8")).to_equal(first_length)
+		gate4_emit_array_header(context, output, "%third", "%v2", 1, "8")
+		expect(gate4_emit_array_header(context, output, "%first", "%v0", 1, "8")).to_equal(first_length)
+		expect(gate4_emit_array_header(context, output, "%second", "%v1", 1, "8") == second_length).to_be_false()
+		expect(output.count[0]).to_equal(8)
 	end
 
 	test("keeps Array header loads local outside owned-managed loops") do

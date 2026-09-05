@@ -131,7 +131,7 @@ record Gate4EmitContext
 	scalar_inline_range_failure_used: Array<Integer>
 	array_bounds_failure_used: Array<Integer>
 	array_header: Array<String>
-	array_header_fallback: Array<String>
+	array_header_fallback: Array<Array<String>>
 end
 
 record Gate4EmittedValue
@@ -1668,8 +1668,8 @@ def gate4_emit_context_new(
 		scalar_inline_depth: [0],
 		scalar_inline_range_failure_used: [0],
 		array_bounds_failure_used: [0],
-		array_header: ["@none", "", ""],
-		array_header_fallback: ["@none", "", ""],
+		array_header: gate4_array_header_new(),
+		array_header_fallback: [gate4_array_header_new(), gate4_array_header_new()],
 	)
 end
 
@@ -2684,8 +2684,13 @@ def gate4_emit_checked_integer_division(
 	return
 end
 
+def gate4_array_header_new(): Array<String>
+	return ["@none", "", ""]
+end
+
 def gate4_invalidate_array_header_cache(mut context: Gate4EmitContext)
-	context.array_header_fallback[0] = "@none"
+	context.array_header_fallback[0][0] = "@none"
+	context.array_header_fallback[1][0] = "@none"
 end
 
 def gate4_emit_array_header(
@@ -2699,15 +2704,23 @@ def gate4_emit_array_header(
 	if key == context.array_header[0]
 		return context.array_header[cache_index]
 	end
-	mut cache := context.array_header_fallback
+	mut caches := context.array_header_fallback
+	mut cache := caches[0]
 	if key != ""
 		if cache[0] != key
-			cache[0] = key
-			cache[1] = ""
-			cache[2] = ""
+			previous_cache := cache
+			cache = caches[1]
+			if cache[0] != key
+				cache[0] = key
+				cache[1] = ""
+				cache[2] = ""
+			end
+			caches[1] = previous_cache
+			caches[0] = cache
 		end
-		if cache[cache_index] != ""
-			return cache[cache_index]
+		cached := cache[cache_index]
+		if cached != ""
+			return cached
 		end
 	end
 	address := gate4_emit_temporary(context)
@@ -9710,26 +9723,18 @@ def gate4_scalar_mir_commit(
 		state.scalar_mir.literal_texts.push(locals.mir_literal_texts[index])
 		index += 1
 	end
+	instruction_count := locals.mir_instructions.size()
 	index = 0
-	while index < locals.mir_instructions.size()
-		instruction := locals.mir_instructions[index]
-		mut literal := instruction[4]
+	while index < instruction_count
+		# Checking is complete: transfer the function-owned row, as for values.
+		# Only a literal operand needs relocation into the module's literal table.
+		mut instruction := locals.mir_instructions[index]
 		if instruction[0] == 6
-			literal += literal_base
+			instruction[4] += literal_base
 		end
-		state.scalar_mir.instructions.push([
-				instruction[0],
-				instruction[1],
-				instruction[2],
-				instruction[3],
-				literal,
-				instruction[5],
-				instruction[6],
-				instruction[7],
-			])
+		state.scalar_mir.instructions.push(instruction)
 		index += 1
 	end
-	instruction_count := locals.mir_instructions.size()
 	if mode >= 2
 		header_block := entry_block + 1
 		body_block := entry_block + 2

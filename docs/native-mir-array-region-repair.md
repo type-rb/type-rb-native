@@ -1,9 +1,9 @@
 # Array-header proof repair
 
-Status: the first candidate in [PR #246](https://github.com/type-rb/type-rb-native/pull/246)
-is rejected. Passing the recorded timing and compactness checks at `ce297d4`
-does not establish correctness, and those timings are not accepted performance
-evidence.
+Status: [PR #246](https://github.com/type-rb/type-rb-native/pull/246) remains
+unaccepted. The first candidate, `ce297d4`, fails correctness. Its successor,
+`69ff52b5`, passes correctness but fails the n-body runtime control. The current
+repair restores that control without widening the proof or changing a limit.
 
 ## Review findings
 
@@ -65,55 +65,83 @@ Array in an outer loop and then grows it inside an inner loop. The faulty
 candidate panics; the repaired candidate produces the exact expected total.
 Only the separately verified immutable-parameter header survives invalidation.
 
-## Remaining acceptance work
+## Rejected control candidate
 
-The current compiler source SHA-256 is
-`1c4cefd0de3b1780eb3007aa790db42f3060d91871c99c438a5ef7602bf2ac48`;
-the test source SHA-256 is
-`277c96d81a820cb32931ab81c3bf804a920d4cb30cb04036a2dc68c8d741e9fc`.
-It passes all eleven runtime-invalid and 22 valid Native fixtures and an
-ordinary local Native B1/B2/B3 fixed point. All 33 fixtures emit byte-identical
-QBE before and after the shared-builder refactoring. The three benchmark
-programs also retain exact QBE and executable bytes. Root formatting, type
-checks, all 80 root tests, and all 86 Gate 4 tests pass, including self-parsing
-and QBE-backed executable emission. Hosted acceptance remains a separate
-requirement.
+The [complete comparison at `69ff52b5`](https://github.com/type-rb/type-rb-native/actions/runs/33939737675)
+passes correctness, fixed points, target regressions, memory smoke, and compiler
+compactness. On Linux arm64, spectral-norm improves from 4.081436718 to
+3.592571062 seconds, an 11.978% reduction. Fannkuch-redux is byte-identical and
+its runtime is effectively unchanged. However, n-body increases from
+10.448269730 to 11.823397073 seconds: a 1.131613 ratio, outside the 1.02 control
+limit. The retained ranges do not overlap. This separate regression prevents
+acceptance even though the selected workload passes its 10% improvement goal.
 
-| Darwin arm64 compiler metric | Initial correctness repair | Current repair | Unchanged ceiling |
+That candidate reduced the recent-header fallback from two entries to one.
+The separately verified parameter header does not replace a second recent
+entry for functions operating on multiple record-field Arrays. Restoring only
+the two-entry fallback reproduces the baseline's complete 67,246-byte n-body
+QBE, while preserving the improved 52,173-byte spectral-norm QBE. The local
+two-warmup, seven-observation diagnostic against the rejected executable has
+wall/CPU/RSS ratios of `0.861576`, `0.865986`, and `1.0`. This isolates recovery
+from the rejected candidate; it is not an improvement claim over the baseline.
+
+Removing the entire fallback is also rejected: that diagnostic emits 52,356
+bytes of spectral-norm QBE, exceeding its strict-shrink condition, and 68,784
+bytes of n-body QBE, exceeding its control limit. The eventual migration of the
+remaining fallback into MIR is still due.
+
+## Two-entry repair and compactness
+
+The fallback again keeps two most-recently-used headers, independent of the
+verified parameter tuple. Both fallback entries are invalidated together at
+the existing boundaries, including nested-loop entry. Focused tests cover
+alternating length/data reuse, least-recently-used eviction, invalidation of
+both entries, and preservation of the independently verified tuple.
+
+The direct restoration initially emits 1,121,231 compiler-QBE bytes, above the
+unchanged 1,120,000-byte ceiling. The repair recovers that space through shared
+tuple construction and transfer of completed function-owned MIR instruction
+rows instead of copying their eight fields into another allocation. Commit is
+called once after checking; the caller discards its local state immediately
+afterward. Only literal-table operands are relocated, and no subsequent checker
+mutation shares ownership with the optimizer. Value rows already follow this
+transfer pattern. A regression test checks distinct function literals and
+their original source lines. The instruction count is fixed before transfer,
+avoiding repeated length loads from an unchanged collection.
+
+| Darwin arm64 compiler metric | Rejected `69ff52b5` | Current repair | Unchanged ceiling |
 | --- | ---: | ---: | ---: |
 | Complete executable bytes | 349,224 | 349,224 | 350,000 |
-| Code-section bytes | 259,800 | 250,312 | 250,904 |
-| Target-neutral QBE bytes | 1,149,251 | 1,119,802 | 1,120,000 |
+| Code-section bytes | 250,312 | 250,248 | 250,904 |
+| Target-neutral QBE bytes | 1,119,802 | 1,119,987 | 1,120,000 |
 
-The shared builders recover 1,184 code-section bytes and 2,799 QBE bytes from
-the preceding parameter-only checkpoint. All local compiler-size conditions
-now pass without changing a ceiling. Removing the entire fallback cache is
-not a valid shortcut: that diagnostic fits the compiler ceilings but emits 52,356
-bytes of spectral-norm QBE, exceeding its strict-shrink condition, and 68,784
-bytes of n-body QBE, exceeding the control's 1.02 ratio. Keep the shared
-fallback implementation; its eventual MIR migration is still due.
+The current compiler source SHA-256 is
+`d2706bf577782c7e7693b116deba2fab12575a89a5f597ec081536611260abf1`;
+the test source SHA-256 is
+`5ba3074304c7832563655f26c495546bdf8db7d78b05e1ea370a217595d0d58f`.
+The ordinary local B1/B2/B3 executable and QBE fixed points are exact. All 22
+valid, three mutation, and eleven runtime-invalid Native programs produce their
+expected output, status, and diagnostics. Root formatting, type checks, and all
+80 root tests pass. The 89-test Gate 4 suite, including self-parsing and
+QBE-backed execution, passes; a final six-test header/relocation rerun also
+passes.
 
-The current local input-5500 diagnostic retains exact output over two warmups
-and seven alternating retained processes per role: candidate/baseline medians
-are approximately `0.884375x` wall time, `0.880079x` CPU time, and `0.980132x`
-peak RSS. Its spectral-norm QBE is 52,173 bytes and code section is 10,684
-bytes. Those application bytes are unchanged by the builder refactoring.
-This is a local selection signal, not formal Linux arm64 evidence or accepted
-performance. Hosted target, build-cost, control, and memory limits still need
-fresh verification for the current compiler.
+The three application QBE files and Darwin executables are identical before
+and after the compactness refactoring. N-body and fannkuch-redux additionally
+match the original baseline executables exactly. Spectral-norm retains the
+improved candidate executable. The marker retains the original local
+spectral-norm selection diagnostic (`0.884375x` wall, `0.880079x` CPU,
+`0.980132x` RSS) because its measured executable remains byte-identical.
 
-The transition marker now identifies this locally eligible corrected compiler
-and its fixtures. Its local runtime fields retain the diagnostic above because
-the measured application executables are byte-identical. No limit changes, and
-the rejected first candidate remains rejected. PR #246 can now request complete
-correctness, fixed-point, target, memory, and comparative performance authority.
-The accepted Pages snapshot stays unchanged until those requirements pass.
+## Remaining acceptance work
 
-This repair narrows the original issue #245 plan: it makes no new unchecked
-access decision, and general source-token-driven emission remains outside this
-parameter-header projection. Unsupported operations preserve TypeRB behavior;
-the shared header loader may renumber QBE temporaries, and the fallback cache
-retains one recent header rather than two. Exact unchanged-program bytes are
-therefore a refactoring control, not a universal claim against the original
-baseline. The frozen selected-program shrink and control-artifact limits still
-apply to the complete change.
+The marker registers the corrected source identity and local sizes before
+hosted verification; every numerical limit remains unchanged. Fresh complete
+correctness, target, fixed-point, memory, build-cost, and runtime-control checks
+must pass for this compiler before acceptance. The failed candidates and their
+measurements remain rejected. The accepted Pages snapshot stays unchanged.
+
+This repair still makes no new unchecked-access decision. General source-token
+emission remains outside the parameter-header projection, and the selected
+workload's strict-shrink and control-artifact limits apply to the complete
+change, not just the restoring refactoring.
