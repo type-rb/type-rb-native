@@ -2184,6 +2184,20 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_output_source(gate4_emit_qbe(delegating)).include?("call $g4f1")).to_be_true()
 	end
 
+	test("retains caller lower-bound checks after the literal-return inline budget") do
+		source := "def one(): Integer\n\treturn 1\nend\n\ndef main()\n\tmut value := 7\n\tmut index := 0\n\twhile index < 1\n\t\tvalue += one()\n\t\tvalue += one()\n\t\tvalue += one()\n\t\tindex += 1\n\tend\n\tputs(value.to_s())\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		qbe := gate4_output_source(gate4_emit_qbe(state))
+		expect(gate4_occurrence_count(qbe, "call $g4f0()")).to_equal(1)
+		# One loop comparison and one lower-bound check for the retained call.
+		# Neither of the two inlined literal returns needs that lower check.
+		expect(gate4_occurrence_count(qbe, " =w csltl %t")).to_equal(2)
+	end
+
 	test("limits scalar leaf inlining to two call sites per small program") do
 		source := "def scalar(value: Integer): Integer\n\treturn value + 1\nend\n\ndef main()\n\tmut index := 0\n\twhile index < 1\n\t\tfirst := scalar(index)\n\t\tsecond := scalar(index)\n\t\tthird := scalar(index)\n\t\tindex += first + second + third\n\tend\n\treturn\nend\n"
 		mut state := gate4_compiler_new(source.size() + 1)
