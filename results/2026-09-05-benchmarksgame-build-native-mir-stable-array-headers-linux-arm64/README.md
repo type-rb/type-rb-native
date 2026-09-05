@@ -1,5 +1,10 @@
 # Formal Stable-Array-Header Build Results on Linux arm64
 
+Status: retained build-only evidence for rejected candidate `69ff52b5`. Its
+build checks passed, but the independent n-body runtime control failed. This
+result is not the current accepted Pages snapshot. See the
+[accepted successor build](../2026-09-05-benchmarksgame-build-native-mir-stable-array-headers-accepted-linux-arm64/README.md).
+
 The self-hosted Native compiler passes the complete formal backend-pair build
 and distribution contract on all three registered TypeRB programs. In this
 same-run comparison, Native needs 36.8% to 47.6% of the optimized Go backend's
