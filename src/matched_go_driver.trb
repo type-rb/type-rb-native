@@ -2,7 +2,7 @@ import { native_write_text } from native_file_system
 import trb/std/process
 import trb/std/result
 
-record Gate5MatchedDriverError
+record MatchedGoDriverError
 	phase: String
 	message: String
 	status: Integer? = nil
@@ -10,15 +10,15 @@ record Gate5MatchedDriverError
 	stderr: String = ""
 end
 
-def gate5_empty_main_source(): String
+def matched_go_empty_main_source(): String
 	return "def main()\n\treturn\nend\n"
 end
 
-def gate5_go_driver_import(): String
+def matched_go_driver_import(): String
 	return "import trb/std/process\n"
 end
 
-def gate5_go_driver_source(): String
+def matched_go_driver_source(): String
 	mut source := "def main()\n"
 	source += "\targuments := Process.argv()\n"
 	source += "\tif arguments.size() != 3 || arguments[0] != \"--source-content\"\n"
@@ -31,8 +31,8 @@ def gate5_go_driver_source(): String
 	return source
 end
 
-def gate5_matched_go_source(source: String): Result<String, String>
-	empty_main := gate5_empty_main_source()
+def matched_go_source(source: String): Result<String, String>
+	empty_main := matched_go_empty_main_source()
 	if !source.end_with?(empty_main)
 		return Result<String, String>::Err(
 			"compiler source must end with the exact empty main() driver",
@@ -40,13 +40,13 @@ def gate5_matched_go_source(source: String): Result<String, String>
 	end
 	core := source.slice(0...(source.size() - empty_main.size()))
 	return Result<String, String>::Ok(
-		gate5_go_driver_import() + core + gate5_go_driver_source(),
+		matched_go_driver_import() + core + matched_go_driver_source(),
 	)
 end
 
-def gate5_recover_canonical_source(transformed: String): Result<String, String>
-	import_source := gate5_go_driver_import()
-	driver_source := gate5_go_driver_source()
+def matched_go_recover_canonical_source(transformed: String): Result<String, String>
+	import_source := matched_go_driver_import()
+	driver_source := matched_go_driver_source()
 	if !transformed.start_with?(import_source)
 		return Result<String, String>::Err("matched source is missing the argv import")
 	end
@@ -54,29 +54,30 @@ def gate5_recover_canonical_source(transformed: String): Result<String, String>
 		return Result<String, String>::Err("matched source is missing the exact argv driver")
 	end
 	core := transformed.slice(import_source.size()...(transformed.size() - driver_source.size()))
-	return Result<String, String>::Ok(core + gate5_empty_main_source())
+	return Result<String, String>::Ok(core + matched_go_empty_main_source())
 end
 
-def build_gate5_matched_go_compiler(
+def build_matched_go_compiler(
 		reference_trb: String,
 		compiler_source: String,
 		workspace: String,
-	): Result<String, Gate5MatchedDriverError>
-	matched_source := case gate5_matched_go_source(compiler_source)
+	): Result<String, MatchedGoDriverError>
+	matched_source := case matched_go_source(compiler_source)
 	when Result::Ok(source)
 		source
 	when Result::Err(message)
-		return Result<String, Gate5MatchedDriverError>::Err(
-			Gate5MatchedDriverError.new(phase: "transform", message: message),
+		return Result<String, MatchedGoDriverError>::Err(
+			MatchedGoDriverError.new(phase: "transform", message: message),
 		)
 	end
+	# Retain the artifact basenames consumed by the historical comparison harness.
 	matched_source_path := workspace + "/gate5-matched-go-compiler.trb"
 	output_path := workspace + "/gate5-matched-go-compiler"
 	case native_write_text(matched_source_path, matched_source)
 	when Result::Ok(_unit)
 	when Result::Err(error)
-		return Result<String, Gate5MatchedDriverError>::Err(
-			Gate5MatchedDriverError.new(
+		return Result<String, MatchedGoDriverError>::Err(
+			MatchedGoDriverError.new(
 				phase: "write-source",
 				message: error.operation + ": " + error.message,
 			),
@@ -89,16 +90,16 @@ def build_gate5_matched_go_compiler(
 	when Result::Ok(value)
 		value
 	when Result::Err(error)
-		return Result<String, Gate5MatchedDriverError>::Err(
-			Gate5MatchedDriverError.new(
+		return Result<String, MatchedGoDriverError>::Err(
+			MatchedGoDriverError.new(
 				phase: "launch-build",
 				message: error.operation + ": " + error.message,
 			),
 		)
 	end
 	if !process.success
-		return Result<String, Gate5MatchedDriverError>::Err(
-			Gate5MatchedDriverError.new(
+		return Result<String, MatchedGoDriverError>::Err(
+			MatchedGoDriverError.new(
 				phase: "build",
 				message: "the optimized Go comparison compiler build failed",
 				status: process.status,
@@ -107,5 +108,5 @@ def build_gate5_matched_go_compiler(
 			),
 		)
 	end
-	return Result<String, Gate5MatchedDriverError>::Ok(output_path)
+	return Result<String, MatchedGoDriverError>::Ok(output_path)
 end

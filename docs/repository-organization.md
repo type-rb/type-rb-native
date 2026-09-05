@@ -20,7 +20,7 @@ guide, not a finding that every gate-numbered file is obsolete.
 | `compiler/gate4/src/compiler.trb`, `storage.trb`, `path.trb` | Ordinary self-hosted compiler closure. Split by responsibility and eventually remove checkpoint-derived names; retain one canonical implementation. |
 | `src/gate0.trb`, `snapshot.trb`, `json_boundary.trb`, `diagnostic.trb`, `native_mir.trb` | Initial snapshot validation/MIR boundary and shared support. Classify callers before separating shared code from recovery-only code. |
 | `src/gate1_*`, `gate2_*`, `gate3_*`, `qbe.trb`, `qbe2.trb`, `qbe3.trb` | Versioned snapshot, MIR, layout, QBE, and managed-runtime paths with differential tests. These are not three successive unused compiler copies. Name retained paths by format/capability and role. |
-| `src/gate4_toolchain.trb`, `gate5_matched_driver.trb`, `gate6f_compiler_source.trb` and associated tests | Recovery generation, matched reference comparison, and strict compiler-source flattening support. Keep them visibly separate from the ordinary compiler. |
+| `src/gate4_toolchain.trb`, `matched_go_driver.trb`, `gate6f_compiler_source.trb` and associated tests | Recovery generation, matched reference comparison, and strict compiler-source flattening support. Keep them visibly separate from the ordinary compiler. |
 | `src/*_test.trb`, `compiler/gate4/conformance/`, `corpus/` | Active correctness evidence. Relocate with their owners and preserve discovery, negative cases, and coverage. |
 | `tools/`, `.github/workflows/`, compatibility and transition metadata | Current consumers of source paths, names, runtime output, and exact identities. Move references atomically with implementation changes. |
 | `results/`, dated gate plans and accepted decisions | Historical evidence. Preserve gate labels, recorded commands, hashes, and revisions rather than rewriting history to resemble the current layout. |
@@ -39,7 +39,12 @@ bootstrap tooling. A filename search alone cannot establish dead code.
 | O4 — Active path and symbol naming | As each O2/O3 responsibility is verified | Remove its gate-derived file/type/helper names and update live consumers. Move the ordinary compiler out of `compiler/gate4/` once its entry, recovery, and test references can move together. Do not wait for all source modules to be decomposed. |
 | O5 — Retire superseded implementation | When a replacement covers the old path's actual consumers | Delete only proven-unused implementation and compatibility shims after dependency and coverage checks. Preserve useful regression inputs and immutable historical evidence. |
 
-O1 is the initial documentation change; O2–O5 are planned, not completed.
+O1 supplied the initial documentation cleanup. O2's
+[root source inventory](root-source-inventory.md) covers all 45 source files
+and records the first matched-Go driver move under
+[issue #258](https://github.com/type-rb/type-rb-native/issues/258). Only that
+support module and its test have moved; the other destinations are proposals.
+O3–O5 remain planned, not completed.
 Before each code slice, register its exact files, baseline, expected generated
 identity effects, and acceptance checks in a public issue. If O2 encounters a
 correctness or recovery blocker, publish the precise blocker and next repair,
