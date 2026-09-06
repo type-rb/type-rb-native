@@ -6,6 +6,7 @@ import copy
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 TOOLS = Path(__file__).resolve().parent
@@ -30,6 +31,21 @@ class CompatibilityManifestTest(unittest.TestCase):
 
     def test_current_manifest_is_valid(self) -> None:
         self.validate(self.manifest)
+
+    def test_target_tokens_are_checked_in_the_runtime_source_owner(self) -> None:
+        runtime = ROOT / "compiler/src/qbe_runtime.trb"
+        read_text = Path.read_text
+        source = read_text(runtime, encoding="utf-8")
+        profile = self.manifest["targets"][0]["profile"]
+        self.assertIn(profile, source)
+        for changed in ("", source.replace(profile, "unknown-profile")):
+            with self.subTest(empty=not changed):
+                def read_source(path, *args, **kwargs):
+                    return changed if path == runtime else read_text(path, *args, **kwargs)
+
+                with patch.object(Path, "read_text", read_source):
+                    with self.assertRaisesRegex(ValidationError, "self-hosted target profile"):
+                        self.validate(self.manifest)
 
     def test_unknown_and_missing_members_are_rejected(self) -> None:
         unknown = copy.deepcopy(self.manifest)
