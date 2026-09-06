@@ -54,6 +54,20 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
     assert executable.read_bytes() == before, 'failed build replaced an existing executable'
     hello.write_text('def main()\nputs("unsupported: é")\nend\n')
     assert 'TRBN' in run('build', hello, '--compile', success=False)
+    hello.write_text('def main()\nputs("program ready")\nwhile true\nend\nend\n')
+    child = subprocess.Popen([str(binary), 'run', str(hello)], cwd=root, env=env,
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        assert select.select([child.stdout], [], [], 20)[0], 'program did not start'
+        assert child.stdout.readline() == 'program ready\n'
+        child.send_signal(signal.SIGINT)
+        stdout, stderr = child.communicate(timeout=10)
+        assert child.returncode == 130, (child.returncode, stdout, stderr)
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.communicate()
+
     assert run('run', cwd=repository) == 'Hello from TypeRB Native!\n'
     project = root / 'project'
     (project / 'src/nested').mkdir(parents=True)
@@ -178,6 +192,13 @@ pair
         expect('loop started\r\n')
         send('\x03')
         expect('Interrupted')
+        expect('trbn:trb> ')
+        send('apples\n')
+        expect('4 : Integer')
+        expect('trbn:trb> ')
+        send('apples +')
+        expect('apples +')
+        send('\x03')
         expect('trbn:trb> ')
         send('apples\n')
         expect('4 : Integer')
