@@ -112,7 +112,7 @@ end
 
 describe("Gate 4 TypeRB frontend") do
 	test("lowers, verifies, and selects complete checked scalar leaf MIR") do
-		source := "def scalar(value: Integer, scale: Float, enabled: Boolean): Float\n\tnext := value + 1\n\tconverted: Float := next\n\tproduct := converted * scale\n\tselected := enabled == true\n\tinverted := !selected\n\toffset := - value\n\tif_unused := inverted != false\n\treturn product + offset\nend\n\ndef delegated(value: Integer): Integer\n\treturn scalar(value, 1.0, true).to_i()\nend\n\ndef mutable_leaf(value: Integer): Integer\n\tmut result := value\n\treturn result\nend\n\ndef main()\n\treturn\nend\n"
+		source := "def scalar(value: Integer, scale: Float, enabled: Boolean): Float\n\tnext_value := value + 1\n\tconverted: Float := next_value\n\tproduct := converted * scale\n\tselected := enabled == true\n\tinverted := !selected\n\toffset := - value\n\tif_unused := inverted != false\n\treturn product + offset\nend\n\ndef delegated(value: Integer): Integer\n\treturn scalar(value, 1.0, true).to_i()\nend\n\ndef mutable_leaf(value: Integer): Integer\n\tmut result := value\n\treturn result\nend\n\ndef main()\n\treturn\nend\n"
 		mut state := gate4_compiler_new(source.size() + 1)
 		expect(gate4_lex(state, source)).to_be_true()
 		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
@@ -1190,6 +1190,31 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_false()
 		expect(gate4_load_string(state.diagnostic_codes, 0)).to_equal("TRBN4002")
 		expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("expected end")
+	end
+
+	test("rejects statement-leading next bindings before resolution") do
+		declarations := ["next := 1", "next: Integer := 1"]
+		mut index := 0
+		while index < declarations.size()
+			source := "def main()\n\t" + declarations[index] + "\n\tputs(next.to_s())\nend\n"
+			mut state := gate4_compiler_new(source.size() + 1)
+			expect(gate4_lex(state, source)).to_be_true()
+			expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_false()
+			expect(state.diagnostic_count[0]).to_equal(1)
+			expect(gate4_load_string(state.diagnostic_codes, 0)).to_equal("TRBN4002")
+			expect(gate4_load_integer(state.diagnostic_lines, 0)).to_equal(2)
+			expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("next does not take a value")
+			index += 1
+		end
+	end
+
+	test("preserves contextual next identifiers and nearby names") do
+		source := "record Value\n\tnext: Integer\nend\n\ndef next_parameter(next: Integer): Integer\n\treturn next\nend\n\ndef main()\n\tnext_value := 1\n\tnext2 := 2\n\tmut next := 3\n\tvalue := Value.new(next: 4)\n\tputs((next_value + next_parameter(next2) + next + value.next).to_s())\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
 	end
 
 	test("parses the checked-in compiler closure through its own frontend") do
