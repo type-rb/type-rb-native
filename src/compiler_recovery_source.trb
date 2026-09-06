@@ -14,6 +14,7 @@ record RecoveryCompilerSources
 	qbe_output: String
 	qbe_runtime: String
 	project_config: String
+	loop_bounds: String
 	flattened: String
 end
 
@@ -22,7 +23,7 @@ def compiler_source_import_prefix(): String
 end
 
 def mir_source_import_prefix(): String
-	return "import { gate4_float_literal_in_range, gate4_integer_literal_in_range, gate4_number_is_float, gate4_small_nonnegative_integer_operand } from literals\n\n"
+	return "import { gate4_float_literal_in_range, gate4_integer_literal_in_range, gate4_number_is_float, gate4_small_nonnegative_integer_operand } from literals\nimport { array_loop_plan, array_loop_selection_valid, optimize_array_loop_accesses } from mir_loop_bounds\n\n"
 end
 
 def state_source_import_prefix(): String
@@ -86,6 +87,7 @@ def flatten_compiler_recovery_source(
 		qbe_output: String,
 		qbe_runtime: String,
 		project_config: String,
+		loop_bounds: String,
 	): Result<String, String>
 	prefix := compiler_source_import_prefix()
 	if !entry.start_with?(prefix)
@@ -132,7 +134,7 @@ def flatten_compiler_recovery_source(
 		return Result<String, String>::Err("Project-configuration source import boundary differs")
 	end
 	project_config_core := project_config.slice(project_config_prefix.size()...project_config.size())
-	declarations := [core, storage, path, mir_core, literals, state_core, parser_core, resolution_core, checked_program_core, qbe_output_core, qbe_runtime_core, project_config_core]
+	declarations := [core, storage, path, mir_core, literals, state_core, parser_core, resolution_core, checked_program_core, qbe_output_core, qbe_runtime_core, project_config_core, loop_bounds]
 	mut index := 0
 	while index < declarations.size()
 		if declarations[index].empty?()
@@ -143,7 +145,7 @@ def flatten_compiler_recovery_source(
 		end
 		index += 1
 	end
-	return Result<String, String>::Ok(storage + "\n" + path + "\n" + literals + "\n" + mir_core + "\n" + state_core + "\n" + parser_core + "\n" + resolution_core + "\n" + checked_program_core + "\n" + qbe_output_core + "\n" + qbe_runtime_core + "\n" + project_config_core + "\n" + core)
+	return Result<String, String>::Ok(storage + "\n" + path + "\n" + literals + "\n" + mir_core + "\n" + state_core + "\n" + parser_core + "\n" + resolution_core + "\n" + checked_program_core + "\n" + qbe_output_core + "\n" + qbe_runtime_core + "\n" + project_config_core + "\n" + loop_bounds + "\n" + core)
 end
 
 def compiler_source_directory(path: String): String
@@ -200,7 +202,8 @@ def read_compiler_recovery_sources(entry_path: String): Result<RecoveryCompilerS
 	qbe_output := try read_required_compiler_source(compiler_source_path(directory, "qbe_output.trb"))
 	qbe_runtime := try read_required_compiler_source(compiler_source_path(directory, "qbe_runtime.trb"))
 	project_config := try read_required_compiler_source(compiler_source_path(directory, "project_config.trb"))
-	flattened := try flatten_compiler_recovery_source(entry, storage, path, mir, literals, state, parser, resolution, checked_program, qbe_output, qbe_runtime, project_config)
+	loop_bounds := try read_required_compiler_source(compiler_source_path(directory, "mir_loop_bounds.trb"))
+	flattened := try flatten_compiler_recovery_source(entry, storage, path, mir, literals, state, parser, resolution, checked_program, qbe_output, qbe_runtime, project_config, loop_bounds)
 	return Result<RecoveryCompilerSources, String>::Ok(
 		RecoveryCompilerSources.new(
 			entry: entry,
@@ -215,6 +218,7 @@ def read_compiler_recovery_sources(entry_path: String): Result<RecoveryCompilerS
 			qbe_output: qbe_output,
 			qbe_runtime: qbe_runtime,
 			project_config: project_config,
+			loop_bounds: loop_bounds,
 			flattened: flattened,
 		),
 	)

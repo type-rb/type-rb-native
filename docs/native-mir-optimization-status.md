@@ -2,6 +2,18 @@
 
 ## Current ownership checkpoint
 
+The [Array-loop bounds connection candidate](native-mir-loop-bounds.md), tracked
+in [issue #303](https://github.com/type-rb/type-rb-native/issues/303), extends the
+existing region owner with checked binding, guard and update identities.
+Selected reads are reverified before mechanical bounds-free address lowering;
+unknown effects and unproved loop shapes retain checks. Its thirteen-module
+recovery closure includes `mir_loop_bounds.trb`. This is not an accepted runtime
+result or completion of the direct-emitter migration. The preregistered local
+and hosted comparisons, ordinary costs and target authorities remain required.
+The [local diagnostic](../results/2026-09-06-mir-loop-bounds-diagnostic-darwin-arm64/README.md)
+passes both spectral runtime cohorts, but its current build wall ratio of
+1.0505660577 still exceeds 1.05. It is not an accepted optimization or Pages update.
+
 [PR #260](https://github.com/type-rb/type-rb-native/pull/260) implements the
 first, partial checkpoint of
 [issue #254](https://github.com/type-rb/type-rb-native/issues/254): structured

@@ -813,6 +813,10 @@ def gate4_emit_array_address(
 		requested_nonnegative: Integer,
 	): String
 	length := gate4_emit_array_header(context, output, array, array_key, 1, "8")
+	if requested_nonnegative == 3
+		data := gate4_emit_array_header(context, output, array, array_key, 2, "24")
+		return gate4_emit_array_data_address(context, output, data, requested)
+	end
 	known_nonnegative := requested_nonnegative == 2
 	mut index := requested
 	valid := gate4_emit_temporary(context)
@@ -3803,8 +3807,8 @@ def gate4_check_function(
 	end
 	mut array_region := locals.mir_array
 	if array_region.size() > 0
-		if array_region[0] == 6
-			array_region = [6, 0, array_region[2]]
+		if array_region[0][0] == 8
+			array_region = [array_region[0]]
 		end
 	end
 	state.scalar_mir.array_regions.push(array_region)
@@ -3837,6 +3841,28 @@ def gate4_check(mut state: Gate4Compiler): Boolean
 		end
 		if mir_error != ""
 			gate4_diagnostic(state, "TRBN4004", 1, mir_error)
+		end
+	end
+	if !gate4_has_diagnostic(state)
+		function_index = 0
+		while function_index < state.scalar_mir.array_regions.size()
+			region := state.scalar_mir.array_regions[function_index]
+			mut index := 0
+			while index < region.size()
+				row := region[index]
+				if row[0] == 10
+					if gate4_mir_function_index(state.scalar_mir, function_index) < 0
+						origin := row[5]
+						if origin >= state.token_count[0]
+							gate4_diagnostic(state, "TRBN4004", 1, "MIR Array bounds origin is invalid")
+						else
+							gate4_store_integer(state.mir_nonnegative_facts, origin, 3)
+						end
+					end
+				end
+				index += 1
+			end
+			function_index += 1
 		end
 	end
 	if !gate4_has_diagnostic(state)

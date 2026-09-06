@@ -1,4 +1,5 @@
 import { gate4_float_literal_in_range, gate4_integer_literal_in_range, gate4_number_is_float, gate4_small_nonnegative_integer_operand } from literals
+import { array_loop_plan, array_loop_selection_valid, optimize_array_loop_accesses } from mir_loop_bounds
 
 # Compact bootstrap MIR rows use these fixed layouts:
 # function: id, entry block, origin source/line, parameter range, block range;
@@ -18,7 +19,7 @@ record Gate4MirModule
 	values: Array<Array<Integer>>
 	instructions: Array<Array<Integer>>
 	arguments: Array<Integer>
-	array_regions: Array<Array<Integer>>
+	array_regions: Array<Array<Array<Integer>>>
 	facts: Array<Integer>
 	literal_texts: Array<String>
 end
@@ -427,78 +428,6 @@ def gate4_mir_induction_address(
 	return true
 end
 
-# A raw parameter-header region uses three-cell operations:
-# 1 parameter (type, origin): type 0 scalar, 1 immutable Array, 2 mutable
-# Array. Parameters are an ordered prefix; their row position is their ordinal.
-# Parameter origins are declaration-table indexes; other origins are tokens.
-# 4 parameter Array access (ordinal, origin);
-# 6 opaque effect/control (0, origin).
-# The result is a parameter ordinal, -1 for no reusable header, or -2 for
-# malformed MIR. Parameters dominate every use and never leave lexical scope;
-# this proof owns neither local aliases nor removal of any access check.
-def gate4_mir_array_header(operations: Array<Integer>): Integer
-	if operations.size() % 3 != 0
-		return - 2
-	end
-	mut parameter_count := 0
-	mut parameter_origin :=- 1
-	mut selected :=- 1
-	mut blocked := false
-	mut index := 0
-	while index < operations.size()
-		kind := operations[index]
-		slot := operations[index + 1]
-		origin := operations[index + 2]
-		if origin < 0
-			return - 2
-		end
-		if slot < 0
-			return - 2
-		end
-		if kind == 1
-			if index != parameter_count * 3
-				return - 2
-			end
-			if slot > 2
-				return - 2
-			end
-			if origin <= parameter_origin
-				return - 2
-			end
-			parameter_origin = origin
-			parameter_count += 1
-		else
-			if kind == 4
-				if slot >= parameter_count
-					return - 2
-				end
-				binding_type := operations[slot * 3 + 1]
-				if binding_type == 0
-					return - 2
-				end
-				if binding_type == 1
-					if selected == - 1
-						selected = slot
-					end
-				end
-			else
-				if kind != 6
-					return - 2
-				end
-				if slot != 0
-					return - 2
-				end
-				blocked = true
-			end
-		end
-		index += 3
-	end
-	if blocked
-		return - 1
-	end
-	return selected
-end
-
 def gate4_optimize_verified_mir(mut native_module: Gate4MirModule)
 	mut index := 0
 	while index < native_module.instructions.size()
@@ -523,7 +452,8 @@ def gate4_optimize_verified_mir(mut native_module: Gate4MirModule)
 	end
 	index = 0
 	while index < native_module.array_regions.size()
-		header := gate4_mir_array_header(native_module.array_regions[index])
+		plan := array_loop_plan(native_module.array_regions[index])
+		header := plan[0]
 		if header < - 1
 			return
 		end
@@ -532,6 +462,7 @@ def gate4_optimize_verified_mir(mut native_module: Gate4MirModule)
 		else
 			native_module.facts[index] = header
 		end
+		optimize_array_loop_accesses(plan, native_module.array_regions[index])
 		index += 1
 	end
 	return
@@ -1116,9 +1047,13 @@ def gate4_verify_mir(native_module: Gate4MirModule, optimized: Boolean): String
 		end
 	end
 	while index < native_module.array_regions.size()
-		header := gate4_mir_array_header(native_module.array_regions[index])
+		plan := array_loop_plan(native_module.array_regions[index])
+		header := plan[0]
 		if header < - 1
 			return "MIR Array region is invalid"
+		end
+		if !array_loop_selection_valid(plan, optimized, native_module.array_regions[index])
+			return "MIR Array bounds selection is invalid"
 		end
 		if optimized
 			if native_module.facts[index] != header

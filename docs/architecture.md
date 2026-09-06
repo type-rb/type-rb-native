@@ -91,6 +91,10 @@ the remaining direct path is not that finished architecture. The
 [MIR status](native-mir-optimization-status.md) distinguishes implemented
 vertical slices from remaining ownership. In the current source closure,
 `mir.trb` owns the model, verifier, and target-independent passes;
+the current Array-loop connection candidate delegates its structured region
+proof to `mir_loop_bounds.trb`. That module replaces the header-only region
+analysis within the existing owner rather than adding another permanent fact
+table; see the [candidate boundary](native-mir-loop-bounds.md).
 `literals.trb` owns shared numeric predicates. `state.trb` owns shared compiler
 state, symbol indexes and diagnostics, while `parser.trb` owns syntax parsing,
 token/cursor primitives and the shared operator mapping. `resolution.trb` owns

@@ -70,7 +70,7 @@ describe("Native MIR model and verifier") do
 
 	test("rejects missing or extra optimized Array-header facts") do
 		mut native_module := gate4_mir_test_module(false, false)
-		native_module.array_regions.push([1, 1, 10, 4, 0, 13])
+		native_module.array_regions.push([[1, 0, 1, 0, 0, 10], [9, 0, 0, 0, 0, 13]])
 		expect(gate4_verify_mir(native_module, true)).to_equal("MIR optimized Array-header fact is invalid")
 		native_module.facts.push(0)
 		native_module.facts.push(13)
@@ -79,14 +79,14 @@ describe("Native MIR model and verifier") do
 
 	test("rejects a forged optimized Array-header parameter ordinal") do
 		mut native_module := gate4_mir_test_module(false, false)
-		native_module.array_regions.push([1, 1, 10, 4, 0, 13])
+		native_module.array_regions.push([[1, 0, 1, 0, 0, 10], [9, 0, 0, 0, 0, 13]])
 		native_module.facts.push(11)
 		expect(gate4_verify_mir(native_module, true)).to_equal("MIR optimized Array-header fact is invalid")
 	end
 
 	test("derives only Array-header identity from raw parameters and operations") do
 		mut native_module := gate4_mir_test_module(false, false)
-		native_module.array_regions.push([1, 1, 10, 4, 0, 13])
+		native_module.array_regions.push([[1, 0, 1, 0, 0, 10], [9, 0, 0, 0, 0, 13]])
 		expect(gate4_verify_mir(native_module, false)).to_equal("")
 		gate4_optimize_verified_mir(native_module)
 		expect(native_module.facts).to_equal([0])
@@ -97,14 +97,14 @@ describe("Native MIR model and verifier") do
 	end
 
 	test("rejects forged Array-header facts after raw parameters or accesses change") do
-		changes := [[1, 2], [7, 1]]
+		changes := [[0, 2, 2], [2, 1, 1]]
 		mut index := 0
 		while index < changes.size()
 			mut native_module := gate4_mir_test_module(false, false)
-			mut region := [1, 1, 10, 1, 2, 11, 4, 0, 13]
+			mut region := [[1, 0, 1, 0, 0, 10], [1, 1, 2, 0, 0, 11], [9, 0, 0, 0, 0, 13]]
 			native_module.array_regions.push(region)
 			gate4_optimize_verified_mir(native_module)
-			region[changes[index][0]] = changes[index][1]
+			region[changes[index][0]][changes[index][1]] = changes[index][2]
 			expect(gate4_verify_mir(native_module, true)).to_equal("MIR optimized Array-header fact is invalid")
 			index += 1
 		end
@@ -112,14 +112,14 @@ describe("Native MIR model and verifier") do
 
 	test("rejects forged Array-header facts across opaque effects") do
 		mut native_module := gate4_mir_test_module(false, false)
-		native_module.array_regions.push([1, 1, 10, 4, 0, 13, 6, 0, 14])
+		native_module.array_regions.push([[1, 0, 1, 0, 0, 10], [9, 0, 0, 0, 0, 13], [8, 0, 0, 0, 0, 14]])
 		native_module.facts.push(0)
 		expect(gate4_verify_mir(native_module, true)).to_equal("MIR optimized Array-header fact is invalid")
 	end
 
 	test("retains distinct Array parameter identities across repeated accesses") do
 		mut native_module := gate4_mir_test_module(false, false)
-		region := [1, 2, 10, 1, 1, 11, 4, 0, 13, 4, 1, 15, 4, 0, 16]
+		region := [[1, 0, 2, 0, 0, 10], [1, 1, 1, 0, 0, 11], [9, 0, 0, 0, 0, 13], [9, 1, 0, 0, 0, 15], [9, 0, 0, 0, 0, 16]]
 		native_module.array_regions.push(region)
 		expect(gate4_verify_mir(native_module, false)).to_equal("")
 		gate4_optimize_verified_mir(native_module)
@@ -151,7 +151,7 @@ describe("Native MIR model and verifier") do
 		mut index := 0
 		while index < regions.size()
 			mut native_module := gate4_mir_test_module(false, false)
-			native_module.array_regions.push(regions[index])
+			native_module.array_regions.push([regions[index]])
 			expect(gate4_verify_mir(native_module, false)).to_equal("MIR Array region is invalid")
 			index += 1
 		end

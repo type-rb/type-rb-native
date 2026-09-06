@@ -1,15 +1,22 @@
-# Local proof-core checkpoint for the Array-loop MIR connection. This module
-# does not yet authorize unchecked access in the ordinary compiler.
+# Structured Array-loop projection for the ordinary MIR connection candidate.
+# Only reverified kind-10 reads authorize bounds-free adapter lowering.
 # Rows: kind, binding, operand, input version, region, source origin.
-# 1 Array parameter (operand 1 immutable / 2 mutable); 2 Integer definition
-# (operand initial value); 3 strict index < Array-length loop; 4 Array read;
+# 1 parameter (operand 0 other / 1 immutable Array / 2 mutable Array);
+# 2 Integer definition (operand zero or conservative nonzero/unknown);
+# 3 strict index < Array-length loop; 4 Array read;
 # 5 checked unit increment; 6 unknown Integer write; 7 loop close; 8 opaque.
+# 9 header-only access; 10 optimized read; 11 unknown induction (bounds only).
 # Definitions have distinct identities even when authored names are shadowed.
 # Result: [-1] malformed; [0, access origins...] verified, possibly empty.
 # The checked producer must represent unsupported control, Array growth,
 # uncertain aliases and unproved calls as opaque. Omitted effects cannot be
-# recovered from this projection. No result is an adapter permission until the
-# complete producer and source-origin mapping have been verified together.
+# recovered from this projection. The MIR verifier recomputes every selection
+# before the compiler publishes its source-origin mapping to the adapter.
+
+# Keep identical cold failure-result construction in one owner.
+def invalid_loop_proof(code: Integer): Array<Integer>
+	return [code]
+end
 
 def loop_identity(id: Integer, rows: Array<Array<Integer>>): Integer
 	mut index := 0
@@ -51,7 +58,7 @@ def verify_array_loop_bounds(operations: Array<Array<Integer>>): Array<Integer>
 	while position < operations.size()
 		row := operations[position]
 		if row.size() != 6
-			return [- 1]
+			return invalid_loop_proof(- 1)
 		end
 		kind := row[0]
 		identity := row[1]
@@ -60,19 +67,19 @@ def verify_array_loop_bounds(operations: Array<Array<Integer>>): Array<Integer>
 		region_id := row[4]
 		origin := row[5]
 		if identity < 0
-			return [- 1]
+			return invalid_loop_proof(- 1)
 		end
 		if version < 0
-			return [- 1]
+			return invalid_loop_proof(- 1)
 		end
 		if version > operations.size()
-			return [- 1]
+			return invalid_loop_proof(- 1)
 		end
 		if region_id < 0
-			return [- 1]
+			return invalid_loop_proof(- 1)
 		end
 		if origin <= previous_origin
-			return [- 1]
+			return invalid_loop_proof(- 1)
 		end
 		previous_origin = origin
 		mut current_region :=- 1
@@ -82,33 +89,33 @@ def verify_array_loop_bounds(operations: Array<Array<Integer>>): Array<Integer>
 			current_region_id = regions[current_region][0]
 		end
 		if kind < 1
-			return [- 1]
+			return invalid_loop_proof(- 1)
 		end
 		if kind != 3
 			if region_id != current_region_id
-				return [- 1]
+				return invalid_loop_proof(- 1)
 			end
 		end
 		binding_index := loop_identity(identity, bindings)
 		if kind <= 2
 			if binding_index >= 0
-				return [- 1]
+				return invalid_loop_proof(- 1)
 			end
 			if version != 0
-				return [- 1]
+				return invalid_loop_proof(- 1)
 			end
 			if kind == 1
 				if body_started
-					return [- 1]
+					return invalid_loop_proof(- 1)
 				end
 				if depth != 0
-					return [- 1]
+					return invalid_loop_proof(- 1)
 				end
-				if operand < 1
-					return [- 1]
+				if operand < 0
+					return invalid_loop_proof(- 1)
 				end
 				if operand > 2
-					return [- 1]
+					return invalid_loop_proof(- 1)
 				end
 				bindings.push([identity, operand, 0, 0])
 			else
@@ -121,123 +128,143 @@ def verify_array_loop_bounds(operations: Array<Array<Integer>>): Array<Integer>
 			end
 		else
 			body_started = true
-			if kind == 8
+			mut opaque := kind == 8
+			if kind == 11
+				opaque = true
+			end
+			if opaque
 				if identity != 0
-					return [- 1]
+					return invalid_loop_proof(- 1)
 				end
 				if operand != 0
-					return [- 1]
+					return invalid_loop_proof(- 1)
 				end
 				if version != 0
-					return [- 1]
+					return invalid_loop_proof(- 1)
 				end
 				blocked = true
 			else
 				if binding_index < 0
-					return [- 1]
+					return invalid_loop_proof(- 1)
 				end
 				mut binding := bindings[binding_index]
-				if kind == 4
-					index_binding := loop_identity(operand, bindings)
+				if kind == 9
 					if binding[1] == 0
-						return [- 1]
+						return invalid_loop_proof(- 1)
 					end
-					if index_binding < 0
-						return [- 1]
+					if operand != 0
+						return invalid_loop_proof(- 1)
 					end
-					index_value := bindings[index_binding]
-					if index_value[1] != 0
-						return [- 1]
-					end
-					if index_value[2] != version
-						return [- 1]
-					end
-					mut level := depth
-					while level > 0
-						level -= 1
-						owner := stack[level]
-						region := regions[owner]
-						if loop_read_matches(operand, identity, version, region)
-							reads.push([owner, origin])
-							level = 0
-						end
+					if version != 0
+						return invalid_loop_proof(- 1)
 					end
 				else
-					if binding[1] != 0
-						return [- 1]
+					mut is_read := kind == 4
+					if kind == 10
+						is_read = true
 					end
-					if binding[2] != version
-						return [- 1]
-					end
-					if kind == 3
-						array_index := loop_identity(operand, bindings)
-						if array_index < 0
-							return [- 1]
+					if is_read
+						index_binding := loop_identity(operand, bindings)
+						if binding[1] == 0
+							return invalid_loop_proof(- 1)
 						end
-						if region_id == 0
-							return [- 1]
+						if index_binding < 0
+							return invalid_loop_proof(- 1)
 						end
-						if loop_identity(region_id, regions) >= 0
-							return [- 1]
+						index_value := bindings[index_binding]
+						if index_value[1] != 0
+							return invalid_loop_proof(- 1)
 						end
-						array := bindings[array_index]
-						if array[1] == 0
-							return [- 1]
+						if index_value[2] != version
+							return invalid_loop_proof(- 1)
 						end
-						mut eligible := 0
-						if array[1] == 1
-							eligible = binding[3]
-						end
-						if stack.size() == depth
-							stack.push(regions.size())
-						else
-							stack[depth] = regions.size()
-						end
-						regions.push([region_id, identity, operand, version, eligible, 0])
-						depth += 1
-					else
-						if kind <= 6
-							if operand != 6 - kind
-								return [- 1]
+						mut level := depth
+						while level > 0
+							level -= 1
+							owner := stack[level]
+							region := regions[owner]
+							if loop_read_matches(operand, identity, version, region)
+								reads.push([owner, origin])
+								level = 0
 							end
-							mut owner := 0
-							while owner < regions.size()
-								mut region := regions[owner]
-								if region[1] == identity
-									# Include closed regions: a later write inside an outer
-									# loop can change the next invocation of an inner loop.
-									mut unit_update := false
-									if kind == 5
-										if owner == current_region
-											unit_update = loop_read_matches(identity, region[2], version, region)
+						end
+					else
+						if binding[1] != 0
+							return invalid_loop_proof(- 1)
+						end
+						if binding[2] != version
+							return invalid_loop_proof(- 1)
+						end
+						if kind == 3
+							array_index := loop_identity(operand, bindings)
+							if array_index < 0
+								return invalid_loop_proof(- 1)
+							end
+							if region_id == 0
+								return invalid_loop_proof(- 1)
+							end
+							if loop_identity(region_id, regions) >= 0
+								return invalid_loop_proof(- 1)
+							end
+							array := bindings[array_index]
+							if array[1] == 0
+								return invalid_loop_proof(- 1)
+							end
+							mut eligible := 0
+							if array[1] == 1
+								eligible = binding[3]
+							end
+							if stack.size() == depth
+								stack.push(regions.size())
+							else
+								stack[depth] = regions.size()
+							end
+							regions.push([region_id, identity, operand, version, eligible, 0])
+							depth += 1
+						else
+							if kind <= 6
+								if operand != 6 - kind
+									return invalid_loop_proof(- 1)
+								end
+								mut owner := 0
+								while owner < regions.size()
+									mut region := regions[owner]
+									if region[1] == identity
+										# Include closed regions: a later write inside an outer
+										# loop can change the next invocation of an inner loop.
+										mut unit_update := false
+										if kind == 5
+											if owner == current_region
+												unit_update = loop_read_matches(identity, region[2], version, region)
+											end
+										end
+										if unit_update
+											region[5] = 1
+										else
+											region[4] = 0
 										end
 									end
-									if unit_update
-										region[5] = 1
-									else
-										region[4] = 0
-									end
+									owner += 1
 								end
-								owner += 1
+								binding[2] = version + 1
+								binding[3] = 0
+							else
+								if kind != 7
+									return invalid_loop_proof(- 1)
+								end
+								if current_region < 0
+									return invalid_loop_proof(- 1)
+								end
+								region := regions[current_region]
+								if region[1] != identity
+									return invalid_loop_proof(- 1)
+								end
+								if region[2] != operand
+									return invalid_loop_proof(- 1)
+								end
+								binding[3] = 0
+								depth -= 1
 							end
-							binding[2] = version + 1
-							binding[3] = 0
-						else
-							if kind != 7
-								return [- 1]
-							end
-							if current_region < 0
-								return [- 1]
-							end
-							region := regions[current_region]
-							if region[1] != identity
-								return [- 1]
-							end
-							if region[2] != operand
-								return [- 1]
-							end
-							binding[3] = 0
-							depth -= 1
 						end
 					end
 				end
@@ -246,7 +273,7 @@ def verify_array_loop_bounds(operations: Array<Array<Integer>>): Array<Integer>
 		position += 1
 	end
 	if depth != 0
-		return [- 1]
+		return invalid_loop_proof(- 1)
 	end
 	mut result := [0]
 	if !blocked
@@ -263,4 +290,97 @@ def verify_array_loop_bounds(operations: Array<Array<Integer>>): Array<Integer>
 		end
 	end
 	return result
+end
+
+def array_loop_selection_valid(proof: Array<Integer>, optimized: Boolean, rows: Array<Array<Integer>>): Boolean
+	mut selected := 1
+	mut index := 0
+	while index < rows.size()
+		row := rows[index]
+		mut expected := false
+		if selected < proof.size()
+			if row[5] == proof[selected]
+				expected = optimized
+				selected += 1
+			end
+		end
+		if expected
+			if row[0] != 10
+				return false
+			end
+		else
+			if row[0] == 10
+				return false
+			end
+		end
+		index += 1
+	end
+	return true
+end
+
+def optimize_array_loop_accesses(proof: Array<Integer>, mut rows: Array<Array<Integer>>)
+	mut selected := 1
+	mut index := 0
+	while index < rows.size()
+		mut row := rows[index]
+		if selected < proof.size()
+			if row[5] == proof[selected]
+				row[0] = 10
+				selected += 1
+			end
+		end
+		index += 1
+	end
+end
+
+def array_loop_plan(rows: Array<Array<Integer>>): Array<Integer>
+	mut proof := verify_array_loop_bounds(rows)
+	if proof[0] < 0
+		return invalid_loop_proof(- 2)
+	end
+	mut index := 0
+	while index < rows.size()
+		row := rows[index]
+		if row[0] == 1
+			if row[1] != index
+				return invalid_loop_proof(- 2)
+			end
+		end
+		index += 1
+	end
+	proof[0] = array_loop_header(rows)
+	return proof
+end
+
+def array_loop_header(rows: Array<Array<Integer>>): Integer
+	mut header :=- 1
+	mut index := 0
+	while index < rows.size()
+		row := rows[index]
+		if row[0] == 8
+			return - 1
+		end
+		mut read := row[0] == 4
+		if row[0] == 9
+			read = true
+		end
+		if row[0] == 10
+			read = true
+		end
+		if read
+			if header < 0
+				# Parameter ordinals identify a prefix; no local Array aliases enter it.
+				if row[1] < rows.size()
+					definition := rows[row[1]]
+					if definition[0] == 1
+						if definition[2] == 1
+							header = row[1]
+						end
+					end
+				end
+			end
+		end
+		index += 1
+	end
+	return header
 end

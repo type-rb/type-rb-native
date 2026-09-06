@@ -377,7 +377,7 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("")
 	end
 
-	test("publishes a stable Array-header plan without a scalar MIR function") do
+	test("publishes verified input bounds without granting output bounds") do
 		source := "def copy(input: Array<Float>, mut output: Array<Float>)\n\tmut index := 0\n\twhile index < input.size()\n\t\toutput[index] = input[index]\n\t\tindex += 1\n\tend\n\treturn\nend\n\ndef main()\n\treturn\nend\n"
 		mut state := gate4_compiler_new(source.size() + 1)
 		expect(gate4_lex(state, source)).to_be_true()
@@ -389,7 +389,8 @@ describe("Gate 4 TypeRB frontend") do
 		expect(state.scalar_mir.facts[0] >= 0).to_be_true()
 		expect(state.scalar_mir.facts[1]).to_equal(- 1)
 		qbe := gate4_output_source(gate4_emit_qbe(state))
-		expect(gate4_occurrence_count(qbe, " =w cultl ")).to_equal(2)
+		# Only the input is guarded. The mutable output may be shorter.
+		expect(gate4_occurrence_count(qbe, " =w cultl ")).to_equal(1)
 	end
 
 	test("leaves local Array aliases outside the parameter-header proof") do
@@ -493,12 +494,13 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_mir_function_index(state.scalar_mir, 0)).to_equal(- 1)
 		expect(gate4_mir_function_index(state.scalar_mir, 1)).to_equal(- 1)
 		expect(gate4_mir_function_index(state.scalar_mir, 2)).to_equal(- 1)
-		# Header reuse is independent of a unit-step induction proof; it
-		# neither promotes the function nor removes access checks.
+		# Header reuse remains independent. The nonadjacent zero-origin loop
+		# now receives a bounds plan without full scalar-MIR promotion;
+		# non-unit and conditional bodies keep normalization and bounds checks.
 		expect(state.scalar_mir.facts[0] >= 0).to_be_true()
 		expect(state.scalar_mir.facts[1] >= 0).to_be_true()
 		expect(state.scalar_mir.facts[2]).to_equal(- 1)
-		expect(gate4_occurrence_count(gate4_output_source(gate4_emit_qbe(state)), " =l sar ")).to_equal(3)
+		expect(gate4_occurrence_count(gate4_output_source(gate4_emit_qbe(state)), " =l sar ")).to_equal(2)
 	end
 
 	test("loads every configured project module and selects its unique main") do
@@ -1236,8 +1238,9 @@ describe("Gate 4 TypeRB frontend") do
 				gate4_required_test_source(base + "qbe_output.trb"),
 				gate4_required_test_source(base + "qbe_runtime.trb"),
 				gate4_required_test_source(base + "project_config.trb"),
+				gate4_required_test_source(base + "mir_loop_bounds.trb"),
 			]
-			names := ["compiler", "storage", "path", "mir", "literals", "state", "parser", "resolution", "checked_program", "qbe_output", "qbe_runtime", "project_config"]
+			names := ["compiler", "storage", "path", "mir", "literals", "state", "parser", "resolution", "checked_program", "qbe_output", "qbe_runtime", "project_config", "mir_loop_bounds"]
 			mut capacity := 0
 			mut module_index := 0
 			while module_index < sources.size()

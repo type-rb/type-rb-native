@@ -1319,7 +1319,7 @@ def _prepare_compiler_closure(
 		omitted: String,
 	): Result<Boolean, String>
 	try _recovery_reset_directory(directory)
-	names := ["compiler", "storage", "path", "mir", "literals", "state", "parser", "resolution", "checked_program", "qbe_output", "qbe_runtime", "project_config"]
+	names := ["compiler", "storage", "path", "mir", "literals", "state", "parser", "resolution", "checked_program", "qbe_output", "qbe_runtime", "project_config", "mir_loop_bounds"]
 	mut index := 0
 	while index < names.size()
 		if names[index] != omitted
@@ -1346,6 +1346,7 @@ def _recovery_verify_compiler_source_closure(
 		qbe_output: String,
 		qbe_runtime: String,
 		project_config: String,
+		loop_bounds: String,
 		workspace: String,
 	): Result<Boolean, String>
 	canonical := try _recovery_process(executable, ["emit-qbe", compiler_path])
@@ -1379,12 +1380,13 @@ def _recovery_verify_compiler_source_closure(
 	qbe_output_mutation := try _recovery_replace_once(qbe_output, "output.count[0] = index + 1", "output.count[0] = index + 2")
 	qbe_runtime_mutation := try _recovery_replace_once(qbe_runtime, "data $g4_gc_heap_target = align 8 { l 1048576 }", "data $g4_gc_heap_target = align 8 { l 1048577 }")
 	project_config_mutation := try _recovery_replace_once(project_config, "name is required", "project name is required")
-	names := ["compiler", "storage", "path", "mir", "literals", "state", "parser", "resolution", "checked_program", "qbe_output", "qbe_runtime", "project_config"]
-	sources := [entry, storage, path, mir, literals, state, parser, resolution, checked_program, qbe_output, qbe_runtime, project_config]
-	mutations := [entry, storage_mutation, path_mutation, mir_mutation, literal_mutation, state_mutation, parser_mutation, resolution_mutation, checked_program_mutation, qbe_output_mutation, qbe_runtime_mutation, project_config_mutation]
+	loop_bounds_mutation := try _recovery_replace_once(loop_bounds, "return region[5] == 0", "return region[5] == 1")
+	names := ["compiler", "storage", "path", "mir", "literals", "state", "parser", "resolution", "checked_program", "qbe_output", "qbe_runtime", "project_config", "mir_loop_bounds"]
+	sources := [entry, storage, path, mir, literals, state, parser, resolution, checked_program, qbe_output, qbe_runtime, project_config, loop_bounds]
+	mutations := [entry, storage_mutation, path_mutation, mir_mutation, literal_mutation, state_mutation, parser_mutation, resolution_mutation, checked_program_mutation, qbe_output_mutation, qbe_runtime_mutation, project_config_mutation, loop_bounds_mutation]
 	mut index := 1
 	while index < names.size()
-		mut changed := [entry, storage, path, mir, literals, state, parser, resolution, checked_program, qbe_output, qbe_runtime, project_config]
+		mut changed := [entry, storage, path, mir, literals, state, parser, resolution, checked_program, qbe_output, qbe_runtime, project_config, loop_bounds]
 		changed[index] = mutations[index]
 		directory := workspace + "/gate6f-compiler-" + names[index] + "-mutation"
 		try _prepare_compiler_closure(directory, changed, "")
@@ -2060,6 +2062,14 @@ describe("Native compiler recovery") do
 					expect(false).to_be_true()
 					""
 				end
+				loop_bounds_source := case native_read_text(root + "/compiler/src/mir_loop_bounds.trb")
+				when Result::Ok(source)
+					source
+				when Result::Err(error)
+					puts(error.operation + ": " + error.message)
+					expect(false).to_be_true()
+					""
+				end
 				recovery_source := case flatten_compiler_recovery_source(
 						compiler_source,
 						storage_source,
@@ -2073,6 +2083,7 @@ describe("Native compiler recovery") do
 						qbe_output_source,
 						qbe_runtime_source,
 						project_config_source,
+						loop_bounds_source,
 					)
 				when Result::Ok(source)
 					source
@@ -2149,6 +2160,12 @@ describe("Native compiler recovery") do
 					expect(false).to_be_true()
 				end
 				case native_write_text(workspace + "/qbe_runtime.trb", qbe_runtime_source)
+				when Result::Ok(_unit)
+				when Result::Err(error)
+					puts(error.operation + ": " + error.message)
+					expect(false).to_be_true()
+				end
+				case native_write_text(workspace + "/mir_loop_bounds.trb", loop_bounds_source)
 				when Result::Ok(_unit)
 				when Result::Err(error)
 					puts(error.operation + ": " + error.message)
@@ -2250,6 +2267,7 @@ describe("Native compiler recovery") do
 								qbe_output_source,
 								qbe_runtime_source,
 								project_config_source,
+								loop_bounds_source,
 								workspace,
 							)
 						when Result::Ok(_value)

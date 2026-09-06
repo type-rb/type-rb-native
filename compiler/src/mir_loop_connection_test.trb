@@ -1,0 +1,125 @@
+import { gate4_check, gate4_lex } from compiler
+import { gate4_verify_mir } from mir
+import { array_loop_plan } from mir_loop_bounds
+import { gate4_parse_module } from parser
+import { gate4_resolve } from resolution
+import { Gate4Compiler, gate4_compiler_new } from state
+import { gate4_load_integer, gate4_load_string } from storage
+import { describe, expect, test } from trb/std/test
+
+def checked_loop_source(source: String): Gate4Compiler
+	mut state := gate4_compiler_new(source.size() + 1)
+	expect(gate4_lex(state, source)).to_be_true()
+	expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+	expect(gate4_resolve(state)).to_be_true()
+	checked := gate4_check(state)
+	if !checked
+		expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("")
+	end
+	expect(checked).to_be_true()
+	return state
+end
+
+def checked_loop_count(state: Gate4Compiler): Integer
+	region := state.scalar_mir.array_regions[0]
+	mut count := 0
+	mut index := 0
+	while index < region.size()
+		row := region[index]
+		if row[0] == 10
+			origin := row[5]
+			expect(gate4_load_string(state.token_texts, origin)).to_equal("]")
+			expect(gate4_load_integer(state.mir_nonnegative_facts, origin)).to_equal(3)
+			count += 1
+		end
+		index += 1
+	end
+	return count
+end
+
+def numeric_loop(initial: String, guard: String, body: String, step: String): String
+	return "def sum(input: Array<Float>, other: Array<Float>): Float\n\tmut total := 0.0\n\tmut index := " + initial + "\n\twhile " + guard + "\n\t\t" + body + "\n\t\t" + step + "\n\tend\n\treturn total\nend\n\ndef main()\n\treturn\nend\n"
+end
+
+describe("MIR Array loop connection") do
+	test("validates every cell of a canonical opaque region without granting a proof") do
+		expect(array_loop_plan([])).to_equal([- 1])
+		expect(array_loop_plan([[8, 0, 0, 0, 0, 42]])).to_equal([- 1])
+		mut cell := 1
+		while cell < 5
+			mut invalid := [8, 0, 0, 0, 0, 42]
+			invalid[cell] = 1
+			expect(array_loop_plan([invalid])).to_equal([- 2])
+			invalid[cell] =- 1
+			expect(array_loop_plan([invalid])).to_equal([- 2])
+			cell += 1
+		end
+		expect(array_loop_plan([[8, 0, 0, 0, 0, - 1]])).to_equal([- 2])
+		expect(array_loop_plan([[8, 0, 0, 0, 0, 42, 0]])).to_equal([- 2])
+	end
+
+	test("derives a selected read from checked identities rather than an emitted operand") do
+		state := checked_loop_source(numeric_loop("0", "index < input.size()", "total += input[index]", "index += 1"))
+		expect(checked_loop_count(state)).to_equal(1)
+		expect(state.scalar_mir.functions.size()).to_equal(0)
+		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("")
+	end
+
+	test("retains checked access for changed indices, bounds, aliases and steps") do
+		cases := [
+			["-1", "index < input.size()", "total += input[index]", "index += 1"],
+			["1", "index < input.size()", "total += input[index]", "index += 1"],
+			["0", "index < input.size() + 1", "total += input[index]", "index += 1"],
+			["0", "index <= input.size()", "total += input[index]", "index += 1"],
+			["0", "index < 10", "total += input[index]", "index += 1"],
+			["0", "index < input.size()", "total += other[index]", "index += 1"],
+			["0", "index < input.size()", "total += input[index + 1]", "index += 1"],
+			["0", "index < input.size()", "index += 1\n\t\ttotal += input[index]", "index += 1"],
+			["0", "index < input.size()", "total += input[index]", "index -= 1"],
+			["0", "index < input.size()", "total += input[index]", "index = index + 1"],
+			["0", "index < input.size()", "alias := index\n\t\ttotal += input[alias]", "index += 1"],
+			["0", "index < input.size()", "puts(\"effect\")\n\t\ttotal += input[index]", "index += 1"],
+		]
+		mut index := 0
+		while index < cases.size()
+			row := cases[index]
+			state := checked_loop_source(numeric_loop(row[0], row[1], row[2], row[3]))
+			if checked_loop_count(state) != 0
+				puts("unexpected bounds selection in control " + index.to_s())
+			end
+			expect(checked_loop_count(state)).to_equal(0)
+			index += 1
+		end
+	end
+
+	test("preserves header authority when only the induction relationship is unknown") do
+		state := checked_loop_source(numeric_loop("0", "index < 10", "total += input[index]", "index += 1"))
+		expect(checked_loop_count(state)).to_equal(0)
+		expect(state.scalar_mir.facts[0]).to_equal(0)
+	end
+
+	test("rejects forged and missing optimized read markers") do
+		mut state := checked_loop_source(numeric_loop("0", "index < input.size()", "total += input[index]", "index += 1"))
+		mut region := state.scalar_mir.array_regions[0]
+		mut index := 0
+		while index < region.size()
+			mut row := region[index]
+			if row[0] == 10
+				row[0] = 4
+			end
+			index += 1
+		end
+		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("MIR Array bounds selection is invalid")
+		mut other := checked_loop_source(numeric_loop("0", "index < input.size()", "total += other[index]", "index += 1"))
+		mut other_region := other.scalar_mir.array_regions[0]
+		index = 0
+		while index < other_region.size()
+			mut row := other_region[index]
+			if row[0] == 4
+				row[0] = 10
+			end
+			index += 1
+		end
+		expect(gate4_verify_mir(other.scalar_mir, true)).to_equal("MIR Array bounds selection is invalid")
+	end
+end
