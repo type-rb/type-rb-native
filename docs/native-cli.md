@@ -9,7 +9,7 @@ native code. The reference `trb` command and its defaults are unchanged.
 ## Build and run from a checkout
 
 On Darwin arm64, install the Xcode command-line tools. On Linux arm64, install
-a C toolchain, `make`, `curl`, `xz`, `lld`, and `libedit2`. Then run:
+a C toolchain, `make`, `curl`, `xz`, and `lld`. Then run:
 
 ```sh
 ./trbn --version
@@ -29,8 +29,9 @@ tools/build-native.sh
 
 The outputs are `bin/trbn`, its `bin/qbe` sidecar, and `bin/build-info.txt`.
 Keep the executables together when copying them elsewhere. The system C
-driver/linker and system libraries remain runtime build dependencies. Darwin
-ships the terminal editor; interactive Linux sessions require `libedit2`.
+driver/linker and system libraries remain runtime build dependencies.
+The terminal editor is implemented in TypeRB and uses POSIX terminal I/O on
+both systems; it has no libedit or Wasm dependency.
 Checkout bootstrap currently supports Darwin arm64 and Linux arm64, even
 though the internal compiler also has a Linux amd64 target profile.
 
@@ -103,9 +104,30 @@ values
 statements and replays the session,
 `:reload` reloads the project and replays the session, `:help` shows help, and
 `:quit` (`:q` / `:exit`) or Ctrl-D exits. Explicit `:load` and `:reload`
-replay earlier side effects; ordinary submissions do not. Ctrl-C cancels input or evaluation. An interactive
-terminal supports cursor editing, Up/Down history, and Tab completion of
-session/project names. Project history is `.trb/repl_history`; standalone
+replay earlier side effects; ordinary submissions do not. Ctrl-C cancels input or evaluation.
+An interactive terminal provides:
+
+- Live syntax colors for keywords, strings, numbers, comments, types and calls,
+  with unfinished strings marked separately. `NO_COLOR=1` disables colors.
+- A single editable multiline buffer, two-space indentation on Enter, and
+  dedenting when the complete submission is accepted. Up/Down move between
+  buffer lines and then through history at the first/last line.
+- Bracketed paste, retained as one submission until Enter. Pasted control
+  sequences are not interpreted as editing commands.
+- Tab completion of session/project names, record fields and supported methods,
+  filtered at type positions. Tab/Shift-Tab cycle ambiguous candidates with a
+  type/signature description; Enter accepts a selected candidate before a
+  subsequent Enter submits the buffer.
+- Ctrl-R reverse history search; another Ctrl-R finds an older match. Enter
+  accepts the match for editing, and Ctrl-G restores the draft.
+- Left/Right, Home/End, Delete/Backspace, Ctrl-A/E/B/F/P/N, Ctrl-K/U/W to kill
+  text, Ctrl-L to clear the screen, Ctrl-Y to yank it, and Ctrl-_ to undo up to 64 edits.
+- UTF-8 codepoint movement and deletion, combining-mark attachment, wide
+  character cell widths, and a cursor-following viewport for long input.
+  Resize starts a fresh display region so old terminal reflow cannot corrupt
+  cursor placement. Terminal settings are restored before evaluation and exit.
+
+Project history is `.trb/repl_history`; standalone
 history is `~/.cache/trbn/repl_history_trb`. `TRBN_HISTORY` overrides that file.
 History uses the reference REPL's JSON string-array format.
 
@@ -113,8 +135,14 @@ This is a bounded experimental implementation, not complete `trb` parity.
 The ordinary compiler's language and package restrictions still apply,
 including its current ASCII String-literal boundary.
 Formatting, tests, language-server and package-management commands are not
-implemented by `trbn`. REPL completion and diagnostics do not yet reproduce
-all reference editor behavior. The evaluator has a 256-call depth bound and
+implemented by `trbn`.
+The editor does not yet provide the reference formatter's full canonical
+spacing, every readline/vi binding, import-repair and argument-aware completion,
+or full Unicode grapheme-cluster segmentation (for example joined emoji).
+Completion follows the executable Native subset; editing Unicode does not lift
+the compiler's ASCII String-literal restriction. Submissions are bounded to
+64 KiB, including paste; overflow is rejected without evaluating a prefix.
+The evaluator has a 256-call depth bound and
 retains reachable session values; it is not a sandbox or a production runtime.
 
 ## CI artifacts and validation
@@ -130,6 +158,11 @@ Run the same integration tests locally after building:
 
 ```sh
 python3 tools/native-cli-test.py bin/trbn
+python3 -m venv .trb/repl-tests
+.trb/repl-tests/bin/pip install -r tools/repl-test-requirements.txt
+.trb/repl-tests/bin/python tools/native-repl-editor-test.py bin/trbn
+# Optional: run the shared screen scenarios against the reference REPL too.
+.trb/repl-tests/bin/python tools/native-repl-editor-test.py bin/trbn --reference /path/to/trb
 ```
 
 Compiler implementation stays in `compiler/src`; CLI, terminal integration

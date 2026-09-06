@@ -1,3 +1,5 @@
+import { ReplCandidates, repl_editor_read, repl_editor_paint } from repl_editor
+import { repl_incomplete, repl_color, repl_escape } from repl_syntax
 import { repl_history_load, repl_history_save } from repl_history
 import { Gate4Compiler, gate4_compiler_new, gate4_has_diagnostic, gate4_locals_new, gate4_local_add, gate4_diagnostic, gate4_find_module } from state
 import { gate4_load_integer, gate4_load_string, gate4_store_integer } from storage
@@ -6,7 +8,7 @@ import { gate4_resolve, gate4_find_function_in_module, gate4_type_display, gate4
 import { gate4_lex, gate4_check, gate4_print_diagnostic, gate4_load_file_root, gate4_read_source, gate4_file_exists, gate4_source_slice, gate4_parse_project_config, gate4_collect_project_sources, gate4_project_module_name } from compiler
 import { gate4_check_expression } from checked_program
 import { gate4_path_directory, gate4_path_join, gate4_string_starts_with } from path
-import { native_cli_line, native_cli_eof, native_cli_tty, native_cli_write, native_cli_interrupt, native_cli_cwd, native_cli_env, native_cli_mkdir, native_cli_editor, native_cli_completions, native_cli_history } from host
+import { native_cli_line, native_cli_eof, native_cli_tty, native_cli_write, native_cli_interrupt, native_cli_cwd, native_cli_env, native_cli_mkdir } from host
 import { ReplStore, ReplEnvironment, repl_store, repl_environment, repl_render, repl_compact } from repl_values
 import { repl_statement } from repl_eval
 import { gate4_ascii_code } from literals
@@ -67,52 +69,6 @@ def repl_lines(text: String): Integer
 		index += 1
 	end
 	return lines
-end
-
-def repl_incomplete(text: String): Boolean
-	mut state := gate4_compiler_new(text.size() + 1)
-	gate4_lex(state, text)
-	if gate4_has_diagnostic(state)
-		message := gate4_load_string(state.diagnostic_messages, 0)
-		return gate4_string_starts_with(message, "unterminated")
-	end
-	mut depth := 0
-	mut delimiters := 0
-	mut index := 0
-	while index < state.token_count[0]
-		if gate4_token_is(state, index, "def")
-			depth += 1
-		end
-		if gate4_token_is(state, index, "record")
-			depth += 1
-		end
-		if gate4_token_is(state, index, "if")
-			depth += 1
-		end
-		if gate4_token_is(state, index, "while")
-			depth += 1
-		end
-		if gate4_token_is(state, index, "end")
-			depth -= 1
-		end
-		if gate4_token_is(state, index, "(")
-			delimiters += 1
-		end
-		if gate4_token_is(state, index, "[")
-			delimiters += 1
-		end
-		if gate4_token_is(state, index, ")")
-			delimiters -= 1
-		end
-		if gate4_token_is(state, index, "]")
-			delimiters -= 1
-		end
-		index += 1
-	end
-	if depth > 0
-		return true
-	end
-	return delimiters > 0
 end
 
 def repl_project(config: String): ReplProject
@@ -250,7 +206,7 @@ def repl_show(mut state: Gate4Compiler, mut session: ReplSession, input: String,
 			index += 1
 		end
 		value := gate4_check_expression(state, position, locals, 1, "")
-		puts(gate4_type_display(state, value.type_name))
+		puts(repl_editor_paint(gate4_type_display(state, value.type_name), 5, repl_use_color()))
 		return true
 	end
 	session.store.error[0] = ""
@@ -277,14 +233,14 @@ def repl_show(mut state: Gate4Compiler, mut session: ReplSession, input: String,
 	end
 	session.text[1] = repl_bindings(state, session)
 	if session.store.error[0] != ""
-		native_cli_write(session.store.error[0] + "\n", 2)
+		native_cli_write(repl_editor_paint(session.store.error[0], 7, repl_use_color()) + "\n", 2)
 		return false
 	end
 	if !display
 		return true
 	end
 	if session.store.types[value] != "Void"
-		mut rendered := repl_render(state, session.store, value, 0) + " : " + gate4_type_display(state, session.store.types[value])
+		mut rendered := repl_editor_paint(repl_render(state, session.store, value, 0), 2, repl_use_color()) + repl_editor_paint(" : ", 4, repl_use_color()) + repl_editor_paint(gate4_type_display(state, session.store.types[value]), 5, repl_use_color())
 		mut mutable := gate4_string_starts_with(input, "mut ")
 		mut index := 0
 		while index < session.environment.count[0]
@@ -294,7 +250,7 @@ def repl_show(mut state: Gate4Compiler, mut session: ReplSession, input: String,
 			index += 1
 		end
 		if mutable
-			rendered += " [mut]"
+			rendered += repl_editor_paint(" [mut]", 4, repl_use_color())
 		end
 		puts(rendered)
 	end
@@ -310,7 +266,7 @@ def repl_submit(mut session: ReplSession, input: String, type_only: Boolean, dis
 	end
 	mut state := repl_checked(source, session.project.root)
 	if gate4_has_diagnostic(state)
-		gate4_print_diagnostic(state, true)
+		repl_diagnostic(state)
 		return false
 	end
 	if declarations
@@ -395,10 +351,6 @@ def repl_run(config: String): Integer
 	end
 	mut history_entries: Array<String> := []
 	if interactive
-		if native_cli_editor() != 0
-			native_cli_write("trbn: interactive REPL requires libedit (install libedit2 on Linux)\n", 2)
-			return 1
-		end
 		if history != ""
 			history_entries = repl_history_load(history)
 		end
@@ -408,20 +360,25 @@ def repl_run(config: String): Integer
 	mut running := true
 	while running
 		native_cli_interrupt(1)
-		mut prompt := ""
+		mut line := ""
+		mut editor_status := 0
 		if interactive
-			repl_complete(session)
-			prompt = "trbn:trb> "
-			if pending != ""
-				prompt = "...> "
-			end
+			input := repl_editor_read(history_entries, repl_complete(session))
+			line = input.text
+			editor_status = input.status
+		else
+			line = native_cli_line("")
 		end
-		line := native_cli_line(prompt)
-		if native_cli_interrupt(0) != 0
+		if editor_status == 3
+			native_cli_write("trbn: " + line + "\n", 2)
+			return 1
+		end
+
+		if repl_cancelled(editor_status)
 			pending = ""
 			native_cli_write("\n", 1)
 		else
-			if native_cli_eof() != 0
+			if repl_ended(editor_status, interactive)
 				running = false
 				if pending != ""
 					native_cli_write("trbn: incomplete input at end of session\n", 2)
@@ -435,10 +392,9 @@ def repl_run(config: String): Integer
 					session.store = repl_compact(session.store, session.environment)
 					if interactive
 						if history != ""
-							if input != ":quit"
+							if repl_keep_history(input)
 								if input != ""
 									history_entries.push(input)
-									native_cli_history(input)
 									if !repl_history_save(history, history_entries)
 										native_cli_write("trbn: cannot save REPL history\n", 2)
 									end
@@ -499,29 +455,69 @@ def repl_bindings(state: Gate4Compiler, session: ReplSession): String
 	return source
 end
 
-def repl_complete(session: ReplSession)
-	mut candidates := [":type ", ":load ", ":reload", ":help", ":quit", "puts(", "Math.sqrt(", "Process.argv()", "true", "false", "mut ", "def ", "record "]
+def repl_complete(session: ReplSession): ReplCandidates
+	mut candidates := ReplCandidates.new(labels: [], insertions: [], details: [], kinds: [])
+	repl_candidate(candidates, ":type", ":type ", "show checked type", 0)
+	repl_candidate(candidates, ":load", ":load ", "load a file and replay session", 0)
+	repl_candidate(candidates, ":reload", ":reload", "reload project and session", 0)
+	repl_candidate(candidates, ":help", ":help", "show REPL commands", 0)
+	repl_candidate(candidates, ":quit", ":quit", "exit REPL", 0)
+	repl_candidate(candidates, "puts", "puts(", "puts(value: String)", 6)
+	repl_candidate(candidates, "Math", "Math", "standard module", 0)
+	repl_candidate(candidates, "Process", "Process", "standard module", 0)
+	repl_candidate(candidates, "Math.sqrt", "Math.sqrt(", "Math.sqrt(value: Float): Float", 6)
+	repl_candidate(candidates, "Process.argv", "Process.argv()", "Process.argv(): Array<String>", 6)
+	keywords := ["true", "false", "mut", "def", "record", "if", "else", "while", "return", "end", "import"]
+	mut keyword := 0
+	while keyword < keywords.size()
+		repl_candidate(candidates, keywords[keyword], keywords[keyword], "keyword", 1)
+		keyword += 1
+	end
+	types := ["Integer", "Float", "Boolean", "String", "Array"]
+	keyword = 0
+	while keyword < types.size()
+		repl_candidate(candidates, types[keyword], types[keyword], "built-in type", 5)
+		keyword += 1
+	end
+	state := repl_checked(session.text[0] + "def main()\n" + session.text[1] + "return\nend\n", session.project.root)
+
 	mut index := 0
 	while index < session.environment.count[0]
 		name := session.environment.names[index]
-		candidates.push(name)
 		type_name := session.store.types[session.environment.values[index]]
+		repl_candidate(candidates, name, name, gate4_type_display(state, type_name), 0)
 		if gate4_string_starts_with(type_name, "Array<")
-			candidates.push(name + ".size()")
-			candidates.push(name + ".push(")
+			repl_candidate(candidates, name + ".size", name + ".size()", "size(): Integer", 6)
+			repl_candidate(candidates, name + ".push", name + ".push(", "push(value)", 6)
 		end
 		if type_name == "String"
-			candidates.push(name + ".size()")
+			repl_candidate(candidates, name + ".size", name + ".size()", "size(): Integer", 6)
+		end
+		if type_name == "String"
+			repl_candidate(candidates, name + ".to_i", name + ".to_i()", "to_i(): Integer", 6)
+		end
+		if type_name == "Integer"
+			repl_candidate(candidates, name + ".to_s", name + ".to_s()", "to_s(): String", 6)
+		end
+		record_index := gate4_find_record_type(state, type_name)
+		if record_index >= 0
+			start := gate4_load_integer(state.record_field_starts, record_index)
+			count := gate4_load_integer(state.record_field_counts, record_index)
+			mut field := 0
+			while field < count
+				member := name + "." + gate4_load_string(state.field_names, start + field)
+				repl_candidate(candidates, member, member, gate4_type_display(state, gate4_load_string(state.field_types, start + field)), 0)
+				field += 1
+			end
 		end
 		index += 1
 	end
-	state := repl_checked(session.text[0] + "def main()\nreturn\nend\n", session.project.root)
 	index = 0
 	while index < state.function_count[0]
 		if gate4_load_integer(state.function_modules, index) == state.entry_module[0]
 			name := gate4_load_string(state.function_names, index)
 			if name != "main"
-				candidates.push(name + "(")
+				repl_candidate(candidates, name, name + "(", repl_function_detail(state, index), 6)
 			end
 		end
 		index += 1
@@ -530,17 +526,25 @@ def repl_complete(session: ReplSession)
 	while index < state.import_count[0]
 		name := gate4_load_string(state.import_symbols, index)
 		if name != ""
-			candidates.push(name)
+			mut imported_function :=- 1
+			if gate4_load_integer(state.import_kinds, index) == 0
+				imported_function = gate4_find_function_in_module(state, gate4_load_integer(state.import_targets, index), name)
+			end
+			if imported_function >= 0
+				repl_candidate(candidates, name, name + "(", repl_function_detail(state, imported_function), 6)
+			else
+				repl_candidate(candidates, name, name, "project declaration", 0)
+			end
 		end
 		index += 1
 	end
 	index = 0
 	while index < state.record_count[0]
-		candidates.push(gate4_load_string(state.record_names, index) + ".new(")
+		repl_candidate(candidates, gate4_load_string(state.record_names, index), gate4_load_string(state.record_names, index), "record type", 5)
+		repl_candidate(candidates, gate4_load_string(state.record_names, index) + ".new", gate4_load_string(state.record_names, index) + ".new(", "record constructor", 6)
 		index += 1
 	end
-	native_cli_completions(candidates)
-	return
+	return candidates
 end
 
 # Record indexes are compiler-state-local. Preserve nominal identities when a
@@ -596,7 +600,7 @@ def repl_replay(mut session: ReplSession, config: String, additional: Array<Stri
 	end
 	checked := repl_checked(declarations + "def main()\n" + body + "return\nend\n", project.root)
 	if gate4_has_diagnostic(checked)
-		gate4_print_diagnostic(checked, true)
+		repl_diagnostic(checked)
 		return false
 	end
 	replayed.text[0] = declarations
@@ -659,4 +663,76 @@ def repl_is_declaration(input: String): Boolean
 		declarations = true
 	end
 	return declarations
+end
+
+def repl_cancelled(status: Integer): Boolean
+	if status == 2
+		return true
+	end
+	return native_cli_interrupt(0) != 0
+end
+
+def repl_ended(status: Integer, interactive: Boolean): Boolean
+	if interactive
+		return status == 1
+	end
+	return native_cli_eof() != 0
+end
+
+def repl_keep_history(input: String): Boolean
+	if input == ":quit"
+		return false
+	end
+	if input == ":q"
+		return false
+	end
+	return input != ":exit"
+end
+
+def repl_candidate(mut candidates: ReplCandidates, label: String, insertion: String, detail: String, kind: Integer)
+	mut index := 0
+	while index < candidates.labels.size()
+		if candidates.labels[index] == label
+			return
+		end
+		index += 1
+	end
+	candidates.labels.push(label)
+	candidates.insertions.push(insertion)
+	candidates.details.push(detail)
+	candidates.kinds.push(kind)
+	return
+end
+
+def repl_function_detail(state: Gate4Compiler, index: Integer): String
+	mut detail := gate4_load_string(state.function_names, index) + "("
+	start := gate4_load_integer(state.function_parameter_starts, index)
+	count := gate4_load_integer(state.function_parameter_counts, index)
+	mut parameter := 0
+	while parameter < count
+		if parameter > 0
+			detail += ", "
+		end
+		detail += gate4_load_string(state.parameter_names, start + parameter) + ": " + gate4_type_display(state, gate4_load_string(state.parameter_types, start + parameter))
+		parameter += 1
+	end
+	return detail + "): " + gate4_type_display(state, gate4_load_string(state.function_result_types, index))
+end
+
+def repl_use_color(): Boolean
+	if native_cli_tty() == 0
+		return false
+	end
+	return native_cli_env("NO_COLOR") == ""
+end
+
+def repl_diagnostic(state: Gate4Compiler)
+	if repl_use_color()
+		native_cli_write(repl_color(7), 2)
+	end
+	gate4_print_diagnostic(state, true)
+	if repl_use_color()
+		native_cli_write(repl_escape() + "0m", 2)
+	end
+	return
 end
