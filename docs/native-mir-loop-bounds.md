@@ -60,8 +60,11 @@ ordinal, while Integer declarations use distinct source-token identities.
 Source checking resolves each use in its live scope before recovering that
 declaration identity, so a reused local slot cannot inherit an earlier proof.
 The producer's row objects pass directly to this owner; no flatten/reconstruct
-copy remains. The obsolete header-only wrapper has been removed, and identical
-cold failure-result construction has one shared implementation.
+copy remains. The obsolete header-only wrapper has been removed. The current
+diagnostic separates Boolean verification completion from result publication,
+so structural failures do not each return a managed result. An already opaque
+producer row is reused while retaining its latest origin; its verification and
+conservative effect classification are unchanged.
 
 Checked values carry explicit `loop_index` and `loop_array` operands, separate
 from their source origin, scalar MIR value, callable category and mutability.
@@ -106,7 +109,7 @@ ordinary replacement fixed points, cross-target evidence, or runtime acceptance.
 
 The [retained local diagnostic](../results/2026-09-06-mir-loop-bounds-diagnostic-darwin-arm64/README.md)
 passes both runtime cohorts with about 2.1–2.3% less spectral-norm wall time.
-It is still **not accepted**: the current build wall ratio is 1.0505660577,
+It is still **not accepted**: that outlined candidate's build wall ratio is 1.0505660577,
 above the unchanged 1.05 ceiling. All failed candidate observations remain
 retained. Do not round the ratio down or update Pages from this result.
 
@@ -116,10 +119,25 @@ and [checked postfix copies](../results/2026-09-06-checked-postfix-copy-diagnost
 Their full observations and source patches are retained; the additional
 malformed-stream and checked-value ownership tests remain. Neither changes
 the current compiler implementation or the frozen comparison baseline.
-The restored production closure reproduces the prior compiler bytes; its full
-compiler suite now passes 131 tests, including the additional boundary tests.
-Before another candidate, revisit phase costs and the size of the structured
-projection/verifier, rather than rerunning an unchanged near-threshold result.
+The restored production closure at that checkpoint reproduced the prior compiler
+bytes and passed 131 compiler tests, including the additional boundary tests.
+
+The current candidate integrates the readonly-binding correction from PR #306
+without moving the frozen baseline. Its
+[proof-result-only diagnostic](../results/2026-09-06-loop-proof-result-diagnostic-darwin-arm64/README.md)
+misses the build limits. The subsequent
+[opaque-row reuse diagnostic](../results/2026-09-06-loop-opaque-reuse-diagnostic-darwin-arm64/README.md)
+passes 134 compiler tests and 75 corpus cases at B2/B3/B4, but still misses wall
+and CPU limits at 1.0517507271 and 1.0520158222. It remains unfinished work,
+not an accepted optimization. Its three numeric application QBE outputs are
+unchanged; no new runtime or Pure Go claim is made.
+
+Crossed compiler/source measurements suggest that added source volume and shape
+account for more of the check/emit overhead than the implementation change on
+fixed source. The allocation reduction is measured but small. Next reduce
+duplicate compiler/projection code and obtain finer phase evidence; do not
+rerun an unchanged near-threshold candidate or relax a limit. Current-source
+full root recovery and hosted cross-target acceptance remain pending.
 
 1. Complete executable differential controls, recovery, ordinary fixed points,
    target/process/memory authorities and the registered compiler cost bounds.

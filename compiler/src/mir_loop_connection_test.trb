@@ -1,9 +1,10 @@
 import { gate4_check, gate4_lex } from compiler
+import { gate4_array_region_operation } from checked_program
 import { gate4_verify_mir } from mir
 import { array_loop_plan } from mir_loop_bounds
 import { gate4_parse_module } from parser
 import { gate4_resolve } from resolution
-import { Gate4Compiler, gate4_compiler_new } from state
+import { Gate4Compiler, gate4_compiler_new, gate4_locals_new } from state
 import { gate4_load_integer, gate4_load_string } from storage
 import { describe, expect, test } from trb/std/test
 
@@ -42,6 +43,25 @@ def numeric_loop(initial: String, guard: String, body: String, step: String): St
 end
 
 describe("MIR Array loop connection") do
+	test("retains one opaque row and its latest origin after repeated effects") do
+		mut locals := gate4_locals_new(32)
+		gate4_array_region_operation(locals, 6, 0, 3)
+		retained := locals.mir_array[0]
+		gate4_array_region_operation(locals, 6, 0, 7)
+		gate4_array_region_operation(locals, 6, 0, 9)
+		gate4_array_region_operation(locals, 2, 0, 10)
+		expect(locals.mir_array.size()).to_equal(1)
+		expect(retained).to_equal([8, 0, 0, 0, 0, 9])
+		expect(array_loop_plan(locals.mir_array)).to_equal([- 1])
+		mut populated := gate4_locals_new(32)
+		populated.count[0] = 1
+		gate4_array_region_operation(populated, 1, 1, 1)
+		gate4_array_region_operation(populated, 6, 0, 4)
+		gate4_array_region_operation(populated, 6, 0, 8)
+		expect(populated.mir_array).to_equal([[8, 0, 0, 0, 0, 8]])
+		expect(array_loop_plan(populated.mir_array)).to_equal([- 1])
+	end
+
 	test("validates every cell of a canonical opaque region without granting a proof") do
 		expect(array_loop_plan([])).to_equal([- 1])
 		expect(array_loop_plan([[8, 0, 0, 0, 0, 42]])).to_equal([- 1])
