@@ -1,0 +1,217 @@
+import { Gate4Compiler } from state
+import { gate4_type_display, gate4_find_record_type } from resolution
+import { gate4_load_integer, gate4_load_string } from storage
+import { gate4_integer_string } from literals
+import { gate4_string_starts_with } from path
+import { native_cli_float_text } from host
+
+# Values have a checked language type and a finite storage representation.
+# Aggregate identities are pool indexes, so aliases survive across submissions.
+record ReplValue
+	type_name: String
+	integer: Integer
+	floating: Float
+	text: String
+	children: Array<Integer>
+end
+
+record ReplStore
+	types: Array<String>
+	integers: Array<Integer>
+	floats: Array<Float>
+	texts: Array<String>
+	children: Array<Array<Integer>>
+	error: Array<String>
+	depth: Array<Integer>
+end
+
+record ReplEnvironment
+	names: Array<String>
+	values: Array<Integer>
+	mutable: Array<Integer>
+	count: Array<Integer>
+end
+
+record ReplReference
+	value: Integer
+	binding: Integer
+	container: Integer
+	slot: Integer
+end
+
+def repl_store(): ReplStore
+	return ReplStore.new(types: ["Void"], integers: [0], floats: [0.0], texts: [""], children: [[]], error: [""], depth: [0])
+end
+
+def repl_environment(): ReplEnvironment
+	return ReplEnvironment.new(names: [], values: [], mutable: [], count: [0])
+end
+
+def repl_value(mut store: ReplStore, type_name: String, integer: Integer, floating: Float, text: String, children: Array<Integer>): Integer
+	id := store.types.size()
+	store.types.push(type_name)
+	store.integers.push(integer)
+	store.floats.push(floating)
+	store.texts.push(text)
+	store.children.push(children)
+	return id
+end
+
+def repl_integer(mut store: ReplStore, value: Integer): Integer
+	return repl_value(store, "Integer", value, 0.0, "", [])
+end
+
+def repl_float(mut store: ReplStore, value: Float): Integer
+	return repl_value(store, "Float", 0, value, "", [])
+end
+
+def repl_boolean(mut store: ReplStore, value: Boolean): Integer
+	mut integer := 0
+	if value
+		integer = 1
+	end
+	return repl_value(store, "Boolean", integer, 0.0, "", [])
+end
+
+def repl_string(mut store: ReplStore, value: String): Integer
+	return repl_value(store, "String", 0, 0.0, value, [])
+end
+
+def repl_reference(value: Integer): ReplReference
+	return ReplReference.new(value: value, binding: - 1, container: - 1, slot: - 1)
+end
+
+def repl_find(environment: ReplEnvironment, name: String): Integer
+	mut index := environment.count[0] - 1
+	while index >= 0
+		if environment.names[index] == name
+			return index
+		end
+		index -= 1
+	end
+	return - 1
+end
+
+def repl_bind(mut environment: ReplEnvironment, name: String, value: Integer, mutable: Integer)
+	index := environment.count[0]
+	if index == environment.names.size()
+		environment.names.push(name)
+		environment.values.push(value)
+		environment.mutable.push(mutable)
+	else
+		environment.names[index] = name
+		environment.values[index] = value
+		environment.mutable[index] = mutable
+	end
+	environment.count[0] += 1
+	return
+end
+
+def repl_coerce(mut store: ReplStore, id: Integer, expected: String): Integer
+	if expected == "Float"
+		if store.types[id] == "Integer"
+			return repl_float(store, store.integers[id])
+		end
+	end
+	return id
+end
+
+def repl_render(state: Gate4Compiler, store: ReplStore, id: Integer, depth: Integer): String
+	value := repl_get(store, id)
+	if value.type_name == "Integer"
+		return gate4_integer_string(value.integer)
+	end
+	if value.type_name == "Float"
+		return native_cli_float_text(value.floating)
+	end
+	if value.type_name == "Boolean"
+		if value.integer == 1
+			return "true"
+		end
+		return "false"
+	end
+	if value.type_name == "String"
+		mut result := "\""
+		mut index := 0
+		while index < value.text.size()
+			character := value.text[index]
+			if character == "\n"
+				result += "\\n"
+			else
+				if character == "\""
+					result += "\\\""
+				else
+					if character == "\\"
+						result += "\\\\"
+					else
+						result += character
+					end
+				end
+			end
+			index += 1
+		end
+		return result + "\""
+	end
+	if value.type_name == "Void"
+		return ""
+	end
+	if depth > 12
+		return "..."
+	end
+	mut result := gate4_type_display(state, value.type_name) + "("
+	mut closing := ")"
+	if gate4_string_starts_with(value.type_name, "Array<")
+		result = "["
+		closing = "]"
+	end
+	mut index := 0
+	while index < value.children.size()
+		if index > 0
+			result += ", "
+		end
+		record_index := gate4_find_record_type(state, value.type_name)
+		if record_index >= 0
+			start := gate4_load_integer(state.record_field_starts, record_index)
+			result += gate4_load_string(state.field_names, start + index) + ": "
+		end
+		result += repl_render(state, store, value.children[index], depth + 1)
+		index += 1
+	end
+	return result + closing
+end
+
+def repl_get(store: ReplStore, id: Integer): ReplValue
+	return ReplValue.new(type_name: store.types[id], integer: store.integers[id], floating: store.floats[id], text: store.texts[id], children: store.children[id])
+end
+
+def repl_copy_value(source: ReplStore, mut target: ReplStore, id: Integer, mut mapping: Array<Integer>): Integer
+	if mapping[id] >= 0
+		return mapping[id]
+	end
+	value := repl_get(source, id)
+	copied := repl_value(target, value.type_name, value.integer, value.floating, value.text, [])
+	mapping[id] = copied
+	mut index := 0
+	while index < value.children.size()
+		target.children[copied].push(repl_copy_value(source, target, value.children[index], mapping))
+		index += 1
+	end
+	return copied
+end
+
+# Drop unreachable evaluation temporaries between submissions while preserving
+# every reachable aggregate's identity, including multiple aliases.
+def repl_compact(source: ReplStore, mut environment: ReplEnvironment): ReplStore
+	mut target := repl_store()
+	mut mapping: Array<Integer> := []
+	while mapping.size() < source.types.size()
+		mapping.push(- 1)
+	end
+	mapping[0] = 0
+	mut index := 0
+	while index < environment.count[0]
+		environment.values[index] = repl_copy_value(source, target, environment.values[index], mapping)
+		index += 1
+	end
+	return target
+end

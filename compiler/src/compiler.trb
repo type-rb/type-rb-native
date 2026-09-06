@@ -1494,6 +1494,16 @@ def gate4_emit_direct_call(
 		return gate4_emitted_value(result, result_type, 0, "", 1, "")
 	end
 	if gate4_compiler_entry_function(state) >= 0
+		if gate4_find_function_in_module(state, state.entry_module[0], "native_cli_main") >= 0
+			if function_index >= 0
+				if gate4_load_string(state.module_names, gate4_load_integer(state.function_modules, function_index)) == "host"
+					result := gate4_emit_temporary(context)
+					gate4_output_line(output, "\t" + result + " =" + gate4_qbe_type(result_type) + " call $" + callee.name + "(" + arguments + ")")
+					gate4_emit_root_value(context, result_type)
+					return gate4_emitted_value(result, result_type, 0, "", 0, "")
+				end
+			end
+		end
 		if callee.name == "gate4_file_exists"
 			result := gate4_emit_temporary(context)
 			gate4_output_line(output, "\t" + result + " =l call $g4_file_exists(" + arguments + ")")
@@ -2278,6 +2288,9 @@ def gate4_emit_block(
 	mut complete := false
 	mut terminated := 0
 	while !complete
+		if gate4_has_diagnostic(state)
+			return terminated
+		end
 		if gate4_token_is(state, position[0], "end")
 			complete = true
 		else
@@ -2725,7 +2738,7 @@ def gate4_emit_target_entry(mut output: Gate4Output)
 	return
 end
 
-def gate4_emit_entry(state: Gate4Compiler, mut output: Gate4Output)
+def gate4_emit_entry(mut state: Gate4Compiler, mut output: Gate4Output)
 	compiler_entry := gate4_compiler_entry_function(state)
 	if compiler_entry >= 0
 		compiler_file_entry := gate4_compiler_file_entry_function(state)
@@ -2784,7 +2797,30 @@ def gate4_emit_entry(state: Gate4Compiler, mut output: Gate4Output)
 	end
 	gate4_output_line(output, "}")
 	if compiler_entry >= 0
-		gate4_emit_target_entry(output)
+		cli_entry := gate4_find_function_in_module(state, state.entry_module[0], "native_cli_main")
+		if cli_entry >= 0
+			output.runtime_flags[1] = 1
+			runtime_module := gate4_find_module(state, "host")
+			runtime_function := gate4_find_function_in_module(state, runtime_module, "native_cli_runtime_qbe")
+			if runtime_function < 0
+				gate4_diagnostic(state, "TRBN4005", 1, "Native CLI runtime template is missing")
+				return
+			end
+			runtime_token := gate4_load_integer(state.function_body_starts, runtime_function) + 1
+			if gate4_load_integer(state.token_kinds, runtime_token) != 3
+				gate4_diagnostic(state, "TRBN4005", 1, "Native CLI runtime template must be a literal String")
+				return
+			end
+			gate4_output_line(output, gate4_load_string(state.token_texts, runtime_token))
+			gate4_output_line(output, "export function w $main(w %argc, l %argv) {\n@start\n\tcall $g4_gc_trace_initialize()")
+			if output.runtime_flags[2] == 1
+				gate4_output_line(output, "\tcall $g4_static_strings_initialize()")
+			end
+			gate4_emit_process_arguments(output)
+			gate4_output_line(output, "\t%status =l call $g4f" + gate4_integer_string(cli_entry) + "()\n\tcall $g4_gc_finish()\n\tret %status\n}")
+		else
+			gate4_emit_target_entry(output)
+		end
 	end
 	return
 end
@@ -2792,6 +2828,9 @@ end
 def gate4_emit_qbe(mut state: Gate4Compiler): Gate4Output
 	mut output := gate4_output_new(state.token_count[0] * 24 + 4096, [0, 0, 0, 0])
 	gate4_emit_static_strings(state, output)
+	if gate4_has_diagnostic(state)
+		return output
+	end
 	gate4_emit_record_descriptors(state, output)
 	compiler_runtime := gate4_compiler_entry_function(state) >= 0
 	gate4_emit_runtime(output, compiler_runtime)
@@ -2812,7 +2851,9 @@ def gate4_emit_qbe(mut state: Gate4Compiler): Gate4Output
 	# Canonical multi-module compiler input uses the runtime intrinsics directly.
 	if compiler_runtime
 		if state.module_count[0] > 1
-			function_index = 5
+			if gate4_find_function_in_module(state, state.entry_module[0], "native_cli_main") < 0
+				function_index = 5
+			end
 		end
 	end
 	mut deferred_function :=- 1
@@ -3615,7 +3656,11 @@ def gate4_parse_project_config(source: String): Gate4ProjectConfig
 	end
 	if error[0] == ""
 		if mode != "go"
-			gate4_project_set_error(error, error_line, "mode must be go for configured Native builds", 1)
+			if mode != "trb"
+				if mode != ""
+					gate4_project_set_error(error, error_line, "mode must be go or trb for configured Native builds", 1)
+				end
+			end
 		end
 	end
 	if source_dir == ""
@@ -3643,8 +3688,10 @@ def gate4_parse_project_config(source: String): Gate4ProjectConfig
 		end
 	end
 	if error[0] == ""
-		if gate4_project_blank(go_config.module_name)
-			gate4_project_set_error(error, error_line, "go.module is required for mode go", 1)
+		if mode == "go"
+			if gate4_project_blank(go_config.module_name)
+				gate4_project_set_error(error, error_line, "go.module is required for mode go", 1)
+			end
 		end
 	end
 	if error[0] == ""

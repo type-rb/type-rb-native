@@ -26,6 +26,16 @@ managed independently from TypeRB versions; the strict
 TypeRB version and revision backed by current evidence. See
 [Native versioning and compatibility](docs/versioning.md).
 
+## Try the native executable
+
+On Darwin arm64 or Linux arm64, `./trbn` builds the native executable when
+needed and starts a REPL. `./trbn run` runs the example project, and
+`./trbn build --compile` creates an executable. The default mode is `trb`;
+other explicit modes are rejected. Go is not required for this bootstrap.
+
+See the [experimental CLI guide](docs/native-cli.md) for prerequisites,
+commands, limitations, and manually dispatched CI binary artifacts.
+
 ## Goals
 
 - Test a native AOT pipeline without requiring the Go toolchain to compile a

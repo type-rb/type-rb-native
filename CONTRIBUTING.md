@@ -77,8 +77,9 @@ Run the Gate 0 checks from the repository root:
 
 ```sh
 trb fmt --check .
-trb check
-TYPE_RB_NATIVE_ROOT="$PWD" trb test
+trb check --config trbconfig.reference.jsonc
+tools/check-native-cli.sh /path/to/trb
+TYPE_RB_NATIVE_ROOT="$PWD" trb test --config trbconfig.reference.jsonc
 python3 -m unittest tools/compatibility_manifest_test.py
 python3 tools/compatibility_manifest.py --reference-trb /path/to/pinned/trb
 ```

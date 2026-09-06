@@ -1,0 +1,197 @@
+#!/usr/bin/env python3
+"""Exercise the built CLI through public commands and a real terminal."""
+import argparse
+import errno
+import json
+import os
+from pathlib import Path
+import pty
+import select
+import signal
+import subprocess
+import tempfile
+import time
+
+parser = argparse.ArgumentParser()
+parser.add_argument('binary', type=Path)
+args = parser.parse_args()
+binary = args.binary.resolve()
+repository = Path(__file__).resolve().parent.parent
+
+with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
+    root = Path(temporary)
+    env = dict(os.environ, TRBN_HISTORY=str(root / 'history.json'), TERM='xterm')
+
+    def run(*arguments, text=None, cwd=root, success=True):
+        result = subprocess.run([str(binary), *map(str, arguments)], input=text,
+                                text=True, capture_output=True, cwd=cwd, env=env,
+                                timeout=30)
+        if (result.returncode == 0) != success:
+            raise AssertionError((arguments, result.returncode, result.stdout, result.stderr))
+        return result.stdout + result.stderr
+
+    assert 'default mode: trb' in run('--version')
+    assert 'Usage:' in run()
+    assert 'Usage:' in run('-h')
+    for arguments in [('fmt',), ('--mode=',), ('--config',), ('build', '--compile', '--stdout')]:
+        run(*arguments, success=False)
+    hello = root / 'hello world.trb'
+    hello.write_text('import trb/std/process\ndef main()\nputs(Process.argv()[0])\nend\n')
+    assert run(hello, '--', 'spaces; $literal') == 'spaces; $literal\n'
+    assert run('run', hello, '--', '--flag') == '--flag\n'
+    run('check', hello)
+    run('check', hello, '--mode=trb')
+    assert 'not implemented' in run('check', hello, '--mode', 'go', success=False)
+    run('build', hello)
+    assert (root / 'build/hello world.ssa').read_text().lstrip().startswith('data ')
+    assert 'export function' in run('build', hello, '--stdout')
+    executable = root / 'out dir/hello'
+    run('build', hello, '--compile', '--outfile', executable)
+    assert subprocess.check_output([executable, 'compiled'], text=True) == 'compiled\n'
+    before = executable.read_bytes()
+    hello.write_text('def main()\nputs(123)\nend\n')
+    run('build', hello, '--compile', '--outfile', executable, success=False)
+    assert executable.read_bytes() == before, 'failed build replaced an existing executable'
+    hello.write_text('def main()\nputs("unsupported: é")\nend\n')
+    assert 'TRBN' in run('build', hello, '--compile', success=False)
+    assert run('run', cwd=repository) == 'Hello from TypeRB Native!\n'
+    project = root / 'project'
+    (project / 'src/nested').mkdir(parents=True)
+    (project / 'src/main.trb').write_text('def answer(): Integer\nreturn 42\nend\ndef main()\nputs("project")\nend\n')
+    config = project / 'trbconfig.jsonc'
+    config.write_text('{"name":"demo","sourceDir":"src"}')
+    assert run('run', cwd=project / 'src/nested') == 'project\n'
+    assert '42 : Integer' in run('repl', text='answer()\n:quit\n', cwd=project)
+    assert 'override' in run('check', '--mode', 'trb', cwd=project, success=False)
+    config.write_text('{"name":"demo","mode":"go","sourceDir":"src","go":{"module":"example.com/demo"}}')
+    assert 'not implemented' in run('run', cwd=project, success=False)
+    assert '42 : Integer' in run('repl', '--mode=trb', text='answer()\n:quit\n', cwd=project)
+    run('run', 'missing.trb', cwd=project, success=False)
+    assert 'ASCII String literals only' in run('repl', text='"é"\n:quit\n')
+    (root / 'helpers.trb').write_text('# A declaration file\ndef loaded(): Integer\nreturn 8\nend\n')
+    assert '8 : Integer' in run('repl', text=':load helpers.trb\nloaded()\n:quit\n')
+    output = run('repl', text='''mut total := 2
+puts("once")
+:type puts("must not print")
+total += 3
+total
+:type total + 1
+mut xs := [1, 2]
+mut ys := xs
+ys.push(3)
+xs[0] = 9
+ys
+xs[99]
+ys
+1 + "bad"
+1 + 2
+"invalid".to_i()
+"+12".to_i()
+"9007199254740992".to_i()
+[1, 2.5]
+9007199254740991 + 1
+10 / 0
+def sum(xs: Array<Integer>): Integer
+mut i := 0
+mut n := 0
+while i < xs.size()
+n += xs[i]
+i += 1
+end
+return n
+end
+sum(xs)
+record Pair
+left: Integer
+right: Integer
+end
+mut pair := Pair.new(left: 2, right: 4)
+pair.left = 7
+pair
+:quit
+''')
+    for expected in ['5 : Integer', 'Integer\n', '[9, 2, 3]', 'out of bounds',
+                     '3 : Integer', 'invalid Integer', '12 : Integer',
+                     'outside the portable range', '[1, 2.5] : Array<Float>',
+                     'division by zero', '14 : Integer', 'left: 7, right: 4']:
+        assert expected in output, (expected, output)
+    assert output.count('once') == 1, output
+    assert 'must not print' not in output, output
+    assert output.count('[9, 2, 3]') >= 2, output
+
+    # A controlling terminal exercises libedit, tab completion, history and SIGINT.
+    pid, descriptor = pty.fork()
+    if pid == 0:
+        os.chdir(root)
+        os.execve(binary, [str(binary)], env)
+    pending = b''
+
+    def expect(needle, timeout=15):
+        global pending
+        end = time.monotonic() + timeout
+        target = needle.encode()
+        while target not in pending:
+            assert time.monotonic() < end, (needle, pending.decode(errors='replace'))
+            if select.select([descriptor], [], [], 0.2)[0]:
+                try:
+                    part = os.read(descriptor, 65536)
+                except OSError as error:
+                    if error.errno == errno.EIO:
+                        part = b''
+                    else:
+                        raise
+                assert part, ('terminal exited', pending)
+                pending += part
+        before, pending = pending.split(target, 1)
+        return before.decode(errors='replace')
+
+    def send(text):
+        os.write(descriptor, text.encode())
+
+    try:
+        expect('trbn:trb> ')
+        send('mut apples := 4\n')
+        expect('4 : Integer')
+        expect('trbn:trb> ')
+        send('app\t\n')
+        expect('4 : Integer')
+        expect('trbn:trb> ')
+        send('\x1b[A\n')
+        expect('4 : Integer')
+        expect('trbn:trb> ')
+        send('if true\n')
+        expect('...> ')
+        send('puts("loop started")\nwhile true\nend\nend\n')
+        expect('loop started\r\n')
+        send('\x03')
+        expect('Interrupted')
+        expect('trbn:trb> ')
+        send('apples\n')
+        expect('4 : Integer')
+        expect('trbn:trb> ')
+        send(':quit\n')
+        deadline = time.monotonic() + 10
+        while True:
+            waited, status = os.waitpid(pid, os.WNOHANG)
+            if waited:
+                assert os.waitstatus_to_exitcode(status) == 0
+                pid = 0
+                break
+            if select.select([descriptor], [], [], 0)[0]:
+                try:
+                    pending += os.read(descriptor, 65536)
+                except OSError as error:
+                    if error.errno != errno.EIO:
+                        raise
+            assert time.monotonic() < deadline, ('REPL did not exit', pending)
+            time.sleep(0.02)
+    finally:
+        os.close(descriptor)
+        if pid:
+            os.kill(pid, signal.SIGKILL)
+            os.waitpid(pid, 0)
+    history = json.loads((root / 'history.json').read_text())
+    assert 'mut apples := 4' in history
+    assert 'if true\nputs("loop started")\nwhile true\nend\nend' in history
+
+print('Native CLI, project configuration, REPL and terminal tests passed')
