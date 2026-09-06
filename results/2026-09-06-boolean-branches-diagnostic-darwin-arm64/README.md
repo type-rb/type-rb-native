@@ -118,3 +118,11 @@ a configured project when reproducing the original source pair.
 The named formal Linux arm64 contract is documented in
 [the A/B controller](../../tools/native-runtime-ab/README.md).
 This local result does not establish Pure Go parity or update Pages.
+
+The first hosted A/B [run 34016344055](https://github.com/type-rb/type-rb-native/actions/runs/34016344055)
+closed both compiler chains, then stopped before application measurement: the
+compactness step had not sourced `tools/compiler-project.sh` before the MIR
+policy helper. The repair adds that dependency in the fresh step shell, with
+an executable regression that also reproduces its absence. Compiler source,
+baseline, runtime controller, observations and all thresholds are unchanged;
+the failed run and its closure evidence remain part of the attempt history.

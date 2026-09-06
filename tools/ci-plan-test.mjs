@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -36,6 +36,33 @@ test('runtime A/B remains manual with separate frozen historical and Boolean con
   assert(workflow.includes('compiler_qbe_bytes strict-shrink'));
   assert(workflow.includes('build_cost_authority=normal-exact-head-PR-interleaved-compactness'));
   assert(workflow.includes('if test "$NATIVE_RUNTIME_AB_CONTRACT" = derived-loop-index; then\n            for stage'));
+});
+
+test('manual Boolean compactness loads its dependencies in a fresh step shell', () => {
+  const root = fileURLToPath(new URL('../', import.meta.url));
+  const workflow = readFileSync(new URL('../.github/workflows/native-runtime-ab.yml', import.meta.url), 'utf8');
+  const setup = workflow.match(/          compiler_maximum=1\.01\n[\s\S]*?(?=            for role in baseline candidate; do)/)?.[0];
+  assert(setup, 'the actual compactness setup must be exercised');
+  const directory = mkdtempSync(join(tmpdir(), 'native-runtime-policy-test-'));
+  try {
+    symlinkSync(root, join(directory, 'baseline-source'), 'dir');
+    const script = `set -eu\n${setup}\nfi\nprintf '%s %s\\n' "$compiler_maximum" "$compiler_limit"\n`;
+    const options = { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: {
+      PATH: process.env.PATH,
+      GITHUB_WORKSPACE: root,
+      RUNNER_TEMP: directory,
+      NATIVE_RUNTIME_AB_CONTRACT: 'checked-boolean-branches',
+    } };
+    for (const shell of ['/bin/sh', '/bin/bash']) {
+      assert.equal(execFileSync(shell, ['-c', script], options).trim(), '1.00 317000');
+      // A previous workflow step's functions do not survive in a new shell.
+      assert.throws(() => execFileSync(shell, ['-c', script.replace(
+        '. tools/compiler-project.sh', ': missing-project-helper')], options),
+      error => error.status !== 0 && /native_compiler_project_directory/.test(error.stderr));
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test('compatibility checks precede matrix fan-out and remain in standalone validation', () => {
