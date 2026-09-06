@@ -1,0 +1,82 @@
+import { gate4_scan_symbol, gate4_two_character_symbol } from compiler
+import { gate4_compiler_new } from state
+import { gate4_load_integer, gate4_load_string } from storage
+import { describe, expect, test } from trb/std/test
+
+def expected_pair(pair: String): Boolean
+	pairs := [":=", "==", "!=", "<=", ">=", "+=", "-=", "*=", "/=", "->"]
+	mut index := 0
+	while index < pairs.size()
+		if pairs[index] == pair
+			return true
+		end
+		index += 1
+	end
+	return false
+end
+
+describe("Lexer symbol recognition") do
+	test("recognizes exactly the registered symbol pairs") do
+		characters := "()[]{}:,.+-*/%<>=! a0\n\t#\"_?&|"
+		mut first := 0
+		while first < characters.size()
+			mut second := 0
+			while second < characters.size()
+				left := characters[first]
+				right := characters[second]
+				expect(gate4_two_character_symbol(left, right)).to_equal(expected_pair(left + right))
+				second += 1
+			end
+			first += 1
+		end
+	end
+
+	test("preserves symbol text, kind, line and cursor with every symbol lookahead") do
+		symbols := "()[]{}:,.+-*/%<>=!"
+		lookahead := symbols + " a0\n\t#\"_?&|"
+		mut first := 0
+		while first < symbols.size()
+			mut second := 0
+			while second <= lookahead.size()
+				mut source := symbols[first]
+				if second < lookahead.size()
+					source += lookahead[second]
+				end
+				mut state := gate4_compiler_new(8)
+				mut position := [0]
+				gate4_scan_symbol(state, source, position, 7)
+				mut width := 1
+				mut text := symbols[first]
+				if expected_pair(source)
+					width = 2
+					text = source
+				end
+				expect(position[0]).to_equal(width)
+				expect(state.token_count[0]).to_equal(1)
+				expect(gate4_load_integer(state.token_kinds, 0)).to_equal(5)
+				expect(gate4_load_integer(state.token_lines, 0)).to_equal(7)
+				expect(gate4_load_string(state.token_texts, 0)).to_equal(text)
+				expect(state.diagnostic_count[0]).to_equal(0)
+				second += 1
+			end
+			first += 1
+		end
+	end
+
+	test("does not consume a suffix after unsupported punctuation") do
+		characters := "?&|"
+		mut index := 0
+		while index < characters.size()
+			mut state := gate4_compiler_new(8)
+			mut position := [0]
+			gate4_scan_symbol(state, characters[index] + "=", position, 9)
+			expect(position[0]).to_equal(1)
+			expect(state.token_count[0]).to_equal(0)
+			expect(state.diagnostic_count[0]).to_equal(1)
+			expect(gate4_load_string(state.diagnostic_codes, 0)).to_equal("TRBN4001")
+			expect(gate4_load_integer(state.diagnostic_lines, 0)).to_equal(9)
+			expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("unsupported source character " + characters[index])
+			index += 1
+		end
+	end
+end

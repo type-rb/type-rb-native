@@ -161,6 +161,14 @@ no runtime acceptance or Pages update results. The next bounded cost reduction
 will avoid constructing unused two-character lexer symbols, with exhaustive
 symbol recognition and tokenization controls before new cost measurements.
 
+The [lexer-symbol construction checkpoint](../results/2026-09-07-lexer-symbol-construction-darwin-arm64/README.md)
+passes 138 compiler tests and 225 corpus observations, preserves numeric
+application QBE, and passes the local cost prefilter (wall 1.0452087228, CPU
+1.0465555100, RSS 1.0032599837). Its source differs from the rejected hosted
+candidate; the earlier failure remains recorded. The margin is small, so first
+run the frozen-baseline hosted compiler comparison before another long recovery
+or runtime batch. This ordering does not waive any merge acceptance checks.
+
 1. Complete executable differential controls, recovery, ordinary fixed points,
    target/process/memory authorities and the registered compiler cost bounds.
    Measure the smallest complete candidate before hosted performance acceptance.
