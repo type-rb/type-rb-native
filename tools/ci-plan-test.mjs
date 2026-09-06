@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, renameSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,6 +17,28 @@ function results(plan) {
     }).map(([key, value]) => [key, { result: value ? 'success' : 'skipped' }])),
   };
 }
+
+test('compatibility checks precede matrix fan-out and remain in standalone validation', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/pull-request.yml', import.meta.url), 'utf8');
+  const standalone = readFileSync(new URL('../.github/workflows/gate-zero.yml', import.meta.url), 'utf8');
+  const quick = workflow.match(/^  quick:\n([\s\S]*?)(?=^  documentation:)/m)?.[1];
+  assert(quick, 'quick stage must exist');
+  const build = quick.indexOf('go build -C .type-rb');
+  const formatting = quick.indexOf('Check formatting and core types');
+  for (const command of [
+    'python3 -m unittest tools/compatibility_manifest_test.py',
+    'python3 tools/compatibility_manifest.py --reference-trb "$RUNNER_TEMP/trb"',
+  ]) {
+    const check = quick.indexOf(command);
+    assert(build >= 0 && check > build && formatting > check,
+      `${command} must run after reference build and before later quick checks`);
+    assert(standalone.includes(command), 'standalone validation must retain the same check');
+  }
+  for (const job of ['native', 'targets', 'memory']) {
+    assert(workflow.includes(`  ${job}:\n    needs: [plan, quick]\n`),
+      `${job} must wait for successful quick feedback`);
+  }
+});
 
 test('documentation-only PRs do not run compiler or performance matrices', () => {
   const plan = classify(['README.md', 'docs/index.html', 'results/a.json',

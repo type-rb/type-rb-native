@@ -20,9 +20,10 @@ normal full authority. Formal benchmark controllers are not documentation tools.
 ## Stages
 
 1. **Planning and quick feedback.** Every PR runs routing/acceptance tests and
-   whitespace validation. Code changes also run formatting, core type checks,
-   root unit tests, transition-policy tests, and a focused Gate 4 MIR, Array,
-   scalar, and numeric test selection. These checks do not claim complete
+   whitespace validation. Code changes first check canonical compatibility
+   metadata with the already-built pinned reference compiler, then formatting,
+   core type checks, root unit tests, transition-policy tests, and a focused
+   MIR, Array, scalar, and numeric test selection. These checks do not claim complete
    Native execution or benchmark evidence.
 2. **Complete correctness.** A non-draft code PR runs the unchanged Native gate
    and Linux target authorities after quick feedback passes. Applicable
@@ -47,6 +48,13 @@ The called authorities no longer launch duplicate standalone PR runs. Their
 existing manual and post-merge triggers remain available. Full multi-language
 benchmark refreshes and Pages deployment retain their existing manual controls.
 Manual measurements do not substitute for the current PR acceptance chain.
+
+The compatibility preflight runs the existing validator and its regression
+tests before the Native, target, and memory matrices can start. A mismatch
+therefore fails quick feedback without spending those jobs. The standalone
+Native workflow retains its own identical validation; no new reference build,
+validator, skip option, or relaxed acceptance rule is introduced. See
+[issue #287](https://github.com/type-rb/type-rb-native/issues/287).
 
 ## Correctness-suite scheduling
 
