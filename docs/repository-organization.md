@@ -17,7 +17,7 @@ guide, not a finding that every gate-numbered file is obsolete.
 
 | Current area | Role and treatment |
 | --- | --- |
-| `compiler/src/compiler.trb` and its storage/path/MIR/literal/state/parser/resolution/checked-program imports | Ordinary self-hosted compiler closure. Shared state/indexes, syntax, resolution, typed checking/MIR construction and MIR model/verifier/passes have distinct owners; continue splitting adapter, runtime, and driver responsibilities and remove checkpoint-derived names incrementally. |
+| `compiler/src/compiler.trb` and its storage/path/MIR/literal/state/parser/resolution/checked-program/QBE-output/runtime imports | Ordinary self-hosted compiler closure. Shared state/indexes, syntax, resolution, typed checking/MIR construction, MIR model/verifier/passes, QBE output and runtime generation have distinct owners; continue splitting adapter and driver responsibilities and remove checkpoint-derived names incrementally. |
 | `src/gate0.trb`, `snapshot.trb`, `json_boundary.trb`, `diagnostic.trb`, `native_mir.trb` | Initial snapshot validation/MIR boundary and shared support. Classify callers before separating shared code from recovery-only code. |
 | `src/gate1_*`, `gate2_*`, `gate3_*`, `qbe.trb`, `qbe2.trb`, `qbe3.trb` | Versioned snapshot, MIR, layout, QBE, and managed-runtime paths with differential tests. These are not three successive unused compiler copies. Name retained paths by format/capability and role. |
 | `src/recovery_generation.trb`, `matched_go_driver.trb`, `compiler_recovery_source.trb` and associated tests | Recovery generation, matched reference comparison, and strict compiler-source flattening support. Keep them visibly separate from the ordinary compiler. |
@@ -82,10 +82,21 @@ whole-program check orchestration remain at the entry to preserve the exact
 temporary-storage intrinsic/lifetime boundary. Nine-module recovery adds
 resolution/checked-program before entry, with all strict prefixes and tests.
 
-O3 continues incrementally; O4–O5 are not complete. Next, audit the QBE output
-and runtime-generation boundary, project configuration and driver dependencies,
-alongside active gate-derived naming. Do not move the remaining 4,723 lines
-into another catch-all module or claim the compiler is fully decomposed.
+The QBE boundary in [issue #284](https://github.com/type-rb/type-rb-native/issues/284)
+moves the output record/four helpers to `qbe_output.trb` and eight runtime
+generation/selection helpers to `qbe_runtime.trb`. Their implementation names
+describe their responsibility, without an entry dependency or compatibility
+aliases. All quoted runtime QBE and declaration logic remain unchanged.
+The entry decreases from 4,724 to 4,577 lines and from 196,720 to 142,907 bytes;
+the large runtime literals now have a separate owner. Strict eleven-module
+recovery includes missing/malformed/mutated-module tests and the current CI
+source-copy boundary. Typed compiler-runtime intrinsics remain at the entry.
+
+O3 continues incrementally; O4–O5 are not complete. Next, audit project
+configuration and driver dependencies alongside active gate-derived naming.
+Do not move the remaining entry into another catch-all module or claim the
+compiler is fully decomposed. The remaining QBE adapter is also a decomposition
+target while checked/MIR ownership replaces its semantic analysis.
 
 The ordinary compiler project move under
 [issue #274](https://github.com/type-rb/type-rb-native/issues/274) relocates

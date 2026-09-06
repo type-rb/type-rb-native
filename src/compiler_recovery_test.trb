@@ -1315,7 +1315,7 @@ def _prepare_compiler_closure(
 		omitted: String,
 	): Result<Boolean, String>
 	try _recovery_reset_directory(directory)
-	names := ["compiler", "storage", "path", "mir", "literals", "state", "parser", "resolution", "checked_program"]
+	names := ["compiler", "storage", "path", "mir", "literals", "state", "parser", "resolution", "checked_program", "qbe_output", "qbe_runtime"]
 	mut index := 0
 	while index < names.size()
 		if names[index] != omitted
@@ -1339,6 +1339,8 @@ def _recovery_verify_compiler_source_closure(
 		parser: String,
 		resolution: String,
 		checked_program: String,
+		qbe_output: String,
+		qbe_runtime: String,
 		workspace: String,
 	): Result<Boolean, String>
 	canonical := try _recovery_process(executable, ["emit-qbe", compiler_path])
@@ -1369,12 +1371,14 @@ def _recovery_verify_compiler_source_closure(
 	parser_mutation := try _recovery_replace_once(parser, "unexpected token ", "unexpected syntax token ")
 	resolution_mutation := try _recovery_replace_once(resolution, "unresolved function ", "unresolved callable ")
 	checked_program_mutation := try _recovery_replace_once(checked_program, "unsupported operator ", "unsupported binary operator ")
-	names := ["compiler", "storage", "path", "mir", "literals", "state", "parser", "resolution", "checked_program"]
-	sources := [entry, storage, path, mir, literals, state, parser, resolution, checked_program]
-	mutations := [entry, storage_mutation, path_mutation, mir_mutation, literal_mutation, state_mutation, parser_mutation, resolution_mutation, checked_program_mutation]
+	qbe_output_mutation := try _recovery_replace_once(qbe_output, "output.count[0] = index + 1", "output.count[0] = index + 2")
+	qbe_runtime_mutation := try _recovery_replace_once(qbe_runtime, "data $g4_gc_heap_target = align 8 { l 1048576 }", "data $g4_gc_heap_target = align 8 { l 1048577 }")
+	names := ["compiler", "storage", "path", "mir", "literals", "state", "parser", "resolution", "checked_program", "qbe_output", "qbe_runtime"]
+	sources := [entry, storage, path, mir, literals, state, parser, resolution, checked_program, qbe_output, qbe_runtime]
+	mutations := [entry, storage_mutation, path_mutation, mir_mutation, literal_mutation, state_mutation, parser_mutation, resolution_mutation, checked_program_mutation, qbe_output_mutation, qbe_runtime_mutation]
 	mut index := 1
 	while index < names.size()
-		mut changed := [entry, storage, path, mir, literals, state, parser, resolution, checked_program]
+		mut changed := [entry, storage, path, mir, literals, state, parser, resolution, checked_program, qbe_output, qbe_runtime]
 		changed[index] = mutations[index]
 		directory := workspace + "/gate6f-compiler-" + names[index] + "-mutation"
 		try _prepare_compiler_closure(directory, changed, "")
@@ -2025,6 +2029,22 @@ describe("Native compiler recovery") do
 				expect(false).to_be_true()
 				""
 			end
+			qbe_output_source := case native_read_text(root + "/compiler/src/qbe_output.trb")
+			when Result::Ok(source)
+				source
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+				""
+			end
+			qbe_runtime_source := case native_read_text(root + "/compiler/src/qbe_runtime.trb")
+			when Result::Ok(source)
+				source
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+				""
+			end
 			recovery_source := case flatten_compiler_recovery_source(
 					compiler_source,
 					storage_source,
@@ -2035,6 +2055,8 @@ describe("Native compiler recovery") do
 					parser_source,
 					resolution_source,
 					checked_program_source,
+					qbe_output_source,
+					qbe_runtime_source,
 				)
 			when Result::Ok(source)
 				source
@@ -2099,6 +2121,18 @@ describe("Native compiler recovery") do
 				expect(false).to_be_true()
 			end
 			case native_write_text(workspace + "/checked_program.trb", checked_program_source)
+			when Result::Ok(_unit)
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+			end
+			case native_write_text(workspace + "/qbe_output.trb", qbe_output_source)
+			when Result::Ok(_unit)
+			when Result::Err(error)
+				puts(error.operation + ": " + error.message)
+				expect(false).to_be_true()
+			end
+			case native_write_text(workspace + "/qbe_runtime.trb", qbe_runtime_source)
 			when Result::Ok(_unit)
 			when Result::Err(error)
 				puts(error.operation + ": " + error.message)
@@ -2191,6 +2225,8 @@ describe("Native compiler recovery") do
 							parser_source,
 							resolution_source,
 							checked_program_source,
+							qbe_output_source,
+							qbe_runtime_source,
 							workspace,
 						)
 					when Result::Ok(_value)

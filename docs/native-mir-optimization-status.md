@@ -66,7 +66,11 @@ state. The entry retains final checking orchestration and temporary-storage
 lifetime boundaries alongside QBE adaptation, runtime and driver code. Explicit
 imports, independently owned tests, and strict nine-file recovery move together.
 Declaration bodies and optimization ownership are unchanged by these moves.
-This is source decomposition,
+The subsequent [QBE output/runtime extraction](https://github.com/type-rb/type-rb-native/issues/284)
+gives the shared output container and runtime-source generation separate,
+responsibility-named modules, with strict eleven-file recovery. The entry
+still owns QBE adaptation, final check/lifetime orchestration, lexer and driver
+work; runtime generation no longer sits there. This is source decomposition,
 not broader MIR coverage or completion of direct-emitter recovery; see the
 [organization schedule](repository-organization.md).
 

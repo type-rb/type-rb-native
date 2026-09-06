@@ -1,0 +1,25 @@
+import { qbe_output_append, qbe_output_branch, qbe_output_line, qbe_output_new } from qbe_output
+import { gate4_load_string } from storage
+import { describe, expect, test } from trb/std/test
+
+describe("QBE output construction") do
+	test("keeps ordered lines, branch spelling, and appended output independent") do
+		flags := [1, 0]
+		mut output := qbe_output_new(8, flags)
+		expect(output.count[0]).to_equal(0)
+		qbe_output_line(output, "@entry")
+		qbe_output_branch(output, "%condition", "@yes", "@no")
+		mut appended := qbe_output_new(4, [0, 1])
+		qbe_output_line(appended, "@yes")
+		qbe_output_append(output, appended)
+		expect(output.count[0]).to_equal(3)
+		expect(gate4_load_string(output.lines, 0)).to_equal("@entry")
+		expect(gate4_load_string(output.lines, 1)).to_equal("\tjnz %condition, @yes, @no")
+		expect(gate4_load_string(output.lines, 2)).to_equal("@yes")
+		expect(appended.count[0]).to_equal(1)
+		qbe_output_line(appended, "@no")
+		expect(output.count[0]).to_equal(3)
+		expect(output.runtime_flags[0]).to_equal(1)
+		expect(output.runtime_flags[1]).to_equal(0)
+	end
+end

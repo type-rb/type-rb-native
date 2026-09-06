@@ -1,4 +1,5 @@
-import { Gate4Output, Gate4ProjectSources, gate4_character_in, gate4_check, gate4_emit_array_header, gate4_emit_context_new, gate4_emit_qbe, gate4_emitted_value, gate4_encode_static_string, gate4_function_reassigns_parameter, gate4_invalidate_array_header_cache, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_output_new, gate4_parse_project_config, gate4_string_starts_at, lower_checked_binary } from compiler
+import { Gate4ProjectSources, gate4_character_in, gate4_check, gate4_emit_array_header, gate4_emit_context_new, gate4_emit_qbe, gate4_emitted_value, gate4_encode_static_string, gate4_function_reassigns_parameter, gate4_invalidate_array_header_cache, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_parse_project_config, gate4_string_starts_at, lower_checked_binary } from compiler
+import { QbeOutput, qbe_output_new } from qbe_output
 import { gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage
 import { gate4_mir_function_index, gate4_optimize_verified_mir, gate4_verify_mir } from mir
 import { Gate4Compiler, gate4_add_module, gate4_build_symbol_index, gate4_compiler_new, gate4_find_module, gate4_has_diagnostic, gate4_local_add, gate4_local_find, gate4_locals_new, gate4_symbol_bucket_count } from state
@@ -40,7 +41,7 @@ def gate4_frontend_test_source(): String
 	return "record Pair\n\tleft: Integer\n\tright: Integer\nend\n\ndef add(left: Integer, right: Integer): Integer\n\treturn left + right\nend\n\ndef main()\n\tpair := Pair.new(left: 20, right: 22)\n\tmut values: Array<Integer> := []\n\tvalues.push(add(pair.left, pair.right))\n\tmessage := \"o\" + \"k\"\n\tmut repetitions := 0\n\twhile repetitions < 1000000\n\t\trepeated := repetitions\n\t\trepetitions = repeated + 1\n\tend\n\tif values[0] == 42\n\t\tif message != \"bad\"\n\t\t\tif repetitions == 1000000\n\t\t\t\tputs(message)\n\t\t\telse\n\t\t\t\tputs(\"bad\")\n\t\t\tend\n\t\telse\n\t\t\tputs(\"bad\")\n\t\tend\n\telse\n\t\tputs(\"bad\")\n\tend\n\treturn\nend\n"
 end
 
-def gate4_output_source(output: Gate4Output): String
+def gate4_output_source(output: QbeOutput): String
 	mut writer := StringBuilder.new()
 	mut index := 0
 	while index < output.count[0]
@@ -1306,8 +1307,10 @@ describe("Gate 4 TypeRB frontend") do
 				gate4_required_test_source(base + "parser.trb"),
 				gate4_required_test_source(base + "resolution.trb"),
 				gate4_required_test_source(base + "checked_program.trb"),
+				gate4_required_test_source(base + "qbe_output.trb"),
+				gate4_required_test_source(base + "qbe_runtime.trb"),
 			]
-			names := ["compiler", "storage", "path", "mir", "literals", "state", "parser", "resolution", "checked_program"]
+			names := ["compiler", "storage", "path", "mir", "literals", "state", "parser", "resolution", "checked_program", "qbe_output", "qbe_runtime"]
 			mut capacity := 0
 			mut module_index := 0
 			while module_index < sources.size()
@@ -1337,6 +1340,8 @@ describe("Gate 4 TypeRB frontend") do
 				import_index += 1
 			end
 			expect(gate4_find_record_in_module(state, 0, "Gate4Compiler")).to_equal(- 1)
+			expect(gate4_find_record_in_module(state, 0, "QbeOutput")).to_equal(- 1)
+			expect(gate4_find_record_in_module(state, gate4_find_module(state, "qbe_output"), "QbeOutput") >= 0).to_be_true()
 			expect(gate4_find_record_in_module(state, gate4_find_module(state, "state"), "Gate4Compiler") >= 0).to_be_true()
 			expect(gate4_find_record_in_module(state, 0, "Gate4Locals")).to_equal(- 1)
 			expect(gate4_find_record_in_module(state, gate4_find_module(state, "state"), "Gate4Locals") >= 0).to_be_true()
@@ -2055,7 +2060,7 @@ describe("Gate 4 TypeRB frontend") do
 			expect(gate4_lex(state, operators[index])).to_be_true()
 			gate4_store_integer(state.mir_nonnegative_facts, 0, plans[index])
 			mut context := gate4_emit_context_new(8, [64, 6, 2])
-			mut output := gate4_output_new(256, [0, 0, 0, 0])
+			mut output := qbe_output_new(256, [0, 0, 0, 0])
 			value := gate4_emitted_value(operands[index], operand_types[index], 0, "", 0, "")
 			result := lower_checked_binary(state, context, output, 0, value, value)
 			expect(result.type_name).to_equal(result_types[index])
@@ -2367,7 +2372,7 @@ describe("Gate 4 TypeRB frontend") do
 
 	test("preserves a verified stable Array header across fallback invalidations") do
 		mut context := gate4_emit_context_new(16, [64, 16, 2])
-		mut output := gate4_output_new(16, [0, 0, 0, 0])
+		mut output := qbe_output_new(16, [0, 0, 0, 0])
 		context.array_header[0] = "%v0"
 		context.array_header[1] = "%length"
 		context.array_header[2] = "%data"
@@ -2382,7 +2387,7 @@ describe("Gate 4 TypeRB frontend") do
 
 	test("reuses both recent Array headers and invalidates both together") do
 		mut context := gate4_emit_context_new(16, [64, 16, 2])
-		mut output := gate4_output_new(16, [0, 0, 0, 0])
+		mut output := qbe_output_new(16, [0, 0, 0, 0])
 		first_length := gate4_emit_array_header(context, output, "%first", "%v0", 1, "8")
 		second_length := gate4_emit_array_header(context, output, "%second", "%v1", 1, "8")
 		first_data := gate4_emit_array_header(context, output, "%first", "%v0", 2, "24")
@@ -2400,7 +2405,7 @@ describe("Gate 4 TypeRB frontend") do
 
 	test("evicts only the least recently used fallback Array header") do
 		mut context := gate4_emit_context_new(16, [64, 16, 2])
-		mut output := gate4_output_new(16, [0, 0, 0, 0])
+		mut output := qbe_output_new(16, [0, 0, 0, 0])
 		first_length := gate4_emit_array_header(context, output, "%first", "%v0", 1, "8")
 		second_length := gate4_emit_array_header(context, output, "%second", "%v1", 1, "8")
 		expect(gate4_emit_array_header(context, output, "%first", "%v0", 1, "8")).to_equal(first_length)
@@ -2412,7 +2417,7 @@ describe("Gate 4 TypeRB frontend") do
 
 	test("keeps Array header loads local outside owned-managed loops") do
 		mut context := gate4_emit_context_new(16, [64, 16, 2])
-		mut output := gate4_output_new(16, [0, 0, 0, 0])
+		mut output := qbe_output_new(16, [0, 0, 0, 0])
 		first_length := gate4_emit_array_header(context, output, "%first", "", 1, "8")
 		second_length := gate4_emit_array_header(context, output, "%second", "", 1, "8")
 		expect(second_length == first_length).to_be_false()
