@@ -1,4 +1,4 @@
-import { Gate4Output, Gate4ProjectSources, gate4_character_in, gate4_check, gate4_emit_array_header, gate4_emit_context_new, gate4_emit_qbe, gate4_emitted_value, gate4_encode_static_string, gate4_invalidate_array_header_cache, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_output_new, gate4_parse_project_config, gate4_string_starts_at, lower_checked_binary } from compiler
+import { Gate4Output, Gate4ProjectSources, gate4_character_in, gate4_check, gate4_emit_array_header, gate4_emit_context_new, gate4_emit_qbe, gate4_emitted_value, gate4_encode_static_string, gate4_function_reassigns_parameter, gate4_invalidate_array_header_cache, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_output_new, gate4_parse_project_config, gate4_string_starts_at, lower_checked_binary } from compiler
 import { gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage
 import { gate4_mir_function_index, gate4_optimize_verified_mir, gate4_verify_mir } from mir
 import { Gate4Compiler, gate4_add_module, gate4_build_symbol_index, gate4_compiler_new, gate4_find_module, gate4_has_diagnostic, gate4_local_add, gate4_local_find, gate4_locals_new, gate4_symbol_bucket_count } from state
@@ -2197,6 +2197,25 @@ describe("Gate 4 TypeRB frontend") do
 				"function $g4f0() {\n@start\n\t%v0 =l alloc8 8\n\t%v1 =l alloc8 8\n\tstorel 0, %v0\n",
 			),
 		).to_be_true()
+	end
+
+	test("distinguishes keyword strings from parameter-reassignment boundaries") do
+		keywords := ["end", "if", "while"]
+		mut index := 0
+		while index < keywords.size()
+			keyword := keywords[index]
+			source := "def rewrite(mut values: Array<Integer>)\n\tputs(\"" + keyword + "\")\n\tif true\n\t\twhile false\n\t\t\tputs(\"end\")\n\t\tend\n\t\tvalues = [123]\n\tend\n\treturn\nend\n\ndef untouched(values: Array<Integer>)\n\tputs(\"" + keyword + "\")\n\treturn\nend\n\ndef later(mut values: Array<Integer>)\n\tvalues = [999]\n\treturn\nend\n\ndef append(mut value: String)\n\tputs(\"end\")\n\tvalue += \"x\"\n\treturn\nend\n\ndef main()\n\treturn\nend\n"
+			mut state := gate4_compiler_new(source.size() + 1)
+			expect(gate4_lex(state, source)).to_be_true()
+			expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+			expect(gate4_resolve(state)).to_be_true()
+			expect(gate4_check(state)).to_be_true()
+			expect(gate4_function_reassigns_parameter(state, 0, "values")).to_be_true()
+			expect(gate4_function_reassigns_parameter(state, 1, "values")).to_be_false()
+			expect(gate4_function_reassigns_parameter(state, 2, "values")).to_be_true()
+			expect(gate4_function_reassigns_parameter(state, 3, "value")).to_be_true()
+			index += 1
+		end
 	end
 
 	test("reserves the managed-local high-water mark and bulk-rewrites loop roots") do
