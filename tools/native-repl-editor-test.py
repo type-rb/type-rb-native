@@ -152,6 +152,22 @@ def shared_scenarios(binary, reference=False):
         finally:
             terminal.close()
 
+        (root / 'src').mkdir()
+        config = {'name': 'sample', 'sourceDir': 'src'}
+        if reference:
+            config.update(mode='go', go={'module': 'example.com/sample'})
+        (root / 'trbconfig.jsonc').write_text(json.dumps(config))
+        (root / 'src/main.trb').write_text('def answer(): Integer\nreturn 42\nend\ndef main()\nreturn\nend\n')
+        terminal = Terminal(binary, root, reference)
+        try:
+            terminal.send('ans\t')
+            terminal.wait(lambda: 'answer()' in terminal.display, 'zero-argument function completion')
+            terminal.send('\x03')  # Leave the reference completion menu, if active.
+            terminal.send('\x03')  # Cancel the remaining input buffer.
+            terminal.finish()
+        finally:
+            terminal.close()
+
 
 def native_scenarios(binary):
     with tempfile.TemporaryDirectory(prefix='native-repl-detail-') as directory:
