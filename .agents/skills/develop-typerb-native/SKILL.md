@@ -172,9 +172,14 @@ run:
 
 ```sh
 trb fmt --check .
-trb check
-TYPE_RB_NATIVE_ROOT="$PWD" trb test
+trb check --config trbconfig.reference.jsonc
+TYPE_RB_NATIVE_ROOT="$PWD" trb test --config trbconfig.reference.jsonc
 ```
+
+The default root configuration is the runnable Native example, not the
+reference-validation project. Select `trbconfig.reference.jsonc` explicitly
+for the root reference checks and tests; use `compiler/trbconfig.jsonc` for the
+compiler suite. See `CONTRIBUTING.md` for the maintained project commands.
 
 For compiler-source changes, also enable the recovery and QBE-backed tests:
 set `TYPE_RB_NATIVE_REFERENCE_TRB` to the absolute pinned compiler executable
