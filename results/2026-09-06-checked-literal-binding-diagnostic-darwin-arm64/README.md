@@ -47,8 +47,11 @@ miss and are not claimed.
 
 ## Reproduction and retained artifacts
 
-The four patches in this directory independently apply to the exact baseline
-above. They are rejected source snapshots, not active implementation. Use the
+The four `v*.patch.json` files encode exact unified patches as JSON strings,
+preserving context tabs and blank lines without making patch-format whitespace
+look like source indentation errors. Extract the `patch` field to obtain each
+patch; all four independently apply to the exact baseline above. They are
+rejected source snapshots, not active implementation. Use the
 repository's pinned reference `5dc09070cf7f88a569279f5e63982a6de59d692c`, QBE 1.3,
 `darwin-arm64-v0` and the system C driver. Start with the accepted Native compiler,
 build `compiler/src/compiler.trb` to an output named `compiler`, and use each
