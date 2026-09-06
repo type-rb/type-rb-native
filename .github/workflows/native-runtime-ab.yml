@@ -11,6 +11,7 @@ on:
         options:
           - derived-loop-index
           - checked-boolean-branches
+          - array-loop-bounds
 
 permissions:
   contents: read
@@ -43,6 +44,9 @@ jobs:
             checked-boolean-branches)
               BASELINE_REVISION=6f7e3ba10623d40b5b0f7e6cc03b732125607795
               ;;
+            array-loop-bounds)
+              BASELINE_REVISION=1afd60c2c7257ed34fd2a2aa70cb8b9164433009
+              ;;
             *) exit 64 ;;
           esac
           printf 'BASELINE_REVISION=%s\n' "$BASELINE_REVISION" >> "$GITHUB_ENV"
@@ -50,6 +54,9 @@ jobs:
           git merge-base --is-ancestor "$BASELINE_REVISION" HEAD
           git worktree add --detach "$RUNNER_TEMP/baseline-source" "$BASELINE_REVISION"
           test "$(git -C "$RUNNER_TEMP/baseline-source" rev-parse HEAD)" = "$BASELINE_REVISION"
+
+      - name: Verify registered runtime comparison contracts
+        run: /bin/sh tools/native-runtime-ab/runtime-controller-test.sh
 
       - name: Install the registered Linux measurement toolchain
         run: |
@@ -205,6 +212,19 @@ jobs:
 
           compiler_maximum=1.01
           compiler_limit=255000
+          if test "$NATIVE_RUNTIME_AB_CONTRACT" = array-loop-bounds; then
+            . tools/compiler-project.sh
+            . tools/native-mir-transition-policy.sh
+            native_mir_transition_markers_valid "$GITHUB_WORKSPACE"
+            native_mir_transition_markers_valid "$RUNNER_TEMP/baseline-source"
+            compiler_maximum=1.05
+            compiler_limit=$(native_mir_target_compiler_limit linux-arm64-v0)
+            printf '%s\n' \
+              'bootstrap_measurements=closure-evidence-only' \
+              'build_cost_authority=exact-head-interleaved-compactness-frozen-1afd60c2' \
+              'compiler_policy=ordinary-1.05-no-new-marker' \
+              > "$evidence/measurement-policy.txt"
+          fi
           if test "$NATIVE_RUNTIME_AB_CONTRACT" = checked-boolean-branches; then
             . tools/compiler-project.sh
             . tools/native-mir-transition-policy.sh
@@ -335,7 +355,7 @@ jobs:
             done
             qbe_maximum=1.00
             executable_maximum=1.001
-            if test "$NATIVE_RUNTIME_AB_CONTRACT" = checked-boolean-branches; then
+            if test "$NATIVE_RUNTIME_AB_CONTRACT" != derived-loop-index; then
               executable_maximum=1.00
             fi
             record_size "$case_name" qbe \

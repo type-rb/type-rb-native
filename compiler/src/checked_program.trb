@@ -122,31 +122,41 @@ def gate4_checked_value(
 	)
 end
 
-def array_loop_checked_binding(
+def checked_binding_value(
 		state: Gate4Compiler,
 		locals: Gate4Locals,
 		slot: Integer,
-		value: Gate4CheckedValue,
+		category: Integer,
+		origin: Integer,
 	): Gate4CheckedValue
+	type_name := gate4_load_string(locals.types, slot)
 	mut index :=- 1
 	mut array :=- 1
-	if locals.mir_state[1] < 0
-		return value
-	end
+	mut tracked := locals.mir_state[1] >= 0
 	if locals.mir_array.size() > 0
 		if locals.mir_array[0][0] == 8
-			return value
+			tracked = false
 		end
 	end
-	if value.type_name == "Integer"
-		index = array_loop_binding(state, locals, slot)
-	end
-	if gate4_array_element_type(value.type_name) != ""
-		if slot < gate4_load_integer(state.function_parameter_counts, locals.mir_state[1])
-			array = slot
+	if tracked
+		if type_name == "Integer"
+			index = array_loop_binding(state, locals, slot)
+		end
+		if gate4_array_element_type(type_name) != ""
+			if slot < gate4_load_integer(state.function_parameter_counts, locals.mir_state[1])
+				array = slot
+			end
 		end
 	end
-	return array_loop_operands(value, index, array)
+	# Construct one complete checked value after both metadata owners finish.
+	return Gate4CheckedValue.new(
+		type_name: type_name,
+		category: category,
+		origin: origin,
+		mutable: gate4_load_integer(locals.mutable, slot),
+		loop_index: index,
+		loop_array: array,
+	)
 end
 
 def array_loop_operands(value: Gate4CheckedValue, index: Integer, array: Integer): Gate4CheckedValue
@@ -557,23 +567,15 @@ def gate4_check_primary(
 		local_index := gate4_local_find(locals, name)
 		if local_index >= 0
 			mir_value := gate4_load_integer(locals.mir_values, local_index)
+			mut category := 0
 			if locals.mir_state[0] > 0
 				if mir_value > 0
-					return array_loop_checked_binding(state, locals, local_index, gate4_mir_checked_value(
-							gate4_load_string(locals.types, local_index),
-							mir_value - 1,
-							origin,
-							gate4_load_integer(locals.mutable, local_index),
-						))
+					category =- mir_value
+				else
+					gate4_scalar_mir_disable(locals)
 				end
-				gate4_scalar_mir_disable(locals)
 			end
-			return array_loop_checked_binding(state, locals, local_index, gate4_checked_value(
-					gate4_load_string(locals.types, local_index),
-					0,
-					origin,
-					gate4_load_integer(locals.mutable, local_index),
-				))
+			return checked_binding_value(state, locals, local_index, category, origin)
 		end
 		standard_package := gate4_standard_package_import(state, state.active_module[0], name)
 		if standard_package < - 1

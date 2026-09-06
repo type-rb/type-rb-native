@@ -169,11 +169,11 @@ worker-gc-temp-push-fast-path)
 esac
 case "$CONTRACT" in
 default) ;;
-checked-boolean-branches)
+checked-boolean-branches | array-loop-bounds)
 	case "$case_name" in
 	spectral-norm) maximum_ratio=0.98 ;;
 	fannkuch-redux | n-body) ;;
-	*) fail "checked-boolean-branches requires a numeric case" ;;
+	*) fail "$CONTRACT requires a numeric case" ;;
 	esac
 	comparison_metrics='walltime cputime memory'
 	catastrophic_reference=baseline
@@ -270,9 +270,11 @@ done
 	printf 'retained_rounds=%s\n' "$RETAINED_ROUNDS"
 	printf 'candidates=%s\n' "$candidates"
 	printf 'maximum_candidate_ratio=%s\n' "$maximum_ratio"
-	if test "$CONTRACT" = checked-boolean-branches; then
+	case "$CONTRACT" in
+	checked-boolean-branches | array-loop-bounds)
 		printf 'maximum_candidate_memory_ratio=1.05\n'
-	fi
+		;;
+	esac
 	printf 'catastrophic_reference=%s\n' "$catastrophic_reference"
 	if test "$total_candidates" -eq 3; then
 		printf 'maximum_candidate_go_ratio=%s\n' "$maximum_go_ratio"

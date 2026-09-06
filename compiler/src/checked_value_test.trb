@@ -1,0 +1,62 @@
+import { gate4_lex } from compiler
+import { gate4_check_primary } from checked_program
+import { gate4_compiler_new, gate4_local_add, gate4_locals_new } from state
+import { gate4_store_integer } from storage
+import { describe, expect, test } from trb/std/test
+
+describe("Checked binding value construction") do
+	test("preserves independent type, capability, origin, scalar and loop metadata") do
+		types := ["Integer", "Float", "Array<Float>"]
+		# Active scalar MIR, stored value, expected category, final active state.
+		modes := [[0, 0, 0, 0], [0, 3, 0, 0], [1, 3, - 3, 1], [1, 0, 0, 0]]
+		mut type_index := 0
+		while type_index < types.size()
+			mut mode_index := 0
+			while mode_index < modes.size()
+				mut opaque := 0
+				while opaque < 2
+					mut capability := 0
+					while capability < 2
+						mut state := gate4_compiler_new(64)
+						expect(gate4_lex(state, "value\n")).to_be_true()
+						mut locals := gate4_locals_new(8)
+						expect(gate4_local_add(state, locals, "value", types[type_index], capability, 1)).to_be_true()
+						gate4_store_integer(state.function_parameter_counts, 0, 1)
+						locals.mir_state[1] = 0
+						mode := modes[mode_index]
+						locals.mir_state[0] = mode[0]
+						gate4_store_integer(locals.mir_values, 0, mode[1])
+						if opaque == 1
+							locals.mir_array.push([8, 0, 0, 0, 0, 0])
+						end
+						mut position := [0]
+						value := gate4_check_primary(state, position, locals, "")
+						expect(value.type_name).to_equal(types[type_index])
+						expect(value.category).to_equal(mode[2])
+						expect(value.origin).to_equal(0)
+						expect(value.mutable).to_equal(capability)
+						mut expected_index :=- 1
+						mut expected_array :=- 1
+						if opaque == 0
+							if type_index == 0
+								expected_index = 0
+							end
+							if type_index == 2
+								expected_array = 0
+							end
+						end
+						expect(value.loop_index).to_equal(expected_index)
+						expect(value.loop_array).to_equal(expected_array)
+						expect(locals.mir_state[0]).to_equal(mode[3])
+						expect(position[0]).to_equal(1)
+						expect(state.diagnostic_count[0]).to_equal(0)
+						capability += 1
+					end
+					opaque += 1
+				end
+				mode_index += 1
+			end
+			type_index += 1
+		end
+	end
+end

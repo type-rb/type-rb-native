@@ -122,13 +122,13 @@ the current compiler implementation or the frozen comparison baseline.
 The restored production closure at that checkpoint reproduced the prior compiler
 bytes and passed 131 compiler tests, including the additional boundary tests.
 
-The current candidate integrates the readonly-binding correction from PR #306
+The subsequent candidates integrate the readonly-binding correction from PR #306
 without moving the frozen baseline. Its
 [proof-result-only diagnostic](../results/2026-09-06-loop-proof-result-diagnostic-darwin-arm64/README.md)
 misses the build limits. The subsequent
 [opaque-row reuse diagnostic](../results/2026-09-06-loop-opaque-reuse-diagnostic-darwin-arm64/README.md)
 passes 134 compiler tests and 75 corpus cases at B2/B3/B4, but still misses wall
-and CPU limits at 1.0517507271 and 1.0520158222. It remains unfinished work,
+and CPU limits at 1.0517507271 and 1.0520158222. That remains a failed cost result,
 not an accepted optimization. Its three numeric application QBE outputs are
 unchanged; no new runtime or Pure Go claim is made.
 
@@ -138,6 +138,16 @@ fixed source. The allocation reduction is measured but small. Next reduce
 duplicate compiler/projection code and obtain finer phase evidence; do not
 rerun an unchanged near-threshold candidate or relax a limit. Current-source
 full root recovery and hosted cross-target acceptance remain pending.
+
+The [single-construction checked binding checkpoint](../results/2026-09-07-checked-binding-construction-darwin-arm64/README.md)
+now passes the local build-cost prefilter: wall 1.0472902709, CPU 1.0446608988,
+RSS 0.9995921697. It removes duplicate construction sites without changing
+checked metadata or generated numeric application QBE. Its compiler suite
+passes 135 tests, with 225 corpus observations and exact B2/B3/B4 compiler
+bytes. This is not complete acceptance: source is frozen for joined recovery
+and formal target/runtime checks. The manual `array-loop-bounds` contract and
+same-head frozen-baseline compiler comparison are described in the
+[runtime controller guide](../tools/native-runtime-ab/README.md).
 
 1. Complete executable differential controls, recovery, ordinary fixed points,
    target/process/memory authorities and the registered compiler cost bounds.

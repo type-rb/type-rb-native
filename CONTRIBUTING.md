@@ -55,6 +55,15 @@ Use the pinned reference compiler revision recorded in `TYPE_RB_REVISION` for
 gate verification. A revision update is a reviewed compatibility change, not
 an incidental tool upgrade.
 
+For local cost diagnostics, use focused correctness and ordinary fixed-point
+checks as an inexpensive prefilter before long recovery suites. A failed cost
+candidate may be recorded as rejected without running the full acceptance
+matrix; state exactly which checks remain unperformed. Once a candidate passes
+that prefilter, freeze its compiler source and run all required recovery,
+conformance, target, process, memory and performance authorities before merging.
+Do not overlap owned correctness/build jobs with comparative timing. This
+ordering saves work on rejected candidates without weakening acceptance.
+
 ## Cross-repository changes
 
 Keep the reference TypeRB repository independent of this project. When a

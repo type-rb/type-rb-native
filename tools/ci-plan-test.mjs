@@ -18,7 +18,7 @@ function results(plan) {
   };
 }
 
-test('runtime A/B remains manual with separate frozen historical and Boolean contracts', () => {
+test('runtime A/B remains manual with separate frozen optimization contracts', () => {
   const workflow = readFileSync(new URL('../.github/workflows/native-runtime-ab.yml', import.meta.url), 'utf8');
   const entry = readFileSync(new URL('../.github/workflows/pull-request.yml', import.meta.url), 'utf8');
   assert(workflow.includes('  workflow_dispatch:\n'));
@@ -27,6 +27,8 @@ test('runtime A/B remains manual with separate frozen historical and Boolean con
   assert(workflow.includes('default: derived-loop-index'));
   assert.match(workflow, /derived-loop-index\)\n\s+BASELINE_REVISION=aad4954c66ae394a5edb836b20498e5a60b769bd/);
   assert.match(workflow, /checked-boolean-branches\)\n\s+BASELINE_REVISION=6f7e3ba10623d40b5b0f7e6cc03b732125607795/);
+  assert.match(workflow, /array-loop-bounds\)\n\s+BASELINE_REVISION=1afd60c2c7257ed34fd2a2aa70cb8b9164433009/);
+  assert(workflow.includes('build_cost_authority=exact-head-interleaved-compactness-frozen-1afd60c2'));
   assert(workflow.includes('*) exit 64 ;;'), 'unknown contracts must not materialize a baseline');
   assert(workflow.includes('native_compiler_project_directory "$RUNNER_TEMP/baseline-source"'));
   assert(!workflow.includes('baseline-source/compiler/gate4/'));
@@ -38,7 +40,7 @@ test('runtime A/B remains manual with separate frozen historical and Boolean con
   assert(workflow.includes('if test "$NATIVE_RUNTIME_AB_CONTRACT" = derived-loop-index; then\n            for stage'));
 });
 
-test('manual Boolean compactness loads its dependencies in a fresh step shell', () => {
+test('manual optimization compactness loads its dependencies in a fresh step shell', () => {
   const root = fileURLToPath(new URL('../', import.meta.url));
   const workflow = readFileSync(new URL('../.github/workflows/native-runtime-ab.yml', import.meta.url), 'utf8');
   const setup = workflow.match(/          compiler_maximum=1\.01\n[\s\S]*?(?=            for role in baseline candidate; do)/)?.[0];
@@ -46,19 +48,31 @@ test('manual Boolean compactness loads its dependencies in a fresh step shell', 
   const directory = mkdtempSync(join(tmpdir(), 'native-runtime-policy-test-'));
   try {
     symlinkSync(root, join(directory, 'baseline-source'), 'dir');
-    const script = `set -eu\n${setup}\nfi\nprintf '%s %s\\n' "$compiler_maximum" "$compiler_limit"\n`;
+    const script = `set -eu\nevidence="$RUNNER_TEMP"\n${setup}\nfi\nprintf '%s %s\\n' "$compiler_maximum" "$compiler_limit"\n`;
     const options = { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: {
       PATH: process.env.PATH,
       GITHUB_WORKSPACE: root,
       RUNNER_TEMP: directory,
       NATIVE_RUNTIME_AB_CONTRACT: 'checked-boolean-branches',
     } };
-    for (const shell of ['/bin/sh', '/bin/bash']) {
-      assert.equal(execFileSync(shell, ['-c', script], options).trim(), '1.00 317000');
-      // A previous workflow step's functions do not survive in a new shell.
-      assert.throws(() => execFileSync(shell, ['-c', script.replace(
-        '. tools/compiler-project.sh', ': missing-project-helper')], options),
-      error => error.status !== 0 && /native_compiler_project_directory/.test(error.stderr));
+    for (const [contract, expected] of [
+      ['checked-boolean-branches', '1.00 317000'],
+      ['array-loop-bounds', '1.05 317000'],
+    ]) {
+      options.env.NATIVE_RUNTIME_AB_CONTRACT = contract;
+      for (const shell of ['/bin/sh', '/bin/bash']) {
+        assert.equal(execFileSync(shell, ['-c', script], options).trim(), expected);
+        // Remove every occurrence so the selected branch loses its dependency.
+        // A previous workflow step's functions do not survive in a new shell.
+        for (const [helper, missingFunction] of [
+          ['compiler-project.sh', /native_compiler_project_directory/],
+          ['native-mir-transition-policy.sh', /native_mir_transition_markers_valid/],
+        ]) {
+          assert.throws(() => execFileSync(shell, ['-c', script.replaceAll(
+            `. tools/${helper}`, ': missing-helper')], options),
+          error => error.status !== 0 && missingFunction.test(error.stderr));
+        }
+      }
     }
   } finally {
     rmSync(directory, { recursive: true, force: true });

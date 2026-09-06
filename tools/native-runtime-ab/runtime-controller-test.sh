@@ -249,66 +249,68 @@ test ! -s "$test_root/fannkuch.stderr" || fail "fannkuch controller wrote stderr
 test "$(awk -F= '$1 == "maximum_candidate_ratio" { print $2 }' "$test_root/fannkuch-evidence/environment.txt")" = 1.02 ||
 	fail "fannkuch threshold differs"
 
-for boolean_case in spectral-norm fannkuch-redux n-body; do
-	case "$boolean_case" in
-	spectral-norm) boolean_catalog=$catalog; boolean_limit=0.98 ;;
-	fannkuch-redux) boolean_catalog=$fannkuch_catalog; boolean_limit=1.02 ;;
-	n-body) boolean_catalog=$nbody_catalog; boolean_limit=1.02 ;;
-	esac
-	FAKE_BOOLEAN=1 FAKE_BOOLEAN_BOUNDARY=1 NATIVE_RUNTIME_AB_CONTRACT=checked-boolean-branches \
-		/bin/sh "$script_directory/runtime-controller.sh" \
-		test "$fake_runexec" "$boolean_catalog" "$boolean_case" 0 "$cache_control" \
-		"$test_root/boolean-$boolean_case-workspace" "$test_root/boolean-$boolean_case-evidence" \
-		> "$test_root/boolean-$boolean_case.stdout" 2> "$test_root/boolean-$boolean_case.stderr"
-	boolean_evidence=$test_root/boolean-$boolean_case-evidence
-	test "$(awk -F= '$1 == "maximum_candidate_ratio" {print $2}' "$boolean_evidence/environment.txt")" = "$boolean_limit" ||
-		fail "Boolean runtime threshold differs"
-	test "$(awk -F= '$1 == "catastrophic_reference" {print $2}' "$boolean_evidence/environment.txt")" = baseline ||
-		fail "Boolean catastrophic reference differs"
-	awk -F '\t' '$2 == "memory" {found++; if ($5 != 1.05 || $6 != 1.05 || $7 != "pass") exit 1}
-		END {if (found != 1) exit 1}' "$boolean_evidence/evaluation.tsv" || fail "Boolean memory boundary differs"
-done
+for bounded_contract in checked-boolean-branches array-loop-bounds; do
+	for boolean_case in spectral-norm fannkuch-redux n-body; do
+		case "$boolean_case" in
+		spectral-norm) boolean_catalog=$catalog; boolean_limit=0.98 ;;
+		fannkuch-redux) boolean_catalog=$fannkuch_catalog; boolean_limit=1.02 ;;
+		n-body) boolean_catalog=$nbody_catalog; boolean_limit=1.02 ;;
+		esac
+		FAKE_BOOLEAN=1 FAKE_BOOLEAN_BOUNDARY=1 NATIVE_RUNTIME_AB_CONTRACT=$bounded_contract \
+			/bin/sh "$script_directory/runtime-controller.sh" \
+			test "$fake_runexec" "$boolean_catalog" "$boolean_case" 0 "$cache_control" \
+			"$test_root/$bounded_contract-$boolean_case-workspace" "$test_root/$bounded_contract-$boolean_case-evidence" \
+			> "$test_root/$bounded_contract-$boolean_case.stdout" 2> "$test_root/$bounded_contract-$boolean_case.stderr"
+		boolean_evidence=$test_root/$bounded_contract-$boolean_case-evidence
+		test "$(awk -F= '$1 == "maximum_candidate_ratio" {print $2}' "$boolean_evidence/environment.txt")" = "$boolean_limit" ||
+			fail "$bounded_contract runtime threshold differs"
+		test "$(awk -F= '$1 == "catastrophic_reference" {print $2}' "$boolean_evidence/environment.txt")" = baseline ||
+			fail "$bounded_contract catastrophic reference differs"
+		awk -F '\t' '$2 == "memory" {found++; if ($5 != 1.05 || $6 != 1.05 || $7 != "pass") exit 1}
+			END {if (found != 1) exit 1}' "$boolean_evidence/evaluation.tsv" || fail "$bounded_contract memory boundary differs"
+	done
 
-set +e
-FAKE_BOOLEAN=1 FAKE_BOOLEAN_MEMORY=1051 NATIVE_RUNTIME_AB_CONTRACT=checked-boolean-branches \
-	/bin/sh "$script_directory/runtime-controller.sh" \
-	test "$fake_runexec" "$catalog" spectral-norm 0 "$cache_control" \
-	"$test_root/boolean-memory-workspace" "$test_root/boolean-memory-evidence" \
-	> "$test_root/boolean-memory.stdout" 2> "$test_root/boolean-memory.stderr"
-boolean_memory_status=$?
-set -e
-test "$boolean_memory_status" -ne 0 || fail "Boolean memory regression passed"
-awk -F '\t' '$2 == "memory" {found++; if ($7 != "fail") exit 1}
-	END {if (found != 1) exit 1}' "$test_root/boolean-memory-evidence/evaluation.tsv" ||
-	fail "Boolean memory failure was not recorded"
-test "$(wc -l < "$test_root/boolean-memory-evidence/raw.tsv" | tr -d ' ')" -eq 27 ||
-	fail "Boolean memory failure stopped observations"
-
-for spike_role in baseline candidate; do
 	set +e
-	FAKE_BOOLEAN=1 FAKE_SPIKE_ROLE=$spike_role NATIVE_RUNTIME_AB_CONTRACT=checked-boolean-branches \
+	FAKE_BOOLEAN=1 FAKE_BOOLEAN_MEMORY=1051 NATIVE_RUNTIME_AB_CONTRACT=$bounded_contract \
 		/bin/sh "$script_directory/runtime-controller.sh" \
 		test "$fake_runexec" "$catalog" spectral-norm 0 "$cache_control" \
-		"$test_root/boolean-spike-$spike_role-workspace" "$test_root/boolean-spike-$spike_role-evidence" \
-		> "$test_root/boolean-spike-$spike_role.stdout" 2> "$test_root/boolean-spike-$spike_role.stderr"
-	spike_status=$?
+		"$test_root/$bounded_contract-memory-workspace" "$test_root/$bounded_contract-memory-evidence" \
+		> "$test_root/$bounded_contract-memory.stdout" 2> "$test_root/$bounded_contract-memory.stderr"
+	boolean_memory_status=$?
 	set -e
-	test "$spike_status" -ne 0 || fail "Boolean $spike_role catastrophic outlier passed"
-	awk -F '\t' -v role="$spike_role" '$2 == role && $3 == "walltime" {
-		found++; if ($4 != 0.2 || $8 != "fail") exit 1
-	} END {if (found != 1) exit 1}' "$test_root/boolean-spike-$spike_role-evidence/catastrophic.tsv" ||
-		fail "Boolean $spike_role outlier does not use the baseline median"
-	test "$(wc -l < "$test_root/boolean-spike-$spike_role-evidence/raw.tsv" | tr -d ' ')" -eq 27 ||
-		fail "Boolean catastrophic failure stopped observations"
-done
+	test "$boolean_memory_status" -ne 0 || fail "$bounded_contract memory regression passed"
+	awk -F '\t' '$2 == "memory" {found++; if ($7 != "fail") exit 1}
+		END {if (found != 1) exit 1}' "$test_root/$bounded_contract-memory-evidence/evaluation.tsv" ||
+		fail "$bounded_contract memory failure was not recorded"
+	test "$(wc -l < "$test_root/$bounded_contract-memory-evidence/raw.tsv" | tr -d ' ')" -eq 27 ||
+		fail "$bounded_contract memory failure stopped observations"
 
-# A faster candidate's own median is not substituted for the registered baseline.
-FAKE_BOOLEAN=1 FAKE_SPIKE_ROLE=candidate FAKE_SPIKE_WALL=0.35 \
-	NATIVE_RUNTIME_AB_CONTRACT=checked-boolean-branches \
-	/bin/sh "$script_directory/runtime-controller.sh" \
-	test "$fake_runexec" "$catalog" spectral-norm 0 "$cache_control" \
-	"$test_root/boolean-reference-workspace" "$test_root/boolean-reference-evidence" \
-	> "$test_root/boolean-reference.stdout" 2> "$test_root/boolean-reference.stderr"
+	for spike_role in baseline candidate; do
+		set +e
+		FAKE_BOOLEAN=1 FAKE_SPIKE_ROLE=$spike_role NATIVE_RUNTIME_AB_CONTRACT=$bounded_contract \
+			/bin/sh "$script_directory/runtime-controller.sh" \
+			test "$fake_runexec" "$catalog" spectral-norm 0 "$cache_control" \
+			"$test_root/$bounded_contract-spike-$spike_role-workspace" "$test_root/$bounded_contract-spike-$spike_role-evidence" \
+			> "$test_root/$bounded_contract-spike-$spike_role.stdout" 2> "$test_root/$bounded_contract-spike-$spike_role.stderr"
+		spike_status=$?
+		set -e
+		test "$spike_status" -ne 0 || fail "$bounded_contract $spike_role catastrophic outlier passed"
+		awk -F '\t' -v role="$spike_role" '$2 == role && $3 == "walltime" {
+			found++; if ($4 != 0.2 || $8 != "fail") exit 1
+		} END {if (found != 1) exit 1}' "$test_root/$bounded_contract-spike-$spike_role-evidence/catastrophic.tsv" ||
+			fail "$bounded_contract $spike_role outlier does not use the baseline median"
+		test "$(wc -l < "$test_root/$bounded_contract-spike-$spike_role-evidence/raw.tsv" | tr -d ' ')" -eq 27 ||
+			fail "$bounded_contract catastrophic failure stopped observations"
+	done
+
+	# A faster candidate's own median is not substituted for the registered baseline.
+	FAKE_BOOLEAN=1 FAKE_SPIKE_ROLE=candidate FAKE_SPIKE_WALL=0.35 \
+		NATIVE_RUNTIME_AB_CONTRACT=$bounded_contract \
+		/bin/sh "$script_directory/runtime-controller.sh" \
+		test "$fake_runexec" "$catalog" spectral-norm 0 "$cache_control" \
+		"$test_root/$bounded_contract-reference-workspace" "$test_root/$bounded_contract-reference-evidence" \
+		> "$test_root/$bounded_contract-reference.stdout" 2> "$test_root/$bounded_contract-reference.stderr"
+done
 
 worker_expected=$test_root/worker-expected.txt
 printf 'native-worker-phase\nnative-worker-ok\n' > "$worker_expected"

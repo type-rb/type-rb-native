@@ -97,9 +97,27 @@ remains required for interleaved build/RSS comparisons and all target checks.
 This supplemental workflow retains its bootstrap series as closure evidence
 only, not a substitute build-cost decision series. No old contract is relaxed.
 
+The `array-loop-bounds` selection implements the independent
+[issue #303](https://github.com/type-rb/type-rb-native/issues/303) registration.
+It fixes baseline `1afd60c2c7257ed34fd2a2aa70cb8b9164433009`, requires spectral
+wall and CPU ratios at most 0.98, both numeric controls at most 1.02, memory at
+most 1.05, and all retained values for both roles at most 2.0 of the baseline
+median. It shares the full two-warmup/eleven-retained controller schedule and
+boundary/outlier regressions, not the old Boolean compiler-shrink contract.
+Compiler sizes retain ordinary 1.05 and current absolute MIR policy ceilings;
+application QBE and executable sizes cannot grow. This adds no marker or budget.
+
+Before acceptance, also dispatch `Static String compactness regression` at the
+same exact candidate with `baseline_revision` set to the full frozen revision
+above. Require both target comparisons and their combined result to pass. The
+normal PR's current-main comparison is independently required but does not
+replace this frozen-baseline authority. Bootstrap samples in the runtime job
+remain closure evidence, not an interleaved build-cost authority. Record both
+manual run identities and all required PR checks before judging the result.
+
 The default manual selection remains `derived-loop-index`, with its historical
-baseline and 255000-byte limit. Both layouts resolve through the shared source
-project helper. Neither manual selection adds an automatic PR performance job,
+baseline and 255000-byte limit. All layouts resolve through the shared source
+project helper. No manual selection adds an automatic PR performance job,
 replaces PR acceptance, or updates the full cross-language results or Pages.
 
 Each worker case is registered by its linked public experiment and also
