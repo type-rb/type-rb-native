@@ -47,8 +47,10 @@ and records the first matched-Go driver move under
 moves four source/test paths to `compiler_recovery_source{,_test}.trb`,
 `recovery_generation.trb`, and `compiler_recovery_test.trb`, and replaces their
 gate-derived implementation helpers. Its path map distinguishes the retained
-measurement protocols from active implementation names. Other root destinations
-remain proposals rather than completed moves.
+measurement protocols from active implementation names. The next [heap-free aggregate layout slice](https://github.com/type-rb/type-rb-native/issues/279)
+moves `gate2_layout{,_test}.trb` to `aggregate_layout{,_test}.trb` and replaces
+its owned symbols, with exact diagnostic and generated-output preservation.
+Other root destinations remain proposals rather than completed moves.
 The first O3 slice, registered in
 [issue #262](https://github.com/type-rb/type-rb-native/issues/262), extracts the
 ordinary compiler's MIR model, verifier, and target-independent passes into

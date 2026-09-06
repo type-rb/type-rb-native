@@ -1,19 +1,19 @@
 import { Diagnostic, boundary_diagnostic } from diagnostic
 import { Gate1Instruction, ScalarType } from gate1_mir
-import { Gate2FieldLayout, Gate2Layout, Gate2LayoutKind, Gate2TypeDefinition, Gate2ValueType, Gate2VariantLayout, compute_gate2_layout, gate2_field_layout, gate2_value_types_equal, gate2_variant_field_layout, gate2_variant_layout, verify_gate2_layouts } from gate2_layout
+import { AggregateFieldLayout, AggregateLayout, AggregateLayoutKind, AggregateTypeDefinition, AggregateValueType, AggregateVariantLayout, aggregate_field_layout, aggregate_value_types_equal, aggregate_variant_field_layout, aggregate_variant_layout, compute_aggregate_layout, verify_aggregate_layouts } from aggregate_layout
 import { NativeSource } from native_mir
 import { SourceOrigin } from snapshot
 import trb/std/result
 
 record Gate2Parameter
 	id: String
-	value_type: Gate2ValueType
+	value_type: AggregateValueType
 	origin: SourceOrigin
 end
 
 enum Gate2ResultType
 	Void
-	Value(value_type: Gate2ValueType)
+	Value(value_type: AggregateValueType)
 end
 
 enum Gate2Instruction
@@ -91,13 +91,13 @@ enum Gate2Instruction
 		id: String
 		entry_function: String
 		sources: Array<NativeSource>
-		types: Array<Gate2TypeDefinition>
+		types: Array<AggregateTypeDefinition>
 		functions: Array<Gate2Function>
 	end
 
 	record Gate2Definition
 		id: String
-		value_type: Gate2ValueType
+		value_type: AggregateValueType
 	end
 
 	def gate2_result_types_equal(left: Gate2ResultType, right: Gate2ResultType): Boolean
@@ -114,7 +114,7 @@ enum Gate2Instruction
 			when Gate2ResultType::Void
 				return false
 			when Gate2ResultType::Value(right_type)
-				return gate2_value_types_equal(left_type, right_type)
+				return aggregate_value_types_equal(left_type, right_type)
 			end
 		end
 	end
@@ -130,7 +130,7 @@ enum Gate2Instruction
 				boundary_diagnostic("TRBN0004", "/functions", "Gate 2 MIR must contain at least one function")
 			)
 		end
-		try verify_gate2_layouts(native_module.types)
+		try verify_aggregate_layouts(native_module.types)
 		mut source_ids: Array<String> := []
 		mut index := 0
 		while index < native_module.sources.size()
@@ -199,7 +199,7 @@ enum Gate2Instruction
 				boundary_diagnostic("TRBN0004", path + "/blocks", "Gate 2 MIR function has no blocks")
 			)
 		end
-		mut definitions: Hash<String, Gate2ValueType> := {}
+		mut definitions: Hash<String, AggregateValueType> := {}
 		mut index := 0
 		while index < function.parameters.size()
 			parameter := function.parameters[index]
@@ -277,21 +277,21 @@ enum Gate2Instruction
 		when Gate2Instruction::Scalar(scalar)
 			case scalar
 			when Gate1Instruction::BooleanLiteral(result, _value, _origin)
-				return _gate2_some_definition(result, Gate2ValueType::Scalar(ScalarType::Boolean))
+				return _gate2_some_definition(result, AggregateValueType::Scalar(ScalarType::Boolean))
 			when Gate1Instruction::IntegerLiteral(result, _value, _origin)
-				return _gate2_some_definition(result, Gate2ValueType::Scalar(ScalarType::Integer))
+				return _gate2_some_definition(result, AggregateValueType::Scalar(ScalarType::Integer))
 			when Gate1Instruction::FloatLiteral(result, _value, _origin)
-				return _gate2_some_definition(result, Gate2ValueType::Scalar(ScalarType::Float))
+				return _gate2_some_definition(result, AggregateValueType::Scalar(ScalarType::Float))
 			when Gate1Instruction::IntegerBinary(result, _operator, _left, _right, _origin)
-				return _gate2_some_definition(result, Gate2ValueType::Scalar(ScalarType::Integer))
+				return _gate2_some_definition(result, AggregateValueType::Scalar(ScalarType::Integer))
 			when Gate1Instruction::FloatBinary(result, _operator, _left, _right, _origin)
-				return _gate2_some_definition(result, Gate2ValueType::Scalar(ScalarType::Float))
+				return _gate2_some_definition(result, AggregateValueType::Scalar(ScalarType::Float))
 			when Gate1Instruction::IntegerCompare(result, _operator, _left, _right, _origin)
-				return _gate2_some_definition(result, Gate2ValueType::Scalar(ScalarType::Boolean))
+				return _gate2_some_definition(result, AggregateValueType::Scalar(ScalarType::Boolean))
 			when Gate1Instruction::FloatCompare(result, _operator, _left, _right, _origin)
-				return _gate2_some_definition(result, Gate2ValueType::Scalar(ScalarType::Boolean))
+				return _gate2_some_definition(result, AggregateValueType::Scalar(ScalarType::Boolean))
 			when Gate1Instruction::BooleanNot(result, _value, _origin)
-				return _gate2_some_definition(result, Gate2ValueType::Scalar(ScalarType::Boolean))
+				return _gate2_some_definition(result, AggregateValueType::Scalar(ScalarType::Boolean))
 			when Gate1Instruction::Call(_result, _function_id, _arguments, _origin)
 				return Result<Gate2Definition?, Diagnostic>::Err(
 					boundary_diagnostic("TRBN0004", path, "Gate 1 call must be normalized to a Gate 2 call")
@@ -300,36 +300,36 @@ enum Gate2Instruction
 				return Result<Gate2Definition?, Diagnostic>::Ok(nil)
 			end
 		when Gate2Instruction::RecordConstruct(result, type_id, _arguments, _origin)
-			layout := try compute_gate2_layout(native_module.types, type_id)
-			if layout.kind != Gate2LayoutKind::Record
+			layout := try compute_aggregate_layout(native_module.types, type_id)
+			if layout.kind != AggregateLayoutKind::Record
 				return Result<Gate2Definition?, Diagnostic>::Err(
 					boundary_diagnostic("TRBN0004", path + "/type", "record construction requires a record type")
 				)
 			end
-			return _gate2_some_definition(result, Gate2ValueType::Aggregate(type_id))
+			return _gate2_some_definition(result, AggregateValueType::Aggregate(type_id))
 		when Gate2Instruction::RecordProject(result, type_id, _record, field, _origin)
-			layout := try compute_gate2_layout(native_module.types, type_id)
-			field_layout := gate2_field_layout(layout, field)
-			if layout.kind != Gate2LayoutKind::Record || field_layout == nil
+			layout := try compute_aggregate_layout(native_module.types, type_id)
+			field_layout := aggregate_field_layout(layout, field)
+			if layout.kind != AggregateLayoutKind::Record || field_layout == nil
 				return Result<Gate2Definition?, Diagnostic>::Err(
 					boundary_diagnostic("TRBN0004", path + "/field", "record projection references an unknown field")
 				)
 			end
 			return _gate2_some_definition(result, field_layout.value_type)
 		when Gate2Instruction::VariantConstruct(result, type_id, variant, _arguments, _origin)
-			layout := try compute_gate2_layout(native_module.types, type_id)
-			if layout.kind != Gate2LayoutKind::Tagged || gate2_variant_layout(layout, variant) == nil
+			layout := try compute_aggregate_layout(native_module.types, type_id)
+			if layout.kind != AggregateLayoutKind::Tagged || aggregate_variant_layout(layout, variant) == nil
 				return Result<Gate2Definition?, Diagnostic>::Err(
 					boundary_diagnostic("TRBN0004", path + "/variant", "variant construction references an unknown variant")
 				)
 			end
-			return _gate2_some_definition(result, Gate2ValueType::Aggregate(type_id))
+			return _gate2_some_definition(result, AggregateValueType::Aggregate(type_id))
 		when Gate2Instruction::VariantTest(result, _type_id, _value, _variant, _origin)
-			return _gate2_some_definition(result, Gate2ValueType::Scalar(ScalarType::Boolean))
+			return _gate2_some_definition(result, AggregateValueType::Scalar(ScalarType::Boolean))
 		when Gate2Instruction::VariantProject(result, type_id, _value, variant, field, _origin)
-			layout := try compute_gate2_layout(native_module.types, type_id)
-			variant_layout := gate2_variant_layout(layout, variant)
-			if layout.kind != Gate2LayoutKind::Tagged
+			layout := try compute_aggregate_layout(native_module.types, type_id)
+			variant_layout := aggregate_variant_layout(layout, variant)
+			if layout.kind != AggregateLayoutKind::Tagged
 				return Result<Gate2Definition?, Diagnostic>::Err(
 					boundary_diagnostic("TRBN0004", path + "/variant", "variant projection requires a tagged type")
 				)
@@ -339,7 +339,7 @@ enum Gate2Instruction
 					boundary_diagnostic("TRBN0004", path + "/variant", "variant projection references an unknown variant")
 				)
 			end
-			field_layout := gate2_variant_field_layout(variant_layout, field)
+			field_layout := aggregate_variant_field_layout(variant_layout, field)
 			if field_layout == nil
 				return Result<Gate2Definition?, Diagnostic>::Err(
 					boundary_diagnostic("TRBN0004", path + "/field", "variant projection references an unknown field")
@@ -376,11 +376,11 @@ enum Gate2Instruction
 			native_module: Gate2Module,
 			function: Gate2Function,
 			block: Gate2Block,
-			definitions: Hash<String, Gate2ValueType>,
+			definitions: Hash<String, AggregateValueType>,
 			source_ids: Array<String>,
 			path: String,
 		): Result<Boolean, Diagnostic>
-		mut available: Hash<String, Gate2ValueType> := {}
+		mut available: Hash<String, AggregateValueType> := {}
 		mut index := 0
 		while index < function.parameters.size()
 			parameter := function.parameters[index]
@@ -411,7 +411,7 @@ enum Gate2Instruction
 	def _gate2_verify_instruction(
 			native_module: Gate2Module,
 			instruction: Gate2Instruction,
-			available: Hash<String, Gate2ValueType>,
+			available: Hash<String, AggregateValueType>,
 			source_ids: Array<String>,
 			path: String,
 		): Result<Boolean, Diagnostic>
@@ -420,22 +420,22 @@ enum Gate2Instruction
 			return _gate2_verify_scalar(scalar, available, source_ids, path)
 		when Gate2Instruction::RecordConstruct(_result, type_id, arguments, origin)
 			try _gate2_verify_origin(origin, source_ids, path + "/origin")
-			layout := try compute_gate2_layout(native_module.types, type_id)
+			layout := try compute_aggregate_layout(native_module.types, type_id)
 			try _gate2_require_arguments(available, arguments, layout.fields, path + "/arguments")
 		when Gate2Instruction::RecordProject(_result, type_id, record, field, origin)
 			try _gate2_verify_origin(origin, source_ids, path + "/origin")
-			try _gate2_require(available, record, Gate2ValueType::Aggregate(type_id), path + "/record")
-			layout := try compute_gate2_layout(native_module.types, type_id)
-			if layout.kind != Gate2LayoutKind::Record || gate2_field_layout(layout, field) == nil
+			try _gate2_require(available, record, AggregateValueType::Aggregate(type_id), path + "/record")
+			layout := try compute_aggregate_layout(native_module.types, type_id)
+			if layout.kind != AggregateLayoutKind::Record || aggregate_field_layout(layout, field) == nil
 				return Result<Boolean, Diagnostic>::Err(
 					boundary_diagnostic("TRBN0004", path + "/field", "record projection references an unknown field")
 				)
 			end
 		when Gate2Instruction::VariantConstruct(_result, type_id, variant, arguments, origin)
 			try _gate2_verify_origin(origin, source_ids, path + "/origin")
-			layout := try compute_gate2_layout(native_module.types, type_id)
-			variant_layout := gate2_variant_layout(layout, variant)
-			if layout.kind != Gate2LayoutKind::Tagged || variant_layout == nil
+			layout := try compute_aggregate_layout(native_module.types, type_id)
+			variant_layout := aggregate_variant_layout(layout, variant)
+			if layout.kind != AggregateLayoutKind::Tagged || variant_layout == nil
 				return Result<Boolean, Diagnostic>::Err(
 					boundary_diagnostic("TRBN0004", path + "/variant", "variant construction references an unknown variant")
 				)
@@ -443,19 +443,19 @@ enum Gate2Instruction
 			try _gate2_require_arguments(available, arguments, variant_layout.fields, path + "/arguments")
 		when Gate2Instruction::VariantTest(_result, type_id, value, variant, origin)
 			try _gate2_verify_origin(origin, source_ids, path + "/origin")
-			try _gate2_require(available, value, Gate2ValueType::Aggregate(type_id), path + "/value")
-			layout := try compute_gate2_layout(native_module.types, type_id)
-			if layout.kind != Gate2LayoutKind::Tagged || gate2_variant_layout(layout, variant) == nil
+			try _gate2_require(available, value, AggregateValueType::Aggregate(type_id), path + "/value")
+			layout := try compute_aggregate_layout(native_module.types, type_id)
+			if layout.kind != AggregateLayoutKind::Tagged || aggregate_variant_layout(layout, variant) == nil
 				return Result<Boolean, Diagnostic>::Err(
 					boundary_diagnostic("TRBN0004", path + "/variant", "variant test references an unknown variant")
 				)
 			end
 		when Gate2Instruction::VariantProject(_result, type_id, value, variant, field, origin)
 			try _gate2_verify_origin(origin, source_ids, path + "/origin")
-			try _gate2_require(available, value, Gate2ValueType::Aggregate(type_id), path + "/value")
-			layout := try compute_gate2_layout(native_module.types, type_id)
-			variant_layout := gate2_variant_layout(layout, variant)
-			if layout.kind != Gate2LayoutKind::Tagged
+			try _gate2_require(available, value, AggregateValueType::Aggregate(type_id), path + "/value")
+			layout := try compute_aggregate_layout(native_module.types, type_id)
+			variant_layout := aggregate_variant_layout(layout, variant)
+			if layout.kind != AggregateLayoutKind::Tagged
 				return Result<Boolean, Diagnostic>::Err(
 					boundary_diagnostic("TRBN0004", path + "/variant", "variant projection requires a tagged type")
 				)
@@ -465,7 +465,7 @@ enum Gate2Instruction
 					boundary_diagnostic("TRBN0004", path + "/variant", "variant projection references an unknown variant")
 				)
 			end
-			if gate2_variant_field_layout(variant_layout, field) == nil
+			if aggregate_variant_field_layout(variant_layout, field) == nil
 				return Result<Boolean, Diagnostic>::Err(
 					boundary_diagnostic("TRBN0004", path + "/field", "variant projection references an unknown field")
 				)
@@ -494,7 +494,7 @@ enum Gate2Instruction
 
 	def _gate2_verify_scalar(
 			instruction: Gate1Instruction,
-			available: Hash<String, Gate2ValueType>,
+			available: Hash<String, AggregateValueType>,
 			source_ids: Array<String>,
 			path: String,
 		): Result<Boolean, Diagnostic>
@@ -548,7 +548,7 @@ enum Gate2Instruction
 			native_module: Gate2Module,
 			function: Gate2Function,
 			terminator: Gate2Terminator,
-			available: Hash<String, Gate2ValueType>,
+			available: Hash<String, AggregateValueType>,
 			source_ids: Array<String>,
 			path: String,
 		): Result<Boolean, Diagnostic>
@@ -586,7 +586,7 @@ enum Gate2Instruction
 			function: Gate2Function,
 			target: String,
 			arguments: Array<String>,
-			available: Hash<String, Gate2ValueType>,
+			available: Hash<String, AggregateValueType>,
 			path: String,
 		): Result<Boolean, Diagnostic>
 		block := gate2_block(function.blocks, target)
@@ -609,9 +609,9 @@ enum Gate2Instruction
 	end
 
 	def _gate2_require_arguments(
-			available: Hash<String, Gate2ValueType>,
+			available: Hash<String, AggregateValueType>,
 			arguments: Array<String>,
-			fields: Array<Gate2FieldLayout>,
+			fields: Array<AggregateFieldLayout>,
 			path: String,
 		): Result<Boolean, Diagnostic>
 		if arguments.size() != fields.size()
@@ -628,9 +628,9 @@ enum Gate2Instruction
 	end
 
 	def _gate2_define(
-			mut definitions: Hash<String, Gate2ValueType>,
+			mut definitions: Hash<String, AggregateValueType>,
 			id: String,
-			value_type: Gate2ValueType,
+			value_type: AggregateValueType,
 			path: String,
 		): Result<Boolean, Diagnostic>
 		if id.empty?() || definitions.key?(id)
@@ -643,13 +643,13 @@ enum Gate2Instruction
 	end
 
 	def _gate2_require(
-			available: Hash<String, Gate2ValueType>,
+			available: Hash<String, AggregateValueType>,
 			id: String,
-			expected: Gate2ValueType,
+			expected: AggregateValueType,
 			path: String,
 		): Result<Boolean, Diagnostic>
 		actual := try _gate2_require_any(available, id, path)
-		if !gate2_value_types_equal(actual, expected)
+		if !aggregate_value_types_equal(actual, expected)
 			return Result<Boolean, Diagnostic>::Err(
 				boundary_diagnostic("TRBN0004", path, "operand type does not match the operation")
 			)
@@ -658,45 +658,45 @@ enum Gate2Instruction
 	end
 
 	def _gate2_require_scalar(
-			available: Hash<String, Gate2ValueType>,
+			available: Hash<String, AggregateValueType>,
 			id: String,
 			scalar: ScalarType,
 			path: String,
 		): Result<Boolean, Diagnostic>
-		return _gate2_require(available, id, Gate2ValueType::Scalar(scalar), path)
+		return _gate2_require(available, id, AggregateValueType::Scalar(scalar), path)
 	end
 
 	def _gate2_require_any(
-			available: Hash<String, Gate2ValueType>,
+			available: Hash<String, AggregateValueType>,
 			id: String,
 			path: String,
-		): Result<Gate2ValueType, Diagnostic>
+		): Result<AggregateValueType, Diagnostic>
 		if !available.key?(id)
-			return Result<Gate2ValueType, Diagnostic>::Err(
+			return Result<AggregateValueType, Diagnostic>::Err(
 				boundary_diagnostic("TRBN0004", path, "operand is not available in this block")
 			)
 		end
-		return Result<Gate2ValueType, Diagnostic>::Ok(available.fetch(id))
+		return Result<AggregateValueType, Diagnostic>::Ok(available.fetch(id))
 	end
 
 	def _gate2_aggregate_layout(
 			native_module: Gate2Module,
-			value_type: Gate2ValueType,
+			value_type: AggregateValueType,
 			path: String,
-		): Result<Gate2Layout, Diagnostic>
+		): Result<AggregateLayout, Diagnostic>
 		case value_type
-		when Gate2ValueType::Scalar(_scalar)
-			return Result<Gate2Layout, Diagnostic>::Err(
+		when AggregateValueType::Scalar(_scalar)
+			return Result<AggregateLayout, Diagnostic>::Err(
 				boundary_diagnostic("TRBN0004", path, "operation requires an aggregate value")
 			)
-		when Gate2ValueType::Aggregate(type_id)
-			return compute_gate2_layout(native_module.types, type_id)
+		when AggregateValueType::Aggregate(type_id)
+			return compute_aggregate_layout(native_module.types, type_id)
 		end
 	end
 
 	def _gate2_some_definition(
 			id: String,
-			value_type: Gate2ValueType,
+			value_type: AggregateValueType,
 		): Result<Gate2Definition?, Diagnostic>
 		return Result<Gate2Definition?, Diagnostic>::Ok(Gate2Definition.new(id: id, value_type: value_type))
 	end

@@ -1,6 +1,6 @@
 import diagnostic
 import { ComparisonOperator, FloatBinaryOperator, Gate1Instruction, IntegerBinaryOperator, ScalarType } from gate1_mir
-import { Gate2FieldLayout, Gate2Layout, Gate2ValueType, Gate2VariantLayout, compute_gate2_layout } from gate2_layout
+import { AggregateFieldLayout, AggregateLayout, AggregateValueType, AggregateVariantLayout, compute_aggregate_layout } from aggregate_layout
 import { Gate2Block, Gate2Function, Gate2Instruction, Gate2Module, Gate2Parameter, Gate2ResultType, Gate2Terminator, gate2_block, gate2_function, gate2_instruction_result, verify_gate2_mir } from gate2_mir
 import { QbeStaticData, qbe_comparison, qbe_emit_checked_add, qbe_emit_checked_divide, qbe_emit_checked_multiply, qbe_emit_checked_power, qbe_emit_checked_remainder, qbe_emit_checked_subtract, qbe_emit_integer_binary, qbe_emit_static_data, qbe_float_operator, qbe_line, qbe_scalar_type, qbe_static_symbol } from qbe
 import { SourceOrigin } from snapshot
@@ -9,7 +9,7 @@ import trb/std/string_builder
 
 record Gate2QbeContext
 	values: Hash<String, String>
-	value_types: Hash<String, Gate2ValueType>
+	value_types: Hash<String, AggregateValueType>
 	transfer_slots: Hash<String, String>
 	storage_slots: Hash<String, String>
 end
@@ -195,8 +195,8 @@ def _qbe2_emit_function(
 	when Gate2ResultType::Void
 	when Gate2ResultType::Value(value_type)
 		case value_type
-		when Gate2ValueType::Scalar(_scalar)
-		when Gate2ValueType::Aggregate(_type_id)
+		when AggregateValueType::Scalar(_scalar)
+		when AggregateValueType::Aggregate(_type_id)
 			parameters.push("l %return")
 		end
 	end
@@ -211,9 +211,9 @@ def _qbe2_emit_function(
 	when Gate2ResultType::Void
 	when Gate2ResultType::Value(value_type)
 		case value_type
-		when Gate2ValueType::Scalar(scalar)
+		when AggregateValueType::Scalar(scalar)
 			result_prefix = _qbe_type(scalar) + " "
-		when Gate2ValueType::Aggregate(_type_id)
+		when AggregateValueType::Aggregate(_type_id)
 		end
 	end
 	_qbe_line(writer, "function " + result_prefix + "$trbn_g2f" + function_index.to_s() + "(" + parameters.join(", ") + ") {")
@@ -236,7 +236,7 @@ def _qbe2_context(
 		function: Gate2Function,
 	): Result<Gate2QbeContext, Diagnostic>
 	mut values: Hash<String, String> := {}
-	mut value_types: Hash<String, Gate2ValueType> := {}
+	mut value_types: Hash<String, AggregateValueType> := {}
 	mut transfer_slots: Hash<String, String> := {}
 	mut storage_slots: Hash<String, String> := {}
 	mut next_value := 0
@@ -260,10 +260,10 @@ def _qbe2_context(
 			next_transfer += 1
 			value_types[parameter.id] = parameter.value_type
 			case parameter.value_type
-			when Gate2ValueType::Scalar(_scalar)
+			when AggregateValueType::Scalar(_scalar)
 				values[parameter.id] = "%v" + next_value.to_s()
 				next_value += 1
-			when Gate2ValueType::Aggregate(_type_id)
+			when AggregateValueType::Aggregate(_type_id)
 				storage_slots[parameter.id] = "%storage" + next_storage.to_s()
 				values[parameter.id] = transfer_slots.fetch(parameter.id)
 				next_storage += 1
@@ -278,10 +278,10 @@ def _qbe2_context(
 				value_type := try _qbe2_instruction_type(native_module, instruction)
 				value_types[result] = value_type
 				case value_type
-				when Gate2ValueType::Scalar(_scalar)
+				when AggregateValueType::Scalar(_scalar)
 					values[result] = "%v" + next_value.to_s()
 					next_value += 1
-				when Gate2ValueType::Aggregate(_type_id)
+				when AggregateValueType::Aggregate(_type_id)
 					storage_slots[result] = "%storage" + next_storage.to_s()
 					values[result] = storage_slots.fetch(result)
 					next_storage += 1
@@ -300,8 +300,8 @@ def _qbe2_context(
 			while parameter_index < block.parameters.size()
 				parameter := block.parameters[parameter_index]
 				case parameter.value_type
-				when Gate2ValueType::Scalar(_scalar)
-				when Gate2ValueType::Aggregate(_type_id)
+				when AggregateValueType::Scalar(_scalar)
+				when AggregateValueType::Aggregate(_type_id)
 					incoming := _qbe2_common_incoming_value(function, block.id, parameter_index, values)
 					if !incoming.empty?()
 						values[parameter.id] = incoming
@@ -382,51 +382,51 @@ end
 def _qbe2_instruction_type(
 		native_module: Gate2Module,
 		instruction: Gate2Instruction,
-	): Result<Gate2ValueType, Diagnostic>
+	): Result<AggregateValueType, Diagnostic>
 	case instruction
 	when Gate2Instruction::Scalar(scalar)
 		case scalar
 		when Gate1Instruction::BooleanLiteral(_result, _value, _origin)
-			return Result<Gate2ValueType, Diagnostic>::Ok(Gate2ValueType::Scalar(ScalarType::Boolean))
+			return Result<AggregateValueType, Diagnostic>::Ok(AggregateValueType::Scalar(ScalarType::Boolean))
 		when Gate1Instruction::IntegerLiteral(_result, _value, _origin)
-			return Result<Gate2ValueType, Diagnostic>::Ok(Gate2ValueType::Scalar(ScalarType::Integer))
+			return Result<AggregateValueType, Diagnostic>::Ok(AggregateValueType::Scalar(ScalarType::Integer))
 		when Gate1Instruction::FloatLiteral(_result, _value, _origin)
-			return Result<Gate2ValueType, Diagnostic>::Ok(Gate2ValueType::Scalar(ScalarType::Float))
+			return Result<AggregateValueType, Diagnostic>::Ok(AggregateValueType::Scalar(ScalarType::Float))
 		when Gate1Instruction::IntegerBinary(_result, _operator, _left, _right, _origin)
-			return Result<Gate2ValueType, Diagnostic>::Ok(Gate2ValueType::Scalar(ScalarType::Integer))
+			return Result<AggregateValueType, Diagnostic>::Ok(AggregateValueType::Scalar(ScalarType::Integer))
 		when Gate1Instruction::FloatBinary(_result, _operator, _left, _right, _origin)
-			return Result<Gate2ValueType, Diagnostic>::Ok(Gate2ValueType::Scalar(ScalarType::Float))
+			return Result<AggregateValueType, Diagnostic>::Ok(AggregateValueType::Scalar(ScalarType::Float))
 		when Gate1Instruction::IntegerCompare(_result, _operator, _left, _right, _origin)
-			return Result<Gate2ValueType, Diagnostic>::Ok(Gate2ValueType::Scalar(ScalarType::Boolean))
+			return Result<AggregateValueType, Diagnostic>::Ok(AggregateValueType::Scalar(ScalarType::Boolean))
 		when Gate1Instruction::FloatCompare(_result, _operator, _left, _right, _origin)
-			return Result<Gate2ValueType, Diagnostic>::Ok(Gate2ValueType::Scalar(ScalarType::Boolean))
+			return Result<AggregateValueType, Diagnostic>::Ok(AggregateValueType::Scalar(ScalarType::Boolean))
 		when Gate1Instruction::BooleanNot(_result, _value, _origin)
-			return Result<Gate2ValueType, Diagnostic>::Ok(Gate2ValueType::Scalar(ScalarType::Boolean))
+			return Result<AggregateValueType, Diagnostic>::Ok(AggregateValueType::Scalar(ScalarType::Boolean))
 		when Gate1Instruction::Call(_result, _function_id, _arguments, _origin)
-			return Result<Gate2ValueType, Diagnostic>::Ok(Gate2ValueType::Scalar(ScalarType::Void))
+			return Result<AggregateValueType, Diagnostic>::Ok(AggregateValueType::Scalar(ScalarType::Void))
 		when Gate1Instruction::WriteStatic(_value, _origin)
-			return Result<Gate2ValueType, Diagnostic>::Ok(Gate2ValueType::Scalar(ScalarType::Void))
+			return Result<AggregateValueType, Diagnostic>::Ok(AggregateValueType::Scalar(ScalarType::Void))
 		end
 	when Gate2Instruction::RecordConstruct(_result, type_id, _arguments, _origin)
-		return Result<Gate2ValueType, Diagnostic>::Ok(Gate2ValueType::Aggregate(type_id))
+		return Result<AggregateValueType, Diagnostic>::Ok(AggregateValueType::Aggregate(type_id))
 	when Gate2Instruction::RecordProject(_result, type_id, _record, field, _origin)
-		layout := try compute_gate2_layout(native_module.types, type_id)
-		return Result<Gate2ValueType, Diagnostic>::Ok(_qbe2_required_field(layout, field).value_type)
+		layout := try compute_aggregate_layout(native_module.types, type_id)
+		return Result<AggregateValueType, Diagnostic>::Ok(_qbe2_required_field(layout, field).value_type)
 	when Gate2Instruction::VariantConstruct(_result, type_id, _variant, _arguments, _origin)
-		return Result<Gate2ValueType, Diagnostic>::Ok(Gate2ValueType::Aggregate(type_id))
+		return Result<AggregateValueType, Diagnostic>::Ok(AggregateValueType::Aggregate(type_id))
 	when Gate2Instruction::VariantTest(_result, _type_id, _value, _variant, _origin)
-		return Result<Gate2ValueType, Diagnostic>::Ok(Gate2ValueType::Scalar(ScalarType::Boolean))
+		return Result<AggregateValueType, Diagnostic>::Ok(AggregateValueType::Scalar(ScalarType::Boolean))
 	when Gate2Instruction::VariantProject(_result, type_id, _value, variant, field, _origin)
-		layout := try compute_gate2_layout(native_module.types, type_id)
+		layout := try compute_aggregate_layout(native_module.types, type_id)
 		variant_layout := _qbe2_required_variant(layout, variant)
-		return Result<Gate2ValueType, Diagnostic>::Ok(_qbe2_required_variant_field(variant_layout, field).value_type)
+		return Result<AggregateValueType, Diagnostic>::Ok(_qbe2_required_variant_field(variant_layout, field).value_type)
 	when Gate2Instruction::Call(_result, function_id, _arguments, _origin)
 		callee := gate2_function(native_module.functions, function_id)
 		case callee.result_type
 		when Gate2ResultType::Void
-			return Result<Gate2ValueType, Diagnostic>::Ok(Gate2ValueType::Scalar(ScalarType::Void))
+			return Result<AggregateValueType, Diagnostic>::Ok(AggregateValueType::Scalar(ScalarType::Void))
 		when Gate2ResultType::Value(value_type)
-			return Result<Gate2ValueType, Diagnostic>::Ok(value_type)
+			return Result<AggregateValueType, Diagnostic>::Ok(value_type)
 		end
 	end
 end
@@ -482,8 +482,8 @@ def _qbe2_emit_allocations(
 				writer,
 			)
 			case parameter.value_type
-			when Gate2ValueType::Scalar(_scalar)
-			when Gate2ValueType::Aggregate(_type_id)
+			when AggregateValueType::Scalar(_scalar)
+			when AggregateValueType::Aggregate(_type_id)
 				try _qbe2_emit_allocation(
 					native_module,
 					parameter.value_type,
@@ -515,20 +515,20 @@ end
 
 def _qbe2_emit_allocation(
 		native_module: Gate2Module,
-		value_type: Gate2ValueType,
+		value_type: AggregateValueType,
 		slot: String,
 		mut writer: StringBuilder,
 	): Result<Boolean, Diagnostic>
 	mut allocation := "alloc8"
 	mut size := 8
 	case value_type
-	when Gate2ValueType::Scalar(scalar)
+	when AggregateValueType::Scalar(scalar)
 		if scalar == ScalarType::Boolean
 			allocation = "alloc4"
 			size = 4
 		end
-	when Gate2ValueType::Aggregate(type_id)
-		layout := try compute_gate2_layout(native_module.types, type_id)
+	when AggregateValueType::Aggregate(type_id)
+		layout := try compute_aggregate_layout(native_module.types, type_id)
 		size = layout.size
 		if layout.alignment < 8
 			allocation = "alloc4"
@@ -551,12 +551,12 @@ def _qbe2_emit_block_parameter_loads(
 	while index < block.parameters.size()
 		parameter := block.parameters[index]
 		case parameter.value_type
-		when Gate2ValueType::Scalar(scalar)
+		when AggregateValueType::Scalar(scalar)
 			_qbe_line(writer,
 				"\t" + context.values.fetch(parameter.id) + " =" + _qbe_type(scalar) + " " +
 				_qbe2_scalar_slot_load(scalar) + " " + context.transfer_slots.fetch(parameter.id)
 			)
-		when Gate2ValueType::Aggregate(_type_id)
+		when AggregateValueType::Aggregate(_type_id)
 		end
 		index += 1
 	end
@@ -578,7 +578,7 @@ def _qbe2_emit_instruction(
 		_qbe2_emit_scalar(native_module, scalar, block_index, instruction_index, context.values, static_data, writer)
 	when Gate2Instruction::RecordConstruct(result, type_id, arguments, origin)
 		_qbe2_emit_origin(native_module, origin, writer)
-		layout := try compute_gate2_layout(native_module.types, type_id)
+		layout := try compute_aggregate_layout(native_module.types, type_id)
 		destination := context.values.fetch(result)
 		_qbe2_emit_zero(destination, layout.size, writer)
 		mut index := 0
@@ -595,7 +595,7 @@ def _qbe2_emit_instruction(
 		end
 	when Gate2Instruction::RecordProject(result, type_id, record, field, origin)
 		_qbe2_emit_origin(native_module, origin, writer)
-		layout := try compute_gate2_layout(native_module.types, type_id)
+		layout := try compute_aggregate_layout(native_module.types, type_id)
 		field_layout := _qbe2_required_field(layout, field)
 		try _qbe2_emit_project(
 			native_module,
@@ -607,7 +607,7 @@ def _qbe2_emit_instruction(
 		)
 	when Gate2Instruction::VariantConstruct(result, type_id, variant, arguments, origin)
 		_qbe2_emit_origin(native_module, origin, writer)
-		layout := try compute_gate2_layout(native_module.types, type_id)
+		layout := try compute_aggregate_layout(native_module.types, type_id)
 		variant_layout := _qbe2_required_variant(layout, variant)
 		destination := context.values.fetch(result)
 		_qbe2_emit_zero(destination, layout.size, writer)
@@ -626,14 +626,14 @@ def _qbe2_emit_instruction(
 		end
 	when Gate2Instruction::VariantTest(result, type_id, value, variant, origin)
 		_qbe2_emit_origin(native_module, origin, writer)
-		layout := try compute_gate2_layout(native_module.types, type_id)
+		layout := try compute_aggregate_layout(native_module.types, type_id)
 		variant_layout := _qbe2_required_variant(layout, variant)
 		tag := prefix + "tag"
 		_qbe_line(writer, "\t" + tag + " =w loadw " + context.values.fetch(value))
 		_qbe_line(writer, "\t" + context.values.fetch(result) + " =w ceqw " + tag + ", " + variant_layout.tag.to_s())
 	when Gate2Instruction::VariantProject(result, type_id, value, variant, field, origin)
 		_qbe2_emit_origin(native_module, origin, writer)
-		layout := try compute_gate2_layout(native_module.types, type_id)
+		layout := try compute_aggregate_layout(native_module.types, type_id)
 		variant_layout := _qbe2_required_variant(layout, variant)
 		tag := prefix + "tag"
 		matches := prefix + "matches"
@@ -664,8 +664,8 @@ def _qbe2_emit_instruction(
 		when Gate2ResultType::Void
 		when Gate2ResultType::Value(value_type)
 			case value_type
-			when Gate2ValueType::Scalar(_scalar)
-			when Gate2ValueType::Aggregate(_type_id)
+			when AggregateValueType::Scalar(_scalar)
+			when AggregateValueType::Aggregate(_type_id)
 				call_arguments.push("l " + context.values.fetch(_qbe2_required_id(result)))
 			end
 		end
@@ -681,9 +681,9 @@ def _qbe2_emit_instruction(
 		when Gate2ResultType::Void
 		when Gate2ResultType::Value(value_type)
 			case value_type
-			when Gate2ValueType::Scalar(scalar)
+			when AggregateValueType::Scalar(scalar)
 				call_prefix = "\t" + context.values.fetch(_qbe2_required_id(result)) + " =" + _qbe_type(scalar) + " "
-			when Gate2ValueType::Aggregate(_type_id)
+			when AggregateValueType::Aggregate(_type_id)
 			end
 		end
 		_qbe_line(writer, call_prefix + "call $trbn_g2f" + callee_index.to_s() + "(" + call_arguments.join(", ") + ")")
@@ -760,7 +760,7 @@ end
 
 def _qbe2_emit_store_field(
 		native_module: Gate2Module,
-		field: Gate2FieldLayout,
+		field: AggregateFieldLayout,
 		source: String,
 		destination: String,
 		prefix: String,
@@ -768,10 +768,10 @@ def _qbe2_emit_store_field(
 	): Result<Boolean, Diagnostic>
 	address := _qbe2_address(destination, field.offset, prefix + "_address", writer)
 	case field.value_type
-	when Gate2ValueType::Scalar(scalar)
+	when AggregateValueType::Scalar(scalar)
 		_qbe_line(writer, "\t" + _qbe2_scalar_field_store(scalar) + " " + source + ", " + address)
-	when Gate2ValueType::Aggregate(type_id)
-		layout := try compute_gate2_layout(native_module.types, type_id)
+	when AggregateValueType::Aggregate(type_id)
+		layout := try compute_aggregate_layout(native_module.types, type_id)
 		_qbe2_emit_copy(address, source, layout.size, writer)
 	end
 	return Result<Boolean, Diagnostic>::Ok(true)
@@ -779,7 +779,7 @@ end
 
 def _qbe2_emit_project(
 		native_module: Gate2Module,
-		field: Gate2FieldLayout,
+		field: AggregateFieldLayout,
 		source: String,
 		destination: String,
 		prefix: String,
@@ -787,12 +787,12 @@ def _qbe2_emit_project(
 	): Result<Boolean, Diagnostic>
 	address := _qbe2_address(source, field.offset, prefix + "address", writer)
 	case field.value_type
-	when Gate2ValueType::Scalar(scalar)
+	when AggregateValueType::Scalar(scalar)
 		_qbe_line(writer,
 			"\t" + destination + " =" + _qbe_type(scalar) + " " + _qbe2_scalar_field_load(scalar) + " " + address
 		)
-	when Gate2ValueType::Aggregate(type_id)
-		layout := try compute_gate2_layout(native_module.types, type_id)
+	when AggregateValueType::Aggregate(type_id)
+		layout := try compute_aggregate_layout(native_module.types, type_id)
 		_qbe2_emit_copy(destination, address, layout.size, writer)
 	end
 	return Result<Boolean, Diagnostic>::Ok(true)
@@ -829,10 +829,10 @@ def _qbe2_emit_terminator(
 			_qbe_line(writer, "\tret")
 		when Gate2ResultType::Value(value_type)
 			case value_type
-			when Gate2ValueType::Scalar(_scalar)
+			when AggregateValueType::Scalar(_scalar)
 				_qbe_line(writer, "\tret " + context.values.fetch(_qbe2_required_id(value)))
-			when Gate2ValueType::Aggregate(type_id)
-				layout := try compute_gate2_layout(native_module.types, type_id)
+			when AggregateValueType::Aggregate(type_id)
+				layout := try compute_aggregate_layout(native_module.types, type_id)
 				_qbe2_emit_copy("%return", context.values.fetch(_qbe2_required_id(value)), layout.size, writer)
 				_qbe_line(writer, "\tret")
 			end
@@ -854,13 +854,13 @@ def _qbe2_emit_edge(
 	while index < arguments.size()
 		parameter := block.parameters[index]
 		case parameter.value_type
-		when Gate2ValueType::Scalar(_scalar)
-		when Gate2ValueType::Aggregate(type_id)
+		when AggregateValueType::Scalar(_scalar)
+		when AggregateValueType::Aggregate(type_id)
 			if _qbe2_parameter_uses_transfer(parameter, context)
 				source := context.values.fetch(arguments[index])
 				destination := context.transfer_slots.fetch(parameter.id)
 				if source != destination && _qbe2_edge_source_is_destination(block, source, context)
-					layout := try compute_gate2_layout(native_module.types, type_id)
+					layout := try compute_aggregate_layout(native_module.types, type_id)
 					_qbe2_emit_copy(context.storage_slots.fetch(parameter.id), source, layout.size, writer)
 				end
 			end
@@ -871,14 +871,14 @@ def _qbe2_emit_edge(
 	while index < arguments.size()
 		parameter := block.parameters[index]
 		case parameter.value_type
-		when Gate2ValueType::Scalar(scalar)
+		when AggregateValueType::Scalar(scalar)
 			_qbe_line(writer,
 				"\t" + _qbe2_scalar_slot_store(scalar) + " " + context.values.fetch(arguments[index]) +
 				", " + context.transfer_slots.fetch(parameter.id)
 			)
-		when Gate2ValueType::Aggregate(type_id)
+		when AggregateValueType::Aggregate(type_id)
 			if _qbe2_parameter_uses_transfer(parameter, context)
-				layout := try compute_gate2_layout(native_module.types, type_id)
+				layout := try compute_aggregate_layout(native_module.types, type_id)
 				destination := context.transfer_slots.fetch(parameter.id)
 				mut source := context.values.fetch(arguments[index])
 				if source != destination && _qbe2_edge_source_is_destination(block, source, context)
@@ -907,8 +907,8 @@ def _qbe2_edge_source_is_destination(
 	while index < block.parameters.size()
 		parameter := block.parameters[index]
 		case parameter.value_type
-		when Gate2ValueType::Scalar(_scalar)
-		when Gate2ValueType::Aggregate(_type_id)
+		when AggregateValueType::Scalar(_scalar)
+		when AggregateValueType::Aggregate(_type_id)
 			if _qbe2_parameter_uses_transfer(parameter, context) && context.transfer_slots.fetch(parameter.id) == source
 				return true
 			end
@@ -977,11 +977,11 @@ def _qbe2_address(base: String, offset: Integer, name: String, mut writer: Strin
 	return name
 end
 
-def _qbe2_abi_type(value_type: Gate2ValueType): String
+def _qbe2_abi_type(value_type: AggregateValueType): String
 	case value_type
-	when Gate2ValueType::Scalar(scalar)
+	when AggregateValueType::Scalar(scalar)
 		return _qbe_type(scalar)
-	when Gate2ValueType::Aggregate(_type_id)
+	when AggregateValueType::Aggregate(_type_id)
 		return "l"
 	end
 end
@@ -1047,7 +1047,7 @@ def _qbe2_required_id(value: String?): String
 	return value
 end
 
-def _qbe2_required_field(layout: Gate2Layout, name: String): Gate2FieldLayout
+def _qbe2_required_field(layout: AggregateLayout, name: String): AggregateFieldLayout
 	mut index := 0
 	while layout.fields[index].name != name
 		index += 1
@@ -1055,7 +1055,7 @@ def _qbe2_required_field(layout: Gate2Layout, name: String): Gate2FieldLayout
 	return layout.fields[index]
 end
 
-def _qbe2_required_variant(layout: Gate2Layout, name: String): Gate2VariantLayout
+def _qbe2_required_variant(layout: AggregateLayout, name: String): AggregateVariantLayout
 	mut index := 0
 	while layout.variants[index].name != name
 		index += 1
@@ -1063,7 +1063,7 @@ def _qbe2_required_variant(layout: Gate2Layout, name: String): Gate2VariantLayou
 	return layout.variants[index]
 end
 
-def _qbe2_required_variant_field(variant: Gate2VariantLayout, name: String): Gate2FieldLayout
+def _qbe2_required_variant_field(variant: AggregateVariantLayout, name: String): AggregateFieldLayout
 	mut index := 0
 	while variant.fields[index].name != name
 		index += 1
