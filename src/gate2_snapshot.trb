@@ -1,7 +1,7 @@
 import { Diagnostic, boundary_diagnostic } from diagnostic
 import { ComparisonOperator, FloatBinaryOperator, Gate1Instruction, IntegerBinaryOperator, ScalarType } from gate1_mir
 import { Gate2Block, Gate2Function, Gate2Instruction, Gate2Module, Gate2Parameter, Gate2ResultType, Gate2Terminator, verify_gate2_mir } from gate2_mir
-import { Gate2Field, Gate2TypeDefinition, Gate2ValueType, Gate2Variant } from gate2_layout
+import { AggregateField, AggregateTypeDefinition, AggregateValueType, AggregateVariant } from aggregate_layout
 import { NativeSource } from native_mir
 import { object, required_array, required_field, required_integer, required_string, strict_object } from json_boundary
 import { decode_origin } from snapshot
@@ -77,7 +77,7 @@ def decode_gate2_snapshot(source: String): Result<Gate2Module, Diagnostic>
 			boundary_diagnostic("TRBN0005", "/types", "type definition count exceeds the Gate 2 limit")
 		)
 	end
-	mut types: Array<Gate2TypeDefinition> := []
+	mut types: Array<AggregateTypeDefinition> := []
 	mut type_index := 0
 	while type_index < type_values.size()
 		types.push(try _gate2_decode_type_definition(type_values[type_index], "/types/" + type_index.to_s()))
@@ -106,13 +106,13 @@ def decode_gate2_snapshot(source: String): Result<Gate2Module, Diagnostic>
 	return Result<Gate2Module, Diagnostic>::Ok(native_module)
 end
 
-def _gate2_decode_type_definition(value: JSON::Value, path: String): Result<Gate2TypeDefinition, Diagnostic>
+def _gate2_decode_type_definition(value: JSON::Value, path: String): Result<AggregateTypeDefinition, Diagnostic>
 	base_fields := try object(value, path)
 	kind := try required_string(base_fields, "kind", path, false)
 	if kind == "record"
 		fields := try strict_object(value, path, ["kind", "id", "fields"])
-		return Result<Gate2TypeDefinition, Diagnostic>::Ok(
-			Gate2TypeDefinition::Record(
+		return Result<AggregateTypeDefinition, Diagnostic>::Ok(
+			AggregateTypeDefinition::Record(
 				try required_string(fields, "id", path, true),
 				try _gate2_decode_fields(try required_array(fields, "fields", path), path + "/fields"),
 			)
@@ -122,17 +122,17 @@ def _gate2_decode_type_definition(value: JSON::Value, path: String): Result<Gate
 		fields := try strict_object(value, path, ["kind", "id", "variants"])
 		variant_values := try required_array(fields, "variants", path)
 		if variant_values.size() > GATE2_SNAPSHOT_MAX_VARIANTS
-			return Result<Gate2TypeDefinition, Diagnostic>::Err(
+			return Result<AggregateTypeDefinition, Diagnostic>::Err(
 				boundary_diagnostic("TRBN0005", path + "/variants", "variant count exceeds the Gate 2 limit")
 			)
 		end
-		mut variants: Array<Gate2Variant> := []
+		mut variants: Array<AggregateVariant> := []
 		mut index := 0
 		while index < variant_values.size()
 			variant_path := path + "/variants/" + index.to_s()
 			variant_fields := try strict_object(variant_values[index], variant_path, ["name", "fields"])
 			variants.push(
-				Gate2Variant.new(
+				AggregateVariant.new(
 					name: try required_string(variant_fields, "name", variant_path, true),
 					fields: try _gate2_decode_fields(
 						try required_array(variant_fields, "fields", variant_path),
@@ -142,31 +142,31 @@ def _gate2_decode_type_definition(value: JSON::Value, path: String): Result<Gate
 			)
 			index += 1
 		end
-		return Result<Gate2TypeDefinition, Diagnostic>::Ok(
-			Gate2TypeDefinition::Tagged(
+		return Result<AggregateTypeDefinition, Diagnostic>::Ok(
+			AggregateTypeDefinition::Tagged(
 				try required_string(fields, "id", path, true),
 				variants,
 			)
 		)
 	end
-	return Result<Gate2TypeDefinition, Diagnostic>::Err(
+	return Result<AggregateTypeDefinition, Diagnostic>::Err(
 		boundary_diagnostic("TRBN0003", path + "/kind", "unsupported Gate 2 type definition")
 	)
 end
 
-def _gate2_decode_fields(values: Array<JSON::Value>, path: String): Result<Array<Gate2Field>, Diagnostic>
+def _gate2_decode_fields(values: Array<JSON::Value>, path: String): Result<Array<AggregateField>, Diagnostic>
 	if values.size() > GATE2_SNAPSHOT_MAX_FIELDS
-		return Result<Array<Gate2Field>, Diagnostic>::Err(
+		return Result<Array<AggregateField>, Diagnostic>::Err(
 			boundary_diagnostic("TRBN0005", path, "field count exceeds the Gate 2 limit")
 		)
 	end
-	mut fields: Array<Gate2Field> := []
+	mut fields: Array<AggregateField> := []
 	mut index := 0
 	while index < values.size()
 		field_path := path + "/" + index.to_s()
 		item := try strict_object(values[index], field_path, ["name", "type"])
 		fields.push(
-			Gate2Field.new(
+			AggregateField.new(
 				name: try required_string(item, "name", field_path, true),
 				value_type: try _gate2_decode_value_type(
 					try required_string(item, "type", field_path, false),
@@ -176,7 +176,7 @@ def _gate2_decode_fields(values: Array<JSON::Value>, path: String): Result<Array
 		)
 		index += 1
 	end
-	return Result<Array<Gate2Field>, Diagnostic>::Ok(fields)
+	return Result<Array<AggregateField>, Diagnostic>::Ok(fields)
 end
 
 def _gate2_decode_source(value: JSON::Value, path: String): Result<NativeSource, Diagnostic>
@@ -258,22 +258,22 @@ def _gate2_decode_parameter(value: JSON::Value, path: String): Result<Gate2Param
 	)
 end
 
-def _gate2_decode_value_type(name: String, path: String): Result<Gate2ValueType, Diagnostic>
+def _gate2_decode_value_type(name: String, path: String): Result<AggregateValueType, Diagnostic>
 	if name == "Boolean"
-		return Result<Gate2ValueType, Diagnostic>::Ok(Gate2ValueType::Scalar(ScalarType::Boolean))
+		return Result<AggregateValueType, Diagnostic>::Ok(AggregateValueType::Scalar(ScalarType::Boolean))
 	end
 	if name == "Integer"
-		return Result<Gate2ValueType, Diagnostic>::Ok(Gate2ValueType::Scalar(ScalarType::Integer))
+		return Result<AggregateValueType, Diagnostic>::Ok(AggregateValueType::Scalar(ScalarType::Integer))
 	end
 	if name == "Float"
-		return Result<Gate2ValueType, Diagnostic>::Ok(Gate2ValueType::Scalar(ScalarType::Float))
+		return Result<AggregateValueType, Diagnostic>::Ok(AggregateValueType::Scalar(ScalarType::Float))
 	end
 	if name.empty?() || name == "Void"
-		return Result<Gate2ValueType, Diagnostic>::Err(
+		return Result<AggregateValueType, Diagnostic>::Err(
 			boundary_diagnostic("TRBN0003", path, "unsupported Gate 2 value type")
 		)
 	end
-	return Result<Gate2ValueType, Diagnostic>::Ok(Gate2ValueType::Aggregate(name))
+	return Result<AggregateValueType, Diagnostic>::Ok(AggregateValueType::Aggregate(name))
 end
 
 def _gate2_decode_result_type(name: String, path: String): Result<Gate2ResultType, Diagnostic>

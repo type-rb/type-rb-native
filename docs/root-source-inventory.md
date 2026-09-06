@@ -25,21 +25,21 @@ do not authorize merging the snapshot and ordinary self-hosted MIRs.
 
 | File in `src/` | Responsibility | Local imports | Direct consumers | Disposition / proposed destination |
 | --- | --- | --- | --- | --- |
-| [diagnostic.trb](../src/diagnostic.trb) | Shared deterministic diagnostics | — | `gate0`, `gate1_mir`, `gate1_snapshot`, `gate2_layout`, `gate2_mir`, `gate2_snapshot`, `gate3_layout`, `gate3_mir`, `gate3_snapshot`, `json_boundary`, `native_mir`, `qbe`, `qbe2`, `qbe3`, `snapshot` | Keep: `diagnostic.trb` |
+| [diagnostic.trb](../src/diagnostic.trb) | Shared deterministic diagnostics | — | `gate0`, `gate1_mir`, `gate1_snapshot`, `aggregate_layout`, `gate2_mir`, `gate2_snapshot`, `gate3_layout`, `gate3_mir`, `gate3_snapshot`, `json_boundary`, `native_mir`, `qbe`, `qbe2`, `qbe3`, `snapshot` | Keep: `diagnostic.trb` |
 | [gate0.trb](../src/gate0.trb) | Snapshot v1 validate/lower entry | `diagnostic`, `native_mir`, `snapshot` | `gate0_test` | Keep; rename later: `snapshot_boundary.trb` |
 | [gate0_test.trb](../src/gate0_test.trb) | Test: Gate 0 boundary | `gate0`, `native_mir`, `snapshot`, `native_file_system` | Root test discovery | Keep; rename later: `snapshot_boundary_test.trb` |
 | [gate1_differential_test.trb](../src/gate1_differential_test.trb) | Test: Gate 1 source-connected differential corpus | `gate1_snapshot`, `gate1_toolchain`, `native_file_system` | Root test discovery | Keep; rename later: `scalar_differential_test.trb` |
 | [gate1_driver.trb](../src/gate1_driver.trb) | Snapshot/recovery/comparison CLI entry | `gate1_snapshot`, `gate1_toolchain`, `gate2_snapshot`, `gate2_toolchain`, `gate3_snapshot`, `gate3_toolchain`, `recovery_generation`, `matched_go_driver`, `compiler_recovery_source`, `native_file_system` | Root executable CLI | Keep; rename later: `bootstrap_driver.trb` |
-| [gate1_mir.trb](../src/gate1_mir.trb) | Scalar MIR and shared scalar operators | `diagnostic`, `native_mir`, `snapshot` | `gate1_snapshot`, `gate1_test`, `gate1_toolchain`, `gate2_layout`, `gate2_layout_test`, `gate2_mir`, `gate2_mir_test`, `gate2_snapshot`, `gate3_capture_test`, `gate3_gc_test`, `gate3_integer_array_test`, `gate3_layout`, `gate3_layout_test`, `gate3_mir`, `gate3_mir_test`, `gate3_snapshot`, `qbe`, `qbe2`, `qbe3` | Keep; rename later: `scalar_mir.trb` |
+| [gate1_mir.trb](../src/gate1_mir.trb) | Scalar MIR and shared scalar operators | `diagnostic`, `native_mir`, `snapshot` | `gate1_snapshot`, `gate1_test`, `gate1_toolchain`, `aggregate_layout`, `aggregate_layout_test`, `gate2_mir`, `gate2_mir_test`, `gate2_snapshot`, `gate3_capture_test`, `gate3_gc_test`, `gate3_integer_array_test`, `gate3_layout`, `gate3_layout_test`, `gate3_mir`, `gate3_mir_test`, `gate3_snapshot`, `qbe`, `qbe2`, `qbe3` | Keep; rename later: `scalar_mir.trb` |
 | [gate1_snapshot.trb](../src/gate1_snapshot.trb) | Snapshot v2 scalar decoder | `diagnostic`, `gate1_mir`, `native_mir`, `json_boundary`, `snapshot` | `gate1_differential_test`, `gate1_driver`, `gate1_test` | Keep; rename later: `scalar_snapshot.trb` |
 | [gate1_test.trb](../src/gate1_test.trb) | Test: Gate 1 scalar QBE path | `gate1_mir`, `gate1_toolchain`, `gate1_snapshot`, `native_mir`, `qbe`, `snapshot`, `native_file_system` | Root test discovery | Keep; rename later: `scalar_qbe_test.trb` |
 | [gate1_toolchain.trb](../src/gate1_toolchain.trb) | Scalar QBE tool invocation | `gate1_mir`, `qbe`, `native_file_system` | `gate1_differential_test`, `gate1_driver`, `gate1_test` | Keep; rename later: `scalar_toolchain.trb` |
 | [gate2_differential_test.trb](../src/gate2_differential_test.trb) | Test: Gate 2 source-connected differential corpus | `gate2_snapshot`, `gate2_toolchain`, `native_file_system` | Root test discovery | Keep; rename later: `aggregate_differential_test.trb` |
-| [gate2_layout.trb](../src/gate2_layout.trb) | Heap-free aggregate layout | `diagnostic`, `gate1_mir` | `gate2_layout_test`, `gate2_mir`, `gate2_mir_test`, `gate2_snapshot`, `qbe2` | Keep; rename later: `aggregate_layout.trb` |
-| [gate2_layout_test.trb](../src/gate2_layout_test.trb) | Test: Gate 2 static aggregate layout | `gate2_layout`, `gate1_mir` | Root test discovery | Keep; rename later: `aggregate_layout_test.trb` |
-| [gate2_mir.trb](../src/gate2_mir.trb) | Heap-free aggregate MIR/verifier | `diagnostic`, `gate1_mir`, `gate2_layout`, `native_mir`, `snapshot` | `gate2_mir_test`, `gate2_snapshot`, `gate2_toolchain`, `qbe2` | Keep; rename later: `aggregate_mir.trb` |
-| [gate2_mir_test.trb](../src/gate2_mir_test.trb) | Test: Gate 2 aggregate MIR | `gate1_mir`, `gate2_layout`, `gate2_mir`, `gate2_toolchain`, `native_mir`, `qbe2`, `snapshot`, `native_file_system` | Root test discovery | Keep; rename later: `aggregate_mir_test.trb` |
-| [gate2_snapshot.trb](../src/gate2_snapshot.trb) | Snapshot v3 aggregate decoder | `diagnostic`, `gate1_mir`, `gate2_mir`, `gate2_layout`, `native_mir`, `json_boundary`, `snapshot` | `gate1_driver`, `gate2_differential_test`, `gate2_snapshot_test` | Keep; rename later: `aggregate_snapshot.trb` |
+| [aggregate_layout.trb](../src/aggregate_layout.trb) | Heap-free aggregate layout | `diagnostic`, `gate1_mir` | `aggregate_layout_test`, `gate2_mir`, `gate2_mir_test`, `gate2_snapshot`, `qbe2` | Moved: `aggregate_layout.trb` |
+| [aggregate_layout_test.trb](../src/aggregate_layout_test.trb) | Test: Gate 2 static aggregate layout | `aggregate_layout`, `gate1_mir` | Root test discovery | Moved: `aggregate_layout_test.trb` |
+| [gate2_mir.trb](../src/gate2_mir.trb) | Heap-free aggregate MIR/verifier | `diagnostic`, `gate1_mir`, `aggregate_layout`, `native_mir`, `snapshot` | `gate2_mir_test`, `gate2_snapshot`, `gate2_toolchain`, `qbe2` | Keep; rename later: `aggregate_mir.trb` |
+| [gate2_mir_test.trb](../src/gate2_mir_test.trb) | Test: Gate 2 aggregate MIR | `gate1_mir`, `aggregate_layout`, `gate2_mir`, `gate2_toolchain`, `native_mir`, `qbe2`, `snapshot`, `native_file_system` | Root test discovery | Keep; rename later: `aggregate_mir_test.trb` |
+| [gate2_snapshot.trb](../src/gate2_snapshot.trb) | Snapshot v3 aggregate decoder | `diagnostic`, `gate1_mir`, `gate2_mir`, `aggregate_layout`, `native_mir`, `json_boundary`, `snapshot` | `gate1_driver`, `gate2_differential_test`, `gate2_snapshot_test` | Keep; rename later: `aggregate_snapshot.trb` |
 | [gate2_snapshot_test.trb](../src/gate2_snapshot_test.trb) | Test: Gate 2 snapshot v3 | `gate2_snapshot`, `gate2_toolchain`, `qbe2`, `native_file_system` | Root test discovery | Keep; rename later: `aggregate_snapshot_test.trb` |
 | [gate2_toolchain.trb](../src/gate2_toolchain.trb) | Aggregate QBE tool invocation | `gate2_mir`, `qbe2`, `native_file_system` | `gate1_driver`, `gate2_differential_test`, `gate2_mir_test`, `gate2_snapshot_test` | Keep; rename later: `aggregate_toolchain.trb` |
 | [gate3_capture_test.trb](../src/gate3_capture_test.trb) | Test: Gate 3 closure capture runtime | `gate1_mir`, `gate3_layout`, `gate3_mir`, `gate3_toolchain`, `native_mir`, `snapshot`, `native_file_system` | Root test discovery | Keep; rename later: `closure_capture_test.trb` |
@@ -66,7 +66,7 @@ do not authorize merging the snapshot and ordinary self-hosted MIRs.
 | [native_file_system_test.trb](../src/native_file_system_test.trb) | Test: Native filesystem support | `native_file_system` | Root test discovery | Keep: `native_file_system_test.trb` |
 | [native_mir.trb](../src/native_mir.trb) | Snapshot v1 MIR and shared source identities | `diagnostic`, `snapshot` | `gate0`, `gate0_test`, `gate1_mir`, `gate1_snapshot`, `gate1_test`, `gate2_mir`, `gate2_mir_test`, `gate2_snapshot`, `gate3_capture_test`, `gate3_gc_test`, `gate3_integer_array_test`, `gate3_managed_aggregate_test`, `gate3_mir`, `gate3_mir_test`, `gate3_snapshot` | Keep; rename later: `snapshot_mir.trb` |
 | [qbe.trb](../src/qbe.trb) | Scalar QBE plus shared emission helpers | `diagnostic`, `gate1_mir`, `snapshot` | `gate1_test`, `gate1_toolchain`, `gate3_runtime`, `qbe2`, `qbe3` | Keep; rename later: `scalar_qbe.trb` |
-| [qbe2.trb](../src/qbe2.trb) | Aggregate QBE adapter | `diagnostic`, `gate1_mir`, `gate2_layout`, `gate2_mir`, `qbe`, `snapshot` | `gate2_mir_test`, `gate2_snapshot_test`, `gate2_toolchain` | Keep; rename later: `aggregate_qbe.trb` |
+| [qbe2.trb](../src/qbe2.trb) | Aggregate QBE adapter | `diagnostic`, `gate1_mir`, `aggregate_layout`, `gate2_mir`, `qbe`, `snapshot` | `gate2_mir_test`, `gate2_snapshot_test`, `gate2_toolchain` | Keep; rename later: `aggregate_qbe.trb` |
 | [qbe3.trb](../src/qbe3.trb) | Managed/recovery QBE adapter | `diagnostic`, `gate1_mir`, `gate3_layout`, `gate3_runtime`, `gate3_mir`, `qbe`, `snapshot` | `gate3_differential_test`, `gate3_toolchain`, `qbe3_test` | Keep; rename later: `managed_qbe.trb` |
 | [qbe3_test.trb](../src/qbe3_test.trb) | Test: Gate 3 managed QBE runtime | `gate3_snapshot`, `gate3_toolchain`, `qbe3`, `native_file_system` | Root test discovery | Keep; rename later: `managed_qbe_test.trb` |
 | [snapshot.trb](../src/snapshot.trb) | Snapshot v1 schema and shared source origins | `diagnostic` | `gate0`, `gate0_test`, `gate1_mir`, `gate1_snapshot`, `gate1_test`, `gate2_mir`, `gate2_mir_test`, `gate2_snapshot`, `gate3_capture_test`, `gate3_gc_test`, `gate3_integer_array_test`, `gate3_managed_aggregate_test`, `gate3_mir`, `gate3_mir_test`, `gate3_snapshot`, `native_mir`, `qbe`, `qbe2`, `qbe3` | Keep; rename later: `snapshot_v1.trb` |
@@ -163,3 +163,16 @@ the next bounded naming move.
 The remaining root driver and snapshot/runtime families can move independently
 with their exact callers. Register each move's baseline and recovery/identity
 checks; do not combine an optimizer change and a broad path rename in one PR.
+
+## Heap-free aggregate layout naming
+
+[Issue #279](https://github.com/type-rb/type-rb-native/issues/279) moves
+`src/gate2_layout{,_test}.trb` to `src/aggregate_layout{,_test}.trb`.
+Layout-owned types, limits and helpers now use `Aggregate`, `AGGREGATE_` and
+`aggregate_` names, including private helpers. The five direct importers move
+with them. No compatibility alias or duplicated layout implementation remains.
+
+The snapshot v3 schema, layout limits and exact diagnostic strings are unchanged;
+`Gate 2` in existing diagnostics is a retained protocol label. Other aggregate
+MIR/snapshot/QBE owners remain separately scheduled. This does not change the
+ordinary compiler closure, its generated output or accepted runtime results.
