@@ -8,6 +8,7 @@ import { gate4_array_element_type, gate4_array_type, gate4_common_array_element_
 import { checked_binary_plan_type, gate4_check_block, gate4_mir_add_parameter, gate4_mir_nonnegative_fact, gate4_scalar_leaf_inline_eligible, gate4_scalar_mir_begin, gate4_scalar_mir_commit } from checked_program
 import { QbeOutput, qbe_output_append, qbe_output_branch, qbe_output_line, qbe_output_new } from qbe_output
 import { emit_float_array_runtime, emit_float_to_integer_runtime, emit_integer_to_string_runtime, emit_process_runtime, emit_qbe_runtime, emit_string_to_integer_runtime } from qbe_runtime
+import { parse_project_config } from project_config
 
 record Gate4EmitContext
 	local_names: Gate4StringStorage
@@ -38,25 +39,6 @@ record Gate4EmittedValue
 	name: String
 	mutable: Integer
 	address: String
-end
-
-record Gate4ProjectGoConfig
-	module_name: String
-	version: String
-	root_package: String
-end
-
-record Gate4ProjectConfig
-	name: String
-	version: String
-	mode: String
-	source_dir: String
-	out_dir: String
-	copy_files: Boolean
-	package_management: String
-	go_config: Gate4ProjectGoConfig
-	error: String
-	error_line: Integer
 end
 
 record Gate4ProjectSources
@@ -2790,764 +2772,6 @@ def gate4_compile_state(mut state: Gate4Compiler, mode: String, file_mode: Boole
 	return 64
 end
 
-def gate4_project_set_error(
-		mut error: Array<String>,
-		mut error_line: Array<Integer>,
-		message: String,
-		line: Integer,
-	)
-	if error[0] == ""
-		error[0] = message
-		error_line[0] = line
-	end
-	return
-end
-
-def gate4_project_advance(mut value: Array<Integer>, amount: Integer)
-	value[0] = value[0] + amount
-	return
-end
-
-def gate4_json_skip_ignored(
-		source: String,
-		mut position: Array<Integer>,
-		mut line: Array<Integer>,
-		mut error: Array<String>,
-		mut error_line: Array<Integer>,
-	): Boolean
-	mut scanning := true
-	while scanning
-		if position[0] >= source.size()
-			scanning = false
-		else
-			character := source[position[0]]
-			if character == " "
-				gate4_project_advance(position, 1)
-			else
-				if character == "\t"
-					gate4_project_advance(position, 1)
-				else
-					if character == "\r"
-						gate4_project_advance(position, 1)
-					else
-						if character == "\n"
-							gate4_project_advance(position, 1)
-							gate4_project_advance(line, 1)
-						else
-							if character == "/"
-								if position[0] + 1 < source.size()
-									following := source[position[0] + 1]
-									if following == "/"
-										gate4_project_advance(position, 2)
-										mut comment := true
-										while comment
-											if position[0] >= source.size()
-												comment = false
-											else
-												if source[position[0]] == "\n"
-													comment = false
-												else
-													gate4_project_advance(position, 1)
-												end
-											end
-										end
-									else
-										if following == "*"
-											start_line := line[0]
-											gate4_project_advance(position, 2)
-											mut comment := true
-											mut closed := false
-											while comment
-												if position[0] >= source.size()
-													comment = false
-												else
-													if source[position[0]] == "\n"
-														gate4_project_advance(line, 1)
-													end
-													if source[position[0]] == "*"
-														if position[0] + 1 < source.size()
-															if source[position[0] + 1] == "/"
-																gate4_project_advance(position, 2)
-																closed = true
-																comment = false
-															end
-														end
-													end
-													if comment
-														gate4_project_advance(position, 1)
-													end
-												end
-											end
-											if !closed
-												gate4_project_set_error(error, error_line, "unterminated JSONC block comment", start_line)
-												scanning = false
-											end
-										else
-											scanning = false
-										end
-									end
-								else
-									scanning = false
-								end
-							else
-								scanning = false
-							end
-						end
-					end
-				end
-			end
-		end
-	end
-	return error[0] == ""
-end
-
-def gate4_json_hex_digit(character: String): Integer
-	code := gate4_ascii_code(character)
-	if code >= 48
-		if code <= 57
-			return code - 48
-		end
-	end
-	if code >= 65
-		if code <= 70
-			return code - 55
-		end
-	end
-	if code >= 97
-		if code <= 102
-			return code - 87
-		end
-	end
-	return - 1
-end
-
-def gate4_json_ascii_character(code: Integer): String
-	if code == 9
-		return "\t"
-	end
-	if code == 10
-		return "\n"
-	end
-	if code == 13
-		return "\r"
-	end
-	if code < 32
-		return ""
-	end
-	if code > 126
-		return ""
-	end
-	return " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"[code - 32]
-end
-
-def gate4_json_string(
-		source: String,
-		mut position: Array<Integer>,
-		mut line: Array<Integer>,
-		mut error: Array<String>,
-		mut error_line: Array<Integer>,
-	): String
-	if position[0] >= source.size()
-		gate4_project_set_error(error, error_line, "expected JSON string", line[0])
-		return ""
-	end
-	if source[position[0]] != "\""
-		gate4_project_set_error(error, error_line, "expected JSON string", line[0])
-		return ""
-	end
-	gate4_project_advance(position, 1)
-	mut result := ""
-	mut scanning := true
-	mut closed := false
-	while scanning
-		if position[0] >= source.size()
-			scanning = false
-		else
-			character := source[position[0]]
-			if character == "\""
-				gate4_project_advance(position, 1)
-				closed = true
-				scanning = false
-			else
-				if character == "\n"
-					gate4_project_set_error(error, error_line, "newline in JSON string", line[0])
-					scanning = false
-				else
-					if character == "\\"
-						gate4_project_advance(position, 1)
-						if position[0] >= source.size()
-							gate4_project_set_error(error, error_line, "unterminated JSON escape", line[0])
-							scanning = false
-						else
-							escaped := source[position[0]]
-							gate4_project_advance(position, 1)
-							if escaped == "\""
-								result += "\""
-							else
-								if escaped == "\\"
-									result += "\\"
-								else
-									if escaped == "/"
-										result += "/"
-									else
-										if escaped == "n"
-											result += "\n"
-										else
-											if escaped == "r"
-												result += "\r"
-											else
-												if escaped == "t"
-													result += "\t"
-												else
-													if escaped == "u"
-														mut code := 0
-														mut digit_index := 0
-														while digit_index < 4
-															if position[0] >= source.size()
-																gate4_project_set_error(error, error_line, "incomplete JSON Unicode escape", line[0])
-																digit_index = 4
-															else
-																digit := gate4_json_hex_digit(source[position[0]])
-																if digit < 0
-																	gate4_project_set_error(error, error_line, "invalid JSON Unicode escape", line[0])
-																	digit_index = 4
-																else
-																	code = code * 16 + digit
-																	gate4_project_advance(position, 1)
-																	digit_index += 1
-																end
-															end
-														end
-														if error[0] == ""
-															decoded := gate4_json_ascii_character(code)
-															if decoded == ""
-																gate4_project_set_error(error, error_line, "non-ASCII JSON Unicode escape is not supported", line[0])
-															else
-																result += decoded
-															end
-														end
-													else
-														gate4_project_set_error(error, error_line, "unsupported JSON escape", line[0])
-													end
-												end
-											end
-										end
-									end
-								end
-							end
-							if error[0] != ""
-								scanning = false
-							end
-						end
-					else
-						code := gate4_ascii_code(character)
-						if code >= 0
-							if code < 32
-								gate4_project_set_error(error, error_line, "control character in JSON string", line[0])
-								scanning = false
-							end
-						end
-						if scanning
-							result += character
-							gate4_project_advance(position, 1)
-						end
-					end
-				end
-			end
-		end
-	end
-	if !closed
-		if error[0] == ""
-			gate4_project_set_error(error, error_line, "unterminated JSON string", line[0])
-		end
-	end
-	return result
-end
-
-def gate4_json_literal_at(source: String, position: Integer, literal: String): Boolean
-	if position + literal.size() > source.size()
-		return false
-	end
-	mut index := 0
-	while index < literal.size()
-		if source[position + index] != literal[index]
-			return false
-		end
-		index += 1
-	end
-	return true
-end
-
-def gate4_json_boolean(
-		source: String,
-		mut position: Array<Integer>,
-		line: Integer,
-		mut error: Array<String>,
-		mut error_line: Array<Integer>,
-	): Boolean
-	if gate4_json_literal_at(source, position[0], "true")
-		gate4_project_advance(position, 4)
-		return true
-	end
-	if gate4_json_literal_at(source, position[0], "false")
-		gate4_project_advance(position, 5)
-		return false
-	end
-	gate4_project_set_error(error, error_line, "expected JSON Boolean", line)
-	return false
-end
-
-def gate4_string_array_contains(values: Array<String>, value: String): Boolean
-	mut index := 0
-	while index < values.size()
-		if values[index] == value
-			return true
-		end
-		index += 1
-	end
-	return false
-end
-
-def gate4_json_expect(
-		source: String,
-		mut position: Array<Integer>,
-		expected: String,
-		line: Integer,
-		mut error: Array<String>,
-		mut error_line: Array<Integer>,
-	): Boolean
-	if position[0] < source.size()
-		if source[position[0]] == expected
-			gate4_project_advance(position, 1)
-			return true
-		end
-	end
-	gate4_project_set_error(error, error_line, "expected JSON " + expected, line)
-	return false
-end
-
-def gate4_parse_project_go_config(
-		source: String,
-		mut position: Array<Integer>,
-		mut line: Array<Integer>,
-		mut error: Array<String>,
-		mut error_line: Array<Integer>,
-	): Gate4ProjectGoConfig
-	mut module_name := ""
-	mut version := "1.27"
-	mut root_package := "main"
-	gate4_json_expect(source, position, "{", line[0], error, error_line)
-	gate4_json_skip_ignored(source, position, line, error, error_line)
-	mut seen: Array<String> := []
-	mut finished := false
-	while !finished
-		if error[0] != ""
-			finished = true
-		else
-			if position[0] < source.size()
-				if source[position[0]] == "}"
-					gate4_project_advance(position, 1)
-					finished = true
-				else
-					key_line := line[0]
-					key := gate4_json_string(source, position, line, error, error_line)
-					if gate4_string_array_contains(seen, key)
-						gate4_project_set_error(error, error_line, "duplicate go configuration field " + key, key_line)
-					else
-						seen.push(key)
-					end
-					gate4_json_skip_ignored(source, position, line, error, error_line)
-					gate4_json_expect(source, position, ":", line[0], error, error_line)
-					gate4_json_skip_ignored(source, position, line, error, error_line)
-					if error[0] == ""
-						if key == "module"
-							module_name = gate4_json_string(source, position, line, error, error_line)
-						else
-							if key == "version"
-								version = gate4_json_string(source, position, line, error, error_line)
-							else
-								if key == "rootPackage"
-									root_package = gate4_json_string(source, position, line, error, error_line)
-								else
-									gate4_project_set_error(error, error_line, "unsupported go configuration field " + key, key_line)
-								end
-							end
-						end
-					end
-					gate4_json_skip_ignored(source, position, line, error, error_line)
-					if error[0] == ""
-						if position[0] < source.size()
-							if source[position[0]] == ","
-								gate4_project_advance(position, 1)
-								gate4_json_skip_ignored(source, position, line, error, error_line)
-								if position[0] < source.size()
-									if source[position[0]] == "}"
-										gate4_project_set_error(error, error_line, "trailing comma in go configuration", line[0])
-									end
-								end
-							else
-								if source[position[0]] != "}"
-									gate4_project_set_error(error, error_line, "expected JSON , or }", line[0])
-								end
-							end
-						else
-							gate4_project_set_error(error, error_line, "unterminated go configuration", line[0])
-						end
-					end
-				end
-			else
-				gate4_project_set_error(error, error_line, "unterminated go configuration", line[0])
-			end
-		end
-	end
-	if version == ""
-		version = "1.27"
-	end
-	if root_package == ""
-		root_package = "main"
-	end
-	return Gate4ProjectGoConfig.new(module_name: module_name, version: version, root_package: root_package)
-end
-
-def gate4_project_blank(value: String): Boolean
-	mut index := 0
-	while index < value.size()
-		character := value[index]
-		mut whitespace := character == " "
-		if character == "\t"
-			whitespace = true
-		end
-		if character == "\r"
-			whitespace = true
-		end
-		if character == "\n"
-			whitespace = true
-		end
-		if !whitespace
-			return false
-		end
-		index += 1
-	end
-	return true
-end
-
-def gate4_project_clean_relative(
-		value: String,
-		field: String,
-		mut error: Array<String>,
-		mut error_line: Array<Integer>,
-	): String
-	if value.size() > 0
-		if value[0] == "/"
-			gate4_project_set_error(error, error_line, field + " must be relative to the project root", 1)
-			return ""
-		end
-	end
-	mut segments: Array<String> := []
-	mut segment_count := 0
-	mut segment := ""
-	mut index := 0
-	while index <= value.size()
-		mut boundary := index == value.size()
-		if !boundary
-			if value[index] == "/"
-				boundary = true
-			end
-		end
-		if boundary
-			if segment == ".."
-				if segment_count == 0
-					gate4_project_set_error(error, error_line, field + " cannot escape the project root", 1)
-				else
-					segment_count -= 1
-				end
-			else
-				if segment != ""
-					if segment != "."
-						if segment_count < segments.size()
-							segments[segment_count] = segment
-						else
-							segments.push(segment)
-						end
-						segment_count += 1
-					end
-				end
-			end
-			segment = ""
-		else
-			segment += value[index]
-		end
-		index += 1
-	end
-	mut result := ""
-	index = 0
-	while index < segment_count
-		if result != ""
-			result += "/"
-		end
-		result += segments[index]
-		index += 1
-	end
-	if result == ""
-		return "."
-	end
-	return result
-end
-
-def gate4_project_go_version_supported(value: String): Boolean
-	mut components: Array<Integer> := []
-	mut current := 0
-	mut digits := 0
-	mut index := 0
-	while index <= value.size()
-		mut boundary := index == value.size()
-		if !boundary
-			if value[index] == "."
-				boundary = true
-			end
-		end
-		if boundary
-			if digits == 0
-				return false
-			end
-			components.push(current)
-			current = 0
-			digits = 0
-		else
-			code := gate4_ascii_code(value[index])
-			if code < 48
-				return false
-			end
-			if code > 57
-				return false
-			end
-			digit := code - 48
-			if current > 900719925474099
-				return false
-			end
-			if current == 900719925474099
-				if digit > 1
-					return false
-				end
-			end
-			current = current * 10 + digit
-			digits += 1
-		end
-		index += 1
-	end
-	if components.size() < 2
-		return false
-	end
-	if components.size() > 3
-		return false
-	end
-	if components[0] > 1
-		return true
-	end
-	if components[0] < 1
-		return false
-	end
-	return components[1] >= 27
-end
-
-def gate4_project_config_error(
-		name: String,
-		version: String,
-		mode: String,
-		source_dir: String,
-		out_dir: String,
-		copy_files: Boolean,
-		package_management: String,
-		go_config: Gate4ProjectGoConfig,
-		error: String,
-		error_line: Integer,
-	): Gate4ProjectConfig
-	return Gate4ProjectConfig.new(
-		name: name,
-		version: version,
-		mode: mode,
-		source_dir: source_dir,
-		out_dir: out_dir,
-		copy_files: copy_files,
-		package_management: package_management,
-		go_config: go_config,
-		error: error,
-		error_line: error_line,
-	)
-end
-
-def gate4_parse_project_config(source: String): Gate4ProjectConfig
-	mut position := [0]
-	mut line := [1]
-	mut error := [""]
-	mut error_line := [1]
-	mut name := ""
-	mut version := "0.1.0"
-	mut mode := ""
-	mut source_dir := "."
-	mut out_dir := "build"
-	mut copy_files := true
-	mut package_management := "managed"
-	mut go_config := Gate4ProjectGoConfig.new(module_name: "", version: "1.27", root_package: "main")
-	gate4_json_skip_ignored(source, position, line, error, error_line)
-	gate4_json_expect(source, position, "{", line[0], error, error_line)
-	gate4_json_skip_ignored(source, position, line, error, error_line)
-	mut seen: Array<String> := []
-	mut finished := false
-	while !finished
-		if error[0] != ""
-			finished = true
-		else
-			if position[0] < source.size()
-				if source[position[0]] == "}"
-					gate4_project_advance(position, 1)
-					finished = true
-				else
-					key_line := line[0]
-					key := gate4_json_string(source, position, line, error, error_line)
-					if gate4_string_array_contains(seen, key)
-						gate4_project_set_error(error, error_line, "duplicate project configuration field " + key, key_line)
-					else
-						seen.push(key)
-					end
-					gate4_json_skip_ignored(source, position, line, error, error_line)
-					gate4_json_expect(source, position, ":", line[0], error, error_line)
-					gate4_json_skip_ignored(source, position, line, error, error_line)
-					if error[0] == ""
-						if key == "$schema"
-							gate4_json_string(source, position, line, error, error_line)
-						else
-							if key == "name"
-								name = gate4_json_string(source, position, line, error, error_line)
-							else
-								if key == "version"
-									version = gate4_json_string(source, position, line, error, error_line)
-								else
-									if key == "mode"
-										mode = gate4_json_string(source, position, line, error, error_line)
-									else
-										if key == "sourceDir"
-											source_dir = gate4_json_string(source, position, line, error, error_line)
-										else
-											if key == "outDir"
-												out_dir = gate4_json_string(source, position, line, error, error_line)
-											else
-												if key == "copyFiles"
-													copy_files = gate4_json_boolean(source, position, line[0], error, error_line)
-												else
-													if key == "packageManagement"
-														package_management = gate4_json_string(source, position, line, error, error_line)
-													else
-														if key == "go"
-															go_config = gate4_parse_project_go_config(source, position, line, error, error_line)
-														else
-															gate4_project_set_error(error, error_line, "unsupported project configuration field " + key, key_line)
-														end
-													end
-												end
-											end
-										end
-									end
-								end
-							end
-						end
-					end
-					gate4_json_skip_ignored(source, position, line, error, error_line)
-					if error[0] == ""
-						if position[0] < source.size()
-							if source[position[0]] == ","
-								gate4_project_advance(position, 1)
-								gate4_json_skip_ignored(source, position, line, error, error_line)
-								if position[0] < source.size()
-									if source[position[0]] == "}"
-										gate4_project_set_error(error, error_line, "trailing comma in project configuration", line[0])
-									end
-								end
-							else
-								if source[position[0]] != "}"
-									gate4_project_set_error(error, error_line, "expected JSON , or }", line[0])
-								end
-							end
-						else
-							gate4_project_set_error(error, error_line, "unterminated project configuration", line[0])
-						end
-					end
-				end
-			else
-				gate4_project_set_error(error, error_line, "unterminated project configuration", line[0])
-			end
-		end
-	end
-	gate4_json_skip_ignored(source, position, line, error, error_line)
-	if error[0] == ""
-		if position[0] != source.size()
-			gate4_project_set_error(error, error_line, "unexpected data after project configuration", line[0])
-		end
-	end
-	if error[0] == ""
-		if gate4_project_blank(name)
-			gate4_project_set_error(error, error_line, "name is required", 1)
-		end
-	end
-	if error[0] == ""
-		if mode != "go"
-			if mode != "trb"
-				if mode != ""
-					gate4_project_set_error(error, error_line, "mode must be go or trb for configured Native builds", 1)
-				end
-			end
-		end
-	end
-	if source_dir == ""
-		source_dir = "."
-	end
-	if out_dir == ""
-		out_dir = "build"
-	end
-	if package_management == ""
-		package_management = "managed"
-	end
-	if error[0] == ""
-		source_dir = gate4_project_clean_relative(source_dir, "sourceDir", error, error_line)
-	end
-	if error[0] == ""
-		out_dir = gate4_project_clean_relative(out_dir, "outDir", error, error_line)
-	end
-	if error[0] == ""
-		mut package_mode_supported := package_management == "managed"
-		if package_management == "external"
-			package_mode_supported = true
-		end
-		if !package_mode_supported
-			gate4_project_set_error(error, error_line, "packageManagement must be managed or external", 1)
-		end
-	end
-	if error[0] == ""
-		if mode == "go"
-			if gate4_project_blank(go_config.module_name)
-				gate4_project_set_error(error, error_line, "go.module is required for mode go", 1)
-			end
-		end
-	end
-	if error[0] == ""
-		if !gate4_project_go_version_supported(go_config.version)
-			gate4_project_set_error(error, error_line, "go.version must be 1.27 or later", 1)
-		end
-	end
-	return gate4_project_config_error(
-		name,
-		version,
-		mode,
-		source_dir,
-		out_dir,
-		copy_files,
-		package_management,
-		go_config,
-		error[0],
-		error_line[0],
-	)
-end
-
 def compiler_main(source: String, mode: String, file_mode: Boolean): Integer
 	mut state := gate4_compiler_new(source.size() + 1)
 	gate4_lex(state, source)
@@ -3628,7 +2852,7 @@ def gate4_scan_identifier(
 					source[position[0]],
 					"0123456789fretnmoidupglsavchbyxkwqzjABCDEFGHIJKLMNOPQRSTUVWXYZ_",
 				)
-				gate4_project_advance(position, 1)
+				gate4_advance(position)
 			else
 				scanning = false
 			end
@@ -3651,7 +2875,7 @@ def gate4_scan_number(
 			scanning = false
 		else
 			if gate4_number_character(source[position[0]])
-				gate4_project_advance(position, 1)
+				gate4_advance(position)
 			else
 				scanning = false
 			end
@@ -3660,14 +2884,14 @@ def gate4_scan_number(
 	if position[0] + 1 < source.size()
 		if source[position[0]] == "."
 			if gate4_character_in(source[position[0] + 1], "0123456789")
-				gate4_project_advance(position, 1)
+				gate4_advance(position)
 				scanning = true
 				while scanning
 					if position[0] >= source.size()
 						scanning = false
 					else
 						if gate4_number_character(source[position[0]])
-							gate4_project_advance(position, 1)
+							gate4_advance(position)
 						else
 							scanning = false
 						end
@@ -3712,7 +2936,7 @@ def gate4_scan_string(
 		mut position: Array<Integer>,
 		line: Integer,
 	)
-	gate4_project_advance(position, 1)
+	gate4_advance(position)
 	mut text := ""
 	mut chunk_start := position[0]
 	mut scanning := true
@@ -3726,7 +2950,7 @@ def gate4_scan_string(
 				text += gate4_source_slice(source, chunk_start, position[0])
 				closed = true
 				scanning = false
-				gate4_project_advance(position, 1)
+				gate4_advance(position)
 			else
 				if current == "\n"
 					gate4_diagnostic(state, "TRBN4001", line, "unterminated String literal")
@@ -3734,17 +2958,17 @@ def gate4_scan_string(
 				else
 					if current == "\\"
 						text += gate4_source_slice(source, chunk_start, position[0])
-						gate4_project_advance(position, 1)
+						gate4_advance(position)
 						if position[0] >= source.size()
 							gate4_diagnostic(state, "TRBN4001", line, "unterminated String escape")
 							scanning = false
 						else
 							text += gate4_decode_escape(state, source[position[0]], line)
-							gate4_project_advance(position, 1)
+							gate4_advance(position)
 							chunk_start = position[0]
 						end
 					else
-						gate4_project_advance(position, 1)
+						gate4_advance(position)
 					end
 				end
 			end
@@ -3807,7 +3031,7 @@ def gate4_scan_symbol(
 		pair := character + source[position[0] + 1]
 		if gate4_two_character_symbol(pair)
 			symbol = pair
-			gate4_project_advance(position, 1)
+			gate4_advance(position)
 		end
 	end
 	if gate4_character_in(character, "()[]{}:,.+-*/%<>=!")
@@ -3815,7 +3039,7 @@ def gate4_scan_symbol(
 	else
 		gate4_diagnostic(state, "TRBN4001", line, "unsupported source character " + character)
 	end
-	gate4_project_advance(position, 1)
+	gate4_advance(position)
 	return
 end
 
@@ -3828,7 +3052,7 @@ def gate4_skip_comment(source: String, mut position: Array<Integer>)
 			if source[position[0]] == "\n"
 				scanning = false
 			else
-				gate4_project_advance(position, 1)
+				gate4_advance(position)
 			end
 		end
 	end
@@ -3842,18 +3066,18 @@ def gate4_lex_source(mut state: Gate4Compiler, source: String, terminal_kind: In
 	while position[0] < source.size()
 		character = source[position[0]]
 		if character == " "
-			gate4_project_advance(position, 1)
+			gate4_advance(position)
 		else
 			if character == "\t"
-				gate4_project_advance(position, 1)
+				gate4_advance(position)
 			else
 				if character == "\r"
-					gate4_project_advance(position, 1)
+					gate4_advance(position)
 				else
 					if character == "\n"
 						gate4_push_token(state, 4, "\n", line)
 						line += 1
-						gate4_project_advance(position, 1)
+						gate4_advance(position)
 					else
 						if character == "#"
 							gate4_skip_comment(source, position)
@@ -4330,7 +3554,7 @@ def gate4_resolve_project_imports(mut state: Gate4Compiler): Boolean
 end
 
 def gate4_load_configured_project(config_source: String, config_path: String): Gate4Compiler
-	config := gate4_parse_project_config(config_source)
+	config := parse_project_config(config_source)
 	if config.error != ""
 		return gate4_project_error_state(config_path, config.error_line, config.error)
 	end
