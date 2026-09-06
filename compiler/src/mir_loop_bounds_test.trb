@@ -1,0 +1,194 @@
+import { verify_array_loop_bounds } from mir_loop_bounds
+import { describe, expect, test } from trb/std/test
+
+def simple_loop_bounds_operations(): Array<Array<Integer>>
+	return [
+		[1, 10, 1, 0, 0, 1],
+		[2, 20, 0, 0, 0, 2],
+		[3, 20, 10, 0, 30, 3],
+		[4, 10, 20, 0, 30, 4],
+		[5, 20, 1, 0, 30, 5],
+		[7, 20, 10, 1, 30, 6],
+	]
+end
+
+def nested_loop_bounds_operations(): Array<Array<Integer>>
+	return [
+		[1, 10, 1, 0, 0, 1],
+		[2, 20, 0, 0, 0, 2],
+		[3, 20, 10, 0, 30, 3],
+		[2, 21, 0, 0, 30, 4],
+		[3, 21, 10, 0, 31, 5],
+		[4, 10, 21, 0, 31, 6],
+		[4, 10, 20, 0, 31, 7],
+		[5, 21, 1, 0, 31, 8],
+		[7, 21, 10, 1, 31, 9],
+		[5, 20, 1, 0, 30, 10],
+		[7, 20, 10, 1, 30, 11],
+	]
+end
+
+describe("MIR Array loop proof core") do
+	test("selects only reads dominated by the same immutable Array and index") do
+		expect(verify_array_loop_bounds(simple_loop_bounds_operations())).to_equal([0, 4])
+		expect(verify_array_loop_bounds(nested_loop_bounds_operations())).to_equal([0, 6, 7])
+		expect(verify_array_loop_bounds([])).to_equal([0])
+	end
+
+	test("retains checks for mutable parameters and nonzero initializers") do
+		mut mutable_array := simple_loop_bounds_operations()
+		mutable_array[0][2] = 2
+		expect(verify_array_loop_bounds(mutable_array)).to_equal([0])
+		mut negative := simple_loop_bounds_operations()
+		negative[1][2] =- 1
+		expect(verify_array_loop_bounds(negative)).to_equal([0])
+		mut positive := simple_loop_bounds_operations()
+		positive[1][2] = 1
+		expect(verify_array_loop_bounds(positive)).to_equal([0])
+	end
+
+	test("does not confuse two valid Array bindings") do
+		operations := [
+			[1, 10, 1, 0, 0, 1], [1, 11, 1, 0, 0, 2],
+			[2, 20, 0, 0, 0, 3], [3, 20, 10, 0, 30, 4],
+			[4, 11, 20, 0, 30, 5], [5, 20, 1, 0, 30, 6],
+			[7, 20, 10, 1, 30, 7],
+		]
+		expect(verify_array_loop_bounds(operations)).to_equal([0])
+	end
+
+	test("retains checks after a unit update or an unknown write") do
+		mut updated := simple_loop_bounds_operations()
+		updated[3] = [5, 20, 1, 0, 30, 4]
+		updated[4] = [4, 10, 20, 1, 30, 5]
+		expect(verify_array_loop_bounds(updated)).to_equal([0])
+		mut written := simple_loop_bounds_operations()
+		written[4] = [6, 20, 0, 0, 30, 5]
+		expect(verify_array_loop_bounds(written)).to_equal([0])
+	end
+
+	test("invalidates a closed inner proof when an outer iteration can change its index") do
+		mut operations := nested_loop_bounds_operations()
+		operations[9] = [6, 21, 0, 1, 30, 10]
+		operations[10] = [5, 20, 1, 0, 30, 11]
+		operations.push([7, 20, 10, 1, 30, 12])
+		# The outer-index read remains proved; the inner-index read does not.
+		expect(verify_array_loop_bounds(operations)).to_equal([0, 7])
+	end
+
+	test("requires a complete unit backedge and retains opaque effects") do
+		mut opaque := simple_loop_bounds_operations()
+		opaque.push([8, 0, 0, 0, 0, 7])
+		expect(verify_array_loop_bounds(opaque)).to_equal([0])
+		operations := [
+			[1, 10, 1, 0, 0, 1], [2, 20, 0, 0, 0, 2],
+			[3, 20, 10, 0, 30, 3], [4, 10, 20, 0, 30, 4],
+			[7, 20, 10, 0, 30, 5],
+		]
+		expect(verify_array_loop_bounds(operations)).to_equal([0])
+	end
+
+	test("rejects truncated, stale, unknown and incorrectly nested rows") do
+		mut bad_row := simple_loop_bounds_operations()
+		bad_row[3] = [4, 10]
+		expect(verify_array_loop_bounds(bad_row)).to_equal([- 1])
+		mut stale := simple_loop_bounds_operations()
+		stale[3][3] = 1
+		expect(verify_array_loop_bounds(stale)).to_equal([- 1])
+		mut unknown := simple_loop_bounds_operations()
+		unknown[3][2] = 99
+		expect(verify_array_loop_bounds(unknown)).to_equal([- 1])
+		mut unclosed := simple_loop_bounds_operations()
+		unclosed[5] = [8, 0, 0, 0, 30, 6]
+		expect(verify_array_loop_bounds(unclosed)).to_equal([- 1])
+		mut nested := nested_loop_bounds_operations()
+		nested[8][4] = 30
+		expect(verify_array_loop_bounds(nested)).to_equal([- 1])
+	end
+
+	test("rejects duplicate identities, origins and malformed operation fields") do
+		mut duplicate := simple_loop_bounds_operations()
+		duplicate[1][1] = 10
+		expect(verify_array_loop_bounds(duplicate)).to_equal([- 1])
+		mut origin := simple_loop_bounds_operations()
+		origin[3][5] = 3
+		expect(verify_array_loop_bounds(origin)).to_equal([- 1])
+		mut field := 0
+		while field < 6
+			mut operations := simple_loop_bounds_operations()
+			operations[3][field] =- 1
+			expect(verify_array_loop_bounds(operations)).to_equal([- 1])
+			field += 1
+		end
+	end
+
+	test("does not prove a read outside its guard or after two increments") do
+		outside := [
+			[1, 10, 1, 0, 0, 1], [2, 20, 0, 0, 0, 2],
+			[4, 10, 20, 0, 0, 3],
+		]
+		expect(verify_array_loop_bounds(outside)).to_equal([0])
+		mut twice := simple_loop_bounds_operations()
+		twice[5] = [5, 20, 1, 1, 30, 6]
+		twice.push([7, 20, 10, 2, 30, 7])
+		expect(verify_array_loop_bounds(twice)).to_equal([0])
+	end
+
+	test("rejects duplicate region identity and malformed effects") do
+		mut duplicate := nested_loop_bounds_operations()
+		duplicate[4][4] = 30
+		expect(verify_array_loop_bounds(duplicate)).to_equal([- 1])
+		mut effect := simple_loop_bounds_operations()
+		effect.push([8, 20, 0, 0, 0, 7])
+		expect(verify_array_loop_bounds(effect)).to_equal([- 1])
+	end
+
+	test("does not mutate operations or derive a new fact on a second pass") do
+		operations := nested_loop_bounds_operations()
+		expect(verify_array_loop_bounds(operations)).to_equal([0, 6, 7])
+		expect(operations).to_equal(nested_loop_bounds_operations())
+		expect(verify_array_loop_bounds(operations)).to_equal([0, 6, 7])
+	end
+
+	test("rejects every truncated prefix of a structured loop body") do
+		operations := nested_loop_bounds_operations()
+		mut prefix: Array<Array<Integer>> := []
+		mut index := 0
+		while index < operations.size() - 1
+			prefix.push(operations[index])
+			if index >= 2
+				expect(verify_array_loop_bounds(prefix)).to_equal([- 1])
+			end
+			index += 1
+		end
+	end
+
+	test("handles single-field boundary mutations deterministically without changing input") do
+		values := [- 9007199254740991, - 1, 0, 1, 2, 30, 9007199254740991]
+		mut row := 0
+		while row < 6
+			mut column := 0
+			while column < 6
+				mut index := 0
+				while index < values.size()
+					mut operations := simple_loop_bounds_operations()
+					operations[row][column] = values[index]
+					result := verify_array_loop_bounds(operations)
+					expect(verify_array_loop_bounds(operations)).to_equal(result)
+					expect(operations[row][column]).to_equal(values[index])
+					if result.size() > 1
+						expect(result.size()).to_equal(2)
+						expect(result[0]).to_equal(0)
+						expect(result[1]).to_equal(operations[3][5])
+					else
+						expect(result.size()).to_equal(1)
+						expect(result[0] == 0 || result[0] == - 1).to_equal(true)
+					end
+					index += 1
+				end
+				column += 1
+			end
+			row += 1
+		end
+	end
+end
