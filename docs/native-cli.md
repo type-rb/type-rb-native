@@ -191,3 +191,27 @@ unsupported; their portable formatting requires separate coverage.
 compiled and REPL output with the reference compiler. After a normal checkout
 build, `python3 tools/native-bootstrap-test.py` checks cache invalidation, core
 reuse, failed-build preservation and concurrent callers in an isolated copy.
+
+## Diagnostics
+
+File checking, QBE emission, executable builds and execution report frontend
+errors on stderr as `path:line: error[CODE]: message`, using the actual entry or
+imported file. REPL diagnostics use `(trb)` and the cumulative authored line
+number of accepted submissions; generated imports, the entry function and
+stored bindings do not add visible lines. Failed submissions do not advance
+that line count. REPL runtime failures use `error: message` at the invoking
+statement, including division by zero.
+
+This follows the pinned reference CLI's location/severity/code presentation.
+The experimental frontend currently retains line origins, so it omits columns
+instead of estimating them. Its `TRBN` diagnostic codes and detailed messages
+remain distinct where its supported subset and diagnosis differ from the
+reference frontend. It reports the first error rather than accumulating the
+reference compiler's complete diagnostic set. Compiled-program runtime
+failures and external tool diagnostics retain their existing runtime/tool
+contracts. The internal core compiler protocol remains unchanged.
+
+Run `python3 tools/native-diagnostics-test.py bin/trbn --reference /path/to/trb`
+to compare file, imported-module and cumulative REPL origins against the pinned
+reference executable. The artifact workflow runs the same Native assertions
+on both supported checkout platforms.

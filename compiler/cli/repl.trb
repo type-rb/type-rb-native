@@ -1,3 +1,4 @@
+import { cli_diagnostic } from diagnostics
 import { ReplCandidates, repl_editor_read, repl_editor_paint } from repl_editor
 import { repl_incomplete, repl_color, repl_escape } from repl_syntax
 import { repl_history_load, repl_history_save } from repl_history
@@ -5,14 +6,14 @@ import { Gate4Compiler, gate4_compiler_new, gate4_has_diagnostic, gate4_locals_n
 import { gate4_load_integer, gate4_load_string, gate4_store_integer } from storage
 import { gate4_parse_module, gate4_token_is, gate4_skip_newlines } from parser
 import { gate4_resolve, gate4_find_function_in_module, gate4_type_display, gate4_find_record_type, gate4_find_record_in_module, gate4_record_type } from resolution
-import { gate4_lex, gate4_check, gate4_print_diagnostic, gate4_load_file_root, gate4_read_source, gate4_file_exists, gate4_source_slice, gate4_collect_project_sources, gate4_project_module_name } from compiler
+import { gate4_lex, gate4_check, gate4_load_file_root, gate4_read_source, gate4_file_exists, gate4_source_slice, gate4_collect_project_sources, gate4_project_module_name } from compiler
 import { parse_project_config } from project_config
 import { gate4_check_expression } from checked_program
 import { gate4_path_directory, gate4_path_join, gate4_string_starts_with } from path
 import { native_cli_line, native_cli_eof, native_cli_tty, native_cli_write, native_cli_interrupt, native_cli_cwd, native_cli_env, native_cli_mkdir } from host
 import { ReplStore, ReplEnvironment, repl_store, repl_environment, repl_render, repl_compact } from repl_values
 import { repl_statement } from repl_eval
-import { gate4_ascii_code } from literals
+import { gate4_ascii_code, gate4_integer_string } from literals
 
 record ReplProject
 	imports: String
@@ -216,7 +217,9 @@ def repl_show(mut state: Gate4Compiler, mut session: ReplSession, input: String,
 	mut value := 0
 	finish_line := line_number + repl_lines(input) + 1
 	mut evaluating := true
+	mut error_line := line_number
 	while evaluating
+		error_line = gate4_load_integer(state.token_lines, position[0])
 		value = repl_statement(state, position, session.store, session.environment, flow)
 		gate4_skip_newlines(state, position)
 		if gate4_load_integer(state.token_lines, position[0]) >= finish_line
@@ -234,7 +237,12 @@ def repl_show(mut state: Gate4Compiler, mut session: ReplSession, input: String,
 	end
 	session.text[1] = repl_bindings(state, session)
 	if session.store.error[0] != ""
-		native_cli_write(repl_editor_paint(session.store.error[0], 7, repl_use_color()) + "\n", 2)
+		mut message := session.store.error[0]
+		if gate4_string_starts_with(message, "panic: ")
+			message = gate4_source_slice(message, 7, message.size())
+		end
+		message = "(trb):" + gate4_integer_string(repl_session_lines(session) + error_line - line_number + 1) + ": error: " + message
+		native_cli_write(repl_editor_paint(message, 7, repl_use_color()) + "\n", 2)
 		return false
 	end
 	if !display
@@ -258,6 +266,16 @@ def repl_show(mut state: Gate4Compiler, mut session: ReplSession, input: String,
 	return true
 end
 
+def repl_session_lines(session: ReplSession): Integer
+	mut count := 0
+	mut index := 0
+	while index < session.submissions.size()
+		count += repl_lines(session.submissions[index]) + 1
+		index += 1
+	end
+	return count
+end
+
 def repl_submit(mut session: ReplSession, input: String, type_only: Boolean, display: Boolean): Boolean
 	declarations := repl_is_declaration(input)
 	prefix := session.text[0] + "def main()\n" + session.text[1]
@@ -267,7 +285,11 @@ def repl_submit(mut session: ReplSession, input: String, type_only: Boolean, dis
 	end
 	mut state := repl_checked(source, session.project.root)
 	if gate4_has_diagnostic(state)
-		repl_diagnostic(state)
+		mut offset := repl_lines(prefix)
+		if declarations
+			offset = repl_lines(session.text[0])
+		end
+		repl_diagnostic(state, offset - repl_session_lines(session))
 		return false
 	end
 	if declarations
@@ -601,7 +623,30 @@ def repl_replay(mut session: ReplSession, config: String, additional: Array<Stri
 	end
 	checked := repl_checked(declarations + "def main()\n" + body + "return\nend\n", project.root)
 	if gate4_has_diagnostic(checked)
-		repl_diagnostic(checked)
+		mut offset := repl_lines(project.imports)
+		mut body_offset := repl_lines(declarations) + 1
+		mut input_index := 0
+		mut diagnostic_offset := 0
+		mut submitted_lines := 0
+		line := gate4_load_integer(checked.diagnostic_lines, 0)
+		while input_index < inputs.size()
+			count := repl_lines(inputs[input_index]) + 1
+			mut start := body_offset
+			if repl_is_declaration(inputs[input_index])
+				start = offset
+				offset += count
+			else
+				body_offset += count
+			end
+			if line > start
+				if line <= start + count
+					diagnostic_offset = start - submitted_lines
+				end
+			end
+			submitted_lines += count
+			input_index += 1
+		end
+		repl_diagnostic(checked, diagnostic_offset)
 		return false
 	end
 	replayed.text[0] = declarations
@@ -727,11 +772,11 @@ def repl_use_color(): Boolean
 	return native_cli_env("NO_COLOR") == ""
 end
 
-def repl_diagnostic(state: Gate4Compiler)
+def repl_diagnostic(state: Gate4Compiler, offset: Integer)
 	if repl_use_color()
 		native_cli_write(repl_color(7), 2)
 	end
-	gate4_print_diagnostic(state, true)
+	native_cli_write(cli_diagnostic(state, "(trb)", offset) + "\n", 2)
 	if repl_use_color()
 		native_cli_write(repl_escape() + "0m", 2)
 	end
