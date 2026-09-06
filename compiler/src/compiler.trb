@@ -7,7 +7,7 @@ import { gate4_advance, gate4_binary_operator_id, gate4_binary_precedence, gate4
 import { gate4_array_element_type, gate4_array_type, gate4_common_array_element_type, gate4_find_field, gate4_find_function_in_module, gate4_find_record_type, gate4_find_visible_function, gate4_find_visible_record, gate4_import_path_value, gate4_normalize_import_path, gate4_record_type, gate4_resolve, gate4_resolve_type_name, gate4_standard_package_import, gate4_standard_package_root, gate4_standard_package_target, gate4_validate_import_usage } from resolution
 import { checked_binary_plan_type, gate4_check_block, gate4_mir_add_parameter, gate4_mir_nonnegative_fact, gate4_scalar_leaf_inline_eligible, gate4_scalar_mir_begin, gate4_scalar_mir_commit } from checked_program
 import { QbeOutput, qbe_output_append, qbe_output_branch, qbe_output_line, qbe_output_new } from qbe_output
-import { emit_float_array_runtime, emit_float_to_integer_runtime, emit_integer_to_string_runtime, emit_process_runtime, emit_qbe_runtime, emit_string_to_integer_runtime } from qbe_runtime
+import { emit_boolean_puts_runtime, emit_float_array_runtime, emit_float_to_integer_runtime, emit_integer_to_string_runtime, emit_process_runtime, emit_qbe_runtime, emit_string_to_integer_runtime } from qbe_runtime
 import { parse_project_config } from project_config
 
 record Gate4EmitContext
@@ -1285,6 +1285,7 @@ def gate4_emit_direct_call(
 		end
 	end
 	mut arguments := ""
+	mut puts_runtime := "$g4_puts"
 	mut argument_count := 0
 	mut finished := false
 	while !finished
@@ -1298,11 +1299,27 @@ def gate4_emit_direct_call(
 			if function_index >= 0
 				expected = gate4_load_string(state.parameter_types, parameter_start + argument_count)
 			end
+			if callee.name == "puts"
+				expected = ""
+			end
 			value := gate4_emit_expression(state, position, context, output, 1, expected)
+			mut operand := value.operand
+			if callee.name == "puts"
+				if value.type_name == "Integer"
+					output.runtime_flags[1] = 1
+					operand = gate4_emit_temporary(context)
+					qbe_output_line(output, "\t" + operand + " =l call $g4_integer_to_string(l " + value.operand + ")")
+					gate4_emit_root_value(context, "String")
+				end
+				if value.type_name == "Boolean"
+					puts_runtime = "$g4_puts_boolean"
+					output.runtime_flags[4] = 1
+				end
+			end
 			if arguments != ""
 				arguments += ", "
 			end
-			arguments += gate4_qbe_type(value.type_name) + " " + value.operand
+			arguments += gate4_qbe_type(value.type_name) + " " + operand
 			argument_count += 1
 			if gate4_token_is(state, position[0], ",")
 				gate4_advance(position)
@@ -1362,7 +1379,7 @@ def gate4_emit_direct_call(
 		end
 	end
 	if callee.name == "puts"
-		qbe_output_line(output, "\tcall $g4_puts(" + arguments + ")")
+		qbe_output_line(output, "\tcall " + puts_runtime + "(" + arguments + ")")
 		return gate4_emitted_value("", "Void", 0, "", 0, "")
 	end
 	if callee.name == "gate4_eputs"
@@ -2643,7 +2660,7 @@ def gate4_emit_entry(mut state: Gate4Compiler, mut output: QbeOutput)
 end
 
 def gate4_emit_qbe(mut state: Gate4Compiler): QbeOutput
-	mut output := qbe_output_new(state.token_count[0] * 24 + 4096, [0, 0, 0, 0])
+	mut output := qbe_output_new(state.token_count[0] * 24 + 4096, [0, 0, 0, 0, 0])
 	gate4_emit_static_strings(state, output)
 	if gate4_has_diagnostic(state)
 		return output
@@ -2700,6 +2717,9 @@ def gate4_emit_qbe(mut state: Gate4Compiler): QbeOutput
 			output,
 			"\nfunction l $g4_array_address(l %array, l %requested) {\n@start\n\t%length_slot =l add %array, 8\n\t%length =l loadl %length_slot\n\t%negative =w csltl %requested, 0\n\tjnz %negative, @negative, @check\n@negative\n\t%adjusted_negative =l add %length, %requested\n\tjmp @bounds\n@check\n\t%adjusted_positive =l copy %requested\n\tjmp @bounds\n@bounds\n\t%index =l phi @negative %adjusted_negative, @check %adjusted_positive\n\t%valid =w cultl %index, %length\n\tjnz %valid, @load, @fail\n@fail\n\tcall $g4_fail(l $g4_bounds_error, l 30)\n\thlt\n@load\n\t%data_slot =l add %array, 24\n\t%data =l loadl %data_slot\n\t%offset =l mul %index, 8\n\t%address =l add %data, %offset\n\tret %address\n}",
 		)
+	end
+	if output.runtime_flags[4] == 1
+		emit_boolean_puts_runtime(output)
 	end
 	if output.runtime_flags[0] == 1
 		emit_float_array_runtime(output)

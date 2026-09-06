@@ -49,7 +49,7 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
     run('build', hello, '--compile', '--outfile', executable)
     assert subprocess.check_output([executable, 'compiled'], text=True) == 'compiled\n'
     before = executable.read_bytes()
-    hello.write_text('def main()\nputs(123)\nend\n')
+    hello.write_text('def main()\nputs(1 + true)\nend\n')
     run('build', hello, '--compile', '--outfile', executable, success=False)
     assert executable.read_bytes() == before, 'failed build replaced an existing executable'
     hello.write_text('def main()\nputs("unsupported: é")\nend\n')

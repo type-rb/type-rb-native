@@ -5,13 +5,22 @@ repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cache="$repository_root/.trb/bootstrap"
 output="$repository_root/bin"
 fail() { printf 'trbn: %s\n' "$1" >&2; exit 1; }
-sha256() {
+sha256_files() {
 	if command -v sha256sum >/dev/null 2>&1; then
-		sha256sum "$1" | cut -d ' ' -f 1
+		sha256sum "$@"
 	else
-		shasum -a 256 "$1" | cut -d ' ' -f 1
+		shasum -a 256 "$@"
 	fi
 }
+source_hashes() {
+	if command -v sha256sum >/dev/null 2>&1; then
+		find "$1" -type f -name '*.trb' ! -name '*_test.trb' -exec sha256sum {} + > "$stage/source-hashes"
+	else
+		find "$1" -type f -name '*.trb' ! -name '*_test.trb' -exec shasum -a 256 {} + > "$stage/source-hashes"
+	fi
+	LC_ALL=C sort "$stage/source-hashes"
+}
+sha256() { sha256_files "$1" | cut -d ' ' -f 1; }
 verify() { test "$(sha256 "$1")" = "$2" || fail "checksum mismatch: $1"; }
 case "$(uname -s)/$(uname -m)" in
 	Darwin/arm64)
@@ -49,18 +58,22 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 stage=$(mktemp -d "$cache/build.XXXXXX")
-revision=$(git -C "$repository_root" rev-parse HEAD 2>/dev/null || printf 'source-archive')
+# Hash each source set in one process. Paths, additions and deletions remain
+# part of the manifest; timestamps and Git revision do not determine freshness.
 (
 	cd "$repository_root"
-	find compiler/src compiler/cli -type f -name '*.trb' ! -name '*_test.trb' | LC_ALL=C sort | while IFS= read -r source; do
-		printf '%s %s\n' "$(sha256 "$source")" "$source"
-	done
-	sha256 tools/build-native.sh
-	sha256 "$cc"
-	if test -n "${TRBN_QBE:-}"; then sha256 "$TRBN_QBE"; fi
-	if test -n "${TRBN_BOOTSTRAP_SEED:-}"; then sha256 "$TRBN_BOOTSTRAP_SEED"; fi
-	printf '%s\n' "$profile" "$revision" "$cc" "${TRBN_QBE:-bundled}" "${TRBN_BOOTSTRAP_SEED:-published}"
+	set -- tools/build-native.sh "$cc"
+	if test -n "${TRBN_QBE:-}"; then set -- "$@" "$TRBN_QBE"; fi
+	if test -n "${TRBN_BOOTSTRAP_SEED:-}"; then set -- "$@" "$TRBN_BOOTSTRAP_SEED"; fi
+	sha256_files "$@"
+	source_hashes compiler/src
+	printf '%s\n' "$profile" "$cc" "${TRBN_QBE:-bundled}" "${TRBN_BOOTSTRAP_SEED:-published}"
 	"$cc" --version
+) > "$stage/core-inputs"
+(
+	cat "$stage/core-inputs"
+	cd "$repository_root"
+	source_hashes compiler/cli
 ) > "$stage/inputs"
 if test -x "$output/trbn" && test -x "$output/qbe" && test -f "$cache/inputs"; then
 	if cmp -s "$stage/inputs" "$cache/inputs"; then
@@ -94,24 +107,39 @@ fi
 verify "$seed" "$seed_digest"
 chmod 0755 "$seed"
 mkdir -p "$stage/first" "$stage/runtime" "$stage/core" "$stage/verify" "$stage/source"
-source="$repository_root/compiler/src/compiler.trb"
-"$seed" build "$source" --output "$stage/first/compiler" --qbe "$qbe" --cc "$cc" --target "$profile"
-"$stage/first/compiler" build "$source" --output "$stage/runtime/compiler" --qbe "$qbe" --cc "$cc" --target "$profile"
-"$stage/runtime/compiler" build "$source" --output "$stage/core/compiler" --qbe "$qbe" --cc "$cc" --target "$profile"
-"$stage/core/compiler" build "$source" --output "$stage/verify/compiler" --qbe "$qbe" --cc "$cc" --target "$profile"
-cmp "$stage/core/compiler" "$stage/verify/compiler" || fail 'compiler fixed point differs'
+core="$cache/core/compiler"
+if test -x "$core" && test -f "$cache/core/inputs" && cmp -s "$stage/core-inputs" "$cache/core/inputs"; then
+	printf '%s\n' 'trbn: reusing the verified core compiler' >&2
+else
+	source="$repository_root/compiler/src/compiler.trb"
+	"$seed" build "$source" --output "$stage/first/compiler" --qbe "$qbe" --cc "$cc" --target "$profile"
+	"$stage/first/compiler" build "$source" --output "$stage/runtime/compiler" --qbe "$qbe" --cc "$cc" --target "$profile"
+	"$stage/runtime/compiler" build "$source" --output "$stage/core/compiler" --qbe "$qbe" --cc "$cc" --target "$profile"
+	"$stage/core/compiler" build "$source" --output "$stage/verify/compiler" --qbe "$qbe" --cc "$cc" --target "$profile"
+	cmp "$stage/core/compiler" "$stage/verify/compiler" || fail 'compiler fixed point differs'
+	core="$stage/core/compiler"
+fi
 # The core and CLI share one import root in this derived source tree. The
 # canonical core project remains independently checkable by the reference tool.
 for source in "$repository_root"/compiler/src/*.trb "$repository_root"/compiler/cli/*.trb; do
 	case "$source" in *_test.trb) continue ;; esac
 	cp "$source" "$stage/source/$(basename -- "$source")"
 done
-"$stage/core/compiler" build "$stage/source/main.trb" --output "$stage/trbn" --qbe "$qbe" --cc "$cc" --target "$profile"
+"$core" build "$stage/source/main.trb" --output "$stage/trbn" --qbe "$qbe" --cc "$cc" --target "$profile"
 "$stage/trbn" --version >&2
 "$stage/trbn" --internal-driver build "$stage/source/main.trb" --output "$stage/verify/trbn" --qbe "$qbe" --cc "$cc"
 cmp "$stage/trbn" "$stage/verify/trbn" || fail 'CLI fixed point differs'
 cp "$qbe" "$stage/qbe"
+# Publish the verified core only after the CLI fixed point also succeeds.
+if test "$core" = "$stage/core/compiler"; then
+	mkdir -p "$cache/core"
+	rm -f "$cache/core/inputs"
+	mv "$stage/core/compiler" "$cache/core/compiler"
+	mv "$stage/core-inputs" "$cache/core/inputs"
+fi
+revision=$(git -C "$repository_root" rev-parse HEAD 2>/dev/null || printf 'source-archive')
 printf '%s\n' "profile=$profile" "revision=$revision" "inputs_sha256=$(sha256 "$stage/inputs")" "compiler_sha256=$(sha256 "$stage/trbn")" "qbe_sha256=$(sha256 "$stage/qbe")" > "$stage/build-info.txt"
+rm -f "$cache/inputs"
 mv "$stage/trbn" "$output/trbn"
 mv "$stage/qbe" "$output/qbe"
 mv "$stage/build-info.txt" "$output/build-info.txt"

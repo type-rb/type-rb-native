@@ -21,7 +21,13 @@ The first invocation downloads a checksum-verified native bootstrap seed and
 QBE 1.3, builds the compiler from TypeRB sources, and checks byte-identical
 core and CLI rebuilds. It does not invoke Go. Subsequent invocations reuse
 `bin/trbn` until the compiler sources or build inputs change. Build messages
-go to stderr. To build without launching a command:
+go to stderr. Source hashes are computed in batches. Documentation-only
+commits and timestamp-only changes reuse the binary. A CLI-only source change
+reuses the cached, verified core and performs both CLI builds; core or toolchain
+changes still perform the full four-core/two-CLI chain. Test sources are outside
+this bootstrap input set. `build-info.txt` records the revision at which the
+artifact was built, which can precede the current checkout revision when the
+build inputs are unchanged. To build without launching a command:
 
 ```sh
 tools/build-native.sh
@@ -170,3 +176,18 @@ and evaluation live in `compiler/cli`. The bootstrap stages a shared import
 root without changing those canonical source trees. Typed host declarations
 are backed by a compiler-owned POSIX QBE template only at the CLI compiler
 entry. This is internal bootstrap machinery, not a public FFI facility.
+
+## Builtin output
+
+Like the reference prelude, `puts` takes one value and writes its text followed
+by a newline. The Native subset accepts String, Integer and Boolean in both
+compiled programs and the REPL. Integer uses decimal digits; Boolean uses
+`true` or `false`. Arguments are evaluated once. This builtin output conversion
+does not invoke user-defined `to_s` methods or make ordinary String parameters
+accept other types. Float, collection and record output remain explicitly
+unsupported; their portable formatting requires separate coverage.
+
+`python3 tools/native-puts-test.py bin/trbn --reference /path/to/trb` compares
+compiled and REPL output with the reference compiler. After a normal checkout
+build, `python3 tools/native-bootstrap-test.py` checks cache invalidation, core
+reuse, failed-build preservation and concurrent callers in an isolated copy.
