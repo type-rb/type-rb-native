@@ -13,6 +13,11 @@ The valid cases cover:
 
 - typed direct calls, mutable locals, conditionals, loops, and checked Integer
   arithmetic in `valid/control-flow.trb`;
+- canonical Boolean literals, bindings, record fields, arguments and returns,
+  direct and selected scalar-MIR negation, Integer/Float/String comparisons
+  including NaN and signed zero, and exactly-once condition effects in
+  `valid/boolean-conditions.trb`. Boolean Arrays remain outside this Native
+  subset and are rejected by the focused frontend tests;
 - nominal record construction and projection plus homogeneous Integer Array
   construction, indexing, growth, and mutation in `valid/records-arrays.trb`;
 - managed String concatenation and content inequality in
