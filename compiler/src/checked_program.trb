@@ -1182,6 +1182,28 @@ def gate4_check_expression(
 	return value
 end
 
+def checked_readonly_reference_binding(
+		state: Gate4Compiler,
+		locals: Gate4Locals,
+		value: Gate4CheckedValue,
+	): Boolean
+	if value.mutable != 0
+		return false
+	end
+	# Only a direct checked binding read retains its binding-token origin.
+	# Grouping preserves it; field/index reads and call results clear it.
+	# Reference readonly is shallow, not inherited from every container.
+	if value.origin >= state.token_count[0]
+		return false
+	end
+	if gate4_array_element_type(value.type_name) == ""
+		if gate4_find_record_type(state, value.type_name) < 0
+			return false
+		end
+	end
+	return gate4_local_find(locals, gate4_load_string(state.token_texts, value.origin)) >= 0
+end
+
 def gate4_check_declaration(
 		mut state: Gate4Compiler,
 		mut position: Array<Integer>,
@@ -1212,6 +1234,11 @@ def gate4_check_declaration(
 	gate4_expect(state, position, ":=")
 	value := gate4_check_expression(state, position, locals, 1, declared_type)
 	value_type := value.type_name
+	if mutable == 1
+		if checked_readonly_reference_binding(state, locals, value)
+			gate4_diagnostic(state, "TRBN4004", line, "cannot initialize mutable " + name + " from an immutable value")
+		end
+	end
 	mut fact := 0
 	if mutable == 1
 		if value.mutable < 0
