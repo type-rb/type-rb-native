@@ -1094,10 +1094,8 @@ def gate4_emit_scalar_mir(
 				if instruction[0] == 8
 					value_id := instruction[2]
 					if instruction[4] == 1
-						comparison := gate4_emit_temporary(context)
 						operand := gate4_emit_temporary(context)
-						qbe_output_line(output, "\t" + comparison + " =w ceql " + operands[value_id] + ", 0")
-						qbe_output_line(output, "\t" + operand + " =l extuw " + comparison)
+						qbe_output_line(output, "\t" + operand + " =l ceql " + operands[value_id] + ", 0")
 						result = gate4_emitted_value(operand, "Boolean", 0, "", 0, "")
 					else
 						if instruction[4] == 2
@@ -1677,10 +1675,8 @@ def gate4_emit_primary(
 			output,
 			gate4_emit_primary(state, position, context, output, "Boolean"),
 		)
-		comparison := gate4_emit_temporary(context)
 		result := gate4_emit_temporary(context)
-		qbe_output_line(output, "\t" + comparison + " =w ceql " + value.operand + ", 0")
-		qbe_output_line(output, "\t" + result + " =l extuw " + comparison)
+		qbe_output_line(output, "\t" + result + " =l ceql " + value.operand + ", 0")
 		return gate4_emitted_value(result, "Boolean", 0, "", 0, "")
 	end
 	if gate4_token_is(state, token_index, "-")
@@ -1929,9 +1925,7 @@ def lower_binary_operand(
 				"\t" + equality + " =l call $g4_string_equal(l " + left.operand + ", l " + right.operand + ")",
 			)
 			if different
-				word := gate4_emit_temporary(context)
-				qbe_output_line(output, "\t" + word + " =w ceql " + equality + ", 0")
-				qbe_output_line(output, "\t" + result + " =l extuw " + word)
+				qbe_output_line(output, "\t" + result + " =l ceql " + equality + ", 0")
 			end
 			return result
 		end
@@ -1960,12 +1954,10 @@ def lower_binary_operand(
 		end
 		comparison = "c" + comparison + "l"
 	end
-	word := gate4_emit_temporary(context)
 	qbe_output_line(
 		output,
-		"\t" + word + " =w " + comparison + " " + left_operand + ", " + right_operand,
+		"\t" + result + " =l " + comparison + " " + left_operand + ", " + right_operand,
 	)
-	qbe_output_line(output, "\t" + result + " =l extuw " + word)
 	return result
 end
 
@@ -2120,16 +2112,6 @@ def gate4_emit_simple_statement(
 	return gate4_finish_statement(state, position)
 end
 
-def gate4_emit_condition(
-		mut context: Gate4EmitContext,
-		mut output: QbeOutput,
-		operand: String,
-	): String
-	condition := gate4_emit_temporary(context)
-	qbe_output_line(output, "\t" + condition + " =w cnel " + operand + ", 0")
-	return condition
-end
-
 def gate4_emit_block(
 		mut state: Gate4Compiler,
 		mut position: Array<Integer>,
@@ -2154,11 +2136,12 @@ def gate4_emit_block(
 					gate4_advance(position)
 					condition_value := gate4_emit_expression(state, position, context, output, 1, "Boolean")
 					gate4_finish_statement(state, position)
-					condition := gate4_emit_condition(context, output, condition_value.operand)
 					when_true := gate4_emit_label(context)
 					when_false := gate4_emit_label(context)
 					join := gate4_emit_label(context)
-					qbe_output_branch(output, condition, when_true, when_false)
+					# Checked Booleans are canonical 0/1 long values. QBE jnz may
+					# consume their low word without another comparison.
+					qbe_output_branch(output, condition_value.operand, when_true, when_false)
 					qbe_output_line(output, when_true)
 					saved_count := context.local_count[0]
 					true_terminated := gate4_emit_block(state, position, context, output, result_type)
@@ -2209,8 +2192,7 @@ def gate4_emit_block(
 						context.loop_depth[0] = context.loop_depth[0] + 1
 						condition_value := gate4_emit_expression(state, position, context, loop_output, 1, "Boolean")
 						gate4_finish_statement(state, position)
-						condition := gate4_emit_condition(context, loop_output, condition_value.operand)
-						qbe_output_branch(loop_output, condition, body, done)
+						qbe_output_branch(loop_output, condition_value.operand, body, done)
 						qbe_output_line(loop_output, body)
 						saved_count := context.local_count[0]
 						body_terminated := gate4_emit_block(state, position, context, loop_output, result_type)

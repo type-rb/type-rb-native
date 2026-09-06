@@ -2092,9 +2092,46 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_check(state)).to_be_true()
 		qbe := gate4_output_source(gate4_emit_qbe(state))
 		expect(gate4_occurrence_count(qbe, "call $g4f0()")).to_equal(1)
-		# One loop comparison and one lower-bound check for the retained call.
+		# The Boolean loop comparison and the retained call's lower-bound
+		# check keep distinct result widths. The safety check is not omitted.
 		# Neither of the two inlined literal returns needs that lower check.
-		expect(gate4_occurrence_count(qbe, " =w csltl %t")).to_equal(2)
+		expect(gate4_occurrence_count(qbe, " =l csltl %t")).to_equal(1)
+		expect(gate4_occurrence_count(qbe, " =w csltl %t")).to_equal(1)
+	end
+
+	test("branches on canonical Boolean values without repeated materialization") do
+		# The loop precedes the retained call: an ordinary eligible call closes
+		# the shared inline budget for every later call, even in a loop.
+		source := "def invert(value: Boolean): Boolean\n\treturn !value\nend\n\ndef main()\n\tmut index := 0\n\twhile index < 1\n\t\tif invert(false)\n\t\t\tputs(\"ok\")\n\t\tend\n\t\tindex += 1\n\tend\n\tif invert(true)\n\t\tputs(\"bad\")\n\tend\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		qbe := gate4_output_source(gate4_emit_qbe(state))
+		scalar_body := qbe.split("function l $g4f0(")[1].split("\n}\n")[0]
+		# Inner temporary-root scopes also contain closing braces.
+		main_body := qbe.split("function $g4f1(")[1].split("\nfunction ")[0].split("\nexport function ")[0]
+		expect(scalar_body.include?(" =l ceql ")).to_be_true()
+		expect(main_body.include?(" =l csltl ")).to_be_true()
+		expect(main_body.include?(" =l ceql ")).to_be_true()
+		expect(scalar_body.include?("extuw")).to_be_false()
+		expect(main_body.include?("extuw")).to_be_false()
+		expect(main_body.include?(" =w cnel ")).to_be_false()
+	end
+
+	test("does not widen branch types or unsupported Boolean Arrays") do
+		sources := ["def main()\n\tif 1\n\t\tputs(\"bad\")\n\tend\nend\n", "def main()\n\twhile 4294967296\n\t\tputs(\"bad\")\n\tend\nend\n", "def main()\n\tvalues: Array<Boolean> := [true]\n\treturn\nend\n"]
+		mut index := 0
+		while index < sources.size()
+			source := sources[index]
+			mut state := gate4_compiler_new(source.size() + 1)
+			expect(gate4_lex(state, source)).to_be_true()
+			expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+			expect(gate4_resolve(state)).to_be_true()
+			expect(gate4_check(state)).to_be_false()
+			index += 1
+		end
 	end
 
 	test("limits scalar leaf inlining to two call sites per small program") do
