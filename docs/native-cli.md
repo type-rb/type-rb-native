@@ -99,9 +99,11 @@ values
 :type values
 ```
 
-`:type EXPRESSION` checks without evaluating. `:load FILE` adds declarations,
-`:reload` reloads the project and clears session state, `:help` shows help, and
-`:quit` or Ctrl-D exits. Ctrl-C cancels input or evaluation. An interactive
+`:type EXPRESSION` checks without evaluating. `:load FILE` adds declarations or
+statements and replays the session,
+`:reload` reloads the project and replays the session, `:help` shows help, and
+`:quit` (`:q` / `:exit`) or Ctrl-D exits. Explicit `:load` and `:reload`
+replay earlier side effects; ordinary submissions do not. Ctrl-C cancels input or evaluation. An interactive
 terminal supports cursor editing, Up/Down history, and Tab completion of
 session/project names. Project history is `.trb/repl_history`; standalone
 history is `~/.cache/trbn/repl_history_trb`. `TRBN_HISTORY` overrides that file.

@@ -62,6 +62,11 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
     config.write_text('{"name":"demo","sourceDir":"src"}')
     assert run('run', cwd=project / 'src/nested') == 'project\n'
     assert '42 : Integer' in run('repl', text='answer()\n:quit\n', cwd=project)
+    (project / 'src/model.trb').write_text('record Box\nvalue: Integer\nend\n')
+    records = run('repl', text='mut box := Box.new(value: 3)\nrecord Point\nx: Integer\ny: Integer\nend\nbox\n:type box\nbox.value\n:quit\n', cwd=project)
+    assert records.count('Box(value: 3) : Box') == 2, records
+    assert 'Box\n3 : Integer' in records, records
+
     assert 'override' in run('check', '--mode', 'trb', cwd=project, success=False)
     config.write_text('{"name":"demo","mode":"go","sourceDir":"src","go":{"module":"example.com/demo"}}')
     assert 'not implemented' in run('run', cwd=project, success=False)
@@ -70,6 +75,14 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
     assert 'ASCII String literals only' in run('repl', text='"é"\n:quit\n')
     (root / 'helpers.trb').write_text('# A declaration file\ndef loaded(): Integer\nreturn 8\nend\n')
     assert '8 : Integer' in run('repl', text=':load helpers.trb\nloaded()\n:quit\n')
+    replay = run('repl', text='mut n := 1\nn += 2\nputs("replay marker")\n:reload\nn\n:load helpers.trb\nn + loaded()\n:q\n')
+    assert replay.count('replay marker') == 3, replay
+    assert 'reloaded' in replay and '11 : Integer' in replay, replay
+    (root / 'invalid.trb').write_text('1 + "bad"\n')
+    rejected = run('repl', text='puts("do not replay")\n:load invalid.trb\n:q\n')
+    assert rejected.count('do not replay') == 1, rejected
+
+
     output = run('repl', text='''mut total := 2
 puts("once")
 :type puts("must not print")

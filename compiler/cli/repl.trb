@@ -1,8 +1,8 @@
 import { repl_history_load, repl_history_save } from repl_history
-import { Gate4Compiler, gate4_compiler_new, gate4_has_diagnostic, gate4_locals_new, gate4_local_add, gate4_diagnostic } from state
+import { Gate4Compiler, gate4_compiler_new, gate4_has_diagnostic, gate4_locals_new, gate4_local_add, gate4_diagnostic, gate4_find_module } from state
 import { gate4_load_integer, gate4_load_string, gate4_store_integer } from storage
 import { gate4_parse_module, gate4_token_is, gate4_skip_newlines } from parser
-import { gate4_resolve, gate4_find_function_in_module, gate4_type_display, gate4_find_record_type } from resolution
+import { gate4_resolve, gate4_find_function_in_module, gate4_type_display, gate4_find_record_type, gate4_find_record_in_module, gate4_record_type } from resolution
 import { gate4_lex, gate4_check, gate4_print_diagnostic, gate4_load_file_root, gate4_read_source, gate4_file_exists, gate4_source_slice, gate4_parse_project_config, gate4_collect_project_sources, gate4_project_module_name } from compiler
 import { gate4_check_expression } from checked_program
 import { gate4_path_directory, gate4_path_join, gate4_string_starts_with } from path
@@ -215,7 +215,7 @@ def repl_help()
 	puts("Enter TypeRB expressions, bindings, functions, records, or imports.")
 	puts(":type EXPRESSION  Show the checked type without evaluating")
 	puts(":load FILE        Load declarations from a TypeRB file")
-	puts(":reload           Reload the project and clear session state")
+	puts(":reload           Reload the project and replay the session")
 	puts(":help             Show this help")
 	puts(":quit             Exit (or Ctrl-D); Ctrl-C cancels input/evaluation")
 	return
@@ -226,14 +226,20 @@ record ReplSession
 	text: Array<String>
 	store: ReplStore
 	environment: ReplEnvironment
+	submissions: Array<String>
 end
 
-def repl_show(mut state: Gate4Compiler, mut session: ReplSession, input: String, prefix: String, type_only: Boolean): Boolean
+def repl_show(mut state: Gate4Compiler, mut session: ReplSession, input: String, prefix: String, type_only: Boolean, display: Boolean): Boolean
+	state.active_module[0] = state.entry_module[0]
 	line_number := repl_lines(prefix) + 1
 	main := gate4_find_function_in_module(state, state.entry_module[0], "main")
 	mut position := [gate4_load_integer(state.function_body_starts, main)]
 	while gate4_load_integer(state.token_lines, position[0]) < line_number
 		position[0] += 1
+	end
+	gate4_skip_newlines(state, position)
+	if gate4_load_integer(state.token_lines, position[0]) >= line_number + repl_lines(input) + 1
+		return true
 	end
 	if type_only
 		mut locals := gate4_locals_new(session.environment.count[0] + 16)
@@ -248,6 +254,7 @@ def repl_show(mut state: Gate4Compiler, mut session: ReplSession, input: String,
 		return true
 	end
 	session.store.error[0] = ""
+	previous_count := session.environment.count[0]
 	mut flow := [0]
 	mut value := 0
 	finish_line := line_number + repl_lines(input) + 1
@@ -265,10 +272,16 @@ def repl_show(mut state: Gate4Compiler, mut session: ReplSession, input: String,
 			evaluating = false
 		end
 	end
+	if session.store.error[0] != ""
+		session.environment.count[0] = previous_count
+	end
 	session.text[1] = repl_bindings(state, session)
 	if session.store.error[0] != ""
 		native_cli_write(session.store.error[0] + "\n", 2)
 		return false
+	end
+	if !display
+		return true
 	end
 	if session.store.types[value] != "Void"
 		mut rendered := repl_render(state, session.store, value, 0) + " : " + gate4_type_display(state, session.store.types[value])
@@ -288,18 +301,8 @@ def repl_show(mut state: Gate4Compiler, mut session: ReplSession, input: String,
 	return true
 end
 
-def repl_submit(mut session: ReplSession, input: String, type_only: Boolean): Boolean
-	mut probe := gate4_compiler_new(input.size() + 1)
-	gate4_lex(probe, input)
-	mut first := [0]
-	gate4_skip_newlines(probe, first)
-	mut declarations := gate4_token_is(probe, first[0], "def")
-	if gate4_token_is(probe, first[0], "record")
-		declarations = true
-	end
-	if gate4_token_is(probe, first[0], "import")
-		declarations = true
-	end
+def repl_submit(mut session: ReplSession, input: String, type_only: Boolean, display: Boolean): Boolean
+	declarations := repl_is_declaration(input)
 	prefix := session.text[0] + "def main()\n" + session.text[1]
 	mut source := prefix + input + "\nreturn\nend\n"
 	if declarations
@@ -311,14 +314,22 @@ def repl_submit(mut session: ReplSession, input: String, type_only: Boolean): Bo
 		return false
 	end
 	if declarations
+		previous := repl_checked(session.text[0] + "def main()\n" + session.text[1] + "return\nend\n", session.project.root)
+		repl_remap_records(previous, state, session.store)
 		session.text[0] += input + "\n"
 		return true
 	end
-	return repl_show(state, session, input, prefix, type_only)
+	return repl_show(state, session, input, prefix, type_only, display)
 end
 
 def repl_command(mut session: ReplSession, input: String, config: String): Boolean
 	if input == ":quit"
+		return false
+	end
+	if input == ":exit"
+		return false
+	end
+	if input == ":q"
 		return false
 	end
 	if input == ":help"
@@ -326,21 +337,13 @@ def repl_command(mut session: ReplSession, input: String, config: String): Boole
 		return true
 	end
 	if input == ":reload"
-		project := repl_project(config)
-		if project.error != ""
-			native_cli_write("trbn: " + project.error + "\n", 2)
-			return true
+		if repl_replay(session, config, [])
+			puts("reloaded")
 		end
-		session.project = project
-		session.text[0] = project.imports
-		session.text[1] = ""
-		session.store = repl_store()
-		session.environment = repl_environment()
-		puts("Session reloaded")
 		return true
 	end
 	if gate4_string_starts_with(input, ":type ")
-		repl_submit(session, gate4_source_slice(input, 6, input.size()), true)
+		repl_submit(session, gate4_source_slice(input, 6, input.size()), true, false)
 		return true
 	end
 	if gate4_string_starts_with(input, ":load ")
@@ -349,7 +352,7 @@ def repl_command(mut session: ReplSession, input: String, config: String): Boole
 			native_cli_write("trbn: cannot read " + path + "\n", 2)
 			return true
 		end
-		repl_submit(session, gate4_read_source(path), false)
+		repl_replay(session, config, repl_split_source(gate4_read_source(path)))
 		return true
 	end
 	if gate4_string_starts_with(input, ":")
@@ -357,7 +360,9 @@ def repl_command(mut session: ReplSession, input: String, config: String): Boole
 		return true
 	end
 	if input != ""
-		repl_submit(session, input, false)
+		if repl_submit(session, input, false, true)
+			session.submissions.push(input)
+		end
 	end
 	return true
 end
@@ -368,7 +373,7 @@ def repl_run(config: String): Integer
 		native_cli_write("trbn: " + project.error + "\n", 2)
 		return 1
 	end
-	mut session := ReplSession.new(project: project, text: [project.imports, ""], store: repl_store(), environment: repl_environment())
+	mut session := ReplSession.new(project: project, text: [project.imports, ""], store: repl_store(), environment: repl_environment(), submissions: [])
 	mut pending := ""
 	interactive := native_cli_tty() != 0
 	mut history := native_cli_env("TRBN_HISTORY")
@@ -536,4 +541,122 @@ def repl_complete(session: ReplSession)
 	end
 	native_cli_completions(candidates)
 	return
+end
+
+# Record indexes are compiler-state-local. Preserve nominal identities when a
+# new session declaration changes the ordering of imported record types.
+def repl_remap_records(previous: Gate4Compiler, current: Gate4Compiler, mut store: ReplStore)
+	mut index := 0
+	while index < store.types.size()
+		record_index := gate4_find_record_type(previous, store.types[index])
+		if record_index >= 0
+			module_index := gate4_load_integer(previous.record_modules, record_index)
+			module_name := gate4_load_string(previous.module_names, module_index)
+			name := gate4_load_string(previous.record_names, record_index)
+			next_module := gate4_find_module(current, module_name)
+			next_record := gate4_find_record_in_module(current, next_module, name)
+			store.types[index] = gate4_record_type(next_record)
+		end
+		index += 1
+	end
+	return
+end
+
+# Explicit reload/load rebuild the session, matching the reference commands.
+# Ordinary submissions continue to evaluate only their newly authored input.
+def repl_replay(mut session: ReplSession, config: String, additional: Array<String>): Boolean
+	project := repl_project(config)
+	if project.error != ""
+		native_cli_write("trbn: " + project.error + "\n", 2)
+		return false
+	end
+	mut replayed := ReplSession.new(project: project, text: [project.imports, ""], store: repl_store(), environment: repl_environment(), submissions: [])
+	mut inputs: Array<String> := []
+	mut index := 0
+	while index < session.submissions.size()
+		inputs.push(session.submissions[index])
+		index += 1
+	end
+	index = 0
+	while index < additional.size()
+		inputs.push(additional[index])
+		index += 1
+	end
+	# Check the complete replacement before replaying any observable effects.
+	mut declarations := project.imports
+	mut body := ""
+	index = 0
+	while index < inputs.size()
+		if repl_is_declaration(inputs[index])
+			declarations += inputs[index] + "\n"
+		else
+			body += inputs[index] + "\n"
+		end
+		index += 1
+	end
+	checked := repl_checked(declarations + "def main()\n" + body + "return\nend\n", project.root)
+	if gate4_has_diagnostic(checked)
+		gate4_print_diagnostic(checked, true)
+		return false
+	end
+	replayed.text[0] = declarations
+	index = 0
+	while index < inputs.size()
+		if !repl_is_declaration(inputs[index])
+			if !repl_submit(replayed, inputs[index], false, false)
+				return false
+			end
+		end
+		replayed.submissions.push(inputs[index])
+		replayed.store = repl_compact(replayed.store, replayed.environment)
+		index += 1
+	end
+	session.project = replayed.project
+	session.text = replayed.text
+	session.store = replayed.store
+	session.environment = replayed.environment
+	session.submissions = replayed.submissions
+	return true
+end
+
+def repl_split_source(source: String): Array<String>
+	mut submissions: Array<String> := []
+	mut pending := ""
+	mut index := 0
+	while index <= source.size()
+		mut character := "\n"
+		if index < source.size()
+			character = source[index]
+		end
+		pending += character
+		if character == "\n"
+			if !repl_incomplete(pending)
+				input := repl_trim(pending)
+				if input != ""
+					submissions.push(input)
+				end
+				pending = ""
+			end
+		end
+		index += 1
+	end
+	if pending != ""
+		submissions.push(pending)
+	end
+	return submissions
+end
+
+def repl_is_declaration(input: String): Boolean
+	mut probe := gate4_compiler_new(input.size() + 1)
+	gate4_lex(probe, input)
+	mut first := [0]
+	gate4_skip_newlines(probe, first)
+	mut declarations := gate4_token_is(probe, first[0], "def")
+	if gate4_token_is(probe, first[0], "record")
+		declarations = true
+	end
+	if gate4_token_is(probe, first[0], "import")
+		declarations = true
+	end
+	return declarations
 end

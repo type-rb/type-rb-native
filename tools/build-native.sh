@@ -49,6 +49,7 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 stage=$(mktemp -d "$cache/build.XXXXXX")
+revision=$(git -C "$repository_root" rev-parse HEAD 2>/dev/null || printf 'source-archive')
 (
 	cd "$repository_root"
 	find compiler/src compiler/cli -type f -name '*.trb' ! -name '*_test.trb' | LC_ALL=C sort | while IFS= read -r source; do
@@ -58,7 +59,7 @@ stage=$(mktemp -d "$cache/build.XXXXXX")
 	sha256 "$cc"
 	if test -n "${TRBN_QBE:-}"; then sha256 "$TRBN_QBE"; fi
 	if test -n "${TRBN_BOOTSTRAP_SEED:-}"; then sha256 "$TRBN_BOOTSTRAP_SEED"; fi
-	printf '%s\n' "$profile" "$cc" "${TRBN_QBE:-bundled}" "${TRBN_BOOTSTRAP_SEED:-published}"
+	printf '%s\n' "$profile" "$revision" "$cc" "${TRBN_QBE:-bundled}" "${TRBN_BOOTSTRAP_SEED:-published}"
 	"$cc" --version
 ) > "$stage/inputs"
 if test -x "$output/trbn" && test -x "$output/qbe" && test -f "$cache/inputs"; then
@@ -109,7 +110,6 @@ done
 "$stage/trbn" --version >&2
 "$stage/trbn" --internal-driver build "$stage/source/main.trb" --output "$stage/verify/trbn" --qbe "$qbe" --cc "$cc"
 cmp "$stage/trbn" "$stage/verify/trbn" || fail 'CLI fixed point differs'
-revision=$(git -C "$repository_root" rev-parse HEAD 2>/dev/null || printf 'source-archive')
 cp "$qbe" "$stage/qbe"
 printf '%s\n' "profile=$profile" "revision=$revision" "inputs_sha256=$(sha256 "$stage/inputs")" "compiler_sha256=$(sha256 "$stage/trbn")" "qbe_sha256=$(sha256 "$stage/qbe")" > "$stage/build-info.txt"
 mv "$stage/trbn" "$output/trbn"
