@@ -70,6 +70,13 @@ This is source decomposition,
 not broader MIR coverage or completion of direct-emitter recovery; see the
 [organization schedule](repository-organization.md).
 
+The [full-range Integer-add diagnostic](../results/2026-09-06-full-range-add-diagnostic-darwin-arm64/README.md)
+rejects both returning-fallback replacements: the two-sided check is about10%
+slower locally and the biased single-comparison check about6% slower. The latter
+also increases compiler QBE/text. The accepted guarded path is unchanged; no
+Pure Go parity, runtime improvement or new allowance is claimed. Re-entry needs
+a measured reduction in hot-path work, not merely fewer helper calls.
+
 ## Accepted optimization evidence
 
 The immutable-parameter Array-header proof is accepted in
