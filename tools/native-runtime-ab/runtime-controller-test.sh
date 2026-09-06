@@ -2,6 +2,10 @@
 
 set -eu
 
+# Test cases select their own contracts, independently of a dispatching job.
+NATIVE_RUNTIME_AB_CONTRACT=default
+export NATIVE_RUNTIME_AB_CONTRACT
+
 fail() {
 	printf 'native-runtime-ab-test: %s\n' "$1" >&2
 	exit 1

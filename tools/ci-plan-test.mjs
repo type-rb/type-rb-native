@@ -40,6 +40,31 @@ test('runtime A/B remains manual with separate frozen optimization contracts', (
   assert(workflow.includes('if test "$NATIVE_RUNTIME_AB_CONTRACT" = derived-loop-index; then\n            for stage'));
 });
 
+test('retained loop CSV accepts original CRLF but rejects other whitespace defects', () => {
+  const attributes = readFileSync(new URL('../results/2026-09-06-mir-loop-bounds-diagnostic-darwin-arm64/.gitattributes', import.meta.url), 'utf8');
+  const directory = mkdtempSync(join(tmpdir(), 'native-csv-whitespace-test-'));
+  const options = { cwd: directory, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] };
+  try {
+    execFileSync('git', ['init', '-q'], options);
+    writeFileSync(join(directory, '.gitattributes'), attributes);
+    mkdirSync(join(directory, 'observations'));
+    const csv = join(directory, 'observations/raw.csv');
+    const command = ['-c', 'core.whitespace=blank-at-eol,blank-at-eof,space-before-tab',
+      'diff', '--cached', '--check'];
+    writeFileSync(csv, 'metric,value\r\nwall,1.25\r\n');
+    execFileSync('git', ['-c', 'core.autocrlf=false', 'add', 'observations/raw.csv'], options);
+    assert.equal(execFileSync('git', command, options), '');
+    for (const invalid of ['metric,value \r\n', 'metric,value\r\n\r\n']) {
+      writeFileSync(csv, invalid);
+      execFileSync('git', ['-c', 'core.autocrlf=false', 'add', 'observations/raw.csv'], options);
+      assert.throws(() => execFileSync('git', command, options),
+        error => error.status !== 0 && /whitespace|blank line/.test(error.stdout));
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('manual optimization compactness loads its dependencies in a fresh step shell', () => {
   const root = fileURLToPath(new URL('../', import.meta.url));
   const workflow = readFileSync(new URL('../.github/workflows/native-runtime-ab.yml', import.meta.url), 'utf8');

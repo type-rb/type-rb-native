@@ -149,6 +149,18 @@ and formal target/runtime checks. The manual `array-loop-bounds` contract and
 same-head frozen-baseline compiler comparison are described in the
 [runtime controller guide](../tools/native-runtime-ab/README.md).
 
+The first hosted compiler comparison at `1adc9377d5e729bd1047e22b89ab3f8128d68299`
+([run 34064721027](https://github.com/type-rb/type-rb-native/actions/runs/34064721027))
+rejects this candidate: Linux build wall time is 1.060729 of the frozen baseline,
+above 1.05; Darwin passes at 1.039886. Both compiler-size ratios pass. Linux
+stops at the failed build comparison, so its later comparisons and the combined
+authority are incomplete. Do not replace this failure with the local pass.
+The full local recovery suites subsequently pass 95 root and 135 compiler tests.
+The first runtime dispatch fails during test setup, before any measurements;
+no runtime acceptance or Pages update results. The next bounded cost reduction
+will avoid constructing unused two-character lexer symbols, with exhaustive
+symbol recognition and tokenization controls before new cost measurements.
+
 1. Complete executable differential controls, recovery, ordinary fixed points,
    target/process/memory authorities and the registered compiler cost bounds.
    Measure the smallest complete candidate before hosted performance acceptance.

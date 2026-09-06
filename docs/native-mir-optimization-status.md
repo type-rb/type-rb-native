@@ -14,8 +14,10 @@ The [earlier local diagnostic](../results/2026-09-06-mir-loop-bounds-diagnostic-
 passes both spectral runtime cohorts but misses its build-cost limit. The
 [checked-binding refinement](../results/2026-09-07-checked-binding-construction-darwin-arm64/README.md)
 passes the local build-cost prefilter with unchanged numeric application QBE.
-Full recovery and hosted runtime/target acceptance remain required; neither
-checkpoint is an accepted optimization or Pages update.
+Full local recovery now passes, but the first hosted compiler comparison rejects
+the candidate: Linux build wall ratio 1.060729 exceeds 1.05, while Darwin passes.
+Further cost reduction and hosted runtime/target acceptance remain required;
+neither checkpoint is an accepted optimization or Pages update.
 
 [PR #260](https://github.com/type-rb/type-rb-native/pull/260) implements the
 first, partial checkpoint of
