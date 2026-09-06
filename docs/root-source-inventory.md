@@ -90,7 +90,7 @@ do not authorize merging the snapshot and ordinary self-hosted MIRs.
 - `gate3_snapshot.trb` is also read by
   `tools/compatibility_manifest.py` to check supported snapshot versions.
   Its moved path must update that consumer atomically.
-- The ordinary compiler closure is `compiler/gate4/src/compiler.trb` plus its
+- The ordinary compiler closure is `compiler/src/compiler.trb` plus its
   explicit storage/path/MIR/literal/state/parser/resolution/checked-program
   imports. State depends on the MIR model and shared storage/literal helpers;
   resolution consumes shared state and syntax, and checked-program construction
@@ -154,9 +154,12 @@ filenames and command arguments are deliberately unchanged. The separate
 historical `tools/gate6f-benchmark` controller retains its source-era
 three-module derivation; it does not import the renamed current root module.
 
-Resume checked-binary ownership alongside the next bounded naming move. Audit
-`compiler/gate4/` entry/configuration paths and all current versus historical
-baseline consumers before selecting the ordinary compiler's destination.
+The ordinary compiler now lives in `compiler/` under
+[issue #274](https://github.com/type-rb/type-rb-native/issues/274); its entry,
+configuration, tests and current consumers move together. See the
+[project layout migration](compiler-project-layout.md) for historical consumers
+and mixed-layout comparison rules. Resume checked-binary ownership alongside
+the next bounded naming move.
 The remaining root driver and snapshot/runtime families can move independently
 with their exact callers. Register each move's baseline and recovery/identity
 checks; do not combine an optimizer change and a broad path rename in one PR.

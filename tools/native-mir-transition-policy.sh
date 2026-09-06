@@ -1,20 +1,23 @@
 #!/bin/sh
 
+# Source tools/compiler-project.sh before this policy; layout resolution is
+# shared with entry/build controllers and must precede marker interpretation.
+
 # Frozen by issues #197, #221, #225, #230, #232, #235, #238, #241, and #245 for
 # their registered transitions. The allowance is only for the verified MIR
 # foundation, scalar connection, and first complete control-flow connection.
 # It expires with the complete migration of portable range, index, and
 # induction ownership out of the direct emitter.
-NATIVE_MIR_FOUNDATION_MARKER=compiler/gate4/native-mir-foundation-v1.txt
-NATIVE_MIR_SCALAR_CONNECTION_MARKER=compiler/gate4/native-mir-scalar-connection-v1.txt
-NATIVE_MIR_CONTROL_FLOW_MARKER=compiler/gate4/native-mir-control-flow-v1.txt
-NATIVE_MIR_INDUCTION_PHI_MARKER=compiler/gate4/native-mir-induction-phi-v1.txt
-NATIVE_MIR_ARRAY_REDUCTION_MARKER=compiler/gate4/native-mir-array-reduction-v1.txt
-NATIVE_MIR_ARRAY_LOOP_RECOVERY_MARKER=compiler/gate4/native-mir-array-loop-recovery-v1.txt
-NATIVE_MIR_FLOAT_ARRAY_REDUCTION_MARKER=compiler/gate4/native-mir-float-array-reduction-v1.txt
-NATIVE_MIR_GUARDED_MULTIPLY_MARKER=compiler/gate4/native-mir-guarded-integer-multiply-v1.txt
-NATIVE_MIR_GUARDED_ADD_MARKER=compiler/gate4/native-mir-guarded-integer-add-v1.txt
-NATIVE_MIR_STABLE_ARRAY_HEADER_MARKER=compiler/gate4/native-mir-stable-array-header-v1.txt
+NATIVE_MIR_FOUNDATION_MARKER=compiler/native-mir-foundation-v1.txt
+NATIVE_MIR_SCALAR_CONNECTION_MARKER=compiler/native-mir-scalar-connection-v1.txt
+NATIVE_MIR_CONTROL_FLOW_MARKER=compiler/native-mir-control-flow-v1.txt
+NATIVE_MIR_INDUCTION_PHI_MARKER=compiler/native-mir-induction-phi-v1.txt
+NATIVE_MIR_ARRAY_REDUCTION_MARKER=compiler/native-mir-array-reduction-v1.txt
+NATIVE_MIR_ARRAY_LOOP_RECOVERY_MARKER=compiler/native-mir-array-loop-recovery-v1.txt
+NATIVE_MIR_FLOAT_ARRAY_REDUCTION_MARKER=compiler/native-mir-float-array-reduction-v1.txt
+NATIVE_MIR_GUARDED_MULTIPLY_MARKER=compiler/native-mir-guarded-integer-multiply-v1.txt
+NATIVE_MIR_GUARDED_ADD_MARKER=compiler/native-mir-guarded-integer-add-v1.txt
+NATIVE_MIR_STABLE_ARRAY_HEADER_MARKER=compiler/native-mir-stable-array-header-v1.txt
 NATIVE_MIR_DARWIN_COMPILER_LIMIT=350000
 NATIVE_MIR_LINUX_COMPILER_LIMIT=317000
 # Linux amd64 remains below its pre-existing ceiling; the control-flow
@@ -50,8 +53,22 @@ NATIVE_MIR_ORDINARY_RATIO_LIMIT=1.05
 NATIVE_MIR_RSS_RATIO_LIMIT=1.05
 NATIVE_MIR_CATASTROPHIC_RATIO_LIMIT=2.0
 
+native_mir_marker_path() (
+	project=$(native_compiler_project_directory "$1") || exit 1
+	case "$2" in
+	compiler/native-mir-*.txt) ;;
+	*) return 1 ;;
+	esac
+	printf '%s/%s\n' "$project" "${2##*/}"
+)
+
+native_mir_roots_valid() {
+	native_compiler_project_directory "$1" >/dev/null &&
+		native_compiler_project_directory "$2" >/dev/null
+}
+
 native_mir_foundation_marker_valid() {
-	native_mir_marker=$1/$NATIVE_MIR_FOUNDATION_MARKER
+	native_mir_marker=$(native_mir_marker_path "$1" "$NATIVE_MIR_FOUNDATION_MARKER") || return 1
 	test -f "$native_mir_marker" &&
 		test "$(grep -Fxc 'policy=native-mir-foundation-v1' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'baseline_revision=a36c7417f0c9bc5bc9705c28ef6340a05caa5f27' "$native_mir_marker")" -eq 1 &&
@@ -66,7 +83,7 @@ native_mir_foundation_marker_valid() {
 }
 
 native_mir_scalar_connection_marker_valid() {
-	native_mir_marker=$1/$NATIVE_MIR_SCALAR_CONNECTION_MARKER
+	native_mir_marker=$(native_mir_marker_path "$1" "$NATIVE_MIR_SCALAR_CONNECTION_MARKER") || return 1
 	test -f "$native_mir_marker" &&
 		test "$(grep -Fxc 'policy=native-mir-scalar-connection-v1' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'baseline_revision=0d7b41ed8767df97c74a5a6b52a6b2fa550e495f' "$native_mir_marker")" -eq 1 &&
@@ -88,7 +105,7 @@ native_mir_scalar_connection_marker_valid() {
 }
 
 native_mir_control_flow_marker_valid() {
-	native_mir_marker=$1/$NATIVE_MIR_CONTROL_FLOW_MARKER
+	native_mir_marker=$(native_mir_marker_path "$1" "$NATIVE_MIR_CONTROL_FLOW_MARKER") || return 1
 	test -f "$native_mir_marker" &&
 		test "$(grep -Fxc 'policy=native-mir-control-flow-v1' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'baseline_revision=2a4120d2115ecf3c6b0139f8873658cca55e829f' "$native_mir_marker")" -eq 1 &&
@@ -112,7 +129,7 @@ native_mir_control_flow_marker_valid() {
 }
 
 native_mir_induction_phi_marker_valid() {
-	native_mir_marker=$1/$NATIVE_MIR_INDUCTION_PHI_MARKER
+	native_mir_marker=$(native_mir_marker_path "$1" "$NATIVE_MIR_INDUCTION_PHI_MARKER") || return 1
 	test -f "$native_mir_marker" &&
 		test "$(grep -Fxc 'policy=native-mir-induction-phi-v1' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'baseline_revision=58836d6177cfa32d32fcb17805f37149de2dc49a' "$native_mir_marker")" -eq 1 &&
@@ -129,7 +146,7 @@ native_mir_induction_phi_marker_valid() {
 }
 
 native_mir_array_reduction_marker_valid() {
-	native_mir_marker=$1/$NATIVE_MIR_ARRAY_REDUCTION_MARKER
+	native_mir_marker=$(native_mir_marker_path "$1" "$NATIVE_MIR_ARRAY_REDUCTION_MARKER") || return 1
 	test -f "$native_mir_marker" &&
 		test "$(grep -Fxc 'policy=native-mir-array-reduction-v1' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'baseline_revision=9dcae126e036d335344907ed4ea091a7f11a2198' "$native_mir_marker")" -eq 1 &&
@@ -156,7 +173,7 @@ native_mir_array_reduction_marker_valid() {
 }
 
 native_mir_array_loop_recovery_marker_valid() {
-	native_mir_marker=$1/$NATIVE_MIR_ARRAY_LOOP_RECOVERY_MARKER
+	native_mir_marker=$(native_mir_marker_path "$1" "$NATIVE_MIR_ARRAY_LOOP_RECOVERY_MARKER") || return 1
 	test -f "$native_mir_marker" &&
 		test "$(grep -Fxc 'policy=native-mir-array-loop-recovery-v1' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'baseline_revision=05a35fc355fa5e08cea1c0bfb2ea0face0864746' "$native_mir_marker")" -eq 1 &&
@@ -186,7 +203,7 @@ native_mir_array_loop_recovery_marker_valid() {
 }
 
 native_mir_float_array_reduction_marker_valid() {
-	native_mir_marker=$1/$NATIVE_MIR_FLOAT_ARRAY_REDUCTION_MARKER
+	native_mir_marker=$(native_mir_marker_path "$1" "$NATIVE_MIR_FLOAT_ARRAY_REDUCTION_MARKER") || return 1
 	test -f "$native_mir_marker" &&
 		test "$(grep -Fxc 'policy=native-mir-float-array-reduction-v1' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'baseline_revision=833fa2d22272a12e080bbce34de33054eefe43aa' "$native_mir_marker")" -eq 1 &&
@@ -227,7 +244,7 @@ native_mir_float_array_reduction_marker_valid() {
 }
 
 native_mir_guarded_multiply_marker_valid() {
-	native_mir_marker=$1/$NATIVE_MIR_GUARDED_MULTIPLY_MARKER
+	native_mir_marker=$(native_mir_marker_path "$1" "$NATIVE_MIR_GUARDED_MULTIPLY_MARKER") || return 1
 	test -f "$native_mir_marker" &&
 		test "$(grep -Fxc 'policy=native-mir-guarded-integer-multiply-v1' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'baseline_revision=538742551ac1c6d030e772abd49a273e6cb783eb' "$native_mir_marker")" -eq 1 &&
@@ -274,7 +291,7 @@ native_mir_guarded_multiply_marker_valid() {
 }
 
 native_mir_guarded_add_marker_valid() {
-	native_mir_marker=$1/$NATIVE_MIR_GUARDED_ADD_MARKER
+	native_mir_marker=$(native_mir_marker_path "$1" "$NATIVE_MIR_GUARDED_ADD_MARKER") || return 1
 	test -f "$native_mir_marker" &&
 		test "$(grep -Fxc 'policy=native-mir-guarded-integer-add-v1' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'baseline_revision=b82d30f4986aa289cedb7bb3392002019bc549f8' "$native_mir_marker")" -eq 1 &&
@@ -342,7 +359,7 @@ native_mir_guarded_add_marker_valid() {
 }
 
 native_mir_stable_array_header_marker_valid() {
-	native_mir_marker=$1/$NATIVE_MIR_STABLE_ARRAY_HEADER_MARKER
+	native_mir_marker=$(native_mir_marker_path "$1" "$NATIVE_MIR_STABLE_ARRAY_HEADER_MARKER") || return 1
 	test -f "$native_mir_marker" &&
 		test "$(grep -Fxc 'policy=native-mir-stable-array-header-v1' "$native_mir_marker")" -eq 1 &&
 		test "$(grep -Fxc 'baseline_revision=00009fa304a36b9cba70b123120a469347b3882d' "$native_mir_marker")" -eq 1 &&
@@ -423,73 +440,94 @@ native_mir_foundation_transition() {
 	native_mir_candidate_root=$1
 	native_mir_baseline_root=$2
 	native_mir_foundation_marker_valid "$native_mir_candidate_root" &&
-		test ! -f "$native_mir_baseline_root/$NATIVE_MIR_FOUNDATION_MARKER"
+		native_mir_baseline_marker=$(native_mir_marker_path "$native_mir_baseline_root" "$NATIVE_MIR_FOUNDATION_MARKER") &&
+		test ! -e "$native_mir_baseline_marker" &&
+		test ! -L "$native_mir_baseline_marker"
 }
 
 native_mir_scalar_connection_transition() {
 	native_mir_candidate_root=$1
 	native_mir_baseline_root=$2
 	native_mir_scalar_connection_marker_valid "$native_mir_candidate_root" &&
-		test ! -f "$native_mir_baseline_root/$NATIVE_MIR_SCALAR_CONNECTION_MARKER"
+		native_mir_baseline_marker=$(native_mir_marker_path "$native_mir_baseline_root" "$NATIVE_MIR_SCALAR_CONNECTION_MARKER") &&
+		test ! -e "$native_mir_baseline_marker" &&
+		test ! -L "$native_mir_baseline_marker"
 }
 
 native_mir_control_flow_transition() {
 	native_mir_candidate_root=$1
 	native_mir_baseline_root=$2
 	native_mir_control_flow_marker_valid "$native_mir_candidate_root" &&
-		test ! -f "$native_mir_baseline_root/$NATIVE_MIR_CONTROL_FLOW_MARKER"
+		native_mir_baseline_marker=$(native_mir_marker_path "$native_mir_baseline_root" "$NATIVE_MIR_CONTROL_FLOW_MARKER") &&
+		test ! -e "$native_mir_baseline_marker" &&
+		test ! -L "$native_mir_baseline_marker"
 }
 
 native_mir_induction_phi_recovery() {
 	native_mir_candidate_root=$1
 	native_mir_baseline_root=$2
 	native_mir_induction_phi_marker_valid "$native_mir_candidate_root" &&
-		test ! -f "$native_mir_baseline_root/$NATIVE_MIR_INDUCTION_PHI_MARKER"
+		native_mir_baseline_marker=$(native_mir_marker_path "$native_mir_baseline_root" "$NATIVE_MIR_INDUCTION_PHI_MARKER") &&
+		test ! -e "$native_mir_baseline_marker" &&
+		test ! -L "$native_mir_baseline_marker"
 }
 
 native_mir_array_reduction_transition() {
 	native_mir_candidate_root=$1
 	native_mir_baseline_root=$2
 	native_mir_array_reduction_marker_valid "$native_mir_candidate_root" &&
-		test ! -f "$native_mir_baseline_root/$NATIVE_MIR_ARRAY_REDUCTION_MARKER"
+		native_mir_baseline_marker=$(native_mir_marker_path "$native_mir_baseline_root" "$NATIVE_MIR_ARRAY_REDUCTION_MARKER") &&
+		test ! -e "$native_mir_baseline_marker" &&
+		test ! -L "$native_mir_baseline_marker"
 }
 
 native_mir_array_loop_recovery_transition() {
 	native_mir_candidate_root=$1
 	native_mir_baseline_root=$2
 	native_mir_array_loop_recovery_marker_valid "$native_mir_candidate_root" &&
-		test ! -f "$native_mir_baseline_root/$NATIVE_MIR_ARRAY_LOOP_RECOVERY_MARKER"
+		native_mir_baseline_marker=$(native_mir_marker_path "$native_mir_baseline_root" "$NATIVE_MIR_ARRAY_LOOP_RECOVERY_MARKER") &&
+		test ! -e "$native_mir_baseline_marker" &&
+		test ! -L "$native_mir_baseline_marker"
 }
 
 native_mir_float_array_reduction_transition() {
 	native_mir_candidate_root=$1
 	native_mir_baseline_root=$2
 	native_mir_float_array_reduction_marker_valid "$native_mir_candidate_root" &&
-		test ! -f "$native_mir_baseline_root/$NATIVE_MIR_FLOAT_ARRAY_REDUCTION_MARKER"
+		native_mir_baseline_marker=$(native_mir_marker_path "$native_mir_baseline_root" "$NATIVE_MIR_FLOAT_ARRAY_REDUCTION_MARKER") &&
+		test ! -e "$native_mir_baseline_marker" &&
+		test ! -L "$native_mir_baseline_marker"
 }
 
 native_mir_guarded_multiply_transition() {
 	native_mir_candidate_root=$1
 	native_mir_baseline_root=$2
 	native_mir_guarded_multiply_marker_valid "$native_mir_candidate_root" &&
-		test ! -f "$native_mir_baseline_root/$NATIVE_MIR_GUARDED_MULTIPLY_MARKER"
+		native_mir_baseline_marker=$(native_mir_marker_path "$native_mir_baseline_root" "$NATIVE_MIR_GUARDED_MULTIPLY_MARKER") &&
+		test ! -e "$native_mir_baseline_marker" &&
+		test ! -L "$native_mir_baseline_marker"
 }
 
 native_mir_guarded_add_transition() {
 	native_mir_candidate_root=$1
 	native_mir_baseline_root=$2
 	native_mir_guarded_add_marker_valid "$native_mir_candidate_root" &&
-		test ! -f "$native_mir_baseline_root/$NATIVE_MIR_GUARDED_ADD_MARKER"
+		native_mir_baseline_marker=$(native_mir_marker_path "$native_mir_baseline_root" "$NATIVE_MIR_GUARDED_ADD_MARKER") &&
+		test ! -e "$native_mir_baseline_marker" &&
+		test ! -L "$native_mir_baseline_marker"
 }
 
 native_mir_stable_array_header_transition() {
 	native_mir_candidate_root=$1
 	native_mir_baseline_root=$2
 	native_mir_stable_array_header_marker_valid "$native_mir_candidate_root" &&
-		test ! -f "$native_mir_baseline_root/$NATIVE_MIR_STABLE_ARRAY_HEADER_MARKER"
+		native_mir_baseline_marker=$(native_mir_marker_path "$native_mir_baseline_root" "$NATIVE_MIR_STABLE_ARRAY_HEADER_MARKER") &&
+		test ! -e "$native_mir_baseline_marker" &&
+		test ! -L "$native_mir_baseline_marker"
 }
 
 native_mir_transition_mode() {
+	native_mir_roots_valid "$1" "$2" || return 1
 	if native_mir_foundation_transition "$1" "$2"; then
 		printf '%s\n' foundation-transition
 	else
@@ -530,6 +568,7 @@ native_mir_transition_mode() {
 }
 
 native_mir_compiler_ratio_limit() {
+	native_mir_roots_valid "$1" "$2" || return 1
 	if native_mir_foundation_transition "$1" "$2"; then
 		printf '%s\n' "$NATIVE_MIR_FOUNDATION_COMPILER_RATIO_LIMIT"
 	else
@@ -546,6 +585,7 @@ native_mir_compiler_ratio_limit() {
 }
 
 native_mir_build_ratio_limit() {
+	native_mir_roots_valid "$1" "$2" || return 1
 	if native_mir_foundation_transition "$1" "$2"; then
 		printf '%s\n' "$NATIVE_MIR_FOUNDATION_BUILD_RATIO_LIMIT"
 	else

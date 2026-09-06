@@ -3,6 +3,7 @@
 set -eu
 
 script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+. "$script_directory/compiler-project.sh"
 . "$script_directory/native-mir-transition-policy.sh"
 
 test_root=$(mktemp -d "${TMPDIR:-/tmp}/native-mir-policy.XXXXXX")
@@ -12,7 +13,11 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 candidate=$test_root/candidate
 baseline=$test_root/baseline
-mkdir -p "$candidate/compiler/gate4" "$baseline/compiler/gate4"
+mkdir -p "$candidate/compiler/src" "$baseline/compiler/src"
+: > "$candidate/compiler/src/compiler.trb"
+: > "$candidate/compiler/trbconfig.jsonc"
+: > "$baseline/compiler/src/compiler.trb"
+: > "$baseline/compiler/trbconfig.jsonc"
 cp "$script_directory/../$NATIVE_MIR_INDUCTION_PHI_MARKER" \
 	"$candidate/$NATIVE_MIR_INDUCTION_PHI_MARKER"
 cp "$script_directory/../$NATIVE_MIR_ARRAY_REDUCTION_MARKER" \

@@ -17,11 +17,11 @@ guide, not a finding that every gate-numbered file is obsolete.
 
 | Current area | Role and treatment |
 | --- | --- |
-| `compiler/gate4/src/compiler.trb` and its storage/path/MIR/literal/state/parser/resolution/checked-program imports | Ordinary self-hosted compiler closure. Shared state/indexes, syntax, resolution, typed checking/MIR construction and MIR model/verifier/passes have distinct owners; continue splitting adapter, runtime, and driver responsibilities and remove checkpoint-derived names incrementally. |
+| `compiler/src/compiler.trb` and its storage/path/MIR/literal/state/parser/resolution/checked-program imports | Ordinary self-hosted compiler closure. Shared state/indexes, syntax, resolution, typed checking/MIR construction and MIR model/verifier/passes have distinct owners; continue splitting adapter, runtime, and driver responsibilities and remove checkpoint-derived names incrementally. |
 | `src/gate0.trb`, `snapshot.trb`, `json_boundary.trb`, `diagnostic.trb`, `native_mir.trb` | Initial snapshot validation/MIR boundary and shared support. Classify callers before separating shared code from recovery-only code. |
 | `src/gate1_*`, `gate2_*`, `gate3_*`, `qbe.trb`, `qbe2.trb`, `qbe3.trb` | Versioned snapshot, MIR, layout, QBE, and managed-runtime paths with differential tests. These are not three successive unused compiler copies. Name retained paths by format/capability and role. |
 | `src/recovery_generation.trb`, `matched_go_driver.trb`, `compiler_recovery_source.trb` and associated tests | Recovery generation, matched reference comparison, and strict compiler-source flattening support. Keep them visibly separate from the ordinary compiler. |
-| `src/*_test.trb`, `compiler/gate4/conformance/`, `corpus/` | Active correctness evidence. Relocate with their owners and preserve discovery, negative cases, and coverage. |
+| `src/*_test.trb`, `compiler/conformance/`, `corpus/` | Active correctness evidence. Relocate with their owners and preserve discovery, negative cases, and coverage. |
 | `tools/`, `.github/workflows/`, compatibility and transition metadata | Current consumers of source paths, names, runtime output, and exact identities. Move references atomically with implementation changes. |
 | `results/`, dated gate plans and accepted decisions | Historical evidence. Preserve gate labels, recorded commands, hashes, and revisions rather than rewriting history to resemble the current layout. |
 
@@ -84,6 +84,15 @@ O3 continues incrementally; O4–O5 are not complete. Next, audit the QBE output
 and runtime-generation boundary, project configuration and driver dependencies,
 alongside active gate-derived naming. Do not move the remaining 4,723 lines
 into another catch-all module or claim the compiler is fully decomposed.
+
+The ordinary compiler project move under
+[issue #274](https://github.com/type-rb/type-rb-native/issues/274) relocates
+`compiler/gate4/` to `compiler/`, including configuration, tests, conformance
+inputs and unchanged transition markers. Current entry/recovery/CI consumers
+move together. The [layout migration map](compiler-project-layout.md) records
+the retained historical exceptions and fail-closed cross-revision resolution.
+This removes the checkpoint from the project path, not the remaining `Gate4`
+implementation symbols or the snapshot/runtime families in root `src/`.
 
 Follow with the architecture/development-plan documentation cleanup below and
 an evidence-based audit of open issues. Record a concrete dependency or reopen

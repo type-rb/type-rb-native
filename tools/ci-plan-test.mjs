@@ -26,7 +26,10 @@ test('documentation-only PRs do not run compiler or performance matrices', () =>
   assert.deepEqual(acceptance(results(plan)), []);
 });
 test('compiler, conformance and CI-routing changes retain the full authority', () => {
-  for (const path of ['compiler/gate4/src/storage.trb',
+  for (const path of ['compiler/src/storage.trb', 'compiler/trbconfig.jsonc',
+    'compiler/conformance/runtime-invalid/new.trb',
+    'tools/compiler-project.sh', 'tools/compiler-project-test.sh',
+    'compiler/gate4/src/storage.trb',
     'compiler/gate4/conformance/runtime-invalid/new.trb',
     '.github/workflows/pull-request.yml', 'tools/ci-plan.mjs',
     'tools/native-mir-transition-policy.sh']) {
@@ -82,7 +85,7 @@ test('missing or malformed planning never authorizes skipped validation', () => 
   assert.notDeepEqual(acceptance(needs), []);
 });
 
-test('CLI classifies a real source-to-documentation rename and unusual filename', () => {
+test('CLI classifies real historical-to-documentation and current-project renames', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'native-ci-plan-test-'));
   const git = (...args) => execFileSync('git', [
     '-c', 'user.name=CI Test', '-c', 'user.email=ci-test@example.invalid',
@@ -106,6 +109,16 @@ test('CLI classifies a real source-to-documentation rename and unusual filename'
       { cwd: directory, encoding: 'utf8' });
     assert.deepEqual(Object.fromEntries(output.trim().split('\n').map(row => row.split('='))),
       { code: 'true', documentation: 'true', memory: 'true', performance: 'true', draft: 'false' });
+    mkdirSync(join(directory, 'compiler/src'), { recursive: true });
+    renameSync(join(directory, 'docs/example.md'), join(directory, 'compiler/src/current.trb'));
+    git('add', '-A');
+    git('commit', '-m', 'Move synthetic fixture to current project');
+    const movedPaths = await changedPaths(base, git('rev-parse', 'HEAD'), directory);
+    assert.deepEqual(movedPaths.sort(), ['compiler/gate4/src/old\nname.trb', 'compiler/src/current.trb']);
+    const movedPlan = classify(movedPaths, false);
+    assert.equal(movedPlan.memory, true);
+    assert.equal(movedPlan.performance, true);
+    assert.deepEqual(acceptance(results(movedPlan)), []);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

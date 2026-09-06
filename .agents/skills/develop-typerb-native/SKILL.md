@@ -179,7 +179,7 @@ TYPE_RB_NATIVE_ROOT="$PWD" trb test
 For compiler-source changes, also enable the recovery and QBE-backed tests:
 set `TYPE_RB_NATIVE_REFERENCE_TRB` to the absolute pinned compiler executable
 and `TYPE_RB_NATIVE_QBE` to QBE 1.3, together with `TYPE_RB_NATIVE_ROOT`, when
-running the root and `compiler/gate4` suites. Without those variables, optional
+running the root and `compiler` suites. Without those variables, optional
 tests report success without exercising recovery; do not count that as complete
 bootstrap verification. The recovery snapshot supports a narrower source subset
 than the ordinary Native compiler, so ordinary fixed points alone are not a

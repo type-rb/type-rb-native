@@ -235,15 +235,17 @@ if test -n "$repository_root_override"; then
 else
 	repository_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
 fi
+. "$script_directory/compiler-project.sh"
+compiler_project=$(native_compiler_project_directory "$repository_root") || fail "invalid compiler project"
 transition_policy=$repository_root/tools/native-mir-transition-policy.sh
-control_flow_marker=$repository_root/compiler/gate4/native-mir-control-flow-v1.txt
+control_flow_marker=$compiler_project/native-mir-control-flow-v1.txt
 if test -f "$transition_policy" && test -f "$control_flow_marker"; then
 	. "$transition_policy"
 	if native_mir_transition_markers_valid "$repository_root"; then
 		MAX_COMPILER_SIZE=$(native_mir_target_compiler_limit "$profile")
 	fi
 fi
-compiler_entry=$repository_root/compiler/gate4/src/compiler.trb
+compiler_entry=$compiler_project/src/compiler.trb
 configured_project=$repository_root/corpus/gate6k/configured-project/trbconfig.jsonc
 
 test -f "$compiler_entry" || fail "compiler entry is missing"
@@ -317,7 +319,7 @@ verify_program_case() {
 	require_no_intermediates "$case_directory"
 }
 
-corpus_root=$repository_root/compiler/gate4/conformance
+corpus_root=$compiler_project/conformance
 mkdir -p "$workspace/corpus"
 for compiler_pair in "b2:$b2" "b3:$b3" "b4:$b4"; do
 	compiler_label=$(printf '%s\n' "$compiler_pair" | cut -d: -f1)

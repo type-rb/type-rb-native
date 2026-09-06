@@ -143,8 +143,10 @@ test ! -e "$evidence" || fail "evidence path already exists"
 
 script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repository_root=$(CDPATH= cd -- "$script_directory/../.." && pwd)
+. "$script_directory/../compiler-project.sh"
+compiler_project=$(native_compiler_project_directory "$repository_root") || exit 1
 transition_policy=$repository_root/tools/native-mir-transition-policy.sh
-control_flow_marker=$repository_root/compiler/gate4/native-mir-control-flow-v1.txt
+control_flow_marker=$compiler_project/native-mir-control-flow-v1.txt
 if test -f "$transition_policy" && test -f "$control_flow_marker"; then
 	. "$transition_policy"
 	if native_mir_transition_markers_valid "$repository_root"; then
