@@ -13,6 +13,10 @@ The valid cases cover:
 
 - typed direct calls, mutable locals, conditionals, loops, and checked Integer
   arithmetic in `valid/control-flow.trb`;
+- contextual `next` identifiers in mutable locals, parameters and record fields,
+  plus nearby ordinary names, in `valid/next-identifiers.trb`. The paired
+  `invalid/next-binding.source` and `invalid/next-typed-binding.source` reject
+  statement-leading inferred and typed declarations before code generation;
 - canonical Boolean literals, bindings, record fields, arguments and returns,
   direct and selected scalar-MIR negation, Integer/Float/String comparisons
   including NaN and signed zero, and exactly-once condition effects in
