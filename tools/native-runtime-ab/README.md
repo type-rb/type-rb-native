@@ -20,7 +20,8 @@ separated from the broader cross-language benchmark.
 - raw wall time, CPU time, process-tree peak memory, exit state, and output for
   every observation; and
 - every role's retained wall, CPU, and peak-memory observation at no more than
-  2.00x that role's retained median.
+  2.00x that role's retained median in the historical contracts; the named
+  Boolean contract below uses the corresponding baseline median instead.
 
 The five-column TSV catalog is:
 
@@ -61,8 +62,8 @@ not change either the default or the retained issue #188 contract.
 The named `derived-loop-index` contract registered in
 [issue #192](https://github.com/type-rb/type-rb-native/issues/192) requires
 `n-body` wall and CPU medians at or below `0.96`, while retaining the same
-`1.02` `fannkuch-redux` and `spectral-norm` controls. The three numeric inputs
-currently apply this derived loop-index contract. It does not change the
+`1.02` `fannkuch-redux` and `spectral-norm` controls. The historical workflow
+selection applies this derived loop-index contract. It does not change the
 retained issue #188 or issue #190 contracts.
 
 They do not replace the full cross-language benchmark inputs or its published
@@ -76,6 +77,30 @@ candidate-revision bootstrap observer measures both chains. This keeps the
 wall, CPU, and RSS columns identical across the A/B pair even when the frozen
 baseline predates a newly added evidence column; the observer does not replace
 either compiler or source tree.
+
+## Checked Boolean branches
+
+The manual workflow also offers the independent `checked-boolean-branches`
+contract registered in [issue #288](https://github.com/type-rb/type-rb-native/issues/288#issuecomment-5557213035).
+It freezes baseline `6f7e3ba10623d40b5b0f7e6cc03b732125607795` and requires
+`spectral-norm` wall/CPU ratios <=0.98, both numeric controls <=1.02, and each
+case's median memory ratio <=1.05. Every role's retained wall/CPU/memory
+observation must be <=2.0 times the corresponding **baseline** median. Inputs,
+warmups, retained counts, cache control and output checks are unchanged.
+Unknown contracts and nonnumeric cases fail closed. Deterministic tests cover
+exact boundaries, memory regression, both roles' outliers and complete schedules.
+
+Its Linux compiler QBE and text must strictly shrink; complete compilers and
+application artifacts must not grow. Compiler absolute limits come from the
+existing MIR transition policy. The normal exact-head PR compactness authority
+remains required for interleaved build/RSS comparisons and all target checks.
+This supplemental workflow retains its bootstrap series as closure evidence
+only, not a substitute build-cost decision series. No old contract is relaxed.
+
+The default manual selection remains `derived-loop-index`, with its historical
+baseline and 255000-byte limit. Both layouts resolve through the shared source
+project helper. Neither manual selection adds an automatic PR performance job,
+replaces PR acceptance, or updates the full cross-language results or Pages.
 
 Each worker case is registered by its linked public experiment and also
 compares candidate wall and CPU medians with an exact optimized-Go control.

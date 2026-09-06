@@ -7,6 +7,8 @@ MEMORY_LIMIT=4GB
 WARMUP_ROUNDS=2
 RETAINED_ROUNDS=11
 CONTRACT=${NATIVE_RUNTIME_AB_CONTRACT:-default}
+comparison_metrics='walltime cputime'
+catastrophic_reference=own-role
 CATALOG_HEADER='case\tcandidate\tcommand\tinput\texpected'
 RAW_HEADER='phase\tround\tretained_index\torder\tcase\tcandidate\tverdict\treturnvalue\texitsignal\tterminationreason\twalltime_seconds\tcputime_seconds\tmemory_bytes'
 
@@ -167,6 +169,15 @@ worker-gc-temp-push-fast-path)
 esac
 case "$CONTRACT" in
 default) ;;
+checked-boolean-branches)
+	case "$case_name" in
+	spectral-norm) maximum_ratio=0.98 ;;
+	fannkuch-redux | n-body) ;;
+	*) fail "checked-boolean-branches requires a numeric case" ;;
+	esac
+	comparison_metrics='walltime cputime memory'
+	catastrophic_reference=baseline
+	;;
 nonnegative-loop-index)
 	if test "$case_name" = spectral-norm; then
 		maximum_ratio=0.98
@@ -259,6 +270,10 @@ done
 	printf 'retained_rounds=%s\n' "$RETAINED_ROUNDS"
 	printf 'candidates=%s\n' "$candidates"
 	printf 'maximum_candidate_ratio=%s\n' "$maximum_ratio"
+	if test "$CONTRACT" = checked-boolean-branches; then
+		printf 'maximum_candidate_memory_ratio=1.05\n'
+	fi
+	printf 'catastrophic_reference=%s\n' "$catastrophic_reference"
 	if test "$total_candidates" -eq 3; then
 		printf 'maximum_candidate_go_ratio=%s\n' "$maximum_go_ratio"
 	fi
@@ -408,7 +423,11 @@ for measured_candidate in $candidates; do
 		cputime) raw_column=12; median_column=6 ;;
 		memory) raw_column=13; median_column=7 ;;
 		esac
-		median=$(awk -F '\t' -v column="$median_column" -v wanted="$measured_candidate" \
+		reference_candidate=$measured_candidate
+		if test "$catastrophic_reference" = baseline; then
+			reference_candidate=baseline
+		fi
+		median=$(awk -F '\t' -v column="$median_column" -v wanted="$reference_candidate" \
 			'$2 == wanted && $8 == "pass" { print $column }' "$evidence/medians.tsv")
 		maximum=$(awk -F '\t' -v column="$raw_column" -v wanted="$measured_candidate" \
 			'$1 == "retained" && $6 == wanted && $7 == "pass" {
@@ -441,16 +460,20 @@ references=baseline
 if test "$total_candidates" -eq 3; then
 	references='baseline typerb-go'
 fi
-for metric in walltime cputime; do
+for metric in $comparison_metrics; do
 	case "$metric" in
 	walltime) column=5 ;;
 	cputime) column=6 ;;
+	memory) column=7 ;;
 	esac
 	candidate=$(awk -F '\t' -v column="$column" '$2 == "candidate" && $8 == "pass" { print $column }' "$evidence/medians.tsv")
 	for reference in $references; do
 		baseline=$(awk -F '\t' -v column="$column" -v wanted="$reference" \
 			'$2 == wanted && $8 == "pass" { print $column }' "$evidence/medians.tsv")
 		comparison_maximum=$maximum_ratio
+		if test "$metric" = memory; then
+			comparison_maximum=1.05
+		fi
 		metric_label=$metric
 		if test "$reference" = typerb-go; then
 			comparison_maximum=$maximum_go_ratio

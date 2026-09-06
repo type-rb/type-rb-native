@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,6 +17,53 @@ function results(plan) {
     }).map(([key, value]) => [key, { result: value ? 'success' : 'skipped' }])),
   };
 }
+
+test('runtime A/B remains manual with separate frozen historical and Boolean contracts', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/native-runtime-ab.yml', import.meta.url), 'utf8');
+  const entry = readFileSync(new URL('../.github/workflows/pull-request.yml', import.meta.url), 'utf8');
+  assert(workflow.includes('  workflow_dispatch:\n'));
+  assert(!workflow.includes('  pull_request:') && !workflow.includes('  workflow_call:'));
+  assert(!entry.includes('native-runtime-ab.yml'), 'manual experiments must not add an automatic PR job');
+  assert(workflow.includes('default: derived-loop-index'));
+  assert.match(workflow, /derived-loop-index\)\n\s+BASELINE_REVISION=aad4954c66ae394a5edb836b20498e5a60b769bd/);
+  assert.match(workflow, /checked-boolean-branches\)\n\s+BASELINE_REVISION=6f7e3ba10623d40b5b0f7e6cc03b732125607795/);
+  assert(workflow.includes('*) exit 64 ;;'), 'unknown contracts must not materialize a baseline');
+  assert(workflow.includes('native_compiler_project_directory "$RUNNER_TEMP/baseline-source"'));
+  assert(!workflow.includes('baseline-source/compiler/gate4/'));
+  assert(workflow.includes('compiler_limit=255000'), 'historical absolute limit remains');
+  assert(workflow.includes('compiler_limit=$(native_mir_target_compiler_limit linux-arm64-v0)'));
+  assert(workflow.includes('compiler_text_bytes strict-shrink'));
+  assert(workflow.includes('compiler_qbe_bytes strict-shrink'));
+  assert(workflow.includes('build_cost_authority=normal-exact-head-PR-interleaved-compactness'));
+  assert(workflow.includes('if test "$NATIVE_RUNTIME_AB_CONTRACT" = derived-loop-index; then\n            for stage'));
+});
+
+test('manual Boolean compactness loads its dependencies in a fresh step shell', () => {
+  const root = fileURLToPath(new URL('../', import.meta.url));
+  const workflow = readFileSync(new URL('../.github/workflows/native-runtime-ab.yml', import.meta.url), 'utf8');
+  const setup = workflow.match(/          compiler_maximum=1\.01\n[\s\S]*?(?=            for role in baseline candidate; do)/)?.[0];
+  assert(setup, 'the actual compactness setup must be exercised');
+  const directory = mkdtempSync(join(tmpdir(), 'native-runtime-policy-test-'));
+  try {
+    symlinkSync(root, join(directory, 'baseline-source'), 'dir');
+    const script = `set -eu\n${setup}\nfi\nprintf '%s %s\\n' "$compiler_maximum" "$compiler_limit"\n`;
+    const options = { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: {
+      PATH: process.env.PATH,
+      GITHUB_WORKSPACE: root,
+      RUNNER_TEMP: directory,
+      NATIVE_RUNTIME_AB_CONTRACT: 'checked-boolean-branches',
+    } };
+    for (const shell of ['/bin/sh', '/bin/bash']) {
+      assert.equal(execFileSync(shell, ['-c', script], options).trim(), '1.00 317000');
+      // A previous workflow step's functions do not survive in a new shell.
+      assert.throws(() => execFileSync(shell, ['-c', script.replace(
+        '. tools/compiler-project.sh', ': missing-project-helper')], options),
+      error => error.status !== 0 && /native_compiler_project_directory/.test(error.stderr));
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
 
 test('compatibility checks precede matrix fan-out and remain in standalone validation', () => {
   const workflow = readFileSync(new URL('../.github/workflows/pull-request.yml', import.meta.url), 'utf8');
