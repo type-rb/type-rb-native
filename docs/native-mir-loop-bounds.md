@@ -110,6 +110,17 @@ It is still **not accepted**: the current build wall ratio is 1.0505660577,
 above the unchanged 1.05 ceiling. All failed candidate observations remain
 retained. Do not round the ratio down or update Pages from this result.
 
+Two later local cost refinements were also rejected and reverted:
+[conservative-stream workspaces](../results/2026-09-06-mir-loop-workspace-diagnostic-darwin-arm64/README.md)
+and [checked postfix copies](../results/2026-09-06-checked-postfix-copy-diagnostic-darwin-arm64/README.md).
+Their full observations and source patches are retained; the additional
+malformed-stream and checked-value ownership tests remain. Neither changes
+the current compiler implementation or the frozen comparison baseline.
+The restored production closure reproduces the prior compiler bytes; its full
+compiler suite now passes 131 tests, including the additional boundary tests.
+Before another candidate, revisit phase costs and the size of the structured
+projection/verifier, rather than rerunning an unchanged near-threshold result.
+
 1. Complete executable differential controls, recovery, ordinary fixed points,
    target/process/memory authorities and the registered compiler cost bounds.
    Measure the smallest complete candidate before hosted performance acceptance.

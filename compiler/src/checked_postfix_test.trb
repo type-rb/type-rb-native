@@ -1,0 +1,44 @@
+import { gate4_lex } from compiler
+import { gate4_compiler_new, gate4_locals_new } from state
+import { array_loop_operands, gate4_check_postfix, gate4_checked_value } from checked_program
+import { describe, expect, test } from trb/std/test
+
+describe("Checked postfix result ownership") do
+	test("preserves every checked operand field when no postfix follows") do
+		suffixes := ["\n", "+", ")", "]", ","]
+		mut index := 0
+		while index < suffixes.size()
+			mut state := gate4_compiler_new(32)
+			expect(gate4_lex(state, suffixes[index])).to_be_true()
+			mut locals := gate4_locals_new(8)
+			mut position := [0]
+			initial := array_loop_operands(gate4_checked_value("Integer", - 3, 7, 1), 13, 17)
+			value := gate4_check_postfix(state, position, locals, initial)
+			expect(value.type_name).to_equal("Integer")
+			expect(value.category).to_equal(- 3)
+			expect(value.origin).to_equal(7)
+			expect(value.mutable).to_equal(1)
+			expect(value.loop_index).to_equal(13)
+			expect(value.loop_array).to_equal(17)
+			expect(position[0]).to_equal(0)
+			expect(state.diagnostic_count[0]).to_equal(0)
+			index += 1
+		end
+	end
+
+	test("keeps actual postfix results separate from the initial record") do
+		mut state := gate4_compiler_new(32)
+		expect(gate4_lex(state, ".size()\n")).to_be_true()
+		mut locals := gate4_locals_new(8)
+		mut position := [0]
+		initial := array_loop_operands(gate4_checked_value("Array<Integer>", 0, 9007199254740991, 1), - 1, 17)
+		value := gate4_check_postfix(state, position, locals, initial)
+		expect(value.type_name).to_equal("Integer")
+		expect(value.mutable).to_equal(0)
+		expect(value.loop_array).to_equal(17)
+		expect(initial.type_name).to_equal("Array<Integer>")
+		expect(initial.mutable).to_equal(1)
+		expect(initial.loop_array).to_equal(17)
+		expect(state.diagnostic_count[0]).to_equal(0)
+	end
+end
