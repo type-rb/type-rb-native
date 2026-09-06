@@ -98,6 +98,10 @@ Its legacy success label does not describe this Boolean candidate. It measures
 monotonic wall time and wait4 child CPU/RSS, excluding compilation. Each retained
 `raw.csv` includes warmups and every observation; `summary.json` records binary
 hashes, exact medians, bounds and output-verification results.
+The published CSV copies normalize CRLF to LF; every field, value and row order
+is verified unchanged from the original controller output. The initial PR
+planning failure was this line-ending whitespace check, before hosted compiler
+or performance authority ran.
 
 Build both revisions' programs from the identical authored source, then run
 the controller twice with unique evidence directories and the registered input
