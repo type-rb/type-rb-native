@@ -79,7 +79,8 @@ remain 349224 -> 332712, text is 249804 -> 233556 and QBE 1122621 -> 1055831.
 Both integrated roles produce byte-identical QBE **and executables** to their
 measured counterparts for all three workloads. This preserves the measured
 application identities; it does not relabel old compiler-build observations as
-current-main measurements. Integrated recovery and hosted checks remain separate.
+current-main measurements. The integrated recovery-enabled root/compiler suites
+also pass 90/107 tests. Hosted checks remain separate and pending.
 
 ## Measurement scope and reproduction
 
