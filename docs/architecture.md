@@ -96,9 +96,12 @@ state, symbol indexes and diagnostics, while `parser.trb` owns syntax parsing,
 token/cursor primitives and the shared operator mapping. `resolution.trb` owns
 declaration/import/type resolution; `checked_program.trb` owns typed-expression
 checking and MIR construction. Shared local state remains in `state.trb`.
+`qbe_output.trb` owns the output container and ordered emission helpers;
+`qbe_runtime.trb` owns runtime QBE generation and selection, depending only on
+that output boundary and shared path predicates. Neither depends on the entry.
 The compiler entry retains lexing and its source-slicing intrinsics, final
-checking orchestration and temporary-storage lifetime boundaries, QBE adaptation,
-runtime generation and the remaining driver code.
+checking orchestration and temporary-storage lifetime boundaries, QBE adaptation
+and the remaining driver code.
 These are single canonical modules with explicit imports, not a second
 compiler implementation. The [organization schedule](repository-organization.md)
 tracks the next responsibility extractions.

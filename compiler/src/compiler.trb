@@ -6,12 +6,8 @@ import { Gate4Compiler, Gate4SymbolIndex, gate4_add_module, gate4_add_name_index
 import { gate4_advance, gate4_binary_operator_id, gate4_binary_precedence, gate4_declaration_start, gate4_expect, gate4_expect_identifier, gate4_finish_statement, gate4_parse_module, gate4_parse_simple_statement_syntax, gate4_parse_type, gate4_skip_newlines, gate4_token_is } from parser
 import { gate4_array_element_type, gate4_array_type, gate4_common_array_element_type, gate4_find_field, gate4_find_function_in_module, gate4_find_record_type, gate4_find_visible_function, gate4_find_visible_record, gate4_import_path_value, gate4_normalize_import_path, gate4_record_type, gate4_resolve, gate4_resolve_type_name, gate4_standard_package_import, gate4_standard_package_root, gate4_standard_package_target, gate4_validate_import_usage } from resolution
 import { checked_binary_plan_type, gate4_check_block, gate4_mir_add_parameter, gate4_mir_nonnegative_fact, gate4_scalar_leaf_inline_eligible, gate4_scalar_mir_begin, gate4_scalar_mir_commit } from checked_program
-
-record Gate4Output
-	lines: Gate4StringStorage
-	count: Array<Integer>
-	runtime_flags: Array<Integer>
-end
+import { QbeOutput, qbe_output_append, qbe_output_branch, qbe_output_line, qbe_output_new } from qbe_output
+import { emit_float_array_runtime, emit_float_to_integer_runtime, emit_integer_to_string_runtime, emit_process_runtime, emit_qbe_runtime, emit_string_to_integer_runtime } from qbe_runtime
 
 record Gate4EmitContext
 	local_names: Gate4StringStorage
@@ -98,10 +94,6 @@ def gate4_collect_project_sources(_source_root: String, _out_root: String): Gate
 	return Gate4ProjectSources.new(paths: [], sources: [], error: "")
 end
 
-def gate4_output_new(capacity: Integer, runtime_flags: Array<Integer>): Gate4Output
-	return Gate4Output.new(lines: gate4_string_storage(capacity), count: [0], runtime_flags: runtime_flags)
-end
-
 def gate4_emit_context_new(
 		capacity: Integer,
 		inline_budget: Array<Integer>,
@@ -129,23 +121,6 @@ def gate4_emit_context_new(
 		array_header: gate4_array_header_new(),
 		array_header_fallback: [gate4_array_header_new(), gate4_array_header_new()],
 	)
-end
-
-def gate4_output_line(mut output: Gate4Output, line: String)
-	index := output.count[0]
-	gate4_store_string(output.lines, index, line)
-	output.count[0] = index + 1
-	return
-end
-
-def gate4_output_branch(
-		mut output: Gate4Output,
-		condition: String,
-		when_true: String,
-		when_false: String,
-	)
-	gate4_output_line(output, "\tjnz " + condition + ", " + when_true + ", " + when_false)
-	return
 end
 
 def gate4_static_string_bytes(value: String): Array<Integer>
@@ -234,11 +209,11 @@ def gate4_encode_static_string(value: String): Array<Integer>
 end
 
 def gate4_emit_static_byte_data(
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 		symbol: String,
 		bytes: Array<Integer>,
 	)
-	gate4_output_line(output, "data $" + symbol + " = {")
+	qbe_output_line(output, "data $" + symbol + " = {")
 	mut line := "\tb"
 	mut line_bytes := 0
 	mut index := 0
@@ -246,34 +221,34 @@ def gate4_emit_static_byte_data(
 		line += " " + gate4_integer_string(bytes[index])
 		line_bytes += 1
 		if line_bytes == 16
-			gate4_output_line(output, line + ",")
+			qbe_output_line(output, line + ",")
 			line = "\tb"
 			line_bytes = 0
 		end
 		index += 1
 	end
 	if line_bytes > 0
-		gate4_output_line(output, line + ",")
+		qbe_output_line(output, line + ",")
 	end
-	gate4_output_line(output, "\tb 0 }")
+	qbe_output_line(output, "\tb 0 }")
 	return
 end
 
 def gate4_emit_static_string_decoder(
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 		compressed_tokens: Array<Integer>,
 		compressed_sizes: Array<Integer>,
 		decoded_sizes: Array<Integer>,
 	)
-	gate4_output_line(
+	qbe_output_line(
 		output,
 		"function $g4_static_string_decode(l %target, l %encoded, l %encoded_length, l %decoded_length) {\n@start\n\tstorel 0, %target\n\t%length_address =l add %target, 8\n\tstorel %decoded_length, %length_address\n\t%output =l add %target, 16\n\tjmp @loop\n@loop\n\t%input_index =l phi @start 0, @literal %literal_next_input, @match_done %match_next_input\n\t%output_index =l phi @start 0, @literal %literal_next_output, @match_done %match_next_output\n\t%done =w cslel %encoded_length, %input_index\n\tjnz %done, @terminate, @read\n@read\n\t%encoded_address =l add %encoded, %input_index\n\t%header =w loadub %encoded_address\n\t%is_match =w csgtw %header, 127\n\tjnz %is_match, @match, @literal\n@literal\n\t%literal_address =l add %output, %output_index\n\tstoreb %header, %literal_address\n\t%literal_next_input =l add %input_index, 1\n\t%literal_next_output =l add %output_index, 1\n\tjmp @loop\n@match\n\t%high_address =l add %encoded_address, 1\n\t%low_address =l add %encoded_address, 2\n\t%high =w loadub %high_address\n\t%low =w loadub %low_address\n\t%high_long =l extuw %high\n\t%low_long =l extuw %low\n\t%high_shifted =l shl %high_long, 8\n\t%distance =l or %high_shifted, %low_long\n\t%match_length_word =w sub %header, 125\n\t%match_length =l extuw %match_length_word\n\tjmp @copy\n@copy\n\t%copy_index =l phi @match 0, @copy_byte %copy_next\n\t%copy_done =w cslel %match_length, %copy_index\n\tjnz %copy_done, @match_done, @copy_byte\n@copy_byte\n\t%source_base =l sub %output_index, %distance\n\t%source_index =l add %source_base, %copy_index\n\t%source_address =l add %output, %source_index\n\t%value =w loadub %source_address\n\t%destination_index =l add %output_index, %copy_index\n\t%destination_address =l add %output, %destination_index\n\tstoreb %value, %destination_address\n\t%copy_next =l add %copy_index, 1\n\tjmp @copy\n@match_done\n\t%match_next_input =l add %input_index, 3\n\t%match_next_output =l add %output_index, %match_length\n\tjmp @loop\n@terminate\n\t%terminator =l add %output, %decoded_length\n\tstoreb 0, %terminator\n\tret\n}",
 	)
-	gate4_output_line(output, "\nfunction $g4_static_strings_initialize() {\n@start")
+	qbe_output_line(output, "\nfunction $g4_static_strings_initialize() {\n@start")
 	mut index := 0
 	while index < compressed_tokens.size()
 		token := gate4_integer_string(compressed_tokens[index])
-		gate4_output_line(
+		qbe_output_line(
 			output,
 			"\tcall $g4_static_string_decode(l $g4s" + token + ", l $g4c" + token +
 			", l " + gate4_integer_string(compressed_sizes[index]) +
@@ -281,13 +256,13 @@ def gate4_emit_static_string_decoder(
 		)
 		index += 1
 	end
-	gate4_output_line(output, "\tret\n}")
+	qbe_output_line(output, "\tret\n}")
 	return
 end
 
 def gate4_emit_static_strings(
 		mut state: Gate4Compiler,
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 	): Boolean
 	deduplicate := gate4_compiler_entry_function(state) >= 0
 	mut canonical_values: Array<String> := []
@@ -333,7 +308,7 @@ def gate4_emit_static_strings(
 					end
 				end
 				if use_compressed
-					gate4_output_line(
+					qbe_output_line(
 						output,
 						"data $g4s" + gate4_integer_string(token_index) + " = align 8 { z " +
 						gate4_integer_string(value.size() + 17) + " }",
@@ -344,7 +319,7 @@ def gate4_emit_static_strings(
 					decoded_sizes.push(value.size())
 					output.runtime_flags[2] = 1
 				else
-					gate4_output_line(
+					qbe_output_line(
 						output,
 						"data $g4s" + gate4_integer_string(token_index) +
 						" = align 8 { l 0, l " + gate4_integer_string(value.size()) + ",",
@@ -370,7 +345,7 @@ def gate4_emit_static_strings(
 							line += " " + gate4_integer_string(code)
 							line_bytes += 1
 							if line_bytes == 16
-								gate4_output_line(output, line + ",")
+								qbe_output_line(output, line + ",")
 								line = "\tb"
 								line_bytes = 0
 							end
@@ -378,9 +353,9 @@ def gate4_emit_static_strings(
 						character_index += 1
 					end
 					if line_bytes > 0
-						gate4_output_line(output, line + ",")
+						qbe_output_line(output, line + ",")
 					end
-					gate4_output_line(output, "\tb 0 }")
+					qbe_output_line(output, "\tb 0 }")
 				end
 			end
 			gate4_store_integer(state.token_lines, token_index, canonical)
@@ -390,11 +365,11 @@ def gate4_emit_static_strings(
 	if compressed_tokens.size() > 0
 		gate4_emit_static_string_decoder(output, compressed_tokens, compressed_sizes, decoded_sizes)
 	end
-	gate4_output_line(output, "")
+	qbe_output_line(output, "")
 	return !gate4_has_diagnostic(state)
 end
 
-def gate4_emit_record_descriptors(state: Gate4Compiler, mut output: Gate4Output)
+def gate4_emit_record_descriptors(state: Gate4Compiler, mut output: QbeOutput)
 	mut record_index := 0
 	while record_index < state.record_count[0]
 		field_start := gate4_load_integer(state.record_field_starts, record_index)
@@ -409,7 +384,7 @@ def gate4_emit_record_descriptors(state: Gate4Compiler, mut output: Gate4Output)
 			end
 			field_offset += 1
 		end
-		gate4_output_line(
+		qbe_output_line(
 			output,
 			"data $g4_desc_record" + gate4_integer_string(record_index) +
 			" = align 8 { l 1, l " + gate4_integer_string(managed_count) + ", l " +
@@ -417,120 +392,7 @@ def gate4_emit_record_descriptors(state: Gate4Compiler, mut output: Gate4Output)
 		)
 		record_index += 1
 	end
-	gate4_output_line(output, "")
-	return
-end
-
-def gate4_project_runtime_qbe_line(value: String): Boolean
-	if gate4_string_starts_with(value, "data $g4_project_")
-		return true
-	end
-	if gate4_string_starts_with(value, "function l $g4_source_slice")
-		return true
-	end
-	if gate4_string_starts_with(value, "function w $g4_c_")
-		return true
-	end
-	if gate4_string_starts_with(value, "function w $g4_project_")
-		return true
-	end
-	return gate4_string_starts_with(value, "function l $g4_collect_project_sources")
-end
-
-def gate4_emit_runtime(mut output: Gate4Output, project_runtime: Boolean)
-	# The multiply helper's 26-bit fast entry proves the direct product is below
-	# the portable limit; every other pair continues through its exact checks.
-	lines := [
-		"data $g4_newline = { b 10 }\ndata $g4_character_cache = align 8 { z 2048 }\ndata $g4_string_storage = align 8 { l 0, l 0, l 0 }\ndata $g4_temporary_storage = align 8 { l 0, l 0 }\ndata $g4_allocation_error = { b 112 97 110 105 99 58 32 97 108 108 111 99 97 116 105 111 110 32 102 97 105 108 101 100 10 }\ndata $g4_bounds_error = { b 112 97 110 105 99 58 32 105 110 100 101 120 32 105 115 32 111 117 116 32 111 102 32 98 111 117 110 100 115 10 }\ndata $g4_integer_error = { b 112 97 110 105 99 58 32 73 110 116 101 103 101 114 32 111 112 101 114 97 116 105 111 110 32 102 97 105 108 101 100 10 }\ndata $g4_integer_range_error = { b \"panic: Integer is outside the portable range\", b 10 }\ndata $g4_division_error = { b \"panic: division by zero\", b 10 }\ndata $g4_usage_error = { b \"usage: compiler {check|emit-qbe} SOURCE\", b 10, b \"       compiler build SOURCE --output OUTPUT --qbe QBE --cc CC\", b 10 }\ndata $g4_file_error = { b \"compiler: cannot read source file: \" }\ndata $g4_check = { b \"check\", b 0 }\ndata $g4_emit = { b \"emit-qbe\", b 0 }\ndata $g4_build = { b \"build\", b 0 }\ndata $g4_output_flag = { b \"--output\", b 0 }\ndata $g4_qbe_flag = { b \"--qbe\", b 0 }\ndata $g4_cc_flag = { b \"--cc\", b 0 }\ndata $g4_target_option = { b \"--target\", b 0 }\ndata $g4_source_arg = { b \"--source-content\", b 0 }\ndata $g4_rb = { b \"rb\", b 0 }\ndata $g4_wb = { b \"wb\", b 0 }\ndata $g4_ssa_suffix = { b \".trbn.ssa\", b 0 }\ndata $g4_asm_suffix = { b \".trbn.s\", b 0 }\ndata $g4_temp_suffix = { b \".trbn.XXXXXX\", b 0 }\ndata $g4_slash = { b \"/\", b 0 }\ndata $g4_target_flag = { b \"-t\", b 0 }\ndata $g4_profile_darwin_arm64 = { b \"darwin-arm64-v0\", b 0 }\ndata $g4_profile_linux_arm64 = { b \"linux-arm64-v0\", b 0 }\ndata $g4_profile_linux_amd64 = { b \"linux-amd64-v0\", b 0 }\ndata $g4_qbe_darwin_arm64 = { b \"arm64_apple\", b 0 }\ndata $g4_qbe_linux_arm64 = { b \"arm64\", b 0 }\ndata $g4_qbe_linux_amd64 = { b \"amd64_sysv\", b 0 }\ndata $g4_o_flag = { b \"-o\", b 0 }\ndata $g4_math_library = { b \"-lm\", b 0 }",
-		"data $g4_project_assembler_input = { b \"-xassembler\", b 0 }",
-		"data $g4_project_linker_lld = { b \"-fuse-ld=lld\", b 0 }",
-		"data $g4_dead_strip_darwin = { b \"-Wl,-dead_strip,-x\", b 0 }",
-		"data $g4_dead_strip_linux = { b \"-Wl,--gc-sections,--strip-all,--no-eh-frame-hdr\", b 0 }",
-		"data $g4_selected_qbe_target = align 8 { l $g4_qbe_darwin_arm64 }",
-		"data $g4_selected_dead_strip = align 8 { l $g4_dead_strip_darwin }",
-		"data $g4_project_selected_linker = align 8 { l 0 }",
-		"data $g4_project_paths = align 8 { l 0 }\ndata $g4_project_error = align 8 { l 0 }\ndata $g4_project_source_root = align 8 { l 0 }\ndata $g4_project_out_root = align 8 { l 0 }\ndata $g4_project_empty_string = align 8 { l 0, l 0, b 0 }\ndata $g4_project_trb_suffix = { b \".trb\", b 0 }\ndata $g4_project_test_suffix = { b \"_test.trb\", b 0 }\ndata $g4_project_git_component = { b \"/.git\", b 0 }\ndata $g4_project_trb_component = { b \"/.trb\", b 0 }\ndata $g4_project_node_modules_component = { b \"/node_modules\", b 0 }",
-		"data $g4_target_error = { b \"compiler: unsupported target profile\", b 10 }\ndata $g4_intermediate_error = { b \"compiler: cannot create intermediate file\", b 10 }\ndata $g4_qbe_error = { b \"compiler: qbe failed\", b 10 }\ndata $g4_cc_error = { b \"compiler: cc failed\", b 10 }\ndata $g4_publish_error = { b \"compiler: cannot publish output\", b 10 }\n\nfunction $g4_fail(l %message, l %size) {\n@start\n\tcall $write(w 2, l %message, l %size)\n\tcall $exit(w 2)\n\thlt\n}\n\nfunction l $g4_alloc(l %size) {\n@start\n\t%pointer =l call $calloc(l 1, l %size)\n\t%failed =w ceql %pointer, 0\n\tjnz %failed, @fail, @ok\n@fail\n\tcall $g4_fail(l $g4_allocation_error, l 26)\n\thlt\n@ok\n\tret %pointer\n}\n\nfunction l $g4_string_alloc(l %size) {\n@start\n\t%result =l call $g4_gc_alloc(l $g4_desc_string, l %size, l 0)\n\tret %result\n}\n\nfunction l $g4_temp_alloc(l %size) {\n@start\n\t%storage =l loadl $g4_temporary_storage\n\t%missing =w ceql %storage, 0\n\tjnz %missing, @initialize, @allocate\n@initialize\n\t%allocated =l call $calloc(l 1, l 1048576)\n\t%failed =w ceql %allocated, 0\n\tjnz %failed, @allocation_failed, @initialized\n@allocation_failed\n\tcall $g4_fail(l $g4_allocation_error, l 26)\n\thlt\n@initialized\n\tstorel %allocated, $g4_temporary_storage\n\tjmp @allocate\n@allocate\n\t%base =l loadl $g4_temporary_storage\n\t%used_address =l add $g4_temporary_storage, 8\n\t%used =l loadl %used_address\n\t%with_padding =l add %size, 7\n\t%aligned =l and %with_padding, -8\n\t%next =l add %used, %aligned\n\t%overflow =w csltl 1048576, %next\n\tjnz %overflow, @capacity_failed, @ready\n@capacity_failed\n\tcall $g4_fail(l $g4_allocation_error, l 26)\n\thlt\n@ready\n\t%result =l add %base, %used\n\tstorel %next, %used_address\n\tret %result\n}\n\nfunction $g4_temp_reset() {\n@start\n\t%used_address =l add $g4_temporary_storage, 8\n\tstorel 0, %used_address\n\tret\n}\n\nfunction l $g4_string_from_c(l %source) {\n@start\n\t%length =l call $strlen(l %source)\n\t%size =l add %length, 9\n\t%string =l call $g4_string_alloc(l %size)\n\t%length_address =l add %string, 8\n\tstorel %length, %length_address\n\t%data =l add %string, 16\n\tcall $memcpy(l %data, l %source, l %length)\n\t%end =l add %data, %length\n\tstoreb 0, %end\n\tret %string\n}\n\nfunction l $g4_read_file(l %p) {\n@start\n\t%f =l call $fopen(l %p, l $g4_rb)\n\t%fm =w ceql %f, 0\n\tjnz %fm, @fail, @seek\n@seek\n\t%es =w call $fseek(l %f, l 0, w 2)\n\t%ef =w cnew %es, 0\n\tjnz %ef, @close, @len\n@len\n\t%n =l call $ftell(l %f)\n\t%neg =w csltl %n, 0\n\tjnz %neg, @close, @rewind\n@rewind\n\t%rs =w call $fseek(l %f, l 0, w 0)\n\t%rf =w cnew %rs, 0\n\tjnz %rf, @close, @alloc\n@alloc\n\t%sz =l add %n, 9\n\t%s =l call $g4_string_alloc(l %sz)\n\t%length_address =l add %s, 8\n\tstorel %n, %length_address\n\t%d =l add %s, 16\n\t%got =l call $fread(l %d, l 1, l %n, l %f)\n\t%cs =w call $fclose(l %f)\n\t%rfe =w cnel %got, %n\n\t%cfe =w cnew %cs, 0\n\t%bad =w or %rfe, %cfe\n\tjnz %bad, @fail, @done\n@done\n\t%e =l add %d, %n\n\tstoreb 0, %e\n\t%file_root =l add $g4_gc_global_roots, 8\n\tstorel %s, %file_root\n\tret %s\n@close\n\t%ignored =w call $fclose(l %f)\n\tjmp @fail\n@fail\n\tret 0\n}\n",
-		"function l $g4_file_exists(l %path) {\n@start\n\t%data =l add %path, 16\n\t%status =w call $access(l %data, w 0)\n\t%ok =w ceqw %status, 0\n\t%result =l extuw %ok\n\tret %result\n}\n",
-		"function l $g4_read_source(l %path) {\n@start\n\t%data =l add %path, 16\n\t%source =l call $g4_read_file(l %data)\n\tret %source\n}\n",
-		"function l $g4_source_slice(l %source, l %start, l %finish) {\n@start\n\t%length =l sub %finish, %start\n\t%size =l add %length, 9\n\t%result =l call $g4_string_alloc(l %size)\n\t%length_address =l add %result, 8\n\tstorel %length, %length_address\n\t%source_data =l add %source, 16\n\t%from =l add %source_data, %start\n\t%data =l add %result, 16\n\tcall $memcpy(l %data, l %from, l %length)\n\t%end =l add %data, %length\n\tstoreb 0, %end\n\tret %result\n}\n\nfunction w $g4_c_ends_with(l %value, l %suffix) {\n@start\n\t%value_length =l call $strlen(l %value)\n\t%suffix_length =l call $strlen(l %suffix)\n\t%short =w csltl %value_length, %suffix_length\n\tjnz %short, @no, @compare\n@compare\n\t%offset =l sub %value_length, %suffix_length\n\t%start =l add %value, %offset\n\t%comparison =w call $memcmp(l %start, l %suffix, l %suffix_length)\n\t%equal =w ceqw %comparison, 0\n\tret %equal\n@no\n\tret 0\n}\n\nfunction w $g4_c_is_test_source(l %path) {\n@start\n\t%length =l call $strlen(l %path)\n\t%short =w csltl %length, 9\n\tjnz %short, @no, @compare\n@compare\n\t%offset =l sub %length, 9\n\t%start =l add %path, %offset\n\t%comparison =w call $strncasecmp(l %start, l $g4_project_test_suffix, l 9)\n\t%equal =w ceqw %comparison, 0\n\tret %equal\n@no\n\tret 0\n}\n\nfunction w $g4_c_has_directory_component(l %path, l %component) {\n@start\n\t%component_length =l call $strlen(l %component)\n\tjmp @search\n@search\n\t%cursor =l phi @start %path, @advance %advanced\n\t%match =l call $strstr(l %cursor, l %component)\n\t%missing =w ceql %match, 0\n\tjnz %missing, @no, @boundary\n@boundary\n\t%after =l add %match, %component_length\n\t%character =w loadub %after\n\t%end =w ceqw %character, 0\n\t%slash =w ceqw %character, 47\n\t%matched =w or %end, %slash\n\tjnz %matched, @yes, @advance\n@advance\n\t%advanced =l add %match, 1\n\tjmp @search\n@yes\n\tret 1\n@no\n\tret 0\n}\n\nfunction w $g4_c_path_has_prefix(l %path, l %prefix) {\n@start\n\t%path_length =l call $strlen(l %path)\n\t%prefix_length =l call $strlen(l %prefix)\n\t%short =w csltl %path_length, %prefix_length\n\tjnz %short, @no, @compare\n@compare\n\t%comparison =w call $memcmp(l %path, l %prefix, l %prefix_length)\n\t%different =w cnew %comparison, 0\n\tjnz %different, @no, @boundary\n@boundary\n\t%after =l add %path, %prefix_length\n\t%character =w loadub %after\n\t%end =w ceqw %character, 0\n\t%slash =w ceqw %character, 47\n\t%matched =w or %end, %slash\n\tret %matched\n@no\n\tret 0\n}\n\nfunction w $g4_project_path_excluded(l %path) {\n@start\n\t%source_root =l loadl $g4_project_source_root\n\t%source_comparison =w call $strcmp(l %path, l %source_root)\n\t%source =w ceqw %source_comparison, 0\n\tjnz %source, @no, @out_root\n@out_root\n\t%out_root =l loadl $g4_project_out_root\n\t%roots_comparison =w call $strcmp(l %source_root, l %out_root)\n\t%same_roots =w ceqw %roots_comparison, 0\n\tjnz %same_roots, @components, @out_prefix\n@out_prefix\n\t%inside_out =w call $g4_c_path_has_prefix(l %path, l %out_root)\n\tjnz %inside_out, @yes, @components\n@components\n\t%git =w call $g4_c_has_directory_component(l %path, l $g4_project_git_component)\n\tjnz %git, @yes, @trb\n@trb\n\t%hidden =w call $g4_c_has_directory_component(l %path, l $g4_project_trb_component)\n\tjnz %hidden, @yes, @node_modules\n@node_modules\n\t%node =w call $g4_c_has_directory_component(l %path, l $g4_project_node_modules_component)\n\tjnz %node, @yes, @no\n@yes\n\tret 1\n@no\n\tret 0\n}\n\nfunction w $g4_project_path_compare(l %left_cell, l %right_cell) {\n@start\n\t%left =l loadl %left_cell\n\t%right =l loadl %right_cell\n\t%left_length_address =l add %left, 8\n\t%right_length_address =l add %right, 8\n\t%left_length =l loadl %left_length_address\n\t%right_length =l loadl %right_length_address\n\t%left_shorter =w csltl %left_length, %right_length\n\tjnz %left_shorter, @left_minimum, @right_minimum\n@left_minimum\n\t%left_min =l copy %left_length\n\tjmp @compare\n@right_minimum\n\t%right_min =l copy %right_length\n\tjmp @compare\n@compare\n\t%minimum =l phi @left_minimum %left_min, @right_minimum %right_min\n\t%left_data =l add %left, 16\n\t%right_data =l add %right, 16\n\t%comparison =w call $memcmp(l %left_data, l %right_data, l %minimum)\n\t%different =w cnew %comparison, 0\n\tjnz %different, @compared, @lengths\n@compared\n\tret %comparison\n@lengths\n\t%shorter =w csltl %left_length, %right_length\n\tjnz %shorter, @less, @longer\n@longer\n\t%greater =w csgtl %left_length, %right_length\n\tjnz %greater, @more, @equal\n@less\n\tret -1\n@more\n\tret 1\n@equal\n\tret 0\n}\n\nfunction w $g4_project_walk_callback(l %path, l %stat, w %type, l %walk) {\n@start\n\t%excluded =w call $g4_project_path_excluded(l %path)\n\tjnz %excluded, @ignore, @classify\n@classify\n\t%regular =w ceqw %type, 0\n\tjnz %regular, @regular, @directory\n@directory\n\t%directory =w ceqw %type, 1\n\tjnz %directory, @ignore, @walk_error\n@walk_error\n\t%denied =w ceqw %type, 2\n\t%unknown =w ceqw %type, 4\n\t%unreadable =w or %denied, %unknown\n\tjnz %unreadable, @error, @special\n@special\n\t%source_kind =w call $g4_c_ends_with(l %path, l $g4_project_trb_suffix)\n\tjnz %source_kind, @error, @ignore\n@regular\n\t%source =w call $g4_c_ends_with(l %path, l $g4_project_trb_suffix)\n\tjnz %source, @test, @ignore\n@test\n\t%test_source =w call $g4_c_is_test_source(l %path)\n\tjnz %test_source, @ignore, @collect\n@collect\n\t%owned =l call $g4_string_from_c(l %path)\n\t%paths =l loadl $g4_project_paths\n\tcall $g4_array_push(l %paths, l %owned)\n\tret 0\n@error\n\t%error =l call $g4_string_from_c(l %path)\n\tstorel %error, $g4_project_error\n\t%error_root =l add $g4_gc_global_roots, 88\n\tstorel %error, %error_root\n\tret 1\n@ignore\n\tret 0\n}\n\nfunction l $g4_collect_project_sources(l %source_root, l %out_root) {\n@start\n\t%paths =l call $g4_array_new(l $g4_desc_array_managed)\n\t%paths_root =l add $g4_gc_global_roots, 64\n\tstorel %paths, %paths_root\n\t%sources =l call $g4_array_new(l $g4_desc_array_managed)\n\t%sources_root =l add $g4_gc_global_roots, 72\n\tstorel %sources, %sources_root\n\t%result =l call $g4_gc_alloc(l $g4_desc_project_sources, l 24, l 0)\n\t%result_root =l add $g4_gc_global_roots, 80\n\tstorel %result, %result_root\n\t%paths_slot =l add %result, 8\n\tstorel %paths, %paths_slot\n\t%sources_slot =l add %result, 16\n\tstorel %sources, %sources_slot\n\t%error_slot =l add %result, 24\n\tstorel $g4_project_empty_string, %error_slot\n\tstorel %paths, $g4_project_paths\n\tstorel 0, $g4_project_error\n\t%error_root =l add $g4_gc_global_roots, 88\n\tstorel 0, %error_root\n\t%source_data =l add %source_root, 16\n\t%out_data =l add %out_root, 16\n\tstorel %source_data, $g4_project_source_root\n\tstorel %out_data, $g4_project_out_root\n\t%walk_status =w call $nftw(l %source_data, l $g4_project_walk_callback, w 32, w 1)\n\t%walk_error =l loadl $g4_project_error\n\t%callback_failed =w cnel %walk_error, 0\n\tjnz %callback_failed, @failed, @walk_result\n@walk_result\n\t%walk_failed =w cnew %walk_status, 0\n\tjnz %walk_failed, @root_failed, @sort\n@root_failed\n\tstorel %source_root, %error_slot\n\tret %result\n@failed\n\tstorel %walk_error, %error_slot\n\tret %result\n@sort\n\t%path_count_address =l add %paths, 8\n\t%path_count =l loadl %path_count_address\n\t%multiple =w csltl 1, %path_count\n\tjnz %multiple, @sort_paths, @read_start\n@sort_paths\n\t%paths_data_slot =l add %paths, 24\n\t%paths_data =l loadl %paths_data_slot\n\tcall $qsort(l %paths_data, l %path_count, l 8, l $g4_project_path_compare)\n\tjmp @read_start\n@read_start\n\t%read_data_slot =l add %paths, 24\n\t%read_data =l loadl %read_data_slot\n\tjmp @read_loop\n@read_loop\n\t%index =l phi @read_start 0, @read_next %next_index\n\t%finished =w cslel %path_count, %index\n\tjnz %finished, @success, @read\n@read\n\t%offset =l mul %index, 8\n\t%path_slot =l add %read_data, %offset\n\t%path =l loadl %path_slot\n\t%path_data =l add %path, 16\n\t%source =l call $g4_read_file(l %path_data)\n\t%read_failed =w ceql %source, 0\n\tjnz %read_failed, @source_failed, @source_ready\n@source_failed\n\tstorel %path, %error_slot\n\tret %result\n@source_ready\n\tcall $g4_array_push(l %sources, l %source)\n\tjmp @read_next\n@read_next\n\t%next_index =l add %index, 1\n\tjmp @read_loop\n@success\n\tret %result\n}\n\nfunction l $g4_c_concat(l %a, l %b) {\n@start\n\t%an =l call $strlen(l %a)\n\t%bn =l call $strlen(l %b)\n\t%n =l add %an, %bn\n\t%sz =l add %n, 1\n\t%r =l call $g4_alloc(l %sz)\n\tcall $memcpy(l %r, l %a, l %an)\n\t%p =l add %r, %an\n\tcall $memcpy(l %p, l %b, l %bn)\n\tret %r\n}\n\nfunction l $g4_c_basename(l %path) {\n@start\n\t%slash =l call $strrchr(l %path, w 47)\n\t%missing =w ceql %slash, 0\n\tjnz %missing, @whole, @suffix\n@whole\n\tret %path\n@suffix\n\t%base =l add %slash, 1\n\tret %base\n}\n",
-		"function w $g4_run(l %program, l %args) {\n@start\n\t%pid =w call $fork()\n\t%ff =w csltw %pid, 0\n\tjnz %ff, @fail, @child_check\n@child_check\n\t%child =w ceqw %pid, 0\n\tjnz %child, @child, @parent\n@child\n\t%ignored =w call $execv(l %program, l %args)\n\tcall $exit(w 127)\n\thlt\n@parent\n\t%sp =l alloc8 8\n\tstorew 0, %sp\n\t%waited =w call $waitpid(w %pid, l %sp, w 0)\n\t%wf =w csltw %waited, 0\n\tjnz %wf, @fail, @status\n@status\n\t%st =w loadw %sp\n\t%sig =w and %st, 127\n\t%signaled =w cnew %sig, 0\n\tjnz %signaled, @signal, @exited\n@signal\n\t%sr =w add %sig, 128\n\tret %sr\n@exited\n\t%shifted =w shr %st, 8\n\t%code =w and %shifted, 255\n\tret %code\n@fail\n\tret 127\n}\n",
-		"function w $g4_run_qbe(l %qbe, l %ssa, l %assembly) {\n@start\n\t%target =l loadl $g4_selected_qbe_target\n\t%a =l alloc8 56\n\tstorel %qbe, %a\n\t%a1 =l add %a, 8\n\tstorel $g4_target_flag, %a1\n\t%a2 =l add %a, 16\n\tstorel %target, %a2\n\t%a3 =l add %a, 24\n\tstorel $g4_o_flag, %a3\n\t%a4 =l add %a, 32\n\tstorel %assembly, %a4\n\t%a5 =l add %a, 40\n\tstorel %ssa, %a5\n\t%a6 =l add %a, 48\n\tstorel 0, %a6\n\t%r =w call $g4_run(l %qbe, l %a)\n\tret %r\n}\n",
-		"function w $g4_project_run_cc(l %cc, l %assembly, l %output) {\n@start\n\t%dead_strip =l loadl $g4_selected_dead_strip\n\t%linker =l loadl $g4_project_selected_linker\n\t%a =l alloc8 72\n\tstorel %cc, %a\n\t%a1 =l add %a, 8\n\tstorel $g4_project_assembler_input, %a1\n\t%a2 =l add %a, 16\n\tstorel %assembly, %a2\n\t%has_linker =w cnel %linker, 0\n\tjnz %has_linker, @linker, @default\n@linker\n\t%linker_slot =l add %a, 24\n\tstorel %linker, %linker_slot\n\t%linker_tail =l add %a, 32\n\tjmp @tail\n@default\n\t%default_tail =l add %a, 24\n\tjmp @tail\n@tail\n\t%tail =l phi @linker %linker_tail, @default %default_tail\n\tstorel %dead_strip, %tail\n\t%math_slot =l add %tail, 8\n\tstorel $g4_math_library, %math_slot\n\t%output_flag_slot =l add %tail, 16\n\tstorel $g4_o_flag, %output_flag_slot\n\t%output_slot =l add %tail, 24\n\tstorel %output, %output_slot\n\t%end_slot =l add %tail, 32\n\tstorel 0, %end_slot\n\t%r =w call $g4_run(l %cc, l %a)\n\tret %r\n}\n",
-		"function $g4_cleanup(l %ssa, l %assembly) {\n@start\n\t%i0 =w call $unlink(l %ssa)\n\t%i1 =w call $unlink(l %assembly)\n\tret\n}\n\nfunction $g4_cleanup_output(l %output, l %directory) {\n@start\n\t%i0 =w call $unlink(l %output)\n\t%i1 =w call $rmdir(l %directory)\n\tret\n}\n\nfunction l $g4_string_concat(l %left, l %right) {\n@start\n\t%left_length_address =l add %left, 8\n\t%right_length_address =l add %right, 8\n\t%left_length =l loadl %left_length_address\n\t%right_length =l loadl %right_length_address\n\t%length =l add %left_length, %right_length\n\t%size =l add %length, 9\n\t%string =l call $g4_string_alloc(l %size)\n\t%length_address =l add %string, 8\n\tstorel %length, %length_address\n\t%data =l add %string, 16\n\t%left_data =l add %left, 16\n\tcall $memcpy(l %data, l %left_data, l %left_length)\n\t%right_target =l add %data, %left_length\n\t%right_data =l add %right, 16\n\tcall $memcpy(l %right_target, l %right_data, l %right_length)\n\t%end =l add %data, %length\n\tstoreb 0, %end\n\tret %string\n}\n\nfunction l $g4_string_equal(l %left, l %right) {\n@start\n\t%left_length_address =l add %left, 8\n\t%right_length_address =l add %right, 8\n\t%left_length =l loadl %left_length_address\n\t%right_length =l loadl %right_length_address\n\t%same_length =w ceql %left_length, %right_length\n\tjnz %same_length, @compare, @different\n@compare\n\t%left_data =l add %left, 16\n\t%right_data =l add %right, 16\n\t%comparison =w call $memcmp(l %left_data, l %right_data, l %left_length)\n\t%equal =w ceqw %comparison, 0\n\t%result =l extuw %equal\n\tret %result\n@different\n\tret 0\n}\n\nfunction l $g4_string_index(l %string, l %requested) {\n@start\n\t%length_address =l add %string, 8\n\t%length =l loadl %length_address\n\t%negative =w csltl %requested, 0\n\tjnz %negative, @negative, @check\n@negative\n\t%adjusted_negative =l add %length, %requested\n\tjmp @bounds\n@check\n\t%adjusted_positive =l copy %requested\n\tjmp @bounds\n@bounds\n\t%index =l phi @negative %adjusted_negative, @check %adjusted_positive\n\t%below =w csltl %index, 0\n\t%above =w cslel %length, %index\n\t%invalid =w or %below, %above\n\tjnz %invalid, @fail, @load\n@fail\n\tcall $g4_fail(l $g4_bounds_error, l 30)\n\thlt\n@load\n\t%data =l add %string, 16\n\t%address =l add %data, %index\n\t%character =w loadub %address\n\t%result =l call $g4_string_alloc(l 10)\n\t%result_length =l add %result, 8\n\tstorel 1, %result_length\n\t%result_data =l add %result, 16\n\tstoreb %character, %result_data\n\t%result_end =l add %result_data, 1\n\tstoreb 0, %result_end\n\tret %result\n}\n\nfunction $g4_puts(l %string) {\n@start\n\t%length_address =l add %string, 8\n\t%length =l loadl %length_address\n\t%data =l add %string, 16\n\tcall $write(w 1, l %data, l %length)\n\tcall $write(w 1, l $g4_newline, l 1)\n\tret\n}\n\nfunction $g4_eputs(l %string) {\n@start\n\t%length_address =l add %string, 8\n\t%length =l loadl %length_address\n\t%data =l add %string, 16\n\tcall $write(w 2, l %data, l %length)\n\tcall $write(w 2, l $g4_newline, l 1)\n\tret\n}\n\nfunction l $g4_array_new(l %descriptor) {\n@start\n\t%array =l call $g4_gc_alloc(l %descriptor, l 24, l 32)\n\t%data =l call $calloc(l 4, l 8)\n\t%failed =w ceql %data, 0\n\tjnz %failed, @fail, @initialize\n@fail\n\tcall $g4_fail(l $g4_allocation_error, l 26)\n\thlt\n@initialize\n\t%heap =l loadl $g4_gc_heap_bytes\n\t%heap_with_data =l add %heap, 32\n\tstorel %heap_with_data, $g4_gc_heap_bytes\n\t%allocated =l loadl $g4_gc_allocated_bytes\n\t%allocated_with_data =l add %allocated, 32\n\tstorel %allocated_with_data, $g4_gc_allocated_bytes\n\tcall $g4_gc_update_peak(l %heap_with_data)\n\t%length =l add %array, 8\n\tstorel 0, %length\n\t%capacity =l add %array, 16\n\tstorel 4, %capacity\n\t%data_slot =l add %array, 24\n\tstorel %data, %data_slot\n\tret %array\n}\n\nfunction $g4_array_push(l %array, l %value) {\n@start\n\t%length_slot =l add %array, 8\n\t%length =l loadl %length_slot\n\t%capacity_slot =l add %array, 16\n\t%capacity =l loadl %capacity_slot\n\t%full =w ceql %length, %capacity\n\tjnz %full, @grow, @store\n@grow\n\t%new_capacity =l mul %capacity, 2\n\t%new_bytes =l mul %new_capacity, 8\n\t%old_bytes =l mul %capacity, 8\n\t%growth =l sub %new_bytes, %old_bytes\n\t%data_slot =l add %array, 24\n\t%data =l loadl %data_slot\n\t%new_data =l call $realloc(l %data, l %new_bytes)\n\t%failed =w ceql %new_data, 0\n\tjnz %failed, @fail, @grown\n@fail\n\tcall $g4_fail(l $g4_allocation_error, l 26)\n\thlt\n@grown\n\t%heap_before =l loadl $g4_gc_heap_bytes\n\t%heap_after =l add %heap_before, %growth\n\tstorel %heap_after, $g4_gc_heap_bytes\n\t%allocated_before =l loadl $g4_gc_allocated_bytes\n\t%allocated_after =l add %allocated_before, %growth\n\tstorel %allocated_after, $g4_gc_allocated_bytes\n\tcall $g4_gc_update_peak(l %heap_after)\n\tstorel %new_capacity, %capacity_slot\n\tstorel %new_data, %data_slot\n\tjmp @store\n@store\n\t%current_data_slot =l add %array, 24\n\t%current_data =l loadl %current_data_slot\n\t%offset =l mul %length, 8\n\t%target =l add %current_data, %offset\n\tstorel %value, %target\n\t%new_length =l add %length, 1\n\tstorel %new_length, %length_slot\n\tret\n}\n\nfunction l $g4_integer_add(l %left, l %right) {\n@start\n\t%result =l add %left, %right\n\t%too_high =w csgtl %result, 9007199254740991\n\tjnz %too_high, @fail, @check_low\n@check_low\n\t%too_low =w csltl %result, -9007199254740991\n\tjnz %too_low, @fail, @ok\n@fail\n\tcall $g4_fail(l $g4_integer_range_error, l 45)\n\thlt\n@ok\n\tret %result\n}\n\nfunction l $g4_integer_subtract(l %left, l %right) {\n@start\n\t%result =l sub %left, %right\n\t%too_high =w csgtl %result, 9007199254740991\n\tjnz %too_high, @fail, @check_low\n@check_low\n\t%too_low =w csltl %result, -9007199254740991\n\tjnz %too_low, @fail, @ok\n@fail\n\tcall $g4_fail(l $g4_integer_range_error, l 45)\n\thlt\n@ok\n\tret %result\n}\n\nfunction l $g4_integer_mul(l %left, l %right) {\n@start\n\t%c =l or %left, %right\n\t%u =l shr %c, 26\n\tjnz %u, @left_sign, @multiply\n@left_sign\n\t%right_zero =w ceql %right, 0\n\tjnz %right_zero, @zero, @left_nonzero\n@left_nonzero\n\t%left_positive =w csgtl %left, 0\n\tjnz %left_positive, @left_positive, @left_negative\n@left_positive\n\t%right_positive =w csgtl %right, 0\n\tjnz %right_positive, @positive_positive, @positive_negative\n@positive_positive\n\t%positive_limit =l div 9007199254740991, %right\n\t%positive_overflow =w csgtl %left, %positive_limit\n\tjnz %positive_overflow, @fail, @multiply\n@positive_negative\n\t%negative_limit =l div -9007199254740991, %left\n\t%negative_overflow =w csltl %right, %negative_limit\n\tjnz %negative_overflow, @fail, @multiply\n@left_negative\n\t%right_positive_two =w csgtl %right, 0\n\tjnz %right_positive_two, @negative_positive, @negative_negative\n@negative_positive\n\t%negative_limit_two =l div -9007199254740991, %right\n\t%negative_overflow_two =w csltl %left, %negative_limit_two\n\tjnz %negative_overflow_two, @fail, @multiply\n@negative_negative\n\t%positive_limit_two =l div 9007199254740991, %right\n\t%positive_overflow_two =w csltl %left, %positive_limit_two\n\tjnz %positive_overflow_two, @fail, @multiply\n@multiply\n\t%result =l mul %left, %right\n\tret %result\n@zero\n\tret 0\n@fail\n\tcall $g4_fail(l $g4_integer_range_error, l 45)\n\thlt\n}\n\nfunction l $g4_integer_divide(l %left, l %right) {\n@start\n\t%zero =w ceql %right, 0\n\tjnz %zero, @fail, @ok\n@fail\n\tcall $g4_fail(l $g4_division_error, l 24)\n\thlt\n@ok\n\t%result =l div %left, %right\n\tret %result\n}\n\nfunction l $g4_integer_remainder(l %left, l %right) {\n@start\n\t%zero =w ceql %right, 0\n\tjnz %zero, @fail, @ok\n@fail\n\tcall $g4_fail(l $g4_division_error, l 24)\n\thlt\n@ok\n\t%result =l rem %left, %right\n\tret %result\n}\n",
-	]
-	mut index := 0
-	while index < lines.size()
-		line := lines[index]
-		if project_runtime
-			gate4_output_line(output, line)
-		else
-			if gate4_string_starts_with(line, "function w $g4_project_run_cc")
-				gate4_output_line(
-					output,
-					"function w $g4_run_cc(l %cc, l %assembly, l %output) {\n@start\n\t%dead_strip =l loadl $g4_selected_dead_strip\n\t%a =l alloc8 56\n\tstorel %cc, %a\n\t%a1 =l add %a, 8\n\tstorel %assembly, %a1\n\t%a2 =l add %a, 16\n\tstorel %dead_strip, %a2\n\t%a3 =l add %a, 24\n\tstorel $g4_math_library, %a3\n\t%a4 =l add %a, 32\n\tstorel $g4_o_flag, %a4\n\t%a5 =l add %a, 40\n\tstorel %output, %a5\n\t%a6 =l add %a, 48\n\tstorel 0, %a6\n\t%r =w call $g4_run(l %cc, l %a)\n\tret %r\n}\n",
-				)
-			else
-				if gate4_string_starts_with(line, "function l $g4_read_source")
-					gate4_output_line(
-						output,
-						"function l $g4_read_source(l %path) {\n@start\n\t%data =l add %path, 16\n\t%source =l call $g4_read_file(l %data)\n\tret %source\n}\n",
-					)
-				else
-					if !gate4_project_runtime_qbe_line(line)
-						gate4_output_line(output, line)
-					end
-				end
-			end
-		end
-		index += 1
-	end
-	gate4_emit_managed_runtime_compact(output)
-	return
-end
-
-def gate4_emit_managed_runtime_compact(mut output: Gate4Output)
-	gate4_output_line(output, "data $g4_gc_heap = align 8 { l 0 }\ndata $g4_gc_global_roots = align 8 { z 96 }\ndata $g4_gc_temp_data = align 8 { l 0 }\ndata $g4_gc_temp_count = align 8 { l 0 }\ndata $g4_gc_temp_capacity = align 8 { l 0 }\ndata $g4_gc_heap_bytes = align 8 { l 0 }\ndata $g4_gc_heap_target = align 8 { l 1048576 }\ndata $g4_gc_collection_count = align 8 { l 0 }\ndata $g4_gc_automatic_collection_count = align 8 { l 0 }\ndata $g4_gc_allocated_bytes = align 8 { l 0 }\ndata $g4_gc_reclaimed_bytes = align 8 { l 0 }\ndata $g4_gc_peak_heap_bytes = align 8 { l 0 }\ndata $g4_gc_trace_enabled = align 8 { l 0 }\ndata $g4_desc_string = align 8 { l 0 }\ndata $g4_desc_array_scalar = align 8 { l 2, l 0 }\ndata $g4_desc_array_managed = align 8 { l 2, l 1 }\ndata $g4_desc_project_sources = align 8 { l 1, l 3, l 24, l 8, l 16, l 24 }\ndata $g4_gc_stats_environment = { b \"TYPE_RB_NATIVE_RUNTIME_STATS\", b 0 }\ndata $g4_gc_trace_environment = { b \"TYPE_RB_NATIVE_RUNTIME_TRACE\", b 0 }\ndata $g4_gc_trace_collection = { b \"type-rb-native-gc-trace-v1,collection,\" }\ndata $g4_gc_trace_automatic = { b \"type-rb-native-gc-trace-v1,automatic,\" }\ndata $g4_gc_trace_live = { b \"type-rb-native-gc-trace-v1,live-bytes,\" }\ndata $g4_gc_trace_target = { b \"type-rb-native-gc-trace-v1,next-target-bytes,\" }\ndata $g4_gc_trace_roots = { b \"type-rb-native-gc-trace-v1,root-count,\" }\ndata $g4_gc_trace_capacity = { b \"type-rb-native-gc-trace-v1,root-capacity,\" }\ndata $g4_gc_report_collections = { b \"type-rb-native-gc-stat-v1,collections,\" }\ndata $g4_gc_report_automatic = { b \"type-rb-native-gc-stat-v1,automatic-collections,\" }\ndata $g4_gc_report_allocated = { b \"type-rb-native-gc-stat-v1,allocated-bytes,\" }\ndata $g4_gc_report_reclaimed = { b \"type-rb-native-gc-stat-v1,reclaimed-bytes,\" }\ndata $g4_gc_report_live = { b \"type-rb-native-gc-stat-v1,live-bytes,\" }\ndata $g4_gc_report_peak = { b \"type-rb-native-gc-stat-v1,peak-heap-bytes,\" }\n\nfunction $g4_gc_update_peak(l %candidate) {\n@start\n\t%peak =l loadl $g4_gc_peak_heap_bytes\n\t%greater =w csgtl %candidate, %peak\n\tjnz %greater, @store, @finish\n@store\n\tstorel %candidate, $g4_gc_peak_heap_bytes\n\tret\n@finish\n\tret\n}\n\nfunction $g4_gc_maybe_collect(l %additional) {\n@start\n\t%before =l loadl $g4_gc_heap_bytes\n\t%projected =l add %before, %additional\n\t%target =l loadl $g4_gc_heap_target\n\t%over =w csgtl %projected, %target\n\tjnz %over, @collect, @finish\n@collect\n\tcall $g4_gc_collect(w 1)\n@finish\n\tret\n}\n\nfunction $g4_gc_temp_push(l %value) {\n@start\n\t%nil =w ceql %value, 0\n\tjnz %nil, @finish, @descriptor\n@descriptor\n\t%descriptor_mark =l loadl %value\n\t%static =w ceql %descriptor_mark, 0\n\tjnz %static, @finish, @count\n@count\n\t%count =l loadl $g4_gc_temp_count\n\t%capacity =l loadl $g4_gc_temp_capacity\n\t%full =w ceql %count, %capacity\n\tjnz %full, @grow, @store\n@grow\n\tcall $g4_gc_temp_grow(l %value, l %count, l %capacity)\n\tret\n@store\n\t%current_data =l loadl $g4_gc_temp_data\n\t%offset =l shl %count, 3\n\t%slot =l add %current_data, %offset\n\tstorel %value, %slot\n\t%next_count =l add %count, 1\n\tstorel %next_count, $g4_gc_temp_count\n\tjmp @finish\n@finish\n\tret\n}\n\nfunction $g4_gc_temp_grow(l %value, l %count, l %capacity) {\n@start\n\t%empty =w ceql %capacity, 0\n\tjnz %empty, @minimum, @double\n@minimum\n\t%minimum =l copy 64\n\tjmp @allocate\n@double\n\t%doubled =l mul %capacity, 2\n\tjmp @allocate\n@allocate\n\t%next_capacity =l phi @minimum %minimum, @double %doubled\n\t%bytes =l mul %next_capacity, 8\n\t%data =l loadl $g4_gc_temp_data\n\t%new_data =l call $realloc(l %data, l %bytes)\n\t%failed =w ceql %new_data, 0\n\tjnz %failed, @fail, @grown\n@fail\n\tcall $g4_fail(l $g4_allocation_error, l 26)\n\thlt\n@grown\n\tstorel %new_data, $g4_gc_temp_data\n\tstorel %next_capacity, $g4_gc_temp_capacity\n\t%offset =l mul %count, 8\n\t%slot =l add %new_data, %offset\n\tstorel %value, %slot\n\t%next_count =l add %count, 1\n\tstorel %next_count, $g4_gc_temp_count\n\tret\n}\n\nfunction $g4_gc_temp_reset(l %base) {\n@start\n\tstorel %base, $g4_gc_temp_count\n\tret\n}\n\nfunction l $g4_gc_alloc(l %descriptor, l %payload_size, l %reserved_size) {\n@start\n\t%total =l add %payload_size, 16\n\t%projected =l add %total, %reserved_size\n\tcall $g4_gc_maybe_collect(l %projected)\n\t%base =l call $malloc(l %total)\n\t%failed =w ceql %base, 0\n\tjnz %failed, @fail, @initialize\n@fail\n\tcall $g4_fail(l $g4_allocation_error, l 26)\n\thlt\n@initialize\n\t%head =l loadl $g4_gc_heap\n\tstorel %head, %base\n\t%object =l add %base, 8\n\tstorel %descriptor, %object\n\t%payload =l add %object, 8\n\tcall $memset(l %payload, w 0, l %payload_size)\n\t%bytes =l loadl $g4_gc_heap_bytes\n\t%updated =l add %bytes, %total\n\tstorel %updated, $g4_gc_heap_bytes\n\t%allocated =l loadl $g4_gc_allocated_bytes\n\t%new_allocated =l add %allocated, %total\n\tstorel %new_allocated, $g4_gc_allocated_bytes\n\tcall $g4_gc_update_peak(l %updated)\n\tstorel %base, $g4_gc_heap\n\tcall $g4_gc_temp_push(l %object)\n\tret %object\n}\n\nfunction $g4_gc_scan_fixed(l %object, l %descriptor) {\n@start\n\t%count_address =l add %descriptor, 8\n\t%count =l loadl %count_address\n\tjmp @loop\n@loop\n\t%index =l phi @start 0, @visit %next\n\t%done =w cslel %count, %index\n\tjnz %done, @finish, @visit\n@visit\n\t%scaled =l mul %index, 8\n\t%entries =l add %descriptor, 24\n\t%entry =l add %entries, %scaled\n\t%offset =l loadl %entry\n\t%field =l add %object, %offset\n\t%reference =l loadl %field\n\tcall $g4_gc_mark(l %reference)\n\t%next =l add %index, 1\n\tjmp @loop\n@finish\n\tret\n}\n\nfunction $g4_gc_scan_array(l %object, l %descriptor) {\n@start\n\t%managed_address =l add %descriptor, 8\n\t%managed =l loadl %managed_address\n\t%scalar =w ceql %managed, 0\n\tjnz %scalar, @finish, @prepare\n@prepare\n\t%length_address =l add %object, 8\n\t%length =l loadl %length_address\n\t%data_address =l add %object, 24\n\t%data =l loadl %data_address\n\tjmp @loop\n@loop\n\t%index =l phi @prepare 0, @visit %next\n\t%done =w cslel %length, %index\n\tjnz %done, @finish, @visit\n@visit\n\t%scaled =l mul %index, 8\n\t%entry =l add %data, %scaled\n\t%reference =l loadl %entry\n\tcall $g4_gc_mark(l %reference)\n\t%next =l add %index, 1\n\tjmp @loop\n@finish\n\tret\n}\n\nfunction $g4_gc_mark(l %object) {\n@start\n\t%nil =w ceql %object, 0\n\tjnz %nil, @finish, @descriptor\n@descriptor\n\t%descriptor_mark =l loadl %object\n\t%static =w ceql %descriptor_mark, 0\n\tjnz %static, @finish, @check_mark\n@check_mark\n\t%mark =l and %descriptor_mark, 1\n\t%seen =w cnel %mark, 0\n\tjnz %seen, @finish, @dispatch\n@dispatch\n\t%marked_descriptor =l or %descriptor_mark, 1\n\tstorel %marked_descriptor, %object\n\t%descriptor =l and %descriptor_mark, -2\n\t%kind =l loadl %descriptor\n\t%fixed =w ceql %kind, 1\n\tjnz %fixed, @fixed, @check_array\n@fixed\n\tcall $g4_gc_scan_fixed(l %object, l %descriptor)\n\tret\n@check_array\n\t%array =w ceql %kind, 2\n\tjnz %array, @array, @finish\n@array\n\tcall $g4_gc_scan_array(l %object, l %descriptor)\n@finish\n\tret\n}\n\nfunction $g4_gc_mark_roots() {\n@start\n\t%temp_count =l loadl $g4_gc_temp_count\n\t%temp_data =l loadl $g4_gc_temp_data\n\tjmp @temp_loop\n@temp_loop\n\t%temp_index =l phi @start 0, @temp %next_temp\n\t%temps_done =w cslel %temp_count, %temp_index\n\tjnz %temps_done, @globals, @temp\n@temp\n\t%temp_scaled =l mul %temp_index, 8\n\t%temp_slot =l add %temp_data, %temp_scaled\n\t%temp_reference =l loadl %temp_slot\n\tcall $g4_gc_mark(l %temp_reference)\n\t%next_temp =l add %temp_index, 1\n\tjmp @temp_loop\n@globals\n\tjmp @global_loop\n@global_loop\n\t%global_index =l phi @globals 0, @global %next_global\n\t%globals_done =w cslel 12, %global_index\n\tjnz %globals_done, @finish, @global\n@global\n\t%global_scaled =l mul %global_index, 8\n\t%global_slot =l add $g4_gc_global_roots, %global_scaled\n\t%global_reference =l loadl %global_slot\n\tcall $g4_gc_mark(l %global_reference)\n\t%next_global =l add %global_index, 1\n\tjmp @global_loop\n@finish\n\tret\n}\n\nfunction $g4_gc_sweep() {\n@start\n\t%head =l loadl $g4_gc_heap\n\tjmp @loop\n@loop\n\t%current =l phi @start %head, @advance %next\n\t%previous =l phi @start 0, @advance %next_previous\n\t%done =w ceql %current, 0\n\tjnz %done, @finish, @object\n@object\n\t%next =l loadl %current\n\t%descriptor_address =l add %current, 8\n\t%descriptor_mark =l loadl %descriptor_address\n\t%mark =l and %descriptor_mark, 1\n\t%live =w cnel %mark, 0\n\tjnz %live, @keep, @release\n@keep\n\t%descriptor =l and %descriptor_mark, -2\n\tstorel %descriptor, %descriptor_address\n\tjmp @advance\n@release\n\t%released_descriptor =l and %descriptor_mark, -2\n\t%kind =l loadl %released_descriptor\n\t%array =w ceql %kind, 2\n\tjnz %array, @release_array, @check_fixed\n@release_array\n\t%data_address =l add %current, 32\n\t%data =l loadl %data_address\n\t%capacity_address =l add %current, 24\n\t%capacity =l loadl %capacity_address\n\t%backing_bytes =l mul %capacity, 8\n\t%heap_with_backing =l loadl $g4_gc_heap_bytes\n\t%heap_without_backing =l sub %heap_with_backing, %backing_bytes\n\tstorel %heap_without_backing, $g4_gc_heap_bytes\n\t%reclaimed_before_backing =l loadl $g4_gc_reclaimed_bytes\n\t%reclaimed_with_backing =l add %reclaimed_before_backing, %backing_bytes\n\tstorel %reclaimed_with_backing, $g4_gc_reclaimed_bytes\n\t%has_data =w cnel %data, 0\n\tjnz %has_data, @free_data, @array_ready\n@free_data\n\tcall $free(l %data)\n\tjmp @array_ready\n@array_ready\n\t%array_size =l copy 40\n\tjmp @unlink\n@check_fixed\n\t%fixed =w ceql %kind, 1\n\tjnz %fixed, @fixed_size, @string_size\n@fixed_size\n\t%payload_size_address =l add %released_descriptor, 16\n\t%payload_size =l loadl %payload_size_address\n\t%fixed_size =l add %payload_size, 16\n\tjmp @unlink\n@string_size\n\t%length_address =l add %current, 16\n\t%length =l loadl %length_address\n\t%string_size =l add %length, 25\n\tjmp @unlink\n@unlink\n\t%size =l phi @array_ready %array_size, @fixed_size %fixed_size, @string_size %string_size\n\t%at_head =w ceql %previous, 0\n\tjnz %at_head, @unlink_head, @unlink_after\n@unlink_head\n\tstorel %next, $g4_gc_heap\n\tjmp @account\n@unlink_after\n\tstorel %next, %previous\n@account\n\t%bytes =l loadl $g4_gc_heap_bytes\n\t%remaining =l sub %bytes, %size\n\tstorel %remaining, $g4_gc_heap_bytes\n\t%reclaimed =l loadl $g4_gc_reclaimed_bytes\n\t%new_reclaimed =l add %reclaimed, %size\n\tstorel %new_reclaimed, $g4_gc_reclaimed_bytes\n\tcall $free(l %current)\n\tjmp @advance\n@advance\n\t%next_previous =l phi @keep %current, @account %previous\n\tjmp @loop\n@finish\n\tret\n}\n\nfunction $g4_gc_collect(w %automatic) {\n@start\n\tcall $g4_gc_mark_roots()\n\tcall $g4_gc_sweep()\n\t%count =l loadl $g4_gc_collection_count\n\t%next_count =l add %count, 1\n\tstorel %next_count, $g4_gc_collection_count\n\tjnz %automatic, @automatic, @pace\n@automatic\n\t%automatic_count =l loadl $g4_gc_automatic_collection_count\n\t%next_automatic =l add %automatic_count, 1\n\tstorel %next_automatic, $g4_gc_automatic_collection_count\n\tjmp @pace\n@pace\n\t%live =l loadl $g4_gc_heap_bytes\n\t%doubled =l mul %live, 2\n\t%candidate =l add %doubled, 65536\n\t%small =w csltl %candidate, 1048576\n\tjnz %small, @minimum, @candidate\n@minimum\n\tstorel 1048576, $g4_gc_heap_target\n\tjmp @trace\n@candidate\n\tstorel %candidate, $g4_gc_heap_target\n\tjmp @trace\n@trace\n\tcall $g4_gc_trace(w %automatic, l %next_count)\n\tret\n}\n\nfunction $g4_gc_trace_initialize() {\n@start\n\t%enabled =l call $getenv(l $g4_gc_trace_environment)\n\tstorel %enabled, $g4_gc_trace_enabled\n\tret\n}\n\nfunction $g4_gc_trace(w %automatic, l %collection) {\n@start\n\t%enabled =l loadl $g4_gc_trace_enabled\n\t%disabled =w ceql %enabled, 0\n\tjnz %disabled, @finish, @select\n@select\n\t%manual =w ceqw %automatic, 0\n\tjnz %manual, @emit, @interval\n@interval\n\t%remainder =l rem %collection, 64\n\t%sampled =w ceql %remainder, 0\n\tjnz %sampled, @emit, @finish\n@emit\n\tcall $g4_gc_report(l $g4_gc_trace_collection, l 38, l %collection)\n\t%automatic_value =l extuw %automatic\n\tcall $g4_gc_report(l $g4_gc_trace_automatic, l 37, l %automatic_value)\n\t%live =l loadl $g4_gc_heap_bytes\n\tcall $g4_gc_report(l $g4_gc_trace_live, l 38, l %live)\n\t%target =l loadl $g4_gc_heap_target\n\tcall $g4_gc_report(l $g4_gc_trace_target, l 45, l %target)\n\t%roots =l loadl $g4_gc_temp_count\n\tcall $g4_gc_report(l $g4_gc_trace_roots, l 38, l %roots)\n\t%capacity =l loadl $g4_gc_temp_capacity\n\tcall $g4_gc_report(l $g4_gc_trace_capacity, l 41, l %capacity)\n@finish\n\tret\n}\n\nfunction $g4_gc_report(l %label, l %label_size, l %value) {\n@start\n\tcall $write(w 2, l %label, l %label_size)\n\t%buffer =l alloc8 32\n\t%end =l add %buffer, 32\n\t%cursor_slot =l alloc8 8\n\t%value_slot =l alloc8 8\n\tstorel %end, %cursor_slot\n\tstorel %value, %value_slot\n\t%zero =w ceql %value, 0\n\tjnz %zero, @zero, @loop\n@zero\n\t%zero_cursor =l sub %end, 1\n\tstoreb 48, %zero_cursor\n\tstorel %zero_cursor, %cursor_slot\n\tjmp @write\n@loop\n\t%current =l loadl %value_slot\n\t%done =w ceql %current, 0\n\tjnz %done, @write, @digit\n@digit\n\t%remainder =l rem %current, 10\n\t%digit =l add %remainder, 48\n\t%digit_byte =w copy %digit\n\t%cursor =l loadl %cursor_slot\n\t%next_cursor =l sub %cursor, 1\n\tstoreb %digit_byte, %next_cursor\n\tstorel %next_cursor, %cursor_slot\n\t%remaining =l div %current, 10\n\tstorel %remaining, %value_slot\n\tjmp @loop\n@write\n\t%start =l loadl %cursor_slot\n\t%size =l sub %end, %start\n\tcall $write(w 2, l %start, l %size)\n\tcall $write(w 2, l $g4_newline, l 1)\n\tret\n}\n\nfunction $g4_gc_finish() {\n@start\n\t%stats_enabled =l call $getenv(l $g4_gc_stats_environment)\n\t%trace_enabled =l loadl $g4_gc_trace_enabled\n\t%stats_disabled =w ceql %stats_enabled, 0\n\t%trace_disabled =w ceql %trace_enabled, 0\n\t%disabled =w and %stats_disabled, %trace_disabled\n\tjnz %disabled, @finish, @collect\n@collect\n\tstorel 0, $g4_gc_temp_count\n\tcall $memset(l $g4_gc_global_roots, w 0, l 96)\n\tcall $g4_gc_collect(w 0)\n\tjnz %stats_disabled, @finish, @report\n@report\n\t%collections =l loadl $g4_gc_collection_count\n\tcall $g4_gc_report(l $g4_gc_report_collections, l 38, l %collections)\n\t%automatic =l loadl $g4_gc_automatic_collection_count\n\tcall $g4_gc_report(l $g4_gc_report_automatic, l 48, l %automatic)\n\t%allocated =l loadl $g4_gc_allocated_bytes\n\tcall $g4_gc_report(l $g4_gc_report_allocated, l 42, l %allocated)\n\t%reclaimed =l loadl $g4_gc_reclaimed_bytes\n\tcall $g4_gc_report(l $g4_gc_report_reclaimed, l 42, l %reclaimed)\n\t%live =l loadl $g4_gc_heap_bytes\n\tcall $g4_gc_report(l $g4_gc_report_live, l 37, l %live)\n\t%peak =l loadl $g4_gc_peak_heap_bytes\n\tcall $g4_gc_report(l $g4_gc_report_peak, l 42, l %peak)\n@finish\n\tret\n}\n")
-	gate4_output_line(output, "\nfunction $g4_gc_temp_reserve(l %required) {\n@start\n\t%capacity =l loadl $g4_gc_temp_capacity\n\t%enough =w cslel %required, %capacity\n\tjnz %enough, @finish, @initial\n@initial\n\t%empty =w ceql %capacity, 0\n\tjnz %empty, @minimum, @existing\n@minimum\n\t%minimum =l copy 64\n\tjmp @grow\n@existing\n\t%existing =l copy %capacity\n\tjmp @grow\n@grow\n\t%current =l phi @minimum %minimum, @existing %existing, @double %doubled\n\t%large_enough =w cslel %required, %current\n\tjnz %large_enough, @allocate, @double\n@double\n\t%doubled =l mul %current, 2\n\tjmp @grow\n@allocate\n\t%bytes =l mul %current, 8\n\t%data =l loadl $g4_gc_temp_data\n\t%new_data =l call $realloc(l %data, l %bytes)\n\t%failed =w ceql %new_data, 0\n\tjnz %failed, @fail, @ready\n@fail\n\tcall $g4_fail(l $g4_allocation_error, l 26)\n\thlt\n@ready\n\tstorel %new_data, $g4_gc_temp_data\n\tstorel %current, $g4_gc_temp_capacity\n@finish\n\tret\n}\n")
-	# Traced non-Float Arrays share paced growth and a compact push ABI.
-	gate4_output_line(output, "\nfunction $g4_array_push_paced(l %array, l %value) {\n@start\n\t%length_slot =l add %array, 8\n\t%length =l loadl %length_slot\n\t%capacity_slot =l add %array, 16\n\t%capacity =l loadl %capacity_slot\n\t%full =w ceql %length, %capacity\n\tjnz %full, @grow, @store\n@grow\n\tcall $g4_array_grow_paced(l %array, l %value, l %length, l %capacity)\n\tret\n@store\n\t%new_length =l add %length, 1\n\tstorel %new_length, %length_slot\n\t%data_slot =l add %array, 24\n\t%data =l loadl %data_slot\n\t%offset =l shl %length, 3\n\t%target =l add %data, %offset\n\tstorel %value, %target\n\tret\n}\n\nfunction $g4_array_grow_paced(l %array, l %value, l %length, l %capacity) {\n@start\n\t%new_capacity =l shl %capacity, 2\n\t%new_bytes =l shl %new_capacity, 3\n\t%old_bytes =l shl %capacity, 3\n\t%growth =l sub %new_bytes, %old_bytes\n\tcall $g4_gc_maybe_collect(l %growth)\n\t%data_slot =l add %array, 24\n\t%data =l loadl %data_slot\n\t%new_data =l call $realloc(l %data, l %new_bytes)\n\t%failed =w ceql %new_data, 0\n\tjnz %failed, @fail, @grown\n@fail\n\tcall $g4_fail(l $g4_allocation_error, l 26)\n\thlt\n@grown\n\t%heap_before =l loadl $g4_gc_heap_bytes\n\t%heap_after =l add %heap_before, %growth\n\tstorel %heap_after, $g4_gc_heap_bytes\n\t%allocated_before =l loadl $g4_gc_allocated_bytes\n\t%allocated_after =l add %allocated_before, %growth\n\tstorel %allocated_after, $g4_gc_allocated_bytes\n\tcall $g4_gc_update_peak(l %heap_after)\n\t%capacity_slot =l add %array, 16\n\tstorel %new_capacity, %capacity_slot\n\tstorel %new_data, %data_slot\n\t%offset =l shl %length, 3\n\t%target =l add %new_data, %offset\n\tstorel %value, %target\n\t%new_length =l add %length, 1\n\t%length_slot =l add %array, 8\n\tstorel %new_length, %length_slot\n\tret\n}\n")
-	return
-end
-
-def gate4_emit_float_array_runtime(mut output: Gate4Output)
-	gate4_output_line(output, "\nfunction $g4_array_push_d(l %array, d %value) {\n@start\n\t%length_slot =l add %array, 8\n\t%length =l loadl %length_slot\n\t%capacity_slot =l add %array, 16\n\t%capacity =l loadl %capacity_slot\n\t%full =w ceql %length, %capacity\n\tjnz %full, @grow, @store\n@grow\n\t%new_capacity =l mul %capacity, 2\n\t%new_bytes =l mul %new_capacity, 8\n\t%old_bytes =l mul %capacity, 8\n\t%growth =l sub %new_bytes, %old_bytes\n\tcall $g4_gc_maybe_collect(l %growth)\n\t%data_slot =l add %array, 24\n\t%data =l loadl %data_slot\n\t%new_data =l call $realloc(l %data, l %new_bytes)\n\t%failed =w ceql %new_data, 0\n\tjnz %failed, @fail, @grown\n@fail\n\tcall $g4_fail(l $g4_allocation_error, l 26)\n\thlt\n@grown\n\t%heap_before =l loadl $g4_gc_heap_bytes\n\t%heap_after =l add %heap_before, %growth\n\tstorel %heap_after, $g4_gc_heap_bytes\n\t%allocated_before =l loadl $g4_gc_allocated_bytes\n\t%allocated_after =l add %allocated_before, %growth\n\tstorel %allocated_after, $g4_gc_allocated_bytes\n\tcall $g4_gc_update_peak(l %heap_after)\n\tstorel %new_capacity, %capacity_slot\n\tstorel %new_data, %data_slot\n\tjmp @store\n@store\n\t%current_data_slot =l add %array, 24\n\t%current_data =l loadl %current_data_slot\n\t%offset =l mul %length, 8\n\t%target =l add %current_data, %offset\n\tstored %value, %target\n\t%new_length =l add %length, 1\n\tstorel %new_length, %length_slot\n\tret\n}")
-	return
-end
-
-def gate4_emit_process_runtime(mut output: Gate4Output)
-	gate4_output_line(
-		output,
-		"\ndata $g4_process_argc = align 8 { l 0 }\ndata $g4_process_argv_pointer = align 8 { l 0 }\n\nfunction l $g4_process_argv() {\n@start\n\t%array =l call $g4_array_new(l $g4_desc_array_managed)\n\t%argc =l loadl $g4_process_argc\n\t%argv =l loadl $g4_process_argv_pointer\n\tjmp @loop\n@loop\n\t%index =l phi @start 1, @append %next\n\t%done =w cslel %argc, %index\n\tjnz %done, @finish, @load\n@load\n\t%offset =l mul %index, 8\n\t%cell =l add %argv, %offset\n\t%source =l loadl %cell\n\t%string =l call $g4_string_from_c(l %source)\n\tcall $g4_array_push_paced(l %array, l %string)\n\tjmp @append\n@append\n\t%next =l add %index, 1\n\tjmp @loop\n@finish\n\tret %array\n}",
-	)
-	return
-end
-
-def gate4_emit_string_to_integer_runtime(mut output: Gate4Output)
-	gate4_output_line(
-		output,
-		"\ndata $g4_invalid_integer_error = { b \"panic: invalid Integer\", b 10 }\n\nfunction l $g4_string_to_integer(l %string) {\n@start\n\t%length_address =l add %string, 8\n\t%length =l loadl %length_address\n\t%empty =w ceql %length, 0\n\tjnz %empty, @invalid, @first\n@first\n\t%parse_start_slot =l alloc8 8\n\t%data =l add %string, 16\n\t%first =w loadub %data\n\t%plus =w ceqw %first, 43\n\t%minus =w ceqw %first, 45\n\t%signed =w or %plus, %minus\n\tjnz %signed, @signed, @unsigned\n@signed\n\t%sign_only =w ceql %length, 1\n\tjnz %sign_only, @invalid, @signed_start\n@signed_start\n\t%signed_index =l copy 1\n\tstorel %signed_index, %parse_start_slot\n\tjmp @validate\n@unsigned\n\t%unsigned_index =l copy 0\n\tstorel %unsigned_index, %parse_start_slot\n\tjmp @validate\n@validate\n\t%validation_index =l phi @signed_start %signed_index, @unsigned %unsigned_index, @validate_next %validation_next\n\t%validation_done =w cslel %length, %validation_index\n\tjnz %validation_done, @parse_start, @validate_digit\n@validate_digit\n\t%validation_address =l add %data, %validation_index\n\t%validation_character =w loadub %validation_address\n\t%validation_below =w csltw %validation_character, 48\n\t%validation_above =w csgtw %validation_character, 57\n\t%validation_invalid =w or %validation_below, %validation_above\n\tjnz %validation_invalid, @invalid, @validate_next\n@validate_next\n\t%validation_next =l add %validation_index, 1\n\tjmp @validate\n@parse_start\n\t%parse_begin =l loadl %parse_start_slot\n\tjmp @parse\n@parse\n\t%parse_index =l phi @parse_start %parse_begin, @parse_next %next_index\n\t%accumulator =l phi @parse_start 0, @parse_next %next_accumulator\n\t%parse_done =w cslel %length, %parse_index\n\tjnz %parse_done, @sign, @parse_digit\n@parse_digit\n\t%parse_address =l add %data, %parse_index\n\t%parse_character =w loadub %parse_address\n\t%digit_word =w sub %parse_character, 48\n\t%digit =l extuw %digit_word\n\t%large_prefix =w csgtl %accumulator, 900719925474099\n\t%limit_prefix =w ceql %accumulator, 900719925474099\n\t%large_digit =w csgtl %digit, 1\n\t%limit_overflow =w and %limit_prefix, %large_digit\n\t%overflow =w or %large_prefix, %limit_overflow\n\tjnz %overflow, @range, @accumulate\n@accumulate\n\t%scaled =l mul %accumulator, 10\n\t%next_accumulator =l add %scaled, %digit\n\tjmp @parse_next\n@parse_next\n\t%next_index =l add %parse_index, 1\n\tjmp @parse\n@sign\n\tjnz %minus, @negative, @positive\n@negative\n\t%negative_result =l sub 0, %accumulator\n\tret %negative_result\n@positive\n\tret %accumulator\n@invalid\n\tcall $g4_fail(l $g4_invalid_integer_error, l 23)\n\thlt\n@range\n\tcall $g4_fail(l $g4_integer_range_error, l 45)\n\thlt\n}",
-	)
-	return
-end
-
-def gate4_emit_integer_to_string_runtime(mut output: Gate4Output)
-	gate4_output_line(
-		output,
-		"\nfunction l $g4_integer_to_string(l %value) {\n@start\n\t%buffer =l alloc8 32\n\t%end =l add %buffer, 32\n\t%cursor_slot =l alloc8 8\n\tstorel %end, %cursor_slot\n\t%negative =w csltl %value, 0\n\tjnz %negative, @negative_value, @positive_value\n@negative_value\n\t%negative_magnitude =l sub 0, %value\n\tjmp @magnitude\n@positive_value\n\t%positive_magnitude =l copy %value\n\tjmp @magnitude\n@magnitude\n\t%magnitude_value =l phi @negative_value %negative_magnitude, @positive_value %positive_magnitude\n\t%zero =w ceql %magnitude_value, 0\n\tjnz %zero, @zero_digit, @digits\n@zero_digit\n\t%zero_cursor =l sub %end, 1\n\tstoreb 48, %zero_cursor\n\tstorel %zero_cursor, %cursor_slot\n\tjmp @sign\n@digits\n\t%current =l phi @magnitude %magnitude_value, @digit %remaining\n\t%done =w ceql %current, 0\n\tjnz %done, @sign, @digit\n@digit\n\t%remainder =l rem %current, 10\n\t%digit_value =l add %remainder, 48\n\t%digit_byte =w copy %digit_value\n\t%cursor =l loadl %cursor_slot\n\t%next_cursor =l sub %cursor, 1\n\tstoreb %digit_byte, %next_cursor\n\tstorel %next_cursor, %cursor_slot\n\t%remaining =l div %current, 10\n\tjmp @digits\n@sign\n\tjnz %negative, @negative_sign, @finish\n@negative_sign\n\t%sign_cursor =l loadl %cursor_slot\n\t%before_sign =l sub %sign_cursor, 1\n\tstoreb 45, %before_sign\n\tstorel %before_sign, %cursor_slot\n\tjmp @finish\n@finish\n\t%start =l loadl %cursor_slot\n\t%length =l sub %end, %start\n\t%size =l add %length, 9\n\t%string =l call $g4_string_alloc(l %size)\n\t%length_address =l add %string, 8\n\tstorel %length, %length_address\n\t%data =l add %string, 16\n\tcall $memcpy(l %data, l %start, l %length)\n\t%terminator =l add %data, %length\n\tstoreb 0, %terminator\n\tret %string\n}",
-	)
-	return
-end
-
-def gate4_emit_float_to_integer_runtime(mut output: Gate4Output)
-	gate4_output_line(
-		output,
-		"\ndata $g4_float_integer_error = { b \"panic: Float cannot be converted to Integer\", b 10 }\n\nfunction l $g4_float_to_integer(d %value) {\n@start\n\t%self_difference =d sub %value, %value\n\t%finite =w ceqd %self_difference, %self_difference\n\tjnz %finite, @range, @nonfinite\n@range\n\t%too_high =w cgtd %value, d_9007199254740991.0\n\t%too_low =w cltd %value, d_-9007199254740991.0\n\t%outside =w or %too_high, %too_low\n\tjnz %outside, @outside, @convert\n@convert\n\t%result =l dtosi %value\n\tret %result\n@nonfinite\n\tcall $g4_fail(l $g4_float_integer_error, l 44)\n\thlt\n@outside\n\tcall $g4_fail(l $g4_integer_range_error, l 45)\n\thlt\n}",
-	)
+	qbe_output_line(output, "")
 	return
 end
 
@@ -560,22 +422,22 @@ def gate4_qbe_type(type_name: String): String
 end
 
 def gate4_emit_typed_load(
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 		result: String,
 		type_name: String,
 		address: String,
 	)
 	qbe_type := gate4_qbe_type(type_name)
-	gate4_output_line(output, "\t" + result + " =" + qbe_type + " load" + qbe_type + " " + address)
+	qbe_output_line(output, "\t" + result + " =" + qbe_type + " load" + qbe_type + " " + address)
 end
 
 def gate4_emit_typed_store(
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 		type_name: String,
 		value: String,
 		address: String,
 	)
-	gate4_output_line(output, "\tstore" + gate4_qbe_type(type_name) + " " + value + ", " + address)
+	qbe_output_line(output, "\tstore" + gate4_qbe_type(type_name) + " " + value + ", " + address)
 end
 
 def gate4_type_is_managed(type_name: String): Boolean
@@ -605,7 +467,7 @@ end
 
 def gate4_emit_array_push(
 		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 		array: String,
 		element_type: String,
 		operand: String,
@@ -615,13 +477,13 @@ def gate4_emit_array_push(
 	gate4_invalidate_array_header_cache(context)
 	if element_type == "Float"
 		output.runtime_flags[0] = 1
-		gate4_output_line(
+		qbe_output_line(
 			output,
 			"\tcall $g4_array_push_d(l " + array + ", d " + operand + ")",
 		)
 		return
 	end
-	gate4_output_line(
+	qbe_output_line(
 		output,
 		"\tcall $g4_array_push_paced(l " + array + ", l " + operand + ")",
 	)
@@ -631,15 +493,6 @@ def gate4_emit_temporary(mut context: Gate4EmitContext): String
 	index := context.temporary_count[0]
 	context.temporary_count[0] = index + 1
 	return "%t" + gate4_integer_string(index)
-end
-
-def gate4_output_append(mut output: Gate4Output, appended: Gate4Output)
-	mut index := 0
-	while index < appended.count[0]
-		gate4_output_line(output, gate4_load_string(appended.lines, index))
-		index += 1
-	end
-	return
 end
 
 def gate4_owned_managed_local_count(context: Gate4EmitContext): Integer
@@ -656,22 +509,22 @@ def gate4_owned_managed_local_count(context: Gate4EmitContext): Integer
 	return count
 end
 
-def gate4_emit_loop_root_compaction(mut context: Gate4EmitContext, mut output: Gate4Output)
+def gate4_emit_loop_root_compaction(mut context: Gate4EmitContext, mut output: QbeOutput)
 	# Replace this function's temporary-root segment with its currently live
 	# managed locals. The prologue reserves the maximum segment first, so loop
 	# headers never reallocate while rewriting roots.
 	managed_count := gate4_owned_managed_local_count(context)
 	if managed_count == 0
-		gate4_output_line(output, "\tcall $g4_gc_temp_reset(l %temporary_roots)")
+		qbe_output_line(output, "\tcall $g4_gc_temp_reset(l %temporary_roots)")
 		return
 	end
-	gate4_output_line(output, "{")
+	qbe_output_line(output, "{")
 	data := gate4_emit_temporary(context)
 	base_offset := gate4_emit_temporary(context)
 	base := gate4_emit_temporary(context)
-	gate4_output_line(output, "\t" + data + " =l loadl $g4_gc_temp_data")
-	gate4_output_line(output, "\t" + base_offset + " =l mul %temporary_roots, 8")
-	gate4_output_line(output, "\t" + base + " =l add " + data + ", " + base_offset)
+	qbe_output_line(output, "\t" + data + " =l loadl $g4_gc_temp_data")
+	qbe_output_line(output, "\t" + base_offset + " =l mul %temporary_roots, 8")
+	qbe_output_line(output, "\t" + base + " =l add " + data + ", " + base_offset)
 	mut local_index := 0
 	mut managed_index := 0
 	while local_index < context.local_count[0]
@@ -682,28 +535,28 @@ def gate4_emit_loop_root_compaction(mut context: Gate4EmitContext, mut output: G
 				mut slot := base
 				if managed_index > 0
 					slot = gate4_emit_temporary(context)
-					gate4_output_line(
+					qbe_output_line(
 						output,
 						"\t" + slot + " =l add " + base + ", " + gate4_integer_string(managed_index * 8),
 					)
 				end
-				gate4_output_line(
+				qbe_output_line(
 					output,
 					"\t" + value + " =l loadl " + gate4_load_string(context.local_slots, local_index),
 				)
-				gate4_output_line(output, "\tstorel " + value + ", " + slot)
+				qbe_output_line(output, "\tstorel " + value + ", " + slot)
 				managed_index += 1
 			end
 		end
 		local_index += 1
 	end
 	root_count := gate4_emit_temporary(context)
-	gate4_output_line(
+	qbe_output_line(
 		output,
 		"\t" + root_count + " =l add %temporary_roots, " + gate4_integer_string(managed_count),
 	)
-	gate4_output_line(output, "\tstorel " + root_count + ", $g4_gc_temp_count")
-	gate4_output_line(output, "}")
+	qbe_output_line(output, "\tstorel " + root_count + ", $g4_gc_temp_count")
+	qbe_output_line(output, "}")
 	return
 end
 
@@ -801,19 +654,19 @@ def gate4_integer_range_failure_label(mut context: Gate4EmitContext): String
 	return gate4_emit_label(context)
 end
 
-def gate4_emit_integer_range_failure(mut output: Gate4Output, failure: String)
+def gate4_emit_integer_range_failure(mut output: QbeOutput, failure: String)
 	if failure == "@scalar_inline_integer_range_failure"
 		return
 	end
-	gate4_output_line(output, failure)
-	gate4_output_line(output, "\tcall $g4_fail(l $g4_integer_range_error, l 45)")
-	gate4_output_line(output, "\thlt")
+	qbe_output_line(output, failure)
+	qbe_output_line(output, "\tcall $g4_fail(l $g4_integer_range_error, l 45)")
+	qbe_output_line(output, "\thlt")
 	return
 end
 
 def gate4_emit_checked_integer_operation(
 		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 		result: String,
 		left: String,
 		right: String,
@@ -823,26 +676,26 @@ def gate4_emit_checked_integer_operation(
 	too_high := gate4_emit_temporary(context)
 	failure := gate4_integer_range_failure_label(context)
 	complete := gate4_emit_label(context)
-	gate4_output_line(output, "\t" + result + " =l " + operation + " " + left + ", " + right)
-	gate4_output_line(output, "\t" + too_high + " =w csgtl " + result + ", 9007199254740991")
+	qbe_output_line(output, "\t" + result + " =l " + operation + " " + left + ", " + right)
+	qbe_output_line(output, "\t" + too_high + " =w csgtl " + result + ", 9007199254740991")
 	if right_nonnegative
-		gate4_output_branch(output, too_high, failure, complete)
+		qbe_output_branch(output, too_high, failure, complete)
 	else
 		too_low := gate4_emit_temporary(context)
 		check_low := gate4_emit_label(context)
-		gate4_output_branch(output, too_high, failure, check_low)
-		gate4_output_line(output, check_low)
-		gate4_output_line(output, "\t" + too_low + " =w csltl " + result + ", -9007199254740991")
-		gate4_output_branch(output, too_low, failure, complete)
+		qbe_output_branch(output, too_high, failure, check_low)
+		qbe_output_line(output, check_low)
+		qbe_output_line(output, "\t" + too_low + " =w csltl " + result + ", -9007199254740991")
+		qbe_output_branch(output, too_low, failure, complete)
 	end
 	gate4_emit_integer_range_failure(output, failure)
-	gate4_output_line(output, complete)
+	qbe_output_line(output, complete)
 	return complete
 end
 
 def gate4_emit_guarded_integer_operation(
 		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 		result: String,
 		left: String,
 		right: String,
@@ -867,28 +720,28 @@ def gate4_emit_guarded_integer_operation(
 	fast := gate4_emit_label(context)
 	complete := gate4_emit_label(context)
 	if guarded == 13
-		gate4_output_line(output, "\t" + combined + " =l add " + left + ", " + right)
+		qbe_output_line(output, "\t" + combined + " =l add " + left + ", " + right)
 	else
-		gate4_output_line(output, "\t" + combined + " =l or " + left + ", " + right)
+		qbe_output_line(output, "\t" + combined + " =l or " + left + ", " + right)
 	end
-	gate4_output_line(output, "\t" + small + " =w cultl " + combined + ", " + limit)
-	gate4_output_branch(output, small, fast, slow)
-	gate4_output_line(output, slow)
+	qbe_output_line(output, "\t" + small + " =w cultl " + combined + ", " + limit)
+	qbe_output_branch(output, small, fast, slow)
+	qbe_output_line(output, slow)
 	gate4_emit_integer_call(output, result, operation, left, right)
-	gate4_output_line(output, "\tjmp " + complete)
-	gate4_output_line(output, fast)
+	qbe_output_line(output, "\tjmp " + complete)
+	qbe_output_line(output, fast)
 	if guarded == 13
-		gate4_output_line(output, "\t" + result + " =l copy " + combined)
+		qbe_output_line(output, "\t" + result + " =l copy " + combined)
 	else
-		gate4_output_line(output, "\t" + result + " =l " + operation + " " + left + ", " + right)
+		qbe_output_line(output, "\t" + result + " =l " + operation + " " + left + ", " + right)
 	end
-	gate4_output_line(output, complete)
+	qbe_output_line(output, complete)
 	return
 end
 
 def gate4_emit_checked_integer_division(
 		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 		result: String,
 		left: String,
 		right: String,
@@ -897,13 +750,13 @@ def gate4_emit_checked_integer_division(
 	zero := gate4_emit_temporary(context)
 	failure := gate4_emit_label(context)
 	complete := gate4_emit_label(context)
-	gate4_output_line(output, "\t" + zero + " =w ceql " + right + ", 0")
-	gate4_output_branch(output, zero, failure, complete)
-	gate4_output_line(output, failure)
-	gate4_output_line(output, "\tcall $g4_fail(l $g4_division_error, l 24)")
-	gate4_output_line(output, "\thlt")
-	gate4_output_line(output, complete)
-	gate4_output_line(output, "\t" + result + " =l " + operation + " " + left + ", " + right)
+	qbe_output_line(output, "\t" + zero + " =w ceql " + right + ", 0")
+	qbe_output_branch(output, zero, failure, complete)
+	qbe_output_line(output, failure)
+	qbe_output_line(output, "\tcall $g4_fail(l $g4_division_error, l 24)")
+	qbe_output_line(output, "\thlt")
+	qbe_output_line(output, complete)
+	qbe_output_line(output, "\t" + result + " =l " + operation + " " + left + ", " + right)
 	return
 end
 
@@ -918,7 +771,7 @@ end
 
 def gate4_emit_array_header(
 		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 		array: String,
 		key: String,
 		cache_index: Integer,
@@ -948,8 +801,8 @@ def gate4_emit_array_header(
 	end
 	address := gate4_emit_temporary(context)
 	value := gate4_emit_temporary(context)
-	gate4_output_line(output, "\t" + address + " =l add " + array + ", " + offset)
-	gate4_output_line(output, "\t" + value + " =l loadl " + address)
+	qbe_output_line(output, "\t" + address + " =l add " + array + ", " + offset)
+	qbe_output_line(output, "\t" + value + " =l loadl " + address)
 	if key != ""
 		cache[cache_index] = value
 	end
@@ -958,20 +811,20 @@ end
 
 def gate4_emit_array_data_address(
 		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 		data: String,
 		index: String,
 	): String
 	offset := gate4_emit_temporary(context)
 	address := gate4_emit_temporary(context)
-	gate4_output_line(output, "\t" + offset + " =l mul " + index + ", 8")
-	gate4_output_line(output, "\t" + address + " =l add " + data + ", " + offset)
+	qbe_output_line(output, "\t" + offset + " =l mul " + index + ", 8")
+	qbe_output_line(output, "\t" + address + " =l add " + data + ", " + offset)
 	return address
 end
 
 def gate4_emit_array_address(
 		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 		array: String,
 		array_key: String,
 		requested: String,
@@ -986,21 +839,21 @@ def gate4_emit_array_address(
 		negative_mask := gate4_emit_temporary(context)
 		adjustment := gate4_emit_temporary(context)
 		index = gate4_emit_temporary(context)
-		gate4_output_line(output, "\t" + negative_mask + " =l sar " + requested + ", 63")
-		gate4_output_line(output, "\t" + adjustment + " =l and " + length + ", " + negative_mask)
-		gate4_output_line(output, "\t" + index + " =l add " + requested + ", " + adjustment)
+		qbe_output_line(output, "\t" + negative_mask + " =l sar " + requested + ", 63")
+		qbe_output_line(output, "\t" + adjustment + " =l and " + length + ", " + negative_mask)
+		qbe_output_line(output, "\t" + index + " =l add " + requested + ", " + adjustment)
 	end
-	gate4_output_line(output, "\t" + valid + " =w cultl " + index + ", " + length)
-	gate4_output_branch(output, valid, load_label, "@array_bounds_failure")
+	qbe_output_line(output, "\t" + valid + " =w cultl " + index + ", " + length)
+	qbe_output_branch(output, valid, load_label, "@array_bounds_failure")
 	context.array_bounds_failure_used[0] = 1
-	gate4_output_line(output, load_label)
+	qbe_output_line(output, load_label)
 	data := gate4_emit_array_header(context, output, array, array_key, 2, "24")
 	return gate4_emit_array_data_address(context, output, data, index)
 end
 
 def gate4_emit_add_local(
 		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 		name: String,
 		type_name: String,
 		mutable: Integer,
@@ -1038,7 +891,7 @@ end
 
 def gate4_emit_loaded_local(
 		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 		index: Integer,
 	): Gate4EmittedValue
 	type_name := gate4_load_string(context.local_types, index)
@@ -1071,7 +924,7 @@ end
 
 def gate4_emit_address(
 		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 		base: String,
 		offset: Integer,
 	): String
@@ -1079,7 +932,7 @@ def gate4_emit_address(
 		return base
 	end
 	address := gate4_emit_temporary(context)
-	gate4_output_line(output, "\t" + address + " =l add " + base + ", " + gate4_integer_string(offset))
+	qbe_output_line(output, "\t" + address + " =l add " + base + ", " + gate4_integer_string(offset))
 	return address
 end
 
@@ -1087,7 +940,7 @@ def gate4_emit_array_literal(
 		mut state: Gate4Compiler,
 		mut position: Array<Integer>,
 		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 		expected: String,
 	): Gate4EmittedValue
 	gate4_advance(position)
@@ -1121,7 +974,7 @@ def gate4_emit_array_literal(
 	if gate4_type_is_managed(element_type)
 		descriptor = "$g4_desc_array_managed"
 	end
-	gate4_output_line(
+	qbe_output_line(
 		output,
 		"\t" + array + " =l call $g4_array_new(l " + descriptor + ")",
 	)
@@ -1132,7 +985,7 @@ def gate4_emit_array_literal(
 		if element_type == "Float"
 			if value_types[index] == "Integer"
 				converted := gate4_emit_temporary(context)
-				gate4_output_line(output, "\t" + converted + " =d sltof " + operand)
+				qbe_output_line(output, "\t" + converted + " =d sltof " + operand)
 				operand = converted
 			end
 		end
@@ -1168,7 +1021,7 @@ def gate4_emit_scalar_mir(
 		argument_types: Array<String>,
 		argument_facts: Array<Integer>,
 		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 		inline: Boolean,
 	): Gate4EmittedValue
 	saved_inline_depth := context.scalar_inline_depth[0]
@@ -1243,16 +1096,16 @@ def gate4_emit_scalar_mir(
 					if instruction[4] == 1
 						comparison := gate4_emit_temporary(context)
 						operand := gate4_emit_temporary(context)
-						gate4_output_line(output, "\t" + comparison + " =w ceql " + operands[value_id] + ", 0")
-						gate4_output_line(output, "\t" + operand + " =l extuw " + comparison)
+						qbe_output_line(output, "\t" + comparison + " =w ceql " + operands[value_id] + ", 0")
+						qbe_output_line(output, "\t" + operand + " =l extuw " + comparison)
 						result = gate4_emitted_value(operand, "Boolean", 0, "", 0, "")
 					else
 						if instruction[4] == 2
 							operand := gate4_emit_temporary(context)
 							if result_type == "Float"
-								gate4_output_line(output, "\t" + operand + " =d sub d_-0.0, " + operands[value_id])
+								qbe_output_line(output, "\t" + operand + " =d sub d_-0.0, " + operands[value_id])
 							else
-								gate4_output_line(output, "\t" + operand + " =l call $g4_integer_subtract(l 0, l " + operands[value_id] + ")")
+								qbe_output_line(output, "\t" + operand + " =l call $g4_integer_subtract(l 0, l " + operands[value_id] + ")")
 							end
 							result = gate4_emitted_value(operand, result_type, 0, "", 0, "")
 						else
@@ -1263,7 +1116,7 @@ def gate4_emit_scalar_mir(
 				else
 					value_id := instruction[2]
 					operand := gate4_emit_temporary(context)
-					gate4_output_line(output, "\t" + operand + " =d sltof " + operands[value_id])
+					qbe_output_line(output, "\t" + operand + " =d sltof " + operands[value_id])
 					result = gate4_emitted_value(operand, "Float", 0, "", 0, "")
 				end
 			end
@@ -1283,7 +1136,7 @@ def gate4_emit_scalar_mir_direct_call(
 		function_index: Integer,
 		parameter_start: Integer,
 		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 	): Gate4EmittedValue
 	mut argument_operands: Array<String> := []
 	mut argument_types: Array<String> := []
@@ -1327,7 +1180,7 @@ def gate4_emit_induction_mir(
 		function_index: Integer,
 		element_type: String,
 		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 	)
 	function := state.scalar_mir.functions[gate4_mir_function_index(state.scalar_mir, function_index)]
 	header := state.scalar_mir.blocks[function[6] + 1]
@@ -1351,26 +1204,26 @@ def gate4_emit_induction_mir(
 	end
 	length := gate4_emit_array_header(context, output, "%p0", "", 1, "8")
 	data := gate4_emit_array_header(context, output, "%p0", "", 2, "24")
-	gate4_output_line(output, "\tjmp " + header_label)
-	gate4_output_line(output, header_label)
+	qbe_output_line(output, "\tjmp " + header_label)
+	qbe_output_line(output, header_label)
 	phi_line := output.count[0]
-	gate4_output_line(output, "")
+	qbe_output_line(output, "")
 	mut accumulator_phi_line :=- 1
 	if reduction
 		accumulator_phi_line = output.count[0]
-		gate4_output_line(output, "")
+		qbe_output_line(output, "")
 	end
 	condition := gate4_emit_temporary(context)
-	gate4_output_line(output, "\t" + condition + " =w csltl " + index + ", " + length)
-	gate4_output_branch(output, condition, body_label, exit_label)
-	gate4_output_line(output, body_label)
+	qbe_output_line(output, "\t" + condition + " =w csltl " + index + ", " + length)
+	qbe_output_branch(output, condition, body_label, exit_label)
+	qbe_output_line(output, body_label)
 	address := gate4_emit_array_data_address(context, output, data, index)
 	loaded := gate4_emit_temporary(context)
 	gate4_emit_typed_load(output, loaded, element_type, address)
 	mut increment_predecessor := body_label
 	if reduction
 		if float_elements
-			gate4_output_line(output, "\t" + accumulated + " =d add " + accumulator + ", " + loaded)
+			qbe_output_line(output, "\t" + accumulated + " =d add " + accumulator + ", " + loaded)
 		else
 			increment_predecessor = gate4_emit_checked_integer_operation(
 				context,
@@ -1383,7 +1236,7 @@ def gate4_emit_induction_mir(
 			)
 		end
 	end
-	gate4_output_line(output, "\t" + advanced + " =l add " + index + ", 1")
+	qbe_output_line(output, "\t" + advanced + " =l add " + index + ", 1")
 	gate4_store_string(
 		output.lines,
 		phi_line,
@@ -1401,19 +1254,19 @@ def gate4_emit_induction_mir(
 			increment_predecessor + " " + accumulated,
 		)
 	end
-	gate4_output_line(output, "\tjmp " + header_label)
-	gate4_output_line(output, exit_label)
+	qbe_output_line(output, "\tjmp " + header_label)
+	qbe_output_line(output, exit_label)
 	if reduction
 		gate4_emit_typed_store(output, element_type, accumulator, "%return_value")
 	end
-	gate4_output_line(output, "\tjmp @return")
+	qbe_output_line(output, "\tjmp @return")
 end
 
 def gate4_emit_direct_call(
 		mut state: Gate4Compiler,
 		mut position: Array<Integer>,
 		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 		callee: Gate4EmittedValue,
 	): Gate4EmittedValue
 	gate4_advance(position)
@@ -1482,23 +1335,23 @@ def gate4_emit_direct_call(
 	gate4_expect(state, position, ")")
 	if callee.category == 5
 		result := gate4_emit_temporary(context)
-		gate4_output_line(output, "\t" + result + " =d call $sqrt(" + arguments + ")")
+		qbe_output_line(output, "\t" + result + " =d call $sqrt(" + arguments + ")")
 		return gate4_emitted_value(result, result_type, 0, "", 0, "")
 	end
 	gate4_invalidate_array_header_cache(context)
 	if callee.category == 4
 		output.runtime_flags[1] = 1
 		result := gate4_emit_temporary(context)
-		gate4_output_line(output, "\t" + result + " =l call $g4_process_argv()")
+		qbe_output_line(output, "\t" + result + " =l call $g4_process_argv()")
 		gate4_emit_root_value(context, result_type)
 		return gate4_emitted_value(result, result_type, 0, "", 1, "")
 	end
 	if gate4_compiler_entry_function(state) >= 0
-		if gate4_find_function_in_module(state, state.entry_module[0], "native_cli_main") >= 0
-			if function_index >= 0
-				if gate4_load_string(state.module_names, gate4_load_integer(state.function_modules, function_index)) == "host"
+		if function_index >= 0
+			if gate4_load_string(state.module_names, gate4_load_integer(state.function_modules, function_index)) == "host"
+				if gate4_find_function_in_module(state, state.entry_module[0], "native_cli_main") >= 0
 					result := gate4_emit_temporary(context)
-					gate4_output_line(output, "\t" + result + " =" + gate4_qbe_type(result_type) + " call $" + callee.name + "(" + arguments + ")")
+					qbe_output_line(output, "\t" + result + " =" + gate4_qbe_type(result_type) + " call $" + callee.name + "(" + arguments + ")")
 					gate4_emit_root_value(context, result_type)
 					return gate4_emitted_value(result, result_type, 0, "", 0, "")
 				end
@@ -1506,38 +1359,38 @@ def gate4_emit_direct_call(
 		end
 		if callee.name == "gate4_file_exists"
 			result := gate4_emit_temporary(context)
-			gate4_output_line(output, "\t" + result + " =l call $g4_file_exists(" + arguments + ")")
+			qbe_output_line(output, "\t" + result + " =l call $g4_file_exists(" + arguments + ")")
 			return gate4_emitted_value(result, "Boolean", 0, "", 0, "")
 		end
 		if callee.name == "gate4_read_source"
 			result := gate4_emit_temporary(context)
-			gate4_output_line(output, "\t" + result + " =l call $g4_read_source(" + arguments + ")")
+			qbe_output_line(output, "\t" + result + " =l call $g4_read_source(" + arguments + ")")
 			gate4_emit_root_value(context, "String")
 			return gate4_emitted_value(result, "String", 0, "", 0, "")
 		end
 		if callee.name == "gate4_source_slice"
 			result := gate4_emit_temporary(context)
-			gate4_output_line(output, "\t" + result + " =l call $g4_source_slice(" + arguments + ")")
+			qbe_output_line(output, "\t" + result + " =l call $g4_source_slice(" + arguments + ")")
 			gate4_emit_root_value(context, "String")
 			return gate4_emitted_value(result, "String", 0, "", 0, "")
 		end
 		if callee.name == "gate4_collect_project_sources"
 			result := gate4_emit_temporary(context)
-			gate4_output_line(output, "\t" + result + " =l call $g4_collect_project_sources(" + arguments + ")")
+			qbe_output_line(output, "\t" + result + " =l call $g4_collect_project_sources(" + arguments + ")")
 			gate4_emit_root_value(context, result_type)
 			return gate4_emitted_value(result, result_type, 0, "", 0, "")
 		end
 	end
 	if callee.name == "puts"
-		gate4_output_line(output, "\tcall $g4_puts(" + arguments + ")")
+		qbe_output_line(output, "\tcall $g4_puts(" + arguments + ")")
 		return gate4_emitted_value("", "Void", 0, "", 0, "")
 	end
 	if callee.name == "gate4_eputs"
-		gate4_output_line(output, "\tcall $g4_eputs(" + arguments + ")")
+		qbe_output_line(output, "\tcall $g4_eputs(" + arguments + ")")
 		return gate4_emitted_value("", "Void", 0, "", 0, "")
 	end
 	if callee.name == "gate4_reset_temporary_storage"
-		gate4_output_line(output, "\tcall $g4_temp_reset()")
+		qbe_output_line(output, "\tcall $g4_temp_reset()")
 		return gate4_emitted_value("", "Void", 0, "", 0, "")
 	end
 	if context.inline_budget[2] >= 0
@@ -1549,14 +1402,14 @@ def gate4_emit_direct_call(
 	# TypeRB call remains a conservative GC safe point.
 	gate4_note_gc_state(context, true)
 	if result_type == "Void"
-		gate4_output_line(
+		qbe_output_line(
 			output,
 			"\tcall $g4f" + gate4_integer_string(function_index) + "(" + arguments + ")",
 		)
 		return gate4_emitted_value("", "Void", 0, "", 0, "")
 	end
 	result := gate4_emit_temporary(context)
-	gate4_output_line(
+	qbe_output_line(
 		output,
 		"\t" + result + " =" + gate4_qbe_type(result_type) + " call $g4f" +
 		gate4_integer_string(function_index) + "(" + arguments + ")",
@@ -1569,14 +1422,14 @@ def gate4_emit_record_new(
 		mut state: Gate4Compiler,
 		mut position: Array<Integer>,
 		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 		record_name: String,
 	): Gate4EmittedValue
 	record_index := gate4_find_visible_record(state, state.active_module[0], record_name)
 	field_start := gate4_load_integer(state.record_field_starts, record_index)
 	field_count := gate4_load_integer(state.record_field_counts, record_index)
 	record_value := gate4_emit_temporary(context)
-	gate4_output_line(
+	qbe_output_line(
 		output,
 		"\t" + record_value + " =l call $g4_gc_alloc(l $g4_desc_record" +
 		gate4_integer_string(record_index) + ", l " + gate4_integer_string(field_count * 8) + ", l 0)",
@@ -1624,7 +1477,7 @@ def gate4_emit_method_call(
 		mut state: Gate4Compiler,
 		mut position: Array<Integer>,
 		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 		receiver: Gate4EmittedValue,
 		method: String,
 	): Gate4EmittedValue
@@ -1657,14 +1510,14 @@ def gate4_emit_method_call(
 		if receiver.type_name == "String"
 			conversion = "$g4_string_to_integer(l "
 		end
-		gate4_output_line(output, "\t" + result + " =l call " + conversion + receiver.operand + ")")
+		qbe_output_line(output, "\t" + result + " =l call " + conversion + receiver.operand + ")")
 		return gate4_emitted_value(result, "Integer", 0, "", 0, "")
 	end
 	if method == "to_s"
 		gate4_expect(state, position, ")")
 		output.runtime_flags[1] = 1
 		result := gate4_emit_temporary(context)
-		gate4_output_line(
+		qbe_output_line(
 			output,
 			"\t" + result + " =l call $g4_integer_to_string(l " + receiver.operand + ")",
 		)
@@ -1678,7 +1531,7 @@ def gate4_emit_postfix(
 		mut state: Gate4Compiler,
 		mut position: Array<Integer>,
 		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 		initial: Gate4EmittedValue,
 	): Gate4EmittedValue
 	mut value := gate4_emitted_value(
@@ -1729,7 +1582,7 @@ def gate4_emit_postfix(
 					index := gate4_emit_expression(state, position, context, output, 1, "Integer")
 					if value.type_name == "String"
 						result := gate4_emit_temporary(context)
-						gate4_output_line(
+						qbe_output_line(
 							output,
 							"\t" + result + " =l call $g4_string_index(l " + value.operand + ", l " + index.operand + ")",
 						)
@@ -1755,7 +1608,7 @@ def gate4_emit_postfix(
 						else
 							output.runtime_flags[3] = 1
 							address = gate4_emit_temporary(context)
-							gate4_output_line(
+							qbe_output_line(
 								output,
 								"\t" + address + " =l call $g4_array_address(l " + value.operand + ", l " + index.operand + ")",
 							)
@@ -1787,7 +1640,7 @@ def gate4_emit_primary(
 		mut state: Gate4Compiler,
 		mut position: Array<Integer>,
 		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 		expected: String,
 	): Gate4EmittedValue
 	token_index := position[0]
@@ -1826,8 +1679,8 @@ def gate4_emit_primary(
 		)
 		comparison := gate4_emit_temporary(context)
 		result := gate4_emit_temporary(context)
-		gate4_output_line(output, "\t" + comparison + " =w ceql " + value.operand + ", 0")
-		gate4_output_line(output, "\t" + result + " =l extuw " + comparison)
+		qbe_output_line(output, "\t" + comparison + " =w ceql " + value.operand + ", 0")
+		qbe_output_line(output, "\t" + result + " =l extuw " + comparison)
 		return gate4_emitted_value(result, "Boolean", 0, "", 0, "")
 	end
 	if gate4_token_is(state, token_index, "-")
@@ -1841,10 +1694,10 @@ def gate4_emit_primary(
 		)
 		result := gate4_emit_temporary(context)
 		if value.type_name == "Float"
-			gate4_output_line(output, "\t" + result + " =d sub d_-0.0, " + value.operand)
+			qbe_output_line(output, "\t" + result + " =d sub d_-0.0, " + value.operand)
 			return gate4_emitted_value(result, "Float", 0, "", 0, "")
 		end
-		gate4_output_line(output, "\t" + result + " =l call $g4_integer_subtract(l 0, l " + value.operand + ")")
+		qbe_output_line(output, "\t" + result + " =l call $g4_integer_subtract(l 0, l " + value.operand + ")")
 		return gate4_emitted_value(result, "Integer", 0, "", 0, "")
 	end
 	if gate4_token_is(state, token_index, "+")
@@ -1897,13 +1750,13 @@ def gate4_emit_primary(
 end
 
 def gate4_emit_integer_call(
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 		result: String,
 		operation: String,
 		left: String,
 		right: String,
 	)
-	gate4_output_line(
+	qbe_output_line(
 		output,
 		"\t" + result + " =l call $g4_integer_" + operation + "(l " + left + ", l " + right + ")",
 	)
@@ -1914,7 +1767,7 @@ end
 # adapter returns only the backend operand, including for comparisons.
 def lower_binary_operand(
 		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 		operator_id: Integer,
 		left: Gate4EmittedValue,
 		right: Gate4EmittedValue,
@@ -1935,12 +1788,12 @@ def lower_binary_operand(
 	if float_operands
 		if !left_float
 			converted_left := gate4_emit_temporary(context)
-			gate4_output_line(output, "\t" + converted_left + " =d sltof " + left_operand)
+			qbe_output_line(output, "\t" + converted_left + " =d sltof " + left_operand)
 			left_operand = converted_left
 		end
 		if !right_float
 			converted_right := gate4_emit_temporary(context)
-			gate4_output_line(output, "\t" + converted_right + " =d sltof " + right_operand)
+			qbe_output_line(output, "\t" + converted_right + " =d sltof " + right_operand)
 			right_operand = converted_right
 		end
 	end
@@ -1955,12 +1808,12 @@ def lower_binary_operand(
 		if operator_id == 4
 			operation = "div"
 		end
-		gate4_output_line(output, "\t" + result + " =d " + operation + " " + left_operand + ", " + right_operand)
+		qbe_output_line(output, "\t" + result + " =d " + operation + " " + left_operand + ", " + right_operand)
 		return result
 	end
 	if operator_id == 1
 		if left.type_name == "String"
-			gate4_output_line(
+			qbe_output_line(
 				output,
 				"\t" + result + " =l call $g4_string_concat(l " + left.operand + ", l " + right.operand + ")",
 			)
@@ -2071,14 +1924,14 @@ def lower_binary_operand(
 			if different
 				equality = gate4_emit_temporary(context)
 			end
-			gate4_output_line(
+			qbe_output_line(
 				output,
 				"\t" + equality + " =l call $g4_string_equal(l " + left.operand + ", l " + right.operand + ")",
 			)
 			if different
 				word := gate4_emit_temporary(context)
-				gate4_output_line(output, "\t" + word + " =w ceql " + equality + ", 0")
-				gate4_output_line(output, "\t" + result + " =l extuw " + word)
+				qbe_output_line(output, "\t" + word + " =w ceql " + equality + ", 0")
+				qbe_output_line(output, "\t" + result + " =l extuw " + word)
 			end
 			return result
 		end
@@ -2108,18 +1961,18 @@ def lower_binary_operand(
 		comparison = "c" + comparison + "l"
 	end
 	word := gate4_emit_temporary(context)
-	gate4_output_line(
+	qbe_output_line(
 		output,
 		"\t" + word + " =w " + comparison + " " + left_operand + ", " + right_operand,
 	)
-	gate4_output_line(output, "\t" + result + " =l extuw " + word)
+	qbe_output_line(output, "\t" + result + " =l extuw " + word)
 	return result
 end
 
 def lower_checked_binary(
 		mut state: Gate4Compiler,
 		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 		origin: Integer,
 		left: Gate4EmittedValue,
 		right: Gate4EmittedValue,
@@ -2157,7 +2010,7 @@ def gate4_emit_expression_value(
 		mut state: Gate4Compiler,
 		mut position: Array<Integer>,
 		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 		minimum_precedence: Integer,
 		expected: String,
 	): Gate4EmittedValue
@@ -2196,7 +2049,7 @@ def gate4_emit_expression(
 		mut state: Gate4Compiler,
 		mut position: Array<Integer>,
 		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 		minimum_precedence: Integer,
 		expected: String,
 	): Gate4EmittedValue
@@ -2205,7 +2058,7 @@ def gate4_emit_expression(
 	if expected == "Float"
 		if value.type_name == "Integer"
 			converted := gate4_emit_temporary(context)
-			gate4_output_line(output, "\t" + converted + " =d sltof " + value.operand)
+			qbe_output_line(output, "\t" + converted + " =d sltof " + value.operand)
 			return gate4_emitted_value(converted, "Float", 0, "", 0, "")
 		end
 	end
@@ -2216,7 +2069,7 @@ def gate4_emit_declaration(
 		mut state: Gate4Compiler,
 		mut position: Array<Integer>,
 		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 	): Boolean
 	mut mutable := 0
 	if gate4_token_is(state, position[0], "mut")
@@ -2244,7 +2097,7 @@ def gate4_emit_simple_statement(
 		mut state: Gate4Compiler,
 		mut position: Array<Integer>,
 		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 	): Boolean
 	left := gate4_emit_expression(state, position, context, output, 1, "")
 	operator_origin := position[0]
@@ -2269,11 +2122,11 @@ end
 
 def gate4_emit_condition(
 		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 		operand: String,
 	): String
 	condition := gate4_emit_temporary(context)
-	gate4_output_line(output, "\t" + condition + " =w cnel " + operand + ", 0")
+	qbe_output_line(output, "\t" + condition + " =w cnel " + operand + ", 0")
 	return condition
 end
 
@@ -2281,7 +2134,7 @@ def gate4_emit_block(
 		mut state: Gate4Compiler,
 		mut position: Array<Integer>,
 		mut context: Gate4EmitContext,
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 		result_type: String,
 	): Integer
 	gate4_skip_newlines(state, position)
@@ -2305,16 +2158,16 @@ def gate4_emit_block(
 					when_true := gate4_emit_label(context)
 					when_false := gate4_emit_label(context)
 					join := gate4_emit_label(context)
-					gate4_output_branch(output, condition, when_true, when_false)
-					gate4_output_line(output, when_true)
+					qbe_output_branch(output, condition, when_true, when_false)
+					qbe_output_line(output, when_true)
 					saved_count := context.local_count[0]
 					true_terminated := gate4_emit_block(state, position, context, output, result_type)
 					context.local_count[0] = saved_count
 					if true_terminated == 0
-						gate4_output_line(output, "\tjmp " + join)
+						qbe_output_line(output, "\tjmp " + join)
 					end
 					gate4_invalidate_array_header_cache(context)
-					gate4_output_line(output, when_false)
+					qbe_output_line(output, when_false)
 					mut false_terminated := 0
 					if gate4_token_is(state, position[0], "else")
 						gate4_advance(position)
@@ -2323,7 +2176,7 @@ def gate4_emit_block(
 						context.local_count[0] = saved_count
 					end
 					if false_terminated == 0
-						gate4_output_line(output, "\tjmp " + join)
+						qbe_output_line(output, "\tjmp " + join)
 					end
 					gate4_expect(state, position, "end")
 					gate4_finish_statement(state, position)
@@ -2331,10 +2184,10 @@ def gate4_emit_block(
 						if false_terminated == 1
 							terminated = 1
 						else
-							gate4_output_line(output, join)
+							qbe_output_line(output, join)
 						end
 					else
-						gate4_output_line(output, join)
+						qbe_output_line(output, join)
 					end
 					gate4_invalidate_array_header_cache(context)
 				else
@@ -2345,9 +2198,9 @@ def gate4_emit_block(
 						# Fallback values from an enclosing loop are not invariant on
 						# this backedge. Only the verified parameter header survives.
 						gate4_invalidate_array_header_cache(context)
-						gate4_output_line(output, "\tjmp " + header)
-						gate4_output_line(output, header)
-						mut loop_output := gate4_output_new(
+						qbe_output_line(output, "\tjmp " + header)
+						qbe_output_line(output, header)
+						mut loop_output := qbe_output_new(
 							state.token_count[0] * 8 + 1024,
 							output.runtime_flags,
 						)
@@ -2357,23 +2210,23 @@ def gate4_emit_block(
 						condition_value := gate4_emit_expression(state, position, context, loop_output, 1, "Boolean")
 						gate4_finish_statement(state, position)
 						condition := gate4_emit_condition(context, loop_output, condition_value.operand)
-						gate4_output_branch(loop_output, condition, body, done)
-						gate4_output_line(loop_output, body)
+						qbe_output_branch(loop_output, condition, body, done)
+						qbe_output_line(loop_output, body)
 						saved_count := context.local_count[0]
 						body_terminated := gate4_emit_block(state, position, context, loop_output, result_type)
 						context.local_count[0] = saved_count
 						if body_terminated == 0
-							gate4_output_line(loop_output, "\tjmp " + header)
+							qbe_output_line(loop_output, "\tjmp " + header)
 						end
 						gate4_expect(state, position, "end")
 						gate4_finish_statement(state, position)
-						gate4_output_line(loop_output, done)
+						qbe_output_line(loop_output, done)
 						if context.temporary_roots_used[1] == safe_points_before
-							gate4_output_append(output, loop_output)
+							qbe_output_append(output, loop_output)
 							gate4_emit_loop_root_compaction(context, output)
 						else
 							gate4_emit_loop_root_compaction(context, output)
-							gate4_output_append(output, loop_output)
+							qbe_output_append(output, loop_output)
 						end
 						gate4_invalidate_array_header_cache(context)
 						context.loop_depth[0] = context.loop_depth[0] - 1
@@ -2381,11 +2234,11 @@ def gate4_emit_block(
 						if gate4_token_is(state, position[0], "return")
 							gate4_advance(position)
 							if gate4_load_integer(state.token_kinds, position[0]) == 4
-								gate4_output_line(output, "\tjmp @return")
+								qbe_output_line(output, "\tjmp @return")
 							else
 								value := gate4_emit_expression(state, position, context, output, 1, result_type)
 								gate4_emit_typed_store(output, result_type, value.operand, "%return_value")
-								gate4_output_line(output, "\tjmp @return")
+								qbe_output_line(output, "\tjmp @return")
 							end
 							gate4_finish_statement(state, position)
 							terminated = 1
@@ -2420,7 +2273,7 @@ end
 def gate4_emit_function(
 		mut state: Gate4Compiler,
 		function_index: Integer,
-		mut output: Gate4Output,
+		mut output: QbeOutput,
 		inline_budget: Array<Integer>,
 	)
 	state.active_module[0] = gate4_load_integer(state.function_modules, function_index)
@@ -2428,7 +2281,7 @@ def gate4_emit_function(
 		state.token_count[0] + 1,
 		inline_budget,
 	)
-	mut body := gate4_output_new(state.token_count[0] * 8 + 1024, output.runtime_flags)
+	mut body := qbe_output_new(state.token_count[0] * 8 + 1024, output.runtime_flags)
 	parameter_start := gate4_load_integer(state.function_parameter_starts, function_index)
 	parameter_count := gate4_load_integer(state.function_parameter_counts, function_index)
 	mut parameters := ""
@@ -2506,7 +2359,7 @@ def gate4_emit_function(
 				false,
 			)
 			gate4_emit_typed_store(body, result_type, value.operand, "%return_value")
-			gate4_output_line(body, "\tjmp @return")
+			qbe_output_line(body, "\tjmp @return")
 			terminated = 1
 		else
 			mut position := [gate4_load_integer(state.function_body_starts, function_index)]
@@ -2521,32 +2374,32 @@ def gate4_emit_function(
 	end
 	if terminated == 0
 		if result_type == "Void"
-			gate4_output_line(body, "\tjmp @return")
+			qbe_output_line(body, "\tjmp @return")
 		else
-			gate4_output_line(body, "\tcall $g4_fail(l $g4_integer_error, l 32)")
-			gate4_output_line(body, "\thlt")
+			qbe_output_line(body, "\tcall $g4_fail(l $g4_integer_error, l 32)")
+			qbe_output_line(body, "\thlt")
 		end
 	end
-	gate4_output_line(
+	qbe_output_line(
 		output,
 		"function " + result_prefix + "$g4f" + gate4_integer_string(function_index) + "(" + parameters + ") {",
 	)
-	gate4_output_line(output, "@start")
+	qbe_output_line(output, "@start")
 	# State 2 combines a managed temporary with a following collection safe
 	# point. Either condition alone does not require publishing the frame.
 	uses_temporary_roots := context.temporary_roots_used[0] == 2
 	managed_local_count := context.managed_local_high_water[0]
 	if uses_temporary_roots
-		gate4_output_line(output, "\t%temporary_roots =l loadl $g4_gc_temp_count")
+		qbe_output_line(output, "\t%temporary_roots =l loadl $g4_gc_temp_count")
 	end
 	if result_type != "Void"
-		gate4_output_line(output, "\t%return_value =l alloc8 8")
+		qbe_output_line(output, "\t%return_value =l alloc8 8")
 	end
 	# QBE allocates dynamically when an alloc instruction executes, so lexical
 	# local slots must precede every branch and loop in the function body.
 	mut slot_index := 0
 	while slot_index < context.slot_count[0]
-		gate4_output_line(
+		qbe_output_line(
 			output,
 			"\t%v" + gate4_integer_string(slot_index) + " =l alloc8 8",
 		)
@@ -2554,11 +2407,11 @@ def gate4_emit_function(
 	end
 	if uses_temporary_roots
 		if managed_local_count > 0
-			gate4_output_line(
+			qbe_output_line(
 				output,
 				"\t%root_capacity =l add %temporary_roots, " + gate4_integer_string(managed_local_count),
 			)
-			gate4_output_line(output, "\tcall $g4_gc_temp_reserve(l %root_capacity)")
+			qbe_output_line(output, "\tcall $g4_gc_temp_reserve(l %root_capacity)")
 		end
 	end
 	mut body_index := 0
@@ -2573,14 +2426,14 @@ def gate4_emit_function(
 			else
 				if uses_temporary_roots
 					if line == "\tcall $g4_gc_temp_reset(l %temporary_roots)"
-						gate4_output_line(output, "\tstorel %temporary_roots, $g4_gc_temp_count")
+						qbe_output_line(output, "\tstorel %temporary_roots, $g4_gc_temp_count")
 					else
-						gate4_output_line(output, line)
+						qbe_output_line(output, line)
 					end
 				else
 					if !inside_root_publication
 						if line != "\tcall $g4_gc_temp_reset(l %temporary_roots)"
-							gate4_output_line(output, line)
+							qbe_output_line(output, line)
 						end
 					end
 				end
@@ -2589,29 +2442,29 @@ def gate4_emit_function(
 		body_index += 1
 	end
 	if context.array_bounds_failure_used[0] == 1
-		gate4_output_line(output, "@array_bounds_failure")
-		gate4_output_line(output, "\tcall $g4_fail(l $g4_bounds_error, l 30)")
-		gate4_output_line(output, "\thlt")
+		qbe_output_line(output, "@array_bounds_failure")
+		qbe_output_line(output, "\tcall $g4_fail(l $g4_bounds_error, l 30)")
+		qbe_output_line(output, "\thlt")
 	end
 	if context.scalar_inline_range_failure_used[0] == 1
-		gate4_output_line(output, "@scalar_inline_integer_range_failure")
-		gate4_output_line(output, "\tcall $g4_fail(l $g4_integer_range_error, l 45)")
-		gate4_output_line(output, "\thlt")
+		qbe_output_line(output, "@scalar_inline_integer_range_failure")
+		qbe_output_line(output, "\tcall $g4_fail(l $g4_integer_range_error, l 45)")
+		qbe_output_line(output, "\thlt")
 	end
-	gate4_output_line(output, "@return")
+	qbe_output_line(output, "@return")
 	if uses_temporary_roots
-		gate4_output_line(output, "\tstorel %temporary_roots, $g4_gc_temp_count")
+		qbe_output_line(output, "\tstorel %temporary_roots, $g4_gc_temp_count")
 	end
 	if result_type == "Void"
-		gate4_output_line(output, "\tret")
+		qbe_output_line(output, "\tret")
 	else
 		gate4_emit_typed_load(output, "%return_result", result_type, "%return_value")
 		if gate4_type_is_managed(result_type)
-			gate4_output_line(output, "\tcall $g4_gc_temp_push(l %return_result)")
+			qbe_output_line(output, "\tcall $g4_gc_temp_push(l %return_result)")
 		end
-		gate4_output_line(output, "\tret %return_result")
+		qbe_output_line(output, "\tret %return_result")
 	end
-	gate4_output_line(output, "}\n")
+	qbe_output_line(output, "}\n")
 	gate4_reset_temporary_storage()
 	return
 end
@@ -2667,135 +2520,135 @@ def gate4_compiler_file_entry_function(state: Gate4Compiler): Integer
 	return index
 end
 
-def gate4_emit_process_arguments(mut output: Gate4Output)
-	gate4_output_line(
+def gate4_emit_process_arguments(mut output: QbeOutput)
+	qbe_output_line(
 		output,
 		"\t%process_argc =l extsw %argc\n\tstorel %process_argc, $g4_process_argc\n\tstorel %argv, $g4_process_argv_pointer",
 	)
 	return
 end
 
-def gate4_emit_target_entry(mut output: Gate4Output)
-	gate4_output_line(output, "\nexport function w $main(w %argc, l %argv) {")
-	gate4_output_line(output, "@start")
-	gate4_output_line(output, "\tcall $g4_gc_trace_initialize()")
+def gate4_emit_target_entry(mut output: QbeOutput)
+	qbe_output_line(output, "\nexport function w $main(w %argc, l %argv) {")
+	qbe_output_line(output, "@start")
+	qbe_output_line(output, "\tcall $g4_gc_trace_initialize()")
 	if output.runtime_flags[2] == 1
-		gate4_output_line(output, "\tcall $g4_static_strings_initialize()")
+		qbe_output_line(output, "\tcall $g4_static_strings_initialize()")
 	end
 	if output.runtime_flags[1] == 1
 		gate4_emit_process_arguments(output)
 	end
-	gate4_output_line(output, "\tstorel $g4_qbe_darwin_arm64, $g4_selected_qbe_target")
-	gate4_output_line(output, "\tstorel $g4_dead_strip_darwin, $g4_selected_dead_strip")
-	gate4_output_line(output, "\tstorel 0, $g4_project_selected_linker")
-	gate4_output_line(output, "\t%a11 =w ceqw %argc, 11")
-	gate4_output_line(output, "\tjnz %a11, @target_shape, @dispatch")
-	gate4_output_line(output, "@target_shape")
-	gate4_output_line(output, "\t%target_flag_pointer =l add %argv, 72")
-	gate4_output_line(output, "\t%target_flag =l loadl %target_flag_pointer")
-	gate4_output_line(output, "\t%target_flag_comparison =w call $strcmp(l %target_flag, l $g4_target_option)")
-	gate4_output_line(output, "\t%target_flag_ok =w ceqw %target_flag_comparison, 0")
-	gate4_output_line(output, "\tjnz %target_flag_ok, @target_profile, @dispatch")
-	gate4_output_line(output, "@target_profile")
-	gate4_output_line(output, "\t%profile_pointer =l add %argv, 80")
-	gate4_output_line(output, "\t%profile =l loadl %profile_pointer")
-	gate4_output_line(output, "\t%darwin_comparison =w call $strcmp(l %profile, l $g4_profile_darwin_arm64)")
-	gate4_output_line(output, "\t%darwin =w ceqw %darwin_comparison, 0")
-	gate4_output_line(output, "\tjnz %darwin, @target_darwin, @target_linux_check")
-	gate4_output_line(output, "@target_darwin")
-	gate4_output_line(output, "\tjmp @invoke_target")
-	gate4_output_line(output, "@target_linux_check")
-	gate4_output_line(output, "\t%linux_comparison =w call $strcmp(l %profile, l $g4_profile_linux_arm64)")
-	gate4_output_line(output, "\t%linux =w ceqw %linux_comparison, 0")
-	gate4_output_line(output, "\tjnz %linux, @target_linux_arm64, @target_linux_amd64_check")
-	gate4_output_line(output, "@target_linux_arm64")
-	gate4_output_line(output, "\tstorel $g4_qbe_linux_arm64, $g4_selected_qbe_target")
-	gate4_output_line(output, "\tjmp @target_linux_common")
-	gate4_output_line(output, "@target_linux_amd64_check")
-	gate4_output_line(output, "\t%linux_amd64_comparison =w call $strcmp(l %profile, l $g4_profile_linux_amd64)")
-	gate4_output_line(output, "\t%linux_amd64 =w ceqw %linux_amd64_comparison, 0")
-	gate4_output_line(output, "\tjnz %linux_amd64, @target_linux_amd64, @target_error")
-	gate4_output_line(output, "@target_linux_amd64")
-	gate4_output_line(output, "\tstorel $g4_qbe_linux_amd64, $g4_selected_qbe_target")
-	gate4_output_line(output, "\tjmp @target_linux_common")
-	gate4_output_line(output, "@target_linux_common")
-	gate4_output_line(output, "\tstorel $g4_dead_strip_linux, $g4_selected_dead_strip")
-	gate4_output_line(output, "\tstorel $g4_project_linker_lld, $g4_project_selected_linker")
-	gate4_output_line(output, "\tjmp @invoke_target")
-	gate4_output_line(output, "@target_error")
-	gate4_output_line(output, "\tcall $write(w 2, l $g4_target_error, l 37)")
-	gate4_output_line(output, "\tcall $g4_gc_finish()")
-	gate4_output_line(output, "\tret 64")
-	gate4_output_line(output, "@invoke_target")
-	gate4_output_line(output, "\t%target_status =w call $g4_compiler_dispatch(w 9, l %argv)")
-	gate4_output_line(output, "\tcall $g4_gc_finish()")
-	gate4_output_line(output, "\tret %target_status")
-	gate4_output_line(output, "@dispatch")
-	gate4_output_line(output, "\t%dispatch_status =w call $g4_compiler_dispatch(w %argc, l %argv)")
-	gate4_output_line(output, "\tcall $g4_gc_finish()")
-	gate4_output_line(output, "\tret %dispatch_status")
-	gate4_output_line(output, "}")
+	qbe_output_line(output, "\tstorel $g4_qbe_darwin_arm64, $g4_selected_qbe_target")
+	qbe_output_line(output, "\tstorel $g4_dead_strip_darwin, $g4_selected_dead_strip")
+	qbe_output_line(output, "\tstorel 0, $g4_project_selected_linker")
+	qbe_output_line(output, "\t%a11 =w ceqw %argc, 11")
+	qbe_output_line(output, "\tjnz %a11, @target_shape, @dispatch")
+	qbe_output_line(output, "@target_shape")
+	qbe_output_line(output, "\t%target_flag_pointer =l add %argv, 72")
+	qbe_output_line(output, "\t%target_flag =l loadl %target_flag_pointer")
+	qbe_output_line(output, "\t%target_flag_comparison =w call $strcmp(l %target_flag, l $g4_target_option)")
+	qbe_output_line(output, "\t%target_flag_ok =w ceqw %target_flag_comparison, 0")
+	qbe_output_line(output, "\tjnz %target_flag_ok, @target_profile, @dispatch")
+	qbe_output_line(output, "@target_profile")
+	qbe_output_line(output, "\t%profile_pointer =l add %argv, 80")
+	qbe_output_line(output, "\t%profile =l loadl %profile_pointer")
+	qbe_output_line(output, "\t%darwin_comparison =w call $strcmp(l %profile, l $g4_profile_darwin_arm64)")
+	qbe_output_line(output, "\t%darwin =w ceqw %darwin_comparison, 0")
+	qbe_output_line(output, "\tjnz %darwin, @target_darwin, @target_linux_check")
+	qbe_output_line(output, "@target_darwin")
+	qbe_output_line(output, "\tjmp @invoke_target")
+	qbe_output_line(output, "@target_linux_check")
+	qbe_output_line(output, "\t%linux_comparison =w call $strcmp(l %profile, l $g4_profile_linux_arm64)")
+	qbe_output_line(output, "\t%linux =w ceqw %linux_comparison, 0")
+	qbe_output_line(output, "\tjnz %linux, @target_linux_arm64, @target_linux_amd64_check")
+	qbe_output_line(output, "@target_linux_arm64")
+	qbe_output_line(output, "\tstorel $g4_qbe_linux_arm64, $g4_selected_qbe_target")
+	qbe_output_line(output, "\tjmp @target_linux_common")
+	qbe_output_line(output, "@target_linux_amd64_check")
+	qbe_output_line(output, "\t%linux_amd64_comparison =w call $strcmp(l %profile, l $g4_profile_linux_amd64)")
+	qbe_output_line(output, "\t%linux_amd64 =w ceqw %linux_amd64_comparison, 0")
+	qbe_output_line(output, "\tjnz %linux_amd64, @target_linux_amd64, @target_error")
+	qbe_output_line(output, "@target_linux_amd64")
+	qbe_output_line(output, "\tstorel $g4_qbe_linux_amd64, $g4_selected_qbe_target")
+	qbe_output_line(output, "\tjmp @target_linux_common")
+	qbe_output_line(output, "@target_linux_common")
+	qbe_output_line(output, "\tstorel $g4_dead_strip_linux, $g4_selected_dead_strip")
+	qbe_output_line(output, "\tstorel $g4_project_linker_lld, $g4_project_selected_linker")
+	qbe_output_line(output, "\tjmp @invoke_target")
+	qbe_output_line(output, "@target_error")
+	qbe_output_line(output, "\tcall $write(w 2, l $g4_target_error, l 37)")
+	qbe_output_line(output, "\tcall $g4_gc_finish()")
+	qbe_output_line(output, "\tret 64")
+	qbe_output_line(output, "@invoke_target")
+	qbe_output_line(output, "\t%target_status =w call $g4_compiler_dispatch(w 9, l %argv)")
+	qbe_output_line(output, "\tcall $g4_gc_finish()")
+	qbe_output_line(output, "\tret %target_status")
+	qbe_output_line(output, "@dispatch")
+	qbe_output_line(output, "\t%dispatch_status =w call $g4_compiler_dispatch(w %argc, l %argv)")
+	qbe_output_line(output, "\tcall $g4_gc_finish()")
+	qbe_output_line(output, "\tret %dispatch_status")
+	qbe_output_line(output, "}")
 	return
 end
 
-def gate4_emit_entry(mut state: Gate4Compiler, mut output: Gate4Output)
+def gate4_emit_entry(mut state: Gate4Compiler, mut output: QbeOutput)
 	compiler_entry := gate4_compiler_entry_function(state)
 	if compiler_entry >= 0
 		compiler_file_entry := gate4_compiler_file_entry_function(state)
-		gate4_output_line(output, "function w $g4_compiler_dispatch(w %argc, l %argv) {")
-		gate4_output_line(output, "@start")
-		gate4_output_line(
+		qbe_output_line(output, "function w $g4_compiler_dispatch(w %argc, l %argv) {")
+		qbe_output_line(output, "@start")
+		qbe_output_line(
 			output,
 			"\t%a9 =w ceqw %argc, 9\n\tjnz %a9, @bshape, @other\n@bshape\n\t%bcmdp =l add %argv, 8\n\t%bcmd =l loadl %bcmdp\n\t%boc =w call $strcmp(l %bcmd, l $g4_build)\n\t%bok =w ceqw %boc, 0\n\t%bofp =l add %argv, 24\n\t%bof =l loadl %bofp\n\t%bofc =w call $strcmp(l %bof, l $g4_output_flag)\n\t%bofo =w ceqw %bofc, 0\n\t%bqfp =l add %argv, 40\n\t%bqf =l loadl %bqfp\n\t%bqfc =w call $strcmp(l %bqf, l $g4_qbe_flag)\n\t%bqfo =w ceqw %bqfc, 0\n\t%bcfp =l add %argv, 56\n\t%bcf =l loadl %bcfp\n\t%bcfc =w call $strcmp(l %bcf, l $g4_cc_flag)\n\t%bcfo =w ceqw %bcfc, 0\n\t%bv0 =w and %bok, %bofo\n\t%bv1 =w and %bqfo, %bcfo\n\t%bv =w and %bv0, %bv1\n\tjnz %bv, @build, @usage\n@build\n\t%bspp =l add %argv, 16\n\t%bsp =l loadl %bspp\n\t%bsrc =l call $g4_read_file(l %bsp)\n\t%bsm =w ceql %bsrc, 0\n\tjnz %bsm, @bread_error, @bpaths\n@bread_error\n\tcall $write(w 2, l $g4_file_error, l 35)\n\t%bspl =l call $strlen(l %bsp)\n\tcall $write(w 2, l %bsp, l %bspl)\n\tcall $write(w 2, l $g4_newline, l 1)\n\tret 66\n@bpaths\n\t%bop =l add %argv, 32\n\t%bo =l loadl %bop\n\t%bqp =l add %argv, 48\n\t%bqbe =l loadl %bqp\n\t%bcp =l add %argv, 64\n\t%bcc =l loadl %bcp\n\t%bssa =l call $g4_c_concat(l %bo, l $g4_ssa_suffix)\n\t%basm =l call $g4_c_concat(l %bo, l $g4_asm_suffix)\n\t%bf =l call $fopen(l %bssa, l $g4_wb)\n\t%bfm =w ceql %bf, 0\n\tjnz %bfm, @bfile_error, @bredirect\n@bfile_error\n\tcall $g4_cleanup(l %bssa, l %basm)\n\tcall $write(w 2, l $g4_intermediate_error, l 42)\n\tret 73\n@bredirect\n\t%bfd =w call $fileno(l %bf)\n\t%bsaved =w call $dup(w 1)\n\t%bfdb =w csltw %bfd, 0\n\t%bsavedb =w csltw %bsaved, 0\n\t%brb =w or %bfdb, %bsavedb\n\tjnz %brb, @bredirect_error, @bset_stdout\n@bset_stdout\n\t%bset =w call $dup2(w %bfd, w 1)\n\t%bsetb =w csltw %bset, 0\n\tjnz %bsetb, @bredirect_error, @bcompile\n@bredirect_error\n\t%bci =w call $close(w %bsaved)\n\t%bfci =w call $fclose(l %bf)\n\tcall $g4_cleanup(l %bssa, l %basm)\n\tcall $write(w 2, l $g4_intermediate_error, l 42)\n\tret 73\n@bcompile\n\t%bm =l call $g4_string_from_c(l $g4_emit)",
 		)
-		gate4_output_line(
+		qbe_output_line(
 			output,
 			"\t%bpath =l call $g4_string_from_c(l %bsp)",
 		)
-		gate4_output_line(
+		qbe_output_line(
 			output,
 			"\t%bst =l call $g4f" + gate4_integer_string(compiler_file_entry) +
 			"(l %bsrc, l %bpath, l %bm, l 1)",
 		)
-		gate4_output_line(
+		qbe_output_line(
 			output,
 			"\t%brestore =w call $dup2(w %bsaved, w 1)\n\t%bclosed =w call $close(w %bsaved)\n\t%bfclosed =w call $fclose(l %bf)\n\t%brb0 =w csltw %brestore, 0\n\t%brb1 =w csltw %bclosed, 0\n\t%brb2 =w cnew %bfclosed, 0\n\t%brb3 =w or %brb0, %brb1\n\t%brbad =w or %brb3, %brb2\n\tjnz %brbad, @bpost_error, @bcompiled\n@bpost_error\n\tcall $g4_cleanup(l %bssa, l %basm)\n\tcall $write(w 2, l $g4_intermediate_error, l 42)\n\tret 73\n@bcompiled\n\t%bcfail =w cnel %bst, 0\n\tjnz %bcfail, @bcompiler_failed, @bqbe\n@bcompiler_failed\n\tcall $g4_cleanup(l %bssa, l %basm)\n\tret 1\n@bqbe\n\t%bqs =w call $g4_run_qbe(l %bqbe, l %bssa, l %basm)\n\t%bqfail =w cnew %bqs, 0\n\tjnz %bqfail, @bqbe_failed, @btemp\n@bqbe_failed\n\tcall $g4_cleanup(l %bssa, l %basm)\n\tcall $write(w 2, l $g4_qbe_error, l 21)\n\tret 70\n@btemp\n\t%btmpl =l call $g4_c_concat(l %bo, l $g4_temp_suffix)\n\t%bdir =l call $mkdtemp(l %btmpl)\n\t%bdfail =w ceql %bdir, 0\n\tjnz %bdfail, @btemp_failed, @btemp_path\n@btemp_failed\n\tcall $g4_cleanup(l %bssa, l %basm)\n\tcall $write(w 2, l $g4_intermediate_error, l 42)\n\tret 73\n@btemp_path\n\t%bbase =l call $g4_c_basename(l %bo)\n\t%bdp =l call $g4_c_concat(l %bdir, l $g4_slash)\n\t%bexe =l call $g4_c_concat(l %bdp, l %bbase)\n\t%bcs =w call $g4_project_run_cc(l %bcc, l %basm, l %bexe)\n\t%bccfail =w cnew %bcs, 0\n\tjnz %bccfail, @bcc_failed, @bpublish\n@bcc_failed\n\tcall $g4_cleanup(l %bssa, l %basm)\n\tcall $g4_cleanup_output(l %bexe, l %bdir)\n\tcall $write(w 2, l $g4_cc_error, l 20)\n\tret 70\n@bpublish\n\t%bpr =w call $rename(l %bexe, l %bo)\n\t%bpf =w cnew %bpr, 0\n\tjnz %bpf, @bpublish_failed, @bsuccess\n@bpublish_failed\n\tcall $g4_cleanup(l %bssa, l %basm)\n\tcall $g4_cleanup_output(l %bexe, l %bdir)\n\tcall $write(w 2, l $g4_publish_error, l 32)\n\tret 73\n@bsuccess\n\tcall $g4_cleanup(l %bssa, l %basm)\n\tcall $g4_cleanup_output(l %bexe, l %bdir)\n\tret 0\n@other\n\t%a3 =w ceqw %argc, 3\n\tjnz %a3, @fargs, @hargc\n@hargc\n\t%a4 =w ceqw %argc, 4\n\tjnz %a4, @hargs, @usage\n@hargs\n\t%hfp =l add %argv, 8\n\t%hf =l loadl %hfp\n\t%hfc =w call $strcmp(l %hf, l $g4_source_arg)\n\t%valid_hf =w ceqw %hfc, 0\n\tjnz %valid_hf, @hidden, @usage\n@usage\n\tcall $write(w 2, l $g4_usage_error, l 103)\n\tret 64\n@hidden\n\t%hmp =l add %argv, 16\n\t%hmc =l loadl %hmp\n\t%hm =l call $g4_string_from_c(l %hmc)\n\t%hsp =l add %argv, 24\n\t%hsc =l loadl %hsp\n\t%hs =l call $g4_string_from_c(l %hsc)",
 		)
-		gate4_output_line(
+		qbe_output_line(
 			output,
 			"\t%hst =l call $g4f" + gate4_integer_string(compiler_entry) +
 			"(l %hs, l %hm, l 0)",
 		)
-		gate4_output_line(
+		qbe_output_line(
 			output,
 			"\tret 0\n@fargs\n\t%fmp =l add %argv, 8\n\t%fmc =l loadl %fmp\n\t%cc =w call $strcmp(l %fmc, l $g4_check)\n\t%cm =w ceqw %cc, 0\n\t%ec =w call $strcmp(l %fmc, l $g4_emit)\n\t%em =w ceqw %ec, 0\n\t%valid_fm =w or %cm, %em\n\tjnz %valid_fm, @file, @usage\n@file\n\t%pp =l add %argv, 16\n\t%path =l loadl %pp\n\t%src =l call $g4_read_file(l %path)\n\t%rf =w ceql %src, 0\n\tjnz %rf, @read_error, @compile\n@read_error\n\tcall $write(w 2, l $g4_file_error, l 35)\n\t%pl =l call $strlen(l %path)\n\tcall $write(w 2, l %path, l %pl)\n\tcall $write(w 2, l $g4_newline, l 1)\n\tret 66\n@compile\n\t%fm =l call $g4_string_from_c(l %fmc)",
 		)
-		gate4_output_line(
+		qbe_output_line(
 			output,
 			"\t%fpath =l call $g4_string_from_c(l %path)",
 		)
-		gate4_output_line(
+		qbe_output_line(
 			output,
 			"\t%fst =l call $g4f" + gate4_integer_string(compiler_file_entry) +
 			"(l %src, l %fpath, l %fm, l 1)",
 		)
-		gate4_output_line(output, "\t%failed =w cnel %fst, 0\n\tret %failed")
+		qbe_output_line(output, "\t%failed =w cnel %fst, 0\n\tret %failed")
 	else
-		gate4_output_line(output, "export function w $main(w %argc, l %argv) {")
-		gate4_output_line(output, "@start")
-		gate4_output_line(output, "\tcall $g4_gc_trace_initialize()")
+		qbe_output_line(output, "export function w $main(w %argc, l %argv) {")
+		qbe_output_line(output, "@start")
+		qbe_output_line(output, "\tcall $g4_gc_trace_initialize()")
 		if output.runtime_flags[2] == 1
-			gate4_output_line(output, "\tcall $g4_static_strings_initialize()")
+			qbe_output_line(output, "\tcall $g4_static_strings_initialize()")
 		end
 		if output.runtime_flags[1] == 1
 			gate4_emit_process_arguments(output)
 		end
 		main_index := gate4_find_function_in_module(state, state.entry_module[0], "main")
-		gate4_output_line(output, "\tcall $g4f" + gate4_integer_string(main_index) + "()")
-		gate4_output_line(output, "\tcall $g4_gc_finish()")
-		gate4_output_line(output, "\tret 0")
+		qbe_output_line(output, "\tcall $g4f" + gate4_integer_string(main_index) + "()")
+		qbe_output_line(output, "\tcall $g4_gc_finish()")
+		qbe_output_line(output, "\tret 0")
 	end
-	gate4_output_line(output, "}")
+	qbe_output_line(output, "}")
 	if compiler_entry >= 0
 		cli_entry := gate4_find_function_in_module(state, state.entry_module[0], "native_cli_main")
 		if cli_entry >= 0
@@ -2811,13 +2664,13 @@ def gate4_emit_entry(mut state: Gate4Compiler, mut output: Gate4Output)
 				gate4_diagnostic(state, "TRBN4005", 1, "Native CLI runtime template must be a literal String")
 				return
 			end
-			gate4_output_line(output, gate4_load_string(state.token_texts, runtime_token))
-			gate4_output_line(output, "export function w $main(w %argc, l %argv) {\n@start\n\tcall $g4_gc_trace_initialize()")
+			qbe_output_line(output, gate4_load_string(state.token_texts, runtime_token))
+			qbe_output_line(output, "export function w $main(w %argc, l %argv) {\n@start\n\tcall $g4_gc_trace_initialize()")
 			if output.runtime_flags[2] == 1
-				gate4_output_line(output, "\tcall $g4_static_strings_initialize()")
+				qbe_output_line(output, "\tcall $g4_static_strings_initialize()")
 			end
 			gate4_emit_process_arguments(output)
-			gate4_output_line(output, "\t%status =l call $g4f" + gate4_integer_string(cli_entry) + "()\n\tcall $g4_gc_finish()\n\tret %status\n}")
+			qbe_output_line(output, "\t%status =l call $g4f" + gate4_integer_string(cli_entry) + "()\n\tcall $g4_gc_finish()\n\tret %status\n}")
 		else
 			gate4_emit_target_entry(output)
 		end
@@ -2825,15 +2678,15 @@ def gate4_emit_entry(mut state: Gate4Compiler, mut output: Gate4Output)
 	return
 end
 
-def gate4_emit_qbe(mut state: Gate4Compiler): Gate4Output
-	mut output := gate4_output_new(state.token_count[0] * 24 + 4096, [0, 0, 0, 0])
+def gate4_emit_qbe(mut state: Gate4Compiler): QbeOutput
+	mut output := qbe_output_new(state.token_count[0] * 24 + 4096, [0, 0, 0, 0])
 	gate4_emit_static_strings(state, output)
 	if gate4_has_diagnostic(state)
 		return output
 	end
 	gate4_emit_record_descriptors(state, output)
 	compiler_runtime := gate4_compiler_entry_function(state) >= 0
-	gate4_emit_runtime(output, compiler_runtime)
+	emit_qbe_runtime(output, compiler_runtime)
 	function_count := state.function_count[0]
 	mut inline_budget := [0, 0, - 2]
 	if function_count <= 32
@@ -2879,19 +2732,19 @@ def gate4_emit_qbe(mut state: Gate4Compiler): Gate4Output
 	end
 	gate4_emit_entry(state, output)
 	if output.runtime_flags[3] == 1
-		gate4_output_line(
+		qbe_output_line(
 			output,
 			"\nfunction l $g4_array_address(l %array, l %requested) {\n@start\n\t%length_slot =l add %array, 8\n\t%length =l loadl %length_slot\n\t%negative =w csltl %requested, 0\n\tjnz %negative, @negative, @check\n@negative\n\t%adjusted_negative =l add %length, %requested\n\tjmp @bounds\n@check\n\t%adjusted_positive =l copy %requested\n\tjmp @bounds\n@bounds\n\t%index =l phi @negative %adjusted_negative, @check %adjusted_positive\n\t%valid =w cultl %index, %length\n\tjnz %valid, @load, @fail\n@fail\n\tcall $g4_fail(l $g4_bounds_error, l 30)\n\thlt\n@load\n\t%data_slot =l add %array, 24\n\t%data =l loadl %data_slot\n\t%offset =l mul %index, 8\n\t%address =l add %data, %offset\n\tret %address\n}",
 		)
 	end
 	if output.runtime_flags[0] == 1
-		gate4_emit_float_array_runtime(output)
+		emit_float_array_runtime(output)
 	end
 	if output.runtime_flags[1] == 1
-		gate4_emit_process_runtime(output)
-		gate4_emit_string_to_integer_runtime(output)
-		gate4_emit_integer_to_string_runtime(output)
-		gate4_emit_float_to_integer_runtime(output)
+		emit_process_runtime(output)
+		emit_string_to_integer_runtime(output)
+		emit_integer_to_string_runtime(output)
+		emit_float_to_integer_runtime(output)
 	end
 	return output
 end

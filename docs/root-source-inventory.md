@@ -91,14 +91,14 @@ do not authorize merging the snapshot and ordinary self-hosted MIRs.
   `tools/compatibility_manifest.py` to check supported snapshot versions.
   Its moved path must update that consumer atomically.
 - The ordinary compiler closure is `compiler/src/compiler.trb` plus its
-  explicit storage/path/MIR/literal/state/parser/resolution/checked-program
+  explicit storage/path/MIR/literal/state/parser/resolution/checked-program/QBE-output/runtime
   imports. State depends on the MIR model and shared storage/literal helpers;
   resolution consumes shared state and syntax, and checked-program construction
   consumes resolution, never back on the compiler entry. Root helpers do not become ordinary compiler
   modules just because the reference root project compiles them.
-  `compiler_recovery_source.trb` validates the entry, MIR, state, parser, resolution
-  and checked-program import prefixes and derives a recovery-only flat source
-  from nine canonical inputs. Compiler module extraction must
+  `compiler_recovery_source.trb` validates the entry, MIR, state, parser, resolution,
+  checked-program, QBE-output and QBE-runtime import prefixes and derives a
+  recovery-only flat source from eleven canonical inputs. Compiler module extraction must
   update this derivation and its tests together.
 - `tools/bootstrap-seed.sh` and current target/memory/performance workflows
   build the ordinary closure through explicit paths. `tools/gate6*-benchmark`

@@ -249,16 +249,16 @@ def validate_repository_values(
         raise ValidationError("target profiles disagree with the retained release manifest")
     recovered_targets = current_targets[len(seed_targets) :]
 
-    compiler_source = _require_text(
-        root / "compiler/src/compiler.trb",
+    runtime_source = _require_text(
+        root / "compiler/src/qbe_runtime.trb",
         [
             *[f'b \\"{target["profile"]}\\"' for target in current_targets],
             *[f'b \\"{target["qbeTarget"]}\\"' for target in current_targets],
         ],
         "self-hosted target profile",
     )
-    if not compiler_source:
-        raise ValidationError("self-hosted compiler source is empty")
+    if not runtime_source:
+        raise ValidationError("self-hosted runtime source is empty")
 
     bootstrap_tool = (root / "tools/bootstrap-seed.sh").read_text(encoding="utf-8")
     for target in current_targets:
