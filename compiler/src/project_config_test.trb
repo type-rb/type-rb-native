@@ -1,0 +1,112 @@
+import { parse_project_config } from project_config
+import { describe, expect, test } from trb/std/test
+
+describe("Project configuration") do
+	test("strictly decodes the configured-project projection and comments") do
+		config := parse_project_config(
+			"{\n" +
+			"  // a comment outside a String\n" +
+			"  \"$schema\": \"https://example.com/schema//v1\",\n" +
+			"  \"name\": \"configured /* project */\",\n" +
+			"  \"version\": \"2.0.0\",\n" +
+			"  \"m\\u006fde\": \"go\",\n" +
+			"  \"sourceDir\": \"src/./application/../lib\",\n" +
+			"  \"outDir\": \"artifacts/native\",\n" +
+			"  \"copyFiles\": false,\n" +
+			"  \"packageManagement\": \"external\",\n" +
+			"  /* the bounded portable Go projection */\n" +
+			"  \"go\": {\n" +
+			"    \"module\": \"example.com/configured\",\n" +
+			"    \"version\": \"1.28.1\",\n" +
+			"    \"rootPackage\": \"command\"\n" +
+			"  }\n" +
+			"}\n",
+		)
+		expect(config.error).to_equal("")
+		expect(config.name).to_equal("configured /* project */")
+		expect(config.version).to_equal("2.0.0")
+		expect(config.mode).to_equal("go")
+		expect(config.source_dir).to_equal("src/lib")
+		expect(config.out_dir).to_equal("artifacts/native")
+		expect(config.copy_files).to_be_false()
+		expect(config.package_management).to_equal("external")
+		expect(config.go_config.module_name).to_equal("example.com/configured")
+		expect(config.go_config.version).to_equal("1.28.1")
+		expect(config.go_config.root_package).to_equal("command")
+	end
+
+	test("applies the configured-project defaults") do
+		config := parse_project_config(
+			"{\"name\":\"minimal\",\"mode\":\"go\",\"go\":{\"module\":\"example.com/minimal\"}}",
+		)
+		expect(config.error).to_equal("")
+		expect(config.version).to_equal("0.1.0")
+		expect(config.source_dir).to_equal(".")
+		expect(config.out_dir).to_equal("build")
+		expect(config.copy_files).to_be_true()
+		expect(config.package_management).to_equal("managed")
+		expect(config.go_config.version).to_equal("1.27")
+		expect(config.go_config.root_package).to_equal("main")
+	end
+
+	test("rejects ambiguous and unsupported configured-project input") do
+		duplicate := parse_project_config(
+			"{\"name\":\"first\",\"name\":\"second\",\"mode\":\"go\",\"go\":{\"module\":\"example.com/x\"}}",
+		)
+		expect(duplicate.error).to_equal("duplicate project configuration field name")
+
+		trailing := parse_project_config(
+			"{\"name\":\"x\",\"mode\":\"go\",\"go\":{\"module\":\"example.com/x\",}}",
+		)
+		expect(trailing.error).to_equal("trailing comma in go configuration")
+
+		unsupported := parse_project_config(
+			"{\"name\":\"x\",\"mode\":\"go\",\"packages\":{},\"go\":{\"module\":\"example.com/x\"}}",
+		)
+		expect(unsupported.error).to_equal("unsupported project configuration field packages")
+
+		wrong_type := parse_project_config(
+			"{\"name\":\"x\",\"mode\":\"go\",\"copyFiles\":\"false\",\"go\":{\"module\":\"example.com/x\"}}",
+		)
+		expect(wrong_type.error).to_equal("expected JSON Boolean")
+	end
+
+	test("accepts native projects without a Go configuration") do
+		explicit := parse_project_config("{\"name\":\"x\",\"mode\":\"trb\"}")
+		expect(explicit.error).to_equal("")
+		expect(explicit.mode).to_equal("trb")
+		implicit := parse_project_config("{\"name\":\"x\"}")
+		expect(implicit.error).to_equal("")
+		expect(implicit.mode).to_equal("")
+	end
+
+	test("validates configured-project modes, versions, and paths") do
+		wrong_mode := parse_project_config(
+			"{\"name\":\"x\",\"mode\":\"ruby\",\"go\":{\"module\":\"example.com/x\"}}",
+		)
+		expect(wrong_mode.error).to_equal("mode must be go or trb for configured Native builds")
+
+		missing_module := parse_project_config("{\"name\":\"x\",\"mode\":\"go\",\"go\":{}}")
+		expect(missing_module.error).to_equal("go.module is required for mode go")
+
+		old_go := parse_project_config(
+			"{\"name\":\"x\",\"mode\":\"go\",\"go\":{\"module\":\"example.com/x\",\"version\":\"1.26.9\"}}",
+		)
+		expect(old_go.error).to_equal("go.version must be 1.27 or later")
+
+		overflowing_go := parse_project_config(
+			"{\"name\":\"x\",\"mode\":\"go\",\"go\":{\"module\":\"example.com/x\",\"version\":\"999999999999999999999999999.27\"}}",
+		)
+		expect(overflowing_go.error).to_equal("go.version must be 1.27 or later")
+
+		absolute := parse_project_config(
+			"{\"name\":\"x\",\"mode\":\"go\",\"sourceDir\":\"/tmp/src\",\"go\":{\"module\":\"example.com/x\"}}",
+		)
+		expect(absolute.error).to_equal("sourceDir must be relative to the project root")
+
+		escaping := parse_project_config(
+			"{\"name\":\"x\",\"mode\":\"go\",\"outDir\":\"build/../../outside\",\"go\":{\"module\":\"example.com/x\"}}",
+		)
+		expect(escaping.error).to_equal("outDir cannot escape the project root")
+	end
+end

@@ -19,8 +19,9 @@ compiler integration test and root recovery tests use the new repository
 paths. The recovery Go module identity is unchanged; the Go project is a
 reference/recovery tool, not an ordinary bootstrap dependency.
 
-Subsequent responsibility extraction adds `qbe_output.trb` and `qbe_runtime.trb`
-to the canonical closure; current recovery validates eleven modules. See the
+Subsequent responsibility extraction adds `qbe_output.trb`, `qbe_runtime.trb`
+and `project_config.trb` to the canonical closure; current recovery validates
+twelve modules. See the
 [organization schedule](repository-organization.md) for the later ownership
 changes rather than treating the relocation's nine-module count as permanent.
 

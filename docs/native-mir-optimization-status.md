@@ -73,6 +73,10 @@ still owns QBE adaptation, final check/lifetime orchestration, lexer and driver
 work; runtime generation no longer sits there. This is source decomposition,
 not broader MIR coverage or completion of direct-emitter recovery; see the
 [organization schedule](repository-organization.md).
+The project-configuration extraction in
+[issue #293](https://github.com/type-rb/type-rb-native/issues/293) adds the
+responsibility-named `project_config.trb` owner and strict twelve-file recovery.
+It preserves checked/MIR and adapter ownership rather than adding an analysis.
 
 The [full-range Integer-add diagnostic](../results/2026-09-06-full-range-add-diagnostic-darwin-arm64/README.md)
 rejects both returning-fallback replacements: the two-sided check is about10%
@@ -86,8 +90,16 @@ passes both registered local cohorts with about 5.8-5.9% less spectral wall time
 and compiler shrinkage. It removes redundant result extension and zero-testing
 through mechanical QBE legalization of already checked Boolean values, without
 adding semantic analysis or a new fact family. The integrated main source
-produces identical measured application bytes. This remains a local candidate
-pending exact-head formal acceptance, not an accepted Pure Go or Pages result.
+produces identical measured application bytes.
+[PR #291](https://github.com/type-rb/type-rb-native/pull/291) subsequently accepts
+the exact-head change after normal and experimental CLI authorities pass on
+both arm64 hosts. The
+[registered Linux runtime comparison](https://github.com/type-rb/type-rb-native/actions/runs/34016548080)
+records spectral-norm wall time of 3.59727 to 3.32893 seconds (0.925405 ratio),
+fannkuch-redux 0.909760 and n-body 0.982423, with unchanged cost limits and
+compiler shrinkage. These ratios compare previous and candidate Native, not
+Pure Go. The complete cross-language refresh remains separate; no Pure Go
+parity or updated Pages result is implied.
 
 ## Accepted optimization evidence
 

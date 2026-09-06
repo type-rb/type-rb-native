@@ -99,6 +99,9 @@ checking and MIR construction. Shared local state remains in `state.trb`.
 `qbe_output.trb` owns the output container and ordered emission helpers;
 `qbe_runtime.trb` owns runtime QBE generation and selection, depending only on
 that output boundary and shared path predicates. Neither depends on the entry.
+`project_config.trb` owns project configuration records, JSONC parsing and
+validation, with only the shared ASCII predicate as an outbound dependency.
+The compiler driver, experimental CLI and REPL import its parser directly.
 The compiler entry retains lexing and its source-slicing intrinsics, final
 checking orchestration and temporary-storage lifetime boundaries, QBE adaptation
 and the remaining driver code.

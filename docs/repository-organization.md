@@ -92,8 +92,25 @@ the large runtime literals now have a separate owner. Strict eleven-module
 recovery includes missing/malformed/mutated-module tests and the current CI
 source-copy boundary. Typed compiler-runtime intrinsics remain at the entry.
 
-O3 continues incrementally; O4–O5 are not complete. Next, audit project
-configuration and driver dependencies alongside active gate-derived naming.
+The project configuration slice in
+[issue #293](https://github.com/type-rb/type-rb-native/issues/293) moves two
+records and sixteen parsing/validation helpers into `project_config.trb`, with
+five focused tests in `project_config_test.trb`. These declarations have
+responsibility-based names and no dependency on the compiler entry. The driver,
+experimental CLI and REPL import the parser directly, without aliases. Sixteen
+lexer calls to the former configuration cursor helper now use the already
+imported parser unit-advance helper; its operation is identical for those
+unit-step calls. Configuration keeps its variable-step cursor helper.
+The entry decreases from 4,606 to 3,830 lines. Strict twelve-module recovery
+includes the new owner in source copies, missing/malformed boundaries and
+observable source-mutation coverage. This is organization, not a runtime
+optimization or completion of frontend decomposition.
+
+O3 continues incrementally; O4–O5 are not complete. Next, audit the remaining
+lexer and driver dependencies alongside active gate-derived naming. The
+recovery harness also needs independent workspace isolation and stage-level
+cost visibility, tracked in
+[issue #295](https://github.com/type-rb/type-rb-native/issues/295).
 Do not move the remaining entry into another catch-all module or claim the
 compiler is fully decomposed. The remaining QBE adapter is also a decomposition
 target while checked/MIR ownership replaces its semantic analysis.

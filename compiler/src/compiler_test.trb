@@ -1,4 +1,4 @@
-import { Gate4ProjectSources, gate4_character_in, gate4_check, gate4_emit_array_header, gate4_emit_context_new, gate4_emit_qbe, gate4_emitted_value, gate4_encode_static_string, gate4_function_reassigns_parameter, gate4_invalidate_array_header_cache, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_parse_project_config, gate4_string_starts_at, lower_checked_binary } from compiler
+import { Gate4ProjectSources, gate4_character_in, gate4_check, gate4_emit_array_header, gate4_emit_context_new, gate4_emit_qbe, gate4_emitted_value, gate4_encode_static_string, gate4_function_reassigns_parameter, gate4_invalidate_array_header_cache, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_string_starts_at, lower_checked_binary } from compiler
 import { QbeOutput, qbe_output_new } from qbe_output
 import { gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage
 import { gate4_mir_function_index, gate4_optimize_verified_mir, gate4_verify_mir } from mir
@@ -499,114 +499,6 @@ describe("Gate 4 TypeRB frontend") do
 		expect(state.scalar_mir.facts[1] >= 0).to_be_true()
 		expect(state.scalar_mir.facts[2]).to_equal(- 1)
 		expect(gate4_occurrence_count(gate4_output_source(gate4_emit_qbe(state)), " =l sar ")).to_equal(3)
-	end
-
-	test("strictly decodes the configured-project projection and comments") do
-		config := gate4_parse_project_config(
-			"{\n" +
-			"  // a comment outside a String\n" +
-			"  \"$schema\": \"https://example.com/schema//v1\",\n" +
-			"  \"name\": \"configured /* project */\",\n" +
-			"  \"version\": \"2.0.0\",\n" +
-			"  \"m\\u006fde\": \"go\",\n" +
-			"  \"sourceDir\": \"src/./application/../lib\",\n" +
-			"  \"outDir\": \"artifacts/native\",\n" +
-			"  \"copyFiles\": false,\n" +
-			"  \"packageManagement\": \"external\",\n" +
-			"  /* the bounded portable Go projection */\n" +
-			"  \"go\": {\n" +
-			"    \"module\": \"example.com/configured\",\n" +
-			"    \"version\": \"1.28.1\",\n" +
-			"    \"rootPackage\": \"command\"\n" +
-			"  }\n" +
-			"}\n",
-		)
-		expect(config.error).to_equal("")
-		expect(config.name).to_equal("configured /* project */")
-		expect(config.version).to_equal("2.0.0")
-		expect(config.mode).to_equal("go")
-		expect(config.source_dir).to_equal("src/lib")
-		expect(config.out_dir).to_equal("artifacts/native")
-		expect(config.copy_files).to_be_false()
-		expect(config.package_management).to_equal("external")
-		expect(config.go_config.module_name).to_equal("example.com/configured")
-		expect(config.go_config.version).to_equal("1.28.1")
-		expect(config.go_config.root_package).to_equal("command")
-	end
-
-	test("applies the configured-project defaults") do
-		config := gate4_parse_project_config(
-			"{\"name\":\"minimal\",\"mode\":\"go\",\"go\":{\"module\":\"example.com/minimal\"}}",
-		)
-		expect(config.error).to_equal("")
-		expect(config.version).to_equal("0.1.0")
-		expect(config.source_dir).to_equal(".")
-		expect(config.out_dir).to_equal("build")
-		expect(config.copy_files).to_be_true()
-		expect(config.package_management).to_equal("managed")
-		expect(config.go_config.version).to_equal("1.27")
-		expect(config.go_config.root_package).to_equal("main")
-	end
-
-	test("rejects ambiguous and unsupported configured-project input") do
-		duplicate := gate4_parse_project_config(
-			"{\"name\":\"first\",\"name\":\"second\",\"mode\":\"go\",\"go\":{\"module\":\"example.com/x\"}}",
-		)
-		expect(duplicate.error).to_equal("duplicate project configuration field name")
-
-		trailing := gate4_parse_project_config(
-			"{\"name\":\"x\",\"mode\":\"go\",\"go\":{\"module\":\"example.com/x\",}}",
-		)
-		expect(trailing.error).to_equal("trailing comma in go configuration")
-
-		unsupported := gate4_parse_project_config(
-			"{\"name\":\"x\",\"mode\":\"go\",\"packages\":{},\"go\":{\"module\":\"example.com/x\"}}",
-		)
-		expect(unsupported.error).to_equal("unsupported project configuration field packages")
-
-		wrong_type := gate4_parse_project_config(
-			"{\"name\":\"x\",\"mode\":\"go\",\"copyFiles\":\"false\",\"go\":{\"module\":\"example.com/x\"}}",
-		)
-		expect(wrong_type.error).to_equal("expected JSON Boolean")
-	end
-
-	test("accepts native projects without a Go configuration") do
-		explicit := gate4_parse_project_config("{\"name\":\"x\",\"mode\":\"trb\"}")
-		expect(explicit.error).to_equal("")
-		expect(explicit.mode).to_equal("trb")
-		implicit := gate4_parse_project_config("{\"name\":\"x\"}")
-		expect(implicit.error).to_equal("")
-		expect(implicit.mode).to_equal("")
-	end
-
-	test("validates configured-project modes, versions, and paths") do
-		wrong_mode := gate4_parse_project_config(
-			"{\"name\":\"x\",\"mode\":\"ruby\",\"go\":{\"module\":\"example.com/x\"}}",
-		)
-		expect(wrong_mode.error).to_equal("mode must be go or trb for configured Native builds")
-
-		missing_module := gate4_parse_project_config("{\"name\":\"x\",\"mode\":\"go\",\"go\":{}}")
-		expect(missing_module.error).to_equal("go.module is required for mode go")
-
-		old_go := gate4_parse_project_config(
-			"{\"name\":\"x\",\"mode\":\"go\",\"go\":{\"module\":\"example.com/x\",\"version\":\"1.26.9\"}}",
-		)
-		expect(old_go.error).to_equal("go.version must be 1.27 or later")
-
-		overflowing_go := gate4_parse_project_config(
-			"{\"name\":\"x\",\"mode\":\"go\",\"go\":{\"module\":\"example.com/x\",\"version\":\"999999999999999999999999999.27\"}}",
-		)
-		expect(overflowing_go.error).to_equal("go.version must be 1.27 or later")
-
-		absolute := gate4_parse_project_config(
-			"{\"name\":\"x\",\"mode\":\"go\",\"sourceDir\":\"/tmp/src\",\"go\":{\"module\":\"example.com/x\"}}",
-		)
-		expect(absolute.error).to_equal("sourceDir must be relative to the project root")
-
-		escaping := gate4_parse_project_config(
-			"{\"name\":\"x\",\"mode\":\"go\",\"outDir\":\"build/../../outside\",\"go\":{\"module\":\"example.com/x\"}}",
-		)
-		expect(escaping.error).to_equal("outDir cannot escape the project root")
 	end
 
 	test("loads every configured project module and selects its unique main") do
@@ -1318,8 +1210,9 @@ describe("Gate 4 TypeRB frontend") do
 				gate4_required_test_source(base + "checked_program.trb"),
 				gate4_required_test_source(base + "qbe_output.trb"),
 				gate4_required_test_source(base + "qbe_runtime.trb"),
+				gate4_required_test_source(base + "project_config.trb"),
 			]
-			names := ["compiler", "storage", "path", "mir", "literals", "state", "parser", "resolution", "checked_program", "qbe_output", "qbe_runtime"]
+			names := ["compiler", "storage", "path", "mir", "literals", "state", "parser", "resolution", "checked_program", "qbe_output", "qbe_runtime", "project_config"]
 			mut capacity := 0
 			mut module_index := 0
 			while module_index < sources.size()

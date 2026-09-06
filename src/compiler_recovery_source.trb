@@ -13,11 +13,12 @@ record RecoveryCompilerSources
 	checked_program: String
 	qbe_output: String
 	qbe_runtime: String
+	project_config: String
 	flattened: String
 end
 
 def compiler_source_import_prefix(): String
-	return "import { Gate4IntegerStorage, Gate4StringStorage, gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage\nimport { gate4_path_basename, gate4_path_directory, gate4_path_join, gate4_string_ends_with, gate4_string_starts_with, gate4_string_without_suffix } from path\nimport { gate4_ascii_code, gate4_integer_string, gate4_number_is_float, gate4_number_without_underscores, gate4_small_nonnegative_integer_operand } from literals\nimport { gate4_mir_block_index, gate4_mir_function_index, gate4_mir_value_type, gate4_optimize_verified_mir, gate4_verify_mir } from mir\nimport { Gate4Compiler, Gate4SymbolIndex, gate4_add_module, gate4_add_name_index, gate4_compiler_new, gate4_diagnostic, gate4_find_module, gate4_find_name, gate4_has_diagnostic, gate4_local_add, gate4_locals_new, gate4_symbol_index_new } from state\nimport { gate4_advance, gate4_binary_operator_id, gate4_binary_precedence, gate4_declaration_start, gate4_expect, gate4_expect_identifier, gate4_finish_statement, gate4_parse_module, gate4_parse_simple_statement_syntax, gate4_parse_type, gate4_skip_newlines, gate4_token_is } from parser\nimport { gate4_array_element_type, gate4_array_type, gate4_common_array_element_type, gate4_find_field, gate4_find_function_in_module, gate4_find_record_type, gate4_find_visible_function, gate4_find_visible_record, gate4_import_path_value, gate4_normalize_import_path, gate4_record_type, gate4_resolve, gate4_resolve_type_name, gate4_standard_package_import, gate4_standard_package_root, gate4_standard_package_target, gate4_validate_import_usage } from resolution\nimport { checked_binary_plan_type, gate4_check_block, gate4_mir_add_parameter, gate4_mir_nonnegative_fact, gate4_scalar_leaf_inline_eligible, gate4_scalar_mir_begin, gate4_scalar_mir_commit } from checked_program\nimport { QbeOutput, qbe_output_append, qbe_output_branch, qbe_output_line, qbe_output_new } from qbe_output\nimport { emit_float_array_runtime, emit_float_to_integer_runtime, emit_integer_to_string_runtime, emit_process_runtime, emit_qbe_runtime, emit_string_to_integer_runtime } from qbe_runtime\n\n"
+	return "import { Gate4IntegerStorage, Gate4StringStorage, gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage\nimport { gate4_path_basename, gate4_path_directory, gate4_path_join, gate4_string_ends_with, gate4_string_starts_with, gate4_string_without_suffix } from path\nimport { gate4_ascii_code, gate4_integer_string, gate4_number_is_float, gate4_number_without_underscores, gate4_small_nonnegative_integer_operand } from literals\nimport { gate4_mir_block_index, gate4_mir_function_index, gate4_mir_value_type, gate4_optimize_verified_mir, gate4_verify_mir } from mir\nimport { Gate4Compiler, Gate4SymbolIndex, gate4_add_module, gate4_add_name_index, gate4_compiler_new, gate4_diagnostic, gate4_find_module, gate4_find_name, gate4_has_diagnostic, gate4_local_add, gate4_locals_new, gate4_symbol_index_new } from state\nimport { gate4_advance, gate4_binary_operator_id, gate4_binary_precedence, gate4_declaration_start, gate4_expect, gate4_expect_identifier, gate4_finish_statement, gate4_parse_module, gate4_parse_simple_statement_syntax, gate4_parse_type, gate4_skip_newlines, gate4_token_is } from parser\nimport { gate4_array_element_type, gate4_array_type, gate4_common_array_element_type, gate4_find_field, gate4_find_function_in_module, gate4_find_record_type, gate4_find_visible_function, gate4_find_visible_record, gate4_import_path_value, gate4_normalize_import_path, gate4_record_type, gate4_resolve, gate4_resolve_type_name, gate4_standard_package_import, gate4_standard_package_root, gate4_standard_package_target, gate4_validate_import_usage } from resolution\nimport { checked_binary_plan_type, gate4_check_block, gate4_mir_add_parameter, gate4_mir_nonnegative_fact, gate4_scalar_leaf_inline_eligible, gate4_scalar_mir_begin, gate4_scalar_mir_commit } from checked_program\nimport { QbeOutput, qbe_output_append, qbe_output_branch, qbe_output_line, qbe_output_new } from qbe_output\nimport { emit_float_array_runtime, emit_float_to_integer_runtime, emit_integer_to_string_runtime, emit_process_runtime, emit_qbe_runtime, emit_string_to_integer_runtime } from qbe_runtime\nimport { parse_project_config } from project_config\n\n"
 end
 
 def mir_source_import_prefix(): String
@@ -46,6 +47,10 @@ end
 
 def qbe_runtime_source_import_prefix(): String
 	return "import { gate4_string_starts_with } from path\nimport { QbeOutput, qbe_output_line } from qbe_output\n\n"
+end
+
+def project_config_source_import_prefix(): String
+	return "import { gate4_ascii_code } from literals\n\n"
 end
 
 def compiler_source_has_import(source: String): Boolean
@@ -80,6 +85,7 @@ def flatten_compiler_recovery_source(
 		checked_program: String,
 		qbe_output: String,
 		qbe_runtime: String,
+		project_config: String,
 	): Result<String, String>
 	prefix := compiler_source_import_prefix()
 	if !entry.start_with?(prefix)
@@ -121,7 +127,12 @@ def flatten_compiler_recovery_source(
 		return Result<String, String>::Err("QBE-runtime source import boundary differs")
 	end
 	qbe_runtime_core := qbe_runtime.slice(qbe_runtime_prefix.size()...qbe_runtime.size())
-	declarations := [core, storage, path, mir_core, literals, state_core, parser_core, resolution_core, checked_program_core, qbe_output_core, qbe_runtime_core]
+	project_config_prefix := project_config_source_import_prefix()
+	if !project_config.start_with?(project_config_prefix)
+		return Result<String, String>::Err("Project-configuration source import boundary differs")
+	end
+	project_config_core := project_config.slice(project_config_prefix.size()...project_config.size())
+	declarations := [core, storage, path, mir_core, literals, state_core, parser_core, resolution_core, checked_program_core, qbe_output_core, qbe_runtime_core, project_config_core]
 	mut index := 0
 	while index < declarations.size()
 		if declarations[index].empty?()
@@ -132,7 +143,7 @@ def flatten_compiler_recovery_source(
 		end
 		index += 1
 	end
-	return Result<String, String>::Ok(storage + "\n" + path + "\n" + literals + "\n" + mir_core + "\n" + state_core + "\n" + parser_core + "\n" + resolution_core + "\n" + checked_program_core + "\n" + qbe_output_core + "\n" + qbe_runtime_core + "\n" + core)
+	return Result<String, String>::Ok(storage + "\n" + path + "\n" + literals + "\n" + mir_core + "\n" + state_core + "\n" + parser_core + "\n" + resolution_core + "\n" + checked_program_core + "\n" + qbe_output_core + "\n" + qbe_runtime_core + "\n" + project_config_core + "\n" + core)
 end
 
 def compiler_source_directory(path: String): String
@@ -188,7 +199,8 @@ def read_compiler_recovery_sources(entry_path: String): Result<RecoveryCompilerS
 	checked_program := try read_required_compiler_source(compiler_source_path(directory, "checked_program.trb"))
 	qbe_output := try read_required_compiler_source(compiler_source_path(directory, "qbe_output.trb"))
 	qbe_runtime := try read_required_compiler_source(compiler_source_path(directory, "qbe_runtime.trb"))
-	flattened := try flatten_compiler_recovery_source(entry, storage, path, mir, literals, state, parser, resolution, checked_program, qbe_output, qbe_runtime)
+	project_config := try read_required_compiler_source(compiler_source_path(directory, "project_config.trb"))
+	flattened := try flatten_compiler_recovery_source(entry, storage, path, mir, literals, state, parser, resolution, checked_program, qbe_output, qbe_runtime, project_config)
 	return Result<RecoveryCompilerSources, String>::Ok(
 		RecoveryCompilerSources.new(
 			entry: entry,
@@ -202,6 +214,7 @@ def read_compiler_recovery_sources(entry_path: String): Result<RecoveryCompilerS
 			checked_program: checked_program,
 			qbe_output: qbe_output,
 			qbe_runtime: qbe_runtime,
+			project_config: project_config,
 			flattened: flattened,
 		),
 	)
