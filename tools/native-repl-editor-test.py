@@ -221,6 +221,8 @@ def native_scenarios(binary):
             terminal.send('apples +')
             os.kill(terminal.pid, signal.SIGINT)
             terminal.pump()
+            terminal.evaluate('missing_diagnostic_name', 'error[TRBN4003]: unresolved local missing_diagnostic_name')
+            assert '\x1b[38;2;255;88;116m(trb):' in terminal.raw
             terminal.evaluate('1 + 2', '3 : Integer')
             terminal.send('mut unfinished := "abc')
             terminal.wait(lambda: terminal.screen.buffer[terminal.screen.cursor.y][terminal.screen.cursor.x - 1].underscore,
@@ -242,6 +244,8 @@ def native_scenarios(binary):
             terminal.wait(lambda: '1 + 2' in terminal.display, 'uncolored input')
             assert '\x1b[38;' not in terminal.raw and '\x1b[1;38;' not in terminal.raw
             terminal.evaluate('', '3 : Integer')
+            terminal.evaluate('missing_diagnostic_name', '(trb):2: error[TRBN4003]:')
+            assert '\x1b[38;' not in terminal.raw and '\x1b[1;38;' not in terminal.raw
             terminal.finish()
         finally:
             terminal.close()
