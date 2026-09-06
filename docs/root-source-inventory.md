@@ -5,7 +5,8 @@
 This inventories all 45 root `src/*.trb` files for the first support-code
 organization slice, [issue #258](https://github.com/type-rb/type-rb-native/issues/258),
 against baseline `2522a995fdf48985745ccf9cfef945da6e7f17b1`.
-Rows now include the matched-driver and compiler-recovery naming moves.
+The inventory now includes the matched-driver and compiler-recovery naming moves and
+the two recovery-workspace support files (47 current root source files).
 No file has been classified for retirement: every implementation has callers
 or an explicit recovery/verification role, and every test remains discovered.
 
@@ -22,6 +23,14 @@ JSON helpers, and QBE helpers must remain one implementation; naming proposals
 do not authorize merging the snapshot and ordinary self-hosted MIRs.
 
 ## File inventory
+
+The recovery workspace owner and its tests were added under
+[issue #295](https://github.com/type-rb/type-rb-native/issues/295). They depend
+only on `native_file_system` and standard-library process/result/test support;
+their only direct consumers are `compiler_recovery_test` and
+`compiler_recovery_workspace_test`. They are test/recovery support, not part of
+the ordinary compiler closure. See [the ownership contract](ci-validation.md#recovery-workspace-ownership)
+for the receipt, CI consumers, cleanup and negative controls.
 
 | File in `src/` | Responsibility | Local imports | Direct consumers | Disposition / proposed destination |
 | --- | --- | --- | --- | --- |

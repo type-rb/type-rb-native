@@ -67,8 +67,9 @@ validator, skip option, or relaxed acceptance rule is introduced. See
 
 The Native gate runs the recovery-enabled root and compiler suites concurrently
 through `tools/ci-run-suites.mjs`, with exactly two process groups. Their project
-output directories and fixed test workspaces are distinct. All seven historical
-tool suites, allocation/worker smoke checks, and language-corpus verification
+output directories are distinct. Every enabled root recovery invocation allocates
+a fresh workspace atomically with `mktemp -d`; it never reuses a shared path.
+All seven historical tool suites, allocation/worker smoke checks, and language-corpus verification
 remain after the successful join. Comparative performance measurements never
 overlap these correctness suites.
 
@@ -88,6 +89,36 @@ the routing tests, without launching compiler suites for documentation-only
 changes. The scheduling change is registered in
 [issue #263](https://github.com/type-rb/type-rb-native/issues/263); it changes no
 test coverage, benchmark contract, threshold, or draft acceptance rule.
+
+### Recovery workspace ownership
+
+`src/compiler_recovery_workspace.trb` owns the test-only allocation contract.
+The optional `TYPE_RB_NATIVE_RECOVERY_RECEIPT` names an evidence file, not a
+workspace supplied by the caller. Give each invocation its own receipt file.
+CI sets it inside the job's `native-suite-evidence`;
+direct recovery-enabled tests can omit it and inspect the reported retained
+workspace. Allocation or receipt publication failure fails the test, without
+falling back to a shared directory. No ordinary Native compiler dependency or
+production source closure is changed.
+
+The versioned receipt contains exactly the generated `/tmp/trbn-recovery.` path
+with its six-character suffix. The workspace carries an identical owner marker.
+`tools/recovery-workspace.mjs` checks both regular files, the exact path shape,
+and the non-symlink directory before providing the path to later smoke, corpus,
+and shell-bootstrap consumers. After those consumers, an always-run step removes
+only that validated directory and keeps both the receipt and cleanup outcome in
+the uploaded suite evidence. Missing allocation produces `not-created`; an
+invalid or foreign receipt is refused and fails cleanup. A killed runner can
+still prevent an always-run step; this is not an orphan-reaper or a security
+boundary against hostile processes with the same user privileges.
+
+Focused tests cover overlapping allocations with a mutual-start barrier,
+peer preservation, malformed/foreign ownership, symlinks, non-regular files,
+and retained evidence. The existing suite process-group controller, cancellation
+rules, complete test coverage, and all benchmark limits remain unchanged.
+This is the workspace-isolation part of
+[issue #295](https://github.com/type-rb/type-rb-native/issues/295); stage-level
+timing instrumentation is a separate pending change.
 
 ## Protection and review
 
