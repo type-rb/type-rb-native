@@ -18,6 +18,26 @@ function results(plan) {
   };
 }
 
+test('runtime A/B remains manual with separate frozen historical and Boolean contracts', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/native-runtime-ab.yml', import.meta.url), 'utf8');
+  const entry = readFileSync(new URL('../.github/workflows/pull-request.yml', import.meta.url), 'utf8');
+  assert(workflow.includes('  workflow_dispatch:\n'));
+  assert(!workflow.includes('  pull_request:') && !workflow.includes('  workflow_call:'));
+  assert(!entry.includes('native-runtime-ab.yml'), 'manual experiments must not add an automatic PR job');
+  assert(workflow.includes('default: derived-loop-index'));
+  assert.match(workflow, /derived-loop-index\)\n\s+BASELINE_REVISION=aad4954c66ae394a5edb836b20498e5a60b769bd/);
+  assert.match(workflow, /checked-boolean-branches\)\n\s+BASELINE_REVISION=6f7e3ba10623d40b5b0f7e6cc03b732125607795/);
+  assert(workflow.includes('*) exit 64 ;;'), 'unknown contracts must not materialize a baseline');
+  assert(workflow.includes('native_compiler_project_directory "$RUNNER_TEMP/baseline-source"'));
+  assert(!workflow.includes('baseline-source/compiler/gate4/'));
+  assert(workflow.includes('compiler_limit=255000'), 'historical absolute limit remains');
+  assert(workflow.includes('compiler_limit=$(native_mir_target_compiler_limit linux-arm64-v0)'));
+  assert(workflow.includes('compiler_text_bytes strict-shrink'));
+  assert(workflow.includes('compiler_qbe_bytes strict-shrink'));
+  assert(workflow.includes('build_cost_authority=normal-exact-head-PR-interleaved-compactness'));
+  assert(workflow.includes('if test "$NATIVE_RUNTIME_AB_CONTRACT" = derived-loop-index; then\n            for stage'));
+});
+
 test('compatibility checks precede matrix fan-out and remain in standalone validation', () => {
   const workflow = readFileSync(new URL('../.github/workflows/pull-request.yml', import.meta.url), 'utf8');
   const standalone = readFileSync(new URL('../.github/workflows/gate-zero.yml', import.meta.url), 'utf8');

@@ -49,6 +49,13 @@ existing manual and post-merge triggers remain available. Full multi-language
 benchmark refreshes and Pages deployment retain their existing manual controls.
 Manual measurements do not substitute for the current PR acceptance chain.
 
+The manual Native runtime A/B workflow selects a named, pre-registered contract
+and its frozen baseline. The checked-Boolean selection uses the existing
+Linux arm64 runtime controller and retains the historical derived-loop-index
+selection unchanged. It supplements, rather than replaces, current-head PR
+correctness and interleaved build/RSS authority; it adds no automatic runtime
+comparison job. See [the controller contract](../tools/native-runtime-ab/README.md).
+
 The compatibility preflight runs the existing validator and its regression
 tests before the Native, target, and memory matrices can start. A mismatch
 therefore fails quick feedback without spending those jobs. The standalone

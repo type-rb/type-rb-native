@@ -81,6 +81,14 @@ also increases compiler QBE/text. The accepted guarded path is unchanged; no
 Pure Go parity, runtime improvement or new allowance is claimed. Re-entry needs
 a measured reduction in hot-path work, not merely fewer helper calls.
 
+The [checked Boolean branch diagnostic](../results/2026-09-06-boolean-branches-diagnostic-darwin-arm64/README.md)
+passes both registered local cohorts with about 5.8-5.9% less spectral wall time
+and compiler shrinkage. It removes redundant result extension and zero-testing
+through mechanical QBE legalization of already checked Boolean values, without
+adding semantic analysis or a new fact family. The integrated main source
+produces identical measured application bytes. This remains a local candidate
+pending exact-head formal acceptance, not an accepted Pure Go or Pages result.
+
 ## Accepted optimization evidence
 
 The immutable-parameter Array-header proof is accepted in
