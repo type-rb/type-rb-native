@@ -1,0 +1,964 @@
+import { gate4_string_starts_with } from path
+import { gate4_source_slice } from compiler
+import { gate4_integer_string } from literals
+import { native_cli_terminal_start, native_cli_terminal_end, native_cli_terminal_size, native_cli_key, native_cli_byte, native_cli_character, native_cli_write, native_cli_env } from host
+import { repl_escape, repl_color, repl_syntax, repl_indent, repl_word, repl_glyph, repl_previous, repl_next, repl_incomplete } from repl_syntax
+
+record ReplCandidates
+	labels: Array<String>
+	insertions: Array<String>
+	details: Array<String>
+	kinds: Array<Integer>
+end
+
+record ReplEditor
+	text: String
+	cursor: Integer
+	row: Integer
+	rows: Integer
+	height: Integer
+	columns: Integer
+	overflow: Boolean
+	color: Boolean
+	names: Array<String>
+	kinds: Array<Integer>
+	message: String
+	undo_count: Integer
+	undo_text: Array<String>
+	undo_cursor: Array<Integer>
+end
+
+record ReplInput
+	text: String
+	status: Integer
+end
+
+def repl_editor_replace(mut editor: ReplEditor, start: Integer, finish: Integer, replacement: String)
+	if editor.text.size() - finish + start + replacement.size() > 65536
+		editor.overflow = true
+		return
+	end
+	if editor.undo_count == 64
+		mut index := 1
+		while index < 64
+			editor.undo_text[index - 1] = editor.undo_text[index]
+			editor.undo_cursor[index - 1] = editor.undo_cursor[index]
+			index += 1
+		end
+		editor.undo_count = 63
+	end
+	if editor.undo_count < editor.undo_text.size()
+		editor.undo_text[editor.undo_count] = editor.text
+		editor.undo_cursor[editor.undo_count] = editor.cursor
+	else
+		editor.undo_text.push(editor.text)
+		editor.undo_cursor.push(editor.cursor)
+	end
+	editor.undo_count += 1
+	editor.text = gate4_source_slice(editor.text, 0, start) + replacement + gate4_source_slice(editor.text, finish, editor.text.size())
+	editor.cursor = start + replacement.size()
+	return
+end
+
+def repl_editor_size(axis: Integer): Integer
+	size := native_cli_terminal_size(axis)
+	if size < 10
+		if axis == 0
+			return 24
+		end
+		return 80
+	end
+	return size
+end
+
+def repl_editor_paint(text: String, kind: Integer, color: Boolean): String
+	if color
+		return repl_color(kind) + text + repl_escape() + "0m"
+	end
+	return text
+end
+
+# Explicit rows avoid terminal autowrap ambiguity at the right margin. Long
+# submissions use a cursor-following viewport instead of scrolling over output.
+def repl_editor_render(mut editor: ReplEditor)
+	columns := repl_editor_size(1)
+	height := repl_editor_size(0) - 2
+	editor.height = height + 2
+	if columns != editor.columns
+		# A terminal resize may have reflowed old rows. Begin a fresh display
+		# region rather than applying stale cursor geometry to prior output.
+		native_cli_write("\r\n", 1)
+		editor.row = 0
+		editor.columns = columns
+	end
+	spans := repl_syntax(editor.text)
+	mut rows := [repl_editor_paint("trbn:trb> ", 6, editor.color)]
+	mut row := 0
+	mut column := 10
+	mut cursor_row := 0
+	mut cursor_column := 10
+	mut index := 0
+	mut span := 0
+	while index < editor.text.size()
+		mut loop_33 := true
+		while loop_33
+			mut condition_32 := span + 1 < spans.ends.size()
+			if condition_32
+				condition_32 = index >= spans.ends[span]
+			end
+			if condition_32
+				span += 1
+			else
+				loop_33 = false
+			end
+		end
+		character := editor.text[index]
+		glyph := repl_glyph(editor.text, index)
+		mut condition_34 := character != "\n"
+		if condition_34
+			condition_34 = column + glyph.width >= columns
+		end
+		if condition_34
+			rows.push("")
+			row += 1
+			column = 0
+		end
+		if index == editor.cursor
+			cursor_row = row
+			cursor_column = column
+		end
+		if character == "\n"
+			rows.push(repl_editor_paint("...> ", 6, editor.color))
+			row += 1
+			column = 5
+		else
+			mut text := gate4_source_slice(editor.text, index, index + glyph.bytes)
+			mut width := glyph.width
+			mut condition_35 := native_cli_byte(editor.text, index) < 32
+			if !condition_35
+				condition_35 = native_cli_byte(editor.text, index) == 127
+			end
+			if condition_35
+				text = "?"
+				width = 1
+			end
+			rows[row] += repl_editor_paint(text, repl_editor_kind(editor, spans.words[span], spans.kinds[span]), editor.color)
+			column += width
+		end
+		index += glyph.bytes
+	end
+	if editor.cursor == editor.text.size()
+		cursor_row = row
+		cursor_column = column
+	end
+	mut top := 0
+	if cursor_row >= height
+		top = cursor_row - height + 1
+	end
+	mut last := top + height
+	if last > rows.size()
+		last = rows.size()
+	end
+	mut output := "\r"
+	if editor.row > 0
+		output += repl_escape() + gate4_integer_string(editor.row) + "A"
+	end
+	output += repl_escape() + "J"
+	index = top
+	while index < last
+		if index > top
+			output += "\r\n"
+		end
+		output += rows[index]
+		index += 1
+	end
+	mut bottom := last - top - 1
+	if editor.message != ""
+		# Messages contain only printable, width-bounded completion/search text.
+		output += "\r\n" + repl_editor_paint(editor.message, 4, editor.color)
+		bottom += 1
+	end
+	output += "\r"
+	if bottom > cursor_row - top
+		output += repl_escape() + gate4_integer_string(bottom - cursor_row + top) + "A"
+	end
+	if cursor_column > 0
+		output += repl_escape() + gate4_integer_string(cursor_column) + "C"
+	end
+	native_cli_write(output, 1)
+	editor.row = cursor_row - top
+	editor.rows = bottom + 1
+	return
+end
+
+def repl_editor_finish(mut editor: ReplEditor)
+	editor.cursor = editor.text.size()
+	editor.message = ""
+	repl_editor_render(editor)
+	native_cli_write(repl_escape() + "0m\r\n" + repl_escape() + "?2004l", 1)
+	native_cli_terminal_end()
+	return
+end
+
+def repl_editor_line_start(text: String, cursor: Integer): Integer
+	mut index := cursor
+	mut loop_37 := true
+	while loop_37
+		mut condition_36 := index > 0
+		if condition_36
+			condition_36 = text[index - 1] != "\n"
+		end
+		if condition_36
+			index -= 1
+		else
+			loop_37 = false
+		end
+	end
+	return index
+end
+
+def repl_editor_line_end(text: String, cursor: Integer): Integer
+	mut index := cursor
+	mut loop_39 := true
+	while loop_39
+		mut condition_38 := index < text.size()
+		if condition_38
+			condition_38 = text[index] != "\n"
+		end
+		if condition_38
+			index += 1
+		else
+			loop_39 = false
+		end
+	end
+	return index
+end
+
+def repl_editor_vertical(mut editor: ReplEditor, direction: Integer): Boolean
+	start := repl_editor_line_start(editor.text, editor.cursor)
+	finish := repl_editor_line_end(editor.text, editor.cursor)
+	mut target := 0
+	if direction < 0
+		if start == 0
+			return false
+		end
+		target = repl_editor_line_start(editor.text, start - 1)
+	else
+		if finish == editor.text.size()
+			return false
+		end
+		target = finish + 1
+	end
+	mut column := 0
+	mut index := start
+	while index < editor.cursor
+		glyph := repl_glyph(editor.text, index)
+		column += glyph.width
+		index += glyph.bytes
+	end
+	mut width := 0
+	mut cursor := target
+	mut loop_41 := true
+	while loop_41
+		mut condition_40 := cursor < editor.text.size()
+		if condition_40
+			condition_40 = editor.text[cursor] != "\n"
+		end
+		if condition_40
+			condition_40 = width < column
+		end
+		if condition_40
+			glyph := repl_glyph(editor.text, cursor)
+			if width + glyph.width > column
+				column = width
+			else
+				width += glyph.width
+				cursor += glyph.bytes
+			end
+		else
+			loop_41 = false
+		end
+	end
+	editor.cursor = cursor
+	return true
+end
+
+def repl_editor_key(): String
+	key := native_cli_key(100)
+	if key == - 1
+		return "eof"
+	end
+	if key == - 2
+		return "idle"
+	end
+	mut condition_42 := key == - 3
+	if !condition_42
+		condition_42 = key == 3
+	end
+	if condition_42
+		return "interrupt"
+	end
+	if key != 27
+		return native_cli_character(key)
+	end
+	mut sequence := native_cli_character(27)
+	mut byte := native_cli_key(40)
+	if byte < 0
+		return sequence
+	end
+	sequence += native_cli_character(byte)
+	mut condition_43 := byte != 91
+	if condition_43
+		condition_43 = byte != 79
+	end
+	if condition_43
+		return sequence
+	end
+	mut reading := true
+	mut loop_45 := true
+	while loop_45
+		mut condition_44 := reading
+		if condition_44
+			condition_44 = sequence.size() < 24
+		end
+		if condition_44
+			byte = native_cli_key(40)
+			if byte < 0
+				reading = false
+			else
+				sequence += native_cli_character(byte)
+				mut condition_46 := byte >= 64
+				if condition_46
+					condition_46 = byte <= 126
+				end
+				if condition_46
+					reading = false
+				end
+			end
+		else
+			loop_45 = false
+		end
+	end
+	return sequence
+end
+
+def repl_editor_contains(text: String, query: String): Boolean
+	mut index := 0
+	while index + query.size() <= text.size()
+		if gate4_source_slice(text, index, index + query.size()) == query
+			return true
+		end
+		index += 1
+	end
+	return false
+end
+
+def repl_editor_message(text: String, columns: Integer): String
+	mut output := ""
+	mut index := 0
+	mut width := 0
+	mut loop_48 := true
+	while loop_48
+		mut condition_47 := index < text.size()
+		if condition_47
+			condition_47 = width < columns - 1
+		end
+		if condition_47
+			glyph := repl_glyph(text, index)
+			if width + glyph.width >= columns
+				return output
+			end
+			byte := native_cli_byte(text, index)
+			mut condition_49 := byte < 32
+			if !condition_49
+				condition_49 = byte == 127
+			end
+			if condition_49
+				output += " "
+				width += 1
+			else
+				output += gate4_source_slice(text, index, index + glyph.bytes)
+				width += glyph.width
+			end
+			index += glyph.bytes
+		else
+			loop_48 = false
+		end
+	end
+	return output
+end
+
+def repl_editor_matches(editor: ReplEditor, candidates: ReplCandidates): Array<Integer>
+	mut start := editor.cursor
+	mut loop_52 := true
+	while loop_52
+		mut condition_50 := start > 0
+		if condition_50
+			mut condition_51 := repl_word(editor.text[start - 1])
+			if !condition_51
+				condition_51 = editor.text[start - 1] == "."
+			end
+			condition_50 = condition_51
+		end
+		if condition_50
+			start -= 1
+		else
+			loop_52 = false
+		end
+	end
+	if start == 1
+		if editor.text[0] == ":"
+			start = 0
+		end
+	end
+	prefix := gate4_source_slice(editor.text, start, editor.cursor)
+	mut matches: Array<Integer> := [start]
+	spans := repl_syntax(gate4_source_slice(editor.text, 0, editor.cursor))
+	if spans.kinds.size() > 0
+		kind := spans.kinds[spans.kinds.size() - 1]
+		mut condition_53 := kind == 2
+		if !condition_53
+			condition_53 = kind == 4
+		end
+		if !condition_53
+			condition_53 = kind == 7
+		end
+		if condition_53
+			return matches
+		end
+	end
+	mut type_position := false
+	mut before := start
+	mut loop_55 := true
+	while loop_55
+		mut condition_54 := before > 0
+		if condition_54
+			condition_54 = editor.text[before - 1] == " "
+		end
+		if condition_54
+			before -= 1
+		else
+			loop_55 = false
+		end
+	end
+	mut condition_56 := before > 0
+	if condition_56
+		condition_56 = editor.text[before - 1] == ":"
+	end
+	if condition_56
+		type_position = true
+	end
+	mut index := 0
+	while index < candidates.labels.size()
+		if repl_editor_candidate_match(candidates.labels[index], prefix)
+			mut condition_57 :=!type_position
+			if !condition_57
+				condition_57 = candidates.kinds[index] == 5
+			end
+			if condition_57
+				matches.push(index)
+			end
+		end
+		index += 1
+	end
+	return matches
+end
+
+record ReplEditing
+	history_index: Integer
+	draft: String
+	searching: Boolean
+	query: String
+	search_index: Integer
+	search_original: String
+	clipboard: String
+	paste: Boolean
+	pasted: String
+	paste_cr: Boolean
+	menu: Array<Integer>
+	selected: Integer
+	menu_finish: Integer
+	status: Integer
+end
+
+def repl_editor_code(key: String): Integer
+	mut code := 0
+	if key.size() == 1
+		code = native_cli_byte(key, 0)
+	end
+	if code == 10
+		return 13
+	end
+	if code == 8
+		return 127
+	end
+	if key == repl_escape() + "D"
+		return 2
+	end
+	if key == repl_escape() + "C"
+		return 6
+	end
+	if key == repl_escape() + "A"
+		return 16
+	end
+	if key == repl_escape() + "B"
+		return 14
+	end
+	if key == repl_escape() + "H"
+		return 1
+	end
+	if key == native_cli_character(27) + "OH"
+		return 1
+	end
+	if key == repl_escape() + "1~"
+		return 1
+	end
+	if key == repl_escape() + "F"
+		return 5
+	end
+	if key == native_cli_character(27) + "OF"
+		return 5
+	end
+	if key == repl_escape() + "4~"
+		return 5
+	end
+	if key == repl_escape() + "3~"
+		return 1001
+	end
+	if key == repl_escape() + "Z"
+		return 1000
+	end
+	return code
+end
+
+def repl_editor_search(mut editor: ReplEditor, mut editing: ReplEditing, key: String, history: Array<String>)
+	code := repl_editor_code(key)
+	if code == 13
+		editing.searching = false
+		editor.message = ""
+		return
+	end
+	if code == 27
+		editing.searching = false
+		editor.message = ""
+		return
+	end
+	if code == 7
+		editing.searching = false
+		editor.text = editing.search_original
+		editor.cursor = editor.text.size()
+		editor.message = ""
+		return
+	end
+	if code == 127
+		editing.query = gate4_source_slice(editing.query, 0, repl_previous(editing.query, editing.query.size()))
+		editing.search_index = history.size()
+	else
+		if code >= 32
+			if code < 256
+				editing.query += key
+				editing.search_index = history.size()
+			end
+		end
+	end
+	mut found := false
+	mut scanning := true
+	while scanning
+		if editing.search_index <= 0
+			scanning = false
+		else
+			editing.search_index -= 1
+			if repl_editor_contains(history[editing.search_index], editing.query)
+				editor.text = history[editing.search_index]
+				editor.cursor = editor.text.size()
+				found = true
+				scanning = false
+			end
+		end
+	end
+	mut message := "reverse-search: "
+	if !found
+		message = "no match: "
+	end
+	editor.message = repl_editor_message(message + editing.query, editor.columns)
+	return
+end
+
+def repl_editor_menu(mut editor: ReplEditor, mut editing: ReplEditing, key: String, candidates: ReplCandidates): Boolean
+	code := repl_editor_code(key)
+	mut cycling := code == 9
+	if code == 1000
+		cycling = true
+	end
+	if editing.menu.size() > 1
+		if code == 14
+			cycling = true
+		end
+		if code == 16
+			cycling = true
+		end
+	end
+	if cycling
+		if editing.menu.size() <= 1
+			editing.menu = repl_editor_matches(editor, candidates)
+			editing.menu_finish = repl_editor_completion_end(editor.text, editor.cursor)
+			editing.selected = 0
+		end
+		if editing.menu.size() <= 1
+			editor.message = "no completions"
+			return true
+		end
+		mut backwards := code == 1000
+		if code == 16
+			backwards = true
+		end
+		if backwards
+			editing.selected -= 1
+			if editing.selected < 1
+				editing.selected = editing.menu.size() - 1
+			end
+		else
+			editing.selected += 1
+			if editing.selected >= editing.menu.size()
+				editing.selected = 1
+			end
+		end
+		candidate := editing.menu[editing.selected]
+		if editing.menu.size() == 2
+			repl_editor_accept(editor, editing.menu[0], editing.menu_finish, candidates.insertions[candidate])
+			editing.menu = []
+			editor.message = ""
+		else
+			editor.message = repl_editor_message(gate4_integer_string(editing.selected) + "/" + gate4_integer_string(editing.menu.size() - 1) + " " + candidates.labels[candidate] + "  " + candidates.details[candidate] + "  [Tab: next, Enter: accept]", editor.columns)
+		end
+		return true
+	end
+	mut accepted := false
+	if editing.menu.size() > 1
+		if code == 13
+			repl_editor_accept(editor, editing.menu[0], editing.menu_finish, candidates.insertions[editing.menu[editing.selected]])
+			accepted = true
+		end
+	end
+	editing.menu = []
+	editor.message = ""
+	return accepted
+end
+
+def repl_editor_edit(mut editor: ReplEditor, mut editing: ReplEditing, key: String, history: Array<String>)
+	code := repl_editor_code(key)
+	if code == 13
+		if repl_incomplete(editor.text)
+			prefix := repl_indent(gate4_source_slice(editor.text, 0, editor.cursor) + "\n")
+			repl_editor_replace(editor, 0, editor.cursor, prefix)
+		else
+			editor.text = repl_indent(editor.text)
+			editing.status = 4
+		end
+		return
+	end
+	if code == 1001
+		repl_editor_replace(editor, editor.cursor, repl_next(editor.text, editor.cursor), "")
+		return
+	end
+	if code == 12
+		native_cli_write(repl_escape() + "2J" + repl_escape() + "H", 1)
+		editor.row = 0
+		return
+	end
+	if code == 23
+		mut start := editor.cursor
+		mut scanning := true
+		while scanning
+			if start == 0
+				scanning = false
+			else
+				previous := repl_previous(editor.text, start)
+				if editor.text[previous] == " "
+					start = previous
+				else
+					scanning = false
+				end
+			end
+		end
+		scanning = true
+		while scanning
+			if start == 0
+				scanning = false
+			else
+				previous := repl_previous(editor.text, start)
+				if repl_word(editor.text[previous])
+					start = previous
+				else
+					scanning = false
+				end
+			end
+		end
+		editing.clipboard = gate4_source_slice(editor.text, start, editor.cursor)
+		repl_editor_replace(editor, start, editor.cursor, "")
+		return
+	end
+	if code == 4
+		if editor.text == ""
+			editing.status = 1
+		else
+			repl_editor_replace(editor, editor.cursor, repl_next(editor.text, editor.cursor), "")
+		end
+		return
+	end
+	if code == 127
+		if editor.cursor > 0
+			repl_editor_replace(editor, repl_previous(editor.text, editor.cursor), editor.cursor, "")
+		end
+		return
+	end
+	if code == 2
+		editor.cursor = repl_previous(editor.text, editor.cursor)
+		return
+	end
+	if code == 6
+		editor.cursor = repl_next(editor.text, editor.cursor)
+		return
+	end
+	if code == 1
+		editor.cursor = repl_editor_line_start(editor.text, editor.cursor)
+		return
+	end
+	if code == 5
+		editor.cursor = repl_editor_line_end(editor.text, editor.cursor)
+		return
+	end
+	if code == 16
+		if !repl_editor_vertical(editor, - 1)
+			if editing.history_index > 0
+				if editing.history_index == history.size()
+					editing.draft = editor.text
+				end
+				editing.history_index -= 1
+				repl_editor_replace(editor, 0, editor.text.size(), history[editing.history_index])
+			end
+		end
+		return
+	end
+	if code == 14
+		if !repl_editor_vertical(editor, 1)
+			if editing.history_index < history.size()
+				editing.history_index += 1
+				mut text := editing.draft
+				if editing.history_index < history.size()
+					text = history[editing.history_index]
+				end
+				repl_editor_replace(editor, 0, editor.text.size(), text)
+			end
+		end
+		return
+	end
+	if code == 18
+		editing.searching = true
+		editing.search_original = editor.text
+		editing.query = ""
+		editing.search_index = history.size()
+		editor.message = "reverse-search: "
+		return
+	end
+	if code == 11
+		mut finish := repl_editor_line_end(editor.text, editor.cursor)
+		if finish == editor.cursor
+			if finish < editor.text.size()
+				finish += 1
+			end
+		end
+		editing.clipboard = gate4_source_slice(editor.text, editor.cursor, finish)
+		repl_editor_replace(editor, editor.cursor, finish, "")
+		return
+	end
+	if code == 21
+		start := repl_editor_line_start(editor.text, editor.cursor)
+		editing.clipboard = gate4_source_slice(editor.text, start, editor.cursor)
+		repl_editor_replace(editor, start, editor.cursor, "")
+		return
+	end
+	if code == 25
+		repl_editor_replace(editor, editor.cursor, editor.cursor, editing.clipboard)
+		return
+	end
+	if code == 31
+		if editor.undo_count > 0
+			editor.undo_count -= 1
+			editor.text = editor.undo_text[editor.undo_count]
+			editor.cursor = editor.undo_cursor[editor.undo_count]
+		end
+		return
+	end
+	if code >= 32
+		if code < 256
+			if code != 127
+				repl_editor_replace(editor, editor.cursor, editor.cursor, key)
+			end
+		end
+	end
+	return
+end
+
+def repl_editor_pasted(mut editor: ReplEditor, mut editing: ReplEditing, key: String)
+	if key == repl_escape() + "201~"
+		editing.paste = false
+		repl_editor_replace(editor, editor.cursor, editor.cursor, editing.pasted)
+		return
+	end
+	mut text := ""
+	if key == "\r"
+		text = "\n"
+	else
+		if key == "\n"
+			if !editing.paste_cr
+				text = "\n"
+			end
+		else
+			if key == "\t"
+				text = "  "
+			else
+				if key.size() > 0
+					byte := native_cli_byte(key, 0)
+					if byte >= 32
+						if byte != 127
+							text = key
+						end
+					end
+				end
+			end
+		end
+	end
+	editing.paste_cr = key == "\r"
+	editing.pasted = repl_editor_paste(editing.pasted, text)
+	return
+end
+
+def repl_editor_read(history: Array<String>, candidates: ReplCandidates): ReplInput
+	if native_cli_terminal_start() != 0
+		return ReplInput.new(text: "cannot enter terminal editing mode", status: 3)
+	end
+	mut editor := ReplEditor.new(text: "", cursor: 0, row: 0, rows: 1, height: repl_editor_size(0), columns: repl_editor_size(1), overflow: false, color: native_cli_env("NO_COLOR") == "", names: candidates.labels, kinds: candidates.kinds, message: "", undo_count: 0, undo_text: [], undo_cursor: [])
+	mut editing := ReplEditing.new(history_index: history.size(), draft: "", searching: false, query: "", search_index: history.size(), search_original: "", clipboard: "", paste: false, pasted: "", paste_cr: false, menu: [], selected: 0, menu_finish: 0, status: 0)
+	native_cli_write(repl_escape() + "?2004h", 1)
+	repl_editor_render(editor)
+	while editing.status == 0
+		key := repl_editor_key()
+		if key == "idle"
+			if repl_editor_resized(editor)
+				repl_editor_render(editor)
+			end
+		else
+			if key == "eof"
+				editing.status = 1
+			else
+				if key == "interrupt"
+					editing.status = 2
+				else
+					if editing.paste
+						repl_editor_pasted(editor, editing, key)
+					else
+						if key == repl_escape() + "200~"
+							editing.paste = true
+							editing.pasted = ""
+							editing.paste_cr = false
+						else
+							if editing.searching
+								repl_editor_search(editor, editing, key, history)
+							else
+								if !repl_editor_menu(editor, editing, key, candidates)
+									repl_editor_edit(editor, editing, key, history)
+								end
+							end
+						end
+					end
+				end
+			end
+			if !editing.paste
+				if editor.overflow
+					editing.status = 2
+				end
+				if editing.status == 0
+					repl_editor_render(editor)
+				end
+			end
+		end
+	end
+	repl_editor_finish(editor)
+	if editor.overflow
+		native_cli_write("trbn: input exceeds 64 KiB; submission discarded\n", 2)
+	end
+	if editing.status == 4
+		editing.status = 0
+	end
+	return ReplInput.new(text: editor.text, status: editing.status)
+end
+
+def repl_editor_candidate_match(label: String, prefix: String): Boolean
+	if repl_editor_contains(label, ".") != repl_editor_contains(prefix, ".")
+		return false
+	end
+	return gate4_string_starts_with(label, prefix)
+end
+
+def repl_editor_completion_end(text: String, cursor: Integer): Integer
+	mut index := cursor
+	mut scanning := true
+	while scanning
+		if index >= text.size()
+			scanning = false
+		else
+			if repl_word(text[index])
+				index += 1
+			else
+				scanning = false
+			end
+		end
+	end
+	return index
+end
+
+def repl_editor_accept(mut editor: ReplEditor, start: Integer, finish: Integer, insertion: String)
+	mut text := insertion
+	if finish < editor.text.size()
+		if editor.text[finish] == "("
+			mut index := 0
+			while index < text.size()
+				if text[index] == "("
+					text = gate4_source_slice(text, 0, index)
+				end
+				index += 1
+			end
+		end
+	end
+	repl_editor_replace(editor, start, finish, text)
+	return
+end
+
+def repl_editor_resized(editor: ReplEditor): Boolean
+	if repl_editor_size(1) != editor.columns
+		return true
+	end
+	return repl_editor_size(0) != editor.height
+end
+
+def repl_editor_paste(pasted: String, key: String): String
+	if pasted.size() > 65536
+		return pasted
+	end
+	return pasted + key
+end
+
+def repl_editor_kind(editor: ReplEditor, word: String, lexical: Integer): Integer
+	if lexical != 0
+		return lexical
+	end
+	mut index := 0
+	while index < editor.names.size()
+		if editor.names[index] == word
+			return editor.kinds[index]
+		end
+		index += 1
+	end
+	return lexical
+end

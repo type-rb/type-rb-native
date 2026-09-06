@@ -1,0 +1,485 @@
+import { gate4_string_starts_with } from path
+import { gate4_compiler_new, gate4_has_diagnostic } from state
+import { gate4_load_string } from storage
+import { gate4_token_is } from parser
+import { gate4_character_in, gate4_source_slice, gate4_lex } from compiler
+import { native_cli_byte, native_cli_character, native_cli_cell_width } from host
+
+# Display spans preserve whitespace, comments and unfinished input. They do not
+# replace the compiler lexer or decide whether an expression may execute.
+record ReplSyntax
+	starts: Array<Integer>
+	ends: Array<Integer>
+	kinds: Array<Integer>
+	words: Array<String>
+end
+
+def repl_word(character: String): Boolean
+	return gate4_character_in(character, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789")
+end
+
+def repl_keyword(word: String): Boolean
+	words := ["alias", "break", "case", "catch", "class", "def", "do", "else", "elsif", "end", "enum", "fn", "if", "implements", "import", "interface", "module", "mut", "newtype", "next", "readonly", "record", "return", "self", "then", "try", "when", "while", "from"]
+	mut index := 0
+	while index < words.size()
+		if words[index] == word
+			return true
+		end
+		index += 1
+	end
+	return false
+end
+
+def repl_syntax(source: String): ReplSyntax
+	mut spans := ReplSyntax.new(starts: [], ends: [], kinds: [], words: [])
+	mut index := 0
+	mut previous := ""
+	while index < source.size()
+		start := index
+		character := source[index]
+		mut kind := 0
+		index += 1
+		if character == "#"
+			kind = 4
+			mut loop_2 := true
+			while loop_2
+				mut condition_1 := index < source.size()
+				if condition_1
+					condition_1 = source[index] != "\n"
+				end
+				if condition_1
+					index += 1
+				else
+					loop_2 = false
+				end
+			end
+		else
+			if character == "\""
+				kind = 2
+				mut closed := false
+				mut loop_4 := true
+				while loop_4
+					mut condition_3 := index < source.size()
+					if condition_3
+						condition_3 =!closed
+					end
+					if condition_3
+						condition_3 = source[index] != "\n"
+					end
+					if condition_3
+						if source[index] == "\\"
+							index += 1
+							mut condition_5 := index < source.size()
+							if condition_5
+								condition_5 = source[index] != "\n"
+							end
+							if condition_5
+								index += 1
+							end
+						else
+							closed = source[index] == "\""
+							index += 1
+						end
+					else
+						loop_4 = false
+					end
+				end
+				if !closed
+					kind = 7
+				end
+			else
+				if gate4_character_in(character, "0123456789")
+					kind = 3
+					mut loop_7 := true
+					while loop_7
+						mut condition_6 := index < source.size()
+						if condition_6
+							condition_6 = gate4_character_in(source[index], "0123456789_.")
+						end
+						if condition_6
+							index += 1
+						else
+							loop_7 = false
+						end
+					end
+				else
+					if repl_word(character)
+						mut loop_9 := true
+						while loop_9
+							mut condition_8 := index < source.size()
+							if condition_8
+								condition_8 = repl_word(source[index])
+							end
+							if condition_8
+								index += 1
+							else
+								loop_9 = false
+							end
+						end
+						word := gate4_source_slice(source, start, index)
+						if repl_keyword(word)
+							kind = 1
+						else
+							mut condition_10 := word == "true"
+							if !condition_10
+								condition_10 = word == "false"
+							end
+							if !condition_10
+								condition_10 = word == "nil"
+							end
+							if condition_10
+								kind = 3
+							else
+								if gate4_character_in(character, "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+									kind = 5
+								else
+									mut lookahead := index
+									mut loop_12 := true
+									while loop_12
+										mut condition_11 := lookahead < source.size()
+										if condition_11
+											condition_11 = source[lookahead] == " "
+										end
+										if condition_11
+											lookahead += 1
+										else
+											loop_12 = false
+										end
+									end
+									mut condition_13 := previous == "def"
+									if !condition_13
+										condition_13 = previous == "."
+									end
+									if condition_13
+										kind = 6
+									else
+										mut condition_14 := lookahead < source.size()
+										if condition_14
+											condition_14 = source[lookahead] == "("
+										end
+										if condition_14
+											kind = 6
+										end
+									end
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+		word := gate4_source_slice(source, start, index)
+		spans.starts.push(start)
+		spans.ends.push(index)
+		spans.kinds.push(kind)
+		spans.words.push(word)
+		mut condition_15 := character != " "
+		if condition_15
+			condition_15 = character != "\t"
+		end
+		if condition_15
+			condition_15 = kind != 4
+		end
+		if condition_15
+			previous = word
+		end
+	end
+	return spans
+end
+
+def repl_escape(): String
+	return native_cli_character(27) + "["
+end
+
+def repl_color(kind: Integer): String
+	colors := ["1;38;2;214;222;235", "1;38;2;198;120;221", "38;2;197;228;120", "38;2;255;184;108", "3;38;2;98;114;164", "38;2;127;219;202", "38;2;130;170;255", "4;38;2;255;88;116"]
+	return repl_escape() + colors[kind] + "m"
+end
+
+def repl_block_open(word: String): Boolean
+	mut condition_16 := word == "def"
+	if !condition_16
+		condition_16 = word == "record"
+	end
+	if !condition_16
+		condition_16 = word == "if"
+	end
+	if !condition_16
+		condition_16 = word == "while"
+	end
+	if !condition_16
+		condition_16 = word == "class"
+	end
+	if !condition_16
+		condition_16 = word == "module"
+	end
+	if !condition_16
+		condition_16 = word == "case"
+	end
+	if !condition_16
+		condition_16 = word == "enum"
+	end
+	if !condition_16
+		condition_16 = word == "interface"
+	end
+	if !condition_16
+		condition_16 = word == "do"
+	end
+	return condition_16
+end
+
+# Keep two-space interactive indentation, including partially written blocks.
+# Formatting never modifies bytes inside a string or comment.
+def repl_indent(source: String): String
+	spans := repl_syntax(source)
+	mut depth := 0
+	mut output := ""
+	mut line_start := true
+	mut index := 0
+	while index < spans.words.size()
+		word := spans.words[index]
+		kind := spans.kinds[index]
+		mut condition_17 :=!line_start
+		if !condition_17
+			mut condition_18 := word != " "
+			if condition_18
+				condition_18 = word != "\t"
+			end
+			condition_17 = condition_18
+		end
+		if condition_17
+			mut condition_19 := word == "end"
+			if !condition_19
+				condition_19 = word == ")"
+			end
+			if !condition_19
+				condition_19 = word == "]"
+			end
+			if !condition_19
+				condition_19 = word == "}"
+			end
+			closing := condition_19
+			mut condition_20 := word == "else"
+			if !condition_20
+				condition_20 = word == "elsif"
+			end
+			if !condition_20
+				condition_20 = word == "when"
+			end
+			if !condition_20
+				condition_20 = word == "catch"
+			end
+			branch := condition_20
+			mut condition_21 := kind != 2
+			if condition_21
+				condition_21 = kind != 4
+			end
+			if condition_21
+				condition_21 = kind != 7
+			end
+			if condition_21
+				condition_21 = closing
+			end
+			if condition_21
+				depth -= 1
+				if depth < 0
+					depth = 0
+				end
+			end
+			mut condition_22 := line_start
+			if condition_22
+				condition_22 = word != "\n"
+			end
+			if condition_22
+				mut indent := depth
+				mut condition_23 := branch
+				if condition_23
+					condition_23 = indent > 0
+				end
+				if condition_23
+					indent -= 1
+				end
+				mut level := 0
+				while level < indent
+					output += "  "
+					level += 1
+				end
+			end
+			output += word
+			line_start = word == "\n"
+			mut condition_24 := kind != 2
+			if condition_24
+				condition_24 = kind != 4
+			end
+			if condition_24
+				condition_24 = kind != 7
+			end
+			if condition_24
+				mut condition_25 := repl_block_open(word)
+				if !condition_25
+					condition_25 = word == "("
+				end
+				if !condition_25
+					condition_25 = word == "["
+				end
+				if !condition_25
+					condition_25 = word == "{"
+				end
+				if condition_25
+					depth += 1
+				end
+			end
+		end
+		index += 1
+	end
+	if line_start
+		mut level := 0
+		while level < depth
+			output += "  "
+			level += 1
+		end
+	end
+	return output
+end
+
+# Decode only for terminal geometry. This does not broaden String semantics.
+record ReplGlyph
+	bytes: Integer
+	width: Integer
+end
+
+def repl_glyph(text: String, start: Integer): ReplGlyph
+	first := native_cli_byte(text, start)
+	mut length := 1
+	mut codepoint := first
+	mut condition_26 := first >= 194
+	if condition_26
+		condition_26 = first <= 223
+	end
+	if condition_26
+		length = 2
+		codepoint = first - 192
+	else
+		mut condition_27 := first >= 224
+		if condition_27
+			condition_27 = first <= 239
+		end
+		if condition_27
+			length = 3
+			codepoint = first - 224
+		else
+			mut condition_28 := first >= 240
+			if condition_28
+				condition_28 = first <= 244
+			end
+			if condition_28
+				length = 4
+				codepoint = first - 240
+			else
+				if first >= 128
+					return ReplGlyph.new(bytes: 1, width: 1)
+				end
+			end
+		end
+	end
+	mut index := 1
+	while index < length
+		if start + index >= text.size()
+			return ReplGlyph.new(bytes: 1, width: 1)
+		end
+		byte := native_cli_byte(text, start + index)
+		mut condition_29 := byte < 128
+		if !condition_29
+			condition_29 = byte > 191
+		end
+		if condition_29
+			return ReplGlyph.new(bytes: 1, width: 1)
+		end
+		codepoint = codepoint * 64 + byte - 128
+		index += 1
+	end
+	mut width := native_cli_cell_width(codepoint)
+	if width < 0
+		width = 1
+	end
+	return ReplGlyph.new(bytes: length, width: width)
+end
+
+def repl_previous(text: String, cursor: Integer): Integer
+	mut previous := 0
+	mut index := 0
+	while index < cursor
+		glyph := repl_glyph(text, index)
+		if glyph.width != 0
+			previous = index
+		end
+		index += glyph.bytes
+	end
+	return previous
+end
+
+def repl_next(text: String, cursor: Integer): Integer
+	if cursor >= text.size()
+		return text.size()
+	end
+	mut index := cursor + repl_glyph(text, cursor).bytes
+	mut loop_31 := true
+	while loop_31
+		mut condition_30 := index < text.size()
+		if condition_30
+			condition_30 = repl_glyph(text, index).width == 0
+		end
+		if condition_30
+			index += repl_glyph(text, index).bytes
+		else
+			loop_31 = false
+		end
+	end
+	return index
+end
+
+def repl_incomplete(text: String): Boolean
+	mut state := gate4_compiler_new(text.size() + 1)
+	gate4_lex(state, text)
+	if gate4_has_diagnostic(state)
+		message := gate4_load_string(state.diagnostic_messages, 0)
+		return gate4_string_starts_with(message, "unterminated")
+	end
+	mut depth := 0
+	mut delimiters := 0
+	mut index := 0
+	while index < state.token_count[0]
+		if gate4_token_is(state, index, "def")
+			depth += 1
+		end
+		if gate4_token_is(state, index, "record")
+			depth += 1
+		end
+		if gate4_token_is(state, index, "if")
+			depth += 1
+		end
+		if gate4_token_is(state, index, "while")
+			depth += 1
+		end
+		if gate4_token_is(state, index, "end")
+			depth -= 1
+		end
+		if gate4_token_is(state, index, "(")
+			delimiters += 1
+		end
+		if gate4_token_is(state, index, "[")
+			delimiters += 1
+		end
+		if gate4_token_is(state, index, ")")
+			delimiters -= 1
+		end
+		if gate4_token_is(state, index, "]")
+			delimiters -= 1
+		end
+		index += 1
+	end
+	if depth > 0
+		return true
+	end
+	return delimiters > 0
+end

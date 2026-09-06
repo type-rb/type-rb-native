@@ -10,6 +10,8 @@ on:
       - 'trbconfig*.jsonc'
       - 'tools/build-native.sh'
       - 'tools/native-cli-test.py'
+      - 'tools/native-repl-editor-test.py'
+      - 'tools/repl-test-requirements.txt'
       - '.github/workflows/native-cli.yml'
 
 permissions:
@@ -33,13 +35,18 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
-      - name: Install Linux linker and terminal editor
+      - name: Install Linux linker
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y lld libedit2
+        run: sudo apt-get update && sudo apt-get install -y lld
       - name: Build from the pinned native seed and verify fixed points
         run: ./trbn --version
       - name: Exercise CLI, REPL, terminal editing and project configuration
         run: python3 tools/native-cli-test.py bin/trbn
+      - name: Exercise REPL screen rendering and terminal restoration
+        run: |
+          python3 -m venv "$RUNNER_TEMP/repl-tests"
+          "$RUNNER_TEMP/repl-tests/bin/pip" install -r tools/repl-test-requirements.txt
+          "$RUNNER_TEMP/repl-tests/bin/python" tools/native-repl-editor-test.py bin/trbn
       - name: Verify unchanged inputs reuse the binary
         run: |
           cp bin/trbn "$RUNNER_TEMP/trbn-before"

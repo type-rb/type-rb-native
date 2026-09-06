@@ -20,7 +20,7 @@ repository = Path(__file__).resolve().parent.parent
 
 with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
     root = Path(temporary)
-    env = dict(os.environ, TRBN_HISTORY=str(root / 'history.json'), TERM='xterm')
+    env = dict(os.environ, TRBN_HISTORY=str(root / 'history.json'), TERM='xterm', NO_COLOR='1')
 
     def run(*arguments, text=None, cwd=root, success=True):
         result = subprocess.run([str(binary), *map(str, arguments)], input=text,
@@ -146,7 +146,7 @@ pair
     assert 'must not print' not in output, output
     assert output.count('[9, 2, 3]') >= 2, output
 
-    # A controlling terminal exercises libedit, tab completion, history and SIGINT.
+    # A controlling terminal exercises native editing, tab completion, history and SIGINT.
     pid, descriptor = pty.fork()
     if pid == 0:
         os.chdir(root)
@@ -226,6 +226,6 @@ pair
             os.waitpid(pid, 0)
     history = json.loads((root / 'history.json').read_text())
     assert 'mut apples := 4' in history
-    assert 'if true\nputs("loop started")\nwhile true\nend\nend' in history
+    assert 'if true\n  puts("loop started")\n  while true\n  end\nend' in history
 
 print('Native CLI, project configuration, REPL and terminal tests passed')
