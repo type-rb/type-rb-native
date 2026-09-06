@@ -41,6 +41,14 @@ The valid cases cover:
 - shared outer Integer Array identity across aliases and mutable parameters,
   including growth, element mutation, and parameter-local rebinding in
   `valid/array-aliases.trb`;
+- mutable record/Array binding aliases, fresh and returned values, scalar and
+  String copies, and shallow nested field/Array reads in
+  `valid/mutable-reference-bindings.trb`. The four `immutable-*-local` and
+  `immutable-*-parameter` invalid cases reject direct readonly capability
+  upgrades, including grouped and explicitly typed initializers. Mutable
+  record bindings are reassigned to fresh records, not used to write record
+  fields. Record-field assignment is a separate known reference discrepancy
+  tracked in [TypeRB #647](https://github.com/type-rb/type-rb/issues/647);
 - managed record-field and Array-element aliases retained through owner
   reassignment, lexical-block exit, loop-root compaction, and forced
   collection in `valid/managed-alias-roots.trb`;
