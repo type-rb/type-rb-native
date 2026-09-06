@@ -110,3 +110,15 @@ Revisit only with a measured reduction in executed hot-path work (for example,
 an owned and verified range proof), not the assumption that fewer helper calls
 must be faster. The current accepted guarded path remains in place. Existing
 MIR ownership and compactness recovery obligations remain open.
+
+## Measurement-scope clarification — 2026-09-06
+
+The statement above about concurrent heavy batches describes only the batches
+launched for this diagnostic. Host-wide CPU isolation was not enforced, and
+unrelated host activity was not excluded. Interleaving reduces some shared-host
+bias but does not establish isolated instruction latency or remove all noise.
+
+The raw observations and rejection decision are retained unchanged. These
+local runs do not constitute formal target acceptance, a Pure Go comparison,
+or a claim that the reported ratios isolate one microarchitectural cause.
+See the [scope clarification on issue #277](https://github.com/type-rb/type-rb-native/issues/277#issuecomment-5556068538).
