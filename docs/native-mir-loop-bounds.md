@@ -169,6 +169,14 @@ candidate; the earlier failure remains recorded. The margin is small, so first
 run the frozen-baseline hosted compiler comparison before another long recovery
 or runtime batch. This ordering does not waive any merge acceptance checks.
 
+The [hosted lexer refinement](../results/2026-09-07-lexer-symbol-hosted-cost-rejection/README.md)
+also fails the unchanged build limit: Darwin 1.050992, Linux 1.057471. The
+long recovery/runtime batches were not dispatched. Keep both source-distinct
+failures; next obtain finer compiler phase evidence and reduce the representation
+within the supported Native source subset. A Boolean-OR guard grouping cannot
+bootstrap under that subset and was reverted before publication. No limit,
+language capability, acceptance result or Pages snapshot changes.
+
 1. Complete executable differential controls, recovery, ordinary fixed points,
    target/process/memory authorities and the registered compiler cost bounds.
    Measure the smallest complete candidate before hosted performance acceptance.

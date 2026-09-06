@@ -64,6 +64,13 @@ conformance, target, process, memory and performance authorities before merging.
 Do not overlap owned correctness/build jobs with comparative timing. This
 ordering saves work on rejected candidates without weakening acceptance.
 
+Before launching a long reference suite for compiler-source edits, also run
+`check` with the previous accepted or verified Native compiler against the
+canonical compiler entry. Reference acceptance alone does not establish that a
+spelling is supported by the current Native bootstrap subset. Reject an
+unsupported-source candidate at that cheap boundary before further timing or
+recovery work; do not expand language capability just to pass a cost check.
+
 ## Cross-repository changes
 
 Keep the reference TypeRB repository independent of this project. When a

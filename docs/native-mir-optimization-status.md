@@ -16,6 +16,8 @@ passes both spectral runtime cohorts but misses its build-cost limit. The
 passes the local build-cost prefilter with unchanged numeric application QBE.
 Full local recovery now passes, but the first hosted compiler comparison rejects
 the candidate: Linux build wall ratio 1.060729 exceeds 1.05, while Darwin passes.
+The subsequent lexer refinement also misses the hosted build limit on both
+targets (Darwin 1.050992, Linux 1.057471), despite passing the local prefilter.
 Further cost reduction and hosted runtime/target acceptance remain required;
 neither checkpoint is an accepted optimization or Pages update.
 
