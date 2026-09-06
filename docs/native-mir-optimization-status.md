@@ -33,6 +33,14 @@ budget. An eligible but non-selected call cannot inherit its callee's literal
 proof. The new controls retain that distinction and computed-argument overflow
 failures. No new fact family or application speedup is claimed.
 
+The [checked-binding representation diagnostic](../results/2026-09-06-checked-literal-binding-diagnostic-darwin-arm64/README.md)
+removes that remaining ownership in four local variants while preserving 72
+generated-output controls and ordinary fixed points. All variants fail the
+registered compiler compactness requirements and are rejected, with their
+source patches retained. No allowance is added. Revisit the representation
+when existing construction/storage can be removed to cover its cost; meanwhile
+measure independent improvements to already verified MIR Integer operations.
+
 The [complete formal run](https://github.com/type-rb/type-rb-native/actions/runs/33966616215)
 passes the preregistered recovery, fixed-point, target, process, memory,
 compactness, and build-cost checks; #260 is merged as `5f262d813533d3b4e044e30e272e8a569536d313`.
