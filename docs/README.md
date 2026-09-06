@@ -15,6 +15,7 @@ historical architecture notes removed from the current architecture and plan.
 
 - [Capability map](https://type-rb.github.io/type-rb-native/) ([source and maintenance](capabilities/README.md))
 - [Benchmark explorer](capabilities/benchmarks/README.md)
+- [Experimental native CLI and REPL](native-cli.md)
 - [Architecture](architecture.md)
 - [Development and validation plan](experiment-plan.md)
 - [Native versioning and compatibility](versioning.md)

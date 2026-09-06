@@ -117,7 +117,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       throw new Error('Usage: ci-run-suites.mjs ABSOLUTE_TRB EVIDENCE (with all recovery/QBE environment variables)');
     }
     process.exitCode = await runSuites({ executable, evidence, suites: [
-      { name: 'root', args: ['test'] },
+      { name: 'root', args: ['test', '--config', 'trbconfig.reference.jsonc'] },
       { name: 'compiler', args: ['test', '--config', 'compiler/trbconfig.jsonc'] },
     ] });
   } catch (error) {
