@@ -544,7 +544,7 @@ The next exact-reference revalidation is registered in
 the oracle to TypeRB `0.4.4-dev`, replaces all repository-owned uses of the
 removed aggregate filesystem facade with bounded scoped-file support, and
 keeps recursive directory creation outside the ordinary compiler closure. The
-[recorded result](../results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/README.md)
+[recorded result](https://github.com/type-rb/type-rb-native/blob/5cf61c740aa600c34ed94f1b130ea2ffefd9e783/results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/README.md)
 passes all selected-reference and target regressions. Darwin/Linux arm64
 B2/B3/B4 compilers and target-neutral QBE are exact within the candidate and
 against the registered Native baseline; the worst candidate build/RSS median

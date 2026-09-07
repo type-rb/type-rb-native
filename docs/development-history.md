@@ -223,7 +223,7 @@ promise. See the
 and
 [recorded result](../results/2026-08-30-gate6l-bootstrap-seed-darwin-linux-arm64/README.md).
 
-Current development pins TypeRB `0.4.4-dev` at an exact revision. All 39 uses
+The scoped-file migration pinned TypeRB `0.4.4-dev` at an exact revision. All 39 uses
 of the removed aggregate filesystem package now use bounded scoped files and
 shell-free test support for recursive directory creation. The immutable
 previous-Native seed reaches byte-identical current B2/B3/B4 fixed points on
@@ -236,7 +236,7 @@ range. See the
 [TypeRB compatibility mapping](type-rb-compatibility.md),
 [registered revalidation](https://github.com/type-rb/type-rb-native/issues/144),
 and
-[recorded result](../results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/README.md).
+[recorded result](https://github.com/type-rb/type-rb-native/blob/5cf61c740aa600c34ed94f1b130ea2ffefd9e783/results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/README.md).
 
 Profitable static Strings of at least 256 bytes now use a deterministic,
 dependency-free bounded-backreference representation. They expand once into
