@@ -67,7 +67,9 @@ if test "$mode" = prepare; then bootstrap_input=$workspace/setup-runtime/compile
     --metadata "$package/$target.json" --asset-name "$asset" --repository-root "$root"
 python3 "$root/tools/bootstrap-seed-release.py" observations "$workspace/evidence/measurements.csv" "$input_role"
 cmp "$workspace/b4/compiler" "$package/$asset"
-# The release is useful only if the supported logical condition syntax works.
-"$package/$asset" check "$root/compiler/conformance/valid/logical-short-circuit.trb"
+# Check the syntax that the next compiler-source simplification will use.
+for fixture in logical-short-circuit elsif-control elsif-managed; do
+    "$package/$asset" check "$root/compiler/conformance/valid/$fixture.trb"
+done
 find "$workspace" -name '*.trbn.*' -print > "$workspace/temporary-inventory.txt"
 test ! -s "$workspace/temporary-inventory.txt"
