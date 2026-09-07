@@ -102,6 +102,15 @@ Manual measurements supplement rather than replace current PR acceptance.
 
 ## Further latency boundaries
 
+Ordinary acceptance cost limits remain unchanged by the
+[trade-off policy](optimization-tradeoffs.md). A registered bounded diagnostic
+may use standalone measurement controllers when ordinary compactness fails;
+label that evidence diagnostic and retain the ordinary failed status. This
+does not enable a hidden CI skip, a force-merge path, or a new benchmark on every
+PR. No generic diagnostic-to-acceptance switch exists. A future candidate-scoped
+acceptance budget requires a reviewed enforcement change and fail-closed tests
+before it can affect CI acceptance.
+
 Generation controls check the recovery source through B0, B1 and B2 and compare
 repeated QBE emission against each previously built generation. Those repeated
 commands test distinct seed/command behavior and deterministic output; deleting
