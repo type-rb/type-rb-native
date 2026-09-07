@@ -16,7 +16,7 @@ and pinned Linux arm64 evidence all pass the pre-registered boundary. The
 measured compiler implementation is
 `84e2e4a6e2cff9d7fdab46ce4eec33b609a597c4`; the reviewed harness is
 `9d11966a92ca308d4bb84dacc59f47efbb92b6cc`. See the
-[recorded result](../results/2026-08-30-gate6k-configured-project-darwin-linux-arm64/README.md).
+[recorded result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-30-gate6k-configured-project-darwin-linux-arm64/README.md).
 
 The fixed source baseline is TypeRB Native main revision
 `e9b00ed946919957fad82b6d2d3ffccfe8cd48d1`. Both baseline and candidate

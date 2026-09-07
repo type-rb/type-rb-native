@@ -27,7 +27,7 @@ changing source-visible behavior.
 
 All registered correctness, automatic-collection, size, build-time, runtime,
 and peak-RSS bounds pass in the
-[dated Darwin arm64 result](../results/2026-08-28-gate3-qbe-darwin-arm64/README.md).
+[dated Darwin arm64 result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-28-gate3-qbe-darwin-arm64/README.md).
 
 ## Reference producer pin
 

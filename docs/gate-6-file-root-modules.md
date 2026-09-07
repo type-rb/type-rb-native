@@ -11,7 +11,7 @@ Gate 6E is complete at measured TypeRB Native revision
 `b2b4740f39571dc35af9199dae817d94912b7a47`. The reviewed Darwin arm64
 measurements, exact Native compiler closure, and pinned Linux arm64 correctness
 run are recorded in the
-[Gate 6E result](../results/2026-08-29-gate6e-file-root-darwin-linux-arm64/README.md).
+[Gate 6E result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-29-gate6e-file-root-darwin-linux-arm64/README.md).
 This remains an internal experiment rather than a supported project or command
 format.
 

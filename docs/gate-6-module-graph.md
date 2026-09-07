@@ -12,7 +12,7 @@ ownership model is defined by
 Complete at measured revision
 `e39f774237a6306d7cd46b09941367c42816c628`. The reviewed Darwin and pinned
 Linux arm64 evidence is retained in the
-[Gate 6H result](../results/2026-08-29-gate6h-module-graph-darwin-linux-arm64/README.md).
+[Gate 6H result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-29-gate6h-module-graph-darwin-linux-arm64/README.md).
 
 The recorded direct candidate selection remains valid when its index peer does
 not enter the file-root closure. The current graph index also preserves the

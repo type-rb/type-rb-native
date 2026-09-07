@@ -1,82 +1,82 @@
-# Evidence retention
+# Evidence lifecycle and retention
 
-Retain the evidence needed to reproduce an acceptance or rejection, not every
-generated file in the source checkout. This storage policy changes neither
-measurement bounds nor which observations are retained. Failed observations,
-warmups, outliers and rejected candidates must not disappear through cleanup.
+Keep a bounded working set with an explicit purpose, not every past experiment.
+Storage cleanup must not change a measurement, hide a failed acceptance decision,
+or move the fixed baseline of an experiment that is still running.
 
-## Source repository
+## What belongs in main
 
-Keep a dated result README with the conclusion, exact revisions, commands,
-environment, measurement contract, all observation values and statuses in
-compact CSV/TSV, derived summaries, source/artifact digests and archive location.
-Preserve files consumed by compatibility checks, frozen-baseline policies and
-Pages. Avoid duplicating drivers and source snapshots: link to exact revisions
-or put a necessary reproduction in the maintained test/tool owner.
+`results/active.json` is the complete registry. Each dated result occupies one
+named slot and states its current purpose and retirement condition. The slots
+cover published runtime/build measurements, compatibility, the bootstrap seed,
+the amd64 target, persistent memory, the accepted compiler, one candidate, its
+comparison baseline, and one runtime investigation. Unused slots stay empty.
 
-New result directories have a ceiling of **100 files and 2 MiB**, with no
-individual new or changed file over **256 KiB**. Consolidate per-process tiny
-files into tables. Do not add empty files, stdout/stderr sidecars, generated
-executables, object files, QBE/assembly or compressed payloads to Git. Small
-human-readable diagnostic logs remain useful within these limits. A necessary
-exception requires an explicit policy review, not a silent limit increase.
+When a result supersedes another in the same slot, update consumers and remove
+the predecessor directory **in the same PR**. If the old result still has an
+independent active purpose, explicitly assign that purpose's available slot.
+Do not invent permanent slots for individual dates or implementation attempts.
 
-`tools/result_archive.py check BASE HEAD` checks committed trees. Historical
-unchanged files are grandfathered; an oversized result may shrink but cannot
-grow beyond its previous size/count (or the normal ceiling). New/changed files
-must meet the per-file policy. CI runs this with the actual PR/push base, not a
-moving hand-picked measurement baseline. No performance rerun is needed for
-storage-only changes. Planning-only maintenance uses unconditional routing
-tests; execution-workflow changes retain compiler validation. See
-[CI validation stages](ci-validation.md).
+CI enforces **512 files / 4 MiB across all of results/**, including the registry
+and indexes. Every directory must have exactly one slot and an existing README.
+Unknown slots, duplicate entries, missing reasons/retirement conditions, orphan
+directories and unregistered root files fail. Budget changes require policy
+review; a larger artifact import is not sufficient justification.
 
-## Detailed public archives
+New results also have the existing **100 files / 2 MiB** limit; new or changed
+files must be nonempty text, at most **256 KiB**, without generated executables,
+QBE/assembly or stdout/stderr/status sidecars. Consolidate observations and
+statuses in tables. Existing oversized per-result inventories may shrink but
+not grow; they are **not exempt from the global budget**.
 
-Use a dedicated **evidence-only prerelease**, not a compiler/product release,
-with a public `.tar.gz` asset. Do not update an existing asset in place. Record
-its URL, SHA-256, size and source revision in each result's `ARCHIVE.json`.
-The archive contains the original report, all files (including empty logs and
-failed observations), and an internal per-file SHA-256/size/mode manifest.
-Keep its source-era inventory; do not relabel it as a new measurement.
+Current published values retain all required observations, statuses, revisions,
+measurement contracts and digests, not just favorable medians. Keep any
+machine-consumed seed manifests unchanged. Retained reports may link detailed
+source-era inventories to an exact Git revision or an existing verified archive.
 
-GitHub Actions artifacts are a temporary transport, not the only long-term
-copy: they expire according to the configured retention period. Public release
-assets also require stewardship; the digest detects replacement, it does not
-guarantee permanent hosting. Preserve a backup before deleting or moving an
-archive. See [GitHub artifact retention](https://docs.github.com/en/organizations/managing-organization-settings/configuring-the-retention-period-for-github-actions-artifacts-and-logs-in-your-organization).
+## Completed and intermediate work
 
-For future measurements, publish the producing workflow's detailed evidence
-before staging the compact result for Git. Do not temporarily commit raw files
-on a PR branch and delete them in a later commit: that still grows Git history.
-The `pack` command below is for migrating already-committed historical evidence,
-not a requirement to commit new raw payloads first.
+Keep significant conclusions, important numbers and rejected-approach reasons in
+the [development history](development-history.md) or the relevant decision/PR.
+Retain useful regression cases in their maintained test owner. Do not keep a
+dated folder merely because it passed a gate, was once a baseline, or is linked
+from historical prose: historical links should use the exact archived revision.
 
-## Verified migration
+During an experiment, keep successful and failed observations until the decision
+and review are complete. Afterwards, discard intermediate logs and generated
+payloads that have no remaining reproduction, published-evidence or diagnostic
+purpose. Routine CI artifacts are temporary; do not promote all of them into
+permanent release assets. Archive only evidence with a documented durable use.
+Never cherry-pick observations inside a still-active/public measurement cohort.
 
-1. Select exact committed public result directories; inspect external and
-   cross-result consumers. Do not mix untracked files or private evidence.
-2. Run `python3 tools/result_archive.py pack OUTPUT.tar.gz RESULT_ID ...` with
-   an output outside the checkout. The deterministic archive includes only
-   files whose bytes match the recorded Git revision; symlinks are rejected.
-3. Upload the archive as a new evidence asset. Download it again from its public
-   URL to a separate location and run `verify DOWNLOADED.tar.gz SHA256`.
-   Confirm the download checksum and every member before removing any file.
-4. Run `compact DOWNLOADED.tar.gz SHA256 PUBLIC_URL`. This stages only exact
-   archived files for removal, preserves CSV/TSV/JSON/Markdown/checksum indexes,
-   and adds an archive pointer and a storage notice. It rejects missing,
-   changed or additional committed evidence. The command verifies local bytes;
-   the operator must use the fresh public download from step 3, not assume
-   that a successful upload proves availability.
-5. Inspect the full diff and all remaining links. Run archive tests, the
-   retention checker and Pages/compatibility consumers. Merge through a PR.
+The [pre-retirement snapshot](https://github.com/type-rb/type-rb-native/tree/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results)
+preserves existing historical reports and their original inventories. The
+previously published evidence archive and immutable bootstrap release remain
+available. No new full archive is necessary just to remove already-versioned,
+superseded results from main. This policy does not rewrite Git history; history
+still grows through ordinary source changes.
 
-To inspect old detailed evidence, download the linked asset, verify its SHA-256
-and manifest with `verify`, then extract it into a **new empty temporary
-directory**, never over the working checkout. It restores the original
-`results/RESULT_ID/` layout for source-era verifiers and checksum inventories.
-The checked-in README's added storage notice is intentionally outside the
-historical manifest; its original bytes are inside the archive.
+## Safe retirement
 
-Ordinary cleanup does not erase Git history. Existing history remains intact;
-this work reduces current checkout size/file count and stops future raw-payload
-growth. History rewriting and force pushes are not part of this policy.
+1. Identify current Pages, compatibility, seed, comparison and capability
+   consumers; assign only results with a concrete current use to active slots.
+2. Record significant conclusions/rejection reasons and a pinned historical
+   link before removing a superseded record. For new evidence, publish any
+   required durable payload before Git import; never commit raw payloads
+   temporarily and delete them later.
+3. Check exact targets against committed public evidence, update historical
+   links and current consumers, and remove only those tracked targets.
+4. Run `python3 tools/result_archive.py check BASE HEAD`, archival/lifecycle
+   tests, link checks, Pages and compatibility validation. Review and merge
+   through a PR. Preserve frozen benchmark contracts and published seed assets.
+
+For evidence that actually needs an archive, the existing `pack`, `verify`
+and `compact` commands remain available. `pack` accepts already-committed
+historical evidence, not a requirement to commit new raw files first. Publish a
+new evidence-only asset without overwriting one, freshly download it and verify
+its whole-archive and per-member SHA-256 before removing the archived payload.
+Extract verified archives only into a new empty directory.
+
+Lifecycle checks stay in the lightweight documentation CI. Planning-only
+maintenance uses unconditional routing tests; compiler/execution changes retain
+their normal authority. See [CI validation stages](ci-validation.md).

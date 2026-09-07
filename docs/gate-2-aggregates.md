@@ -16,7 +16,7 @@ construction initializes padding and inactive payload bytes deterministically.
 The final source corpus covers ordinary and nested records, payloadless and
 payload-bearing variants, exhaustive dispatch, aggregate direct calls and
 returns, `Result`, `try`, loop-carried record state, and parallel aggregate
-swaps. See the [Gate 2 result](../results/2026-08-28-gate2-qbe-darwin-arm64/README.md).
+swaps. See the [Gate 2 result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-28-gate2-qbe-darwin-arm64/README.md).
 
 ## Checkpoint boundary
 

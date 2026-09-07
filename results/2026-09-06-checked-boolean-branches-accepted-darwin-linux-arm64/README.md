@@ -1,3 +1,6 @@
+> Lifecycle: [complete source-era record](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-09-06-checked-boolean-branches-accepted-darwin-linux-arm64/README.md).
+> Historical checksum inventories refer to that full record, not this compact working set.
+
 # Accepted Checked Boolean Branch Verification
 
 [PR #291](https://github.com/type-rb/type-rb-native/pull/291) accepts candidate
@@ -89,7 +92,7 @@ All 22 controller tests and actionlint pass; compiler production SHA-256 remains
 Runtime measurement code, inputs, baseline, samples and limits do not change.
 The repaired head reruns the complete normal authority as well as the supplement.
 The earlier local diagnostic and CSV-whitespace preflight history remain in
-[the diagnostic record](../2026-09-06-boolean-branches-diagnostic-darwin-arm64/README.md).
+[the diagnostic record](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-09-06-boolean-branches-diagnostic-darwin-arm64/README.md).
 
 ## Artifact integrity
 

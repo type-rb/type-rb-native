@@ -15,7 +15,7 @@ Gate 6J is complete at measured implementation revision
 `328f93ea348fe569c56d7737206246c7df42eb9c`. Every registered correctness,
 performance, memory, size, fixed-point, regression, and pinned Linux arm64
 criterion passes. See the
-[recorded result](../results/2026-08-29-gate6j-float-arrays-darwin-linux-arm64/README.md).
+[recorded result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-29-gate6j-float-arrays-darwin-linux-arm64/README.md).
 
 The fixed source baseline is TypeRB Native main revision
 `5ff3da39c8c41a30596bbeed3b6fcffc207a43ed`. Both baseline and candidate begin

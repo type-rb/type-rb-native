@@ -19,12 +19,12 @@ rules.
 
 The declaration-import compatibility work was registered in
 [issue #97](https://github.com/type-rb/type-rb-native/issues/97). Its
-[Darwin/Linux arm64 result](../results/2026-08-30-typerb-0-4-compatibility-darwin-linux-arm64/README.md)
+[Darwin/Linux arm64 result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-30-typerb-0-4-compatibility-darwin-linux-arm64/README.md)
 passes the selected `0.4.1-dev` reference, previous-seed, exact fixed-point,
 process, elapsed-time, peak-RSS, and compiler-size criteria. The `0.4.3-dev`
 successor is registered in
 [issue #106](https://github.com/type-rb/type-rb-native/issues/106), and its
-[Darwin/Linux arm64 result](../results/2026-08-30-typerb-0-4-3-compatibility-darwin-linux-arm64/README.md)
+[Darwin/Linux arm64 result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-30-typerb-0-4-3-compatibility-darwin-linux-arm64/README.md)
 passes the selected-reference, explicit setup-transition, exact fixed-point,
 process, elapsed-time, peak-RSS, and compiler-size criteria. This document
 records the implementation boundary independently of those measurements.

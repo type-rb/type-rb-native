@@ -121,7 +121,7 @@ recipe, adjacent Native medians differ by at most 0.88%, and median RSS differs
 from external by at most 0.35%. Re-stripped compiler bytes remain exact and are
 15.64% below the registered size ceiling. The full corpus, failure contracts,
 cleanup checks, ELF inspection, and observed process graph pass. See the
-[Gate 6D Linux arm64 result](../results/2026-08-29-gate6d-native-bootstrap-linux-arm64/README.md).
+[Gate 6D Linux arm64 result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-29-gate6d-native-bootstrap-linux-arm64/README.md).
 
 ## Deferred scope
 

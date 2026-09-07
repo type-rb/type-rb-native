@@ -12,13 +12,13 @@ The capability corpus and the first formal runtime and build/distribution
 layers are complete. All three performance inputs pass through the pinned Go
 reference compiler, ordinary self-hosted Native compiler, and five pinned
 context implementations with exact published output. The
-[current Linux arm64 result](../results/2026-09-05-benchmarksgame-runtime-native-mir-stable-array-headers-accepted-linux-arm64/README.md)
-retains every registered observation and measures accepted revision `5a23176`.
-Native is substantially smaller and lighter than TypeRB Go but needs 1.12x
-to 3.45x the time of Pure Go across these numeric kernels. Pure Go parity or
+[current Linux arm64 result](../results/2026-09-06-benchmarksgame-runtime-checked-boolean-branches-linux-arm64/README.md)
+retains every registered observation and measures accepted revision `85e8d49`.
+Native is substantially smaller and lighter than TypeRB Go but needs 1.03x
+to 3.13x the time of Pure Go across these numeric kernels. Pure Go parity or
 better is the minimum runtime objective. The independent
-[build result](../results/2026-09-05-benchmarksgame-build-native-mir-stable-array-headers-accepted-linux-arm64/README.md)
-finds that Native needs 39.7% to 44.8% of TypeRB Go's build wall time, uses about
+[build result](../results/2026-09-06-benchmarksgame-build-checked-boolean-branches-linux-arm64/README.md)
+finds that Native needs 38.7% to 44.0% of TypeRB Go's build wall time, uses about
 51% less compiler RSS, and reduces the controlled raw build payload by 99.63%.
 This internally consistent snapshot replaces the preceding complete result;
 later focused A/B records remain separate until another complete rerun.
@@ -160,7 +160,7 @@ BenchExec `runexec` 3.35, runs correctness before timing, rotates all seven
 candidates through two warmup and eleven retained rounds, and preserves every
 failure and raw process-tree metric. One-core and four-core lanes are separate.
 This controller measures complete fresh processes only. Its current
-[formal result](../results/2026-09-05-benchmarksgame-runtime-native-mir-stable-array-headers-accepted-linux-arm64/README.md)
+[formal result](../results/2026-09-06-benchmarksgame-runtime-checked-boolean-branches-linux-arm64/README.md)
 publishes all one-core and four-core raw observations, independently reproduced
 medians, and exact artifact identities. Compiler measurements and complete
 artifact/distribution inventory use the separate
@@ -169,7 +169,7 @@ measures alternating clean outputs through both TypeRB backends, verifies every
 measured artifact, process-traces representative builds, and separates
 controlled payloads from platform prerequisites and deploy artifacts. Its
 current
-[formal result](../results/2026-09-05-benchmarksgame-build-native-mir-stable-array-headers-accepted-linux-arm64/README.md)
+[formal result](../results/2026-09-06-benchmarksgame-build-checked-boolean-branches-linux-arm64/README.md)
 publishes all raw observations, independently reproduced medians, artifact
 variants, process closure, dynamic dependencies, and distribution totals. See
 [Decision 0024](decisions/0024-benchexec-runtime-controller.md) and
@@ -199,7 +199,7 @@ stripped application-size limits before runtime timing. This optimization A/B
 contract does not replace or revise the published cross-language inputs or
 results.
 
-The first [formal optimization result](../results/2026-08-31-native-numeric-inline-linux-arm64/README.md)
+The first [formal optimization result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-31-native-numeric-inline-linux-arm64/README.md)
 passes that contract. Its bounded numeric-only reserve reduces the exact
 `spectral-norm` wall and CPU medians by 20.61% and 20.62%, keeps both control
 programs slightly faster than the frozen Native baseline, closes an exact
@@ -213,7 +213,7 @@ the target-neutral unsigned bounds predicate in the shared Array-address
 helper. `fannkuch-redux` is the required performance signal; `n-body` and
 `spectral-norm` are bounded non-regression controls. The workflow additionally
 retains the exact QBE-generated helper assembly for both candidates.
-The [formal result](../results/2026-08-31-native-array-address-linux-arm64/README.md)
+The [formal result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-31-native-array-address-linux-arm64/README.md)
 passes every registered bound: wall and CPU medians improve by 4.67% to 7.97%
 across the three cases, while compiler, QBE, and application artifacts all
 become smaller.
@@ -221,7 +221,7 @@ become smaller.
 The next contract, registered by
 [issue #142](https://github.com/type-rb/type-rb-native/issues/142), evaluated
 bounded scalar-leaf inlining at two hot loop call sites. Its
-[formal result](../results/2026-08-31-native-scalar-leaf-inline-linux-arm64/README.md)
+[formal result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-31-native-scalar-leaf-inline-linux-arm64/README.md)
 is a rejection: correctness, fixed-point, and cross-target QBE regressions
 passed, but the Linux arm64 self-hosted compiler grew by 2.20% against a
 pre-registered 0.1% maximum. The workflow stopped before runtime timing, the
@@ -240,7 +240,7 @@ The next contract, registered by
 [issue #174](https://github.com/type-rb/type-rb-native/issues/174), evaluated
 whether functions with no collection safe point could omit redundant managed
 root publication. Its
-[formal result](../results/2026-09-01-rejected-no-gc-root-publication-linux-arm64/README.md)
+[formal result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-09-01-rejected-no-gc-root-publication-linux-arm64/README.md)
 improves `n-body` wall and CPU medians by about 12.7%, shrinks its generated
 QBE and executable, and passes all correctness, fixed-point, build, and
 compactness limits. It nevertheless misses the preregistered 15% performance
@@ -250,7 +250,7 @@ The combined contract registered by
 [issue #176](https://github.com/type-rb/type-rb-native/issues/176) retains that
 safe-point-aware analysis and adds a bounded two-entry Array-header cache for
 owned loops. Its
-[formal result](../results/2026-09-01-native-safe-array-headers-linux-arm64/README.md)
+[formal result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-09-01-native-safe-array-headers-linux-arm64/README.md)
 passes every frozen condition. `n-body` wall and CPU medians improve by 28.36%
 and 28.50%; `fannkuch-redux` improves by 7.46%; and `spectral-norm` remains
 neutral. The self-hosted fixed point, build cost, compiler size, application
@@ -261,7 +261,7 @@ of matching or beating the separately measured Pure Go implementations.
 The follow-up registered by
 [issue #179](https://github.com/type-rb/type-rb-native/issues/179) evaluated a
 bounded loop-preheader Array-header hoist. Its final length-only
-[formal result](../results/2026-09-01-rejected-loop-invariant-array-length-linux-arm64/README.md)
+[formal result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-09-01-rejected-loop-invariant-array-length-linux-arm64/README.md)
 passes every correctness, fixed-point, build, compactness, memory, and control
 condition, but improves the required `spectral-norm` wall and CPU medians by
 only about 0.6% against the frozen 3% signal. The threshold was not relaxed,
@@ -273,7 +273,7 @@ The next contract, registered by
 [issue #182](https://github.com/type-rb/type-rb-native/issues/182), moves
 managed-root publication from a loop header to its exit only when emitted-code
 analysis proves the loop cannot start collection. Its
-[formal result](../results/2026-09-02-native-safe-point-free-loop-roots-linux-arm64/README.md)
+[formal result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-09-02-native-safe-point-free-loop-roots-linux-arm64/README.md)
 passes every frozen condition. `fannkuch-redux` wall and CPU medians improve by
 12.46% and 12.47%; `n-body` and `spectral-norm` remain neutral; and the exact
 self-hosted fixed point, build cost, compiler size, application size,
@@ -286,7 +286,7 @@ The following contract, registered by
 [issue #184](https://github.com/type-rb/type-rb-native/issues/184), adds a
 bounded direct entry to checked Integer multiplication while preserving the
 existing exact path for every other operand pair. Its
-[formal result](../results/2026-09-02-native-bounded-integer-multiply-linux-arm64/README.md)
+[formal result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-09-02-native-bounded-integer-multiply-linux-arm64/README.md)
 passes every frozen condition. `spectral-norm` wall and CPU medians improve by
 27.82% and 27.83%; `fannkuch-redux` and `n-body` remain neutral; the fixed
 compiler and executable sizes remain unchanged; and generated QBE shrinks for
@@ -299,7 +299,7 @@ The next contract, registered by
 impossible lower portable-range check from one already budgeted checked
 Integer addition when either emitted operand is an unsigned decimal literal
 no greater than 1024. Its
-[formal result](../results/2026-09-02-native-bounded-literal-integer-add-linux-arm64/README.md)
+[formal result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-09-02-native-bounded-literal-integer-add-linux-arm64/README.md)
 passes every frozen condition. Median wall time improves by 2.85% for
 `fannkuch-redux`, 1.26% for `n-body`, and 9.25% for `spectral-norm`; the fixed
 compiler and every registered application shrink; memory is neutral; and all
@@ -319,7 +319,7 @@ dedicated formal contract requires at least a 2% `spectral-norm` wall-time and
 CPU-time improvement without relaxing the default 5% signal floor used by
 other optimization contracts. Negative indexing and every unproved index keep
 the general path. Its
-[formal result](../results/2026-09-02-native-nonnegative-loop-index-linux-arm64/README.md)
+[formal result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-09-02-native-nonnegative-loop-index-linux-arm64/README.md)
 passes every frozen condition. `spectral-norm` wall and CPU medians improve by
 5.00%; `fannkuch-redux` and `n-body` remain neutral; application artifacts are
 byte-neutral or smaller; and the fixed compiler remains within both size
@@ -339,7 +339,7 @@ passes at `0.877919x` wall and `0.877819x` CPU, preserves both controls, and
 passes all existing exact-output, fixed-point, compiler-size, build-cost,
 application-size, memory, catastrophic, process-boundary, and cleanup
 requirements. The complete evidence is retained in the
-[lexical loop-index result](../results/2026-09-02-native-lexical-loop-index-linux-arm64/README.md).
+[lexical loop-index result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-09-02-native-lexical-loop-index-linux-arm64/README.md).
 
 The accepted contract registered by
 [issue #192](https://github.com/type-rb/type-rb-native/issues/192), evaluates a
@@ -353,7 +353,7 @@ the fixed compiler and affected application artifacts, and passes all
 correctness, fixed-point, compiler-size, build-cost, application-size, memory,
 catastrophic, process, and cleanup conditions. The complete evidence is
 retained in the
-[derived loop-index result](../results/2026-09-02-native-derived-loop-index-linux-arm64/README.md).
+[derived loop-index result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-09-02-native-derived-loop-index-linux-arm64/README.md).
 
 This closes the preregistered direct-emitter semantic-analysis experiments.
 Further portable facts and transforms move to verified Native MIR analysis and
