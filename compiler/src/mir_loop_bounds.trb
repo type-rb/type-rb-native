@@ -25,13 +25,7 @@ def loop_identity(id: Integer, rows: Array<Array<Integer>>): Integer
 end
 
 def loop_read_matches(index: Integer, array: Integer, version: Integer, region: Array<Integer>): Boolean
-	if region[1] != index
-		return false
-	end
-	if region[2] != array
-		return false
-	end
-	if region[3] != version
+	if region[1] != index || region[2] != array || region[3] != version
 		return false
 	end
 	return region[5] == 0
@@ -63,19 +57,7 @@ def collect_array_loop_bounds(mut result: Array<Integer>, parameter_ordinals: Bo
 		version := row[3]
 		region_id := row[4]
 		origin := row[5]
-		if identity < 0
-			return false
-		end
-		if version < 0
-			return false
-		end
-		if version > operations.size()
-			return false
-		end
-		if region_id < 0
-			return false
-		end
-		if origin <= previous_origin
+		if identity < 0 || version < 0 || version > operations.size() || region_id < 0 || origin <= previous_origin
 			return false
 		end
 		previous_origin = origin
@@ -88,35 +70,19 @@ def collect_array_loop_bounds(mut result: Array<Integer>, parameter_ordinals: Bo
 		if kind < 1
 			return false
 		end
-		if kind != 3
-			if region_id != current_region_id
-				return false
-			end
+		if kind != 3 && region_id != current_region_id
+			return false
 		end
 		binding_index := loop_identity(identity, bindings)
 		if kind <= 2
-			if binding_index >= 0
-				return false
-			end
-			if version != 0
+			if binding_index >= 0 || version != 0
 				return false
 			end
 			if kind == 1
-				if parameter_ordinals
-					if identity != position
-						return false
-					end
-				end
-				if body_started
+				if parameter_ordinals && identity != position
 					return false
 				end
-				if depth != 0
-					return false
-				end
-				if operand < 0
-					return false
-				end
-				if operand > 2
+				if body_started || depth != 0 || operand < 0 || operand > 2
 					return false
 				end
 				bindings.push([identity, operand, 0, 0])
@@ -130,18 +96,8 @@ def collect_array_loop_bounds(mut result: Array<Integer>, parameter_ordinals: Bo
 			end
 		else
 			body_started = true
-			mut opaque := kind == 8
-			if kind == 11
-				opaque = true
-			end
-			if opaque
-				if identity != 0
-					return false
-				end
-				if operand != 0
-					return false
-				end
-				if version != 0
+			if kind == 8 || kind == 11
+				if identity != 0 || operand != 0 || version != 0
 					return false
 				end
 				blocked = true
@@ -155,44 +111,24 @@ def collect_array_loop_bounds(mut result: Array<Integer>, parameter_ordinals: Bo
 				end
 				mut binding := bindings[binding_index]
 				if kind == 9
-					if binding[1] == 0
+					if binding[1] == 0 || operand != 0 || version != 0
 						return false
 					end
-					if operand != 0
-						return false
-					end
-					if version != 0
-						return false
-					end
-					if result[0] == - 1
-						if binding[1] == 1
-							result[0] = identity
-						end
+					if result[0] == - 1 && binding[1] == 1
+						result[0] = identity
 					end
 				else
-					mut is_read := kind == 4
-					if kind == 10
-						is_read = true
-					end
-					if is_read
+					if kind == 4 || kind == 10
 						index_binding := loop_identity(operand, bindings)
-						if binding[1] == 0
-							return false
-						end
-						if index_binding < 0
+						if binding[1] == 0 || index_binding < 0
 							return false
 						end
 						index_value := bindings[index_binding]
-						if index_value[1] != 0
+						if index_value[1] != 0 || index_value[2] != version
 							return false
 						end
-						if index_value[2] != version
-							return false
-						end
-						if result[0] == - 1
-							if binding[1] == 1
-								result[0] = identity
-							end
+						if result[0] == - 1 && binding[1] == 1
+							result[0] = identity
 						end
 						mut level := depth
 						while level > 0
@@ -205,21 +141,12 @@ def collect_array_loop_bounds(mut result: Array<Integer>, parameter_ordinals: Bo
 							end
 						end
 					else
-						if binding[1] != 0
-							return false
-						end
-						if binding[2] != version
+						if binding[1] != 0 || binding[2] != version
 							return false
 						end
 						if kind == 3
 							array_index := loop_identity(operand, bindings)
-							if array_index < 0
-								return false
-							end
-							if region_id == 0
-								return false
-							end
-							if loop_identity(region_id, regions) >= 0
+							if array_index < 0 || region_id == 0 || loop_identity(region_id, regions) >= 0
 								return false
 							end
 							array := bindings[array_index]
@@ -248,13 +175,7 @@ def collect_array_loop_bounds(mut result: Array<Integer>, parameter_ordinals: Bo
 									if region[1] == identity
 										# Include closed regions: a later write inside an outer
 										# loop can change the next invocation of an inner loop.
-										mut unit_update := false
-										if kind == 5
-											if owner == current_region
-												unit_update = loop_read_matches(identity, region[2], version, region)
-											end
-										end
-										if unit_update
+										if kind == 5 && owner == current_region && loop_read_matches(identity, region[2], version, region)
 											region[5] = 1
 										else
 											region[4] = 0
@@ -265,17 +186,11 @@ def collect_array_loop_bounds(mut result: Array<Integer>, parameter_ordinals: Bo
 								binding[2] = version + 1
 								binding[3] = 0
 							else
-								if kind != 7
-									return false
-								end
-								if current_region < 0
+								if kind != 7 || current_region < 0
 									return false
 								end
 								region := regions[current_region]
-								if region[1] != identity
-									return false
-								end
-								if region[2] != operand
+								if region[1] != identity || region[2] != operand
 									return false
 								end
 								binding[3] = 0
@@ -299,10 +214,8 @@ def collect_array_loop_bounds(mut result: Array<Integer>, parameter_ordinals: Bo
 		while index < reads.size()
 			read := reads[index]
 			region := regions[read[0]]
-			if region[4] == 1
-				if region[5] == 1
-					result.push(read[1])
-				end
+			if region[4] == 1 && region[5] == 1
+				result.push(read[1])
 			end
 			index += 1
 		end

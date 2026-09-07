@@ -137,6 +137,35 @@ basenames/toolchains instead of substituting the local Darwin size. Current
 Linux text and same-run comparative build costs are not established here.
 Earlier compiler-time cohorts do not transfer to the corrected compiler.
 
+## Logical-condition readability checkpoint
+
+The proof module now expresses equivalent rejecting guards and conditional
+updates with short-circuit `||` and `&&`. It shrinks from 362 to 275 lines
+without changing the operation schema, evaluation order, selected reads,
+independent verification, or backend boundary. The source SHA-256 is
+`571116ed03c9ce558cc9b25304720ef7e0fbe13badff534cb4a59fa18a391e14`.
+This removes mutable Boolean flags and unnecessary nesting, not safety checks.
+
+Local recovery/QBE-enabled verification passes 97 root and 152 compiler tests
+and all thirteen recovery stages. That verification uses a reference executable
+whose source tree is identical to merged reference
+`6d130b3cd89044d4f54cc983555e0a3d340793c7`; it does not imply that the older
+reference pin supports these snapshot conditions. [PR #324](https://github.com/type-rb/type-rb-native/pull/324)
+updates and independently revalidates the pin. The verified Sep7 seed builds
+this source through the ordinary core/CLI fixed points. [PR #325](https://github.com/type-rb/type-rb-native/pull/325)
+separately migrates the active CI consumers, retaining the immutable amd64 root
+with an exact accepted-source compatibility transition. Both prerequisites
+must be accepted before this refactor can be adopted.
+
+The repeated local compiler is 349,256 bytes, SHA-256
+`dcf245afc11729d28e5076ff3f48d6dde2243cb33bc3903caed9d69692341ba7`.
+Compared with the corrected source above, text grows by 708 bytes to 253,928
+and QBE grows by 962 bytes to 1,130,354. The complete executable size is
+unchanged; the existing text/QBE failures remain. All three application
+executables remain byte-identical under matching output basenames. This is a
+readability improvement, not a new runtime measurement or cost acceptance.
+The earlier measurements and their original pass/fail conclusions are retained.
+
 ## Remaining adoption decision
 
 1. Finish the remaining target/memory authorities; Linux size stops are not
