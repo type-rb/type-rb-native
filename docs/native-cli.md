@@ -226,6 +226,12 @@ preserves expression precedence and postfix operations on the resulting String.
 Nested quoted Strings and nested interpolation are supported within the
 existing expression and ASCII String subset.
 
+Use `\#` to suppress interpolation: `"\#{name}"` produces the literal text
+`#{name}`. With two backslashes, `"\\#{name}"` produces one backslash followed
+by the value of `name`. Undefined escapes such as `\{` and `\q` are errors,
+including in literal segments next to interpolation. Escaped markers retain
+literal coloring in the REPL and round-trip unchanged through its history.
+
 The REPL colors interpolation delimiters and embedded expressions separately
 from literal text, including while input is incomplete. JSON history retains
 interpolation as source text and never interprets it while loading.

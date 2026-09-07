@@ -267,8 +267,8 @@ def interpolation_scenarios(binary):
             try:
                 if not color:
                     terminal.send('\x1b[A')
-                    terminal.wait(lambda: 'puts("#{"nested"}")' in terminal.display,
-                                  'literal interpolation history round trip')
+                    terminal.wait(lambda: r'puts("literal \#{missing}")' in terminal.display,
+                                  'escaped interpolation history round trip')
                     terminal.send('\x03')
                 terminal.evaluate('s := "abc"', '"abc" : String')
                 source = 'puts("hello #{s}")'
@@ -287,6 +287,15 @@ def interpolation_scenarios(binary):
                 terminal.send('}")')
                 terminal.evaluate('', 'hello abc')
                 terminal.evaluate('puts("#{"nested"}")', 'nested')
+                source = r'puts("literal \#{missing}")'
+                terminal.send(source)
+                terminal.wait(lambda: source in terminal.display, 'escaped interpolation input')
+                if color:
+                    line = terminal.screen.buffer[terminal.screen.cursor.y]
+                    start = terminal.screen.cursor.x - len(source)
+                    assert line[start + 6].fg == line[start + source.index('#')].fg
+                    assert line[start + 6].fg == line[start + source.index('missing')].fg
+                terminal.evaluate('', 'literal #{missing}')
                 terminal.finish()
             finally:
                 terminal.close()

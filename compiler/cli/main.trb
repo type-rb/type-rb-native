@@ -59,16 +59,18 @@ def cli_compile_state(mut state: Gate4Compiler, path: String, mode: String, file
 	return 1
 end
 
+# Record fields are immutable; parser state lives in scalar array cells.
+# Boolean flags use 0/1 within the current Native array subset.
 record CliOptions
-	command: String
-	source: String
-	config: String
-	mode: String
-	output: String
-	compile: Boolean
-	stdout: Boolean
+	command: Array<String>
+	source: Array<String>
+	config: Array<String>
+	mode: Array<String>
+	output: Array<String>
+	compile: Array<Integer>
+	stdout: Array<Integer>
 	arguments: Array<String>
-	error: String
+	error: Array<String>
 end
 
 def cli_error(message: String): Integer
@@ -105,7 +107,7 @@ def cli_parse_argument(mut options: CliOptions, arguments: Array<String>, mut in
 	end
 	if has_inline
 		if !cli_any(cli_any(argument == "--mode", argument == "--config"), argument == "--outfile")
-			options.error = "unexpected option value for " + argument
+			options.error[0] = "unexpected option value for " + argument
 			return
 		end
 	end
@@ -118,77 +120,77 @@ def cli_parse_argument(mut options: CliOptions, arguments: Array<String>, mut in
 		return
 	end
 	if argument == "--compile"
-		options.compile = true
+		options.compile[0] = 1
 		return
 	end
 	if argument == "--stdout"
-		options.stdout = true
+		options.stdout[0] = 1
 		return
 	end
 	if cli_any(argument == "--help", argument == "-h")
-		options.command = "help"
+		options.command[0] = "help"
 		return
 	end
 	if argument == "--version"
-		options.command = "version"
+		options.command[0] = "version"
 		return
 	end
 	if cli_any(cli_any(argument == "--mode", argument == "--config"), argument == "--outfile")
 		mut value := inline_value
 		if !has_inline
 			if index[0] >= arguments.size()
-				options.error = "missing value for " + argument
+				options.error[0] = "missing value for " + argument
 				return
 			end
 			value = arguments[index[0]]
 			index[0] += 1
 		end
 		if cli_any(value == "", gate4_string_starts_with(value, "--"))
-			options.error = "missing value for " + argument
+			options.error[0] = "missing value for " + argument
 			return
 		end
 		if argument == "--mode"
-			options.mode = value
+			options.mode[0] = value
 		end
 		if argument == "--config"
-			options.config = value
+			options.config[0] = value
 		end
 		if argument == "--outfile"
-			options.output = value
+			options.output[0] = value
 		end
 		return
 	end
 	if gate4_string_starts_with(argument, "-")
-		options.error = "unknown option " + argument
+		options.error[0] = "unknown option " + argument
 		return
 	end
-	if options.command == ""
+	if options.command[0] == ""
 		if cli_any(cli_any(cli_any(argument == "check", argument == "build"), cli_any(argument == "run", argument == "repl")), cli_any(argument == "help", argument == "version"))
-			options.command = argument
+			options.command[0] = argument
 			return
 		end
 		if !gate4_string_ends_with(argument, ".trb")
 			if !gate4_file_exists(argument)
-				options.error = "unknown command " + argument
+				options.error[0] = "unknown command " + argument
 				return
 			end
 		end
-		options.command = "run"
+		options.command[0] = "run"
 	end
-	if options.source == ""
-		options.source = argument
+	if options.source[0] == ""
+		options.source[0] = argument
 		return
 	end
-	options.error = "unexpected argument " + argument
+	options.error[0] = "unexpected argument " + argument
 	return
 end
 
 def cli_parse(arguments: Array<String>): CliOptions
-	mut options := CliOptions.new(command: "", source: "", config: "", mode: "", output: "", compile: false, stdout: false, arguments: [], error: "")
+	mut options := CliOptions.new(command: [""], source: [""], config: [""], mode: [""], output: [""], compile: [0], stdout: [0], arguments: [], error: [""])
 	mut index := [0]
 	while index[0] < arguments.size()
 		cli_parse_argument(options, arguments, index)
-		if options.error != ""
+		if options.error[0] != ""
 			return options
 		end
 	end
@@ -276,10 +278,10 @@ def native_cli_main(): Integer
 		end
 	end
 	options := cli_parse(arguments)
-	if options.error != ""
-		return cli_error(options.error)
+	if options.error[0] != ""
+		return cli_error(options.error[0])
 	end
-	mut command := options.command
+	mut command := options.command[0]
 	if command == "help"
 		return cli_usage()
 	end
@@ -299,24 +301,24 @@ def native_cli_main(): Integer
 		end
 	end
 	if command != "build"
-		if cli_any(cli_any(options.compile, options.stdout), options.output != "")
+		if cli_any(cli_any((options.compile[0] != 0), (options.stdout[0] != 0)), options.output[0] != "")
 			return cli_error("build options require the build command")
 		end
 	end
-	if cli_both(options.compile, options.stdout)
+	if cli_both((options.compile[0] != 0), (options.stdout[0] != 0))
 		return cli_error("--compile cannot be combined with --stdout")
 	end
 	cwd := native_cli_cwd()
 	if cwd == ""
 		return cli_error("cannot resolve the working directory")
 	end
-	mut source := cli_absolute(options.source, cwd)
-	if options.source != ""
+	mut source := cli_absolute(options.source[0], cwd)
+	if options.source[0] != ""
 		if !gate4_file_exists(source)
 			return cli_error("cannot read source " + source)
 		end
 	end
-	mut config := options.config
+	mut config := options.config[0]
 	if config != ""
 		config = cli_absolute(config, cwd)
 		if !gate4_file_exists(config)
@@ -346,11 +348,11 @@ def native_cli_main(): Integer
 		output_root = gate4_path_directory(config)
 		source = config
 	end
-	if options.mode != ""
+	if options.mode[0] != ""
 		if cli_both(config != "", command != "repl")
 			return cli_error("--mode cannot override a project configuration")
 		end
-		mode = options.mode
+		mode = options.mode[0]
 	end
 	if mode != "trb"
 		return cli_error("mode " + mode + " is not implemented; this experimental compiler supports mode trb")
@@ -372,11 +374,11 @@ def native_cli_main(): Integer
 	if command == "check"
 		return compiler_file_main(gate4_read_source(source), source, "check", true)
 	end
-	if cli_both(command == "build", !options.compile)
-		if options.stdout
+	if cli_both(command == "build", !(options.compile[0] != 0))
+		if (options.stdout[0] != 0)
 			return compiler_file_main(gate4_read_source(source), source, "emit-qbe", true)
 		end
-		if options.output != ""
+		if options.output[0] != ""
 			return cli_error("--outfile requires --compile")
 		end
 		directory := cli_absolute(source_output, output_root)
@@ -413,7 +415,7 @@ def native_cli_main(): Integer
 		return cli_error("QBE is missing; place qbe beside trbn or set TRBN_QBE")
 	end
 	mut temporary := ""
-	mut output := options.output
+	mut output := options.output[0]
 	if command == "run"
 		temporary = native_cli_temp()
 		if temporary == ""

@@ -63,6 +63,31 @@ puts("#{s}".size())
             result = invoke(tool, root, ('repl',), source + '\nputs("recovered")\n:quit\n')
             assert result.stderr and result.stdout == 'recovered\n', result
 
+    escaped = r'''s := "abc"
+puts("aaa\#{missing}")
+puts("aaa\\#{s}")
+puts("aaa\\\#{missing}")
+puts("aaa\#{s} #{s}")
+puts("#{"\#{missing}"}")
+puts("\\n #{s}\nend")
+'''
+    escaped_output = 'aaa#{missing}\naaa\\abc\naaa\\#{missing}\naaa#{s} abc\n#{missing}\n\\n abc\nend\n'
+    path.write_text('def main()\n' + escaped + 'end\n')
+    for tool in [binary] + ([reference] if reference else []):
+        result = invoke(tool, root, ('run', path))
+        assert result.returncode == 0 and result.stderr == '' and result.stdout == escaped_output, result
+        result = invoke(tool, root, ('repl',), escaped + ':quit\n')
+        assert result.returncode == 0 and result.stderr == '' and result.stdout == '"abc" : String\n' + escaped_output, result
+
+    for literal in [r'"aaa#\{s}"', r'"\q"', r'"\q #{"ok"}"', r'"#{"ok"}\q"', r'"#{"\q"}"']:
+        statement = 'puts(' + literal + ')'
+        path.write_text('def main()\n' + statement + '\nend\n')
+        for tool in [binary] + ([reference] if reference else []):
+            result = invoke(tool, root, ('check', path))
+            assert result.returncode != 0 and result.stdout == '' and 'escape' in result.stderr, result
+            result = invoke(tool, root, ('repl',), statement + '\nputs("recovered")\n:quit\n')
+            assert 'escape' in result.stderr and result.stdout == 'recovered\n', result
+
     # Token expansion must fit source-sized REPL probes and hidden input.
     dense = 'puts("' + '#{s}' * 300 + '")'
     result = invoke(binary, root, ('repl',), 's := "z"\n' + dense + '\n:quit\n')

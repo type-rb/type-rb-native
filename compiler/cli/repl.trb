@@ -301,49 +301,60 @@ def repl_submit(mut session: ReplSession, input: String, type_only: Boolean, dis
 	return repl_show(state, session, input, prefix, type_only, display)
 end
 
-def repl_command(mut session: ReplSession, input: String, config: String): Boolean
+record ReplCommand
+	session: ReplSession
+	running: Boolean
+end
+
+record ReplReplay
+	session: ReplSession
+	success: Boolean
+end
+
+def repl_command(mut session: ReplSession, input: String, config: String): ReplCommand
 	if input == ":quit"
-		return false
+		return ReplCommand.new(session: session, running: false)
 	end
 	if input == ":exit"
-		return false
+		return ReplCommand.new(session: session, running: false)
 	end
 	if input == ":q"
-		return false
+		return ReplCommand.new(session: session, running: false)
 	end
 	if input == ":help"
 		repl_help()
-		return true
+		return ReplCommand.new(session: session, running: true)
 	end
 	if input == ":reload"
-		if repl_replay(session, config, [])
+		replayed := repl_replay(session, config, [])
+		if replayed.success
 			puts("reloaded")
 		end
-		return true
+		return ReplCommand.new(session: replayed.session, running: true)
 	end
 	if gate4_string_starts_with(input, ":type ")
 		repl_submit(session, gate4_source_slice(input, 6, input.size()), true, false)
-		return true
+		return ReplCommand.new(session: session, running: true)
 	end
 	if gate4_string_starts_with(input, ":load ")
 		path := repl_trim(gate4_source_slice(input, 6, input.size()))
 		if !gate4_file_exists(path)
 			native_cli_write("trbn: cannot read " + path + "\n", 2)
-			return true
+			return ReplCommand.new(session: session, running: true)
 		end
-		repl_replay(session, config, repl_split_source(gate4_read_source(path)))
-		return true
+		replayed := repl_replay(session, config, repl_split_source(gate4_read_source(path)))
+		return ReplCommand.new(session: replayed.session, running: true)
 	end
 	if gate4_string_starts_with(input, ":")
 		native_cli_write("trbn: unknown REPL command; use :help\n", 2)
-		return true
+		return ReplCommand.new(session: session, running: true)
 	end
 	if input != ""
 		if repl_submit(session, input, false, true)
 			session.submissions.push(input)
 		end
 	end
-	return true
+	return ReplCommand.new(session: session, running: true)
 end
 
 def repl_run(config: String): Integer
@@ -411,8 +422,9 @@ def repl_run(config: String): Integer
 				if !repl_incomplete(pending)
 					input := repl_trim(pending)
 					pending = ""
-					running = repl_command(session, input, config)
-					session.store = repl_compact(session.store, session.environment)
+					command := repl_command(session, input, config)
+					running = command.running
+					session = ReplSession.new(project: command.session.project, text: command.session.text, store: repl_compact(command.session.store, command.session.environment), environment: command.session.environment, submissions: command.session.submissions)
 					if interactive
 						if history != ""
 							if repl_keep_history(input)
@@ -591,11 +603,11 @@ end
 
 # Explicit reload/load rebuild the session, matching the reference commands.
 # Ordinary submissions continue to evaluate only their newly authored input.
-def repl_replay(mut session: ReplSession, config: String, additional: Array<String>): Boolean
+def repl_replay(mut session: ReplSession, config: String, additional: Array<String>): ReplReplay
 	project := repl_project(config)
 	if project.error != ""
 		native_cli_write("trbn: " + project.error + "\n", 2)
-		return false
+		return ReplReplay.new(session: session, success: false)
 	end
 	mut replayed := ReplSession.new(project: project, text: [project.imports, ""], store: repl_store(), environment: repl_environment(), submissions: [])
 	mut inputs: Array<String> := []
@@ -647,26 +659,21 @@ def repl_replay(mut session: ReplSession, config: String, additional: Array<Stri
 			input_index += 1
 		end
 		repl_diagnostic(checked, diagnostic_offset)
-		return false
+		return ReplReplay.new(session: session, success: false)
 	end
 	replayed.text[0] = declarations
 	index = 0
 	while index < inputs.size()
 		if !repl_is_declaration(inputs[index])
 			if !repl_submit(replayed, inputs[index], false, false)
-				return false
+				return ReplReplay.new(session: session, success: false)
 			end
 		end
 		replayed.submissions.push(inputs[index])
-		replayed.store = repl_compact(replayed.store, replayed.environment)
+		replayed = ReplSession.new(project: replayed.project, text: replayed.text, store: repl_compact(replayed.store, replayed.environment), environment: replayed.environment, submissions: replayed.submissions)
 		index += 1
 	end
-	session.project = replayed.project
-	session.text = replayed.text
-	session.store = replayed.store
-	session.environment = replayed.environment
-	session.submissions = replayed.submissions
-	return true
+	return ReplReplay.new(session: replayed, success: true)
 end
 
 def repl_split_source(source: String): Array<String>
