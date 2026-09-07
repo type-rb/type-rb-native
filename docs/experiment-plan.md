@@ -49,6 +49,14 @@ required engineering work or an architectural decision; it does not by itself
 end the native implementation. Targets cannot be weakened after results are
 reviewed merely to label a gate complete.
 
+Follow [Optimization costs and trade-off evaluation](optimization-tradeoffs.md).
+Ordinary acceptance retains existing limits; a preregistered, candidate-specific
+diagnostic can measure benefit despite a cost miss. Any later acceptance-budget
+change needs a separate reviewed decision and enforcement, not retrospective
+relabeling. Track same-feature and frozen cumulative controls and actual Go
+comparisons. Reassess after two size-only attempts without a current runtime
+benefit assessment, rather than polishing small overruns indefinitely.
+
 ## Candidate sequence
 
 Backend candidates are not implemented to production completeness in parallel.
@@ -106,8 +114,9 @@ both sides of the trade: any small compiler-QBE or code-section cost must fit
 the existing temporary envelope with no complete-compiler growth, while the
 selected generated workload must strictly shrink and improve materially in
 wall and CPU time without an RSS regression. The pass cost remains recoverable
-migration space, not permission to expand the envelope or enter another fact
-family.
+migration space under ordinary acceptance. A bounded trade-off investigation
+uses the separate registration/decision procedure above, not a silent expansion
+of this envelope.
 
 Historical MIR transition measurements and their exact source-era bounds are
 preserved in the [gate reference](gate-reference.md#mir-transition-history).
@@ -118,9 +127,11 @@ and its exact validated markers remain the executable source for current
 limits. Only a preregistered marker introduction may use its one-time ratios;
 later ordinary changes return to 1.05. Recovery, generated-code and application
 identity, catastrophic, process, stack, and cleanup bounds remain independent.
-Recover the temporary compiler increase by the end of the portable range,
-index, and induction migration before beginning another fact family. This
-reorganization neither changes a limit nor marks that recovery complete.
+Remove superseded emitter ownership as each slice migrates. Separately account
+for duplicate migration code and useful optimizer code; cumulative cost and
+outstanding ownership debt must be reviewed before another fact family, but
+return to the exact pre-MIR byte count is not the sole condition for bounded
+investigation. No historical limit or failed result is changed by this policy.
 
 LLVM remains deferred until the shared path and benchmark corpus cover scalar,
 Array, allocation, and I/O behavior. Its first role is a bounded

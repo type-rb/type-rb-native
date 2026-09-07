@@ -49,20 +49,19 @@ retain their applicable code/recovery/measurement checks.
 - Treat the current self-hosted direct-QBE path as migration evidence rather
   than the target optimizer architecture. Finish already registered narrow
   experiments, but do not add new non-trivial semantic analysis to its emitter.
-- Keep ordinary optimization candidates inside their registered compactness
-  bounds. A Native MIR foundation may use a separately pre-registered,
-  temporary compiler-size envelope only after measuring the smallest useful
-  skeleton; record build time, RSS, and size throughout, remove superseded
-  emitter logic, and preserve the final Go-competitive build and artifact
-  goals. Register each successive structural transition with an exact validated
-  marker before changing its limits. After the marker reaches the baseline,
-  ordinary relative limits apply again; do not begin another fact family until
-  the registered direct-emitter recovery is complete.
-- For a bounded removal slice whose complete compiler is unchanged only by
-  executable-format alignment, require strict same-run code-section and
-  target-neutral-QBE shrinkage plus complete-compiler non-growth on every
-  registered target. Keep cumulative complete-artifact shrinkage mandatory
-  before the current MIR fact family is declared recovered.
+- Follow `docs/optimization-tradeoffs.md`: ordinary cost limits remain the
+  default acceptance gate, while a preregistered candidate-specific diagnostic
+  may measure runtime benefit despite a cost miss. Never infer merge approval
+  from a diagnostic budget or rewrite historical failures. Preserve correctness,
+  safety, self-hosting and full acceptance authorities.
+- Track both a same-feature control and the frozen cumulative Native baseline;
+  do not compound successive 5% allowances or infer current Go headroom from an
+  older small-program snapshot. Report compiler and application costs separately.
+- Remove superseded emitter ownership, but distinguish duplicate migration code
+  from the justified cost of useful MIR passes. QBE text is a diagnostic signal,
+  not a shipped artifact; its ordinary CI limit is unchanged. After two bounded
+  size-only attempts without a current benefit assessment, explicitly reassess
+  whether to measure the benefit, review the trade, or defer before continuing.
 - Record benchmark inputs, commands, revisions, hardware, operating system,
   toolchain versions, cache state, repetitions, and raw results. Include every
   required sidecar, linker, and runtime in size comparisons.

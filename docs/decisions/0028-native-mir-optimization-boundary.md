@@ -4,6 +4,14 @@
 
 Accepted for the self-hosted optimizer transition.
 
+The cost-decision procedure was amended on 2026-09-07 by
+[Optimization costs and trade-off evaluation](../optimization-tradeoffs.md).
+It supersedes the blanket requirement to recover every added byte before
+investigating another useful pass. Remove duplicate/superseded emitter ownership
+and track cumulative cost; separately justify useful optimizer code. Historical
+ceilings and failed outcomes below remain unchanged, as do ordinary CI limits.
+A bounded diagnostic is not an acceptance allowance.
+
 ## Context
 
 The bootstrap pipeline established a distinct verified Native MIR before QBE

@@ -121,49 +121,28 @@ a time.
 - Add only the feature set required by the active gate. Record a new decision
   before changing language semantics, ownership boundaries, self-hosting
   criteria, or backend selection policy.
-- Keep per-optimization compactness limits unchanged. For a structural Native
-  MIR foundation, measure the minimal skeleton first and pre-register a
-  separate temporary compiler-size envelope, its removal condition, and build,
-  RSS, fixed-point, and generated-application guardrails. Do not silently reuse
-  or relax an optimization threshold. The final build-time and generated-size
-  objectives relative to the Go backend remain unchanged.
-- While the MIR migration is present, use
-  `tools/native-mir-transition-policy.sh` as the single CI source for measured
-  absolute ceilings and exceptional transition ratios. Apply an exceptional
-  ratio only when the candidate introduces its exact validated marker over a
-  baseline without it; use the ordinary 1.05 ratios for every later change.
-  Do not spend either measured structural allowance on unrelated work. Remove
-  the markers and restore the pre-foundation absolute ceilings after portable
-  range, index, and induction ownership has left the direct emitter, before
-  starting the next portable fact family.
-- A bounded removal may fail to change a complete executable because Mach-O or
-  ELF segments are aligned more coarsely than the removed code. Normally
-  require strict same-run per-target code-section and target-neutral-QBE
-  reductions and require every complete compiler to be no larger. If moving
-  the decision into its first explicit MIR pass instead has a small measured
-  compiler-QBE or code-section cost, register that exact cost before the first
-  hosted candidate, keep it inside the existing temporary envelope without
-  adding or expanding an allowance, require strict generated-workload
-  QBE/code-section shrink plus a material runtime improvement, and keep the
-  complete compiler non-growing. In either case retain cumulative recovery as
-  a condition for finishing the current fact family; do not use section
-  granularity or pass structure to begin another semantic family early.
-- For each successive structural slice, first retain a rejected diagnostic run
-  under the current policy, then measure the complete local candidate and
-  register its exact source digests, target sizes, one-time ratios, superseded
-  ownership, and recovery point in a new validated marker before publishing
-  the candidate. Use an exact public revision when one already exists; exact
-  source digests are the pre-publication identity when publishing first would
-  make the measurement policy retrospective. A marker transition is
-  exceptional only while the baseline lacks that exact marker. Do not extend
-  its limits after a marked candidate fails, and do not use it to carry the
-  next fact family.
-- The `native-mir-array-reduction-v1` allowance applies only to the exact
-  two-phi `Array<Integer>` reduction slice and its removal of token/control and
-  mutable-stack emission ownership. Keep the ordinary 1.05 compiler, build,
-  and RSS ratios and the 2.0 catastrophic bound. Recover the complete
-  portable-range/index/induction family increase before starting another
-  portable fact family.
+- Before choosing an optimization's cost/benefit path, read
+  `docs/optimization-tradeoffs.md`. Keep ordinary 1.05 ratios and absolute CI
+  ceilings unchanged unless a separate reviewed acceptance decision updates
+  their enforcement. A cost miss is not, by itself, a reason to abandon a
+  promising optimization or spend indefinitely on size-only refinements.
+- Register a candidate-specific diagnostic before measuring beyond an ordinary
+  cost bound: exact identities, cumulative and same-feature controls, numeric
+  investigation ceilings, runtime benefit/control criteria, run budget,
+  correctness prerequisites, expiry and next decision. Do not convert this into
+  automatic merge authority or silently reuse a structural transition marker.
+- Preserve all earlier failed results. Compare actual application build/size and
+  runtime separately from compiler self-build/text/QBE/distribution costs; old
+  Go measurements do not establish current or general-purpose spare capacity.
+- At coherent checkpoints track incremental and cumulative cost and the next
+  action. After two bounded size-only attempts without a current runtime-benefit
+  assessment, choose bounded measurement, trade-off review, or justified deferral
+  before another such attempt. Keep active evidence in its existing result slot.
+- Remove duplicate and superseded direct-emitter ownership as MIR slices migrate.
+  Useful verified optimization code need not be cost-free: propose its retained
+  cost explicitly. Before another fact family, account for outstanding migration
+  debt and cumulative cost; do not add a second semantic owner or broaden LLVM
+  work merely because an investigation budget exists.
 
 ## Verify
 
