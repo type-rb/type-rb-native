@@ -68,6 +68,14 @@ puts("#{s}".size())
     result = invoke(binary, root, ('repl',), 's := "z"\n' + dense + '\n:quit\n')
     assert result.returncode == 0 and result.stderr == '' and 'z' * 300 + '\n' in result.stdout, result
 
+    path.write_text('def main()\n s := "abc"\n puts("hello #{\n s\n }")\nend\n')
+    for tool in [binary] + ([reference] if reference else []):
+        result = invoke(tool, root, ('run', path))
+        assert result.returncode == 0 and result.stderr == '' and result.stdout == 'hello abc\n', result
+    path.write_text('def main()\n puts("#{\n missing\n }")\nend\n')
+    result = invoke(binary, root, ('check', path))
+    assert result.returncode != 0 and ':3: error[TRBN4003]:' in result.stderr, result
+
     # Line origins survive lowering and nested lexical failures.
     path.write_text('def main()\n\n  puts("hello #{missing}")\nend\n')
     result = invoke(binary, root, ('check', path))

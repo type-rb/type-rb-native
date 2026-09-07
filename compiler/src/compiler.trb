@@ -3083,15 +3083,45 @@ def gate4_scan_string(
 											gate4_push_token(state, 5, "(", line)
 											first_token := state.token_count[0]
 											inner := gate4_source_slice(source, position[0] + 2, finish)
-											gate4_lex_source(state, inner, 0)
+											mut first := 0
+											mut last := inner.size()
+											mut inner_line := line
+											mut trim := true
+											while trim
+												if first >= last
+													trim = false
+												else
+													if gate4_character_in(inner[first], " \t\r\n")
+														if inner[first] == "\n"
+															inner_line += 1
+														end
+														first += 1
+													else
+														trim = false
+													end
+												end
+											end
+											trim = true
+											while trim
+												if last <= first
+													trim = false
+												else
+													if gate4_character_in(inner[last - 1], " \t\r\n")
+														last -= 1
+													else
+														trim = false
+													end
+												end
+											end
+											gate4_lex_source(state, gate4_source_slice(inner, first, last), 0)
 											state.token_count[0] -= 1
 											mut token := first_token
 											while token < state.token_count[0]
-												gate4_store_integer(state.token_lines, token, gate4_load_integer(state.token_lines, token) + line - 1)
+												gate4_store_integer(state.token_lines, token, gate4_load_integer(state.token_lines, token) + inner_line - 1)
 												token += 1
 											end
 											if gate4_has_diagnostic(state)
-												gate4_store_integer(state.diagnostic_lines, 0, gate4_load_integer(state.diagnostic_lines, 0) + line - 1)
+												gate4_store_integer(state.diagnostic_lines, 0, gate4_load_integer(state.diagnostic_lines, 0) + inner_line - 1)
 												return line - start_line
 											end
 											mut character_index := 0
