@@ -8,12 +8,24 @@ successor to structured checking, MIR verification and address lowering.
 
 ## Current integration checkpoint
 
-The draft now integrates accepted main `3ae51bbf`, including independent Boolean
+The draft now integrates accepted main `26bb32a3`, including independent Boolean
 support from #317, its REPL unary-precedence correction, the exact reference
 `47a160cae05ddc2035c7430735c4762d36bbc9c4`, and current CI/retention policy.
 This integration is not a passing cost result. The original frozen baseline
 above and every earlier rejection remain binding. Revalidate the complete
-source before measuring a source-distinct compiler-cost reduction.
+source before measuring a source-distinct compiler-cost reduction. PR #319 adds
+the [trade-off evaluation policy](optimization-tradeoffs.md) without changing
+production compiler code or ordinary limits. The
+[registered bounded evaluation](https://github.com/type-rb/type-rb-native/issues/303#issuecomment-5567395291)
+now measures the current candidate's runtime benefit against both the frozen
+baseline and accepted same-feature main, rather than requiring another size-only
+refinement first. This supersedes the earlier size-first diagnostic sequencing,
+not its failed outcomes or the full acceptance requirements.
+The [completed assessment](../results/2026-09-07-array-loop-output-batching-darwin-arm64/README.md#trade-off-evaluation-outcome)
+shows 1.57--2.21% less spectral CPU time, but three of four cohorts miss the
+required repeated 2% wall-and-CPU gain. All controls and investigation budgets
+pass. This budget is now expired; keep the draft and investigate a larger
+general-purpose MIR benefit before proposing an acceptance cost exception.
 
 Superseded diagnostic folders are no longer part of the active checkout.
 The pinned historical links below retain their full observations and patches;
@@ -34,15 +46,16 @@ does not waive section/QBE bounds. All 81 corpus QBE/diagnostic outputs remain
 identical to the integrated control, and ordinary core/CLI fixed points and
 CLI regressions pass for the batching checkpoint; the field cleanup repeats
 core/CLI fixed points and all 81 exact corpus comparisons and passes 152 compiler
-tests without recovery. Next reduce compiler/projection representation before
-full recovery and hosted acceptance; do not dispatch long runtime acceptance
-while these cost bounds fail.
+tests without recovery. Full recovery and hosted acceptance remain required.
+Ordinary acceptance remains blocked by the cost limits; a separately registered
+local runtime evaluation does not waive them.
 
 The named-field candidate's separate frozen-baseline cohort fails wall time at
 1.1047821, while CPU 1.0374060 and RSS 1.0004095 pass. All 18 ordinary builds
 reach fixed points and retained values pass the 2.0 catastrophic bound. Keep
 the failed cohort; the earlier batching timing pass does not transfer to this
-source, and the current candidate still needs size and time improvement.
+source. Acceptance still needs compliant costs or a separately reviewed,
+measured candidate-specific trade-off decision; the diagnostic is neither.
 
 ## Proof boundary
 

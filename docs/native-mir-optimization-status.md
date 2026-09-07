@@ -11,6 +11,18 @@ fail. The new source's separate cohort also misses wall time (1.1047821 versus
 1.05); CPU and RSS pass. Keep both outcomes, not just the earlier time pass.
 It remains draft; no current runtime or Pure Go result is accepted. The
 source-era failures below remain historical evidence, not current measurements.
+PR #319 adopts [bounded trade-off evaluation](optimization-tradeoffs.md): retain
+ordinary limits while investigating a candidate's benefit under preregistered
+diagnostic ceilings. Compare same-feature main as well as the frozen cumulative
+baseline; do not require another size-only attempt before measuring value.
+The resulting [bounded assessment](../results/2026-09-07-array-loop-output-batching-darwin-arm64/README.md#trade-off-evaluation-outcome)
+retains all 180 observations: spectral CPU falls 1.57--2.21%, but three of four
+cohorts miss the registered repeated 2% wall-and-CPU benefit. Controls, root RSS,
+fixed points and investigation budgets pass. New self-build time cohorts pass
+without cancelling the earlier failure; absolute text/QBE ordinary limits still
+fail. Keep the candidate draft. The next step is to investigate remaining checked
+numeric-loop work for a larger verified MIR benefit, not automatically increase
+acceptance limits or resume size-only polishing. Pages values are unchanged.
 
 The [Array-loop bounds connection candidate](native-mir-loop-bounds.md), tracked
 in [issue #303](https://github.com/type-rb/type-rb-native/issues/303), extends the
@@ -335,9 +347,12 @@ all 182,400,576 allocated bytes, finish at zero live managed bytes with a
 QBE.
 
 The temporary MIR allowance is migration space, not a new final size target.
-It must be recovered by deleting superseded direct-emitter ownership by the end
-of portable range, index, and induction migration. The final Go-competitive
-build-time and generated-artifact objectives and the Pure Go-or-better
+Under the dated amendment to decision 0028, superseded direct-emitter ownership
+must be removed, while the retained cost of useful verified MIR passes is
+evaluated explicitly instead of requiring every pass to be byte-neutral.
+Outstanding migration debt and cumulative costs must be accounted for before
+the next fact family; ordinary ceilings do not change automatically. The final
+Go-competitive build-time and generated-artifact objectives and the Pure Go-or-better
 generated-program runtime objective remain unchanged.
 
 Public evidence:

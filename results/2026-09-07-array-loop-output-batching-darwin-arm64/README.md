@@ -1,10 +1,12 @@
-# Array-loop batching and verifier-size diagnostic
+# Array-loop cost and runtime trade-off diagnostic
 
 Not accepted. The current named-field verifier candidate reduces compiler QBE
-and text but still exceeds both absolute limits and misses local build wall time.
+and text but still exceeds both absolute limits. Its first named-field build
+cohort fails wall time; later trade-off cohorts pass and are reported separately.
 The earlier batching-only cohort passes local time/RSS, not absolute size.
-The Array runtime benefit, full recovery and hosted authorities remain unverified
-for the current source. There is no Pure Go or Pages performance claim.
+The later bounded runtime evaluation is recorded below separately from ordinary
+acceptance. Full recovery and hosted authorities remain unfinished for the
+current source. There is no Pure Go or Pages performance claim.
 
 ## Identities and scope
 
@@ -115,3 +117,120 @@ constructor reduced text by 36 bytes but increased QBE by 252 bytes; a flat
 output container increased text by 296 bytes and QBE by 1,272 bytes. Neither
 justified changing the current representation. Their size diagnostics do not
 alter any allowance or constitute runtime evidence.
+
+## Bounded trade-off protocol
+
+The [prospective registration](https://github.com/type-rb/type-rb-native/issues/303#issuecomment-5567395291)
+uses the policy adopted in PR #319. Candidate production source remains
+`c33b105fee3af3712fe97d938d20167d2f013bdf`; integrating the policy as `1309ce32`
+changes no compiler, runtime or tool code. The cumulative control stays
+`1afd60c2c7257ed34fd2a2aa70cb8b9164433009`; accepted main
+`26bb32a3d3bd085fdae4fc190bf2a14703351a8f` is the additional same-feature
+control. This measures the whole pending candidate, not a causal ablation of
+each compiler-cost refinement.
+
+The candidate-specific investigation ceilings are 350,000 complete compiler
+bytes and 1.05 times the cumulative compiler, 254,000 text bytes and 1,135,000
+QBE bytes. Self-build wall/CPU/root RSS limits are 1.20/1.10/1.05 against each
+same-run control; retained catastrophic observations remain limited to 2.0.
+Ordinary 250,904 text, 1,120,000 QBE and 1.05 cost ratios are unchanged and
+reported separately. This is not an acceptance allowance.
+
+Runtime measurements use unchanged sources and inputs: spectral-norm/5500 has
+two separately executed cohorts against each control, with wall and CPU ratios
+at most 0.98. The n-body/1000000 and fannkuch-redux/10 controls have one cohort
+per comparison and 1.02 wall/CPU limits. All have 1.05 median root RSS and 2.0
+retained catastrophic limits. Each cohort contains two warmups and seven
+retained observations per role, alternating baseline/candidate order by round.
+The smaller control inputs are bounded diagnostic coverage, not replacements
+for full formal controls. No observations are retried or selected out.
+
+Use the [external observer](tradeoff-observer.py) in `setup` then `measure`
+mode, passing the candidate checkout, a fresh output directory, QBE, and the
+frozen/main/candidate compilers. Its public version exposes those paths as
+arguments; the locally executed version supplied them as configuration
+constants, with identical setup and measurement functions. Setup snapshots
+each compiler's exact own source from Git, checks compiler fixed points and
+source equality, builds all nine applications, and checks expected stdout and
+empty stderr before timing. Measurement uses monotonic fork/exec/wait4 timing,
+records every row before proceeding, validates outputs or compiler fixed points,
+and imposes a single 20-minute deadline on the eight runtime and at most two
+self-build cohorts. Timeout kills the observed process group and records failure.
+Catastrophic and median budget checks occur when a cohort's medians are available;
+wrong output or timeout stops immediately. A missed minimum runtime benefit is
+retained as a failed criterion, not retried for a more favorable sample.
+
+The same Apple M2 Pro/macOS 26.6.2/QBE 1.3/Apple clang 21.0.0 environment is
+used, with warm caches and no CPU affinity or host-wide isolation. Other owned
+builds/tests finish before timing. Application sizes here are ordinary unstripped
+Mach-O executables, not the published stripped Linux sizes. External QBE and
+system tool dependencies remain unchanged and are not included in app bytes.
+Application builds in setup are untimed correctness preparation; this diagnostic
+does not establish application build-time ratios or current TypeRB Go headroom.
+
+## Trade-off evaluation outcome
+
+All ten registered cohorts completed in 241.94 seconds, without retries. All
+144 runtime observations have exact expected output and all 36 self-build
+observations reproduce their respective compiler. The three setup fixed points,
+nine application preflights, complete identities and sizes are in
+[tradeoff-identities.json](tradeoff-identities.json); all 180 warmup/retained
+rows are in [tradeoff-raw.csv](tradeoff-raw.csv), with unrounded medians,
+limits and statuses in [tradeoff-summary.json](tradeoff-summary.json).
+
+| Runtime comparison | Wall ratio | CPU ratio | RSS ratio | Registered runtime criterion |
+| --- | ---: | ---: | ---: | --- |
+| spectral / frozen, cohort 1 | 0.965287 | 0.977927 | 1.020134 | pass |
+| spectral / same-feature main, cohort 1 | 0.968476 | 0.980209 | 1.000000 | fail |
+| spectral / frozen, cohort 2 | 0.987201 | 0.984294 | 1.006711 | fail |
+| spectral / same-feature main, cohort 2 | 0.983861 | 0.981890 | 1.000000 | fail |
+| n-body / frozen | 0.993625 | 0.998898 | 1.000000 | pass |
+| n-body / same-feature main | 1.005596 | 0.996651 | 1.000000 | pass |
+| fannkuch / frozen | 1.007068 | 1.004224 | 1.011765 | pass |
+| fannkuch / same-feature main | 1.000677 | 0.997116 | 1.011765 | pass |
+
+The spectral CPU reduction is 1.57--2.21%, and wall reduction 1.28--3.47%.
+This is encouraging but **does not meet the repeated 2% wall-and-CPU criterion**:
+three of four cohorts miss it. Do not round 0.980209 down to 0.98 or pool away
+the failed cohorts. Every control and every retained 2.0 catastrophic check
+passes. Median RSS meets its bound throughout. These are single-process local
+Darwin results, not a new formal Linux or Pure Go comparison.
+
+| Own-source compiler comparison | Wall ratio | CPU ratio | RSS ratio | Ordinary time/RSS | Investigation time/RSS |
+| --- | ---: | ---: | ---: | --- | --- |
+| Candidate / frozen | 0.992742 | 0.996871 | 1.004499 | pass | pass |
+| Candidate / same-feature main | 0.944879 | 0.954142 | 1.006127 | pass | pass |
+
+The new cohorts pass both cost budgets. They do **not** cancel the earlier
+1.1047821 wall-time failure or establish stable universal self-build gains.
+Sources are exact per-role Git snapshots, with each compiler building its own
+source; this includes source-volume/shape differences. Different sessions and
+non-isolated scheduling produce different observations. This preregistered
+diagnostic is not an unchanged-source acceptance retry.
+
+| Compiler artifact | Frozen | Same-feature main | Candidate |
+| --- | ---: | ---: | ---: |
+| Complete bytes | 332712 | 332728 | 349256 |
+| Mach-O text bytes | 233536 | 241600 | 253180 |
+| Target-neutral QBE bytes | 1056552 | 1086338 | 1129223 |
+
+Complete compiler growth is 16,528 bytes versus same-feature main and 16,544
+versus the frozen baseline (about 4.97% in either case). Text grows by 11,580
+and 19,644 bytes respectively; QBE by 42,885 and 72,671. The investigation
+size budget passes; ordinary absolute text and QBE limits still fail. All
+three application file sizes remain equal across roles: spectral 50,992,
+n-body 50,984 and fannkuch 50,960 bytes. Both controls are byte-identical across
+all three compilers; spectral differs only between the candidate and the two
+byte-identical baseline applications.
+
+Decision: keep the candidate draft and expire this diagnostic budget. Do not
+request a larger acceptance envelope on the strength of this small, incompletely
+repeated benefit alone, and do not return automatically to size-only polishing.
+Next inspect the remaining hot-loop checked arithmetic and the facts needed for
+a larger general-purpose MIR benefit. The currently verified Array-read proof
+does not authorize removing induction/arithmetic checks; any extension needs a
+new bounded registration, independent proof and failure/overflow controls. Keep
+the current implementation and failed evidence available for that investigation.
+Full recovery, hosted target/process/memory checks, formal full-input runtime
+acceptance and matched application build/Go comparisons remain pending. Pages
+continues to show the last complete accepted result.
