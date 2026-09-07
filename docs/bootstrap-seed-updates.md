@@ -21,8 +21,8 @@ immutable tag and digests, never a floating `latest` asset.
 ## Refresh sequence
 
 The registered refresh is tracked by [issue #320](https://github.com/type-rb/type-rb-native/issues/320).
-Preparation tooling alone does not mean that the new release is published or
-that checkout pins have switched.
+Preparation tooling alone does not mean that a release is published or that
+checkout pins have switched. The current accepted handoff is recorded below.
 
 1. Register a new tag, accepted source revision/closure, predecessor identities,
    target matrix and current bounds. Merge the reviewed observer changes first.
@@ -75,3 +75,30 @@ Compiler binaries stay outside Git. Retain compact accepted release identities
 and durable verification links; temporary workflow packages/logs expire normally.
 Never replace a published asset, retry until a favorable measurement hides an
 earlier failure, or switch the default pin before post-publication verification.
+
+## Current verified checkout seed
+
+Checkout builds pin [bootstrap-seed-2026-09-07](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-09-07),
+an immutable experimental prerelease from accepted source
+`1f7e8a110bbb2b13f0609709deb6fc8f09dc8b44`. The compiler tree is unchanged from
+accepted `26bb32a3d3bd085fdae4fc190bf2a14703351a8f`; no pending optimization
+candidate was included. The predecessor remains immutable and unchanged.
+
+- [Preparation and attestations](https://github.com/type-rb/type-rb-native/actions/runs/34113420518) passed both arm64 targets.
+- [Fresh published-asset verification](https://github.com/type-rb/type-rb-native/actions/runs/34113836522) passed both targets, including equality of each downloaded seed with its regenerated fixed point, corpus, all retained generation observations and ordinary Linux process boundaries.
+- Darwin compiler: 332,728 bytes, SHA-256 `b960d8720ad6bb256fb019d04cd6ab80e86870228bed16776bba9fbe78f5769f` (asset 548637192).
+- Linux compiler: 307,544 bytes, SHA-256 `ff3bc9a2409e91eba0e2ef5109bf72a10aa16d4f360bc32aceafc50baa96a580` (asset 548637194).
+- Combined: 640,272 bytes, below the unchanged 667,000-byte bound.
+- Manifest: SHA-256 `330e59e08bb1173b5865e782a7c578a556942ba5174422434cc56ab4fedfeed5` (asset 548637191).
+- Checksum index: SHA-256 `a36b347714285cc4e80597987c2863b7595e5e72a7b082f4787a628c49d194fe` (asset 548637193).
+
+The [first preparation](https://github.com/type-rb/type-rb-native/actions/runs/34111463383)
+passed Darwin but stopped Linux at its second setup transition, before ordinary
+measurements: the observer mislabeled that compatibility build `ordinary`.
+[PR #322](https://github.com/type-rb/type-rb-native/pull/322) corrected the role to
+match the existing worker authority; it did not relax ordinary LLD or numerical
+requirements. No release was produced from the failed paired run.
+
+Compiler binaries and detailed run artifacts remain outside Git. This compact
+handoff record does not introduce another retained benchmark result directory
+or claim a runtime speedup.

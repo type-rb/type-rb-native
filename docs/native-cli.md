@@ -41,8 +41,11 @@ both systems; it has no libedit or Wasm dependency.
 Checkout bootstrap currently supports Darwin arm64 and Linux arm64, even
 though the internal compiler also has a Linux amd64 target profile.
 
-The script pins the `bootstrap-seed-2026-08-30` release assets and their SHA-256
-digests, and the QBE 1.3 archive digest. Cache files live in `.trb/bootstrap`.
+The script pins the `bootstrap-seed-2026-09-07` release assets and their SHA-256
+digests, and the QBE 1.3 archive digest. Cache files live in `.trb/bootstrap`;
+downloaded seeds live under their release tag there. Updating the pin selects
+a new cache entry without overwriting an older seed. The changed build script
+also invalidates the verified core/CLI cache by content.
 See [seed update policy](bootstrap-seed-updates.md) for compatibility-driven
 refreshes and the separate pre-/post-publication verification boundary.
 `TRBN_BOOTSTRAP_SEED` can select a local copy of that exact pinned seed.

@@ -36,8 +36,21 @@ with tempfile.TemporaryDirectory(prefix='native bootstrap ') as temporary:
         # Content changes must invalidate even when timestamps are preserved.
         os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))
 
+    # An old same-name cache must not shadow the immutable release-scoped seed.
+    seeds = list((root / '.trb/bootstrap/bootstrap-seed-2026-09-07').glob('type-rb-native-bootstrap-*'))
+    assert len(seeds) == 1, seeds
+    legacy_seed = root / '.trb/bootstrap' / seeds[0].name
+    legacy_seed.write_bytes(b'synthetic stale legacy seed\n')
+
     build()
     baseline = snapshot()
+    invalid_seed = subprocess.run(['./trbn', '--version'], cwd=root,
+                                  env={**env, 'TRBN_BOOTSTRAP_SEED': str(legacy_seed)},
+                                  text=True, capture_output=True, timeout=120)
+    assert invalid_seed.returncode != 0 and 'checksum mismatch' in invalid_seed.stderr
+    assert snapshot() == baseline
+    assert not (root / '.trb/bootstrap/build.lock').exists()
+    assert not list((root / '.trb/bootstrap').glob('build.*'))
     assert build() == '' and snapshot() == baseline
     (root / 'compiler/cli/main.trb').touch()
     (root / 'compiler/cli/ignored_test.trb').write_text('invalid test source\n')
@@ -64,6 +77,7 @@ with tempfile.TemporaryDirectory(prefix='native bootstrap ') as temporary:
     result = build()
     assert 'bootstrapping' in result and 'reusing' not in result
     assert snapshot()[1] != baseline[1]
+    assert legacy_seed.read_bytes() == b'synthetic stale legacy seed\n'
 
     nested = root / 'compiler/src/unused'
     nested.mkdir()
