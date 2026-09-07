@@ -111,6 +111,27 @@ def gate4_large_scalar_inline_test_source(): String
 end
 
 describe("Gate 4 TypeRB frontend") do
+	test("skips unreachable structured statements without changing block boundaries") do
+		source := "def main()\nreturn\nif true\nwhile true\nputs(\"unreachable\")\nend\nelse\nreturn\nend\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		output := gate4_emit_qbe(state)
+		expect(gate4_has_diagnostic(state)).to_be_false()
+		expect(gate4_output_source(output).include?("export function w $main")).to_be_true()
+	end
+
+	test("still type checks unreachable structured statements") do
+		source := "def main()\nreturn\nif 1\nputs(\"unreachable\")\nend\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_false()
+	end
+
 	test("checks every elsif condition and isolates branch bindings") do
 		source := "def main()\nif false\nvalue := 1\nputs(value)\nelsif false\nvalue := true\nputs(value)\nelsif true\nvalue := \"selected\"\nputs(value)\nelse\nvalue := 2.0\nputs(value == 2.0)\nend\nend\n"
 		mut state := gate4_compiler_new(source.size() + 1)
