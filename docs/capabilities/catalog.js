@@ -12,7 +12,7 @@ const capability = (title, status, scopes, description, evidence) => ({
 
 export const catalog = {
   schemaVersion: 1,
-  updatedAt: '2026-09-07',
+  updatedAt: '2026-09-08',
   areas: [
     {
       id: 'language',
@@ -21,8 +21,8 @@ export const catalog = {
       items: [
         capability('Functions, branches, and loops', 'verified', ['parity'], 'Execute the bounded control-flow and direct-call surface with deterministic failures.', ['Gate 1', 'docs/gate-1-qbe.md']),
         capability('Checked Integer and binary64 Float', 'verified', ['parity', 'ecosystem'], 'Preserve portable Integer bounds and the selected Float behavior.', ['Gate 1 / Gate 6I', 'docs/gate-6-float.md']),
-        capability('Records, enums, Result, and try', 'verified', ['parity', 'production'], 'Lower aggregate values, tagged values, calls, returns, and Result propagation.', ['Gate 2', 'docs/gate-2-aggregates.md']),
-        capability('Managed String, Array, and closures', 'verified', ['parity', 'production', 'ecosystem'], 'Execute managed UTF-8 strings, mutable arrays, and captured closures.', ['Gate 3', 'docs/gate-3-managed-runtime.md']),
+        capability('Snapshot records, enums, Result, and try', 'verified', ['parity', 'production'], 'The snapshot/recovery path lowers aggregates, tagged values and Result propagation. This evidence does not establish ordinary trbn enum or Result support.', ['Gate 2 snapshot path', 'docs/gate-2-aggregates.md']),
+        capability('Snapshot managed String, Array, and closures', 'verified', ['parity', 'production', 'ecosystem'], 'The snapshot/recovery path executes managed UTF-8 strings, arrays and closures. Ordinary trbn has a narrower String and collection boundary; this is not ordinary UTF-8 literal or closure support.', ['Gate 3 snapshot path', 'docs/gate-3-managed-runtime.md']),
         capability('Complete TypeRB syntax and diagnostics', 'partial', ['parity', 'production', 'ecosystem'], 'The ordinary compiler and REPL support checked short-circuit Boolean OR/AND, precedence and conditional effects. The frontend remains bounded, not the complete reference surface.', ['Boolean expressions', 'docs/native-logical-expressions.md']),
         capability('Generics', 'unassessed', ['parity', 'production', 'ecosystem'], 'Inventory generic declarations, specialization, inference, and diagnostics against the reference compiler.'),
         capability('Classes, interfaces, and dispatch', 'unassessed', ['parity', 'production', 'ecosystem'], 'Define and verify the abstraction and dispatch surface needed by representative packages.'),

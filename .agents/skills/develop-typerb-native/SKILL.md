@@ -15,6 +15,11 @@ a time.
 3. Treat `type-rb/type-rb` at `TYPE_RB_REVISION` as the language, compiler, and
    conformance source of truth.
 4. State the current gate and its exit condition before expanding scope.
+5. Read `docs/native-language-coverage.md` when selecting a new feature or
+   changing coverage claims. Prefer the current basic-language slices and
+   their necessary MIR work over further benchmark tuning. Keep ordinary
+   check/build/execution/REPL evidence distinct from recovery, and complete
+   the seed/recovery prerequisites before compiler source adopts new syntax.
 
 ## Preserve repository ownership
 

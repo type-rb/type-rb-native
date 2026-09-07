@@ -67,8 +67,10 @@ snapshot/recovery pipeline and the ordinary compiler have different coverage.
 See the [capability map](https://type-rb.github.io/type-rb-native/) for the
 measured boundary, not the highest completed gate number.
 
-Current work moves portable optimization ownership from the direct QBE emitter
-into verified Native MIR and improves representative runtime performance.
+Current work expands ordinary language coverage and improves compiler-source
+readability, with the required semantic ownership and verification in Native
+MIR. See the [basic language coverage plan](docs/native-language-coverage.md).
+Further benchmark tuning is secondary to these bounded language slices.
 Pure Go parity remains a goal, not an achieved general result. Runtime and
 compiler-build measurements are separate in the
 [benchmark explorer](https://type-rb.github.io/type-rb-native/benchmarks/).
