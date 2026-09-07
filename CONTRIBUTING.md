@@ -70,6 +70,12 @@ canonical compiler entry. Reference acceptance alone does not establish that a
 spelling is supported by the current Native bootstrap subset. Reject an
 unsupported-source candidate at that cheap boundary before further timing or
 recovery work; do not expand language capability just to pass a cost check.
+An independently justified basic-language gap that forces duplicated checks
+or unnatural nesting may be implemented as a bounded capability slice. Pair
+closely related forms, retain the reference semantics and applicable cost
+checks, and verify fresh bootstrap before using the feature in compiler source.
+The [logical-expression slice](docs/native-logical-expressions.md) records
+this boundary for `||` and `&&`.
 
 ## Cross-repository changes
 

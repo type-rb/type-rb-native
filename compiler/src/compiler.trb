@@ -1,7 +1,7 @@
 import { Gate4IntegerStorage, Gate4StringStorage, gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage
 import { gate4_path_basename, gate4_path_directory, gate4_path_join, gate4_string_ends_with, gate4_string_starts_with, gate4_string_without_suffix } from path
 import { gate4_ascii_code, gate4_integer_string, gate4_number_is_float, gate4_number_without_underscores, gate4_small_nonnegative_integer_operand } from literals
-import { gate4_mir_block_index, gate4_mir_function_index, gate4_mir_value_type, gate4_optimize_verified_mir, gate4_verify_mir } from mir
+import { gate4_mir_block_index, gate4_mir_function_index, gate4_mir_value_type, gate4_optimize_verified_mir, gate4_verify_mir, mir_logical_short_value } from mir
 import { Gate4Compiler, Gate4SymbolIndex, gate4_add_module, gate4_add_name_index, gate4_compiler_new, gate4_diagnostic, gate4_find_module, gate4_find_name, gate4_has_diagnostic, gate4_local_add, gate4_locals_new, gate4_symbol_index_new } from state
 import { gate4_advance, gate4_binary_operator_id, gate4_binary_precedence, gate4_declaration_start, gate4_expect, gate4_expect_identifier, gate4_finish_statement, gate4_parse_module, gate4_parse_simple_statement_syntax, gate4_parse_type, gate4_skip_newlines, gate4_token_is } from parser
 import { gate4_array_element_type, gate4_array_type, gate4_common_array_element_type, gate4_find_field, gate4_find_function_in_module, gate4_find_record_type, gate4_find_visible_function, gate4_find_visible_record, gate4_import_path_value, gate4_normalize_import_path, gate4_record_type, gate4_resolve, gate4_resolve_type_name, gate4_standard_package_import, gate4_standard_package_root, gate4_standard_package_target, gate4_validate_import_usage } from resolution
@@ -2001,6 +2001,51 @@ def lower_checked_binary(
 	return gate4_emitted_value(operand, result_type, 0, "", 0, "")
 end
 
+def lower_checked_logical(
+		mut state: Gate4Compiler,
+		mut position: Array<Integer>,
+		mut context: Gate4EmitContext,
+		mut output: QbeOutput,
+		origin: Integer,
+		minimum_precedence: Integer,
+		left: Gate4EmittedValue,
+	): Gate4EmittedValue
+	plan := gate4_load_integer(state.mir_nonnegative_facts, origin)
+	short_value := mir_logical_short_value(plan)
+	mut valid := short_value >= 0
+	if valid
+		valid = plan - 64 == gate4_binary_operator_id(gate4_load_string(state.token_texts, origin))
+	end
+	if !valid
+		gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, origin), "invalid checked logical plan")
+		return gate4_emitted_value("0", "Invalid", 0, "", 0, "")
+	end
+	rhs := gate4_emit_label(context)
+	merge := gate4_emit_label(context)
+	slot := gate4_emit_temporary(context)
+	qbe_output_line(output, "\t" + slot + " =l alloc8 8")
+	qbe_output_line(output, "\tstorel " + gate4_integer_string(short_value) + ", " + slot)
+	if short_value == 1
+		qbe_output_branch(output, left.operand, merge, rhs)
+	else
+		qbe_output_branch(output, left.operand, rhs, merge)
+	end
+	qbe_output_line(output, rhs)
+	# Header temporaries created on either conditional path do not dominate
+	# the merge. The shared managed-root stack remains runtime path-sensitive.
+	gate4_invalidate_array_header_cache(context)
+	right := gate4_emit_expression(state, position, context, output, minimum_precedence, "Boolean")
+	qbe_output_line(output, "\tstorel " + right.operand + ", " + slot)
+	qbe_output_line(output, "\tjmp " + merge)
+	qbe_output_line(output, merge)
+	result := gate4_emit_temporary(context)
+	# The local Boolean slot gives nested RHS regions one merge without
+	# reconstructing their final predecessor. QBE promotes this private slot.
+	qbe_output_line(output, "\t" + result + " =l loadl " + slot)
+	gate4_invalidate_array_header_cache(context)
+	return gate4_emitted_value(result, "Boolean", 0, "", 0, "")
+end
+
 def gate4_emit_expression_value(
 		mut state: Gate4Compiler,
 		mut position: Array<Integer>,
@@ -2026,15 +2071,22 @@ def gate4_emit_expression_value(
 		else
 			gate4_advance(position)
 			gate4_skip_newlines(state, position)
-			right := gate4_emit_expression(
-				state,
-				position,
-				context,
-				output,
-				precedence + 1,
-				"",
-			)
-			value = lower_checked_binary(state, context, output, operator_origin, value, right)
+			if precedence <= 2
+				value = lower_checked_logical(state, position, context, output, operator_origin, precedence + 1, value)
+				if gate4_has_diagnostic(state)
+					return value
+				end
+			else
+				right := gate4_emit_expression(
+					state,
+					position,
+					context,
+					output,
+					precedence + 1,
+					"",
+				)
+				value = lower_checked_binary(state, context, output, operator_origin, value, right)
+			end
 		end
 	end
 	return value
@@ -3009,6 +3061,14 @@ def gate4_scan_string(
 end
 
 def gate4_two_character_symbol(first: String, second: String): Boolean
+	if first == second
+		if first == "|"
+			return true
+		end
+		if first == "&"
+			return true
+		end
+	end
 	if second == "="
 		return gate4_character_in(first, ":=!<>+-*/")
 	end
@@ -3034,7 +3094,11 @@ def gate4_scan_symbol(
 			gate4_advance(position)
 		end
 	end
-	if gate4_character_in(character, "()[]{}:,.+-*/%<>=!")
+	mut supported := symbol.size() == 2
+	if !supported
+		supported = gate4_character_in(character, "()[]{}:,.+-*/%<>=!")
+	end
+	if supported
 		gate4_push_token(state, 5, symbol, line)
 	else
 		gate4_diagnostic(state, "TRBN4001", line, "unsupported source character " + character)

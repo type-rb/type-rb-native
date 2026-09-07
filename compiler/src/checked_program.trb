@@ -1,6 +1,6 @@
 import { gate4_load_integer, gate4_load_string, gate4_store_integer } from storage
 import { gate4_float_literal_in_range, gate4_integer_literal_in_range, gate4_number_is_float, gate4_small_nonnegative_integer_operand } from literals
-import { gate4_mir_array_element_type, gate4_mir_function_index } from mir
+import { gate4_mir_array_element_type, gate4_mir_function_index, mir_logical_plan } from mir
 import { Gate4Compiler, Gate4Locals, gate4_diagnostic, gate4_has_diagnostic, gate4_local_add, gate4_local_find, gate4_terminal_token } from state
 import { gate4_advance, gate4_binary_operator_id, gate4_binary_precedence, gate4_declaration_start, gate4_expect, gate4_expect_identifier, gate4_finish_statement, gate4_parse_type, gate4_skip_newlines, gate4_token_is } from parser
 import { gate4_array_element_type, gate4_array_type, gate4_common_array_element_type, gate4_find_field, gate4_find_record_type, gate4_find_visible_function, gate4_find_visible_record, gate4_record_type, gate4_resolve_type_name, gate4_standard_package_import, gate4_standard_package_root, gate4_type_display } from resolution
@@ -1031,6 +1031,18 @@ def gate4_binary_result_type(
 		line: Integer,
 		origin: Integer,
 	): String
+	operator_id := gate4_binary_operator_id(operator)
+	if operator_id >= 12
+		if operator_id <= 13
+			plan := mir_logical_plan(operator_id, left, right)
+			if plan == 0
+				gate4_diagnostic(state, "TRBN4004", line, "logical operands must be Boolean")
+				return "Invalid"
+			end
+			gate4_store_integer(state.mir_nonnegative_facts, origin, plan)
+			return "Boolean"
+		end
+	end
 	mut numeric_pair := false
 	if gate4_numeric_type(left)
 		if gate4_numeric_type(right)
@@ -1050,7 +1062,6 @@ def gate4_binary_result_type(
 	if right == "Float"
 		numeric_tag = 32
 	end
-	operator_id := gate4_binary_operator_id(operator)
 	mut plan := 0
 	if operator_id >= 1
 		if operator_id <= 4
@@ -1117,6 +1128,12 @@ def gate4_check_expression_value(
 		if precedence < minimum_precedence
 			scanning = false
 		else
+			if precedence <= 2
+				# The flat scalar/Array projections cannot represent a conditional
+				# RHS. Keep the structured logical plan and never hoist RHS work.
+				gate4_scalar_mir_disable(locals)
+				gate4_array_region_operation(locals, 6, 0, operator_origin)
+			end
 			gate4_advance(position)
 			gate4_skip_newlines(state, position)
 			right := gate4_check_expression(state, position, locals, precedence + 1, "")
@@ -1148,15 +1165,19 @@ def gate4_check_expression_value(
 					end
 				end
 			end
-			value = gate4_scalar_mir_binary(
-				state,
-				locals,
-				operator,
-				value,
-				right,
-				result_type,
-				operator_origin,
-			)
+			if precedence <= 2
+				value = gate4_checked_value(result_type, 0, 9007199254740991, 0)
+			else
+				value = gate4_scalar_mir_binary(
+					state,
+					locals,
+					operator,
+					value,
+					right,
+					result_type,
+					operator_origin,
+				)
+			end
 			if guard_index >= 0
 				if guard_array >= 0
 					value = array_loop_operands(value, guard_index, guard_array)

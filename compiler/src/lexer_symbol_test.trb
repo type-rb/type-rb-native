@@ -4,7 +4,7 @@ import { gate4_load_integer, gate4_load_string } from storage
 import { describe, expect, test } from trb/std/test
 
 def expected_pair(pair: String): Boolean
-	pairs := [":=", "==", "!=", "<=", ">=", "+=", "-=", "*=", "/=", "->"]
+	pairs := [":=", "==", "!=", "<=", ">=", "+=", "-=", "*=", "/=", "->", "||", "&&"]
 	mut index := 0
 	while index < pairs.size()
 		if pairs[index] == pair
@@ -77,6 +77,36 @@ describe("Lexer symbol recognition") do
 			expect(gate4_load_integer(state.diagnostic_lines, 0)).to_equal(9)
 			expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("unsupported source character " + characters[index])
 			index += 1
+		end
+	end
+
+	test("accepts paired logical punctuation but rejects every unpaired suffix") do
+		prefixes := "&|"
+		suffixes := "&|= a\n"
+		mut first := 0
+		while first < prefixes.size()
+			mut second := 0
+			while second <= suffixes.size()
+				mut source := prefixes[first]
+				if second < suffixes.size()
+					source += suffixes[second]
+				end
+				mut state := gate4_compiler_new(8)
+				mut position := [0]
+				gate4_scan_symbol(state, source, position, 4)
+				if expected_pair(source)
+					expect(position[0]).to_equal(2)
+					expect(state.token_count[0]).to_equal(1)
+					expect(gate4_load_string(state.token_texts, 0)).to_equal(source)
+					expect(state.diagnostic_count[0]).to_equal(0)
+				else
+					expect(position[0]).to_equal(1)
+					expect(state.token_count[0]).to_equal(0)
+					expect(state.diagnostic_count[0]).to_equal(1)
+				end
+				second += 1
+			end
+			first += 1
 		end
 	end
 end

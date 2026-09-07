@@ -1,0 +1,123 @@
+import { gate4_check, gate4_emit_qbe, gate4_lex } from compiler
+import { gate4_binary_precedence, gate4_parse_module } from parser
+import { gate4_resolve } from resolution
+import { Gate4Compiler, gate4_compiler_new } from state
+import { gate4_load_integer, gate4_load_string, gate4_store_integer } from storage
+import { mir_logical_plan, mir_logical_short_value } from mir
+import { describe, expect, test } from trb/std/test
+
+def logical_checked_source(source: String): Gate4Compiler
+	mut state := gate4_compiler_new(source.size() + 1)
+	expect(gate4_lex(state, source)).to_be_true()
+	expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+	expect(gate4_resolve(state)).to_be_true()
+	return state
+end
+
+describe("Short-circuit Boolean expressions") do
+	test("orders logical operators below comparisons and arithmetic") do
+		expect(gate4_binary_precedence("||")).to_equal(1)
+		expect(gate4_binary_precedence("&&")).to_equal(2)
+		expect(gate4_binary_precedence("==")).to_equal(3)
+		expect(gate4_binary_precedence("<")).to_equal(4)
+		expect(gate4_binary_precedence("+")).to_equal(5)
+		expect(gate4_binary_precedence("*")).to_equal(6)
+		expect(gate4_binary_precedence("|")).to_equal(0)
+	end
+
+	test("constructs only Boolean logical plans and rejects all other tags") do
+		types := ["Boolean", "Boolean?", "Integer", "Float", "String", "Void", "Invalid"]
+		mut operator_id := 0
+		while operator_id <= 20
+			mut left := 0
+			while left < types.size()
+				mut right := 0
+				while right < types.size()
+					mut expected := 0
+					if left == 0
+						if right == 0
+							if operator_id == 12
+								expected = 76
+							end
+							if operator_id == 13
+								expected = 77
+							end
+						end
+					end
+					expect(mir_logical_plan(operator_id, types[left], types[right])).to_equal(expected)
+					right += 1
+				end
+				left += 1
+			end
+			operator_id += 1
+		end
+		mut plan :=- 1
+		while plan < 100
+			mut expected :=- 1
+			if plan == 76
+				expected = 1
+			end
+			if plan == 77
+				expected = 0
+			end
+			expect(mir_logical_short_value(plan)).to_equal(expected)
+			plan += 1
+		end
+	end
+
+	test("checks both operands even when the left literal skips the right at runtime") do
+		expressions := ["true || 1", "false && 0", "1 || true", "0 && false", "true || 1.0", "false && \"text\"", "false && (1 + true)"]
+		mut index := 0
+		while index < expressions.size()
+			source := "def main()\n\tputs(" + expressions[index] + ")\n\treturn\nend\n"
+			mut state := logical_checked_source(source)
+			expect(gate4_check(state)).to_be_false()
+			expect(state.diagnostic_count[0] > 0).to_be_true()
+			index += 1
+		end
+	end
+
+	test("still resolves a name on a skipped right-hand side") do
+		source := "def main()\n\tputs(true || missing)\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_false()
+		expect(state.diagnostic_count[0] > 0).to_be_true()
+	end
+
+	test("never records conditional operands as eager scalar MIR") do
+		source := "def choose(a: Boolean, b: Boolean, c: Boolean): Boolean\n\treturn !a && (b || c)\nend\ndef main()\n\tputs(choose(false, false, true))\n\treturn\nend\n"
+		mut state := logical_checked_source(source)
+		expect(gate4_check(state)).to_be_true()
+		expect(state.scalar_mir.functions.size()).to_equal(0)
+		gate4_emit_qbe(state)
+		expect(state.diagnostic_count[0]).to_equal(0)
+	end
+
+	test("rejects missing malformed and opposite checked-origin plans") do
+		operators := ["||", "&&"]
+		invalid := [0, 54, 78, - 1, 77, 76]
+		mut index := 0
+		while index < operators.size()
+			mut candidate := 0
+			while candidate < invalid.size()
+				if invalid[candidate] != 76 + index
+					source := "def main()\n\tputs(true " + operators[index] + " false)\n\treturn\nend\n"
+					mut state := logical_checked_source(source)
+					expect(gate4_check(state)).to_be_true()
+					mut origin := 0
+					while gate4_load_string(state.token_texts, origin) != operators[index]
+						origin += 1
+					end
+					expect(gate4_load_integer(state.mir_nonnegative_facts, origin)).to_equal(76 + index)
+					gate4_store_integer(state.mir_nonnegative_facts, origin, invalid[candidate])
+					gate4_emit_qbe(state)
+					expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("invalid checked logical plan")
+				end
+				candidate += 1
+			end
+			index += 1
+		end
+	end
+end
