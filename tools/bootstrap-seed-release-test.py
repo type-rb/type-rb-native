@@ -12,6 +12,13 @@ spec.loader.exec_module(seed)
 
 
 class SeedReleaseTests(unittest.TestCase):
+    def test_refresh_roles_match_the_existing_compatibility_boundary(self):
+        observer = Path(__file__).with_name("bootstrap-seed-refresh.sh").read_text()
+        self.assertIn('build_step "$seed" setup-first setup', observer)
+        self.assertIn('build_step "$workspace/setup-first/compiler" setup-runtime setup', observer)
+        self.assertIn('for step in b2 b3 b4; do\n    build_step "$seed" "$step" ordinary', observer)
+        self.assertIn('if test "$mode" = verify; then\n    cmp "$input" "$workspace/b4/compiler"', observer)
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)

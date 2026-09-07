@@ -29,7 +29,10 @@ that checkout pins have switched.
 2. Dispatch `bootstrap-seed-refresh.yml` on main with `mode=prepare`. It verifies
    predecessor release state, strict manifest, checksums, asset digests and
    source-bound GitHub attestations **before** executing the old compiler.
-3. Build setup-only transitions from the previous Native seed. Then verify
+3. Build two setup-only transitions from the previous Native seed, matching the
+   existing worker-memory authority: the first generated compiler still carries
+   the predecessor runtime. Both transitions permit the registered system linker;
+   they remain process-traced and outside ordinary measurements. Then verify
    ordinary B2/B3/B4 builds, the complete existing corpus and registered adjacent
    measurement bounds (1.25 for adjacent generation medians, and 2.0 for every
    retained time/RSS/CPU observation against the strongest adjacent median).

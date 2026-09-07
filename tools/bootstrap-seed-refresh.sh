@@ -40,7 +40,10 @@ seed=$input
 input_role=ordinary
 if test "$mode" = prepare; then
     build_step "$seed" setup-first setup
-    build_step "$workspace/setup-first/compiler" setup-runtime ordinary
+    # The first generated compiler still contains the predecessor's runtime.
+    # Match the existing worker authority: both compatibility builds are setup;
+    # the following B2/B3/B4 builds must each satisfy the ordinary LLD boundary.
+    build_step "$workspace/setup-first/compiler" setup-runtime setup
     seed=$workspace/setup-runtime/compiler
     input_role=transition
 fi
