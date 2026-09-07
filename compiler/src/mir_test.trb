@@ -1,4 +1,4 @@
-import { Gate4MirModule, gate4_optimize_verified_mir, gate4_verify_mir } from mir
+import { Gate4MirModule, gate4_mir_instruction_error, gate4_optimize_verified_mir, gate4_verify_mir } from mir
 import { describe, expect, test } from trb/std/test
 
 def gate4_mir_test_module(
@@ -51,6 +51,28 @@ def gate4_mir_test_module(
 end
 
 describe("Native MIR model and verifier") do
+	test("validates instruction shape and origin before reading named fields") do
+		mut native_module := gate4_mir_test_module(false, false)
+		function := native_module.functions[0]
+		block := native_module.blocks[0]
+		mut width := 0
+		while width < 8
+			mut row: Array<Integer> := []
+			mut index := 0
+			while index < width
+				row.push(- 1)
+				index += 1
+			end
+			native_module.instructions[0] = row
+			expect(gate4_mir_instruction_error(native_module, function, block, 0)).to_equal("MIR instruction row size differs")
+			width += 1
+		end
+		native_module.instructions[0] = [99, - 1, - 1, - 1, - 1, - 1, - 1, 0]
+		expect(gate4_mir_instruction_error(native_module, function, block, 0)).to_equal("MIR instruction origin is invalid")
+		native_module.instructions[0] = [99, - 1, - 1, - 1, - 1, - 1, 0, 1]
+		expect(gate4_mir_instruction_error(native_module, function, block, 0)).to_equal("MIR instruction kind is unsupported")
+	end
+
 	test("verifies a checked scalar and Array loop MIR skeleton") do
 		native_module := gate4_mir_test_module(false, false)
 		expect(gate4_verify_mir(native_module, false)).to_equal("")

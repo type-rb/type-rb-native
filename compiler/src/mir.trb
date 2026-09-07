@@ -508,39 +508,45 @@ def gate4_mir_instruction_error(
 	if !gate4_mir_origin_valid(instruction[6], instruction[7], native_module.source_count[0])
 		return "MIR instruction origin is invalid"
 	end
+	# The validated row is immutable throughout instruction verification.
+	kind := instruction[0]
+	first_value := instruction[2]
+	second_value := instruction[3]
+	detail := instruction[4]
+	failure := instruction[5]
 	function_id := function[0]
 	result_type := gate4_mir_value_type(native_module, function_id, instruction[1])
-	first_type := gate4_mir_value_type(native_module, function_id, instruction[2])
-	second_type := gate4_mir_value_type(native_module, function_id, instruction[3])
+	first_type := gate4_mir_value_type(native_module, function_id, first_value)
+	second_type := gate4_mir_value_type(native_module, function_id, second_value)
 	first_available := gate4_mir_value_available(
 		native_module,
 		function,
 		block,
 		instruction_index,
-		instruction[2],
+		first_value,
 	)
 	second_available := gate4_mir_value_available(
 		native_module,
 		function,
 		block,
 		instruction_index,
-		instruction[3],
+		second_value,
 	)
-	if instruction[0] == 1
+	if kind == 1
 		if result_type != 1
 			return "MIR Integer constant result type differs"
 		end
-		if instruction[2] == - 1
-			if instruction[3] == - 1
-				if instruction[5] == - 1
+		if first_value == - 1
+			if second_value == - 1
+				if failure == - 1
 					return ""
 				end
 			end
 		end
 		return "MIR Integer constant shape differs"
 	end
-	if instruction[0] == 2
-		if instruction[4] != 0
+	if kind == 2
+		if detail != 0
 			return "MIR checked Integer add shape differs"
 		end
 		if result_type == 1
@@ -548,7 +554,7 @@ def gate4_mir_instruction_error(
 				if first_type == 1
 					if second_available
 						if second_type == 1
-							return gate4_mir_failure_error(native_module, function, instruction[5])
+							return gate4_mir_failure_error(native_module, function, failure)
 						end
 					end
 				end
@@ -556,9 +562,9 @@ def gate4_mir_instruction_error(
 		end
 		return "MIR checked Integer add type differs"
 	end
-	if instruction[0] == 3
-		if instruction[4] == 0
-			if instruction[5] == - 1
+	if kind == 3
+		if detail == 0
+			if failure == - 1
 				if result_type == 2
 					if first_available
 						if first_type == 1
@@ -575,10 +581,10 @@ def gate4_mir_instruction_error(
 		end
 		return "MIR Integer comparison shape differs"
 	end
-	if instruction[0] == 4
-		if instruction[3] == - 1
-			if instruction[4] == 0
-				if instruction[5] == - 1
+	if kind == 4
+		if second_value == - 1
+			if detail == 0
+				if failure == - 1
 					if result_type == 1
 						if first_available
 							if gate4_mir_array_element_type(first_type) > 0
@@ -592,11 +598,11 @@ def gate4_mir_instruction_error(
 		end
 		return "MIR Array length shape differs"
 	end
-	if instruction[0] == 5
-		if instruction[4] < 0
+	if kind == 5
+		if detail < 0
 			return "MIR Array address shape differs"
 		end
-		if instruction[4] > 2
+		if detail > 2
 			return "MIR Array address shape differs"
 		end
 		if result_type == first_type + 1
@@ -604,11 +610,11 @@ def gate4_mir_instruction_error(
 				if gate4_mir_array_element_type(first_type) > 0
 					if second_available
 						if second_type == 1
-							error := gate4_mir_failure_error(native_module, function, instruction[5])
+							error := gate4_mir_failure_error(native_module, function, failure)
 							if error != ""
 								return error
 							end
-							if instruction[4] >= 1
+							if detail >= 1
 								if !gate4_mir_induction_address(native_module, function, block, instruction)
 									return "MIR Array induction proof differs"
 								end
@@ -621,26 +627,26 @@ def gate4_mir_instruction_error(
 		end
 		return "MIR Array address type differs"
 	end
-	if instruction[0] == 6
-		if instruction[2] < 0
+	if kind == 6
+		if first_value < 0
 			return "MIR scalar literal shape differs"
 		end
-		if instruction[2] > 1
+		if first_value > 1
 			return "MIR scalar literal shape differs"
 		end
-		if instruction[3] != - 1
+		if second_value != - 1
 			return "MIR scalar literal shape differs"
 		end
-		if instruction[5] != - 1
+		if failure != - 1
 			return "MIR scalar literal shape differs"
 		end
-		if instruction[4] < 0
+		if detail < 0
 			return "MIR scalar literal index is invalid"
 		end
-		if instruction[4] >= native_module.literal_texts.size()
+		if detail >= native_module.literal_texts.size()
 			return "MIR scalar literal index is invalid"
 		end
-		literal := native_module.literal_texts[instruction[4]]
+		literal := native_module.literal_texts[detail]
 		if result_type == 1
 			if !gate4_number_is_float(literal)
 				if gate4_integer_literal_in_range(literal)
@@ -648,7 +654,7 @@ def gate4_mir_instruction_error(
 					if gate4_small_nonnegative_integer_operand(literal)
 						expected_fact = 1
 					end
-					if instruction[2] == expected_fact
+					if first_value == expected_fact
 						return ""
 					end
 					return "MIR Integer literal fact differs"
@@ -657,7 +663,7 @@ def gate4_mir_instruction_error(
 			return "MIR Integer literal is invalid"
 		end
 		if result_type == 2
-			if instruction[2] != 0
+			if first_value != 0
 				return "MIR Boolean literal fact differs"
 			end
 			if literal == "true"
@@ -669,7 +675,7 @@ def gate4_mir_instruction_error(
 			return "MIR Boolean literal is invalid"
 		end
 		if result_type == 5
-			if instruction[2] != 0
+			if first_value != 0
 				return "MIR Float literal fact differs"
 			end
 			if gate4_number_is_float(literal)
@@ -681,14 +687,14 @@ def gate4_mir_instruction_error(
 		end
 		return "MIR scalar literal result type differs"
 	end
-	if instruction[0] == 7
+	if kind == 7
 		if !first_available
 			return "MIR scalar binary operand is undefined"
 		end
 		if !second_available
 			return "MIR scalar binary operand is undefined"
 		end
-		mut operator := instruction[4]
+		mut operator := detail
 		if operator == 12
 			operator = 3
 		end
@@ -757,31 +763,31 @@ def gate4_mir_instruction_error(
 			return "MIR scalar binary type differs"
 		end
 		if checked
-			return gate4_mir_failure_error(native_module, function, instruction[5])
+			return gate4_mir_failure_error(native_module, function, failure)
 		end
-		if instruction[5] != - 1
+		if failure != - 1
 			return "MIR scalar binary failure shape differs"
 		end
 		return ""
 	end
-	if instruction[0] == 8
-		if instruction[3] != - 1
+	if kind == 8
+		if second_value != - 1
 			return "MIR scalar unary shape differs"
 		end
-		if instruction[5] != - 1
+		if failure != - 1
 			return "MIR scalar unary shape differs"
 		end
 		if !first_available
 			return "MIR scalar unary operand is undefined"
 		end
-		if instruction[4] == 1
+		if detail == 1
 			if first_type == 2
 				if result_type == 2
 					return ""
 				end
 			end
 		else
-			if instruction[4] == 2
+			if detail == 2
 				if first_type == result_type
 					if result_type == 1
 						return ""
@@ -791,7 +797,7 @@ def gate4_mir_instruction_error(
 					end
 				end
 			end
-			if instruction[4] == 3
+			if detail == 3
 				if first_type == result_type
 					if result_type == 1
 						return ""
@@ -804,10 +810,10 @@ def gate4_mir_instruction_error(
 		end
 		return "MIR scalar unary type differs"
 	end
-	if instruction[0] == 9
-		if instruction[3] == - 1
-			if instruction[4] == 0
-				if instruction[5] == - 1
+	if kind == 9
+		if second_value == - 1
+			if detail == 0
+				if failure == - 1
 					if first_available
 						if first_type == 1
 							if result_type == 5
@@ -820,10 +826,10 @@ def gate4_mir_instruction_error(
 		end
 		return "MIR Integer-to-Float conversion type differs"
 	end
-	if instruction[0] == 10
-		if instruction[3] == - 1
-			if instruction[4] == 0
-				if instruction[5] == - 1
+	if kind == 10
+		if second_value == - 1
+			if detail == 0
+				if failure == - 1
 					if first_available
 						if result_type == gate4_mir_array_element_type(first_type - 1)
 							return ""

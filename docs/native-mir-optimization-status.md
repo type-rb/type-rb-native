@@ -2,9 +2,13 @@
 
 ## Current ownership checkpoint
 
-The current [Array output-batching diagnostic](../results/2026-09-07-array-loop-output-batching-darwin-arm64/README.md)
-integrates accepted compatibility/Boolean work and passes the frozen-baseline
-local build-time/RSS prefilter, but still exceeds compiler text/QBE ceilings.
+The current [Array batching/verifier diagnostic](../results/2026-09-07-array-loop-output-batching-darwin-arm64/README.md)
+integrates accepted compatibility/Boolean work. Batching passed an earlier
+frozen-baseline local time/RSS cohort. Naming validated immutable MIR instruction
+fields then reduced compiler text/QBE by 1,288/2,897 bytes, with 152 compiler
+tests and 81 exact corpus comparisons passing, but both absolute ceilings still
+fail. The new source's separate cohort also misses wall time (1.1047821 versus
+1.05); CPU and RSS pass. Keep both outcomes, not just the earlier time pass.
 It remains draft; no current runtime or Pure Go result is accepted. The
 source-era failures below remain historical evidence, not current measurements.
 

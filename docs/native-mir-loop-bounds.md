@@ -18,21 +18,31 @@ source before measuring a source-distinct compiler-cost reduction.
 Superseded diagnostic folders are no longer part of the active checkout.
 The pinned historical links below retain their full observations and patches;
 no raw observations are selected out of a published measurement cohort.
-The [current output-batching diagnostic](../results/2026-09-07-array-loop-output-batching-darwin-arm64/README.md)
+The [output-batching checkpoint](../results/2026-09-07-array-loop-output-batching-darwin-arm64/README.md)
 passes local compiler time/RSS selection: wall 1.0177125, CPU 1.0226662 and
 RSS 1.0016293 versus the unchanged frozen baseline. Its integrated control
 fails at wall 1.0784632 and CPU 1.0772980. These are separate frozen-baseline
 cohorts, not a direct same-run percentage gain between control and batching.
 
-The candidate is still not accepted: compiler QBE is 1,132,120 bytes and
-Mach-O text 254,468 bytes, above the existing 1,120,000/250,904 ceilings.
+The subsequent immutable instruction-field cleanup reduces compiler QBE from
+1,132,120 to 1,129,223 bytes and Mach-O text from 254,468 to 253,180 bytes.
+The candidate is still not accepted: both remain above the existing
+1,120,000/250,904 ceilings. Every verifier predicate and diagnostic remains.
 Integration already exceeded both ceilings before batching. The complete
 349,256-byte compiler remains within its absolute limit, but file alignment
 does not waive section/QBE bounds. All 81 corpus QBE/diagnostic outputs remain
 identical to the integrated control, and ordinary core/CLI fixed points and
-CLI regressions pass. Next reduce compiler/projection representation before
+CLI regressions pass for the batching checkpoint; the field cleanup repeats
+core/CLI fixed points and all 81 exact corpus comparisons and passes 152 compiler
+tests without recovery. Next reduce compiler/projection representation before
 full recovery and hosted acceptance; do not dispatch long runtime acceptance
-from this partial cost pass.
+while these cost bounds fail.
+
+The named-field candidate's separate frozen-baseline cohort fails wall time at
+1.1047821, while CPU 1.0374060 and RSS 1.0004095 pass. All 18 ordinary builds
+reach fixed points and retained values pass the 2.0 catastrophic bound. Keep
+the failed cohort; the earlier batching timing pass does not transfer to this
+source, and the current candidate still needs size and time improvement.
 
 ## Proof boundary
 

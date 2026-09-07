@@ -1,9 +1,10 @@
-# Array-loop output-batching diagnostic
+# Array-loop batching and verifier-size diagnostic
 
-Not accepted. The output-batching candidate passes local compiler time/RSS
-selection but exceeds the unchanged absolute compiler QBE and text limits.
+Not accepted. The current named-field verifier candidate reduces compiler QBE
+and text but still exceeds both absolute limits and misses local build wall time.
+The earlier batching-only cohort passes local time/RSS, not absolute size.
 The Array runtime benefit, full recovery and hosted authorities remain unverified
-for this exact candidate. There is no Pure Go or Pages performance claim.
+for the current source. There is no Pure Go or Pages performance claim.
 
 ## Identities and scope
 
@@ -11,8 +12,10 @@ The fixed comparison remains `1afd60c2c7257ed34fd2a2aa70cb8b9164433009`.
 Integrated control `1e4ace11` includes accepted main `3ae51bbf`, exact reference
 `47a160cae05ddc2035c7430735c4762d36bbc9c4`, Boolean support and current
 retention/CI policy. It is not a new acceptance baseline. Candidate
-[source hashes](source-identities.json) identify only the subsequent bounded
-QBE stdout batching change and its tests; application semantics are unchanged.
+[source hashes](source-identities.json) identify the current named-field verifier
+source and tests. Batching-only identities remain at
+[`ffd99fa3`](https://github.com/type-rb/type-rb-native/blob/ffd99fa3aa06a84a5e8158e9c2311039c70f02ab/results/2026-09-07-array-loop-output-batching-darwin-arm64/source-identities.json);
+application semantics are unchanged.
 The [registration](https://github.com/type-rb/type-rb-native/issues/303#issuecomment-5566332134)
 preceded the batching implementation.
 
@@ -74,3 +77,41 @@ performance conclusions. A setup-only CLI invocation also rejected an explicit
 target option unsupported by that old CLI. The corrected old CLI regenerated
 the baseline core, whose next ordinary build reproduced it byte-for-byte,
 before the two valid cohorts above. These are setup failures, not slow baselines.
+
+## Verifier-size refinement
+
+The [registered follow-up](https://github.com/type-rb/type-rb-native/issues/303#issuecomment-5566937365)
+names five immutable instruction fields after the existing row-shape and origin
+validation. The verifier retains every predicate, diagnostic and independent
+Array proof recomputation; it no longer repeatedly indexes the same row fields.
+This does not add MIR facts or move semantics into QBE emission.
+
+| Artifact | Batching only | Named instruction fields | Absolute limit |
+| --- | ---: | ---: | ---: |
+| Complete compiler bytes | 349256 | 349256 | 350000 |
+| Mach-O text bytes | 254468 | 253180 | 250904 |
+| Target-neutral QBE bytes | 1132120 | 1129223 | 1120000 |
+
+The remaining excess is 2,276 text bytes and 9,223 QBE bytes. Previous-Native
+core/CLI builds reach fixed points. All 81 corpus cases execute or reject as
+required, and their repeated QBE/diagnostics are byte-identical to `ffd99fa3`.
+All 152 compiler tests and root/compiler source checks pass. Recovery was not
+enabled in this suite; full recovery remains required. No generated-application
+speedup follows from this compiler-only refinement.
+
+The same frozen-baseline observer, machine/toolchain and 2-warmup/7-retained
+protocol produced the [new raw cohort](named-fields-raw.csv). All other owned
+tests/checks completed before timing, and all 18 builds reproduce their own
+compiler. Wall ratio **1.1047821 fails 1.05**; CPU **1.0374060** and RSS
+**1.0004095** pass. All retained catastrophic values remain below 2.0.
+The full summary includes the failure. This is a separate cohort, not proof
+that naming fields caused a specific slowdown or that the earlier batching
+time pass transfers to this source. Do not discard it or substitute the earlier
+timing result for current acceptance. Full hosted/runtime acceptance remains
+deferred while the absolute code-size bounds fail.
+
+Two earlier bounded size trials were reverted: a shared checked-value
+constructor reduced text by 36 bytes but increased QBE by 252 bytes; a flat
+output container increased text by 296 bytes and QBE by 1,272 bytes. Neither
+justified changing the current representation. Their size diagnostics do not
+alter any allowance or constitute runtime evidence.
