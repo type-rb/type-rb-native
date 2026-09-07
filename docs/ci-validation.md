@@ -12,7 +12,8 @@ cannot silently truncate or bypass validation. Git failures reject planning.
 | --- | --- |
 | Markdown, development metadata, static documentation, registered results and exact documentation generators | Planning and documentation |
 | The two exact planning files | Their unconditional planning tests and documentation |
-| Exact synthetic tool-test files listed in `toolingTests` | Planning and tooling controls |
+| Exact synthetic tool-test files listed in `toolingTests` | Planning and macOS tooling; project/policy shell tests also run Linux quick tooling |
+| Existing compiler unit-test modules listed in `compilerTestInputs` | Complete quick, Native, CLI, tooling and target correctness; no unchanged-binary performance or worker-memory measurements |
 | Exact CLI adapter, launcher, build helper and CLI-test inputs listed in `cliInputs` | Planning, quick checks and Darwin/Linux CLI artifacts |
 | Ordinary compiler, conformance, execution workflows and measurement policy | Full applicable correctness, tooling, CLI, target, memory and comparative authorities |
 | Other code or unknown files | Complete Native correctness, tooling and CLI/target checks; memory and performance according to the conservative rules in the planner |
@@ -23,10 +24,22 @@ for arbitrary tests. A new CLI file or neighboring tool defaults to the code
 lane until its consumers and executing authority are reviewed. Production
 measurement controllers, toolchain pins, suite controllers and stage-recording
 code retain code validation. Tool-test-only routing is valid because the
-independent tooling job actually executes each listed test. Compiler tests
-and conformance fixtures retain their existing compiler authorities. Project
-and transition-policy shell tests also retain their Linux quick-check authority
-in addition to the macOS tooling checks.
+independent tooling job actually executes each listed test. Suite-controller
+and workspace-ownership tests run on Linux in unconditional planning and on
+macOS in tooling, moving the former Native step without duplicating it.
+Project and transition-policy shell tests also retain their Linux quick-check
+authority in addition to the macOS tooling checks. For changes limited to those
+tests, quick skips reference checkout/build, compatibility, formatting/types and
+TypeRB units; the Linux shell tests need none of those compiler inputs.
+
+The ten reviewed compiler unit-test modules are excluded from ordinary
+reference/Native compiler builds and CLI source staging. Changing only those
+modules cannot change the measured compiler or worker binary. Full correctness
+and target checks still execute; only comparative and worker-memory measurements
+are omitted. Conformance fixtures, new test paths, project configurations,
+production source and measurement policies retain conservative routing. A mixed
+non-exempt code change restores the previous compiler measurement requirements;
+changing routing/execution workflows still exercises the full graph.
 
 CLI adapters are outside the ordinary compiler source closure. Their dedicated
 workflow builds the current core from the pinned Native seed, verifies fixed
@@ -46,9 +59,11 @@ the Pages workflow requires documentation validation, not compiler benchmarks.
 1. **Plan and quick feedback.** Planning tests are unconditional. Code or CLI
    changes build the pinned reference compiler, validate canonical compatibility
    metadata, formatting/core types and root/focused MIR units. No complete
-   recovery or comparative claim comes from quick feedback.
+   recovery or comparative claim comes from quick feedback. The explicit `quick`
+   output also selects Linux-only tooling steps for project/policy test edits;
+   code and CLI plans must always require complete quick feedback.
 2. **Independent tooling.** The former Native `Verify bootstrap seed tooling`
-   step runs unchanged on macOS in the separate `CI tooling controls` workflow.
+   commands run unchanged on macOS in the separate `CI tooling controls` workflow.
    Its synthetic checks need no compiled candidate, so it can start after
    planning without waiting for quick feedback. This removes it from the serial
    path before recovery. Historical TypeRB tool suites and recovery-artifact
@@ -84,6 +99,19 @@ documentation-only delta must not erase an unfinished code validation.
 
 Full multi-language benchmark refreshes and Native runtime A/B remain manual.
 Manual measurements supplement rather than replace current PR acceptance.
+
+## Further latency boundaries
+
+Generation controls check the recovery source through B0, B1 and B2 and compare
+repeated QBE emission against each previously built generation. Those repeated
+commands test distinct seed/command behavior and deterministic output; deleting
+them would remove coverage. Ordinary B1-to-B4 regeneration also preserves its
+sequential seed dependencies. No generation check or benchmark repetition is
+removed by test-only routing.
+
+Quick checks retain their ordering for compiler/CLI changes. Additional runner
+fan-out or performance-before-correctness would change resource usage or the
+failure policy, so neither is used for these scoped improvements.
 
 ## Recovery scheduling and stage evidence
 

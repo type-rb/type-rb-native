@@ -19,9 +19,15 @@ const documentation = path => staticDocumentationTools.has(path) || path.endsWit
 const planningTools = new Set(['tools/ci-plan.mjs', 'tools/ci-plan-test.mjs']);
 // Only these synthetic tests can use tooling-only validation. Their production
 // controllers and unknown neighboring paths still require the full code lane.
-// The project/policy shell tests also have a Linux quick-check authority, so
-// they are not exempted by this macOS-only tooling lane.
+// Tests with a second Linux authority retain it through planning or quick.
+export const quickToolingTests = new Set([
+  'tools/compiler-project-test.sh',
+  'tools/native-mir-transition-policy-test.sh',
+]);
 export const toolingTests = new Set([
+  ...quickToolingTests,
+  'tools/ci-run-suites-test.mjs',
+  'tools/recovery-workspace-test.mjs',
   'tools/bootstrap-seed-manifest-test.sh',
   'tools/bootstrap-seed-arguments-test.sh',
   'tools/gate6n-measure-test.py',
@@ -32,6 +38,21 @@ export const toolingTests = new Set([
   'tools/runtime-worker-soak/analyze-gc-trace-test.sh',
   'tools/runtime-worker-soak/analyze-process-series-test.sh',
   'tools/recovery_stage_test.py',
+]);
+// These existing test modules are excluded from ordinary compiler builds.
+// Keep complete correctness validation; only unchanged-binary measurements
+// are unnecessary. New test paths, configurations and fixtures default to code.
+export const compilerTestInputs = new Set([
+  'compiler/src/checked_binding_test.trb',
+  'compiler/src/checked_program_test.trb',
+  'compiler/src/compiler_test.trb',
+  'compiler/src/literals_test.trb',
+  'compiler/src/mir_test.trb',
+  'compiler/src/parser_test.trb',
+  'compiler/src/project_config_test.trb',
+  'compiler/src/qbe_output_test.trb',
+  'compiler/src/resolution_test.trb',
+  'compiler/src/state_test.trb',
 ]);
 // These adapters are outside the ordinary compiler source closure. Core edits
 // mixed with them restore all core authorities; new paths default to code.
@@ -62,12 +83,14 @@ export function classify(paths, draft) {
   const codePaths = executable.filter(path => !toolingTests.has(path) && !cliInputs.has(path));
   const code = codePaths.length > 0;
   const routing = paths.some(path => path.startsWith('.github/workflows/') || path.startsWith('tools/ci-'));
-  const compiler = codePaths.some(path => path.startsWith('compiler/'));
+  const compiler = codePaths.some(path => path.startsWith('compiler/')) &&
+    !codePaths.every(path => compilerTestInputs.has(path));
   const policy = codePaths.some(path => path.startsWith('tools/native-mir-') || path.startsWith('tools/compiler-project'));
   const performance = code && (routing || compiler || policy);
   const memory = code && (performance || codePaths.some(path => path.startsWith('tools/runtime-worker-soak/')));
   return {
-    code, documentation: routing || paths.some(documentation),
+    code, quick: code || executable.some(path => cliInputs.has(path) || quickToolingTests.has(path)),
+    documentation: routing || paths.some(documentation),
     memory, performance, draft,
     tooling: code || executable.some(path => toolingTests.has(path)),
     cli: code || executable.some(path => cliInputs.has(path)),
@@ -77,13 +100,16 @@ export function classify(paths, draft) {
 export function acceptance(needs) {
   if (needs.plan?.result !== 'success') return ['CI planning did not succeed'];
   const plan = needs.plan.outputs;
-  if (!plan || ['code', 'documentation', 'memory', 'performance', 'draft', 'tooling', 'cli']
+  if (!plan || ['code', 'documentation', 'memory', 'performance', 'draft', 'tooling', 'cli', 'quick']
     .some(key => !['true', 'false'].includes(plan[key]))) {
     return ['CI planning outputs are missing or malformed'];
   }
+  if ((plan.code === 'true' || plan.cli === 'true') && plan.quick !== 'true') {
+    return ['Code and CLI validation require quick feedback'];
+  }
   if (plan.draft === 'true') return ['Draft feedback is not merge acceptance'];
   const required = {
-    quick: String(plan.code === 'true' || plan.cli === 'true'), documentation: plan.documentation,
+    quick: plan.quick, documentation: plan.documentation,
     native: plan.code, targets: plan.code,
     memory: plan.memory, performance: plan.performance,
     tooling: plan.tooling, cli: plan.cli,
