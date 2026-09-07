@@ -7,14 +7,25 @@ only after false for OR, or true for AND. Precedence runs from unary operators,
 arithmetic, ordering, equality and AND to OR. Parentheses override grouping.
 Logical compound assignment and bitwise operators are outside this slice.
 
-## Independent candidate
+## Accepted independent feature
 
-This candidate extracts the language capability from draft PR #307 without its
+Merged [PR #317](https://github.com/type-rb/type-rb-native/pull/317) extracts
+the language capability from draft PR #307 without its
 Array-loop proof or bounds-check optimization. Its accepted implementation
 baseline is `450ed9d1bd8a43b85cb5cfb653326d0eee42d6ec`, with reference
 `47a160cae05ddc2035c7430735c4762d36bbc9c4`. The earlier combined candidate's
 cost rejection remains valid and is not an isolated Boolean-feature result.
 Issue #303 retains its original frozen baseline and acceptance requirements.
+
+All seventeen required jobs passed in the
+[exact-head validation](https://github.com/type-rb/type-rb-native/actions/runs/34090466286),
+including recovery-enabled suites (97 root and 119 compiler tests), ordinary
+fixed points, CLI, memory, process and target checks, and compiler costs.
+Hosted build wall ratios were 1.003077 on Darwin arm64 and 1.003922 on Linux
+arm64; complete compiler sizes were 332,728 and 307,544 bytes. The existing
+limits were unchanged. This is capability acceptance, not a runtime speedup.
+The [local selection record](https://github.com/type-rb/type-rb-native/tree/0197303234d047ba6b413a6fdee870fbccc698d1/results/2026-09-07-independent-logical-expressions-darwin-arm64)
+is retained in Git history rather than occupying the active candidate slot.
 
 ## Ownership
 

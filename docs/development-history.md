@@ -19,6 +19,28 @@ preserves original reports, diagnostic attempts and source-era inventories.
 Only [registered active results](../results/active.json) remain in the checkout.
 Routine intermediate runs do not need additional permanent history entries.
 
+## Independent Boolean expressions — 2026-09-07
+
+[PR #317](https://github.com/type-rb/type-rb-native/pull/317) accepts Boolean-only
+short-circuit OR and AND in the ordinary compiler and REPL, independently of
+the unaccepted Array-loop candidate in #307. Checking owns conditional MIR
+plans; skipped RHS calls, allocations and traps remain skipped. Extraction
+also corrected REPL unary precedence, with compiled and interactive controls.
+
+[Exact-head CI](https://github.com/type-rb/type-rb-native/actions/runs/34090466286)
+passed all seventeen jobs, including recovery-enabled suites, fixed points,
+target/process/cleanup, CLI, memory and measured compiler costs. Hosted build
+wall ratios were 1.003077 (Darwin arm64) and 1.003922 (Linux arm64); root RSS
+ratios were 1.000000 and 0.999239. Complete compilers measured 332,728 and
+307,544 bytes, size ratios 1.000000 and 1.005940. No threshold changed.
+These are compiler-feature costs, not application-speedup or Pure Go evidence.
+
+The [complete local selection record](https://github.com/type-rb/type-rb-native/tree/0197303234d047ba6b413a6fdee870fbccc698d1/results/2026-09-07-independent-logical-expressions-darwin-arm64)
+preserves all raw observations, identities and corpus statuses at the merged
+revision. Its five candidate-only files are retired from main now that the
+decision is complete; published measurements and seed records stay active.
+Issue #303 keeps its frozen baseline and all earlier rejected-cost conclusions.
+
 ## Recorded checkpoints
 
 Gate 0 implements the experimental boundary in TypeRB: strict decoding of
