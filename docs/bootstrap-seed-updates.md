@@ -102,3 +102,27 @@ requirements. No release was produced from the failed paired run.
 Compiler binaries and detailed run artifacts remain outside Git. This compact
 handoff record does not introduce another retained benchmark result directory
 or claim a runtime speedup.
+
+## Active CI consumers versus historical recovery
+
+Current compiler-cost, worker-memory, formal runtime/build benchmark and Linux
+arm64 regression workflows use the exact Sep7 seed and the shared strict
+download/authentication helper. Their manual seed input must match the recorded
+source revision; an older or unknown tag fails rather than bypassing provenance.
+Changing a setup seed does not move a frozen benchmark baseline or change any
+measurement/acceptance bound. Full benchmark jobs remain manually dispatched.
+
+Linux amd64 retains the original immutable root QBE. Before reading candidate
+syntax, its setup compiler builds the exact clean Sep7 source revision
+`1f7e8a110bbb2b13f0609709deb6fc8f09dc8b44`. That generated compiler must accept
+the logical-condition conformance fixture, then reads the **candidate** source
+for the current-runtime transition. Ordinary B2/B3/B4 and measured inputs remain
+the candidate. The setup source revision/entry digest and all existing process
+traces are retained separately. No new root asset or Go recovery is introduced.
+The optional setup-source argument accepts only that exact clean revision;
+omission retains the historical direct-current-source setup shape.
+
+Initial publication/release-integrity workflows, retained manifests and earlier
+results keep their source-era identities. Refreshing checkout bootstrap alone
+does not establish that every historical recovery compiler understands newly
+adopted implementation syntax; inspect these consumers before adopting it.

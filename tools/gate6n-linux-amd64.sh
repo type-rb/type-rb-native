@@ -16,7 +16,7 @@ APPLICATION_RUNTIME_ELAPSED_REPETITIONS=32
 usage() {
 	cat >&2 <<'EOF'
 usage: gate6n-linux-amd64.sh CANDIDATE_ROOT ROOT_QBE QBE CC
-       REFERENCE_TRB GO WORKSPACE EVIDENCE OUTPUT_COMPILER
+       REFERENCE_TRB GO WORKSPACE EVIDENCE OUTPUT_COMPILER [SEED_SOURCE_ROOT]
 EOF
 	exit 64
 }
@@ -167,7 +167,7 @@ require_go_build() {
 	test -x "$output" || fail "$label did not publish an executable"
 }
 
-test "$#" -eq 9 || usage
+test "$#" -eq 9 || test "$#" -eq 10 || usage
 
 candidate_root=$1
 root_qbe=$2
@@ -178,6 +178,7 @@ go_command=$6
 workspace=$7
 evidence=$8
 output_compiler=$9
+seed_source_root=${10:-$candidate_root}
 
 script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 verifier_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
@@ -967,6 +968,16 @@ test "$(file_size "$root_qbe")" -eq "$ROOT_QBE_SIZE" || fail "root QBE size diff
 test "$(sha256 "$root_qbe")" = "$ROOT_QBE_SHA256" || fail "root QBE digest differs"
 
 compiler_entry=$candidate_root/compiler/src/compiler.trb
+seed_entry=$compiler_entry
+if test "$seed_source_root" != "$candidate_root"; then
+	# Only the exact accepted seed source may bridge the immutable root parser
+	# to newer compiler syntax. This is setup, never a measured candidate input.
+	require_clean_revision "$seed_source_root" "accepted seed source"
+	test "$(git -C "$seed_source_root" rev-parse HEAD)" = \
+		1f7e8a110bbb2b13f0609709deb6fc8f09dc8b44 || fail "seed source revision differs"
+	seed_entry=$seed_source_root/compiler/src/compiler.trb
+	test -f "$seed_entry" || fail "seed compiler entry is missing"
+fi
 portable_config=$candidate_root/corpus/gate6m/portable-entry/trbconfig.jsonc
 portable_source=$candidate_root/corpus/gate6m/portable-entry/src/main.trb
 failure_config=$candidate_root/corpus/gate6m/runtime-failures/trbconfig.jsonc
@@ -1025,7 +1036,7 @@ require_tool_observed "$evidence/setup/root-link-process.trace" 'execve\("[^"]*/
 	"root-era LLD"
 
 strace -f -e trace=process -o "$evidence/setup/root-emit-process.trace" \
-	"$root_compiler" emit-qbe "$compiler_entry" \
+	"$root_compiler" emit-qbe "$seed_entry" \
 	> "$first_qbe" \
 	2> "$evidence/setup/root-emit.stderr" || fail "root-era current-source emission failed"
 require_empty_file "$evidence/setup/root-emit.stderr" "root-era current-source emission wrote stderr"
@@ -1054,6 +1065,16 @@ require_empty_file "$evidence/setup/first-link.stderr" "first-transition link wr
 test -x "$first_transition" || fail "first current-source transition was not produced"
 require_tool_observed "$evidence/setup/first-link-process.trace" 'execve\("[^"]*/ld\.lld"' \
 	"first-transition LLD"
+
+if test "$seed_source_root" != "$candidate_root"; then
+	strace -f -e trace=process -o "$evidence/setup/logical-condition-process.trace" \
+		"$first_transition" check "$candidate_root/compiler/conformance/valid/logical-short-circuit.trb" \
+		> "$evidence/setup/logical-condition.stdout" \
+		2> "$evidence/setup/logical-condition.stderr" || fail "seed bridge rejected logical conditions"
+	require_empty_file "$evidence/setup/logical-condition.stdout" "logical condition check wrote stdout"
+	require_empty_file "$evidence/setup/logical-condition.stderr" "logical condition check wrote stderr"
+	require_forbidden_processes_absent "$evidence/setup/logical-condition-process.trace" "logical condition check"
+fi
 
 strace -f -e trace=process -o "$evidence/setup/current-runtime-emit-process.trace" \
 	"$first_transition" emit-qbe "$compiler_entry" \
@@ -1092,12 +1113,17 @@ require_tool_observed "$evidence/setup/current-runtime-link-process.trace" 'exec
 	grep execve "$evidence/setup/root-emit-process.trace"
 	grep execve "$evidence/setup/first-qbe-process.trace"
 	grep execve "$evidence/setup/first-link-process.trace"
+	if test "$seed_source_root" != "$candidate_root"; then
+		grep execve "$evidence/setup/logical-condition-process.trace"
+	fi
 	grep execve "$evidence/setup/current-runtime-emit-process.trace"
 	grep execve "$evidence/setup/current-runtime-qbe-process.trace"
 	grep execve "$evidence/setup/current-runtime-link-process.trace"
 } > "$evidence/setup/process-inventory.txt"
 {
 	printf 'root_qbe_size=%s\n' "$(file_size "$root_qbe")"
+	printf 'seed_source_revision=%s\n' "$(git -C "$seed_source_root" rev-parse HEAD)"
+	printf 'seed_source_entry_sha256=%s\n' "$(sha256 "$seed_entry")"
 	printf 'root_qbe_sha256=%s\n' "$(sha256 "$root_qbe")"
 	printf 'root_era_compiler_size=%s\n' "$(file_size "$root_compiler")"
 	printf 'root_era_compiler_sha256=%s\n' "$(sha256 "$root_compiler")"
