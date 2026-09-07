@@ -37,7 +37,7 @@ with tempfile.TemporaryDirectory(prefix='native bootstrap ') as temporary:
         os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))
 
     # An old same-name cache must not shadow the immutable release-scoped seed.
-    seeds = list((root / '.trb/bootstrap/bootstrap-seed-2026-09-07').glob('type-rb-native-bootstrap-*'))
+    seeds = list((root / '.trb/bootstrap/bootstrap-seed-2026-09-08').glob('type-rb-native-bootstrap-*'))
     assert len(seeds) == 1, seeds
     legacy_seed = root / '.trb/bootstrap' / seeds[0].name
     legacy_seed.write_bytes(b'synthetic stale legacy seed\n')
