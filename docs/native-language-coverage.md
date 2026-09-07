@@ -1,7 +1,8 @@
 # Ordinary Native language coverage
 
-Status: coverage inventory and regression tests are the next implementation
-checkpoint. This plan does not declare additional syntax supported.
+Status: an initial 14-case ordinary-path inventory and regression contract are
+available. Basic control syntax is the next implementation checkpoint. This
+inventory does not declare additional syntax supported.
 Track the first bounded delivery in [issue #326](https://github.com/type-rb/type-rb-native/issues/326).
 
 ## Current development priority
@@ -33,6 +34,20 @@ to justify its existence. A failed cost bound still needs the existing
 
 ## Coverage is path-specific
 
+The [generated case matrix](native-language-coverage-matrix.md) comes from
+[`tools/native-language-cases.json`](../tools/native-language-cases.json).
+Each row describes one bounded example, not complete support for that feature
+or a percentage of the TypeRB language. The exact reference revision is pinned
+in `TYPE_RB_REVISION` and recorded alongside executable and registry hashes in
+each observation report.
+
+The `while` case currently returns the same final value but differs in its
+REPL value display (`[mut]` is absent after the loop). This remains an explicit
+output difference. A rejected REPL submission can still leave the interactive
+session with exit status zero; output and diagnostics, not just exit status,
+determine the row. UTF-8 String literals pass `check` but fail ordinary build
+and REPL emission. Historical snapshot support does not close that gap.
+
 Maintain one small executable case registry and derive its ordinary coverage
 table from checked expectations. Each row needs a feature, authored source,
 reference revision, expected output/diagnostic, and separate observations for:
@@ -54,6 +69,30 @@ by a build rejection must be visible rather than collapsed to "supported".
 The first inventory covers scalar/control successes and the reported gaps:
 `elsif`, `break`, `next`, default arguments, Boolean arrays, nullable Strings,
 ordinary enums and UTF-8 String literals. It is not an exhaustive specification.
+
+### Reproducing and maintaining the inventory
+
+```sh
+python3 tools/native-language-coverage-test.py
+python3 tools/native-language-coverage.py --native /absolute/path/to/trbn
+python3 tools/native-language-coverage.py --reference /absolute/path/to/trb
+python3 tools/native-language-coverage.py --check-table docs/native-language-coverage-matrix.md
+```
+
+The reference executable must be built from `TYPE_RB_REVISION`. CI validates
+every fixture with that compiler in the quick oracle job. Ordinary Native CLI
+jobs independently exercise the same cases without invoking a reference
+compiler. Reports are short-lived CI artifacts; do not add raw observations
+to `results/`. Changing this registry routes to the quick and CLI checks, not
+an unchanged compiler's performance matrices.
+
+Use `--case ID` for a bounded probe and `--observe` to inspect changed Native
+behavior before reviewing expectations. Observation mode still rejects an
+invalid reference fixture and never rewrites expectations. Update a case only
+after reviewing all four paths, then regenerate the table with `--table`.
+Documentation-only CI checks that the table matches the registry without
+building or executing a compiler. Each subprocess has a 30-second safety
+timeout with owned-process-group cleanup; these are not performance tests.
 
 ## Feature delivery contract
 

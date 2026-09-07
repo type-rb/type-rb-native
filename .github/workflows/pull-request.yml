@@ -78,6 +78,25 @@ jobs:
         run: |
           sh tools/native-mir-transition-policy-test.sh
           sh tools/compiler-project-test.sh
+      # Reference validity belongs to this oracle job, not the Go-free CLI chain.
+      - name: Verify language fixtures against the exact reference compiler
+        if: needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true'
+        run: |
+          python3 tools/native-language-coverage-test.py
+          python3 tools/native-language-coverage.py --reference "$RUNNER_TEMP/trb" \
+            > "$RUNNER_TEMP/reference-language.json"
+      - name: Retain reference language observations
+        if: always() && (needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true')
+        uses: actions/upload-artifact@v4
+        with:
+          name: reference-language
+          path: ${{ runner.temp }}/reference-language.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Check that the coverage table matches the fixture registry
+        if: needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true'
+        run: |
+          python3 tools/native-language-coverage.py --check-table docs/native-language-coverage-matrix.md
       - name: Run root units and focused MIR correctness tests
         if: needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true'
         env:

@@ -94,6 +94,25 @@ test('documentation-only PRs do not run compiler or performance matrices', () =>
     memory: false, performance: false, draft: false, tooling: false, cli: false });
   assert.deepEqual(acceptance(results(plan)), []);
 });
+test('ordinary language cases use a separate reference oracle and Go-free CLI checks', () => {
+  const entry = readFileSync(new URL('../.github/workflows/pull-request.yml', import.meta.url), 'utf8');
+  const cli = readFileSync(new URL('../.github/workflows/native-cli.yml', import.meta.url), 'utf8');
+  const docs = readFileSync(new URL('../.github/workflows/documentation.yml', import.meta.url), 'utf8');
+  assert(entry.includes('tools/native-language-coverage.py --reference "$RUNNER_TEMP/trb"'));
+  assert(cli.includes('tools/native-language-coverage.py --native bin/trbn'));
+  assert(!cli.includes('tools/native-language-coverage.py --reference'));
+  assert(docs.includes('tools/native-language-coverage.py --check-table docs/native-language-coverage-matrix.md'));
+  for (const path of ['tools/native-language-cases.json', 'tools/native-language-coverage.py',
+    'tools/native-language-coverage-test.py']) {
+    const plan = classify([path], false);
+    assert.equal(plan.quick, true);
+    assert.equal(plan.cli, true);
+    assert.equal(plan.code, false);
+    assert.equal(plan.performance, false);
+    assert.deepEqual(acceptance(results(plan)), []);
+    assert.equal(classify([path, 'compiler/src/compiler.trb'], false).performance, true);
+  }
+});
 test('compiler, conformance and execution workflows retain the full authority', () => {
   for (const path of ['compiler/src/storage.trb', 'compiler/trbconfig.jsonc',
     'compiler/conformance/runtime-invalid/new.trb',
