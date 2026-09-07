@@ -59,8 +59,8 @@ Attestations bind compilers, manifest and checksums to the preparation workflow,
 exact main revision and hosted runners. Manifest validation alone is not an
 attestation check.
 
-The first refresh keeps accepted compiler caps of 350,000 bytes on Darwin arm64,
-317,000 on Linux arm64 and 667,000 combined. It changes no ordinary optimizer
+Refreshes keep accepted compiler caps of 350,000 bytes on Darwin arm64,
+317,000 on Linux arm64 and 667,000 combined. They change no ordinary optimizer
 acceptance limit, measurement baseline or runtime performance claim. The legacy
 initial-root manifest/verifier and its historical bounds remain unchanged.
 
@@ -87,33 +87,34 @@ Sep7 release recorded below; both known refresh tags retain their exact
 predecessor validation. Unknown tags and cross-tag manifests fail closed.
 
 Darwin arm64 and Linux arm64 retain the same target, combined-size, generation,
-retained-observation, corpus and process bounds. The preparation verifies the
-logical-condition and `elsif` fixtures. Publication, fresh published-asset
-verification and a separate checkout pin PR are still required. No Sep8 seed
-is claimed published or verified by these preparation changes.
+retained-observation, corpus and process bounds. The preparation and actual
+published-asset verification both passed, including logical-condition and
+`elsif` fixtures. The verified checkout handoff follows.
 
 ## Current verified checkout seed
 
-Checkout builds pin [bootstrap-seed-2026-09-07](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-09-07),
+Checkout builds pin [bootstrap-seed-2026-09-08](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-09-08),
 an immutable experimental prerelease from accepted source
-`1f7e8a110bbb2b13f0609709deb6fc8f09dc8b44`. The compiler tree is unchanged from
-accepted `26bb32a3d3bd085fdae4fc190bf2a14703351a8f`; no pending optimization
-candidate was included. The predecessor remains immutable and unchanged.
+`f8c293f6f9683b0a29b7eee614fc4fff261d36b8`. Its compiler implementation is unchanged
+from accepted `21f507e7ee7de2577f4137f6dfb9f732c14c1640`; PR #330 supplied the reviewed
+preparation observers. No pending optimization candidate was included.
 
-- [Preparation and attestations](https://github.com/type-rb/type-rb-native/actions/runs/34113420518) passed both arm64 targets.
-- [Fresh published-asset verification](https://github.com/type-rb/type-rb-native/actions/runs/34113836522) passed both targets, including equality of each downloaded seed with its regenerated fixed point, corpus, all retained generation observations and ordinary Linux process boundaries.
-- Darwin compiler: 332,728 bytes, SHA-256 `b960d8720ad6bb256fb019d04cd6ab80e86870228bed16776bba9fbe78f5769f` (asset 548637192).
-- Linux compiler: 307,544 bytes, SHA-256 `ff3bc9a2409e91eba0e2ef5109bf72a10aa16d4f360bc32aceafc50baa96a580` (asset 548637194).
-- Combined: 640,272 bytes, below the unchanged 667,000-byte bound.
-- Manifest: SHA-256 `330e59e08bb1173b5865e782a7c578a556942ba5174422434cc56ab4fedfeed5` (asset 548637191).
-- Checksum index: SHA-256 `a36b347714285cc4e80597987c2863b7595e5e72a7b082f4787a628c49d194fe` (asset 548637193).
+- [Preparation and attestations](https://github.com/type-rb/type-rb-native/actions/runs/34157740161) passed both arm64 targets and all 28 retained observations.
+- [Fresh published-asset verification](https://github.com/type-rb/type-rb-native/actions/runs/34158167351) passed both targets, including equality of each downloaded seed with its regenerated fixed point, corpus, all 42 retained generation observations and ordinary Linux process boundaries.
+- Darwin compiler: 332,728 bytes, SHA-256 `9a815fd3bdcfd24a082111814442ee11380d31532058024cc7d7564e203b0629` (asset 549315183).
+- Linux compiler: 309,696 bytes, SHA-256 `77e8e9df3b91cbbf7cb823044c0c79c23e63767c5986369f8d9a11e23773abf3` (asset 549315180).
+- Combined: 642,424 bytes, below the unchanged 667,000-byte bound.
+- Manifest: SHA-256 `6b92832b482e8b502045a71f7f267f2e3bb5b221cd2c52ce1c07e9a4405fe083` (asset 549315182).
+- Checksum index: SHA-256 `5a8d5661b45607ce707d2176adb54fadcfd926f7104e4dcd1b1389e84b2e2b2f` (asset 549315181).
 
-The [first preparation](https://github.com/type-rb/type-rb-native/actions/runs/34111463383)
-passed Darwin but stopped Linux at its second setup transition, before ordinary
-measurements: the observer mislabeled that compatibility build `ordinary`.
-[PR #322](https://github.com/type-rb/type-rb-native/pull/322) corrected the role to
-match the existing worker authority; it did not relax ordinary LLD or numerical
-requirements. No release was produced from the failed paired run.
+The immutable [Sep7 predecessor](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-09-07)
+remains at `1f7e8a110bbb2b13f0609709deb6fc8f09dc8b44`, with its exact identities
+and earlier preparation-failure correction retained in the
+[source-era handoff record](https://github.com/type-rb/type-rb-native/blob/f8c293f6f9683b0a29b7eee614fc4fff261d36b8/docs/bootstrap-seed-updates.md#current-verified-checkout-seed).
+Its [preparation](https://github.com/type-rb/type-rb-native/actions/runs/34113420518)
+and [published verification](https://github.com/type-rb/type-rb-native/actions/runs/34113836522)
+remain the authorities for that historical release. Predecessor identities in
+the strict verifier and Sep8 preparation workflow remain unchanged.
 
 Compiler binaries and detailed run artifacts remain outside Git. This compact
 handoff record does not introduce another retained benchmark result directory
@@ -122,7 +123,7 @@ or claim a runtime speedup.
 ## Active CI consumers versus historical recovery
 
 Current compiler-cost, worker-memory, formal runtime/build benchmark and Linux
-arm64 regression workflows use the exact Sep7 seed and the shared strict
+arm64 regression workflows use the exact Sep8 seed and the shared strict
 download/authentication helper. Their manual seed input must match the recorded
 source revision; an older or unknown tag fails rather than bypassing provenance.
 Changing a setup seed does not move a frozen benchmark baseline or change any
@@ -135,7 +136,7 @@ the logical-condition and `elsif` conformance fixtures, then reads the
 **candidate** source for the current-runtime transition. Ordinary B2/B3/B4 and measured inputs remain
 the candidate. The setup source revision/entry digest and all existing process
 traces are retained separately. No new root asset or Go recovery is introduced.
-The arm64 comparison still authenticates the Sep7 seed independently of this
+The arm64 comparison still authenticates the Sep8 seed independently of this
 amd64 setup-source revision. The optional setup-source argument accepts only
 the exact clean setup revision; omission retains the historical direct-current-source setup shape.
 
