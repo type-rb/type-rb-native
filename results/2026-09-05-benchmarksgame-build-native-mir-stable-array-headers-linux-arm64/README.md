@@ -1,3 +1,7 @@
+> Storage update: detailed files are preserved in the verified public archive
+> identified by [ARCHIVE.json](ARCHIVE.json). Tables and measurements remain in Git.
+> Original reports and every archived file are included unchanged in that archive.
+
 # Formal Stable-Array-Header Build Results on Linux arm64
 
 Status: retained build-only evidence for rejected candidate `69ff52b5`. Its

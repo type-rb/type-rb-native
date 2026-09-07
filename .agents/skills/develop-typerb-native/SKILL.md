@@ -167,6 +167,13 @@ a time.
 
 ## Verify
 
+Before importing or reorganizing `results/`, read `docs/evidence-retention.md`.
+Keep compact reports and observation tables in Git; publish detailed payloads
+as checksummed public evidence archives. Verify a fresh public download and
+all existing consumers before removing an archived file. Preserve failed
+observations and historical identities; archival does not accept a candidate.
+Run the retention check with the actual PR base before publishing new results.
+
 From the repository root, use the compiler revision in `TYPE_RB_REVISION` and
 run:
 

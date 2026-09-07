@@ -1,3 +1,7 @@
+> Storage update: detailed files are preserved in the verified public archive
+> identified by [ARCHIVE.json](ARCHIVE.json). Tables and measurements remain in Git.
+> Original reports and every archived file are included unchanged in that archive.
+
 # Formal Native-MIR Induction-Phi Runtime Results on Linux arm64
 
 The complete current-revision snapshot passes the formal fresh-process runtime

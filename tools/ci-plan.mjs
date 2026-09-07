@@ -6,12 +6,19 @@ const staticDocumentationTools = new Set([
   'tools/capability-map-check.mjs',
   'tools/benchmark-pages-data.mjs',
   'tools/benchmark-pages-check.mjs',
+  'tools/result_archive.py',
+  'tools/result_archive_test.py',
+  '.github/workflows/documentation.yml',
 ]);
 const documentation = path => staticDocumentationTools.has(path) || path.endsWith('.md') ||
   ['.agents/', 'docs/', 'results/'].some(prefix => path.startsWith(prefix));
+// These exact files are exercised by the unconditional planning job. They do
+// not build or execute the compiler. Execution workflows/controllers are not
+// included: changing those still needs the authorities they orchestrate.
+const planningTools = new Set(['tools/ci-plan.mjs', 'tools/ci-plan-test.mjs']);
 
 export function classify(paths, draft) {
-  const code = paths.some(path => !documentation(path));
+  const code = paths.some(path => !documentation(path) && !planningTools.has(path));
   const routing = paths.some(path => path.startsWith('.github/workflows/') ||
     path.startsWith('tools/ci-'));
   const compiler = paths.some(path => path.startsWith('compiler/') &&
