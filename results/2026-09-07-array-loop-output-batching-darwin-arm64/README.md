@@ -5,8 +5,9 @@ and text but still exceeds both absolute limits. Its first named-field build
 cohort fails wall time; later trade-off cohorts pass and are reported separately.
 The earlier batching-only cohort passes local time/RSS, not absolute size.
 The later bounded runtime evaluation is recorded below separately from ordinary
-acceptance. Full recovery and hosted authorities remain unfinished for the
-current source. There is no Pure Go or Pages performance claim.
+acceptance. Corrected-source full local recovery now passes; hosted Linux arm64
+target/memory authorities stop at the unchanged compiler-size limit. There is
+no Pure Go or Pages performance claim.
 
 ## Identities and scope
 
@@ -248,5 +249,37 @@ outside the snapshot v4 subset. The corrected spelling preserves cursor behavior
 and all three measured application binaries byte-for-byte. The compiler itself
 changes: text 253,180 to 253,220 and QBE 1,129,223 to 1,129,392 bytes, complete
 compiler 349,256 unchanged. Earlier compiler-time cohorts must not be presented
-as measurements of this corrected source. Full verification and an explicit
-adoption decision remain pending.
+as measurements of this corrected source.
+
+Corrected candidate `70fe5c0b29560490e4c49a0b5e67d8d14a86fe19` passes the full
+97-test root and 152-test compiler suites with recovery/QBE enabled. All thirteen
+recovery stages complete, including generation and conformance controls. Both
+owned recovery workspaces are removed; the first failed run remains recorded.
+[Compact identities and verification outcomes](adoption-review.json) preserve
+the corrected application hashes and distinguish each authority.
+
+The [hosted target run](https://github.com/type-rb/type-rb-native/actions/runs/34101454030)
+passes Linux amd64. Linux arm64 reaches identical B2/B3/B4 compilers at 319,440
+bytes, then fails the 317,000 limit before completing its corpus authority.
+The [worker run](https://github.com/type-rb/type-rb-native/actions/runs/34101457007)
+passes the Darwin smoke, with 175 collections, all 182,400,576 allocated bytes
+reclaimed and final live bytes zero. Linux fails before worker execution at
+319,432 stripped bytes against 317,000. Neither is long-running soak evidence.
+
+Worker compiler sizes are 349,296 Darwin and 319,432 Linux, manually totaling
+668,728 against 667,000; the combined workflow job is skipped. Their compiler
+QBE hashes agree with the local corrected 1,129,392-byte QBE. This manual
+identity check does not turn either failed workflow into a pass. Distinct
+basename/toolchain artifacts must not be conflated with the local 349,256-byte
+compiler. Quick, documentation, tooling and both CLI jobs pass in the
+[draft PR run](https://github.com/type-rb/type-rb-native/actions/runs/34101416130);
+its acceptance guard correctly fails while required authorities are skipped.
+
+The review finds one localized proof owner, no retained superseded header-only
+owner, and moderate maintenance cost from positional rows and central dispatch.
+It keeps small-gain adoption eligible, without assuming useful optimizer code
+must be free. Before broadening the proof, check large-function scaling and
+review responsibility-based structure. Complete the candidate-scoped cost and
+repeatability decision before new formal measurement or threshold changes;
+original failures remain failures. No additional comparative timing was run
+for this checkpoint. Full acceptance and Pages updates remain pending.

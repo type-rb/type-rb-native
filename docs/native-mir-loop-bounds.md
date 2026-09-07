@@ -30,7 +30,11 @@ eligible for consideration without requiring a larger optimization first.
 It reviews maintenance cost and remaining correctness, not a relabeling of the
 failed 2% criterion. Its first full recovery check found an unsupported indexed
 compound assignment in output batching; the equivalent simple-assignment
-correction is being verified separately from the earlier candidate.
+correction now passes all 97 root and 152 compiler tests with recovery enabled.
+Linux amd64 target verification and the Darwin worker smoke pass. Linux arm64
+reaches a fixed point but stops at the unchanged size limit before completing
+target and memory authorities. The adoption review records those distinct
+outcomes; it is not an acceptance or a long-running memory-soak result.
 
 Superseded diagnostic folders are no longer part of the active checkout.
 The pinned historical links below retain their full observations and patches;

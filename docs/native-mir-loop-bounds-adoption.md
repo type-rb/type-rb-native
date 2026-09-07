@@ -52,6 +52,12 @@ carriers or responsibility-based handlers, their recovery compatibility and
 cumulative cost. Any later refactor must preserve validation ordering and the
 independent proof boundary, not trade them for fewer lines.
 
+Identity/version lookup and write invalidation scan prior rows or regions;
+large functions can therefore incur quadratic analysis work. Current compiler
+measurements are not a scalability guarantee. Include a large-function scaling
+check before broadening this projection, and prefer reusing existing indexes
+if profiling shows a real bottleneck rather than adding a speculative cache.
+
 ## Correctness review checklist
 
 - Live local lookup rejects redeclaration of a still-visible name. Reused slots
@@ -92,10 +98,51 @@ Require full recovery again on this corrected source, not just the inexpensive
 ordinary fixed point. Retain distinct compiler identities and costs even if
 generated applications remain byte-identical.
 
+## Corrected-source verification checkpoint
+
+Candidate `70fe5c0b29560490e4c49a0b5e67d8d14a86fe19` passes all 97 root and
+152 compiler tests with recovery and QBE enabled, including all thirteen
+recovery stages, generation controls and conformance. Both owned recovery
+workspaces were removed after their consumers finished; the initial failure
+is retained in the [compact review record](../results/2026-09-07-array-loop-output-batching-darwin-arm64/adoption-review.json).
+Ordinary core/CLI fixed points pass, and all three measured local application
+binaries remain byte-identical to the previous candidate.
+
+[Hosted target verification](https://github.com/type-rb/type-rb-native/actions/runs/34101454030)
+passes Linux amd64. Linux arm64 reaches identical B2/B3/B4 compilers, but stops
+at 319,440 bytes against 317,000 before completing its corpus authority.
+The cross-target comparison job is skipped, not passed.
+
+[Persistent-worker verification](https://github.com/type-rb/type-rb-native/actions/runs/34101457007)
+passes the Darwin **smoke**, not a long-running soak: 175 collections reclaim
+all 182,400,576 allocated bytes, ending at zero live bytes for this workload.
+This does not prove general leak freedom. Linux arm64 stops before worker
+execution because its stripped compiler is 319,432 bytes against 317,000.
+The downloaded compiler QBE agrees across both arm64 targets and with the
+local corrected compiler, but this manual comparison is not a passing complete
+workflow. Quick, tooling, documentation and both target CLI jobs pass; the
+draft PR acceptance guard correctly remains failed.
+
+| Artifact / scope | Corrected bytes | Ordinary limit | Excess |
+| --- | ---: | ---: | ---: |
+| Local Darwin complete compiler | 349256 | 350000 | none |
+| Local Darwin text | 253220 | 250904 | 2316 |
+| Portable compiler QBE | 1129392 | 1120000 | 9392 |
+| Hosted Linux arm64 ordinary compiler | 319440 | 317000 | 2440 |
+| Hosted worker stripped compiler pair | 668728 | 667000 | 1728 |
+
+The worker pair is a manual sum of its 349,296-byte Darwin and 319,432-byte
+Linux artifacts; its combined workflow job was skipped. Preserve the distinct
+basenames/toolchains instead of substituting the local Darwin size. Current
+Linux text and same-run comparative build costs are not established here.
+Earlier compiler-time cohorts do not transfer to the corrected compiler.
+
 ## Remaining adoption decision
 
-1. Complete corrected-source recovery, target/process/cleanup and memory checks.
-   Resolve any correctness or ownership blocker before performance acceptance.
+1. Finish the remaining target/memory authorities; Linux size stops are not
+   correctness passes. The local recovery blocker is resolved, not the complete
+   acceptance gate. Do not rerun unchanged ordinary size failures without a
+   new question or reviewed policy.
 2. Assess repeatability of the small runtime benefit with explicit uncertainty
    and current application artifacts. Register any new measurement before it
    runs; do not retry the expired diagnostic until a favorable cohort appears.

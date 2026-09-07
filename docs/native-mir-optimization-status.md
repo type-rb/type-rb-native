@@ -25,8 +25,12 @@ fail. Keep the candidate draft. The subsequent
 the existing benefit justifies its localized complexity, without requiring a
 larger optimization first or automatically increasing acceptance limits.
 Full recovery exposed indexed compound assignment outside snapshot v4 in output
-batching; an equivalent simple-assignment correction is under verification.
-Pages values are unchanged.
+batching; the equivalent simple-assignment correction now passes the complete
+recovery-enabled 97-test root and 152-test compiler suites. Linux amd64 target
+verification and the Darwin worker smoke pass. Linux arm64 fixed points are
+identical, but ordinary/stripped compilers of 319,440/319,432 bytes exceed
+317,000 and stop the remaining target/memory authorities. This is not a complete
+acceptance or long-running soak result. Pages values are unchanged.
 
 The [Array-loop bounds connection candidate](native-mir-loop-bounds.md), tracked
 in [issue #303](https://github.com/type-rb/type-rb-native/issues/303), extends the
