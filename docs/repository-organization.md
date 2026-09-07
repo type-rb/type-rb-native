@@ -106,6 +106,18 @@ includes the new owner in source copies, missing/malformed boundaries and
 observable source-mutation coverage. This is organization, not a runtime
 optimization or completion of frontend decomposition.
 
+The [statement-parser naming slice](https://github.com/type-rb/type-rb-native/issues/326#issuecomment-5575420238)
+following ordinary `elsif` self-use replaces
+four parser-owned helpers: `gate4_parse_block_syntax` becomes
+`parse_statement_block`, `gate4_parse_declaration_syntax` becomes
+`parse_declaration_statement`, `gate4_parse_simple_statement_syntax` becomes
+`parse_simple_statement`, and `gate4_finish_statement` becomes `finish_statement`.
+The parser, entry/checker callers and exact recovery import prefixes move
+together, without aliases. Existing application QBE and diagnostics remain
+unchanged; compiler source/symbol identities can change and retain all ordinary
+fixed-point, recovery, target, memory and cost checks. Other parser helpers and
+shared state types remain separate O4 work.
+
 O3 continues incrementally; O4–O5 are not complete. Next, audit the remaining
 lexer and driver dependencies alongside active gate-derived naming. The
 recovery harness also needs independent workspace isolation and stage-level

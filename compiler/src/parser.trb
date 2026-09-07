@@ -274,7 +274,7 @@ def gate4_parse_expression_syntax(
 	return true
 end
 
-def gate4_finish_statement(mut state: Gate4Compiler, mut position: Array<Integer>): Boolean
+def finish_statement(mut state: Gate4Compiler, mut position: Array<Integer>): Boolean
 	if gate4_load_integer(state.token_kinds, position[0]) == 4
 		gate4_skip_newlines(state, position)
 		return true
@@ -291,7 +291,7 @@ def gate4_finish_statement(mut state: Gate4Compiler, mut position: Array<Integer
 	return false
 end
 
-def gate4_parse_declaration_syntax(mut state: Gate4Compiler, mut position: Array<Integer>): Boolean
+def parse_declaration_statement(mut state: Gate4Compiler, mut position: Array<Integer>): Boolean
 	# The reference treats a statement-leading next as loop control, not a
 	# binding. Keep contextual identifiers (including mut next) unchanged.
 	if gate4_token_is(state, position[0], "next")
@@ -315,10 +315,10 @@ def gate4_parse_declaration_syntax(mut state: Gate4Compiler, mut position: Array
 	if !gate4_parse_expression_syntax(state, position, 1)
 		return false
 	end
-	return gate4_finish_statement(state, position)
+	return finish_statement(state, position)
 end
 
-def gate4_parse_simple_statement_syntax(mut state: Gate4Compiler, mut position: Array<Integer>): Boolean
+def parse_simple_statement(mut state: Gate4Compiler, mut position: Array<Integer>): Boolean
 	if !gate4_parse_expression_syntax(state, position, 1)
 		return false
 	end
@@ -336,10 +336,10 @@ def gate4_parse_simple_statement_syntax(mut state: Gate4Compiler, mut position: 
 			end
 		end
 	end
-	return gate4_finish_statement(state, position)
+	return finish_statement(state, position)
 end
 
-def gate4_parse_block_syntax(mut state: Gate4Compiler, mut position: Array<Integer>): Boolean
+def parse_statement_block(mut state: Gate4Compiler, mut position: Array<Integer>): Boolean
 	gate4_skip_newlines(state, position)
 	mut complete := false
 	while !complete
@@ -353,37 +353,37 @@ def gate4_parse_block_syntax(mut state: Gate4Compiler, mut position: Array<Integ
 		elsif gate4_token_is(state, position[0], "if")
 			gate4_advance(position)
 			if gate4_parse_expression_syntax(state, position, 1)
-				if gate4_finish_statement(state, position)
-					gate4_parse_block_syntax(state, position)
+				if finish_statement(state, position)
+					parse_statement_block(state, position)
 					while gate4_token_is(state, position[0], "elsif")
 						gate4_advance(position)
 						if !gate4_parse_expression_syntax(state, position, 1)
 							return false
 						end
-						if !gate4_finish_statement(state, position)
+						if !finish_statement(state, position)
 							return false
 						end
-						if !gate4_parse_block_syntax(state, position)
+						if !parse_statement_block(state, position)
 							return false
 						end
 					end
 					if gate4_token_is(state, position[0], "else")
 						gate4_advance(position)
-						gate4_finish_statement(state, position)
-						gate4_parse_block_syntax(state, position)
+						finish_statement(state, position)
+						parse_statement_block(state, position)
 					end
 					if gate4_expect(state, position, "end")
-						gate4_finish_statement(state, position)
+						finish_statement(state, position)
 					end
 				end
 			end
 		elsif gate4_token_is(state, position[0], "while")
 			gate4_advance(position)
 			if gate4_parse_expression_syntax(state, position, 1)
-				if gate4_finish_statement(state, position)
-					gate4_parse_block_syntax(state, position)
+				if finish_statement(state, position)
+					parse_statement_block(state, position)
 					if gate4_expect(state, position, "end")
-						gate4_finish_statement(state, position)
+						finish_statement(state, position)
 					end
 				end
 			end
@@ -394,11 +394,11 @@ def gate4_parse_block_syntax(mut state: Gate4Compiler, mut position: Array<Integ
 					gate4_parse_expression_syntax(state, position, 1)
 				end
 			end
-			gate4_finish_statement(state, position)
+			finish_statement(state, position)
 		elsif gate4_declaration_start(state, position[0])
-			gate4_parse_declaration_syntax(state, position)
+			parse_declaration_statement(state, position)
 		else
-			gate4_parse_simple_statement_syntax(state, position)
+			parse_simple_statement(state, position)
 		end
 		if gate4_has_diagnostic(state)
 			complete = true
@@ -411,7 +411,7 @@ def gate4_parse_record(mut state: Gate4Compiler, mut position: Array<Integer>): 
 	line := gate4_load_integer(state.token_lines, position[0])
 	gate4_advance(position)
 	name := gate4_expect_identifier(state, position)
-	if !gate4_finish_statement(state, position)
+	if !finish_statement(state, position)
 		return false
 	end
 	record_index := state.record_count[0]
@@ -431,7 +431,7 @@ def gate4_parse_record(mut state: Gate4Compiler, mut position: Array<Integer>): 
 			return false
 		end
 		field_type := gate4_parse_type(state, position)
-		if !gate4_finish_statement(state, position)
+		if !finish_statement(state, position)
 			return false
 		end
 		field_index := state.field_count[0]
@@ -444,7 +444,7 @@ def gate4_parse_record(mut state: Gate4Compiler, mut position: Array<Integer>): 
 	gate4_advance(position)
 	gate4_store_integer(state.record_field_counts, record_index, count)
 	state.record_count[0] = record_index + 1
-	return gate4_finish_statement(state, position)
+	return finish_statement(state, position)
 end
 
 def gate4_parse_function(mut state: Gate4Compiler, mut position: Array<Integer>): Boolean
@@ -500,18 +500,18 @@ def gate4_parse_function(mut state: Gate4Compiler, mut position: Array<Integer>)
 		gate4_advance(position)
 		result_type = gate4_parse_type(state, position)
 	end
-	if !gate4_finish_statement(state, position)
+	if !finish_statement(state, position)
 		return false
 	end
 	body_start := position[0]
-	if !gate4_parse_block_syntax(state, position)
+	if !parse_statement_block(state, position)
 		return false
 	end
 	body_end := position[0]
 	if !gate4_expect(state, position, "end")
 		return false
 	end
-	if !gate4_finish_statement(state, position)
+	if !finish_statement(state, position)
 		return false
 	end
 	function_index := state.function_count[0]
@@ -619,7 +619,7 @@ def gate4_parse_named_import(mut state: Gate4Compiler, mut position: Array<Integ
 		gate4_store_string(state.import_paths, import_index, path)
 		import_index += 1
 	end
-	return gate4_finish_statement(state, position)
+	return finish_statement(state, position)
 end
 
 def gate4_parse_bare_import(mut state: Gate4Compiler, mut position: Array<Integer>, line: Integer): Boolean
@@ -654,7 +654,7 @@ def gate4_parse_bare_import(mut state: Gate4Compiler, mut position: Array<Intege
 		end
 	end
 	gate4_append_import(state, path, "", binding, 1, line)
-	return gate4_finish_statement(state, position)
+	return finish_statement(state, position)
 end
 
 def gate4_parse_module(mut state: Gate4Compiler, start: Integer, module_index: Integer): Boolean
