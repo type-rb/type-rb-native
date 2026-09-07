@@ -11,6 +11,12 @@ B2 and do not retroactively widen recovery.
 
 The valid cases cover:
 
+- statement `elsif` chains, ordered conditions, skipped traps, optional else,
+  branch-local bindings and nested returns in `valid/elsif-control.trb`;
+  managed-root retention and Array mutation across conditional edges in
+  `valid/elsif-managed.trb`, beginning with the updated ordinary B2. Paired
+  invalid and runtime-invalid cases preserve diagnostics and required failures;
+
 - paired short-circuit Boolean operators, precedence, unary operands,
   nested exactly-once effects and skipped traps in `valid/logical-short-circuit.trb`,
   with managed RHS allocation in `valid/logical-managed-rhs.trb` and required

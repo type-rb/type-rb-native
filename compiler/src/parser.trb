@@ -24,6 +24,13 @@ def gate4_declaration_start(state: Gate4Compiler, index: Integer): Boolean
 	return gate4_token_is(state, index + 1, ":")
 end
 
+def syntax_conditional_tail(state: Gate4Compiler, index: Integer): Boolean
+	if gate4_token_is(state, index, "else")
+		return true
+	end
+	return gate4_token_is(state, index, "elsif")
+end
+
 def gate4_advance(mut position: Array<Integer>)
 	position[0] = position[0] + 1
 	return
@@ -343,7 +350,7 @@ def gate4_parse_block_syntax(mut state: Gate4Compiler, mut position: Array<Integ
 			if gate4_token_is(state, position[0], "end")
 				complete = true
 			else
-				if gate4_token_is(state, position[0], "else")
+				if syntax_conditional_tail(state, position[0])
 					complete = true
 				else
 					if gate4_token_is(state, position[0], "if")
@@ -351,6 +358,18 @@ def gate4_parse_block_syntax(mut state: Gate4Compiler, mut position: Array<Integ
 						if gate4_parse_expression_syntax(state, position, 1)
 							if gate4_finish_statement(state, position)
 								gate4_parse_block_syntax(state, position)
+								while gate4_token_is(state, position[0], "elsif")
+									gate4_advance(position)
+									if !gate4_parse_expression_syntax(state, position, 1)
+										return false
+									end
+									if !gate4_finish_statement(state, position)
+										return false
+									end
+									if !gate4_parse_block_syntax(state, position)
+										return false
+									end
+								end
 								if gate4_token_is(state, position[0], "else")
 									gate4_advance(position)
 									gate4_finish_statement(state, position)

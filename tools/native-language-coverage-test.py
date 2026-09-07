@@ -46,7 +46,7 @@ class LanguageCoverageTests(unittest.TestCase):
         table = coverage.coverage_table(coverage.validate(self.document))
         self.assertIn("| UTF-8 String literal | accepts | rejects | not reached | rejects |", table)
         self.assertIn("| while | accepts | accepts | matches reference | output differs |", table)
-        self.assertIn("| elsif | rejects | rejects | not reached | rejects |", table)
+        self.assertIn("| elsif | accepts | accepts | matches reference | matches reference |", table)
         self.assertIn("Array&lt;Boolean&gt;", table)
         self.assertEqual(table, coverage.coverage_table(self.document["cases"]))
 
