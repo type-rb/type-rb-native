@@ -1,6 +1,26 @@
-# String escape reference compatibility
+# Current reference compatibility
 
-This experimental update selects TypeRB `0.4.6-dev` at
+The current development pin is TypeRB `0.4.6-dev` at
+`6d130b3cd89044d4f54cc983555e0a3d340793c7`, the merged
+[short-circuit snapshot-condition correction](https://github.com/type-rb/type-rb/pull/653).
+Snapshot v3/v4 lower logical `if`/`while` condition trees through ordinary
+branches while preserving short-circuit evaluation. General logical values
+and call arguments remain outside that recovery subset; this does not change
+the ordinary Native language boundary.
+
+The Native compiler implementation is unchanged from accepted
+`d8fb20925e8eade09ea964c0f0c574083f68684b`. Its independent
+[checkout CLI verification](https://github.com/type-rb/type-rb-native/actions/runs/34114320082)
+passed Darwin/Linux arm64 with the Sep7 seed. That workflow verifies the
+unchanged Native executable chain, **not** the new reference revision.
+The reference-pin PR separately requires fresh recovery-enabled root/compiler
+tests, exact-reference compatibility validation and every applicable hosted
+acceptance authority before merge. This is not evidence for adopting the
+pending Array-loop optimization or expanding a compatibility range.
+
+## Previous String-escape checkpoint
+
+The preceding experimental update selected TypeRB `0.4.6-dev` at
 `47a160cae05ddc2035c7430735c4762d36bbc9c4`, the source revision of
 [TypeRB PR #651](https://github.com/type-rb/type-rb/pull/651).
 The dependent Native update requires that reference PR to merge first.
