@@ -11,6 +11,10 @@ B2 and do not retroactively widen recovery.
 
 The valid cases cover:
 
+- paired short-circuit Boolean operators, precedence, unary operands,
+  nested exactly-once effects and skipped traps in `valid/logical-short-circuit.trb`,
+  with managed RHS allocation in `valid/logical-managed-rhs.trb` and required
+  RHS traps and invalid non-Boolean operands in the paired failure fixtures;
 - typed direct calls, mutable locals, conditionals, loops, and checked Integer
   arithmetic in `valid/control-flow.trb`;
 - contextual `next` identifiers in mutable locals, parameters and record fields,

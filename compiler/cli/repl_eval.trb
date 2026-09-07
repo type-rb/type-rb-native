@@ -1,7 +1,8 @@
 import trb/std/math
 import { Gate4Compiler } from state
 import { gate4_load_integer, gate4_load_string } from storage
-import { gate4_token_is, gate4_binary_precedence, gate4_parse_type, gate4_skip_newlines, gate4_declaration_start } from parser
+import { gate4_token_is, gate4_binary_operator_id, gate4_binary_precedence, gate4_parse_expression_syntax, gate4_parse_type, gate4_skip_newlines, gate4_declaration_start } from parser
+import { mir_logical_short_value } from mir
 import { gate4_find_visible_function, gate4_find_visible_record, gate4_find_record_type, gate4_find_field, gate4_record_type, gate4_array_element_type } from resolution
 import { gate4_number_is_float, gate4_number_without_underscores, gate4_integer_string } from literals
 import { native_cli_float, native_cli_interrupt } from host
@@ -245,7 +246,7 @@ def repl_primary(mut state: Gate4Compiler, mut position: Array<Integer>, mut sto
 		return repl_reference(repl_boolean(store, false))
 	end
 	if text == "-"
-		operand := repl_expression(state, position, store, environment, 4, "")
+		operand := repl_expression(state, position, store, environment, 7, "")
 		value := repl_get(store, operand.value)
 		if value.type_name == "Float"
 			return repl_reference(repl_float(store, - value.floating))
@@ -253,7 +254,7 @@ def repl_primary(mut state: Gate4Compiler, mut position: Array<Integer>, mut sto
 		return repl_reference(repl_integer(store, - value.integer))
 	end
 	if text == "!"
-		operand := repl_expression(state, position, store, environment, 4, "Boolean")
+		operand := repl_expression(state, position, store, environment, 7, "Boolean")
 		return repl_reference(repl_boolean(store, store.integers[operand.value] == 0))
 	end
 	if text == "("
@@ -482,8 +483,29 @@ def repl_expression(mut state: Gate4Compiler, mut position: Array<Integer>, mut 
 			complete = true
 		else
 			position[0] += 1
-			right := repl_expression(state, position, store, environment, precedence + 1, "")
-			result = repl_reference(repl_numeric(store, result.value, operator, right.value))
+			origin := position[0] - 1
+			gate4_skip_newlines(state, position)
+			if precedence <= 2
+				plan := gate4_load_integer(state.mir_nonnegative_facts, origin)
+				short_value := mir_logical_short_value(plan)
+				if short_value < 0 || plan - 64 != gate4_binary_operator_id(operator)
+					store.error[0] = "invalid checked logical plan"
+					return repl_reference(0)
+				end
+				if store.integers[result.value] == short_value
+					# The frontend already checked both regions. Advance through
+					# skipped syntax without evaluating calls, allocations or traps.
+					if !gate4_parse_expression_syntax(state, position, precedence + 1)
+						store.error[0] = "invalid checked logical right-hand side"
+					end
+					result = repl_reference(result.value)
+				else
+					result = repl_reference(repl_expression(state, position, store, environment, precedence + 1, "Boolean").value)
+				end
+			else
+				right := repl_expression(state, position, store, environment, precedence + 1, "")
+				result = repl_reference(repl_numeric(store, result.value, operator, right.value))
+			end
 		end
 	end
 	return result
