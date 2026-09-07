@@ -126,3 +126,27 @@ test('a normally exiting parent cannot leave a descendant for later CI steps', a
   await delay(100);
   assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' });
 });
+
+test('successful suite exit cannot replace missing or incomplete recovery stage evidence', async t => {
+  const dir = workspace(t);
+  const root = new URL('../', import.meta.url).pathname;
+  const record = new URL('./recovery-stage.py', import.meta.url).pathname;
+  const code = `const {spawnSync}=require('child_process');
+    const file=process.env.TYPE_RB_NATIVE_RECOVERY_STAGES;
+    if(!file)process.exit(8);
+    const result=spawnSync('python3',[${JSON.stringify(record)},'start',file,'source-preparation']);
+    process.exitCode=result.status;`;
+  const peer = `if(process.env.TYPE_RB_NATIVE_RECOVERY_STAGES)process.exitCode=9;`;
+  const result = await runSuites({ executable: process.execPath, evidence: dir, cwd: root,
+    recoveryStages: true, env: { ...process.env, TYPE_RB_NATIVE_RECOVERY_STAGES: '/ignored/shared' }, suites: [
+      { name: 'root', args: ['-e', code] }, { name: 'compiler', args: ['-e', peer] },
+    ] });
+  assert.equal(result, 1);
+  const status = readStatus(dir);
+  assert.equal(status.suites[0].code, 0);
+  assert.match(status.suites[0].stageEvidenceError, /Incomplete/);
+  assert.equal(status.suites[1].code, 0);
+  const report = JSON.parse(fs.readFileSync(dir + '/recovery-stages.summary.json'));
+  assert.equal(report.complete, false);
+  assert.equal(report.stages[0].state, 'incomplete');
+});
