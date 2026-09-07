@@ -9,8 +9,8 @@
 | Record construction and field read | accepts | accepts | matches reference | matches reference |
 | Array&lt;Integer&gt; | accepts | accepts | matches reference | matches reference |
 | elsif | accepts | accepts | matches reference | matches reference |
-| break | rejects | rejects | not reached | rejects |
-| next | rejects | rejects | not reached | rejects |
+| break | accepts | accepts | matches reference | matches reference |
+| next | accepts | accepts | matches reference | matches reference |
 | Default argument | rejects | rejects | not reached | rejects |
 | Array&lt;Boolean&gt; | rejects | rejects | not reached | rejects |
 | Nullable String | rejects | rejects | not reached | rejects |
