@@ -19,14 +19,14 @@ const documentation = path => staticDocumentationTools.has(path) || path.endsWit
 const planningTools = new Set(['tools/ci-plan.mjs', 'tools/ci-plan-test.mjs']);
 // Only these synthetic tests can use tooling-only validation. Their production
 // controllers and unknown neighboring paths still require the full code lane.
+// The project/policy shell tests also have a Linux quick-check authority, so
+// they are not exempted by this macOS-only tooling lane.
 export const toolingTests = new Set([
   'tools/bootstrap-seed-manifest-test.sh',
   'tools/bootstrap-seed-arguments-test.sh',
   'tools/gate6n-measure-test.py',
   'tools/benchmarksgame-formal/runtime-controller-test.sh',
   'tools/native-runtime-ab/runtime-controller-test.sh',
-  'tools/native-mir-transition-policy-test.sh',
-  'tools/compiler-project-test.sh',
   'tools/benchmarksgame-build-formal/build-controller-test.sh',
   'tools/runtime-memory-soak/analyze-rss-test.sh',
   'tools/runtime-worker-soak/analyze-gc-trace-test.sh',

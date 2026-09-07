@@ -24,7 +24,9 @@ lane until its consumers and executing authority are reviewed. Production
 measurement controllers, toolchain pins, suite controllers and stage-recording
 code retain code validation. Tool-test-only routing is valid because the
 independent tooling job actually executes each listed test. Compiler tests
-and conformance fixtures retain their existing compiler authorities.
+and conformance fixtures retain their existing compiler authorities. Project
+and transition-policy shell tests also retain their Linux quick-check authority
+in addition to the macOS tooling checks.
 
 CLI adapters are outside the ordinary compiler source closure. Their dedicated
 workflow builds the current core from the pinned Native seed, verifies fixed

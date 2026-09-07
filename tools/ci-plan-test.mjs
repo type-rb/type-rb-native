@@ -97,7 +97,7 @@ test('documentation-only PRs do not run compiler or performance matrices', () =>
 test('compiler, conformance and execution workflows retain the full authority', () => {
   for (const path of ['compiler/src/storage.trb', 'compiler/trbconfig.jsonc',
     'compiler/conformance/runtime-invalid/new.trb',
-    'tools/compiler-project.sh',
+    'tools/compiler-project.sh', 'tools/compiler-project-test.sh',
     'compiler/gate4/src/storage.trb',
     'compiler/gate4/conformance/runtime-invalid/new.trb',
     '.github/workflows/pull-request.yml', '.github/workflows/gate-zero.yml',
