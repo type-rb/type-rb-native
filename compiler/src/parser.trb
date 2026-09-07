@@ -346,71 +346,59 @@ def gate4_parse_block_syntax(mut state: Gate4Compiler, mut position: Array<Integ
 		if gate4_terminal_token(state, position[0])
 			gate4_diagnostic(state, "TRBN4002", gate4_load_integer(state.token_lines, position[0]), "expected end")
 			complete = true
-		else
-			if gate4_token_is(state, position[0], "end")
-				complete = true
-			else
-				if syntax_conditional_tail(state, position[0])
-					complete = true
-				else
-					if gate4_token_is(state, position[0], "if")
+		elsif gate4_token_is(state, position[0], "end")
+			complete = true
+		elsif syntax_conditional_tail(state, position[0])
+			complete = true
+		elsif gate4_token_is(state, position[0], "if")
+			gate4_advance(position)
+			if gate4_parse_expression_syntax(state, position, 1)
+				if gate4_finish_statement(state, position)
+					gate4_parse_block_syntax(state, position)
+					while gate4_token_is(state, position[0], "elsif")
 						gate4_advance(position)
-						if gate4_parse_expression_syntax(state, position, 1)
-							if gate4_finish_statement(state, position)
-								gate4_parse_block_syntax(state, position)
-								while gate4_token_is(state, position[0], "elsif")
-									gate4_advance(position)
-									if !gate4_parse_expression_syntax(state, position, 1)
-										return false
-									end
-									if !gate4_finish_statement(state, position)
-										return false
-									end
-									if !gate4_parse_block_syntax(state, position)
-										return false
-									end
-								end
-								if gate4_token_is(state, position[0], "else")
-									gate4_advance(position)
-									gate4_finish_statement(state, position)
-									gate4_parse_block_syntax(state, position)
-								end
-								if gate4_expect(state, position, "end")
-									gate4_finish_statement(state, position)
-								end
-							end
+						if !gate4_parse_expression_syntax(state, position, 1)
+							return false
 						end
-					else
-						if gate4_token_is(state, position[0], "while")
-							gate4_advance(position)
-							if gate4_parse_expression_syntax(state, position, 1)
-								if gate4_finish_statement(state, position)
-									gate4_parse_block_syntax(state, position)
-									if gate4_expect(state, position, "end")
-										gate4_finish_statement(state, position)
-									end
-								end
-							end
-						else
-							if gate4_token_is(state, position[0], "return")
-								gate4_advance(position)
-								if gate4_load_integer(state.token_kinds, position[0]) != 4
-									if !gate4_terminal_token(state, position[0])
-										gate4_parse_expression_syntax(state, position, 1)
-									end
-								end
-								gate4_finish_statement(state, position)
-							else
-								if gate4_declaration_start(state, position[0])
-									gate4_parse_declaration_syntax(state, position)
-								else
-									gate4_parse_simple_statement_syntax(state, position)
-								end
-							end
+						if !gate4_finish_statement(state, position)
+							return false
 						end
+						if !gate4_parse_block_syntax(state, position)
+							return false
+						end
+					end
+					if gate4_token_is(state, position[0], "else")
+						gate4_advance(position)
+						gate4_finish_statement(state, position)
+						gate4_parse_block_syntax(state, position)
+					end
+					if gate4_expect(state, position, "end")
+						gate4_finish_statement(state, position)
 					end
 				end
 			end
+		elsif gate4_token_is(state, position[0], "while")
+			gate4_advance(position)
+			if gate4_parse_expression_syntax(state, position, 1)
+				if gate4_finish_statement(state, position)
+					gate4_parse_block_syntax(state, position)
+					if gate4_expect(state, position, "end")
+						gate4_finish_statement(state, position)
+					end
+				end
+			end
+		elsif gate4_token_is(state, position[0], "return")
+			gate4_advance(position)
+			if gate4_load_integer(state.token_kinds, position[0]) != 4
+				if !gate4_terminal_token(state, position[0])
+					gate4_parse_expression_syntax(state, position, 1)
+				end
+			end
+			gate4_finish_statement(state, position)
+		elsif gate4_declaration_start(state, position[0])
+			gate4_parse_declaration_syntax(state, position)
+		else
+			gate4_parse_simple_statement_syntax(state, position)
 		end
 		if gate4_has_diagnostic(state)
 			complete = true
