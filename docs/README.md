@@ -19,6 +19,7 @@ historical architecture notes removed from the current architecture and plan.
 - [Short-circuit Boolean expressions](native-logical-expressions.md)
 - [Architecture](architecture.md)
 - [Development and validation plan](experiment-plan.md)
+- [Optimization costs and trade-off evaluation](optimization-tradeoffs.md)
 - [Evidence lifecycle and retention](evidence-retention.md)
 - [Native versioning and compatibility](versioning.md)
 - [TypeRB compatibility mapping](type-rb-compatibility.md)

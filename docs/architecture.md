@@ -201,7 +201,13 @@ operation/fact subset, lower it through the existing QBE ABI, move the matching
 optimization ownership above the adapter, and remove the superseded emitter
 logic before broadening the subset.
 
-Ordinary optimization experiments keep their pre-registered compactness caps.
+The [trade-off policy](optimization-tradeoffs.md) distinguishes ordinary
+acceptance from bounded runtime-benefit investigation after a cost miss. It
+retains cumulative budgets and removes superseded ownership, while allowing
+useful optimizer code to have an explicitly justified cost. QBE text alone is
+not a deployed-artifact objective. Existing ordinary CI limits remain unchanged.
+
+Ordinary optimization acceptance keeps its pre-registered compactness caps.
 A structural MIR slice may use a distinct temporary compiler-size envelope
 only after the smallest useful skeleton has been measured and the envelope,
 build/RSS limits, removal condition, and final compactness target have been
@@ -213,9 +219,10 @@ Before a candidate has a public revision, exact compiler and compiler-test
 source digests identify the measured implementation without making the policy
 retrospective. Once that marker exists in the baseline, later changes
 automatically return to the ordinary limits.
-The first complete control-flow slice must delete its superseded Array
-induction token facts and direct emission before the migration expands beyond
-the portable range, index, and induction family.
+Remove superseded Array induction token facts and direct emission as the
+control-flow slice migrates. Assess outstanding migration debt and cumulative
+cost before expanding the fact family; useful verified passes are not required
+to have zero net code cost as a prerequisite to bounded investigation.
 
 The first complete `Array<Integer>` reduction slice extends that same family
 with verified induction and accumulator block parameters. Its measured
@@ -223,8 +230,8 @@ one-time ceilings are 350,000 Darwin arm64 bytes, 317,000 Linux arm64 bytes,
 667,000 bytes combined, and 1,120,000 bytes of target-neutral compiler QBE.
 The measured code-section ceilings are 250,904 Mach-O `__text` bytes and
 253,424 ELF `.text` bytes. Ordinary 1.05 compiler/build/RSS ratios and the 2.0
-catastrophic bound remain in force. This slice must help recover the complete
-family's temporary increase before any new portable fact family begins.
+catastrophic bound remain in force for ordinary acceptance. Retain these
+historical ceilings and apply the trade-off policy to future cost decisions.
 See [Decision 0028](decisions/0028-native-mir-optimization-boundary.md).
 
 ## Backend adapters
