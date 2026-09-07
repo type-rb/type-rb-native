@@ -57,6 +57,17 @@ relabeling. Track same-feature and frozen cumulative controls and actual Go
 comparisons. Reassess after two size-only attempts without a current runtime
 benefit assessment, rather than polishing small overruns indefinitely.
 
+## Current implementation focus
+
+Follow the [ordinary language coverage plan](native-language-coverage.md):
+separate check/build/execution/REPL coverage from recovery evidence, add basic
+control syntax, and use accepted features to improve compiler implementation
+clarity. Necessary MIR representation and verification ship with each feature.
+Complete MIR migration and Pure Go parity are not prerequisites for this work.
+The pending Array-loop candidate is explicitly deferred with a frozen identity
+and re-entry conditions; neither its merge nor further size-only refinement
+blocks language coverage. Existing performance goals and cost authorities remain.
+
 ## Candidate sequence
 
 Backend candidates are not implemented to production completeness in parallel.

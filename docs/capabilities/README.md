@@ -18,6 +18,10 @@ The four evidence states have narrow meanings:
 
 These states do not create a support promise, compatibility guarantee, or
 product commitment. Public evidence links point only to this repository.
+The stated execution path is part of the scope: snapshot/recovery verification
+must not be presented as ordinary `trbn` check, execution or REPL support.
+See the [ordinary coverage plan](../native-language-coverage.md) for that separate
+feature-level boundary.
 
 ## Maintenance boundary
 

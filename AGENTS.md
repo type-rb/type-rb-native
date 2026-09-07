@@ -16,6 +16,11 @@ text in English.
 Treat this repository as an experimental research project, not as a supported
 TypeRB backend or product commitment.
 
+Follow `docs/native-language-coverage.md` for current feature selection. Keep
+ordinary check/build/execution/REPL claims separate from snapshot recovery.
+Pair basic syntax with its MIR safety checks and verified compiler self-use;
+do not make deferred optimization acceptance a prerequisite for language work.
+
 Follow `docs/repository-organization.md` for staged source and documentation
 cleanup. Include root gate-numbered files and symbols, not just directories.
 At accepted optimization checkpoints, advance the next bounded organization

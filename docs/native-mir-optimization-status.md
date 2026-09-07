@@ -1,5 +1,14 @@
 # Native MIR optimization transition status
 
+## Current development focus
+
+Basic ordinary language coverage and compiler-source readability now take
+priority over additional benchmark tuning. Required checked/MIR semantics and
+verification remain part of each feature, not deferred cleanup. See the
+[coverage plan](native-language-coverage.md) for the sequence and the explicit
+deferral/re-entry conditions for unaccepted Array-loop PR #307. The accepted
+ownership and historical measurements below remain unchanged.
+
 ## Current ownership checkpoint
 
 [PR #260](https://github.com/type-rb/type-rb-native/pull/260) implements the

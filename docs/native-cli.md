@@ -143,6 +143,8 @@ history is `~/.cache/trbn/repl_history_trb`. `TRBN_HISTORY` overrides that file.
 History uses the reference REPL's JSON string-array format.
 
 This is a bounded experimental implementation, not complete `trb` parity.
+See the [ordinary coverage plan](native-language-coverage.md) for path-specific
+tracking; snapshot/recovery capabilities do not establish ordinary CLI support.
 The ordinary compiler's language and package restrictions still apply,
 including its current ASCII String-literal boundary.
 Formatting, tests, language-server and package-management commands are not
