@@ -87,6 +87,26 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
     assert '42 : Integer' in run('repl', '--mode=trb', text='answer()\n:quit\n', cwd=project)
     run('run', 'missing.trb', cwd=project, success=False)
     assert 'ASCII String literals only' in run('repl', text='"é"\n:quit\n')
+    logical = run('repl', text='''def mark(value: Boolean): Boolean
+puts("visited")
+return value
+end
+true || mark(false)
+false && mark(true)
+false || mark(true) && !false
+true || 1 / 0 == 0
+false && (true || 1 / 0 == 0)
+false == 1 < 2 || 3 > 2 == true
+:exit
+''')
+    assert logical.count('visited') == 1, logical
+    assert logical.count('true : Boolean') == 4, logical
+    assert logical.count('false : Boolean') == 2, logical
+    assert 'panic:' not in logical, logical
+    unary = run('repl', text='-1 + 2\n-1 * 2 + 3\n-(1 + 2)\n!true && false || true\n:quit\n')
+    assert unary == '1 : Integer\n1 : Integer\n-3 : Integer\ntrue : Boolean\n', unary
+    required_rhs = run('repl', text='false || 1 / 0 == 0\n:q\n')
+    assert 'division by zero' in required_rhs, required_rhs
     (root / 'helpers.trb').write_text('# A declaration file\ndef loaded(): Integer\nreturn 8\nend\n')
     assert '8 : Integer' in run('repl', text=':load helpers.trb\nloaded()\n:quit\n')
     replay = run('repl', text='mut n := 1\nn += 2\nputs("replay marker")\n:reload\nn\n:load helpers.trb\nn + loaded()\n:q\n')
