@@ -12,6 +12,32 @@ spec.loader.exec_module(seed)
 
 
 class SeedReleaseTests(unittest.TestCase):
+    def test_active_ci_consumers_authenticate_the_current_seed(self):
+        root = Path(__file__).resolve().parent.parent
+        for name in ("static-string-compactness", "runtime-worker-memory",
+                     "benchmarksgame-formal", "benchmarksgame-build-formal",
+                     "gate6n-linux-amd64"):
+            with self.subTest(workflow=name):
+                workflow = (root / ".github/workflows" / (name + ".yml")).read_text()
+                self.assertIn("bootstrap-seed-2026-09-07", workflow)
+                self.assertIn("1f7e8a110bbb2b13f0609709deb6fc8f09dc8b44", workflow)
+                self.assertIn("tools/bootstrap-seed-download.sh", workflow)
+        workflow = (root / ".github/workflows/gate6n-linux-amd64.yml").read_text()
+        self.assertIn("ROOT_RELEASE_TAG: bootstrap-seed-2026-08-30", workflow)
+        self.assertIn("path: .gate6n-seed-source", workflow)
+        self.assertIn('"$GITHUB_WORKSPACE/.gate6n-seed-source"', workflow)
+
+    def test_amd64_bridge_does_not_replace_ordinary_candidate_input(self):
+        observer = Path(__file__).with_name("gate6n-linux-amd64.sh").read_text()
+        self.assertIn('"$root_compiler" emit-qbe "$seed_entry"', observer)
+        self.assertIn('"$first_transition" emit-qbe "$compiler_entry"', observer)
+        self.assertIn('1f7e8a110bbb2b13f0609709deb6fc8f09dc8b44 || fail "seed source revision differs"', observer)
+        self.assertIn('require_clean_revision "$seed_source_root"', observer)
+        self.assertIn('compiler/conformance/valid/logical-short-circuit.trb', observer)
+        self.assertIn("printf 'ok\\n' > \"$evidence/setup/logical-condition.expected\"", observer)
+        self.assertIn('cmp "$evidence/setup/logical-condition.expected" "$evidence/setup/logical-condition.stdout"', observer)
+        self.assertNotIn('require_empty_file "$evidence/setup/logical-condition.stdout"', observer)
+
     def test_refresh_roles_match_the_existing_compatibility_boundary(self):
         observer = Path(__file__).with_name("bootstrap-seed-refresh.sh").read_text()
         self.assertIn('build_step "$seed" setup-first setup', observer)

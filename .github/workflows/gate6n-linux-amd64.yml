@@ -14,17 +14,18 @@ env:
   QBE_ARCHIVE_SHA256: d587905d620dc5e1d2bfa7c2cc642b9b837aa89a3188c6e37b53d756cf66e320
   ROOT_REPOSITORY: type-rb/type-rb-native
   ROOT_RELEASE_TAG: bootstrap-seed-2026-08-30
-  BOOTSTRAP_SEED_REVISION: 0058818314977633c50393796ef9b9f8f1fda50f
-  BOOTSTRAP_MANIFEST_ASSET: type-rb-native-bootstrap-manifest-v1.json
+  ARM64_RELEASE_TAG: bootstrap-seed-2026-09-07
+  BOOTSTRAP_SEED_REVISION: 1f7e8a110bbb2b13f0609709deb6fc8f09dc8b44
+  BOOTSTRAP_MANIFEST_ASSET: type-rb-native-bootstrap-manifest-v2.json
   BOOTSTRAP_CHECKSUM_ASSET: SHA256SUMS
   ROOT_ASSET_ID: "535828321"
   ROOT_ASSET_NAME: type-rb-native-bootstrap-root-qbe-v1.ssa
   ROOT_QBE_SIZE: "658639"
   ROOT_QBE_SHA256: 62db3c31527a670c3050051a9fa27bf142b6c5deaab81ef8234104bd467aa95a
-  ARM64_ASSET_ID: "535839628"
+  ARM64_ASSET_ID: "548637194"
   ARM64_ASSET_NAME: type-rb-native-bootstrap-linux-arm64
-  ARM64_SEED_SIZE: "241488"
-  ARM64_SEED_SHA256: b4307c244edc9e4da620f2a7c1b03a733e575da032efefae615f9edf75048a37
+  ARM64_SEED_SIZE: "307544"
+  ARM64_SEED_SHA256: ff3bc9a2409e91eba0e2ef5109bf72a10aa16d4f360bc32aceafc50baa96a580
 
 jobs:
   verify-linux-amd64:
@@ -41,6 +42,12 @@ jobs:
         with:
           ref: ${{ github.sha }}
           path: .gate6n-candidate
+
+      - name: Check out the exact accepted compatibility bridge source
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ env.BOOTSTRAP_SEED_REVISION }}
+          path: .gate6n-seed-source
 
       - name: Check out the pinned TypeRB compiler
         uses: actions/checkout@v5
@@ -151,6 +158,7 @@ jobs:
             "$RUNNER_TEMP/gate6n-linux-amd64-workspace" \
             "$evidence" \
             "$RUNNER_TEMP/gate6n-linux-amd64-compiler" \
+            "$GITHUB_WORKSPACE/.gate6n-seed-source" \
             > "$controller/stdout" \
             2> "$controller/stderr"
           controller_status=$?
@@ -309,84 +317,18 @@ jobs:
         run: |
           release="$RUNNER_TEMP/gate6n-linux-arm64-release"
           evidence="$RUNNER_TEMP/gate6n-linux-arm64-evidence/release"
-          mkdir -p "$release" "$evidence"
-          gh api "repos/$ROOT_REPOSITORY/releases/tags/$ROOT_RELEASE_TAG" \
-            > "$release/release.json"
-          cp "$release/release.json" "$evidence/release.json"
-          jq -e \
-            --arg tag "$ROOT_RELEASE_TAG" \
-            --argjson id "$ARM64_ASSET_ID" \
-            --arg name "$ARM64_ASSET_NAME" \
-            --argjson size "$ARM64_SEED_SIZE" \
-            --arg digest "sha256:$ARM64_SEED_SHA256" \
-            '
-              .immutable == true and
-              .draft == false and
-              .prerelease == true and
-              .tag_name == $tag and
-              ([
-                .assets[]
-                | select(
-                    .id == $id and
-                    .name == $name and
-                    .size == $size and
-                    .digest == $digest
-                  )
-              ] | length == 1)
-            ' "$release/release.json" \
-            > "$evidence/release-verification.json"
-          gh api \
-            -H "Accept: application/octet-stream" \
-            "repos/$ROOT_REPOSITORY/releases/assets/$ARM64_ASSET_ID" \
-            > "$release/$ARM64_ASSET_NAME"
-          gh release download "$ROOT_RELEASE_TAG" \
-            --repo "$ROOT_REPOSITORY" \
-            --dir "$release" \
-            --pattern "$BOOTSTRAP_MANIFEST_ASSET" \
-            --pattern "$BOOTSTRAP_CHECKSUM_ASSET"
-          test "$(wc -c < "$release/$ARM64_ASSET_NAME" | tr -d ' ')" = \
-            "$ARM64_SEED_SIZE"
-          test "$(sha256sum "$release/$ARM64_ASSET_NAME" | awk '{print $1}')" = \
-            "$ARM64_SEED_SHA256"
-          /bin/sh .gate6n-arm64-candidate/tools/bootstrap-seed-manifest.sh verify \
-            "$ROOT_RELEASE_TAG" \
-            "$BOOTSTRAP_SEED_REVISION" \
-            "$ARM64_ASSET_NAME" \
-            "$release/$ARM64_ASSET_NAME" \
-            "$release/$BOOTSTRAP_MANIFEST_ASSET" \
-            "$release/$BOOTSTRAP_CHECKSUM_ASSET" \
-            "$release/release.json" \
-            > "$evidence/manifest-verification.stdout" \
-            2> "$evidence/manifest-verification.stderr"
-          gh attestation verify \
-            "$release/$ARM64_ASSET_NAME" \
-            -R "$ROOT_REPOSITORY" \
-            --signer-workflow type-rb/type-rb-native/.github/workflows/bootstrap-seed-initial.yml \
-            --source-digest "$BOOTSTRAP_SEED_REVISION" \
-            --source-ref refs/heads/main \
-            --deny-self-hosted-runners \
-            --format json > "$evidence/compiler-attestation.json"
-          gh attestation verify \
-            "$release/$BOOTSTRAP_MANIFEST_ASSET" \
-            -R "$ROOT_REPOSITORY" \
-            --signer-workflow type-rb/type-rb-native/.github/workflows/bootstrap-seed-initial.yml \
-            --source-digest "$BOOTSTRAP_SEED_REVISION" \
-            --source-ref refs/heads/main \
-            --deny-self-hosted-runners \
-            --format json > "$evidence/manifest-attestation.json"
-          gh attestation verify \
-            "$release/$BOOTSTRAP_CHECKSUM_ASSET" \
-            -R "$ROOT_REPOSITORY" \
-            --signer-workflow type-rb/type-rb-native/.github/workflows/bootstrap-seed-initial.yml \
-            --source-digest "$BOOTSTRAP_SEED_REVISION" \
-            --source-ref refs/heads/main \
-            --deny-self-hosted-runners \
-            --format json > "$evidence/checksums-attestation.json"
-          chmod 0755 "$release/$ARM64_ASSET_NAME"
+          /bin/sh .gate6n-arm64-candidate/tools/bootstrap-seed-download.sh \
+            "$ARM64_RELEASE_TAG" "$BOOTSTRAP_SEED_REVISION" "$ARM64_ASSET_NAME" "$release"
+          jq -e --argjson id "$ARM64_ASSET_ID" --arg name "$ARM64_ASSET_NAME" \
+            '[.assets[] | select(.id == $id and .name == $name)] | length == 1' "$release/release.json"
+          test "$(wc -c < "$release/$ARM64_ASSET_NAME" | tr -d ' ')" = "$ARM64_SEED_SIZE"
+          test "$(sha256sum "$release/$ARM64_ASSET_NAME" | awk '{print $1}')" = "$ARM64_SEED_SHA256"
+          mkdir -p "$evidence"
+          cp "$release/release.json" "$release/$BOOTSTRAP_MANIFEST_ASSET" \
+            "$release/$BOOTSTRAP_CHECKSUM_ASSET" "$evidence/"
+          cp "$release/"*.attestation.json "$evidence/"
           wc -c "$release/$ARM64_ASSET_NAME" > "$evidence/seed-size.txt"
           sha256sum "$release/$ARM64_ASSET_NAME" > "$evidence/seed-sha256.txt"
-          cp "$release/$BOOTSTRAP_MANIFEST_ASSET" "$evidence/"
-          cp "$release/$BOOTSTRAP_CHECKSUM_ASSET" "$evidence/"
 
       - name: Build exact setup-only current-source transitions
         env:
