@@ -2,7 +2,7 @@
 
 TypeRB Native follows exact reference revisions while it is experimental. The
 current source and semantic oracle is TypeRB
-`f6229c5657a5acb40194cde71785a63754d00355` (`0.4.6-dev`), recorded in
+`4e1327c9af1b4caec9963756e6ffbc0e2ef56341` (`0.4.6-dev`), recorded in
 `TYPE_RB_REVISION`. This is an exact development pin, not a supported version
 range.
 
@@ -33,6 +33,19 @@ The earlier scoped-file successor is registered in
 [Darwin/Linux arm64 result](https://github.com/type-rb/type-rb-native/blob/5cf61c740aa600c34ed94f1b130ea2ffefd9e783/results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/README.md)
 passes the selected-reference, migration, exact-baseline, target-regression,
 fixed-point, process, resource, and size criteria.
+
+## Loop-transfer snapshot update
+
+The current pin includes [TypeRB PR #657](https://github.com/type-rb/type-rb/pull/657).
+Snapshot v3/v4 now encode `break`, `next` and early method returns in `while`
+with existing jumps and block arguments. The `loop-transfer-recovery` fixture
+checks live managed bindings, nested targets, condition effects and returns
+through v4 program decoding, recovery QBE generation and execution. The format,
+v2 boundary and ordinary language semantics remain unchanged.
+
+The reference update accompanies the separately registered loop-transfer seed
+refresh and exact Linux amd64 setup source bridge. Neither registration nor
+pinning replaces full acceptance or post-publication seed verification.
 
 ## Statement conditional snapshot update
 

@@ -539,22 +539,23 @@ def _recovery_verify_bounds_failure(
 	return Result<Boolean, String>::Ok(true)
 end
 
-def _recovery_verify_snapshot_conditional(
+def _recovery_verify_snapshot_program(
 		root: String,
 		reference_trb: String,
 		qbe: String,
 		workspace: String,
+		case_name: String,
 	): Result<Boolean, String>
-	directory := workspace + "/snapshot-conditional"
+	directory := workspace + "/snapshot-" + case_name
 	try _recovery_reset_directory(directory)
-	base := root + "/compiler/conformance/valid/elsif-recovery"
+	base := root + "/compiler/conformance/valid/" + case_name
 	try _recovery_write_source(directory + "/main.trb", try _recovery_read(base + ".trb"))
 	snapshot := try _recovery_process(
 		reference_trb,
 		["compiler", "bootstrap-snapshot", "--snapshot-version", "4", directory + "/main.trb"],
 	)
 	if !snapshot.success || !snapshot.stderr.empty?()
-		return Result<Boolean, String>::Err("conditional snapshot failed: " + snapshot.stderr)
+		return Result<Boolean, String>::Err(case_name + " snapshot failed: " + snapshot.stderr)
 	end
 	native_module := case decode_gate4_bootstrap_snapshot(snapshot.stdout)
 	when Result::Ok(value)
@@ -570,7 +571,7 @@ def _recovery_verify_snapshot_conditional(
 	runtime := try _recovery_process(directory + "/program", [])
 	expected := try _recovery_read(base + ".out")
 	if !runtime.success || runtime.stdout != expected || !runtime.stderr.empty?()
-		return Result<Boolean, String>::Err("conditional snapshot runtime differs: " + runtime.stdout + runtime.stderr)
+		return Result<Boolean, String>::Err(case_name + " snapshot runtime differs: " + runtime.stdout + runtime.stderr)
 	end
 	return Result<Boolean, String>::Ok(true)
 end
@@ -2233,7 +2234,13 @@ describe("Native compiler recovery") do
 				end
 				_recovery_stage("end", "matched-go")
 				_recovery_stage("start", "snapshot")
-				case _recovery_verify_snapshot_conditional(root, reference_trb, qbe, workspace)
+				case _recovery_verify_snapshot_program(root, reference_trb, qbe, workspace, "elsif-recovery")
+				when Result::Ok(_verified)
+				when Result::Err(message)
+					puts(message)
+					expect(false).to_be_true()
+				end
+				case _recovery_verify_snapshot_program(root, reference_trb, qbe, workspace, "loop-transfer-recovery")
 				when Result::Ok(_verified)
 				when Result::Err(message)
 					puts(message)

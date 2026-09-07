@@ -91,6 +91,21 @@ retained-observation, corpus and process bounds. The preparation and actual
 published-asset verification both passed, including logical-condition and
 `elsif` fixtures. The verified checkout handoff follows.
 
+## Registered loop-transfer refresh
+
+[Issue #334](https://github.com/type-rb/type-rb-native/issues/334#issuecomment-5576325728)
+registers the distinct `bootstrap-seed-2026-09-08-loop-transfers` tag from accepted
+implementation `4e1d0b4aee97b9a5bd73a98f918b31d47985da25`, with reviewed observer
+changes before preparation. Its predecessor is the verified Sep8 release below.
+All three registered refresh tags keep their exact predecessor validation.
+This preparation does not publish assets or change checkout pins.
+
+Darwin arm64 and Linux arm64 retain all target, combined-size, corpus, process,
+adjacent-generation and retained-observation bounds. The reference pin includes
+loop-transfer snapshot support and the corresponding program recovery case.
+Actual attested publication, fresh published-asset verification and a separate
+checkout-pin PR remain required before compiler implementation adopts transfers.
+
 ## Current verified checkout seed
 
 Checkout builds pin [bootstrap-seed-2026-09-08](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-09-08),
@@ -129,16 +144,22 @@ source revision; an older or unknown tag fails rather than bypassing provenance.
 Changing a setup seed does not move a frozen benchmark baseline or change any
 measurement/acceptance bound. Full benchmark jobs remain manually dispatched.
 
-Linux amd64 retains the original immutable root QBE. Before reading candidate
-syntax, its setup compiler builds the exact clean accepted source revision
-`21f507e7ee7de2577f4137f6dfb9f732c14c1640`. That generated compiler must accept
-the logical-condition and `elsif` conformance fixtures, then reads the
-**candidate** source for the current-runtime transition. Ordinary B2/B3/B4 and measured inputs remain
-the candidate. The setup source revision/entry digest and all existing process
-traces are retained separately. No new root asset or Go recovery is introduced.
-The arm64 comparison still authenticates the Sep8 seed independently of this
-amd64 setup-source revision. The optional setup-source argument accepts only
-the exact clean setup revision; omission retains the historical direct-current-source setup shape.
+Linux amd64 retains the original immutable root QBE. Its first setup compiler
+builds exact accepted source `21f507e7ee7de2577f4137f6dfb9f732c14c1640` and must
+accept logical-condition and `elsif` fixtures. That compiler then builds exact
+accepted loop-transfer source `4e1d0b4aee97b9a5bd73a98f918b31d47985da25`; the new
+bridge must accept the loop-transfer fixture before it reads **candidate** source.
+The subsequent candidate-runtime transition stays separate so a future runtime
+change still precedes ordinary B2/B3/B4. These ordinary and measured generations
+remain the candidate.
+
+The extra bridge is setup-only. Exact clean source revisions and entry digests,
+compiler/QBE identities, emission/QBE/link traces and capability-check output
+are retained separately. It creates neither a new root asset nor Go recovery.
+The arm64 comparison authenticates its verified seed independently. Optional
+source arguments accept only their exact registered revisions; omitting both
+retains the historical direct-current-source setup shape, and supplying only
+the first source retains the previous conditional bridge.
 
 Initial publication/release-integrity workflows, retained manifests and earlier
 results keep their source-era identities. Refreshing checkout bootstrap alone

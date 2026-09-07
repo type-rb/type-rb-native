@@ -26,11 +26,18 @@ class SeedReleaseTests(unittest.TestCase):
         self.assertIn("ROOT_RELEASE_TAG: bootstrap-seed-2026-08-30", workflow)
         self.assertIn("path: .gate6n-seed-source", workflow)
         self.assertIn('"$GITHUB_WORKSPACE/.gate6n-seed-source"', workflow)
+        self.assertIn("AMD64_LOOP_SETUP_REVISION: 4e1d0b4aee97b9a5bd73a98f918b31d47985da25", workflow)
+        self.assertIn('"$GITHUB_WORKSPACE/.gate6n-loop-source"', workflow)
 
     def test_amd64_bridge_does_not_replace_ordinary_candidate_input(self):
         observer = Path(__file__).with_name("gate6n-linux-amd64.sh").read_text()
         self.assertIn('"$root_compiler" emit-qbe "$seed_entry"', observer)
-        self.assertIn('"$first_transition" emit-qbe "$compiler_entry"', observer)
+        self.assertIn('runtime_seed=$first_transition', observer)
+        self.assertIn('"$first_transition" emit-qbe "$loop_entry"', observer)
+        self.assertIn('runtime_seed=$loop_transition', observer)
+        self.assertIn('"$runtime_seed" emit-qbe "$compiler_entry"', observer)
+        self.assertIn('4e1d0b4aee97b9a5bd73a98f918b31d47985da25 || fail "loop source revision differs"', observer)
+        self.assertIn('require_clean_revision "$loop_source_root"', observer)
         self.assertIn('21f507e7ee7de2577f4137f6dfb9f732c14c1640 || fail "seed source revision differs"', observer)
         self.assertIn('require_clean_revision "$seed_source_root"', observer)
         self.assertIn('compiler/conformance/valid/logical-short-circuit.trb', observer)
@@ -122,34 +129,34 @@ class SeedReleaseTests(unittest.TestCase):
                 seed.validate_target(target, seed.TARGETS[index])
 
     def test_registered_predecessors_remain_tag_bound(self):
-        old_tag = "bootstrap-seed-2026-09-07"
-        legacy = copy.deepcopy(self.manifest)
-        legacy["releaseTag"] = old_tag
-        legacy["predecessor"] = seed.PREDECESSORS[old_tag]
-        seed.validate_manifest(legacy, self.revision, old_tag)
-        with self.assertRaises(ValueError):
-            seed.validate_manifest(legacy, self.revision, seed.TAG)
-        with self.assertRaises(ValueError):
-            seed.validate_manifest(self.manifest, self.revision, old_tag)
+        for tag in seed.PREDECESSORS:
+            manifest = copy.deepcopy(self.manifest)
+            manifest["releaseTag"] = tag
+            manifest["predecessor"] = seed.PREDECESSORS[tag]
+            seed.validate_manifest(manifest, self.revision, tag)
+            for other in seed.PREDECESSORS:
+                if other != tag:
+                    with self.assertRaises(ValueError):
+                        seed.validate_manifest(manifest, self.revision, other)
         for tag in ("latest", "bootstrap-seed-2099-01-01", None, []):
             with self.assertRaises(ValueError):
                 seed.validate_manifest(self.manifest, self.revision, tag)
 
     def test_download_verification_preserves_the_previous_tag(self):
-        tag = "bootstrap-seed-2026-09-07"
-        self.manifest["releaseTag"] = tag
-        self.manifest["predecessor"] = seed.PREDECESSORS[tag]
-        self.manifest_path.write_text(json.dumps(self.manifest))
-        names = [target["asset"] for target in self.manifest["targets"]] + [seed.MANIFEST]
-        (self.package / "SHA256SUMS").write_text("".join(
-            seed.digest(self.package / name) + "  " + name + "\n" for name in names))
-        self.release["tag_name"] = tag
-        self.release["assets"] = [{"name": p.name, "size": p.stat().st_size,
-                                   "digest": "sha256:" + seed.digest(p)}
-                                  for p in sorted(self.package.iterdir())]
-        self.release_path.write_text(json.dumps(self.release))
-        for target in self.manifest["targets"]:
-            seed.verify(tag, self.revision, target["asset"], self.package, self.release_path)
+        for tag in ("bootstrap-seed-2026-09-07", "bootstrap-seed-2026-09-08"):
+            self.manifest["releaseTag"] = tag
+            self.manifest["predecessor"] = seed.PREDECESSORS[tag]
+            self.manifest_path.write_text(json.dumps(self.manifest))
+            names = [target["asset"] for target in self.manifest["targets"]] + [seed.MANIFEST]
+            (self.package / "SHA256SUMS").write_text("".join(
+                seed.digest(self.package / name) + "  " + name + "\n" for name in names))
+            self.release["tag_name"] = tag
+            self.release["assets"] = [{"name": p.name, "size": p.stat().st_size,
+                                       "digest": "sha256:" + seed.digest(p)}
+                                      for p in sorted(self.package.iterdir())]
+            self.release_path.write_text(json.dumps(self.release))
+            for target in self.manifest["targets"]:
+                seed.verify(tag, self.revision, target["asset"], self.package, self.release_path)
         with self.assertRaises(ValueError):
             self.verify()
 

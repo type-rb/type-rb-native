@@ -14,7 +14,7 @@ import shutil
 import statistics
 import sys
 
-TAG = "bootstrap-seed-2026-09-08"
+TAG = "bootstrap-seed-2026-09-08-loop-transfers"
 MANIFEST = "type-rb-native-bootstrap-manifest-v2.json"
 PREDECESSORS = {"bootstrap-seed-2026-09-07": {
     "releaseTag": "bootstrap-seed-2026-08-30",
@@ -31,6 +31,14 @@ PREDECESSORS = {"bootstrap-seed-2026-09-07": {
     "targets": [
         {"asset": "type-rb-native-bootstrap-darwin-arm64", "sha256": "b960d8720ad6bb256fb019d04cd6ab80e86870228bed16776bba9fbe78f5769f"},
         {"asset": "type-rb-native-bootstrap-linux-arm64", "sha256": "ff3bc9a2409e91eba0e2ef5109bf72a10aa16d4f360bc32aceafc50baa96a580"},
+    ],
+}, "bootstrap-seed-2026-09-08-loop-transfers": {
+    "releaseTag": "bootstrap-seed-2026-09-08",
+    "nativeRevision": "f8c293f6f9683b0a29b7eee614fc4fff261d36b8",
+    "manifestSha256": "6b92832b482e8b502045a71f7f267f2e3bb5b221cd2c52ce1c07e9a4405fe083",
+    "targets": [
+        {"asset": "type-rb-native-bootstrap-darwin-arm64", "sha256": "9a815fd3bdcfd24a082111814442ee11380d31532058024cc7d7564e203b0629"},
+        {"asset": "type-rb-native-bootstrap-linux-arm64", "sha256": "77e8e9df3b91cbbf7cb823044c0c79c23e63767c5986369f8d9a11e23773abf3"},
     ],
 }}
 
