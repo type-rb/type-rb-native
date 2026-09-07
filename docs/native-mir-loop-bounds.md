@@ -24,8 +24,13 @@ not its failed outcomes or the full acceptance requirements.
 The [completed assessment](../results/2026-09-07-array-loop-output-batching-darwin-arm64/README.md#trade-off-evaluation-outcome)
 shows 1.57--2.21% less spectral CPU time, but three of four cohorts miss the
 required repeated 2% wall-and-CPU gain. All controls and investigation budgets
-pass. This budget is now expired; keep the draft and investigate a larger
-general-purpose MIR benefit before proposing an acceptance cost exception.
+pass. This budget is now expired. The subsequent
+[small-gain adoption review](native-mir-loop-bounds-adoption.md) keeps the draft
+eligible for consideration without requiring a larger optimization first.
+It reviews maintenance cost and remaining correctness, not a relabeling of the
+failed 2% criterion. Its first full recovery check found an unsupported indexed
+compound assignment in output batching; the equivalent simple-assignment
+correction is being verified separately from the earlier candidate.
 
 Superseded diagnostic folders are no longer part of the active checkout.
 The pinned historical links below retain their full observations and patches;

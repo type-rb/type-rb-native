@@ -234,3 +234,19 @@ the current implementation and failed evidence available for that investigation.
 Full recovery, hosted target/process/memory checks, formal full-input runtime
 acceptance and matched application build/Go comparisons remain pending. Pages
 continues to show the last complete accepted result.
+
+## Subsequent small-gain adoption review
+
+The [adoption review](../../docs/native-mir-loop-bounds-adoption.md) revisits the
+decision to require a larger benefit before adoption consideration. The above
+diagnostic and every failed threshold remain unchanged; a small reproducible
+improvement can still warrant adoption if its maintenance and measured costs
+are acceptable. No acceptance limit changes follow automatically.
+
+The recovery-enabled review found indexed compound assignment in output batching
+outside the snapshot v4 subset. The corrected spelling preserves cursor behavior
+and all three measured application binaries byte-for-byte. The compiler itself
+changes: text 253,180 to 253,220 and QBE 1,129,223 to 1,129,392 bytes, complete
+compiler 349,256 unchanged. Earlier compiler-time cohorts must not be presented
+as measurements of this corrected source. Full verification and an explicit
+adoption decision remain pending.

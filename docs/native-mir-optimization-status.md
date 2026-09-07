@@ -20,9 +20,13 @@ retains all 180 observations: spectral CPU falls 1.57--2.21%, but three of four
 cohorts miss the registered repeated 2% wall-and-CPU benefit. Controls, root RSS,
 fixed points and investigation budgets pass. New self-build time cohorts pass
 without cancelling the earlier failure; absolute text/QBE ordinary limits still
-fail. Keep the candidate draft. The next step is to investigate remaining checked
-numeric-loop work for a larger verified MIR benefit, not automatically increase
-acceptance limits or resume size-only polishing. Pages values are unchanged.
+fail. Keep the candidate draft. The subsequent
+[small-gain adoption review](native-mir-loop-bounds-adoption.md) examines whether
+the existing benefit justifies its localized complexity, without requiring a
+larger optimization first or automatically increasing acceptance limits.
+Full recovery exposed indexed compound assignment outside snapshot v4 in output
+batching; an equivalent simple-assignment correction is under verification.
+Pages values are unchanged.
 
 The [Array-loop bounds connection candidate](native-mir-loop-bounds.md), tracked
 in [issue #303](https://github.com/type-rb/type-rb-native/issues/303), extends the
