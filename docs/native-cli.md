@@ -43,6 +43,8 @@ though the internal compiler also has a Linux amd64 target profile.
 
 The script pins the `bootstrap-seed-2026-08-30` release assets and their SHA-256
 digests, and the QBE 1.3 archive digest. Cache files live in `.trb/bootstrap`.
+See [seed update policy](bootstrap-seed-updates.md) for compatibility-driven
+refreshes and the separate pre-/post-publication verification boundary.
 `TRBN_BOOTSTRAP_SEED` can select a local copy of that exact pinned seed.
 `TRBN_QBE` and `TRBN_CC` select explicit executable paths. Overrides participate
 in build invalidation. A lock serializes concurrent checkout builds; a killed

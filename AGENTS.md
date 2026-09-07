@@ -75,3 +75,8 @@ retain their applicable code/recovery/measurement checks.
 - Treat reproducible TypeRB self-hosting as a required promotion outcome. The
   Go reference compiler is an early bootstrap and differential oracle, not part
   of the ordinary final release path.
+- Follow `docs/bootstrap-seed-updates.md` before using newly supported syntax
+  in compiler implementation source. Refresh from accepted main when needed;
+  retain immutable historical seeds and verify actual published assets before
+  switching exact checkout pins. Do not use an unaccepted candidate as a seed
+  or add a floating latest download to bypass this boundary.
