@@ -2793,7 +2793,7 @@ def gate4_compile_state(mut state: Gate4Compiler, mode: String, file_mode: Boole
 end
 
 def compiler_main(source: String, mode: String, file_mode: Boolean): Integer
-	mut state := gate4_compiler_new(source.size() + 1)
+	mut state := gate4_compiler_new(source.size() * 3 + 16)
 	gate4_lex(state, source)
 	if !gate4_has_diagnostic(state)
 		gate4_parse_module(state, 0, state.entry_module[0])
@@ -2950,13 +2950,83 @@ def gate4_decode_escape(mut state: Gate4Compiler, escaped: String, line: Integer
 	return value
 end
 
+# Locate embedded expressions without treating quoted braces as delimiters.
+def gate4_interpolation_end(source: String, mut index: Integer): Integer
+	mut depth := 1
+	while index < source.size()
+		character := source[index]
+		if character == "\""
+			index = gate4_interpolation_quote_end(source, index + 1)
+			if index < 0
+				return - 1
+			end
+		else
+			if character == "{"
+				depth += 1
+			end
+			if character == "}"
+				depth -= 1
+				if depth == 0
+					return index
+				end
+			end
+			if character == "#"
+				mut comment := true
+				while comment
+					if index >= source.size()
+						comment = false
+					else
+						if source[index] == "\n"
+							comment = false
+						else
+							index += 1
+						end
+					end
+				end
+			end
+		end
+		index += 1
+	end
+	return - 1
+end
+
+def gate4_interpolation_quote_end(source: String, mut index: Integer): Integer
+	while index < source.size()
+		character := source[index]
+		if character == "\\"
+			index += 1
+		else
+			if character == "\""
+				return index
+			end
+			if character == "#"
+				if index + 1 < source.size()
+					if source[index + 1] == "{"
+						index = gate4_interpolation_end(source, index + 2)
+						if index < 0
+							return - 1
+						end
+					end
+				end
+			end
+		end
+		index += 1
+	end
+	return - 1
+end
+
+# Normalize interpolation to grouped String concatenation before checking.
+# Each embedded expression is evaluated once by the shared ordinary pipeline.
 def gate4_scan_string(
 		mut state: Gate4Compiler,
 		source: String,
 		mut position: Array<Integer>,
-		line: Integer,
-	)
+		mut line: Integer,
+		interpolation: Boolean,
+	): Integer
+	start_line := line
 	gate4_advance(position)
+	mut interpolated := false
 	mut text := ""
 	mut chunk_start := position[0]
 	mut scanning := true
@@ -2988,7 +3058,65 @@ def gate4_scan_string(
 							chunk_start = position[0]
 						end
 					else
-						gate4_advance(position)
+						if current == "#"
+							if position[0] + 1 < source.size()
+								mut opening := source[position[0] + 1] == "{"
+								if opening
+									opening = interpolation
+								end
+								if opening
+									finish := gate4_interpolation_end(source, position[0] + 2)
+									if finish < 0
+										gate4_diagnostic(state, "TRBN4001", line, "unterminated String interpolation")
+										scanning = false
+									else
+										if finish == position[0] + 2
+											position[0] = finish + 1
+										else
+											if !interpolated
+												gate4_push_token(state, 5, "(", start_line)
+												interpolated = true
+											end
+											text += gate4_source_slice(source, chunk_start, position[0])
+											gate4_push_token(state, 3, text, line)
+											gate4_push_token(state, 5, "+", line)
+											gate4_push_token(state, 5, "(", line)
+											first_token := state.token_count[0]
+											inner := gate4_source_slice(source, position[0] + 2, finish)
+											gate4_lex_source(state, inner, 0)
+											state.token_count[0] -= 1
+											mut token := first_token
+											while token < state.token_count[0]
+												gate4_store_integer(state.token_lines, token, gate4_load_integer(state.token_lines, token) + line - 1)
+												token += 1
+											end
+											if gate4_has_diagnostic(state)
+												gate4_store_integer(state.diagnostic_lines, 0, gate4_load_integer(state.diagnostic_lines, 0) + line - 1)
+												return line - start_line
+											end
+											mut character_index := 0
+											while character_index < inner.size()
+												if inner[character_index] == "\n"
+													line += 1
+												end
+												character_index += 1
+											end
+											gate4_push_token(state, 5, ")", line)
+											gate4_push_token(state, 5, "+", line)
+											position[0] = finish + 1
+											chunk_start = position[0]
+											text = ""
+										end
+									end
+								else
+									gate4_advance(position)
+								end
+							else
+								gate4_advance(position)
+							end
+						else
+							gate4_advance(position)
+						end
 					end
 				end
 			end
@@ -2996,12 +3124,15 @@ def gate4_scan_string(
 	end
 	if closed
 		gate4_push_token(state, 3, text, line)
+		if interpolated
+			gate4_push_token(state, 5, ")", line)
+		end
 	else
 		if !gate4_has_diagnostic(state)
 			gate4_diagnostic(state, "TRBN4001", line, "unterminated String literal")
 		end
 	end
-	return
+	return line - start_line
 end
 
 def gate4_two_character_symbol(pair: String): Boolean
@@ -3112,7 +3243,7 @@ def gate4_lex_source(mut state: Gate4Compiler, source: String, terminal_kind: In
 									gate4_scan_number(state, source, position, line)
 								else
 									if character == "\""
-										gate4_scan_string(state, source, position, line)
+										line += gate4_scan_string(state, source, position, line, true)
 									else
 										gate4_scan_symbol(state, source, position, line)
 									end
