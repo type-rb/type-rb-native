@@ -146,7 +146,7 @@ RSS trend limits, and no post-warmup descriptor or thread growth.
 ## Current status
 
 The reviewed
-[Darwin/Linux arm64 result](../results/2026-08-30-runtime-memory-stability-darwin-linux-arm64/README.md)
+[Darwin/Linux arm64 result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-30-runtime-memory-stability-darwin-linux-arm64/README.md)
 passes every frozen Stage 1 criterion. The 300,000,000-iteration production
 soak allocates and reclaims 42,300,000,000 managed bytes, ends with zero live
 managed bytes, and records zero RSS growth or fitted slope. ASan/LSan reports no

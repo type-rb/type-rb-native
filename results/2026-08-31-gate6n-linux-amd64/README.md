@@ -1,3 +1,6 @@
+> Lifecycle: [complete source-era record](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-31-gate6n-linux-amd64/README.md).
+> Historical checksum inventories refer to that full record, not this compact working set.
+
 # Gate 6N Linux amd64 Target-chain Results
 
 Gate 6N passes every preregistered fixed-point, correctness, process,
@@ -199,16 +202,16 @@ workflow artifacts:
   every warmup and retained measurement row.
 - [`linux-amd64/medians.csv`](linux-amd64/medians.csv) records the enforced
   primary medians and frozen percentage limits.
-- [`linux-amd64/ordinary-chain`](linux-amd64/ordinary-chain) and
+- [`linux-amd64/ordinary-chain`](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-31-gate6n-linux-amd64/linux-amd64/ordinary-chain) and
   [`linux-amd64/applications`](linux-amd64/applications) retain process
   traces, exact executable inventories, outputs, failures, and cleanup
   evidence.
-- [`linux-amd64/elf`](linux-amd64/elf) retains compiler and application ELF,
+- [`linux-amd64/elf`](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-31-gate6n-linux-amd64/linux-amd64/elf) retains compiler and application ELF,
   dependency, symbol, note, stack, and absent-Go-metadata inspection.
 - [`linux-arm64`](linux-arm64) retains immutable-seed verification,
   current-revision fixed points, portable behavior, process traces, target
   inspection, and identities.
-- [`cross-target/observed-identities.txt`](cross-target/observed-identities.txt)
+- [`cross-target/observed-identities.txt`](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-31-gate6n-linux-amd64/cross-target/observed-identities.txt)
   records the same-attempt amd64/arm64 artifact and QBE identities.
 - `EVIDENCE_SHA256SUMS` covers every retained raw evidence file; it excludes
   this explanatory README and itself.

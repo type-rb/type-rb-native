@@ -1,3 +1,10 @@
+> Lifecycle: [complete source-era record](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-09-06-benchmarksgame-build-checked-boolean-branches-linux-arm64/README.md).
+> Historical checksum inventories refer to that full record, not this compact working set.
+
+> Storage update: detailed files are preserved in the verified public archive
+> identified by [ARCHIVE.json](ARCHIVE.json). Tables and measurements remain in Git.
+> Original reports and every archived file are included unchanged in that archive.
+
 # Accepted Checked-Boolean-Branch Build Results on Linux arm64
 
 All 66 retained builds and 12 warmups pass at accepted Native revision

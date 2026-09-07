@@ -12,7 +12,7 @@ const capability = (title, status, scopes, description, evidence) => ({
 
 export const catalog = {
   schemaVersion: 1,
-  updatedAt: '2026-09-05',
+  updatedAt: '2026-09-07',
   areas: [
     {
       id: 'language',
@@ -23,7 +23,7 @@ export const catalog = {
         capability('Checked Integer and binary64 Float', 'verified', ['parity', 'ecosystem'], 'Preserve portable Integer bounds and the selected Float behavior.', ['Gate 1 / Gate 6I', 'docs/gate-6-float.md']),
         capability('Records, enums, Result, and try', 'verified', ['parity', 'production'], 'Lower aggregate values, tagged values, calls, returns, and Result propagation.', ['Gate 2', 'docs/gate-2-aggregates.md']),
         capability('Managed String, Array, and closures', 'verified', ['parity', 'production', 'ecosystem'], 'Execute managed UTF-8 strings, mutable arrays, and captured closures.', ['Gate 3', 'docs/gate-3-managed-runtime.md']),
-        capability('Complete TypeRB syntax and diagnostics', 'partial', ['parity', 'production', 'ecosystem'], 'The self-hosted frontend is intentionally bounded and does not yet cover the complete reference surface.'),
+        capability('Complete TypeRB syntax and diagnostics', 'partial', ['parity', 'production', 'ecosystem'], 'The ordinary compiler and REPL support checked short-circuit Boolean OR/AND, precedence and conditional effects. The frontend remains bounded, not the complete reference surface.', ['Boolean expressions', 'docs/native-logical-expressions.md']),
         capability('Generics', 'unassessed', ['parity', 'production', 'ecosystem'], 'Inventory generic declarations, specialization, inference, and diagnostics against the reference compiler.'),
         capability('Classes, interfaces, and dispatch', 'unassessed', ['parity', 'production', 'ecosystem'], 'Define and verify the abstraction and dispatch surface needed by representative packages.'),
         capability('Concurrency semantics', 'open', ['parity', 'production', 'ecosystem'], 'Implement portable tasks, cancellation, synchronization, and failure behavior.'),
@@ -126,8 +126,8 @@ export const catalog = {
       description: 'Whole-toolchain evidence, service behavior, security, debugging, and maintenance cost.',
       items: [
         capability('Reproducible benchmark controllers', 'verified', ['parity', 'ecosystem'], 'Retain raw build, runtime, RSS, artifact, and process-boundary observations.', ['Benchmark policy', 'docs/benchmarksgame.md']),
-        capability('Compiler build time and distribution size', 'verified', ['parity', 'production', 'ecosystem'], 'The current registered compiler and application build cases materially outperform the optimized Go path.', ['Formal build result', 'results/2026-09-05-benchmarksgame-build-native-mir-stable-array-headers-accepted-linux-arm64/README.md']),
-        capability('Numeric runtime performance', 'partial', ['production', 'ecosystem'], 'Native needs 1.12x to 3.45x the time of Pure Go across the current three numeric kernels; Pure Go parity or better remains the minimum objective. Spectral-norm is closer to parity, while fannkuch-redux and n-body retain large gaps.', ['Formal runtime result', 'results/2026-09-05-benchmarksgame-runtime-native-mir-stable-array-headers-accepted-linux-arm64/README.md']),
+        capability('Compiler build time and distribution size', 'verified', ['parity', 'production', 'ecosystem'], 'The current registered compiler and application build cases materially outperform the optimized Go path.', ['Formal build result', 'results/2026-09-06-benchmarksgame-build-checked-boolean-branches-linux-arm64/README.md']),
+        capability('Numeric runtime performance', 'partial', ['production', 'ecosystem'], 'Native remains slower than Pure Go on the published numeric kernels; see the current formal measurements. Pure Go parity or better remains the minimum objective.', ['Formal runtime result', 'results/2026-09-06-benchmarksgame-runtime-checked-boolean-branches-linux-arm64/README.md']),
         capability('Service throughput and tail latency', 'open', ['production', 'ecosystem'], 'Measure representative HTTP, database, and worker workloads end to end.'),
         capability('Debugger, profiler, and crash reports', 'open', ['production', 'ecosystem'], 'Provide source-level debugging, CPU and heap profiles, and symbolized failures.'),
         capability('Security hardening', 'unassessed', ['production', 'ecosystem'], 'Systematize fuzzing, supply-chain controls, dependency maintenance, and release response.'),

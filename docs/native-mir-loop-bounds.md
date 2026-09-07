@@ -6,6 +6,20 @@ not an accepted optimization or performance result. The accepted baseline is
 is `98eb48e0261853aec4b03c541eb6617f8995a93e`; this candidate connects its
 successor to structured checking, MIR verification and address lowering.
 
+## Current integration checkpoint
+
+The draft now integrates accepted main `3ae51bbf`, including independent Boolean
+support from #317, its REPL unary-precedence correction, the exact reference
+`47a160cae05ddc2035c7430735c4762d36bbc9c4`, and current CI/retention policy.
+This integration is not a passing cost result. The original frozen baseline
+above and every earlier rejection remain binding. Revalidate the complete
+source before measuring a source-distinct compiler-cost reduction.
+
+Superseded diagnostic folders are no longer part of the active checkout.
+The pinned historical links below retain their full observations and patches;
+no raw observations are selected out of a published measurement cohort.
+No new candidate result is registered before the next executable measurement.
+
 ## Proof boundary
 
 The diagnostic verifies a structured projection of an already checked function.
@@ -107,15 +121,15 @@ ordinary replacement fixed points, cross-target evidence, or runtime acceptance.
 
 ## Remaining acceptance
 
-The [retained local diagnostic](../results/2026-09-06-mir-loop-bounds-diagnostic-darwin-arm64/README.md)
+The [retained local diagnostic](https://github.com/type-rb/type-rb-native/blob/ba065229c96555cc968c3ed8e6797ce91991afa7/results/2026-09-06-mir-loop-bounds-diagnostic-darwin-arm64/README.md)
 passes both runtime cohorts with about 2.1–2.3% less spectral-norm wall time.
 It is still **not accepted**: that outlined candidate's build wall ratio is 1.0505660577,
 above the unchanged 1.05 ceiling. All failed candidate observations remain
 retained. Do not round the ratio down or update Pages from this result.
 
 Two later local cost refinements were also rejected and reverted:
-[conservative-stream workspaces](../results/2026-09-06-mir-loop-workspace-diagnostic-darwin-arm64/README.md)
-and [checked postfix copies](../results/2026-09-06-checked-postfix-copy-diagnostic-darwin-arm64/README.md).
+[conservative-stream workspaces](https://github.com/type-rb/type-rb-native/blob/ba065229c96555cc968c3ed8e6797ce91991afa7/results/2026-09-06-mir-loop-workspace-diagnostic-darwin-arm64/README.md)
+and [checked postfix copies](https://github.com/type-rb/type-rb-native/blob/ba065229c96555cc968c3ed8e6797ce91991afa7/results/2026-09-06-checked-postfix-copy-diagnostic-darwin-arm64/README.md).
 Their full observations and source patches are retained; the additional
 malformed-stream and checked-value ownership tests remain. Neither changes
 the current compiler implementation or the frozen comparison baseline.
@@ -124,9 +138,9 @@ bytes and passed 131 compiler tests, including the additional boundary tests.
 
 The subsequent candidates integrate the readonly-binding correction from PR #306
 without moving the frozen baseline. Its
-[proof-result-only diagnostic](../results/2026-09-06-loop-proof-result-diagnostic-darwin-arm64/README.md)
+[proof-result-only diagnostic](https://github.com/type-rb/type-rb-native/blob/ba065229c96555cc968c3ed8e6797ce91991afa7/results/2026-09-06-loop-proof-result-diagnostic-darwin-arm64/README.md)
 misses the build limits. The subsequent
-[opaque-row reuse diagnostic](../results/2026-09-06-loop-opaque-reuse-diagnostic-darwin-arm64/README.md)
+[opaque-row reuse diagnostic](https://github.com/type-rb/type-rb-native/blob/ba065229c96555cc968c3ed8e6797ce91991afa7/results/2026-09-06-loop-opaque-reuse-diagnostic-darwin-arm64/README.md)
 passes 134 compiler tests and 75 corpus cases at B2/B3/B4, but still misses wall
 and CPU limits at 1.0517507271 and 1.0520158222. That remains a failed cost result,
 not an accepted optimization. Its three numeric application QBE outputs are
@@ -139,7 +153,7 @@ duplicate compiler/projection code and obtain finer phase evidence; do not
 rerun an unchanged near-threshold candidate or relax a limit. Current-source
 full root recovery and hosted cross-target acceptance remain pending.
 
-The subsequent [plan-fusion diagnostic](../results/2026-09-07-loop-plan-fusion-darwin-arm64/README.md)
+The subsequent [plan-fusion diagnostic](https://github.com/type-rb/type-rb-native/blob/ba065229c96555cc968c3ed8e6797ce91991afa7/results/2026-09-07-loop-plan-fusion-darwin-arm64/README.md)
 combines ordinal validation and header selection with structural verification,
 removing two separate row scans and moving a test-only wrapper out of production.
 The optimizer and final verifier still independently derive their plans.
@@ -148,7 +162,7 @@ It passes 148 compiler tests, 95 root units and 243 ordinary corpus observations
 1.0577499943 and CPU 1.0554374884 still miss the unchanged 1.05 limit.
 This is a retained draft simplification, not accepted performance evidence.
 
-The [single-construction checked binding checkpoint](../results/2026-09-07-checked-binding-construction-darwin-arm64/README.md)
+The [single-construction checked binding checkpoint](https://github.com/type-rb/type-rb-native/blob/ba065229c96555cc968c3ed8e6797ce91991afa7/results/2026-09-07-checked-binding-construction-darwin-arm64/README.md)
 now passes the local build-cost prefilter: wall 1.0472902709, CPU 1.0446608988,
 RSS 0.9995921697. It removes duplicate construction sites without changing
 checked metadata or generated numeric application QBE. Its compiler suite
@@ -170,7 +184,7 @@ no runtime acceptance or Pages update results. The next bounded cost reduction
 will avoid constructing unused two-character lexer symbols, with exhaustive
 symbol recognition and tokenization controls before new cost measurements.
 
-The [lexer-symbol construction checkpoint](../results/2026-09-07-lexer-symbol-construction-darwin-arm64/README.md)
+The [lexer-symbol construction checkpoint](https://github.com/type-rb/type-rb-native/blob/ba065229c96555cc968c3ed8e6797ce91991afa7/results/2026-09-07-lexer-symbol-construction-darwin-arm64/README.md)
 passes 138 compiler tests and 225 corpus observations, preserves numeric
 application QBE, and passes the local cost prefilter (wall 1.0452087228, CPU
 1.0465555100, RSS 1.0032599837). Its source differs from the rejected hosted
@@ -178,7 +192,7 @@ candidate; the earlier failure remains recorded. The margin is small, so first
 run the frozen-baseline hosted compiler comparison before another long recovery
 or runtime batch. This ordering does not waive any merge acceptance checks.
 
-The [hosted lexer refinement](../results/2026-09-07-lexer-symbol-hosted-cost-rejection/README.md)
+The [hosted lexer refinement](https://github.com/type-rb/type-rb-native/blob/ba065229c96555cc968c3ed8e6797ce91991afa7/results/2026-09-07-lexer-symbol-hosted-cost-rejection/README.md)
 also fails the unchanged build limit: Darwin 1.050992, Linux 1.057471. The
 long recovery/runtime batches were not dispatched. Keep both source-distinct
 failures; next obtain finer compiler phase evidence and reduce the representation

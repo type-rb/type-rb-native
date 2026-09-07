@@ -1,0 +1,49 @@
+name: Main validation
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.plan.outputs.code }}
+      documentation: ${{ steps.plan.outputs.documentation }}
+      memory: ${{ steps.plan.outputs.memory }}
+      tooling: ${{ steps.plan.outputs.tooling }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Test shared routing and acceptance
+        run: node --test tools/ci-plan-test.mjs tools/ci-run-suites-test.mjs tools/recovery-workspace-test.mjs
+      - name: Classify the complete push delta
+        id: plan
+        env:
+          BASE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: node tools/ci-plan.mjs "$BASE_SHA" "$HEAD_SHA" false push >> "$GITHUB_OUTPUT"
+
+  native:
+    needs: plan
+    if: needs.plan.outputs.code == 'true'
+    uses: ./.github/workflows/gate-zero.yml
+
+  tooling:
+    needs: plan
+    if: needs.plan.outputs.tooling == 'true'
+    uses: ./.github/workflows/ci-tooling.yml
+
+  memory:
+    needs: plan
+    if: needs.plan.outputs.memory == 'true'
+    uses: ./.github/workflows/runtime-worker-memory.yml
+
+  documentation:
+    needs: plan
+    if: needs.plan.outputs.documentation == 'true'
+    uses: ./.github/workflows/documentation.yml

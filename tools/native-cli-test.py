@@ -103,6 +103,8 @@ false == 1 < 2 || 3 > 2 == true
     assert logical.count('true : Boolean') == 4, logical
     assert logical.count('false : Boolean') == 2, logical
     assert 'panic:' not in logical, logical
+    unary = run('repl', text='-1 + 2\n-1 * 2 + 3\n-(1 + 2)\n!true && false || true\n:quit\n')
+    assert unary == '1 : Integer\n1 : Integer\n-3 : Integer\ntrue : Boolean\n', unary
     required_rhs = run('repl', text='false || 1 / 0 == 0\n:q\n')
     assert 'division by zero' in required_rhs, required_rhs
     (root / 'helpers.trb').write_text('# A declaration file\ndef loaded(): Integer\nreturn 8\nend\n')

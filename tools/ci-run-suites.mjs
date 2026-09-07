@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
 // Correctness suites only. Performance authorities run after the joined job.
-export async function runSuites({ executable, suites, evidence, cwd = process.cwd(), env = process.env, graceMs = 1000 }) {
+export async function runSuites({ executable, suites, evidence, cwd = process.cwd(), env = process.env, graceMs = 1000, recoveryStages = false }) {
   if (process.platform === 'win32' || suites.length !== 2 ||
       suites.some(s => !/^[a-z]+$/.test(s.name) || !Array.isArray(s.args) || s.args.some(a=>typeof a !== 'string')) ||
       suites[0].name === suites[1].name || !Number.isInteger(graceMs) || graceMs < 1 || graceMs > 10000) {
@@ -70,7 +70,12 @@ export async function runSuites({ executable, suites, evidence, cwd = process.cw
       record.state = 'running';
       record.startedAt = new Date().toISOString();
       console.log(`Starting ${suite.name} suite`);
-      const child = spawn(executable, suite.args, { cwd, env, detached: true, stdio: ['ignore', out, err] });
+      const stagePath = path.resolve(evidence, 'recovery-stages.jsonl');
+      const suiteEnv = { ...env };
+      // A caller cannot accidentally make the compiler suite share the root receipt.
+      delete suiteEnv.TYPE_RB_NATIVE_RECOVERY_STAGES;
+      if (recoveryStages && suite.name === 'root') suiteEnv.TYPE_RB_NATIVE_RECOVERY_STAGES = stagePath;
+      const child = spawn(executable, suite.args, { cwd, env: suiteEnv, detached: true, stdio: ['ignore', out, err] });
       if (child.pid) groups.add(child.pid);
       child.on('error', error => { record.launchError = error.message; });
       child.on('close', async (code, signal) => {
@@ -90,6 +95,13 @@ export async function runSuites({ executable, suites, evidence, cwd = process.cw
           }
           if (!cancellation) groups.delete(child.pid);
         }
+        if (recoveryStages && suite.name === 'root') {
+          const outcome = cancellation ? 'cancelled' : code === 0 && !signal && !record.orphanedDescendants ? 'success' : 'failed';
+          const report = spawnSync('python3', [path.join(cwd, 'tools/recovery-stage.py'), 'finalize', stagePath, outcome], { encoding: 'utf8' });
+          if (report.status !== 0) {
+            record.stageEvidenceError = report.error?.message || report.stderr || 'Incomplete recovery stages';
+          }
+        }
         record.state = 'completed';
         record.elapsedSeconds = (performance.now() - start) / 1000;
         save();
@@ -106,7 +118,7 @@ export async function runSuites({ executable, suites, evidence, cwd = process.cw
   }
   if (cancellation) return cancellation === 'SIGINT' ? 130 : 143;
   if (evidenceError) return 1;
-  return records.every(r => r.code === 0 && !r.signal && !r.launchError && !r.orphanedDescendants) ? 0 : 1;
+  return records.every(r => r.code === 0 && !r.signal && !r.launchError && !r.orphanedDescendants && !r.stageEvidenceError) ? 0 : 1;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -116,7 +128,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         !process.env.TYPE_RB_NATIVE_ROOT || !process.env.TYPE_RB_NATIVE_REFERENCE_TRB || !process.env.TYPE_RB_NATIVE_QBE) {
       throw new Error('Usage: ci-run-suites.mjs ABSOLUTE_TRB EVIDENCE (with all recovery/QBE environment variables)');
     }
-    process.exitCode = await runSuites({ executable, evidence, suites: [
+    process.exitCode = await runSuites({ executable, evidence, recoveryStages: true, suites: [
       { name: 'root', args: ['test', '--config', 'trbconfig.reference.jsonc'] },
       { name: 'compiler', args: ['test', '--config', 'compiler/trbconfig.jsonc'] },
     ] });

@@ -2,7 +2,7 @@ import { gate4_string_starts_with } from path
 import { gate4_compiler_new, gate4_has_diagnostic } from state
 import { gate4_load_string } from storage
 import { gate4_token_is } from parser
-import { gate4_character_in, gate4_source_slice, gate4_lex } from compiler
+import { gate4_character_in, gate4_source_slice, gate4_lex, gate4_interpolation_end, gate4_interpolation_quote_end } from compiler
 import { native_cli_byte, native_cli_character, native_cli_cell_width } from host
 
 # Display spans preserve whitespace, comments and unfinished input. They do not
@@ -30,7 +30,7 @@ def repl_keyword(word: String): Boolean
 	return false
 end
 
-def repl_syntax(source: String): ReplSyntax
+def repl_syntax_flat(source: String): ReplSyntax
 	mut spans := ReplSyntax.new(starts: [], ends: [], kinds: [], words: [])
 	mut index := 0
 	mut previous := ""
@@ -56,36 +56,12 @@ def repl_syntax(source: String): ReplSyntax
 		else
 			if character == "\""
 				kind = 2
-				mut closed := false
-				mut loop_4 := true
-				while loop_4
-					mut condition_3 := index < source.size()
-					if condition_3
-						condition_3 =!closed
-					end
-					if condition_3
-						condition_3 = source[index] != "\n"
-					end
-					if condition_3
-						if source[index] == "\\"
-							index += 1
-							mut condition_5 := index < source.size()
-							if condition_5
-								condition_5 = source[index] != "\n"
-							end
-							if condition_5
-								index += 1
-							end
-						else
-							closed = source[index] == "\""
-							index += 1
-						end
-					else
-						loop_4 = false
-					end
-				end
-				if !closed
+				finish := gate4_interpolation_quote_end(source, index)
+				if finish < 0
+					index = source.size()
 					kind = 7
+				else
+					index = finish + 1
 				end
 			else
 				if gate4_character_in(character, "0123456789")
@@ -187,6 +163,75 @@ def repl_syntax(source: String): ReplSyntax
 	return spans
 end
 
+def repl_syntax_span(mut spans: ReplSyntax, source: String, start: Integer, finish: Integer, kind: Integer)
+	if finish > start
+		spans.starts.push(start)
+		spans.ends.push(finish)
+		spans.kinds.push(kind)
+		spans.words.push(gate4_source_slice(source, start, finish))
+	end
+	return
+end
+
+def repl_string_spans(mut spans: ReplSyntax, source: String, start: Integer, finish: Integer, kind: Integer)
+	mut chunk := start
+	mut index := start + 1
+	while index < finish
+		if source[index] == "\\"
+			index += 2
+		else
+			mut embedded := source[index] == "#"
+			if embedded
+				embedded = index + 1 < finish
+			end
+			if embedded
+				embedded = source[index + 1] == "{"
+			end
+			if embedded
+				repl_syntax_span(spans, source, chunk, index, 2)
+				mut end_index := gate4_interpolation_end(source, index + 2)
+				mut marker_kind := 1
+				if end_index < 0
+					end_index = finish
+					marker_kind = 7
+				end
+				repl_syntax_span(spans, source, index, index + 2, marker_kind)
+				inner := repl_syntax(gate4_source_slice(source, index + 2, end_index))
+				mut part := 0
+				while part < inner.starts.size()
+					repl_syntax_span(spans, source, index + 2 + inner.starts[part], index + 2 + inner.ends[part], inner.kinds[part])
+					part += 1
+				end
+				if end_index < finish
+					repl_syntax_span(spans, source, end_index, end_index + 1, 1)
+				end
+				index = end_index + 1
+				chunk = index
+			else
+				index += 1
+			end
+		end
+	end
+	repl_syntax_span(spans, source, chunk, finish, kind)
+	return
+end
+
+def repl_syntax(source: String): ReplSyntax
+	flat := repl_syntax_flat(source)
+	mut spans := ReplSyntax.new(starts: [], ends: [], kinds: [], words: [])
+	mut index := 0
+	while index < flat.starts.size()
+		start := flat.starts[index]
+		if source[start] == "\""
+			repl_string_spans(spans, source, start, flat.ends[index], flat.kinds[index])
+		else
+			repl_syntax_span(spans, source, start, flat.ends[index], flat.kinds[index])
+		end
+		index += 1
+	end
+	return spans
+end
+
 def repl_escape(): String
 	return native_cli_character(27) + "["
 end
@@ -231,7 +276,7 @@ end
 # Keep two-space interactive indentation, including partially written blocks.
 # Formatting never modifies bytes inside a string or comment.
 def repl_indent(source: String): String
-	spans := repl_syntax(source)
+	spans := repl_syntax_flat(source)
 	mut depth := 0
 	mut output := ""
 	mut line_start := true
@@ -439,7 +484,7 @@ def repl_next(text: String, cursor: Integer): Integer
 end
 
 def repl_incomplete(text: String): Boolean
-	mut state := gate4_compiler_new(text.size() + 1)
+	mut state := gate4_compiler_new(text.size() * 3 + 16)
 	gate4_lex(state, text)
 	if gate4_has_diagnostic(state)
 		message := gate4_load_string(state.diagnostic_messages, 0)

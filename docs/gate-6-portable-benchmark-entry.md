@@ -15,7 +15,7 @@ current Linux arm64 linker recipe is fixed by
 Gate 6M is complete. The measured portable compiler/runtime slice is TypeRB
 Native revision `97b3ac2aa1d88cbb7782602589ad70686593ddab`; the final evidence
 tooling is revision `c326b52d4bb2ce72602a6e33839883c94fd30f1d`. The reviewed
-[Darwin and Linux arm64 result](../results/2026-08-31-gate6m-portable-benchmark-entry-darwin-linux-arm64/README.md)
+[Darwin and Linux arm64 result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-31-gate6m-portable-benchmark-entry-darwin-linux-arm64/README.md)
 passes every registered correctness, fixed-point, process, performance,
 memory, and size criterion.
 
@@ -126,7 +126,7 @@ is 71.54% lower than optimized Go. The stripped Native application is 98.19%
 smaller on Darwin and 99.15% smaller on Linux. The Linux process evidence
 observes the explicit LLD and dynamic libm boundaries. Detailed measurements,
 correction history, and all retained raw artifacts are in the
-[recorded result](../results/2026-08-31-gate6m-portable-benchmark-entry-darwin-linux-arm64/README.md).
+[recorded result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-31-gate6m-portable-benchmark-entry-darwin-linux-arm64/README.md).
 
 The TypeRB-authored
 [Gate 6M benchmark controller](../tools/gate6m-benchmark/README.md) owns the

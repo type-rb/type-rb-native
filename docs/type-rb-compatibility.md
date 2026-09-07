@@ -2,7 +2,7 @@
 
 TypeRB Native follows exact reference revisions while it is experimental. The
 current source and semantic oracle is TypeRB
-`5dc09070cf7f88a569279f5e63982a6de59d692c` (`0.4.4-dev`), recorded in
+`47a160cae05ddc2035c7430735c4762d36bbc9c4` (`0.4.6-dev`), recorded in
 `TYPE_RB_REVISION`. This is an exact development pin, not a supported version
 range.
 
@@ -19,20 +19,38 @@ rules.
 
 The declaration-import compatibility work was registered in
 [issue #97](https://github.com/type-rb/type-rb-native/issues/97). Its
-[Darwin/Linux arm64 result](../results/2026-08-30-typerb-0-4-compatibility-darwin-linux-arm64/README.md)
+[Darwin/Linux arm64 result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-30-typerb-0-4-compatibility-darwin-linux-arm64/README.md)
 passes the selected `0.4.1-dev` reference, previous-seed, exact fixed-point,
 process, elapsed-time, peak-RSS, and compiler-size criteria. The `0.4.3-dev`
 successor is registered in
 [issue #106](https://github.com/type-rb/type-rb-native/issues/106), and its
-[Darwin/Linux arm64 result](../results/2026-08-30-typerb-0-4-3-compatibility-darwin-linux-arm64/README.md)
+[Darwin/Linux arm64 result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-30-typerb-0-4-3-compatibility-darwin-linux-arm64/README.md)
 passes the selected-reference, explicit setup-transition, exact fixed-point,
 process, elapsed-time, peak-RSS, and compiler-size criteria. This document
 records the implementation boundary independently of those measurements.
-The current scoped-file successor is registered in
+The earlier scoped-file successor is registered in
 [issue #144](https://github.com/type-rb/type-rb-native/issues/144), and its
-[Darwin/Linux arm64 result](../results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/README.md)
+[Darwin/Linux arm64 result](https://github.com/type-rb/type-rb-native/blob/5cf61c740aa600c34ed94f1b130ea2ffefd9e783/results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/README.md)
 passes the selected-reference, migration, exact-baseline, target-regression,
 fixed-point, process, resource, and size criteria.
+
+## String escape reference update
+
+The current pin selects the portable String escape fix in
+[TypeRB PR #651](https://github.com/type-rb/type-rb/pull/651). Merge that
+reference PR before this dependent update. Double-quoted source accepts `\#`
+as a literal hash, respects backslash parity before interpolation, and rejects
+unknown escapes. JSON history data retains its separate JSON escape rules.
+
+Moving the oracle to `0.4.6-dev` also requires typed `Path` arguments in the
+repository-owned file adapter and immutable record fields in the CLI. Mutable
+editor cells use Arrays; session transitions return replacement records.
+These changes preserve the portable rules without adding reference aliases.
+The [current validation record](../results/2026-09-07-string-escape-reference-compatibility/README.md)
+separates local reference checks from hosted Native CLI and fixed-point checks.
+The PR's full recovery, target, memory and performance authorities remain
+required before acceptance. Earlier measurements below retain their original
+revisions and do not establish performance at the new pin.
 
 ## TypeRB 0.4.4 source compatibility revalidation
 

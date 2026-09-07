@@ -12,7 +12,7 @@ internal ownership model is defined by
 Complete at measured revision
 `8bcc2a6e1c5ecede5f07c2dda63a4d4d82631375`. The formal Darwin and pinned
 Linux arm64 evidence is retained in the
-[Gate 6G result](../results/2026-08-29-gate6g-symbol-lookup-darwin-linux-arm64/README.md).
+[Gate 6G result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-29-gate6g-symbol-lookup-darwin-linux-arm64/README.md).
 
 Canonical direct QBE emission improves by 30.80%, the complete compiler build
 improves by 5.95%, and 6,000-function direct QBE emission improves by 53.49%.

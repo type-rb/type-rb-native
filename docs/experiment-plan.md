@@ -248,6 +248,11 @@ Every published result should include:
 
 Store results under a date- and experiment-specific directory only after the
 first executable benchmark exists. Do not commit placeholder result files.
+Follow the [evidence lifecycle policy](evidence-retention.md): only registered
+active reports and observation tables stay in main. Replace a result and retire
+its predecessor in the same PR, retaining significant decisions and pinned
+historical links. Archive generated payloads only when they have a durable use.
+Preserve active measurement cohorts, frozen baselines and seed consumers.
 
 ## Backend selection policy
 

@@ -10,9 +10,9 @@ unknown effects and unproved loop shapes retain checks. Its thirteen-module
 recovery closure includes `mir_loop_bounds.trb`. This is not an accepted runtime
 result or completion of the direct-emitter migration. The preregistered local
 and hosted comparisons, ordinary costs and target authorities remain required.
-The [earlier local diagnostic](../results/2026-09-06-mir-loop-bounds-diagnostic-darwin-arm64/README.md)
+The [earlier local diagnostic](https://github.com/type-rb/type-rb-native/blob/ba065229c96555cc968c3ed8e6797ce91991afa7/results/2026-09-06-mir-loop-bounds-diagnostic-darwin-arm64/README.md)
 passes both spectral runtime cohorts but misses its build-cost limit. The
-[checked-binding refinement](../results/2026-09-07-checked-binding-construction-darwin-arm64/README.md)
+[checked-binding refinement](https://github.com/type-rb/type-rb-native/blob/ba065229c96555cc968c3ed8e6797ce91991afa7/results/2026-09-07-checked-binding-construction-darwin-arm64/README.md)
 passes the local build-cost prefilter with unchanged numeric application QBE.
 Full local recovery now passes, but the first hosted compiler comparison rejects
 the candidate: Linux build wall ratio 1.060729 exceeds 1.05, while Darwin passes.
@@ -52,7 +52,7 @@ budget. An eligible but non-selected call cannot inherit its callee's literal
 proof. The new controls retain that distinction and computed-argument overflow
 failures. No new fact family or application speedup is claimed.
 
-The [checked-binding representation diagnostic](../results/2026-09-06-checked-literal-binding-diagnostic-darwin-arm64/README.md)
+The [checked-binding representation diagnostic](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-09-06-checked-literal-binding-diagnostic-darwin-arm64/README.md)
 removes that remaining ownership in four local variants while preserving 72
 generated-output controls and ordinary fixed points. All variants fail the
 registered compiler compactness requirements and are rejected, with their
@@ -97,14 +97,14 @@ The project-configuration extraction in
 responsibility-named `project_config.trb` owner and strict twelve-file recovery.
 It preserves checked/MIR and adapter ownership rather than adding an analysis.
 
-The [full-range Integer-add diagnostic](../results/2026-09-06-full-range-add-diagnostic-darwin-arm64/README.md)
+The [full-range Integer-add diagnostic](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-09-06-full-range-add-diagnostic-darwin-arm64/README.md)
 rejects both returning-fallback replacements: the two-sided check is about10%
 slower locally and the biased single-comparison check about6% slower. The latter
 also increases compiler QBE/text. The accepted guarded path is unchanged; no
 Pure Go parity, runtime improvement or new allowance is claimed. Re-entry needs
 a measured reduction in hot-path work, not merely fewer helper calls.
 
-The [checked Boolean branch diagnostic](../results/2026-09-06-boolean-branches-diagnostic-darwin-arm64/README.md)
+The [checked Boolean branch diagnostic](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-09-06-boolean-branches-diagnostic-darwin-arm64/README.md)
 passes both registered local cohorts with about 5.8-5.9% less spectral wall time
 and compiler shrinkage. It removes redundant result extension and zero-testing
 through mechanical QBE legalization of already checked Boolean values, without
@@ -156,7 +156,7 @@ QBE exactly. Complete compilers now total 662,992 bytes; both target code
 sections and the shared 1,116,173-byte compiler QBE shrink. This is not a new
 application optimization or fact family.
 
-The following [Integer-halving diagnostic](../results/2026-09-05-native-mir-halving-diagnostic-darwin-arm64/README.md)
+The following [Integer-halving diagnostic](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-09-05-native-mir-halving-diagnostic-darwin-arm64/README.md)
 is rejected: its shorter generated QBE produces a larger compiler and about
 6.2% more local spectral-norm wall time. No halving change to the active
 compiler, threshold relaxation, or replacement of the accepted benchmark
@@ -374,5 +374,5 @@ Public evidence:
 - [Array reduction target regressions](https://github.com/type-rb/type-rb-native/actions/runs/33697599529)
 - [Array reduction persistent-worker checks](https://github.com/type-rb/type-rb-native/actions/runs/33697599556)
 - [Array reduction complete Native gates](https://github.com/type-rb/type-rb-native/actions/runs/33697599531)
-- [current complete formal runtime result](../results/2026-09-05-benchmarksgame-runtime-native-mir-stable-array-headers-accepted-linux-arm64/README.md)
-- [current complete formal build result](../results/2026-09-05-benchmarksgame-build-native-mir-stable-array-headers-accepted-linux-arm64/README.md)
+- [current complete formal runtime result](https://github.com/type-rb/type-rb-native/blob/ba065229c96555cc968c3ed8e6797ce91991afa7/results/2026-09-06-benchmarksgame-runtime-checked-boolean-branches-linux-arm64/README.md)
+- [current complete formal build result](https://github.com/type-rb/type-rb-native/blob/ba065229c96555cc968c3ed8e6797ce91991afa7/results/2026-09-06-benchmarksgame-build-checked-boolean-branches-linux-arm64/README.md)

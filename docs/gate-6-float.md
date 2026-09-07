@@ -15,7 +15,7 @@ Gate 6I is complete at measured implementation revision
 `073504790b930157b48c1bc6743bc0102f5fe014`. Every registered semantic,
 correctness, performance, memory, size, ownership, fixed-point, and pinned
 Linux arm64 criterion passes. See the
-[recorded result](../results/2026-08-29-gate6i-float-darwin-linux-arm64/README.md).
+[recorded result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-29-gate6i-float-darwin-linux-arm64/README.md).
 
 On the fixed Float workload, Native builds 41.37% faster and with 48.35% less
 peak RSS than optimized Go. It runs 10.60% slower with 65.60% less peak RSS,

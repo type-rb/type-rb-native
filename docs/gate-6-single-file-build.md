@@ -13,7 +13,7 @@ Gate 6B is complete at measured TypeRB Native revision
 `1038cfe497a96d9d282db55a54d9eea6509f7868`. The complete correctness,
 fixed-point, executable-identity, elapsed-time, peak-RSS, size, cleanup, and
 process-inventory criteria pass. See the
-[recorded Darwin arm64 result](../results/2026-08-29-gate6b-single-file-build-darwin-arm64/README.md).
+[recorded Darwin arm64 result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-29-gate6b-single-file-build-darwin-arm64/README.md).
 
 This is not the complete Gate 6 product-feasibility exit and does not create a
 supported TypeRB command.

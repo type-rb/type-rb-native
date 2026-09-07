@@ -103,7 +103,7 @@ at most 1.03%, and every value remains within 1.10% of the Gate 6B baseline.
 Median observed RSS is 36,667,392, 36,421,632, and 36,503,552 bytes; adjacent
 differences are at most 0.67%, and every value remains within 0.67% of the
 baseline. Stripped compiler code remains exactly 166,824 bytes. See the
-[Gate 6C Darwin arm64 result](../results/2026-08-29-gate6c-native-bootstrap-darwin-arm64/README.md).
+[Gate 6C Darwin arm64 result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-29-gate6c-native-bootstrap-darwin-arm64/README.md).
 
 ## Deferred scope
 

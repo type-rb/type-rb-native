@@ -10,7 +10,7 @@ bootstrap boundary is defined by
 
 Gate 4 is complete. B0, B1, B2, and the additional B3 fixed-point stage pass
 the registered correctness and convergence checks. See the
-[recorded result](../results/2026-08-28-gate4-self-host-darwin-arm64/README.md).
+[recorded result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-28-gate4-self-host-darwin-arm64/README.md).
 
 ## Compiler source closure
 

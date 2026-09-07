@@ -126,3 +126,52 @@ test('a normally exiting parent cannot leave a descendant for later CI steps', a
   await delay(100);
   assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' });
 });
+
+test('successful suite exit cannot replace missing or incomplete recovery stage evidence', async t => {
+  const dir = workspace(t);
+  const root = new URL('../', import.meta.url).pathname;
+  const record = new URL('./recovery-stage.py', import.meta.url).pathname;
+  const code = `const {spawnSync}=require('child_process');
+    const file=process.env.TYPE_RB_NATIVE_RECOVERY_STAGES;
+    if(!file)process.exit(8);
+    const result=spawnSync('python3',[${JSON.stringify(record)},'start',file,'source-preparation']);
+    process.exitCode=result.status;`;
+  const peer = `if(process.env.TYPE_RB_NATIVE_RECOVERY_STAGES)process.exitCode=9;`;
+  const result = await runSuites({ executable: process.execPath, evidence: dir, cwd: root,
+    recoveryStages: true, env: { ...process.env, TYPE_RB_NATIVE_RECOVERY_STAGES: '/ignored/shared' }, suites: [
+      { name: 'root', args: ['-e', code] }, { name: 'compiler', args: ['-e', peer] },
+    ] });
+  assert.equal(result, 1);
+  const status = readStatus(dir);
+  assert.equal(status.suites[0].code, 0);
+  assert.match(status.suites[0].stageEvidenceError, /Incomplete/);
+  assert.equal(status.suites[1].code, 0);
+  const report = JSON.parse(fs.readFileSync(dir + '/recovery-stages.summary.json'));
+  assert.equal(report.complete, false);
+  assert.equal(report.stages[0].state, 'incomplete');
+});
+
+test('controller cancellation retains an interrupted recovery phase', { timeout: 10000 }, async t => {
+  const dir = workspace(t);
+  const root = new URL('../', import.meta.url).pathname;
+  const recorder = new URL('./recovery-stage.py', import.meta.url).pathname;
+  const code = `const fs=require('fs');const {spawnSync}=require('child_process');
+    const r=spawnSync('python3',[${JSON.stringify(recorder)},'start',process.env.TYPE_RB_NATIVE_RECOVERY_STAGES,'source-preparation']);
+    if(r.status!==0)process.exit(7);fs.writeFileSync(${JSON.stringify(dir + '/ready')},'ready');setInterval(()=>{},1000);`;
+  const suites = [{name:'root',args:['-e',code]}, {name:'compiler',args:['-e','setInterval(()=>{},1000)']}];
+  const script = `import {runSuites} from ${JSON.stringify(moduleUrl.href)};
+    process.exitCode=await runSuites({executable:process.execPath,evidence:${JSON.stringify(dir)},cwd:${JSON.stringify(root)},recoveryStages:true,suites:${JSON.stringify(suites)},graceMs:100});`;
+  const controller = spawn(process.execPath, ['--input-type=module', '-e', script], { stdio: 'ignore' });
+  const done = once(controller, 'close');
+  t.after(() => { if (controller.exitCode === null) controller.kill('SIGTERM'); });
+  for (let attempt=0; !fs.existsSync(dir + '/ready'); attempt++) {
+    assert(attempt < 200, 'root should publish its stage before cancellation');
+    await delay(10);
+  }
+  controller.kill('SIGTERM');
+  assert.deepEqual(await done, [143, null]);
+  const summary = JSON.parse(fs.readFileSync(dir + '/recovery-stages.summary.json'));
+  assert.equal(summary.complete, false);
+  assert.equal(summary.suiteOutcome, 'cancelled');
+  assert.equal(summary.stages[0].state, 'cancelled');
+});

@@ -1,76 +1,62 @@
 # Short-circuit Boolean expressions
 
-Issue [#308](https://github.com/type-rb/type-rb-native/issues/308) adds `||`
-and `&&` together to the ordinary compiler. This is an implementation of the
-pinned TypeRB contract, not a new language decision. Both operands must be
-non-nullable `Boolean`; the result is `Boolean`. The left operand executes
-once. `||` executes the right operand only after `false`, and `&&` only after
-`true`. Both operands are resolved and checked even when a constant left
-operand skips the right at runtime.
+Issue [#308](https://github.com/type-rb/type-rb-native/issues/308) implements
+`||` and `&&` together. Both operands must be non-nullable Boolean and both
+are resolved and checked. The left operand executes once; the right executes
+only after false for OR, or true for AND. Precedence runs from unary operators,
+arithmetic, ordering, equality and AND to OR. Parentheses override grouping.
+Logical compound assignment and bitwise operators are outside this slice.
 
-Precedence is unary `!`, arithmetic, ordering, equality, `&&`, then `||`; parentheses
-override grouping. Logical compound assignment and bitwise operators remain
-outside this slice.
+## Accepted independent feature
 
-The [local implementation checkpoint](../results/2026-09-07-logical-expressions-darwin-arm64/README.md)
-passes correctness and ordinary fixed-point checks, but the combined candidate
-still exceeds its build-time limit. It is not accepted or released.
+Merged [PR #317](https://github.com/type-rb/type-rb-native/pull/317) extracts
+the language capability from draft PR #307 without its
+Array-loop proof or bounds-check optimization. Its accepted implementation
+baseline is `450ed9d1bd8a43b85cb5cfb653326d0eee42d6ec`, with reference
+`47a160cae05ddc2035c7430735c4762d36bbc9c4`. The earlier combined candidate's
+cost rejection remains valid and is not an isolated Boolean-feature result.
+Issue #303 retains its original frozen baseline and acceptance requirements.
+
+All seventeen required jobs passed in the
+[exact-head validation](https://github.com/type-rb/type-rb-native/actions/runs/34090466286),
+including recovery-enabled suites (97 root and 119 compiler tests), ordinary
+fixed points, CLI, memory, process and target checks, and compiler costs.
+Hosted build wall ratios were 1.003077 on Darwin arm64 and 1.003922 on Linux
+arm64; complete compiler sizes were 332,728 and 307,544 bytes. The existing
+limits were unchanged. This is capability acceptance, not a runtime speedup.
+The [local selection record](https://github.com/type-rb/type-rb-native/tree/0197303234d047ba6b413a6fdee870fbccc698d1/results/2026-09-07-independent-logical-expressions-darwin-arm64)
+is retained in Git history rather than occupying the active candidate slot.
 
 ## Ownership
 
-The checker constructs a bounded structured logical plan using the MIR
-Boolean-only constructor. The existing source-indexed checked projection
-binds that plan to its operator origin. Plan 76 skips with true, and plan 77
-skips with false. These internal tags are deliberately not eager binary
-instructions and are rejected by ordinary checked-binary lowering.
+Structured checking calls the Boolean-only MIR plan constructor and binds its
+result to the exact operator origin in existing storage. The adapter verifies
+that binding and lowers a branch, conditional RHS and private Boolean merge
+slot. QBE can promote the slot; it is not an eager binary AND/OR instruction.
+Malformed, absent and opposite-operator plans fail closed.
 
-The adapter validates the plan and operator binding before lowering the right
-region. It lowers a branch and Boolean merge, not an eager `or` or `and`.
-An initialized private Boolean slot joins nested RHS control flow without
-reconstructing a backend predecessor; QBE can promote this slot.
-Conditional header temporaries are invalidated at branch boundaries. Runtime
-managed-root operations remain on their executed paths.
+The current flat scalar and Array projections cannot represent conditional
+work, so logical expressions disable those projections conservatively.
+Conditional Array-header temporaries are invalidated at branch boundaries;
+managed-root operations stay on their executed paths. No RHS call, allocation
+or trap may be hoisted. This does not complete general function-CFG MIR.
 
-This is not complete function-CFG MIR coverage. The current flat scalar and
-Array projections are disabled for a logical expression because they cannot
-represent its conditional work. They must never hoist RHS operations, traps,
-or effects. A later complete CFG connection can remove this conservative
-boundary; it must not rediscover short-circuit semantics in the backend.
+REPL evaluation consumes the same plan and parses a skipped RHS without
+evaluating it. Its unary operand precedence must remain above every binary
+operator; the independent regression requires `-1 + 2` to produce `1`, not
+`-3`. Compiled and REPL controls cover truth tables, nesting, grouping,
+side effects, managed values, invalid operands and required/skipped traps.
 
-## Acceptance and self-adoption
+## Acceptance and adoption
 
-Require differential truth tables, grouping, nested calls and mutation,
-skipped and required traps, invalid operands, malformed-plan rejection, the
-existing corpus, recovery coverage and ordinary file-root fixed points.
-Measure compiler build time, RSS and artifacts under existing policy; this
-feature does not relax the bounds or accept the rejected Array-loop candidate.
+Require reference checks, recovery-enabled suites, previous-Native fixed
+points, conformance, CLI/REPL, target/process/memory and measured compiler
+cost. Existing workloads must retain exact QBE. Ordinary 1.05 compiler/build/RSS
+ratios, 2.0 catastrophic limits and absolute transition ceilings remain unchanged.
+No new marker, allowance, runtime improvement or Pure Go claim is introduced.
 
-The core implementation uses only syntax accepted by the published Native
-seed. The CLI and REPL are built by the newly generated core, so they can
-already use logical guards without adding a bootstrap stage. The REPL consumes
-the same checked plan and advances over a skipped RHS using syntax parsing,
-never evaluation. Exit-command and history-publication guards are initial
-compiler-tooling consumers; a failed history write must not attempt rename.
-
-Before replacing core compiler guards with logical expressions, retain
-and verify a previous-Native setup compiler that understands those expressions,
-and wire its exact source provenance into ordinary bootstrap and recovery.
-Do not change immutable released assets, silently invoke Go, or claim local
-self-adoption as a working fresh bootstrap. Keep self-adoption a separate
-reviewable checkpoint until all these consumers can rebuild it.
-
-The pinned reference has a separate condition-parsing defect:
-[type-rb#648](https://github.com/type-rb/type-rb/issues/648) loses the suffix
-of some conditions beginning with a parenthesized operand. The managed-RHS
-fixture deliberately retains that valid source shape. Record its reference
-failure and any fixed-reference comparison separately; do not mislabel a
-newer or patched oracle as the unchanged compatibility pin.
-The fix merged in [type-rb#649](https://github.com/type-rb/type-rb/pull/649)
-at `8220f9c121c836d4c0e01aecbf8e8aeb4dab8ef9`; compatibility advancement is
-separate from the source-identified supplemental comparison.
-
-Basic supported-language gaps that force duplicated checks or deeply nested
-compiler code are candidates for bounded implementation alongside maintenance.
-Pair closely related forms and their tests, but do not turn a local cleanup
-into an unmeasured full-language expansion. Verify before replacing the
-workaround, then remove it rather than retaining two implementation paths.
+The core uses syntax understood by the immutable published seed. The generated
+core builds the CLI, allowing exit and history-publication guards to use OR.
+Core-source self-adoption needs a separately verified previous-Native setup
+transition; do not change seed assets or add a hidden Go fallback. The current
+reference already includes the condition-parser repair from TypeRB PR #649.

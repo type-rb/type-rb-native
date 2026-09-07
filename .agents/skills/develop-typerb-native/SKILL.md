@@ -167,6 +167,16 @@ a time.
 
 ## Verify
 
+Before importing or reorganizing `results/`, read `docs/evidence-retention.md`.
+Retain only results with a current purpose in `results/active.json`. Replace
+the occupied slot, update consumers and remove superseded directories in the
+same PR; do not accumulate dated snapshots or archive every intermediate run.
+Preserve active/public measurement cohorts, frozen comparison baselines and
+seed consumers. Keep significant rejected-approach reasons in the development
+history and link retired evidence to its exact Git revision. Use a verified
+public archive only when detailed evidence has a durable purpose. Run the
+lifecycle/global-budget check with the actual PR base before publishing results.
+
 From the repository root, use the compiler revision in `TYPE_RB_REVISION` and
 run:
 

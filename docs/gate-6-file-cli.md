@@ -13,7 +13,7 @@ Gate 6A is complete at TypeRB Native revision
 `cf6fabccf8bd799d5457372f93f024687d5e6d13`. The complete correctness,
 fixed-point, normalization, direct-time, peak-RSS, stripped-size, and process
 inventory criteria pass. See the
-[recorded Darwin arm64 result](../results/2026-08-29-gate6a-file-entry-darwin-arm64/README.md).
+[recorded Darwin arm64 result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-29-gate6a-file-entry-darwin-arm64/README.md).
 
 This slice is not the complete Gate 6 exit and does not create a supported
 TypeRB command. Project discovery, multi-module resolution, output management,

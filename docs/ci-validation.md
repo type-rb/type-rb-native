@@ -1,146 +1,192 @@
-# Pull request validation stages
+# Validation by changed surface
 
-The single `Pull request validation` entry workflow classifies every changed
-path, including deleted paths and both sides of renames. It has no path filter,
-so a documentation-only change can still complete its merge-acceptance check.
-Unknown non-documentation paths receive full correctness and target checking.
+The `Pull request validation` entry has no path filter. Its planning job tests
+and executes `tools/ci-plan.mjs` against the complete merge-base-to-head delta,
+including deletions and both sides of renames. Git output is streamed with NUL
+separators; large evidence inventories, unusual filenames and unknown paths
+cannot silently truncate or bypass validation. Git failures reject planning.
 
-The changed-path inventory streams Git's NUL-delimited output instead of using
-a fixed-size synchronous process buffer. Large evidence snapshots therefore
-retain every path, including code changes after the first megabyte. Git errors
-and incomplete path records fail planning; they do not authorize partial lists.
+## Required authorities
 
-The three exact static-documentation tools (`tools/capability-map-check.mjs`,
-`tools/benchmark-pages-data.mjs`, and `tools/benchmark-pages-check.mjs`) use the
-documentation authority, which already executes those checks. A snapshot or
-generator-only update does not need compiler or performance matrices. Mixed
-compiler changes, CI-routing changes, and unknown neighboring paths retain the
-normal full authority. Formal benchmark controllers are not documentation tools.
+| Changed surface | Required PR validation |
+| --- | --- |
+| Markdown, development metadata, static documentation, registered results and exact documentation generators | Planning and documentation |
+| The two exact planning files | Their unconditional planning tests and documentation |
+| Exact synthetic tool-test files listed in `toolingTests` | Planning and macOS tooling; project/policy shell tests also run Linux quick tooling |
+| Existing compiler unit-test modules listed in `compilerTestInputs` | Complete quick, Native, CLI, tooling and target correctness; no unchanged-binary performance or worker-memory measurements |
+| Exact CLI adapter, launcher, build helper and CLI-test inputs listed in `cliInputs` | Planning, quick checks and Darwin/Linux CLI artifacts |
+| Ordinary compiler, conformance, execution workflows and measurement policy | Full applicable correctness, tooling, CLI, target, memory and comparative authorities |
+| Other code or unknown files | Complete Native correctness, tooling and CLI/target checks; memory and performance according to the conservative rules in the planner |
+| Mixed changes | The union of applicable authorities, with core changes restoring the core lane |
 
-## Stages
+These are exact allowlists for executable exceptions, not filename suffix rules
+for arbitrary tests. A new CLI file or neighboring tool defaults to the code
+lane until its consumers and executing authority are reviewed. Production
+measurement controllers, toolchain pins, suite controllers and stage-recording
+code retain code validation. Tool-test-only routing is valid because the
+independent tooling job actually executes each listed test. Suite-controller
+and workspace-ownership tests run on Linux in unconditional planning and on
+macOS in tooling, moving the former Native step without duplicating it.
+Project and transition-policy shell tests also retain their Linux quick-check
+authority in addition to the macOS tooling checks. For changes limited to those
+tests, quick skips reference checkout/build, compatibility, formatting/types and
+TypeRB units; the Linux shell tests need none of those compiler inputs.
 
-1. **Planning and quick feedback.** Every PR runs routing/acceptance tests and
-   whitespace validation. Code changes first check canonical compatibility
-   metadata with the already-built pinned reference compiler, then formatting,
-   core type checks, root unit tests, transition-policy tests, and a focused
-   MIR, Array, scalar, and numeric test selection. These checks do not claim complete
-   Native execution or benchmark evidence.
-2. **Complete correctness.** A non-draft code PR runs the unchanged Native gate
-   and Linux target authorities after quick feedback passes. Applicable
-   compiler/runtime changes also run the persistent-memory authority.
-3. **Comparative measurement.** Applicable compiler, conformance, transition
-   policy, and CI-routing changes run compactness/performance comparisons only
-   after the complete Native, target, and memory authorities succeed. The
-   measurement implementations, repetitions, evidence, and limits are unchanged.
-4. **Merge acceptance.** `Native CI acceptance` verifies that every applicable
-   authority actually succeeded. Failure, cancellation, a missing job, or a
-   skipped required job rejects acceptance. Documentation-only ready PRs need
-   only planning and their documentation authority.
+The ten reviewed compiler unit-test modules are excluded from ordinary
+reference/Native compiler builds and CLI source staging. Changing only those
+modules cannot change the measured compiler or worker binary. Full correctness
+and target checks still execute; only comparative and worker-memory measurements
+are omitted. Conformance fixtures, new test paths, project configurations,
+production source and measurement policies retain conservative routing. A mixed
+non-exempt code change restores the previous compiler measurement requirements;
+changing routing/execution workflows still exercises the full graph.
 
-Drafts receive quick and documentation feedback but deliberately fail the
-merge-acceptance check with `Draft feedback is not merge acceptance`. This is
-an eligibility result, not a failed correctness test. Marking the PR ready
-triggers the complete pipeline even when no commit changed. Converting it back
-to draft cancels the superseded run and revokes acceptance. A newer commit
-cancels an obsolete PR run; cancelled measurements are not retained results.
+CLI adapters are outside the ordinary compiler source closure. Their dedicated
+workflow builds the current core from the pinned Native seed, verifies fixed
+points, tests the CLI/REPL and packages Darwin/Linux artifacts. CLI-only changes
+still run reference formatting/type checks and quick tests. Changing core
+source alongside an adapter restores core and comparative checks. Documentation
+under `compiler/` no longer accidentally triggers a separate CLI matrix.
 
-The called authorities no longer launch duplicate standalone PR runs. Their
-existing manual and post-merge triggers remain available. Full multi-language
-benchmark refreshes and Pages deployment retain their existing manual controls.
-Manual measurements do not substitute for the current PR acceptance chain.
+The documentation authority checks evidence retention, skill metadata, public
+path hygiene, the capability catalog and benchmark explorer. Pages does not
+repeat those checks in a separate PR workflow. Its main-push deployment and
+manual publication workflow retain verification before upload/deploy. Changing
+the Pages workflow requires documentation validation, not compiler benchmarks.
 
-The manual Native runtime A/B workflow selects a named, pre-registered contract
-and its frozen baseline. The checked-Boolean selection uses the existing
-Linux arm64 runtime controller and retains the historical derived-loop-index
-selection unchanged. It supplements, rather than replaces, current-head PR
-correctness and interleaved build/RSS authority; it adds no automatic runtime
-comparison job. See [the controller contract](../tools/native-runtime-ab/README.md).
+## Scheduling and acceptance
 
-The compatibility preflight runs the existing validator and its regression
-tests before the Native, target, and memory matrices can start. A mismatch
-therefore fails quick feedback without spending those jobs. The standalone
-Native workflow retains its own identical validation; no new reference build,
-validator, skip option, or relaxed acceptance rule is introduced. See
-[issue #287](https://github.com/type-rb/type-rb-native/issues/287).
+1. **Plan and quick feedback.** Planning tests are unconditional. Code or CLI
+   changes build the pinned reference compiler, validate canonical compatibility
+   metadata, formatting/core types and root/focused MIR units. No complete
+   recovery or comparative claim comes from quick feedback. The explicit `quick`
+   output also selects Linux-only tooling steps for project/policy test edits;
+   code and CLI plans must always require complete quick feedback.
+2. **Independent tooling.** The former Native `Verify bootstrap seed tooling`
+   commands run unchanged on macOS in the separate `CI tooling controls` workflow.
+   Its synthetic checks need no compiled candidate, so it can start after
+   planning without waiting for quick feedback. This removes it from the serial
+   path before recovery. Historical TypeRB tool suites and recovery-artifact
+   consumers remain in the Native job after recovery joins.
+3. **Correctness and CLI.** Complete Native, target and applicable memory jobs
+   start after quick succeeds on non-draft core PRs. The CLI authority runs after
+   quick for applicable changes, including drafts as before.
+4. **Comparative measurement.** Applicable non-draft changes wait for Native,
+   targets, memory, tooling and CLI success before starting comparisons. Existing
+   repetitions, interleaving, baseline identities, raw evidence and limits stay
+   unchanged. Diagnostic stage recording never runs inside measured chains.
+5. **Acceptance.** `Native CI acceptance` checks every planned authority,
+   including tooling and CLI. Failed, cancelled, missing or skipped required
+   jobs reject acceptance. Unexpected execution of a disabled authority also
+   rejects the plan/result mismatch.
 
-## Correctness-suite scheduling
+Drafts receive quick, applicable tooling/CLI and documentation feedback but
+reject merge acceptance with `Draft feedback is not merge acceptance`. Marking
+ready triggers complete validation; converting back to draft cancels the old
+run. New commits cancel superseded PR work. Cancelled measurements are not
+accepted results.
 
-The Native gate runs the recovery-enabled root and compiler suites concurrently
-through `tools/ci-run-suites.mjs`, with exactly two process groups. Their project
-output directories are distinct. Every enabled root recovery invocation allocates
-a fresh workspace atomically with `mktemp -d`; it never reuses a shared path.
-All seven historical tool suites, allocation/worker smoke checks, and language-corpus verification
-remain after the successful join. Comparative performance measurements never
-overlap these correctness suites.
+`Main validation` replaces the separate Native, memory and documentation push
+triggers. It executes the same planner using the complete **before-to-head**
+push delta (two-dot, rather than a PR merge-base delta), then selects those
+post-merge authorities and tooling controls. It does not add a second full PR
+performance/target/CLI pipeline. Removed inputs and multi-commit pushes remain
+visible. Unknown or invalid revisions fail planning rather than skip checks.
+Main memory routing now covers the current compiler modules consistently rather
+than maintaining a separate list of old entry paths. Manual workflow controls
+remain available. Main pushes do not cancel earlier validations: a later
+documentation-only delta must not erase an unfinished code validation.
 
-Both suites keep their full commands and all three recovery/QBE environment
-variables. A failure does not skip the other suite's evidence: each gets its
-own stdout/stderr log, exit code or signal, and elapsed time in `status.json`.
-The job uploads `native-suite-evidence` even when a suite fails or is cancelled.
-Cancellation terminates only owned process groups, escalating after a bounded
-grace period. A parent that exits while leaving descendants causes cleanup and
-failure rather than allowing background work into subsequent measurements.
-Log-file setup completes before either process starts.
+Full multi-language benchmark refreshes and Native runtime A/B remain manual.
+Manual measurements supplement rather than replace current PR acceptance.
 
-The controller tests use a mutual-start barrier to prove actual concurrency,
-exercise one/both failures and missing executables, reject absent recovery
-variables, and check cancellation and orphan-descendant cleanup. They run with
-the routing tests, without launching compiler suites for documentation-only
-changes. The scheduling change is registered in
-[issue #263](https://github.com/type-rb/type-rb-native/issues/263); it changes no
-test coverage, benchmark contract, threshold, or draft acceptance rule.
+## Further latency boundaries
+
+Generation controls check the recovery source through B0, B1 and B2 and compare
+repeated QBE emission against each previously built generation. Those repeated
+commands test distinct seed/command behavior and deterministic output; deleting
+them would remove coverage. Ordinary B1-to-B4 regeneration also preserves its
+sequential seed dependencies. No generation check or benchmark repetition is
+removed by test-only routing.
+
+Quick checks retain their ordering for compiler/CLI changes. Additional runner
+fan-out or performance-before-correctness would change resource usage or the
+failure policy, so neither is used for these scoped improvements.
+
+## Recovery scheduling and stage evidence
+
+`tools/ci-run-suites.mjs` runs exactly two recovery-enabled process groups: root
+and compiler. Both retain their complete commands and recovery/QBE variables,
+independent stdout/stderr logs, exit code/signal and monotonic elapsed duration
+in `status.json`. A failure does not discard the peer's evidence. Cancellation
+terminates only owned process groups, with a bounded grace period; orphaned
+descendants fail validation. Log setup finishes before either process starts.
+
+The root test also records thirteen ordered phases:
+
+- source preparation and matched-Go comparison build;
+- snapshot generation and B0 recovery;
+- recovery generations, ordinary Native fixed point and generation controls;
+- module-boundary mutations;
+- file CLI, build CLI and project/module controls;
+- normalization and differential conformance.
+
+The controller gives only the root suite an invocation-local
+`TYPE_RB_NATIVE_RECOVERY_STAGES` path. The test calls `tools/recovery-stage.py`
+at phase boundaries; this external test observer uses Python's monotonic clock
+and closes each JSONL receipt before returning. It adds no ordinary compiler or
+runtime dependency. Direct recovery tests can omit this optional variable.
+The receipt includes test-observer overhead and is a diagnostic phase duration,
+not a replacement for controlled build/runtime measurements.
+
+The controller finalizes `recovery-stages.summary.json` after root termination.
+An unfinished phase is failed/cancelled/incomplete, never completed. Missing,
+malformed, reordered, repeated or incomplete evidence rejects an otherwise
+successful suite. Previously completed phases remain visible when a later
+phase fails, but the summary cannot claim successful recovery. Both raw receipts
+and the summary live in the always-uploaded suite evidence directory.
+
+The source-mutation helper uses the reference compiler's code-point `index`,
+`rindex` and `slice` operations. Comparing the first and last match preserves
+strict uniqueness, including overlapping needles; prefix/suffix slices preserve
+all surrounding source bytes. This removes repeated per-character scans and
+string reconstruction from module-boundary setup without removing a mutation,
+missing-module, malformed-module or generated-output check. Focused tests cover
+Unicode, empty/missing needles, overlaps and replacements at both boundaries.
+
+Stage instrumentation completes the remaining observability scope of
+[issue #295](https://github.com/type-rb/type-rb-native/issues/295). Use measured
+phase costs to select later bounded scheduling changes; do not remove generation
+identity, mutation or differential checks merely because they are slow.
 
 ### Recovery workspace ownership
 
-`src/compiler_recovery_workspace.trb` owns the test-only allocation contract.
-The optional `TYPE_RB_NATIVE_RECOVERY_RECEIPT` names an evidence file, not a
-workspace supplied by the caller. Give each invocation its own receipt file.
-CI sets it inside the job's `native-suite-evidence`;
-direct recovery-enabled tests can omit it and inspect the reported retained
-workspace. Allocation or receipt publication failure fails the test, without
-falling back to a shared directory. No ordinary Native compiler dependency or
-production source closure is changed.
+Each root invocation allocates a fresh workspace with `mktemp -d` through
+`src/compiler_recovery_workspace.trb`. `TYPE_RB_NATIVE_RECOVERY_RECEIPT` names
+an evidence file, not a caller-supplied workspace. The exact generated path and
+owner marker are checked by `tools/recovery-workspace.mjs` before later smoke,
+corpus and shell-bootstrap consumers use it. The always-run cleanup removes
+only that validated directory and uploads the receipt and outcome. Invalid or
+foreign ownership fails cleanup; absence before allocation is `not-created`.
+A killed runner can still prevent an always-run step. This is not an orphan
+reaper or a boundary against hostile processes with the same user privileges.
 
-The versioned receipt contains exactly the generated `/tmp/trbn-recovery.` path
-with its six-character suffix. The workspace carries an identical owner marker.
-`tools/recovery-workspace.mjs` checks both regular files, the exact path shape,
-and the non-symlink directory before providing the path to later smoke, corpus,
-and shell-bootstrap consumers. After those consumers, an always-run step removes
-only that validated directory and keeps both the receipt and cleanup outcome in
-the uploaded suite evidence. Missing allocation produces `not-created`; an
-invalid or foreign receipt is refused and fails cleanup. A killed runner can
-still prevent an always-run step; this is not an orphan-reaper or a security
-boundary against hostile processes with the same user privileges.
-
-Focused tests cover overlapping allocations with a mutual-start barrier,
-peer preservation, malformed/foreign ownership, symlinks, non-regular files,
-and retained evidence. The existing suite process-group controller, cancellation
-rules, complete test coverage, and all benchmark limits remain unchanged.
-This is the workspace-isolation part of
-[issue #295](https://github.com/type-rb/type-rb-native/issues/295); stage-level
-timing instrumentation is a separate pending change.
+Tests cover actual suite concurrency, failures, cancellation/descendants,
+stage receipt order and completeness, workspace isolation and ownership,
+large/deleted/renamed/mixed path inventories, selective routing and acceptance.
+The bounded CI changes are recorded in
+[issue #313](https://github.com/type-rb/type-rb-native/issues/313).
 
 ## Protection and review
 
 The main ruleset requires the uniquely named `Native CI acceptance` check from
-GitHub Actions. It was activated after
-[the complete hosted verification](https://github.com/type-rb/type-rb-native/actions/runs/33931154436)
-passed at `85a6771f7256594d767bfcc36fab4a803d74b78b`. The existing PR-only,
-no-force-push, and no-deletion rules remain unchanged, with no bypass actors.
-Do not require conditionally omitted workflow names individually, and do not
-interpret a green skipped job as an accepted compiler. GitHub documents that
-skipped jobs otherwise count as
-[successful checks](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-jobs-with-conditions).
+GitHub Actions. Existing PR-only, no-force-push and no-deletion rules remain.
+Do not require conditionally omitted workflow names individually or interpret
+a green skipped job as accepted compiler evidence. Review relevant base changes
+before merging; update and revalidate when correctness, measurement baseline
+or the CI contract changes. An unrelated documentation merge alone does not
+invalidate the compiler evidence.
 
-The ruleset does not force an up-to-date branch after every unrelated main
-change. Review the base delta before merging; update and revalidate a candidate
-when that delta affects its correctness, measurement baseline, or CI contract.
-This avoids requiring another complete measurement solely for an unrelated
-documentation merge, without treating stale relevant evidence as current.
-
-Tests and an acceptance check cannot replace review of the proof boundary.
-Before requesting the comparative stage, inspect raw MIR, its independent
-verification, mutation/effect exclusions, negative cases, and local compactness.
-Prefer a separately measurable narrow optimization over combining header reuse
-with access-check elimination. If local correctness or a registered size limit
-fails, keep the candidate in draft and repair it before running long benchmarks.
+Routing and tests cannot replace review of semantic proof boundaries. Preserve
+raw MIR verification, mutation/effect exclusions, negative cases, compactness
+and measured thresholds before accepting a compiler optimization.

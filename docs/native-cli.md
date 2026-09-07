@@ -215,3 +215,29 @@ Run `python3 tools/native-diagnostics-test.py bin/trbn --reference /path/to/trb`
 to compare file, imported-module and cumulative REPL origins against the pinned
 reference executable. The artifact workflow runs the same Native assertions
 on both supported checkout platforms.
+
+## String interpolation
+
+Double-quoted Strings evaluate `#{expression}` through the shared Native
+frontend in both compiled programs and the REPL. Expressions must return
+String; use an explicit supported conversion such as `value.to_s()` for an
+Integer. Multiple expressions run once each, from left to right. Grouping
+preserves expression precedence and postfix operations on the resulting String.
+Nested quoted Strings and nested interpolation are supported within the
+existing expression and ASCII String subset.
+
+Use `\#` to suppress interpolation: `"\#{name}"` produces the literal text
+`#{name}`. With two backslashes, `"\\#{name}"` produces one backslash followed
+by the value of `name`. Undefined escapes such as `\{` and `\q` are errors,
+including in literal segments next to interpolation. Escaped markers retain
+literal coloring in the REPL and round-trip unchanged through its history.
+
+The REPL colors interpolation delimiters and embedded expressions separately
+from literal text, including while input is incomplete. JSON history retains
+interpolation as source text and never interprets it while loading.
+
+`python3 tools/native-interpolation-test.py bin/trbn --reference /path/to/trb`
+compares evaluation, side effects and type rejection with the pinned reference.
+Empty interpolation markers remain literal as in that reference. Malformed
+nonempty expressions and unterminated interpolation receive diagnostics; no
+implicit conversion or unchecked evaluation is introduced.

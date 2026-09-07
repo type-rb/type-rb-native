@@ -7,7 +7,7 @@ target or a measurement of the final self-hosted compiler.
 
 The source-connected differential corpus and provisional measurements are
 complete. Gate 1 passes; see the
-[recorded result](../results/2026-08-28-gate1-qbe-darwin-arm64/README.md).
+[recorded result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-28-gate1-qbe-darwin-arm64/README.md).
 
 ## Current pipeline
 

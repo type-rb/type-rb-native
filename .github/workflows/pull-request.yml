@@ -16,10 +16,13 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.plan.outputs.code }}
+      quick: ${{ steps.plan.outputs.quick }}
       documentation: ${{ steps.plan.outputs.documentation }}
       memory: ${{ steps.plan.outputs.memory }}
       performance: ${{ steps.plan.outputs.performance }}
       draft: ${{ steps.plan.outputs.draft }}
+      tooling: ${{ steps.plan.outputs.tooling }}
+      cli: ${{ steps.plan.outputs.cli }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -38,48 +41,66 @@ jobs:
 
   quick:
     needs: plan
-    if: needs.plan.outputs.code == 'true'
+    if: needs.plan.outputs.quick == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
       - uses: actions/checkout@v5
+        if: needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true'
         with:
           repository: type-rb/type-rb
-          ref: 5dc09070cf7f88a569279f5e63982a6de59d692c
+          ref: 47a160cae05ddc2035c7430735c4762d36bbc9c4
           path: .type-rb
       - uses: actions/setup-go@v6
+        if: needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true'
         with:
           go-version-file: .type-rb/go.mod
           cache-dependency-path: .type-rb/go.sum
       - name: Build the pinned reference compiler
+        if: needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true'
         run: |
           test "$(cat TYPE_RB_REVISION)" = "$(git -C .type-rb rev-parse HEAD)"
           go build -C .type-rb -o "$RUNNER_TEMP/trb" ./cmd/trb
       - name: Check canonical compatibility metadata before matrix fan-out
+        if: needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true'
         run: |
           python3 -m unittest tools/compatibility_manifest_test.py
           python3 tools/compatibility_manifest.py --reference-trb "$RUNNER_TEMP/trb"
       - name: Check formatting and core types
+        if: needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true'
         run: |
           "$RUNNER_TEMP/trb" fmt --check src compiler corpus tools benchmarks
           "$RUNNER_TEMP/trb" check --config trbconfig.reference.jsonc
           "$RUNNER_TEMP/trb" check --config compiler/trbconfig.jsonc
           tools/check-native-cli.sh "$RUNNER_TEMP/trb"
+      - name: Verify project and transition policy tooling on Linux
+        run: |
           sh tools/native-mir-transition-policy-test.sh
           sh tools/compiler-project-test.sh
       - name: Run root units and focused MIR correctness tests
+        if: needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true'
         env:
           TYPE_RB_NATIVE_ROOT: ${{ github.workspace }}
         run: |
           "$RUNNER_TEMP/trb" test --config trbconfig.reference.jsonc
           "$RUNNER_TEMP/trb" test --config compiler/trbconfig.jsonc \
-            -t 'MIR|Array|Integer|Float|scalar|bounds|allocating|induction|Boolean|Lexer|syntax primitives'
+            -t 'MIR|Array|Integer|Float|scalar|bounds|allocating|induction|Boolean|Lexer|syntax'
 
   documentation:
     needs: plan
     if: needs.plan.outputs.documentation == 'true'
     uses: ./.github/workflows/documentation.yml
+
+  tooling:
+    needs: plan
+    if: needs.plan.outputs.tooling == 'true'
+    uses: ./.github/workflows/ci-tooling.yml
+
+  cli:
+    needs: [plan, quick]
+    if: needs.plan.outputs.cli == 'true'
+    uses: ./.github/workflows/native-cli.yml
 
   native:
     needs: [plan, quick]
@@ -97,17 +118,18 @@ jobs:
     uses: ./.github/workflows/runtime-worker-memory.yml
 
   performance:
-    needs: [plan, native, targets, memory]
+    needs: [plan, native, targets, memory, tooling, cli]
     if: >-
       !cancelled() && needs.plan.outputs.performance == 'true' &&
       needs.plan.outputs.draft == 'false' && needs.native.result == 'success' &&
-      needs.targets.result == 'success' && needs.memory.result == 'success'
+      needs.targets.result == 'success' && needs.memory.result == 'success' &&
+      needs.tooling.result == 'success' && needs.cli.result == 'success'
     uses: ./.github/workflows/static-string-compactness.yml
 
   acceptance:
     name: Native CI acceptance
     if: always()
-    needs: [plan, quick, documentation, native, targets, memory, performance]
+    needs: [plan, quick, documentation, native, targets, memory, performance, tooling, cli]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

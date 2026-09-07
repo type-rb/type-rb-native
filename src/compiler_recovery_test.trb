@@ -17,6 +17,25 @@ def _recovery_environment(name: String): String
 	return value
 end
 
+# Optional test-harness evidence, outside all ordinary compiler generations.
+def _recovery_stage(event: String, stage: String)
+	path := _recovery_environment("TYPE_RB_NATIVE_RECOVERY_STAGES")
+	if !path.empty?()
+		root := _recovery_environment("TYPE_RB_NATIVE_ROOT")
+		case Process.run("python3", [root + "/tools/recovery-stage.py", event, path, stage])
+		when Result::Ok(process)
+			if !process.success
+				puts(process.stderr)
+			end
+			expect(process.success).to_be_true()
+		when Result::Err(error)
+			puts(error.operation + ": " + error.message)
+			expect(false).to_be_true()
+		end
+	end
+	return
+end
+
 def _recovery_read(path: String): Result<String, String>
 	case native_read_text(path)
 	when Result::Ok(source)
@@ -30,41 +49,21 @@ def _recovery_replace_once(source: String, before: String, after: String): Resul
 	if before.empty?()
 		return Result<String, String>::Err("replacement needle is empty")
 	end
-	mut match_index :=- 1
-	mut index := 0
-	while index + before.size() <= source.size()
-		mut matches := true
-		mut offset := 0
-		while offset < before.size()
-			if source[index + offset] != before[offset]
-				matches = false
-			end
-			offset += 1
-		end
-		if matches
-			if match_index >= 0
-				return Result<String, String>::Err("replacement needle is not unique")
-			end
-			match_index = index
-		end
-		index += 1
-	end
-	if match_index < 0
+	first := source.index(before)
+	if first == nil
 		return Result<String, String>::Err("replacement needle is missing")
 	end
-	mut result := ""
-	index = 0
-	while index < match_index
-		result += source[index]
-		index += 1
+	# First/last comparison also rejects overlapping occurrences.
+	last := source.rindex(before)
+	if last == nil
+		return Result<String, String>::Err("replacement needle is missing")
 	end
-	result += after
-	index = match_index + before.size()
-	while index < source.size()
-		result += source[index]
-		index += 1
+	if last != first
+		return Result<String, String>::Err("replacement needle is not unique")
 	end
-	return Result<String, String>::Ok(result)
+	prefix := source.slice(0...first)
+	suffix := source.slice((first + before.size())...source.size())
+	return Result<String, String>::Ok(prefix + after + suffix)
 end
 
 def _recovery_process(command: String, arguments: Array<String>): Result<Process::Output, String>
@@ -871,6 +870,8 @@ def _recovery_build_cycle(
 		puts("recovery B1, B2, and B3 QBE outputs differ")
 		return false
 	end
+	_recovery_stage("end", "recovery-generations")
+	_recovery_stage("start", "ordinary-fixed-point")
 	canonical_qbe := case Process.run(b1.output_path, ["emit-qbe", compiler_path])
 	when Result::Ok(process)
 		if !process.success || process.stdout.empty?() || !process.stderr.empty?()
@@ -894,6 +895,8 @@ def _recovery_build_cycle(
 		puts(error)
 		return false
 	end
+	_recovery_stage("end", "ordinary-fixed-point")
+	_recovery_stage("start", "generation-controls")
 	seeds := [b0_path, b1.output_path, b2.output_path]
 	expected_qbe := [b1_qbe, b2_qbe, b3_qbe]
 	mut seed_index := 0
@@ -1966,6 +1969,7 @@ describe("Native compiler recovery") do
 				expect(false).to_be_true()
 			when Result::Ok(workspace)
 				puts("Recovery workspace retained for inspection: " + workspace)
+				_recovery_stage("start", "source-preparation")
 				compiler_source := case native_read_text(root + "/compiler/src/compiler.trb")
 				when Result::Ok(source)
 					source
@@ -2177,6 +2181,8 @@ describe("Native compiler recovery") do
 					puts(error.operation + ": " + error.message)
 					expect(false).to_be_true()
 				end
+				_recovery_stage("end", "source-preparation")
+				_recovery_stage("start", "matched-go")
 				matched_go_compiler := case build_matched_go_compiler(
 						reference_trb,
 						recovery_source,
@@ -2189,6 +2195,8 @@ describe("Native compiler recovery") do
 					expect(false).to_be_true()
 					""
 				end
+				_recovery_stage("end", "matched-go")
+				_recovery_stage("start", "snapshot")
 				snapshot := case Process.run(
 						reference_trb,
 						["compiler", "bootstrap-snapshot", "--snapshot-version", "4", compiler_path],
@@ -2212,6 +2220,8 @@ describe("Native compiler recovery") do
 					expect(diagnostic.code).to_equal("TRBN0005")
 					expect(diagnostic.message).to_equal("snapshot exceeds the Gate 3 4 MiB input limit")
 				end
+				_recovery_stage("end", "snapshot")
+				_recovery_stage("start", "recovery-b0")
 				case decode_gate4_bootstrap_snapshot(snapshot)
 				when Result::Ok(native_module)
 					case build_compiler_recovery_executable(
@@ -2243,6 +2253,8 @@ describe("Native compiler recovery") do
 							puts(error.operation + ": " + error.message)
 							expect(false).to_be_true()
 						end
+						_recovery_stage("end", "recovery-b0")
+						_recovery_stage("start", "recovery-generations")
 						expect(
 							_recovery_build_cycle(
 								workspace + "/b0",
@@ -2252,6 +2264,8 @@ describe("Native compiler recovery") do
 								workspace,
 							),
 						).to_be_true()
+						_recovery_stage("end", "generation-controls")
+						_recovery_stage("start", "module-boundaries")
 						case _recovery_verify_compiler_source_closure(
 								workspace + "/b1",
 								compiler_path,
@@ -2276,6 +2290,8 @@ describe("Native compiler recovery") do
 							puts(error)
 							expect(false).to_be_true()
 						end
+						_recovery_stage("end", "module-boundaries")
+						_recovery_stage("start", "file-cli")
 						case _recovery_verify_file_cli(workspace)
 						when Result::Ok(_value)
 							expect(true).to_be_true()
@@ -2283,6 +2299,8 @@ describe("Native compiler recovery") do
 							puts(error)
 							expect(false).to_be_true()
 						end
+						_recovery_stage("end", "file-cli")
+						_recovery_stage("start", "build-cli")
 						case _recovery_verify_build_cli(workspace, qbe)
 						when Result::Ok(_value)
 							expect(true).to_be_true()
@@ -2290,6 +2308,8 @@ describe("Native compiler recovery") do
 							puts(error)
 							expect(false).to_be_true()
 						end
+						_recovery_stage("end", "build-cli")
+						_recovery_stage("start", "project-controls")
 						case _recovery_verify_file_root_modules(root, workspace, qbe, reference_trb)
 						when Result::Ok(_value)
 							expect(true).to_be_true()
@@ -2297,6 +2317,8 @@ describe("Native compiler recovery") do
 							puts(error)
 							expect(false).to_be_true()
 						end
+						_recovery_stage("end", "project-controls")
+						_recovery_stage("start", "normalization")
 						case Process.run(
 								"/bin/sh",
 								[
@@ -2317,6 +2339,8 @@ describe("Native compiler recovery") do
 							puts(error.operation + ": " + error.message)
 							expect(false).to_be_true()
 						end
+						_recovery_stage("end", "normalization")
+						_recovery_stage("start", "conformance")
 						case _recovery_verify_conformance(root, qbe, workspace, matched_go_compiler)
 						when Result::Ok(_value)
 							expect(true).to_be_true()
@@ -2324,6 +2348,7 @@ describe("Native compiler recovery") do
 							puts(error)
 							expect(false).to_be_true()
 						end
+						_recovery_stage("end", "conformance")
 					when Result::Err(error)
 						puts(error.phase + ": " + error.message + "\n" + error.stderr)
 						expect(false).to_be_true()
@@ -2334,5 +2359,32 @@ describe("Native compiler recovery") do
 				end
 			end
 		end
+	end
+end
+
+describe("Recovery source mutation") do
+	test("preserves exact Unicode source around one replacement") do
+		sources := ["abc", "abc", "abc", "abc", "A😀éZ", "é", "abc"]
+		needles := ["a", "b", "c", "abc", "😀é", "́", "b"]
+		replacements := ["X", "X", "X", "", "λ", "!", "bb"]
+		expected := ["Xbc", "aXc", "abX", "", "AλZ", "e!", "abbc"]
+		mut index := 0
+		while index < sources.size()
+			expect(_recovery_replace_once(sources[index], needles[index], replacements[index])).to_equal(
+				Result<String, String>::Ok(expected[index]),
+			)
+			index += 1
+		end
+	end
+
+	test("rejects empty missing repeated and overlapping needles") do
+		expect(_recovery_replace_once("", "", "x")).to_equal(Result<String, String>::Err("replacement needle is empty"))
+		expect(_recovery_replace_once("abc", "", "x")).to_equal(Result<String, String>::Err("replacement needle is empty"))
+		expect(_recovery_replace_once("", "a", "x")).to_equal(Result<String, String>::Err("replacement needle is missing"))
+		expect(_recovery_replace_once("abc", "abcd", "x")).to_equal(Result<String, String>::Err("replacement needle is missing"))
+		expect(_recovery_replace_once("ababa", "aba", "x")).to_equal(Result<String, String>::Err("replacement needle is not unique"))
+		expect(_recovery_replace_once("aaa", "aa", "x")).to_equal(Result<String, String>::Err("replacement needle is not unique"))
+		expect(_recovery_replace_once("😀😀😀", "😀😀", "x")).to_equal(Result<String, String>::Err("replacement needle is not unique"))
+		expect(_recovery_replace_once("aba", "a", "x")).to_equal(Result<String, String>::Err("replacement needle is not unique"))
 	end
 end

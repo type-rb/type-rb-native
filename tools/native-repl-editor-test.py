@@ -259,6 +259,48 @@ def native_scenarios(binary):
             terminal.close()
 
 
+def interpolation_scenarios(binary):
+    with tempfile.TemporaryDirectory(prefix='native-repl-interpolation-') as directory:
+        root = Path(directory)
+        for color in (True, False):
+            terminal = Terminal(binary, root, color=color)
+            try:
+                if not color:
+                    terminal.send('\x1b[A')
+                    terminal.wait(lambda: r'puts("literal \#{missing}")' in terminal.display,
+                                  'escaped interpolation history round trip')
+                    terminal.send('\x03')
+                terminal.evaluate('s := "abc"', '"abc" : String')
+                source = 'puts("hello #{s}")'
+                terminal.send(source)
+                terminal.wait(lambda: source in terminal.display, 'interpolation input')
+                line = terminal.screen.buffer[terminal.screen.cursor.y]
+                start = terminal.screen.cursor.x - len(source)
+                if color:
+                    assert line[start + 6].fg == 'c5e478', ('literal text', line[start + 6])
+                    assert line[start + 12].fg == 'c678dd', ('interpolation delimiter', line[start + 12])
+                    assert line[start + 14].fg != line[start + 6].fg, ('embedded expression', line[start + 14])
+                else:
+                    assert '\x1b[38;' not in terminal.raw and '\x1b[1;38;' not in terminal.raw
+                terminal.evaluate('', 'hello abc')
+                terminal.send('puts("hello #{s')
+                terminal.send('}")')
+                terminal.evaluate('', 'hello abc')
+                terminal.evaluate('puts("#{"nested"}")', 'nested')
+                source = r'puts("literal \#{missing}")'
+                terminal.send(source)
+                terminal.wait(lambda: source in terminal.display, 'escaped interpolation input')
+                if color:
+                    line = terminal.screen.buffer[terminal.screen.cursor.y]
+                    start = terminal.screen.cursor.x - len(source)
+                    assert line[start + 6].fg == line[start + source.index('#')].fg
+                    assert line[start + 6].fg == line[start + source.index('missing')].fg
+                terminal.evaluate('', 'literal #{missing}')
+                terminal.finish()
+            finally:
+                terminal.close()
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('binary', type=lambda path: Path(path).resolve())
@@ -266,6 +308,7 @@ if __name__ == '__main__':
     arguments = parser.parse_args()
     shared_scenarios(arguments.binary)
     native_scenarios(arguments.binary)
+    interpolation_scenarios(arguments.binary)
     if arguments.reference:
         shared_scenarios(arguments.reference, reference=True)
     print('REPL screen, editing, completion, Unicode and terminal restoration checks passed')
