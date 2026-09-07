@@ -7,16 +7,11 @@
 # 5 checked unit increment; 6 unknown Integer write; 7 loop close; 8 opaque.
 # 9 header-only access; 10 optimized read; 11 unknown induction (bounds only).
 # Definitions have distinct identities even when authored names are shadowed.
-# Result: [-1] malformed; [0, access origins...] verified, possibly empty.
+# Plan: [-2] malformed; [header parameter or -1, access origins...] verified.
 # The checked producer must represent unsupported control, Array growth,
 # uncertain aliases and unproved calls as opaque. Omitted effects cannot be
 # recovered from this projection. The MIR verifier recomputes every selection
 # before the compiler publishes its source-origin mapping to the adapter.
-
-# Keep identical cold failure-result construction in one owner.
-def invalid_loop_proof(code: Integer): Array<Integer>
-	return [code]
-end
 
 def loop_identity(id: Integer, rows: Array<Array<Integer>>): Integer
 	mut index := 0
@@ -42,16 +37,9 @@ def loop_read_matches(index: Integer, array: Integer, version: Integer, region: 
 	return region[5] == 0
 end
 
-# Keep partial read selections private until complete structural verification.
-def verify_array_loop_bounds(operations: Array<Array<Integer>>): Array<Integer>
-	mut result := [0]
-	if !collect_array_loop_bounds(result, operations)
-		return invalid_loop_proof(- 1)
-	end
-	return result
-end
-
-def collect_array_loop_bounds(mut result: Array<Integer>, operations: Array<Array<Integer>>): Boolean
+# The ordinary plan requires canonical parameter ordinals. Proof-core tests
+# also exercise arbitrary binding identities without publishing adapter facts.
+def collect_array_loop_bounds(mut result: Array<Integer>, parameter_ordinals: Boolean, operations: Array<Array<Integer>>): Boolean
 	# Binding: identity, type (0 Integer / 1 immutable / 2 mutable Array),
 	# current version, zero initializer. Region: identity, index, Array,
 	# guard version, eligible, unit-update count.
@@ -114,6 +102,11 @@ def collect_array_loop_bounds(mut result: Array<Integer>, operations: Array<Arra
 				return false
 			end
 			if kind == 1
+				if parameter_ordinals
+					if identity != position
+						return false
+					end
+				end
 				if body_started
 					return false
 				end
@@ -152,6 +145,10 @@ def collect_array_loop_bounds(mut result: Array<Integer>, operations: Array<Arra
 					return false
 				end
 				blocked = true
+				if kind == 8
+					# An opaque effect also invalidates any earlier header selection.
+					result[0] =- 2
+				end
 			else
 				if binding_index < 0
 					return false
@@ -166,6 +163,11 @@ def collect_array_loop_bounds(mut result: Array<Integer>, operations: Array<Arra
 					end
 					if version != 0
 						return false
+					end
+					if result[0] == - 1
+						if binding[1] == 1
+							result[0] = identity
+						end
 					end
 				else
 					mut is_read := kind == 4
@@ -186,6 +188,11 @@ def collect_array_loop_bounds(mut result: Array<Integer>, operations: Array<Arra
 						end
 						if index_value[2] != version
 							return false
+						end
+						if result[0] == - 1
+							if binding[1] == 1
+								result[0] = identity
+							end
 						end
 						mut level := depth
 						while level > 0
@@ -284,6 +291,9 @@ def collect_array_loop_bounds(mut result: Array<Integer>, operations: Array<Arra
 	if depth != 0
 		return false
 	end
+	if result[0] == - 2
+		result[0] =- 1
+	end
 	if !blocked
 		mut index := 0
 		while index < reads.size()
@@ -342,53 +352,11 @@ def optimize_array_loop_accesses(proof: Array<Integer>, mut rows: Array<Array<In
 end
 
 def array_loop_plan(rows: Array<Array<Integer>>): Array<Integer>
-	mut proof := verify_array_loop_bounds(rows)
-	if proof[0] < 0
-		return invalid_loop_proof(- 2)
+	# Validate parameter ordinals and select the header during the structural
+	# proof. Publish neither header nor read selections from a malformed stream.
+	mut proof := [- 1]
+	if !collect_array_loop_bounds(proof, true, rows)
+		return [- 2]
 	end
-	mut index := 0
-	while index < rows.size()
-		row := rows[index]
-		if row[0] == 1
-			if row[1] != index
-				return invalid_loop_proof(- 2)
-			end
-		end
-		index += 1
-	end
-	proof[0] = array_loop_header(rows)
 	return proof
-end
-
-def array_loop_header(rows: Array<Array<Integer>>): Integer
-	mut header :=- 1
-	mut index := 0
-	while index < rows.size()
-		row := rows[index]
-		if row[0] == 8
-			return - 1
-		end
-		mut read := row[0] == 4
-		if row[0] == 9
-			read = true
-		end
-		if row[0] == 10
-			read = true
-		end
-		if read
-			if header < 0
-				# Parameter ordinals identify a prefix; no local Array aliases enter it.
-				if row[1] < rows.size()
-					definition := rows[row[1]]
-					if definition[0] == 1
-						if definition[2] == 1
-							header = row[1]
-						end
-					end
-				end
-			end
-		end
-		index += 1
-	end
-	return header
 end

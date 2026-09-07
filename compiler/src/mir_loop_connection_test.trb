@@ -43,6 +43,43 @@ def numeric_loop(initial: String, guard: String, body: String, step: String): St
 end
 
 describe("MIR Array loop connection") do
+	test("selects the first immutable header for every access kind during verification") do
+		kinds := [4, 9, 10]
+		mut index := 0
+		while index < kinds.size()
+			mut rows := [
+				[1, 0, 1, 0, 0, 0], [1, 1, 1, 0, 0, 1],
+				[1, 2, 0, 0, 0, 2], [kinds[index], 1, 2, 0, 0, 3],
+				[9, 0, 0, 0, 0, 4],
+			]
+			if kinds[index] == 9
+				rows[3][2] = 0
+			end
+			expect(array_loop_plan(rows)).to_equal([1])
+			rows[1][2] = 2
+			expect(array_loop_plan(rows)).to_equal([0])
+			rows[0][2] = 2
+			expect(array_loop_plan(rows)).to_equal([- 1])
+			index += 1
+		end
+	end
+
+	test("invalidates a selected header only for opaque effects and still checks later rows") do
+		mut rows := [[1, 0, 1, 0, 0, 0], [9, 0, 0, 0, 0, 1], [11, 0, 0, 0, 0, 2]]
+		expect(array_loop_plan(rows)).to_equal([0])
+		rows[2][0] = 8
+		expect(array_loop_plan(rows)).to_equal([- 1])
+		rows.push([9, 0, 0, 0, 0, 3])
+		expect(array_loop_plan(rows)).to_equal([- 1])
+		rows[3][3] = 1
+		expect(array_loop_plan(rows)).to_equal([- 2])
+	end
+
+	test("requires canonical parameter ordinals before publishing any selection") do
+		expect(array_loop_plan([[1, 1, 1, 0, 0, 0], [9, 1, 0, 0, 0, 1]])).to_equal([- 2])
+		expect(array_loop_plan([[1, 0, 1, 0, 0, 0], [9, 0, 0, 0, 0, 1], [1, 2, 0, 0, 0, 2]])).to_equal([- 2])
+	end
+
 	test("retains one opaque row and its latest origin after repeated effects") do
 		mut locals := gate4_locals_new(32)
 		gate4_array_region_operation(locals, 6, 0, 3)

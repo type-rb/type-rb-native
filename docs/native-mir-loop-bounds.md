@@ -139,6 +139,15 @@ duplicate compiler/projection code and obtain finer phase evidence; do not
 rerun an unchanged near-threshold candidate or relax a limit. Current-source
 full root recovery and hosted cross-target acceptance remain pending.
 
+The subsequent [plan-fusion diagnostic](../results/2026-09-07-loop-plan-fusion-darwin-arm64/README.md)
+combines ordinal validation and header selection with structural verification,
+removing two separate row scans and moving a test-only wrapper out of production.
+The optimizer and final verifier still independently derive their plans.
+It passes 148 compiler tests, 95 root units and 243 ordinary corpus observations;
+1530 old/new planner mutations agree. Compiler QBE and text shrink, but wall
+1.0577499943 and CPU 1.0554374884 still miss the unchanged 1.05 limit.
+This is a retained draft simplification, not accepted performance evidence.
+
 The [single-construction checked binding checkpoint](../results/2026-09-07-checked-binding-construction-darwin-arm64/README.md)
 now passes the local build-cost prefilter: wall 1.0472902709, CPU 1.0446608988,
 RSS 0.9995921697. It removes duplicate construction sites without changing
