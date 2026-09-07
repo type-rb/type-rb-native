@@ -151,11 +151,13 @@ and all thirteen recovery stages. That verification uses a reference executable
 whose source tree is identical to merged reference
 `6d130b3cd89044d4f54cc983555e0a3d340793c7`; it does not imply that the older
 reference pin supports these snapshot conditions. [PR #324](https://github.com/type-rb/type-rb-native/pull/324)
-updates and independently revalidates the pin. The verified Sep7 seed builds
+merged after [full compatibility CI](https://github.com/type-rb/type-rb-native/actions/runs/34145025379)
+and independently revalidates the pin. The verified Sep7 seed builds
 this source through the ordinary core/CLI fixed points. [PR #325](https://github.com/type-rb/type-rb-native/pull/325)
-separately migrates the active CI consumers, retaining the immutable amd64 root
-with an exact accepted-source compatibility transition. Both prerequisites
-must be accepted before this refactor can be adopted.
+separately migrated the active CI consumers, retaining the immutable amd64 root
+with an exact accepted-source compatibility transition. Its [full CI](https://github.com/type-rb/type-rb-native/actions/runs/34146132204)
+passed before merge. These prerequisites are accepted and integrated; they do
+not accept this optimization or resolve its remaining cost review.
 
 The repeated local compiler is 349,256 bytes, SHA-256
 `dcf245afc11729d28e5076ff3f48d6dde2243cb33bc3903caed9d69692341ba7`.
