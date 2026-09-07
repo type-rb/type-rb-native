@@ -26,7 +26,9 @@ unchanged files are grandfathered; an oversized result may shrink but cannot
 grow beyond its previous size/count (or the normal ceiling). New/changed files
 must meet the per-file policy. CI runs this with the actual PR/push base, not a
 moving hand-picked measurement baseline. No performance rerun is needed for
-storage-only changes; CI-routing changes still require their existing checks.
+storage-only changes. Planning-only maintenance uses unconditional routing
+tests; execution-workflow changes retain compiler validation. See
+[CI validation stages](ci-validation.md).
 
 ## Detailed public archives
 

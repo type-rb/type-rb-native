@@ -94,13 +94,14 @@ test('documentation-only PRs do not run compiler or performance matrices', () =>
     memory: false, performance: false, draft: false });
   assert.deepEqual(acceptance(results(plan)), []);
 });
-test('compiler, conformance and CI-routing changes retain the full authority', () => {
+test('compiler, conformance and execution workflows retain the full authority', () => {
   for (const path of ['compiler/src/storage.trb', 'compiler/trbconfig.jsonc',
     'compiler/conformance/runtime-invalid/new.trb',
     'tools/compiler-project.sh', 'tools/compiler-project-test.sh',
     'compiler/gate4/src/storage.trb',
     'compiler/gate4/conformance/runtime-invalid/new.trb',
-    '.github/workflows/pull-request.yml', 'tools/ci-plan.mjs',
+    '.github/workflows/pull-request.yml', '.github/workflows/gate-zero.yml',
+    '.github/workflows/static-string-compactness.yml', 'tools/ci-run-suites.mjs',
     'tools/native-mir-transition-policy.sh']) {
     const plan = classify([path], false);
     assert.equal(plan.code, true);
@@ -120,9 +121,37 @@ test('static documentation and evidence tools do not run compiler matrices', () 
     assert.deepEqual(acceptance(results(plan)), []);
     assert.equal(classify([`${tool}.unknown`], false).code, true);
     assert.equal(classify([tool, 'compiler/gate4/src/compiler.trb'], false).performance, true);
-    assert.equal(classify([tool, 'tools/ci-plan.mjs'], false).performance, true);
+    assert.equal(classify([tool, 'tools/ci-plan.mjs'], false).performance, false);
   }
   assert.equal(classify(['tools/benchmarksgame-formal/run.sh'], false).code, true);
+});
+test('planning-only maintenance uses its unconditional tests, not compiler matrices', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/pull-request.yml', import.meta.url), 'utf8');
+  const planning = workflow.match(/^  plan:\n([\s\S]*?)(?=^  quick:)/m)?.[1];
+  assert(planning);
+  assert(!/^\s+if:/m.test(planning), 'planning tests cannot be conditional on their own outputs');
+  for (const command of ['node --test tools/ci-plan-test.mjs tools/ci-run-suites-test.mjs tools/recovery-workspace-test.mjs',
+    'node tools/ci-plan.mjs "$BASE_SHA" "$HEAD_SHA" "$IS_DRAFT"']) {
+    assert(planning.includes(command), 'test and execute the actual router on every PR');
+  }
+  for (const path of ['tools/ci-plan.mjs', 'tools/ci-plan-test.mjs']) {
+    const plan = classify([path, 'docs/evidence-retention.md', 'results/historical/raw.tsv'], false);
+    assert.deepEqual(plan, { code: false, documentation: true,
+      memory: false, performance: false, draft: false });
+    assert.deepEqual(acceptance(results(plan)), []);
+    for (const failure of ['failure', 'cancelled', 'skipped', undefined]) {
+      const needs = results(plan);
+      needs.plan.result = failure;
+      assert.notDeepEqual(acceptance(needs), [], 'no acceptance without successful planning');
+    }
+    for (const other of ['compiler/src/compiler.trb', 'src/runtime.trb', 'TYPE_RB_REVISION',
+      'tools/ci-run-suites.mjs', '.github/workflows/pull-request.yml',
+      'tools/native-mir-transition-policy.sh', `${path}.unknown`, 'unknown/file']) {
+      const mixed = classify([path, other], false);
+      assert.equal(mixed.code, true, other);
+      assert.equal(mixed.performance, true, other);
+    }
+  }
 });
 test('other executable changes retain complete correctness and target checks', () => {
   const plan = classify(['src/decoder.trb'], false);

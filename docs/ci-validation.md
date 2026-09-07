@@ -10,12 +10,23 @@ a fixed-size synchronous process buffer. Large evidence snapshots therefore
 retain every path, including code changes after the first megabyte. Git errors
 and incomplete path records fail planning; they do not authorize partial lists.
 
-The three exact static-documentation tools (`tools/capability-map-check.mjs`,
-`tools/benchmark-pages-data.mjs`, and `tools/benchmark-pages-check.mjs`) use the
-documentation authority, which already executes those checks. A snapshot or
-generator-only update does not need compiler or performance matrices. Mixed
-compiler changes, CI-routing changes, and unknown neighboring paths retain the
-normal full authority. Formal benchmark controllers are not documentation tools.
+The exact static-documentation and evidence tools listed in `tools/ci-plan.mjs`
+use the documentation authority, which executes their checks. A snapshot,
+generator or evidence-retention-only update does not need compiler matrices.
+
+The two exact planning files, `tools/ci-plan.mjs` and `tools/ci-plan-test.mjs`,
+use the unconditional planning tests plus documentation validation. Rebuilding
+an unchanged compiler does not test the router's selection contract. The
+planning tests instead cover mixed changes, unknown paths, deletions/renames,
+large inventories, draft eligibility and failure/missing/skipped-job rejection.
+They also require the entry workflow to test and execute the actual router
+unconditionally. Neither a label nor a user-supplied skip flag selects this lane.
+
+This is not a blanket CI exemption. Compiler changes, execution workflows
+(including the PR entry), suite controllers, benchmark controllers, toolchain
+pins, measurement policies and unknown neighboring paths retain their normal
+authorities. Adding any such path to planning-only maintenance restores the
+compiler checks. Review the exact allowlist and routing-test changes together.
 
 ## Stages
 
@@ -29,13 +40,13 @@ normal full authority. Formal benchmark controllers are not documentation tools.
    and Linux target authorities after quick feedback passes. Applicable
    compiler/runtime changes also run the persistent-memory authority.
 3. **Comparative measurement.** Applicable compiler, conformance, transition
-   policy, and CI-routing changes run compactness/performance comparisons only
+   policy, and execution-workflow changes run compactness/performance comparisons only
    after the complete Native, target, and memory authorities succeed. The
    measurement implementations, repetitions, evidence, and limits are unchanged.
 4. **Merge acceptance.** `Native CI acceptance` verifies that every applicable
    authority actually succeeded. Failure, cancellation, a missing job, or a
-   skipped required job rejects acceptance. Documentation-only ready PRs need
-   only planning and their documentation authority.
+   skipped required job rejects acceptance. Documentation- or planning-only
+   ready PRs need only planning and their documentation authority.
 
 Drafts receive quick and documentation feedback but deliberately fail the
 merge-acceptance check with `Draft feedback is not merge acceptance`. This is
