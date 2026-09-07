@@ -3,6 +3,7 @@ set -eu
 
 repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cache="$repository_root/.trb/bootstrap"
+seed_release=bootstrap-seed-2026-09-07
 output="$repository_root/bin"
 fail() { printf 'trbn: %s\n' "$1" >&2; exit 1; }
 sha256_files() {
@@ -26,12 +27,12 @@ case "$(uname -s)/$(uname -m)" in
 	Darwin/arm64)
 		profile=darwin-arm64-v0
 		asset=type-rb-native-bootstrap-darwin-arm64
-		seed_digest=ef438d13598c534766334b408a39715c56ff1b69db528910ebf7d90ec7720b65
+		seed_digest=b960d8720ad6bb256fb019d04cd6ab80e86870228bed16776bba9fbe78f5769f
 		;;
 	Linux/aarch64)
 		profile=linux-arm64-v0
 		asset=type-rb-native-bootstrap-linux-arm64
-		seed_digest=b4307c244edc9e4da620f2a7c1b03a733e575da032efefae615f9edf75048a37
+		seed_digest=ff3bc9a2409e91eba0e2ef5109bf72a10aa16d4f360bc32aceafc50baa96a580
 		command -v ld.lld >/dev/null 2>&1 || fail 'Linux builds require lld'
 		;;
 	*) fail 'checkout bootstrap currently supports Darwin arm64 and Linux arm64' ;;
@@ -97,11 +98,12 @@ if test ! -x "$qbe"; then
 	mkdir -p "$cache/qbe-1.3"
 	cp "$stage/qbe-1.3/qbe" "$qbe"
 fi
-seed=${TRBN_BOOTSTRAP_SEED:-$cache/$asset}
+seed=${TRBN_BOOTSTRAP_SEED:-$cache/$seed_release/$asset}
 if test ! -f "$seed"; then
 	test -z "${TRBN_BOOTSTRAP_SEED:-}" || fail "bootstrap seed is missing: $seed"
-	curl --fail --location --retry 3 "https://github.com/type-rb/type-rb-native/releases/download/bootstrap-seed-2026-08-30/$asset" -o "$stage/seed"
+	curl --fail --location --retry 3 "https://github.com/type-rb/type-rb-native/releases/download/$seed_release/$asset" -o "$stage/seed"
 	verify "$stage/seed" "$seed_digest"
+	mkdir -p "$cache/$seed_release"
 	mv "$stage/seed" "$seed"
 fi
 verify "$seed" "$seed_digest"
