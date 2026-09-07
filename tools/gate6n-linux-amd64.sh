@@ -1071,7 +1071,9 @@ if test "$seed_source_root" != "$candidate_root"; then
 		"$first_transition" check "$candidate_root/compiler/conformance/valid/logical-short-circuit.trb" \
 		> "$evidence/setup/logical-condition.stdout" \
 		2> "$evidence/setup/logical-condition.stderr" || fail "seed bridge rejected logical conditions"
-	require_empty_file "$evidence/setup/logical-condition.stdout" "logical condition check wrote stdout"
+	printf 'ok\n' > "$evidence/setup/logical-condition.expected"
+	cmp "$evidence/setup/logical-condition.expected" "$evidence/setup/logical-condition.stdout" > /dev/null ||
+		fail "logical condition check stdout differs"
 	require_empty_file "$evidence/setup/logical-condition.stderr" "logical condition check wrote stderr"
 	require_forbidden_processes_absent "$evidence/setup/logical-condition-process.trace" "logical condition check"
 fi

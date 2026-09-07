@@ -34,6 +34,9 @@ class SeedReleaseTests(unittest.TestCase):
         self.assertIn('1f7e8a110bbb2b13f0609709deb6fc8f09dc8b44 || fail "seed source revision differs"', observer)
         self.assertIn('require_clean_revision "$seed_source_root"', observer)
         self.assertIn('compiler/conformance/valid/logical-short-circuit.trb', observer)
+        self.assertIn("printf 'ok\\n' > \"$evidence/setup/logical-condition.expected\"", observer)
+        self.assertIn('cmp "$evidence/setup/logical-condition.expected" "$evidence/setup/logical-condition.stdout"', observer)
+        self.assertNotIn('require_empty_file "$evidence/setup/logical-condition.stdout"', observer)
 
     def test_refresh_roles_match_the_existing_compatibility_boundary(self):
         observer = Path(__file__).with_name("bootstrap-seed-refresh.sh").read_text()
