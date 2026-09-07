@@ -18,7 +18,21 @@ source before measuring a source-distinct compiler-cost reduction.
 Superseded diagnostic folders are no longer part of the active checkout.
 The pinned historical links below retain their full observations and patches;
 no raw observations are selected out of a published measurement cohort.
-No new candidate result is registered before the next executable measurement.
+The [current output-batching diagnostic](../results/2026-09-07-array-loop-output-batching-darwin-arm64/README.md)
+passes local compiler time/RSS selection: wall 1.0177125, CPU 1.0226662 and
+RSS 1.0016293 versus the unchanged frozen baseline. Its integrated control
+fails at wall 1.0784632 and CPU 1.0772980. These are separate frozen-baseline
+cohorts, not a direct same-run percentage gain between control and batching.
+
+The candidate is still not accepted: compiler QBE is 1,132,120 bytes and
+Mach-O text 254,468 bytes, above the existing 1,120,000/250,904 ceilings.
+Integration already exceeded both ceilings before batching. The complete
+349,256-byte compiler remains within its absolute limit, but file alignment
+does not waive section/QBE bounds. All 81 corpus QBE/diagnostic outputs remain
+identical to the integrated control, and ordinary core/CLI fixed points and
+CLI regressions pass. Next reduce compiler/projection representation before
+full recovery and hosted acceptance; do not dispatch long runtime acceptance
+from this partial cost pass.
 
 ## Proof boundary
 

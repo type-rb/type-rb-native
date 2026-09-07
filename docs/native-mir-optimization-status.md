@@ -2,6 +2,12 @@
 
 ## Current ownership checkpoint
 
+The current [Array output-batching diagnostic](../results/2026-09-07-array-loop-output-batching-darwin-arm64/README.md)
+integrates accepted compatibility/Boolean work and passes the frozen-baseline
+local build-time/RSS prefilter, but still exceeds compiler text/QBE ceilings.
+It remains draft; no current runtime or Pure Go result is accepted. The
+source-era failures below remain historical evidence, not current measurements.
+
 The [Array-loop bounds connection candidate](native-mir-loop-bounds.md), tracked
 in [issue #303](https://github.com/type-rb/type-rb-native/issues/303), extends the
 existing region owner with checked binding, guard and update identities.
