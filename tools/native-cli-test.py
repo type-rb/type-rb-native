@@ -40,6 +40,13 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
         case_output = root / case_name
         run('build', '--compile', '--outfile', case_output, case_source)
         assert subprocess.check_output([case_output], text=True, timeout=30) == expected
+        if case_name == 'elsif-managed':
+            collected = subprocess.run([case_output], text=True, capture_output=True,
+                                       env=dict(env, TYPE_RB_NATIVE_RUNTIME_STATS='1'), timeout=30)
+            assert collected.returncode == 0 and collected.stdout == expected
+            automatic = [line.split(',')[-1] for line in collected.stderr.splitlines()
+                         if line.startswith('type-rb-native-gc-stat-v1,automatic-collections,')]
+            assert len(automatic) == 1 and int(automatic[0]) > 0, collected.stderr
         submission = fixture.read_text().replace('def main()', 'def exercise_elsif_case()')
         assert run('repl', text=submission + '\nexercise_elsif_case()\n:quit\n') == expected
     for case_name in ('elsif-after-else', 'elsif-branch-binding', 'elsif-condition',
