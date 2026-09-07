@@ -130,9 +130,12 @@ This extends the existing checked conditional path. Functions outside the
 current complete MIR subset retain direct lowering and their runtime checks;
 conditional edges do not introduce new loop-induction or header-stability
 proofs. This does not add conditional expressions, nullable narrowing, or
-`break` / `next` support. Compiler implementation source still uses the pinned
-seed's existing syntax: seed/recovery compatibility and source simplification
-remain separate follow-up deliveries.
+`break` / `next` support. Compiler implementation source now uses `elsif` in the
+statement-dispatch chain of `gate4_parse_block_syntax`, replacing six nested `else` / `if` wrappers.
+This adoption follows the verified Sep8 seed handoff and matching snapshot
+recovery coverage. Existing statement conditions, cursor updates, diagnostics
+and application output remain unchanged; other parser and checker nesting
+remains eligible for separately verified cleanup.
 
 ## Deferred Array-loop candidate
 
