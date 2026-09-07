@@ -18,6 +18,7 @@ historical architecture notes removed from the current architecture and plan.
 - [Experimental native CLI and REPL](native-cli.md)
 - [Architecture](architecture.md)
 - [Development and validation plan](experiment-plan.md)
+- [Evidence retention and archive verification](evidence-retention.md)
 - [Native versioning and compatibility](versioning.md)
 - [TypeRB compatibility mapping](type-rb-compatibility.md)
 - [TypeRB 0.4 compatibility Darwin/Linux arm64 result](../results/2026-08-30-typerb-0-4-compatibility-darwin-linux-arm64/README.md)

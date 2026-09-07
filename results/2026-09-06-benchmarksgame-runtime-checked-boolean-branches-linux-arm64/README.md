@@ -1,3 +1,7 @@
+> Storage update: detailed files are preserved in the verified public archive
+> identified by [ARCHIVE.json](ARCHIVE.json). Tables and measurements remain in Git.
+> Original reports and every archived file are included unchanged in that archive.
+
 # Accepted Checked-Boolean-Branch Runtime Results on Linux arm64
 
 All 462 retained observations and 84 warmups pass at accepted Native revision

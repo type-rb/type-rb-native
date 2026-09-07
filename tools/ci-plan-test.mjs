@@ -109,9 +109,11 @@ test('compiler, conformance and CI-routing changes retain the full authority', (
     assert.deepEqual(acceptance(results(plan)), []);
   }
 });
-test('static Pages generators use documentation checks, not compiler matrices', () => {
+test('static documentation and evidence tools do not run compiler matrices', () => {
   for (const tool of ['tools/capability-map-check.mjs',
-    'tools/benchmark-pages-data.mjs', 'tools/benchmark-pages-check.mjs']) {
+    'tools/benchmark-pages-data.mjs', 'tools/benchmark-pages-check.mjs',
+    'tools/result_archive.py', 'tools/result_archive_test.py',
+    '.github/workflows/documentation.yml']) {
     const plan = classify([tool, 'docs/capabilities/benchmarks/data.js'], false);
     assert.deepEqual(plan, { code: false, documentation: true,
       memory: false, performance: false, draft: false });

@@ -1,3 +1,7 @@
+> Storage update: detailed files are preserved in the verified public archive
+> identified by [ARCHIVE.json](ARCHIVE.json). Tables and measurements remain in Git.
+> Original reports and every archived file are included unchanged in that archive.
+
 # Formal Benchmarks Game Runtime Results on Linux arm64
 
 The first formal cross-language runtime layer passes its complete correctness,

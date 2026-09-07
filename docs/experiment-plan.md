@@ -248,6 +248,10 @@ Every published result should include:
 
 Store results under a date- and experiment-specific directory only after the
 first executable benchmark exists. Do not commit placeholder result files.
+Follow the [evidence retention policy](evidence-retention.md): compact reports
+and observation tables stay in Git; detailed generated payloads belong in a
+verified public archive. Storage changes must preserve both accepted and
+rejected evidence, exact source identities, and current verification consumers.
 
 ## Backend selection policy
 

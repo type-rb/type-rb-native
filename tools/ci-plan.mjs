@@ -6,6 +6,9 @@ const staticDocumentationTools = new Set([
   'tools/capability-map-check.mjs',
   'tools/benchmark-pages-data.mjs',
   'tools/benchmark-pages-check.mjs',
+  'tools/result_archive.py',
+  'tools/result_archive_test.py',
+  '.github/workflows/documentation.yml',
 ]);
 const documentation = path => staticDocumentationTools.has(path) || path.endsWith('.md') ||
   ['.agents/', 'docs/', 'results/'].some(prefix => path.startsWith(prefix));
