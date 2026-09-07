@@ -111,6 +111,30 @@ def gate4_large_scalar_inline_test_source(): String
 end
 
 describe("Gate 4 TypeRB frontend") do
+	test("checks every elsif condition and isolates branch bindings") do
+		source := "def main()\nif false\nvalue := 1\nputs(value)\nelsif false\nvalue := true\nputs(value)\nelsif true\nvalue := \"selected\"\nputs(value)\nelse\nvalue := 2.0\nputs(value == 2.0)\nend\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("")
+		expect(gate4_mir_function_index(state.scalar_mir, 0)).to_equal(- 1)
+		expect(gate4_output_source(gate4_emit_qbe(state)).include?("export function w $main")).to_be_true()
+	end
+
+	test("retains bounds checks when an elsif invalidates the loop induction") do
+		source := "def read(values: Array<Integer>): Integer\nmut index := 0\nmut total := 0\nwhile index < values.size()\nif false\nreturn 0\nelsif true\nindex =- 2\nend\ntotal += values[index]\nindex += 1\nend\nreturn total\nend\ndef main()\nreturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("")
+		expect(gate4_mir_function_index(state.scalar_mir, 0)).to_equal(- 1)
+		expect(gate4_output_source(gate4_emit_qbe(state)).include?("@array_bounds_failure")).to_be_true()
+	end
+
 	test("lowers, verifies, and selects complete checked scalar leaf MIR") do
 		source := "def scalar(value: Integer, scale: Float, enabled: Boolean): Float\n\tnext_value := value + 1\n\tconverted: Float := next_value\n\tproduct := converted * scale\n\tselected := enabled == true\n\tinverted := !selected\n\toffset := - value\n\tif_unused := inverted != false\n\treturn product + offset\nend\n\ndef delegated(value: Integer): Integer\n\treturn scalar(value, 1.0, true).to_i()\nend\n\ndef mutable_leaf(value: Integer): Integer\n\tmut result := value\n\treturn result\nend\n\ndef main()\n\treturn\nend\n"
 		mut state := gate4_compiler_new(source.size() + 1)

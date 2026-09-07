@@ -1,7 +1,7 @@
 import trb/std/math
 import { Gate4Compiler } from state
 import { gate4_load_integer, gate4_load_string } from storage
-import { gate4_token_is, gate4_binary_operator_id, gate4_binary_precedence, gate4_parse_expression_syntax, gate4_parse_type, gate4_skip_newlines, gate4_declaration_start } from parser
+import { syntax_conditional_tail, gate4_token_is, gate4_binary_operator_id, gate4_binary_precedence, gate4_parse_expression_syntax, gate4_parse_type, gate4_skip_newlines, gate4_declaration_start } from parser
 import { mir_logical_short_value } from mir
 import { gate4_find_visible_function, gate4_find_visible_record, gate4_find_record_type, gate4_find_field, gate4_record_type, gate4_array_element_type } from resolution
 import { gate4_number_is_float, gate4_number_without_underscores, gate4_integer_string } from literals
@@ -529,7 +529,7 @@ def repl_block_end(state: Gate4Compiler, start: Integer, stop_else: Boolean): In
 		end
 		if stop_else
 			if depth == 0
-				if gate4_token_is(state, position, "else")
+				if syntax_conditional_tail(state, position)
 					return position
 				end
 			end
@@ -541,19 +541,30 @@ end
 
 def repl_statement(mut state: Gate4Compiler, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, mut flow: Array<Integer>): Integer
 	if gate4_token_is(state, position[0], "if")
-		position[0] += 1
-		condition := repl_expression(state, position, store, environment, 1, "Boolean")
-		gate4_skip_newlines(state, position)
-		boundary := repl_block_end(state, position[0], true)
-		finish := repl_block_end(state, position[0], false)
+		finish := repl_block_end(state, position[0] + 1, false)
 		saved := environment.count[0]
 		mut result := 0
-		if store.integers[condition.value] != 0
-			result = repl_block(state, position, store, environment, flow)
-		else
-			if gate4_token_is(state, boundary, "else")
-				position[0] = boundary + 1
+		mut complete := false
+		while !complete
+			position[0] += 1
+			condition := repl_expression(state, position, store, environment, 1, "Boolean")
+			if store.error[0] != ""
+				return 0
+			end
+			gate4_skip_newlines(state, position)
+			if store.integers[condition.value] != 0
 				result = repl_block(state, position, store, environment, flow)
+				complete = true
+			else
+				boundary := repl_block_end(state, position[0], true)
+				position[0] = boundary
+				if !gate4_token_is(state, boundary, "elsif")
+					if gate4_token_is(state, boundary, "else")
+						position[0] += 1
+						result = repl_block(state, position, store, environment, flow)
+					end
+					complete = true
+				end
 			end
 		end
 		environment.count[0] = saved
@@ -667,7 +678,7 @@ def repl_block(mut state: Gate4Compiler, mut position: Array<Integer>, mut store
 		if gate4_token_is(state, position[0], "end")
 			complete = true
 		else
-			if gate4_token_is(state, position[0], "else")
+			if syntax_conditional_tail(state, position[0])
 				complete = true
 			else
 				result = repl_statement(state, position, store, environment, flow)

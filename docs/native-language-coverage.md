@@ -1,8 +1,8 @@
 # Ordinary Native language coverage
 
 Status: an initial 14-case ordinary-path inventory and regression contract are
-available. Basic control syntax is the next implementation checkpoint. This
-inventory does not declare additional syntax supported.
+available. Statement `elsif` is covered by ordinary compiler and REPL regressions.
+The inventory remains a bounded set of examples, not complete language support.
 Track the first bounded delivery in [issue #326](https://github.com/type-rb/type-rb-native/issues/326).
 
 ## Current development priority
@@ -115,6 +115,24 @@ snapshot recovery coverage when that source begins using it. Then remove the
 actual flags, nesting or representation workaround that motivated the feature.
 Do not count a parser-only change or a source rewrite without bootstrap tests
 as completion. Keep each feature and its self-use adoption independently clear.
+
+## Statement conditional chains
+
+The ordinary compiler and REPL accept ordered `if` / `elsif` chains with an
+optional `else`. Every condition must be Boolean, including conditions in a
+branch that will not execute. Conditions run in order and stop at the first
+match; later effects and failures are skipped. Each branch has its own local
+bindings. Nested chains, early returns, managed values, and Array mutation are
+covered by `elsif-control` and `elsif-managed` conformance cases, with malformed
+chains, scope errors, required traps, and invalidated loop bounds as controls.
+
+This extends the existing checked conditional path. Functions outside the
+current complete MIR subset retain direct lowering and their runtime checks;
+conditional edges do not introduce new loop-induction or header-stability
+proofs. This does not add conditional expressions, nullable narrowing, or
+`break` / `next` support. Compiler implementation source still uses the pinned
+seed's existing syntax: seed/recovery compatibility and source simplification
+remain separate follow-up deliveries.
 
 ## Deferred Array-loop candidate
 

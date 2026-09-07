@@ -8,7 +8,7 @@
 | Short-circuit OR / AND | accepts | accepts | matches reference | matches reference |
 | Record construction and field read | accepts | accepts | matches reference | matches reference |
 | Array&lt;Integer&gt; | accepts | accepts | matches reference | matches reference |
-| elsif | rejects | rejects | not reached | rejects |
+| elsif | accepts | accepts | matches reference | matches reference |
 | break | rejects | rejects | not reached | rejects |
 | next | rejects | rejects | not reached | rejects |
 | Default argument | rejects | rejects | not reached | rejects |
