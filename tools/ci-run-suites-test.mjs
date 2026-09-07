@@ -150,3 +150,28 @@ test('successful suite exit cannot replace missing or incomplete recovery stage 
   assert.equal(report.complete, false);
   assert.equal(report.stages[0].state, 'incomplete');
 });
+
+test('controller cancellation retains an interrupted recovery phase', { timeout: 10000 }, async t => {
+  const dir = workspace(t);
+  const root = new URL('../', import.meta.url).pathname;
+  const recorder = new URL('./recovery-stage.py', import.meta.url).pathname;
+  const code = `const fs=require('fs');const {spawnSync}=require('child_process');
+    const r=spawnSync('python3',[${JSON.stringify(recorder)},'start',process.env.TYPE_RB_NATIVE_RECOVERY_STAGES,'source-preparation']);
+    if(r.status!==0)process.exit(7);fs.writeFileSync(${JSON.stringify(dir + '/ready')},'ready');setInterval(()=>{},1000);`;
+  const suites = [{name:'root',args:['-e',code]}, {name:'compiler',args:['-e','setInterval(()=>{},1000)']}];
+  const script = `import {runSuites} from ${JSON.stringify(moduleUrl.href)};
+    process.exitCode=await runSuites({executable:process.execPath,evidence:${JSON.stringify(dir)},cwd:${JSON.stringify(root)},recoveryStages:true,suites:${JSON.stringify(suites)},graceMs:100});`;
+  const controller = spawn(process.execPath, ['--input-type=module', '-e', script], { stdio: 'ignore' });
+  const done = once(controller, 'close');
+  t.after(() => { if (controller.exitCode === null) controller.kill('SIGTERM'); });
+  for (let attempt=0; !fs.existsSync(dir + '/ready'); attempt++) {
+    assert(attempt < 200, 'root should publish its stage before cancellation');
+    await delay(10);
+  }
+  controller.kill('SIGTERM');
+  assert.deepEqual(await done, [143, null]);
+  const summary = JSON.parse(fs.readFileSync(dir + '/recovery-stages.summary.json'));
+  assert.equal(summary.complete, false);
+  assert.equal(summary.suiteOutcome, 'cancelled');
+  assert.equal(summary.stages[0].state, 'cancelled');
+});
