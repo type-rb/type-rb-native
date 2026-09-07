@@ -1,27 +1,26 @@
 # Current reference compatibility
 
 The current development pin is TypeRB `0.4.6-dev` at
-`f6229c5657a5acb40194cde71785a63754d00355`, the merged
-[statement conditional snapshot correction](https://github.com/type-rb/type-rb/pull/655).
-Snapshot v3/v4 encode ordered `elsif` conditions with existing control flow;
-conditional expressions and the v2 subset remain unchanged. The new
-`elsif-recovery` regression exercises snapshot encoding, strict decoding,
-recovery emission and execution, plus ordinary current compiler generations.
+`4e1327c9af1b4caec9963756e6ffbc0e2ef56341`, the merged
+[loop-transfer snapshot update](https://github.com/type-rb/type-rb/pull/657).
+Snapshot v3/v4 encode nearest-while transfers and early method returns with
+existing jumps and live block arguments. The format and v2 boundary remain
+unchanged. Both `elsif-recovery` and `loop-transfer-recovery` run through
+snapshot encoding, strict program decoding, recovery QBE emission and execution.
 
-The Native implementation remains accepted
-`21f507e7ee7de2577f4137f6dfb9f732c14c1640` from PR #329.
-[Exact-head acceptance](https://github.com/type-rb/type-rb-native/actions/runs/34153242015)
-passed recovery, ordinary CLI, both target/cost/memory comparisons and combined
-size at the preceding reference pin. It does not establish acceptance of the
-new reference by itself. This update requires fresh recovery-enabled suites
-and every applicable hosted authority before merge. Seed preparation does not
-mean a new seed has been published, verified or selected by checkout builds.
+The Native implementation is accepted
+`4e1d0b4aee97b9a5bd73a98f918b31d47985da25` from PR #337.
+[Exact-head acceptance](https://github.com/type-rb/type-rb-native/actions/runs/34166076931)
+passed all selected recovery, ordinary CLI, target, memory and comparative-cost
+authorities at the preceding reference pin. That is the implementation baseline,
+not acceptance of this reference update. Fresh enabled suites and every
+applicable hosted authority are required before merge. Seed registration is
+separate from publication, actual published-asset verification and checkout pins.
 
-The preceding logical-condition reference pin was
-`6d130b3cd89044d4f54cc983555e0a3d340793c7` from
-[TypeRB PR #653](https://github.com/type-rb/type-rb/pull/653).
-Its [source-era compatibility record](https://github.com/type-rb/type-rb-native/blob/21f507e7ee7de2577f4137f6dfb9f732c14c1640/results/2026-09-07-string-escape-reference-compatibility/README.md)
-remains available at the exact accepted revision.
+The preceding pin was `f6229c5657a5acb40194cde71785a63754d00355` from
+[TypeRB PR #655](https://github.com/type-rb/type-rb/pull/655).
+Its [source-era compatibility record](https://github.com/type-rb/type-rb-native/blob/4e1d0b4aee97b9a5bd73a98f918b31d47985da25/results/2026-09-07-string-escape-reference-compatibility/README.md)
+retains the earlier conditional and logical-condition checkpoint identities.
 
 ## Previous String-escape checkpoint
 

@@ -14,7 +14,7 @@ bootstrap-seed-2026-08-30)
     manifest=type-rb-native-bootstrap-manifest-v1.json
     signer=bootstrap-seed-initial.yml
     ;;
-bootstrap-seed-2026-09-07|bootstrap-seed-2026-09-08)
+bootstrap-seed-2026-09-07|bootstrap-seed-2026-09-08|bootstrap-seed-2026-09-08-loop-transfers)
     manifest=type-rb-native-bootstrap-manifest-v2.json
     signer=bootstrap-seed-refresh.yml
     ;;

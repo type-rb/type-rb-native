@@ -3,7 +3,7 @@
 set -eu
 
 PRE_IMPLEMENTATION_REVISION=266c996668a4c3e0ad6eb833ca646b73ca7e56e1
-TYPE_RB_REVISION=f6229c5657a5acb40194cde71785a63754d00355
+TYPE_RB_REVISION=4e1327c9af1b4caec9963756e6ffbc0e2ef56341
 TYPE_RB_VERSION=0.4.6-dev
 ROOT_QBE_SIZE=658639
 ROOT_QBE_SHA256=62db3c31527a670c3050051a9fa27bf142b6c5deaab81ef8234104bd467aa95a
@@ -16,7 +16,7 @@ APPLICATION_RUNTIME_ELAPSED_REPETITIONS=32
 usage() {
 	cat >&2 <<'EOF'
 usage: gate6n-linux-amd64.sh CANDIDATE_ROOT ROOT_QBE QBE CC
-       REFERENCE_TRB GO WORKSPACE EVIDENCE OUTPUT_COMPILER [SEED_SOURCE_ROOT]
+       REFERENCE_TRB GO WORKSPACE EVIDENCE OUTPUT_COMPILER [SEED_SOURCE_ROOT [LOOP_SOURCE_ROOT]]
 EOF
 	exit 64
 }
@@ -167,7 +167,7 @@ require_go_build() {
 	test -x "$output" || fail "$label did not publish an executable"
 }
 
-test "$#" -eq 9 || test "$#" -eq 10 || usage
+test "$#" -eq 9 || test "$#" -eq 10 || test "$#" -eq 11 || usage
 
 candidate_root=$1
 root_qbe=$2
@@ -179,6 +179,7 @@ workspace=$7
 evidence=$8
 output_compiler=$9
 seed_source_root=${10:-$candidate_root}
+loop_source_root=${11:-}
 
 script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 verifier_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
@@ -978,6 +979,15 @@ if test "$seed_source_root" != "$candidate_root"; then
 	seed_entry=$seed_source_root/compiler/src/compiler.trb
 	test -f "$seed_entry" || fail "seed compiler entry is missing"
 fi
+loop_entry=
+if test -n "$loop_source_root"; then
+	test "$seed_source_root" != "$candidate_root" || fail "loop source requires the accepted first seed source"
+	require_clean_revision "$loop_source_root" "accepted loop source"
+	test "$(git -C "$loop_source_root" rev-parse HEAD)" = \
+		4e1d0b4aee97b9a5bd73a98f918b31d47985da25 || fail "loop source revision differs"
+	loop_entry=$loop_source_root/compiler/src/compiler.trb
+	test -f "$loop_entry" || fail "loop compiler entry is missing"
+fi
 portable_config=$candidate_root/corpus/gate6m/portable-entry/trbconfig.jsonc
 portable_source=$candidate_root/corpus/gate6m/portable-entry/src/main.trb
 failure_config=$candidate_root/corpus/gate6m/runtime-failures/trbconfig.jsonc
@@ -1087,8 +1097,47 @@ if test "$seed_source_root" != "$candidate_root"; then
 	require_forbidden_processes_absent "$evidence/setup/elsif-process.trace" "elsif check"
 fi
 
+# The immutable first bridge knows elsif; this accepted source adds loop
+# transfers before the candidate may use them. Keep the later candidate-runtime
+# transition separate so future runtime changes still precede ordinary B2.
+runtime_seed=$first_transition
+if test -n "$loop_source_root"; then
+	mkdir -p "$workspace/setup/loop-syntax"
+	loop_qbe=$workspace/setup/loop-syntax/compiler.ssa
+	loop_assembly=$workspace/setup/loop-syntax/compiler.s
+	loop_transition=$workspace/setup/loop-syntax/compiler
+	strace -f -e trace=process -o "$evidence/setup/loop-emit-process.trace" \
+		"$first_transition" emit-qbe "$loop_entry" \
+		> "$loop_qbe" 2> "$evidence/setup/loop-emit.stderr" || fail "loop source emission failed"
+	require_empty_file "$evidence/setup/loop-emit.stderr" "loop source emission wrote stderr"
+	test -s "$loop_qbe" || fail "loop source QBE is empty"
+	require_forbidden_processes_absent "$evidence/setup/loop-emit-process.trace" "loop source emission"
+	strace -f -e trace=process -o "$evidence/setup/loop-qbe-process.trace" \
+		"$qbe" -t amd64_sysv -o "$loop_assembly" "$loop_qbe" \
+		> "$evidence/setup/loop-qbe.stdout" 2> "$evidence/setup/loop-qbe.stderr" || fail "loop QBE translation failed"
+	require_empty_file "$evidence/setup/loop-qbe.stdout" "loop QBE translation wrote stdout"
+	require_empty_file "$evidence/setup/loop-qbe.stderr" "loop QBE translation wrote stderr"
+	test -s "$loop_assembly" || fail "loop assembly is empty"
+	strace -f -e trace=process -o "$evidence/setup/loop-link-process.trace" \
+		"$cc" -xassembler "$loop_assembly" -fuse-ld=lld \
+		-Wl,--gc-sections,--strip-all -lm -o "$loop_transition" \
+		> "$evidence/setup/loop-link.stdout" 2> "$evidence/setup/loop-link.stderr" || fail "loop transition link failed"
+	require_empty_file "$evidence/setup/loop-link.stdout" "loop transition link wrote stdout"
+	require_empty_file "$evidence/setup/loop-link.stderr" "loop transition link wrote stderr"
+	test -x "$loop_transition" || fail "loop transition compiler is missing"
+	require_tool_observed "$evidence/setup/loop-link-process.trace" 'execve\("[^"]*/ld\.lld"' "loop transition LLD"
+	strace -f -e trace=process -o "$evidence/setup/loop-check-process.trace" \
+		"$loop_transition" check "$candidate_root/compiler/conformance/valid/loop-transfer-control.trb" \
+		> "$evidence/setup/loop-check.stdout" 2> "$evidence/setup/loop-check.stderr" || fail "loop bridge rejected transfers"
+	printf 'ok\n' > "$evidence/setup/loop-check.expected"
+	cmp "$evidence/setup/loop-check.expected" "$evidence/setup/loop-check.stdout" > /dev/null || fail "loop check stdout differs"
+	require_empty_file "$evidence/setup/loop-check.stderr" "loop check wrote stderr"
+	require_forbidden_processes_absent "$evidence/setup/loop-check-process.trace" "loop transfer check"
+	runtime_seed=$loop_transition
+fi
+
 strace -f -e trace=process -o "$evidence/setup/current-runtime-emit-process.trace" \
-	"$first_transition" emit-qbe "$compiler_entry" \
+	"$runtime_seed" emit-qbe "$compiler_entry" \
 	> "$runtime_qbe" \
 	2> "$evidence/setup/current-runtime-emit.stderr" || fail "current-runtime QBE emission failed"
 require_empty_file "$evidence/setup/current-runtime-emit.stderr" "current-runtime QBE emission wrote stderr"
@@ -1128,6 +1177,12 @@ require_tool_observed "$evidence/setup/current-runtime-link-process.trace" 'exec
 		grep execve "$evidence/setup/logical-condition-process.trace"
 		grep execve "$evidence/setup/elsif-process.trace"
 	fi
+	if test -n "$loop_source_root"; then
+		grep execve "$evidence/setup/loop-emit-process.trace"
+		grep execve "$evidence/setup/loop-qbe-process.trace"
+		grep execve "$evidence/setup/loop-link-process.trace"
+		grep execve "$evidence/setup/loop-check-process.trace"
+	fi
 	grep execve "$evidence/setup/current-runtime-emit-process.trace"
 	grep execve "$evidence/setup/current-runtime-qbe-process.trace"
 	grep execve "$evidence/setup/current-runtime-link-process.trace"
@@ -1143,6 +1198,14 @@ require_tool_observed "$evidence/setup/current-runtime-link-process.trace" 'exec
 	printf 'first_transition_qbe_sha256=%s\n' "$(sha256 "$first_qbe")"
 	printf 'first_transition_size=%s\n' "$(file_size "$first_transition")"
 	printf 'first_transition_sha256=%s\n' "$(sha256 "$first_transition")"
+	if test -n "$loop_source_root"; then
+		printf 'loop_source_revision=%s\n' "$(git -C "$loop_source_root" rev-parse HEAD)"
+		printf 'loop_source_entry_sha256=%s\n' "$(sha256 "$loop_entry")"
+		printf 'loop_transition_qbe_size=%s\n' "$(file_size "$loop_qbe")"
+		printf 'loop_transition_qbe_sha256=%s\n' "$(sha256 "$loop_qbe")"
+		printf 'loop_transition_size=%s\n' "$(file_size "$loop_transition")"
+		printf 'loop_transition_sha256=%s\n' "$(sha256 "$loop_transition")"
+	fi
 	printf 'current_runtime_qbe_size=%s\n' "$(file_size "$runtime_qbe")"
 	printf 'current_runtime_qbe_sha256=%s\n' "$(sha256 "$runtime_qbe")"
 	printf 'current_runtime_transition_size=%s\n' "$(file_size "$runtime_transition")"
