@@ -5,15 +5,15 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { acceptance, changedPaths, classify, lightweightPushPaths, nativePushFilterOnly } from './ci-plan.mjs';
+import { acceptance, changedPaths, classify, toolingTests, cliInputs } from './ci-plan.mjs';
 
 function results(plan) {
   return {
     plan: { result: 'success', outputs: Object.fromEntries(
       Object.entries(plan).map(([key, value]) => [key, String(value)])) },
-    ...Object.fromEntries(Object.entries({ quick: plan.code,
+    ...Object.fromEntries(Object.entries({ quick: plan.code || plan.cli,
       documentation: plan.documentation, native: plan.code, targets: plan.code,
-      memory: plan.memory, performance: plan.performance,
+      memory: plan.memory, performance: plan.performance, tooling: plan.tooling, cli: plan.cli,
     }).map(([key, value]) => [key, { result: value ? 'success' : 'skipped' }])),
   };
 }
@@ -91,7 +91,7 @@ test('documentation-only PRs do not run compiler or performance matrices', () =>
   const plan = classify(['README.md', 'docs/index.html', 'results/a.json',
     'tools/native-mir-guarded-add/README.md'], false);
   assert.deepEqual(plan, { code: false, documentation: true,
-    memory: false, performance: false, draft: false });
+    memory: false, performance: false, draft: false, tooling: false, cli: false });
   assert.deepEqual(acceptance(results(plan)), []);
 });
 test('compiler, conformance and execution workflows retain the full authority', () => {
@@ -117,7 +117,7 @@ test('static documentation and evidence tools do not run compiler matrices', () 
     '.github/workflows/documentation.yml']) {
     const plan = classify([tool, 'docs/capabilities/benchmarks/data.js'], false);
     assert.deepEqual(plan, { code: false, documentation: true,
-      memory: false, performance: false, draft: false });
+      memory: false, performance: false, draft: false, tooling: false, cli: false });
     assert.deepEqual(acceptance(results(plan)), []);
     assert.equal(classify([`${tool}.unknown`], false).code, true);
     assert.equal(classify([tool, 'compiler/gate4/src/compiler.trb'], false).performance, true);
@@ -137,7 +137,7 @@ test('planning-only maintenance uses its unconditional tests, not compiler matri
   for (const path of ['tools/ci-plan.mjs', 'tools/ci-plan-test.mjs']) {
     const plan = classify([path, 'docs/evidence-retention.md', 'results/historical/raw.tsv'], false);
     assert.deepEqual(plan, { code: false, documentation: true,
-      memory: false, performance: false, draft: false });
+      memory: false, performance: false, draft: false, tooling: false, cli: false });
     assert.deepEqual(acceptance(results(plan)), []);
     for (const failure of ['failure', 'cancelled', 'skipped', undefined]) {
       const needs = results(plan);
@@ -160,39 +160,6 @@ test('other executable changes retain complete correctness and target checks', (
   assert.deepEqual(acceptance(results(plan)), []);
 });
 
-test('post-merge ignores match the lightweight allowlist without exempting execution changes', () => {
-  const file = '.github/workflows/gate-zero.yml';
-  const current = readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
-  const ignores = current.match(/    paths-ignore:\n([\s\S]*?)(?=\npermissions:)/)?.[1];
-  assert(ignores);
-  let previous = current;
-  for (const path of lightweightPushPaths) {
-    assert(ignores.includes(`      - ${path}\n`), path);
-    previous = previous.replace(`      - ${path}\n`, '');
-  }
-  assert(nativePushFilterOnly(previous, current));
-  assert(nativePushFilterOnly(current, previous));
-  assert.equal(classify([file], false).code, true, 'paths alone cannot justify skipping');
-  const plan = classify([file], false, nativePushFilterOnly(previous, current));
-  assert.equal(plan.code, false);
-  assert.equal(plan.documentation, true);
-  assert.deepEqual(acceptance(results(plan)), []);
-  for (const mutation of [
-    current.replace('macos-14', 'macos-15'),
-    current.replace('contents: read', 'contents: write'),
-    current.replace('  workflow_call:\n', ''),
-    current.replace('      - main', '      - other'),
-    current.replace('      - results/**', '      - compiler/**'),
-    current.replace('      - tools/ci-plan.mjs', '      - tools/ci-*'),
-    current.replace('    paths-ignore:', '    paths:'),
-    current + '\n# changed outside the filter\n',
-    '',
-  ]) assert.equal(nativePushFilterOnly(previous, mutation), false);
-  for (const path of ['compiler/src/compiler.trb', 'TYPE_RB_REVISION', 'tools/ci-run-suites.mjs',
-    '.github/workflows/pull-request.yml', 'unknown/file']) {
-    assert.equal(classify([file, path], false, true).code, true, path);
-  }
-});
 test('deletions, renames, mixed changes and unknown paths fail toward more checking', () => {
   assert.equal(classify(['README.md', 'compiler/gate4/src/old.trb'], false).performance, true);
   assert.equal(classify(['new-directory/file'], false).code, true);
@@ -202,7 +169,7 @@ test('draft feedback cannot be accepted even when all jobs happen to succeed', (
   assert.notDeepEqual(acceptance(results(classify(['README.md'], true))), []);
 });
 test('failed, cancelled, skipped, missing and pending required jobs reject acceptance', () => {
-  for (const job of ['quick', 'documentation', 'native', 'targets', 'memory', 'performance']) {
+  for (const job of ['quick', 'documentation', 'native', 'targets', 'memory', 'performance', 'tooling', 'cli']) {
     for (const state of ['failure', 'cancelled', 'skipped', 'pending', undefined]) {
       const needs = results(classify(['compiler/gate4/src/compiler.trb', 'README.md'], false));
       needs[job] = state ? { result: state } : undefined;
@@ -242,7 +209,7 @@ test('CLI classifies real historical-to-documentation and current-project rename
       [fileURLToPath(new URL('./ci-plan.mjs', import.meta.url)), base, head, 'false'],
       { cwd: directory, encoding: 'utf8' });
     assert.deepEqual(Object.fromEntries(output.trim().split('\n').map(row => row.split('='))),
-      { code: 'true', documentation: 'true', memory: 'true', performance: 'true', draft: 'false' });
+      { code: 'true', documentation: 'true', memory: 'true', performance: 'true', draft: 'false', tooling: 'true', cli: 'true' });
     mkdirSync(join(directory, 'compiler/src'), { recursive: true });
     renameSync(join(directory, 'docs/example.md'), join(directory, 'compiler/src/current.trb'));
     git('add', '-A');
@@ -290,6 +257,121 @@ test('large evidence inventories retain every path and a final code change', asy
     assert.equal(complete.at(-1), 'zz-final-code.trb');
     assert.equal(classify(complete, false).code, true);
     await assert.rejects(changedPaths(base, '0'.repeat(40), directory), /Git path inventory failed/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('exact CLI inputs run quick and CLI authorities without core measurements', () => {
+  for (const file of cliInputs) {
+    const plan = classify([file], false);
+    assert.equal(plan.code, false, file);
+    assert.equal(plan.cli, true, file);
+    assert.equal(plan.memory, false, file);
+    assert.equal(plan.performance, false, file);
+    assert.deepEqual(acceptance(results(plan)), []);
+    for (const state of ['skipped', 'failure', 'cancelled', undefined]) {
+      const needs = results(plan);
+      needs.cli = { result: state };
+      assert.notDeepEqual(acceptance(needs), [], file);
+    }
+    assert.equal(classify([file + '.unknown'], false).code, true);
+    assert.equal(classify([file, 'compiler/src/compiler.trb'], false).performance, true);
+  }
+  const workflow = readFileSync(new URL('../.github/workflows/native-cli.yml', import.meta.url), 'utf8');
+  assert(workflow.includes('  workflow_call:'));
+  assert(!workflow.includes('  pull_request:'), 'one shared PR planner, no separate path-filtered run');
+  assert.equal(classify(['compiler/conformance/README.md'], false).cli, false);
+});
+
+test('synthetic tooling tests have an executable authority without compiler rebuilds', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/ci-tooling.yml', import.meta.url), 'utf8');
+  for (const file of toolingTests) {
+    assert(workflow.includes(file), `the tooling authority must execute ${file}`);
+    const plan = classify([file], false);
+    assert.equal(plan.code, false, file);
+    assert.equal(plan.cli, false, file);
+    assert.equal(plan.tooling, true, file);
+    assert.deepEqual(acceptance(results(plan)), []);
+    const needs = results(plan);
+    needs.tooling.result = 'skipped';
+    assert.notDeepEqual(acceptance(needs), []);
+    assert.equal(classify([file + '.unknown'], false).code, true);
+    assert.equal(classify([file, 'compiler/src/compiler.trb'], false).performance, true);
+  }
+  for (const file of ['tools/benchmarksgame-build-formal/build-controller.sh',
+    'tools/recovery-stage.py', 'tools/ci-run-suites.mjs', '.github/workflows/ci-tooling.yml']) {
+    assert.equal(classify([file], false).code, true, file);
+  }
+  const native = readFileSync(new URL('../.github/workflows/gate-zero.yml', import.meta.url), 'utf8');
+  assert(!native.includes('Verify bootstrap seed tooling'));
+  const entry = readFileSync(new URL('../.github/workflows/pull-request.yml', import.meta.url), 'utf8');
+  assert(entry.includes('needs: [plan, native, targets, memory, tooling, cli]'));
+  assert(entry.includes("needs.tooling.result == 'success'"));
+  assert(entry.includes('needs: [plan, quick, documentation, native, targets, memory, performance, tooling, cli]'));
+});
+
+test('main uses the same complete path classifier and Pages PR checks are not duplicated', () => {
+  const main = readFileSync(new URL('../.github/workflows/push-validation.yml', import.meta.url), 'utf8');
+  assert(main.includes('node tools/ci-plan.mjs "$BASE_SHA" "$HEAD_SHA" false push'));
+  assert(main.includes('BASE_SHA: ${{ github.event.before }}'));
+  for (const job of ['native', 'memory', 'tooling', 'documentation']) assert(main.includes(`  ${job}:`));
+  for (const name of ['gate-zero', 'runtime-worker-memory', 'documentation']) {
+    const source = readFileSync(new URL(`../.github/workflows/${name}.yml`, import.meta.url), 'utf8');
+    assert(!source.includes('  push:'), `${name} must not independently rerun the same main validation`);
+    assert(source.includes('  workflow_call:'));
+  }
+  const pages = readFileSync(new URL('../.github/workflows/capability-map-pages.yml', import.meta.url), 'utf8');
+  assert(!pages.includes('  pull_request:'));
+  assert(pages.includes('  push:') && pages.includes('  workflow_dispatch:'));
+  assert.equal(classify(['.github/workflows/capability-map-pages.yml'], false).code, false);
+  const doc = readFileSync(new URL('../.github/workflows/documentation.yml', import.meta.url), 'utf8');
+  for (const command of ['node tools/capability-map-check.mjs', 'node tools/benchmark-pages-data.mjs --check', 'node tools/benchmark-pages-check.mjs']) assert(doc.includes(command));
+});
+
+test('mixed lightweight surfaces require the union and never skip a failed authority', () => {
+  const plan = classify(['compiler/cli/main.trb', 'tools/recovery_stage_test.py', 'README.md'], false);
+  assert.equal(plan.code, false);
+  assert.equal(plan.cli, true);
+  assert.equal(plan.tooling, true);
+  assert.equal(plan.documentation, true);
+  assert.deepEqual(acceptance(results(plan)), []);
+  for (const job of ['quick', 'cli', 'tooling', 'documentation']) {
+    for (const result of ['failure', 'cancelled', 'skipped', undefined]) {
+      const needs = results(plan);
+      needs[job] = { result };
+      assert.notDeepEqual(acceptance(needs), []);
+    }
+  }
+  for (const key of ['cli', 'tooling']) {
+    const needs = results(plan);
+    delete needs.plan.outputs[key];
+    assert.notDeepEqual(acceptance(needs), []);
+  }
+});
+
+test('push comparison includes changes against the actual before revision, not its merge base', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'native-ci-push-test-'));
+  const git = (args, input) => execFileSync('git', [
+    '-c', 'user.name=CI Test', '-c', 'user.email=ci-test@example.invalid',
+    '-c', 'commit.gpgsign=false', ...args,
+  ], { cwd: directory, encoding: 'utf8', input }).trim();
+  try {
+    git(['init']);
+    const empty = git(['mktree'], '');
+    const base = git(['commit-tree', empty], 'Base\n');
+    const blob = git(['hash-object', '-w', '--stdin'], 'Synthetic\n');
+    const codeTree = git(['mktree'], `100644 blob ${blob}\tcore.trb\n`);
+    const before = git(['commit-tree', codeTree, '-p', base], 'Earlier code\n');
+    const docsTree = git(['mktree'], `100644 blob ${blob}\tREADME.md\n`);
+    const head = git(['commit-tree', docsTree, '-p', base], 'Documentation on another lineage\n');
+    assert.deepEqual(await changedPaths(before, head, directory), ['README.md']);
+    assert.deepEqual(await changedPaths(before, head, directory, true), ['README.md', 'core.trb']);
+    const output = execFileSync(process.execPath, [fileURLToPath(new URL('./ci-plan.mjs', import.meta.url)),
+      before, head, 'false', 'push'], { cwd: directory, encoding: 'utf8' });
+    assert.match(output, /^code=true$/m);
+    assert.throws(() => execFileSync(process.execPath, [fileURLToPath(new URL('./ci-plan.mjs', import.meta.url)),
+      before, head, 'false', 'unknown'], { cwd: directory, stdio: 'pipe' }));
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
