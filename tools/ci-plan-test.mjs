@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { acceptance, changedPaths, classify } from './ci-plan.mjs';
+import { acceptance, changedPaths, classify, lightweightPushPaths, nativePushFilterOnly } from './ci-plan.mjs';
 
 function results(plan) {
   return {
@@ -158,6 +158,40 @@ test('other executable changes retain complete correctness and target checks', (
   assert.equal(plan.code, true);
   assert.equal(plan.performance, false);
   assert.deepEqual(acceptance(results(plan)), []);
+});
+
+test('post-merge ignores match the lightweight allowlist without exempting execution changes', () => {
+  const file = '.github/workflows/gate-zero.yml';
+  const current = readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
+  const ignores = current.match(/    paths-ignore:\n([\s\S]*?)(?=\npermissions:)/)?.[1];
+  assert(ignores);
+  let previous = current;
+  for (const path of lightweightPushPaths) {
+    assert(ignores.includes(`      - ${path}\n`), path);
+    previous = previous.replace(`      - ${path}\n`, '');
+  }
+  assert(nativePushFilterOnly(previous, current));
+  assert(nativePushFilterOnly(current, previous));
+  assert.equal(classify([file], false).code, true, 'paths alone cannot justify skipping');
+  const plan = classify([file], false, nativePushFilterOnly(previous, current));
+  assert.equal(plan.code, false);
+  assert.equal(plan.documentation, true);
+  assert.deepEqual(acceptance(results(plan)), []);
+  for (const mutation of [
+    current.replace('macos-14', 'macos-15'),
+    current.replace('contents: read', 'contents: write'),
+    current.replace('  workflow_call:\n', ''),
+    current.replace('      - main', '      - other'),
+    current.replace('      - results/**', '      - compiler/**'),
+    current.replace('      - tools/ci-plan.mjs', '      - tools/ci-*'),
+    current.replace('    paths-ignore:', '    paths:'),
+    current + '\n# changed outside the filter\n',
+    '',
+  ]) assert.equal(nativePushFilterOnly(previous, mutation), false);
+  for (const path of ['compiler/src/compiler.trb', 'TYPE_RB_REVISION', 'tools/ci-run-suites.mjs',
+    '.github/workflows/pull-request.yml', 'unknown/file']) {
+    assert.equal(classify([file, path], false, true).code, true, path);
+  }
 });
 test('deletions, renames, mixed changes and unknown paths fail toward more checking', () => {
   assert.equal(classify(['README.md', 'compiler/gate4/src/old.trb'], false).performance, true);

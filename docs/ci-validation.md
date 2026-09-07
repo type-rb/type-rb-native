@@ -28,6 +28,15 @@ pins, measurement policies and unknown neighboring paths retain their normal
 authorities. Adding any such path to planning-only maintenance restores the
 compiler checks. Review the exact allowlist and routing-test changes together.
 
+The post-merge Native push trigger ignores that same exact lightweight file
+list; its synchronization is tested. Updating only those ignore entries uses
+lightweight validation only when the router compares merge-base and head and
+proves the rest of `gate-zero.yml` byte-identical. Changes to jobs, permissions,
+branches, reusable-workflow entry, unknown patterns or other files retain their
+normal checks. Missing/unreadable workflow versions fail toward full checking.
+This narrow trigger-maintenance exception does not exempt arbitrary workflow
+changes or permit glob-based compiler exclusions.
+
 ## Stages
 
 1. **Planning and quick feedback.** Every PR runs routing/acceptance tests and

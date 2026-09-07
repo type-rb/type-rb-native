@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { pathToFileURL } from 'node:url';
 
@@ -16,9 +16,27 @@ const documentation = path => staticDocumentationTools.has(path) || path.endsWit
 // not build or execute the compiler. Execution workflows/controllers are not
 // included: changing those still needs the authorities they orchestrate.
 const planningTools = new Set(['tools/ci-plan.mjs', 'tools/ci-plan-test.mjs']);
+export const lightweightPushPaths = [...staticDocumentationTools, ...planningTools];
+const nativeWorkflow = '.github/workflows/gate-zero.yml';
 
-export function classify(paths, draft) {
-  const code = paths.some(path => !documentation(path) && !planningTools.has(path));
+export function nativePushFilterOnly(before, after) {
+  // Only remove exact, already-lightweight entries from the push ignore block.
+  // Compare everything else byte-for-byte, including jobs, permissions and
+  // workflow_call. Unknown patterns or edits elsewhere keep full validation.
+  const normalize = text => {
+    const match = text.match(/^([\s\S]*?    paths-ignore:\n)((?:      - [^\n]+\n)+)([\s\S]*)$/);
+    if (!match || !match[1].includes('\non:\n  workflow_call:\n  push:\n') ||
+        !match[3].startsWith('\npermissions:\n')) return null;
+    const ignored = new Set(lightweightPushPaths.map(path => `      - ${path}`));
+    return match[1] + match[2].split('\n').filter(line => !ignored.has(line)).join('\n') + match[3];
+  };
+  const normalized = normalize(before);
+  return normalized !== null && normalized === normalize(after);
+}
+
+export function classify(paths, draft, pushFilterOnly = false) {
+  const code = paths.some(path => !documentation(path) && !planningTools.has(path) &&
+    !(pushFilterOnly && path === nativeWorkflow));
   const routing = paths.some(path => path.startsWith('.github/workflows/') ||
     path.startsWith('tools/ci-'));
   const compiler = paths.some(path => path.startsWith('compiler/') &&
@@ -89,7 +107,18 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     }
     // Include both sides of renames, and preserve arbitrary path characters.
     const paths = await changedPaths(base, head);
-    for (const [key, value] of Object.entries(classify(paths, draft === 'true'))) {
+    let pushFilterOnly = false;
+    if (paths.includes(nativeWorkflow)) {
+      try {
+        const ancestor = execFileSync('git', ['merge-base', base, head], { encoding: 'utf8' }).trim();
+        const source = revision => execFileSync('git', ['show', `${revision}:${nativeWorkflow}`],
+          { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+        pushFilterOnly = nativePushFilterOnly(source(ancestor), source(head));
+      } catch {
+        // Missing, new, unreadable or oversized workflow: require full checks.
+      }
+    }
+    for (const [key, value] of Object.entries(classify(paths, draft === 'true', pushFilterOnly))) {
       console.log(`${key}=${value}`);
     }
   }
