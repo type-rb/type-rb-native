@@ -14,9 +14,9 @@ import shutil
 import statistics
 import sys
 
-TAG = "bootstrap-seed-2026-09-07"
+TAG = "bootstrap-seed-2026-09-08"
 MANIFEST = "type-rb-native-bootstrap-manifest-v2.json"
-PREDECESSOR = {
+PREDECESSORS = {"bootstrap-seed-2026-09-07": {
     "releaseTag": "bootstrap-seed-2026-08-30",
     "nativeRevision": "0058818314977633c50393796ef9b9f8f1fda50f",
     "manifestSha256": "a46d8c789f661a96aa38b1d4b9fd9ee21e46ccb3f4f2303a4f4d43caae1701b0",
@@ -24,7 +24,16 @@ PREDECESSOR = {
         {"asset": "type-rb-native-bootstrap-darwin-arm64", "sha256": "ef438d13598c534766334b408a39715c56ff1b69db528910ebf7d90ec7720b65"},
         {"asset": "type-rb-native-bootstrap-linux-arm64", "sha256": "b4307c244edc9e4da620f2a7c1b03a733e575da032efefae615f9edf75048a37"},
     ],
-}
+}, "bootstrap-seed-2026-09-08": {
+    "releaseTag": "bootstrap-seed-2026-09-07",
+    "nativeRevision": "1f7e8a110bbb2b13f0609709deb6fc8f09dc8b44",
+    "manifestSha256": "330e59e08bb1173b5865e782a7c578a556942ba5174422434cc56ab4fedfeed5",
+    "targets": [
+        {"asset": "type-rb-native-bootstrap-darwin-arm64", "sha256": "b960d8720ad6bb256fb019d04cd6ab80e86870228bed16776bba9fbe78f5769f"},
+        {"asset": "type-rb-native-bootstrap-linux-arm64", "sha256": "ff3bc9a2409e91eba0e2ef5109bf72a10aa16d4f360bc32aceafc50baa96a580"},
+    ],
+}}
+
 BACKEND = {"name": "QBE", "version": "1.3", "sourceSha256": "d587905d620dc5e1d2bfa7c2cc642b9b837aa89a3188c6e37b53d756cf66e320"}
 TARGETS = [
     ("darwin-arm64", "darwin", "macos-15", "arm64_apple", 350000),
@@ -80,15 +89,16 @@ def validate_target(target, expected):
     require(size(target["qbeBinarySize"]) and sha(target["qbeBinarySha256"]), "QBE binary identity invalid")
 
 
-def validate_manifest(manifest, revision):
+def validate_manifest(manifest, revision, tag=TAG):
+    require(isinstance(tag, str) and tag in PREDECESSORS, "unknown release tag")
     require(sha(revision, 40), "invalid source revision")
     require(isinstance(manifest, dict) and set(manifest) == {
         "schemaVersion", "status", "releaseTag", "nativeRevision", "predecessor", "backend", "targets"
     }, "manifest keys differ")
     require(type(manifest["schemaVersion"]) is int and manifest["schemaVersion"] == 2, "manifest version differs")
-    require(manifest["status"] == "experimental" and manifest["releaseTag"] == TAG, "release identity differs")
+    require(manifest["status"] == "experimental" and manifest["releaseTag"] == tag, "release identity differs")
     require(manifest["nativeRevision"] == revision, "source revision differs")
-    require(manifest["predecessor"] == PREDECESSOR, "predecessor provenance differs")
+    require(manifest["predecessor"] == PREDECESSORS[tag], "predecessor provenance differs")
     require(manifest["backend"] == BACKEND, "backend identity differs")
     require(isinstance(manifest["targets"], list) and len(manifest["targets"]) == 2, "target count differs")
     for target, expected in zip(manifest["targets"], TARGETS):
@@ -99,7 +109,7 @@ def validate_manifest(manifest, revision):
 def create(revision, inputs, output):
     inputs, output = Path(inputs), Path(output)
     manifest = {"schemaVersion": 2, "status": "experimental", "releaseTag": TAG,
-                "nativeRevision": revision, "predecessor": PREDECESSOR,
+                "nativeRevision": revision, "predecessor": PREDECESSORS[TAG],
                 "backend": BACKEND, "targets": [read_json(inputs / (t[0] + ".json")) for t in TARGETS]}
     validate_manifest(manifest, revision)
     for target in manifest["targets"]:
@@ -115,10 +125,10 @@ def create(revision, inputs, output):
     (output / "SHA256SUMS").write_text("".join(digest(output / name) + "  " + name + "\n" for name in names))
 
 
-def verify(revision, asset, directory, release_path):
+def verify(tag, revision, asset, directory, release_path):
     directory = Path(directory)
     manifest = read_json(directory / MANIFEST)
-    validate_manifest(manifest, revision)
+    validate_manifest(manifest, revision, tag)
     targets = {target["asset"]: target for target in manifest["targets"]}
     require(asset in targets, "unknown target")
     target = targets[asset]
@@ -128,7 +138,7 @@ def verify(revision, asset, directory, release_path):
     expected_sums += digest(directory / MANIFEST) + "  " + MANIFEST + "\n"
     require((directory / "SHA256SUMS").read_text() == expected_sums, "checksum index differs")
     release = read_json(release_path)
-    require(release.get("tag_name") == TAG and release.get("target_commitish") == revision,
+    require(release.get("tag_name") == tag and release.get("target_commitish") == revision,
             "published release revision differs")
     require(release.get("draft") is False and release.get("prerelease") is True and release.get("immutable") is True,
             "release is not an immutable prerelease")
@@ -172,12 +182,12 @@ if __name__ == "__main__":
         command, *arguments = sys.argv[1:]
         if command == "create" and len(arguments) == 3:
             create(*arguments)
-        elif command == "verify" and len(arguments) == 4:
+        elif command == "verify" and len(arguments) == 5:
             verify(*arguments)
         elif command == "observations" and len(arguments) == 2:
             observations(*arguments)
         else:
-            raise ValueError("usage: bootstrap-seed-release.py create REV INPUTS OUTPUT | verify REV ASSET DIRECTORY RELEASE_JSON | observations CSV ordinary|transition")
+            raise ValueError("usage: bootstrap-seed-release.py create REV INPUTS OUTPUT | verify TAG REV ASSET DIRECTORY RELEASE_JSON | observations CSV ordinary|transition")
         print("bootstrap seed package " + command + " passed")
     except (ValueError, OSError, KeyError, TypeError) as error:
         sys.exit("bootstrap seed package: " + str(error))

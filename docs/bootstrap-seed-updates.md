@@ -76,6 +76,22 @@ and durable verification links; temporary workflow packages/logs expire normally
 Never replace a published asset, retry until a favorable measurement hides an
 earlier failure, or switch the default pin before post-publication verification.
 
+## Registered conditional-syntax refresh
+
+[Issue #326](https://github.com/type-rb/type-rb-native/issues/326#issuecomment-5574765145)
+registers `bootstrap-seed-2026-09-08`. Its implementation source is accepted
+`21f507e7ee7de2577f4137f6dfb9f732c14c1640` from PR #329, with reviewed observer
+changes applied before preparation. The workflow records the exact main source
+and compiler tree used by that invocation. The predecessor is the verified
+Sep7 release recorded below; both known refresh tags retain their exact
+predecessor validation. Unknown tags and cross-tag manifests fail closed.
+
+Darwin arm64 and Linux arm64 retain the same target, combined-size, generation,
+retained-observation, corpus and process bounds. The preparation verifies the
+logical-condition and `elsif` fixtures. Publication, fresh published-asset
+verification and a separate checkout pin PR are still required. No Sep8 seed
+is claimed published or verified by these preparation changes.
+
 ## Current verified checkout seed
 
 Checkout builds pin [bootstrap-seed-2026-09-07](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-09-07),
@@ -113,14 +129,15 @@ Changing a setup seed does not move a frozen benchmark baseline or change any
 measurement/acceptance bound. Full benchmark jobs remain manually dispatched.
 
 Linux amd64 retains the original immutable root QBE. Before reading candidate
-syntax, its setup compiler builds the exact clean Sep7 source revision
-`1f7e8a110bbb2b13f0609709deb6fc8f09dc8b44`. That generated compiler must accept
-the logical-condition conformance fixture, then reads the **candidate** source
-for the current-runtime transition. Ordinary B2/B3/B4 and measured inputs remain
+syntax, its setup compiler builds the exact clean accepted source revision
+`21f507e7ee7de2577f4137f6dfb9f732c14c1640`. That generated compiler must accept
+the logical-condition and `elsif` conformance fixtures, then reads the
+**candidate** source for the current-runtime transition. Ordinary B2/B3/B4 and measured inputs remain
 the candidate. The setup source revision/entry digest and all existing process
 traces are retained separately. No new root asset or Go recovery is introduced.
-The optional setup-source argument accepts only that exact clean revision;
-omission retains the historical direct-current-source setup shape.
+The arm64 comparison still authenticates the Sep7 seed independently of this
+amd64 setup-source revision. The optional setup-source argument accepts only
+the exact clean setup revision; omission retains the historical direct-current-source setup shape.
 
 Initial publication/release-integrity workflows, retained manifests and earlier
 results keep their source-era identities. Refreshing checkout bootstrap alone

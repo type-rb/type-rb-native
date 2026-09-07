@@ -1,5 +1,5 @@
 import { decode_gate3_snapshot, decode_gate4_bootstrap_snapshot } from gate3_snapshot
-import { build_compiler_recovery_executable } from gate3_toolchain
+import { build_compiler_recovery_executable, build_gate3_executable } from gate3_toolchain
 import { build_recovery_generation } from recovery_generation
 import { build_matched_go_compiler } from matched_go_driver
 import { flatten_compiler_recovery_source } from compiler_recovery_source
@@ -539,6 +539,42 @@ def _recovery_verify_bounds_failure(
 	return Result<Boolean, String>::Ok(true)
 end
 
+def _recovery_verify_snapshot_conditional(
+		root: String,
+		reference_trb: String,
+		qbe: String,
+		workspace: String,
+	): Result<Boolean, String>
+	directory := workspace + "/snapshot-conditional"
+	try _recovery_reset_directory(directory)
+	base := root + "/compiler/conformance/valid/elsif-recovery"
+	try _recovery_write_source(directory + "/main.trb", try _recovery_read(base + ".trb"))
+	snapshot := try _recovery_process(
+		reference_trb,
+		["compiler", "bootstrap-snapshot", "--snapshot-version", "4", directory + "/main.trb"],
+	)
+	if !snapshot.success || !snapshot.stderr.empty?()
+		return Result<Boolean, String>::Err("conditional snapshot failed: " + snapshot.stderr)
+	end
+	native_module := case decode_gate4_bootstrap_snapshot(snapshot.stdout)
+	when Result::Ok(value)
+		value
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.code + ": " + error.message)
+	end
+	case build_gate3_executable(native_module, qbe, "/usr/bin/cc", directory, directory + "/program")
+	when Result::Ok(_report)
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.phase + ": " + error.message + " " + error.stderr)
+	end
+	runtime := try _recovery_process(directory + "/program", [])
+	expected := try _recovery_read(base + ".out")
+	if !runtime.success || runtime.stdout != expected || !runtime.stderr.empty?()
+		return Result<Boolean, String>::Err("conditional snapshot runtime differs: " + runtime.stdout + runtime.stderr)
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
 def _recovery_verify_conformance(
 		root: String,
 		qbe: String,
@@ -614,7 +650,7 @@ def _recovery_verify_conformance(
 		return Result<Boolean, String>::Err("Float call boundary uses the Integer ABI")
 	end
 	candidate_executables := [executables[3], executables[4], executables[5]]
-	conditional_cases := ["elsif-control", "elsif-managed"]
+	conditional_cases := ["elsif-control", "elsif-managed", "elsif-recovery"]
 	index = 0
 	while index < conditional_cases.size()
 		try _recovery_verify_valid_case(
@@ -2189,6 +2225,12 @@ describe("Native compiler recovery") do
 				end
 				_recovery_stage("end", "matched-go")
 				_recovery_stage("start", "snapshot")
+				case _recovery_verify_snapshot_conditional(root, reference_trb, qbe, workspace)
+				when Result::Ok(_verified)
+				when Result::Err(message)
+					puts(message)
+					expect(false).to_be_true()
+				end
 				snapshot := case Process.run(
 						reference_trb,
 						["compiler", "bootstrap-snapshot", "--snapshot-version", "4", compiler_path],

@@ -3,7 +3,7 @@
 set -eu
 
 PRE_IMPLEMENTATION_REVISION=266c996668a4c3e0ad6eb833ca646b73ca7e56e1
-TYPE_RB_REVISION=6d130b3cd89044d4f54cc983555e0a3d340793c7
+TYPE_RB_REVISION=f6229c5657a5acb40194cde71785a63754d00355
 TYPE_RB_VERSION=0.4.6-dev
 ROOT_QBE_SIZE=658639
 ROOT_QBE_SHA256=62db3c31527a670c3050051a9fa27bf142b6c5deaab81ef8234104bd467aa95a
@@ -974,7 +974,7 @@ if test "$seed_source_root" != "$candidate_root"; then
 	# to newer compiler syntax. This is setup, never a measured candidate input.
 	require_clean_revision "$seed_source_root" "accepted seed source"
 	test "$(git -C "$seed_source_root" rev-parse HEAD)" = \
-		1f7e8a110bbb2b13f0609709deb6fc8f09dc8b44 || fail "seed source revision differs"
+		21f507e7ee7de2577f4137f6dfb9f732c14c1640 || fail "seed source revision differs"
 	seed_entry=$seed_source_root/compiler/src/compiler.trb
 	test -f "$seed_entry" || fail "seed compiler entry is missing"
 fi
@@ -1076,6 +1076,15 @@ if test "$seed_source_root" != "$candidate_root"; then
 		fail "logical condition check stdout differs"
 	require_empty_file "$evidence/setup/logical-condition.stderr" "logical condition check wrote stderr"
 	require_forbidden_processes_absent "$evidence/setup/logical-condition-process.trace" "logical condition check"
+	strace -f -e trace=process -o "$evidence/setup/elsif-process.trace" \
+		"$first_transition" check "$candidate_root/compiler/conformance/valid/elsif-control.trb" \
+		> "$evidence/setup/elsif.stdout" \
+		2> "$evidence/setup/elsif.stderr" || fail "seed bridge rejected elsif"
+	printf 'ok\n' > "$evidence/setup/elsif.expected"
+	cmp "$evidence/setup/elsif.expected" "$evidence/setup/elsif.stdout" > /dev/null ||
+		fail "elsif check stdout differs"
+	require_empty_file "$evidence/setup/elsif.stderr" "elsif check wrote stderr"
+	require_forbidden_processes_absent "$evidence/setup/elsif-process.trace" "elsif check"
 fi
 
 strace -f -e trace=process -o "$evidence/setup/current-runtime-emit-process.trace" \
@@ -1117,6 +1126,7 @@ require_tool_observed "$evidence/setup/current-runtime-link-process.trace" 'exec
 	grep execve "$evidence/setup/first-link-process.trace"
 	if test "$seed_source_root" != "$candidate_root"; then
 		grep execve "$evidence/setup/logical-condition-process.trace"
+		grep execve "$evidence/setup/elsif-process.trace"
 	fi
 	grep execve "$evidence/setup/current-runtime-emit-process.trace"
 	grep execve "$evidence/setup/current-runtime-qbe-process.trace"

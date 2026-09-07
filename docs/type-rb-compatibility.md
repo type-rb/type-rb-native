@@ -2,7 +2,7 @@
 
 TypeRB Native follows exact reference revisions while it is experimental. The
 current source and semantic oracle is TypeRB
-`6d130b3cd89044d4f54cc983555e0a3d340793c7` (`0.4.6-dev`), recorded in
+`f6229c5657a5acb40194cde71785a63754d00355` (`0.4.6-dev`), recorded in
 `TYPE_RB_REVISION`. This is an exact development pin, not a supported version
 range.
 
@@ -34,9 +34,22 @@ The earlier scoped-file successor is registered in
 passes the selected-reference, migration, exact-baseline, target-regression,
 fixed-point, process, resource, and size criteria.
 
+## Statement conditional snapshot update
+
+The current pin includes [TypeRB PR #655](https://github.com/type-rb/type-rb/pull/655).
+It encodes statement `elsif` with existing v3/v4 branches, jumps and block
+parameters, preserving ordered conditions, lexical scopes and terminating
+branches. It does not expand conditional expressions or the v2 snapshot subset.
+The `elsif-recovery` fixture now runs through v4 encoding, strict decoding,
+recovery QBE emission and execution as well as current ordinary generations.
+
+This pin is a prerequisite for compiler-source self-use. Complete recovery,
+ordinary fixed points, target, memory and cost acceptance remain required;
+updating a reference pin does not replace a verified checkout seed.
+
 ## String escape reference update
 
-The current pin selects the portable String escape fix in
+The pin also includes the portable String escape fix in
 [TypeRB PR #651](https://github.com/type-rb/type-rb/pull/651). Merge that
 reference PR before this dependent update. Double-quoted source accepts `\#`
 as a literal hash, respects backslash parity before interpolation, and rejects

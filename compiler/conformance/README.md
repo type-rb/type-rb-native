@@ -139,3 +139,7 @@ isolate file-root module overhead from ordinary Native code generation.
 
 This is an experimental subset corpus, not the TypeRB language conformance
 suite. Full language and package compatibility remains outside Gate 4.
+
+`elsif-recovery` restricts its values to the v4 snapshot subset and verifies
+ordered conditions and managed String joins through snapshot recovery and
+ordinary current compiler generations.

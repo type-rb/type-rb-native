@@ -14,7 +14,7 @@ bootstrap-seed-2026-08-30)
     manifest=type-rb-native-bootstrap-manifest-v1.json
     signer=bootstrap-seed-initial.yml
     ;;
-bootstrap-seed-2026-09-07)
+bootstrap-seed-2026-09-07|bootstrap-seed-2026-09-08)
     manifest=type-rb-native-bootstrap-manifest-v2.json
     signer=bootstrap-seed-refresh.yml
     ;;
@@ -30,7 +30,7 @@ if test "$tag" = bootstrap-seed-2026-08-30; then
     /bin/sh "$tool_root/bootstrap-seed-manifest.sh" verify "$tag" "$revision" "$asset" \
         "$destination/$asset" "$destination/$manifest" "$destination/SHA256SUMS" "$destination/release.json"
 else
-    python3 "$tool_root/bootstrap-seed-release.py" verify "$revision" "$asset" "$destination" "$destination/release.json"
+    python3 "$tool_root/bootstrap-seed-release.py" verify "$tag" "$revision" "$asset" "$destination" "$destination/release.json"
 fi
 for subject in "$asset" "$manifest" SHA256SUMS; do
     gh attestation verify "$destination/$subject" -R type-rb/type-rb-native \

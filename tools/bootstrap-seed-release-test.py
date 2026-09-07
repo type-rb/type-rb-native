@@ -31,7 +31,7 @@ class SeedReleaseTests(unittest.TestCase):
         observer = Path(__file__).with_name("gate6n-linux-amd64.sh").read_text()
         self.assertIn('"$root_compiler" emit-qbe "$seed_entry"', observer)
         self.assertIn('"$first_transition" emit-qbe "$compiler_entry"', observer)
-        self.assertIn('1f7e8a110bbb2b13f0609709deb6fc8f09dc8b44 || fail "seed source revision differs"', observer)
+        self.assertIn('21f507e7ee7de2577f4137f6dfb9f732c14c1640 || fail "seed source revision differs"', observer)
         self.assertIn('require_clean_revision "$seed_source_root"', observer)
         self.assertIn('compiler/conformance/valid/logical-short-circuit.trb', observer)
         self.assertIn("printf 'ok\\n' > \"$evidence/setup/logical-condition.expected\"", observer)
@@ -76,11 +76,11 @@ class SeedReleaseTests(unittest.TestCase):
         self.release_path.write_text(json.dumps(self.release))
 
     def verify(self):
-        seed.verify(self.revision, self.asset, self.package, self.release_path)
+        seed.verify(seed.TAG, self.revision, self.asset, self.package, self.release_path)
 
     def test_both_targets_and_repeatable_package(self):
         for target in self.manifest["targets"]:
-            seed.verify(self.revision, target["asset"], self.package, self.release_path)
+            seed.verify(seed.TAG, self.revision, target["asset"], self.package, self.release_path)
         repeated = self.root / "repeated"
         seed.create(self.revision, self.inputs, repeated)
         for path in self.package.iterdir():
@@ -120,6 +120,38 @@ class SeedReleaseTests(unittest.TestCase):
             target["size"] = seed.TARGETS[index][4] + 1
             with self.assertRaises(ValueError):
                 seed.validate_target(target, seed.TARGETS[index])
+
+    def test_registered_predecessors_remain_tag_bound(self):
+        old_tag = "bootstrap-seed-2026-09-07"
+        legacy = copy.deepcopy(self.manifest)
+        legacy["releaseTag"] = old_tag
+        legacy["predecessor"] = seed.PREDECESSORS[old_tag]
+        seed.validate_manifest(legacy, self.revision, old_tag)
+        with self.assertRaises(ValueError):
+            seed.validate_manifest(legacy, self.revision, seed.TAG)
+        with self.assertRaises(ValueError):
+            seed.validate_manifest(self.manifest, self.revision, old_tag)
+        for tag in ("latest", "bootstrap-seed-2099-01-01", None, []):
+            with self.assertRaises(ValueError):
+                seed.validate_manifest(self.manifest, self.revision, tag)
+
+    def test_download_verification_preserves_the_previous_tag(self):
+        tag = "bootstrap-seed-2026-09-07"
+        self.manifest["releaseTag"] = tag
+        self.manifest["predecessor"] = seed.PREDECESSORS[tag]
+        self.manifest_path.write_text(json.dumps(self.manifest))
+        names = [target["asset"] for target in self.manifest["targets"]] + [seed.MANIFEST]
+        (self.package / "SHA256SUMS").write_text("".join(
+            seed.digest(self.package / name) + "  " + name + "\n" for name in names))
+        self.release["tag_name"] = tag
+        self.release["assets"] = [{"name": p.name, "size": p.stat().st_size,
+                                   "digest": "sha256:" + seed.digest(p)}
+                                  for p in sorted(self.package.iterdir())]
+        self.release_path.write_text(json.dumps(self.release))
+        for target in self.manifest["targets"]:
+            seed.verify(tag, self.revision, target["asset"], self.package, self.release_path)
+        with self.assertRaises(ValueError):
+            self.verify()
 
     def test_corruption_and_checksum_reordering_fail(self):
         (self.package / self.asset).write_bytes(b"changed")
