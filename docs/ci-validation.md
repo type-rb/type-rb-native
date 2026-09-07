@@ -118,6 +118,14 @@ successful suite. Previously completed phases remain visible when a later
 phase fails, but the summary cannot claim successful recovery. Both raw receipts
 and the summary live in the always-uploaded suite evidence directory.
 
+The source-mutation helper uses the reference compiler's code-point `index`,
+`rindex` and `slice` operations. Comparing the first and last match preserves
+strict uniqueness, including overlapping needles; prefix/suffix slices preserve
+all surrounding source bytes. This removes repeated per-character scans and
+string reconstruction from module-boundary setup without removing a mutation,
+missing-module, malformed-module or generated-output check. Focused tests cover
+Unicode, empty/missing needles, overlaps and replacements at both boundaries.
+
 Stage instrumentation completes the remaining observability scope of
 [issue #295](https://github.com/type-rb/type-rb-native/issues/295). Use measured
 phase costs to select later bounded scheduling changes; do not remove generation

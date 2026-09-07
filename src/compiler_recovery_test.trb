@@ -49,41 +49,21 @@ def _recovery_replace_once(source: String, before: String, after: String): Resul
 	if before.empty?()
 		return Result<String, String>::Err("replacement needle is empty")
 	end
-	mut match_index :=- 1
-	mut index := 0
-	while index + before.size() <= source.size()
-		mut matches := true
-		mut offset := 0
-		while offset < before.size()
-			if source[index + offset] != before[offset]
-				matches = false
-			end
-			offset += 1
-		end
-		if matches
-			if match_index >= 0
-				return Result<String, String>::Err("replacement needle is not unique")
-			end
-			match_index = index
-		end
-		index += 1
-	end
-	if match_index < 0
+	first := source.index(before)
+	if first == nil
 		return Result<String, String>::Err("replacement needle is missing")
 	end
-	mut result := ""
-	index = 0
-	while index < match_index
-		result += source[index]
-		index += 1
+	# First/last comparison also rejects overlapping occurrences.
+	last := source.rindex(before)
+	if last == nil
+		return Result<String, String>::Err("replacement needle is missing")
 	end
-	result += after
-	index = match_index + before.size()
-	while index < source.size()
-		result += source[index]
-		index += 1
+	if last != first
+		return Result<String, String>::Err("replacement needle is not unique")
 	end
-	return Result<String, String>::Ok(result)
+	prefix := source.slice(0...first)
+	suffix := source.slice((first + before.size())...source.size())
+	return Result<String, String>::Ok(prefix + after + suffix)
 end
 
 def _recovery_process(command: String, arguments: Array<String>): Result<Process::Output, String>
@@ -2361,5 +2341,32 @@ describe("Native compiler recovery") do
 				end
 			end
 		end
+	end
+end
+
+describe("Recovery source mutation") do
+	test("preserves exact Unicode source around one replacement") do
+		sources := ["abc", "abc", "abc", "abc", "A😀éZ", "é", "abc"]
+		needles := ["a", "b", "c", "abc", "😀é", "́", "b"]
+		replacements := ["X", "X", "X", "", "λ", "!", "bb"]
+		expected := ["Xbc", "aXc", "abX", "", "AλZ", "e!", "abbc"]
+		mut index := 0
+		while index < sources.size()
+			expect(_recovery_replace_once(sources[index], needles[index], replacements[index])).to_equal(
+				Result<String, String>::Ok(expected[index]),
+			)
+			index += 1
+		end
+	end
+
+	test("rejects empty missing repeated and overlapping needles") do
+		expect(_recovery_replace_once("", "", "x")).to_equal(Result<String, String>::Err("replacement needle is empty"))
+		expect(_recovery_replace_once("abc", "", "x")).to_equal(Result<String, String>::Err("replacement needle is empty"))
+		expect(_recovery_replace_once("", "a", "x")).to_equal(Result<String, String>::Err("replacement needle is missing"))
+		expect(_recovery_replace_once("abc", "abcd", "x")).to_equal(Result<String, String>::Err("replacement needle is missing"))
+		expect(_recovery_replace_once("ababa", "aba", "x")).to_equal(Result<String, String>::Err("replacement needle is not unique"))
+		expect(_recovery_replace_once("aaa", "aa", "x")).to_equal(Result<String, String>::Err("replacement needle is not unique"))
+		expect(_recovery_replace_once("😀😀😀", "😀😀", "x")).to_equal(Result<String, String>::Err("replacement needle is not unique"))
+		expect(_recovery_replace_once("aba", "a", "x")).to_equal(Result<String, String>::Err("replacement needle is not unique"))
 	end
 end
