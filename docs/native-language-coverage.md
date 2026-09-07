@@ -1,7 +1,8 @@
 # Ordinary Native language coverage
 
 Status: an initial 14-case ordinary-path inventory and regression contract are
-available. Statement `elsif` is covered by ordinary compiler and REPL regressions.
+available. Statement `elsif` and bare `break` / `next` in `while` are covered by ordinary
+compiler and REPL regressions.
 The inventory remains a bounded set of examples, not complete language support.
 Track the first bounded delivery in [issue #326](https://github.com/type-rb/type-rb-native/issues/326).
 
@@ -129,14 +130,42 @@ chains, scope errors, required traps, and invalidated loop bounds as controls.
 This extends the existing checked conditional path. Functions outside the
 current complete MIR subset retain direct lowering and their runtime checks;
 conditional edges do not introduce new loop-induction or header-stability
-proofs. This does not add conditional expressions, nullable narrowing, or
-`break` / `next` support. Compiler implementation source now uses `elsif` in the
-statement-dispatch chain of `parse_statement_block`, replacing six nested
+proofs. This does not add conditional expressions or nullable narrowing.
+Compiler implementation source now uses `elsif` in the statement-dispatch chain of `parse_statement_block`, replacing six nested
 `else` / `if` wrappers.
 This adoption follows the verified Sep8 seed handoff and matching snapshot
 recovery coverage. Existing statement conditions, cursor updates, diagnostics
 and application output remain unchanged; other parser and checker nesting
 remains eligible for separately verified cleanup.
+
+## Ordinary loop transfers
+
+Bare `break` exits the nearest enclosing `while`; bare `next` transfers to its
+header and reevaluates the condition, including its effects. Nested loops own
+their transfers, while `return` still exits the function. Every statement is
+checked, including unreachable transfers. Transfers outside a loop and transfer
+values are rejected. Existing contextual `next` bindings remain supported.
+Use an ordinary `if` guard in this subset: postfix conditional transfers and
+iteration blocks remain unsupported. The REPL currently reports incomplete
+input for a postfix `break if` submission; it does not execute that submission.
+
+The checker stores the kind and nearest-loop target at the exact statement
+origin. A named `MirLoopTransfer` plan verifies origin, kind, token bounds and
+nearest target before the code generator or REPL may consume it. Missing,
+malformed or cross-loop plans fail closed. Transfers invalidate complete scalar
+induction plans, Array-region/header proofs and dependent nonnegative facts;
+unproved accesses retain runtime checks. Backedges enter the existing loop
+header and its root-compaction boundary; exits retain the loop cleanup path.
+
+`loop-transfer-control`, `loop-transfer-effects` and `loop-transfer-managed`
+cover nested targets, skipped updates and traps, condition effects, branch
+termination and managed values surviving automatic collection. Negative cases
+retain required index/range failures and reject illegal targets and values.
+Recovered compilers and ordinary replacement generations exercise these
+sources, separately from snapshot support for those source programs.
+Compiler implementation source does not yet use `break` or `next`: snapshot
+recovery and a verified seed handoff remain prerequisites for that adoption.
+Track the full delivery in [issue #334](https://github.com/type-rb/type-rb-native/issues/334).
 
 ## Deferred Array-loop candidate
 

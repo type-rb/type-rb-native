@@ -31,7 +31,8 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
         return result.stdout + result.stderr
 
     # These sources exercise the checked compiler and the independent REPL evaluator.
-    for case_name in ('elsif-control', 'elsif-managed'):
+    for case_name in ('elsif-control', 'elsif-managed', 'loop-transfer-control',
+                      'loop-transfer-effects', 'loop-transfer-managed'):
         fixture = repository / 'compiler/conformance/valid' / (case_name + '.trb')
         expected = fixture.with_suffix('.out').read_text()
         case_source = root / (case_name + '.trb')
@@ -40,24 +41,31 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
         case_output = root / case_name
         run('build', '--compile', '--outfile', case_output, case_source)
         assert subprocess.check_output([case_output], text=True, timeout=30) == expected
-        if case_name == 'elsif-managed':
+        if case_name in ('elsif-managed', 'loop-transfer-managed'):
             collected = subprocess.run([case_output], text=True, capture_output=True,
                                        env=dict(env, TYPE_RB_NATIVE_RUNTIME_STATS='1'), timeout=30)
             assert collected.returncode == 0 and collected.stdout == expected
             automatic = [line.split(',')[-1] for line in collected.stderr.splitlines()
                          if line.startswith('type-rb-native-gc-stat-v1,automatic-collections,')]
             assert len(automatic) == 1 and int(automatic[0]) > 0, collected.stderr
-        submission = fixture.read_text().replace('def main()', 'def exercise_elsif_case()')
-        assert run('repl', text=submission + '\nexercise_elsif_case()\n:quit\n') == expected
+        submission = fixture.read_text().replace('def main()', 'def exercise_control_case()')
+        assert run('repl', text=submission + '\nexercise_control_case()\n:quit\n') == expected
     for case_name in ('elsif-after-else', 'elsif-branch-binding', 'elsif-condition',
-                      'elsif-escaping-binding', 'elsif-missing-condition', 'elsif-outside-if'):
+                      'elsif-escaping-binding', 'elsif-missing-condition', 'elsif-outside-if',
+                      'loop-transfer-break-outside-loop', 'loop-transfer-next-outside-loop',
+                      'loop-transfer-break-value', 'loop-transfer-next-value',
+                      'loop-transfer-break-condition'):
         fixture = repository / 'compiler/conformance/invalid' / (case_name + '.source')
         case_source = root / (case_name + '.trb')
         case_source.write_text(fixture.read_text())
         assert 'TRBN' in run('check', case_source, success=False)
         assert 'TRBN' in run('build', '--compile', case_source, success=False)
-        submission = fixture.read_text().replace('def main()', 'def invalid_elsif_case()')
-        assert 'TRBN' in run('repl', text=submission + '\n:quit\n')
+        submission = fixture.read_text().replace('def main()', 'def invalid_control_case()')
+        rejection = run('repl', text=submission + '\n:quit\n')
+        if case_name == 'loop-transfer-break-condition':
+            assert 'incomplete input at end of session' in rejection
+        else:
+            assert 'TRBN' in rejection
 
     failed_condition = run('repl', text='def visited(): Boolean\nputs("unexpected effect")\nreturn true\nend\nif false\nputs("wrong")\nelsif 1 / 0 == 0\nputs("wrong")\nelsif visited()\nputs("wrong")\nend\n:quit\n')
     assert 'division by zero' in failed_condition

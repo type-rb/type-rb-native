@@ -1,8 +1,8 @@
 import { gate4_load_integer, gate4_load_string, gate4_store_integer } from storage
 import { gate4_float_literal_in_range, gate4_integer_literal_in_range, gate4_number_is_float, gate4_small_nonnegative_integer_operand } from literals
-import { gate4_mir_array_element_type, gate4_mir_function_index, mir_logical_plan } from mir
+import { MirLoopTransfer, gate4_mir_array_element_type, gate4_mir_function_index, mir_logical_plan, mir_loop_transfer_valid } from mir
 import { Gate4Compiler, Gate4Locals, gate4_diagnostic, gate4_has_diagnostic, gate4_local_add, gate4_local_find, gate4_terminal_token } from state
-import { finish_statement, gate4_advance, gate4_binary_operator_id, gate4_binary_precedence, gate4_declaration_start, gate4_expect, gate4_expect_identifier, gate4_parse_type, gate4_skip_newlines, gate4_token_is, syntax_conditional_tail } from parser
+import { finish_statement, gate4_advance, gate4_binary_operator_id, gate4_binary_precedence, gate4_declaration_start, gate4_expect, gate4_expect_identifier, gate4_parse_type, gate4_skip_newlines, gate4_token_is, syntax_conditional_tail, syntax_loop_transfer_kind } from parser
 import { gate4_array_element_type, gate4_array_type, gate4_common_array_element_type, gate4_find_field, gate4_find_record_type, gate4_find_visible_function, gate4_find_visible_record, gate4_record_type, gate4_resolve_type_name, gate4_standard_package_import, gate4_standard_package_root, gate4_type_display } from resolution
 
 record Gate4CheckedValue
@@ -1311,6 +1311,7 @@ def gate4_check_block(
 		mut position: Array<Integer>,
 		mut locals: Gate4Locals,
 		result_type: String,
+		loop_origin: Integer,
 	): Boolean
 	gate4_skip_newlines(state, position)
 	mut complete := false
@@ -1331,6 +1332,26 @@ def gate4_check_block(
 		if gate4_terminal_token(state, position[0])
 			gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, position[0]), "unexpected end of input")
 			complete = true
+		elsif syntax_loop_transfer_kind(state, position[0]) > 0
+			if loop_origin < 0
+				gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, position[0]), gate4_load_string(state.token_texts, position[0]) + " is only valid inside while")
+			else
+				gate4_store_integer(state.loop_transfer_kinds, position[0], syntax_loop_transfer_kind(state, position[0]))
+				gate4_store_integer(state.loop_transfer_targets, position[0], loop_origin + 1)
+				# A transfer can skip any subsequent update, access or effect. No
+				# complete induction plan or enclosing nonnegative proof survives.
+				gate4_scalar_mir_disable(locals)
+				gate4_array_region_operation(locals, 6, 0, position[0])
+				mut fact_index := 0
+				while fact_index < locals.count[0]
+					if gate4_load_integer(locals.mutable, fact_index) < 0
+						gate4_store_integer(locals.mutable, fact_index, 1)
+					end
+					fact_index += 1
+				end
+			end
+			gate4_advance(position)
+			finish_statement(state, position)
 		else
 			if gate4_token_is(state, position[0], "end")
 				complete = true
@@ -1354,7 +1375,7 @@ def gate4_check_block(
 						gate4_check_expected(state, condition.type_name, "Boolean", line)
 						finish_statement(state, position)
 						saved_count := locals.count[0]
-						gate4_check_block(state, position, locals, result_type)
+						gate4_check_block(state, position, locals, result_type, loop_origin)
 						locals.count[0] = saved_count
 						while gate4_token_is(state, position[0], "elsif")
 							branch_line := gate4_load_integer(state.token_lines, position[0])
@@ -1362,7 +1383,7 @@ def gate4_check_block(
 							branch_condition := gate4_check_expression(state, position, locals, 1, "Boolean")
 							gate4_check_expected(state, branch_condition.type_name, "Boolean", branch_line)
 							finish_statement(state, position)
-							gate4_check_block(state, position, locals, result_type)
+							gate4_check_block(state, position, locals, result_type, loop_origin)
 							locals.count[0] = saved_count
 							if gate4_has_diagnostic(state)
 								return false
@@ -1371,7 +1392,7 @@ def gate4_check_block(
 						if gate4_token_is(state, position[0], "else")
 							gate4_advance(position)
 							finish_statement(state, position)
-							gate4_check_block(state, position, locals, result_type)
+							gate4_check_block(state, position, locals, result_type, loop_origin)
 							locals.count[0] = saved_count
 						end
 						gate4_expect(state, position, "end")
@@ -1475,7 +1496,7 @@ def gate4_check_block(
 								end
 							end
 							saved_count := locals.count[0]
-							gate4_check_block(state, position, locals, result_type)
+							gate4_check_block(state, position, locals, result_type, loop_start)
 							if locals.mir_state[0] >= 2
 								if locals.mir_state[10] < 0
 									gate4_scalar_mir_disable(locals)
@@ -1590,6 +1611,28 @@ def gate4_check_block(
 		end
 	end
 	return !gate4_has_diagnostic(state)
+end
+
+# Validate exact source and nearest-loop bindings before an adapter consumes
+# the plan. Zero-filled target storage represents absence, never token zero.
+def checked_loop_transfer_kind(mut state: Gate4Compiler, origin: Integer, loop_origin: Integer): Integer
+	encoded_target := gate4_load_integer(state.loop_transfer_targets, origin)
+	mut target :=- 1
+	if encoded_target > 0
+		target = encoded_target - 1
+	end
+	plan := MirLoopTransfer.new(
+		kind: gate4_load_integer(state.loop_transfer_kinds, origin),
+		origin: origin,
+		target: target,
+	)
+	if mir_loop_transfer_valid(plan, origin, syntax_loop_transfer_kind(state, origin), loop_origin, state.token_count[0])
+		if gate4_token_is(state, loop_origin, "while")
+			return plan.kind
+		end
+	end
+	gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, origin), "invalid checked loop transfer target")
+	return 0
 end
 
 def gate4_mir_nonnegative_fact(state: Gate4Compiler, origin: Integer): Integer

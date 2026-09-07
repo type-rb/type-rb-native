@@ -1,8 +1,9 @@
 import trb/std/math
 import { Gate4Compiler } from state
 import { gate4_load_integer, gate4_load_string } from storage
-import { syntax_conditional_tail, gate4_token_is, gate4_binary_operator_id, gate4_binary_precedence, gate4_parse_expression_syntax, gate4_parse_type, gate4_skip_newlines, gate4_declaration_start } from parser
+import { syntax_loop_transfer_kind, syntax_conditional_tail, gate4_token_is, gate4_binary_operator_id, gate4_binary_precedence, gate4_parse_expression_syntax, gate4_parse_type, gate4_skip_newlines, gate4_declaration_start } from parser
 import { mir_logical_short_value } from mir
+import { checked_loop_transfer_kind } from checked_program
 import { gate4_find_visible_function, gate4_find_visible_record, gate4_find_record_type, gate4_find_field, gate4_record_type, gate4_array_element_type } from resolution
 import { gate4_number_is_float, gate4_number_without_underscores, gate4_integer_string } from literals
 import { native_cli_float, native_cli_interrupt } from host
@@ -220,7 +221,7 @@ def repl_call(mut state: Gate4Compiler, function: Integer, arguments: Array<Inte
 	mut flow := [0]
 	module_name := state.active_module[0]
 	state.active_module[0] = gate4_load_integer(state.function_modules, function)
-	result := repl_block(state, position, store, environment, flow)
+	result := repl_block(state, position, store, environment, flow, - 1)
 	state.active_module[0] = module_name
 	store.depth[0] -= 1
 	return repl_coerce(store, result, gate4_load_string(state.function_result_types, function))
@@ -539,7 +540,7 @@ def repl_block_end(state: Gate4Compiler, start: Integer, stop_else: Boolean): In
 	return position
 end
 
-def repl_statement(mut state: Gate4Compiler, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, mut flow: Array<Integer>): Integer
+def repl_statement(mut state: Gate4Compiler, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, mut flow: Array<Integer>, loop_origin: Integer): Integer
 	if gate4_token_is(state, position[0], "if")
 		finish := repl_block_end(state, position[0] + 1, false)
 		saved := environment.count[0]
@@ -553,7 +554,7 @@ def repl_statement(mut state: Gate4Compiler, mut position: Array<Integer>, mut s
 			end
 			gate4_skip_newlines(state, position)
 			if store.integers[condition.value] != 0
-				result = repl_block(state, position, store, environment, flow)
+				result = repl_block(state, position, store, environment, flow, loop_origin)
 				complete = true
 			else
 				boundary := repl_block_end(state, position[0], true)
@@ -561,7 +562,7 @@ def repl_statement(mut state: Gate4Compiler, mut position: Array<Integer>, mut s
 				if !gate4_token_is(state, boundary, "elsif")
 					if gate4_token_is(state, boundary, "else")
 						position[0] += 1
-						result = repl_block(state, position, store, environment, flow)
+						result = repl_block(state, position, store, environment, flow, loop_origin)
 					end
 					complete = true
 				end
@@ -583,10 +584,15 @@ def repl_statement(mut state: Gate4Compiler, mut position: Array<Integer>, mut s
 				running = false
 			else
 				saved := environment.count[0]
-				result = repl_block(state, position, store, environment, flow)
+				result = repl_block(state, position, store, environment, flow, start - 1)
 				environment.count[0] = saved
 			end
-			if flow[0] != 0
+			if flow[0] == 2
+				flow[0] = 0
+				running = false
+			elsif flow[0] == 3
+				flow[0] = 0
+			elsif flow[0] != 0
 				running = false
 			end
 			if store.error[0] != ""
@@ -595,6 +601,17 @@ def repl_statement(mut state: Gate4Compiler, mut position: Array<Integer>, mut s
 		end
 		position[0] = finish + 1
 		return result
+	end
+	if syntax_loop_transfer_kind(state, position[0]) > 0
+		kind := checked_loop_transfer_kind(state, position[0], loop_origin)
+		if kind == 0
+			store.error[0] = "invalid checked loop transfer target"
+			return 0
+		end
+		# Return remains 1; the nearest while consumes exit/header transfers.
+		flow[0] = kind + 1
+		position[0] += 1
+		return 0
 	end
 	if gate4_token_is(state, position[0], "return")
 		position[0] += 1
@@ -664,7 +681,7 @@ def repl_statement(mut state: Gate4Compiler, mut position: Array<Integer>, mut s
 	return left.value
 end
 
-def repl_block(mut state: Gate4Compiler, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, mut flow: Array<Integer>): Integer
+def repl_block(mut state: Gate4Compiler, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, mut flow: Array<Integer>, loop_origin: Integer): Integer
 	mut result := 0
 	gate4_skip_newlines(state, position)
 	mut complete := false
@@ -681,7 +698,7 @@ def repl_block(mut state: Gate4Compiler, mut position: Array<Integer>, mut store
 			if syntax_conditional_tail(state, position[0])
 				complete = true
 			else
-				result = repl_statement(state, position, store, environment, flow)
+				result = repl_statement(state, position, store, environment, flow, loop_origin)
 				gate4_skip_newlines(state, position)
 				if flow[0] != 0
 					complete = true
