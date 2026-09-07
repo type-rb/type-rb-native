@@ -31,7 +31,7 @@ and closed both ordinary previous-Native chains. See the
   `d587905d620dc5e1d2bfa7c2cc642b9b837aa89a3188c6e37b53d756cf66e320`
 
 The recorded
-[Gate 6K result](../results/2026-08-30-gate6k-configured-project-darwin-linux-arm64/README.md)
+[Gate 6K result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-30-gate6k-configured-project-darwin-linux-arm64/README.md)
 owns the initial fixed-point evidence. Gate 6L does not regenerate or rename
 that provenance.
 

@@ -13,7 +13,7 @@ Gate 5 is complete at TypeRB Native revision
 `a83699d6dd87de0c77a8a8a395ea6e266802bf0a`. The matched corpus, fixed point,
 normalization, Go-free process boundary, time, peak-RSS, artifact-size,
 distribution, and adjacent-generation criteria all pass. See the
-[recorded Darwin arm64 result](../results/2026-08-29-gate5-matched-compiler-darwin-arm64/README.md).
+[recorded Darwin arm64 result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-29-gate5-matched-compiler-darwin-arm64/README.md).
 
 ## Comparison boundary
 

@@ -1,3 +1,6 @@
+> Lifecycle: [complete source-era record](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/README.md).
+> Historical checksum inventories refer to that full record, not this compact working set.
+
 # TypeRB 0.4.4 Development Compatibility Revalidation Results
 
 TypeRB Native passes the registered exact-revision compatibility revalidation
@@ -35,7 +38,7 @@ production support.
 
 The selected TypeRB interval removes `trb/std/filesystem` and requires scoped
 file ownership. All 39 affected repository sources in
-[`migration-inventory.txt`](migration-inventory.txt) now use repository-owned
+[`migration-inventory.txt`](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/migration-inventory.txt) now use repository-owned
 support built on `File.open`. Production reads default to a 67,108,864-byte
 limit, writes use `FileMode::Write`, and recursive directory creation needed by
 tests and benchmark controllers uses exact `/bin/mkdir -p` through shell-free
@@ -140,8 +143,8 @@ replacement seed is warranted by this source-compatibility migration.
   evidence.
 - [`baseline`](baseline) retains the complete same-toolchain baseline evidence
   with the same directory structure.
-- [`combined-size.txt`](combined-size.txt) and
-  [`baseline/combined-size.txt`](baseline/combined-size.txt) are exact.
+- [`combined-size.txt`](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/combined-size.txt) and
+  [`baseline/combined-size.txt`](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/baseline/combined-size.txt) are exact.
 - [`EVIDENCE_SHA256SUMS`](EVIDENCE_SHA256SUMS) covers every retained raw file
   and the migration inventory.
 

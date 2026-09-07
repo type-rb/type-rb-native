@@ -148,7 +148,7 @@ byte-for-byte; every conformance and mutation check passes; and the direct
 B1-to-B2 harness contains no Go or reference compiler. Build time, RSS, and
 stripped size are within the registered B1/B2 convergence bounds, while the
 native compiler-plus-QBE distribution is 99.827% smaller than recovery. See
-the [Gate 4 result](../results/2026-08-28-gate4-self-host-darwin-arm64/README.md).
+the [Gate 4 result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-28-gate4-self-host-darwin-arm64/README.md).
 
 ### Gate 5: Matched self-hosted compiler baseline
 
@@ -189,7 +189,7 @@ anti-shortcut checks pass; B1/B2/B3 QBE and normalized B1/B2 executables
 converge; Native direct compilation and end-to-end building are substantially
 faster than the matched Go artifact; all RSS bounds pass; and stripped compiler
 and compiler-plus-QBE sizes improve by 94.46% and 82.18%. See the
-[Gate 5 result](../results/2026-08-29-gate5-matched-compiler-darwin-arm64/README.md).
+[Gate 5 result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-29-gate5-matched-compiler-darwin-arm64/README.md).
 
 ### Gate 6: Self-hosted product feasibility
 
@@ -210,7 +210,7 @@ Gate 6A completed at TypeRB Native revision
 registered behavior and fixed point, direct time and RSS improve over the
 same-generation hidden path, adjacent B1/B2 measurements converge, stripped
 size grows by 0.16%, and the direct process imports no spawn operation. See the
-[Gate 6A result](../results/2026-08-29-gate6a-file-entry-darwin-arm64/README.md).
+[Gate 6A result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-29-gate6a-file-entry-darwin-arm64/README.md).
 
 Gate 6B is the separately measurable Native-owned single-file build slice
 registered in
@@ -239,7 +239,7 @@ Native-to-QBE-to-CC process graph. Median time is 1.41% and 3.13% above the
 same-generation external recipe, median RSS is 0.63% and 0.27% above it,
 adjacent Native generations converge within 0.42%, and stripped compiler
 growth is 11.38%. All registered bounds pass. See the
-[Gate 6B result](../results/2026-08-29-gate6b-single-file-build-darwin-arm64/README.md).
+[Gate 6B result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-29-gate6b-single-file-build-darwin-arm64/README.md).
 
 Gate 6C is the Native-to-Native bootstrap-closure slice registered in
 [issue #43](https://github.com/type-rb/type-rb-native/issues/43) and specified
@@ -260,7 +260,7 @@ Gate 6C completed at measured TypeRB Native revision
 identical, adjacent median time and RSS differ by at most 1.03% and 0.67%,
 every median remains within 1.10% of its Gate 6B baseline, and stripped code
 remains exactly 166,824 bytes. All registered bounds pass. See the
-[Gate 6C result](../results/2026-08-29-gate6c-native-bootstrap-darwin-arm64/README.md).
+[Gate 6C result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-29-gate6c-native-bootstrap-darwin-arm64/README.md).
 
 Gate 6D is the second-environment target slice registered in
 [issue #47](https://github.com/type-rb/type-rb-native/issues/47) and specified
@@ -285,7 +285,7 @@ are exact; the complete corpus, failures, ELF and process inventory pass;
 Native/external median time differs by at most 2.55%; adjacent Native medians
 differ by at most 0.88%; median RSS differs by at most 0.35%; and compiler size
 is 15.64% below its registered ceiling. See the
-[Gate 6D result](../results/2026-08-29-gate6d-native-bootstrap-linux-arm64/README.md).
+[Gate 6D result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-29-gate6d-native-bootstrap-linux-arm64/README.md).
 
 Gate 6E is the file-root multi-module slice registered in
 [issue #51](https://github.com/type-rb/type-rb-native/issues/51) and specified
@@ -311,7 +311,7 @@ and runtime RSS 65.32% lower; stripped output is 97.82% smaller and equal to
 the flattened Native size. B1-to-B2 time is 23.80% above the Gate 6C baseline,
 RSS is effectively flat, the compiler strips to 199,992 bytes, and Darwin and
 pinned Linux arm64 fixed points pass. See the
-[Gate 6E result](../results/2026-08-29-gate6e-file-root-darwin-linux-arm64/README.md).
+[Gate 6E result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-29-gate6e-file-root-darwin-linux-arm64/README.md).
 
 Gate 6F is the reflexive multi-file compiler slice registered in
 [issue #55](https://github.com/type-rb/type-rb-native/issues/55) and specified
@@ -332,7 +332,7 @@ builds 0.37% faster and uses 0.09% less RSS than its temporary flat comparator;
 it remains within the Gate 6C absolute bounds, strips to the same 199,992
 bytes, preserves the Gate 6E application hash, and closes exact Darwin and
 Linux arm64 B2/B3/B4 chains. See the
-[Gate 6F result](../results/2026-08-29-gate6f-multifile-compiler-darwin-linux-arm64/README.md).
+[Gate 6F result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-29-gate6f-multifile-compiler-darwin-linux-arm64/README.md).
 
 Gate 6G is the self-hosted symbol-lookup scalability slice registered in
 [issue #59](https://github.com/type-rb/type-rb-native/issues/59) and specified
@@ -356,7 +356,7 @@ emission improves by 53.49%; median RSS changes by +1.31%, 0.00%, and +0.12%
 respectively. The candidate strips to 200,008 bytes, retains the representative
 application exactly, and closes exact Darwin and Linux arm64 replacement
 chains. See the
-[Gate 6G result](../results/2026-08-29-gate6g-symbol-lookup-darwin-linux-arm64/README.md).
+[Gate 6G result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-29-gate6g-symbol-lookup-darwin-linux-arm64/README.md).
 
 Gate 6H is the file-root module-graph scalability slice registered in
 [issue #64](https://github.com/type-rb/type-rb-native/issues/64) and specified
@@ -385,7 +385,7 @@ candidate remains within the canonical Gate 6G guardrails, builds the same
 project 85.79% faster and with 92.93% less peak RSS than the pinned optimized
 Go path, produces a 97.00% smaller stripped application, and closes exact
 Darwin and Linux arm64 chains. See the
-[Gate 6H result](../results/2026-08-29-gate6h-module-graph-darwin-linux-arm64/README.md).
+[Gate 6H result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-29-gate6h-module-graph-darwin-linux-arm64/README.md).
 
 Gate 6I is the self-hosted Float scalar slice registered in
 [issue #69](https://github.com/type-rb/type-rb-native/issues/69) and specified
@@ -414,7 +414,7 @@ executable. All four Go-parity metrics remain within the registered 25%
 ceiling. The candidate also remains within every canonical compiler guardrail,
 strips to 216,552 bytes, and closes exact Darwin and Linux arm64 replacement
 chains. See the
-[Gate 6I result](../results/2026-08-29-gate6i-float-darwin-linux-arm64/README.md).
+[Gate 6I result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-29-gate6i-float-darwin-linux-arm64/README.md).
 
 Gate 6J is the self-hosted Float Array slice registered in
 [issue #74](https://github.com/type-rb/type-rb-native/issues/74) and specified
@@ -443,7 +443,7 @@ executable. All four Go-parity metrics remain within the registered 25%
 ceiling. The candidate also remains within every canonical compiler guardrail,
 strips to 216,552 bytes, preserves the exact representative and scalar Float
 applications, and closes exact Darwin and Linux arm64 replacement chains. See
-the [Gate 6J result](../results/2026-08-29-gate6j-float-arrays-darwin-linux-arm64/README.md).
+the [Gate 6J result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-29-gate6j-float-arrays-darwin-linux-arm64/README.md).
 
 Gate 6K is the explicit configured-project slice registered in
 [issue #80](https://github.com/type-rb/type-rb-native/issues/80) and specified
@@ -489,7 +489,7 @@ Native configured check is 2.85% faster, build is 85.81% faster, and runtime is
 application. The fresh Gate 6J comparison remains within every canonical
 compiler guardrail, and exact Darwin and Linux arm64 candidate chains close.
 See the
-[Gate 6K result](../results/2026-08-30-gate6k-configured-project-darwin-linux-arm64/README.md).
+[Gate 6K result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-30-gate6k-configured-project-darwin-linux-arm64/README.md).
 
 Gate 6L is the experimental bootstrap seed distribution slice registered in
 [issue #90](https://github.com/type-rb/type-rb-native/issues/90) and specified
@@ -519,7 +519,7 @@ the exact TypeRB reference to `0.4.1-dev`, migrates repository source and the
 self-hosted declaration-import subset, then uses the immutable Gate 6L seed to
 close current Darwin/Linux arm64 B1/B2/B3/B4 chains. The seed identity and
 current fixed-point identity remain separate. The
-[recorded result](../results/2026-08-30-typerb-0-4-compatibility-darwin-linux-arm64/README.md)
+[recorded result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-30-typerb-0-4-compatibility-darwin-linux-arm64/README.md)
 passes the same two-warmup, seven-observation, 25%, 2x, 310,000-byte, and
 620,000-byte bounds without publishing a replacement seed.
 
@@ -534,7 +534,7 @@ source and runtime before candidate B2. Candidate B2/B3/B4 exactness and all
 registered time, RSS, process, and size boundaries remain unchanged and
 independent of the reference revision.
 The
-[recorded result](../results/2026-08-30-typerb-0-4-3-compatibility-darwin-linux-arm64/README.md)
+[recorded result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-30-typerb-0-4-3-compatibility-darwin-linux-arm64/README.md)
 passes both targets: candidate B2/B3/B4 and cross-target QBE are exact, all
 adjacent candidate spreads remain below 1.89%, and the combined compilers use
 544,712 of the registered 620,000 bytes.
@@ -556,7 +556,7 @@ the representation of profitable static Strings of at least 256 bytes. A
 deterministic bounded-backreference encoder in the self-hosted compiler emits
 dependency-free data that expands once into zero-filled static storage before
 entry; the decoder and initialization call are omitted when unused. The
-[formal Darwin/Linux arm64 result](../results/2026-08-31-static-string-compactness-darwin-linux-arm64/README.md)
+[formal Darwin/Linux arm64 result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-31-static-string-compactness-darwin-linux-arm64/README.md)
 passes exact fixed-point and target-neutral-QBE checks, all registered
 correctness and process boundaries, and the 5% build-time/RSS caps. The
 Darwin/Linux compiler pair decreases from 567,824 to 535,304 bytes, while the
@@ -587,7 +587,7 @@ allocation accounting, a 4 MiB managed-heap ceiling, 64 MiB RSS ceiling, both
 registered RSS-trend limits, the 5x calibration guardrail, compiler sizes, and
 existing fixed points are mandatory. See the
 [runtime memory stability plan](runtime-memory-stability.md). The
-[recorded result](../results/2026-08-30-runtime-memory-stability-darwin-linux-arm64/README.md)
+[recorded result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-30-runtime-memory-stability-darwin-linux-arm64/README.md)
 passes every frozen Stage 1 criterion: 42,300,000,000 managed bytes are
 allocated and reclaimed, final live bytes and both RSS trend values are zero,
 and ASan/LSan, Valgrind, exact fixed-point, process, and compiler-size checks
@@ -631,7 +631,7 @@ improvement. See the
 stand in for the later cross-language benchmark result.
 
 The
-[recorded Darwin/Linux arm64 result](../results/2026-08-31-gate6m-portable-benchmark-entry-darwin-linux-arm64/README.md)
+[recorded Darwin/Linux arm64 result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-31-gate6m-portable-benchmark-entry-darwin-linux-arm64/README.md)
 passes every frozen criterion. Candidate compiler time and RSS are 7.93% and
 13.77% above the fixed baseline; both remain below the 15% ceiling. The
 identical-source Native application is faster and lighter than optimized Go on
@@ -720,7 +720,7 @@ and cleanup bounds remain independently enforced. The complete temporary
 increase must be recovered by the end of portable range, index, and induction
 migration, before the next fact family. The long-term Go-competitive build and
 generated-artifact objectives remain mandatory. See the
-[recorded foundation result](../results/2026-09-02-native-mir-foundation-linux-arm64/README.md),
+[recorded foundation result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-09-02-native-mir-foundation-linux-arm64/README.md),
 [scalar-connection freeze](https://github.com/type-rb/type-rb-native/issues/221),
 and [control-flow freeze](https://github.com/type-rb/type-rb-native/issues/225).
 

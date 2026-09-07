@@ -1,3 +1,6 @@
+> Lifecycle: [complete source-era record](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-09-01-persistent-worker-memory-darwin-linux-arm64/README.md).
+> Historical checksum inventories refer to that full record, not this compact working set.
+
 # Persistent Worker Memory Lifecycle Result on Darwin and Linux arm64
 
 The registered single-threaded persistent worker lifecycle passes every
@@ -172,7 +175,7 @@ evidence is retained without compiler or workload executables:
 - [`linux-arm64`](linux-arm64) adds all five generation process traces, the
   complete 3,066-line formal GC trace, Native and Go raw process series,
   ASan/LSan output, and complete Memcheck output;
-- [`cross-target.txt`](cross-target.txt) records the independently stripped
+- [`cross-target.txt`](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-09-01-persistent-worker-memory-darwin-linux-arm64/cross-target.txt) records the independently stripped
   compiler pair; and
 - [`build-regression`](build-regression) contains all interleaved current-main
   observations, decisions, catastrophic checks, bootstrap identities, and

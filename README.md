@@ -101,7 +101,8 @@ See the [development and validation plan](docs/experiment-plan.md).
   support, and tests; gate-numbered names do not mean unused code.
 - `tools/` and `corpus/`: verification and measurement drivers and inputs.
 - `docs/`: architecture, plans, current status, and historical decisions.
-- `results/`: dated measurement evidence; `docs/capabilities/` powers Pages.
+- `results/`: registered active evidence with retirement and size limits;
+  `docs/capabilities/` powers Pages.
 
 The [organization plan](docs/repository-organization.md) schedules early
 documentation cleanup, dependency-led source organization, and incremental

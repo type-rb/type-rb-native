@@ -14,6 +14,69 @@ KEEP_SUFFIXES = {".md", ".csv", ".tsv", ".json", ".sha256"}
 FORBIDDEN_SUFFIXES = {".raw", ".stripped", ".ssa", ".s", ".o", ".a", ".so",
                       ".dylib", ".exe", ".zip", ".gz", ".xz", ".zst",
                       ".stdout", ".stderr", ".status", ".rss-kib"}
+ACTIVE_SLOTS = {"published-runtime", "published-build", "compatibility", "bootstrap-seed",
+                "target-amd64", "persistent-memory", "accepted-compiler",
+                "candidate", "comparison-baseline", "runtime-investigation"}
+
+
+def lifecycle_errors(root, revision, entries):
+    errors = []
+    if len(entries) > 512 or sum(e[2] for e in entries.values()) > 4 * 1024**2:
+        errors.append("Active results exceed the global 512-file / 4 MiB budget")
+    try:
+        record = entries["results/active.json"]
+        manifest = json.loads(git(root, "cat-file", "blob", record[1]))
+        if set(manifest) != {"schemaVersion", "entries"} or manifest["schemaVersion"] != 1:
+            raise ValueError("Invalid active result registry")
+        slots, directories = set(), set()
+        for item in manifest["entries"]:
+            if (set(item) != {"slot", "directory", "reason", "retireWhen"} or
+                    item["slot"] not in ACTIVE_SLOTS or item["slot"] in slots or
+                    not re.fullmatch(r"[a-z0-9][a-z0-9-]+", item["directory"]) or
+                    item["directory"] in directories or
+                    any(not isinstance(item[k], str) or not item[k].strip() for k in ("reason", "retireWhen"))):
+                raise ValueError("Invalid, duplicated or unexplained active result")
+            slots.add(item["slot"])
+            directories.add(item["directory"])
+            if f'results/{item["directory"]}/README.md' not in entries:
+                raise ValueError("Active result needs a retained README")
+        actual = {p.split('/')[1] for p in entries if len(p.split('/')) >= 3}
+        if actual != directories:
+            errors.append("Every result directory must occupy one active slot; remove superseded directories")
+        if any(len(p.split('/')) == 2 and p not in ("results/README.md", "results/active.json") for p in entries):
+            errors.append("Unregistered top-level result file")
+    except (KeyError, TypeError, ValueError):
+        errors.append("Missing or invalid results/active.json lifecycle registry")
+    return errors
+
+
+def result_reference_errors(root, revision, entries):
+    """Reject dangling dated result references; pinned history is checked in Git."""
+    sources = [p for p in git(root, 'ls-tree', '-rz', '--name-only', revision).decode().split('\0')
+               if PurePosixPath(p).suffix in {'.md', '.js', '.mjs', '.json', '.jsonc', '.py',
+                                            '.trb', '.sh', '.yml', '.yaml', '.html', '.toml'}]
+    if not sources:
+        return []
+    try:
+        lines = git(root, 'grep', '-I', '-h', '-E', 'results/[0-9]{4}-', revision, '--',
+                    *sources).decode()
+    except subprocess.CalledProcessError as error:
+        if error.returncode == 1:
+            return []
+        raise
+    pattern = (r'(?:https://github\.com/type-rb/type-rb-native/(?:blob|tree)/([a-f0-9]{7,40})/)?'
+               r'results/([0-9]{4}-[A-Za-z0-9_-]+)')
+    errors = []
+    directories = {p.split('/')[1] for p in entries if len(p.split('/')) >= 3}
+    for pinned, directory in sorted(set(re.findall(pattern, lines))):
+        if pinned:
+            try:
+                git(root, 'cat-file', '-e', f'{pinned}:results/{directory}')
+            except subprocess.CalledProcessError:
+                errors.append(f'Historical result reference is unavailable: {pinned}/{directory}')
+        elif directory not in directories:
+            errors.append(f'Retired result reference must use an exact historical revision: {directory}')
+    return errors
 
 
 def git(root, *args, data=None):
@@ -176,7 +239,7 @@ def compact(root, archive, checksum, url):
 
 def check(root, base, head):
     old, new = tree(root, base), tree(root, head)
-    errors = []
+    errors = lifecycle_errors(root, head, new) + result_reference_errors(root, head, new)
     for name, entry in new.items():
         if old.get(name) == entry:
             continue
