@@ -16,7 +16,7 @@ APPLICATION_RUNTIME_ELAPSED_REPETITIONS=32
 usage() {
 	cat >&2 <<'EOF'
 usage: gate6n-linux-amd64.sh CANDIDATE_ROOT ROOT_QBE QBE CC
-       REFERENCE_TRB GO WORKSPACE EVIDENCE OUTPUT_COMPILER [SEED_SOURCE_ROOT [LOOP_SOURCE_ROOT [BOOLEAN_SOURCE_ROOT]]]
+       REFERENCE_TRB GO WORKSPACE EVIDENCE OUTPUT_COMPILER [SEED_SOURCE_ROOT [LOOP_SOURCE_ROOT [BOOLEAN_SOURCE_ROOT [RECORD_SOURCE_ROOT]]]]
 EOF
 	exit 64
 }
@@ -167,7 +167,7 @@ require_go_build() {
 	test -x "$output" || fail "$label did not publish an executable"
 }
 
-test "$#" -eq 9 || test "$#" -eq 10 || test "$#" -eq 11 || test "$#" -eq 12 || usage
+test "$#" -eq 9 || test "$#" -eq 10 || test "$#" -eq 11 || test "$#" -eq 12 || test "$#" -eq 13 || usage
 
 candidate_root=$1
 root_qbe=$2
@@ -181,6 +181,7 @@ output_compiler=$9
 seed_source_root=${10:-$candidate_root}
 loop_source_root=${11:-}
 boolean_source_root=${12:-}
+record_source_root=${13:-}
 
 script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 verifier_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
@@ -998,6 +999,15 @@ if test -n "$boolean_source_root"; then
 	boolean_entry=$boolean_source_root/compiler/src/compiler.trb
 	test -f "$boolean_entry" || fail "boolean compiler entry is missing"
 fi
+record_entry=
+if test -n "$record_source_root"; then
+	test -n "$boolean_source_root" || fail "record Array source requires the accepted Boolean source"
+	require_clean_revision "$record_source_root" "accepted record source"
+	test "$(git -C "$record_source_root" rev-parse HEAD)" = \
+		566d00d67172460df0f57dff6d5fe03db3b67cdc || fail "record source revision differs"
+	record_entry=$record_source_root/compiler/src/compiler.trb
+	test -f "$record_entry" || fail "record compiler entry is missing"
+fi
 portable_config=$candidate_root/corpus/gate6m/portable-entry/trbconfig.jsonc
 portable_source=$candidate_root/corpus/gate6m/portable-entry/src/main.trb
 failure_config=$candidate_root/corpus/gate6m/runtime-failures/trbconfig.jsonc
@@ -1179,6 +1189,40 @@ if test -n "$boolean_source_root"; then
 	require_forbidden_processes_absent "$evidence/setup/boolean-check-process.trace" "Boolean Array check"
 	runtime_seed=$boolean_transition
 fi
+if test -n "$record_source_root"; then
+	mkdir -p "$workspace/setup/record-syntax"
+	record_qbe=$workspace/setup/record-syntax/compiler.ssa
+	record_assembly=$workspace/setup/record-syntax/compiler.s
+	record_transition=$workspace/setup/record-syntax/compiler
+	strace -f -e trace=process -o "$evidence/setup/record-emit-process.trace" \
+		"$boolean_transition" emit-qbe "$record_entry" \
+		> "$record_qbe" 2> "$evidence/setup/record-emit.stderr" || fail "record source emission failed"
+	require_empty_file "$evidence/setup/record-emit.stderr" "record source emission wrote stderr"
+	test -s "$record_qbe" || fail "record source QBE is empty"
+	require_forbidden_processes_absent "$evidence/setup/record-emit-process.trace" "record source emission"
+	strace -f -e trace=process -o "$evidence/setup/record-qbe-process.trace" \
+		"$qbe" -t amd64_sysv -o "$record_assembly" "$record_qbe" \
+		> "$evidence/setup/record-qbe.stdout" 2> "$evidence/setup/record-qbe.stderr" || fail "record QBE translation failed"
+	require_empty_file "$evidence/setup/record-qbe.stdout" "record QBE translation wrote stdout"
+	require_empty_file "$evidence/setup/record-qbe.stderr" "record QBE translation wrote stderr"
+	test -s "$record_assembly" || fail "record assembly is empty"
+	strace -f -e trace=process -o "$evidence/setup/record-link-process.trace" \
+		"$cc" -xassembler "$record_assembly" -fuse-ld=lld \
+		-Wl,--gc-sections,--strip-all -lm -o "$record_transition" \
+		> "$evidence/setup/record-link.stdout" 2> "$evidence/setup/record-link.stderr" || fail "record transition link failed"
+	require_empty_file "$evidence/setup/record-link.stdout" "record transition link wrote stdout"
+	require_empty_file "$evidence/setup/record-link.stderr" "record transition link wrote stderr"
+	test -x "$record_transition" || fail "record transition compiler is missing"
+	require_tool_observed "$evidence/setup/record-link-process.trace" 'execve\("[^"]*/ld\.lld"' "record transition LLD"
+	strace -f -e trace=process -o "$evidence/setup/record-check-process.trace" \
+		"$record_transition" check "$candidate_root/compiler/conformance/valid/record-array-values.trb" \
+		> "$evidence/setup/record-check.stdout" 2> "$evidence/setup/record-check.stderr" || fail "record Array bridge rejected record Arrays"
+	printf 'ok\n' > "$evidence/setup/record-check.expected"
+	cmp "$evidence/setup/record-check.expected" "$evidence/setup/record-check.stdout" > /dev/null || fail "record check stdout differs"
+	require_empty_file "$evidence/setup/record-check.stderr" "record check wrote stderr"
+	require_forbidden_processes_absent "$evidence/setup/record-check-process.trace" "record Array check"
+	runtime_seed=$record_transition
+fi
 
 strace -f -e trace=process -o "$evidence/setup/current-runtime-emit-process.trace" \
 	"$runtime_seed" emit-qbe "$compiler_entry" \
@@ -1233,6 +1277,12 @@ require_tool_observed "$evidence/setup/current-runtime-link-process.trace" 'exec
 		grep execve "$evidence/setup/boolean-link-process.trace"
 		grep execve "$evidence/setup/boolean-check-process.trace"
 	fi
+	if test -n "$record_source_root"; then
+		grep execve "$evidence/setup/record-emit-process.trace"
+		grep execve "$evidence/setup/record-qbe-process.trace"
+		grep execve "$evidence/setup/record-link-process.trace"
+		grep execve "$evidence/setup/record-check-process.trace"
+	fi
 	grep execve "$evidence/setup/current-runtime-emit-process.trace"
 	grep execve "$evidence/setup/current-runtime-qbe-process.trace"
 	grep execve "$evidence/setup/current-runtime-link-process.trace"
@@ -1263,6 +1313,14 @@ require_tool_observed "$evidence/setup/current-runtime-link-process.trace" 'exec
 		printf 'boolean_transition_qbe_sha256=%s\n' "$(sha256 "$boolean_qbe")"
 		printf 'boolean_transition_size=%s\n' "$(file_size "$boolean_transition")"
 		printf 'boolean_transition_sha256=%s\n' "$(sha256 "$boolean_transition")"
+	fi
+	if test -n "$record_source_root"; then
+		printf 'record_source_revision=%s\n' "$(git -C "$record_source_root" rev-parse HEAD)"
+		printf 'record_source_entry_sha256=%s\n' "$(sha256 "$record_entry")"
+		printf 'record_transition_qbe_size=%s\n' "$(file_size "$record_qbe")"
+		printf 'record_transition_qbe_sha256=%s\n' "$(sha256 "$record_qbe")"
+		printf 'record_transition_size=%s\n' "$(file_size "$record_transition")"
+		printf 'record_transition_sha256=%s\n' "$(sha256 "$record_transition")"
 	fi
 	printf 'current_runtime_qbe_size=%s\n' "$(file_size "$runtime_qbe")"
 	printf 'current_runtime_qbe_sha256=%s\n' "$(sha256 "$runtime_qbe")"

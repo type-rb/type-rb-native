@@ -35,7 +35,7 @@ named functions, while a separate snapshot case retains closure coverage.
 The original failed observation remains separate from the corrected cohort.
 The ordinary compiler source and local binary are unchanged from PR #345.
 
-The [verified Boolean Array seed handoff](../../docs/bootstrap-seed-updates.md#current-verified-checkout-seed)
+The [verified Boolean Array seed handoff](https://github.com/type-rb/type-rb-native/blob/db48f64f6c3f6ce3fb904b2d28c95fa46522ebfc/docs/bootstrap-seed-updates.md#current-verified-checkout-seed)
 records immutable assets, exact source and successful fresh published-asset
 verification. The checkout handoff is accepted at
 `65ab856abe55b4816ec6cc8e7e4cc91ce98293bd` from
@@ -105,7 +105,7 @@ selected authorities passed at `9e8a6f6149323a87710b2be33f9b39e7b71077e7`.
 The failed first cost attempt and bounded confirmation are retained below.
 No compiler implementation uses record Arrays yet.
 
-The matching record Array recovery candidate pins the accepted reference above.
+The accepted record Array recovery implementation pins the reference above.
 Local recovery-enabled root 102/102 and compiler 133/133 tests pass, including
 the ordinary recovery fixture and a separate escaping closure fixture.
 The complete ordinary CLI/REPL/terminal suite and both 15-case language
@@ -115,8 +115,9 @@ calls, nested aliases, mutation and explicit collection, and traces dynamic
 String and Integer-Array fields owned by another returned record. Removing
 scalar-record boxing fails the exact-value lifetime test. An earlier Boolean-only
 oracle did not expose that invalid stack storage and was strengthened; both
-observations are retained separately. The recovery candidate changes no
-ordinary compiler source and still needs all selected hosted authorities.
+observations are retained separately. The recovery changes no ordinary compiler
+source; exact-head hosted acceptance and its retained first failure are recorded
+below.
 
 No runtime-performance or Pure Go claim, benchmark-value update or seed change
 is made by this recovery update. The cumulative baseline remains
@@ -338,9 +339,56 @@ passed at `6f344860f35337126b20d2dad38f2754df67f0c7`.
 
 The existing ordinary recovery fixture now retains a cycle across allocation
 pressure and creates unreachable record/Array cycles. Ordinary execution and
-a focused real v4 snapshot/decoder/MIR/QBE execution pass. Earlier 102/133
-local suites predate this stronger fixture; final enabled suites and every
-applicable hosted authority remain required for this exact reference update.
+a focused real v4 snapshot/decoder/MIR/QBE execution pass. The final enabled local suites passed 102 root and 133 compiler tests with
+this stronger fixture and the exact accepted reference.
 The earlier recovery candidate CI was cancelled for this correction after
 CLI, target/QBE and worker/combined checks passed; its cancelled root suite
-and unrun comparative checks establish no acceptance. No seed was published.
+and unrun comparative checks establish no acceptance. That earlier candidate
+did not publish a seed.
+
+
+## Record Array recovery hosted acceptance
+
+[PR #355](https://github.com/type-rb/type-rb-native/pull/355) was accepted at
+`b8133a3df537d3d8af5531fbd235322d87519d3f` and merged as
+`db48f64f6c3f6ce3fb904b2d28c95fa46522ebfc`. Its first
+[hosted attempt](https://github.com/type-rb/type-rb-native/actions/runs/34250207907/attempts/1)
+passed correctness, recovery, both CLI and target controls, worker/combined
+size and memory, and Linux comparative cost (0.992424), but failed Darwin
+self-build wall ratio 1.065539 (2.365 / 2.520 seconds). Baseline and candidate
+Darwin compilers were byte-identical at 365,768 bytes, SHA-256
+`a95b8758af7d45ccbd40100cf00e15f2783a381b66a253a21fe683c06968e9bd`.
+
+A [separate single confirmation](https://github.com/type-rb/type-rb-native/pull/355#issuecomment-5588686720)
+retained the exact candidate and baseline, commands, observations and ordinary
+limits. Attempt 2 passed all 17 authorities; Darwin medians were 2.040 / 1.995
+seconds (0.977941). The additional preregistered pool of all 28 retained
+observations per role gave 2.185 / 2.215 seconds (1.013730), with RSS ratio
+0.998611. The [complete two-attempt evidence](record-array-recovery-hosted-confirmation.json)
+retains all 72 warmup/retained observations, identities, environments, policies
+and original failures. QBE binaries were identical between roles within each
+attempt; fresh builds on separate runners had different tool binary digests,
+which remain recorded separately. The confirmation budget is exhausted and
+expired. This accepts the recovery prerequisite without changing any ordinary
+limit or renewing a runtime diagnostic.
+
+
+## Record Array bootstrap handoff
+
+The [current seed record](../../docs/bootstrap-seed-updates.md#current-verified-checkout-seed)
+pins immutable `bootstrap-seed-2026-09-09-record-arrays` at accepted
+`db48f64f6c3f6ce3fb904b2d28c95fa46522ebfc`. Preparation 34254120749 passed both
+targets and all 28 retained observations; actual-published verification 34255257731
+passed both targets, seed/B1/B2/B3/B4 equality, the corpus and all 42 retained
+observations. All four published asset attestations bind to that accepted source
+and hosted preparation workflow. Compiler sizes are 365,768 Darwin and 327,744
+Linux bytes, 693,512 combined. Exact hashes and asset IDs remain in the linked
+handoff record. Historical releases and their source-era bounds are unchanged.
+
+Checkout core/CLI bootstrap and active CI consumers now select that exact seed.
+The historical Linux amd64 setup also builds accepted record-capable 566d00d6
+before candidate source; this setup-only bridge retains separate source,
+compiler/QBE and process identities. Compiler implementation has not adopted
+record Arrays yet. The subsequent five-field MIR value carrier migration still
+requires this checkout handoff's acceptance. Frozen benchmark baselines and the
+cumulative n-body alarm are unchanged; no runtime/Pure Go gain is claimed.
