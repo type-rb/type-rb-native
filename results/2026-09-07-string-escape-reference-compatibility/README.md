@@ -231,3 +231,37 @@ previous measurement contracts retain their original revisions.
 
 The [previous compatibility record](https://github.com/type-rb/type-rb-native/blob/5cf61c740aa600c34ed94f1b130ea2ffefd9e783/results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/README.md)
 remains available at its exact archived revision.
+
+## Record Array diagnostic assessment
+
+The [prospectively registered local cohort](https://github.com/type-rb/type-rb-native/pull/352#issuecomment-5586493243)
+completed all [105 raw observations](record-array-cost-diagnostic.csv), including
+two warmups and five retained rotating rounds. The [identities and all medians](record-array-cost-diagnostic.json)
+retain source/compiler/application hashes, exact inputs, toolchain and hardware.
+All outputs and repeated artifacts matched. The old cumulative compiler was
+reclosed through equal same-basename generations after the newer seed's initial
+output; the initial bootstrap binary was not treated as the frozen compiler.
+
+Spectral-norm(5500) wall medians were 2.373460 / 2.385774 / 2.367373 seconds for
+cumulative / accepted control / candidate, with 50,984-byte applications.
+Compiler self-build medians were 1.596516 / 1.657213 / 1.660604 seconds; candidate
+ratios are 1.040143 cumulative and 1.002047 incremental. Both selected applications
+retain byte-identical control/candidate QBE and executables. This establishes
+neither a runtime gain nor a new Go comparison.
+
+The cohort also exposes a cumulative regression: n-body(1000000) runtime medians
+are 0.273365 / 0.472791 / 0.476320 seconds, a candidate/cumulative ratio of
+1.742429. The immediate control already has that difference. Its cumulative
+build wall ratio 1.054824 also crosses the 1.05 alarm; coarse runtime CPU medians
+are 0.10 / 0.30 / 0.30 seconds. These observations are retained as regression
+alarms, not omitted or relabeled as passing results. Static QBE Array-address
+call counts rise from 4 to 16 before this candidate; that is a follow-up lead,
+not a proven attribution. [Issue #354](https://github.com/type-rb/type-rb-native/issues/354)
+tracks that cumulative investigation. No diagnostic budget is renewed by this assessment.
+
+Hosted cohort [34234062970](https://github.com/type-rb/type-rb-native/actions/runs/34234062970)
+passed enabled recovery suites and CLI/target controls, then failed both Darwin
+managed-runtime smoke and worker size guards at 365,808 bytes. Linux worker
+size is 327,736 bytes; the 693,544-byte sum is arithmetic because combined and
+comparative checks were skipped. The separate [budget proposal](https://github.com/type-rb/type-rb-native/pull/353)
+requires review; the feature remains unaccepted.
