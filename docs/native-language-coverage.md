@@ -44,7 +44,8 @@ and mutable arguments. Field immutability does not recursively freeze values.
 [Issue #350](https://github.com/type-rb/type-rb-native/issues/350) tracks the
 checked-frontend correction and its ordinary file/REPL and recovery regressions.
 The existing scalar Float fixture now rebinds the whole record to comply with
-the reference rule. Named record Arrays remain a separate, unaccepted slice in
+the reference rule. Ordinary named record Arrays are accepted through PR #352; the remaining
+recovery, seed and MIR self-use work is tracked in
 [issue #349](https://github.com/type-rb/type-rb-native/issues/349).
 
 ## Coverage is path-specific

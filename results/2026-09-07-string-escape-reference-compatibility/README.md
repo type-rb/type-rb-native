@@ -70,7 +70,7 @@ check/QBE observations and the complete ordinary CLI/REPL/terminal suite pass.
 Corrected enabled suites passed root 99/99 and compiler 131/131; hosted
 acceptance is recorded above.
 
-The ordinary named-record Array candidate in
+The accepted ordinary named-record Array implementation in
 [issue #349](https://github.com/type-rb/type-rb-native/issues/349) follows that
 readonly correction. Three execution cases match the reference, covering
 typed and inferred arrays, nested aliases, RHS growth and automatic collection.
@@ -98,8 +98,11 @@ The separate budget PR #353 is accepted at
 [run 34238461767](https://github.com/type-rb/type-rb-native/actions/runs/34238461767).
 Decision 0030 changes only Darwin/combined ceilings to 366,000/694,000 bytes;
 relative and all other acceptance requirements remain unchanged. Ordinary
-record Array feature acceptance under that policy remains separate. No compiler
-implementation uses record Arrays yet.
+record Arrays are accepted at `566d00d67172460df0f57dff6d5fe03db3b67cdc` from
+[PR #352](https://github.com/type-rb/type-rb-native/pull/352), after all 17
+selected authorities passed at `9e8a6f6149323a87710b2be33f9b39e7b71077e7`.
+The failed first cost attempt and bounded confirmation are retained below.
+No compiler implementation uses record Arrays yet.
 
 The matching record Array recovery candidate pins the accepted reference above.
 Local recovery-enabled root 102/102 and compiler 133/133 tests pass, including
@@ -287,5 +290,34 @@ Hosted cohort [34234062970](https://github.com/type-rb/type-rb-native/actions/ru
 passed enabled recovery suites and CLI/target controls, then failed both Darwin
 managed-runtime smoke and worker size guards at 365,808 bytes. Linux worker
 size is 327,736 bytes; the 693,544-byte sum is arithmetic because combined and
-comparative checks were skipped. The separate [budget proposal](https://github.com/type-rb/type-rb-native/pull/353)
-requires review; the feature remains unaccepted.
+comparative checks were skipped. The separate [budget decision](https://github.com/type-rb/type-rb-native/pull/353)
+was subsequently accepted; this source-era failed cohort remains unchanged.
+
+## Ordinary record Array hosted acceptance
+
+[Run 34241831590](https://github.com/type-rb/type-rb-native/actions/runs/34241831590)
+at `9e8a6f6149323a87710b2be33f9b39e7b71077e7` first failed Darwin self-build
+wall ratio 1.053299 (1.970 / 2.075 seconds). Correctness, recovery, both CLI
+and target controls, worker/combined size and memory, and Linux comparative
+cost passed. The Darwin comparison exited before writing cross-target
+identities; the downstream failure does not establish a code mismatch.
+
+A [separately preregistered single confirmation](https://github.com/type-rb/type-rb-native/pull/352#issuecomment-5587645688)
+kept the exact source, ordinary 1.05 limits, two warmups and seven retained
+rounds. Attempt 2 passed all 17 authorities, including cross-target identity.
+Darwin self-build medians were 2.560 / 2.420 seconds (0.945312). The additional
+preregistered check pooled all 28 retained observations per role from both
+attempts: medians 2.300 / 2.360 seconds, ratio 1.026087. Pooled peak RSS ratio
+is 0.996429. The first failed attempt is preserved and the one-run confirmation
+budget is expired.
+
+The [complete two-attempt Darwin observations](record-array-hosted-confirmation.json)
+include every warmup and retained measurement, source/compiler/toolchain
+identities, measurement policy, environments and original comparisons. Linux
+self-build ratio was 1.011364. Persistent-worker compiler sizes were 365,808
+Darwin and 327,736 Linux, with the verified 693,544-byte combined total below
+694,000. Comparative fixed-point filenames produce separately recorded sizes
+of 365,768 and 327,744 bytes; do not substitute one observer's artifact identity
+for another. This checkpoint supports ordinary incremental acceptance only.
+The frozen cumulative cohort and n-body alarm above remain; no runtime speedup
+or Pure Go comparison is inferred.

@@ -137,10 +137,11 @@ verified source change.
 
 [Issue #349](https://github.com/type-rb/type-rb-native/issues/349) tracks the
 bounded `bootstrap-seed-2026-09-09-record-arrays` refresh. Preparation remains
-inactive until ordinary record Arrays in PR #352 and matching snapshot recovery
-and these observers in PR #355 are accepted on main. The current ordinary
-candidate is `9e8a6f6149323a87710b2be33f9b39e7b71077e7`; retain its failed
-source-era cohorts separately. Update the accepted source record before
+inactive until matching snapshot recovery and these observers in PR #355
+are accepted on main. Ordinary record Arrays in PR #352 are accepted at
+`566d00d67172460df0f57dff6d5fe03db3b67cdc` from candidate
+`9e8a6f6149323a87710b2be33f9b39e7b71077e7`; its failed source-era cohorts and
+bounded hosted confirmation remain recorded separately. Update the accepted source record before
 preparation if that implementation changes. Every workflow invocation records
 its exact accepted main source and compiler closure.
 
