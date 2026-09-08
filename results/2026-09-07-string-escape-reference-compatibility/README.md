@@ -1,40 +1,54 @@
 # Current reference compatibility
 
 The current development pin is TypeRB `0.4.6-dev` at
-`caf6aadb9493ca69290ab0dc22d420b5f574df14`, the merged
-[stable Array assignment update](https://github.com/type-rb/type-rb/pull/659).
-It captures the Array receiver, requested index and validated nonnegative
-position before the RHS. Compound assignments retain their old value, while
-the final write checks the position against current storage. Snapshot v4
-represents the initial check and normalization with existing operations.
+`202cea85e8ceffd91cfc3ceb69d6f4d8a7acfd7b`, the merged
+[Boolean Array snapshot extension](https://github.com/type-rb/type-rb/pull/660).
+Snapshot v4 retains exact Boolean element types through construction, reads,
+writes, push, nested arrays, records and captures, without adding operations
+or changing the schema. The existing stable Array-assignment behavior from
+[PR #659](https://github.com/type-rb/type-rb/pull/659) remains: capture and validate
+the receiver/index/position before the RHS, then check current storage at write.
 
-The current accepted implementation is Native
+The current accepted ordinary implementation is Native
+`57cb41ad6be91716e31fa555ed8ea8c8ce7a5f51` from
+[PR #345](https://github.com/type-rb/type-rb-native/pull/345). All 17 selected
+checks passed at `06aedd81c291d732fe74afc88a9e131d3608765a` in
+[run 34213179434](https://github.com/type-rb/type-rb-native/actions/runs/34213179434).
+Hosted worker sizes are 349,296 Darwin arm64 and 325,864 Linux arm64 bytes,
+675,160 combined. Local full recovery-enabled suites passed root 97/97 and
+compiler 130/130, alongside 348 deterministic check/QBE observations, both
+14-case language registries and ordinary CLI/REPL/automatic-GC checks.
+
+The bounded follow-up adds Boolean Array snapshot recovery and registers its
+next seed handoff. It retains exact element types, explicit scalar/storage ABI
+conversion and managed nested roots. Typed MIR failures and explicit-collection
+runtime cases are tested; the snapshot fixture covers record/closure carriers,
+three nested levels and RHS reallocation. Compiler source still uses Integer
+flag arrays until a separate verified published-seed handoff. This follow-up
+requires its own full exact-head acceptance before merge.
+
+The accepted assignment prerequisite is Native
 `1baf5ad2cb6cc2bd6158c20f837a3479bfa3360d` from
 [PR #343](https://github.com/type-rb/type-rb-native/pull/343). All 17 selected
 checks passed at `ea58fd0391d4a252d26acf3ee284ad908b8c68f5` in
 [run 34209892000](https://github.com/type-rb/type-rb-native/actions/runs/34209892000)
 after the separately accepted budget [PR #344](https://github.com/type-rb/type-rb-native/pull/344).
-Hosted worker sizes are 349,296 Darwin arm64 and 325,600 Linux arm64 bytes,
-674,896 combined. These are distinct from the earlier local Darwin observations.
-The interleaved Linux compiler comparison reports 313,248 baseline and 325,608
-candidate bytes (1.039458), build median ratio 1.010417 and RSS ratio 1.000413.
-All original failures below retain their source-era status. The cumulative
-implementation baseline remains `ac633935a7f248470c59d22666da14c819a131fa`;
-acceptance does not establish a Pure Go speedup.
+Its worker sizes are 349,296 Darwin arm64 and 325,600 Linux arm64 bytes,
+674,896 combined. Its Linux compiler comparison reports 313,248 baseline and
+325,608 candidate bytes (1.039458), build median ratio 1.010417 and RSS ratio
+1.000413. All original failures below retain their source-era status. The
+cumulative implementation baseline remains
+`ac633935a7f248470c59d22666da14c819a131fa`; acceptance does not establish a
+Pure Go speedup.
 
-The ordinary Boolean Array follow-up uses this accepted implementation and
-unchanged reference pin. It adds three concrete Boolean Array depths through
-the shared runtime, with checked typing and explicit numeric-MIR exclusions.
-Its feature and fresh complete acceptance remain separate from the accepted
-assignment repair.
+Earlier assignment-repair observations follow.
 Local ordinary Integer, Float, nested-owner and managed String assignment
 cases match the selected reference, including actual RHS growth and an
 initial bounds failure that skips RHS effects. The managed case records five
 automatic collections and zero live bytes after final collection. The formerly
 crashing Integer growth probe succeeds under GuardMalloc. The pinned published
 seed builds the current core and CLI fixed points; ordinary CLI and REPL tests
-pass with the new cases. Full recovery and hosted target, memory and cost
-acceptance on the final PR head remain required before merge.
+passed with those cases. Its complete acceptance is recorded above.
 
 Compiler recovery authoring failures are retained separately: an unsynchronized
 exact import prefix, a helper initially placed after the required empty driver,

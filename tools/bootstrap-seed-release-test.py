@@ -142,8 +142,29 @@ class SeedReleaseTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 seed.validate_manifest(self.manifest, self.revision, tag)
 
+    def test_manifest_size_limits_remain_tag_bound(self):
+        for tag in seed.PREDECESSORS:
+            manifest = copy.deepcopy(self.manifest)
+            manifest["releaseTag"] = tag
+            manifest["predecessor"] = seed.PREDECESSORS[tag]
+            for target, limit in zip(manifest["targets"], seed.LIMITS[tag][:2]):
+                target["size"] = limit
+            seed.validate_manifest(manifest, self.revision, tag)
+            for index in range(2):
+                changed = copy.deepcopy(manifest)
+                changed["targets"][index]["size"] += 1
+                with self.assertRaises(ValueError):
+                    seed.validate_manifest(changed, self.revision, tag)
+            manifest["targets"][0]["size"] = 349296
+            manifest["targets"][1]["size"] = 325864
+            if tag == "bootstrap-seed-2026-09-08-boolean-arrays":
+                seed.validate_manifest(manifest, self.revision, tag)
+            else:
+                with self.assertRaises(ValueError):
+                    seed.validate_manifest(manifest, self.revision, tag)
+
     def test_download_verification_preserves_the_previous_tag(self):
-        for tag in ("bootstrap-seed-2026-09-07", "bootstrap-seed-2026-09-08"):
+        for tag in ("bootstrap-seed-2026-09-07", "bootstrap-seed-2026-09-08", "bootstrap-seed-2026-09-08-loop-transfers"):
             self.manifest["releaseTag"] = tag
             self.manifest["predecessor"] = seed.PREDECESSORS[tag]
             self.manifest_path.write_text(json.dumps(self.manifest))

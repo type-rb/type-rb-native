@@ -1257,31 +1257,44 @@ def _qbe3_emit_instruction(
 		mut index := 0
 		while index < arguments.size()
 			entry := _qbe3_address(backing, index * 8, prefix + "array_entry" + index.to_s(), writer)
-			_qbe_line(writer, "\tstorel " + context.values.fetch(arguments[index]) + ", " + entry)
+			stored := _qbe3_array_storage_value(
+				native_module, type_id, context.values.fetch(arguments[index]),
+				prefix + "array_value" + index.to_s(), writer,
+			)
+			_qbe_line(writer, "\tstorel " + stored + ", " + entry)
 			index += 1
 		end
 	when Gate3Instruction::ArraySize(result, _type_id, array, origin)
 		_qbe3_emit_origin(native_module, origin, writer)
 		_qbe_line(writer, "\t" + context.values.fetch(result) + " =l call $trbn_array_size(l " + context.values.fetch(array) + ")")
-	when Gate3Instruction::ArrayGet(result, _type_id, array, index, origin)
+	when Gate3Instruction::ArrayGet(result, type_id, array, index, origin)
 		_qbe3_emit_origin(native_module, origin, writer)
+		mut loaded := context.values.fetch(result)
+		if _qbe3_abi_type(_qbe3_array_element_type(native_module, type_id)) == "w"
+			loaded = prefix + "array_value"
+		end
 		_qbe_line(
 			writer,
-			"\t" + context.values.fetch(result) + " =l call $trbn_array_get(l " + context.values.fetch(array) +
+			"\t" + loaded + " =l call $trbn_array_get(l " + context.values.fetch(array) +
 			", l " + context.values.fetch(index) + ")",
 		)
-	when Gate3Instruction::ArraySet(_type_id, array, index, value, origin)
+		if loaded != context.values.fetch(result)
+			_qbe_line(writer, "\t" + context.values.fetch(result) + " =w copy " + loaded)
+		end
+	when Gate3Instruction::ArraySet(type_id, array, index, value, origin)
 		_qbe3_emit_origin(native_module, origin, writer)
+		stored := _qbe3_array_storage_value(native_module, type_id, context.values.fetch(value), prefix + "array_value", writer)
 		_qbe_line(
 			writer,
 			"\tcall $trbn_array_set(l " + context.values.fetch(array) + ", l " + context.values.fetch(index) +
-			", l " + context.values.fetch(value) + ")",
+			", l " + stored + ")",
 		)
-	when Gate3Instruction::ArrayPush(_type_id, array, value, origin)
+	when Gate3Instruction::ArrayPush(type_id, array, value, origin)
 		_qbe3_emit_origin(native_module, origin, writer)
+		stored := _qbe3_array_storage_value(native_module, type_id, context.values.fetch(value), prefix + "array_value", writer)
 		_qbe_line(
 			writer,
-			"\tcall $trbn_array_push(l " + context.values.fetch(array) + ", l " + context.values.fetch(value) + ")",
+			"\tcall $trbn_array_push(l " + context.values.fetch(array) + ", l " + stored + ")",
 		)
 	when Gate3Instruction::ClosureConstruct(result, _type_id, function_id, captures, origin)
 		_qbe3_emit_origin(native_module, origin, writer)
@@ -1994,6 +2007,20 @@ def _qbe3_abi_type(value_type: Gate3ValueType): String
 	when Gate3ValueType::Aggregate(_type_id)
 		return "l"
 	end
+end
+
+def _qbe3_array_storage_value(
+		native_module: Gate3Module,
+		type_id: String,
+		value: String,
+		result: String,
+		mut writer: StringBuilder,
+	): String
+	if _qbe3_abi_type(_qbe3_array_element_type(native_module, type_id)) == "w"
+		_qbe_line(writer, "\t" + result + " =l extuw " + value)
+		return result
+	end
+	return value
 end
 
 def _qbe3_array_element_type(native_module: Gate3Module, type_id: String): Gate3ValueType
