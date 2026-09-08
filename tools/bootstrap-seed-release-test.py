@@ -45,6 +45,20 @@ class SeedReleaseTests(unittest.TestCase):
         self.assertIn('cmp "$evidence/setup/logical-condition.expected" "$evidence/setup/logical-condition.stdout"', observer)
         self.assertNotIn('require_empty_file "$evidence/setup/logical-condition.stdout"', observer)
 
+    def test_boolean_bridge_requires_the_exact_accepted_source(self):
+        root = Path(__file__).resolve().parent.parent
+        observer = (root / "tools/gate6n-linux-amd64.sh").read_text()
+        workflow = (root / ".github/workflows/gate6n-linux-amd64.yml").read_text()
+        self.assertIn('test -n "$loop_source_root" || fail "Boolean source requires the accepted loop source"', observer)
+        self.assertIn('require_clean_revision "$boolean_source_root"', observer)
+        self.assertIn('57cb41ad6be91716e31fa555ed8ea8c8ce7a5f51 || fail "boolean source revision differs"', observer)
+        self.assertIn('"$loop_transition" emit-qbe "$boolean_entry"', observer)
+        self.assertIn('runtime_seed=$boolean_transition', observer)
+        self.assertIn('"$runtime_seed" emit-qbe "$compiler_entry"', observer)
+        self.assertIn('"$boolean_transition" check "$candidate_root/compiler/conformance/valid/boolean-array-values.trb"', observer)
+        self.assertIn('AMD64_BOOLEAN_SETUP_REVISION: 57cb41ad6be91716e31fa555ed8ea8c8ce7a5f51', workflow)
+        self.assertIn('"$GITHUB_WORKSPACE/.gate6n-boolean-source"', workflow)
+
     def test_refresh_roles_match_the_existing_compatibility_boundary(self):
         observer = Path(__file__).with_name("bootstrap-seed-refresh.sh").read_text()
         self.assertIn('build_step "$seed" setup-first setup', observer)
