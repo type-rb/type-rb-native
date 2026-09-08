@@ -2,7 +2,7 @@
 
 Status: an initial 14-case ordinary-path inventory and regression contract are
 available. Statement `elsif` and bare `break` / `next` in `while` are covered by ordinary
-compiler and REPL regressions.
+compiler and REPL regressions. The ordinary Boolean-array case is also covered.
 The inventory remains a bounded set of examples, not complete language support.
 Track the first bounded delivery in [issue #326](https://github.com/type-rb/type-rb-native/issues/326).
 
@@ -168,6 +168,33 @@ After loop-transfer snapshot recovery and the verified seed handoff,
 Its dispatch, cursor updates, diagnostics and final result remain unchanged.
 Other completion flags and `next` self-use remain separate cleanup opportunities.
 Track the full delivery in [issue #334](https://github.com/type-rb/type-rb-native/issues/334).
+
+## Boolean arrays
+
+The ordinary compiler and REPL accept `Array<Boolean>` literals, explicitly
+typed empty arrays, indexing, indexed assignment, `push`, `size`, and function
+and record carriers. Nested arrays have the same three-level bound as existing
+scalar arrays. Negative indexes retain the reference behavior: `-1` addresses
+the final element, while indexes outside either end fail. Boolean elements do
+not coerce to Integer; existing homogeneous typing, mutable-array invariance
+and readonly capabilities apply.
+
+`boolean-array-values`, `boolean-array-effects` and `boolean-array-managed`
+cover shared and nested aliases, typed empty arrays, left-to-right evaluation,
+growth and arrays surviving automatic collection. Invalid cases reject wrong
+element/index types and mutation capabilities; runtime cases retain required
+bounds failures. The ordinary coverage row includes REPL value display.
+
+Boolean arrays use the shared scalar-element runtime storage; nested arrays
+retain managed-element descriptors and roots. They remain outside the complete
+scalar/numeric-reduction MIR type set, with explicit checked/MIR boundary tests,
+and retain the existing verified header and checked-access paths. This does not
+add numeric reduction permissions or a target-specific Boolean representation.
+
+Compiler implementation still uses Integer flag carriers. Snapshot array-element
+support and a verified seed handoff are separate prerequisites before Boolean
+array self-use. Track this bounded delivery in
+[issue #341](https://github.com/type-rb/type-rb-native/issues/341).
 
 ## Deferred Array-loop candidate
 
