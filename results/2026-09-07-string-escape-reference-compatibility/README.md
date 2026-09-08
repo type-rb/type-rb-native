@@ -389,8 +389,8 @@ Checkout core/CLI bootstrap and active CI consumers now select that exact seed.
 The historical Linux amd64 setup also builds accepted record-capable 566d00d6
 before candidate source; this setup-only bridge retains separate source,
 compiler/QBE and process identities. Compiler implementation has not adopted
-record Arrays yet. The subsequent five-field MIR value carrier migration still
-requires this checkout handoff's acceptance. Frozen benchmark baselines and the
+record Arrays yet. The subsequent five-field MIR value carrier migration followed this
+accepted checkout handoff. Frozen benchmark baselines and the
 cumulative n-body alarm are unchanged; no runtime/Pure Go gain is claimed.
 
 
@@ -415,10 +415,55 @@ Spectral-norm (100) and n-body (1000) retain byte-identical QBE and executables
 and the exact expected output. Fresh verified-seed core/CLI fixed points and
 full CLI/REPL/terminal checks pass. Local compiler and CLI sizes remain 365,768
 and 499,144 bytes respectively; their contents change as expected for the new
-internal representation. Formatting and both source checks pass. Full enabled
-recovery suites and every exact-head target/cost authority remain acceptance
-requirements for this candidate.
+internal representation. Formatting and both source checks pass. Full enabled local recovery suites passed root 102/102 and compiler 135/135.
+The owned recovery workspace was removed after terminal completion. Exact-head
+hosted acceptance and the retained first failure follow.
 
 No application runtime measurement or speedup is claimed. The cumulative
 `ac633935a7f248470c59d22666da14c819a131fa` baseline, n-body alarm and expired
 measurement budgets above remain unchanged.
+
+
+## MIR value carrier acceptance
+
+[PR #357](https://github.com/type-rb/type-rb-native/pull/357) is accepted at
+`89a35c16de504ffb9c2ad926867ff277f6bf529d`, merged as
+`3bde3e0a06d764789fc478e68255ffe47c209e33`, after all 17 authorities in
+[run 34258862533](https://github.com/type-rb/type-rb-native/actions/runs/34258862533)
+and the separately registered additional check passed.
+
+The first amd64 attempt failed one retained adjacent-generation observation:
+B2-to-B3 took 1.978962366 seconds, 2.05398157 times its strongest adjacent
+median. The B2-to-B3/B3-to-B4 medians were 0.963476204/0.966003788 seconds;
+all three compilers were byte-identical at 280,608 bytes, SHA-256
+`fc325b7998a704c69f8b48da49239e99ad5ce7dae38c95043eba1f1670518426`.
+The unchanged 2.0 guard correctly failed that cohort. Its 88 observations
+(16 warmups and 72 retained measurements) are preserved, including the outlier.
+Environmental variation motivated investigation but is not proven attribution.
+
+A [single fixed-input confirmation](https://github.com/type-rb/type-rb-native/pull/357#issuecomment-5589567975)
+kept the exact source, compiler identity, observer, workloads, repetitions,
+ordering and all ordinary limits. The new amd64 cohort passed every guard;
+its adjacent medians were 1.283581789/1.270438763 seconds (spread 1.01034527).
+Both hosts report the same CPU model, but absolute times differ and both
+host environments remain recorded. The additional pool of all 14 retained
+observations per generation role gave medians 1.253844056/1.255019547 seconds,
+spread 1.00093751; RSS spread is 1.00043349. The original catastrophic failure
+remains a separate failed cohort, not a rewritten passing observation.
+The one-run budget is exhausted and expired, with no third cohort authorized.
+
+The [complete hosted acceptance record](mir-value-hosted-acceptance.json)
+retains all 176 amd64 observations and both environments, source/compiler/tool
+identities, original failure, registration and pooled calculation. It also
+retains the subsequent ordinary arm64 compiler A/B observations and bounds.
+Darwin self-build medians were 1.960/1.985 seconds (1.012755), with RSS ratio
+1.002785. Linux medians were 1.350/1.370 seconds (1.014815), with RSS ratio
+0.999557. All ordinary 1.05 limits passed. Darwin compiler size remains
+365,768 bytes; Linux falls from 327,744 to 327,448 bytes, for 693,216 combined.
+Compiler QBE falls from 1,151,452 to 1,150,705 bytes. These are compiler costs,
+not application runtime improvements. The frozen cumulative baseline and prior
+n-body alarm remain; no new cumulative timing or Pure Go comparison is claimed.
+
+This closes the named record Array slice through ordinary support, matching
+recovery, verified immutable seed handoff and actual compiler self-use. Other
+MIR carriers and optimization facts remain independently bounded follow-ups.
