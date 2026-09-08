@@ -59,10 +59,14 @@ Attestations bind compilers, manifest and checksums to the preparation workflow,
 exact main revision and hosted runners. Manifest validation alone is not an
 attestation check.
 
-Refreshes keep accepted compiler caps of 350,000 bytes on Darwin arm64,
-317,000 on Linux arm64 and 667,000 combined. They change no ordinary optimizer
-acceptance limit, measurement baseline or runtime performance claim. The legacy
-initial-root manifest/verifier and its historical bounds remain unchanged.
+The registered published refreshes retain their source-era manifest caps of
+350,000 bytes on Darwin arm64, 317,000 on Linux arm64 and 667,000 combined.
+Current-source ordinary compiler validation uses the revised complete-compiler
+budgets in [Decision 0029](decisions/0029-array-assignment-compiler-budget.md).
+A future refresh must register its own exact source and manifest limits; this
+decision does not republish a seed or alter historical release verification.
+Refreshes change no ordinary relative limit, measurement baseline or runtime
+performance claim. The legacy initial-root verifier remains unchanged.
 
 ## Retention and failure handling
 
