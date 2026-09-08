@@ -163,8 +163,10 @@ termination and managed values surviving automatic collection. Negative cases
 retain required index/range failures and reject illegal targets and values.
 Recovered compilers and ordinary replacement generations exercise these
 sources, separately from snapshot support for those source programs.
-Compiler implementation source does not yet use `break` or `next`: snapshot
-recovery and a verified seed handoff remain prerequisites for that adoption.
+After loop-transfer snapshot recovery and the verified seed handoff,
+`parse_statement_block` uses bare `break` exits instead of a completion flag.
+Its dispatch, cursor updates, diagnostics and final result remain unchanged.
+Other completion flags and `next` self-use remain separate cleanup opportunities.
 Track the full delivery in [issue #334](https://github.com/type-rb/type-rb-native/issues/334).
 
 ## Deferred Array-loop candidate

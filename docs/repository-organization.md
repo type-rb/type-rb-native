@@ -118,6 +118,12 @@ unchanged; compiler source/symbol identities can change and retain all ordinary
 fixed-point, recovery, target, memory and cost checks. Other parser helpers and
 shared state types remain separate O4 work.
 
+The subsequent [parser loop self-use](https://github.com/type-rb/type-rb-native/issues/334#issuecomment-5576987963)
+replaces the completion flag and its four assignments in `parse_statement_block`
+with ordinary `break` exits. This uses the verified loop-transfer seed and
+matching snapshot recovery support. The statement parser retains one owner;
+other parser/checker/emitter flags remain separate source-cleanup work.
+
 O3 continues incrementally; O4–O5 are not complete. Next, audit the remaining
 lexer and driver dependencies alongside active gate-derived naming. The
 recovery harness also needs independent workspace isolation and stage-level
