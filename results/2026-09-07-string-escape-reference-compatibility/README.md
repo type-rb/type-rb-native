@@ -1,6 +1,88 @@
 # Current reference compatibility
 
 The current development pin is TypeRB `0.4.6-dev` at
+`caf6aadb9493ca69290ab0dc22d420b5f574df14`, the merged
+[stable Array assignment update](https://github.com/type-rb/type-rb/pull/659).
+It captures the Array receiver, requested index and validated nonnegative
+position before the RHS. Compound assignments retain their old value, while
+the final write checks the position against current storage. Snapshot v4
+represents the initial check and normalization with existing operations.
+
+The implementation baseline remains accepted Native
+`ac633935a7f248470c59d22666da14c819a131fa` from PR #340, with
+[unchanged-head acceptance attempt 2](https://github.com/type-rb/type-rb-native/actions/runs/34172032048/attempts/2).
+That acceptance does not cover this assignment candidate. The first attempt's
+retained failure remains part of its source-era evidence.
+
+Local ordinary Integer, Float, nested-owner and managed String assignment
+cases match the selected reference, including actual RHS growth and an
+initial bounds failure that skips RHS effects. The managed case records five
+automatic collections and zero live bytes after final collection. The formerly
+crashing Integer growth probe succeeds under GuardMalloc. The pinned published
+seed builds the current core and CLI fixed points; ordinary CLI and REPL tests
+pass with the new cases. Full recovery and hosted target, memory and cost
+acceptance on the final PR head remain required before merge.
+
+Compiler recovery authoring failures are retained separately: an unsynchronized
+exact import prefix, a helper initially placed after the required empty driver,
+and logical expressions outside snapshot v4's supported source subset. The
+candidate uses the existing statement forms and preserves the exact recovery
+boundaries. Earlier tests that counted only initial bounds checks now account
+for the independent final store check; their induction and inline-budget
+assertions remain in place. No cost limit or failed measurement was waived.
+
+## First assignment candidate and bounded carrier cleanup
+
+The first full cohort for Native
+`90435186fc5c06b662c06cb80584575e28d9d064` is
+[run 34199705462](https://github.com/type-rb/type-rb-native/actions/runs/34199705462).
+Recovery, both ordinary CLI targets, Darwin worker memory and the Linux amd64
+target passed. Linux arm64 failed its unchanged 317,000-byte compiler ceiling:
+the target chain reports 326,312 bytes, and the worker's stripped compiler
+reports 326,304 bytes. The combined and performance authorities therefore did
+not run; this candidate was not accepted. Keep that cohort and its failures.
+
+The first bounded follow-up removes emitter-only mutability transport, whose
+checks already belong to the checked frontend, and removes the redundant
+Array-position carrier field. A tagged slot represents a binding address or
+a validated Array position beside its owner. All internal callers change
+directly. Required bounds, owner/old-value roots and target/store verification
+remain. This is one revised-source correctness and cost cohort, not an
+unchanged-head retry or a larger acceptance budget. Reassess any remaining
+cost miss before another size-only attempt.
+
+## Compact candidate and accepted budget decision
+
+The compact source `885414012e0aa891d1af99f30069e60da300a6cb` completed
+[run 34202210192](https://github.com/type-rb/type-rb-native/actions/runs/34202210192).
+Recovery, both CLI targets, Darwin worker memory and Linux amd64 passed.
+Linux worker size was 325,600 bytes; the Linux target chain was 325,608 bytes.
+Both failed the source-era 317,000-byte ceiling. Combined, target-neutral
+comparison and performance authorities were skipped, and acceptance failed.
+This cohort and the earlier failure remain failures.
+
+The [complete local diagnostic observations](array-assignment-diagnostic.csv)
+include both warmups and all retained rounds; their
+[identities and method](array-assignment-diagnostic-identities.json) distinguish
+cumulative baseline, same-feature control and compact candidate. All 216
+observations retained expected outputs and reproducible artifacts. A sandbox
+restriction prevented the first timer invocation from reading `kern.clockrate`
+before any valid observation; that stopped infrastructure record is separate
+from this complete cohort. No failed performance sample was replaced.
+
+[Decision 0029](../../docs/decisions/0029-array-assignment-compiler-budget.md)
+records the cost assessment and accepted Linux 328,000 / combined 678,000-byte
+budgets. [PR #344](https://github.com/type-rb/type-rb-native/pull/344) implements
+that policy separately. Its compiler source is unchanged from cumulative
+baseline `ac633935a7f248470c59d22666da14c819a131fa`; this budget revision does
+not reset the cumulative comparison. The repair includes the policy for fresh
+full validation and cannot merge before that policy is accepted and every
+selected authority passes at the repair's exact head. Pages measurements and
+all other acceptance requirements remain unchanged.
+
+# Previous loop-transfer reference checkpoint
+
+The current development pin is TypeRB `0.4.6-dev` at
 `4e1327c9af1b4caec9963756e6ffbc0e2ef56341`, the merged
 [loop-transfer snapshot update](https://github.com/type-rb/type-rb/pull/657).
 Snapshot v3/v4 encode nearest-while transfers and early method returns with

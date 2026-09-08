@@ -11,6 +11,13 @@ B2 and do not retroactively widen recovery.
 
 The valid cases cover:
 
+- stable Array assignment positions across RHS growth and index-side effects
+  in `valid/array-assignment-targets.trb`, retained nested owners and compound
+  String values across collection in `valid/array-assignment-managed.trb`,
+  and snapshot v4 parity in `valid/array-assignment-recovery.trb`. The paired
+  runtime-invalid fixture checks that an initially invalid target skips RHS
+  effects. These cases begin with the updated ordinary B2;
+
 - statement `elsif` chains, ordered conditions, skipped traps, optional else,
   branch-local bindings and nested returns in `valid/elsif-control.trb`;
   managed-root retention and Array mutation across conditional edges in

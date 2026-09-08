@@ -497,8 +497,9 @@ def _recovery_verify_bounds_failure(
 		executables: Array<String>,
 		qbe: String,
 		workspace: String,
+		case_name: String,
 	): Result<Boolean, String>
-	source_path := root + "/compiler/conformance/runtime-invalid/float-array-bounds.trb"
+	source_path := root + "/compiler/conformance/runtime-invalid/" + case_name + ".trb"
 	source := try _recovery_read(source_path)
 	mut canonical_qbe := ""
 	mut outputs: Array<String> := []
@@ -506,26 +507,26 @@ def _recovery_verify_bounds_failure(
 	while index < executables.size()
 		check := try _recovery_compiler_output(executables[index], source, "check")
 		if check != "ok\n"
-			return Result<Boolean, String>::Err("Float Array bounds source check differs")
+			return Result<Boolean, String>::Err(case_name + " source check differs")
 		end
 		emission := try _recovery_compiler_output(executables[index], source, "emit-qbe")
 		if index == 0
 			canonical_qbe = emission
 		else
 			if emission != canonical_qbe
-				return Result<Boolean, String>::Err("Float Array bounds QBE differs")
+				return Result<Boolean, String>::Err(case_name + " QBE differs")
 			end
 		end
-		directory := workspace + "/gate6j-bounds-" + index.to_s()
+		directory := workspace + "/bounds-" + case_name + "-" + index.to_s()
 		try _recovery_reset_directory(directory)
 		output := directory + "/program"
 		build := try _recovery_build(executables[index], source_path, output, qbe, "/usr/bin/cc")
 		if build.status != 0 || !build.stdout.empty?() || !build.stderr.empty?()
-			return Result<Boolean, String>::Err("Float Array bounds build failed: " + build.stderr)
+			return Result<Boolean, String>::Err(case_name + " build failed: " + build.stderr)
 		end
 		runtime := try _recovery_process(output, [])
 		if runtime.status != 2 || !runtime.stdout.empty?() || runtime.stderr != "panic: index is out of bounds\n"
-			return Result<Boolean, String>::Err("Float Array bounds failure differs")
+			return Result<Boolean, String>::Err(case_name + " failure differs")
 		end
 		try _recovery_require_no_intermediates(directory)
 		outputs.push(output)
@@ -533,7 +534,7 @@ def _recovery_verify_bounds_failure(
 	end
 	index = 1
 	while index < outputs.size()
-		try _recovery_require_same(outputs[0], outputs[index], "Float Array bounds candidate build")
+		try _recovery_require_same(outputs[0], outputs[index], case_name + " candidate build")
 		index += 1
 	end
 	return Result<Boolean, String>::Ok(true)
@@ -654,7 +655,7 @@ def _recovery_verify_conformance(
 		return Result<Boolean, String>::Err("Float call boundary uses the Integer ABI")
 	end
 	candidate_executables := [executables[3], executables[4], executables[5]]
-	conditional_cases := ["elsif-control", "elsif-managed", "elsif-recovery"]
+	conditional_cases := ["elsif-control", "elsif-managed", "elsif-recovery", "array-assignment-targets", "array-assignment-managed", "array-assignment-recovery"]
 	index = 0
 	while index < conditional_cases.size()
 		try _recovery_verify_valid_case(
@@ -718,7 +719,8 @@ def _recovery_verify_conformance(
 		)
 		index += 1
 	end
-	try _recovery_verify_bounds_failure(root, candidate_executables, qbe, workspace)
+	try _recovery_verify_bounds_failure(root, candidate_executables, qbe, workspace, "float-array-bounds")
+	try _recovery_verify_bounds_failure(root, candidate_executables, qbe, workspace, "array-assignment-initial")
 	mutation_names := ["base", "literal", "control"]
 	mut mutation_qbe: Array<String> := []
 	index = 0
@@ -2246,6 +2248,13 @@ describe("Native compiler recovery") do
 					puts(message)
 					expect(false).to_be_true()
 				end
+				case _recovery_verify_snapshot_program(root, reference_trb, qbe, workspace, "array-assignment-recovery")
+				when Result::Ok(_verified)
+				when Result::Err(message)
+					puts(message)
+					expect(false).to_be_true()
+				end
+
 				snapshot := case Process.run(
 						reference_trb,
 						["compiler", "bootstrap-snapshot", "--snapshot-version", "4", compiler_path],
