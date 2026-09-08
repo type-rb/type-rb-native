@@ -33,9 +33,21 @@ The ordinary compiler source and local binary are unchanged from PR #345.
 
 The [verified Boolean Array seed handoff](../../docs/bootstrap-seed-updates.md#current-verified-checkout-seed)
 records immutable assets, exact source and successful fresh published-asset
-verification. Compiler source still uses Integer flag arrays; typed flag
-self-use is the next bounded source change. This checkout handoff retains all
-ordinary and historical acceptance contracts.
+verification. The checkout handoff is accepted at
+`65ab856abe55b4816ec6cc8e7e4cc91ce98293bd` from
+[PR #347](https://github.com/type-rb/type-rb-native/pull/347). All 17 checks passed
+at `c6b98d25483d766c09e5695a8c315e210f1111de` in
+[run 34219868383](https://github.com/type-rb/type-rb-native/actions/runs/34219868383),
+including the separate Linux amd64 Boolean-capability setup bridge.
+
+The following bounded source change adopts `Array<Boolean>` for only the
+shared scalar-inline-range-failure and Array-bounds-failure flags, replacing
+Integer sentinels with false/true values and direct Boolean tests. It starts
+from that accepted checkout handoff. Full recovery, ordinary fixed points,
+application check/QBE equality against the same-feature control, CLI and all
+hosted acceptance authorities remain required. This is internal typed self-use;
+there is no new runtime-performance or Pure Go claim, benchmark-value update,
+or acceptance-budget change. The cumulative baseline remains `ac633935a7f248470c59d22666da14c819a131fa`.
 
 The accepted assignment prerequisite is Native
 `1baf5ad2cb6cc2bd6158c20f837a3479bfa3360d` from
