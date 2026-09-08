@@ -98,38 +98,39 @@ registers the distinct `bootstrap-seed-2026-09-08-loop-transfers` tag from accep
 implementation `4e1d0b4aee97b9a5bd73a98f918b31d47985da25`, with reviewed observer
 changes before preparation. Its predecessor is the verified Sep8 release below.
 All three registered refresh tags keep their exact predecessor validation.
-This preparation does not publish assets or change checkout pins.
+Preparation, attested publication and fresh actual-asset verification have passed;
+the verified checkout handoff is recorded below.
 
 Darwin arm64 and Linux arm64 retain all target, combined-size, corpus, process,
 adjacent-generation and retained-observation bounds. The reference pin includes
 loop-transfer snapshot support and the corresponding program recovery case.
-Actual attested publication, fresh published-asset verification and a separate
-checkout-pin PR remain required before compiler implementation adopts transfers.
+The separate checkout-pin change follows those checks. Compiler implementation
+self-use remains a subsequent verified source change.
 
 ## Current verified checkout seed
 
-Checkout builds pin [bootstrap-seed-2026-09-08](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-09-08),
+Checkout builds pin [bootstrap-seed-2026-09-08-loop-transfers](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-09-08-loop-transfers),
 an immutable experimental prerelease from accepted source
-`f8c293f6f9683b0a29b7eee614fc4fff261d36b8`. Its compiler implementation is unchanged
-from accepted `21f507e7ee7de2577f4137f6dfb9f732c14c1640`; PR #330 supplied the reviewed
-preparation observers. No pending optimization candidate was included.
+`1d53ed0f5b9471335c913dd9d148ff3b9eb1b483`. Its compiler implementation is unchanged
+from accepted PR #337; PR #338 supplied the reviewed recovery and preparation
+observers. No pending optimization candidate was included.
 
-- [Preparation and attestations](https://github.com/type-rb/type-rb-native/actions/runs/34157740161) passed both arm64 targets and all 28 retained observations.
-- [Fresh published-asset verification](https://github.com/type-rb/type-rb-native/actions/runs/34158167351) passed both targets, including equality of each downloaded seed with its regenerated fixed point, corpus, all 42 retained generation observations and ordinary Linux process boundaries.
-- Darwin compiler: 332,728 bytes, SHA-256 `9a815fd3bdcfd24a082111814442ee11380d31532058024cc7d7564e203b0629` (asset 549315183).
-- Linux compiler: 309,696 bytes, SHA-256 `77e8e9df3b91cbbf7cb823044c0c79c23e63767c5986369f8d9a11e23773abf3` (asset 549315180).
-- Combined: 642,424 bytes, below the unchanged 667,000-byte bound.
-- Manifest: SHA-256 `6b92832b482e8b502045a71f7f267f2e3bb5b221cd2c52ce1c07e9a4405fe083` (asset 549315182).
-- Checksum index: SHA-256 `5a8d5661b45607ce707d2176adb54fadcfd926f7104e4dcd1b1389e84b2e2b2f` (asset 549315181).
+- [Preparation and attestations](https://github.com/type-rb/type-rb-native/actions/runs/34169810365) passed both arm64 targets and all 28 retained observations.
+- [Fresh published-asset verification](https://github.com/type-rb/type-rb-native/actions/runs/34170169680) passed both targets, including equality of each downloaded seed with B1/B2/B3/B4, the corpus, all 42 retained generation observations and ordinary Linux process boundaries.
+- Darwin compiler: 349,240 bytes, SHA-256 `756413fe6daa7b2a286bd4ae2721099807bf2061122f6d84f0414ea851c31d8f` (asset 549524918).
+- Linux compiler: 313,328 bytes, SHA-256 `13ae8ba588768b1e1936d83d022b85341144a401687e1cea2afa839f0e1a1e48` (asset 549524920).
+- Combined: 662,568 bytes, below the unchanged 667,000-byte bound.
+- Manifest: SHA-256 `1262b05399ff63f3890b126f34bcce2c8c92405149ce902d49a3eb3d979dab68` (asset 549524916).
+- Checksum index: SHA-256 `0c1de65359b7216507a614a6d3604e628f89f6d15c7b7c56ebee1e696e4591dd` (asset 549524917).
 
-The immutable [Sep7 predecessor](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-09-07)
-remains at `1f7e8a110bbb2b13f0609709deb6fc8f09dc8b44`, with its exact identities
-and earlier preparation-failure correction retained in the
-[source-era handoff record](https://github.com/type-rb/type-rb-native/blob/f8c293f6f9683b0a29b7eee614fc4fff261d36b8/docs/bootstrap-seed-updates.md#current-verified-checkout-seed).
-Its [preparation](https://github.com/type-rb/type-rb-native/actions/runs/34113420518)
-and [published verification](https://github.com/type-rb/type-rb-native/actions/runs/34113836522)
-remain the authorities for that historical release. Predecessor identities in
-the strict verifier and Sep8 preparation workflow remain unchanged.
+The immutable [Sep8 predecessor](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-09-08)
+remains at `f8c293f6f9683b0a29b7eee614fc4fff261d36b8`. Its exact identities and
+Sep7 predecessor history remain in the
+[source-era handoff record](https://github.com/type-rb/type-rb-native/blob/1d53ed0f5b9471335c913dd9d148ff3b9eb1b483/docs/bootstrap-seed-updates.md#current-verified-checkout-seed).
+Its [preparation](https://github.com/type-rb/type-rb-native/actions/runs/34157740161)
+and [published verification](https://github.com/type-rb/type-rb-native/actions/runs/34158167351)
+remain the authorities for that historical release. Strict predecessor mappings
+and the loop-transfer preparation workflow remain unchanged.
 
 Compiler binaries and detailed run artifacts remain outside Git. This compact
 handoff record does not introduce another retained benchmark result directory
@@ -138,7 +139,7 @@ or claim a runtime speedup.
 ## Active CI consumers versus historical recovery
 
 Current compiler-cost, worker-memory, formal runtime/build benchmark and Linux
-arm64 regression workflows use the exact Sep8 seed and the shared strict
+arm64 regression workflows use the exact loop-transfer seed and the shared strict
 download/authentication helper. Their manual seed input must match the recorded
 source revision; an older or unknown tag fails rather than bypassing provenance.
 Changing a setup seed does not move a frozen benchmark baseline or change any
