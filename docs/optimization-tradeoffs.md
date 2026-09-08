@@ -29,9 +29,9 @@ The ordinary 1.05 ratios and current absolute limits in
 govern acceptance. An explicit complete-compiler budget revision for safe Array
 assignment is recorded in
 [Decision 0029](decisions/0029-array-assignment-compiler-budget.md); it changes
-no relative limit or historical result. The separate proposed
-[record Array budget](decisions/0030-record-array-compiler-budget.md) requires
-review before its new ceilings can authorize feature acceptance.
+no relative limit or historical result. The separately validated
+[record Array budget](decisions/0030-record-array-compiler-budget.md) retains
+the ordinary structured-data implementation cost without changing those ratios.
 A cost failure blocks ordinary acceptance, not necessarily
 further investigation. There is no general relaxed percentage or automatic
 conversion from an evaluation budget to a merge budget.
