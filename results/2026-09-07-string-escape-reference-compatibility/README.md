@@ -51,6 +51,35 @@ remain. This is one revised-source correctness and cost cohort, not an
 unchanged-head retry or a larger acceptance budget. Reassess any remaining
 cost miss before another size-only attempt.
 
+## Compact candidate and accepted budget decision
+
+The compact source `885414012e0aa891d1af99f30069e60da300a6cb` completed
+[run 34202210192](https://github.com/type-rb/type-rb-native/actions/runs/34202210192).
+Recovery, both CLI targets, Darwin worker memory and Linux amd64 passed.
+Linux worker size was 325,600 bytes; the Linux target chain was 325,608 bytes.
+Both failed the source-era 317,000-byte ceiling. Combined, target-neutral
+comparison and performance authorities were skipped, and acceptance failed.
+This cohort and the earlier failure remain failures.
+
+The [complete local diagnostic observations](array-assignment-diagnostic.csv)
+include both warmups and all retained rounds; their
+[identities and method](array-assignment-diagnostic-identities.json) distinguish
+cumulative baseline, same-feature control and compact candidate. All 216
+observations retained expected outputs and reproducible artifacts. A sandbox
+restriction prevented the first timer invocation from reading `kern.clockrate`
+before any valid observation; that stopped infrastructure record is separate
+from this complete cohort. No failed performance sample was replaced.
+
+[Decision 0029](../../docs/decisions/0029-array-assignment-compiler-budget.md)
+records the cost assessment and accepted Linux 328,000 / combined 678,000-byte
+budgets. [PR #344](https://github.com/type-rb/type-rb-native/pull/344) implements
+that policy separately. Its compiler source is unchanged from cumulative
+baseline `ac633935a7f248470c59d22666da14c819a131fa`; this budget revision does
+not reset the cumulative comparison. The repair includes the policy for fresh
+full validation and cannot merge before that policy is accepted and every
+selected authority passes at the repair's exact head. Pages measurements and
+all other acceptance requirements remain unchanged.
+
 # Previous loop-transfer reference checkpoint
 
 The current development pin is TypeRB `0.4.6-dev` at
