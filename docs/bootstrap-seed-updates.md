@@ -62,7 +62,8 @@ attestation check.
 The three earlier published refreshes retain their source-era manifest caps of
 350,000 bytes on Darwin arm64, 317,000 on Linux arm64 and 667,000 combined.
 Current-source ordinary compiler validation uses the revised complete-compiler
-budgets in [Decision 0029](decisions/0029-array-assignment-compiler-budget.md).
+budgets in [Decision 0029](decisions/0029-array-assignment-compiler-budget.md)
+and [Decision 0030](decisions/0030-record-array-compiler-budget.md).
 A future refresh must register its own exact source and manifest limits; this
 decision does not republish a seed or alter historical release verification.
 Refreshes change no ordinary relative limit, measurement baseline or runtime
@@ -131,6 +132,33 @@ Preparation, immutable publication and fresh actual-asset verification have
 passed. The verified checkout handoff and its historical Linux amd64 Boolean
 source bridge are recorded below. Compiler flag self-use remains a subsequent
 verified source change.
+
+## Record Array refresh pending source acceptance
+
+[Issue #349](https://github.com/type-rb/type-rb-native/issues/349) tracks the
+bounded `bootstrap-seed-2026-09-09-record-arrays` refresh. Preparation remains
+inactive until matching snapshot recovery and these observers in PR #355
+are accepted on main. Ordinary record Arrays in PR #352 are accepted at
+`566d00d67172460df0f57dff6d5fe03db3b67cdc` from candidate
+`9e8a6f6149323a87710b2be33f9b39e7b71077e7`; its failed source-era cohorts and
+bounded hosted confirmation remain recorded separately. Update the accepted source record before
+preparation if that implementation changes. Every workflow invocation records
+its exact accepted main source and compiler closure.
+
+The predecessor is the verified Boolean Array release below. Only the new tag
+registers Decision 0030 manifest ceilings: 366,000 Darwin arm64, 328,000 Linux
+arm64 and 694,000 combined bytes. All four earlier refreshes retain their own
+predecessor and size contracts. Unknown tags and cross-tag provenance fail
+closed. Adjacent-generation ratios, retained-observation bounds, complete corpus,
+process allowlists, attestation checks and immutable-release requirements remain.
+The syntax checks include record Array values, RHS effects, managed lifetimes
+and the ordinary recovery fixture.
+
+Preparation, publication, fresh actual-asset verification and a separate checkout
+handoff remain required. Neither this observer update nor ordinary record Array
+acceptance adopts record Arrays in compiler implementation source. The five-field
+MIR value carrier remains the subsequent self-use slice; no runtime speedup or
+benchmark-value change is claimed here.
 
 ## Current verified checkout seed
 

@@ -171,14 +171,27 @@ class SeedReleaseTests(unittest.TestCase):
                     seed.validate_manifest(changed, self.revision, tag)
             manifest["targets"][0]["size"] = 349296
             manifest["targets"][1]["size"] = 325864
-            if tag == "bootstrap-seed-2026-09-08-boolean-arrays":
+            if tag in ("bootstrap-seed-2026-09-08-boolean-arrays", "bootstrap-seed-2026-09-09-record-arrays"):
+                seed.validate_manifest(manifest, self.revision, tag)
+            else:
+                with self.assertRaises(ValueError):
+                    seed.validate_manifest(manifest, self.revision, tag)
+
+    def test_record_array_budget_does_not_relax_historical_manifests(self):
+        for tag in seed.PREDECESSORS:
+            manifest = copy.deepcopy(self.manifest)
+            manifest["releaseTag"] = tag
+            manifest["predecessor"] = seed.PREDECESSORS[tag]
+            manifest["targets"][0]["size"] = 365808
+            manifest["targets"][1]["size"] = 327736
+            if tag == "bootstrap-seed-2026-09-09-record-arrays":
                 seed.validate_manifest(manifest, self.revision, tag)
             else:
                 with self.assertRaises(ValueError):
                     seed.validate_manifest(manifest, self.revision, tag)
 
     def test_download_verification_preserves_the_previous_tag(self):
-        for tag in ("bootstrap-seed-2026-09-07", "bootstrap-seed-2026-09-08", "bootstrap-seed-2026-09-08-loop-transfers"):
+        for tag in ("bootstrap-seed-2026-09-07", "bootstrap-seed-2026-09-08", "bootstrap-seed-2026-09-08-loop-transfers", "bootstrap-seed-2026-09-08-boolean-arrays"):
             self.manifest["releaseTag"] = tag
             self.manifest["predecessor"] = seed.PREDECESSORS[tag]
             self.manifest_path.write_text(json.dumps(self.manifest))

@@ -157,6 +157,33 @@ describe("Gate 3 static aggregate layout") do
 		end
 	end
 
+	test("boxes scalar records retained by Arrays and propagates their managed layout") do
+		mut definitions := _gate3_layout_definitions()
+		definitions.push(Gate3TypeDefinition::Array("Array<Point>", Gate3ValueType::Aggregate("example#Point")))
+		case verify_gate3_layouts(definitions)
+		when Result::Ok(valid)
+			expect(valid).to_be_true()
+		when Result::Err(_diagnostic)
+			expect(false).to_be_true()
+		end
+		case compute_gate3_layout(definitions, "example#Point")
+		when Result::Ok(layout)
+			expect(layout.managed).to_be_true()
+			expect(layout.size).to_equal(24)
+			expect(gate3_field_layout(layout, "x").managed).to_be_false()
+		when Result::Err(_diagnostic)
+			expect(false).to_be_true()
+		end
+		case compute_gate3_layout(definitions, "example#Envelope")
+		when Result::Ok(layout)
+			expect(layout.managed).to_be_true()
+			expect(gate3_field_layout(layout, "point").size).to_equal(8)
+			expect(gate3_field_layout(layout, "point").managed).to_be_true()
+		when Result::Err(_diagnostic)
+			expect(false).to_be_true()
+		end
+	end
+
 	test("rejects Array element types outside the registered managed subset") do
 		definitions := [
 			Gate3TypeDefinition::Array("Array<Float>", _gate3_scalar(ScalarType::Float)),

@@ -38,6 +38,9 @@ The valid cases cover:
   direct and selected scalar-MIR negation, Integer/Float/String comparisons
   including NaN and signed zero, and exactly-once condition effects in
   `valid/boolean-conditions.trb`;
+- named record Array snapshot recovery of scalar-only and managed records,
+  three nested depths, function returns, retained RHS-growth positions and
+  allocation loops in `valid/record-array-recovery.trb`;
 - Boolean Array snapshot recovery of three nested depths, record/function
   carriers, scalar values and RHS reallocation in
   `valid/boolean-array-recovery.trb`;

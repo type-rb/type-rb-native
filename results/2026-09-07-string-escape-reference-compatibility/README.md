@@ -1,15 +1,19 @@
 # Current reference compatibility
 
 The current development pin is TypeRB `0.4.6-dev` at
-`202cea85e8ceffd91cfc3ceb69d6f4d8a7acfd7b`, the merged
-[Boolean Array snapshot extension](https://github.com/type-rb/type-rb/pull/660).
-Snapshot v4 retains exact Boolean element types through construction, reads,
-writes, push, nested arrays, records and captures, without adding operations
-or changing the schema. The existing stable Array-assignment behavior from
-[PR #659](https://github.com/type-rb/type-rb/pull/659) remains: capture and validate
-the receiver/index/position before the RHS, then check current storage at write.
+`6cbd4025545d44a1de211335f9197772077bb478`, the merged
+[record Array snapshot extension](https://github.com/type-rb/type-rb/pull/663) and
+[recursive record registration correction](https://github.com/type-rb/type-rb/pull/664).
+It retains canonical record element identities through aliases, nesting,
+function signatures and closure captures. Snapshot v4 remains data-only and
+keeps the existing operations/schema. Boolean Array support from
+[PR #660](https://github.com/type-rb/type-rb/pull/660) and stable assignment
+positions from [PR #659](https://github.com/type-rb/type-rb/pull/659) remain.
+The new pin also includes the independent scalar-field call diagnostic and
+imported nominal-contract fixes in PRs #661 and #662. Earlier observations
+below retain their original reference pin and outcomes.
 
-The current accepted ordinary implementation is Native
+The accepted Boolean Array ordinary implementation is Native
 `57cb41ad6be91716e31fa555ed8ea8c8ce7a5f51` from
 [PR #345](https://github.com/type-rb/type-rb-native/pull/345). All 17 selected
 checks passed at `06aedd81c291d732fe74afc88a9e131d3608765a` in
@@ -48,14 +52,14 @@ checks passed at `62860e4d45691aff6d5002db9715d150042eabbb` in
 Both failure-flag carriers use Boolean elements; local enabled suites passed
 root 99/99 and compiler 130/130, with unchanged application QBE observations.
 
-The current [readonly-field repair](https://github.com/type-rb/type-rb-native/issues/350)
-starts from that accepted implementation. Field-binding assignment rejection
-belongs to the checked frontend, while Array contents retain their existing
-mutation capability. Direct calls of scalar fields remain rejected. The pinned
-reference already rejects field assignments; its `check` currently misses the
-separate `(box.value)()` scalar-field call error, which its Go backend rejects.
-That probe is a preserved Native diagnostic, not a claim of equal reference
-check output.
+The [readonly-field repair](https://github.com/type-rb/type-rb-native/pull/351)
+is accepted at `f1d65b96d659f68376c7ec937be98ef95e02a838`, with all 17 checks
+passing at `2d917d2e8feed1e0054edfe8f9c9958cedcab0c7` in
+[run 34232237613](https://github.com/type-rb/type-rb-native/actions/runs/34232237613).
+Field-binding rejection belongs to the checked frontend, while Array contents
+retain their mutation capability. Its source-era reference pin `202cea8`
+missed `(box.value)()` during checking; the current pin includes that separate
+checker repair. The original mismatch remains a source-era observation.
 
 The initial local enabled cohort passed compiler 131/131 but failed one of
 99 root tests: the old `float-scalars` valid fixture assigned to a readonly
@@ -64,10 +68,10 @@ fixture now rebinds the complete record, and REPL coverage checks both rejected
 field replacement and valid complete rebinding. Those original failures remain
 separate from the corrected-source cohort. All 378 corrected deterministic
 check/QBE observations and the complete ordinary CLI/REPL/terminal suite pass.
-Full corrected enabled suites and all exact-head hosted authorities are still
-required before acceptance.
+Corrected enabled suites passed root 99/99 and compiler 131/131; hosted
+acceptance is recorded above.
 
-The ordinary named-record Array candidate in
+The accepted ordinary named-record Array implementation in
 [issue #349](https://github.com/type-rb/type-rb-native/issues/349) follows that
 readonly correction. Three execution cases match the reference, covering
 typed and inferred arrays, nested aliases, RHS growth and automatic collection.
@@ -76,22 +80,46 @@ four remains an explicit unsupported subset. Both runtime bounds cases retain
 panic exit 2. Full ordinary CLI/REPL/terminal checks and 423 deterministic check/QBE
 observations pass; existing cases match the readonly control. Imported record aliases
 preserve identity; a same-named local record and an inferred imported record
-remain distinct. The pinned reference incorrectly accepts that latter check
-and subsequently fails generated Go with a duplicate declaration; it is not a
-successful reference comparison. Different names with identical shapes are
+remain distinct. The source-era `202cea8` reference incorrectly accepted that latter check
+and then failed generated Go with a duplicate declaration. Preserve that
+failed comparison; the current pin rejects the nominal contract mismatch and
+does not claim broader same-name code-generation support. Different names with identical shapes are
 rejected by both compilers.
 
 The initial Darwin prototype is 365,768 bytes versus its 349,256-byte control.
 Its text section grows from 259,136 to 260,804 bytes and crosses a 16 KiB
-segment boundary. This exceeds the unchanged 350,000-byte Darwin ceiling and
-is an unaccepted cost observation. The source after the readonly prerequisite
+segment boundary. This exceeded the source-era 350,000-byte Darwin ceiling and remains
+a failed cost observation. The source after the readonly prerequisite
 also produces 365,768 bytes locally (text 260,964 bytes) and requires its
-own complete target/cost cohort. Preserve the failure; no size or
-performance budget is widened here. Snapshot recovery and verified seed
-prerequisites remain open, and no compiler implementation uses record Arrays.
+own complete target/cost cohort. The first hosted cohort failed Darwin worker
+and managed-runtime size guards at 365,808 bytes; Linux worker size was 327,736.
+The separate budget PR #353 is accepted at
+`8dc08fbd8e18a4b161460ccf5c3a2c0aefd7f2ec`, with all 17 checks at
+`3cb5e159beff9d802981885878f94545599ca604` in
+[run 34238461767](https://github.com/type-rb/type-rb-native/actions/runs/34238461767).
+Decision 0030 changes only Darwin/combined ceilings to 366,000/694,000 bytes;
+relative and all other acceptance requirements remain unchanged. Ordinary
+record Arrays are accepted at `566d00d67172460df0f57dff6d5fe03db3b67cdc` from
+[PR #352](https://github.com/type-rb/type-rb-native/pull/352), after all 17
+selected authorities passed at `9e8a6f6149323a87710b2be33f9b39e7b71077e7`.
+The failed first cost attempt and bounded confirmation are retained below.
+No compiler implementation uses record Arrays yet.
 
-No runtime-performance or Pure Go claim, benchmark-value update, seed change
-or acceptance-budget change is made. The cumulative baseline remains
+The matching record Array recovery candidate pins the accepted reference above.
+Local recovery-enabled root 102/102 and compiler 133/133 tests pass, including
+the ordinary recovery fixture and a separate escaping closure fixture.
+The complete ordinary CLI/REPL/terminal suite and both 15-case language
+registries pass. Focused MIR tests reject seven element/index/receiver errors;
+the lifetime test retains exact record Integer values after two constructing
+calls, nested aliases, mutation and explicit collection, and traces dynamic
+String and Integer-Array fields owned by another returned record. Removing
+scalar-record boxing fails the exact-value lifetime test. An earlier Boolean-only
+oracle did not expose that invalid stack storage and was strengthened; both
+observations are retained separately. The recovery candidate changes no
+ordinary compiler source and still needs all selected hosted authorities.
+
+No runtime-performance or Pure Go claim, benchmark-value update or seed change
+is made by this recovery update. The cumulative baseline remains
 `ac633935a7f248470c59d22666da14c819a131fa`.
 
 The accepted assignment prerequisite is Native
@@ -263,5 +291,56 @@ Hosted cohort [34234062970](https://github.com/type-rb/type-rb-native/actions/ru
 passed enabled recovery suites and CLI/target controls, then failed both Darwin
 managed-runtime smoke and worker size guards at 365,808 bytes. Linux worker
 size is 327,736 bytes; the 693,544-byte sum is arithmetic because combined and
-comparative checks were skipped. The separate [budget proposal](https://github.com/type-rb/type-rb-native/pull/353)
-requires review; the feature remains unaccepted.
+comparative checks were skipped. The separate [budget decision](https://github.com/type-rb/type-rb-native/pull/353)
+was subsequently accepted; this source-era failed cohort remains unchanged.
+
+## Ordinary record Array hosted acceptance
+
+[Run 34241831590](https://github.com/type-rb/type-rb-native/actions/runs/34241831590)
+at `9e8a6f6149323a87710b2be33f9b39e7b71077e7` first failed Darwin self-build
+wall ratio 1.053299 (1.970 / 2.075 seconds). Correctness, recovery, both CLI
+and target controls, worker/combined size and memory, and Linux comparative
+cost passed. The Darwin comparison exited before writing cross-target
+identities; the downstream failure does not establish a code mismatch.
+
+A [separately preregistered single confirmation](https://github.com/type-rb/type-rb-native/pull/352#issuecomment-5587645688)
+kept the exact source, ordinary 1.05 limits, two warmups and seven retained
+rounds. Attempt 2 passed all 17 authorities, including cross-target identity.
+Darwin self-build medians were 2.560 / 2.420 seconds (0.945312). The additional
+preregistered check pooled all 28 retained observations per role from both
+attempts: medians 2.300 / 2.360 seconds, ratio 1.026087. Pooled peak RSS ratio
+is 0.996429. The first failed attempt is preserved and the one-run confirmation
+budget is expired.
+
+The [complete two-attempt Darwin observations](record-array-hosted-confirmation.json)
+include every warmup and retained measurement, source/compiler/toolchain
+identities, measurement policy, environments and original comparisons. Linux
+self-build ratio was 1.011364. Persistent-worker compiler sizes were 365,808
+Darwin and 327,736 Linux, with the verified 693,544-byte combined total below
+694,000. Comparative fixed-point filenames produce separately recorded sizes
+of 365,768 and 327,744 bytes; do not substitute one observer's artifact identity
+for another. This checkpoint supports ordinary incremental acceptance only.
+The frozen cumulative cohort and n-body alarm above remain; no runtime speedup
+or Pure Go comparison is inferred.
+
+## Recursive record Array recovery correction
+
+A self-referential `Node` with `children: Array<Node>` executes correctly in
+both ordinary compilers, including a retained cycle and 20,000 discarded cycles,
+but the first v4 producer rejected its Array element while `Node` was still
+being registered. [TypeRB #664](https://github.com/type-rb/type-rb/pull/664)
+registers the record kind before traversing fields and completes the same field
+slice. Self-recursive and mutually recursive type graphs retain complete fields,
+unique nominal definitions and deterministic snapshots. The exact accepted
+reference is `6cbd4025545d44a1de211335f9197772077bb478`; full Go tests, source
+formatting and [hosted validation](https://github.com/type-rb/type-rb/actions/runs/34249335045)
+passed at `6f344860f35337126b20d2dad38f2754df67f0c7`.
+
+The existing ordinary recovery fixture now retains a cycle across allocation
+pressure and creates unreachable record/Array cycles. Ordinary execution and
+a focused real v4 snapshot/decoder/MIR/QBE execution pass. Earlier 102/133
+local suites predate this stronger fixture; final enabled suites and every
+applicable hosted authority remain required for this exact reference update.
+The earlier recovery candidate CI was cancelled for this correction after
+CLI, target/QBE and worker/combined checks passed; its cancelled root suite
+and unrun comparative checks establish no acceptance. No seed was published.

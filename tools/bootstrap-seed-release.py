@@ -14,7 +14,7 @@ import shutil
 import statistics
 import sys
 
-TAG = "bootstrap-seed-2026-09-08-boolean-arrays"
+TAG = "bootstrap-seed-2026-09-09-record-arrays"
 MANIFEST = "type-rb-native-bootstrap-manifest-v2.json"
 PREDECESSORS = {"bootstrap-seed-2026-09-07": {
     "releaseTag": "bootstrap-seed-2026-08-30",
@@ -48,6 +48,14 @@ PREDECESSORS = {"bootstrap-seed-2026-09-07": {
         {"asset": "type-rb-native-bootstrap-darwin-arm64", "sha256": "756413fe6daa7b2a286bd4ae2721099807bf2061122f6d84f0414ea851c31d8f"},
         {"asset": "type-rb-native-bootstrap-linux-arm64", "sha256": "13ae8ba588768b1e1936d83d022b85341144a401687e1cea2afa839f0e1a1e48"},
     ],
+}, "bootstrap-seed-2026-09-09-record-arrays": {
+    "releaseTag": "bootstrap-seed-2026-09-08-boolean-arrays",
+    "nativeRevision": "e99df93e81c36c765ead99526fe58b2c2a978ced",
+    "manifestSha256": "faf866e10a4b1f3ca45fcf2c85db0efb01fbed9f02f44876ade0b4037f28da92",
+    "targets": [
+        {"asset": "type-rb-native-bootstrap-darwin-arm64", "sha256": "1c8fdd630b3e129b9e121abce34c6d6dbd928b844cbfc1cff5f20a53b6ccaec7"},
+        {"asset": "type-rb-native-bootstrap-linux-arm64", "sha256": "af5549d42390d3ac3ec74c646ddd37c5930b411f706e5cf2dfd4ca7258bb09fd"},
+    ],
 }}
 
 # Published manifests retain their registered source-era size contracts.
@@ -56,6 +64,7 @@ LIMITS = {
     "bootstrap-seed-2026-09-08": (350000, 317000, 667000),
     "bootstrap-seed-2026-09-08-loop-transfers": (350000, 317000, 667000),
     "bootstrap-seed-2026-09-08-boolean-arrays": (350000, 328000, 678000),
+    "bootstrap-seed-2026-09-09-record-arrays": (366000, 328000, 694000),
 }
 
 BACKEND = {"name": "QBE", "version": "1.3", "sourceSha256": "d587905d620dc5e1d2bfa7c2cc642b9b837aa89a3188c6e37b53d756cf66e320"}
