@@ -1,6 +1,6 @@
 import { gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string } from storage
-import { gate4_path_basename, gate4_path_directory, gate4_string_without_suffix } from path
-import { gate4_integer_string } from literals
+import { gate4_path_basename, gate4_path_directory, gate4_string_starts_with, gate4_string_without_suffix } from path
+import { gate4_ascii_code, gate4_integer_string } from literals
 import { Gate4Compiler, Gate4Locals, gate4_build_symbol_index, gate4_diagnostic, gate4_find_symbol, gate4_has_diagnostic, gate4_local_find, gate4_locals_new, gate4_terminal_token } from state
 import { gate4_token_is, syntax_loop_transfer_kind } from parser
 
@@ -244,6 +244,10 @@ def gate4_type_display(state: Gate4Compiler, type_name: String): String
 	if record_index >= 0
 		return gate4_load_string(state.record_names, record_index)
 	end
+	element := gate4_array_element_type(type_name)
+	if element != ""
+		return "Array<" + gate4_type_display(state, element) + ">"
+	end
 	return type_name
 end
 
@@ -294,7 +298,90 @@ def gate4_resolve_type_name(
 	if record_index >= 0
 		return gate4_record_type(record_index)
 	end
+	mut element := gate4_array_inner_name(type_name)
+	if element != ""
+		mut depth := 1
+		while depth < 3
+			nested := gate4_array_inner_name(element)
+			if nested == ""
+				break
+			end
+			element = nested
+			depth += 1
+		end
+		leaf := gate4_find_visible_record(state, module_index, element)
+		if leaf >= 0
+			mut resolved := gate4_record_type(leaf)
+			while depth > 0
+				resolved = "Array<" + resolved + ">"
+				depth -= 1
+			end
+			return resolved
+		end
+	end
 	return ""
+end
+
+# Extract syntax only; declaration resolution or canonical element validation
+# must establish the type before this spelling reaches checked lowering.
+def gate4_array_inner_name(type_name: String): String
+	if type_name.size() < 8
+		return ""
+	end
+	if !gate4_string_starts_with(type_name, "Array<")
+		return ""
+	end
+	finish := type_name.size() - 1
+	if type_name[finish] != ">"
+		return ""
+	end
+	mut element := ""
+	mut index := 6
+	while index < finish
+		element += type_name[index]
+		index += 1
+	end
+	return element
+end
+
+def gate4_record_array_element(type_name: String): String
+	if type_name.size() < 15
+		return ""
+	end
+	element := gate4_array_inner_name(type_name)
+	mut leaf := element
+	mut depth := 1
+	while depth < 3
+		nested := gate4_array_inner_name(leaf)
+		if nested == ""
+			break
+		end
+		leaf = nested
+		depth += 1
+	end
+	if !gate4_string_starts_with(leaf, "Record#")
+		return ""
+	end
+	if leaf.size() < 8
+		return ""
+	end
+	if leaf.size() > 8
+		if leaf[7] == "0"
+			return ""
+		end
+	end
+	mut digit := 7
+	while digit < leaf.size()
+		code := gate4_ascii_code(leaf[digit])
+		if code < 48
+			return ""
+		end
+		if code > 57
+			return ""
+		end
+		digit += 1
+	end
+	return element
 end
 
 def gate4_array_element_type(type_name: String): String
@@ -334,7 +421,7 @@ def gate4_array_element_type(type_name: String): String
 	if type_name == "Array<Array<Array<Boolean>>>"
 		return "Array<Array<Boolean>>"
 	end
-	return ""
+	return gate4_record_array_element(type_name)
 end
 
 def gate4_array_type(element_type: String): String

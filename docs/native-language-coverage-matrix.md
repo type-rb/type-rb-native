@@ -16,3 +16,4 @@
 | Nullable String | rejects | rejects | not reached | rejects |
 | Ordinary enum | rejects | rejects | not reached | rejects |
 | UTF-8 String literal | accepts | rejects | not reached | rejects |
+| Array of named records | accepts | accepts | matches reference | matches reference |

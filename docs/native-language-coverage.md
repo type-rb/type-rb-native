@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: an initial 14-case ordinary-path inventory and regression contract are
+Status: an initial 15-case ordinary-path inventory and regression contract are
 available. Statement `elsif` and bare `break` / `next` in `while` are covered by ordinary
 compiler and REPL regressions. The ordinary Boolean-array case is also covered.
 The inventory remains a bounded set of examples, not complete language support.
@@ -225,6 +225,31 @@ states retain their existing types. This is typed internal self-use, with
 unchanged application QBE and required failure paths, not a runtime speedup.
 Track this delivery in
 [issue #341](https://github.com/type-rb/type-rb-native/issues/341).
+
+## Named record Arrays
+
+The ordinary subset accepts homogeneous `Array<Entry>` for a visible named
+record, with the same three-level nesting bound as scalar Arrays. Typed empty
+arrays, inference, read/write, `push`, `size`, function signatures and record
+fields preserve canonical declaration identity, including imported aliases.
+Identical field shapes do not make distinct records interchangeable. Mixed
+record literals can infer union Arrays in the reference; that broader union
+subset remains unsupported here.
+
+The `record-array-values`, `record-array-effects` and `record-array-managed`
+cases exercise aliases, nested arrays, retained assignment positions across
+RHS growth and managed record contents surviving automatic collection.
+Diagnostics retain exact element types, bounds and mutation capabilities;
+readonly fields remain protected even after indexing a mutable Array.
+Record Array parameters remain outside numeric reduction MIR, and elements
+use the existing managed aggregate storage and tracing paths.
+
+These are ordinary file and REPL claims. Snapshot recovery does not yet accept
+record Array elements, and compiler implementation has not adopted record
+Arrays. The [bounded delivery](https://github.com/type-rb/type-rb-native/issues/349)
+requires matching recovery, verified published bootstrap assets and an accepted
+checkout handoff before replacing the five-position MIR value carrier with a
+named record. Other MIR row families and deferred optimization remain separate.
 
 ## Deferred Array-loop candidate
 

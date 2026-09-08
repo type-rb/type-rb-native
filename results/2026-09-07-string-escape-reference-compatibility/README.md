@@ -67,6 +67,29 @@ check/QBE observations and the complete ordinary CLI/REPL/terminal suite pass.
 Full corrected enabled suites and all exact-head hosted authorities are still
 required before acceptance.
 
+The ordinary named-record Array candidate in
+[issue #349](https://github.com/type-rb/type-rb-native/issues/349) follows that
+readonly correction. Three execution cases match the reference, covering
+typed and inferred arrays, nested aliases, RHS growth and automatic collection.
+Ten diagnostic fixtures retain nominal types and mutation capabilities; depth
+four remains an explicit unsupported subset. Both runtime bounds cases retain
+panic exit 2. Full ordinary CLI/REPL/terminal checks and 423 deterministic check/QBE
+observations pass; existing cases match the readonly control. Imported record aliases
+preserve identity; a same-named local record and an inferred imported record
+remain distinct. The pinned reference incorrectly accepts that latter check
+and subsequently fails generated Go with a duplicate declaration; it is not a
+successful reference comparison. Different names with identical shapes are
+rejected by both compilers.
+
+The initial Darwin prototype is 365,768 bytes versus its 349,256-byte control.
+Its text section grows from 259,136 to 260,804 bytes and crosses a 16 KiB
+segment boundary. This exceeds the unchanged 350,000-byte Darwin ceiling and
+is an unaccepted cost observation. The source after the readonly prerequisite
+also produces 365,768 bytes locally (text 260,964 bytes) and requires its
+own complete target/cost cohort. Preserve the failure; no size or
+performance budget is widened here. Snapshot recovery and verified seed
+prerequisites remain open, and no compiler implementation uses record Arrays.
+
 No runtime-performance or Pure Go claim, benchmark-value update, seed change
 or acceptance-budget change is made. The cumulative baseline remains
 `ac633935a7f248470c59d22666da14c819a131fa`.

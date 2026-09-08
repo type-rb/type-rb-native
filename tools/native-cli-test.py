@@ -35,7 +35,8 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
                       'loop-transfer-effects', 'loop-transfer-managed', 'array-assignment-targets',
                       'array-assignment-managed', 'array-assignment-recovery',
                       'boolean-array-values', 'boolean-array-effects', 'boolean-array-managed',
-                      'record-field-values'):
+                      'record-field-values', 'record-array-values',
+                      'record-array-effects', 'record-array-managed'):
         fixture = repository / 'compiler/conformance/valid' / (case_name + '.trb')
         expected = fixture.with_suffix('.out').read_text()
         case_source = root / (case_name + '.trb')
@@ -45,7 +46,7 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
         run('build', '--compile', '--outfile', case_output, case_source)
         assert subprocess.check_output([case_output], text=True, timeout=30) == expected
         if case_name in ('elsif-managed', 'loop-transfer-managed', 'array-assignment-managed',
-                         'boolean-array-managed'):
+                         'boolean-array-managed', 'record-array-managed'):
             collected = subprocess.run([case_output], text=True, capture_output=True,
                                        env=dict(env, TYPE_RB_NATIVE_RUNTIME_STATS='1'), timeout=30)
             assert collected.returncode == 0 and collected.stdout == expected
@@ -59,7 +60,8 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
     failure_output = run('repl', text=submission + '\ninvalid_assignment_case()\n:quit\n')
     assert 'out of bounds' in failure_output, failure_output
     assert 'unexpected RHS' not in failure_output, failure_output
-    for case_name in ('boolean-array-negative', 'boolean-array-past-end'):
+    for case_name in ('boolean-array-negative', 'boolean-array-past-end',
+                      'record-array-negative', 'record-array-past-end'):
         fixture = repository / 'compiler/conformance/runtime-invalid' / (case_name + '.trb')
         case_source = root / (case_name + '.trb')
         case_source.write_text(fixture.read_text())
@@ -80,7 +82,11 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
                       'boolean-array-depth', 'boolean-array-parameter', 'boolean-array-readonly',
                       'boolean-array-invariance', 'record-field-write', 'record-field-compound',
                       'record-field-parenthesized', 'record-field-array-replace', 'record-field-call',
-                      'record-field-array-immutable', 'record-field-nested', 'record-field-return'):
+                      'record-field-array-immutable', 'record-field-nested', 'record-field-return',
+                      'record-array-element', 'record-array-write', 'record-array-push',
+                      'record-array-index', 'record-array-constant-mutation', 'record-array-readonly',
+                      'record-array-invariance', 'record-array-field-mutation', 'record-array-depth',
+                      'record-array-unknown'):
         fixture = repository / 'compiler/conformance/invalid' / (case_name + '.source')
         case_source = root / (case_name + '.trb')
         case_source.write_text(fixture.read_text())
@@ -148,6 +154,29 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
     records = run('repl', text='mut box := Box.new(value: 3)\nrecord Point\nx: Integer\ny: Integer\nend\nbox\n:type box\nbox.value\n:quit\n', cwd=project)
     assert records.count('Box(value: 3) : Box') == 2, records
     assert 'Box\n3 : Integer' in records, records
+
+    # Imported record aliases retain declaration identity inside Array types.
+    record_project = root / 'record-arrays'
+    record_project.mkdir()
+    (record_project / 'model.trb').write_text(
+        'record Entry\nid: Integer\nend\ndef entries(): Array<Entry>\n'
+        'return [Entry.new(id: 3)]\nend\n')
+    record_entry = record_project / 'main.trb'
+    record_entry.write_text(
+        'import { Entry as Item, entries } from model\n'
+        'def read(values: Array<Item>): Integer\nreturn values[0].id\nend\n'
+        'def main()\nmut values: Array<Item> := entries()\n'
+        'values.push(Item.new(id: 4))\nputs(read(values))\nputs(values[1].id)\nend\n')
+    assert run('check', record_entry) == 'ok\n'
+    assert run('run', record_entry) == '3\n4\n'
+    record_entry.write_text(
+        'import { entries } from model\nrecord Entry\nid: Integer\nend\n'
+        'def consume(values: Array<Entry>)\nputs(values.size())\nend\n'
+        'def main()\nconsume(entries())\nend\n')
+    assert 'TRBN4004' in run('check', record_entry, success=False)
+    record_entry.write_text(record_entry.read_text().replace(
+        'record Entry', 'record OtherEntry').replace('Array<Entry>', 'Array<OtherEntry>'))
+    assert 'TRBN4004' in run('check', record_entry, success=False)
 
     assert 'override' in run('check', '--mode', 'trb', cwd=project, success=False)
     config.write_text('{"name":"demo","mode":"go","sourceDir":"src","go":{"module":"example.com/demo"}}')
