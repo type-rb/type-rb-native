@@ -25,8 +25,8 @@ record Gate4EmitContext
 	loop_depth: Array<Integer>
 	inline_budget: Array<Integer>
 	scalar_inline_depth: Array<Integer>
-	scalar_inline_range_failure_used: Array<Integer>
-	array_bounds_failure_used: Array<Integer>
+	scalar_inline_range_failure_used: Array<Boolean>
+	array_bounds_failure_used: Array<Boolean>
 	array_header: Array<String>
 	array_header_fallback: Array<Array<String>>
 end
@@ -98,8 +98,8 @@ def gate4_emit_context_new(
 		loop_depth: [0],
 		inline_budget: inline_budget,
 		scalar_inline_depth: [0],
-		scalar_inline_range_failure_used: [0],
-		array_bounds_failure_used: [0],
+		scalar_inline_range_failure_used: [false],
+		array_bounds_failure_used: [false],
 		array_header: gate4_array_header_new(),
 		array_header_fallback: [gate4_array_header_new(), gate4_array_header_new()],
 	)
@@ -629,7 +629,7 @@ end
 
 def gate4_integer_range_failure_label(mut context: Gate4EmitContext): String
 	if context.scalar_inline_depth[0] > 0
-		context.scalar_inline_range_failure_used[0] = 1
+		context.scalar_inline_range_failure_used[0] = true
 		return "@scalar_inline_integer_range_failure"
 	end
 	return gate4_emit_label(context)
@@ -826,7 +826,7 @@ def gate4_emit_array_address(
 	end
 	qbe_output_line(output, "\t" + valid + " =w cultl " + index + ", " + length)
 	qbe_output_branch(output, valid, load_label, "@array_bounds_failure")
-	context.array_bounds_failure_used[0] = 1
+	context.array_bounds_failure_used[0] = true
 	qbe_output_line(output, load_label)
 	data := gate4_emit_array_header(context, output, array, array_key, 2, "24")
 	return gate4_emit_array_data_address(context, output, data, index)
@@ -2557,12 +2557,12 @@ def gate4_emit_function(
 		end
 		body_index += 1
 	end
-	if context.array_bounds_failure_used[0] == 1
+	if context.array_bounds_failure_used[0]
 		qbe_output_line(output, "@array_bounds_failure")
 		qbe_output_line(output, "\tcall $g4_fail(l $g4_bounds_error, l 30)")
 		qbe_output_line(output, "\thlt")
 	end
-	if context.scalar_inline_range_failure_used[0] == 1
+	if context.scalar_inline_range_failure_used[0]
 		qbe_output_line(output, "@scalar_inline_integer_range_failure")
 		qbe_output_line(output, "\tcall $g4_fail(l $g4_integer_range_error, l 45)")
 		qbe_output_line(output, "\thlt")
