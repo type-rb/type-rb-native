@@ -14,7 +14,6 @@ record Gate4EmitContext
 	local_names: Gate4StringStorage
 	local_types: Gate4StringStorage
 	local_slots: Gate4StringStorage
-	local_mutable: Gate4IntegerStorage
 	local_inherited: Gate4IntegerStorage
 	local_direct: Gate4IntegerStorage
 	local_count: Array<Integer>
@@ -37,10 +36,10 @@ record Gate4EmittedValue
 	type_name: String
 	category: Integer
 	name: String
-	mutable: Integer
-	address: String
-	assignment_owner: String
-	assignment_position: String
+	# Bindings and record fields use addresses; category 3 uses a validated
+	# Array position and owner. Plain element reads carry no pending target.
+	slot: String
+	owner: String
 end
 
 record Gate4ProjectSources
@@ -86,7 +85,6 @@ def gate4_emit_context_new(
 		local_names: gate4_string_storage(capacity),
 		local_types: gate4_string_storage(capacity),
 		local_slots: gate4_string_storage(capacity),
-		local_mutable: gate4_integer_storage(capacity),
 		local_inherited: gate4_integer_storage(capacity),
 		local_direct: gate4_integer_storage(capacity),
 		local_count: [0],
@@ -385,18 +383,15 @@ def gate4_emitted_value(
 		type_name: String,
 		category: Integer,
 		name: String,
-		mutable: Integer,
-		address: String,
+		slot: String,
 	): Gate4EmittedValue
 	return Gate4EmittedValue.new(
 		operand: operand,
 		type_name: type_name,
 		category: category,
 		name: name,
-		mutable: mutable,
-		address: address,
-		assignment_owner: "",
-		assignment_position: "",
+		slot: slot,
+		owner: "",
 	)
 end
 
@@ -842,7 +837,6 @@ def gate4_emit_add_local(
 		mut output: QbeOutput,
 		name: String,
 		type_name: String,
-		mutable: Integer,
 		initial: String,
 		inherited_root: Boolean,
 	): String
@@ -853,7 +847,6 @@ def gate4_emit_add_local(
 	gate4_store_string(context.local_names, index, name)
 	gate4_store_string(context.local_types, index, type_name)
 	gate4_store_string(context.local_slots, index, slot)
-	gate4_store_integer(context.local_mutable, index, mutable)
 	gate4_store_integer(context.local_direct, index, 0)
 	mut inherited := 0
 	if inherited_root
@@ -887,7 +880,6 @@ def gate4_emit_loaded_local(
 			type_name,
 			0,
 			"",
-			0,
 			"",
 		)
 	end
@@ -903,7 +895,6 @@ def gate4_emit_loaded_local(
 		type_name,
 		0,
 		"",
-		gate4_load_integer(context.local_mutable, index),
 		gate4_load_string(context.local_slots, index),
 	)
 end
@@ -978,7 +969,7 @@ def gate4_emit_array_literal(
 		gate4_emit_array_push(context, output, array, element_type, operand)
 		index += 1
 	end
-	return gate4_emitted_value(array, gate4_array_type(element_type), 0, "", 1, "")
+	return gate4_emitted_value(array, gate4_array_type(element_type), 0, "", "")
 end
 
 def gate4_scalar_type_name(type_id: Integer): String
@@ -1033,7 +1024,7 @@ def gate4_emit_scalar_mir(
 		result_type := gate4_scalar_type_name(
 			gate4_mir_value_type(state.scalar_mir, function_index, instruction[1]),
 		)
-		mut result := gate4_emitted_value("", result_type, 0, "", 0, "")
+		mut result := gate4_emitted_value("", result_type, 0, "", "")
 		mut result_fact := 0
 		if instruction[0] == 6
 			literal := gate4_number_without_underscores(state.scalar_mir.literal_texts[instruction[4]])
@@ -1047,7 +1038,7 @@ def gate4_emit_scalar_mir(
 			if result_type == "Float"
 				operand = "d_" + literal
 			end
-			result = gate4_emitted_value(operand, result_type, 0, "", 0, "")
+			result = gate4_emitted_value(operand, result_type, 0, "", "")
 			result_fact = instruction[2]
 		else
 			if instruction[0] == 7
@@ -1068,21 +1059,21 @@ def gate4_emit_scalar_mir(
 					context,
 					output,
 					operator_id,
-					gate4_emitted_value(operands[left_id], types[left_id], 0, "", 0, ""),
-					gate4_emitted_value(operands[right_id], types[right_id], 0, "", 0, ""),
+					gate4_emitted_value(operands[left_id], types[left_id], 0, "", ""),
+					gate4_emitted_value(operands[right_id], types[right_id], 0, "", ""),
 					result_type,
 					facts[left_id] == 1,
 					facts[right_id] == 1,
 					guarded_operator,
 				)
-				result = gate4_emitted_value(operand, result_type, 0, "", 0, "")
+				result = gate4_emitted_value(operand, result_type, 0, "", "")
 			else
 				if instruction[0] == 8
 					value_id := instruction[2]
 					if instruction[4] == 1
 						operand := gate4_emit_temporary(context)
 						qbe_output_line(output, "\t" + operand + " =l ceql " + operands[value_id] + ", 0")
-						result = gate4_emitted_value(operand, "Boolean", 0, "", 0, "")
+						result = gate4_emitted_value(operand, "Boolean", 0, "", "")
 					else
 						if instruction[4] == 2
 							operand := gate4_emit_temporary(context)
@@ -1091,9 +1082,9 @@ def gate4_emit_scalar_mir(
 							else
 								qbe_output_line(output, "\t" + operand + " =l call $g4_integer_subtract(l 0, l " + operands[value_id] + ")")
 							end
-							result = gate4_emitted_value(operand, result_type, 0, "", 0, "")
+							result = gate4_emitted_value(operand, result_type, 0, "", "")
 						else
-							result = gate4_emitted_value(operands[value_id], result_type, 0, "", 0, "")
+							result = gate4_emitted_value(operands[value_id], result_type, 0, "", "")
 							result_fact = facts[value_id]
 						end
 					end
@@ -1101,7 +1092,7 @@ def gate4_emit_scalar_mir(
 					value_id := instruction[2]
 					operand := gate4_emit_temporary(context)
 					qbe_output_line(output, "\t" + operand + " =d sltof " + operands[value_id])
-					result = gate4_emitted_value(operand, "Float", 0, "", 0, "")
+					result = gate4_emitted_value(operand, "Float", 0, "", "")
 				end
 			end
 		end
@@ -1111,7 +1102,7 @@ def gate4_emit_scalar_mir(
 		index += 1
 	end
 	context.scalar_inline_depth[0] = saved_inline_depth
-	return gate4_emitted_value(operands[block[15]], types[block[15]], 0, "", 0, "")
+	return gate4_emitted_value(operands[block[15]], types[block[15]], 0, "", "")
 end
 
 def gate4_emit_scalar_mir_direct_call(
@@ -1337,7 +1328,7 @@ def gate4_emit_direct_call(
 	if callee.category == 5
 		result := gate4_emit_temporary(context)
 		qbe_output_line(output, "\t" + result + " =d call $sqrt(" + arguments + ")")
-		return gate4_emitted_value(result, result_type, 0, "", 0, "")
+		return gate4_emitted_value(result, result_type, 0, "", "")
 	end
 	gate4_invalidate_array_header_cache(context)
 	if callee.category == 4
@@ -1345,7 +1336,7 @@ def gate4_emit_direct_call(
 		result := gate4_emit_temporary(context)
 		qbe_output_line(output, "\t" + result + " =l call $g4_process_argv()")
 		gate4_emit_root_value(context, result_type)
-		return gate4_emitted_value(result, result_type, 0, "", 1, "")
+		return gate4_emitted_value(result, result_type, 0, "", "")
 	end
 	if gate4_compiler_entry_function(state) >= 0
 		if function_index >= 0
@@ -1354,45 +1345,45 @@ def gate4_emit_direct_call(
 					result := gate4_emit_temporary(context)
 					qbe_output_line(output, "\t" + result + " =" + gate4_qbe_type(result_type) + " call $" + callee.name + "(" + arguments + ")")
 					gate4_emit_root_value(context, result_type)
-					return gate4_emitted_value(result, result_type, 0, "", 0, "")
+					return gate4_emitted_value(result, result_type, 0, "", "")
 				end
 			end
 		end
 		if callee.name == "gate4_file_exists"
 			result := gate4_emit_temporary(context)
 			qbe_output_line(output, "\t" + result + " =l call $g4_file_exists(" + arguments + ")")
-			return gate4_emitted_value(result, "Boolean", 0, "", 0, "")
+			return gate4_emitted_value(result, "Boolean", 0, "", "")
 		end
 		if callee.name == "gate4_read_source"
 			result := gate4_emit_temporary(context)
 			qbe_output_line(output, "\t" + result + " =l call $g4_read_source(" + arguments + ")")
 			gate4_emit_root_value(context, "String")
-			return gate4_emitted_value(result, "String", 0, "", 0, "")
+			return gate4_emitted_value(result, "String", 0, "", "")
 		end
 		if callee.name == "gate4_source_slice"
 			result := gate4_emit_temporary(context)
 			qbe_output_line(output, "\t" + result + " =l call $g4_source_slice(" + arguments + ")")
 			gate4_emit_root_value(context, "String")
-			return gate4_emitted_value(result, "String", 0, "", 0, "")
+			return gate4_emitted_value(result, "String", 0, "", "")
 		end
 		if callee.name == "gate4_collect_project_sources"
 			result := gate4_emit_temporary(context)
 			qbe_output_line(output, "\t" + result + " =l call $g4_collect_project_sources(" + arguments + ")")
 			gate4_emit_root_value(context, result_type)
-			return gate4_emitted_value(result, result_type, 0, "", 0, "")
+			return gate4_emitted_value(result, result_type, 0, "", "")
 		end
 	end
 	if callee.name == "puts"
 		qbe_output_line(output, "\tcall " + puts_runtime + "(" + arguments + ")")
-		return gate4_emitted_value("", "Void", 0, "", 0, "")
+		return gate4_emitted_value("", "Void", 0, "", "")
 	end
 	if callee.name == "gate4_eputs"
 		qbe_output_line(output, "\tcall $g4_eputs(" + arguments + ")")
-		return gate4_emitted_value("", "Void", 0, "", 0, "")
+		return gate4_emitted_value("", "Void", 0, "", "")
 	end
 	if callee.name == "gate4_reset_temporary_storage"
 		qbe_output_line(output, "\tcall $g4_temp_reset()")
-		return gate4_emitted_value("", "Void", 0, "", 0, "")
+		return gate4_emitted_value("", "Void", 0, "", "")
 	end
 	if context.inline_budget[2] >= 0
 		if gate4_scalar_leaf_inline_eligible(state, function_index)
@@ -1407,7 +1398,7 @@ def gate4_emit_direct_call(
 			output,
 			"\tcall $g4f" + gate4_integer_string(function_index) + "(" + arguments + ")",
 		)
-		return gate4_emitted_value("", "Void", 0, "", 0, "")
+		return gate4_emitted_value("", "Void", 0, "", "")
 	end
 	result := gate4_emit_temporary(context)
 	qbe_output_line(
@@ -1416,7 +1407,7 @@ def gate4_emit_direct_call(
 		gate4_integer_string(function_index) + "(" + arguments + ")",
 	)
 	gate4_emit_root_value(context, result_type)
-	return gate4_emitted_value(result, result_type, 0, "", 0, "")
+	return gate4_emitted_value(result, result_type, 0, "", "")
 end
 
 def gate4_emit_record_new(
@@ -1471,7 +1462,7 @@ def gate4_emit_record_new(
 		end
 	end
 	gate4_expect(state, position, ")")
-	return gate4_emitted_value(record_value, gate4_record_type(record_index), 0, "", 1, "")
+	return gate4_emitted_value(record_value, gate4_record_type(record_index), 0, "", "")
 end
 
 def gate4_emit_method_call(
@@ -1486,14 +1477,14 @@ def gate4_emit_method_call(
 	gate4_skip_newlines(state, position)
 	if method == "size"
 		gate4_expect(state, position, ")")
-		mut key := receiver.address
+		mut key := receiver.slot
 		if key != context.array_header[0]
 			key = ""
 		end
 		result := gate4_emit_array_header(
 			context, output, receiver.operand, key, 1, "8",
 		)
-		return gate4_emitted_value(result, "Integer", 0, "", 0, "")
+		return gate4_emitted_value(result, "Integer", 0, "", "")
 	end
 	if method == "push"
 		element_type := gate4_array_element_type(receiver.type_name)
@@ -1501,7 +1492,7 @@ def gate4_emit_method_call(
 		gate4_skip_newlines(state, position)
 		gate4_expect(state, position, ")")
 		gate4_emit_array_push(context, output, receiver.operand, element_type, value.operand)
-		return gate4_emitted_value("", "Void", 0, "", 0, "")
+		return gate4_emitted_value("", "Void", 0, "", "")
 	end
 	if method == "to_i"
 		gate4_expect(state, position, ")")
@@ -1512,7 +1503,7 @@ def gate4_emit_method_call(
 			conversion = "$g4_string_to_integer(l "
 		end
 		qbe_output_line(output, "\t" + result + " =l call " + conversion + receiver.operand + ")")
-		return gate4_emitted_value(result, "Integer", 0, "", 0, "")
+		return gate4_emitted_value(result, "Integer", 0, "", "")
 	end
 	if method == "to_s"
 		gate4_expect(state, position, ")")
@@ -1523,9 +1514,9 @@ def gate4_emit_method_call(
 			"\t" + result + " =l call $g4_integer_to_string(l " + receiver.operand + ")",
 		)
 		gate4_emit_root_value(context, "String")
-		return gate4_emitted_value(result, "String", 0, "", 0, "")
+		return gate4_emitted_value(result, "String", 0, "", "")
 	end
-	return gate4_emitted_value("", "Invalid", 0, "", 0, "")
+	return gate4_emitted_value("", "Invalid", 0, "", "")
 end
 
 def gate4_emit_postfix(
@@ -1540,10 +1531,8 @@ def gate4_emit_postfix(
 		type_name: initial.type_name,
 		category: initial.category,
 		name: initial.name,
-		mutable: initial.mutable,
-		address: initial.address,
-		assignment_owner: initial.assignment_owner,
-		assignment_position: initial.assignment_position,
+		slot: initial.slot,
+		owner: initial.owner,
 	)
 	mut scanning := true
 	while scanning
@@ -1575,7 +1564,6 @@ def gate4_emit_postfix(
 						field_type,
 						0,
 						member,
-						value.mutable,
 						address,
 					)
 				end
@@ -1602,7 +1590,7 @@ def gate4_emit_postfix(
 							"\t" + result + " =l call $g4_string_index(l " + value.operand + ", l " + index.operand + ")",
 						)
 						gate4_emit_root_value(context, "String")
-						value = gate4_emitted_value(result, "String", 0, "", 0, "")
+						value = gate4_emitted_value(result, "String", 0, "", "")
 					else
 						mut address := ""
 						mut inline_address := false
@@ -1616,7 +1604,7 @@ def gate4_emit_postfix(
 								context,
 								output,
 								value.operand,
-								value.address,
+								value.slot,
 								index.operand,
 								gate4_mir_nonnegative_fact(state, position[0]),
 							)
@@ -1656,10 +1644,8 @@ def gate4_emit_postfix(
 							type_name: element_type,
 							category: 3,
 							name: "",
-							mutable: value.mutable,
-							address: address,
-							assignment_owner: owner,
-							assignment_position: retained_position,
+							slot: retained_position,
+							owner: owner,
 						)
 					end
 					gate4_expect(state, position, "]")
@@ -1685,13 +1671,13 @@ def gate4_emit_primary(
 		value := gate4_number_without_underscores(gate4_load_string(state.token_texts, token_index))
 		gate4_advance(position)
 		if gate4_number_is_float(value)
-			return gate4_emitted_value("d_" + value, "Float", 0, "", 0, "")
+			return gate4_emitted_value("d_" + value, "Float", 0, "", "")
 		end
-		return gate4_emitted_value(value, "Integer", 0, "", 0, "")
+		return gate4_emitted_value(value, "Integer", 0, "", "")
 	end
 	if kind == 3
 		gate4_advance(position)
-		return gate4_emitted_value("$g4s" + gate4_integer_string(gate4_load_integer(state.token_lines, token_index)), "String", 0, "", 0, "")
+		return gate4_emitted_value("$g4s" + gate4_integer_string(gate4_load_integer(state.token_lines, token_index)), "String", 0, "", "")
 	end
 	if gate4_token_is(state, token_index, "[")
 		return gate4_emit_array_literal(state, position, context, output, expected)
@@ -1715,7 +1701,7 @@ def gate4_emit_primary(
 		)
 		result := gate4_emit_temporary(context)
 		qbe_output_line(output, "\t" + result + " =l ceql " + value.operand + ", 0")
-		return gate4_emitted_value(result, "Boolean", 0, "", 0, "")
+		return gate4_emitted_value(result, "Boolean", 0, "", "")
 	end
 	if gate4_token_is(state, token_index, "-")
 		gate4_advance(position)
@@ -1729,10 +1715,10 @@ def gate4_emit_primary(
 		result := gate4_emit_temporary(context)
 		if value.type_name == "Float"
 			qbe_output_line(output, "\t" + result + " =d sub d_-0.0, " + value.operand)
-			return gate4_emitted_value(result, "Float", 0, "", 0, "")
+			return gate4_emitted_value(result, "Float", 0, "", "")
 		end
 		qbe_output_line(output, "\t" + result + " =l call $g4_integer_subtract(l 0, l " + value.operand + ")")
-		return gate4_emitted_value(result, "Integer", 0, "", 0, "")
+		return gate4_emitted_value(result, "Integer", 0, "", "")
 	end
 	if gate4_token_is(state, token_index, "+")
 		gate4_advance(position)
@@ -1748,10 +1734,10 @@ def gate4_emit_primary(
 		name := gate4_load_string(state.token_texts, token_index)
 		gate4_advance(position)
 		if name == "true"
-			return gate4_emitted_value("1", "Boolean", 0, "", 0, "")
+			return gate4_emitted_value("1", "Boolean", 0, "", "")
 		end
 		if name == "false"
-			return gate4_emitted_value("0", "Boolean", 0, "", 0, "")
+			return gate4_emitted_value("0", "Boolean", 0, "", "")
 		end
 		mut local_index := context.local_count[0] - 1
 		mut found_local :=- 1
@@ -1768,19 +1754,19 @@ def gate4_emit_primary(
 		end
 		standard_package := gate4_standard_package_import(state, state.active_module[0], name)
 		if standard_package < - 1
-			return gate4_emitted_value("", gate4_standard_package_root(standard_package), 2 - standard_package, name, 0, "")
+			return gate4_emitted_value("", gate4_standard_package_root(standard_package), 2 - standard_package, name, "")
 		end
 		if name == "puts"
-			return gate4_emitted_value("", "", 1, name, 0, "")
+			return gate4_emitted_value("", "", 1, name, "")
 		end
 		if gate4_find_visible_function(state, state.active_module[0], name) >= 0
-			return gate4_emitted_value("", "", 1, name, 0, "")
+			return gate4_emitted_value("", "", 1, name, "")
 		end
 		if gate4_find_visible_record(state, state.active_module[0], name) >= 0
-			return gate4_emitted_value("", "", 2, name, 0, "")
+			return gate4_emitted_value("", "", 2, name, "")
 		end
 	end
-	return gate4_emitted_value("", "Invalid", 0, "", 0, "")
+	return gate4_emitted_value("", "Invalid", 0, "", "")
 end
 
 def gate4_emit_integer_call(
@@ -2018,7 +2004,7 @@ def lower_checked_binary(
 	end
 	if !valid
 		gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, origin), "invalid checked binary plan")
-		return gate4_emitted_value("0", "Invalid", 0, "", 0, "")
+		return gate4_emitted_value("0", "Invalid", 0, "", "")
 	end
 	# Literal spelling remains transitional until selected inline-call results
 	# are represented above the adapter; the operator and result type do not.
@@ -2033,7 +2019,7 @@ def lower_checked_binary(
 		gate4_small_nonnegative_integer_operand(right.operand),
 		0,
 	)
-	return gate4_emitted_value(operand, result_type, 0, "", 0, "")
+	return gate4_emitted_value(operand, result_type, 0, "", "")
 end
 
 def lower_checked_logical(
@@ -2053,7 +2039,7 @@ def lower_checked_logical(
 	end
 	if !valid
 		gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, origin), "invalid checked logical plan")
-		return gate4_emitted_value("0", "Invalid", 0, "", 0, "")
+		return gate4_emitted_value("0", "Invalid", 0, "", "")
 	end
 	rhs := gate4_emit_label(context)
 	merge := gate4_emit_label(context)
@@ -2078,7 +2064,7 @@ def lower_checked_logical(
 	# reconstructing their final predecessor. QBE promotes this private slot.
 	qbe_output_line(output, "\t" + result + " =l loadl " + slot)
 	gate4_invalidate_array_header_cache(context)
-	return gate4_emitted_value(result, "Boolean", 0, "", 0, "")
+	return gate4_emitted_value(result, "Boolean", 0, "", "")
 end
 
 def gate4_emit_expression_value(
@@ -2141,7 +2127,7 @@ def gate4_emit_expression(
 		if value.type_name == "Integer"
 			converted := gate4_emit_temporary(context)
 			qbe_output_line(output, "\t" + converted + " =d sltof " + value.operand)
-			return gate4_emitted_value(converted, "Float", 0, "", 0, "")
+			return gate4_emitted_value(converted, "Float", 0, "", "")
 		end
 	end
 	return value
@@ -2153,9 +2139,7 @@ def gate4_emit_declaration(
 		mut context: Gate4EmitContext,
 		mut output: QbeOutput,
 	): Boolean
-	mut mutable := 0
 	if gate4_token_is(state, position[0], "mut")
-		mutable = 1
 		gate4_advance(position)
 	end
 	name := gate4_expect_identifier(state, position)
@@ -2171,7 +2155,7 @@ def gate4_emit_declaration(
 	if local_type == ""
 		local_type = value.type_name
 	end
-	gate4_emit_add_local(context, output, name, local_type, mutable, value.operand, false)
+	gate4_emit_add_local(context, output, name, local_type, value.operand, false)
 	return finish_statement(state, position)
 end
 
@@ -2183,14 +2167,14 @@ def emit_checked_assignment_store(
 		left: Gate4EmittedValue,
 		operand: String,
 	)
-	mut address := left.address
+	mut address := left.slot
 	if left.category == 3
 		index_origin := checked_array_assignment_target(state, origin) - 1
 		mut valid := index_origin >= 0
-		if left.assignment_owner == ""
+		if left.owner == ""
 			valid = false
 		end
-		if left.assignment_position == ""
+		if left.slot == ""
 			valid = false
 		end
 		if !valid
@@ -2203,7 +2187,7 @@ def emit_checked_assignment_store(
 		end
 		output.runtime_flags[3] = 1
 		address = gate4_emit_temporary(context)
-		qbe_output_line(output, "\t" + address + " =l call $g4_array_address(l " + left.assignment_owner + ", l " + left.assignment_position + ")")
+		qbe_output_line(output, "\t" + address + " =l call $g4_array_address(l " + left.owner + ", l " + left.slot + ")")
 	end
 	gate4_emit_typed_store(output, left.type_name, operand, address)
 end
@@ -2448,7 +2432,6 @@ def gate4_emit_function(
 				body,
 				parameter_name,
 				gate4_load_string(state.parameter_types, declaration_index),
-				gate4_load_integer(state.parameter_mutable, declaration_index),
 				initial,
 				!gate4_function_reassigns_parameter(state, function_index, parameter_name),
 			)

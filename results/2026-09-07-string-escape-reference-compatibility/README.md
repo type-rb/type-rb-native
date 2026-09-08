@@ -31,6 +31,26 @@ boundaries. Earlier tests that counted only initial bounds checks now account
 for the independent final store check; their induction and inline-budget
 assertions remain in place. No cost limit or failed measurement was waived.
 
+## First assignment candidate and bounded carrier cleanup
+
+The first full cohort for Native
+`90435186fc5c06b662c06cb80584575e28d9d064` is
+[run 34199705462](https://github.com/type-rb/type-rb-native/actions/runs/34199705462).
+Recovery, both ordinary CLI targets, Darwin worker memory and the Linux amd64
+target passed. Linux arm64 failed its unchanged 317,000-byte compiler ceiling:
+the target chain reports 326,312 bytes, and the worker's stripped compiler
+reports 326,304 bytes. The combined and performance authorities therefore did
+not run; this candidate was not accepted. Keep that cohort and its failures.
+
+The first bounded follow-up removes emitter-only mutability transport, whose
+checks already belong to the checked frontend, and removes the redundant
+Array-position carrier field. A tagged slot represents a binding address or
+a validated Array position beside its owner. All internal callers change
+directly. Required bounds, owner/old-value roots and target/store verification
+remain. This is one revised-source correctness and cost cohort, not an
+unchanged-head retry or a larger acceptance budget. Reassess any remaining
+cost miss before another size-only attempt.
+
 # Previous loop-transfer reference checkpoint
 
 The current development pin is TypeRB `0.4.6-dev` at

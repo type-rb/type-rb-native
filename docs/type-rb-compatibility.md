@@ -42,7 +42,9 @@ position before the RHS, then validates that position in current storage at
 the final store. Compound assignment uses the old value saved before the RHS.
 The checked source projection pairs Array target and store origins; its
 verified plan directs owner retention, position capture and final address
-resolution. The adapter no longer writes an element address held across RHS
+resolution. Its tagged slot holds either a binding address or a validated
+Array position beside the owner; checked mutability is not copied into
+emitter metadata. The adapter no longer writes an element address held across RHS
 calls. Managed owners and saved compound values remain rooted across calls.
 
 The ordinary fixtures cover growth, aliasing, index-side mutation, nested owner
