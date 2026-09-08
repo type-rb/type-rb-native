@@ -209,6 +209,8 @@ def _gate3_verify_array_element(
 				return Result<Boolean, Diagnostic>::Ok(true)
 			when Gate3TypeDefinition::Function(_id, _parameters, _result)
 				return Result<Boolean, Diagnostic>::Ok(true)
+			when Gate3TypeDefinition::Record(_id, _fields)
+				return Result<Boolean, Diagnostic>::Ok(true)
 			else
 			end
 		end
@@ -236,6 +238,23 @@ def _gate3_managed_reference_layout(
 	)
 end
 
+# Array slots retain managed references. Use one representation for each record
+# throughout the module, including function results and nested aggregate fields.
+def _gate3_record_is_array_element(definitions: Array<Gate3TypeDefinition>, type_id: String): Boolean
+	mut index := 0
+	while index < definitions.size()
+		case definitions[index]
+		when Gate3TypeDefinition::Array(_id, element_type)
+			if gate3_value_types_equal(element_type, Gate3ValueType::Aggregate(type_id))
+				return true
+			end
+		else
+		end
+		index += 1
+	end
+	return false
+end
+
 def _gate3_record_layout(
 		definitions: Array<Gate3TypeDefinition>,
 		type_id: String,
@@ -251,7 +270,7 @@ def _gate3_record_layout(
 	field_layouts := try _gate3_fields_layout(definitions, fields, visiting, path + "/fields", 0)
 	mut alignment := 1
 	mut end_offset := 0
-	mut managed := false
+	mut managed := _gate3_record_is_array_element(definitions, type_id)
 	mut index := 0
 	while index < field_layouts.size()
 		field := field_layouts[index]

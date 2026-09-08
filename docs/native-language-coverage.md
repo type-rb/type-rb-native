@@ -244,12 +244,28 @@ readonly fields remain protected even after indexing a mutable Array.
 Record Array parameters remain outside numeric reduction MIR, and elements
 use the existing managed aggregate storage and tracing paths.
 
-These are ordinary file and REPL claims. Snapshot recovery does not yet accept
-record Array elements, and compiler implementation has not adopted record
-Arrays. The [bounded delivery](https://github.com/type-rb/type-rb-native/issues/349)
-requires matching recovery, verified published bootstrap assets and an accepted
-checkout handoff before replacing the five-position MIR value carrier with a
-named record. Other MIR row families and deferred optimization remain separate.
+Snapshot v4 recovery also preserves record Array element identities through
+construction, reads, writes, growth, nested Arrays, function returns and closure
+captures. Layout analysis boxes a record used as an Array element throughout the
+module, including scalar-only records, so an Array never retains its stack
+address. Existing managed descriptors and roots trace both the record and its
+String or Array fields. Scalar records outside Array storage keep their existing
+layout; tagged and Float Array elements remain outside this recovery subset.
+
+The `record-array-recovery` fixture covers retained assignment positions across
+RHS growth, three-level nesting and managed records surviving allocation loops.
+The separate `record-array-closure` snapshot fixture exercises closure captures
+and escaping record Arrays; it does not expand ordinary closure support. Focused
+MIR tests reject scalar and nominal element mismatches, invalid indices and
+receiver types. A returned-record runtime test checks exact Integer values after
+subsequent calls, Array mutation and explicit collection, plus managed children.
+Removing the scalar-record boxing makes that lifetime regression test fail.
+
+Compiler implementation has not adopted record Arrays. The
+[bounded delivery](https://github.com/type-rb/type-rb-native/issues/349) still
+requires verified published bootstrap assets and an accepted checkout handoff
+before replacing the five-position MIR value carrier with a named record.
+Other MIR row families and deferred optimization remain separate.
 
 ## Deferred Array-loop candidate
 

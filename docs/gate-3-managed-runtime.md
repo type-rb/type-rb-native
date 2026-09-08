@@ -31,8 +31,8 @@ and peak-RSS bounds pass in the
 
 ## Reference producer pin
 
-`TYPE_RB_REVISION` pins TypeRB commit
-`fa9e0503cc681bcaa691f6f11d2f1e19ca8e6453`, which provides the
+The original Gate 3 evidence used TypeRB commit
+`fa9e0503cc681bcaa691f6f11d2f1e19ca8e6453`, which provided the
 consumer-neutral version 4 bootstrap snapshot producer. The integration command
 owned by this repository is:
 

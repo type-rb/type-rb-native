@@ -2,7 +2,7 @@
 
 TypeRB Native follows exact reference revisions while it is experimental. The
 current source and semantic oracle is TypeRB
-`caf6aadb9493ca69290ab0dc22d420b5f574df14` (`0.4.6-dev`), recorded in
+`5f789d5a46d22f0f9883eaf4bbe985e4c9904c2f` (`0.4.6-dev`), recorded in
 `TYPE_RB_REVISION`. This is an exact development pin, not a supported version
 range.
 
@@ -34,6 +34,23 @@ The earlier scoped-file successor is registered in
 passes the selected-reference, migration, exact-baseline, target-regression,
 fixed-point, process, resource, and size criteria.
 
+## Record Array snapshot update
+
+The current pin includes [TypeRB PR #663](https://github.com/type-rb/type-rb/pull/663).
+Snapshot v4 preserves nominal record Array elements through aliases, nesting,
+function returns and closure captures without adding an operation or changing
+its schema. The recovery layout boxes records stored in Arrays consistently
+throughout the module; roots and descriptors retain scalar-only records and
+records containing managed fields after their constructing call returns.
+Ordinary record Arrays and their compiler-source self-use remain separate
+stages with the prerequisites in [language coverage](native-language-coverage.md#named-record-arrays).
+
+The pin also includes the independent data-field call diagnostic and imported
+nominal-contract corrections in [PR #661](https://github.com/type-rb/type-rb/pull/661)
+and [PR #662](https://github.com/type-rb/type-rb/pull/662). These resolve the
+record Array investigation's checker discrepancies, without claiming broader
+same-named declaration code-generation support.
+
 ## Stable Array assignment targets
 
 The current pin includes [TypeRB PR #659](https://github.com/type-rb/type-rb/pull/659).
@@ -50,8 +67,9 @@ calls. Managed owners and saved compound values remain rooted across calls.
 The ordinary fixtures cover growth, aliasing, index-side mutation, nested owner
 replacement, managed old values and initial bounds failure. The separate
 `array-assignment-recovery` case verifies the same rule through snapshot v4.
-Boolean Arrays and short-circuit assignment syntax remain outside the current
-ordinary subset; this change does not add source forms or collection methods.
+Boolean and named record Arrays are covered by subsequent ordinary slices.
+Short-circuit assignment syntax remains outside the ordinary subset; the
+assignment repair itself adds no source forms or collection methods.
 
 Validation and acceptance for this correctness slice follow
 [issue #342](https://github.com/type-rb/type-rb-native/issues/342), including
