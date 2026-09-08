@@ -40,14 +40,36 @@ at `c6b98d25483d766c09e5695a8c315e210f1111de` in
 [run 34219868383](https://github.com/type-rb/type-rb-native/actions/runs/34219868383),
 including the separate Linux amd64 Boolean-capability setup bridge.
 
-The following bounded source change adopts `Array<Boolean>` for only the
-shared scalar-inline-range-failure and Array-bounds-failure flags, replacing
-Integer sentinels with false/true values and direct Boolean tests. It starts
-from that accepted checkout handoff. Full recovery, ordinary fixed points,
-application check/QBE equality against the same-feature control, CLI and all
-hosted acceptance authorities remain required. This is internal typed self-use;
-there is no new runtime-performance or Pure Go claim, benchmark-value update,
-or acceptance-budget change. The cumulative baseline remains `ac633935a7f248470c59d22666da14c819a131fa`.
+The bounded Boolean flag self-use is accepted at
+`4a594bc6562262502b6f901cae63c5288a705f5b` from
+[PR #348](https://github.com/type-rb/type-rb-native/pull/348). All 17 selected
+checks passed at `62860e4d45691aff6d5002db9715d150042eabbb` in
+[run 34222798465](https://github.com/type-rb/type-rb-native/actions/runs/34222798465).
+Both failure-flag carriers use Boolean elements; local enabled suites passed
+root 99/99 and compiler 130/130, with unchanged application QBE observations.
+
+The current [readonly-field repair](https://github.com/type-rb/type-rb-native/issues/350)
+starts from that accepted implementation. Field-binding assignment rejection
+belongs to the checked frontend, while Array contents retain their existing
+mutation capability. Direct calls of scalar fields remain rejected. The pinned
+reference already rejects field assignments; its `check` currently misses the
+separate `(box.value)()` scalar-field call error, which its Go backend rejects.
+That probe is a preserved Native diagnostic, not a claim of equal reference
+check output.
+
+The initial local enabled cohort passed compiler 131/131 but failed one of
+99 root tests: the old `float-scalars` valid fixture assigned to a readonly
+record field. The ordinary CLI also retained that obsolete expectation. The
+fixture now rebinds the complete record, and REPL coverage checks both rejected
+field replacement and valid complete rebinding. Those original failures remain
+separate from the corrected-source cohort. All 378 corrected deterministic
+check/QBE observations and the complete ordinary CLI/REPL/terminal suite pass.
+Full corrected enabled suites and all exact-head hosted authorities are still
+required before acceptance.
+
+No runtime-performance or Pure Go claim, benchmark-value update, seed change
+or acceptance-budget change is made. The cumulative baseline remains
+`ac633935a7f248470c59d22666da14c819a131fa`.
 
 The accepted assignment prerequisite is Native
 `1baf5ad2cb6cc2bd6158c20f837a3479bfa3360d` from
