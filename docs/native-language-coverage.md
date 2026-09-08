@@ -44,8 +44,8 @@ and mutable arguments. Field immutability does not recursively freeze values.
 [Issue #350](https://github.com/type-rb/type-rb-native/issues/350) tracks the
 checked-frontend correction and its ordinary file/REPL and recovery regressions.
 The existing scalar Float fixture now rebinds the whole record to comply with
-the reference rule. Ordinary named record Arrays are accepted through PR #352; the remaining
-recovery, seed and MIR self-use work is tracked in
+the reference rule. Ordinary named record Arrays are accepted through PR #352;
+the recovery, seed handoff and subsequent MIR self-use are tracked in
 [issue #349](https://github.com/type-rb/type-rb-native/issues/349).
 
 ## Coverage is path-specific
@@ -266,9 +266,11 @@ subsequent calls, Array mutation and explicit collection, plus managed children.
 Removing the scalar-record boxing makes that lifetime regression test fail.
 
 Compiler implementation has not adopted record Arrays. The
-[bounded delivery](https://github.com/type-rb/type-rb-native/issues/349) still
-requires verified published bootstrap assets and an accepted checkout handoff
-before replacing the five-position MIR value carrier with a named record.
+[bounded delivery](https://github.com/type-rb/type-rb-native/issues/349) now
+has verified immutable record Array bootstrap assets and the
+[checkout seed handoff](bootstrap-seed-updates.md#current-verified-checkout-seed).
+The subsequent source slice replaces only the five-position MIR value carrier
+with a named record after this handoff is accepted.
 Other MIR row families and deferred optimization remain separate.
 
 ## Deferred Array-loop candidate
