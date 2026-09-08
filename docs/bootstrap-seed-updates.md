@@ -127,36 +127,35 @@ unknown tags and cross-tag identities fail closed. Adjacent-generation ratios,
 every retained observation, corpus, process and attestation bounds are unchanged.
 Preparation includes the Boolean Array fixtures alongside earlier syntax checks.
 
-This registration does not publish a seed or change checkout pins. Preparation,
-immutable publication, actual-asset verification and the separate checkout
-handoff must finish before compiler source adopts Boolean Array flags. The
-historical Linux amd64 root also needs an exact accepted Boolean-capable source
-bridge after its existing conditional and loop bridges before that self-use.
+Preparation, immutable publication and fresh actual-asset verification have
+passed. The verified checkout handoff and its historical Linux amd64 Boolean
+source bridge are recorded below. Compiler flag self-use remains a subsequent
+verified source change.
 
 ## Current verified checkout seed
 
-Checkout builds pin [bootstrap-seed-2026-09-08-loop-transfers](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-09-08-loop-transfers),
+Checkout builds pin [bootstrap-seed-2026-09-08-boolean-arrays](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-09-08-boolean-arrays),
 an immutable experimental prerelease from accepted source
-`1d53ed0f5b9471335c913dd9d148ff3b9eb1b483`. Its compiler implementation is unchanged
-from accepted PR #337; PR #338 supplied the reviewed recovery and preparation
-observers. No pending optimization candidate was included.
+`e99df93e81c36c765ead99526fe58b2c2a978ced`. Its ordinary compiler implementation
+is unchanged from accepted PR #345; PR #346 supplied matching snapshot recovery
+and reviewed preparation observers.
 
-- [Preparation and attestations](https://github.com/type-rb/type-rb-native/actions/runs/34169810365) passed both arm64 targets and all 28 retained observations.
-- [Fresh published-asset verification](https://github.com/type-rb/type-rb-native/actions/runs/34170169680) passed both targets, including equality of each downloaded seed with B1/B2/B3/B4, the corpus, all 42 retained generation observations and ordinary Linux process boundaries.
-- Darwin compiler: 349,240 bytes, SHA-256 `756413fe6daa7b2a286bd4ae2721099807bf2061122f6d84f0414ea851c31d8f` (asset 549524918).
-- Linux compiler: 313,328 bytes, SHA-256 `13ae8ba588768b1e1936d83d022b85341144a401687e1cea2afa839f0e1a1e48` (asset 549524920).
-- Combined: 662,568 bytes, below the unchanged 667,000-byte bound.
-- Manifest: SHA-256 `1262b05399ff63f3890b126f34bcce2c8c92405149ce902d49a3eb3d979dab68` (asset 549524916).
-- Checksum index: SHA-256 `0c1de65359b7216507a614a6d3604e628f89f6d15c7b7c56ebee1e696e4591dd` (asset 549524917).
+- [Preparation and attestations](https://github.com/type-rb/type-rb-native/actions/runs/34218109921) passed both arm64 targets and all 28 retained observations.
+- [Fresh published-asset verification](https://github.com/type-rb/type-rb-native/actions/runs/34218869691) passed both targets, including equality of each downloaded seed with B1/B2/B3/B4, the corpus, all 42 retained generation observations and ordinary Linux process boundaries.
+- Darwin compiler: 349,256 bytes, SHA-256 `1c8fdd630b3e129b9e121abce34c6d6dbd928b844cbfc1cff5f20a53b6ccaec7` (asset 550345113).
+- Linux compiler: 325,872 bytes, SHA-256 `af5549d42390d3ac3ec74c646ddd37c5930b411f706e5cf2dfd4ca7258bb09fd` (asset 550345122).
+- Combined: 675,128 bytes, below the registered 678,000-byte bound.
+- Manifest: SHA-256 `faf866e10a4b1f3ca45fcf2c85db0efb01fbed9f02f44876ade0b4037f28da92` (asset 550345114).
+- Checksum index: SHA-256 `324ce4e05f0a2124431e2405ec12211a423a5e32d70c02146d11ea37b47b275c` (asset 550345115).
 
-The immutable [Sep8 predecessor](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-09-08)
-remains at `f8c293f6f9683b0a29b7eee614fc4fff261d36b8`. Its exact identities and
-Sep7 predecessor history remain in the
-[source-era handoff record](https://github.com/type-rb/type-rb-native/blob/1d53ed0f5b9471335c913dd9d148ff3b9eb1b483/docs/bootstrap-seed-updates.md#current-verified-checkout-seed).
-Its [preparation](https://github.com/type-rb/type-rb-native/actions/runs/34157740161)
-and [published verification](https://github.com/type-rb/type-rb-native/actions/runs/34158167351)
-remain the authorities for that historical release. Strict predecessor mappings
-and the loop-transfer preparation workflow remain unchanged.
+The immutable [loop-transfer predecessor](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-09-08-loop-transfers)
+remains at `1d53ed0f5b9471335c913dd9d148ff3b9eb1b483`. Its exact identities and
+earlier predecessor history remain in the
+[source-era handoff record](https://github.com/type-rb/type-rb-native/blob/e99df93e81c36c765ead99526fe58b2c2a978ced/docs/bootstrap-seed-updates.md#current-verified-checkout-seed).
+Its [preparation](https://github.com/type-rb/type-rb-native/actions/runs/34169810365)
+and [published verification](https://github.com/type-rb/type-rb-native/actions/runs/34170169680)
+remain the authorities for that historical release. Every registered tag keeps
+its exact predecessor and size contracts.
 
 Compiler binaries and detailed run artifacts remain outside Git. This compact
 handoff record does not introduce another retained benchmark result directory
@@ -165,7 +164,7 @@ or claim a runtime speedup.
 ## Active CI consumers versus historical recovery
 
 Current compiler-cost, worker-memory, formal runtime/build benchmark and Linux
-arm64 regression workflows use the exact loop-transfer seed and the shared strict
+arm64 regression workflows use the exact Boolean Array seed and the shared strict
 download/authentication helper. Their manual seed input must match the recorded
 source revision; an older or unknown tag fails rather than bypassing provenance.
 Changing a setup seed does not move a frozen benchmark baseline or change any
@@ -175,18 +174,21 @@ Linux amd64 retains the original immutable root QBE. Its first setup compiler
 builds exact accepted source `21f507e7ee7de2577f4137f6dfb9f732c14c1640` and must
 accept logical-condition and `elsif` fixtures. That compiler then builds exact
 accepted loop-transfer source `4e1d0b4aee97b9a5bd73a98f918b31d47985da25`; the new
-bridge must accept the loop-transfer fixture before it reads **candidate** source.
-The subsequent candidate-runtime transition stays separate so a future runtime
-change still precedes ordinary B2/B3/B4. These ordinary and measured generations
-remain the candidate.
+bridge must accept the loop-transfer fixture. It then builds exact accepted
+Boolean-capable source `57cb41ad6be91716e31fa555ed8ea8c8ce7a5f51` and checks the
+Boolean Array fixture before reading **candidate** source. The subsequent
+candidate-runtime transition stays separate so a future runtime change still
+precedes ordinary B2/B3/B4. These ordinary and measured generations remain the
+candidate.
 
-The extra bridge is setup-only. Exact clean source revisions and entry digests,
+These compatibility bridges are setup-only. Exact clean source revisions and entry digests,
 compiler/QBE identities, emission/QBE/link traces and capability-check output
 are retained separately. It creates neither a new root asset nor Go recovery.
 The arm64 comparison authenticates its verified seed independently. Optional
-source arguments accept only their exact registered revisions; omitting both
-retains the historical direct-current-source setup shape, and supplying only
-the first source retains the previous conditional bridge.
+source arguments accept only their exact registered revisions. The Boolean
+source requires both earlier sources; omitted later arguments retain the
+earlier setup shapes. Omitting every source argument retains the historical
+direct-current-source setup.
 
 Initial publication/release-integrity workflows, retained manifests and earlier
 results keep their source-era identities. Refreshing checkout bootstrap alone

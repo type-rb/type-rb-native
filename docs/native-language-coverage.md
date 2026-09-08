@@ -203,8 +203,9 @@ record/closure capture coverage within snapshot recovery; it does not claim
 ordinary alias or closure support. Focused runtime tests retain nested arrays
 across explicit collection.
 
-Compiler implementation still uses Integer flag carriers. A verified seed
-handoff remains required before Boolean array self-use. Track this delivery in
+The verified Boolean Array seed handoff closes the bootstrap prerequisite.
+Compiler implementation still uses Integer flag carriers; the first two typed
+flag arrays remain a separate source change. Track this delivery in
 [issue #341](https://github.com/type-rb/type-rb-native/issues/341).
 
 ## Deferred Array-loop candidate

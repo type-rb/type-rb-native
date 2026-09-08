@@ -16,7 +16,7 @@ APPLICATION_RUNTIME_ELAPSED_REPETITIONS=32
 usage() {
 	cat >&2 <<'EOF'
 usage: gate6n-linux-amd64.sh CANDIDATE_ROOT ROOT_QBE QBE CC
-       REFERENCE_TRB GO WORKSPACE EVIDENCE OUTPUT_COMPILER [SEED_SOURCE_ROOT [LOOP_SOURCE_ROOT]]
+       REFERENCE_TRB GO WORKSPACE EVIDENCE OUTPUT_COMPILER [SEED_SOURCE_ROOT [LOOP_SOURCE_ROOT [BOOLEAN_SOURCE_ROOT]]]
 EOF
 	exit 64
 }
@@ -167,7 +167,7 @@ require_go_build() {
 	test -x "$output" || fail "$label did not publish an executable"
 }
 
-test "$#" -eq 9 || test "$#" -eq 10 || test "$#" -eq 11 || usage
+test "$#" -eq 9 || test "$#" -eq 10 || test "$#" -eq 11 || test "$#" -eq 12 || usage
 
 candidate_root=$1
 root_qbe=$2
@@ -180,6 +180,7 @@ evidence=$8
 output_compiler=$9
 seed_source_root=${10:-$candidate_root}
 loop_source_root=${11:-}
+boolean_source_root=${12:-}
 
 script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 verifier_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
@@ -988,6 +989,15 @@ if test -n "$loop_source_root"; then
 	loop_entry=$loop_source_root/compiler/src/compiler.trb
 	test -f "$loop_entry" || fail "loop compiler entry is missing"
 fi
+boolean_entry=
+if test -n "$boolean_source_root"; then
+	test -n "$loop_source_root" || fail "Boolean source requires the accepted loop source"
+	require_clean_revision "$boolean_source_root" "accepted boolean source"
+	test "$(git -C "$boolean_source_root" rev-parse HEAD)" = \
+		57cb41ad6be91716e31fa555ed8ea8c8ce7a5f51 || fail "boolean source revision differs"
+	boolean_entry=$boolean_source_root/compiler/src/compiler.trb
+	test -f "$boolean_entry" || fail "boolean compiler entry is missing"
+fi
 portable_config=$candidate_root/corpus/gate6m/portable-entry/trbconfig.jsonc
 portable_source=$candidate_root/corpus/gate6m/portable-entry/src/main.trb
 failure_config=$candidate_root/corpus/gate6m/runtime-failures/trbconfig.jsonc
@@ -1135,6 +1145,40 @@ if test -n "$loop_source_root"; then
 	require_forbidden_processes_absent "$evidence/setup/loop-check-process.trace" "loop transfer check"
 	runtime_seed=$loop_transition
 fi
+if test -n "$boolean_source_root"; then
+	mkdir -p "$workspace/setup/boolean-syntax"
+	boolean_qbe=$workspace/setup/boolean-syntax/compiler.ssa
+	boolean_assembly=$workspace/setup/boolean-syntax/compiler.s
+	boolean_transition=$workspace/setup/boolean-syntax/compiler
+	strace -f -e trace=process -o "$evidence/setup/boolean-emit-process.trace" \
+		"$loop_transition" emit-qbe "$boolean_entry" \
+		> "$boolean_qbe" 2> "$evidence/setup/boolean-emit.stderr" || fail "boolean source emission failed"
+	require_empty_file "$evidence/setup/boolean-emit.stderr" "boolean source emission wrote stderr"
+	test -s "$boolean_qbe" || fail "boolean source QBE is empty"
+	require_forbidden_processes_absent "$evidence/setup/boolean-emit-process.trace" "boolean source emission"
+	strace -f -e trace=process -o "$evidence/setup/boolean-qbe-process.trace" \
+		"$qbe" -t amd64_sysv -o "$boolean_assembly" "$boolean_qbe" \
+		> "$evidence/setup/boolean-qbe.stdout" 2> "$evidence/setup/boolean-qbe.stderr" || fail "boolean QBE translation failed"
+	require_empty_file "$evidence/setup/boolean-qbe.stdout" "boolean QBE translation wrote stdout"
+	require_empty_file "$evidence/setup/boolean-qbe.stderr" "boolean QBE translation wrote stderr"
+	test -s "$boolean_assembly" || fail "boolean assembly is empty"
+	strace -f -e trace=process -o "$evidence/setup/boolean-link-process.trace" \
+		"$cc" -xassembler "$boolean_assembly" -fuse-ld=lld \
+		-Wl,--gc-sections,--strip-all -lm -o "$boolean_transition" \
+		> "$evidence/setup/boolean-link.stdout" 2> "$evidence/setup/boolean-link.stderr" || fail "boolean transition link failed"
+	require_empty_file "$evidence/setup/boolean-link.stdout" "boolean transition link wrote stdout"
+	require_empty_file "$evidence/setup/boolean-link.stderr" "boolean transition link wrote stderr"
+	test -x "$boolean_transition" || fail "boolean transition compiler is missing"
+	require_tool_observed "$evidence/setup/boolean-link-process.trace" 'execve\("[^"]*/ld\.lld"' "boolean transition LLD"
+	strace -f -e trace=process -o "$evidence/setup/boolean-check-process.trace" \
+		"$boolean_transition" check "$candidate_root/compiler/conformance/valid/boolean-array-values.trb" \
+		> "$evidence/setup/boolean-check.stdout" 2> "$evidence/setup/boolean-check.stderr" || fail "Boolean bridge rejected Boolean arrays"
+	printf 'ok\n' > "$evidence/setup/boolean-check.expected"
+	cmp "$evidence/setup/boolean-check.expected" "$evidence/setup/boolean-check.stdout" > /dev/null || fail "boolean check stdout differs"
+	require_empty_file "$evidence/setup/boolean-check.stderr" "boolean check wrote stderr"
+	require_forbidden_processes_absent "$evidence/setup/boolean-check-process.trace" "Boolean Array check"
+	runtime_seed=$boolean_transition
+fi
 
 strace -f -e trace=process -o "$evidence/setup/current-runtime-emit-process.trace" \
 	"$runtime_seed" emit-qbe "$compiler_entry" \
@@ -1183,6 +1227,12 @@ require_tool_observed "$evidence/setup/current-runtime-link-process.trace" 'exec
 		grep execve "$evidence/setup/loop-link-process.trace"
 		grep execve "$evidence/setup/loop-check-process.trace"
 	fi
+	if test -n "$boolean_source_root"; then
+		grep execve "$evidence/setup/boolean-emit-process.trace"
+		grep execve "$evidence/setup/boolean-qbe-process.trace"
+		grep execve "$evidence/setup/boolean-link-process.trace"
+		grep execve "$evidence/setup/boolean-check-process.trace"
+	fi
 	grep execve "$evidence/setup/current-runtime-emit-process.trace"
 	grep execve "$evidence/setup/current-runtime-qbe-process.trace"
 	grep execve "$evidence/setup/current-runtime-link-process.trace"
@@ -1205,6 +1255,14 @@ require_tool_observed "$evidence/setup/current-runtime-link-process.trace" 'exec
 		printf 'loop_transition_qbe_sha256=%s\n' "$(sha256 "$loop_qbe")"
 		printf 'loop_transition_size=%s\n' "$(file_size "$loop_transition")"
 		printf 'loop_transition_sha256=%s\n' "$(sha256 "$loop_transition")"
+	fi
+	if test -n "$boolean_source_root"; then
+		printf 'boolean_source_revision=%s\n' "$(git -C "$boolean_source_root" rev-parse HEAD)"
+		printf 'boolean_source_entry_sha256=%s\n' "$(sha256 "$boolean_entry")"
+		printf 'boolean_transition_qbe_size=%s\n' "$(file_size "$boolean_qbe")"
+		printf 'boolean_transition_qbe_sha256=%s\n' "$(sha256 "$boolean_qbe")"
+		printf 'boolean_transition_size=%s\n' "$(file_size "$boolean_transition")"
+		printf 'boolean_transition_sha256=%s\n' "$(sha256 "$boolean_transition")"
 	fi
 	printf 'current_runtime_qbe_size=%s\n' "$(file_size "$runtime_qbe")"
 	printf 'current_runtime_qbe_sha256=%s\n' "$(sha256 "$runtime_qbe")"
