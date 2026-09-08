@@ -8,12 +8,25 @@ position before the RHS. Compound assignments retain their old value, while
 the final write checks the position against current storage. Snapshot v4
 represents the initial check and normalization with existing operations.
 
-The implementation baseline remains accepted Native
-`ac633935a7f248470c59d22666da14c819a131fa` from PR #340, with
-[unchanged-head acceptance attempt 2](https://github.com/type-rb/type-rb-native/actions/runs/34172032048/attempts/2).
-That acceptance does not cover this assignment candidate. The first attempt's
-retained failure remains part of its source-era evidence.
+The current accepted implementation is Native
+`1baf5ad2cb6cc2bd6158c20f837a3479bfa3360d` from
+[PR #343](https://github.com/type-rb/type-rb-native/pull/343). All 17 selected
+checks passed at `ea58fd0391d4a252d26acf3ee284ad908b8c68f5` in
+[run 34209892000](https://github.com/type-rb/type-rb-native/actions/runs/34209892000)
+after the separately accepted budget [PR #344](https://github.com/type-rb/type-rb-native/pull/344).
+Hosted worker sizes are 349,296 Darwin arm64 and 325,600 Linux arm64 bytes,
+674,896 combined. These are distinct from the earlier local Darwin observations.
+The interleaved Linux compiler comparison reports 313,248 baseline and 325,608
+candidate bytes (1.039458), build median ratio 1.010417 and RSS ratio 1.000413.
+All original failures below retain their source-era status. The cumulative
+implementation baseline remains `ac633935a7f248470c59d22666da14c819a131fa`;
+acceptance does not establish a Pure Go speedup.
 
+The ordinary Boolean Array follow-up uses this accepted implementation and
+unchanged reference pin. It adds three concrete Boolean Array depths through
+the shared runtime, with checked typing and explicit numeric-MIR exclusions.
+Its feature and fresh complete acceptance remain separate from the accepted
+assignment repair.
 Local ordinary Integer, Float, nested-owner and managed String assignment
 cases match the selected reference, including actual RHS growth and an
 initial bounds failure that skips RHS effects. The managed case records five

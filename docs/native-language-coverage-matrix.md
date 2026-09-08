@@ -12,7 +12,7 @@
 | break | accepts | accepts | matches reference | matches reference |
 | next | accepts | accepts | matches reference | matches reference |
 | Default argument | rejects | rejects | not reached | rejects |
-| Array&lt;Boolean&gt; | rejects | rejects | not reached | rejects |
+| Array&lt;Boolean&gt; | accepts | accepts | matches reference | matches reference |
 | Nullable String | rejects | rejects | not reached | rejects |
 | Ordinary enum | rejects | rejects | not reached | rejects |
 | UTF-8 String literal | accepts | rejects | not reached | rejects |

@@ -150,3 +150,11 @@ suite. Full language and package compatibility remains outside Gate 4.
 `elsif-recovery` restricts its values to the v4 snapshot subset and verifies
 ordered conditions and managed String joins through snapshot recovery and
 ordinary current compiler generations.
+
+`boolean-array-values`, `boolean-array-effects` and `boolean-array-managed`
+exercise Boolean element typing, required mutability, negative indexes, shared
+and nested aliases, typed empty arrays, left-to-right effects, growth and nested
+arrays across automatic collection. Their invalid and runtime-invalid controls
+retain element/index type rejection, readonly capabilities, the existing
+three-level nesting bound and required out-of-bounds failures. This ordinary
+coverage does not establish snapshot support or numeric-reduction MIR support.

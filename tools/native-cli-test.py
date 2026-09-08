@@ -33,7 +33,8 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
     # These sources exercise the checked compiler and the independent REPL evaluator.
     for case_name in ('elsif-control', 'elsif-managed', 'loop-transfer-control',
                       'loop-transfer-effects', 'loop-transfer-managed', 'array-assignment-targets',
-                      'array-assignment-managed', 'array-assignment-recovery'):
+                      'array-assignment-managed', 'array-assignment-recovery',
+                      'boolean-array-values', 'boolean-array-effects', 'boolean-array-managed'):
         fixture = repository / 'compiler/conformance/valid' / (case_name + '.trb')
         expected = fixture.with_suffix('.out').read_text()
         case_source = root / (case_name + '.trb')
@@ -42,7 +43,8 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
         case_output = root / case_name
         run('build', '--compile', '--outfile', case_output, case_source)
         assert subprocess.check_output([case_output], text=True, timeout=30) == expected
-        if case_name in ('elsif-managed', 'loop-transfer-managed', 'array-assignment-managed'):
+        if case_name in ('elsif-managed', 'loop-transfer-managed', 'array-assignment-managed',
+                         'boolean-array-managed'):
             collected = subprocess.run([case_output], text=True, capture_output=True,
                                        env=dict(env, TYPE_RB_NATIVE_RUNTIME_STATS='1'), timeout=30)
             assert collected.returncode == 0 and collected.stdout == expected
@@ -56,11 +58,26 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
     failure_output = run('repl', text=submission + '\ninvalid_assignment_case()\n:quit\n')
     assert 'out of bounds' in failure_output, failure_output
     assert 'unexpected RHS' not in failure_output, failure_output
+    for case_name in ('boolean-array-negative', 'boolean-array-past-end'):
+        fixture = repository / 'compiler/conformance/runtime-invalid' / (case_name + '.trb')
+        case_source = root / (case_name + '.trb')
+        case_source.write_text(fixture.read_text())
+        assert run('check', case_source) == 'ok\n'
+        case_output = root / case_name
+        run('build', '--compile', '--outfile', case_output, case_source)
+        failed = subprocess.run([case_output], text=True, capture_output=True, timeout=30)
+        assert failed.returncode != 0 and failed.stdout == '', failed
+        assert failed.stderr == fixture.with_suffix('.stderr').read_text(), failed
+        submission = fixture.read_text().replace('def main()', 'def invalid_boolean_index()')
+        assert 'out of bounds' in run('repl', text=submission + '\ninvalid_boolean_index()\n:quit\n')
     for case_name in ('elsif-after-else', 'elsif-branch-binding', 'elsif-condition',
                       'elsif-escaping-binding', 'elsif-missing-condition', 'elsif-outside-if',
                       'loop-transfer-break-outside-loop', 'loop-transfer-next-outside-loop',
                       'loop-transfer-break-value', 'loop-transfer-next-value',
-                      'loop-transfer-break-condition'):
+                      'loop-transfer-break-condition', 'boolean-array-element', 'boolean-array-write',
+                      'boolean-array-push', 'boolean-array-index', 'boolean-array-constant-mutation',
+                      'boolean-array-depth', 'boolean-array-parameter', 'boolean-array-readonly',
+                      'boolean-array-invariance'):
         fixture = repository / 'compiler/conformance/invalid' / (case_name + '.source')
         case_source = root / (case_name + '.trb')
         case_source.write_text(fixture.read_text())
