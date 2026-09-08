@@ -392,3 +392,33 @@ compiler/QBE and process identities. Compiler implementation has not adopted
 record Arrays yet. The subsequent five-field MIR value carrier migration still
 requires this checkout handoff's acceptance. Frozen benchmark baselines and the
 cumulative n-body alarm are unchanged; no runtime/Pure Go gain is claimed.
+
+
+## Named MIR value carrier self-use
+
+The [registered slice](https://github.com/type-rb/type-rb-native/issues/349#issuecomment-5589325244)
+follows accepted seed handoff `2f503f993ca93e5d50ad3151755fc739039d1bb5` (PR #356),
+whose [exact-head validation](https://github.com/type-rb/type-rb-native/actions/runs/34256015371)
+passed all 17 authorities. Only `Gate4MirModule.values` and local staging use
+`Array<Gate4MirValue>`, with named function/value/type/source/line fields.
+Construction, lookup and verification share that type; other MIR row families
+and semantic pass ownership remain unchanged. Wrong tuple lengths become
+unrepresentable, while identity, type range, origins, uniqueness and exact
+value-definition checks remain. Two pre-migration characterization tests retain
+those diagnostics, and existing Integer/Float malformed-MIR tests replace whole
+readonly records.
+
+The [local correctness record](mir-value-carrier-correctness.json) binds all six
+changed source files to the same-feature control, compiler identities and 426
+ordinary check/repeated-QBE observations. Every observation equals the control.
+Spectral-norm (100) and n-body (1000) retain byte-identical QBE and executables
+and the exact expected output. Fresh verified-seed core/CLI fixed points and
+full CLI/REPL/terminal checks pass. Local compiler and CLI sizes remain 365,768
+and 499,144 bytes respectively; their contents change as expected for the new
+internal representation. Formatting and both source checks pass. Full enabled
+recovery suites and every exact-head target/cost authority remain acceptance
+requirements for this candidate.
+
+No application runtime measurement or speedup is claimed. The cumulative
+`ac633935a7f248470c59d22666da14c819a131fa` baseline, n-body alarm and expired
+measurement budgets above remain unchanged.

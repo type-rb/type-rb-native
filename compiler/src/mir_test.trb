@@ -1,4 +1,4 @@
-import { Gate4MirModule, gate4_optimize_verified_mir, gate4_verify_mir } from mir
+import { Gate4MirModule, Gate4MirValue, gate4_optimize_verified_mir, gate4_verify_mir } from mir
 import { describe, expect, test } from trb/std/test
 
 def gate4_mir_test_module(
@@ -25,15 +25,15 @@ def gate4_mir_test_module(
 			[14, 0, 6, 6, 0, 6, 0, 3, - 1, - 1, - 1, 0, 0, 0, 0, - 1],
 		],
 		values: [
-			[1, 0, 3, 0, 1],
-			[1, 1, 1, 0, 2],
-			[1, 2, 1, 0, 3],
-			[1, 3, 1, 0, 3],
-			[1, 4, 2, 0, 3],
-			[1, 5, 1, 0, 4],
-			[1, 6, 4, 0, 4],
-			[1, 7, 1, 0, 4],
-			[1, 8, 1, 0, 4],
+			Gate4MirValue.new(function_id: 1, id: 0, type_id: 3, source_id: 0, line: 1),
+			Gate4MirValue.new(function_id: 1, id: 1, type_id: 1, source_id: 0, line: 2),
+			Gate4MirValue.new(function_id: 1, id: 2, type_id: 1, source_id: 0, line: 3),
+			Gate4MirValue.new(function_id: 1, id: 3, type_id: 1, source_id: 0, line: 3),
+			Gate4MirValue.new(function_id: 1, id: 4, type_id: 2, source_id: 0, line: 3),
+			Gate4MirValue.new(function_id: 1, id: 5, type_id: 1, source_id: 0, line: 4),
+			Gate4MirValue.new(function_id: 1, id: 6, type_id: 4, source_id: 0, line: 4),
+			Gate4MirValue.new(function_id: 1, id: 7, type_id: 1, source_id: 0, line: 4),
+			Gate4MirValue.new(function_id: 1, id: 8, type_id: 1, source_id: 0, line: 4),
 		],
 		instructions: [
 			[1, 1, - 1, - 1, 0, - 1, 0, 2],
@@ -155,5 +155,38 @@ describe("Native MIR model and verifier") do
 			expect(gate4_verify_mir(native_module, false)).to_equal("MIR Array region is invalid")
 			index += 1
 		end
+	end
+end
+
+describe("Native MIR value carrier semantics") do
+	test("rejects invalid value identities, types, origins and absent definitions") do
+		rows := [
+			Gate4MirValue.new(function_id: 99, id: 0, type_id: 3, source_id: 0, line: 1),
+			Gate4MirValue.new(function_id: 1, id: - 1, type_id: 3, source_id: 0, line: 1),
+			Gate4MirValue.new(function_id: 1, id: 0, type_id: 0, source_id: 0, line: 1),
+			Gate4MirValue.new(function_id: 1, id: 0, type_id: 8, source_id: 0, line: 1),
+			Gate4MirValue.new(function_id: 1, id: 0, type_id: 3, source_id: 1, line: 1),
+			Gate4MirValue.new(function_id: 1, id: 0, type_id: 3, source_id: 0, line: 0),
+			Gate4MirValue.new(function_id: 1, id: 99, type_id: 3, source_id: 0, line: 1),
+		]
+		expected := [
+			"MIR value identity is invalid", "MIR value identity is invalid",
+			"MIR value type is invalid", "MIR value type is invalid",
+			"MIR value origin is invalid", "MIR value origin is invalid",
+			"MIR value definition count differs",
+		]
+		mut index := 0
+		while index < rows.size()
+			mut native_module := gate4_mir_test_module(false, false)
+			native_module.values[0] = rows[index]
+			expect(gate4_verify_mir(native_module, false)).to_equal(expected[index])
+			index += 1
+		end
+	end
+
+	test("rejects repeated value identities independently of instruction definitions") do
+		mut native_module := gate4_mir_test_module(false, false)
+		native_module.values.push(Gate4MirValue.new(function_id: 1, id: 0, type_id: 3, source_id: 0, line: 1))
+		expect(gate4_verify_mir(native_module, false)).to_equal("MIR value is defined more than once")
 	end
 end

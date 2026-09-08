@@ -154,7 +154,7 @@ and the recursive ordinary recovery fixture.
 
 Preparation, attested immutable publication and fresh actual-asset verification
 passed. The checkout handoff below precedes compiler-source adoption of record
-Arrays. The five-field MIR value carrier remains the subsequent self-use slice;
+Arrays. The five-field MIR value carrier is the bounded subsequent self-use slice;
 no runtime speedup or benchmark-value change is claimed here.
 
 ## Current verified checkout seed
