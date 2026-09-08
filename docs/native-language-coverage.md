@@ -191,9 +191,20 @@ scalar/numeric-reduction MIR type set, with explicit checked/MIR boundary tests,
 and retain the existing verified header and checked-access paths. This does not
 add numeric reduction permissions or a target-specific Boolean representation.
 
-Compiler implementation still uses Integer flag carriers. Snapshot array-element
-support and a verified seed handoff are separate prerequisites before Boolean
-array self-use. Track this bounded delivery in
+Snapshot v4 recovery preserves Boolean element types through construction,
+reads, writes, growth, nested arrays, record fields and closure captures. The
+recovery QBE adapter explicitly widens Boolean values to the shared 8-byte
+Array storage and narrows loads to the Boolean scalar ABI. MIR verification
+rejects Integer elements, Boolean indices and mismatched Array receivers.
+The `boolean-array-recovery` fixture checks RHS reallocation and retained
+negative-index positions through snapshot execution and compiler generations.
+The separate `fixtures/gate3/programs/boolean-array-closure` case retains
+record/closure capture coverage within snapshot recovery; it does not claim
+ordinary alias or closure support. Focused runtime tests retain nested arrays
+across explicit collection.
+
+Compiler implementation still uses Integer flag carriers. A verified seed
+handoff remains required before Boolean array self-use. Track this delivery in
 [issue #341](https://github.com/type-rb/type-rb-native/issues/341).
 
 ## Deferred Array-loop candidate

@@ -59,7 +59,7 @@ Attestations bind compilers, manifest and checksums to the preparation workflow,
 exact main revision and hosted runners. Manifest validation alone is not an
 attestation check.
 
-The registered published refreshes retain their source-era manifest caps of
+The three earlier published refreshes retain their source-era manifest caps of
 350,000 bytes on Darwin arm64, 317,000 on Linux arm64 and 667,000 combined.
 Current-source ordinary compiler validation uses the revised complete-compiler
 budgets in [Decision 0029](decisions/0029-array-assignment-compiler-budget.md).
@@ -110,6 +110,28 @@ adjacent-generation and retained-observation bounds. The reference pin includes
 loop-transfer snapshot support and the corresponding program recovery case.
 The separate checkout-pin change follows those checks. Compiler implementation
 self-use remains a subsequent verified source change.
+
+## Registered Boolean Array refresh
+
+[Issue #341](https://github.com/type-rb/type-rb-native/issues/341) registers the
+new `bootstrap-seed-2026-09-08-boolean-arrays` tag. Its ordinary compiler source
+is accepted `57cb41ad6be91716e31fa555ed8ea8c8ce7a5f51` from PR #345, with the
+matching snapshot recovery and reviewed preparation observers merged before
+preparation. The workflow records its exact accepted main source and compiler
+closure. Its predecessor is the verified loop-transfer release below.
+
+Only the new tag registers the approved Decision 0029 manifest budgets:
+350,000 Darwin arm64, 328,000 Linux arm64 and 678,000 combined bytes. The three
+earlier tags retain their exact previous limits and predecessor validation;
+unknown tags and cross-tag identities fail closed. Adjacent-generation ratios,
+every retained observation, corpus, process and attestation bounds are unchanged.
+Preparation includes the Boolean Array fixtures alongside earlier syntax checks.
+
+This registration does not publish a seed or change checkout pins. Preparation,
+immutable publication, actual-asset verification and the separate checkout
+handoff must finish before compiler source adopts Boolean Array flags. The
+historical Linux amd64 root also needs an exact accepted Boolean-capable source
+bridge after its existing conditional and loop bridges before that self-use.
 
 ## Current verified checkout seed
 

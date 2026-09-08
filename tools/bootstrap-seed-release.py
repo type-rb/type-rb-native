@@ -14,7 +14,7 @@ import shutil
 import statistics
 import sys
 
-TAG = "bootstrap-seed-2026-09-08-loop-transfers"
+TAG = "bootstrap-seed-2026-09-08-boolean-arrays"
 MANIFEST = "type-rb-native-bootstrap-manifest-v2.json"
 PREDECESSORS = {"bootstrap-seed-2026-09-07": {
     "releaseTag": "bootstrap-seed-2026-08-30",
@@ -40,7 +40,23 @@ PREDECESSORS = {"bootstrap-seed-2026-09-07": {
         {"asset": "type-rb-native-bootstrap-darwin-arm64", "sha256": "9a815fd3bdcfd24a082111814442ee11380d31532058024cc7d7564e203b0629"},
         {"asset": "type-rb-native-bootstrap-linux-arm64", "sha256": "77e8e9df3b91cbbf7cb823044c0c79c23e63767c5986369f8d9a11e23773abf3"},
     ],
+}, "bootstrap-seed-2026-09-08-boolean-arrays": {
+    "releaseTag": "bootstrap-seed-2026-09-08-loop-transfers",
+    "nativeRevision": "1d53ed0f5b9471335c913dd9d148ff3b9eb1b483",
+    "manifestSha256": "1262b05399ff63f3890b126f34bcce2c8c92405149ce902d49a3eb3d979dab68",
+    "targets": [
+        {"asset": "type-rb-native-bootstrap-darwin-arm64", "sha256": "756413fe6daa7b2a286bd4ae2721099807bf2061122f6d84f0414ea851c31d8f"},
+        {"asset": "type-rb-native-bootstrap-linux-arm64", "sha256": "13ae8ba588768b1e1936d83d022b85341144a401687e1cea2afa839f0e1a1e48"},
+    ],
 }}
+
+# Published manifests retain their registered source-era size contracts.
+LIMITS = {
+    "bootstrap-seed-2026-09-07": (350000, 317000, 667000),
+    "bootstrap-seed-2026-09-08": (350000, 317000, 667000),
+    "bootstrap-seed-2026-09-08-loop-transfers": (350000, 317000, 667000),
+    "bootstrap-seed-2026-09-08-boolean-arrays": (350000, 328000, 678000),
+}
 
 BACKEND = {"name": "QBE", "version": "1.3", "sourceSha256": "d587905d620dc5e1d2bfa7c2cc642b9b837aa89a3188c6e37b53d756cf66e320"}
 TARGETS = [
@@ -98,7 +114,7 @@ def validate_target(target, expected):
 
 
 def validate_manifest(manifest, revision, tag=TAG):
-    require(isinstance(tag, str) and tag in PREDECESSORS, "unknown release tag")
+    require(isinstance(tag, str) and tag in PREDECESSORS and tag in LIMITS, "unknown release tag")
     require(sha(revision, 40), "invalid source revision")
     require(isinstance(manifest, dict) and set(manifest) == {
         "schemaVersion", "status", "releaseTag", "nativeRevision", "predecessor", "backend", "targets"
@@ -109,9 +125,10 @@ def validate_manifest(manifest, revision, tag=TAG):
     require(manifest["predecessor"] == PREDECESSORS[tag], "predecessor provenance differs")
     require(manifest["backend"] == BACKEND, "backend identity differs")
     require(isinstance(manifest["targets"], list) and len(manifest["targets"]) == 2, "target count differs")
-    for target, expected in zip(manifest["targets"], TARGETS):
-        validate_target(target, expected)
-    require(sum(target["size"] for target in manifest["targets"]) <= 667000, "combined size exceeds accepted limit")
+    limits = LIMITS[tag]
+    for index, (target, expected) in enumerate(zip(manifest["targets"], TARGETS)):
+        validate_target(target, expected[:-1] + (limits[index],))
+    require(sum(target["size"] for target in manifest["targets"]) <= limits[2], "combined size exceeds accepted limit")
 
 
 def create(revision, inputs, output):
