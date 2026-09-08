@@ -33,6 +33,20 @@ remain unchanged; a feature is not required to manufacture a runtime speedup
 to justify its existence. A failed cost bound still needs the existing
 [trade-off review](optimization-tradeoffs.md), not automatic relaxation.
 
+## Readonly record field correction
+
+Record fields are immutable bindings. Direct and supported compound assignment,
+including parenthesized and nested targets, must be rejected even through a
+`mut` record binding. Whole-record rebinding remains valid, and Array values
+held in fields retain the normal capability rules for indexing, method calls
+and mutable arguments. Field immutability does not recursively freeze values.
+
+[Issue #350](https://github.com/type-rb/type-rb-native/issues/350) tracks the
+checked-frontend correction and its ordinary file/REPL and recovery regressions.
+The existing scalar Float fixture now rebinds the whole record to comply with
+the reference rule. Named record Arrays remain a separate, unaccepted slice in
+[issue #349](https://github.com/type-rb/type-rb-native/issues/349).
+
 ## Coverage is path-specific
 
 The [generated case matrix](native-language-coverage-matrix.md) comes from

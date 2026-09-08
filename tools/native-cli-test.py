@@ -34,7 +34,8 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
     for case_name in ('elsif-control', 'elsif-managed', 'loop-transfer-control',
                       'loop-transfer-effects', 'loop-transfer-managed', 'array-assignment-targets',
                       'array-assignment-managed', 'array-assignment-recovery',
-                      'boolean-array-values', 'boolean-array-effects', 'boolean-array-managed'):
+                      'boolean-array-values', 'boolean-array-effects', 'boolean-array-managed',
+                      'record-field-values'):
         fixture = repository / 'compiler/conformance/valid' / (case_name + '.trb')
         expected = fixture.with_suffix('.out').read_text()
         case_source = root / (case_name + '.trb')
@@ -77,7 +78,9 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
                       'loop-transfer-break-condition', 'boolean-array-element', 'boolean-array-write',
                       'boolean-array-push', 'boolean-array-index', 'boolean-array-constant-mutation',
                       'boolean-array-depth', 'boolean-array-parameter', 'boolean-array-readonly',
-                      'boolean-array-invariance'):
+                      'boolean-array-invariance', 'record-field-write', 'record-field-compound',
+                      'record-field-parenthesized', 'record-field-array-replace', 'record-field-call',
+                      'record-field-array-immutable', 'record-field-nested', 'record-field-return'):
         fixture = repository / 'compiler/conformance/invalid' / (case_name + '.source')
         case_source = root / (case_name + '.trb')
         case_source.write_text(fixture.read_text())
@@ -220,12 +223,15 @@ end
 mut pair := Pair.new(left: 2, right: 4)
 pair.left = 7
 pair
+pair = Pair.new(left: 7, right: 4)
+pair
 :quit
 ''')
     for expected in ['5 : Integer', 'Integer\n', '[9, 2, 3]', 'out of bounds',
                      '3 : Integer', 'invalid Integer', '12 : Integer',
                      'outside the portable range', '[1, 2.5] : Array<Float>',
-                     'division by zero', '14 : Integer', 'left: 7, right: 4']:
+                     'division by zero', '14 : Integer', 'record field is readonly',
+                     'left: 2, right: 4', 'left: 7, right: 4']:
         assert expected in output, (expected, output)
     assert output.count('once') == 1, output
     assert 'must not print' not in output, output

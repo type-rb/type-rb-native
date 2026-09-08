@@ -721,6 +721,9 @@ def gate4_check_postfix(
 			if value.category < 0
 				value = gate4_checked_value(value.type_name, 0, value.origin, value.mutable)
 			end
+			if value.category == 3
+				value = gate4_checked_value(value.type_name, 0, value.origin, value.mutable)
+			end
 			if value.category == 0
 				value = gate4_type_diagnostic(
 					state,
@@ -798,9 +801,11 @@ def gate4_check_postfix(
 							)
 							scanning = false
 						else
+							# Category 3 marks a readonly field binding; mutable retains
+							# the value capability for subsequent indexing or methods.
 							value = gate4_checked_value(
 								gate4_load_string(state.field_types, field_index),
-								0,
+								3,
 								9007199254740991,
 								value.mutable,
 							)
@@ -1229,6 +1234,9 @@ def gate4_check_simple_statement(
 		assignment = true
 	end
 	if assignment
+		if left.category == 3
+			gate4_diagnostic(state, "TRBN4004", line, "record field is readonly")
+		end
 		if left.origin < state.token_count[0]
 			if gate4_token_is(state, left.origin, "[")
 				gate4_store_integer(state.array_assignment_targets, left.origin, operator_origin + 1)
