@@ -32,7 +32,8 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
 
     # These sources exercise the checked compiler and the independent REPL evaluator.
     for case_name in ('elsif-control', 'elsif-managed', 'loop-transfer-control',
-                      'loop-transfer-effects', 'loop-transfer-managed'):
+                      'loop-transfer-effects', 'loop-transfer-managed', 'array-assignment-targets',
+                      'array-assignment-managed', 'array-assignment-recovery'):
         fixture = repository / 'compiler/conformance/valid' / (case_name + '.trb')
         expected = fixture.with_suffix('.out').read_text()
         case_source = root / (case_name + '.trb')
@@ -41,7 +42,7 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
         case_output = root / case_name
         run('build', '--compile', '--outfile', case_output, case_source)
         assert subprocess.check_output([case_output], text=True, timeout=30) == expected
-        if case_name in ('elsif-managed', 'loop-transfer-managed'):
+        if case_name in ('elsif-managed', 'loop-transfer-managed', 'array-assignment-managed'):
             collected = subprocess.run([case_output], text=True, capture_output=True,
                                        env=dict(env, TYPE_RB_NATIVE_RUNTIME_STATS='1'), timeout=30)
             assert collected.returncode == 0 and collected.stdout == expected
@@ -50,6 +51,11 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
             assert len(automatic) == 1 and int(automatic[0]) > 0, collected.stderr
         submission = fixture.read_text().replace('def main()', 'def exercise_control_case()')
         assert run('repl', text=submission + '\nexercise_control_case()\n:quit\n') == expected
+    failure = repository / 'compiler/conformance/runtime-invalid/array-assignment-initial.trb'
+    submission = failure.read_text().replace('def main()', 'def invalid_assignment_case()')
+    failure_output = run('repl', text=submission + '\ninvalid_assignment_case()\n:quit\n')
+    assert 'out of bounds' in failure_output, failure_output
+    assert 'unexpected RHS' not in failure_output, failure_output
     for case_name in ('elsif-after-else', 'elsif-branch-binding', 'elsif-condition',
                       'elsif-escaping-binding', 'elsif-missing-condition', 'elsif-outside-if',
                       'loop-transfer-break-outside-loop', 'loop-transfer-next-outside-loop',

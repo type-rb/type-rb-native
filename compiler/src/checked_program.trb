@@ -1,6 +1,6 @@
-import { gate4_load_integer, gate4_load_string, gate4_store_integer } from storage
+import { gate4_load_integer, gate4_load_string, gate4_storage_chunk_size, gate4_store_integer } from storage
 import { gate4_float_literal_in_range, gate4_integer_literal_in_range, gate4_number_is_float, gate4_small_nonnegative_integer_operand } from literals
-import { MirLoopTransfer, gate4_mir_array_element_type, gate4_mir_function_index, mir_logical_plan, mir_loop_transfer_valid } from mir
+import { MirLoopTransfer, gate4_mir_array_element_type, gate4_mir_function_index, mir_array_assignment_valid, mir_logical_plan, mir_loop_transfer_valid } from mir
 import { Gate4Compiler, Gate4Locals, gate4_diagnostic, gate4_has_diagnostic, gate4_local_add, gate4_local_find, gate4_terminal_token } from state
 import { finish_statement, gate4_advance, gate4_binary_operator_id, gate4_binary_precedence, gate4_declaration_start, gate4_expect, gate4_expect_identifier, gate4_parse_type, gate4_skip_newlines, gate4_token_is, syntax_conditional_tail, syntax_loop_transfer_kind } from parser
 import { gate4_array_element_type, gate4_array_type, gate4_common_array_element_type, gate4_find_field, gate4_find_record_type, gate4_find_visible_function, gate4_find_visible_record, gate4_record_type, gate4_resolve_type_name, gate4_standard_package_import, gate4_standard_package_root, gate4_type_display } from resolution
@@ -809,6 +809,7 @@ def gate4_check_postfix(
 				end
 			else
 				if gate4_token_is(state, position[0], "[")
+					index_origin := position[0]
 					line := gate4_load_integer(state.token_lines, position[0])
 					receiver_id := gate4_checked_mir_value(value)
 					gate4_advance(position)
@@ -849,7 +850,7 @@ def gate4_check_postfix(
 									gate4_scalar_mir_instruction(
 										state, locals, 10, loaded, address, - 1, 0, - 1, line,
 									)
-									value = gate4_mir_checked_value(element_type, loaded, value.origin, value.mutable)
+									value = gate4_mir_checked_value(element_type, loaded, index_origin, value.mutable)
 									lowered = true
 								end
 							end
@@ -874,7 +875,7 @@ def gate4_check_postfix(
 								)
 								scanning = false
 							else
-								value = gate4_checked_value(element_type, 0, 9007199254740991, value.mutable)
+								value = gate4_checked_value(element_type, 0, index_origin, value.mutable)
 							end
 						end
 					end
@@ -1223,6 +1224,18 @@ def gate4_check_simple_statement(
 	left := gate4_check_expression(state, position, locals, 1, "")
 	operator_origin := position[0]
 	operator := gate4_load_string(state.token_texts, position[0])
+	mut assignment := operator == "="
+	if gate4_binary_operator_id(operator) >= 17
+		assignment = true
+	end
+	if assignment
+		if left.origin < state.token_count[0]
+			if gate4_token_is(state, left.origin, "[")
+				gate4_store_integer(state.array_assignment_targets, left.origin, operator_origin + 1)
+				gate4_store_integer(state.array_assignment_targets, operator_origin, left.origin + 1)
+			end
+		end
+	end
 	if operator == "="
 		if left.mutable == 0
 			gate4_diagnostic(state, "TRBN4004", line, "assignment target is immutable")
@@ -1936,4 +1949,49 @@ def gate4_scalar_mir_commit(
 			- 1,
 		))
 	return ""
+end
+
+def checked_array_assignment_store(state: Gate4Compiler, index_origin: Integer): Integer
+	store_origin := checked_array_assignment_target(state, index_origin) - 1
+	if store_origin < 0
+		return - 1
+	end
+	if store_origin >= state.token_count[0]
+		return - 2
+	end
+	reverse_origin := checked_array_assignment_target(state, store_origin) - 1
+	if !mir_array_assignment_valid(index_origin, store_origin, reverse_origin, state.token_count[0])
+		return - 2
+	end
+	operator := gate4_load_string(state.token_texts, store_origin)
+	if operator != "="
+		if gate4_binary_operator_id(operator) < 17
+			return - 2
+		end
+	end
+	return store_origin
+end
+
+def checked_array_assignment_target(state: Gate4Compiler, origin: Integer): Integer
+	storage := state.array_assignment_targets
+	if origin < 0
+		return 0
+	end
+	if origin >= storage.used[0]
+		return 0
+	end
+	chunk_size := gate4_storage_chunk_size()
+	chunk := storage.chunks[0][origin / chunk_size]
+	if chunk.size() == 0
+		return 0
+	end
+	return chunk[origin % chunk_size]
+end
+
+def checked_array_assignment_reads_old(state: Gate4Compiler, index_origin: Integer): Boolean
+	store_origin := checked_array_assignment_store(state, index_origin)
+	if store_origin < 0
+		return false
+	end
+	return !gate4_token_is(state, store_origin, "=")
 end

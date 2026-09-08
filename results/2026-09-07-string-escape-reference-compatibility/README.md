@@ -1,6 +1,39 @@
 # Current reference compatibility
 
 The current development pin is TypeRB `0.4.6-dev` at
+`caf6aadb9493ca69290ab0dc22d420b5f574df14`, the merged
+[stable Array assignment update](https://github.com/type-rb/type-rb/pull/659).
+It captures the Array receiver, requested index and validated nonnegative
+position before the RHS. Compound assignments retain their old value, while
+the final write checks the position against current storage. Snapshot v4
+represents the initial check and normalization with existing operations.
+
+The implementation baseline remains accepted Native
+`ac633935a7f248470c59d22666da14c819a131fa` from PR #340, with
+[unchanged-head acceptance attempt 2](https://github.com/type-rb/type-rb-native/actions/runs/34172032048/attempts/2).
+That acceptance does not cover this assignment candidate. The first attempt's
+retained failure remains part of its source-era evidence.
+
+Local ordinary Integer, Float, nested-owner and managed String assignment
+cases match the selected reference, including actual RHS growth and an
+initial bounds failure that skips RHS effects. The managed case records five
+automatic collections and zero live bytes after final collection. The formerly
+crashing Integer growth probe succeeds under GuardMalloc. The pinned published
+seed builds the current core and CLI fixed points; ordinary CLI and REPL tests
+pass with the new cases. Full recovery and hosted target, memory and cost
+acceptance on the final PR head remain required before merge.
+
+Compiler recovery authoring failures are retained separately: an unsynchronized
+exact import prefix, a helper initially placed after the required empty driver,
+and logical expressions outside snapshot v4's supported source subset. The
+candidate uses the existing statement forms and preserves the exact recovery
+boundaries. Earlier tests that counted only initial bounds checks now account
+for the independent final store check; their induction and inline-budget
+assertions remain in place. No cost limit or failed measurement was waived.
+
+# Previous loop-transfer reference checkpoint
+
+The current development pin is TypeRB `0.4.6-dev` at
 `4e1327c9af1b4caec9963756e6ffbc0e2ef56341`, the merged
 [loop-transfer snapshot update](https://github.com/type-rb/type-rb/pull/657).
 Snapshot v3/v4 encode nearest-while transfers and early method returns with

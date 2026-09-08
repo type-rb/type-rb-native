@@ -2,7 +2,7 @@
 
 TypeRB Native follows exact reference revisions while it is experimental. The
 current source and semantic oracle is TypeRB
-`4e1327c9af1b4caec9963756e6ffbc0e2ef56341` (`0.4.6-dev`), recorded in
+`caf6aadb9493ca69290ab0dc22d420b5f574df14` (`0.4.6-dev`), recorded in
 `TYPE_RB_REVISION`. This is an exact development pin, not a supported version
 range.
 
@@ -33,6 +33,28 @@ The earlier scoped-file successor is registered in
 [Darwin/Linux arm64 result](https://github.com/type-rb/type-rb-native/blob/5cf61c740aa600c34ed94f1b130ea2ffefd9e783/results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/README.md)
 passes the selected-reference, migration, exact-baseline, target-regression,
 fixed-point, process, resource, and size criteria.
+
+## Stable Array assignment targets
+
+The current pin includes [TypeRB PR #659](https://github.com/type-rb/type-rb/pull/659).
+Indexed assignment retains the evaluated Array and validated nonnegative
+position before the RHS, then validates that position in current storage at
+the final store. Compound assignment uses the old value saved before the RHS.
+The checked source projection pairs Array target and store origins; its
+verified plan directs owner retention, position capture and final address
+resolution. The adapter no longer writes an element address held across RHS
+calls. Managed owners and saved compound values remain rooted across calls.
+
+The ordinary fixtures cover growth, aliasing, index-side mutation, nested owner
+replacement, managed old values and initial bounds failure. The separate
+`array-assignment-recovery` case verifies the same rule through snapshot v4.
+Boolean Arrays and short-circuit assignment syntax remain outside the current
+ordinary subset; this change does not add source forms or collection methods.
+
+Validation and acceptance for this correctness slice follow
+[issue #342](https://github.com/type-rb/type-rb-native/issues/342), including
+full recovery suites, ordinary regeneration, conformance, GC and unchanged
+compiler/application cost gates. Reference pinning alone is not acceptance.
 
 ## Loop-transfer snapshot update
 
