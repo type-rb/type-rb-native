@@ -265,12 +265,15 @@ receiver types. A returned-record runtime test checks exact Integer values after
 subsequent calls, Array mutation and explicit collection, plus managed children.
 Removing the scalar-record boxing makes that lifetime regression test fail.
 
-Compiler implementation has not adopted record Arrays. The
-[bounded delivery](https://github.com/type-rb/type-rb-native/issues/349) now
-has verified immutable record Array bootstrap assets and the
-[checkout seed handoff](bootstrap-seed-updates.md#current-verified-checkout-seed).
-The subsequent source slice replaces only the five-position MIR value carrier
-with a named record after this handoff is accepted.
+After the [verified record Array seed handoff](bootstrap-seed-updates.md#current-verified-checkout-seed)
+was accepted in PR #356, compiler implementation adopts `Array<Gate4MirValue>`
+for `Gate4MirModule.values` and `Gate4Locals.mir_value_rows`. The named fields
+are `function_id`, `id`, `type_id`, `source_id` and `line`; construction, lookup
+and verification share that exact carrier. The wrong tuple length is no longer
+representable. Identity, type range, origins, uniqueness and definition-count
+checks remain, and malformed-value tests replace complete readonly records.
+This is the bounded self-use slice in
+[issue #349](https://github.com/type-rb/type-rb-native/issues/349).
 Other MIR row families and deferred optimization remain separate.
 
 ## Deferred Array-loop candidate

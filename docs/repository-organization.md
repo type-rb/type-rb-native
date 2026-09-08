@@ -217,3 +217,16 @@ README for multiple competing descriptions of current status.
 Documentation-only changes use the existing lightweight documentation CI.
 Source moves still run their applicable code authorities; do not misclassify a
 move as documentation merely because its intended behavior is unchanged.
+
+
+## Named MIR value carrier
+
+After ordinary record Arrays, matching recovery and verified checkout handoff
+PR #356, the first positional MIR carrier becomes `Gate4MirValue` in `mir.trb`.
+Only the value table and its local staging table use the named five-field
+record. Construction, lookup and semantic validation remain in their existing
+owners; exact recovery imports change alongside the canonical source.
+Malformed value identity, type, origin, uniqueness and definition counts still
+fail verification. Other row families retain their current layouts and remain
+separate bounded cleanup slices. This changes representation without adding an
+optimization pass, backend semantic owner or application runtime claim.

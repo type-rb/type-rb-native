@@ -32,10 +32,17 @@ def mir_loop_transfer_valid(plan: MirLoopTransfer, origin: Integer, kind: Intege
 	return origin < token_count
 end
 
+record Gate4MirValue
+	function_id: Integer
+	id: Integer
+	type_id: Integer
+	source_id: Integer
+	line: Integer
+end
+
 # Compact bootstrap MIR rows use these fixed layouts:
 # function: id, entry block, origin source/line, parameter range, block range;
-# block: id, origin source/line, parameter and instruction ranges, terminator;
-# value: function, id, type, origin source/line; and
+# block: id, origin source/line, parameter and instruction ranges, terminator; and
 # instruction: kind, result, two operands, literal, failure block, origin.
 # Array regions retain parameter, access, and effect operations.
 # The verifier derives their plans; input facts remain empty.
@@ -47,7 +54,7 @@ record Gate4MirModule
 	entry_function: Array<Integer>
 	functions: Array<Array<Integer>>
 	blocks: Array<Array<Integer>>
-	values: Array<Array<Integer>>
+	values: Array<Gate4MirValue>
 	instructions: Array<Array<Integer>>
 	arguments: Array<Integer>
 	array_regions: Array<Array<Integer>>
@@ -140,11 +147,9 @@ def gate4_mir_value_index(
 	mut index := 0
 	while index < native_module.values.size()
 		row := native_module.values[index]
-		if row.size() == 5
-			if row[0] == function_id
-				if row[1] == value_id
-					return index
-				end
+		if row.function_id == function_id
+			if row.id == value_id
+				return index
 			end
 		end
 		index += 1
@@ -161,7 +166,7 @@ def gate4_mir_value_type(
 	if index < 0
 		return 0
 	end
-	return native_module.values[index][2]
+	return native_module.values[index].type_id
 end
 
 def gate4_mir_array_element_type(type_id: Integer): Integer
@@ -1219,37 +1224,34 @@ def gate4_verify_mir(native_module: Gate4MirModule, optimized: Boolean): String
 	index = 0
 	while index < native_module.values.size()
 		value := native_module.values[index]
-		if value.size() != 5
-			return "MIR value row size differs"
-		end
-		function_index := gate4_mir_function_index(native_module, value[0])
+		function_index := gate4_mir_function_index(native_module, value.function_id)
 		if function_index < 0
 			return "MIR value identity is invalid"
 		end
-		if value[1] < 0
+		if value.id < 0
 			return "MIR value identity is invalid"
 		end
-		if value[2] < 1
+		if value.type_id < 1
 			return "MIR value type is invalid"
 		end
-		if value[2] > 7
+		if value.type_id > 7
 			return "MIR value type is invalid"
 		end
-		if !gate4_mir_origin_valid(value[3], value[4], native_module.source_count[0])
+		if !gate4_mir_origin_valid(value.source_id, value.line, native_module.source_count[0])
 			return "MIR value origin is invalid"
 		end
 		mut previous := 0
 		while previous < index
 			other := native_module.values[previous]
-			if other[0] == value[0]
-				if other[1] == value[1]
+			if other.function_id == value.function_id
+				if other.id == value.id
 					return "MIR value is defined more than once"
 				end
 			end
 			previous += 1
 		end
 		function := native_module.functions[function_index]
-		if gate4_mir_definition_count(native_module, function, value[1]) != 1
+		if gate4_mir_definition_count(native_module, function, value.id) != 1
 			return "MIR value definition count differs"
 		end
 		index += 1

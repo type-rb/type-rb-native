@@ -1,7 +1,7 @@
 import { Gate4ProjectSources, gate4_character_in, gate4_check, gate4_emit_array_header, gate4_emit_context_new, gate4_emit_qbe, gate4_emitted_value, gate4_encode_static_string, gate4_function_reassigns_parameter, gate4_invalidate_array_header_cache, gate4_lex, gate4_lex_module, gate4_load_file_root, gate4_load_project_sources, gate4_string_starts_at, lower_checked_binary } from compiler
 import { QbeOutput, qbe_output_new } from qbe_output
 import { gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage
-import { gate4_mir_function_index, gate4_optimize_verified_mir, gate4_verify_mir } from mir
+import { Gate4MirValue, gate4_mir_function_index, gate4_optimize_verified_mir, gate4_verify_mir } from mir
 import { Gate4Compiler, gate4_add_module, gate4_build_symbol_index, gate4_compiler_new, gate4_find_module, gate4_has_diagnostic, gate4_local_add, gate4_local_find, gate4_locals_new, gate4_symbol_bucket_count } from state
 import { gate4_parse_module } from parser
 import { gate4_find_field, gate4_find_function_in_module, gate4_find_import_binding, gate4_find_record_in_module, gate4_find_record_type, gate4_resolve } from resolution
@@ -298,12 +298,19 @@ describe("Gate 4 TypeRB frontend") do
 
 		load := state.scalar_mir.instructions[body[5] + 1]
 		mut value_index := 0
-		while state.scalar_mir.values[value_index][1] != load[1]
+		while state.scalar_mir.values[value_index].id != load[1]
 			value_index += 1
 		end
-		state.scalar_mir.values[value_index][2] = 5
+		value := state.scalar_mir.values[value_index]
+		state.scalar_mir.values[value_index] = Gate4MirValue.new(
+			function_id: value.function_id,
+			id: value.id,
+			type_id: 5,
+			source_id: value.source_id,
+			line: value.line,
+		)
 		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("MIR Array load type differs")
-		state.scalar_mir.values[value_index][2] = 1
+		state.scalar_mir.values[value_index] = value
 		state.scalar_mir.instructions[body[5]][5] = state.scalar_mir.functions[function_index][1] + 3
 		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("MIR failure target is not a trap block")
 		state.scalar_mir.instructions[body[5]][5] = state.scalar_mir.functions[function_index][1] + 5
@@ -379,7 +386,7 @@ describe("Gate 4 TypeRB frontend") do
 		expect(function_index >= 0).to_be_true()
 		function := state.scalar_mir.functions[function_index]
 		body := state.scalar_mir.blocks[function[6] + 2]
-		expect(state.scalar_mir.values[0][2]).to_equal(6)
+		expect(state.scalar_mir.values[0].type_id).to_equal(6)
 		expect(state.scalar_mir.instructions[body[5]][4]).to_equal(2)
 		qbe := gate4_output_source(gate4_emit_qbe(state))
 		expect(qbe.include?("function d $g4f0(l %p0)")).to_be_true()
@@ -391,10 +398,17 @@ describe("Gate 4 TypeRB frontend") do
 		expect(qbe.include?("csgtl %t1, 9007199254740991")).to_be_false()
 		load := state.scalar_mir.instructions[body[5] + 1]
 		mut value_index := 0
-		while state.scalar_mir.values[value_index][1] != load[1]
+		while state.scalar_mir.values[value_index].id != load[1]
 			value_index += 1
 		end
-		state.scalar_mir.values[value_index][2] = 1
+		value := state.scalar_mir.values[value_index]
+		state.scalar_mir.values[value_index] = Gate4MirValue.new(
+			function_id: value.function_id,
+			id: value.id,
+			type_id: 1,
+			source_id: value.source_id,
+			line: value.line,
+		)
 		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("MIR Array load type differs")
 	end
 
