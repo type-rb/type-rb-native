@@ -256,7 +256,10 @@ layout; tagged and Float Array elements remain outside this recovery subset.
 The `record-array-recovery` fixture covers retained assignment positions across
 RHS growth, three-level nesting and managed records surviving allocation loops.
 The separate `record-array-closure` snapshot fixture exercises closure captures
-and escaping record Arrays; it does not expand ordinary closure support. Focused
+and escaping record Arrays; it does not expand ordinary closure support.
+Recursive record Array definitions preserve nominal identity, and the ordinary
+recovery fixture retains a self-cycle through allocation pressure while
+creating unreachable cycles. Focused
 MIR tests reject scalar and nominal element mismatches, invalid indices and
 receiver types. A returned-record runtime test checks exact Integer values after
 subsequent calls, Array mutation and explicit collection, plus managed children.

@@ -1,8 +1,9 @@
 # Current reference compatibility
 
 The current development pin is TypeRB `0.4.6-dev` at
-`5f789d5a46d22f0f9883eaf4bbe985e4c9904c2f`, the merged
-[record Array snapshot extension](https://github.com/type-rb/type-rb/pull/663).
+`6cbd4025545d44a1de211335f9197772077bb478`, the merged
+[record Array snapshot extension](https://github.com/type-rb/type-rb/pull/663) and
+[recursive record registration correction](https://github.com/type-rb/type-rb/pull/664).
 It retains canonical record element identities through aliases, nesting,
 function signatures and closure captures. Snapshot v4 remains data-only and
 keeps the existing operations/schema. Boolean Array support from
@@ -321,3 +322,25 @@ of 365,768 and 327,744 bytes; do not substitute one observer's artifact identity
 for another. This checkpoint supports ordinary incremental acceptance only.
 The frozen cumulative cohort and n-body alarm above remain; no runtime speedup
 or Pure Go comparison is inferred.
+
+## Recursive record Array recovery correction
+
+A self-referential `Node` with `children: Array<Node>` executes correctly in
+both ordinary compilers, including a retained cycle and 20,000 discarded cycles,
+but the first v4 producer rejected its Array element while `Node` was still
+being registered. [TypeRB #664](https://github.com/type-rb/type-rb/pull/664)
+registers the record kind before traversing fields and completes the same field
+slice. Self-recursive and mutually recursive type graphs retain complete fields,
+unique nominal definitions and deterministic snapshots. The exact accepted
+reference is `6cbd4025545d44a1de211335f9197772077bb478`; full Go tests, source
+formatting and [hosted validation](https://github.com/type-rb/type-rb/actions/runs/34249335045)
+passed at `6f344860f35337126b20d2dad38f2754df67f0c7`.
+
+The existing ordinary recovery fixture now retains a cycle across allocation
+pressure and creates unreachable record/Array cycles. Ordinary execution and
+a focused real v4 snapshot/decoder/MIR/QBE execution pass. Earlier 102/133
+local suites predate this stronger fixture; final enabled suites and every
+applicable hosted authority remain required for this exact reference update.
+The earlier recovery candidate CI was cancelled for this correction after
+CLI, target/QBE and worker/combined checks passed; its cancelled root suite
+and unrun comparative checks establish no acceptance. No seed was published.

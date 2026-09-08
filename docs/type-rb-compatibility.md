@@ -2,7 +2,7 @@
 
 TypeRB Native follows exact reference revisions while it is experimental. The
 current source and semantic oracle is TypeRB
-`5f789d5a46d22f0f9883eaf4bbe985e4c9904c2f` (`0.4.6-dev`), recorded in
+`6cbd4025545d44a1de211335f9197772077bb478` (`0.4.6-dev`), recorded in
 `TYPE_RB_REVISION`. This is an exact development pin, not a supported version
 range.
 
