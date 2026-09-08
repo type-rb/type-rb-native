@@ -230,6 +230,12 @@ catastrophic bound remain in force for ordinary acceptance. Retain these
 historical ceilings and apply the trade-off policy to future cost decisions.
 See [Decision 0028](decisions/0028-native-mir-optimization-boundary.md).
 
+The current complete-compiler limits account for safe Array assignment
+retention under [Decision 0029](decisions/0029-array-assignment-compiler-budget.md):
+350,000 Darwin arm64 bytes, 328,000 Linux arm64 bytes and 678,000 bytes combined.
+Linux amd64 remains at 310,000 bytes. Historical transition markers and all
+relative, code-section, QBE and correctness requirements retain their contracts.
+
 ## Backend adapters
 
 Candidate adapters consume the same verified, target-neutral MIR subset. QBE

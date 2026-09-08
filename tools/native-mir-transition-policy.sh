@@ -18,12 +18,14 @@ NATIVE_MIR_FLOAT_ARRAY_REDUCTION_MARKER=compiler/native-mir-float-array-reductio
 NATIVE_MIR_GUARDED_MULTIPLY_MARKER=compiler/native-mir-guarded-integer-multiply-v1.txt
 NATIVE_MIR_GUARDED_ADD_MARKER=compiler/native-mir-guarded-integer-add-v1.txt
 NATIVE_MIR_STABLE_ARRAY_HEADER_MARKER=compiler/native-mir-stable-array-header-v1.txt
+# Decision 0029 accounts for safe Array assignment retention. Historical
+# transition markers retain their original budgets and ratio requirements.
 NATIVE_MIR_DARWIN_COMPILER_LIMIT=350000
-NATIVE_MIR_LINUX_COMPILER_LIMIT=317000
+NATIVE_MIR_LINUX_COMPILER_LIMIT=328000
 # Linux amd64 remains below its pre-existing ceiling; the control-flow
 # envelope does not grant that target any additional space.
 NATIVE_MIR_LINUX_AMD64_COMPILER_LIMIT=310000
-NATIVE_MIR_COMBINED_COMPILER_LIMIT=667000
+NATIVE_MIR_COMBINED_COMPILER_LIMIT=678000
 NATIVE_MIR_DARWIN_TEXT_LIMIT=250904
 NATIVE_MIR_LINUX_TEXT_LIMIT=253424
 NATIVE_MIR_TARGET_NEUTRAL_QBE_LIMIT=1120000

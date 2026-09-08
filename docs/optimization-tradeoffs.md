@@ -24,9 +24,12 @@ There are two routes:
 | Ordinary acceptance | Detect regressions against the registered Native baseline using existing limits and all correctness authorities | Eligible for normal review only when the complete contract passes |
 | Bounded trade-off evaluation | Learn a promising candidate's runtime benefit even when an ordinary cost limit fails | Diagnostic evidence and an explicit decision, never automatic acceptance |
 
-The ordinary 1.05 ratios and absolute limits in
+The ordinary 1.05 ratios and current absolute limits in
 [`native-mir-transition-policy.sh`](../tools/native-mir-transition-policy.sh)
-remain unchanged. A cost failure blocks ordinary acceptance, not necessarily
+govern acceptance. An explicit complete-compiler budget revision for safe Array
+assignment is recorded in
+[Decision 0029](decisions/0029-array-assignment-compiler-budget.md); it changes
+no relative limit or historical result. A cost failure blocks ordinary acceptance, not necessarily
 further investigation. There is no general relaxed percentage or automatic
 conversion from an evaluation budget to a merge budget.
 
