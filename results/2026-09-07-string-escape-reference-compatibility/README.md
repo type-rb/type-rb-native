@@ -19,13 +19,23 @@ Hosted worker sizes are 349,296 Darwin arm64 and 325,864 Linux arm64 bytes,
 compiler 130/130, alongside 348 deterministic check/QBE observations, both
 14-case language registries and ordinary CLI/REPL/automatic-GC checks.
 
-The bounded follow-up adds Boolean Array snapshot recovery and registers its
-next seed handoff. It retains exact element types, explicit scalar/storage ABI
-conversion and managed nested roots. Typed MIR failures and explicit-collection
-runtime cases are tested; the snapshot fixture covers record/closure carriers,
-three nested levels and RHS reallocation. Compiler source still uses Integer
-flag arrays until a separate verified published-seed handoff. This follow-up
-requires its own full exact-head acceptance before merge.
+Boolean Array snapshot recovery and its seed preparation observers are accepted
+at Native `e99df93e81c36c765ead99526fe58b2c2a978ced` from
+[PR #346](https://github.com/type-rb/type-rb-native/pull/346). All 17 checks passed
+at `d33ec5e55362ef1ac3c685de8c536bc3cf01f6ff` in
+[run 34215915536](https://github.com/type-rb/type-rb-native/actions/runs/34215915536).
+Corrected local full suites passed root 99/99 and compiler 130/130; all 351
+check/QBE observations passed. A fixture initially mixed snapshot-supported
+alias/closure syntax with ordinary coverage. The shared case now uses supported
+named functions, while a separate snapshot case retains closure coverage.
+The original failed observation remains separate from the corrected cohort.
+The ordinary compiler source and local binary are unchanged from PR #345.
+
+The [verified Boolean Array seed handoff](../../docs/bootstrap-seed-updates.md#current-verified-checkout-seed)
+records immutable assets, exact source and successful fresh published-asset
+verification. Compiler source still uses Integer flag arrays; typed flag
+self-use is the next bounded source change. This checkout handoff retains all
+ordinary and historical acceptance contracts.
 
 The accepted assignment prerequisite is Native
 `1baf5ad2cb6cc2bd6158c20f837a3479bfa3360d` from

@@ -19,8 +19,8 @@ class SeedReleaseTests(unittest.TestCase):
                      "gate6n-linux-amd64"):
             with self.subTest(workflow=name):
                 workflow = (root / ".github/workflows" / (name + ".yml")).read_text()
-                self.assertIn("bootstrap-seed-2026-09-08-loop-transfers", workflow)
-                self.assertIn("1d53ed0f5b9471335c913dd9d148ff3b9eb1b483", workflow)
+                self.assertIn("bootstrap-seed-2026-09-08-boolean-arrays", workflow)
+                self.assertIn("e99df93e81c36c765ead99526fe58b2c2a978ced", workflow)
                 self.assertIn("tools/bootstrap-seed-download.sh", workflow)
         workflow = (root / ".github/workflows/gate6n-linux-amd64.yml").read_text()
         self.assertIn("ROOT_RELEASE_TAG: bootstrap-seed-2026-08-30", workflow)
