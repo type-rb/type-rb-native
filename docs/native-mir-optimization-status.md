@@ -14,7 +14,9 @@ verifies harmless conditional structure, with conditional checking extracted
 from the block checker. Parameter and outer-local headers can survive checked
 branches; opaque effects and branch-local escaping bindings remain barriers.
 This advances basic control representation without a full CFG or new bounds
-proof. Published benchmark tables remain tied to their recorded revision.
+proof. The subsequent [block-checker cleanup](https://github.com/type-rb/type-rb-native/issues/386)
+separates while checking and flattens statement dispatch without changing MIR
+admission. Published benchmark tables remain tied to their recorded revision.
 
 ## Scalar Integer region checkpoint
 

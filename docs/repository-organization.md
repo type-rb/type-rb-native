@@ -260,3 +260,13 @@ inside `checked_program.trb`. It owns condition checks, arm-local scope
 restoration and checked MIR control markers. The block checker delegates the
 statement while retaining loop dispatch. No second semantic owner, new module
 boundary or source-flattening exception is introduced.
+
+The follow-up in
+[issue #386](https://github.com/type-rb/type-rb-native/issues/386) separates
+`checked_while` from block dispatch. It retains the existing scalar induction
+admission, condition checks, fallback nonnegative invalidation and lexical
+scope restoration. The dispatcher uses the accepted `elsif` and bare `break`
+syntax to replace its completion flag and nested statement-selection chain.
+Conditional checking remains in its existing helper, unchanged. This is one
+checked-program owner with clearer control structure, not a new MIR fact or
+loop-local effect proof. Recovery still derives the same module boundary.
