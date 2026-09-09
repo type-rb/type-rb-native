@@ -573,6 +573,8 @@ end
 # 1 immutable Array, 2 mutable Array), local Array declarations
 # (2: local ordinal), scope exits (3: restored local count), parameter accesses
 # (4: ordinal), local accesses (5: ordinal), and opaque barriers (6: zero).
+# Conditional starts (7), elsif (8), else (9), and joins (10) carry the
+# entry local count. Each arm restores that scope before its next marker.
 # Parameter origins use declaration indexes; other operations use token origins.
 # Selected declarations are unique operation indexes. Malformed regions
 # return an invalid plan. A local's header is loaded at its declaration,
@@ -582,6 +584,9 @@ def gate4_mir_array_headers(operations: Array<Gate4MirArrayOperation>): MirArray
 	mut parameter_origin :=- 1
 	mut selected: Array<Integer> := []
 	mut blocked := false
+	mut controls: Array<Gate4MirArrayOperation> := []
+	mut depth := 0
+	mut control_origin :=- 1
 	mut index := 0
 	while index < operations.size()
 		operation := operations[index]
@@ -610,9 +615,19 @@ def gate4_mir_array_headers(operations: Array<Gate4MirArrayOperation>): MirArray
 			if slot < parameter_count
 				return MirArrayHeaderPlan.new(declarations: [], valid: false)
 			end
+			if depth > 0
+				if slot < controls[depth - 1].operand
+					return MirArrayHeaderPlan.new(declarations: [], valid: false)
+				end
+			end
 		elsif kind == 3
 			if slot < parameter_count
 				return MirArrayHeaderPlan.new(declarations: [], valid: false)
+			end
+			if depth > 0
+				if slot < controls[depth - 1].operand
+					return MirArrayHeaderPlan.new(declarations: [], valid: false)
+				end
 			end
 			mut selected_index := 0
 			while selected_index < selected.size()
@@ -658,6 +673,44 @@ def gate4_mir_array_headers(operations: Array<Gate4MirArrayOperation>): MirArray
 			if !found
 				return MirArrayHeaderPlan.new(declarations: [], valid: false)
 			end
+		elsif kind >= 7 && kind <= 10
+			if origin <= control_origin || slot < parameter_count
+				return MirArrayHeaderPlan.new(declarations: [], valid: false)
+			end
+			control_origin = origin
+			if kind == 7
+				if depth > 0
+					if slot < controls[depth - 1].operand
+						return MirArrayHeaderPlan.new(declarations: [], valid: false)
+					end
+				end
+				if depth == controls.size()
+					controls.push(operation)
+				else
+					controls[depth] = operation
+				end
+				depth += 1
+			else
+				if depth == 0 || index == 0
+					return MirArrayHeaderPlan.new(declarations: [], valid: false)
+				end
+				frame := controls[depth - 1]
+				exit_operation := operations[index - 1]
+				if slot != frame.operand || exit_operation.kind != 3
+					return MirArrayHeaderPlan.new(declarations: [], valid: false)
+				end
+				if exit_operation.operand != slot || exit_operation.origin != origin
+					return MirArrayHeaderPlan.new(declarations: [], valid: false)
+				end
+				if kind == 10
+					depth -= 1
+				else
+					if frame.kind == 9
+						return MirArrayHeaderPlan.new(declarations: [], valid: false)
+					end
+					controls[depth - 1] = operation
+				end
+			end
 		else
 			if kind != 6
 				return MirArrayHeaderPlan.new(declarations: [], valid: false)
@@ -668,6 +721,9 @@ def gate4_mir_array_headers(operations: Array<Gate4MirArrayOperation>): MirArray
 			blocked = true
 		end
 		index += 1
+	end
+	if depth != 0
+		return MirArrayHeaderPlan.new(declarations: [], valid: false)
 	end
 	if blocked
 		return MirArrayHeaderPlan.new(declarations: [], valid: true)

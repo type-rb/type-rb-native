@@ -37,7 +37,7 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
                       'boolean-array-values', 'boolean-array-effects', 'boolean-array-managed',
                       'record-field-values', 'record-array-values',
                       'record-array-effects', 'record-array-managed', 'local-array-header-mir',
-                      'stable-array-bindings'):
+                      'stable-array-bindings', 'conditional-array-headers'):
         fixture = repository / 'compiler/conformance/valid' / (case_name + '.trb')
         expected = fixture.with_suffix('.out').read_text()
         case_source = root / (case_name + '.trb')
@@ -63,7 +63,7 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
     assert 'unexpected RHS' not in failure_output, failure_output
     for case_name in ('boolean-array-negative', 'boolean-array-past-end',
                       'record-array-negative', 'record-array-past-end', 'local-array-header-bounds',
-                      'stable-array-bindings-bounds'):
+                      'stable-array-bindings-bounds', 'conditional-array-header-bounds'):
         fixture = repository / 'compiler/conformance/runtime-invalid' / (case_name + '.trb')
         case_source = root / (case_name + '.trb')
         case_source.write_text(fixture.read_text())
