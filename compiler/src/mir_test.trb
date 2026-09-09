@@ -1,4 +1,4 @@
-import { Gate4MirModule, Gate4MirValue, gate4_optimize_verified_mir, gate4_verify_mir } from mir
+import { Gate4MirFunction, Gate4MirModule, Gate4MirValue, gate4_optimize_verified_mir, gate4_verify_mir } from mir
 import { describe, expect, test } from trb/std/test
 
 def gate4_mir_test_module(
@@ -16,7 +16,7 @@ def gate4_mir_test_module(
 	return Gate4MirModule.new(
 		source_count: [1],
 		entry_function: [1],
-		functions: [[1, 10, 0, 1, 0, 1, 0, 5]],
+		functions: [Gate4MirFunction.new(id: 1, entry_block: 10, source_id: 0, line: 1, parameter_start: 0, parameter_count: 1, block_start: 0, block_count: 5)],
 		blocks: [
 			[10, 0, 2, 1, 0, 0, 1, 1, - 1, 11, - 1, 1, 1, 0, 0, - 1],
 			[11, 0, 3, 2, 1, 1, 2, 2, 4, 12, 14, 3, 1, 4, 0, - 1],
@@ -188,5 +188,109 @@ describe("Native MIR value carrier semantics") do
 		mut native_module := gate4_mir_test_module(false, false)
 		native_module.values.push(Gate4MirValue.new(function_id: 1, id: 0, type_id: 3, source_id: 0, line: 1))
 		expect(gate4_verify_mir(native_module, false)).to_equal("MIR value is defined more than once")
+	end
+end
+
+describe("Native MIR function carrier invariants") do
+	test("rejects malformed function identity, origin, entry and ranges") do
+		rows := [
+			Gate4MirFunction.new(id: - 1, entry_block: 10, source_id: 0, line: 1, parameter_start: 0, parameter_count: 1, block_start: 0, block_count: 5),
+			Gate4MirFunction.new(id: 1, entry_block: 10, source_id: - 1, line: 1, parameter_start: 0, parameter_count: 1, block_start: 0, block_count: 5),
+			Gate4MirFunction.new(id: 1, entry_block: 10, source_id: 1, line: 1, parameter_start: 0, parameter_count: 1, block_start: 0, block_count: 5),
+			Gate4MirFunction.new(id: 1, entry_block: 10, source_id: 0, line: 0, parameter_start: 0, parameter_count: 1, block_start: 0, block_count: 5),
+			Gate4MirFunction.new(id: 1, entry_block: - 1, source_id: 0, line: 1, parameter_start: 0, parameter_count: 1, block_start: 0, block_count: 5),
+			Gate4MirFunction.new(id: 1, entry_block: 99, source_id: 0, line: 1, parameter_start: 0, parameter_count: 1, block_start: 0, block_count: 5),
+			Gate4MirFunction.new(id: 1, entry_block: 10, source_id: 0, line: 1, parameter_start: - 1, parameter_count: 1, block_start: 0, block_count: 5),
+			Gate4MirFunction.new(id: 1, entry_block: 10, source_id: 0, line: 1, parameter_start: 7, parameter_count: 1, block_start: 0, block_count: 5),
+			Gate4MirFunction.new(id: 1, entry_block: 10, source_id: 0, line: 1, parameter_start: 99, parameter_count: 1, block_start: 0, block_count: 5),
+			Gate4MirFunction.new(id: 1, entry_block: 10, source_id: 0, line: 1, parameter_start: 0, parameter_count: - 1, block_start: 0, block_count: 5),
+			Gate4MirFunction.new(id: 1, entry_block: 10, source_id: 0, line: 1, parameter_start: 0, parameter_count: 7, block_start: 0, block_count: 5),
+			Gate4MirFunction.new(id: 1, entry_block: 10, source_id: 0, line: 1, parameter_start: 0, parameter_count: 9007199254740991, block_start: 0, block_count: 5),
+			Gate4MirFunction.new(id: 1, entry_block: 10, source_id: 0, line: 1, parameter_start: 0, parameter_count: 1, block_start: - 1, block_count: 5),
+			Gate4MirFunction.new(id: 1, entry_block: 10, source_id: 0, line: 1, parameter_start: 0, parameter_count: 1, block_start: 6, block_count: 5),
+			Gate4MirFunction.new(id: 1, entry_block: 10, source_id: 0, line: 1, parameter_start: 0, parameter_count: 1, block_start: 99, block_count: 5),
+			Gate4MirFunction.new(id: 1, entry_block: 10, source_id: 0, line: 1, parameter_start: 0, parameter_count: 1, block_start: 0, block_count: - 1),
+			Gate4MirFunction.new(id: 1, entry_block: 10, source_id: 0, line: 1, parameter_start: 0, parameter_count: 1, block_start: 0, block_count: 6),
+			Gate4MirFunction.new(id: 1, entry_block: 10, source_id: 0, line: 1, parameter_start: 0, parameter_count: 1, block_start: 0, block_count: 9007199254740991),
+		]
+		expected := [
+			"MIR function identifier is invalid",
+			"MIR function origin is invalid",
+			"MIR function origin is invalid",
+			"MIR function origin is invalid",
+			"MIR function entry block does not exist",
+			"MIR function entry block does not exist",
+			"MIR function parameter range is invalid",
+			"MIR function parameter range is invalid",
+			"MIR function parameter range is invalid",
+			"MIR function parameter range is invalid",
+			"MIR function parameter range is invalid",
+			"MIR function parameter range is invalid",
+			"MIR function block range is invalid",
+			"MIR function block range is invalid",
+			"MIR function block range is invalid",
+			"MIR function block range is invalid",
+			"MIR function block range is invalid",
+			"MIR function block range is invalid",
+		]
+		mut index := 0
+		while index < rows.size()
+			mut native_module := gate4_mir_test_module(false, false)
+			native_module.functions[0] = rows[index]
+			expect(gate4_verify_mir(native_module, false)).to_equal(expected[index])
+			expect(gate4_verify_mir(native_module, true)).to_equal(expected[index])
+			index += 1
+		end
+	end
+
+	test("rejects duplicate function identities") do
+		mut native_module := gate4_mir_test_module(false, false)
+		native_module.functions.push(native_module.functions[0])
+		expect(gate4_verify_mir(native_module, false)).to_equal("MIR function identifier is duplicated")
+	end
+
+	test("rejects malformed block ranges before traversing value definitions or targets") do
+		fields := [3, 4, 5, 6, 11, 12, 13, 14]
+		messages := [
+			"MIR block parameter range is invalid", "MIR block parameter range is invalid",
+			"MIR block instruction range is invalid", "MIR block instruction range is invalid",
+			"MIR terminator argument range is invalid", "MIR terminator argument range is invalid",
+			"MIR alternate argument range is invalid", "MIR alternate argument range is invalid",
+		]
+		invalid := [- 1, 99, 9007199254740991]
+		mut index := 0
+		while index < fields.size()
+			mut value_index := 0
+			while value_index < invalid.size()
+				mut native_module := gate4_mir_test_module(false, false)
+				native_module.blocks[0][fields[index]] = invalid[value_index]
+				expect(gate4_verify_mir(native_module, false)).to_equal(messages[index])
+				expect(gate4_verify_mir(native_module, true)).to_equal(messages[index])
+				value_index += 1
+			end
+			index += 1
+		end
+	end
+
+	test("rejects truncated block rows before entry and target lookup") do
+		mut index := 0
+		while index < 5
+			mut native_module := gate4_mir_test_module(false, false)
+			native_module.blocks[index] = []
+			expect(gate4_verify_mir(native_module, false)).to_equal("MIR block row size differs")
+			expect(gate4_verify_mir(native_module, true)).to_equal("MIR block row size differs")
+			index += 1
+		end
+	end
+
+	test("rejects truncated instruction rows before counting definitions") do
+		mut index := 0
+		while index < 6
+			mut native_module := gate4_mir_test_module(false, false)
+			native_module.instructions[index] = []
+			expect(gate4_verify_mir(native_module, false)).to_equal("MIR instruction row size differs")
+			expect(gate4_verify_mir(native_module, true)).to_equal("MIR instruction row size differs")
+			index += 1
+		end
 	end
 end

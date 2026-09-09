@@ -32,6 +32,17 @@ def mir_loop_transfer_valid(plan: MirLoopTransfer, origin: Integer, kind: Intege
 	return origin < token_count
 end
 
+record Gate4MirFunction
+	id: Integer
+	entry_block: Integer
+	source_id: Integer
+	line: Integer
+	parameter_start: Integer
+	parameter_count: Integer
+	block_start: Integer
+	block_count: Integer
+end
+
 record Gate4MirValue
 	function_id: Integer
 	id: Integer
@@ -41,7 +52,6 @@ record Gate4MirValue
 end
 
 # Compact bootstrap MIR rows use these fixed layouts:
-# function: id, entry block, origin source/line, parameter range, block range;
 # block: id, origin source/line, parameter and instruction ranges, terminator; and
 # instruction: kind, result, two operands, literal, failure block, origin.
 # Array regions retain parameter, access, and effect operations.
@@ -52,7 +62,7 @@ end
 record Gate4MirModule
 	source_count: Array<Integer>
 	entry_function: Array<Integer>
-	functions: Array<Array<Integer>>
+	functions: Array<Gate4MirFunction>
 	blocks: Array<Array<Integer>>
 	values: Array<Gate4MirValue>
 	instructions: Array<Array<Integer>>
@@ -113,10 +123,8 @@ def gate4_mir_function_index(native_module: Gate4MirModule, function_id: Integer
 	mut index := 0
 	while index < native_module.functions.size()
 		row := native_module.functions[index]
-		if row.size() == 8
-			if row[0] == function_id
-				return index
-			end
+		if row.id == function_id
+			return index
 		end
 		index += 1
 	end
@@ -125,11 +133,11 @@ end
 
 def gate4_mir_block_index(
 		native_module: Gate4MirModule,
-		function: Array<Integer>,
+		function: Gate4MirFunction,
 		block_id: Integer,
 	): Integer
-	mut index := function[6]
-	finish := index + function[7]
+	mut index := function.block_start
+	finish := index + function.block_count
 	while index < finish
 		if native_module.blocks[index][0] == block_id
 			return index
@@ -198,12 +206,12 @@ end
 
 def gate4_mir_value_available(
 		native_module: Gate4MirModule,
-		function: Array<Integer>,
+		function: Gate4MirFunction,
 		block: Array<Integer>,
 		instruction_finish: Integer,
 		value_id: Integer,
 	): Boolean
-	if gate4_mir_argument_contains(native_module, function[4], function[5], value_id)
+	if gate4_mir_argument_contains(native_module, function.parameter_start, function.parameter_count, value_id)
 		return true
 	end
 	if gate4_mir_argument_contains(native_module, block[3], block[4], value_id)
@@ -221,20 +229,20 @@ end
 
 def gate4_mir_definition_count(
 		native_module: Gate4MirModule,
-		function: Array<Integer>,
+		function: Gate4MirFunction,
 		value_id: Integer,
 	): Integer
 	mut count := 0
-	mut index := function[4]
-	mut finish := index + function[5]
+	mut index := function.parameter_start
+	mut finish := index + function.parameter_count
 	while index < finish
 		if native_module.arguments[index] == value_id
 			count += 1
 		end
 		index += 1
 	end
-	mut block_index := function[6]
-	block_finish := block_index + function[7]
+	mut block_index := function.block_start
+	block_finish := block_index + function.block_count
 	while block_index < block_finish
 		block := native_module.blocks[block_index]
 		index = block[3]
@@ -260,7 +268,7 @@ end
 
 def gate4_mir_failure_error(
 		native_module: Gate4MirModule,
-		function: Array<Integer>,
+		function: Gate4MirFunction,
 		failure: Integer,
 	): String
 	block_index := gate4_mir_block_index(native_module, function, failure)
@@ -296,24 +304,24 @@ end
 
 def gate4_mir_induction_address(
 		native_module: Gate4MirModule,
-		function: Array<Integer>,
+		function: Gate4MirFunction,
 		block: Array<Integer>,
 		instruction: Array<Integer>,
 	): Boolean
-	if function[7] != 6
+	if function.block_count != 6
 		return false
 	end
-	if function[5] != 1
+	if function.parameter_count != 1
 		return false
 	end
-	array_type := gate4_mir_value_type(native_module, function[0], native_module.arguments[function[4]])
+	array_type := gate4_mir_value_type(native_module, function.id, native_module.arguments[function.parameter_start])
 	if gate4_mir_array_element_type(array_type) == 0
 		return false
 	end
-	entry := native_module.blocks[function[6]]
-	header := native_module.blocks[function[6] + 1]
-	body := native_module.blocks[function[6] + 2]
-	exit := native_module.blocks[function[6] + 3]
+	entry := native_module.blocks[function.block_start]
+	header := native_module.blocks[function.block_start + 1]
+	body := native_module.blocks[function.block_start + 2]
+	exit := native_module.blocks[function.block_start + 3]
 	if block[0] != body[0]
 		return false
 	end
@@ -603,18 +611,15 @@ end
 
 def gate4_mir_instruction_error(
 		native_module: Gate4MirModule,
-		function: Array<Integer>,
+		function: Gate4MirFunction,
 		block: Array<Integer>,
 		instruction_index: Integer,
 	): String
 	instruction := native_module.instructions[instruction_index]
-	if instruction.size() != 8
-		return "MIR instruction row size differs"
-	end
 	if !gate4_mir_origin_valid(instruction[6], instruction[7], native_module.source_count[0])
 		return "MIR instruction origin is invalid"
 	end
-	function_id := function[0]
+	function_id := function.id
 	result_type := gate4_mir_value_type(native_module, function_id, instruction[1])
 	first_type := gate4_mir_value_type(native_module, function_id, instruction[2])
 	second_type := gate4_mir_value_type(native_module, function_id, instruction[3])
@@ -945,7 +950,7 @@ end
 
 def gate4_mir_target_arguments_error(
 		native_module: Gate4MirModule,
-		function: Array<Integer>,
+		function: Gate4MirFunction,
 		block: Array<Integer>,
 		target: Integer,
 		start: Integer,
@@ -972,8 +977,8 @@ def gate4_mir_target_arguments_error(
 			return "MIR block argument is undefined"
 		end
 		target_value := native_module.arguments[target_block[3] + index]
-		actual_type := gate4_mir_value_type(native_module, function[0], value_id)
-		target_type := gate4_mir_value_type(native_module, function[0], target_value)
+		actual_type := gate4_mir_value_type(native_module, function.id, value_id)
+		target_type := gate4_mir_value_type(native_module, function.id, target_value)
 		if actual_type != target_type
 			return "MIR block argument type differs"
 		end
@@ -984,7 +989,7 @@ end
 
 def gate4_mir_terminator_error(
 		native_module: Gate4MirModule,
-		function: Array<Integer>,
+		function: Gate4MirFunction,
 		block: Array<Integer>,
 	): String
 	kind := block[7]
@@ -1008,7 +1013,7 @@ def gate4_mir_terminator_error(
 		return "MIR jump shape differs"
 	end
 	if kind == 2
-		condition_type := gate4_mir_value_type(native_module, function[0], block[8])
+		condition_type := gate4_mir_value_type(native_module, function.id, block[8])
 		condition_available := gate4_mir_value_available(
 			native_module,
 			function,
@@ -1091,40 +1096,21 @@ def gate4_mir_terminator_error(
 	return "MIR terminator kind is unsupported"
 end
 
-def gate4_mir_function_error(native_module: Gate4MirModule, function: Array<Integer>): String
-	if !gate4_mir_range_valid(function[4], function[5], native_module.arguments.size())
+# Validate storage before definition counting or cross-block semantic checks.
+# Range checks use subtraction so malformed large counts cannot overflow.
+def gate4_mir_function_structure_error(native_module: Gate4MirModule, function: Gate4MirFunction): String
+	if !gate4_mir_range_valid(function.parameter_start, function.parameter_count, native_module.arguments.size())
 		return "MIR function parameter range is invalid"
 	end
-	if !gate4_mir_range_valid(function[6], function[7], native_module.blocks.size())
+	if !gate4_mir_range_valid(function.block_start, function.block_count, native_module.blocks.size())
 		return "MIR function block range is invalid"
 	end
-	if gate4_mir_block_index(native_module, function, function[1]) < 0
-		return "MIR function entry block does not exist"
-	end
-	mut index := function[4]
-	mut finish := index + function[5]
-	while index < finish
-		if gate4_mir_value_type(native_module, function[0], native_module.arguments[index]) == 0
-			return "MIR function parameter is undefined"
-		end
-		index += 1
-	end
-	mut block_index := function[6]
-	block_finish := block_index + function[7]
+	mut block_index := function.block_start
+	block_finish := block_index + function.block_count
 	while block_index < block_finish
 		block := native_module.blocks[block_index]
 		if block.size() != 16
 			return "MIR block row size differs"
-		end
-		if !gate4_mir_origin_valid(block[1], block[2], native_module.source_count[0])
-			return "MIR block origin is invalid"
-		end
-		mut previous := function[6]
-		while previous < block_index
-			if native_module.blocks[previous][0] == block[0]
-				return "MIR block identifier is duplicated"
-			end
-			previous += 1
 		end
 		if !gate4_mir_range_valid(block[3], block[4], native_module.arguments.size())
 			return "MIR block parameter range is invalid"
@@ -1138,10 +1124,49 @@ def gate4_mir_function_error(native_module: Gate4MirModule, function: Array<Inte
 		if !gate4_mir_range_valid(block[13], block[14], native_module.arguments.size())
 			return "MIR alternate argument range is invalid"
 		end
+		mut index := block[5]
+		finish := index + block[6]
+		while index < finish
+			if native_module.instructions[index].size() != 8
+				return "MIR instruction row size differs"
+			end
+			index += 1
+		end
+		block_index += 1
+	end
+	return ""
+end
+
+def gate4_mir_function_error(native_module: Gate4MirModule, function: Gate4MirFunction): String
+	if gate4_mir_block_index(native_module, function, function.entry_block) < 0
+		return "MIR function entry block does not exist"
+	end
+	mut index := function.parameter_start
+	mut finish := index + function.parameter_count
+	while index < finish
+		if gate4_mir_value_type(native_module, function.id, native_module.arguments[index]) == 0
+			return "MIR function parameter is undefined"
+		end
+		index += 1
+	end
+	mut block_index := function.block_start
+	block_finish := block_index + function.block_count
+	while block_index < block_finish
+		block := native_module.blocks[block_index]
+		if !gate4_mir_origin_valid(block[1], block[2], native_module.source_count[0])
+			return "MIR block origin is invalid"
+		end
+		mut previous := function.block_start
+		while previous < block_index
+			if native_module.blocks[previous][0] == block[0]
+				return "MIR block identifier is duplicated"
+			end
+			previous += 1
+		end
 		index = block[3]
 		finish = index + block[4]
 		while index < finish
-			if gate4_mir_value_type(native_module, function[0], native_module.arguments[index]) == 0
+			if gate4_mir_value_type(native_module, function.id, native_module.arguments[index]) == 0
 				return "MIR block parameter is undefined"
 			end
 			index += 1
@@ -1197,24 +1222,25 @@ def gate4_verify_mir(native_module: Gate4MirModule, optimized: Boolean): String
 	index = 0
 	while index < native_module.functions.size()
 		function := native_module.functions[index]
-		if function.size() != 8
-			return "MIR function row size differs"
-		end
-		if function[0] < 0
+		if function.id < 0
 			return "MIR function identifier is invalid"
 		end
-		if !gate4_mir_origin_valid(function[2], function[3], native_module.source_count[0])
+		if !gate4_mir_origin_valid(function.source_id, function.line, native_module.source_count[0])
 			return "MIR function origin is invalid"
 		end
 		mut previous := 0
 		while previous < index
-			if native_module.functions[previous][0] == function[0]
+			if native_module.functions[previous].id == function.id
 				return "MIR function identifier is duplicated"
 			end
 			previous += 1
 		end
-		if function[0] == native_module.entry_function[0]
+		if function.id == native_module.entry_function[0]
 			entry_found = true
+		end
+		error := gate4_mir_function_structure_error(native_module, function)
+		if error != ""
+			return error
 		end
 		index += 1
 	end

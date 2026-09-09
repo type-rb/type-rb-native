@@ -11,6 +11,21 @@ ownership and historical measurements below remain unchanged.
 
 ## Current ownership checkpoint
 
+The function table now uses `Gate4MirFunction` records for identity, entry,
+source origin, and parameter/block ranges, alongside the named value carrier.
+Construction, verification, passes and adapter consumers use those fields;
+blocks and instructions retain their existing compact rows. This is bounded
+compiler self-use of the accepted record-array seed, not wider MIR admission.
+
+Structural validation precedes value-definition counting and cross-block
+lookups. Function ranges, block shapes and ranges, and referenced instruction
+shapes must be valid before those consumers run. Previously a malformed range
+or truncated row could cause an Array-bounds failure before its intended MIR
+diagnostic. The checks move to one structural owner; identity, origin, type,
+uniqueness, definition and control-flow checks remain in the semantic verifier.
+[Issue #359](https://github.com/type-rb/type-rb-native/issues/359) records the
+slice and its pre-migration failures. No application speedup is implied.
+
 [PR #260](https://github.com/type-rb/type-rb-native/pull/260) implements the
 first, partial checkpoint of
 [issue #254](https://github.com/type-rb/type-rb-native/issues/254): structured
