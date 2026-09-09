@@ -467,3 +467,63 @@ n-body alarm remain; no new cumulative timing or Pure Go comparison is claimed.
 This closes the named record Array slice through ordinary support, matching
 recovery, verified immutable seed handoff and actual compiler self-use. Other
 MIR carriers and optimization facts remain independently bounded follow-ups.
+
+## Named MIR function carrier and structural validation
+
+[Issue #359](https://github.com/type-rb/type-rb-native/issues/359) registers the
+next bounded self-use slice against `923f4bd31c70f1e83979034916bf4f781523dcc0`.
+`Gate4MirFunction` replaces the eight-cell function row with named identity,
+entry, source origin, and parameter/block ranges. Construction, verifier and
+pass helpers, adapter consumers and strict recovery imports move together.
+Other row families and optimization admission are unchanged.
+
+Pre-migration characterization exposed a verifier defect: malformed ranges and
+short rows could be indexed while counting value definitions before their
+structural validation. A standalone malformed function range raised an Array
+bounds error, and four of five expanded tests failed with bounds errors or the
+wrong diagnostic. Structural checks now run before value and cross-block
+consumers. The existing identity, origin, type, uniqueness, definition and
+control-flow checks remain required; malformed function row length becomes
+unrepresentable through the named carrier.
+
+The [local correctness record](mir-function-carrier-correctness.json) binds the
+candidate sources and includes all 426 ordinary check/repeated-QBE observations.
+Fresh published-seed core/CLI fixed points, the language registry and full
+CLI/REPL/terminal suite pass. Enabled recovery/QBE suites pass root 102/102 and
+compiler 140/140; focused MIR tests pass 17/17. The new malformed-MIR tests also
+pass in an ordinary Native-compiled harness. Its first preparation used an
+unsupported core-command package import and was rejected; the corrected harness
+uses the existing `puts` builtin without a compiler change. The owned recovery
+workspace was removed only after both suites terminated.
+
+Spectral-norm at input 100 and n-body at input 1000 retain byte-identical QBE,
+executables and outputs against the accepted same-feature control. The local
+Darwin compiler shrinks from 365,768 to 349,256 bytes; CLI size stays 499,144.
+This does not establish application runtime improvement. Earlier cumulative
+n-body alarms remain unresolved, and no new cumulative timing, Pure Go parity,
+or benchmark/Pages-value update is claimed.
+
+[PR #360](https://github.com/type-rb/type-rb-native/pull/360) is accepted at
+`f4ef0986678ad0870dea48cdeb28decc6eed4e30` and merged as
+`a714f9b20b1b2d9ddec29878a1982a18ed110a6e`.
+All 17 authorities pass on the first attempt in
+[run 34309605826](https://github.com/type-rb/type-rb-native/actions/runs/34309605826).
+The [hosted record](mir-function-hosted-acceptance.json) retains all 88 amd64
+observations (16 warmups and 72 retained), both arm64 bootstrap and interleaved
+comparison cohorts, environment/toolchain/identity records, and cross-target
+results. The PR merge-ref checkout has the same tree as the candidate head.
+
+| Metric | Darwin arm64 | Linux arm64 |
+| --- | ---: | ---: |
+| Complete compiler bytes, before → after | 365,768 → 349,256 | 327,448 → 327,264 |
+| Code text bytes, before → after | 260,700 → 260,512 | 263,280 → 263,120 |
+| Self-build wall ratio | 0.988201 | 0.978417 |
+| Self-build peak RSS ratio | 0.999405 | 0.999842 |
+
+Combined compiler size is 676,520 bytes within the existing 694,000-byte bound.
+Compiler QBE grows by 701 bytes to 1,151,406 while both code sections shrink;
+its target-neutral SHA-256 is
+`11f58bff93f3b9290e19a5c935735793cbd7958b5f17cff3d8b8965f3d30cbb0`.
+The amd64 compiler is 279,976 bytes within its unchanged 310,000-byte bound.
+No special confirmation, threshold revision or historical failure relabeling
+was used. The generated applications remain unchanged as recorded above.
