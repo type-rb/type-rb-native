@@ -1417,6 +1417,153 @@ def gate4_check_conditional(
 	return finish_statement(state, position)
 end
 
+def checked_while(
+		mut state: Gate4Compiler,
+		mut position: Array<Integer>,
+		mut locals: Gate4Locals,
+		result_type: String,
+	): Boolean
+	loop_start := position[0]
+	mut candidate := locals.count[0] - 1
+	mut active := false
+	mut line := 0
+	if locals.mir_state[0] >= 2
+		candidate = locals.mir_state[5]
+		active = candidate >= 0
+		if active
+			active = locals.count[0] == locals.mir_state[0]
+		end
+		if active
+			header_value := gate4_scalar_mir_value(
+				state, locals, 1, loop_start,
+			)
+			body_value := gate4_scalar_mir_value(
+				state, locals, 1, loop_start,
+			)
+			locals.mir_state[12] = body_value
+			gate4_store_integer(locals.mir_values, candidate, header_value + 1)
+			if locals.mir_state[0] == 3
+				accumulator_type := gate4_scalar_mir_type(result_type)
+				accumulator_header := gate4_scalar_mir_value(
+					state, locals, accumulator_type, loop_start,
+				)
+				accumulator_body := gate4_scalar_mir_value(
+					state, locals, accumulator_type, loop_start,
+				)
+				accumulator_exit := gate4_scalar_mir_value(
+					state, locals, accumulator_type, loop_start,
+				)
+				locals.mir_state[14] = accumulator_header
+				locals.mir_state[15] = accumulator_body
+				locals.mir_state[16] = accumulator_exit
+				gate4_store_integer(
+					locals.mir_values,
+					locals.mir_state[13],
+					accumulator_header + 1,
+				)
+			end
+		else
+			gate4_scalar_mir_disable(locals)
+		end
+	else
+		gate4_scalar_mir_disable(locals)
+		if candidate >= 0
+			active = gate4_load_integer(locals.mutable, candidate) == loop_start + 3
+		end
+		if active
+			# The direct fallback retains its enclosing-loop dependency
+			# until the broader Array-owning slice moves through MIR.
+			line = position[1]
+			gate4_store_integer(locals.mutable, candidate, - loop_start)
+		end
+		gate4_store_integer(state.mir_nonnegative_facts, loop_start, line)
+	end
+	line = gate4_load_integer(state.token_lines, position[0])
+	gate4_advance(position)
+	condition := gate4_check_expression(state, position, locals, 1, "Boolean")
+	gate4_check_expected(state, condition.type_name, "Boolean", line)
+	finish_statement(state, position)
+	if locals.mir_state[0] >= 2
+		condition_id := gate4_checked_mir_value(condition)
+		if condition_id < 0
+			gate4_scalar_mir_disable(locals)
+		else
+			locals.mir_state[7] = condition_id
+			locals.mir_state[8] = locals.mir_instructions.size() - locals.mir_state[6]
+			locals.mir_state[9] = locals.mir_instructions.size()
+			if locals.mir_state[8] != 2
+				gate4_scalar_mir_disable(locals)
+			else
+				first := locals.mir_instructions[locals.mir_state[6]]
+				second := locals.mir_instructions[locals.mir_state[6] + 1]
+				if first.kind != 4
+					gate4_scalar_mir_disable(locals)
+				end
+				if second.kind != 7
+					gate4_scalar_mir_disable(locals)
+				else
+					if second.payload != 8
+						gate4_scalar_mir_disable(locals)
+					end
+				end
+			end
+			if locals.mir_state[0] >= 2
+				gate4_store_integer(locals.mir_values, candidate, locals.mir_state[12] + 1)
+				if locals.mir_state[0] == 3
+					gate4_store_integer(
+						locals.mir_values,
+						locals.mir_state[13],
+						locals.mir_state[15] + 1,
+					)
+				end
+			end
+		end
+	end
+	saved_count := locals.count[0]
+	gate4_check_block(state, position, locals, result_type, loop_start)
+	if locals.mir_state[0] >= 2
+		if locals.mir_state[10] < 0
+			gate4_scalar_mir_disable(locals)
+		end
+		if locals.count[0] != saved_count + 3 - locals.mir_state[0]
+			gate4_scalar_mir_disable(locals)
+		end
+		if locals.mir_instructions.size() - locals.mir_state[9] != locals.mir_state[0] + 2
+			gate4_scalar_mir_disable(locals)
+		end
+		if locals.mir_state[18] != locals.mir_state[0] - 1
+			gate4_scalar_mir_disable(locals)
+		end
+		if locals.mir_state[0] == 3
+			if locals.mir_state[17] < 0
+				gate4_scalar_mir_disable(locals)
+			end
+		end
+	else
+		if active
+			if gate4_load_integer(locals.mutable, candidate) >= 0
+				gate4_store_integer(state.mir_nonnegative_facts, loop_start, 0)
+			end
+			gate4_store_integer(locals.mutable, candidate, 1)
+		end
+	end
+	gate4_array_region_operation(locals, 3, saved_count, position[0])
+	locals.count[0] = saved_count
+	gate4_expect(state, position, "end")
+	finish_statement(state, position)
+	if locals.mir_state[0] >= 2
+		if locals.mir_state[0] == 3
+			gate4_store_integer(
+				locals.mir_values,
+				locals.mir_state[13],
+				locals.mir_state[16] + 1,
+			)
+		end
+		locals.mir_state[5] =- 2
+	end
+	return !gate4_has_diagnostic(state)
+end
+
 def gate4_check_block(
 		mut state: Gate4Compiler,
 		mut position: Array<Integer>,
@@ -1425,8 +1572,7 @@ def gate4_check_block(
 		loop_origin: Integer,
 	): Boolean
 	gate4_skip_newlines(state, position)
-	mut complete := false
-	while !complete
+	while true
 		if locals.mir_state[0] > 0
 			if locals.mir_state[4] >= 0
 				if !gate4_token_is(state, position[0], "end")
@@ -1442,7 +1588,7 @@ def gate4_check_block(
 		end
 		if gate4_terminal_token(state, position[0])
 			gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, position[0]), "unexpected end of input")
-			complete = true
+			break
 		elsif syntax_loop_transfer_kind(state, position[0]) > 0
 			if loop_origin < 0
 				gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, position[0]), gate4_load_string(state.token_texts, position[0]) + " is only valid inside while")
@@ -1463,229 +1609,80 @@ def gate4_check_block(
 			end
 			gate4_advance(position)
 			finish_statement(state, position)
-		else
-			if gate4_token_is(state, position[0], "end")
-				complete = true
-			else
-				if syntax_conditional_tail(state, position[0])
-					complete = true
+		elsif gate4_token_is(state, position[0], "end") || syntax_conditional_tail(state, position[0])
+			break
+		elsif gate4_token_is(state, position[0], "if")
+			if !gate4_check_conditional(state, position, locals, result_type, loop_origin)
+				return false
+			end
+		elsif gate4_token_is(state, position[0], "while")
+			if !checked_while(state, position, locals, result_type)
+				return false
+			end
+		elsif gate4_token_is(state, position[0], "return")
+			line := gate4_load_integer(state.token_lines, position[0])
+			gate4_advance(position)
+			if gate4_load_integer(state.token_kinds, position[0]) == 4
+				if result_type != "Void"
+					gate4_diagnostic(state, "TRBN4004", line, "return value is required")
 				else
-					if gate4_token_is(state, position[0], "if")
-						if !gate4_check_conditional(state, position, locals, result_type, loop_origin)
-							return false
-						end
-					else
-						if gate4_token_is(state, position[0], "while")
-							loop_start := position[0]
-							mut candidate := locals.count[0] - 1
-							mut active := false
-							mut line := 0
-							if locals.mir_state[0] >= 2
-								candidate = locals.mir_state[5]
-								active = candidate >= 0
-								if active
-									active = locals.count[0] == locals.mir_state[0]
-								end
-								if active
-									header_value := gate4_scalar_mir_value(
-										state, locals, 1, loop_start,
-									)
-									body_value := gate4_scalar_mir_value(
-										state, locals, 1, loop_start,
-									)
-									locals.mir_state[12] = body_value
-									gate4_store_integer(locals.mir_values, candidate, header_value + 1)
-									if locals.mir_state[0] == 3
-										accumulator_type := gate4_scalar_mir_type(result_type)
-										accumulator_header := gate4_scalar_mir_value(
-											state, locals, accumulator_type, loop_start,
-										)
-										accumulator_body := gate4_scalar_mir_value(
-											state, locals, accumulator_type, loop_start,
-										)
-										accumulator_exit := gate4_scalar_mir_value(
-											state, locals, accumulator_type, loop_start,
-										)
-										locals.mir_state[14] = accumulator_header
-										locals.mir_state[15] = accumulator_body
-										locals.mir_state[16] = accumulator_exit
-										gate4_store_integer(
-											locals.mir_values,
-											locals.mir_state[13],
-											accumulator_header + 1,
-										)
-									end
-								else
-									gate4_scalar_mir_disable(locals)
-								end
-							else
-								gate4_scalar_mir_disable(locals)
-								if candidate >= 0
-									active = gate4_load_integer(locals.mutable, candidate) == loop_start + 3
-								end
-								if active
-									# The direct fallback retains its enclosing-loop dependency
-									# until the broader Array-owning slice moves through MIR.
-									line = position[1]
-									gate4_store_integer(locals.mutable, candidate, - loop_start)
-								end
-								gate4_store_integer(state.mir_nonnegative_facts, loop_start, line)
-							end
-							line = gate4_load_integer(state.token_lines, position[0])
-							gate4_advance(position)
-							condition := gate4_check_expression(state, position, locals, 1, "Boolean")
-							gate4_check_expected(state, condition.type_name, "Boolean", line)
-							finish_statement(state, position)
-							if locals.mir_state[0] >= 2
-								condition_id := gate4_checked_mir_value(condition)
-								if condition_id < 0
-									gate4_scalar_mir_disable(locals)
-								else
-									locals.mir_state[7] = condition_id
-									locals.mir_state[8] = locals.mir_instructions.size() - locals.mir_state[6]
-									locals.mir_state[9] = locals.mir_instructions.size()
-									if locals.mir_state[8] != 2
-										gate4_scalar_mir_disable(locals)
-									else
-										first := locals.mir_instructions[locals.mir_state[6]]
-										second := locals.mir_instructions[locals.mir_state[6] + 1]
-										if first.kind != 4
-											gate4_scalar_mir_disable(locals)
-										end
-										if second.kind != 7
-											gate4_scalar_mir_disable(locals)
-										else
-											if second.payload != 8
-												gate4_scalar_mir_disable(locals)
-											end
-										end
-									end
-									if locals.mir_state[0] >= 2
-										gate4_store_integer(locals.mir_values, candidate, locals.mir_state[12] + 1)
-										if locals.mir_state[0] == 3
-											gate4_store_integer(
-												locals.mir_values,
-												locals.mir_state[13],
-												locals.mir_state[15] + 1,
-											)
-										end
-									end
-								end
-							end
-							saved_count := locals.count[0]
-							gate4_check_block(state, position, locals, result_type, loop_start)
-							if locals.mir_state[0] >= 2
-								if locals.mir_state[10] < 0
-									gate4_scalar_mir_disable(locals)
-								end
-								if locals.count[0] != saved_count + 3 - locals.mir_state[0]
-									gate4_scalar_mir_disable(locals)
-								end
-								if locals.mir_instructions.size() - locals.mir_state[9] != locals.mir_state[0] + 2
-									gate4_scalar_mir_disable(locals)
-								end
-								if locals.mir_state[18] != locals.mir_state[0] - 1
-									gate4_scalar_mir_disable(locals)
-								end
-								if locals.mir_state[0] == 3
-									if locals.mir_state[17] < 0
-										gate4_scalar_mir_disable(locals)
-									end
-								end
-							else
-								if active
-									if gate4_load_integer(locals.mutable, candidate) >= 0
-										gate4_store_integer(state.mir_nonnegative_facts, loop_start, 0)
-									end
-									gate4_store_integer(locals.mutable, candidate, 1)
-								end
-							end
-							gate4_array_region_operation(locals, 3, saved_count, position[0])
-							locals.count[0] = saved_count
-							gate4_expect(state, position, "end")
-							finish_statement(state, position)
-							if locals.mir_state[0] >= 2
-								if locals.mir_state[0] == 3
-									gate4_store_integer(
-										locals.mir_values,
-										locals.mir_state[13],
-										locals.mir_state[16] + 1,
-									)
-								end
-								locals.mir_state[5] =- 2
-							end
+					if locals.mir_state[0] == 2
+						if locals.mir_state[5] == - 2
+							locals.mir_state[4] =- 2
 						else
-							if gate4_token_is(state, position[0], "return")
-								line := gate4_load_integer(state.token_lines, position[0])
-								gate4_advance(position)
-								if gate4_load_integer(state.token_kinds, position[0]) == 4
-									if result_type != "Void"
-										gate4_diagnostic(state, "TRBN4004", line, "return value is required")
-									else
-										if locals.mir_state[0] == 2
-											if locals.mir_state[5] == - 2
-												locals.mir_state[4] =- 2
-											else
-												gate4_scalar_mir_disable(locals)
-											end
-										end
-									end
-								else
-									if result_type == "Void"
-										gate4_diagnostic(state, "TRBN4004", line, "Void function cannot return a value")
-									else
-										return_value := gate4_check_expression(state, position, locals, 1, result_type)
-										if locals.mir_state[0] > 0
-											mir_value := gate4_checked_mir_value(return_value)
-											if mir_value >= 0
-												locals.mir_state[4] = mir_value
-											else
-												gate4_scalar_mir_disable(locals)
-											end
-										end
-									end
-								end
-								finish_statement(state, position)
-							else
-								if gate4_declaration_start(state, position[0])
-									gate4_check_declaration(state, position, locals)
-								else
-									if locals.mir_state[0] < 2
-										gate4_scalar_mir_disable(locals)
-									end
-									statement_start := position[0]
-									gate4_check_simple_statement(state, position, locals)
-									tracked := gate4_local_find(
-										locals,
-										gate4_load_string(state.token_texts, statement_start),
-									)
-									if tracked >= 0
-										assignment := gate4_load_string(state.token_texts, statement_start + 1)
-										if gate4_load_integer(locals.mutable, tracked) < 0
-											mut valid := assignment != "="
-											if assignment.size() == 2
-												valid = assignment == "+="
-												if valid
-													valid = gate4_load_string(state.token_texts, statement_start + 2) == "1"
-												end
-												if valid
-													valid = gate4_load_integer(state.token_kinds, statement_start + 3) == 4
-												end
-											end
-											if !valid
-												gate4_store_integer(locals.mutable, tracked, 1)
-											end
-										end
-									end
-								end
-							end
+							gate4_scalar_mir_disable(locals)
 						end
+					end
+				end
+			else
+				if result_type == "Void"
+					gate4_diagnostic(state, "TRBN4004", line, "Void function cannot return a value")
+				else
+					return_value := gate4_check_expression(state, position, locals, 1, result_type)
+					if locals.mir_state[0] > 0
+						mir_value := gate4_checked_mir_value(return_value)
+						if mir_value >= 0
+							locals.mir_state[4] = mir_value
+						else
+							gate4_scalar_mir_disable(locals)
+						end
+					end
+				end
+			end
+			finish_statement(state, position)
+		elsif gate4_declaration_start(state, position[0])
+			gate4_check_declaration(state, position, locals)
+		else
+			if locals.mir_state[0] < 2
+				gate4_scalar_mir_disable(locals)
+			end
+			statement_start := position[0]
+			gate4_check_simple_statement(state, position, locals)
+			tracked := gate4_local_find(
+				locals,
+				gate4_load_string(state.token_texts, statement_start),
+			)
+			if tracked >= 0
+				assignment := gate4_load_string(state.token_texts, statement_start + 1)
+				if gate4_load_integer(locals.mutable, tracked) < 0
+					mut valid := assignment != "="
+					if assignment.size() == 2
+						valid = assignment == "+="
+						if valid
+							valid = gate4_load_string(state.token_texts, statement_start + 2) == "1"
+						end
+						if valid
+							valid = gate4_load_integer(state.token_kinds, statement_start + 3) == 4
+						end
+					end
+					if !valid
+						gate4_store_integer(locals.mutable, tracked, 1)
 					end
 				end
 			end
 		end
 		if gate4_has_diagnostic(state)
-			complete = true
+			break
 		end
 	end
 	return !gate4_has_diagnostic(state)

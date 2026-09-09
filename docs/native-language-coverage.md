@@ -181,7 +181,11 @@ sources, separately from snapshot support for those source programs.
 After loop-transfer snapshot recovery and the verified seed handoff,
 `parse_statement_block` uses bare `break` exits instead of a completion flag.
 Its dispatch, cursor updates, diagnostics and final result remain unchanged.
-Other completion flags and `next` self-use remain separate cleanup opportunities.
+The checked block dispatcher also uses bare `break` for terminal tokens, block
+tails and diagnostic exits, with `elsif` for statement selection. Its while
+checking has an independent helper; current MIR admission and diagnostics remain
+unchanged. Other completion flags and `next` self-use remain separate cleanup
+opportunities.
 Track the full delivery in [issue #334](https://github.com/type-rb/type-rb-native/issues/334).
 
 ## Boolean arrays
