@@ -13,8 +13,7 @@ ownership and historical measurements below remain unchanged.
 
 The function table now uses `Gate4MirFunction` records for identity, entry,
 source origin, and parameter/block ranges, alongside the named value carrier.
-Construction, verification, passes and adapter consumers use those fields;
-instructions retain their existing compact rows. This is bounded
+Construction, verification, passes and adapter consumers use those fields. This is bounded
 compiler self-use of the accepted record-array seed, not wider MIR admission.
 
 The block table likewise uses `Gate4MirBlock` records for its sixteen fields:
@@ -24,9 +23,19 @@ named fields. Record typing excludes truncated blocks; range and control-flow
 verification remains required. [Issue #362](https://github.com/type-rb/type-rb-native/issues/362)
 records this separate block-carrier slice.
 
+The instruction table and function-local instruction buffer now use
+`Gate4MirInstruction` for kind, result, two operands, opcode-specific payload,
+failure target and source origin. Literal relocation and verified rewrites
+replace whole readonly records through one payload-copy helper. Readers use
+named fields; instruction length is fixed by its type. Opcode, type, operand
+availability, payload, origin and failure-target validation remain required.
+[Issue #365](https://github.com/type-rb/type-rb-native/issues/365) records this
+instruction-carrier slice. Array-region rows and optimization admission remain
+unchanged.
+
 Structural validation precedes value-definition counting and cross-block
-lookups. Function ranges, block ranges, and referenced instruction
-shapes must be valid before those consumers run. Previously a malformed range
+lookups. Function and block ranges must be valid
+before those consumers run; named records now establish carrier lengths. Previously a malformed range
 or truncated row could cause an Array-bounds failure before its intended MIR
 diagnostic. The checks move to one structural owner; identity, origin, type,
 uniqueness, definition and control-flow checks remain in the semantic verifier.
