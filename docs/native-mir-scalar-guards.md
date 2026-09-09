@@ -15,12 +15,14 @@ existing multiplication fast-path domain, 2^26, then successively halves it.
 An unsigned comparison of the bitwise union of the parameters against this
 bound rejects negative inputs and any input outside the common domain.
 
-The proof accepts one to four Integer parameters, a scalar entry returning its
+The proof is disabled above the existing 32-function inline budget. It accepts
+one to four Integer parameters, a scalar entry returning its
 result directly, and at most 32 instructions. It propagates inclusive lower
 and upper bounds through nonnegative literals, addition, multiplication and
 division with a strictly positive divisor. Before calculating bounds, it checks
 addition against the remaining portable maximum and multiplication against the
-maximum divided by the other upper bound. The analysis itself cannot overflow.
+maximum divided by the other upper bound. The analysis itself cannot overflow. Named range records keep each lower/upper
+pair together; a checked decimal decoder uses recovery-supported basic operations.
 Float arithmetic and conversions retain their original order and operations.
 Unsupported instructions disable the plan. At least three checked Integer
 operations must be removed to amortize the entry guard.

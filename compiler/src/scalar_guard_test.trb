@@ -2,7 +2,7 @@ import { gate4_check, gate4_emit_qbe, gate4_lex } from compiler
 import { gate4_parse_module } from parser
 import { gate4_resolve } from resolution
 import { Gate4Compiler, gate4_compiler_new } from state
-import { Gate4MirModule, gate4_mir_function_index, gate4_mir_instruction_with_payload, gate4_optimize_verified_mir, gate4_verify_mir, mir_function_with_guard } from mir
+import { Gate4MirModule, gate4_mir_function_index, gate4_mir_instruction_with_payload, gate4_optimize_verified_mir, gate4_verify_mir, mir_function_with_guard, mir_scalar_literal } from mir
 import qbe_output
 import { gate4_load_string } from storage
 import trb/std/string_builder
@@ -30,6 +30,17 @@ def scalar_guard_state(expression: String): Gate4Compiler
 end
 
 describe("MIR scalar Integer guards") do
+	test("decodes portable literals without unsupported recovery conversions") do
+		expect(mir_scalar_literal("000_12") == 12).to_be_true()
+		expect(mir_scalar_literal("9007199254740991") == 9007199254740991).to_be_true()
+		invalid := ["", "___", "-1", "x", "1.0", "9007199254740992", "999999999999999999999999"]
+		mut index := 0
+		while index < invalid.size()
+			expect(mir_scalar_literal(invalid[index]) == - 1).to_be_true()
+			index += 1
+		end
+	end
+
 	test("derives a common input range for an entire arithmetic region") do
 		state := scalar_guard_state("((left + right) * (left + right + 1) / 2 + left + 1) * 1.0")
 		function := state.scalar_mir.functions[gate4_mir_function_index(state.scalar_mir, 0)]
