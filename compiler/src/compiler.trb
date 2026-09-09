@@ -5,7 +5,7 @@ import { Gate4MirArrayOperation, gate4_mir_block_index, gate4_mir_function_index
 import { Gate4Compiler, Gate4SymbolIndex, gate4_add_module, gate4_add_name_index, gate4_compiler_new, gate4_diagnostic, gate4_find_module, gate4_find_name, gate4_has_diagnostic, gate4_local_add, gate4_locals_new, gate4_symbol_index_new } from state
 import { finish_statement, gate4_advance, gate4_binary_operator_id, gate4_binary_precedence, gate4_declaration_start, gate4_expect, gate4_expect_identifier, gate4_parse_module, gate4_parse_type, gate4_skip_newlines, gate4_token_is, parse_statement_block, syntax_conditional_tail, syntax_loop_transfer_kind } from parser
 import { gate4_array_element_type, gate4_array_type, gate4_common_array_element_type, gate4_find_field, gate4_find_function_in_module, gate4_find_record_type, gate4_find_visible_function, gate4_find_visible_record, gate4_import_path_value, gate4_normalize_import_path, gate4_record_type, gate4_resolve, gate4_resolve_type_name, gate4_standard_package_import, gate4_standard_package_root, gate4_standard_package_target, gate4_validate_import_usage } from resolution
-import { checked_array_assignment_reads_old, checked_array_assignment_store, checked_array_assignment_target, checked_binary_plan_type, checked_loop_transfer_kind, gate4_check_block, gate4_mir_add_parameter, gate4_mir_nonnegative_fact, gate4_scalar_leaf_inline_eligible, gate4_scalar_mir_begin, gate4_scalar_mir_commit } from checked_program
+import { checked_array_assignment_plan, checked_array_assignment_reads_old, checked_array_assignment_store, checked_array_assignment_target, checked_binary_plan_type, checked_loop_transfer_kind, gate4_check_block, gate4_mir_add_parameter, gate4_mir_nonnegative_fact, gate4_scalar_leaf_inline_eligible, gate4_scalar_mir_begin, gate4_scalar_mir_commit } from checked_program
 import { QbeOutput, qbe_output_append, qbe_output_branch, qbe_output_line, qbe_output_new } from qbe_output
 import { emit_boolean_puts_runtime, emit_float_array_runtime, emit_float_to_integer_runtime, emit_integer_to_string_runtime, emit_process_runtime, emit_qbe_runtime, emit_string_to_integer_runtime } from qbe_runtime
 import { parse_project_config } from project_config
@@ -1632,11 +1632,21 @@ def gate4_emit_postfix(
 						gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, index_origin), "invalid checked Array assignment target")
 						return value
 					end
+					mut assignment_plan := 0
 					if store_origin >= 0
-						# Retain the selected owner even if index/RHS calls replace its
-						# last other reference and collect before the final store.
-						qbe_output_line(output, "\tcall $g4_gc_temp_push(l " + value.operand + ")")
-						context.temporary_roots_used[0] = 2
+						assignment_plan = checked_array_assignment_plan(state, index_origin)
+						if assignment_plan < 0
+							gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, index_origin), "invalid checked Array assignment region")
+							return value
+						end
+					end
+					if store_origin >= 0
+						if assignment_plan < 2
+							# Retain the selected owner even if index/RHS calls replace its
+							# last other reference and collect before the final store.
+							qbe_output_line(output, "\tcall $g4_gc_temp_push(l " + value.operand + ")")
+							context.temporary_roots_used[0] = 2
+						end
 					end
 					gate4_advance(position)
 					index := gate4_emit_expression(state, position, context, output, 1, "Integer")
@@ -1681,20 +1691,23 @@ def gate4_emit_postfix(
 						mut retained_position := ""
 						if store_origin >= 0
 							owner = value.operand
-							if checked_array_assignment_reads_old(state, index_origin)
-								if gate4_type_is_managed(element_type)
-									qbe_output_line(output, "\tcall $g4_gc_temp_push(l " + operand + ")")
+							retained_position = address
+							if assignment_plan == 0
+								if checked_array_assignment_reads_old(state, index_origin)
+									if gate4_type_is_managed(element_type)
+										qbe_output_line(output, "\tcall $g4_gc_temp_push(l " + operand + ")")
+									end
 								end
+								# The checked address and current data share the same ABI
+								# allocation here. Retain only the logical slot across RHS.
+								data_slot := gate4_emit_address(context, output, owner, 24)
+								data := gate4_emit_temporary(context)
+								offset := gate4_emit_temporary(context)
+								retained_position = gate4_emit_temporary(context)
+								qbe_output_line(output, "\t" + data + " =l loadl " + data_slot)
+								qbe_output_line(output, "\t" + offset + " =l sub " + address + ", " + data)
+								qbe_output_line(output, "\t" + retained_position + " =l shr " + offset + ", 3")
 							end
-							# The checked address and current data share the same ABI
-							# allocation here. Retain only the logical slot across RHS.
-							data_slot := gate4_emit_address(context, output, owner, 24)
-							data := gate4_emit_temporary(context)
-							offset := gate4_emit_temporary(context)
-							retained_position = gate4_emit_temporary(context)
-							qbe_output_line(output, "\t" + data + " =l loadl " + data_slot)
-							qbe_output_line(output, "\t" + offset + " =l sub " + address + ", " + data)
-							qbe_output_line(output, "\t" + retained_position + " =l shr " + offset + ", 3")
 						end
 						value = Gate4EmittedValue.new(
 							operand: operand,
@@ -2242,9 +2255,16 @@ def emit_checked_assignment_store(
 			gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, origin), "invalid checked Array assignment target")
 			return
 		end
-		output.runtime_flags[3] = 1
-		address = gate4_emit_temporary(context)
-		qbe_output_line(output, "\t" + address + " =l call $g4_array_address(l " + left.owner + ", l " + left.slot + ")")
+		assignment_plan := checked_array_assignment_plan(state, index_origin)
+		if assignment_plan < 0
+			gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, origin), "invalid checked Array assignment region")
+			return
+		end
+		if assignment_plan == 0
+			output.runtime_flags[3] = 1
+			address = gate4_emit_temporary(context)
+			qbe_output_line(output, "\t" + address + " =l call $g4_array_address(l " + left.owner + ", l " + left.slot + ")")
+		end
 	end
 	gate4_emit_typed_store(output, left.type_name, operand, address)
 end

@@ -454,7 +454,7 @@ describe("Gate 4 TypeRB frontend") do
 		expect(state.scalar_mir.facts[0] >= 0).to_be_true()
 		expect(state.scalar_mir.facts[1]).to_equal(- 1)
 		qbe := gate4_output_source(gate4_emit_qbe(state))
-		expect(gate4_occurrence_count(qbe, " =w cultl ")).to_equal(3)
+		expect(gate4_occurrence_count(qbe, " =w cultl ")).to_equal(2)
 	end
 
 	test("leaves local Array aliases outside the parameter-header proof") do
@@ -466,7 +466,7 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_check(state)).to_be_true()
 		expect(state.scalar_mir.facts).to_equal([- 1, - 1])
 		qbe := gate4_output_source(gate4_emit_qbe(state))
-		expect(gate4_occurrence_count(qbe, " =w cultl ")).to_equal(3)
+		expect(gate4_occurrence_count(qbe, " =w cultl ")).to_equal(2)
 	end
 
 	test("blocks stable Array-header plans across allocating primitives") do
@@ -1666,8 +1666,8 @@ describe("Gate 4 TypeRB frontend") do
 		expect(qbe.include?("call $g4_integer_add")).to_be_false()
 		expect(qbe.include?("call $g4_integer_mul")).to_be_false()
 		expect(qbe.include?("call $g4_integer_divide")).to_be_false()
-		# The final assignment store independently checks current storage.
-		expect(gate4_occurrence_count(qbe, "call $g4_array_address")).to_equal(1)
+		# The verified scalar call cannot invalidate the initially checked address.
+		expect(gate4_occurrence_count(qbe, "call $g4_array_address")).to_equal(0)
 	end
 
 	test("routes dynamic Integer multiplication through the bounded checked entry") do
@@ -1748,10 +1748,10 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_true()
 		qbe := gate4_output_source(gate4_emit_qbe(state))
-		# Initial accesses use the loop budget; the final store remains checked.
-		expect(gate4_occurrence_count(qbe, "call $g4_array_address")).to_equal(1)
-		expect(gate4_occurrence_count(qbe, "function l $g4_array_address")).to_equal(1)
-		expect(gate4_occurrence_count(qbe, "call $g4_fail(l $g4_bounds_error")).to_equal(3)
+		# Initial accesses retain their checks; the effect-free store reuses its address.
+		expect(gate4_occurrence_count(qbe, "call $g4_array_address")).to_equal(0)
+		expect(gate4_occurrence_count(qbe, "function l $g4_array_address")).to_equal(0)
+		expect(gate4_occurrence_count(qbe, "call $g4_fail(l $g4_bounds_error")).to_equal(2)
 	end
 
 	test("omits negative Array-index normalization only for proven induction locals") do
@@ -1763,7 +1763,7 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_check(proven)).to_be_true()
 		proven_qbe := gate4_output_source(gate4_emit_qbe(proven))
 		expect(gate4_occurrence_count(proven_qbe, " =l sar ")).to_equal(0)
-		expect(gate4_occurrence_count(proven_qbe, " =w cultl ")).to_equal(3)
+		expect(gate4_occurrence_count(proven_qbe, " =w cultl ")).to_equal(2)
 
 		direct_derived_source := "def main()\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < 1\n\t\tvalue := values[index + 1]\n\t\tindex += 1\n\tend\n\treturn\nend\n"
 		mut direct_derived := gate4_compiler_new(direct_derived_source.size() + 1)
