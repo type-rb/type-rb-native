@@ -592,3 +592,71 @@ The amd64 compiler is 277,440 bytes within its unchanged 310,000-byte bound.
 No special confirmation or threshold revision was used. The amd64 adjacent
 self-hosting-generation comparison is not an incremental application timing
 comparison against the previous carrier slice.
+
+## Named MIR instruction carrier self-use
+
+[Issue #365](https://github.com/type-rb/type-rb-native/issues/365) registers the
+eight-field instruction-carrier slice against
+`4c448befd5c85950ab0369aa502c39b67ffd0fbc`.
+`Gate4MirInstruction` names kind, result, two operands, opcode-specific payload,
+failure target and source origin. The module table and function-local buffer
+share this carrier. Construction, literal relocation, verified optimizer
+rewrites, verifier and adapter readers move together. One payload-copy helper
+preserves the remaining fields, and retained instruction snapshots survive
+repeated optimization. Array-region rows and optimization admission are unchanged.
+
+The 17-case malformed-instruction characterization passes before and after
+migration with identical diagnostics. All 34 focused MIR tests pass, including
+snapshot preservation and repeated optimizer application. Instruction length is
+established by the record type; structural ranges and opcode, type, operand
+availability, payload, origin and failure-target checks remain required.
+
+The [local correctness record](mir-instruction-carrier-correctness.json)
+retains source/compiler identities, all 426 ordinary check/repeated-QBE
+observations, and the Native-compiled malformed function/block/instruction
+harness. Fresh published-seed core/CLI fixed points, full CLI/project/REPL/
+terminal checks, the language inventory and both project checks pass.
+The initial sandbox seed download failed at DNS before compilation. A language
+inventory invocation without the fixed QBE setting was cancelled because the
+launcher repeatedly attempted external-tool downloads; the built CLI with the
+fixed QBE passed. These setup observations are distinct from compiler behavior.
+
+Spectral-norm at input 100 and n-body at input 1000 retain identical QBE,
+executables and output against the accepted same-feature control. The local
+Darwin compiler is 349,272 bytes versus 349,256, with code text decreasing from
+258,664 to 256,544 bytes. The CLI decreases from 499,144 to 482,632 bytes.
+These are compiler results, not a new application timing measurement. Existing
+cumulative n-body alarms and deferred PR #307 remain unresolved. No Pure Go
+parity, runtime speedup, seed/compatibility change or benchmark/Pages value
+update is inferred.
+
+Complete local recovery/QBE-enabled suites pass root 102/102 and compiler
+142/142. The owned recovery workspace was removed after both suites terminated.
+Their durations remain correctness-execution records, separate from hosted
+self-build cost comparisons.
+
+[PR #366](https://github.com/type-rb/type-rb-native/pull/366) accepts source
+`f3e8844d38e51575763560f76b907724d4e955f1` as merge
+`8065494a2d1a03d55642d0891dc15a703f36e957`.
+[CI run 34318902941](https://github.com/type-rb/type-rb-native/actions/runs/34318902941)
+passes all 17 selected authorities on its first attempt. The
+[hosted acceptance record](mir-instruction-hosted-acceptance.json) retains
+artifact identities, raw measurements, environments, policy and checks,
+including all 88 amd64 warm/retained rows with successful process and observer
+statuses. Public CI merge-ref tree identity is verified against the candidate.
+
+| Ordinary compiler metric | Darwin arm64 | Linux arm64 |
+| --- | ---: | ---: |
+| Executable bytes | 349,272 | 323,240 |
+| Code text bytes | 256,544 | 259,152 |
+| Self-build elapsed ratio | 0.984043 | 1.003663 |
+| Self-build peak RSS ratio | 1.000993 | 1.000317 |
+
+Combined compiler size decreases from 674,608 to 672,512 bytes within the
+unchanged 694,000-byte bound. Compiler QBE decreases from 1,148,167 to
+1,144,662 bytes, with target-neutral SHA-256
+`5eab5995b8a87fca95e8785e1e1c2da78e4d1288d76ac2793183a8edbdaa444d`.
+The amd64 compiler is 274,624 bytes within its unchanged 310,000-byte bound.
+No special confirmation or threshold revision was used. The amd64 adjacent
+self-hosting-generation comparison is not an incremental application timing
+comparison against the previous carrier slice.
