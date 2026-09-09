@@ -32,6 +32,12 @@ def mir_loop_transfer_valid(plan: MirLoopTransfer, origin: Integer, kind: Intege
 	return origin < token_count
 end
 
+record Gate4MirArrayOperation
+	kind: Integer
+	operand: Integer
+	origin: Integer
+end
+
 record Gate4MirInstruction
 	kind: Integer
 	result: Integer
@@ -109,7 +115,7 @@ record Gate4MirModule
 	values: Array<Gate4MirValue>
 	instructions: Array<Gate4MirInstruction>
 	arguments: Array<Integer>
-	array_regions: Array<Array<Integer>>
+	array_regions: Array<Array<Gate4MirArrayOperation>>
 	facts: Array<Integer>
 	literal_texts: Array<String>
 end
@@ -532,28 +538,26 @@ def gate4_mir_induction_address(
 	return true
 end
 
-# A raw parameter-header region uses three-cell operations:
+# A raw parameter-header region uses named operations:
 # 1 parameter (type, origin): type 0 scalar, 1 immutable Array, 2 mutable
-# Array. Parameters are an ordered prefix; their row position is their ordinal.
+# Array. Parameters are an ordered prefix; their operation position is their ordinal.
 # Parameter origins are declaration-table indexes; other origins are tokens.
 # 4 parameter Array access (ordinal, origin);
 # 6 opaque effect/control (0, origin).
 # The result is a parameter ordinal, -1 for no reusable header, or -2 for
 # malformed MIR. Parameters dominate every use and never leave lexical scope;
 # this proof owns neither local aliases nor removal of any access check.
-def gate4_mir_array_header(operations: Array<Integer>): Integer
-	if operations.size() % 3 != 0
-		return - 2
-	end
+def gate4_mir_array_header(operations: Array<Gate4MirArrayOperation>): Integer
 	mut parameter_count := 0
 	mut parameter_origin :=- 1
 	mut selected :=- 1
 	mut blocked := false
 	mut index := 0
 	while index < operations.size()
-		kind := operations[index]
-		slot := operations[index + 1]
-		origin := operations[index + 2]
+		operation := operations[index]
+		kind := operation.kind
+		slot := operation.operand
+		origin := operation.origin
 		if origin < 0
 			return - 2
 		end
@@ -561,7 +565,7 @@ def gate4_mir_array_header(operations: Array<Integer>): Integer
 			return - 2
 		end
 		if kind == 1
-			if index != parameter_count * 3
+			if index != parameter_count
 				return - 2
 			end
 			if slot > 2
@@ -577,7 +581,7 @@ def gate4_mir_array_header(operations: Array<Integer>): Integer
 				if slot >= parameter_count
 					return - 2
 				end
-				binding_type := operations[slot * 3 + 1]
+				binding_type := operations[slot].operand
 				if binding_type == 0
 					return - 2
 				end
@@ -596,7 +600,7 @@ def gate4_mir_array_header(operations: Array<Integer>): Integer
 				blocked = true
 			end
 		end
-		index += 3
+		index += 1
 	end
 	if blocked
 		return - 1

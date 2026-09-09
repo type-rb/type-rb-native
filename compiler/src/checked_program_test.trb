@@ -1,5 +1,6 @@
-import { Gate4MirBlock } from mir
-import { checked_binary_plan_type, gate4_checked_mir_value, gate4_checked_value, gate4_mir_block, gate4_mir_checked_value, gate4_scalar_mir_type } from checked_program
+import { gate4_locals_new } from state
+import { Gate4MirArrayOperation, Gate4MirBlock } from mir
+import { checked_binary_plan_type, gate4_array_region_operation, gate4_checked_mir_value, gate4_checked_value, gate4_mir_block, gate4_mir_checked_value, gate4_scalar_mir_type } from checked_program
 import { describe, expect, test } from trb/std/test
 
 describe("Checked program and MIR construction") do
@@ -53,5 +54,28 @@ describe("Checked program and MIR construction") do
 			expect(gate4_scalar_mir_type(names[index])).to_equal(types[index])
 			index += 1
 		end
+	end
+end
+
+describe("Checked Array region construction") do
+	test("retains ordered operations and sticky opaque barriers") do
+		mut locals := gate4_locals_new(32)
+		gate4_array_region_operation(locals, 1, 1, 10)
+		gate4_array_region_operation(locals, 1, 2, 11)
+		gate4_array_region_operation(locals, 4, 0, 12)
+		expect(locals.mir_array).to_equal([Gate4MirArrayOperation.new(kind: 1, operand: 1, origin: 10), Gate4MirArrayOperation.new(kind: 1, operand: 2, origin: 11), Gate4MirArrayOperation.new(kind: 4, operand: 0, origin: 12)])
+		gate4_array_region_operation(locals, 6, 0, 13)
+		gate4_array_region_operation(locals, 4, 0, 14)
+		expect(locals.mir_array).to_equal([Gate4MirArrayOperation.new(kind: 6, operand: 1, origin: 13), Gate4MirArrayOperation.new(kind: 1, operand: 2, origin: 11), Gate4MirArrayOperation.new(kind: 4, operand: 0, origin: 12)])
+		gate4_array_region_operation(locals, 6, 0, 15)
+		expect(locals.mir_array).to_equal([Gate4MirArrayOperation.new(kind: 6, operand: 1, origin: 15), Gate4MirArrayOperation.new(kind: 1, operand: 2, origin: 11), Gate4MirArrayOperation.new(kind: 4, operand: 0, origin: 12)])
+	end
+
+	test("keeps an initial opaque effect without later parameters or accesses") do
+		mut locals := gate4_locals_new(32)
+		gate4_array_region_operation(locals, 6, 0, 3)
+		gate4_array_region_operation(locals, 1, 1, 4)
+		gate4_array_region_operation(locals, 4, 0, 5)
+		expect(locals.mir_array).to_equal([Gate4MirArrayOperation.new(kind: 6, operand: 0, origin: 3)])
 	end
 end
