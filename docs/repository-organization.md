@@ -252,3 +252,11 @@ only the corresponding operand tuples. Mutable bindings use the same path,
 with Array rebinding recorded as a conservative barrier by the checker. The
 previous single-header representation has been removed. Broader control-flow
 migration remains a separate measured slice.
+
+The conditional Array-region slice in
+[issue #384](https://github.com/type-rb/type-rb-native/issues/384) extracts
+conditional statement checking from the large block checker into one helper
+inside `checked_program.trb`. It owns condition checks, arm-local scope
+restoration and checked MIR control markers. The block checker delegates the
+statement while retaining loop dispatch. No second semantic owner, new module
+boundary or source-flattening exception is introduced.

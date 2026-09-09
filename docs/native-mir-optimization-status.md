@@ -9,6 +9,13 @@ verification remain part of each feature, not deferred cleanup. See the
 deferral/re-entry conditions for unaccepted Array-loop PR #307. The accepted
 ownership and historical measurements below remain unchanged.
 
+The [stable Array-header projection](native-mir-local-array-headers.md) now
+verifies harmless conditional structure, with conditional checking extracted
+from the block checker. Parameter and outer-local headers can survive checked
+branches; opaque effects and branch-local escaping bindings remain barriers.
+This advances basic control representation without a full CFG or new bounds
+proof. Published benchmark tables remain tied to their recorded revision.
+
 ## Scalar Integer region checkpoint
 
 [Verified scalar range guards](native-mir-scalar-guards.md) move the proof for

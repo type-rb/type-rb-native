@@ -491,9 +491,31 @@ describe("Gate 4 TypeRB frontend") do
 		end
 	end
 
+	test("retains stable Array headers through checked conditional structure") do
+		sources := ["def update(mut input: Array<Float>, mut output: Array<Float>)\n\tvalues := input\n\tmut index := 0\n\twhile index < input.size()\n\t\tif index == 0\n\t\t\tif values.size() > 0\n\t\t\t\toutput[index] = values[index]\n\t\t\tend\n\t\telsif index == 1\n\t\t\toutput[index] = input[index]\n\t\telse\n\t\t\toutput[index] = values[index]\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n\ndef main()\n\treturn\nend\n", "def update(mut input: Array<Float>, mut output: Array<Float>)\n\tif input.size() == 0\n\t\treturn\n\tend\n\toutput[0] = input[0]\n\treturn\nend\n\ndef main()\n\treturn\nend\n"]
+		mut index := 0
+		while index < sources.size()
+			source := sources[index]
+			mut state := gate4_compiler_new(source.size() + 1)
+			expect(gate4_lex(state, source)).to_be_true()
+			expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+			expect(gate4_resolve(state)).to_be_true()
+			expect(gate4_check(state)).to_be_true()
+			expect(state.scalar_mir.array_headers[0].size() > 0).to_be_true()
+			expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("")
+			gate4_emit_qbe(state)
+			expect(gate4_has_diagnostic(state)).to_be_false()
+			index += 1
+		end
+	end
+
 	test("blocks every stable Array header on local or parameter rebinding") do
 		bodies := [
 			"mut values := input\n\tvalues = output\n\tinput[0] = values[0]",
+			"if input.size() > 0\n\t\tinput.push(2.0)\n\tend\n\toutput[0] = input[0]",
+			"if input.size() > 0\n\t\tinput = output\n\tend\n\toutput[0] = input[0]",
+			"if input.size() > 0\n\t\tunused: Array<Float> := []\n\tend\n\toutput[0] = input[0]",
+
 			"input[0] = output[0]\n\tinput = output\n\tinput[0] = 8.0",
 			"input = output\n\tinput[0] = output[0]",
 			"mut values := input\n\tinput[0] = values[0]\n\tvalues = output\n\tinput[0] = values[- 1]",

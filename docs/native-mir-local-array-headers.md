@@ -27,8 +27,8 @@ negative indices, empty Arrays and Arrays of different lengths. Selecting two
 bindings does not assert that their Arrays are disjoint or equally sized.
 
 Any Array binding reassignment disables all stable headers in the function.
-Unknown calls, allocation, Array growth, conditional control, loop transfers
-and escaping local scopes retain their conservative barriers. A readonly alias
+Unknown calls, allocation, Array growth, loop transfers and escaping local
+scopes retain their conservative barriers. A readonly alias
 alone cannot establish header stability when another alias can grow the Array.
 The same established nonallocating scalar-call and square-root facts remain
 available; nested argument effects still block the proof. Complete control-flow
@@ -40,3 +40,21 @@ initial immutable-local slice. [Issue #380](https://github.com/type-rb/type-rb-n
 records the bounded multiple-binding extension. Local comparison evidence is
 distinct from published Linux runtime tables and does not establish a new Pure
 Go result.
+
+Checked `if`, `elsif`, `else` and joins now retain parameter and outer-local
+headers when the complete function preserves their identities. The existing
+Array-region operation family records each marker's token origin and entry
+local count. MIR validates nesting, arm order, matching scope-exit counts and
+origins, increasing marker origins and balanced joins before selecting headers.
+Malformed control rejects the region, including an arm after `else`, a missing
+scope restoration or an unmatched join. A real opaque effect still collapses
+the projection to its canonical barrier; it supplies no header facts.
+
+Conditional statement checking has a dedicated helper in the checked-program
+owner. Scalar branch/range facts remain conservative, and the backend receives
+only the existing verified header list. This is a bounded control projection,
+not general control-flow MIR or branch-sensitive effect analysis. Conditional
+allocation or rebinding still blocks the entire function, and an accessed
+branch-local Array that leaves scope remains ineligible.
+[Issue #384](https://github.com/type-rb/type-rb-native/issues/384) records this
+structural and checker-organization extension and its verification evidence.
