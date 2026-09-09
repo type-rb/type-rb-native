@@ -15,9 +15,12 @@ ownership and historical measurements below remain unchanged.
 several checked Integer operations into one bounded MIR region. A single
 runtime guard selects the proved path; other inputs retain checked semantics.
 The complete current Linux arm64 cohort puts Native ahead of Pure Go for
-spectral-norm. Other kernels remain slower, and their cumulative regressions
-are retained in the accepted checkpoint. This does not broaden MIR admission
-or establish general performance parity.
+spectral-norm. That published cohort retains the large assignment regressions
+measured before PR #376. Current accepted main has since recovered both n-body
+and fannkuch against the exact former published baseline while retaining the
+spectral gain; see [numeric regression recovery](native-numeric-regression-recovery.md).
+The historical Pages seconds remain tied to their original revision. This does
+not broaden MIR admission or establish general performance parity.
 
 ## Current ownership checkpoint
 
