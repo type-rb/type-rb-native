@@ -660,3 +660,66 @@ The amd64 compiler is 274,624 bytes within its unchanged 310,000-byte bound.
 No special confirmation or threshold revision was used. The amd64 adjacent
 self-hosting-generation comparison is not an incremental application timing
 comparison against the previous carrier slice.
+
+## Named MIR Array-operation carrier self-use
+
+[Issue #368](https://github.com/type-rb/type-rb-native/issues/368) registers
+this slice against `2d7719681bb63067323da64fee7663636c28b81c`.
+`Gate4MirArrayOperation` names kind, operand and source origin. Function-local
+buffers and module regions now contain these records, and parameter ordinals
+refer to operation positions without decoding three-cell offsets. Construction
+preserves sticky opaque effects and final single-effect publication. The MIR
+verifier retains parameter-prefix ordering, operand/origin checks, scalar and
+mutable-Array exclusions, opaque barriers and forged-fact rejection. Partial
+triples become unrepresentable; no new proof or optimization admission is added.
+
+All 12 pre-migration characterization/verifier tests and 36 focused MIR tests
+after migration pass. The
+[local correctness record](mir-array-operation-carrier-correctness.json)
+retains source/compiler identities, all 426 ordinary check/repeated-QBE
+observations, and an ordinary Native-compiled malformed-MIR harness derived
+from the maintained rejection tests. The temporary harness conversion initially
+missed a multiline assertion; the checker correctly rejected an unresolved test
+helper. Correcting that observer conversion passed without changing compiler
+source or expected diagnostics. The initial setup failure is retained separately.
+
+Both project checks, formatting, fresh published-seed core/CLI fixed points,
+full CLI/project/REPL/terminal checks and the language inventory pass.
+Spectral-norm at input 100 and n-body at input 1000 retain identical QBE,
+executables and outputs against the accepted same-feature control. The local
+Darwin core/CLI sizes stay 349,272 / 482,632 bytes; compiler code text changes
+from 256,544 to 256,560 bytes. These are compiler observations, not new
+application timings. Earlier cumulative n-body alarms and deferred PR #307
+remain unresolved. No Pure Go parity, runtime speedup, seed/compatibility
+change or benchmark/Pages value update is inferred.
+
+Complete local recovery/QBE-enabled suites pass root 102/102 and compiler
+144/144. The owned recovery workspace was removed after both suites terminated.
+Their durations are retained as correctness-execution records, separately from
+the hosted self-build cost comparison.
+
+[PR #369](https://github.com/type-rb/type-rb-native/pull/369) accepts source
+`a3d78ebc446ba94235f63a7946d19c76382e9abd` as merge
+`7485da47fa66fd9b767d02ee88315aa4c9543a73`.
+[CI run 34322428715](https://github.com/type-rb/type-rb-native/actions/runs/34322428715)
+passes all 17 selected authorities on its first attempt. The
+[hosted acceptance record](mir-array-operation-hosted-acceptance.json) retains
+artifact identities, raw measurements, environments, policy and checks,
+including all 88 amd64 warm/retained rows with successful process and observer
+statuses. The public CI merge-ref tree is verified against the candidate.
+
+| Ordinary compiler metric | Darwin arm64 | Linux arm64 |
+| --- | ---: | ---: |
+| Executable bytes | 349,272 | 323,280 |
+| Code text bytes | 256,560 | 259,168 |
+| Self-build elapsed ratio | 0.995360 | 1.003745 |
+| Self-build peak RSS ratio | 0.999008 | 0.999683 |
+
+Combined compiler size changes from 672,512 to 672,552 bytes within the
+unchanged 694,000-byte bound. Compiler QBE changes from 1,144,662 to
+1,144,617 bytes, with target-neutral SHA-256
+`51377f43ef8c326a808c8fe4e628c6f50387d6ef98d4bf7f71eef4a8195b5e17`.
+The amd64 compiler is 274,488 bytes within its unchanged 310,000-byte bound.
+No special confirmation or threshold revision was used. The amd64 adjacent
+self-hosting-generation comparison is not an incremental application timing
+comparison against the previous carrier slice.
