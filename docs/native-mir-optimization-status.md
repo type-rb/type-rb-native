@@ -30,8 +30,18 @@ replace whole readonly records through one payload-copy helper. Readers use
 named fields; instruction length is fixed by its type. Opcode, type, operand
 availability, payload, origin and failure-target validation remain required.
 [Issue #365](https://github.com/type-rb/type-rb-native/issues/365) records this
-instruction-carrier slice. Array-region rows and optimization admission remain
-unchanged.
+instruction-carrier slice. Optimization admission remains unchanged.
+
+Array-region operations now use `Gate4MirArrayOperation` records with kind,
+operand and source origin in both the local buffer and published regions.
+Parameter positions are operation ordinals; the verifier no longer decodes
+three-cell offsets. Parameter-prefix ordering, operand/origin checks, mutable
+and scalar exclusions, opaque barriers and forged-fact rejection remain.
+Construction preserves sticky opaque effects and publishes the same final
+single-effect region. Partial triples are excluded by the type. This is the
+bounded carrier slice in
+[issue #368](https://github.com/type-rb/type-rb-native/issues/368), with no new
+header proof, access-check removal or optimization admission.
 
 Structural validation precedes value-definition counting and cross-block
 lookups. Function and block ranges must be valid
