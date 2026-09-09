@@ -418,10 +418,12 @@ Public evidence:
 - [current complete formal runtime result](../results/2026-09-09-benchmarksgame-runtime-scalar-range-guards-linux-arm64/README.md)
 - [current complete formal build result](../results/2026-09-09-benchmarksgame-build-scalar-range-guards-linux-arm64/README.md)
 
-## Immutable local Array headers
+## Stable Array binding headers
 
 The [local binding slice](native-mir-local-array-headers.md) extends the existing
-verified header region with declaration identity and scope exits. It preserves
-all bounds checks and conservative effect barriers, with one shared backend
-installation helper. Its local measurements remain separate from the current
-published runtime snapshot.
+verified header region with declaration identity and scope exits. Its bounded
+follow-on selects multiple stable parameter/local bindings, including mutable
+bindings in regions without Array reassignment. The complete declaration list
+is derived and verified in MIR; one shared backend installation helper consumes
+it. All bounds checks and conservative effect barriers remain. Local evidence
+is separate from the current published runtime snapshot.

@@ -169,3 +169,10 @@ bindings, nested loops, empty Arrays, element aliasing, opaque growth and lexica
 slot reuse. `runtime-invalid/local-array-header-bounds.trb` retains negative-index
 failure after a local header is selected. Both also run through ordinary CLI
 compilation and the independent REPL evaluator.
+
+`valid/stable-array-bindings.trb` covers two mutable parameter/local bindings,
+element writes through identical aliases, parameter/local rebinding, growth and
+empty inputs. `runtime-invalid/stable-array-bindings-bounds.trb` uses unequal
+lengths to require the indexed Array's own check. Both also run through ordinary
+CLI compilation and the independent REPL evaluator. MIR tests reject missing,
+duplicate, reordered and foreign entries in the complete stable-header list.

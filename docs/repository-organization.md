@@ -244,9 +244,11 @@ ownership need separately bounded changes with recovery and cost checks.
 
 ## Local Array-header installation
 
-The immutable-local header slice extends the existing checked region rather
-than adding a second fact store. Parameter and local lowering share
-`gate4_install_stable_array_header`; the declaration/effect/scope proof remains
-in MIR. This removes duplicate installation code while preserving the existing
-single-header adapter boundary. Multiple-header storage and broader control-flow
-migration remain separate measured slices.
+The header slice extends the existing checked region rather than adding a
+second fact store. MIR owns the complete unique list of accessed stable
+parameter/local declarations and rejects missing or forged entries. Parameter
+and local lowering share `gate4_install_stable_array_header`; the adapter stores
+only the corresponding operand tuples. Mutable bindings use the same path,
+with Array rebinding recorded as a conservative barrier by the checker. The
+previous single-header representation has been removed. Broader control-flow
+migration remains a separate measured slice.
