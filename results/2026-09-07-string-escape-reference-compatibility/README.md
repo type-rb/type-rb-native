@@ -527,3 +527,68 @@ its target-neutral SHA-256 is
 The amd64 compiler is 279,976 bytes within its unchanged 310,000-byte bound.
 No special confirmation, threshold revision or historical failure relabeling
 was used. The generated applications remain unchanged as recorded above.
+
+## Named MIR block carrier self-use
+
+[Issue #362](https://github.com/type-rb/type-rb-native/issues/362) registers the
+block-carrier slice against `2360a9462199a612e916f67d6e38df17ad2ee9bd`.
+`Gate4MirBlock` names the sixteen fields for identity, origin, parameter and
+instruction ranges, terminator, condition, both successor/argument ranges, and
+return value. The shared constructor retains its calling boundary; verifier,
+passes and adapter readers use named fields. Strict recovery imports move with
+the constructor. Other row families and optimization admission are unchanged.
+
+Malformed block lengths are unrepresentable through the record type. Range
+checks still precede traversal, and the origin, identity, successor, argument,
+jump/branch/trap/return and value-definition checks remain required. Negative
+fixtures replace a whole readonly record. The two new characterization tests
+pass before and after migration; all 22 focused MIR/construction tests pass.
+The first characterization incorrectly expected a duplicate-ID error after
+renaming a referenced block had removed its target. The baseline correctly
+reported the missing target first; the corrected duplicate case adds a trap
+block without duplicating value definitions or removing a target. This was a
+test expectation correction, not a change to diagnostic precedence.
+
+The [local correctness record](mir-block-carrier-correctness.json) binds the
+source and compiler identities, all 426 ordinary check/repeated-QBE observations,
+and the ordinary Native-compiled malformed-MIR harness. Fresh published-seed
+core/CLI fixed points, the language registry and full CLI/REPL/terminal checks
+pass. Spectral-norm at input 100 and n-body at input 1000 retain identical QBE,
+executables and outputs against the accepted same-feature control.
+
+The local Darwin compiler and CLI remain 349,256 and 499,144 bytes. Compiler
+code text shrinks from 260,512 to 258,664 bytes. These are compiler results;
+there is no application speedup or new cumulative timing claim. Earlier
+cumulative n-body alarms, deferred PR #307 and historical diagnostic outcomes
+remain unchanged. No benchmark/Pages values or compatibility/seed pins change.
+
+Complete local recovery/QBE-enabled suites pass root 102/102 and compiler
+141/141. The owned recovery workspace was removed through its receipt after
+both suites terminated. These correctness-suite durations are retained as
+execution records, not substituted for the hosted self-build cost comparison.
+
+[PR #363](https://github.com/type-rb/type-rb-native/pull/363) accepts source
+`06f536a27198ab2cd85a98bdf060376ff4451862` as merge
+`b2946fd0224957b994f6b199e2a996851c5ae5ae`.
+[CI run 34314865533](https://github.com/type-rb/type-rb-native/actions/runs/34314865533)
+passes all 17 selected authorities on its first attempt. The
+[hosted acceptance record](mir-block-hosted-acceptance.json) retains artifact
+identities, raw measurements, environments, comparison policy and checks,
+including all 88 amd64 warm/retained rows with successful observer and process
+statuses.
+
+| Ordinary compiler metric | Darwin arm64 | Linux arm64 |
+| --- | ---: | ---: |
+| Executable bytes | 349,256 | 325,352 |
+| Code text bytes | 258,664 | 261,232 |
+| Self-build elapsed ratio | 1.005917 | 1.000000 |
+| Self-build peak RSS ratio | 1.000397 | 0.999207 |
+
+Combined compiler size decreases from 676,520 to 674,608 bytes within the
+unchanged 694,000-byte bound. Compiler QBE decreases from 1,151,406 to
+1,148,167 bytes, with target-neutral SHA-256
+`f85615a563f30ae8b1866c0b48ba5eefa827f10ce1c8662b00a5c64fc0771241`.
+The amd64 compiler is 277,440 bytes within its unchanged 310,000-byte bound.
+No special confirmation or threshold revision was used. The amd64 adjacent
+self-hosting-generation comparison is not an incremental application timing
+comparison against the previous carrier slice.
