@@ -539,15 +539,14 @@ def gate4_mir_induction_address(
 	return true
 end
 
-# A raw parameter-header region uses named operations:
-# 1 parameter (type, origin): type 0 scalar, 1 immutable Array, 2 mutable
-# Array. Parameters are an ordered prefix; their operation position is their ordinal.
-# Parameter origins are declaration-table indexes; other origins are tokens.
-# 4 parameter Array access (ordinal, origin);
-# 6 opaque effect/control (0, origin).
-# The result is a parameter ordinal, -1 for no reusable header, or -2 for
-# malformed MIR. Parameters dominate every use and never leave lexical scope;
-# this proof owns neither local aliases nor removal of any access check.
+# Header regions retain parameter declarations (kind 1: type 0 scalar,
+# 1 immutable Array, 2 mutable Array), immutable local Array declarations
+# (2: local ordinal), scope exits (3: restored local count), parameter accesses
+# (4: ordinal), local accesses (5: ordinal), and opaque barriers (6: zero).
+# Parameter origins use declaration indexes; other operations use token origins.
+# The result is the selected declaration's operation index, -1 for no proof,
+# or -2 for malformed MIR. A local's header is loaded at its declaration,
+# never before its initializer. Every element access still checks bounds.
 def gate4_mir_array_header(operations: Array<Gate4MirArrayOperation>): Integer
 	mut parameter_count := 0
 	mut parameter_origin :=- 1
@@ -577,29 +576,70 @@ def gate4_mir_array_header(operations: Array<Gate4MirArrayOperation>): Integer
 			end
 			parameter_origin = origin
 			parameter_count += 1
-		else
-			if kind == 4
-				if slot >= parameter_count
-					return - 2
-				end
-				binding_type := operations[slot].operand
-				if binding_type == 0
-					return - 2
-				end
-				if binding_type == 1
-					if selected == - 1
-						selected = slot
+		elsif kind == 2
+			if slot < parameter_count
+				return - 2
+			end
+		elsif kind == 3
+			if slot < parameter_count
+				return - 2
+			end
+			if selected >= 0
+				binding := operations[selected]
+				if binding.kind == 2
+					if binding.operand >= slot
+						blocked = true
 					end
 				end
-			else
-				if kind != 6
-					return - 2
-				end
-				if slot != 0
-					return - 2
-				end
-				blocked = true
 			end
+		elsif kind == 4
+			if slot >= parameter_count
+				return - 2
+			end
+			binding_type := operations[slot].operand
+			if binding_type == 0
+				return - 2
+			end
+			if binding_type == 1
+				if selected == - 1
+					selected = slot
+				end
+			end
+		elsif kind == 5
+			mut declaration := index - 1
+			mut found := false
+			while declaration >= parameter_count
+				binding := operations[declaration]
+				if binding.kind == 3
+					if slot >= binding.operand
+						return - 2
+					end
+				end
+				if binding.kind == 2
+					if binding.operand == slot
+						if binding.origin >= origin
+							return - 2
+						end
+						if selected == - 1
+							selected = declaration
+						end
+						found = true
+						break
+					end
+				end
+				declaration -= 1
+			end
+			if !found
+				return - 2
+			end
+		else
+			if kind != 6
+				return - 2
+			end
+			if slot != 0
+				return - 2
+			end
+			blocked = true
 		end
 		index += 1
 	end

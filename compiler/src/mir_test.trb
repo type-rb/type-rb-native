@@ -140,6 +140,49 @@ describe("Native MIR model and verifier") do
 		expect(gate4_verify_mir(native_module, true)).to_equal("")
 	end
 
+	test("verifies immutable local header declarations and preserves outer scope identity") do
+		mut native_module := gate4_mir_test_module(false, false)
+		mut region := [Gate4MirArrayOperation.new(kind: 1, operand: 0, origin: 10), Gate4MirArrayOperation.new(kind: 2, operand: 2, origin: 20), Gate4MirArrayOperation.new(kind: 5, operand: 2, origin: 25), Gate4MirArrayOperation.new(kind: 3, operand: 3, origin: 30), Gate4MirArrayOperation.new(kind: 5, operand: 2, origin: 35)]
+		native_module.array_regions.push(region)
+		expect(gate4_verify_mir(native_module, false)).to_equal("")
+		gate4_optimize_verified_mir(native_module)
+		expect(native_module.facts).to_equal([1])
+		expect(gate4_verify_mir(native_module, true)).to_equal("")
+		region[1] = Gate4MirArrayOperation.new(kind: 2, operand: 3, origin: 20)
+		expect(gate4_verify_mir(native_module, true)).to_equal("MIR Array region is invalid")
+	end
+
+	test("rejects local header access before declaration and after scope exit") do
+		declaration := Gate4MirArrayOperation.new(kind: 2, operand: 2, origin: 20)
+		access := Gate4MirArrayOperation.new(kind: 5, operand: 2, origin: 25)
+		exit_scope := Gate4MirArrayOperation.new(kind: 3, operand: 2, origin: 24)
+		regions := [[access, declaration], [declaration, exit_scope, access], [declaration, Gate4MirArrayOperation.new(kind: 5, operand: 2, origin: 20)], [Gate4MirArrayOperation.new(kind: 1, operand: 1, origin: 10), Gate4MirArrayOperation.new(kind: 2, operand: 0, origin: 20)]]
+		mut index := 0
+		while index < regions.size()
+			mut native_module := gate4_mir_test_module(false, false)
+			native_module.array_regions.push(regions[index])
+			expect(gate4_verify_mir(native_module, false)).to_equal("MIR Array region is invalid")
+			index += 1
+		end
+	end
+
+	test("does not retain local header facts across effects or recycled lexical slots") do
+		declaration := Gate4MirArrayOperation.new(kind: 2, operand: 2, origin: 20)
+		access := Gate4MirArrayOperation.new(kind: 5, operand: 2, origin: 25)
+		barriers := [Gate4MirArrayOperation.new(kind: 6, operand: 0, origin: 30), Gate4MirArrayOperation.new(kind: 3, operand: 2, origin: 30)]
+		mut index := 0
+		while index < barriers.size()
+			mut native_module := gate4_mir_test_module(false, false)
+			native_module.array_regions.push([declaration, access, barriers[index], Gate4MirArrayOperation.new(kind: 2, operand: 2, origin: 40), Gate4MirArrayOperation.new(kind: 5, operand: 2, origin: 45)])
+			expect(gate4_verify_mir(native_module, false)).to_equal("")
+			gate4_optimize_verified_mir(native_module)
+			expect(native_module.facts).to_equal([- 1])
+			native_module.facts[0] = 0
+			expect(gate4_verify_mir(native_module, true)).to_equal("MIR optimized Array-header fact is invalid")
+			index += 1
+		end
+	end
+
 	test("rejects malformed raw Array regions") do
 		regions := [
 			[Gate4MirArrayOperation.new(kind: 1, operand: 3, origin: 10)],
@@ -154,8 +197,6 @@ describe("Native MIR model and verifier") do
 			[Gate4MirArrayOperation.new(kind: 1, operand: 0, origin: 10), Gate4MirArrayOperation.new(kind: 4, operand: 0, origin: 11)],
 			[Gate4MirArrayOperation.new(kind: 1, operand: 1, origin: 10), Gate4MirArrayOperation.new(kind: 4, operand: - 1, origin: 11)],
 			[Gate4MirArrayOperation.new(kind: 6, operand: 1, origin: 12)],
-			[Gate4MirArrayOperation.new(kind: 2, operand: 0, origin: 12)],
-			[Gate4MirArrayOperation.new(kind: 3, operand: 0, origin: 12)],
 			[Gate4MirArrayOperation.new(kind: 5, operand: 0, origin: 12)],
 			[Gate4MirArrayOperation.new(kind: 7, operand: 0, origin: 12)],
 			[Gate4MirArrayOperation.new(kind: 0, operand: 0, origin: 12)],

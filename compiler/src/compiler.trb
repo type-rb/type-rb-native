@@ -27,6 +27,7 @@ record Gate4EmitContext
 	scalar_inline_depth: Array<Integer>
 	scalar_inline_range_failure_used: Array<Boolean>
 	array_bounds_failure_used: Array<Boolean>
+	array_header_local_origin: Array<Integer>
 	array_header: Array<String>
 	array_header_fallback: Array<Array<String>>
 end
@@ -100,6 +101,7 @@ def gate4_emit_context_new(
 		scalar_inline_depth: [0],
 		scalar_inline_range_failure_used: [false],
 		array_bounds_failure_used: [false],
+		array_header_local_origin: [- 1],
 		array_header: gate4_array_header_new(),
 		array_header_fallback: [gate4_array_header_new(), gate4_array_header_new()],
 	)
@@ -788,6 +790,15 @@ def gate4_emit_array_header(
 		cache[cache_index] = value
 	end
 	return value
+end
+
+# The adapter installs the single binding selected and verified by MIR.
+def gate4_install_stable_array_header(mut context: Gate4EmitContext, mut output: QbeOutput, array: String, slot: String)
+	length := gate4_emit_array_header(context, output, array, slot, 1, "8")
+	data := gate4_emit_array_header(context, output, array, slot, 2, "24")
+	context.array_header[0] = slot
+	context.array_header[1] = length
+	context.array_header[2] = data
 end
 
 def gate4_emit_array_data_address(
@@ -2212,6 +2223,7 @@ def gate4_emit_declaration(
 	if gate4_token_is(state, position[0], "mut")
 		gate4_advance(position)
 	end
+	declaration_origin := position[0]
 	name := gate4_expect_identifier(state, position)
 	mut declared_type := ""
 	if gate4_token_is(state, position[0], ":")
@@ -2225,7 +2237,10 @@ def gate4_emit_declaration(
 	if local_type == ""
 		local_type = value.type_name
 	end
-	gate4_emit_add_local(context, output, name, local_type, value.operand, false)
+	slot := gate4_emit_add_local(context, output, name, local_type, value.operand, false)
+	if declaration_origin == context.array_header_local_origin[0]
+		gate4_install_stable_array_header(context, output, value.operand, slot)
+	end
 	return finish_statement(state, position)
 end
 
@@ -2513,13 +2528,16 @@ def gate4_emit_function(
 				!gate4_function_reassigns_parameter(state, function_index, parameter_name),
 			)
 			if parameter_index == state.scalar_mir.facts[function_index]
-				length := gate4_emit_array_header(context, body, initial, slot, 1, "8")
-				data := gate4_emit_array_header(context, body, initial, slot, 2, "24")
-				context.array_header[0] = slot
-				context.array_header[1] = length
-				context.array_header[2] = data
+				gate4_install_stable_array_header(context, body, initial, slot)
 			end
 			parameter_index += 1
+		end
+	end
+	header_plan := state.scalar_mir.facts[function_index]
+	if header_plan >= 0
+		binding := state.scalar_mir.array_regions[function_index][header_plan]
+		if binding.kind == 2
+			context.array_header_local_origin[0] = binding.origin
 		end
 	end
 	mut terminated := 0

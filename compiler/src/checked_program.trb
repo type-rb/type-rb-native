@@ -836,9 +836,11 @@ def gate4_check_postfix(
 					if value.origin < state.token_count[0]
 						array_local := gate4_local_find(locals, gate4_load_string(state.token_texts, value.origin))
 						if array_local >= 0
-							if array_local < gate4_load_integer(state.function_parameter_counts, locals.mir_state[1])
-								if gate4_array_element_type(gate4_load_string(locals.types, array_local)) != ""
+							if gate4_array_element_type(gate4_load_string(locals.types, array_local)) != ""
+								if array_local < gate4_load_integer(state.function_parameter_counts, locals.mir_state[1])
 									gate4_array_region_operation(locals, 4, array_local, position[0])
+								elsif gate4_load_integer(locals.mutable, array_local) == 0
+									gate4_array_region_operation(locals, 5, array_local, position[0])
 								end
 							end
 						end
@@ -1136,6 +1138,7 @@ def gate4_check_declaration(
 		end
 		gate4_advance(position)
 	end
+	declaration_origin := position[0]
 	line := gate4_load_integer(state.token_lines, position[0])
 	name := gate4_expect_identifier(state, position)
 	mut declared_type := ""
@@ -1183,6 +1186,11 @@ def gate4_check_declaration(
 	if !added
 		fact = 0
 	else
+		if mutable == 0
+			if gate4_array_element_type(local_type) != ""
+				gate4_array_region_operation(locals, 2, locals.count[0] - 1, declaration_origin)
+			end
+		end
 		mir_value := gate4_checked_mir_value(value)
 		if locals.mir_state[0] > 0
 			if mir_value >= 0
@@ -1418,6 +1426,7 @@ def gate4_check_block(
 						finish_statement(state, position)
 						saved_count := locals.count[0]
 						gate4_check_block(state, position, locals, result_type, loop_origin)
+						gate4_array_region_operation(locals, 3, saved_count, position[0])
 						locals.count[0] = saved_count
 						while gate4_token_is(state, position[0], "elsif")
 							branch_line := gate4_load_integer(state.token_lines, position[0])
@@ -1426,6 +1435,7 @@ def gate4_check_block(
 							gate4_check_expected(state, branch_condition.type_name, "Boolean", branch_line)
 							finish_statement(state, position)
 							gate4_check_block(state, position, locals, result_type, loop_origin)
+							gate4_array_region_operation(locals, 3, saved_count, position[0])
 							locals.count[0] = saved_count
 							if gate4_has_diagnostic(state)
 								return false
@@ -1435,6 +1445,7 @@ def gate4_check_block(
 							gate4_advance(position)
 							finish_statement(state, position)
 							gate4_check_block(state, position, locals, result_type, loop_origin)
+							gate4_array_region_operation(locals, 3, saved_count, position[0])
 							locals.count[0] = saved_count
 						end
 						gate4_expect(state, position, "end")
@@ -1565,6 +1576,7 @@ def gate4_check_block(
 									gate4_store_integer(locals.mutable, candidate, 1)
 								end
 							end
+							gate4_array_region_operation(locals, 3, saved_count, position[0])
 							locals.count[0] = saved_count
 							gate4_expect(state, position, "end")
 							finish_statement(state, position)

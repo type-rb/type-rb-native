@@ -163,3 +163,9 @@ arrays across automatic collection. Their invalid and runtime-invalid controls
 retain element/index type rejection, readonly capabilities, the existing
 three-level nesting bound and required out-of-bounds failures. This ordinary
 coverage does not establish snapshot support or numeric-reduction MIR support.
+
+`valid/local-array-header-mir.trb` covers immutable local and record-field
+bindings, nested loops, empty Arrays, element aliasing, opaque growth and lexical
+slot reuse. `runtime-invalid/local-array-header-bounds.trb` retains negative-index
+failure after a local header is selected. Both also run through ordinary CLI
+compilation and the independent REPL evaluator.

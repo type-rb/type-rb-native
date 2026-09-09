@@ -417,3 +417,11 @@ Public evidence:
 - [Array reduction complete Native gates](https://github.com/type-rb/type-rb-native/actions/runs/33697599531)
 - [current complete formal runtime result](../results/2026-09-09-benchmarksgame-runtime-scalar-range-guards-linux-arm64/README.md)
 - [current complete formal build result](../results/2026-09-09-benchmarksgame-build-scalar-range-guards-linux-arm64/README.md)
+
+## Immutable local Array headers
+
+The [local binding slice](native-mir-local-array-headers.md) extends the existing
+verified header region with declaration identity and scope exits. It preserves
+all bounds checks and conservative effect barriers, with one shared backend
+installation helper. Its local measurements remain separate from the current
+published runtime snapshot.
