@@ -72,7 +72,10 @@ readability, with the required semantic ownership and verification in Native
 MIR. See the [basic language coverage plan](docs/native-language-coverage.md).
 Further benchmark tuning is secondary to these bounded language slices.
 The current spectral-norm result exceeds Pure Go; broader runtime parity remains
-a goal. Application runtime and compilation measurements are separate in the
+a goal. The later [numeric regression recovery](docs/native-numeric-regression-recovery.md)
+confirms that accepted main has restored n-body and fannkuch against the former
+published baseline while retaining the spectral improvement. Application runtime
+and compilation measurements are separate in the
 [benchmark explorer](https://type-rb.github.io/type-rb-native/benchmarks/).
 See [MIR status](docs/native-mir-optimization-status.md) for the migration and
 [development history](docs/development-history.md) for dated checkpoints.
