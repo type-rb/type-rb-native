@@ -527,3 +527,24 @@ Upward configured project discovery, persistent service runtime integration,
 package/native-library boundaries, incremental builds, toolchain discovery,
 debugging, maintenance evaluation, and additional primary targets remain in
 the broader Gate 6 product-feasibility scope.
+
+
+## Scalar Integer ranges and the complete numeric refresh
+
+[PR #372](https://github.com/type-rb/type-rb-native/pull/372) adds a bounded
+MIR proof for complete scalar Integer regions, with one guard and the original
+checked path. [PR #373](https://github.com/type-rb/type-rb-native/pull/373)
+separately retains the measured compiler cost: Linux's absolute ceiling becomes
+331000 bytes and the combined ceiling 697000, with all relative cost and other
+authorities unchanged. Initial recovery and Linux-size failures remain rejected;
+a larger emitter control-flow rewrite was discarded after increasing text.
+
+The current [accepted checkpoint](../results/2026-09-09-scalar-range-guards-accepted-darwin-linux-arm64/README.md)
+replaces its occupied result slot. Complete runtime and build cohorts replace
+their two existing published slots. The preceding reports remain at the
+[exact pre-retirement revision](https://github.com/type-rb/type-rb-native/tree/a604adcffe0cc34ff217ff84d73911c85ceb0a00/results).
+All current observations remain available without growing the active evidence
+budget. In the one-core formal cohort, spectral-norm exceeds the pinned Pure
+Go implementation in wall and CPU time. Other kernels remain slower, including
+previously established cumulative regressions. This is a numeric checkpoint,
+not a broad application-performance or language-promotion claim.

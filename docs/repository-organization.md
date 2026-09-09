@@ -230,3 +230,14 @@ Malformed value identity, type, origin, uniqueness and definition counts still
 fail verification. Other row families retain their current layouts and remain
 separate bounded cleanup slices. This changes representation without adding an
 optimization pass, backend semantic owner or application runtime claim.
+
+
+## Scalar range checkpoint
+
+The scalar Integer guard slice uses named `MirScalarRange` records for its
+transient proof state and keeps proof construction and independent validation
+in MIR. Backend emission consumes the verified bound and retains only the
+checked/unchecked instruction selection. This advances the named-carrier
+cleanup without moving an active compiler-source closure during its frozen
+measurement cohort. The remaining positional MIR tables and Array assignment
+ownership need separately bounded changes with recovery and cost checks.

@@ -12,16 +12,18 @@ The capability corpus and the first formal runtime and build/distribution
 layers are complete. All three performance inputs pass through the pinned Go
 reference compiler, ordinary self-hosted Native compiler, and five pinned
 context implementations with exact published output. The
-[current Linux arm64 result](../results/2026-09-06-benchmarksgame-runtime-checked-boolean-branches-linux-arm64/README.md)
-retains every registered observation and measures accepted revision `85e8d49`.
-Native is substantially smaller and lighter than TypeRB Go but needs 1.03x
-to 3.13x the time of Pure Go across these numeric kernels. Pure Go parity or
-better is the minimum runtime objective. The independent
-[build result](../results/2026-09-06-benchmarksgame-build-checked-boolean-branches-linux-arm64/README.md)
-finds that Native needs 38.7% to 44.0% of TypeRB Go's build wall time, uses about
-51% less compiler RSS, and reduces the controlled raw build payload by 99.63%.
-This internally consistent snapshot replaces the preceding complete result;
-later focused A/B records remain separate until another complete rerun.
+[current Linux arm64 result](../results/2026-09-09-benchmarksgame-runtime-scalar-range-guards-linux-arm64/README.md)
+retains every registered observation and measures revision `2841cb93`,
+accepted through PR #372. Native spectral-norm takes 2.30664 seconds against
+Pure Go's 3.21933 seconds in the one-core lane, using 28.35% less wall time.
+The other two numeric kernels remain slower; this is not general language
+parity. The independent
+[build result](../results/2026-09-09-benchmarksgame-build-scalar-range-guards-linux-arm64/README.md)
+finds that Native needs 33.9% to 40.7% of TypeRB Go's build wall time.
+This is a complete fresh runtime and build cohort with a single compiler
+revision. The local interleaved Native comparison measures the scalar range
+guard's effect separately; differences between publication dates are not
+causal evidence.
 
 ## Runtime objective and benchmark expansion
 
@@ -160,7 +162,7 @@ BenchExec `runexec` 3.35, runs correctness before timing, rotates all seven
 candidates through two warmup and eleven retained rounds, and preserves every
 failure and raw process-tree metric. One-core and four-core lanes are separate.
 This controller measures complete fresh processes only. Its current
-[formal result](../results/2026-09-06-benchmarksgame-runtime-checked-boolean-branches-linux-arm64/README.md)
+[formal result](../results/2026-09-09-benchmarksgame-runtime-scalar-range-guards-linux-arm64/README.md)
 publishes all one-core and four-core raw observations, independently reproduced
 medians, and exact artifact identities. Compiler measurements and complete
 artifact/distribution inventory use the separate
@@ -169,7 +171,7 @@ measures alternating clean outputs through both TypeRB backends, verifies every
 measured artifact, process-traces representative builds, and separates
 controlled payloads from platform prerequisites and deploy artifacts. Its
 current
-[formal result](../results/2026-09-06-benchmarksgame-build-checked-boolean-branches-linux-arm64/README.md)
+[formal result](../results/2026-09-09-benchmarksgame-build-scalar-range-guards-linux-arm64/README.md)
 publishes all raw observations, independently reproduced medians, artifact
 variants, process closure, dynamic dependencies, and distribution totals. See
 [Decision 0024](decisions/0024-benchexec-runtime-controller.md) and
