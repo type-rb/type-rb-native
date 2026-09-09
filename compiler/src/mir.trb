@@ -117,7 +117,7 @@ record Gate4MirModule
 	instructions: Array<Gate4MirInstruction>
 	arguments: Array<Integer>
 	array_regions: Array<Array<Gate4MirArrayOperation>>
-	facts: Array<Integer>
+	array_headers: Array<Array<Integer>>
 	literal_texts: Array<String>
 end
 
@@ -539,18 +539,48 @@ def gate4_mir_induction_address(
 	return true
 end
 
+record MirArrayHeaderPlan
+	declarations: Array<Integer>
+	valid: Boolean
+end
+
+def mir_array_header_select(mut selected: Array<Integer>, declaration: Integer)
+	mut index := 0
+	while index < selected.size()
+		if selected[index] == declaration
+			return
+		end
+		index += 1
+	end
+	selected.push(declaration)
+end
+
+def mir_array_headers_equal(left: Array<Integer>, right: Array<Integer>): Boolean
+	if left.size() != right.size()
+		return false
+	end
+	mut index := 0
+	while index < left.size()
+		if left[index] != right[index]
+			return false
+		end
+		index += 1
+	end
+	return true
+end
+
 # Header regions retain parameter declarations (kind 1: type 0 scalar,
-# 1 immutable Array, 2 mutable Array), immutable local Array declarations
+# 1 immutable Array, 2 mutable Array), local Array declarations
 # (2: local ordinal), scope exits (3: restored local count), parameter accesses
 # (4: ordinal), local accesses (5: ordinal), and opaque barriers (6: zero).
 # Parameter origins use declaration indexes; other operations use token origins.
-# The result is the selected declaration's operation index, -1 for no proof,
-# or -2 for malformed MIR. A local's header is loaded at its declaration,
+# Selected declarations are unique operation indexes. Malformed regions
+# return an invalid plan. A local's header is loaded at its declaration,
 # never before its initializer. Every element access still checks bounds.
-def gate4_mir_array_header(operations: Array<Gate4MirArrayOperation>): Integer
+def gate4_mir_array_headers(operations: Array<Gate4MirArrayOperation>): MirArrayHeaderPlan
 	mut parameter_count := 0
 	mut parameter_origin :=- 1
-	mut selected :=- 1
+	mut selected: Array<Integer> := []
 	mut blocked := false
 	mut index := 0
 	while index < operations.size()
@@ -559,52 +589,50 @@ def gate4_mir_array_header(operations: Array<Gate4MirArrayOperation>): Integer
 		slot := operation.operand
 		origin := operation.origin
 		if origin < 0
-			return - 2
+			return MirArrayHeaderPlan.new(declarations: [], valid: false)
 		end
 		if slot < 0
-			return - 2
+			return MirArrayHeaderPlan.new(declarations: [], valid: false)
 		end
 		if kind == 1
 			if index != parameter_count
-				return - 2
+				return MirArrayHeaderPlan.new(declarations: [], valid: false)
 			end
 			if slot > 2
-				return - 2
+				return MirArrayHeaderPlan.new(declarations: [], valid: false)
 			end
 			if origin <= parameter_origin
-				return - 2
+				return MirArrayHeaderPlan.new(declarations: [], valid: false)
 			end
 			parameter_origin = origin
 			parameter_count += 1
 		elsif kind == 2
 			if slot < parameter_count
-				return - 2
+				return MirArrayHeaderPlan.new(declarations: [], valid: false)
 			end
 		elsif kind == 3
 			if slot < parameter_count
-				return - 2
+				return MirArrayHeaderPlan.new(declarations: [], valid: false)
 			end
-			if selected >= 0
-				binding := operations[selected]
+			mut selected_index := 0
+			while selected_index < selected.size()
+				binding := operations[selected[selected_index]]
 				if binding.kind == 2
 					if binding.operand >= slot
 						blocked = true
 					end
 				end
+				selected_index += 1
 			end
 		elsif kind == 4
 			if slot >= parameter_count
-				return - 2
+				return MirArrayHeaderPlan.new(declarations: [], valid: false)
 			end
 			binding_type := operations[slot].operand
 			if binding_type == 0
-				return - 2
+				return MirArrayHeaderPlan.new(declarations: [], valid: false)
 			end
-			if binding_type == 1
-				if selected == - 1
-					selected = slot
-				end
-			end
+			mir_array_header_select(selected, slot)
 		elsif kind == 5
 			mut declaration := index - 1
 			mut found := false
@@ -612,17 +640,15 @@ def gate4_mir_array_header(operations: Array<Gate4MirArrayOperation>): Integer
 				binding := operations[declaration]
 				if binding.kind == 3
 					if slot >= binding.operand
-						return - 2
+						return MirArrayHeaderPlan.new(declarations: [], valid: false)
 					end
 				end
 				if binding.kind == 2
 					if binding.operand == slot
 						if binding.origin >= origin
-							return - 2
+							return MirArrayHeaderPlan.new(declarations: [], valid: false)
 						end
-						if selected == - 1
-							selected = declaration
-						end
+						mir_array_header_select(selected, declaration)
 						found = true
 						break
 					end
@@ -630,23 +656,23 @@ def gate4_mir_array_header(operations: Array<Gate4MirArrayOperation>): Integer
 				declaration -= 1
 			end
 			if !found
-				return - 2
+				return MirArrayHeaderPlan.new(declarations: [], valid: false)
 			end
 		else
 			if kind != 6
-				return - 2
+				return MirArrayHeaderPlan.new(declarations: [], valid: false)
 			end
 			if slot != 0
-				return - 2
+				return MirArrayHeaderPlan.new(declarations: [], valid: false)
 			end
 			blocked = true
 		end
 		index += 1
 	end
 	if blocked
-		return - 1
+		return MirArrayHeaderPlan.new(declarations: [], valid: true)
 	end
-	return selected
+	return MirArrayHeaderPlan.new(declarations: selected, valid: true)
 end
 
 record MirScalarRange
@@ -826,14 +852,14 @@ def gate4_optimize_verified_mir(mut native_module: Gate4MirModule)
 	end
 	index = 0
 	while index < native_module.array_regions.size()
-		header := gate4_mir_array_header(native_module.array_regions[index])
-		if header < - 1
+		header := gate4_mir_array_headers(native_module.array_regions[index])
+		if !header.valid
 			return
 		end
-		if native_module.facts.size() == index
-			native_module.facts.push(header)
+		if native_module.array_headers.size() == index
+			native_module.array_headers.push(header.declarations)
 		else
-			native_module.facts[index] = header
+			native_module.array_headers[index] = header.declarations
 		end
 		index += 1
 	end
@@ -1416,21 +1442,21 @@ def gate4_verify_mir(native_module: Gate4MirModule, optimized: Boolean): String
 	mut entry_found := false
 	mut index := 0
 	if optimized
-		if native_module.facts.size() != native_module.array_regions.size()
+		if native_module.array_headers.size() != native_module.array_regions.size()
 			return "MIR optimized Array-header fact is invalid"
 		end
 	else
-		if native_module.facts.size() != 0
+		if native_module.array_headers.size() != 0
 			return "MIR input cannot supply optimization facts"
 		end
 	end
 	while index < native_module.array_regions.size()
-		header := gate4_mir_array_header(native_module.array_regions[index])
-		if header < - 1
+		header := gate4_mir_array_headers(native_module.array_regions[index])
+		if !header.valid
 			return "MIR Array region is invalid"
 		end
 		if optimized
-			if native_module.facts[index] != header
+			if !mir_array_headers_equal(native_module.array_headers[index], header.declarations)
 				return "MIR optimized Array-header fact is invalid"
 			end
 		end

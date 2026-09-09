@@ -438,7 +438,7 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_check(state)).to_be_true()
 		# A different loop bound does not invalidate header reuse. Access
 		# checks still test the indexed Array's own length at runtime.
-		expect(state.scalar_mir.facts).to_equal([- 1, 0, - 1, - 1, - 1, - 1, 1, 0, - 1])
+		expect(state.scalar_mir.array_headers).to_equal([[], [0, 1], [], [], [], [], [1], [1, 0], []])
 		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("")
 	end
 
@@ -450,9 +450,9 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_true()
 		expect(state.scalar_mir.functions.size()).to_equal(0)
-		expect(state.scalar_mir.facts.size()).to_equal(2)
-		expect(state.scalar_mir.facts[0] >= 0).to_be_true()
-		expect(state.scalar_mir.facts[1]).to_equal(- 1)
+		expect(state.scalar_mir.array_headers.size()).to_equal(2)
+		expect(state.scalar_mir.array_headers[0].size() > 0).to_be_true()
+		expect(state.scalar_mir.array_headers[1]).to_equal([])
 		qbe := gate4_output_source(gate4_emit_qbe(state))
 		expect(gate4_occurrence_count(qbe, " =w cultl ")).to_equal(2)
 	end
@@ -464,7 +464,7 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_true()
-		expect(state.scalar_mir.facts).to_equal([2, - 1])
+		expect(state.scalar_mir.array_headers).to_equal([[1, 2], []])
 		qbe := gate4_output_source(gate4_emit_qbe(state))
 		expect(gate4_occurrence_count(qbe, " =w cultl ")).to_equal(2)
 	end
@@ -484,7 +484,30 @@ describe("Gate 4 TypeRB frontend") do
 			expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
 			expect(gate4_resolve(state)).to_be_true()
 			expect(gate4_check(state)).to_be_true()
-			expect(state.scalar_mir.facts).to_equal([- 1, - 1])
+			expect(state.scalar_mir.array_headers).to_equal([[], []])
+			gate4_emit_qbe(state)
+			expect(gate4_has_diagnostic(state)).to_be_false()
+			index += 1
+		end
+	end
+
+	test("blocks every stable Array header on local or parameter rebinding") do
+		bodies := [
+			"mut values := input\n\tvalues = output\n\tinput[0] = values[0]",
+			"input[0] = output[0]\n\tinput = output\n\tinput[0] = 8.0",
+			"input = output\n\tinput[0] = output[0]",
+			"mut values := input\n\tinput[0] = values[0]\n\tvalues = output\n\tinput[0] = values[- 1]",
+		]
+		mut index := 0
+		while index < bodies.size()
+			source := "def update(mut input: Array<Float>, mut output: Array<Float>)\n\t" + bodies[index] + "\n\treturn\nend\n\ndef main()\n\treturn\nend\n"
+			mut state := gate4_compiler_new(source.size() + 1)
+			expect(gate4_lex(state, source)).to_be_true()
+			expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+			expect(gate4_resolve(state)).to_be_true()
+			expect(gate4_check(state)).to_be_true()
+			expect(state.scalar_mir.array_headers).to_equal([[], []])
+			expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("")
 			gate4_emit_qbe(state)
 			expect(gate4_has_diagnostic(state)).to_be_false()
 			index += 1
@@ -516,7 +539,7 @@ describe("Gate 4 TypeRB frontend") do
 				expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("")
 			end
 			expect(checked).to_be_true()
-			expect(state.scalar_mir.facts[0]).to_equal(- 1)
+			expect(state.scalar_mir.array_headers[0]).to_equal([])
 			expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("")
 			effect += 1
 		end
@@ -529,7 +552,7 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_true()
-		expect(state.scalar_mir.facts[0] >= 0).to_be_true()
+		expect(state.scalar_mir.array_headers[0].size() > 0).to_be_true()
 		qbe := gate4_output_source(gate4_emit_qbe(state))
 		expect(qbe.include?(", @array_bounds_failure")).to_be_true()
 	end
@@ -541,7 +564,7 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_true()
-		expect(state.scalar_mir.facts[0] >= 0).to_be_true()
+		expect(state.scalar_mir.array_headers[0].size() > 0).to_be_true()
 		qbe := gate4_output_source(gate4_emit_qbe(state))
 		expect(qbe.include?(", @array_bounds_failure")).to_be_true()
 	end
@@ -553,7 +576,7 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_true()
-		expect(state.scalar_mir.facts[0] >= 0).to_be_true()
+		expect(state.scalar_mir.array_headers[0].size() > 0).to_be_true()
 		qbe := gate4_output_source(gate4_emit_qbe(state))
 		expect(qbe.include?(", @array_bounds_failure")).to_be_true()
 	end
@@ -582,9 +605,9 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_mir_function_index(state.scalar_mir, 2)).to_equal(- 1)
 		# Header reuse is independent of a unit-step induction proof; it
 		# neither promotes the function nor removes access checks.
-		expect(state.scalar_mir.facts[0] >= 0).to_be_true()
-		expect(state.scalar_mir.facts[1] >= 0).to_be_true()
-		expect(state.scalar_mir.facts[2]).to_equal(- 1)
+		expect(state.scalar_mir.array_headers[0].size() > 0).to_be_true()
+		expect(state.scalar_mir.array_headers[1].size() > 0).to_be_true()
+		expect(state.scalar_mir.array_headers[2]).to_equal([])
 		expect(gate4_occurrence_count(gate4_output_source(gate4_emit_qbe(state)), " =l sar ")).to_equal(3)
 	end
 
@@ -2427,9 +2450,7 @@ describe("Gate 4 TypeRB frontend") do
 	test("preserves a verified stable Array header across fallback invalidations") do
 		mut context := gate4_emit_context_new(16, [64, 16, 2])
 		mut output := qbe_output_new(16, [0, 0, 0, 0])
-		context.array_header[0] = "%v0"
-		context.array_header[1] = "%length"
-		context.array_header[2] = "%data"
+		context.array_headers.push(["%v0", "%length", "%data"])
 		length := gate4_emit_array_header(context, output, "%first", "%v0", 1, "8")
 		gate4_emit_array_header(context, output, "%second", "%v1", 1, "8")
 		gate4_emit_array_header(context, output, "%third", "%v2", 2, "24")

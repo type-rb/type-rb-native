@@ -27,8 +27,8 @@ record Gate4EmitContext
 	scalar_inline_depth: Array<Integer>
 	scalar_inline_range_failure_used: Array<Boolean>
 	array_bounds_failure_used: Array<Boolean>
-	array_header_local_origin: Array<Integer>
-	array_header: Array<String>
+	array_header_local_origins: Array<Integer>
+	array_headers: Array<Array<String>>
 	array_header_fallback: Array<Array<String>>
 end
 
@@ -101,8 +101,8 @@ def gate4_emit_context_new(
 		scalar_inline_depth: [0],
 		scalar_inline_range_failure_used: [false],
 		array_bounds_failure_used: [false],
-		array_header_local_origin: [- 1],
-		array_header: gate4_array_header_new(),
+		array_header_local_origins: [],
+		array_headers: [],
 		array_header_fallback: [gate4_array_header_new(), gate4_array_header_new()],
 	)
 end
@@ -760,8 +760,13 @@ def gate4_emit_array_header(
 		cache_index: Integer,
 		offset: String,
 	): String
-	if key == context.array_header[0]
-		return context.array_header[cache_index]
+	mut stable_index := 0
+	while stable_index < context.array_headers.size()
+		stable := context.array_headers[stable_index]
+		if key == stable[0]
+			return stable[cache_index]
+		end
+		stable_index += 1
 	end
 	mut caches := context.array_header_fallback
 	mut cache := caches[0]
@@ -792,13 +797,22 @@ def gate4_emit_array_header(
 	return value
 end
 
-# The adapter installs the single binding selected and verified by MIR.
+def gate4_header_binding_selected(bindings: Array<Integer>, binding: Integer): Boolean
+	mut index := 0
+	while index < bindings.size()
+		if bindings[index] == binding
+			return true
+		end
+		index += 1
+	end
+	return false
+end
+
+# The adapter installs only bindings selected and verified by MIR.
 def gate4_install_stable_array_header(mut context: Gate4EmitContext, mut output: QbeOutput, array: String, slot: String)
 	length := gate4_emit_array_header(context, output, array, slot, 1, "8")
 	data := gate4_emit_array_header(context, output, array, slot, 2, "24")
-	context.array_header[0] = slot
-	context.array_header[1] = length
-	context.array_header[2] = data
+	context.array_headers.push([slot, length, data])
 end
 
 def gate4_emit_array_data_address(
@@ -1546,7 +1560,15 @@ def gate4_emit_method_call(
 	if method == "size"
 		gate4_expect(state, position, ")")
 		mut key := receiver.slot
-		if key != context.array_header[0]
+		mut stable := false
+		mut header_index := 0
+		while header_index < context.array_headers.size()
+			if context.array_headers[header_index][0] == key
+				stable = true
+			end
+			header_index += 1
+		end
+		if !stable
 			key = ""
 		end
 		result := gate4_emit_array_header(
@@ -2238,7 +2260,7 @@ def gate4_emit_declaration(
 		local_type = value.type_name
 	end
 	slot := gate4_emit_add_local(context, output, name, local_type, value.operand, false)
-	if declaration_origin == context.array_header_local_origin[0]
+	if gate4_header_binding_selected(context.array_header_local_origins, declaration_origin)
 		gate4_install_stable_array_header(context, output, value.operand, slot)
 	end
 	return finish_statement(state, position)
@@ -2527,18 +2549,20 @@ def gate4_emit_function(
 				initial,
 				!gate4_function_reassigns_parameter(state, function_index, parameter_name),
 			)
-			if parameter_index == state.scalar_mir.facts[function_index]
+			if gate4_header_binding_selected(state.scalar_mir.array_headers[function_index], parameter_index)
 				gate4_install_stable_array_header(context, body, initial, slot)
 			end
 			parameter_index += 1
 		end
 	end
-	header_plan := state.scalar_mir.facts[function_index]
-	if header_plan >= 0
-		binding := state.scalar_mir.array_regions[function_index][header_plan]
+	header_plan := state.scalar_mir.array_headers[function_index]
+	mut header_index := 0
+	while header_index < header_plan.size()
+		binding := state.scalar_mir.array_regions[function_index][header_plan[header_index]]
 		if binding.kind == 2
-			context.array_header_local_origin[0] = binding.origin
+			context.array_header_local_origins.push(binding.origin)
 		end
+		header_index += 1
 	end
 	mut terminated := 0
 	if control_mir_function

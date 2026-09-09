@@ -15,9 +15,9 @@ def gate4_mir_test_module(
 	if invalid_index
 		array_index = 99
 	end
-	mut facts: Array<Integer> := []
+	mut facts: Array<Array<Integer>> := []
 	if supplied_fact
-		facts.push(1)
+		facts.push([1])
 	end
 	return Gate4MirModule.new(
 		source_count: [1],
@@ -51,7 +51,7 @@ def gate4_mir_test_module(
 		],
 		arguments: [0, 1, 2, 2, 5, 8],
 		array_regions: [],
-		facts: facts,
+		array_headers: facts,
 		literal_texts: [],
 	)
 end
@@ -84,15 +84,15 @@ describe("Native MIR model and verifier") do
 		mut native_module := gate4_mir_test_module(false, false)
 		native_module.array_regions.push([Gate4MirArrayOperation.new(kind: 1, operand: 1, origin: 10), Gate4MirArrayOperation.new(kind: 4, operand: 0, origin: 13)])
 		expect(gate4_verify_mir(native_module, true)).to_equal("MIR optimized Array-header fact is invalid")
-		native_module.facts.push(0)
-		native_module.facts.push(13)
+		native_module.array_headers.push([0])
+		native_module.array_headers.push([13])
 		expect(gate4_verify_mir(native_module, true)).to_equal("MIR optimized Array-header fact is invalid")
 	end
 
 	test("rejects a forged optimized Array-header parameter ordinal") do
 		mut native_module := gate4_mir_test_module(false, false)
 		native_module.array_regions.push([Gate4MirArrayOperation.new(kind: 1, operand: 1, origin: 10), Gate4MirArrayOperation.new(kind: 4, operand: 0, origin: 13)])
-		native_module.facts.push(11)
+		native_module.array_headers.push([11])
 		expect(gate4_verify_mir(native_module, true)).to_equal("MIR optimized Array-header fact is invalid")
 	end
 
@@ -101,15 +101,15 @@ describe("Native MIR model and verifier") do
 		native_module.array_regions.push([Gate4MirArrayOperation.new(kind: 1, operand: 1, origin: 10), Gate4MirArrayOperation.new(kind: 4, operand: 0, origin: 13)])
 		expect(gate4_verify_mir(native_module, false)).to_equal("")
 		gate4_optimize_verified_mir(native_module)
-		expect(native_module.facts).to_equal([0])
+		expect(native_module.array_headers).to_equal([[0]])
 		expect(gate4_verify_mir(native_module, true)).to_equal("")
 		gate4_optimize_verified_mir(native_module)
-		expect(native_module.facts).to_equal([0])
+		expect(native_module.array_headers).to_equal([[0]])
 		expect(gate4_verify_mir(native_module, true)).to_equal("")
 	end
 
 	test("rejects forged Array-header facts after raw parameters or accesses change") do
-		changes := [[0, 2], [2, 1]]
+		changes := [[0, 0], [2, 1]]
 		mut index := 0
 		while index < changes.size()
 			mut native_module := gate4_mir_test_module(false, false)
@@ -118,7 +118,11 @@ describe("Native MIR model and verifier") do
 			gate4_optimize_verified_mir(native_module)
 			operation := region[changes[index][0]]
 			region[changes[index][0]] = Gate4MirArrayOperation.new(kind: operation.kind, operand: changes[index][1], origin: operation.origin)
-			expect(gate4_verify_mir(native_module, true)).to_equal("MIR optimized Array-header fact is invalid")
+			if index == 0
+				expect(gate4_verify_mir(native_module, true)).to_equal("MIR Array region is invalid")
+			else
+				expect(gate4_verify_mir(native_module, true)).to_equal("MIR optimized Array-header fact is invalid")
+			end
 			index += 1
 		end
 	end
@@ -126,7 +130,7 @@ describe("Native MIR model and verifier") do
 	test("rejects forged Array-header facts across opaque effects") do
 		mut native_module := gate4_mir_test_module(false, false)
 		native_module.array_regions.push([Gate4MirArrayOperation.new(kind: 1, operand: 1, origin: 10), Gate4MirArrayOperation.new(kind: 4, operand: 0, origin: 13), Gate4MirArrayOperation.new(kind: 6, operand: 0, origin: 14)])
-		native_module.facts.push(0)
+		native_module.array_headers.push([0])
 		expect(gate4_verify_mir(native_module, true)).to_equal("MIR optimized Array-header fact is invalid")
 	end
 
@@ -136,7 +140,27 @@ describe("Native MIR model and verifier") do
 		native_module.array_regions.push(region)
 		expect(gate4_verify_mir(native_module, false)).to_equal("")
 		gate4_optimize_verified_mir(native_module)
-		expect(native_module.facts).to_equal([1])
+		expect(native_module.array_headers).to_equal([[0, 1]])
+		expect(gate4_verify_mir(native_module, true)).to_equal("")
+	end
+
+	test("verifies complete unique Array-header lists including mutable bindings") do
+		mut native_module := gate4_mir_test_module(false, false)
+		region := [Gate4MirArrayOperation.new(kind: 1, operand: 2, origin: 10), Gate4MirArrayOperation.new(kind: 1, operand: 1, origin: 11), Gate4MirArrayOperation.new(kind: 2, operand: 2, origin: 20), Gate4MirArrayOperation.new(kind: 5, operand: 2, origin: 25), Gate4MirArrayOperation.new(kind: 4, operand: 1, origin: 26), Gate4MirArrayOperation.new(kind: 4, operand: 0, origin: 27), Gate4MirArrayOperation.new(kind: 5, operand: 2, origin: 28)]
+		native_module.array_regions.push(region)
+		expect(gate4_verify_mir(native_module, false)).to_equal("")
+		gate4_optimize_verified_mir(native_module)
+		expect(native_module.array_headers).to_equal([[2, 1, 0]])
+		expect(gate4_verify_mir(native_module, true)).to_equal("")
+		forged: Array<Array<Integer>> := [[2, 1], [2, 1, 0, 0], [0, 1, 2], [2, 1, 3], []]
+		mut index := 0
+		while index < forged.size()
+			native_module.array_headers[0] = forged[index]
+			expect(gate4_verify_mir(native_module, true)).to_equal("MIR optimized Array-header fact is invalid")
+			index += 1
+		end
+		gate4_optimize_verified_mir(native_module)
+		expect(native_module.array_headers).to_equal([[2, 1, 0]])
 		expect(gate4_verify_mir(native_module, true)).to_equal("")
 	end
 
@@ -146,7 +170,7 @@ describe("Native MIR model and verifier") do
 		native_module.array_regions.push(region)
 		expect(gate4_verify_mir(native_module, false)).to_equal("")
 		gate4_optimize_verified_mir(native_module)
-		expect(native_module.facts).to_equal([1])
+		expect(native_module.array_headers).to_equal([[1]])
 		expect(gate4_verify_mir(native_module, true)).to_equal("")
 		region[1] = Gate4MirArrayOperation.new(kind: 2, operand: 3, origin: 20)
 		expect(gate4_verify_mir(native_module, true)).to_equal("MIR Array region is invalid")
@@ -176,8 +200,8 @@ describe("Native MIR model and verifier") do
 			native_module.array_regions.push([declaration, access, barriers[index], Gate4MirArrayOperation.new(kind: 2, operand: 2, origin: 40), Gate4MirArrayOperation.new(kind: 5, operand: 2, origin: 45)])
 			expect(gate4_verify_mir(native_module, false)).to_equal("")
 			gate4_optimize_verified_mir(native_module)
-			expect(native_module.facts).to_equal([- 1])
-			native_module.facts[0] = 0
+			expect(native_module.array_headers).to_equal([[]])
+			native_module.array_headers[0] = [0]
 			expect(gate4_verify_mir(native_module, true)).to_equal("MIR optimized Array-header fact is invalid")
 			index += 1
 		end
