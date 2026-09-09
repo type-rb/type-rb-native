@@ -14,11 +14,18 @@ ownership and historical measurements below remain unchanged.
 The function table now uses `Gate4MirFunction` records for identity, entry,
 source origin, and parameter/block ranges, alongside the named value carrier.
 Construction, verification, passes and adapter consumers use those fields;
-blocks and instructions retain their existing compact rows. This is bounded
+instructions retain their existing compact rows. This is bounded
 compiler self-use of the accepted record-array seed, not wider MIR admission.
 
+The block table likewise uses `Gate4MirBlock` records for its sixteen fields:
+identity, origin, parameter/instruction ranges, and both terminator edges. The
+shared constructor preserves its existing calling boundary while readers use
+named fields. Record typing excludes truncated blocks; range and control-flow
+verification remains required. [Issue #362](https://github.com/type-rb/type-rb-native/issues/362)
+records this separate block-carrier slice.
+
 Structural validation precedes value-definition counting and cross-block
-lookups. Function ranges, block shapes and ranges, and referenced instruction
+lookups. Function ranges, block ranges, and referenced instruction
 shapes must be valid before those consumers run. Previously a malformed range
 or truncated row could cause an Array-bounds failure before its intended MIR
 diagnostic. The checks move to one structural owner; identity, origin, type,

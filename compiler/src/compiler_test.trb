@@ -206,7 +206,7 @@ describe("Gate 4 TypeRB frontend") do
 		expect(function_index >= 0).to_be_true()
 		function := state.scalar_mir.functions[function_index]
 		block := state.scalar_mir.blocks[function.block_start]
-		instruction_index := block[5]
+		instruction_index := block.instruction_start
 		expect(state.scalar_mir.instructions[instruction_index][0]).to_equal(7)
 		expect(state.scalar_mir.instructions[instruction_index][4]).to_equal(12)
 		qbe := gate4_output_source(gate4_emit_qbe(state))
@@ -235,7 +235,7 @@ describe("Gate 4 TypeRB frontend") do
 		expect(function_index >= 0).to_be_true()
 		function := state.scalar_mir.functions[function_index]
 		block := state.scalar_mir.blocks[function.block_start]
-		instruction_index := block[5]
+		instruction_index := block.instruction_start
 		expect(state.scalar_mir.instructions[instruction_index][0]).to_equal(7)
 		expect(state.scalar_mir.instructions[instruction_index][4]).to_equal(13)
 		qbe := gate4_output_source(gate4_emit_qbe(state))
@@ -264,7 +264,7 @@ describe("Gate 4 TypeRB frontend") do
 		expect(state.scalar_mir.functions[function_index].block_count).to_equal(6)
 		function := state.scalar_mir.functions[function_index]
 		body := state.scalar_mir.blocks[function.block_start + 2]
-		expect(state.scalar_mir.instructions[body[5]][4]).to_equal(2)
+		expect(state.scalar_mir.instructions[body.instruction_start][4]).to_equal(2)
 		qbe := gate4_output_source(gate4_emit_qbe(state))
 		expect(qbe.include?("function $g4f0(l %p0)")).to_be_true()
 		expect(
@@ -290,13 +290,13 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_occurrence_count(qbe, " =l sar ")).to_equal(0)
 		clear_array_fixture_binary_plans(state, 2)
 		expect(gate4_output_source(gate4_emit_qbe(state))).to_equal(qbe)
-		state.scalar_mir.instructions[body[5]][4] = 1
+		state.scalar_mir.instructions[body.instruction_start][4] = 1
 		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("")
 		gate4_optimize_verified_mir(state.scalar_mir)
-		expect(state.scalar_mir.instructions[body[5]][4]).to_equal(2)
+		expect(state.scalar_mir.instructions[body.instruction_start][4]).to_equal(2)
 		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("")
 
-		load := state.scalar_mir.instructions[body[5] + 1]
+		load := state.scalar_mir.instructions[body.instruction_start + 1]
 		mut value_index := 0
 		while state.scalar_mir.values[value_index].id != load[1]
 			value_index += 1
@@ -311,16 +311,16 @@ describe("Gate 4 TypeRB frontend") do
 		)
 		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("MIR Array load type differs")
 		state.scalar_mir.values[value_index] = value
-		state.scalar_mir.instructions[body[5]][5] = state.scalar_mir.functions[function_index].entry_block + 3
+		state.scalar_mir.instructions[body.instruction_start][5] = state.scalar_mir.functions[function_index].entry_block + 3
 		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("MIR failure target is not a trap block")
-		state.scalar_mir.instructions[body[5]][5] = state.scalar_mir.functions[function_index].entry_block + 5
-		state.scalar_mir.instructions[body[5]][3] = state.scalar_mir.arguments[state.scalar_mir.blocks[state.scalar_mir.functions[function_index].block_start + 1][3]]
+		state.scalar_mir.instructions[body.instruction_start][5] = state.scalar_mir.functions[function_index].entry_block + 5
+		state.scalar_mir.instructions[body.instruction_start][3] = state.scalar_mir.arguments[state.scalar_mir.blocks[state.scalar_mir.functions[function_index].block_start + 1].parameter_start]
 		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("MIR Array address type differs")
-		state.scalar_mir.instructions[body[5]][3] = state.scalar_mir.arguments[body[3]]
-		state.scalar_mir.instructions[body[5] + body[6] - 1][4] = 2
+		state.scalar_mir.instructions[body.instruction_start][3] = state.scalar_mir.arguments[body.parameter_start]
+		state.scalar_mir.instructions[body.instruction_start + body.instruction_count - 1][4] = 2
 		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("MIR Array induction proof differs")
-		state.scalar_mir.instructions[body[5] + body[6] - 1][4] = 1
-		state.scalar_mir.instructions[body[5]][6] = 1
+		state.scalar_mir.instructions[body.instruction_start + body.instruction_count - 1][4] = 1
+		state.scalar_mir.instructions[body.instruction_start][6] = 1
 		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("MIR instruction origin is invalid")
 	end
 
@@ -339,10 +339,10 @@ describe("Gate 4 TypeRB frontend") do
 		header := state.scalar_mir.blocks[function.block_start + 1]
 		body := state.scalar_mir.blocks[function.block_start + 2]
 		exit := state.scalar_mir.blocks[function.block_start + 3]
-		expect(header[4]).to_equal(2)
-		expect(body[4]).to_equal(2)
-		expect(exit[4]).to_equal(1)
-		expect(state.scalar_mir.instructions[body[5]][4]).to_equal(2)
+		expect(header.parameter_count).to_equal(2)
+		expect(body.parameter_count).to_equal(2)
+		expect(exit.parameter_count).to_equal(1)
+		expect(state.scalar_mir.instructions[body.instruction_start][4]).to_equal(2)
 		qbe := gate4_output_source(gate4_emit_qbe(state))
 		expect(
 			qbe.include?(
@@ -370,7 +370,7 @@ describe("Gate 4 TypeRB frontend") do
 		clear_array_fixture_binary_plans(state, 3)
 		expect(gate4_output_source(gate4_emit_qbe(state))).to_equal(qbe)
 
-		state.scalar_mir.arguments[body[11] + 1] = state.scalar_mir.arguments[body[3]]
+		state.scalar_mir.arguments[body.first_argument_start + 1] = state.scalar_mir.arguments[body.parameter_start]
 		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("MIR Array induction proof differs")
 	end
 
@@ -387,7 +387,7 @@ describe("Gate 4 TypeRB frontend") do
 		function := state.scalar_mir.functions[function_index]
 		body := state.scalar_mir.blocks[function.block_start + 2]
 		expect(state.scalar_mir.values[0].type_id).to_equal(6)
-		expect(state.scalar_mir.instructions[body[5]][4]).to_equal(2)
+		expect(state.scalar_mir.instructions[body.instruction_start][4]).to_equal(2)
 		qbe := gate4_output_source(gate4_emit_qbe(state))
 		expect(qbe.include?("function d $g4f0(l %p0)")).to_be_true()
 		expect(qbe.include?(" =d phi @start d_0.0, ")).to_be_true()
@@ -396,7 +396,7 @@ describe("Gate 4 TypeRB frontend") do
 		expect(qbe.include?("stored %t2, %return_value")).to_be_true()
 		expect(qbe.include?("@array_bounds_failure")).to_be_false()
 		expect(qbe.include?("csgtl %t1, 9007199254740991")).to_be_false()
-		load := state.scalar_mir.instructions[body[5] + 1]
+		load := state.scalar_mir.instructions[body.instruction_start + 1]
 		mut value_index := 0
 		while state.scalar_mir.values[value_index].id != load[1]
 			value_index += 1
