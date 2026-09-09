@@ -1,4 +1,4 @@
-import { gate4_float_literal_in_range, gate4_integer_literal_in_range, gate4_number_is_float, gate4_small_nonnegative_integer_operand } from literals
+import { gate4_ascii_code, gate4_float_literal_in_range, gate4_integer_literal_in_range, gate4_number_is_float, gate4_small_nonnegative_integer_operand } from literals
 
 record MirLoopTransfer
 	kind: Integer
@@ -82,6 +82,7 @@ record Gate4MirBlock
 end
 
 record Gate4MirFunction
+	integer_guard: Integer
 	id: Integer
 	entry_block: Integer
 	source_id: Integer
@@ -608,6 +609,151 @@ def gate4_mir_array_header(operations: Array<Gate4MirArrayOperation>): Integer
 	return selected
 end
 
+record MirScalarRange
+	low: Integer
+	high: Integer
+end
+
+# Parse only a nonnegative portable decimal; malformed MIR must not make
+# range analysis itself fail or overflow. Underscores carry no value.
+def mir_scalar_literal(text: String): Integer
+	mut digits := 0
+	mut value := 0
+	mut index := 0
+	while index < text.size()
+		character := text[index]
+		if character != "_"
+			digit := gate4_ascii_code(character) - 48
+			if digit < 0 || digit > 9
+				return - 1
+			end
+			if value > (9007199254740991 - digit) / 10
+				return - 1
+			end
+			digits += 1
+			value = value * 10 + digit
+		end
+		index += 1
+	end
+	if digits == 0
+		return - 1
+	end
+	return value
+end
+
+# A nonzero guard is an exclusive power-of-two bound on every Integer
+# parameter. All intermediate Integer ranges must fit the portable domain.
+# This bounded proof accepts only a complete straight-line scalar entry.
+def mir_scalar_guard_proves(native_module: Gate4MirModule, function: Gate4MirFunction, limit: Integer): Integer
+	if function.block_count != 2 || function.parameter_count < 1 || function.parameter_count > 4
+		return - 1
+	end
+	block := native_module.blocks[function.block_start]
+	if block.id != function.entry_block || block.terminator != 3 || block.instruction_count > 32
+		return - 1
+	end
+	mut ranges: Array<MirScalarRange> := []
+	mut index := 0
+	while index < function.parameter_count
+		value := native_module.arguments[function.parameter_start + index]
+		if value != index || gate4_mir_value_type(native_module, function.id, value) != 1
+			return - 1
+		end
+		ranges.push(MirScalarRange.new(low: 0, high: limit - 1))
+		index += 1
+	end
+	mut checked := 0
+	index = block.instruction_start
+	finish := index + block.instruction_count
+	while index < finish
+		instruction := native_module.instructions[index]
+		if instruction.result != ranges.size()
+			return - 1
+		end
+		mut low := 0
+		mut high := 0
+		result_type := gate4_mir_value_type(native_module, function.id, instruction.result)
+		if instruction.kind == 6
+			if result_type == 1
+				low = mir_scalar_literal(native_module.literal_texts[instruction.payload])
+				if low < 0
+					return - 1
+				end
+				high = low
+			end
+		elsif instruction.kind == 7
+			if result_type == 1
+				left := instruction.first
+				right := instruction.second
+				if left < 0 || right < 0 || left >= ranges.size() || right >= ranges.size()
+					return - 1
+				end
+				left_range := ranges[left]
+				right_range := ranges[right]
+				operator := instruction.payload
+				if operator == 1 || operator == 13
+					if left_range.high > 9007199254740991 - right_range.high
+						return 0
+					end
+					low = left_range.low + right_range.low
+					high = left_range.high + right_range.high
+				elsif operator == 3 || operator == 12
+					if right_range.high > 0
+						if left_range.high > 9007199254740991 / right_range.high
+							return 0
+						end
+					end
+					low = left_range.low * right_range.low
+					high = left_range.high * right_range.high
+				elsif operator == 4
+					if right_range.low == 0
+						return - 1
+					end
+					low = left_range.low / right_range.high
+					high = left_range.high / right_range.low
+				else
+					return - 1
+				end
+				checked += 1
+			end
+		elsif instruction.kind != 9
+			return - 1
+		end
+		ranges.push(MirScalarRange.new(low: low, high: high))
+		index += 1
+	end
+	if checked < 3
+		return - 1
+	end
+	return 1
+end
+
+def mir_scalar_guard(native_module: Gate4MirModule, function: Gate4MirFunction): Integer
+	if native_module.array_regions.size() > 32
+		return 0
+	end
+	if function.block_count != 2 || function.parameter_count < 1 || function.parameter_count > 4
+		return 0
+	end
+	# Begin with the existing multiplication fast-path operand domain and
+	# shrink the common input domain until the entire region is safe.
+	mut limit := 67108864
+	while limit >= 2
+		proof := mir_scalar_guard_proves(native_module, function, limit)
+		if proof < 0
+			return 0
+		elsif proof > 0
+			return limit
+		end
+		limit = limit / 2
+	end
+	return 0
+end
+
+def mir_function_with_guard(function: Gate4MirFunction, guard: Integer): Gate4MirFunction
+	return Gate4MirFunction.new(integer_guard: guard, id: function.id, entry_block: function.entry_block, source_id: function.source_id, line: function.line, parameter_start: function.parameter_start, parameter_count: function.parameter_count, block_start: function.block_start, block_count: function.block_count)
+end
+
 def gate4_optimize_verified_mir(mut native_module: Gate4MirModule)
 	mut index := 0
 	while index < native_module.instructions.size()
@@ -630,6 +776,12 @@ def gate4_optimize_verified_mir(mut native_module: Gate4MirModule)
 		if payload != instruction.payload
 			native_module.instructions[index] = gate4_mir_instruction_with_payload(instruction, payload)
 		end
+		index += 1
+	end
+	index = 0
+	while index < native_module.functions.size()
+		function := native_module.functions[index]
+		native_module.functions[index] = mir_function_with_guard(function, mir_scalar_guard(native_module, function))
 		index += 1
 	end
 	index = 0
@@ -1315,6 +1467,14 @@ def gate4_verify_mir(native_module: Gate4MirModule, optimized: Boolean): String
 		error := gate4_mir_function_error(native_module, native_module.functions[index])
 		if error != ""
 			return error
+		end
+		function := native_module.functions[index]
+		mut expected_guard := 0
+		if optimized
+			expected_guard = mir_scalar_guard(native_module, function)
+		end
+		if function.integer_guard != expected_guard
+			return "MIR scalar Integer guard differs"
 		end
 		index += 1
 	end

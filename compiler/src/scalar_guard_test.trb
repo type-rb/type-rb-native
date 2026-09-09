@@ -1,0 +1,92 @@
+import { gate4_check, gate4_emit_qbe, gate4_lex } from compiler
+import { gate4_parse_module } from parser
+import { gate4_resolve } from resolution
+import { Gate4Compiler, gate4_compiler_new } from state
+import { Gate4MirModule, gate4_mir_function_index, gate4_mir_instruction_with_payload, gate4_optimize_verified_mir, gate4_verify_mir, mir_function_with_guard, mir_scalar_literal } from mir
+import qbe_output
+import { gate4_load_string } from storage
+import trb/std/string_builder
+import { describe, expect, test } from trb/std/test
+
+def scalar_guard_output(output: QbeOutput): String
+	mut writer := StringBuilder.new()
+	mut index := 0
+	while index < output.count[0]
+		writer.append(gate4_load_string(output.lines, index))
+		writer.append("\n")
+		index += 1
+	end
+	return writer.to_s()
+end
+
+def scalar_guard_state(expression: String): Gate4Compiler
+	source := "def scalar(left: Integer, right: Integer): Float\n\treturn " + expression + "\nend\ndef main()\n\tmut index := 0\n\twhile index < 2\n\t\tvalue := scalar(index, index)\n\t\tindex += 1\n\tend\nend\n"
+	mut state := gate4_compiler_new(source.size() + 1)
+	expect(gate4_lex(state, source)).to_be_true()
+	expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+	expect(gate4_resolve(state)).to_be_true()
+	expect(gate4_check(state)).to_be_true()
+	return state
+end
+
+describe("MIR scalar Integer guards") do
+	test("decodes portable literals without unsupported recovery conversions") do
+		expect(mir_scalar_literal("000_12") == 12).to_be_true()
+		expect(mir_scalar_literal("9007199254740991") == 9007199254740991).to_be_true()
+		invalid := ["", "___", "-1", "x", "1.0", "9007199254740992", "999999999999999999999999"]
+		mut index := 0
+		while index < invalid.size()
+			expect(mir_scalar_literal(invalid[index]) == - 1).to_be_true()
+			index += 1
+		end
+	end
+
+	test("derives a common input range for an entire arithmetic region") do
+		state := scalar_guard_state("((left + right) * (left + right + 1) / 2 + left + 1) * 1.0")
+		function := state.scalar_mir.functions[gate4_mir_function_index(state.scalar_mir, 0)]
+		expect(function.integer_guard).to_equal(33554432)
+		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("")
+		qbe := scalar_guard_output(gate4_emit_qbe(state))
+		expect(qbe.include?(", 33554432")).to_be_true()
+		gate4_optimize_verified_mir(state.scalar_mir)
+		expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("")
+	end
+
+	test("rejects supplied, widened, non-power-of-two and missing guards") do
+		guards := [- 1, 0, 33554433, 67108864, 9007199254740991]
+		mut index := 0
+		while index < guards.size()
+			state := scalar_guard_state("((left + right) * (left + right + 1) / 2 + left + 1) * 1.0")
+			mut native_module := state.scalar_mir
+			function := native_module.functions[0]
+			native_module.functions[0] = mir_function_with_guard(function, guards[index])
+			expect(gate4_verify_mir(native_module, true)).to_equal("MIR scalar Integer guard differs")
+			index += 1
+		end
+		state := scalar_guard_state("((left + right) * (left + right + 1) / 2 + left + 1) * 1.0")
+		mut native_module := state.scalar_mir
+		native_module = Gate4MirModule.new(source_count: native_module.source_count, entry_function: native_module.entry_function, functions: native_module.functions, blocks: native_module.blocks, values: native_module.values, instructions: native_module.instructions, arguments: native_module.arguments, array_regions: native_module.array_regions, facts: [], literal_texts: native_module.literal_texts)
+		expect(gate4_verify_mir(native_module, false)).to_equal("MIR scalar Integer guard differs")
+	end
+
+	test("rechecks the proof after a valid arithmetic instruction changes") do
+		state := scalar_guard_state("((left + right) * (left + right + 1) / 2 + left + 1) * 1.0")
+		mut native_module := state.scalar_mir
+		block := native_module.blocks[native_module.functions[0].block_start]
+		instruction := native_module.instructions[block.instruction_start]
+		native_module.instructions[block.instruction_start] = gate4_mir_instruction_with_payload(instruction, 2)
+		expect(gate4_verify_mir(native_module, true)).to_equal("MIR scalar Integer guard differs")
+	end
+
+	test("keeps unsupported or unprofitable regions checked") do
+		expressions := ["(left + right) * 1.0", "(left + right + 1 - left) * 1.0", "((left + right + 1) / right) * 1.0", "((left + right + 1) % 2) * 1.0", "(- left + right + 1) * 1.0"]
+		mut index := 0
+		while index < expressions.size()
+			state := scalar_guard_state(expressions[index])
+			function := state.scalar_mir.functions[gate4_mir_function_index(state.scalar_mir, 0)]
+			expect(function.integer_guard).to_equal(0)
+			expect(gate4_verify_mir(state.scalar_mir, true)).to_equal("")
+			index += 1
+		end
+	end
+end

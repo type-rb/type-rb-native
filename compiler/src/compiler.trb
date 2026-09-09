@@ -991,7 +991,7 @@ def gate4_scalar_type_name(type_id: Integer): String
 	return "Invalid"
 end
 
-def gate4_emit_scalar_mir(
+def gate4_emit_scalar_mir_body(
 		state: Gate4Compiler,
 		function_index: Integer,
 		argument_operands: Array<String>,
@@ -1000,6 +1000,7 @@ def gate4_emit_scalar_mir(
 		mut context: Gate4EmitContext,
 		mut output: QbeOutput,
 		inline: Boolean,
+		safe: Boolean,
 	): Gate4EmittedValue
 	saved_inline_depth := context.scalar_inline_depth[0]
 	if inline
@@ -1055,17 +1056,29 @@ def gate4_emit_scalar_mir(
 				if !inline
 					guarded_operator = 0
 				end
-				operand := lower_binary_operand(
-					context,
-					output,
-					operator_id,
-					gate4_emitted_value(operands[left_id], types[left_id], 0, "", ""),
-					gate4_emitted_value(operands[right_id], types[right_id], 0, "", ""),
-					result_type,
-					facts[left_id] == 1,
-					facts[right_id] == 1,
-					guarded_operator,
-				)
+				mut operand := ""
+				if safe && result_type == "Integer"
+					operand = gate4_emit_temporary(context)
+					mut operation := "add"
+					if operator_id == 3
+						operation = "mul"
+					elsif operator_id == 4
+						operation = "udiv"
+					end
+					qbe_output_line(output, "\t" + operand + " =l " + operation + " " + operands[left_id] + ", " + operands[right_id])
+				else
+					operand = lower_binary_operand(
+						context,
+						output,
+						operator_id,
+						gate4_emitted_value(operands[left_id], types[left_id], 0, "", ""),
+						gate4_emitted_value(operands[right_id], types[right_id], 0, "", ""),
+						result_type,
+						facts[left_id] == 1,
+						facts[right_id] == 1,
+						guarded_operator,
+					)
+				end
 				result = gate4_emitted_value(operand, result_type, 0, "", "")
 			else
 				if instruction.kind == 8
@@ -1103,6 +1116,50 @@ def gate4_emit_scalar_mir(
 	end
 	context.scalar_inline_depth[0] = saved_inline_depth
 	return gate4_emitted_value(operands[block.return_value], types[block.return_value], 0, "", "")
+end
+
+def gate4_emit_scalar_mir(
+		state: Gate4Compiler,
+		function_index: Integer,
+		argument_operands: Array<String>,
+		argument_types: Array<String>,
+		argument_facts: Array<Integer>,
+		mut context: Gate4EmitContext,
+		mut output: QbeOutput,
+		inline: Boolean,
+	): Gate4EmittedValue
+	function := state.scalar_mir.functions[gate4_mir_function_index(state.scalar_mir, function_index)]
+	if !inline || function.integer_guard == 0
+		return gate4_emit_scalar_mir_body(state, function_index, argument_operands, argument_types, argument_facts, context, output, inline, false)
+	end
+	mut combined := argument_operands[0]
+	mut index := 1
+	while index < argument_operands.size()
+		merged := gate4_emit_temporary(context)
+		qbe_output_line(output, "\t" + merged + " =l or " + combined + ", " + argument_operands[index])
+		combined = merged
+		index += 1
+	end
+	valid := gate4_emit_temporary(context)
+	fast := gate4_emit_label(context)
+	slow := gate4_emit_label(context)
+	complete := gate4_emit_label(context)
+	result := gate4_emit_temporary(context)
+	qbe_output_line(output, "\t" + valid + " =w cultl " + combined + ", " + gate4_integer_string(function.integer_guard))
+	qbe_output_branch(output, valid, fast, slow)
+	qbe_output_line(output, slow)
+	checked := gate4_emit_scalar_mir_body(state, function_index, argument_operands, argument_types, argument_facts, context, output, inline, false)
+	mut width := "l"
+	if checked.type_name == "Float"
+		width = "d"
+	end
+	qbe_output_line(output, "\t" + result + " =" + width + " copy " + checked.operand)
+	qbe_output_line(output, "\tjmp " + complete)
+	qbe_output_line(output, fast)
+	unchecked := gate4_emit_scalar_mir_body(state, function_index, argument_operands, argument_types, argument_facts, context, output, inline, true)
+	qbe_output_line(output, "\t" + result + " =" + width + " copy " + unchecked.operand)
+	qbe_output_line(output, complete)
+	return gate4_emitted_value(result, checked.type_name, 0, "", "")
 end
 
 def gate4_emit_scalar_mir_direct_call(
