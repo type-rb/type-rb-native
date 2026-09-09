@@ -9,6 +9,16 @@ verification remain part of each feature, not deferred cleanup. See the
 deferral/re-entry conditions for unaccepted Array-loop PR #307. The accepted
 ownership and historical measurements below remain unchanged.
 
+## Scalar Integer region checkpoint
+
+[Verified scalar range guards](native-mir-scalar-guards.md) move the proof for
+several checked Integer operations into one bounded MIR region. A single
+runtime guard selects the proved path; other inputs retain checked semantics.
+The complete current Linux arm64 cohort puts Native ahead of Pure Go for
+spectral-norm. Other kernels remain slower, and their cumulative regressions
+are retained in the accepted checkpoint. This does not broaden MIR admission
+or establish general performance parity.
+
 ## Current ownership checkpoint
 
 The function table now uses `Gate4MirFunction` records for identity, entry,
@@ -405,5 +415,5 @@ Public evidence:
 - [Array reduction target regressions](https://github.com/type-rb/type-rb-native/actions/runs/33697599529)
 - [Array reduction persistent-worker checks](https://github.com/type-rb/type-rb-native/actions/runs/33697599556)
 - [Array reduction complete Native gates](https://github.com/type-rb/type-rb-native/actions/runs/33697599531)
-- [current complete formal runtime result](../results/2026-09-06-benchmarksgame-runtime-checked-boolean-branches-linux-arm64/README.md)
-- [current complete formal build result](../results/2026-09-06-benchmarksgame-build-checked-boolean-branches-linux-arm64/README.md)
+- [current complete formal runtime result](../results/2026-09-09-benchmarksgame-runtime-scalar-range-guards-linux-arm64/README.md)
+- [current complete formal build result](../results/2026-09-09-benchmarksgame-build-scalar-range-guards-linux-arm64/README.md)

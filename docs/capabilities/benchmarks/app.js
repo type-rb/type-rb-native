@@ -1,4 +1,4 @@
-import { benchmarkData } from './data.js?v=2026-09-06-85e8d49';
+import { benchmarkData } from './data.js?v=2026-09-09-2841cb93';
 
 const caseLabels = {
   'fannkuch-redux': 'fannkuch-redux',

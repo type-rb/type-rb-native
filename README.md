@@ -71,8 +71,8 @@ Current work expands ordinary language coverage and improves compiler-source
 readability, with the required semantic ownership and verification in Native
 MIR. See the [basic language coverage plan](docs/native-language-coverage.md).
 Further benchmark tuning is secondary to these bounded language slices.
-Pure Go parity remains a goal, not an achieved general result. Runtime and
-compiler-build measurements are separate in the
+The current spectral-norm result exceeds Pure Go; broader runtime parity remains
+a goal. Application runtime and compilation measurements are separate in the
 [benchmark explorer](https://type-rb.github.io/type-rb-native/benchmarks/).
 See [MIR status](docs/native-mir-optimization-status.md) for the migration and
 [development history](docs/development-history.md) for dated checkpoints.

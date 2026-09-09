@@ -1,12 +1,12 @@
 # Guarded scalar Integer regions
 
-Status: candidate under [issue #371](https://github.com/type-rb/type-rb-native/issues/371).
-No runtime benefit or adoption is established yet.
+Status: accepted through [PR #372](https://github.com/type-rb/type-rb-native/pull/372).
+The complete formal cohort confirms the spectral-norm objective below.
 
 A complete straight-line scalar MIR function can describe several checked
 Integer operations even when its caller remains on the direct path. Checking
 each operation separately leaves multiple branches in small inlined numeric
-helpers. This candidate proves a common nonnegative parameter range for the
+helpers. The pass proves a common nonnegative parameter range for the
 whole region and guards that range once at an existing inline call site.
 
 `Gate4MirFunction.integer_guard` is zero in input MIR. A nonzero value is an
@@ -48,3 +48,19 @@ unchanged compiler, recovery, target and memory authorities. Compiler size,
 self-build costs and generated application costs are reported separately
 against both immediate and cumulative controls. Current formal cross-language
 runtime/build evidence is required before changing Pages performance claims.
+
+
+## Evidence and remaining scope
+
+The [accepted checkpoint](../results/2026-09-09-scalar-range-guards-accepted-darwin-linux-arm64/README.md)
+records safety/recovery checks, compiler costs, the local interleaved comparison
+and earlier rejected attempts. The [complete formal runtime cohort](../results/2026-09-09-benchmarksgame-runtime-scalar-range-guards-linux-arm64/README.md)
+uses revision `2841cb93` on Linux arm64. Its one-core spectral-norm median is
+2.30664 seconds versus Pure Go's 3.21933 seconds; CPU time also improves.
+The two other kernels remain slower, and the local cumulative comparison
+retains their earlier regressions. These results do not establish broad parity.
+
+The new named `MirScalarRange` record keeps transient lower/upper bounds
+explicit within MIR analysis. It avoids adding a positional carrier or a
+second semantic owner in the emitter. General Array assignment and call-effect
+ownership remain separate work, with no change to source evaluation order.
