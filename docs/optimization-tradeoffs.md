@@ -32,6 +32,8 @@ assignment is recorded in
 no relative limit or historical result. The separately validated
 [record Array budget](decisions/0030-record-array-compiler-budget.md) retains
 the ordinary structured-data implementation cost without changing those ratios.
+The separately validated [scalar guard budget](decisions/0031-scalar-guard-compiler-budget.md)
+retains its bounded range-analysis cost without changing those ratios.
 A cost failure blocks ordinary acceptance, not necessarily
 further investigation. There is no general relaxed percentage or automatic
 conversion from an evaluation budget to a merge budget.
