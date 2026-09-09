@@ -2,7 +2,7 @@ import { gate4_check, gate4_emit_qbe, gate4_lex } from compiler
 import { gate4_parse_module } from parser
 import { gate4_resolve } from resolution
 import { Gate4Compiler, gate4_compiler_new } from state
-import { Gate4MirModule, gate4_mir_function_index, gate4_mir_instruction_with_payload, gate4_optimize_verified_mir, gate4_verify_mir, mir_function_with_guard, mir_scalar_literal } from mir
+import { Gate4MirInstruction, Gate4MirModule, gate4_mir_function_index, gate4_mir_instruction_with_payload, gate4_optimize_verified_mir, gate4_verify_mir, mir_function_with_guard, mir_scalar_literal } from mir
 import qbe_output
 import { gate4_load_string } from storage
 import trb/std/string_builder
@@ -37,6 +37,30 @@ describe("MIR scalar Integer guards") do
 		mut index := 0
 		while index < invalid.size()
 			expect(mir_scalar_literal(invalid[index]) == - 1).to_be_true()
+			index += 1
+		end
+	end
+
+	test("rejects malformed Integer spellings independently of guard admission") do
+		invalid := ["", "___", "x", "1x", "-1", " 1", "1.0", "9007199254740992", "999999999999999999999999"]
+		mut index := 0
+		while index < invalid.size()
+			state := scalar_guard_state("(left + right + 1) * 1.0")
+			mut native_module := state.scalar_mir
+			expect(native_module.functions[0].integer_guard).to_equal(0)
+			mut cursor := 0
+			mut changed := false
+			while cursor < native_module.instructions.size()
+				instruction := native_module.instructions[cursor]
+				if instruction.kind == 6 && !changed
+					native_module.literal_texts[instruction.payload] = invalid[index]
+					native_module.instructions[cursor] = Gate4MirInstruction.new(kind: instruction.kind, result: instruction.result, first: 0, second: instruction.second, payload: instruction.payload, failure: instruction.failure, source_id: instruction.source_id, line: instruction.line)
+					changed = true
+				end
+				cursor += 1
+			end
+			expect(changed).to_be_true()
+			expect(gate4_verify_mir(native_module, true)).to_equal("MIR Integer literal is invalid")
 			index += 1
 		end
 	end
