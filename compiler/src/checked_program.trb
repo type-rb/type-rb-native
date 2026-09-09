@@ -1,6 +1,6 @@
 import { gate4_load_integer, gate4_load_string, gate4_storage_chunk_size, gate4_store_integer } from storage
 import { gate4_float_literal_in_range, gate4_integer_literal_in_range, gate4_number_is_float, gate4_small_nonnegative_integer_operand } from literals
-import { Gate4MirBlock, Gate4MirFunction, Gate4MirValue, MirLoopTransfer, gate4_mir_array_element_type, gate4_mir_function_index, mir_array_assignment_valid, mir_logical_plan, mir_loop_transfer_valid } from mir
+import { Gate4MirBlock, Gate4MirFunction, Gate4MirInstruction, Gate4MirValue, MirLoopTransfer, gate4_mir_array_element_type, gate4_mir_function_index, gate4_mir_instruction_with_payload, mir_array_assignment_valid, mir_logical_plan, mir_loop_transfer_valid } from mir
 import { Gate4Compiler, Gate4Locals, gate4_diagnostic, gate4_has_diagnostic, gate4_local_add, gate4_local_find, gate4_terminal_token } from state
 import { finish_statement, gate4_advance, gate4_binary_operator_id, gate4_binary_precedence, gate4_declaration_start, gate4_expect, gate4_expect_identifier, gate4_parse_type, gate4_skip_newlines, gate4_token_is, syntax_conditional_tail, syntax_loop_transfer_kind } from parser
 import { gate4_array_element_type, gate4_array_type, gate4_common_array_element_type, gate4_find_field, gate4_find_record_type, gate4_find_visible_function, gate4_find_visible_record, gate4_record_type, gate4_resolve_type_name, gate4_standard_package_import, gate4_standard_package_root, gate4_type_display } from resolution
@@ -144,10 +144,16 @@ def gate4_scalar_mir_instruction(
 		failure: Integer,
 		line: Integer,
 	)
-	locals.mir_instructions.push([
-			kind, result, first, second, operation, failure,
-			state.active_module[0], line,
-		])
+	locals.mir_instructions.push(Gate4MirInstruction.new(
+			kind: kind,
+			result: result,
+			first: first,
+			second: second,
+			payload: operation,
+			failure: failure,
+			source_id: state.active_module[0],
+			line: line,
+		))
 end
 
 def gate4_scalar_mir_literal(
@@ -1493,13 +1499,13 @@ def gate4_check_block(
 									else
 										first := locals.mir_instructions[locals.mir_state[6]]
 										second := locals.mir_instructions[locals.mir_state[6] + 1]
-										if first[0] != 4
+										if first.kind != 4
 											gate4_scalar_mir_disable(locals)
 										end
-										if second[0] != 7
+										if second.kind != 7
 											gate4_scalar_mir_disable(locals)
 										else
-											if second[4] != 8
+											if second.payload != 8
 												gate4_scalar_mir_disable(locals)
 											end
 										end
@@ -1840,11 +1846,11 @@ def gate4_scalar_mir_commit(
 	instruction_count := locals.mir_instructions.size()
 	index = 0
 	while index < instruction_count
-		# Checking is complete: transfer the function-owned row, as for values.
-		# Only a literal operand needs relocation into the module's literal table.
+		# Checking is complete: transfer the function-owned instruction.
+		# Relocate a literal payload without mutating the function-local record.
 		mut instruction := locals.mir_instructions[index]
-		if instruction[0] == 6
-			instruction[4] = instruction[4] + literal_base
+		if instruction.kind == 6
+			instruction = gate4_mir_instruction_with_payload(instruction, instruction.payload + literal_base)
 		end
 		native_module.instructions.push(instruction)
 		index += 1
@@ -1872,9 +1878,9 @@ def gate4_scalar_mir_commit(
 			exit_parameter_count = 1
 		end
 		entry_argument := native_module.arguments.size()
-		native_module.arguments.push(locals.mir_instructions[0][1])
+		native_module.arguments.push(locals.mir_instructions[0].result)
 		if mode == 3
-			native_module.arguments.push(locals.mir_instructions[1][1])
+			native_module.arguments.push(locals.mir_instructions[1].result)
 		end
 		body_argument := native_module.arguments.size()
 		native_module.arguments.push(locals.mir_state[12] - 1)

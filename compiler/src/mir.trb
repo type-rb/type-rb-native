@@ -32,6 +32,30 @@ def mir_loop_transfer_valid(plan: MirLoopTransfer, origin: Integer, kind: Intege
 	return origin < token_count
 end
 
+record Gate4MirInstruction
+	kind: Integer
+	result: Integer
+	first: Integer
+	second: Integer
+	payload: Integer
+	failure: Integer
+	source_id: Integer
+	line: Integer
+end
+
+def gate4_mir_instruction_with_payload(instruction: Gate4MirInstruction, payload: Integer): Gate4MirInstruction
+	return Gate4MirInstruction.new(
+		kind: instruction.kind,
+		result: instruction.result,
+		first: instruction.first,
+		second: instruction.second,
+		payload: payload,
+		failure: instruction.failure,
+		source_id: instruction.source_id,
+		line: instruction.line,
+	)
+end
+
 record Gate4MirBlock
 	id: Integer
 	source_id: Integer
@@ -70,8 +94,8 @@ record Gate4MirValue
 	line: Integer
 end
 
-# Instructions retain their compact bootstrap row layout:
-# instruction: kind, result, two operands, literal, failure block, origin.
+# Instructions name their opcode, result, operands, opcode-specific payload,
+# failure target and origin. Verified rewrites replace whole readonly records.
 # Array regions retain parameter, access, and effect operations.
 # The verifier derives their plans; input facts remain empty.
 # A verified pass may mark the complete Array induction plan as optimized
@@ -83,7 +107,7 @@ record Gate4MirModule
 	functions: Array<Gate4MirFunction>
 	blocks: Array<Gate4MirBlock>
 	values: Array<Gate4MirValue>
-	instructions: Array<Array<Integer>>
+	instructions: Array<Gate4MirInstruction>
 	arguments: Array<Integer>
 	array_regions: Array<Array<Integer>>
 	facts: Array<Integer>
@@ -237,7 +261,7 @@ def gate4_mir_value_available(
 	end
 	mut index := block.instruction_start
 	while index < instruction_finish
-		if native_module.instructions[index][1] == value_id
+		if native_module.instructions[index].result == value_id
 			return true
 		end
 		index += 1
@@ -274,7 +298,7 @@ def gate4_mir_definition_count(
 		index = block.instruction_start
 		finish = index + block.instruction_count
 		while index < finish
-			if native_module.instructions[index][1] == value_id
+			if native_module.instructions[index].result == value_id
 				count += 1
 			end
 			index += 1
@@ -301,16 +325,13 @@ end
 
 def gate4_mir_exact_integer_literal(
 		native_module: Gate4MirModule,
-		instruction: Array<Integer>,
+		instruction: Gate4MirInstruction,
 		text: String,
 	): Boolean
-	if instruction.size() != 8
+	if instruction.kind != 6
 		return false
 	end
-	if instruction[0] != 6
-		return false
-	end
-	literal := instruction[4]
+	literal := instruction.payload
 	if literal < 0
 		return false
 	end
@@ -324,7 +345,7 @@ def gate4_mir_induction_address(
 		native_module: Gate4MirModule,
 		function: Gate4MirFunction,
 		block: Gate4MirBlock,
-		instruction: Array<Integer>,
+		instruction: Gate4MirInstruction,
 	): Boolean
 	if function.block_count != 6
 		return false
@@ -375,7 +396,7 @@ def gate4_mir_induction_address(
 	end
 	header_value := native_module.arguments[header.parameter_start]
 	body_value := native_module.arguments[body.parameter_start]
-	if instruction[3] != body_value
+	if instruction.second != body_value
 		return false
 	end
 	if native_module.arguments[header.first_argument_start] != header_value
@@ -394,62 +415,56 @@ def gate4_mir_induction_address(
 	if !gate4_mir_exact_integer_literal(native_module, zero, "0")
 		return false
 	end
-	if native_module.arguments[entry.first_argument_start] != zero[1]
+	if native_module.arguments[entry.first_argument_start] != zero.result
 		return false
 	end
 	length := native_module.instructions[header.instruction_start]
 	comparison := native_module.instructions[header.instruction_start + 1]
-	if length[0] != 4
+	if length.kind != 4
 		return false
 	end
-	if comparison[0] != 7
+	if comparison.kind != 7
 		return false
 	end
-	if comparison[4] != 8
+	if comparison.payload != 8
 		return false
 	end
-	if comparison[2] != header_value
+	if comparison.first != header_value
 		return false
 	end
-	if comparison[3] != length[1]
+	if comparison.second != length.result
 		return false
 	end
-	if header.condition != comparison[1]
+	if header.condition != comparison.result
 		return false
 	end
 	load := native_module.instructions[body.instruction_start + 1]
-	if load.size() != 8
+	if load.kind != 10
 		return false
 	end
-	if load[0] != 10
-		return false
-	end
-	if load[2] != instruction[1]
+	if load.first != instruction.result
 		return false
 	end
 	one := native_module.instructions[body.instruction_start + body.instruction_count - 2]
 	add := native_module.instructions[body.instruction_start + body.instruction_count - 1]
-	if add.size() != 8
-		return false
-	end
 	if !gate4_mir_exact_integer_literal(native_module, one, "1")
 		return false
 	end
-	if add[0] != 7
+	if add.kind != 7
 		return false
 	end
-	if add[4] != 1
-		if add[4] != 13
+	if add.payload != 1
+		if add.payload != 13
 			return false
 		end
 	end
-	if add[2] != body_value
+	if add.first != body_value
 		return false
 	end
-	if add[3] != one[1]
+	if add.second != one.result
 		return false
 	end
-	if native_module.arguments[body.first_argument_start] != add[1]
+	if native_module.arguments[body.first_argument_start] != add.result
 		return false
 	end
 	if header.parameter_count == 1
@@ -484,7 +499,7 @@ def gate4_mir_induction_address(
 	header_accumulator := native_module.arguments[header.parameter_start + 1]
 	body_accumulator := native_module.arguments[body.parameter_start + 1]
 	exit_accumulator := native_module.arguments[exit.parameter_start]
-	if native_module.arguments[entry.first_argument_start + 1] != accumulator_zero[1]
+	if native_module.arguments[entry.first_argument_start + 1] != accumulator_zero.result
 		return false
 	end
 	if native_module.arguments[header.first_argument_start + 1] != header_accumulator
@@ -494,21 +509,21 @@ def gate4_mir_induction_address(
 		return false
 	end
 	reduction := native_module.instructions[body.instruction_start + 2]
-	if reduction[0] != 7
+	if reduction.kind != 7
 		return false
 	end
-	if reduction[4] != 1
-		if reduction[4] != 13
+	if reduction.payload != 1
+		if reduction.payload != 13
 			return false
 		end
 	end
-	if reduction[2] != body_accumulator
+	if reduction.first != body_accumulator
 		return false
 	end
-	if reduction[3] != load[1]
+	if reduction.second != load.result
 		return false
 	end
-	if native_module.arguments[body.first_argument_start + 1] != reduction[1]
+	if native_module.arguments[body.first_argument_start + 1] != reduction.result
 		return false
 	end
 	if exit.return_value != exit_accumulator
@@ -592,22 +607,24 @@ end
 def gate4_optimize_verified_mir(mut native_module: Gate4MirModule)
 	mut index := 0
 	while index < native_module.instructions.size()
-		mut instruction := native_module.instructions[index]
-		if instruction[0] == 5
-			if instruction[4] == 1
-				instruction[4] = 2
+		instruction := native_module.instructions[index]
+		mut payload := instruction.payload
+		if instruction.kind == 5
+			if payload == 1
+				payload = 2
 			end
 		end
-		if instruction[0] == 7
-			if instruction[5] >= 0
-				if instruction[4] == 1
-					instruction[4] = 13
-				else
-					if instruction[4] == 3
-						instruction[4] = 12
-					end
+		if instruction.kind == 7
+			if instruction.failure >= 0
+				if payload == 1
+					payload = 13
+				elsif payload == 3
+					payload = 12
 				end
 			end
+		end
+		if payload != instruction.payload
+			native_module.instructions[index] = gate4_mir_instruction_with_payload(instruction, payload)
 		end
 		index += 1
 	end
@@ -634,42 +651,42 @@ def gate4_mir_instruction_error(
 		instruction_index: Integer,
 	): String
 	instruction := native_module.instructions[instruction_index]
-	if !gate4_mir_origin_valid(instruction[6], instruction[7], native_module.source_count[0])
+	if !gate4_mir_origin_valid(instruction.source_id, instruction.line, native_module.source_count[0])
 		return "MIR instruction origin is invalid"
 	end
 	function_id := function.id
-	result_type := gate4_mir_value_type(native_module, function_id, instruction[1])
-	first_type := gate4_mir_value_type(native_module, function_id, instruction[2])
-	second_type := gate4_mir_value_type(native_module, function_id, instruction[3])
+	result_type := gate4_mir_value_type(native_module, function_id, instruction.result)
+	first_type := gate4_mir_value_type(native_module, function_id, instruction.first)
+	second_type := gate4_mir_value_type(native_module, function_id, instruction.second)
 	first_available := gate4_mir_value_available(
 		native_module,
 		function,
 		block,
 		instruction_index,
-		instruction[2],
+		instruction.first,
 	)
 	second_available := gate4_mir_value_available(
 		native_module,
 		function,
 		block,
 		instruction_index,
-		instruction[3],
+		instruction.second,
 	)
-	if instruction[0] == 1
+	if instruction.kind == 1
 		if result_type != 1
 			return "MIR Integer constant result type differs"
 		end
-		if instruction[2] == - 1
-			if instruction[3] == - 1
-				if instruction[5] == - 1
+		if instruction.first == - 1
+			if instruction.second == - 1
+				if instruction.failure == - 1
 					return ""
 				end
 			end
 		end
 		return "MIR Integer constant shape differs"
 	end
-	if instruction[0] == 2
-		if instruction[4] != 0
+	if instruction.kind == 2
+		if instruction.payload != 0
 			return "MIR checked Integer add shape differs"
 		end
 		if result_type == 1
@@ -677,7 +694,7 @@ def gate4_mir_instruction_error(
 				if first_type == 1
 					if second_available
 						if second_type == 1
-							return gate4_mir_failure_error(native_module, function, instruction[5])
+							return gate4_mir_failure_error(native_module, function, instruction.failure)
 						end
 					end
 				end
@@ -685,9 +702,9 @@ def gate4_mir_instruction_error(
 		end
 		return "MIR checked Integer add type differs"
 	end
-	if instruction[0] == 3
-		if instruction[4] == 0
-			if instruction[5] == - 1
+	if instruction.kind == 3
+		if instruction.payload == 0
+			if instruction.failure == - 1
 				if result_type == 2
 					if first_available
 						if first_type == 1
@@ -704,10 +721,10 @@ def gate4_mir_instruction_error(
 		end
 		return "MIR Integer comparison shape differs"
 	end
-	if instruction[0] == 4
-		if instruction[3] == - 1
-			if instruction[4] == 0
-				if instruction[5] == - 1
+	if instruction.kind == 4
+		if instruction.second == - 1
+			if instruction.payload == 0
+				if instruction.failure == - 1
 					if result_type == 1
 						if first_available
 							if gate4_mir_array_element_type(first_type) > 0
@@ -721,11 +738,11 @@ def gate4_mir_instruction_error(
 		end
 		return "MIR Array length shape differs"
 	end
-	if instruction[0] == 5
-		if instruction[4] < 0
+	if instruction.kind == 5
+		if instruction.payload < 0
 			return "MIR Array address shape differs"
 		end
-		if instruction[4] > 2
+		if instruction.payload > 2
 			return "MIR Array address shape differs"
 		end
 		if result_type == first_type + 1
@@ -733,11 +750,11 @@ def gate4_mir_instruction_error(
 				if gate4_mir_array_element_type(first_type) > 0
 					if second_available
 						if second_type == 1
-							error := gate4_mir_failure_error(native_module, function, instruction[5])
+							error := gate4_mir_failure_error(native_module, function, instruction.failure)
 							if error != ""
 								return error
 							end
-							if instruction[4] >= 1
+							if instruction.payload >= 1
 								if !gate4_mir_induction_address(native_module, function, block, instruction)
 									return "MIR Array induction proof differs"
 								end
@@ -750,26 +767,26 @@ def gate4_mir_instruction_error(
 		end
 		return "MIR Array address type differs"
 	end
-	if instruction[0] == 6
-		if instruction[2] < 0
+	if instruction.kind == 6
+		if instruction.first < 0
 			return "MIR scalar literal shape differs"
 		end
-		if instruction[2] > 1
+		if instruction.first > 1
 			return "MIR scalar literal shape differs"
 		end
-		if instruction[3] != - 1
+		if instruction.second != - 1
 			return "MIR scalar literal shape differs"
 		end
-		if instruction[5] != - 1
+		if instruction.failure != - 1
 			return "MIR scalar literal shape differs"
 		end
-		if instruction[4] < 0
+		if instruction.payload < 0
 			return "MIR scalar literal index is invalid"
 		end
-		if instruction[4] >= native_module.literal_texts.size()
+		if instruction.payload >= native_module.literal_texts.size()
 			return "MIR scalar literal index is invalid"
 		end
-		literal := native_module.literal_texts[instruction[4]]
+		literal := native_module.literal_texts[instruction.payload]
 		if result_type == 1
 			if !gate4_number_is_float(literal)
 				if gate4_integer_literal_in_range(literal)
@@ -777,7 +794,7 @@ def gate4_mir_instruction_error(
 					if gate4_small_nonnegative_integer_operand(literal)
 						expected_fact = 1
 					end
-					if instruction[2] == expected_fact
+					if instruction.first == expected_fact
 						return ""
 					end
 					return "MIR Integer literal fact differs"
@@ -786,7 +803,7 @@ def gate4_mir_instruction_error(
 			return "MIR Integer literal is invalid"
 		end
 		if result_type == 2
-			if instruction[2] != 0
+			if instruction.first != 0
 				return "MIR Boolean literal fact differs"
 			end
 			if literal == "true"
@@ -798,7 +815,7 @@ def gate4_mir_instruction_error(
 			return "MIR Boolean literal is invalid"
 		end
 		if result_type == 5
-			if instruction[2] != 0
+			if instruction.first != 0
 				return "MIR Float literal fact differs"
 			end
 			if gate4_number_is_float(literal)
@@ -810,14 +827,14 @@ def gate4_mir_instruction_error(
 		end
 		return "MIR scalar literal result type differs"
 	end
-	if instruction[0] == 7
+	if instruction.kind == 7
 		if !first_available
 			return "MIR scalar binary operand is undefined"
 		end
 		if !second_available
 			return "MIR scalar binary operand is undefined"
 		end
-		mut operator := instruction[4]
+		mut operator := instruction.payload
 		if operator == 12
 			operator = 3
 		end
@@ -886,31 +903,31 @@ def gate4_mir_instruction_error(
 			return "MIR scalar binary type differs"
 		end
 		if checked
-			return gate4_mir_failure_error(native_module, function, instruction[5])
+			return gate4_mir_failure_error(native_module, function, instruction.failure)
 		end
-		if instruction[5] != - 1
+		if instruction.failure != - 1
 			return "MIR scalar binary failure shape differs"
 		end
 		return ""
 	end
-	if instruction[0] == 8
-		if instruction[3] != - 1
+	if instruction.kind == 8
+		if instruction.second != - 1
 			return "MIR scalar unary shape differs"
 		end
-		if instruction[5] != - 1
+		if instruction.failure != - 1
 			return "MIR scalar unary shape differs"
 		end
 		if !first_available
 			return "MIR scalar unary operand is undefined"
 		end
-		if instruction[4] == 1
+		if instruction.payload == 1
 			if first_type == 2
 				if result_type == 2
 					return ""
 				end
 			end
 		else
-			if instruction[4] == 2
+			if instruction.payload == 2
 				if first_type == result_type
 					if result_type == 1
 						return ""
@@ -920,7 +937,7 @@ def gate4_mir_instruction_error(
 					end
 				end
 			end
-			if instruction[4] == 3
+			if instruction.payload == 3
 				if first_type == result_type
 					if result_type == 1
 						return ""
@@ -933,10 +950,10 @@ def gate4_mir_instruction_error(
 		end
 		return "MIR scalar unary type differs"
 	end
-	if instruction[0] == 9
-		if instruction[3] == - 1
-			if instruction[4] == 0
-				if instruction[5] == - 1
+	if instruction.kind == 9
+		if instruction.second == - 1
+			if instruction.payload == 0
+				if instruction.failure == - 1
 					if first_available
 						if first_type == 1
 							if result_type == 5
@@ -949,10 +966,10 @@ def gate4_mir_instruction_error(
 		end
 		return "MIR Integer-to-Float conversion type differs"
 	end
-	if instruction[0] == 10
-		if instruction[3] == - 1
-			if instruction[4] == 0
-				if instruction[5] == - 1
+	if instruction.kind == 10
+		if instruction.second == - 1
+			if instruction.payload == 0
+				if instruction.failure == - 1
 					if first_available
 						if result_type == gate4_mir_array_element_type(first_type - 1)
 							return ""
@@ -1138,14 +1155,6 @@ def gate4_mir_function_structure_error(native_module: Gate4MirModule, function: 
 		end
 		if !gate4_mir_range_valid(block.second_argument_start, block.second_argument_count, native_module.arguments.size())
 			return "MIR alternate argument range is invalid"
-		end
-		mut index := block.instruction_start
-		finish := index + block.instruction_count
-		while index < finish
-			if native_module.instructions[index].size() != 8
-				return "MIR instruction row size differs"
-			end
-			index += 1
 		end
 		block_index += 1
 	end

@@ -1022,12 +1022,12 @@ def gate4_emit_scalar_mir(
 	while index < finish
 		instruction := state.scalar_mir.instructions[index]
 		result_type := gate4_scalar_type_name(
-			gate4_mir_value_type(state.scalar_mir, function_index, instruction[1]),
+			gate4_mir_value_type(state.scalar_mir, function_index, instruction.result),
 		)
 		mut result := gate4_emitted_value("", result_type, 0, "", "")
 		mut result_fact := 0
-		if instruction[0] == 6
-			literal := gate4_number_without_underscores(state.scalar_mir.literal_texts[instruction[4]])
+		if instruction.kind == 6
+			literal := gate4_number_without_underscores(state.scalar_mir.literal_texts[instruction.payload])
 			mut operand := literal
 			if result_type == "Boolean"
 				operand = "0"
@@ -1039,13 +1039,13 @@ def gate4_emit_scalar_mir(
 				operand = "d_" + literal
 			end
 			result = gate4_emitted_value(operand, result_type, 0, "", "")
-			result_fact = instruction[2]
+			result_fact = instruction.first
 		else
-			if instruction[0] == 7
-				left_id := instruction[2]
-				right_id := instruction[3]
-				mut operator_id := instruction[4]
-				mut guarded_operator := instruction[4]
+			if instruction.kind == 7
+				left_id := instruction.first
+				right_id := instruction.second
+				mut operator_id := instruction.payload
+				mut guarded_operator := instruction.payload
 				if operator_id == 12
 					operator_id = 3
 				end
@@ -1068,14 +1068,14 @@ def gate4_emit_scalar_mir(
 				)
 				result = gate4_emitted_value(operand, result_type, 0, "", "")
 			else
-				if instruction[0] == 8
-					value_id := instruction[2]
-					if instruction[4] == 1
+				if instruction.kind == 8
+					value_id := instruction.first
+					if instruction.payload == 1
 						operand := gate4_emit_temporary(context)
 						qbe_output_line(output, "\t" + operand + " =l ceql " + operands[value_id] + ", 0")
 						result = gate4_emitted_value(operand, "Boolean", 0, "", "")
 					else
-						if instruction[4] == 2
+						if instruction.payload == 2
 							operand := gate4_emit_temporary(context)
 							if result_type == "Float"
 								qbe_output_line(output, "\t" + operand + " =d sub d_-0.0, " + operands[value_id])
@@ -1089,7 +1089,7 @@ def gate4_emit_scalar_mir(
 						end
 					end
 				else
-					value_id := instruction[2]
+					value_id := instruction.first
 					operand := gate4_emit_temporary(context)
 					qbe_output_line(output, "\t" + operand + " =d sltof " + operands[value_id])
 					result = gate4_emitted_value(operand, "Float", 0, "", "")
@@ -1161,7 +1161,7 @@ def gate4_emit_induction_mir(
 	header := state.scalar_mir.blocks[function.block_start + 1]
 	body := state.scalar_mir.blocks[function.block_start + 2]
 	address_instruction := state.scalar_mir.instructions[body.instruction_start]
-	if address_instruction[4] != 2
+	if address_instruction.payload != 2
 		return
 	end
 	float_elements := element_type == "Float"
