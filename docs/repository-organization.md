@@ -241,3 +241,12 @@ checked/unchecked instruction selection. This advances the named-carrier
 cleanup without moving an active compiler-source closure during its frozen
 measurement cohort. The remaining positional MIR tables and Array assignment
 ownership need separately bounded changes with recovery and cost checks.
+
+## Local Array-header installation
+
+The immutable-local header slice extends the existing checked region rather
+than adding a second fact store. Parameter and local lowering share
+`gate4_install_stable_array_header`; the declaration/effect/scope proof remains
+in MIR. This removes duplicate installation code while preserving the existing
+single-header adapter boundary. Multiple-header storage and broader control-flow
+migration remain separate measured slices.

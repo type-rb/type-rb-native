@@ -457,16 +457,38 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_occurrence_count(qbe, " =w cultl ")).to_equal(2)
 	end
 
-	test("leaves local Array aliases outside the parameter-header proof") do
+	test("retains immutable local Array headers across nested loops") do
 		source := "import trb/std/math\n\ndef local_header(input: Array<Float>, mut output: Array<Float>)\n\tvalues := input\n\tmut index := 0\n\twhile index < values.size()\n\t\tmut other := index\n\t\twhile other < values.size()\n\t\t\toutput[index] = Math.sqrt(values[other])\n\t\t\tother += 1\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n\ndef main()\n\treturn\nend\n"
 		mut state := gate4_compiler_new(source.size() + 1)
 		expect(gate4_lex(state, source)).to_be_true()
 		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(gate4_resolve(state)).to_be_true()
 		expect(gate4_check(state)).to_be_true()
-		expect(state.scalar_mir.facts).to_equal([- 1, - 1])
+		expect(state.scalar_mir.facts).to_equal([2, - 1])
 		qbe := gate4_output_source(gate4_emit_qbe(state))
 		expect(gate4_occurrence_count(qbe, " =w cultl ")).to_equal(2)
+	end
+
+	test("keeps local Array headers conservative for alias growth and conditional scopes") do
+		bodies := [
+			"values := input\n\tmut index := 0\n\twhile index < values.size()\n\t\toutput[index] = values[index]\n\t\tinput.push(2.0)\n\t\tindex += 1\n\tend",
+			"mut values := input\n\toutput[0] = values[0]\n\tvalues = output",
+			"if input.size() > 0\n\t\tvalues := input\n\t\toutput[0] = values[0]\n\tend",
+			"mut index := 0\n\twhile index < input.size()\n\t\tvalues := input\n\t\toutput[index] = values[index]\n\t\tindex += 1\n\tend\n\tvalues := output\n\tinput[0] = values[0]",
+		]
+		mut index := 0
+		while index < bodies.size()
+			source := "def update(mut input: Array<Float>, mut output: Array<Float>)\n\t" + bodies[index] + "\n\treturn\nend\n\ndef main()\n\treturn\nend\n"
+			mut state := gate4_compiler_new(source.size() + 1)
+			expect(gate4_lex(state, source)).to_be_true()
+			expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+			expect(gate4_resolve(state)).to_be_true()
+			expect(gate4_check(state)).to_be_true()
+			expect(state.scalar_mir.facts).to_equal([- 1, - 1])
+			gate4_emit_qbe(state)
+			expect(gate4_has_diagnostic(state)).to_be_false()
+			index += 1
+		end
 	end
 
 	test("blocks stable Array-header plans across allocating primitives") do
