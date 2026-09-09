@@ -1,6 +1,6 @@
 import { gate4_load_integer, gate4_load_string, gate4_storage_chunk_size, gate4_store_integer } from storage
 import { gate4_float_literal_in_range, gate4_integer_literal_in_range, gate4_number_is_float, gate4_small_nonnegative_integer_operand } from literals
-import { Gate4MirArrayOperation, Gate4MirBlock, Gate4MirFunction, Gate4MirInstruction, Gate4MirValue, MirLoopTransfer, gate4_mir_array_element_type, gate4_mir_function_index, gate4_mir_instruction_with_payload, mir_array_assignment_valid, mir_logical_plan, mir_loop_transfer_valid } from mir
+import { Gate4MirArrayOperation, Gate4MirBlock, Gate4MirFunction, Gate4MirInstruction, Gate4MirValue, MirLoopTransfer, gate4_mir_array_element_type, gate4_mir_function_index, gate4_mir_instruction_with_payload, mir_array_assignment_plan, mir_array_assignment_valid, mir_logical_plan, mir_loop_transfer_valid } from mir
 import { Gate4Compiler, Gate4Locals, gate4_diagnostic, gate4_has_diagnostic, gate4_local_add, gate4_local_find, gate4_terminal_token } from state
 import { finish_statement, gate4_advance, gate4_binary_operator_id, gate4_binary_precedence, gate4_declaration_start, gate4_expect, gate4_expect_identifier, gate4_parse_type, gate4_skip_newlines, gate4_token_is, syntax_conditional_tail, syntax_loop_transfer_kind } from parser
 import { gate4_array_element_type, gate4_array_type, gate4_common_array_element_type, gate4_find_field, gate4_find_record_type, gate4_find_visible_function, gate4_find_visible_record, gate4_record_type, gate4_resolve_type_name, gate4_standard_package_import, gate4_standard_package_root, gate4_type_display } from resolution
@@ -21,12 +21,20 @@ def gate4_scalar_leaf_inline_eligible(state: Gate4Compiler, function_index: Inte
 	return state.scalar_mir.functions[index].block_count == 2
 end
 
+def checked_assignment_operation(mut locals: Gate4Locals, kind: Integer, operand: Integer, origin: Integer)
+	mut operations := locals.mir_assignment[0]
+	operations.push(Gate4MirArrayOperation.new(kind: kind, operand: operand, origin: origin))
+end
+
 def gate4_array_region_operation(
 		mut locals: Gate4Locals,
 		kind: Integer,
 		operand: Integer,
 		origin: Integer,
 	)
+	if kind == 6
+		checked_assignment_operation(locals, 6, 0, origin)
+	end
 	mut operations := locals.mir_array
 	if operations.size() > 0
 		if kind == 6
@@ -818,11 +826,13 @@ def gate4_check_postfix(
 			else
 				if gate4_token_is(state, position[0], "[")
 					index_origin := position[0]
+					checked_assignment_operation(locals, 1, 0, index_origin)
 					line := gate4_load_integer(state.token_lines, position[0])
 					receiver_id := gate4_checked_mir_value(value)
 					gate4_advance(position)
 					index := gate4_check_expression(state, position, locals, 1, "Integer")
 					index_id := gate4_checked_mir_value(index)
+					checked_assignment_operation(locals, 2, index_origin, position[0])
 					if value.origin < state.token_count[0]
 						array_local := gate4_local_find(locals, gate4_load_string(state.token_texts, value.origin))
 						if array_local >= 0
@@ -1228,6 +1238,7 @@ def gate4_check_simple_statement(
 		mut position: Array<Integer>,
 		mut locals: Gate4Locals,
 	): Boolean
+	locals.mir_assignment[0] = []
 	line := gate4_load_integer(state.token_lines, position[0])
 	left := gate4_check_expression(state, position, locals, 1, "")
 	operator_origin := position[0]
@@ -1239,12 +1250,6 @@ def gate4_check_simple_statement(
 	if assignment
 		if left.category == 3
 			gate4_diagnostic(state, "TRBN4004", line, "record field is readonly")
-		end
-		if left.origin < state.token_count[0]
-			if gate4_token_is(state, left.origin, "[")
-				gate4_store_integer(state.array_assignment_targets, left.origin, operator_origin + 1)
-				gate4_store_integer(state.array_assignment_targets, operator_origin, left.origin + 1)
-			end
 		end
 	end
 	if operator == "="
@@ -1327,6 +1332,19 @@ def gate4_check_simple_statement(
 			end
 		end
 	end
+	if assignment
+		if left.origin < state.token_count[0]
+			if gate4_token_is(state, left.origin, "[")
+				checked_assignment_operation(locals, 5, left.origin, operator_origin)
+				state.array_assignment_regions.push(locals.mir_assignment[0])
+				region := state.array_assignment_regions.size()
+				gate4_store_integer(state.array_assignment_targets, left.origin, region)
+				gate4_store_integer(state.array_assignment_targets, operator_origin, region)
+			end
+		end
+	end
+	# Later conditions must not append to a completed assignment region.
+	locals.mir_assignment[0] = []
 	return finish_statement(state, position)
 end
 
@@ -1999,7 +2017,43 @@ def checked_array_assignment_target(state: Gate4Compiler, origin: Integer): Inte
 	if chunk.size() == 0
 		return 0
 	end
-	return chunk[origin % chunk_size]
+	region := chunk[origin % chunk_size] - 1
+	if region < 0
+		return 0
+	end
+	if region >= state.array_assignment_regions.size()
+		return state.token_count[0] + 1
+	end
+	operations := state.array_assignment_regions[region]
+	if operations.size() == 0
+		return state.token_count[0] + 1
+	end
+	store := operations[operations.size() - 1]
+	if origin == store.origin
+		return store.operand + 1
+	end
+	if origin == store.operand
+		return store.origin + 1
+	end
+	return state.token_count[0] + 1
+end
+
+def checked_array_assignment_plan(state: Gate4Compiler, index_origin: Integer): Integer
+	region := gate4_load_integer(state.array_assignment_targets, index_origin) - 1
+	if region < 0
+		return - 1
+	end
+	if region >= state.array_assignment_regions.size()
+		return - 1
+	end
+	store_origin := checked_array_assignment_store(state, index_origin)
+	if store_origin < 0
+		return - 1
+	end
+	if gate4_load_integer(state.array_assignment_targets, store_origin) != region + 1
+		return - 1
+	end
+	return mir_array_assignment_plan(state.array_assignment_regions[region], index_origin, store_origin, state.token_count[0])
 end
 
 def checked_array_assignment_reads_old(state: Gate4Compiler, index_origin: Integer): Boolean

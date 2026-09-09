@@ -1495,3 +1495,83 @@ def mir_array_assignment_valid(index_origin: Integer, store_origin: Integer, rev
 	end
 	return reverse_origin == index_origin
 end
+
+# Assignment regions retain source-indexed capture (1), checked index (2),
+# conservative effect barriers (6), and final store (5). Plans are recomputed:
+# 0 reloads current storage, 1 reuses the checked address with a rooted owner,
+# and 2 also proves that no owner root is needed across the index and RHS.
+# Unknown/malformed operations never authorize removing either safeguard.
+def mir_array_assignment_plan(operations: Array<Gate4MirArrayOperation>, index_origin: Integer, store_origin: Integer, token_count: Integer): Integer
+	if !mir_array_assignment_valid(index_origin, store_origin, index_origin, token_count)
+		return - 1
+	end
+	mut phase := 0
+	mut plan := 2
+	mut cursor := 0
+	while cursor < operations.size()
+		operation := operations[cursor]
+		if operation.origin < 0
+			return - 1
+		end
+		if operation.origin >= token_count
+			return - 1
+		end
+		if operation.kind == 1
+			if operation.operand != 0
+				return - 1
+			end
+			if operation.origin == index_origin
+				if phase != 0
+					return - 1
+				end
+				phase = 1
+			end
+		elsif operation.kind == 2
+			if operation.operand < 0
+				return - 1
+			end
+			if operation.operand >= operation.origin
+				return - 1
+			end
+			if operation.operand == index_origin
+				if phase != 1
+					return - 1
+				end
+				if operation.origin >= store_origin
+					return - 1
+				end
+				phase = 2
+			end
+		elsif operation.kind == 6
+			if operation.operand != 0
+				return - 1
+			end
+			if phase == 1
+				plan = 1
+			elsif phase == 2
+				plan = 0
+			end
+		elsif operation.kind == 5
+			if cursor != operations.size() - 1
+				return - 1
+			end
+			if phase != 2
+				return - 1
+			end
+			if operation.origin != store_origin
+				return - 1
+			end
+			if operation.operand != index_origin
+				return - 1
+			end
+			phase = 3
+		else
+			return - 1
+		end
+		cursor += 1
+	end
+	if phase != 3
+		return - 1
+	end
+	return plan
+end

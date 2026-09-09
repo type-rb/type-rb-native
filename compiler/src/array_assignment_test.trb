@@ -2,10 +2,10 @@ import { describe, expect, test } from trb/std/test
 import { gate4_check, gate4_emit_qbe, gate4_lex } from compiler
 import { gate4_parse_module } from parser
 import { gate4_resolve } from resolution
-import { gate4_compiler_new, gate4_has_diagnostic } from state
+import { Gate4Compiler, gate4_compiler_new, gate4_has_diagnostic } from state
 import { gate4_load_string, gate4_store_integer } from storage
-import { checked_array_assignment_store } from checked_program
-import { mir_array_assignment_valid } from mir
+import { checked_array_assignment_plan, checked_array_assignment_store } from checked_program
+import { Gate4MirArrayOperation, mir_array_assignment_plan, mir_array_assignment_valid } from mir
 
 describe("Checked Array assignment targets") do
 	test("verifies paired target and store origins") do
@@ -48,5 +48,88 @@ describe("Checked Array assignment targets") do
 			expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("invalid checked Array assignment target")
 			mode += 1
 		end
+	end
+end
+
+def assignment_effect_state(source: String): Gate4Compiler
+	mut state := gate4_compiler_new(source.size() + 1)
+	expect(gate4_lex(state, source)).to_be_true()
+	expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+	expect(gate4_resolve(state)).to_be_true()
+	expect(gate4_check(state)).to_be_true()
+	return state
+end
+
+describe("MIR Array assignment effects") do
+	test("derives separate root and storage lifetimes from the effect region") do
+		capture := Gate4MirArrayOperation.new(kind: 1, operand: 0, origin: 3)
+		check := Gate4MirArrayOperation.new(kind: 2, operand: 3, origin: 6)
+		store := Gate4MirArrayOperation.new(kind: 5, operand: 3, origin: 7)
+		barrier := Gate4MirArrayOperation.new(kind: 6, operand: 0, origin: 5)
+		expect(mir_array_assignment_plan([capture, check, store], 3, 7, 12)).to_equal(2)
+		expect(mir_array_assignment_plan([capture, barrier, check, store], 3, 7, 12)).to_equal(1)
+		expect(mir_array_assignment_plan([capture, check, barrier, store], 3, 7, 12)).to_equal(0)
+		expect(mir_array_assignment_plan([barrier, capture, check, store], 3, 7, 12)).to_equal(2)
+		expect(mir_array_assignment_plan([capture, barrier, check, barrier, store], 3, 7, 12)).to_equal(0)
+	end
+
+	test("rejects incomplete reordered and foreign assignment operations") do
+		capture := Gate4MirArrayOperation.new(kind: 1, operand: 0, origin: 3)
+		check := Gate4MirArrayOperation.new(kind: 2, operand: 3, origin: 6)
+		store := Gate4MirArrayOperation.new(kind: 5, operand: 3, origin: 7)
+		expect(mir_array_assignment_plan([], 3, 7, 12)).to_equal(- 1)
+		expect(mir_array_assignment_plan([capture, store], 3, 7, 12)).to_equal(- 1)
+		expect(mir_array_assignment_plan([check, capture, store], 3, 7, 12)).to_equal(- 1)
+		expect(mir_array_assignment_plan([capture, check], 3, 7, 12)).to_equal(- 1)
+		expect(mir_array_assignment_plan([capture, capture, check, store], 3, 7, 12)).to_equal(- 1)
+		expect(mir_array_assignment_plan([capture, check, store, check], 3, 7, 12)).to_equal(- 1)
+		expect(mir_array_assignment_plan([capture, check, store], 4, 7, 12)).to_equal(- 1)
+		expect(mir_array_assignment_plan([capture, check, store], 3, 8, 12)).to_equal(- 1)
+		invalid := [Gate4MirArrayOperation.new(kind: 99, operand: 0, origin: 5), Gate4MirArrayOperation.new(kind: 6, operand: 1, origin: 5), Gate4MirArrayOperation.new(kind: 6, operand: 0, origin: 12)]
+		mut cursor := 0
+		while cursor < invalid.size()
+			expect(mir_array_assignment_plan([capture, invalid[cursor], check, store], 3, 7, 12)).to_equal(- 1)
+			cursor += 1
+		end
+	end
+
+	test("keeps unknown calls in the index and RHS conservative") do
+		statements := ["values[0] = values[1] + 1", "values[choose(values)] = values[1] + 1", "values[0] = choose(values)"]
+		mut cursor := 0
+		while cursor < statements.size()
+			source := "def choose(mut values: Array<Integer>): Integer\nvalues.push(3)\nreturn 0\nend\ndef main()\nmut values := [1, 2]\n" + statements[cursor] + "\nend\n"
+			state := assignment_effect_state(source)
+			expect(state.array_assignment_regions.size()).to_equal(1)
+			region := state.array_assignment_regions[0]
+			store := region[region.size() - 1]
+			expect(checked_array_assignment_plan(state, store.operand)).to_equal(2 - cursor)
+			gate4_emit_qbe(state)
+			expect(gate4_has_diagnostic(state)).to_be_false()
+			cursor += 1
+		end
+	end
+
+	test("closes completed regions before later conditions are checked") do
+		state := assignment_effect_state("def main()\nmut values := [1, 2]\nvalues[0] = values[1] + 1\nif values[0] == 3\nvalues[1] = 4\nend\nputs(values[1])\nend\n")
+		expect(state.array_assignment_regions.size()).to_equal(2)
+		mut cursor := 0
+		while cursor < state.array_assignment_regions.size()
+			region := state.array_assignment_regions[cursor]
+			store := region[region.size() - 1]
+			expect(store.kind).to_equal(5)
+			expect(checked_array_assignment_plan(state, store.operand)).to_equal(2)
+			cursor += 1
+		end
+		gate4_emit_qbe(state)
+		expect(gate4_has_diagnostic(state)).to_be_false()
+	end
+
+	test("revalidates a changed region before lowering") do
+		mut state := assignment_effect_state("def main()\nmut values := [1, 2]\nvalues[0] = 3\nend\n")
+		mut region := state.array_assignment_regions[0]
+		region[0] = Gate4MirArrayOperation.new(kind: 99, operand: 0, origin: region[0].origin)
+		gate4_emit_qbe(state)
+		expect(gate4_has_diagnostic(state)).to_be_true()
+		expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("invalid checked Array assignment region")
 	end
 end
