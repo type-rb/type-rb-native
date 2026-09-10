@@ -133,6 +133,7 @@ test('static documentation and evidence tools do not run compiler matrices', () 
   for (const tool of ['tools/capability-map-check.mjs',
     'tools/benchmark-pages-data.mjs', 'tools/benchmark-pages-check.mjs',
     'tools/result_archive.py', 'tools/result_archive_test.py',
+    'tools/evidence_bundle.py', 'tools/evidence_bundle_test.py',
     '.github/workflows/documentation.yml']) {
     const plan = classify([tool, 'docs/capabilities/benchmarks/data.js'], false);
     assert.deepEqual(plan, { code: false, quick: false, documentation: true,
