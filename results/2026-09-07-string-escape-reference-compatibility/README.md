@@ -4,13 +4,16 @@ The development pin is TypeRB `0.4.7-dev` at
 `bae19032aa1bb7b263bc827d02606edc6e981c52`, the accepted
 [Hash snapshot-v4 extension](https://github.com/type-rb/type-rb/pull/668).
 It adds data-only String/Integer Hash construction, assignment, required lookup
-and key presence. Native recovery integration is tracked in
-[PR #405](https://github.com/type-rb/type-rb-native/pull/405); local focused
-execution verifies growth, forced collection, aliases, source effects and
-missing keys. Full hosted acceptance is pending. The existing compatibility
-manifest evidence pointer below remains the last completed source-era cohort
-until this integration's full acceptance is recorded. No historical observation
-is relabelled with the new pin.
+and key presence. Native recovery integration and the verified Hash checkout
+seed are accepted in
+[PR #405](https://github.com/type-rb/type-rb-native/pull/405). All 17 selected
+checks pass for `fcb9e610eb6478d545b47950b027f05ff919e2c2` in
+[run 34497846946](https://github.com/type-rb/type-rb-native/actions/runs/34497846946).
+The first final attempt retains a failed Darwin wall ratio despite identical
+control/candidate compiler and QBE bytes; one fresh-runner retry passes the
+unchanged policy. Growth, forced collection, aliases, source effects, missing
+keys and malformed Hash metadata are covered. The compatibility pointer now
+identifies this completed cohort; older observations below retain their pins.
 
 ## Previous reference pin and retained authorities
 
