@@ -8,6 +8,8 @@ const staticDocumentationTools = new Set([
   'tools/benchmark-pages-check.mjs',
   'tools/result_archive.py',
   'tools/result_archive_test.py',
+  'tools/evidence_bundle.py',
+  'tools/evidence_bundle_test.py',
   '.github/workflows/documentation.yml',
   '.github/workflows/capability-map-pages.yml',
 ]);

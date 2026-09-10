@@ -80,3 +80,40 @@ Extract verified archives only into a new empty directory.
 Lifecycle checks stay in the lightweight documentation CI. Planning-only
 maintenance uses unconditional routing tests; compiler/execution changes retain
 their normal authority. See [CI validation stages](ci-validation.md).
+
+## Formal measurement bundles
+
+New formal runtime/build jobs upload one `formal-evidence.jsonl.gz` file each,
+instead of thousands of small logs. The bundle contains one record per original
+file with its relative path, permission bits, byte length, SHA-256 and base64
+content. Empty logs, failed observations and binary artifacts remain exact;
+missing evidence roots are recorded explicitly. Bundling runs after measurement
+and changes no input, repetition, timing, cache control or acceptance rule.
+If bundling fails, the job remains failed and uploads its original files.
+The explicit evidence roots match the previous uploads. Symlinks and hidden
+files are rejected rather than expanding the publication boundary.
+
+After checking the downloaded GitHub artifact digest, inspect or restore a bundle:
+
+```sh
+python3 tools/evidence_bundle.py verify formal-evidence.jsonl.gz
+python3 tools/evidence_bundle.py extract formal-evidence.jsonl.gz restored-evidence
+```
+
+Extraction validates the full inventory and hashes before creating a new output
+directory. It preserves the original layout for existing correctness, median and
+provenance checks. Storage verification does not imply benchmark acceptance:
+failed or incomplete measurements can also have intact bundles.
+
+For future formal publication, retain these verified per-job bundles directly
+as evidence-only assets when durable payloads are needed. Record each bundle's
+whole-file digest and original-file count, freshly download and verify it, and
+keep compact observation tables in Git under the existing limits. A complete
+three-case runtime/build cohort needs six payload files. Logical record counts
+remain explicit; aggregation does not discard observations or claim to reduce
+their information volume. Historical `.tar.gz` assets and their existing
+`ARCHIVE.json` references remain immutable and verifiable by `result_archive.py`.
+This representation change does not alter the independent daily data format.
+
+This reduces small-file handling; compressed byte size can increase because
+binary content uses base64. It is not a measurement-count or storage-byte cut.

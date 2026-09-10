@@ -316,8 +316,25 @@ jobs:
               > "$evidence/benchexec-deb.sha256"
           fi
 
-      - name: Upload all raw measurement evidence
+      - name: Bundle all evidence after measurement
+        id: bundle
         if: always()
+        run: |
+          python3 tools/evidence_bundle.py pack "$RUNNER_TEMP" "$RUNNER_TEMP/formal-evidence.jsonl.gz" \
+            bootstrap-evidence bootstrap-metadata.json transition-evidence host-evidence prepare-evidence runtime-catalog.tsv one-core-evidence four-core-evidence workflow-evidence
+
+      - name: Upload complete evidence bundle
+        if: always() && steps.bundle.outcome == 'success'
+        uses: actions/upload-artifact@v6
+        with:
+          name: benchmarksgame-runtime-${{ matrix.case }}
+          path: ${{ runner.temp }}/formal-evidence.jsonl.gz
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Preserve original evidence if bundling fails
+        if: always() && steps.bundle.outcome != 'success'
         uses: actions/upload-artifact@v6
         with:
           name: benchmarksgame-runtime-${{ matrix.case }}
