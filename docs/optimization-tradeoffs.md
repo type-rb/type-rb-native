@@ -34,6 +34,8 @@ no relative limit or historical result. The separately validated
 the ordinary structured-data implementation cost without changing those ratios.
 The separately validated [scalar guard budget](decisions/0031-scalar-guard-compiler-budget.md)
 retains its bounded range-analysis cost without changing those ratios.
+The separately validated [loop-local header budget](decisions/0032-loop-local-header-compiler-budget.md)
+retains verified loop-effect analysis under the same relative limits.
 A cost failure blocks ordinary acceptance, not necessarily
 further investigation. There is no general relaxed percentage or automatic
 conversion from an evaluation budget to a merge budget.
