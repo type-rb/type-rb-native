@@ -204,7 +204,7 @@ def main():
         trigger = os.environ.get("TRIGGER_RUN_ID")
         if trigger and os.environ.get("TRIGGER_CONCLUSION") in ("failure", "cancelled", "timed_out"):
             run_url = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{trigger}"
-            if (state.get("attempt") or {}).get("runUrl") != run_url:
+            if (state.get("attempt") or {}).get("runUrl") != run_url or (state.get("attempt") or {}).get("status") == "running":
                 state["attempt"] = {"status": "infrastructure-failure", "revision": git("rev-parse", "HEAD"),
                                     "at": now(), "runUrl": run_url}
         state["siteRevision"] = git("rev-parse", "HEAD")

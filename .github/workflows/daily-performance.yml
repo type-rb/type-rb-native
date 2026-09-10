@@ -100,24 +100,8 @@ jobs:
             --compilers "$RUNNER_TEMP/compilers/compilers.json" --qbe "$RUNNER_TEMP/qbe-1.3/qbe" \
             --evidence "$RUNNER_TEMP/measurements" --output "$RUNNER_TEMP/snapshot.json"
 
-      - name: Record results or preserve the last snapshot after an infrastructure failure
-        if: always() && steps.plan.outputs.measure == 'true'
-        env:
-          MEASUREMENT_STATUS: ${{ steps.measurement.outcome }}
-        run: |
-          python3 tools/daily-performance/state.py finish --state "$RUNNER_TEMP/daily/state.json" \
-            --snapshot "$RUNNER_TEMP/snapshot.json" --status "$MEASUREMENT_STATUS"
-
-      - name: Retain state, including unchanged days
-        if: always() && steps.restore.outcome == 'success'
-        uses: actions/upload-artifact@v7
-        with:
-          name: daily-performance-state
-          path: ${{ runner.temp }}/daily/state.json
-          retention-days: 90
-          if-no-files-found: error
-
       - name: Retain exact measurements and compiler evidence
+        id: evidence
         if: always() && steps.plan.outputs.measure == 'true'
         uses: actions/upload-artifact@v7
         with:
@@ -130,6 +114,25 @@ jobs:
             ${{ runner.temp }}/snapshot.json
           retention-days: 90
           if-no-files-found: warn
+
+      - name: Record results or preserve the last snapshot after an infrastructure failure
+        if: always() && steps.plan.outputs.measure == 'true'
+        env:
+          MEASUREMENT_STATUS: ${{ steps.measurement.outcome }}
+          EVIDENCE_STATUS: ${{ steps.evidence.outcome }}
+        run: |
+          if test "$EVIDENCE_STATUS" != success; then MEASUREMENT_STATUS=failure; fi
+          python3 tools/daily-performance/state.py finish --state "$RUNNER_TEMP/daily/state.json" \
+            --snapshot "$RUNNER_TEMP/snapshot.json" --status "$MEASUREMENT_STATUS"
+
+      - name: Retain state, including unchanged days
+        if: always() && steps.restore.outcome == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: daily-performance-state
+          path: ${{ runner.temp }}/daily/state.json
+          retention-days: 90
+          if-no-files-found: error
 
       - name: Report the update without gating development
         if: always() && steps.restore.outcome == 'success'
