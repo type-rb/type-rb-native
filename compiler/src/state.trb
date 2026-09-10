@@ -1,12 +1,7 @@
+import { gate4_integer_string } from literals
 import { MirHashOperation } from hash_mir
 import { Gate4IntegerStorage, Gate4StringStorage, gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage
-import { gate4_ascii_code } from literals
 import { Gate4MirArrayOperation, Gate4MirInstruction, Gate4MirModule, Gate4MirValue } from mir
-
-record Gate4SymbolIndex
-	heads: Gate4IntegerStorage
-	next: Gate4IntegerStorage
-end
 
 record Gate4Compiler
 	hash_operations: Array<MirHashOperation>
@@ -27,7 +22,7 @@ record Gate4Compiler
 	module_count: Array<Integer>
 	module_import_starts: Gate4IntegerStorage
 	module_import_counts: Gate4IntegerStorage
-	module_lookup: Gate4SymbolIndex
+	module_lookup: Hash<String, Integer>
 	entry_module: Array<Integer>
 	active_module: Array<Integer>
 	import_modules: Gate4IntegerStorage
@@ -58,7 +53,7 @@ record Gate4Compiler
 	function_body_ends: Gate4IntegerStorage
 	function_lines: Gate4IntegerStorage
 	function_count: Array<Integer>
-	function_lookup: Gate4SymbolIndex
+	function_lookup: Hash<String, Integer>
 	parameter_names: Gate4StringStorage
 	parameter_types: Gate4StringStorage
 	parameter_mutable: Gate4IntegerStorage
@@ -69,13 +64,6 @@ record Gate4Compiler
 	diagnostic_messages: Gate4StringStorage
 	diagnostic_modules: Gate4IntegerStorage
 	diagnostic_count: Array<Integer>
-end
-
-def gate4_symbol_index_new(capacity: Integer): Gate4SymbolIndex
-	return Gate4SymbolIndex.new(
-		heads: gate4_integer_storage(capacity),
-		next: gate4_integer_storage(capacity),
-	)
 end
 
 def gate4_compiler_new(capacity: Integer): Gate4Compiler
@@ -107,7 +95,7 @@ def gate4_compiler_new(capacity: Integer): Gate4Compiler
 		module_count: [0],
 		module_import_starts: gate4_integer_storage(capacity),
 		module_import_counts: gate4_integer_storage(capacity),
-		module_lookup: gate4_symbol_index_new(capacity),
+		module_lookup: {},
 		entry_module: [0],
 		active_module: [0],
 		import_modules: gate4_integer_storage(capacity),
@@ -138,7 +126,7 @@ def gate4_compiler_new(capacity: Integer): Gate4Compiler
 		function_body_ends: gate4_integer_storage(capacity),
 		function_lines: gate4_integer_storage(capacity),
 		function_count: [0],
-		function_lookup: gate4_symbol_index_new(capacity),
+		function_lookup: {},
 		parameter_names: gate4_string_storage(capacity),
 		parameter_types: gate4_string_storage(capacity),
 		parameter_mutable: gate4_integer_storage(capacity),
@@ -152,141 +140,15 @@ def gate4_compiler_new(capacity: Integer): Gate4Compiler
 	)
 end
 
-def gate4_symbol_bucket_count(element_count: Integer): Integer
-	if element_count == 0
-		return 0
-	end
-	mut bucket_count := 16
-	while bucket_count < element_count * 2
-		bucket_count *= 2
-	end
-	return bucket_count
-end
-
-def gate4_string_bucket(name: String, bucket_count: Integer): Integer
-	mut hash := 0
-	mut index := 0
-	while index < name.size()
-		mut code := gate4_ascii_code(name[index])
-		if code < 0
-			code = 0
-		end
-		hash = (hash * 131 + code) % bucket_count
-		index += 1
-	end
-	return hash
-end
-
-def gate4_symbol_bucket(module_index: Integer, name: String, bucket_count: Integer): Integer
-	return (module_index * 257 + name.size()) % bucket_count
-end
-
-def gate4_build_symbol_index(
-		mut symbol_index: Gate4SymbolIndex,
-		modules: Gate4IntegerStorage,
-		names: Gate4StringStorage,
-		element_count: Integer,
-	)
-	bucket_count := gate4_symbol_bucket_count(element_count)
-	mut bucket := 0
-	while bucket < bucket_count
-		gate4_store_integer(symbol_index.heads, bucket, - 1)
-		bucket += 1
-	end
-	mut element := 0
-	while element < element_count
-		bucket = gate4_symbol_bucket(
-			gate4_load_integer(modules, element),
-			gate4_load_string(names, element),
-			bucket_count,
-		)
-		gate4_store_integer(symbol_index.next, element, gate4_load_integer(symbol_index.heads, bucket))
-		gate4_store_integer(symbol_index.heads, bucket, element)
-		element += 1
-	end
-	return
-end
-
-def gate4_find_symbol(
-		symbol_index: Gate4SymbolIndex,
-		modules: Gate4IntegerStorage,
-		names: Gate4StringStorage,
-		module_index: Integer,
-		name: String,
-	): Integer
-	bucket_count := symbol_index.heads.used[0]
-	if bucket_count == 0
-		return - 1
-	end
-	bucket := gate4_symbol_bucket(module_index, name, bucket_count)
-	mut element := gate4_load_integer(symbol_index.heads, bucket)
-	while element >= 0
-		if gate4_load_integer(modules, element) == module_index
-			if gate4_load_string(names, element) == name
-				return element
-			end
-		end
-		element = gate4_load_integer(symbol_index.next, element)
+def find_name_index(index: Hash<String, Integer>, name: String): Integer
+	if index.key?(name)
+		return index[name]
 	end
 	return - 1
 end
 
-def gate4_build_name_index(
-		mut symbol_index: Gate4SymbolIndex,
-		names: Gate4StringStorage,
-		element_count: Integer,
-	)
-	bucket_count := gate4_symbol_bucket_count(element_count)
-	mut bucket := 0
-	while bucket < bucket_count
-		gate4_store_integer(symbol_index.heads, bucket, - 1)
-		bucket += 1
-	end
-	mut element := 0
-	while element < element_count
-		bucket = gate4_string_bucket(gate4_load_string(names, element), bucket_count)
-		gate4_store_integer(symbol_index.next, element, gate4_load_integer(symbol_index.heads, bucket))
-		gate4_store_integer(symbol_index.heads, bucket, element)
-		element += 1
-	end
-	return
-end
-
-def gate4_add_name_index(
-		mut symbol_index: Gate4SymbolIndex,
-		names: Gate4StringStorage,
-		element_count: Integer,
-	)
-	bucket_count := gate4_symbol_bucket_count(element_count)
-	if symbol_index.heads.used[0] != bucket_count
-		gate4_build_name_index(symbol_index, names, element_count)
-		return
-	end
-	element := element_count - 1
-	bucket := gate4_string_bucket(gate4_load_string(names, element), bucket_count)
-	gate4_store_integer(symbol_index.next, element, gate4_load_integer(symbol_index.heads, bucket))
-	gate4_store_integer(symbol_index.heads, bucket, element)
-	return
-end
-
-def gate4_find_name(
-		symbol_index: Gate4SymbolIndex,
-		names: Gate4StringStorage,
-		name: String,
-	): Integer
-	bucket_count := symbol_index.heads.used[0]
-	if bucket_count == 0
-		return - 1
-	end
-	bucket := gate4_string_bucket(name, bucket_count)
-	mut element := gate4_load_integer(symbol_index.heads, bucket)
-	while element >= 0
-		if gate4_load_string(names, element) == name
-			return element
-		end
-		element = gate4_load_integer(symbol_index.next, element)
-	end
-	return - 1
+def function_index_key(module_index: Integer, name: String): String
+	return gate4_integer_string(module_index) + ":" + name
 end
 
 def gate4_add_module(mut state: Gate4Compiler, name: String, filename: String): Integer
@@ -296,12 +158,12 @@ def gate4_add_module(mut state: Gate4Compiler, name: String, filename: String): 
 	gate4_store_integer(state.module_import_starts, index, state.import_count[0])
 	gate4_store_integer(state.module_import_counts, index, 0)
 	state.module_count[0] = index + 1
-	gate4_add_name_index(state.module_lookup, state.module_names, state.module_count[0])
+	state.module_lookup[name] = index
 	return index
 end
 
 def gate4_find_module(state: Gate4Compiler, name: String): Integer
-	return gate4_find_name(state.module_lookup, state.module_names, name)
+	return find_name_index(state.module_lookup, name)
 end
 
 def gate4_terminal_token(state: Gate4Compiler, index: Integer): Boolean

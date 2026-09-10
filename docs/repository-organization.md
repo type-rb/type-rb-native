@@ -270,3 +270,19 @@ syntax to replace its completion flag and nested statement-selection chain.
 Conditional checking remains in its existing helper, unchanged. This is one
 checked-program owner with clearer control structure, not a new MIR fact or
 loop-local effect proof. Recovery still derives the same module boundary.
+
+## Hash index self-use slice
+
+[Issue #403](https://github.com/type-rb/type-rb-native/issues/403) replaces the
+compiler's bespoke module/function indexes with ordinary Hash collections after
+the verified seed and snapshot handoff. The slice removes `Gate4SymbolIndex`
+and nine gate-prefixed index helpers, including whole-index rebuilding.
+Project source ordering also releases its redundant name vector. The two
+project import-cycle helpers use responsibility names and a separate local color
+array; cycle checking no longer borrows symbol-table storage. Canonical imports,
+strict recovery prefixes and index/graph tests move together. Dense token/MIR
+vectors and active recovery families remain outside this bounded change.
+
+Decision 0033's expired source-tree-specific Hash transition hook is removed.
+Subsequent compiler changes use ordinary ratios; accepted absolute ceilings,
+frozen baselines and historical marker contracts remain unchanged.
