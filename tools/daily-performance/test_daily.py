@@ -1,3 +1,5 @@
+import csv
+import hashlib
 import copy
 import io
 import json
@@ -81,6 +83,35 @@ class DailyTests(unittest.TestCase):
         for item in cases:
             with self.assertRaises(ValueError):
                 state.validate({**state.empty(), "latest": item})
+
+    def test_pure_go_coverage_is_explicit_and_old_history_survives(self):
+        old = snapshot()
+        current = snapshot()
+        current["rows"] = []
+        current["pureGoCases"] = ["fannkuch-redux", "n-body", "spectral-norm"]
+        current["roles"]["pure-go"] = {"revision": "b" * 40}
+        for name in [*current["pureGoCases"], "startup"]:
+            for role in current["roles"]:
+                if name == "startup" and role == "pure-go": continue
+                row = copy.deepcopy(old["rows"][0])
+                row.update(case=name, role=role)
+                current["rows"].append(row)
+        state.validate({**state.empty(), "latest": current, "history": [old, current]})
+        missing = copy.deepcopy(current)
+        missing["rows"] = [r for r in missing["rows"] if not (r["case"] == "n-body" and r["role"] == "pure-go")]
+        with self.assertRaises(ValueError): state.validate({**state.empty(), "latest": missing})
+        extra = copy.deepcopy(current)
+        extra["rows"].append({**copy.deepcopy(old["rows"][0]), "case": "startup", "role": "pure-go"})
+        with self.assertRaises(ValueError): state.validate({**state.empty(), "latest": extra})
+
+    def test_pure_go_sources_match_the_registered_upstream_bytes(self):
+        with open(state.ROOT / "benchmarks/benchmarksgame/context-sources.tsv") as stream:
+            hashes = {r["case"]: r["source_sha256"] for r in csv.DictReader(stream, delimiter="\t") if r["language"] == "go"}
+        cases = state.read(state.ROOT / "tools/daily-performance/suite.json")["cases"]
+        selected = [case for case in cases if "pureGoSource" in case]
+        self.assertEqual(len(selected), 3)
+        for case in selected:
+            self.assertEqual(hashlib.sha256((state.ROOT / case["pureGoSource"]).read_bytes()).hexdigest(), hashes[case["id"]])
 
     def test_restore_rejects_same_name_from_unrelated_workflow(self):
         archive = io.BytesIO()

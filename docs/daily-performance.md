@@ -6,8 +6,8 @@ self-hosting, compiler cost and optimization acceptance authorities are unchange
 ## Purpose and cadence
 
 The primary benchmark page answers what has changed, which supported workload
-areas remain slow, and how the identical TypeRB source compares through the Go
-backend. It is not a language ranking. Daily data does not need a new complete
+areas remain slow, how the identical TypeRB source compares through the Go backend, and how
+three numeric kernels compare with the registered hand-written Pure Go programs. It is not a language ranking. Daily data does not need a new complete
 seven-implementation cohort or a manual prose update.
 
 - PRs retain their applicable acceptance checks. A daily snapshot is never a
@@ -24,8 +24,13 @@ seven-implementation cohort or a manual prose update.
 - Long-lived memory, worker stability and sanitizer checks keep their own
   existing triggers. Short speed measurements cannot replace them.
 
-The initial target is a 10–15 minute daily update, with a 25-minute job safety
-limit. This is an operational budget, not an already measured duration or a
+The first four-role run completed in about 5 minutes 40 seconds, with 2 minutes
+10 seconds spent measuring. It shared current/previous compiler preparation;
+subsequent runs can require more preparation. Adding Pure Go has a provisional
+one-minute incremental budget, to be checked with a real run.
+
+The operational target remains a 10–15 minute daily update, with a 25-minute job safety
+limit. This is an operational budget, not a duration guarantee or a
 requirement to wait after merging. Calibrate using the first real daily runs;
 reduce redundant work before broadening the suite.
 
@@ -57,14 +62,30 @@ the application's clean-output build timings and sizes shown here.
 
 ## Comparison and measurement
 
-Four roles run serially on one logical CPU of a fresh Linux arm64 hosted runner:
+Four TypeRB roles run serially on one logical CPU of a fresh Linux arm64 hosted runner:
 current Native, the previously measured Native revision, a frozen Native
 baseline, and the exact compatible TypeRB Go revision in `TYPE_RB_REVISION`.
-All roles compile the same source bytes. Each Native chain is closed through
+These four roles compile the same TypeRB source bytes. Each Native chain is closed through
 the existing bootstrap verifier from an exact published seed. Identical role
 revisions share a compiler preparation inside one run. If no compatible previous
 snapshot exists, that role uses current Native and the page shows no previous
 comparison. The frozen baseline is not automatically advanced.
+
+Pure Go additionally runs fannkuch-redux (10), n-body (1,000,000) and
+spectral-norm (5,500), using exactly the registered upstream sources in
+`benchmarks/benchmarksgame/pure-go/`. It uses the same installed Go toolchain as
+the TypeRB Go backend, `go build -trimpath`, the same output oracles, CPU and
+sample policy. All measured programs have `GOMAXPROCS=1`. Source SHA-256,
+upstream revision, Go version and tool executable identity accompany the data.
+This comparison includes implementation differences; it is not a general language
+ranking. The other four cases explicitly have no Pure Go comparison.
+
+The page uses buttons for metrics and comparison targets. Each workload shows
+its numbers and a metric-specific assessment (faster/slower, less/more memory,
+smaller/larger). Differences under 5% are described as about the same, without
+claiming statistical equivalence. Missing, failed and below-resolution values
+never receive favorable assessments. Same-run Native/Pure Go ratios are available
+in trends; old snapshots without Pure Go remain valid historical evidence.
 
 Runtime uses one warmup and five retained fresh processes. Application builds
 use one warmup and three retained clean-output builds with a warm Go build

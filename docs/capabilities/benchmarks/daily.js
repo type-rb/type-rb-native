@@ -1,9 +1,4 @@
-const metrics = {
-  runtime: { label: 'Runtime', group: 'runtime', key: 'wallSeconds', unit: 's' },
-  memory: { label: 'Peak RSS', group: 'runtime', key: 'memoryBytes', unit: 'bytes' },
-  build: { label: 'Application build', group: 'build', key: 'wallSeconds', unit: 's' },
-  size: { label: 'Stripped application size', key: 'strippedBytes', unit: 'bytes' },
-};
+import { metrics, comparisons, value, valid, change, assessment } from './daily-model.mjs';
 const $ = id => document.getElementById(id);
 const node = (tag, text, className) => {
   const element = document.createElement(tag);
@@ -13,90 +8,126 @@ const node = (tag, text, className) => {
 };
 const link = (label, url) => {
   const anchor = node('a', label);
-  // Snapshot values never become markup or arbitrary navigations.
   if (typeof url === 'string' && /^https:\/\/github\.com\/type-rb\/type-rb-native\/actions\/runs\/\d+$/.test(url)) anchor.href = url;
   return anchor;
 };
-const value = (row, metric) => !row || row.status !== 'pass' ? null :
-  (metric.group ? row[metric.group]?.[metric.key] : row[metric.key]);
-const valid = number => typeof number === 'number' && Number.isFinite(number) && number > 0;
 const format = (number, metric) => !valid(number) ? 'Unavailable' : metric.unit === 'bytes' ?
   `${(number / 1024).toLocaleString(undefined, { maximumFractionDigits: 1 })} KiB` :
   number < .1 ? `${(number * 1000).toFixed(2)} ms` : `${number.toFixed(3)} s`;
 const rowFor = (snapshot, caseName, role) => snapshot.rows.find(row => row.case === caseName && row.role === role);
-const change = (current, control) => valid(current) && valid(control) ? current / control - 1 : null;
-const changeCell = difference => {
-  if (difference === null) return node('td', 'Unavailable');
-  const text = `${difference > 0 ? '+' : ''}${(difference * 100).toFixed(1)}%`;
-  return node('td', text, Math.abs(difference) < .05 ? 'neutral' : difference < 0 ? 'better' : 'worse');
-};
 let state;
+let metricKey = 'runtime', comparisonKey = 'pure-go', caseName = 'fannkuch-redux';
+const reference = (snapshot, name) => comparisonKey === 'previous' && snapshot.roles.previous.revision === snapshot.roles.native.revision ?
+  undefined : rowFor(snapshot, name, comparisonKey);
 
-function renderCurrent() {
-  const metric = metrics[$('metric').value];
-  const snapshot = state.latest;
-  $('result-body').replaceChildren();
-  if (!snapshot) return;
-  for (const row of snapshot.rows.filter(row => row.role === 'native')) {
-    const tr = node('tr');
-    const title = node('td', row.case);
-    title.append(node('small', row.area));
-    if (row.coverage) title.append(node('small', row.coverage));
-    tr.append(title);
-    const current = value(row, metric);
-    const cell = node('td', row.status === 'pass' ? format(current, metric) : row.status);
-    if (metric.group === 'runtime' && metric.key === 'wallSeconds' && row.runtime) {
-      cell.append(node('small', `Range ${format(row.runtime.wallMin, metric)}–${format(row.runtime.wallMax, metric)}`));
-    }
-    tr.append(cell);
-    const previous = snapshot.roles.previous.revision === snapshot.roles.native.revision ? null :
-      value(rowFor(snapshot, row.case, 'previous'), metric);
-    tr.append(changeCell(change(current, previous)));
-    tr.append(changeCell(change(current, value(rowFor(snapshot, row.case, 'baseline'), metric))));
-    const goValue = value(rowFor(snapshot, row.case, 'typerb-go'), metric);
-    const goCell = node('td', format(goValue, metric));
-    if (valid(current) && valid(goValue)) goCell.append(node('small', `${(current / goValue).toFixed(2)}× Go backend`));
-    tr.append(goCell);
-    $('result-body').append(tr);
+function choices(id, items, selected, onSelect) {
+  const group = $(id);
+  for (const [key, label] of items) {
+    const button = node('button', label);
+    button.type = 'button'; button.setAttribute('aria-pressed', String(key === selected));
+    button.addEventListener('click', () => {
+      for (const sibling of group.children) sibling.setAttribute('aria-pressed', String(sibling === button));
+      onSelect(key);
+    });
+    group.append(button);
   }
 }
-
+function unavailable(snapshot, row, name) {
+  if (row) return row.status === 'pass' ? 'Below resolution' : `Failed: ${row.status}`;
+  if (comparisonKey === 'previous') return 'No previous measurement in this series';
+  if (comparisonKey === 'pure-go') return snapshot.roles['pure-go'] ? 'Outside the 3-case Go comparison' : 'Pure Go measurement pending';
+  return 'Not measured';
+}
+function verdictCell(current, control, metric, missing) {
+  const verdict = assessment(change(current, control), metricKey);
+  const cell = node('td'); cell.dataset.label = 'Assessment';
+  cell.append(node('span', verdict.label, `verdict ${verdict.tone}`));
+  cell.append(node('small', verdict.detail || missing));
+  return cell;
+}
+function numericCell(row, metric, label) {
+  const cell = node('td', row?.status === 'pass' ? format(value(row, metric), metric) : row ? `Failed: ${row.status}` : '—');
+  cell.dataset.label = label;
+  if (metricKey === 'runtime' && row?.status === 'pass' && row.runtime) {
+    cell.append(node('small', `${format(row.runtime.wallMin, metric)}–${format(row.runtime.wallMax, metric)}`));
+  }
+  return cell;
+}
+function renderCurrent() {
+  const metric = metrics[metricKey], snapshot = state.latest;
+  $('result-body').replaceChildren(); $('verdict-summary').replaceChildren();
+  $('reference-heading').textContent = comparisons[comparisonKey];
+  if (!snapshot) return;
+  const counts = { better: 0, neutral: 0, worse: 0, missing: 0 };
+  for (const row of snapshot.rows.filter(row => row.role === 'native')) {
+    const tr = node('tr');
+    const title = node('th', row.case); title.scope = 'row';
+    title.append(node('small', row.area));
+    if (row.coverage) title.append(node('small', row.coverage));
+    tr.append(title, numericCell(row, metric, 'Native'));
+    const ref = reference(snapshot, row.case), current = value(row, metric), control = value(ref, metric);
+    tr.append(numericCell(ref, metric, comparisons[comparisonKey]));
+    const verdict = assessment(change(current, control), metricKey);
+    counts[verdict.tone]++;
+    tr.append(verdictCell(current, control, metric, row.status === 'pass' ? unavailable(snapshot, ref, row.case) : `Native failed: ${row.status}`));
+    $('result-body').append(tr);
+  }
+  const compared = counts.better + counts.neutral + counts.worse;
+  const intro = node('div', undefined, 'summary-intro');
+  intro.append(node('span', `${metric.label} vs ${comparisons[comparisonKey]}`, 'control-label'),
+    node('strong', `${compared} workloads compared`), node('small', `${counts.missing} without a comparable value · lower is better`));
+  $('verdict-summary').append(intro);
+  for (const tone of ['better', 'neutral', 'worse']) {
+    const card = node('div', undefined, `summary-count ${tone}`);
+    card.append(node('strong', String(counts[tone])), node('span', assessment(tone === 'better' ? -.1 : tone === 'worse' ? .1 : 0, metricKey).label));
+    $('verdict-summary').append(card);
+  }
+}
 function renderHistory() {
-  const caseName = $('case').value;
-  const metric = metrics[$('metric').value];
+  const metric = metrics[metricKey];
   const history = state.history.filter(snapshot => snapshot.series === state.latest?.series);
   const points = [];
   $('history-body').replaceChildren();
-  for (const snapshot of history.toReversed()) {
-    const current = value(rowFor(snapshot, caseName, 'native'), metric);
-    const baseline = value(rowFor(snapshot, caseName, 'baseline'), metric);
-    const ratio = change(current, baseline);
+  for (const [index, snapshot] of history.entries()) {
+    const native = rowFor(snapshot, caseName, 'native'), ref = reference(snapshot, caseName);
+    const current = value(native, metric), control = value(ref, metric);
+    const ratio = change(current, control);
     const tr = node('tr');
-    tr.append(node('td', new Date(snapshot.at).toLocaleString()), node('td', snapshot.revision.slice(0, 8)),
-      node('td', format(current, metric)), changeCell(ratio));
-    const evidence = node('td');
-    evidence.append(link('Measurement', snapshot.runUrl));
-    tr.append(evidence);
-    $('history-body').append(tr);
-    if (ratio !== null) points.unshift(ratio * 100);
+    for (const [label, text] of [['Measured', new Date(snapshot.at).toLocaleString()], ['Revision', snapshot.revision.slice(0, 8)]]) {
+      const cell = node('td', text); cell.dataset.label = label; tr.append(cell);
+    }
+    tr.append(numericCell(native, metric, 'Native'), verdictCell(current, control, metric, unavailable(snapshot, ref, caseName)));
+    const evidence = node('td'); evidence.dataset.label = 'Evidence'; evidence.append(link('Measurement ↗', snapshot.runUrl)); tr.append(evidence);
+    $('history-body').prepend(tr);
+    points.push(ratio === null ? null : { index, ratio: ratio * 100 });
   }
-  const svg = $('trend-chart');
-  svg.replaceChildren();
-  $('trend-context').textContent = '';
-  if (points.length < 2) {
-    svg.hidden = true;
-    return;
+  const svg = $('trend-chart'); svg.replaceChildren();
+  const measured = points.filter(Boolean);
+  $('trend-context').textContent = `${caseName} · ${metric.label} vs ${comparisons[comparisonKey]}. Negative means less ${metric.quantity}. Only the current series is shown.`;
+  svg.hidden = !measured.length;
+  if (!measured.length) return;
+  const low = Math.min(0, ...measured.map(p => p.ratio)) - 5, high = Math.max(0, ...measured.map(p => p.ratio)) + 5;
+  const x = index => history.length === 1 ? 365 : 65 + index * 605 / (history.length - 1);
+  const y = ratio => 215 - (ratio - low) * 185 / (high - low);
+  const svgNode = (name, attrs, text) => {
+    const item = document.createElementNS('http://www.w3.org/2000/svg', name);
+    for (const [key, value] of Object.entries(attrs)) item.setAttribute(key, value);
+    if (text) item.textContent = text; svg.append(item); return item;
+  };
+  svgNode('line', { x1: 65, x2: 670, y1: y(0), y2: y(0), stroke: '#87978f', 'stroke-dasharray': '4 4' });
+  svgNode('text', { x: 5, y: y(0) + 4 }, '0%');
+  let previous;
+  for (const point of points) {
+    if (point && previous) svgNode('line', { x1: x(previous.index), y1: y(previous.ratio), x2: x(point.index), y2: y(point.ratio), stroke: '#1b7758', 'stroke-width': 3 });
+    if (point) svgNode('circle', { cx: x(point.index), cy: y(point.ratio), r: 4, fill: '#1b7758' });
+    previous = point;
   }
-  svg.hidden = false;
-  const low = Math.min(0, ...points) - 5, high = Math.max(0, ...points) + 5;
-  const xy = points.map((point, index) => `${30 + index * 640 / (points.length - 1)},${230 - (point - low) * 200 / (high - low)}`);
-  const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-  line.setAttribute('points', xy.join(' '));
-  line.setAttribute('fill', 'none'); line.setAttribute('stroke', '#2872b5'); line.setAttribute('stroke-width', '3');
-  svg.append(line);
-  $('trend-context').textContent = `Oldest to newest · same-host baseline changes range from ${Math.min(...points).toFixed(1)}% to ${Math.max(...points).toFixed(1)}%. Exact values below.`;
+  svgNode('text', { x: 65, y: 248 }, history.length === 1 ? 'First snapshot — trends need another measurement' : 'Oldest → newest · one position per snapshot');
 }
-
+function render() {
+  $('metric-description').textContent = metrics[metricKey].description + ' “About the same” means a difference below 5%; it is not a statistical conclusion.';
+  if (document.body.dataset.view === 'history') renderHistory(); else renderCurrent();
+}
 async function main() {
   const response = await fetch('./daily-state.json', { cache: 'no-store' });
   if (!response.ok) throw new Error('Could not load the last daily measurement.');
@@ -105,34 +136,27 @@ async function main() {
   const snapshot = state.latest;
   $('status').replaceChildren();
   if (snapshot) {
-    $('status').append(node('strong', `Measured ${new Date(snapshot.at).toLocaleString()} · ${snapshot.revision.slice(0, 8)}`));
-    $('status').append(node('div', state.pendingChanges ? 'Performance changes are waiting for the next daily measurement.' : 'No unmeasured performance changes at the last update.'));
-    $('evidence').replaceChildren(link('Open measurement and raw evidence', snapshot.runUrl));
-    $('context').textContent = `${snapshot.platform} · one logical CPU · ${snapshot.samples} retained runtime samples · ${snapshot.buildSamples} retained build samples. Lower values are better.`;
-    $('identity').textContent = `Frozen Native: ${snapshot.roles.baseline.revision.slice(0, 8)} · Previous Native: ${snapshot.roles.previous.revision.slice(0, 8)} · TypeRB Go: ${snapshot.roles['typerb-go'].revision.slice(0, 8)}`;
+    $('status').append(node('strong', `Measured ${new Date(snapshot.at).toLocaleString()}`));
+    $('status').append(node('div', `${snapshot.revision.slice(0, 8)} · ${state.pendingChanges ? 'New performance changes are awaiting measurement.' : 'Up to date with performance changes.'}`));
+    $('evidence').replaceChildren(link('Measurement run and raw evidence ↗', snapshot.runUrl));
+    $('context').textContent = `${snapshot.platform} · 1 logical CPU · ${snapshot.samples} runtime samples · ${snapshot.buildSamples} build samples. Ranges show minimum–maximum.`;
+    $('identity').textContent = `Frozen Native: ${snapshot.roles.baseline.revision.slice(0, 8)} · Previous Native: ${snapshot.roles.previous.revision.slice(0, 8)} · TypeRB Go: ${snapshot.roles['typerb-go'].revision.slice(0, 8)} · Pure Go: ${snapshot.roles['pure-go']?.version ?? 'not yet measured'}`;
   } else {
-    $('status').append(node('strong', 'First daily measurement pending'));
-    $('status').append(node('div', 'The detailed comparison remains available. Daily values will appear after the first completed run.'));
+    $('status').append(node('strong', 'First daily measurement pending'), node('div', 'Daily values appear after a completed measurement. The detailed comparison remains available.'));
     $('results').hidden = true;
   }
   const attempt = state.attempt;
   if (attempt && ['infrastructure-failure', 'measured-with-failures', 'running'].includes(attempt.status)) {
     $('status').classList.add('warning');
-    $('status').append(node('div', `Latest attempt: ${attempt.status} · ${attempt.revision.slice(0, 8)}. Failed or missing measurements are not passing results.`));
-    $('status').append(link('Inspect latest attempt', attempt.runUrl));
+    $('status').append(node('div', `Latest attempt: ${attempt.status} · ${attempt.revision.slice(0, 8)}. Failed or missing measurements are not passing results.`), link('Inspect latest attempt', attempt.runUrl));
   }
-  for (const [key, metric] of Object.entries(metrics)) {
-    const option = node('option', metric.label); option.value = key; $('metric').append(option);
+  choices('metric', Object.entries(metrics).map(([key, m]) => [key, m.label]), metricKey, key => { metricKey = key; render(); });
+  choices('comparison', Object.entries(comparisons), comparisonKey, key => { comparisonKey = key; render(); });
+  if (document.body.dataset.view === 'history') {
+    const cases = snapshot?.rows.filter(row => row.role === 'native').map(row => [row.case, row.case]) ?? [];
+    caseName = cases[0]?.[0] ?? caseName;
+    choices('case', cases, caseName, key => { caseName = key; render(); });
   }
-  const history = document.body.dataset.view === 'history';
-  if (history) {
-    for (const row of snapshot?.rows.filter(row => row.role === 'native') ?? []) {
-      const option = node('option', row.case); option.value = row.case; $('case').append(option);
-    }
-    $('case').addEventListener('change', renderHistory);
-  }
-  const render = history ? renderHistory : renderCurrent;
-  $('metric').addEventListener('change', render);
   render();
 }
 main().catch(error => { $('status').textContent = error.message; $('status').classList.add('warning'); });

@@ -52,13 +52,21 @@ def validate(state):
         if not SHA.fullmatch(snapshot.get("revision", "")) or not isinstance(snapshot.get("rows"), list):
             raise ValueError("Malformed snapshot")
         roles = snapshot.get("roles", {})
-        if set(roles) != {"native", "previous", "baseline", "typerb-go"}:
+        base_roles = {"native", "previous", "baseline", "typerb-go"}
+        if set(roles) not in (base_roles, base_roles | {"pure-go"}):
             raise ValueError("Incomplete compiler identities")
         if roles["native"]["revision"] != snapshot["revision"]:
             raise ValueError("Native revision does not match the snapshot")
         for role in roles.values():
             if not SHA.fullmatch(role.get("revision", "")):
                 raise ValueError("Invalid compiler revision")
+        pure_go_cases = snapshot.get("pureGoCases", [])
+        if "pure-go" in roles:
+            if (not isinstance(pure_go_cases, list) or len(pure_go_cases) != 3 or
+                    set(pure_go_cases) != {"fannkuch-redux", "n-body", "spectral-norm"}):
+                raise ValueError("Invalid Pure Go coverage")
+        elif pure_go_cases:
+            raise ValueError("Pure Go cases lack a compiler identity")
         cases = {}
         if not 1 <= len(snapshot["rows"]) <= 100:
             raise ValueError("Invalid row count")
@@ -84,7 +92,10 @@ def validate(state):
                             raise ValueError("Invalid measurement metric")
                     if not 0 < metrics["wallMin"] <= metrics["wallSeconds"] <= metrics["wallMax"]:
                         raise ValueError("Invalid measurement range")
-        if any(members != set(roles) for members in cases.values()):
+        if not set(pure_go_cases).issubset(cases):
+            raise ValueError("Missing Pure Go workload")
+        if any(members != (base_roles | ({"pure-go"} if case in pure_go_cases else set()))
+               for case, members in cases.items()):
             raise ValueError("Missing comparison role")
     return state
 
@@ -147,6 +158,8 @@ def series():
     digest.update((ROOT / "TYPE_RB_REVISION").read_bytes())
     for case in suite["cases"]:
         digest.update((ROOT / case["source"]).read_bytes())
+        if "pureGoSource" in case:
+            digest.update((ROOT / case["pureGoSource"]).read_bytes())
         if "expectedFile" in case:
             digest.update((ROOT / case["expectedFile"]).read_bytes())
     return digest.hexdigest()
