@@ -24,7 +24,8 @@ or current Go performance headroom.
 The initial comparison uses accepted control source
 `7014e1daa1c4acd79301e9425a0361321503f751` and frozen cumulative source
 `ac633935a7f248470c59d22666da14c819a131fa`. Its candidate was a prototype:
-apply [initial-core.patch](initial-core.patch) to core source at
+extract the `patch` field of [initial-core.json](initial-core.json) and apply it
+to core source at
 `7acb9dff192dd5a25ee0839bcecf2610f13bea14` to reproduce the recorded core source
 digests. Initial CLI evidence retains the executable digest and inputs, but
 exact CLI source reconstruction was not established. Do not treat that initial
