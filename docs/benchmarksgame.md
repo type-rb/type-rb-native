@@ -6,6 +6,15 @@ This plan implements the bounded benchmark work registered in
 identical-TypeRB comparison separate from cross-language implementation
 context.
 
+## Daily status and occasional detailed comparisons
+
+[Daily performance](daily-performance.md) is now the primary Pages view for
+current status and improvements. It uses a bounded diagnostic suite and updates
+independently of this full seven-implementation snapshot. These formal runtime
+and build workflows remain manual and are run for a concrete comparison or
+publication question, not for every merge or a mandatory monthly refresh.
+Daily measurements do not change the acceptance authorities below.
+
 ## Status
 
 The capability corpus and the first formal runtime and build/distribution

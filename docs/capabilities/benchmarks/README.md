@@ -1,42 +1,38 @@
-# TypeRB Native benchmark explorer
+# TypeRB Native performance pages
 
-This dependency-free static page presents the committed formal TypeRB Native
-runtime and build evidence without replacing the result records or benchmark
-methodology. It does not fetch mutable data at runtime.
+The default benchmark page shows daily performance. `trends.html` shows up to
+60 snapshots from the same measurement series. `comparison.html` preserves the
+complete dated Benchmarks Game runtime and build comparison.
 
-Generate the committed page data from the repository root:
+## Daily updates
+
+`daily-performance.yml` checks main once daily and measures only when relevant
+inputs changed; manual dispatch can force a refresh. It is independent of PR
+acceptance. The Pages workflow reads the verified main-branch daily state
+artifact and generates `daily-state.json` only in the deployment workspace.
+The committed JSON is an explicit empty state, never invented measurements.
+Source changes use PRs; data updates require no generated-data commits.
+
+See [the strategy and measurement policy](../../daily-performance.md) for
+coverage, failure states, time budgets, comparisons and evidence retention.
+
+## Detailed comparison
+
+Generate and check the committed formal comparison from the repository root:
 
 ```sh
 node tools/benchmark-pages-data.mjs
-```
-
-Check that the generated data still matches every source TSV and that the
-public page retains its structural and evidence boundaries:
-
-```sh
 node tools/benchmark-pages-data.mjs --check
 node tools/benchmark-pages-check.mjs
+python3 -m unittest discover -s tools/daily-performance -p 'test_*.py'
 ```
 
-The displayed comparisons are limited to the exact programs, inputs, hosts,
-toolchains, and metrics documented by the linked formal results. No composite
-language score or general application-performance claim is implied.
+Refresh the detailed comparison only from a complete committed formal result
+set that passes its registered correctness and measurement boundaries. Update
+result roots and metadata in `tools/benchmark-pages-data.mjs`, regenerate
+`data.js`, and review the detailed page copy. Focused or daily results never
+replace individual rows in this cross-language snapshot.
 
-## Updating the snapshot
-
-Refresh this page only from a complete committed formal result set that passes
-its registered correctness and measurement boundaries. Update the result roots,
-case matrix, platform metadata, and snapshot date in
-`tools/benchmark-pages-data.mjs`, regenerate `data.js`, and rerun both checks.
-Review the page copy whenever the derived ranges or conclusions change.
-
-Keep focused optimization measurements and partial reruns in their own result
-records. Do not mix them into this cross-language snapshot. The explorer shows
-one internally consistent selected snapshot; the linked result directories
-remain the historical and reproducible source of truth.
-
-The Pages workflow remains deliberately lightweight: pull requests verify the
-committed data and site structure, matching pushes to `main` publish the new
-snapshot, and a manual workflow dispatch redeploys the current committed site.
-Formal runtime and build measurements stay in their separate dispatch-only
-workflows and never run as ordinary pull-request CI.
+Daily data can update without another formal run. The detailed comparison has
+no mandatory calendar refresh: rerun it when a concrete cross-language or
+large-input question warrants the cost. Historical evidence stays immutable.

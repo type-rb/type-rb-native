@@ -24,7 +24,7 @@ for (const row of [...benchmarkData.runtime.records, ...benchmarkData.build.reco
   }
 }
 
-const html = await readFile(resolve(root, 'docs/capabilities/benchmarks/index.html'), 'utf8');
+const html = await readFile(resolve(root, 'docs/capabilities/benchmarks/comparison.html'), 'utf8');
 for (const required of ['TypeRB Native Benchmarks', 'id="runtime-chart"', 'id="build-grid"', './app.js']) {
   if (!html.includes(required)) fail(`benchmark page is missing ${required}`);
 }
@@ -45,4 +45,11 @@ if (failures.length > 0) {
   process.exitCode = 1;
 } else {
   console.log('PASS benchmark Pages structure and evidence');
+}
+
+for (const page of ['index.html', 'trends.html']) {
+  const daily = await readFile(resolve(root, 'docs/capabilities/benchmarks', page), 'utf8');
+  for (const required of ['id="status"', 'id="metric"', './daily.js', 'comparison.html', 'Current performance']) {
+    if (!daily.includes(required)) throw new Error(`${page} is missing ${required}`);
+  }
 }
