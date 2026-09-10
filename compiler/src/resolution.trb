@@ -1,3 +1,4 @@
+import { hash_key_type, hash_type, hash_value_type } from hash_types
 import { gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string } from storage
 import { gate4_path_basename, gate4_path_directory, gate4_string_starts_with, gate4_string_without_suffix } from path
 import { gate4_ascii_code, gate4_integer_string } from literals
@@ -240,6 +241,9 @@ def gate4_find_record_type(state: Gate4Compiler, type_name: String): Integer
 end
 
 def gate4_type_display(state: Gate4Compiler, type_name: String): String
+	if hash_key_type(type_name) != ""
+		return "Hash<" + hash_key_type(type_name) + ", " + gate4_type_display(state, hash_value_type(type_name)) + ">"
+	end
 	record_index := gate4_find_record_type(state, type_name)
 	if record_index >= 0
 		return gate4_load_string(state.record_names, record_index)
@@ -291,6 +295,14 @@ def gate4_resolve_type_name(
 		type_name: String,
 		allow_void: Boolean,
 	): String
+	key := hash_key_type(type_name)
+	if key != ""
+		value := gate4_resolve_type_name(state, module_index, hash_value_type(type_name), false)
+		if value == ""
+			return ""
+		end
+		return hash_type(key, value)
+	end
 	if gate4_builtin_type_exists(type_name, allow_void)
 		return type_name
 	end
@@ -502,34 +514,29 @@ def gate4_resolution_keyword(name: String): Boolean
 end
 
 def gate4_is_typed_local_declaration(state: Gate4Compiler, index: Integer): Boolean
-	mut found := false
-	mut scanning := true
+	mut depth := 0
 	mut cursor := index + 2
-	while scanning
-		if gate4_terminal_token(state, cursor)
-			scanning = false
-		else
-			if gate4_load_integer(state.token_kinds, cursor) == 4
-				scanning = false
-			else
-				if gate4_token_is(state, cursor, ":=")
-					found = true
-					scanning = false
-				else
-					if gate4_token_is(state, cursor, ",")
-						scanning = false
-					else
-						if gate4_token_is(state, cursor, ")")
-							scanning = false
-						else
-							cursor += 1
-						end
-					end
-				end
-			end
+	while !gate4_terminal_token(state, cursor)
+		if gate4_load_integer(state.token_kinds, cursor) == 4
+			return false
 		end
+		if gate4_token_is(state, cursor, ":=")
+			return depth == 0
+		end
+		if gate4_token_is(state, cursor, ",") && depth == 0
+			return false
+		end
+		if gate4_token_is(state, cursor, ")")
+			return false
+		end
+		if gate4_token_is(state, cursor, "<")
+			depth += 1
+		elsif gate4_token_is(state, cursor, ">")
+			depth -= 1
+		end
+		cursor += 1
 	end
-	return found
+	return false
 end
 
 def gate4_resolve_bare_imports(mut state: Gate4Compiler): Boolean

@@ -1,0 +1,136 @@
+import { Gate4Compiler, gate4_diagnostic } from state
+import { gate4_load_integer, gate4_load_string, gate4_storage_chunk_size, gate4_store_integer } from storage
+import { MirHashOperation, mir_hash_operation, mir_hash_valid } from hash_mir
+import { gate4_token_is } from parser
+
+def checked_hash_index_at(state: Gate4Compiler, origin: Integer): Integer
+	storage := state.hash_origins
+	if origin < 0 || origin >= storage.used[0]
+		return - 1
+	end
+	chunk_size := gate4_storage_chunk_size()
+	chunk := storage.chunks[0][origin / chunk_size]
+	if chunk.size() == 0
+		return - 1
+	end
+	return chunk[origin % chunk_size] - 1
+end
+
+# Publish a single named plan per source operation; the origin table is only an
+# index into verified MIR, never an independent collection semantics store.
+def checked_hash_publish(mut state: Gate4Compiler, plan: MirHashOperation)
+	mut operations := state.hash_operations
+	index := checked_hash_index_at(state, plan.origin)
+	if index >= 0
+		operations[index] = plan
+	else
+		operations.push(plan)
+		gate4_store_integer(state.hash_origins, plan.origin, operations.size())
+	end
+	gate4_store_integer(state.hash_origins, plan.finish, gate4_load_integer(state.hash_origins, plan.origin))
+end
+
+def checked_hash_plan(state: Gate4Compiler, origin: Integer): MirHashOperation
+	if origin >= 0 && origin < state.token_count[0]
+		index := checked_hash_index_at(state, origin)
+		if index >= 0 && index < state.hash_operations.size()
+			return state.hash_operations[index]
+		end
+	end
+	return mir_hash_operation(0, - 1, - 1, - 1, "", false, 0)
+end
+
+def checked_hash_method(method: String): Integer
+	if method == "fetch"
+		return 13
+	elsif method == "size"
+		return 4
+	elsif method == "key?"
+		return 5
+	elsif method == "delete"
+		return 6
+	elsif method == "dup"
+		return 7
+	elsif method == "merge"
+		return 8
+	elsif method == "update"
+		return 9
+	elsif method == "keys"
+		return 10
+	elsif method == "values"
+		return 11
+	elsif method == "empty?"
+		return 12
+	end
+	return 0
+end
+
+def checked_hash_valid(state: Gate4Compiler, plan: MirHashOperation, pending: Boolean): Boolean
+	if !mir_hash_valid(plan, state.token_count[0], pending)
+		return false
+	end
+	if plan.kind == 3 || plan.kind == 6 || plan.kind == 9
+		if !checked_hash_binding_target(state, plan.receiver_origin)
+			return false
+		end
+	end
+	if plan.kind == 1
+		if gate4_token_is(state, plan.origin, "{") && gate4_token_is(state, plan.finish, "}")
+			return true
+		end
+		return false
+	end
+	if plan.kind == 2 || plan.kind == 3
+		if !gate4_token_is(state, plan.origin, "[") || !gate4_token_is(state, plan.finish, "]")
+			return false
+		end
+		if plan.kind == 3
+			return gate4_token_is(state, plan.finish + 1, "=")
+		end
+		return true
+	end
+	if gate4_token_is(state, plan.origin, "(") && gate4_token_is(state, plan.finish, ")") && plan.kind == checked_hash_method(gate4_load_string(state.token_texts, plan.origin - 1))
+		return true
+	end
+	return false
+end
+
+def checked_hash_require(mut state: Gate4Compiler, origin: Integer, type_name: String): MirHashOperation
+	plan := checked_hash_plan(state, origin)
+	if !checked_hash_valid(state, plan, false) || plan.origin != origin || plan.type_name != type_name
+		gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, origin), "invalid checked Hash operation")
+	end
+	return plan
+end
+
+def checked_hash_verify(mut state: Gate4Compiler): Boolean
+	mut index := 0
+	while index < state.hash_operations.size()
+		plan := state.hash_operations[index]
+		if !checked_hash_valid(state, plan, state.hash_repl[0])
+			gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, plan.origin), "unresolved or invalid Hash operation; annotate Hash<K, V>")
+			return false
+		end
+		index += 1
+	end
+	return true
+end
+
+# A fresh value may be passed to a mutable parameter, but mutation syntax
+# requires a binding. Follow checked indexed receivers without token guessing.
+def checked_hash_binding_target(state: Gate4Compiler, origin: Integer): Boolean
+	mut root := origin
+	mut depth := 0
+	while depth < state.token_count[0]
+		parent := checked_hash_plan(state, root)
+		if parent.kind == 1
+			return false
+		end
+		if parent.kind != 2
+			return true
+		end
+		root = parent.receiver_origin
+		depth += 1
+	end
+	return false
+end

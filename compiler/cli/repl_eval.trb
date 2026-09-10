@@ -1,3 +1,6 @@
+import { hash_key_type, hash_value_type } from hash_types
+import { checked_hash_plan } from hash_checked
+import { repl_hash_new, repl_hash_set, repl_hash_get, repl_hash_slot, repl_hash_delete, repl_hash_update } from repl_hash
 import trb/std/math
 import { Gate4Compiler } from state
 import { gate4_load_integer, gate4_load_string } from storage
@@ -7,7 +10,8 @@ import { checked_loop_transfer_kind } from checked_program
 import { gate4_find_visible_function, gate4_find_visible_record, gate4_find_record_type, gate4_find_field, gate4_record_type, gate4_array_element_type } from resolution
 import { gate4_number_is_float, gate4_number_without_underscores, gate4_integer_string } from literals
 import { native_cli_float, native_cli_interrupt } from host
-import { repl_render, repl_get, ReplStore, ReplEnvironment, ReplReference, repl_value, repl_integer, repl_float, repl_boolean, repl_string, repl_reference, repl_find, repl_bind, repl_environment, repl_coerce } from repl_values
+import { repl_get, ReplStore, ReplEnvironment, ReplReference, repl_value, repl_integer, repl_float, repl_boolean, repl_string, repl_reference, repl_environment } from repl_model
+import { repl_render, repl_find, repl_bind, repl_coerce } from repl_values
 
 # Evaluation follows the already checked token stream. Parser, resolution and
 # type checking remain owned by the ordinary compiler; no source is replayed.
@@ -263,6 +267,26 @@ def repl_primary(mut state: Gate4Compiler, mut position: Array<Integer>, mut sto
 		position[0] += 1
 		return result
 	end
+	if text == "{"
+		plan := checked_hash_plan(state, position[0] - 1)
+		id := repl_hash_new(store, plan.type_name, plan.capacity)
+		gate4_skip_newlines(state, position)
+		while !gate4_token_is(state, position[0], "}")
+			key := repl_expression(state, position, store, environment, 1, plan.key_type)
+			position[0] += 1
+			item := repl_expression(state, position, store, environment, 1, plan.value_type)
+			if store.error[0] != ""
+				return repl_reference(0)
+			end
+			repl_hash_set(store, id, key.value, repl_coerce(store, item.value, plan.value_type))
+			if gate4_token_is(state, position[0], ",")
+				position[0] += 1
+			end
+			gate4_skip_newlines(state, position)
+		end
+		position[0] += 1
+		return repl_reference(id)
+	end
 	if text == "["
 		mut children: Array<Integer> := []
 		mut element := gate4_array_element_type(expected)
@@ -388,6 +412,19 @@ def repl_postfix(mut state: Gate4Compiler, mut position: Array<Integer>, mut sto
 		end
 		value := repl_get(store, result.value)
 		if gate4_token_is(state, position[0], "[")
+			if value.type_name == "Hash" || hash_key_type(value.type_name) != ""
+				plan := checked_hash_plan(state, position[0])
+				store.types[result.value] = plan.type_name
+				position[0] += 1
+				key := repl_expression(state, position, store, environment, 1, plan.key_type)
+				position[0] += 1
+				if plan.kind == 3
+					result = ReplReference.new(value: 0, binding: - 1, container: result.value, slot: key.value)
+				else
+					result = repl_reference(repl_hash_get(store, result.value, key.value))
+				end
+				next
+			end
 			position[0] += 1
 			requested := repl_expression(state, position, store, environment, 1, "Integer")
 			position[0] += 1
@@ -418,6 +455,10 @@ def repl_postfix(mut state: Gate4Compiler, mut position: Array<Integer>, mut sto
 				member := gate4_load_string(state.token_texts, position[0])
 				position[0] += 1
 				if gate4_token_is(state, position[0], "(")
+					if value.type_name == "Hash" || hash_key_type(value.type_name) != ""
+						result = repl_reference(repl_hash_method(state, position, store, environment, result.value))
+						next
+					end
 					position[0] += 1
 					if member == "push"
 						argument := repl_expression(state, position, store, environment, 1, gate4_array_element_type(value.type_name))
@@ -666,13 +707,24 @@ def repl_statement(mut state: Gate4Compiler, mut position: Array<Integer>, mut s
 	end
 	if assignment
 		position[0] += 1
-		expected := store.types[left.value]
+		mut expected := store.types[left.value]
+		mut hash_assignment := false
+		if left.container >= 0
+			if hash_key_type(store.types[left.container]) != ""
+				hash_assignment = true
+				expected = hash_value_type(store.types[left.container])
+			end
+		end
 		right := repl_expression(state, position, store, environment, 1, expected)
 		mut result := repl_coerce(store, right.value, expected)
 		if operator != "="
 			result = repl_numeric(store, left.value, operator[0], result)
 		end
 		if store.error[0] == ""
+			if hash_assignment
+				repl_hash_set(store, left.container, left.slot, result)
+				return result
+			end
 			if left.binding >= 0
 				environment.values[left.binding] = result
 			else
@@ -714,4 +766,61 @@ def repl_block(mut state: Gate4Compiler, mut position: Array<Integer>, mut store
 		end
 	end
 	return result
+end
+
+# Consume the same checked operation plans as ordinary code generation.
+def repl_hash_method(mut state: Gate4Compiler, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, receiver: Integer): Integer
+	plan := checked_hash_plan(state, position[0])
+	position[0] += 1
+	store.types[receiver] = plan.type_name
+	mut argument := 0
+	if plan.kind == 5 || plan.kind == 6 || plan.kind == 13
+		argument = repl_expression(state, position, store, environment, 1, plan.key_type).value
+	end
+	if plan.kind == 8 || plan.kind == 9
+		argument = repl_expression(state, position, store, environment, 1, plan.type_name).value
+	end
+	position[0] += 1
+	if store.error[0] != ""
+		return 0
+	end
+	table := store.hashes[store.integers[receiver]]
+	if plan.kind == 4
+		return repl_integer(store, table.sizes[0])
+	elsif plan.kind == 12
+		return repl_boolean(store, table.sizes[0] == 0)
+	elsif plan.kind == 5
+		return repl_boolean(store, repl_hash_slot(store, table, argument) >= 0)
+	elsif plan.kind == 13
+		return repl_hash_get(store, receiver, argument)
+	elsif plan.kind == 6
+		return repl_hash_delete(store, receiver, argument)
+	elsif plan.kind == 9
+		repl_hash_update(store, receiver, argument)
+		return 0
+	elsif plan.kind == 7 || plan.kind == 8
+		copy := repl_hash_new(store, plan.type_name, table.keys.size())
+		repl_hash_update(store, copy, receiver)
+		if plan.kind == 8
+			repl_hash_update(store, copy, argument)
+		end
+		return copy
+	end
+	mut children: Array<Integer> := []
+	mut index := 0
+	while index < table.keys.size()
+		if table.keys[index] > 0
+			if plan.kind == 10
+				children.push(table.keys[index])
+			else
+				children.push(table.values[index])
+			end
+		end
+		index += 1
+	end
+	mut element := plan.value_type
+	if plan.kind == 10
+		element = plan.key_type
+	end
+	return repl_value(store, "Array<" + element + ">", 0, 0.0, "", children)
 end

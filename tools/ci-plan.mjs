@@ -50,6 +50,7 @@ export const compilerTestInputs = new Set([
   'compiler/src/compiler_test.trb',
   'compiler/src/literals_test.trb',
   'compiler/src/mir_test.trb',
+  'compiler/src/hash_test.trb',
   'compiler/src/parser_test.trb',
   'compiler/src/project_config_test.trb',
   'compiler/src/qbe_output_test.trb',
@@ -63,6 +64,7 @@ export const cliInputs = new Set([
   'tools/build-native.sh',
   'tools/check-native-cli.sh',
   'tools/native-cli-test.py',
+  'tools/native-hash-test.py',
   'tools/native-cli-key-test.py',
   'tools/native-puts-test.py',
   'tools/native-diagnostics-test.py',
@@ -82,6 +84,8 @@ export const cliInputs = new Set([
   'compiler/cli/repl_history.trb',
   'compiler/cli/repl_syntax.trb',
   'compiler/cli/repl_values.trb',
+  'compiler/cli/repl_model.trb',
+  'compiler/cli/repl_hash.trb',
 ]);
 
 export function classify(paths, draft) {

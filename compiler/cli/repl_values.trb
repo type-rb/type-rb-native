@@ -1,85 +1,12 @@
+import { ReplStore, ReplEnvironment, repl_store, repl_value, repl_float, repl_get } from repl_model
+import { repl_hash_new, repl_hash_set } from repl_hash
+import { hash_key_type } from hash_types
 import { Gate4Compiler } from state
 import { gate4_type_display, gate4_find_record_type } from resolution
 import { gate4_load_integer, gate4_load_string } from storage
 import { gate4_integer_string } from literals
 import { gate4_string_starts_with } from path
 import { native_cli_float_text } from host
-
-# Values have a checked language type and a finite storage representation.
-# Aggregate identities are pool indexes, so aliases survive across submissions.
-record ReplValue
-	type_name: String
-	integer: Integer
-	floating: Float
-	text: String
-	children: Array<Integer>
-end
-
-record ReplStore
-	types: Array<String>
-	integers: Array<Integer>
-	floats: Array<Float>
-	texts: Array<String>
-	children: Array<Array<Integer>>
-	error: Array<String>
-	depth: Array<Integer>
-end
-
-record ReplEnvironment
-	names: Array<String>
-	values: Array<Integer>
-	mutable: Array<Integer>
-	count: Array<Integer>
-end
-
-record ReplReference
-	value: Integer
-	binding: Integer
-	container: Integer
-	slot: Integer
-end
-
-def repl_store(): ReplStore
-	return ReplStore.new(types: ["Void"], integers: [0], floats: [0.0], texts: [""], children: [[]], error: [""], depth: [0])
-end
-
-def repl_environment(): ReplEnvironment
-	return ReplEnvironment.new(names: [], values: [], mutable: [], count: [0])
-end
-
-def repl_value(mut store: ReplStore, type_name: String, integer: Integer, floating: Float, text: String, children: Array<Integer>): Integer
-	id := store.types.size()
-	store.types.push(type_name)
-	store.integers.push(integer)
-	store.floats.push(floating)
-	store.texts.push(text)
-	store.children.push(children)
-	return id
-end
-
-def repl_integer(mut store: ReplStore, value: Integer): Integer
-	return repl_value(store, "Integer", value, 0.0, "", [])
-end
-
-def repl_float(mut store: ReplStore, value: Float): Integer
-	return repl_value(store, "Float", 0, value, "", [])
-end
-
-def repl_boolean(mut store: ReplStore, value: Boolean): Integer
-	mut integer := 0
-	if value
-		integer = 1
-	end
-	return repl_value(store, "Boolean", integer, 0.0, "", [])
-end
-
-def repl_string(mut store: ReplStore, value: String): Integer
-	return repl_value(store, "String", 0, 0.0, value, [])
-end
-
-def repl_reference(value: Integer): ReplReference
-	return ReplReference.new(value: value, binding: - 1, container: - 1, slot: - 1)
-end
 
 def repl_find(environment: ReplEnvironment, name: String): Integer
 	mut index := environment.count[0] - 1
@@ -158,6 +85,23 @@ def repl_render(state: Gate4Compiler, store: ReplStore, id: Integer, depth: Inte
 	if depth > 12
 		return "..."
 	end
+	if value.type_name == "Hash" || hash_key_type(value.type_name) != ""
+		table := store.hashes[value.integer]
+		mut rendered := "{"
+		mut slot := 0
+		mut count := 0
+		while slot < table.keys.size()
+			if table.keys[slot] > 0
+				if count > 0
+					rendered += ", "
+				end
+				rendered += repl_render(state, store, table.keys[slot], depth + 1) + " => " + repl_render(state, store, table.values[slot], depth + 1)
+				count += 1
+			end
+			slot += 1
+		end
+		return rendered + "}"
+	end
 	mut result := gate4_type_display(state, value.type_name) + "("
 	mut closing := ")"
 	if gate4_string_starts_with(value.type_name, "Array<")
@@ -180,15 +124,26 @@ def repl_render(state: Gate4Compiler, store: ReplStore, id: Integer, depth: Inte
 	return result + closing
 end
 
-def repl_get(store: ReplStore, id: Integer): ReplValue
-	return ReplValue.new(type_name: store.types[id], integer: store.integers[id], floating: store.floats[id], text: store.texts[id], children: store.children[id])
-end
-
 def repl_copy_value(source: ReplStore, mut target: ReplStore, id: Integer, mut mapping: Array<Integer>): Integer
 	if mapping[id] >= 0
 		return mapping[id]
 	end
 	value := repl_get(source, id)
+	if value.type_name == "Hash" || hash_key_type(value.type_name) != ""
+		table := source.hashes[value.integer]
+		copied := repl_hash_new(target, value.type_name, table.keys.size())
+		mapping[id] = copied
+		mut slot := 0
+		while slot < table.keys.size()
+			if table.keys[slot] > 0
+				key := repl_copy_value(source, target, table.keys[slot], mapping)
+				item := repl_copy_value(source, target, table.values[slot], mapping)
+				repl_hash_set(target, copied, key, item)
+			end
+			slot += 1
+		end
+		return copied
+	end
 	copied := repl_value(target, value.type_name, value.integer, value.floating, value.text, [])
 	mapping[id] = copied
 	mut index := 0

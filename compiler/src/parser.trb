@@ -74,7 +74,11 @@ def gate4_parse_type(mut state: Gate4Compiler, mut position: Array<Integer>): St
 	end
 	if gate4_token_is(state, position[0], "<")
 		gate4_advance(position)
-		argument := gate4_parse_type(state, position)
+		mut argument := gate4_parse_type(state, position)
+		while gate4_token_is(state, position[0], ",")
+			gate4_advance(position)
+			argument += "," + gate4_parse_type(state, position)
+		end
 		if !gate4_expect(state, position, ">")
 			return ""
 		end
@@ -144,8 +148,38 @@ def gate4_parse_arguments_syntax(mut state: Gate4Compiler, mut position: Array<I
 end
 
 def gate4_parse_primary_syntax(mut state: Gate4Compiler, mut position: Array<Integer>): Boolean
+	hash_literal := gate4_token_is(state, position[0], "{")
+	if hash_literal
+		gate4_advance(position)
+		gate4_skip_newlines(state, position)
+		while !gate4_token_is(state, position[0], "}")
+			if gate4_load_integer(state.token_kinds, position[0]) == 1 && gate4_token_is(state, position[0] + 1, ":")
+				gate4_store_integer(state.token_kinds, position[0], 3)
+				gate4_store_string(state.token_texts, position[0] + 1, "=>")
+			end
+			if !gate4_parse_expression_syntax(state, position, 1)
+				return false
+			end
+			if !gate4_expect(state, position, "=>")
+				return false
+			end
+			if !gate4_parse_expression_syntax(state, position, 1)
+				return false
+			end
+			gate4_skip_newlines(state, position)
+			if !gate4_token_is(state, position[0], ",")
+				break
+			end
+			gate4_advance(position)
+			gate4_skip_newlines(state, position)
+		end
+		if !gate4_expect(state, position, "}")
+			return false
+		end
+	end
 	kind := gate4_load_integer(state.token_kinds, position[0])
-	if kind == 1
+	if hash_literal
+	elsif kind == 1
 		gate4_advance(position)
 	else
 		if kind == 2

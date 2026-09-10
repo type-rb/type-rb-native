@@ -1,0 +1,86 @@
+# Values have a checked language type and a finite storage representation.
+# Aggregate identities are pool indexes, so aliases survive across submissions.
+record ReplValue
+	type_name: String
+	integer: Integer
+	floating: Float
+	text: String
+	children: Array<Integer>
+end
+
+record ReplHashTable
+	keys: Array<Integer>
+	values: Array<Integer>
+	sizes: Array<Integer>
+end
+
+record ReplStore
+	types: Array<String>
+	integers: Array<Integer>
+	floats: Array<Float>
+	texts: Array<String>
+	children: Array<Array<Integer>>
+	error: Array<String>
+	hashes: Array<ReplHashTable>
+	depth: Array<Integer>
+end
+
+record ReplEnvironment
+	names: Array<String>
+	values: Array<Integer>
+	mutable: Array<Integer>
+	count: Array<Integer>
+end
+
+record ReplReference
+	value: Integer
+	binding: Integer
+	container: Integer
+	slot: Integer
+end
+
+def repl_store(): ReplStore
+	return ReplStore.new(types: ["Void"], integers: [0], floats: [0.0], texts: [""], children: [[]], error: [""], hashes: [], depth: [0])
+end
+
+def repl_environment(): ReplEnvironment
+	return ReplEnvironment.new(names: [], values: [], mutable: [], count: [0])
+end
+
+def repl_value(mut store: ReplStore, type_name: String, integer: Integer, floating: Float, text: String, children: Array<Integer>): Integer
+	id := store.types.size()
+	store.types.push(type_name)
+	store.integers.push(integer)
+	store.floats.push(floating)
+	store.texts.push(text)
+	store.children.push(children)
+	return id
+end
+
+def repl_integer(mut store: ReplStore, value: Integer): Integer
+	return repl_value(store, "Integer", value, 0.0, "", [])
+end
+
+def repl_float(mut store: ReplStore, value: Float): Integer
+	return repl_value(store, "Float", 0, value, "", [])
+end
+
+def repl_boolean(mut store: ReplStore, value: Boolean): Integer
+	mut integer := 0
+	if value
+		integer = 1
+	end
+	return repl_value(store, "Boolean", integer, 0.0, "", [])
+end
+
+def repl_string(mut store: ReplStore, value: String): Integer
+	return repl_value(store, "String", 0, 0.0, value, [])
+end
+
+def repl_reference(value: Integer): ReplReference
+	return ReplReference.new(value: value, binding: - 1, container: - 1, slot: - 1)
+end
+
+def repl_get(store: ReplStore, id: Integer): ReplValue
+	return ReplValue.new(type_name: store.types[id], integer: store.integers[id], floating: store.floats[id], text: store.texts[id], children: store.children[id])
+end
