@@ -36,3 +36,8 @@ replace individual rows in this cross-language snapshot.
 Daily data can update without another formal run. The detailed comparison has
 no mandatory calendar refresh: rerun it when a concrete cross-language or
 large-input question warrants the cost. Historical evidence stays immutable.
+
+`weekly.html` shows the latest small-input Native/Pure Go/C/C++/Rust/Java
+comparison. `weekly-state.json` is composed from the independent weekly workflow
+artifact; source commits retain an explicit empty placeholder. It updates on
+changed-input weeks or manual dispatch, independently of daily measurements.

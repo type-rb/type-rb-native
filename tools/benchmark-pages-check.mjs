@@ -53,3 +53,12 @@ for (const page of ['index.html', 'trends.html']) {
     if (!daily.includes(required)) throw new Error(`${page} is missing ${required}`);
   }
 }
+
+const weekly = await readFile(resolve(root, 'docs/capabilities/benchmarks/weekly.html'), 'utf8');
+for (const required of ['id="status"', 'id="metric"', 'id="case"', './weekly.js', 'Current performance']) {
+  if (!weekly.includes(required)) throw new Error(`weekly.html is missing ${required}`);
+}
+for (const name of ['index.html', 'trends.html', 'weekly.html']) {
+  const page = await readFile(resolve(root, 'docs/capabilities/benchmarks', name), 'utf8');
+  if (page.includes('<select')) throw new Error(`${name} must use visible comparison buttons`);
+}

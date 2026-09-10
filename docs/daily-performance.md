@@ -18,6 +18,10 @@ seven-implementation cohort or a manual prose update.
 - Manual dispatch can force an immediate refresh. Only main can measure and
   publish. One run may be active; pending requests coalesce through Actions
   concurrency without cancelling the active cohort.
+- `weekly-performance.yml` measures Native, Pure Go, C, C++, Rust and Java on
+  the three daily numeric inputs, at 20:23 UTC Saturday (05:23 JST Sunday),
+  only after relevant changes or a forced manual dispatch. It is independent of
+  the daily workflow, with its own state/evidence artifacts and 25-minute limit.
 - Complete Benchmarks Game comparisons remain manual, on a separate page.
   Run one for a concrete cross-language or large-input question, or before a
   performance claim that needs it. There is no required monthly refresh.
@@ -144,3 +148,32 @@ detected regressions and decisions informed. Replay a known regression/fix pair
 and use identical-binary comparisons before relying on this diagnostic for small
 changes. This calibration is separate from formal acceptance; the daily page
 does not claim it has already established a statistical detection guarantee.
+
+## Weekly external comparisons
+
+The weekly page is a small-input diagnostic covering runtime and peak RSS, not
+a replacement for the large-input formal cohort. Each run measures all six
+implementations on the same host and one logical CPU. It reuses the upstream
+archive and per-program checksums registered for the formal comparison, including
+its C `-O3`, C++ `-O3`, Rust optimization level 3 and Go `-trimpath` policies.
+Tool versions and executable hashes are recorded. Java uses the installed JDK 21
+and `-XX:ActiveProcessorCount=1`; fresh-process JVM startup and JIT are included
+in every sample, so this is not steady-state service throughput.
+
+One warmup and five retained runtime observations use the same daily inputs,
+output checks and 30-second per-process timeout. Runtime roles rotate each round.
+Four clean-output build observations (one warmup, three retained) remain raw
+evidence; weekly build timings and artifact sizes are not compared on the page.
+Compiler warnings remain in build logs; runtime stderr must be empty. Failed
+cases stay visible. Infrastructure failures retain the previous snapshot.
+
+Weekly source/state artifacts use `weekly-performance-evidence` and
+`weekly-performance-state`; retention matches daily (90 days of raw artifacts,
+up to 60 state snapshots). Pages restores each workflow's state separately and
+shows the weekly date/revision on the daily page. Weekly completion cannot
+replace daily results or their failure status.
+
+If optional weekly artifact retrieval fails during Pages composition, the weekly
+section falls back to the last retrievable public weekly snapshot with an explicit
+warning. If neither source is available it shows a pending/ unavailable state.
+This fallback never writes workflow state and does not block daily publication.

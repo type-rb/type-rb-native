@@ -6,7 +6,7 @@ on:
       - main
   workflow_dispatch:
   workflow_run:
-    workflows: [Daily performance snapshot]
+    workflows: [Daily performance snapshot, Weekly language comparison]
     types: [completed]
     branches: [main]
 
@@ -40,11 +40,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TRIGGER_RUN_ID: ${{ github.event.workflow_run.id }}
+          TRIGGER_WORKFLOW: ${{ github.event.workflow_run.name }}
           TRIGGER_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
         run: |
+          event_run="$TRIGGER_RUN_ID"
+          if test "$TRIGGER_WORKFLOW" != "Daily performance snapshot"; then export TRIGGER_RUN_ID=; fi
           python3 tools/daily-performance/state.py restore --state "$RUNNER_TEMP/daily-state.json"
           python3 tools/daily-performance/state.py site --state "$RUNNER_TEMP/daily-state.json" \
             --output docs/capabilities/benchmarks/daily-state.json
+          export TRIGGER_RUN_ID=
+          if test "$TRIGGER_WORKFLOW" = "Weekly language comparison"; then export TRIGGER_RUN_ID="$event_run"; fi
+          python3 tools/daily-performance/state.py restore --tier weekly --state "$RUNNER_TEMP/weekly-state.json" || \
+            python3 tools/weekly-performance/pages-fallback.py "$RUNNER_TEMP/weekly-state.json"
+          python3 tools/daily-performance/state.py site --tier weekly --state "$RUNNER_TEMP/weekly-state.json" \
+            --output docs/capabilities/benchmarks/weekly-state.json
 
       - name: Upload the GitHub Pages artifact
         uses: actions/upload-pages-artifact@v5
