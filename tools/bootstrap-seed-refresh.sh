@@ -68,7 +68,7 @@ if test "$mode" = prepare; then bootstrap_input=$workspace/setup-runtime/compile
 python3 "$root/tools/bootstrap-seed-release.py" observations "$workspace/evidence/measurements.csv" "$input_role"
 cmp "$workspace/b4/compiler" "$package/$asset"
 # Check the syntax that the next compiler-source simplification will use.
-for fixture in logical-short-circuit elsif-control elsif-managed loop-transfer-recovery boolean-array-values boolean-array-effects boolean-array-recovery record-array-values record-array-effects record-array-managed record-array-recovery; do
+for fixture in logical-short-circuit elsif-control elsif-managed loop-transfer-recovery boolean-array-values boolean-array-effects boolean-array-recovery record-array-values record-array-effects record-array-managed record-array-recovery hash-values hash-managed hash-cycles; do
     "$package/$asset" check "$root/compiler/conformance/valid/$fixture.trb"
 done
 find "$workspace" -name '*.trbn.*' -print > "$workspace/temporary-inventory.txt"

@@ -157,6 +157,23 @@ passed. The checkout handoff below precedes compiler-source adoption of record
 Arrays. The five-field MIR value carrier is the bounded subsequent self-use slice;
 no runtime speedup or benchmark-value change is claimed here.
 
+## Registered Hash refresh
+
+[Issue #403](https://github.com/type-rb/type-rb-native/issues/403) registers
+`bootstrap-seed-2026-09-10-hash` from the accepted compiler closure at
+`8a6d9ff73b14a97bca1b010ddaad6a38972b5373` (PR #401). Reviewed preparation
+observers precede dispatch; the run records its exact main revision and closure.
+The predecessor is the verified record Array release below. Only the new tag
+uses Decision 0033 manifest ceilings: 400,000 Darwin arm64, 370,000 Linux arm64
+and 770,000 combined bytes. Every historical release retains its identities
+and source-era bounds. Generation, retained-observation, corpus, process and
+attestation checks remain unchanged; preparation checks ordinary Hash fixtures.
+
+Preparation, publication, actual-asset verification and the separate checkout
+pin handoff are pending. Compiler self-use also requires matching snapshot
+recovery and the accepted-source Linux amd64 setup bridge. This registration
+does not switch checkout pins or claim a compiler/application speedup.
+
 ## Current verified checkout seed
 
 Checkout builds pin [bootstrap-seed-2026-09-09-record-arrays](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-09-09-record-arrays),
