@@ -101,6 +101,9 @@ daily workflow completes, reads data only from this repository's main-branch
 daily workflow, validates it, and composes a static deployment. Source changes
 still go through PRs; daily measurements do not push to main or create data PRs.
 Unrelated Pages updates restore the daily state instead of resetting the page.
+Main pushes also run only the lightweight Pages composition, so newly merged
+performance changes can be labelled unmeasured immediately without starting a
+compiler or benchmark. This deployment is not a merge-completion dependency.
 
 The state carries the last snapshot, latest attempt and up to 60 historical
 snapshots. Raw measurements, derived source, toolchain identity, compiler closure

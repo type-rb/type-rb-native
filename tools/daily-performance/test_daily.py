@@ -110,6 +110,15 @@ class DailyTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 state.restore("unused")
 
+    def test_first_deployment_does_not_require_a_previously_registered_run(self):
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(state, "gh", return_value={"artifacts": []}) as api, \
+             patch.dict(os.environ, {"GITHUB_REPOSITORY": "type-rb/type-rb-native"}):
+            path = Path(directory) / "state.json"
+            state.restore(path)
+            self.assertEqual(state.read(path), state.empty())
+            self.assertEqual(api.call_count, 1)
+
     def test_warmups_excluded_and_partial_sample_medians_rejected(self):
         records = [{"phase": phase, "status": "pass", "wallSeconds": wall, "cpuSeconds": wall, "memoryBytes": 100}
                    for phase, wall in [("warmup", 100), ("retained", 1), ("retained", 2), ("retained", 3)]]

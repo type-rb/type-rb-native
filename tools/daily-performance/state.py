@@ -96,9 +96,12 @@ def gh(endpoint, binary=False):
 
 def restore(destination):
     repo = os.environ["GITHUB_REPOSITORY"]
-    workflow_id = gh(f"repos/{repo}/actions/workflows/{WORKFLOW}")["id"]
     # A repository artifact name alone is not an authority: verify the producer.
     artifacts = gh(f"repos/{repo}/actions/artifacts?name={ARTIFACT}&per_page=100")["artifacts"]
+    if not artifacts:
+        write(destination, empty())
+        return
+    workflow_id = gh(f"repos/{repo}/actions/workflows/{WORKFLOW}")["id"]
     for artifact in sorted(artifacts, key=lambda item: item["id"], reverse=True):
         if artifact["expired"] or artifact["workflow_run"]["head_branch"] != "main":
             continue
