@@ -9,6 +9,10 @@ import { checked_array_assignment_plan, checked_array_assignment_reads_old, chec
 import { QbeOutput, qbe_output_append, qbe_output_branch, qbe_output_line, qbe_output_new } from qbe_output
 import { emit_boolean_puts_runtime, emit_float_array_runtime, emit_float_to_integer_runtime, emit_integer_to_string_runtime, emit_process_runtime, emit_qbe_runtime, emit_string_to_integer_runtime } from qbe_runtime
 import { parse_project_config } from project_config
+import { checked_hash_plan, checked_hash_require, checked_hash_valid, checked_hash_verify } from hash_checked
+import { hash_key_type, native_managed_type } from hash_types
+import { mir_hash_key_managed, mir_hash_value_managed } from hash_mir
+import { emit_hash_runtime } from hash_runtime
 
 record Gate4EmitContext
 	local_names: Gate4StringStorage
@@ -366,7 +370,7 @@ def gate4_emit_record_descriptors(state: Gate4Compiler, mut output: QbeOutput)
 		mut entries := ""
 		mut field_offset := 0
 		while field_offset < field_count
-			if gate4_type_is_managed(gate4_load_string(state.field_types, field_start + field_offset))
+			if native_managed_type(gate4_load_string(state.field_types, field_start + field_offset))
 				entries += ", l " + gate4_integer_string(8 + field_offset * 8)
 				managed_count += 1
 			end
@@ -427,16 +431,6 @@ def gate4_emit_typed_store(
 	qbe_output_line(output, "\tstore" + gate4_qbe_type(type_name) + " " + value + ", " + address)
 end
 
-def gate4_type_is_managed(type_name: String): Boolean
-	if type_name == "String"
-		return true
-	end
-	if gate4_array_element_type(type_name) != ""
-		return true
-	end
-	return gate4_string_starts_with(type_name, "Record#")
-end
-
 def gate4_note_gc_state(mut context: Gate4EmitContext, safe_point: Boolean)
 	mut roots := context.temporary_roots_used
 	if safe_point
@@ -486,7 +480,7 @@ def gate4_owned_managed_local_count(context: Gate4EmitContext): Integer
 	mut count := 0
 	mut local_index := 0
 	while local_index < context.local_count[0]
-		if gate4_type_is_managed(gate4_load_string(context.local_types, local_index))
+		if native_managed_type(gate4_load_string(context.local_types, local_index))
 			if gate4_load_integer(context.local_inherited, local_index) == 0
 				count += 1
 			end
@@ -515,7 +509,7 @@ def gate4_emit_loop_root_compaction(mut context: Gate4EmitContext, mut output: Q
 	mut local_index := 0
 	mut managed_index := 0
 	while local_index < context.local_count[0]
-		if gate4_type_is_managed(gate4_load_string(context.local_types, local_index))
+		if native_managed_type(gate4_load_string(context.local_types, local_index))
 			if gate4_load_integer(context.local_inherited, local_index) == 0
 				gate4_note_gc_state(context, false)
 				value := gate4_emit_temporary(context)
@@ -592,7 +586,7 @@ def gate4_emit_root_value(
 		mut context: Gate4EmitContext,
 		type_name: String,
 	)
-	if gate4_type_is_managed(type_name)
+	if native_managed_type(type_name)
 		# Managed results are produced by allocation or by calls whose allocation
 		# behavior is intentionally opaque at this boundary.
 		gate4_note_gc_state(context, true)
@@ -605,7 +599,7 @@ def gate4_note_managed_alias(
 		mut context: Gate4EmitContext,
 		type_name: String,
 	)
-	if gate4_type_is_managed(type_name)
+	if native_managed_type(type_name)
 		# The owner remains reachable through its caller, allocation, or managed
 		# local root until the alias is consumed. Loop compaction transfers an
 		# alias retained as a local, so a duplicate temporary root is unnecessary.
@@ -904,7 +898,7 @@ def gate4_emit_add_local(
 	end
 	gate4_store_integer(context.local_inherited, index, inherited)
 	context.local_count[0] = index + 1
-	if gate4_type_is_managed(type_name)
+	if native_managed_type(type_name)
 		if inherited == 0
 			# Lexical blocks restore local_count, so retain the maximum active
 			# managed-local count separately for the function prologue.
@@ -963,6 +957,185 @@ def gate4_emit_address(
 	return address
 end
 
+def emit_hash_root(mut context: Gate4EmitContext, mut output: QbeOutput, operand: String)
+	qbe_output_line(output, "\tcall $g4_gc_temp_push(l " + operand + ")")
+	context.temporary_roots_used[0] = 2
+end
+
+def emit_hash_bits(mut context: Gate4EmitContext, mut output: QbeOutput, operand: String, type_name: String): String
+	if type_name != "Float"
+		return operand
+	end
+	bits := gate4_emit_temporary(context)
+	qbe_output_line(output, "\t" + bits + " =l cast " + operand)
+	return bits
+end
+
+def emit_hash_value(mut context: Gate4EmitContext, mut output: QbeOutput, operand: String, type_name: String): Gate4EmittedValue
+	if type_name == "Float"
+		value := gate4_emit_temporary(context)
+		qbe_output_line(output, "\t" + value + " =d cast " + operand)
+		return gate4_emitted_value(value, type_name, 0, "", "")
+	end
+	if native_managed_type(type_name)
+		emit_hash_root(context, output, operand)
+	end
+	return gate4_emitted_value(operand, type_name, 0, "", "")
+end
+
+def emit_hash_set(mut context: Gate4EmitContext, mut output: QbeOutput, owner: String, key: String, value: String, type_name: String)
+	if native_managed_type(type_name)
+		emit_hash_root(context, output, value)
+	end
+	bits := emit_hash_bits(context, output, value, type_name)
+	qbe_output_line(output, "\tcall $g4_hash_set(l " + owner + ", l " + key + ", l " + bits + ")")
+	gate4_note_gc_state(context, true)
+end
+
+def emit_hash_literal(mut state: Gate4Compiler, mut position: Array<Integer>, mut context: Gate4EmitContext, mut output: QbeOutput): Gate4EmittedValue
+	origin := position[0]
+	plan := checked_hash_plan(state, origin)
+	checked_hash_require(state, origin, plan.type_name)
+	if gate4_has_diagnostic(state)
+		return gate4_emitted_value("0", "Invalid", 0, "", "")
+	end
+	output.runtime_flags[5] = 1
+	mut flags := 0
+	if mir_hash_key_managed(plan)
+		flags = 1
+	end
+	if mir_hash_value_managed(plan)
+		flags += 2
+	end
+	table := gate4_emit_temporary(context)
+	qbe_output_line(output, "\t" + table + " =l call $g4_hash_new(l " + gate4_integer_string(plan.capacity) + ", l " + gate4_integer_string(flags) + ")")
+	gate4_emit_root_value(context, plan.type_name)
+	gate4_advance(position)
+	gate4_skip_newlines(state, position)
+	mut entries := 0
+	while !gate4_token_is(state, position[0], "}")
+		key := gate4_emit_expression(state, position, context, output, 1, plan.key_type)
+		if mir_hash_key_managed(plan)
+			emit_hash_root(context, output, key.operand)
+		end
+		gate4_expect(state, position, "=>")
+		value := gate4_emit_expression(state, position, context, output, 1, plan.value_type)
+		emit_hash_set(context, output, table, key.operand, value.operand, plan.value_type)
+		entries += 1
+		gate4_skip_newlines(state, position)
+		if !gate4_token_is(state, position[0], ",")
+			break
+		end
+		gate4_advance(position)
+		gate4_skip_newlines(state, position)
+	end
+	if entries != plan.entries || position[0] != plan.finish
+		gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, origin), "invalid checked Hash literal extent")
+	end
+	gate4_expect(state, position, "}")
+	return gate4_emitted_value(table, plan.type_name, 0, "", "")
+end
+
+def emit_hash_index(mut state: Gate4Compiler, mut position: Array<Integer>, mut context: Gate4EmitContext, mut output: QbeOutput, receiver: Gate4EmittedValue): Gate4EmittedValue
+	plan := checked_hash_require(state, position[0], receiver.type_name)
+	if gate4_has_diagnostic(state)
+		return receiver
+	end
+	output.runtime_flags[5] = 1
+	emit_hash_root(context, output, receiver.operand)
+	gate4_advance(position)
+	key := gate4_emit_expression(state, position, context, output, 1, plan.key_type)
+	if mir_hash_key_managed(plan)
+		emit_hash_root(context, output, key.operand)
+	end
+	gate4_expect(state, position, "]")
+	if plan.kind == 3
+		return Gate4EmittedValue.new(operand: "0", type_name: plan.value_type, category: 4, name: "", slot: key.operand, owner: receiver.operand)
+	end
+	result := gate4_emit_temporary(context)
+	qbe_output_line(output, "\t" + result + " =l call $g4_hash_get(l " + receiver.operand + ", l " + key.operand + ")")
+	return emit_hash_value(context, output, result, plan.value_type)
+end
+
+def emit_hash_method(mut state: Gate4Compiler, mut position: Array<Integer>, mut context: Gate4EmitContext, mut output: QbeOutput, receiver: Gate4EmittedValue): Gate4EmittedValue
+	plan := checked_hash_require(state, position[0], receiver.type_name)
+	if gate4_has_diagnostic(state)
+		return receiver
+	end
+	output.runtime_flags[5] = 1
+	emit_hash_root(context, output, receiver.operand)
+	gate4_advance(position)
+	mut argument := ""
+	if plan.kind == 5 || plan.kind == 6 || plan.kind == 13
+		key := gate4_emit_expression(state, position, context, output, 1, plan.key_type)
+		argument = key.operand
+		if mir_hash_key_managed(plan)
+			emit_hash_root(context, output, argument)
+		end
+	end
+	if plan.kind == 8 || plan.kind == 9
+		other := gate4_emit_expression(state, position, context, output, 1, plan.type_name)
+		argument = other.operand
+		emit_hash_root(context, output, argument)
+	end
+	gate4_skip_newlines(state, position)
+	gate4_expect(state, position, ")")
+	result := gate4_emit_temporary(context)
+	if plan.kind == 4 || plan.kind == 12
+		address := gate4_emit_address(context, output, receiver.operand, 8)
+		qbe_output_line(output, "\t" + result + " =l loadl " + address)
+		if plan.kind == 12
+			empty := gate4_emit_temporary(context)
+			qbe_output_line(output, "\t" + empty + " =l ceql " + result + ", 0")
+			return gate4_emitted_value(empty, "Boolean", 0, "", "")
+		end
+		return gate4_emitted_value(result, "Integer", 0, "", "")
+	end
+	if plan.kind == 5 || plan.kind == 6 || plan.kind == 13
+		mut operation := "contains"
+		mut type_name := "Boolean"
+		if plan.kind == 13
+			operation = "get"
+			type_name = plan.value_type
+		end
+		if plan.kind == 6
+			operation = "delete"
+			type_name = plan.value_type
+			gate4_note_gc_state(context, true)
+		end
+		qbe_output_line(output, "\t" + result + " =l call $g4_hash_" + operation + "(l " + receiver.operand + ", l " + argument + ")")
+		return emit_hash_value(context, output, result, type_name)
+	end
+	if plan.kind == 10 || plan.kind == 11
+		mut selection := "0"
+		mut element := plan.key_type
+		if plan.kind == 11
+			selection = "1"
+			element = plan.value_type
+		end
+		qbe_output_line(output, "\t" + result + " =l call $g4_hash_entries(l " + receiver.operand + ", l " + selection + ")")
+		gate4_emit_root_value(context, gate4_array_type(element))
+		return gate4_emitted_value(result, gate4_array_type(element), 0, "", "")
+	end
+	mut target := receiver.operand
+	if plan.kind == 7 || plan.kind == 8
+		address := gate4_emit_address(context, output, receiver.operand, 16)
+		capacity := gate4_emit_temporary(context)
+		qbe_output_line(output, "\t" + capacity + " =l loadl " + address)
+		qbe_output_line(output, "\t" + result + " =l call $g4_hash_copy(l " + receiver.operand + ", l " + capacity + ")")
+		gate4_emit_root_value(context, receiver.type_name)
+		target = result
+	end
+	if plan.kind == 8 || plan.kind == 9
+		qbe_output_line(output, "\tcall $g4_hash_update(l " + target + ", l " + argument + ")")
+		gate4_note_gc_state(context, true)
+	end
+	if plan.kind == 9
+		return gate4_emitted_value("", "Void", 0, "", "")
+	end
+	return gate4_emitted_value(target, receiver.type_name, 0, "", "")
+end
+
 def gate4_emit_array_literal(
 		mut state: Gate4Compiler,
 		mut position: Array<Integer>,
@@ -998,7 +1171,7 @@ def gate4_emit_array_literal(
 	gate4_expect(state, position, "]")
 	array := gate4_emit_temporary(context)
 	mut descriptor := "$g4_desc_array_scalar"
-	if gate4_type_is_managed(element_type)
+	if native_managed_type(element_type)
 		descriptor = "$g4_desc_array_managed"
 	end
 	qbe_output_line(
@@ -1580,6 +1753,9 @@ def gate4_emit_method_call(
 		receiver: Gate4EmittedValue,
 		method: String,
 	): Gate4EmittedValue
+	if hash_key_type(receiver.type_name) != ""
+		return emit_hash_method(state, position, context, output, receiver)
+	end
 	gate4_advance(position)
 	gate4_skip_newlines(state, position)
 	if method == "size"
@@ -1651,6 +1827,13 @@ def gate4_emit_postfix(
 	)
 	mut scanning := true
 	while scanning
+		if gate4_token_is(state, position[0], "[") && hash_key_type(value.type_name) != ""
+			value = emit_hash_index(state, position, context, output, value)
+			if gate4_has_diagnostic(state)
+				return value
+			end
+			next
+		end
 		if gate4_token_is(state, position[0], "(")
 			value = gate4_emit_direct_call(state, position, context, output, value)
 		else
@@ -1752,7 +1935,7 @@ def gate4_emit_postfix(
 							retained_position = address
 							if assignment_plan == 0
 								if checked_array_assignment_reads_old(state, index_origin)
-									if gate4_type_is_managed(element_type)
+									if native_managed_type(element_type)
 										qbe_output_line(output, "\tcall $g4_gc_temp_push(l " + operand + ")")
 									end
 								end
@@ -1806,6 +1989,9 @@ def gate4_emit_primary(
 	if kind == 3
 		gate4_advance(position)
 		return gate4_emitted_value("$g4s" + gate4_integer_string(gate4_load_integer(state.token_lines, token_index)), "String", 0, "", "")
+	end
+	if gate4_token_is(state, token_index, "{")
+		return emit_hash_literal(state, position, context, output)
 	end
 	if gate4_token_is(state, token_index, "[")
 		return gate4_emit_array_literal(state, position, context, output, expected)
@@ -2299,6 +2485,15 @@ def emit_checked_assignment_store(
 		left: Gate4EmittedValue,
 		operand: String,
 	)
+	if left.category == 4
+		plan := checked_hash_plan(state, origin - 1)
+		if plan.kind != 3 || plan.finish + 1 != origin || !checked_hash_valid(state, plan, false) || plan.value_type != left.type_name
+			gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, origin), "invalid checked Hash assignment")
+			return
+		end
+		emit_hash_set(context, output, left.owner, left.slot, operand, plan.value_type)
+		return
+	end
 	mut address := left.slot
 	if left.category == 3
 		index_origin := checked_array_assignment_target(state, origin) - 1
@@ -2735,7 +2930,7 @@ def gate4_emit_function(
 		qbe_output_line(output, "\tret")
 	else
 		gate4_emit_typed_load(output, "%return_result", result_type, "%return_value")
-		if gate4_type_is_managed(result_type)
+		if native_managed_type(result_type)
 			qbe_output_line(output, "\tcall $g4_gc_temp_push(l %return_result)")
 		end
 		qbe_output_line(output, "\tret %return_result")
@@ -2955,7 +3150,7 @@ def gate4_emit_entry(mut state: Gate4Compiler, mut output: QbeOutput)
 end
 
 def gate4_emit_qbe(mut state: Gate4Compiler): QbeOutput
-	mut output := qbe_output_new(state.token_count[0] * 24 + 4096, [0, 0, 0, 0, 0])
+	mut output := qbe_output_new(state.token_count[0] * 24 + 4096, [0, 0, 0, 0, 0, 0])
 	gate4_emit_static_strings(state, output)
 	if gate4_has_diagnostic(state)
 		return output
@@ -3015,6 +3210,9 @@ def gate4_emit_qbe(mut state: Gate4Compiler): QbeOutput
 	end
 	if output.runtime_flags[4] == 1
 		emit_boolean_puts_runtime(output)
+	end
+	if output.runtime_flags[5] == 1
+		emit_hash_runtime(output)
 	end
 	if output.runtime_flags[0] == 1
 		emit_float_array_runtime(output)
@@ -3171,6 +3369,11 @@ def gate4_scan_identifier(
 			else
 				scanning = false
 			end
+		end
+	end
+	if position[0] < source.size()
+		if source[position[0]] == "?"
+			gate4_advance(position)
 		end
 	end
 	gate4_push_token(state, 1, gate4_source_slice(source, start, position[0]), line)
@@ -3501,6 +3704,9 @@ def gate4_two_character_symbol(pair: String): Boolean
 		supported = true
 	end
 	if pair == "/="
+		supported = true
+	end
+	if pair == "=>"
 		supported = true
 	end
 	if pair == "->"
@@ -4306,6 +4512,9 @@ def gate4_check(mut state: Gate4Compiler): Boolean
 		if mir_error != ""
 			gate4_diagnostic(state, "TRBN4004", 1, mir_error)
 		end
+	end
+	if !gate4_has_diagnostic(state)
+		checked_hash_verify(state)
 	end
 	if !gate4_has_diagnostic(state)
 		gate4_validate_import_usage(state)

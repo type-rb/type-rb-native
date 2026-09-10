@@ -1,3 +1,4 @@
+import { hash_key_type, hash_value_type, hash_type } from hash_types
 import { cli_diagnostic } from diagnostics
 import { ReplCandidates, repl_editor_read, repl_editor_paint } from repl_editor
 import { repl_incomplete, repl_escape } from repl_syntax
@@ -5,13 +6,14 @@ import { repl_history_load, repl_history_save } from repl_history
 import { Gate4Compiler, gate4_compiler_new, gate4_has_diagnostic, gate4_locals_new, gate4_local_add, gate4_diagnostic, gate4_find_module } from state
 import { gate4_load_integer, gate4_load_string, gate4_store_integer } from storage
 import { gate4_parse_module, gate4_token_is, gate4_skip_newlines } from parser
-import { gate4_resolve, gate4_find_function_in_module, gate4_type_display, gate4_find_record_type, gate4_find_record_in_module, gate4_record_type } from resolution
+import { gate4_resolve, gate4_find_function_in_module, gate4_type_display, gate4_find_record_type, gate4_find_record_in_module, gate4_record_type, gate4_array_inner_name } from resolution
 import { gate4_lex, gate4_check, gate4_load_file_root, gate4_read_source, gate4_file_exists, gate4_source_slice, gate4_collect_project_sources, gate4_project_module_name } from compiler
 import { parse_project_config } from project_config
 import { gate4_check_expression } from checked_program
 import { gate4_path_directory, gate4_path_join, gate4_string_starts_with } from path
 import { native_cli_line, native_cli_eof, native_cli_tty, native_cli_write, native_cli_interrupt, native_cli_cwd, native_cli_env, native_cli_mkdir } from host
-import { ReplStore, ReplEnvironment, repl_store, repl_environment, repl_render, repl_compact } from repl_values
+import { ReplStore, ReplEnvironment, repl_store, repl_environment } from repl_model
+import { repl_render, repl_compact } from repl_values
 import { repl_statement } from repl_eval
 import { gate4_ascii_code, gate4_integer_string } from literals
 
@@ -137,6 +139,7 @@ end
 
 def repl_checked(source: String, root: String): Gate4Compiler
 	mut state := gate4_load_file_root(source, gate4_path_join(root, "__repl__.trb"))
+	state.hash_repl[0] = true
 	if !gate4_has_diagnostic(state)
 		gate4_resolve(state)
 	end
@@ -439,6 +442,9 @@ def repl_run(config: String): Integer
 end
 
 def repl_default(state: Gate4Compiler, type_name: String): String
+	if type_name == "Hash" || hash_key_type(type_name) != ""
+		return "{}"
+	end
 	if type_name == "Integer"
 		return "0"
 	end
@@ -478,7 +484,11 @@ def repl_bindings(state: Gate4Compiler, session: ReplSession): String
 		end
 		id := session.environment.values[index]
 		type_name := session.store.types[id]
-		source += session.environment.names[index] + ": " + gate4_type_display(state, type_name) + " := " + repl_default(state, type_name) + "\n"
+		source += session.environment.names[index]
+		if type_name != "Hash"
+			source += ": " + gate4_type_display(state, type_name)
+		end
+		source += " := " + repl_default(state, type_name) + "\n"
 		index += 1
 	end
 	return source
@@ -581,15 +591,7 @@ end
 def repl_remap_records(previous: Gate4Compiler, current: Gate4Compiler, mut store: ReplStore)
 	mut index := 0
 	while index < store.types.size()
-		record_index := gate4_find_record_type(previous, store.types[index])
-		if record_index >= 0
-			module_index := gate4_load_integer(previous.record_modules, record_index)
-			module_name := gate4_load_string(previous.module_names, module_index)
-			name := gate4_load_string(previous.record_names, record_index)
-			next_module := gate4_find_module(current, module_name)
-			next_record := gate4_find_record_in_module(current, next_module, name)
-			store.types[index] = gate4_record_type(next_record)
-		end
+		store.types[index] = repl_remap_type(previous, current, store.types[index])
 		index += 1
 	end
 	return
@@ -790,4 +792,25 @@ def repl_function_insertion(state: Gate4Compiler, index: Integer, name: String):
 		return name + "()"
 	end
 	return name + "("
+end
+
+def repl_remap_type(previous: Gate4Compiler, current: Gate4Compiler, type_name: String): String
+	key := hash_key_type(type_name)
+	if key != ""
+		return hash_type(key, repl_remap_type(previous, current, hash_value_type(type_name)))
+	end
+	element := gate4_array_inner_name(type_name)
+	if element != ""
+		return "Array<" + repl_remap_type(previous, current, element) + ">"
+	end
+	record_index := gate4_find_record_type(previous, type_name)
+	if record_index >= 0
+		module_index := gate4_load_integer(previous.record_modules, record_index)
+		module_name := gate4_load_string(previous.module_names, module_index)
+		name := gate4_load_string(previous.record_names, record_index)
+		next_module := gate4_find_module(current, module_name)
+		next_record := gate4_find_record_in_module(current, next_module, name)
+		return gate4_record_type(next_record)
+	end
+	return type_name
 end

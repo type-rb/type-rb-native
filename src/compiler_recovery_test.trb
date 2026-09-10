@@ -1379,7 +1379,7 @@ def _prepare_compiler_closure(
 		omitted: String,
 	): Result<Boolean, String>
 	try _recovery_reset_directory(directory)
-	names := ["compiler", "storage", "path", "mir", "literals", "state", "parser", "resolution", "checked_program", "qbe_output", "qbe_runtime", "project_config"]
+	names := ["compiler", "storage", "path", "mir", "literals", "state", "parser", "resolution", "checked_program", "qbe_output", "qbe_runtime", "project_config", "hash_types", "hash_mir", "hash_checked", "hash_runtime"]
 	mut index := 0
 	while index < names.size()
 		if names[index] != omitted
@@ -1406,6 +1406,10 @@ def _recovery_verify_compiler_source_closure(
 		qbe_output: String,
 		qbe_runtime: String,
 		project_config: String,
+		hash_types: String,
+		hash_mir: String,
+		hash_checked: String,
+		hash_runtime: String,
 		workspace: String,
 	): Result<Boolean, String>
 	canonical := try _recovery_process(executable, ["emit-qbe", compiler_path])
@@ -1439,12 +1443,16 @@ def _recovery_verify_compiler_source_closure(
 	qbe_output_mutation := try _recovery_replace_once(qbe_output, "output.count[0] = index + 1", "output.count[0] = index + 2")
 	qbe_runtime_mutation := try _recovery_replace_once(qbe_runtime, "data $g4_gc_heap_target = align 8 { l 1048576 }", "data $g4_gc_heap_target = align 8 { l 1048577 }")
 	project_config_mutation := try _recovery_replace_once(project_config, "name is required", "project name is required")
-	names := ["compiler", "storage", "path", "mir", "literals", "state", "parser", "resolution", "checked_program", "qbe_output", "qbe_runtime", "project_config"]
-	sources := [entry, storage, path, mir, literals, state, parser, resolution, checked_program, qbe_output, qbe_runtime, project_config]
-	mutations := [entry, storage_mutation, path_mutation, mir_mutation, literal_mutation, state_mutation, parser_mutation, resolution_mutation, checked_program_mutation, qbe_output_mutation, qbe_runtime_mutation, project_config_mutation]
+	hash_types_mutation := try _recovery_replace_once(hash_types, "Hash<Integer,", "Hash<Changed,")
+	hash_mir_mutation := try _recovery_replace_once(hash_mir, "mut capacity := 8", "mut capacity := 16")
+	hash_checked_mutation := try _recovery_replace_once(hash_checked, "invalid checked Hash operation", "invalid verified Hash operation")
+	hash_runtime_mutation := try _recovery_replace_once(hash_runtime, "Hash key is missing", "Hash key was absent")
+	names := ["compiler", "storage", "path", "mir", "literals", "state", "parser", "resolution", "checked_program", "qbe_output", "qbe_runtime", "project_config", "hash_types", "hash_mir", "hash_checked", "hash_runtime"]
+	sources := [entry, storage, path, mir, literals, state, parser, resolution, checked_program, qbe_output, qbe_runtime, project_config, hash_types, hash_mir, hash_checked, hash_runtime]
+	mutations := [entry, storage_mutation, path_mutation, mir_mutation, literal_mutation, state_mutation, parser_mutation, resolution_mutation, checked_program_mutation, qbe_output_mutation, qbe_runtime_mutation, project_config_mutation, hash_types_mutation, hash_mir_mutation, hash_checked_mutation, hash_runtime_mutation]
 	mut index := 1
 	while index < names.size()
-		mut changed := [entry, storage, path, mir, literals, state, parser, resolution, checked_program, qbe_output, qbe_runtime, project_config]
+		mut changed := [entry, storage, path, mir, literals, state, parser, resolution, checked_program, qbe_output, qbe_runtime, project_config, hash_types, hash_mir, hash_checked, hash_runtime]
 		changed[index] = mutations[index]
 		directory := workspace + "/gate6f-compiler-" + names[index] + "-mutation"
 		try _prepare_compiler_closure(directory, changed, "")
@@ -2121,6 +2129,38 @@ describe("Native compiler recovery") do
 					expect(false).to_be_true()
 					""
 				end
+				hash_types_source := case native_read_text(root + "/compiler/src/hash_types.trb")
+				when Result::Ok(source)
+					source
+				when Result::Err(error)
+					puts(error.operation + ": " + error.message)
+					expect(false).to_be_true()
+					""
+				end
+				hash_mir_source := case native_read_text(root + "/compiler/src/hash_mir.trb")
+				when Result::Ok(source)
+					source
+				when Result::Err(error)
+					puts(error.operation + ": " + error.message)
+					expect(false).to_be_true()
+					""
+				end
+				hash_checked_source := case native_read_text(root + "/compiler/src/hash_checked.trb")
+				when Result::Ok(source)
+					source
+				when Result::Err(error)
+					puts(error.operation + ": " + error.message)
+					expect(false).to_be_true()
+					""
+				end
+				hash_runtime_source := case native_read_text(root + "/compiler/src/hash_runtime.trb")
+				when Result::Ok(source)
+					source
+				when Result::Err(error)
+					puts(error.operation + ": " + error.message)
+					expect(false).to_be_true()
+					""
+				end
 				recovery_source := case flatten_compiler_recovery_source(
 						compiler_source,
 						storage_source,
@@ -2134,6 +2174,10 @@ describe("Native compiler recovery") do
 						qbe_output_source,
 						qbe_runtime_source,
 						project_config_source,
+						hash_types_source,
+						hash_mir_source,
+						hash_checked_source,
+						hash_runtime_source,
 					)
 				when Result::Ok(source)
 					source
@@ -2210,6 +2254,30 @@ describe("Native compiler recovery") do
 					expect(false).to_be_true()
 				end
 				case native_write_text(workspace + "/qbe_runtime.trb", qbe_runtime_source)
+				when Result::Ok(_unit)
+				when Result::Err(error)
+					puts(error.operation + ": " + error.message)
+					expect(false).to_be_true()
+				end
+				case native_write_text(workspace + "/hash_types.trb", hash_types_source)
+				when Result::Ok(_unit)
+				when Result::Err(error)
+					puts(error.operation + ": " + error.message)
+					expect(false).to_be_true()
+				end
+				case native_write_text(workspace + "/hash_mir.trb", hash_mir_source)
+				when Result::Ok(_unit)
+				when Result::Err(error)
+					puts(error.operation + ": " + error.message)
+					expect(false).to_be_true()
+				end
+				case native_write_text(workspace + "/hash_checked.trb", hash_checked_source)
+				when Result::Ok(_unit)
+				when Result::Err(error)
+					puts(error.operation + ": " + error.message)
+					expect(false).to_be_true()
+				end
+				case native_write_text(workspace + "/hash_runtime.trb", hash_runtime_source)
 				when Result::Ok(_unit)
 				when Result::Err(error)
 					puts(error.operation + ": " + error.message)
@@ -2364,6 +2432,10 @@ describe("Native compiler recovery") do
 								qbe_output_source,
 								qbe_runtime_source,
 								project_config_source,
+								hash_types_source,
+								hash_mir_source,
+								hash_checked_source,
+								hash_runtime_source,
 								workspace,
 							)
 						when Result::Ok(_value)

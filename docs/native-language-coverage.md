@@ -1,8 +1,10 @@
 # Ordinary Native language coverage
 
-Status: an initial 15-case ordinary-path inventory and regression contract are
+Status: a 16-case ordinary-path inventory and regression contract are
 available. Statement `elsif` and bare `break` / `next` in `while` are covered by ordinary
 compiler and REPL regressions. The ordinary Boolean-array case is also covered.
+Hash literals and required lookup now have an ordinary-path inventory case;
+[Hash implementation details](native-hash.md) enumerate the wider tested boundary.
 The inventory remains a bounded set of examples, not complete language support.
 Track the first bounded delivery in [issue #326](https://github.com/type-rb/type-rb-native/issues/326).
 

@@ -1,4 +1,7 @@
-import { gate4_load_integer, gate4_load_string, gate4_storage_chunk_size, gate4_store_integer } from storage
+import { hash_key_type, hash_type, hash_value_type } from hash_types
+import { mir_hash_operation } from hash_mir
+import { checked_hash_binding_target, checked_hash_method, checked_hash_plan, checked_hash_publish } from hash_checked
+import { gate4_load_integer, gate4_load_string, gate4_storage_chunk_size, gate4_store_integer, gate4_store_string } from storage
 import { gate4_float_literal_in_range, gate4_integer_literal_in_range, gate4_number_is_float, gate4_small_nonnegative_integer_operand } from literals
 import { Gate4MirArrayOperation, Gate4MirBlock, Gate4MirFunction, Gate4MirInstruction, Gate4MirValue, MirLoopTransfer, gate4_mir_array_element_type, gate4_mir_function_index, gate4_mir_instruction_with_payload, mir_array_assignment_plan, mir_array_assignment_valid, mir_logical_plan, mir_loop_transfer_valid } from mir
 import { Gate4Compiler, Gate4Locals, gate4_diagnostic, gate4_has_diagnostic, gate4_local_add, gate4_local_find, gate4_terminal_token } from state
@@ -311,6 +314,153 @@ def gate4_check_expected(
 	return false
 end
 
+def checked_hash_literal(mut state: Gate4Compiler, mut position: Array<Integer>, mut locals: Gate4Locals, expected: String): Gate4CheckedValue
+	origin := position[0]
+	line := gate4_load_integer(state.token_lines, origin)
+	mut key_type := hash_key_type(expected)
+	mut value_type := hash_value_type(expected)
+	mut entries := 0
+	gate4_advance(position)
+	gate4_skip_newlines(state, position)
+	while !gate4_token_is(state, position[0], "}")
+		key := gate4_check_expression(state, position, locals, 1, key_type)
+		if key.type_name != "Integer" && key.type_name != "String"
+			return gate4_type_diagnostic(state, line, "Hash key must be String or Integer")
+		end
+		key_type = key.type_name
+		if !gate4_expect(state, position, "=>")
+			return gate4_checked_value("Invalid", 0, origin, 0)
+		end
+		value := gate4_check_expression(state, position, locals, 1, hash_value_type(expected))
+		if hash_value_type(expected) == ""
+			common := gate4_common_array_element_type(value_type, value.type_name)
+			if common == ""
+				return gate4_type_diagnostic(state, line, "incompatible Hash value types")
+			end
+			value_type = common
+		end
+		entries += 1
+		gate4_skip_newlines(state, position)
+		if !gate4_token_is(state, position[0], ",")
+			break
+		end
+		gate4_advance(position)
+		gate4_skip_newlines(state, position)
+	end
+	finish := position[0]
+	gate4_expect(state, position, "}")
+	mut type_name := "Hash"
+	if key_type != "" && value_type != ""
+		type_name = hash_type(key_type, value_type)
+	end
+	checked_hash_publish(state, mir_hash_operation(1, origin, finish, origin, type_name, true, entries))
+	return gate4_checked_value(type_name, 0, origin, 1)
+end
+
+def checked_hash_index(mut state: Gate4Compiler, mut position: Array<Integer>, mut locals: Gate4Locals, receiver: Gate4CheckedValue): Gate4CheckedValue
+	origin := position[0]
+	line := gate4_load_integer(state.token_lines, origin)
+	gate4_advance(position)
+	key := gate4_check_expression(state, position, locals, 1, hash_key_type(receiver.type_name))
+	if key.type_name != "Integer" && key.type_name != "String"
+		return gate4_type_diagnostic(state, line, "Hash key must be String or Integer")
+	end
+	finish := position[0]
+	gate4_expect(state, position, "]")
+	mut kind := 2
+	if gate4_token_is(state, position[0], "=")
+		kind = 3
+	end
+	if gate4_binary_operator_id(gate4_load_string(state.token_texts, position[0])) >= 17
+		return gate4_type_diagnostic(state, line, "compound assignment to Hash entries is unsupported")
+	end
+	mut type_name := receiver.type_name
+	if type_name == "Hash"
+		if kind != 3
+			return gate4_type_diagnostic(state, line, "cannot index an untyped Hash; add Hash<K, V> annotation")
+		end
+		type_name = hash_type(key.type_name, "")
+	end
+	if kind == 3 && !checked_hash_binding_target(state, receiver.origin)
+		return gate4_type_diagnostic(state, line, "assignment requires a mutable binding")
+	end
+	checked_hash_publish(state, mir_hash_operation(kind, origin, finish, receiver.origin, type_name, receiver.mutable != 0, 0))
+	gate4_scalar_mir_disable(locals)
+	gate4_array_region_operation(locals, 6, 0, origin)
+	return gate4_checked_value(hash_value_type(type_name), 0, origin, receiver.mutable)
+end
+
+def checked_hash_refine(mut state: Gate4Compiler, mut locals: Gate4Locals, origin: Integer, value_type: String)
+	plan := checked_hash_plan(state, origin)
+	if plan.kind != 3 || plan.value_type != ""
+		return
+	end
+	binding := gate4_local_find(locals, gate4_load_string(state.token_texts, plan.receiver_origin))
+	if binding < 0
+		gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, origin), "empty Hash requires a typed binding")
+		return
+	end
+	type_name := hash_type(plan.key_type, value_type)
+	gate4_store_string(locals.types, binding, type_name)
+	literal_origin := gate4_load_integer(locals.hash_literal_origins, binding) - 1
+	literal := checked_hash_plan(state, literal_origin)
+	if literal.kind != 1
+		gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, origin), "empty Hash requires a typed binding")
+		return
+	end
+	checked_hash_publish(state, mir_hash_operation(1, literal.origin, literal.finish, literal.receiver_origin, type_name, true, 0))
+	checked_hash_publish(state, mir_hash_operation(3, plan.origin, plan.finish, plan.receiver_origin, type_name, plan.mutable, 0))
+end
+
+def checked_hash_call(mut state: Gate4Compiler, mut position: Array<Integer>, mut locals: Gate4Locals, receiver: Gate4CheckedValue, method: String): Gate4CheckedValue
+	origin := position[0]
+	line := gate4_load_integer(state.token_lines, origin)
+	kind := checked_hash_method(method)
+	if kind == 0
+		return gate4_type_diagnostic(state, line, "unsupported Hash method " + method)
+	end
+	if receiver.type_name == "Hash" && kind != 4 && kind != 12
+		return gate4_type_diagnostic(state, line, "Hash method requires a concrete Hash<K, V> type")
+	end
+	if kind == 6 || kind == 9
+		if receiver.mutable == 0 || !checked_hash_binding_target(state, receiver.origin)
+			return gate4_type_diagnostic(state, line, "Hash mutation requires a mutable binding")
+		end
+	end
+	gate4_advance(position)
+	mut result_type := receiver.type_name
+	if kind == 5 || kind == 6 || kind == 13
+		gate4_check_expression(state, position, locals, 1, hash_key_type(receiver.type_name))
+		result_type = hash_value_type(receiver.type_name)
+	end
+	if kind == 8 || kind == 9
+		gate4_check_expression(state, position, locals, 1, receiver.type_name)
+	end
+	if kind == 4
+		result_type = "Integer"
+	elsif kind == 5 || kind == 12
+		result_type = "Boolean"
+	elsif kind == 9
+		result_type = "Void"
+	elsif kind == 10
+		result_type = gate4_array_type(hash_key_type(receiver.type_name))
+	elsif kind == 11
+		result_type = gate4_array_type(hash_value_type(receiver.type_name))
+	end
+	if result_type == ""
+		return gate4_type_diagnostic(state, line, "unsupported Hash result representation")
+	end
+	gate4_skip_newlines(state, position)
+	finish := position[0]
+	gate4_expect(state, position, ")")
+	checked_hash_publish(state, mir_hash_operation(kind, origin, finish, receiver.origin, receiver.type_name, receiver.mutable != 0, 0))
+	gate4_scalar_mir_disable(locals)
+	if kind != 4 && kind != 5 && kind != 12
+		gate4_array_region_operation(locals, 6, 0, origin)
+	end
+	return gate4_checked_value(result_type, 0, 9007199254740991, 0)
+end
+
 def gate4_check_array_literal(
 		mut state: Gate4Compiler,
 		mut position: Array<Integer>,
@@ -389,6 +539,11 @@ def gate4_check_primary(
 		gate4_scalar_mir_disable(locals)
 		gate4_advance(position)
 		return gate4_checked_value("String", 0, origin, 0)
+	end
+	if gate4_token_is(state, position[0], "{")
+		gate4_array_region_operation(locals, 6, 0, origin)
+		gate4_scalar_mir_disable(locals)
+		return checked_hash_literal(state, position, locals, expected)
 	end
 	if gate4_token_is(state, position[0], "[")
 		gate4_array_region_operation(locals, 6, 0, origin)
@@ -547,6 +702,13 @@ def gate4_check_call(
 				end
 			end
 			argument := gate4_check_expression(state, position, locals, 1, argument_expected)
+			if function_index >= 0 && argument_count < parameter_count && hash_key_type(argument_expected) != ""
+				if gate4_load_integer(state.parameter_mutable, parameter_start + argument_count) != 0
+					if checked_readonly_reference_binding(state, locals, argument)
+						gate4_diagnostic(state, "TRBN4004", line, "mutable Hash argument requires a mutable binding or fresh value")
+					end
+				end
+			end
 			if callee_name == "puts"
 				if argument.type_name != "String"
 					if argument.type_name != "Integer"
@@ -638,6 +800,9 @@ def gate4_check_method_call(
 		receiver: Gate4CheckedValue,
 		method: String,
 	): Gate4CheckedValue
+	if hash_key_type(receiver.type_name) != "" || receiver.type_name == "Hash"
+		return checked_hash_call(state, position, locals, receiver, method)
+	end
 	line := gate4_load_integer(state.token_lines, position[0])
 	gate4_advance(position)
 	gate4_skip_newlines(state, position)
@@ -705,6 +870,15 @@ def gate4_check_postfix(
 	mut value := gate4_checked_value(initial.type_name, initial.category, initial.origin, initial.mutable)
 	mut scanning := true
 	while scanning
+		if gate4_token_is(state, position[0], "[")
+			if hash_key_type(value.type_name) != "" || value.type_name == "Hash"
+				value = checked_hash_index(state, position, locals, value)
+				if gate4_has_diagnostic(state)
+					return value
+				end
+				next
+			end
+		end
 		if gate4_token_is(state, position[0], "(")
 			mut effect_free := value.category == 5
 			if value.category == 1
@@ -1109,7 +1283,7 @@ def checked_readonly_reference_binding(
 	if value.origin >= state.token_count[0]
 		return false
 	end
-	if gate4_array_element_type(value.type_name) == ""
+	if gate4_array_element_type(value.type_name) == "" && hash_key_type(value.type_name) == "" && value.type_name != "Hash"
 		if gate4_find_record_type(state, value.type_name) < 0
 			return false
 		end
@@ -1175,6 +1349,13 @@ def gate4_check_declaration(
 		gate4_diagnostic(state, "TRBN4004", line, "local binding cannot have type Void")
 	end
 	added := gate4_local_add(state, locals, name, local_type, mutable, line)
+	if added && local_type == "Hash"
+		if checked_hash_plan(state, value.origin).kind != 1
+			gate4_diagnostic(state, "TRBN4004", line, "untyped Hash aliases require a Hash<K, V> annotation")
+			return false
+		end
+		gate4_store_integer(locals.hash_literal_origins, locals.count[0] - 1, value.origin + 1)
+	end
 	if !added
 		fact = 0
 	else
@@ -1255,7 +1436,8 @@ def gate4_check_simple_statement(
 			gate4_diagnostic(state, "TRBN4004", line, "assignment target is immutable")
 		end
 		gate4_advance(position)
-		gate4_check_expression(state, position, locals, 1, left.type_name)
+		right := gate4_check_expression(state, position, locals, 1, left.type_name)
+		checked_hash_refine(state, locals, left.origin, right.type_name)
 		if locals.mir_state[0] >= 2
 			gate4_scalar_mir_disable(locals)
 		end
@@ -1343,7 +1525,7 @@ def gate4_check_simple_statement(
 	end
 	if assignment
 		if left.origin < state.token_count[0]
-			if gate4_token_is(state, left.origin, "[")
+			if gate4_token_is(state, left.origin, "[") && checked_hash_plan(state, left.origin).kind == 0
 				checked_assignment_operation(locals, 5, left.origin, operator_origin)
 				state.array_assignment_regions.push(locals.mir_assignment[0])
 				region := state.array_assignment_regions.size()

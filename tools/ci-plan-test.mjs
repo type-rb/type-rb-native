@@ -403,7 +403,7 @@ test('push comparison includes changes against the actual before revision, not i
 });
 
 test('known compiler test modules retain correctness without unchanged-binary measurements', () => {
-  assert.equal(compilerTestInputs.size, 10);
+  assert.equal(compilerTestInputs.size, 11);
   for (const file of compilerTestInputs) {
     const plan = classify([file], false);
     assert.deepEqual(plan, { code: true, quick: true, documentation: false,

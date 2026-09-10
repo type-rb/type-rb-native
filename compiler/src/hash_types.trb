@@ -1,0 +1,72 @@
+import { gate4_ascii_code } from literals
+import { gate4_string_starts_with } from path
+
+# Canonical Hash spellings contain one scalar key and one resolved value type.
+def hash_key_type(type_name: String): String
+	if !gate4_string_starts_with(type_name, "Hash<") || type_name[type_name.size() - 1] != ">"
+		return ""
+	end
+	if gate4_string_starts_with(type_name, "Hash<Integer,")
+		return "Integer"
+	end
+	if gate4_string_starts_with(type_name, "Hash<String,")
+		return "String"
+	end
+	return ""
+end
+
+def hash_value_type(type_name: String): String
+	key := hash_key_type(type_name)
+	if key == ""
+		return ""
+	end
+	mut result := ""
+	mut index := 6 + key.size()
+	while index < type_name.size() - 1
+		result += type_name[index]
+		index += 1
+	end
+	return result
+end
+
+def hash_type(key: String, value: String): String
+	return "Hash<" + key + "," + value + ">"
+end
+
+def native_managed_type(type_name: String): Boolean
+	if type_name == "String" || gate4_string_starts_with(type_name, "Array<") || gate4_string_starts_with(type_name, "Record#") || hash_key_type(type_name) != "" || type_name == "Hash"
+		return true
+	end
+	return false
+end
+
+# Validate the word-sized scalar/managed layouts admitted by Hash MIR.
+def native_value_layout(type_name: String): Boolean
+	if type_name == "Integer" || type_name == "Float" || type_name == "Boolean" || type_name == "String"
+		return true
+	end
+	if hash_key_type(type_name) != ""
+		return native_value_layout(hash_value_type(type_name))
+	end
+	if gate4_string_starts_with(type_name, "Array<") && type_name[type_name.size() - 1] == ">"
+		mut element := ""
+		mut index := 6
+		while index < type_name.size() - 1
+			element += type_name[index]
+			index += 1
+		end
+		return native_value_layout(element)
+	end
+	if !gate4_string_starts_with(type_name, "Record#") || type_name.size() == 7
+		return false
+	end
+	mut index := 7
+	while index < type_name.size()
+		code := gate4_ascii_code(type_name[index])
+		if code < 48 || code > 57
+			return false
+		end
+		index += 1
+	end
+	return true
+end
