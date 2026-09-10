@@ -24,6 +24,8 @@ def main():
     p.add_argument('--frozen-core', type=Path, required=True)
     p.add_argument('--output', type=Path, required=True)
     args = p.parse_args()
+    if platform.system() != "Darwin" or platform.machine() != "arm64":
+        p.error("the registered cohort requires Darwin arm64")
     candidate, control = args.candidate.resolve(), args.control.resolve()
     frozen = args.frozen_source.resolve()
     cores = {'candidate': candidate / '.trb/bootstrap/core/compiler',

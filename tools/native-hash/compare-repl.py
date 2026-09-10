@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import platform
 from pathlib import Path
 import statistics
 import subprocess
@@ -16,6 +17,8 @@ p.add_argument('--candidate', type=Path, required=True)
 p.add_argument('--inputs', type=Path, required=True)
 p.add_argument('--output', type=Path, required=True)
 a = p.parse_args()
+if platform.system() != "Darwin" or platform.machine() != "arm64":
+    p.error("the registered cohort requires Darwin arm64")
 binaries = {'control': a.control.resolve(), 'candidate': a.candidate.resolve()}
 inputs = json.loads(a.inputs.read_text())['inputs']
 report = {'diagnosticOnly': True, 'condition': 'uncontrolled local host; recovery validation overlaps',
