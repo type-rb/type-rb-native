@@ -1,8 +1,9 @@
 # Ordinary Hash implementation
 
 Status: implementation candidate for [issue #400](https://github.com/type-rb/type-rb-native/issues/400).
-Ordinary compiler cost limits remain unchanged. This feature is not an accepted
-optimization checkpoint or a claim of complete TypeRB library support.
+The separate [Hash cost decision](decisions/0033-hash-compiler-budget.md)
+records the acceptance budget and required full validation. This subset is not
+a claim of complete TypeRB library support.
 
 ## Language boundary
 

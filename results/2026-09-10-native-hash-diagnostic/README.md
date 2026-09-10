@@ -1,7 +1,10 @@
 # Hash implementation diagnostic
 
 This is local diagnostic evidence for [#400](https://github.com/type-rb/type-rb-native/issues/400),
-not an accepted optimization checkpoint. Ordinary cost limits are unchanged.
+not an accepted optimization checkpoint. Ordinary cost limits were unchanged
+throughout these diagnostic cohorts. The later
+[Hash acceptance decision](../../docs/decisions/0033-hash-compiler-budget.md)
+records the reviewed policy separately; it does not relabel these observations.
 
 ## Registration and conditions
 
