@@ -93,11 +93,22 @@ also verify the fixtures against the pinned reference compiler. The ordinary
 CLI suite includes Hash fixtures; the recovery closure includes all four new
 core modules and verifies their missing/malformed/mutated source boundaries.
 
-New Hash syntax is not used to bootstrap the compiler itself. Named Hash MIR
-records and Arrays were self-hosted using the accepted record-Array seed.
-The verified Hash seed handoff in PR #405 supplies the prerequisite for
-subsequent Hash collections in compiler implementation source. Existing
-unaccepted Array optimization work is not a prerequisite or an implicit dependency.
+The compiler uses `Hash<String, Integer>` for module names, module-qualified
+function declarations and project source ordering. Function declarations enter
+the index when parsing succeeds. A missing name remains `-1`; replacing an entry
+preserves the previous last-declaration lookup rule without changing duplicate
+diagnostics. Declaration vectors retain their stable ordering and identities.
+
+This removes `Gate4SymbolIndex` and its bucket/chain/growth/rebuild helpers.
+`find_name_index` and `function_index_key` own the small lookup boundary; the
+ordinary Hash runtime owns storage and content equality. The key separates the
+decimal module identity from the name with `:`. Import-cycle traversal now owns
+an invocation-local color array, instead of overwriting function-index storage.
+
+Compiler self-use starts from the verified Hash seed in PR #405. Recovery uses
+only its accepted String/Integer Hash subset and existing integer formatting;
+ordinary `Integer.to_s` is outside that snapshot subset. No new snapshot
+operation or broader source fallback is needed for the indexes.
 
 ## Compiler self-use recovery boundary
 
@@ -125,4 +136,4 @@ bounds remain unchanged. This neither republishes an old seed nor substitutes
 snapshot recovery for the ordinary chain. PR #405 pairs this recovery support
 with the
 [verified checkout seed handoff](bootstrap-seed-updates.md#current-verified-checkout-seed);
-compiler index adoption is the next bounded slice.
+compiler index adoption uses these same operations.

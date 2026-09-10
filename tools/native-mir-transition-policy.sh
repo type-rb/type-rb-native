@@ -55,24 +55,6 @@ NATIVE_MIR_ORDINARY_RATIO_LIMIT=1.05
 NATIVE_MIR_RSS_RATIO_LIMIT=1.05
 NATIVE_MIR_CATASTROPHIC_RATIO_LIMIT=2.0
 
-# Decision 0033: a one-time Hash capability transition, pinned to both source
-# trees. A later compiler change (including tests) restores ordinary ratios.
-NATIVE_MIR_HASH_CANDIDATE_TREE=fd6f68e3647e0bca1b1f21d150164355bff92011
-NATIVE_MIR_HASH_BASELINE_TREE=0a328521aeb97e0035bb8ab4824598ec981708ac
-NATIVE_MIR_HASH_COMPILER_RATIO_LIMIT=1.12
-NATIVE_MIR_HASH_BUILD_RATIO_LIMIT=1.15
-
-native_mir_hash_source_matches() {
-	test "$(git -C "$1" rev-parse HEAD:compiler/src 2>/dev/null)" = "$2" &&
-		git -C "$1" diff --quiet HEAD -- compiler/src &&
-		test -z "$(git -C "$1" ls-files --others --exclude-standard -- compiler/src)"
-}
-
-native_mir_hash_transition() {
-	native_mir_hash_source_matches "$1" "$NATIVE_MIR_HASH_CANDIDATE_TREE" &&
-		native_mir_hash_source_matches "$2" "$NATIVE_MIR_HASH_BASELINE_TREE"
-}
-
 native_mir_marker_path() (
 	project=$(native_compiler_project_directory "$1") || exit 1
 	case "$2" in
@@ -548,10 +530,6 @@ native_mir_stable_array_header_transition() {
 
 native_mir_transition_mode() {
 	native_mir_roots_valid "$1" "$2" || return 1
-	if native_mir_hash_transition "$1" "$2"; then
-		printf '%s\n' "hash-capability-transition"
-		return 0
-	fi
 	if native_mir_foundation_transition "$1" "$2"; then
 		printf '%s\n' foundation-transition
 	else
@@ -593,10 +571,6 @@ native_mir_transition_mode() {
 
 native_mir_compiler_ratio_limit() {
 	native_mir_roots_valid "$1" "$2" || return 1
-	if native_mir_hash_transition "$1" "$2"; then
-		printf '%s\n' "$NATIVE_MIR_HASH_COMPILER_RATIO_LIMIT"
-		return 0
-	fi
 	if native_mir_foundation_transition "$1" "$2"; then
 		printf '%s\n' "$NATIVE_MIR_FOUNDATION_COMPILER_RATIO_LIMIT"
 	else
@@ -614,10 +588,6 @@ native_mir_compiler_ratio_limit() {
 
 native_mir_build_ratio_limit() {
 	native_mir_roots_valid "$1" "$2" || return 1
-	if native_mir_hash_transition "$1" "$2"; then
-		printf '%s\n' "$NATIVE_MIR_HASH_BUILD_RATIO_LIMIT"
-		return 0
-	fi
 	if native_mir_foundation_transition "$1" "$2"; then
 		printf '%s\n' "$NATIVE_MIR_FOUNDATION_BUILD_RATIO_LIMIT"
 	else

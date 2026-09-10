@@ -2,7 +2,7 @@ import { Gate4IntegerStorage, Gate4StringStorage, gate4_integer_storage, gate4_l
 import { gate4_path_basename, gate4_path_directory, gate4_path_join, gate4_string_ends_with, gate4_string_starts_with, gate4_string_without_suffix } from path
 import { gate4_ascii_code, gate4_integer_string, gate4_number_is_float, gate4_number_without_underscores, gate4_small_nonnegative_integer_operand } from literals
 import { gate4_mir_block_index, gate4_mir_function_index, gate4_mir_value_type, gate4_optimize_verified_mir, gate4_verify_mir, mir_logical_short_value } from mir
-import { Gate4Compiler, Gate4SymbolIndex, gate4_add_module, gate4_add_name_index, gate4_compiler_new, gate4_diagnostic, gate4_find_module, gate4_find_name, gate4_has_diagnostic, gate4_local_add, gate4_locals_new, gate4_symbol_index_new } from state
+import { Gate4Compiler, find_name_index, gate4_add_module, gate4_compiler_new, gate4_diagnostic, gate4_find_module, gate4_has_diagnostic, gate4_local_add, gate4_locals_new } from state
 import { finish_statement, gate4_advance, gate4_binary_operator_id, gate4_binary_precedence, gate4_declaration_start, gate4_expect, gate4_expect_identifier, gate4_parse_module, gate4_parse_type, gate4_skip_newlines, gate4_token_is, parse_statement_block, syntax_conditional_tail, syntax_loop_transfer_kind } from parser
 import { gate4_array_element_type, gate4_array_type, gate4_common_array_element_type, gate4_find_field, gate4_find_function_in_module, gate4_find_record_type, gate4_find_visible_function, gate4_find_visible_record, gate4_import_path_value, gate4_normalize_import_path, gate4_record_type, gate4_resolve, gate4_resolve_type_name, gate4_standard_package_import, gate4_standard_package_root, gate4_standard_package_target, gate4_validate_import_usage } from resolution
 import { checked_array_assignment_plan, checked_array_assignment_reads_old, checked_array_assignment_store, checked_array_assignment_target, checked_binary_plan_type, checked_loop_transfer_kind, gate4_check_block, gate4_mir_add_parameter, gate4_mir_nonnegative_fact, gate4_scalar_leaf_inline_eligible, gate4_scalar_mir_begin, gate4_scalar_mir_commit } from checked_program
@@ -3896,15 +3896,14 @@ def gate4_project_source_declares_main(source: String): Boolean
 end
 
 def gate4_project_append_import_target(
-		module_names: Gate4StringStorage,
-		module_lookup: Gate4SymbolIndex,
+		module_lookup: Hash<String, Integer>,
 		normalized: String,
 		mut order: Array<Integer>,
 		mut included: Array<Integer>,
 	): Array<Integer>
-	mut target := gate4_find_name(module_lookup, module_names, normalized)
+	mut target := find_name_index(module_lookup, normalized)
 	if target < 0
-		target = gate4_find_name(module_lookup, module_names, normalized + "/index")
+		target = find_name_index(module_lookup, normalized + "/index")
 	end
 	if target >= 0
 		if included[target] == 0
@@ -3935,8 +3934,7 @@ def gate4_project_bare_import_path(raw: String): String
 end
 
 def gate4_project_append_imports(
-		module_names: Gate4StringStorage,
-		module_lookup: Gate4SymbolIndex,
+		module_lookup: Hash<String, Integer>,
 		source: String,
 		mut order: Array<Integer>,
 		mut included: Array<Integer>,
@@ -3960,7 +3958,6 @@ def gate4_project_append_imports(
 			raw := gate4_source_slice(source, index + 6, cursor)
 			normalized := gate4_import_path_value(raw)
 			order = gate4_project_append_import_target(
-				module_names,
 				module_lookup,
 				normalized,
 				order,
@@ -4000,7 +3997,6 @@ def gate4_project_append_imports(
 						path := gate4_project_bare_import_path(raw)
 						normalized := gate4_import_path_value(path)
 						order = gate4_project_append_import_target(
-							module_names,
 							module_lookup,
 							normalized,
 							order,
@@ -4018,8 +4014,7 @@ end
 def gate4_order_project_sources(source_root: String, bundle: Gate4ProjectSources): Gate4ProjectSources
 	mut entry :=- 1
 	mut included: Array<Integer> := []
-	mut module_names := gate4_string_storage(bundle.paths.size())
-	mut module_lookup := gate4_symbol_index_new(bundle.paths.size() * 4 + 16)
+	mut module_lookup: Hash<String, Integer> := {}
 	mut prefix_size := source_root.size()
 	if source_root != "/"
 		prefix_size += 1
@@ -4032,8 +4027,7 @@ def gate4_order_project_sources(source_root: String, bundle: Gate4ProjectSources
 			prefix_size,
 			bundle.paths[index].size() - 4,
 		)
-		gate4_store_string(module_names, index, name)
-		gate4_add_name_index(module_lookup, module_names, index + 1)
+		module_lookup[name] = index
 		if gate4_project_source_declares_main(bundle.sources[index])
 			entry = index
 		end
@@ -4048,7 +4042,6 @@ def gate4_order_project_sources(source_root: String, bundle: Gate4ProjectSources
 	mut cursor := 0
 	while cursor < order.size()
 		order = gate4_project_append_imports(
-			module_names,
 			module_lookup,
 			bundle.sources[order[cursor]],
 			order,
@@ -4105,36 +4098,37 @@ def gate4_project_select_entry(mut state: Gate4Compiler): Boolean
 	return true
 end
 
-def gate4_project_module_acyclic(mut state: Gate4Compiler, module_index: Integer): Boolean
-	color := gate4_load_integer(state.function_lookup.next, module_index)
+def project_module_acyclic(state: Gate4Compiler, module_index: Integer, mut colors: Array<Integer>): Boolean
+	color := colors[module_index]
 	if color > 0
 		return color == 2
 	end
-	gate4_store_integer(state.function_lookup.next, module_index, 1)
+	colors[module_index] = 1
 	mut import_index := gate4_load_integer(state.module_import_starts, module_index)
 	import_end := import_index + gate4_load_integer(state.module_import_counts, module_index)
 	while import_index < import_end
 		target := gate4_load_integer(state.import_targets, import_index)
 		if target >= 0
-			if !gate4_project_module_acyclic(state, target)
+			if !project_module_acyclic(state, target, colors)
 				return false
 			end
 		end
 		import_index += 1
 	end
-	gate4_store_integer(state.function_lookup.next, module_index, 2)
+	colors[module_index] = 2
 	return true
 end
 
-def gate4_project_import_graph_acyclic(mut state: Gate4Compiler): Boolean
+def project_import_graph_acyclic(state: Gate4Compiler): Boolean
+	mut colors: Array<Integer> := []
 	mut module_index := 0
 	while module_index < state.module_count[0]
-		gate4_store_integer(state.function_lookup.next, module_index, 0)
+		colors.push(0)
 		module_index += 1
 	end
 	module_index = 0
 	while module_index < state.module_count[0]
-		if !gate4_project_module_acyclic(state, module_index)
+		if !project_module_acyclic(state, module_index, colors)
 			return false
 		end
 		module_index += 1
@@ -4228,7 +4222,7 @@ def gate4_resolve_project_imports(mut state: Gate4Compiler): Boolean
 		end
 		module_index += 1
 	end
-	if !gate4_project_import_graph_acyclic(state)
+	if !project_import_graph_acyclic(state)
 		module_index = 0
 		while module_index < state.module_count[0]
 			mut import_index := gate4_load_integer(state.module_import_starts, module_index)
