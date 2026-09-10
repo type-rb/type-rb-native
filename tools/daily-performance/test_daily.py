@@ -113,6 +113,21 @@ class DailyTests(unittest.TestCase):
         for case in selected:
             self.assertEqual(hashlib.sha256((state.ROOT / case["pureGoSource"]).read_bytes()).hexdigest(), hashes[case["id"]])
 
+    def test_weekly_profile_requires_all_languages_and_cases(self):
+        weekly = snapshot()
+        weekly["profile"] = "weekly"
+        weekly["roles"] = {role: {"revision": "a" * 40} for role in ("native", "pure-go", "c", "cpp", "rust", "java")}
+        template = weekly["rows"][0]
+        weekly["rows"] = [{**copy.deepcopy(template), "role": role, "case": case}
+                          for role in weekly["roles"] for case in ("fannkuch-redux", "n-body", "spectral-norm")]
+        state.validate({**state.empty(), "latest": weekly})
+        partial = copy.deepcopy(weekly); partial["rows"].pop()
+        with self.assertRaises(ValueError): state.validate({**state.empty(), "latest": partial})
+        wrong = copy.deepcopy(weekly); wrong["profile"] = "unknown"
+        with self.assertRaises(ValueError): state.validate({**state.empty(), "latest": wrong})
+        failed = copy.deepcopy(weekly); failed["rows"][0].update(status="timeout", runtime=None)
+        state.validate({**state.empty(), "latest": failed})
+
     def test_restore_rejects_same_name_from_unrelated_workflow(self):
         archive = io.BytesIO()
         with zipfile.ZipFile(archive, "w") as output:

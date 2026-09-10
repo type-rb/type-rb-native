@@ -160,3 +160,14 @@ async function main() {
   render();
 }
 main().catch(error => { $('status').textContent = error.message; $('status').classList.add('warning'); });
+
+// A weekly-data failure must never hide or block the daily results.
+if ($('weekly-summary')) fetch('./weekly-state.json', { cache: 'no-store' }).then(r => {
+  if (!r.ok) throw new Error('Weekly summary unavailable');
+  return r.json();
+}).then(weekly => {
+  if (weekly.latest?.profile === 'weekly') {
+    const snapshot = weekly.latest;
+    $('weekly-summary').append(node('span', ` · Measured ${new Date(snapshot.at).toLocaleDateString()} · ${snapshot.revision.slice(0, 8)} · ${snapshot.status}${weekly.pendingChanges ? ' · newer changes pending' : ''}${weekly.publicationWarning ? ' · weekly data retrieval delayed' : ''}`));
+  }
+}).catch(() => {});

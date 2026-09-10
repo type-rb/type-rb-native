@@ -52,7 +52,10 @@ def validate(state):
         if not SHA.fullmatch(snapshot.get("revision", "")) or not isinstance(snapshot.get("rows"), list):
             raise ValueError("Malformed snapshot")
         roles = snapshot.get("roles", {})
-        base_roles = {"native", "previous", "baseline", "typerb-go"}
+        weekly = snapshot.get("profile") == "weekly"
+        if snapshot.get("profile") not in (None, "weekly"):
+            raise ValueError("Unknown measurement profile")
+        base_roles = {"native", "pure-go", "c", "cpp", "rust", "java"} if weekly else {"native", "previous", "baseline", "typerb-go"}
         if set(roles) not in (base_roles, base_roles | {"pure-go"}):
             raise ValueError("Incomplete compiler identities")
         if roles["native"]["revision"] != snapshot["revision"]:
@@ -61,7 +64,7 @@ def validate(state):
             if not SHA.fullmatch(role.get("revision", "")):
                 raise ValueError("Invalid compiler revision")
         pure_go_cases = snapshot.get("pureGoCases", [])
-        if "pure-go" in roles:
+        if "pure-go" in roles and not weekly:
             if (not isinstance(pure_go_cases, list) or len(pure_go_cases) != 3 or
                     set(pure_go_cases) != {"fannkuch-redux", "n-body", "spectral-norm"}):
                 raise ValueError("Invalid Pure Go coverage")
@@ -92,6 +95,8 @@ def validate(state):
                             raise ValueError("Invalid measurement metric")
                     if not 0 < metrics["wallMin"] <= metrics["wallSeconds"] <= metrics["wallMax"]:
                         raise ValueError("Invalid measurement range")
+        if weekly and set(cases) != {"fannkuch-redux", "n-body", "spectral-norm"}:
+            raise ValueError("Invalid weekly workload coverage")
         if not set(pure_go_cases).issubset(cases):
             raise ValueError("Missing Pure Go workload")
         if any(members != (base_roles | ({"pure-go"} if case in pure_go_cases else set()))
@@ -138,10 +143,10 @@ def restore(destination):
 def relevant(path):
     if path.endswith(".md") or path.endswith("_test.trb"):
         return False
-    return path.startswith(("compiler/", "src/", "benchmarks/", "tools/daily-performance/",
+    return path.startswith(("compiler/", "src/", "benchmarks/", "tools/daily-performance/", "tools/weekly-performance/",
                             "tools/runtime-memory-soak/", "tools/runtime-worker-soak/",
                             "tools/native-mir-array-loop-recovery/")) or path in (
-        "TYPE_RB_REVISION", ".github/workflows/daily-performance.yml",
+        "TYPE_RB_REVISION", ".github/workflows/daily-performance.yml", ".github/workflows/weekly-performance.yml",
         "tools/bootstrap-seed.sh", "tools/bootstrap-seed-download.sh", "tools/compiler-project.sh")
 
 
@@ -162,6 +167,9 @@ def series():
             digest.update((ROOT / case["pureGoSource"]).read_bytes())
         if "expectedFile" in case:
             digest.update((ROOT / case["expectedFile"]).read_bytes())
+    if WORKFLOW == "weekly-performance.yml":
+        digest.update((ROOT / "tools/weekly-performance/measure.py").read_bytes())
+        digest.update((ROOT / "benchmarks/benchmarksgame/context-sources.tsv").read_bytes())
     return digest.hexdigest()
 
 
@@ -200,12 +208,16 @@ def finish(path, snapshot_path, status):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("command", choices=["restore", "plan", "finish", "site"])
+    parser.add_argument("--tier", choices=["daily", "weekly"], default="daily")
     parser.add_argument("--state", required=True)
     parser.add_argument("--output")
     parser.add_argument("--snapshot")
     parser.add_argument("--status")
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
+    global WORKFLOW, ARTIFACT
+    if args.tier == "weekly":
+        WORKFLOW, ARTIFACT = "weekly-performance.yml", "weekly-performance-state"
     if args.command == "restore":
         restore(args.state)
     elif args.command == "plan":

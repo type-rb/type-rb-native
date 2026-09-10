@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-test "$#" -eq 4 || exit 64
+test "$#" -eq 4 || { test "$#" -eq 5 && test "$5" = --current-only; } || exit 64
 seed=$1
 qbe=$2
 previous=$3
@@ -10,6 +10,7 @@ root=$(pwd)
 mkdir -p "$workspace"
 baseline=$(python3 -c 'import json; print(json.load(open("tools/daily-performance/suite.json"))["baseline"])')
 current=$(git rev-parse HEAD)
+if test "${5:-}" = --current-only; then previous=$current; baseline=$current; fi
 
 for revision in "$current" "$previous" "$baseline"; do
   # Reuse identical revisions inside this run, never a floating compiler binary.
