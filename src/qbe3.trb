@@ -587,6 +587,8 @@ def _qbe3_context(
 	mut storage_slots: Hash<String, String> := {}
 	mut root_slots: Hash<String, String> := {}
 	mut aliased_parameters: Hash<String, Boolean> := {}
+	mut parameter_values: Hash<String, String> := {}
+	mut parameter_roots: Hash<String, String> := {}
 	mut next_value := 0
 	mut next_transfer := 0
 	mut next_storage := 0
@@ -640,6 +642,10 @@ def _qbe3_context(
 					next_storage += 1
 				end
 			end
+			parameter_values[parameter.id] = values.fetch(parameter.id)
+			if root_slots.key?(parameter.id)
+				parameter_roots[parameter.id] = root_slots.fetch(parameter.id)
+			end
 			parameter_index += 1
 		end
 		mut instruction_index := 0
@@ -679,6 +685,8 @@ def _qbe3_context(
 		end
 		block_index += 1
 	end
+	# Self references name the original block parameter, never a rewritten
+	# alias that may already be the real incoming entry definition.
 	mut alias_pass := 0
 	while alias_pass < function.blocks.size()
 		block_index = 0
@@ -691,7 +699,7 @@ def _qbe3_context(
 					function,
 					block.id,
 					parameter_index,
-					values.fetch(parameter.id),
+					parameter_values.fetch(parameter.id),
 					values,
 				)
 				if !incoming.empty?()
@@ -705,7 +713,7 @@ def _qbe3_context(
 								function,
 								block.id,
 								parameter_index,
-								root_slots.fetch(parameter.id),
+								parameter_roots.fetch(parameter.id),
 								root_slots,
 							)
 							if !incoming_root.empty?()
