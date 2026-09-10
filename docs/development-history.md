@@ -539,7 +539,7 @@ separately retains the measured compiler cost: Linux's absolute ceiling becomes
 authorities unchanged. Initial recovery and Linux-size failures remain rejected;
 a larger emitter control-flow rewrite was discarded after increasing text.
 
-The current [accepted checkpoint](../results/2026-09-09-scalar-range-guards-accepted-darwin-linux-arm64/README.md)
+The scalar-guard [accepted checkpoint](https://github.com/type-rb/type-rb-native/blob/8980b5978f0e8519964d200b7f7799b741796478/results/2026-09-09-scalar-range-guards-accepted-darwin-linux-arm64/README.md)
 replaces its occupied result slot. Complete runtime and build cohorts replace
 their two existing published slots. The preceding reports remain at the
 [exact pre-retirement revision](https://github.com/type-rb/type-rb-native/tree/a604adcffe0cc34ff217ff84d73911c85ceb0a00/results).
@@ -548,3 +548,35 @@ budget. In the one-core formal cohort, spectral-norm exceeds the pinned Pure
 Go implementation in wall and CPU time. Other kernels remain slower, including
 previously established cumulative regressions. This is a numeric checkpoint,
 not a broad application-performance or language-promotion claim.
+
+
+## Ordered Array effects and loop-local headers
+
+[PR #389](https://github.com/type-rb/type-rb-native/pull/389) preserves ordered
+checked effects and derives safe per-loop header placement in MIR. The adapter
+loads and restores the verified scope. It shares lexical declaration resolution
+and invalid-plan construction, while the recovery backend redirects every alias
+of a resolved block parameter. Generic malformed-region and managed-String
+backedge tests cover the correctness boundaries. All 17 CI authorities and
+complete local recovery suites pass.
+
+The local 117-observation comparison reduces fannkuch wall time by 11.67%
+against its immediate control and preserves n-body/spectral controls. Frozen
+cumulative wall ratios are 0.729410, 0.883123 and 0.730016 for n-body, fannkuch
+and spectral respectively. These are local Native comparisons, not Pure Go
+measurements. Compiler construction refinement preserves all measured
+application bytes; no replacement timing was substituted.
+
+Earlier Linux size failures remain rejected. The independently reviewed
+[Decision 0032](decisions/0032-loop-local-header-compiler-budget.md) sets the
+Linux and combined ceilings to 334000 and 700000 bytes; the accepted compilers
+use 332440 Linux and 365816 Darwin bytes, 698256 combined. Ordinary 1.05 ratios
+and other authorities remain unchanged. The budget CI's seed attestation
+502/503 failures occurred before measurement; its unchanged-head retry passed.
+
+The [accepted checkpoint](../results/2026-09-10-loop-local-headers-accepted-darwin-linux-arm64/README.md)
+and complete same-source runtime/build cohorts replace the three occupied
+slots together. Raw formal payloads have a verified evidence archive; the
+previous scalar-guard reports remain at the pinned pre-retirement revision.
+Loop placement's three-Integer representation remains the next bounded carrier
+cleanup candidate, requiring separate recovery and cost validation.

@@ -4,8 +4,9 @@ At accepted Native `bb262222279cb18741f8cfd47001020a276af25c`, the large
 checked-assignment regressions in n-body and fannkuch-redux have been removed.
 Fannkuch's generated program is byte-identical to the former published baseline;
 n-body improves beyond that baseline. The spectral-norm guard improvement remains.
-The older Linux snapshot in the benchmark explorer is still an accurate record
-of its measured revision, rather than a measurement of current main.
+The historical proof below identifies that accepted recovery checkpoint. The
+subsequent formal refresh and loop-local improvement are recorded separately
+below; historical artifact identities are not relabelled as current source.
 
 ## Compare the right revisions
 
@@ -80,8 +81,18 @@ contract. Both are preserved; neither is filtered or pooled with this identity
 verification. The accepted compiler passes all 17 selected CI authorities and
 unchanged compiler, build, memory and correctness limits.
 
-Further MIR work can improve the restored fannkuch program. It is separate from
-repairing this regression: whole-function allocation and branch barriers still
-prevent broader header reuse, and narrower regions need their own checked
-control-flow proof. Complete control-flow MIR and bounds-check elimination are
-not prerequisites for recognizing the completed recovery above.
+## Subsequent loop-local improvement and formal refresh
+
+[PR #389](https://github.com/type-rb/type-rb-native/pull/389) supplies the checked
+loop-region proof needed for narrower header reuse. Its local fannkuch wall
+ratio is 0.883322 against the already restored immediate control, while n-body
+and spectral remain within their registered bounds. This is an additional
+improvement, separate from the completed assignment regression repair above.
+
+The [complete formal refresh](../results/2026-09-10-benchmarksgame-runtime-loop-local-headers-linux-arm64/README.md)
+measures source `8980b597` and replaces the older regression snapshot in Pages.
+One-core n-body is 7.87414 seconds and fannkuch is 61.8302 seconds, both below the
+pre-regression published medians of 10.2644 and 77.1176. Spectral-norm is 2.25684
+seconds versus Pure Go's 3.21985; the other two cases remain slower than Pure Go.
+All observations are retained. Cross-date values confirm the refreshed published
+state, while the local comparisons above provide separate causal evidence.
