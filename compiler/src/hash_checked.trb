@@ -1,3 +1,5 @@
+import { gate4_array_element_type, gate4_find_record_type } from resolution
+import { hash_key_type, hash_value_type } from hash_types
 import { Gate4Compiler, gate4_diagnostic } from state
 import { gate4_load_integer, gate4_load_string, gate4_storage_chunk_size, gate4_store_integer } from storage
 import { MirHashOperation, mir_hash_operation, mir_hash_valid } from hash_mir
@@ -69,6 +71,9 @@ def checked_hash_valid(state: Gate4Compiler, plan: MirHashOperation, pending: Bo
 	if !mir_hash_valid(plan, state.token_count[0], pending)
 		return false
 	end
+	if plan.type_name != "Hash" && !checked_hash_value_layout(state, plan.value_type)
+		return false
+	end
 	if plan.kind == 3 || plan.kind == 6 || plan.kind == 9
 		if !checked_hash_binding_target(state, plan.receiver_origin)
 			return false
@@ -133,4 +138,18 @@ def checked_hash_binding_target(state: Gate4Compiler, origin: Integer): Boolean
 		depth += 1
 	end
 	return false
+end
+
+def checked_hash_value_layout(state: Gate4Compiler, type_name: String): Boolean
+	if type_name == "Integer" || type_name == "Float" || type_name == "Boolean" || type_name == "String"
+		return true
+	end
+	if hash_key_type(type_name) != ""
+		return checked_hash_value_layout(state, hash_value_type(type_name))
+	end
+	element := gate4_array_element_type(type_name)
+	if element != ""
+		return checked_hash_value_layout(state, element)
+	end
+	return gate4_find_record_type(state, type_name) >= 0
 end
