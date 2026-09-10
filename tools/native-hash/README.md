@@ -1,7 +1,7 @@
 # Hash measurement tools
 
 These tools run the bounded Darwin arm64 diagnostics registered in
-[the retained report](../../docs/evidence/native-hash/2026-09-10/README.md).
+[the retained report](../../results/2026-09-10-native-hash-diagnostic/README.md).
 They do not change compiler cost limits or establish acceptance.
 
 Build the candidate and accepted control with their recorded seeds/toolchains,
@@ -18,7 +18,7 @@ python3 tools/native-hash/measure.py \
 python3 tools/native-hash/compare-repl.py \
   --control /path/to/control-trbn \
   --candidate /path/to/candidate-trbn \
-  --inputs docs/evidence/native-hash/2026-09-10/initial.json \
+  --inputs results/2026-09-10-native-hash-diagnostic/initial.json \
   --output /path/to/new-paired.json
 ```
 

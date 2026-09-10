@@ -71,11 +71,16 @@ collectable; it does not require an immediate decrease in OS RSS.
 
 ## Compiler cost and integration status
 
-| Current Darwin artifact | Bytes | Ordinary limit | Result |
+| Measured Darwin artifact | Bytes | Applicable ordinary limit | Result |
 | --- | ---: | ---: | --- |
 | Complete core executable | 398,888 | 366,000 | exceeds |
-| Core text | 290,856 | 250,904 | exceeds |
-| Core QBE text | 1,328,312 | 1,120,000 | exceeds |
+| Core text | 290,856 | observed in ordinary mode | diagnostic |
+| Core QBE text | 1,328,312 | observed in ordinary mode | diagnostic |
+
+Review correction: the 250,904-byte text and 1,120,000-byte QBE limits
+apply to named historical transitions, not this ordinary comparison. Their
+values and enforcement remain unchanged. The complete executable ceiling
+and ordinary 1.05 compiler-size ratio still fail.
 
 The accepted control core is 365,816 bytes: current growth is 33,072 bytes
 (9.0%). The current CLI is 548,872 bytes versus a 482,744-byte accepted CLI.
@@ -99,8 +104,8 @@ individual raw observations are retained in `initial.json`.
 
 ## Reproduction
 
-Use [the measurement tools](../../../../tools/native-hash/README.md) with the
+Use [the measurement tools](../../tools/native-hash/README.md) with the
 recorded sources, exact accepted seed, QBE and platform toolchain. A fresh run
 produces new diagnostic evidence; it must not overwrite these historical files.
 Correctness commands and supported boundaries are documented in
-[native-hash.md](../../../native-hash.md).
+[native-hash.md](../../docs/native-hash.md).

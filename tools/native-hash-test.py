@@ -24,11 +24,42 @@ def main():
             assert (result.returncode == 0) == success, result
             return result
 
+        cases = []
         for name in ('hash-values', 'hash-managed', 'hash-cycles'):
             fixture = repository / 'compiler/conformance/valid' / (name + '.trb')
-            source = root / fixture.name
-            source.write_text(fixture.read_text())
-            expected = fixture.with_suffix('.out').read_text()
+            cases.append((name, fixture.read_text(), fixture.with_suffix('.out').read_text(),
+                          name in ('hash-managed', 'hash-cycles')))
+        # Keep legal unformatted newlines: formatting a fixture would remove
+        # the token boundaries that previously broke only REPL evaluation.
+        cases.append(('hash-newlines', '''def main()
+ mut h := {1 => 2
+ , 3 => 4}
+ puts(h[3])
+ puts(h.fetch(1
+ ))
+ puts(h.size(
+ ))
+ puts(h.key?(3
+ ))
+ puts(h.dup(
+ ).size())
+ puts(h.merge({5 => 6}
+ ).fetch(5))
+ h.update({7 => 8}
+ )
+ puts(h.delete(7
+ ))
+ puts(h.values(
+ ).size())
+ puts(h.keys(
+ ).size())
+ puts(h.empty?(
+ ))
+end
+''', '4\n2\n2\ntrue\n2\n6\n8\n2\n2\nfalse\n', False))
+        for name, contents, expected, collects in cases:
+            source = root / (name + '.trb')
+            source.write_text(contents)
             assert run('check', source).stdout == 'ok\n'
             output = root / name
             run('build', '--compile', '--outfile', output, source)
@@ -36,7 +67,7 @@ def main():
                                       env=dict(env, TYPE_RB_NATIVE_RUNTIME_STATS='1'), timeout=60)
             assert executed.returncode == 0 and executed.stdout == expected, executed
             assert 'type-rb-native-gc-stat-v1,live-bytes,0\n' in executed.stderr, executed
-            if name != 'hash-values':
+            if collects:
                 assert 'type-rb-native-gc-stat-v1,automatic-collections,0\n' not in executed.stderr
             submission = source.read_text().replace('def main()', 'def exercise_hash()')
             result = run('repl', text=submission + '\nexercise_hash()\n:quit\n')
