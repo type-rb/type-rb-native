@@ -94,10 +94,10 @@ CLI suite includes Hash fixtures; the recovery closure includes all four new
 core modules and verifies their missing/malformed/mutated source boundaries.
 
 New Hash syntax is not used to bootstrap the compiler itself. Named Hash MIR
-records and Arrays are self-hosted using the accepted record-Array seed. Using
-Hash collections in compiler implementation source awaits the accepted feature
-and the separate verified seed handoff. Existing unaccepted Array optimization
-work is not a prerequisite or an implicit dependency.
+records and Arrays were self-hosted using the accepted record-Array seed.
+The verified Hash seed handoff in PR #405 supplies the prerequisite for
+subsequent Hash collections in compiler implementation source. Existing
+unaccepted Array optimization work is not a prerequisite or an implicit dependency.
 
 ## Compiler self-use recovery boundary
 
@@ -122,5 +122,7 @@ builds exact accepted Hash source `8a6d9ff73b14a97bca1b010ddaad6a38972b5373`
 before reading candidate source. Its process traces, source/compiler identities
 and capability probe are setup-only. Ordinary candidate B2/B3/B4 and all existing
 bounds remain unchanged. This neither republishes an old seed nor substitutes
-snapshot recovery for the ordinary chain. Compiler Hash self-use still awaits
-the separate verified checkout seed handoff.
+snapshot recovery for the ordinary chain. PR #405 pairs this recovery support
+with the
+[verified checkout seed handoff](bootstrap-seed-updates.md#current-verified-checkout-seed);
+compiler index adoption is the next bounded slice.
