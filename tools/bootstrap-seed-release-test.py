@@ -19,8 +19,8 @@ class SeedReleaseTests(unittest.TestCase):
                      "gate6n-linux-amd64"):
             with self.subTest(workflow=name):
                 workflow = (root / ".github/workflows" / (name + ".yml")).read_text()
-                self.assertIn("bootstrap-seed-2026-09-09-record-arrays", workflow)
-                self.assertIn("db48f64f6c3f6ce3fb904b2d28c95fa46522ebfc", workflow)
+                self.assertIn("bootstrap-seed-2026-09-10-hash", workflow)
+                self.assertIn("79f699e9245f79131646ebf43207f6b7526c4f68", workflow)
                 self.assertIn("tools/bootstrap-seed-download.sh", workflow)
         workflow = (root / ".github/workflows/gate6n-linux-amd64.yml").read_text()
         self.assertIn("ROOT_RELEASE_TAG: bootstrap-seed-2026-08-30", workflow)
@@ -58,6 +58,20 @@ class SeedReleaseTests(unittest.TestCase):
         self.assertIn('"$boolean_transition" check "$candidate_root/compiler/conformance/valid/boolean-array-values.trb"', observer)
         self.assertIn('AMD64_BOOLEAN_SETUP_REVISION: 57cb41ad6be91716e31fa555ed8ea8c8ce7a5f51', workflow)
         self.assertIn('"$GITHUB_WORKSPACE/.gate6n-boolean-source"', workflow)
+
+    def test_hash_bridge_requires_the_exact_accepted_source(self):
+        root = Path(__file__).resolve().parent.parent
+        observer = (root / "tools/gate6n-linux-amd64.sh").read_text()
+        workflow = (root / ".github/workflows/gate6n-linux-amd64.yml").read_text()
+        self.assertIn('test -n "$record_source_root" || fail "Hash source requires the accepted record Array source"', observer)
+        self.assertIn('require_clean_revision "$hash_source_root"', observer)
+        self.assertIn('8a6d9ff73b14a97bca1b010ddaad6a38972b5373 || fail "Hash source revision differs"', observer)
+        self.assertIn('"$record_transition" emit-qbe "$hash_entry"', observer)
+        self.assertIn('runtime_seed=$hash_transition', observer)
+        self.assertIn('"$runtime_seed" emit-qbe "$compiler_entry"', observer)
+        self.assertIn('"$hash_transition" check "$candidate_root/compiler/conformance/valid/hash-values.trb"', observer)
+        self.assertIn('AMD64_HASH_SETUP_REVISION: 8a6d9ff73b14a97bca1b010ddaad6a38972b5373', workflow)
+        self.assertIn('"$GITHUB_WORKSPACE/.gate6n-hash-source"', workflow)
 
     def test_refresh_roles_match_the_existing_compatibility_boundary(self):
         observer = Path(__file__).with_name("bootstrap-seed-refresh.sh").read_text()

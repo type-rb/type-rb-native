@@ -1,0 +1,173 @@
+import { allocate_compiler_recovery_workspace } from compiler_recovery_workspace
+import { Gate1Instruction } from gate1_mir
+import { Gate3TypeDefinition } from gate3_layout
+import { Gate3Block, Gate3Function, Gate3Instruction, Gate3Module, Gate3ResultType, Gate3Terminator, verify_gate3_mir } from gate3_mir
+import { decode_gate3_snapshot } from gate3_snapshot
+import { build_gate3_executable } from gate3_toolchain
+import { NativeSource } from native_mir
+import { SourceOrigin } from snapshot
+import { native_read_text, native_write_text } from native_file_system
+import trb/std/process
+import trb/std/result
+import { describe, expect, test } from trb/std/test
+
+def hash_recovery_module(extra: Gate3Instruction): Gate3Module
+	origin := SourceOrigin.new(source_id: "main", start_line: 1, start_column: 1, end_line: 1, end_column: 8)
+	return Gate3Module.new(
+		id: "hash-test", entry_function: "main",
+		sources: [NativeSource.new(id: "main", path: "main.trb")],
+		types: [Gate3TypeDefinition::String("String"), Gate3TypeDefinition::Hash("Hash<String, Integer>")],
+		functions: [Gate3Function.new(id: "main", name: "main", parameters: [], result_type: Gate3ResultType::Void, entry: "entry", origin: origin,
+				blocks: [Gate3Block.new(id: "entry", parameters: [], origin: origin,
+						instructions: [
+							Gate3Instruction::StringLiteral("key", "key", origin),
+							Gate3Instruction::Scalar(Gate1Instruction::IntegerLiteral("value", 2, origin)),
+							Gate3Instruction::HashConstruct("table", "Hash<String, Integer>", [], [], origin),
+							extra,
+						], terminator: Gate3Terminator::Return(nil, origin))])],
+	)
+end
+
+def hash_recovery_program(name: String): Result<Boolean, String>
+	root := Process.environment("TYPE_RB_NATIVE_ROOT")
+	reference := Process.environment("TYPE_RB_NATIVE_REFERENCE_TRB")
+	qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+	if root == nil
+		return Result<Boolean, String>::Ok(false)
+	end
+	if reference == nil
+		return Result<Boolean, String>::Ok(false)
+	end
+	if qbe == nil
+		return Result<Boolean, String>::Ok(false)
+	end
+	workspace := try allocate_compiler_recovery_workspace("")
+	puts("Hash recovery workspace retained for inspection: " + workspace)
+	source := case native_read_text(root + "/fixtures/gate3/programs/" + name + ".trb")
+	when Result::Ok(text)
+		text
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.message)
+	end
+	source_path := workspace + "/" + name + ".trb"
+	case native_write_text(source_path, source)
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.message)
+	end
+	snapshot := case Process.run(reference, ["compiler", "bootstrap-snapshot", "--snapshot-version", "4", source_path])
+	when Result::Ok(process)
+		if !process.success
+			return Result<Boolean, String>::Err(process.stderr)
+		end
+		process.stdout
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.message)
+	end
+	native_module := case decode_gate3_snapshot(snapshot)
+	when Result::Ok(value)
+		value
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.path + ": " + error.message)
+	end
+	# Collection after every Hash write exercises aliases retained through roots.
+	mut functions := native_module.functions
+	mut function_index := 0
+	while function_index < functions.size()
+		function := functions[function_index]
+		mut blocks := function.blocks
+		mut block_index := 0
+		while block_index < blocks.size()
+			block := blocks[block_index]
+			mut instructions: Array<Gate3Instruction> := []
+			mut index := 0
+			while index < block.instructions.size()
+				instruction := block.instructions[index]
+				instructions.push(instruction)
+				case instruction
+				when Gate3Instruction::HashSet(_type, _hash, _key, _value, origin)
+					instructions.push(Gate3Instruction::RuntimeCollect(origin))
+				else
+				end
+				index += 1
+			end
+			blocks[block_index] = Gate3Block.new(id: block.id, parameters: block.parameters, origin: block.origin, instructions: instructions, terminator: block.terminator)
+			block_index += 1
+		end
+		function_index += 1
+	end
+	report := case build_gate3_executable(native_module, qbe, "/usr/bin/cc", workspace, workspace + "/" + name)
+	when Result::Ok(value)
+		value
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.phase + ": " + error.message + " " + error.stderr)
+	end
+	case Process.run(report.output_path, [])
+	when Result::Ok(process)
+		if name == "hash-missing"
+			expect(process.status).to_equal(2)
+			expect(process.stdout).to_equal("")
+			expect(process.stderr).to_equal("panic: Hash key is missing\n")
+		else
+			expect(process.success).to_be_true()
+			expect(process.stdout).to_equal("hash-index-ok\n")
+			expect(process.stderr).to_equal("")
+		end
+	when Result::Err(error)
+		return Result<Boolean, String>::Err(error.message)
+	end
+	return Result<Boolean, String>::Ok(true)
+end
+
+describe("Hash snapshot recovery") do
+	test("rejects malformed types, entry counts and operands") do
+		origin := SourceOrigin.new(source_id: "main", start_line: 1, start_column: 1, end_line: 1, end_column: 8)
+		cases := [
+			Gate3Instruction::HashConstruct("bad", "Hash<String, Integer>", ["key"], [], origin),
+			Gate3Instruction::HashGet("bad", "String", "table", "key", origin),
+			Gate3Instruction::HashGet("bad", "Hash<String, Integer>", "value", "key", origin),
+			Gate3Instruction::HashGet("bad", "Hash<String, Integer>", "table", "value", origin),
+			Gate3Instruction::HashContains("bad", "Hash<String, Integer>", "table", "undefined", origin),
+			Gate3Instruction::HashSet("Hash<String, Integer>", "table", "key", "key", origin),
+		]
+		mut index := 0
+		while index < cases.size()
+			case verify_gate3_mir(hash_recovery_module(cases[index]))
+			when Result::Ok(_value)
+				expect(false).to_be_true()
+			when Result::Err(_error)
+			end
+			index += 1
+		end
+	end
+
+	test("rejects a forged String key layout") do
+		origin := SourceOrigin.new(source_id: "main", start_line: 1, start_column: 1, end_line: 1, end_column: 8)
+		native_module := hash_recovery_module(Gate3Instruction::HashGet("found", "Hash<String, Integer>", "table", "key", origin))
+		mut types := native_module.types
+		types[0] = Gate3TypeDefinition::Record("String", [])
+		case verify_gate3_mir(native_module)
+		when Result::Ok(_value)
+			expect(false).to_be_true()
+		when Result::Err(_error)
+		end
+	end
+
+	test("preserves lookup, overwrite, aliases, closure capture and collection") do
+		case hash_recovery_program("hash-index")
+		when Result::Ok(_verified)
+		when Result::Err(error)
+			puts(error)
+			expect(false).to_be_true()
+		end
+	end
+
+	test("fails required lookup when a key is missing") do
+		case hash_recovery_program("hash-missing")
+		when Result::Ok(_verified)
+		when Result::Err(error)
+			puts(error)
+			expect(false).to_be_true()
+		end
+	end
+end

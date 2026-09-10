@@ -163,41 +163,37 @@ no runtime speedup or benchmark-value change is claimed here.
 `bootstrap-seed-2026-09-10-hash` from the accepted compiler closure at
 `8a6d9ff73b14a97bca1b010ddaad6a38972b5373` (PR #401). Reviewed preparation
 observers precede dispatch; the run records its exact main revision and closure.
-The predecessor is the verified record Array release below. Only the new tag
+The predecessor is the verified record Array release recorded in the history below. Only the new tag
 uses Decision 0033 manifest ceilings: 400,000 Darwin arm64, 370,000 Linux arm64
 and 770,000 combined bytes. Every historical release retains its identities
 and source-era bounds. Generation, retained-observation, corpus, process and
 attestation checks remain unchanged; preparation checks ordinary Hash fixtures.
 
-Preparation, publication, actual-asset verification and the separate checkout
-pin handoff are pending. Compiler self-use also requires matching snapshot
-recovery and the accepted-source Linux amd64 setup bridge. This registration
-does not switch checkout pins or claim a compiler/application speedup.
+Preparation, immutable publication and fresh actual-asset verification passed.
+PR #405 supplies the separate checkout pin handoff, matching snapshot recovery
+and the accepted-source Linux amd64 setup bridge. Compiler Hash self-use follows
+this prerequisite; no compiler/application speedup is claimed by the handoff.
 
 ## Current verified checkout seed
 
-Checkout builds pin [bootstrap-seed-2026-09-09-record-arrays](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-09-09-record-arrays),
+Checkout builds pin [bootstrap-seed-2026-09-10-hash](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-09-10-hash),
 an immutable experimental prerelease from accepted source
-`db48f64f6c3f6ce3fb904b2d28c95fa46522ebfc`. Its ordinary compiler implementation
-is unchanged from accepted PR #352; PR #355 supplied matching snapshot recovery
-and reviewed preparation observers.
+`79f699e9245f79131646ebf43207f6b7526c4f68`. Its compiler closure is unchanged
+from accepted PR #401; PR #404 supplied reviewed preparation observers.
 
-- [Preparation and attestations](https://github.com/type-rb/type-rb-native/actions/runs/34254120749) passed both arm64 targets and all 28 retained observations. All four original assets were authenticated against the exact source and hosted preparation workflow before publication.
-- [Fresh published-asset verification](https://github.com/type-rb/type-rb-native/actions/runs/34255257731) passed both targets, including equality of each downloaded seed with B1/B2/B3/B4, the corpus, all 42 retained generation observations and ordinary Linux process boundaries.
-- Darwin compiler: 365,768 bytes, SHA-256 `a95b8758af7d45ccbd40100cf00e15f2783a381b66a253a21fe683c06968e9bd` (asset 550926393).
-- Linux compiler: 327,744 bytes, SHA-256 `b77758a43f9341880ee2d78602ac131d3e6580808136df36a2de60e6dd633560` (asset 550926386).
-- Combined: 693,512 bytes, below the registered 694,000-byte bound.
-- Manifest: SHA-256 `67a6d9eb4a5449404fc513e7865be431d09fd158b14ecaede81e035abdd313f7` (asset 550926392).
-- Checksum index: SHA-256 `703aadcf69a7f476bded37cee308257e5232c242d1d8f5e519b51a128d1cd2e7` (asset 550926390).
+- [Preparation and attestations](https://github.com/type-rb/type-rb-native/actions/runs/34495976952) passed both arm64 targets and all 28 retained observations. All four original assets were authenticated against the exact source and hosted preparation workflow before publication.
+- [Fresh published-asset verification](https://github.com/type-rb/type-rb-native/actions/runs/34496523509) passed both targets, including equality of each downloaded seed with B1/B2/B3/B4, the corpus, all 42 retained generation observations and ordinary Linux process boundaries.
+- Darwin compiler: 398,888 bytes, SHA-256 `13d2b494b5b4864f0f7c823a5c9e2c38850e865725ed8cef87fd487d1358185d` (asset 555285505).
+- Linux compiler: 368,936 bytes, SHA-256 `6bae5730fc543c9dc8609a19d4884064b8d363ca038fe75a5b74465eb8b3c7a5` (asset 555285497).
+- Combined: 767,824 bytes, below the registered 770,000-byte bound.
+- Manifest: SHA-256 `0fc38b20b2f5a4e0bdd7f15c33b1bac3cb66406d72b54006fcb8a518e5f80ee0` (asset 555285503).
+- Checksum index: SHA-256 `a0e3543ae97f6a27f62e8c4cd6c2ce135a22493ad7f7ba3005f8484e8d8be2f4` (asset 555285504).
 
-The immutable [Boolean Array predecessor](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-09-08-boolean-arrays)
-remains at `e99df93e81c36c765ead99526fe58b2c2a978ced`. Its exact identities and
-earlier predecessor history remain in the
-[source-era handoff record](https://github.com/type-rb/type-rb-native/blob/db48f64f6c3f6ce3fb904b2d28c95fa46522ebfc/docs/bootstrap-seed-updates.md#current-verified-checkout-seed).
-Its [preparation](https://github.com/type-rb/type-rb-native/actions/runs/34218109921)
-and [published verification](https://github.com/type-rb/type-rb-native/actions/runs/34218869691)
-remain the authorities for that historical release. Every registered tag keeps
-its exact predecessor and size contracts.
+The immutable [record Array predecessor](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-09-09-record-arrays)
+remains at `db48f64f6c3f6ce3fb904b2d28c95fa46522ebfc`. Its exact identities,
+preparation/verification runs and earlier predecessor history remain in the
+[source-era handoff record](https://github.com/type-rb/type-rb-native/blob/79f699e9245f79131646ebf43207f6b7526c4f68/docs/bootstrap-seed-updates.md#current-verified-checkout-seed).
+Every historical tag retains its exact predecessor and size contracts.
 
 Compiler binaries and detailed run artifacts remain outside Git. This compact
 handoff record does not introduce another retained benchmark result directory
@@ -206,7 +202,7 @@ or claim a runtime speedup.
 ## Active CI consumers versus historical recovery
 
 Current compiler-cost, worker-memory, formal runtime/build benchmark and Linux
-arm64 regression workflows use the exact record Array seed and the shared strict
+arm64 regression workflows use the exact Hash seed and the shared strict
 download/authentication helper. Their manual seed input must match the recorded
 source revision; an older or unknown tag fails rather than bypassing provenance.
 Changing a setup seed does not move a frozen benchmark baseline or change any
@@ -219,7 +215,8 @@ accepted loop-transfer source `4e1d0b4aee97b9a5bd73a98f918b31d47985da25`; the ne
 bridge must accept the loop-transfer fixture. It then builds exact accepted
 Boolean-capable source `57cb41ad6be91716e31fa555ed8ea8c8ce7a5f51` and checks the
 Boolean Array fixture. It then builds exact accepted record-capable source
-`566d00d67172460df0f57dff6d5fe03db3b67cdc` and checks the record Array fixture
+`566d00d67172460df0f57dff6d5fe03db3b67cdc` and checks the record Array fixture. It then builds accepted Hash source
+`8a6d9ff73b14a97bca1b010ddaad6a38972b5373` and checks the Hash fixture
 before reading **candidate** source. The subsequent
 candidate-runtime transition stays separate so a future runtime change still
 precedes ordinary B2/B3/B4. These ordinary and measured generations remain the
@@ -230,8 +227,8 @@ compiler/QBE identities, emission/QBE/link traces and capability-check output
 are retained separately. It creates neither a new root asset nor Go recovery.
 The arm64 comparison authenticates its verified seed independently. Optional
 source arguments accept only their exact registered revisions. The Boolean
-source requires both earlier sources, and the record source requires all three;
-omitted later arguments retain the
+source requires both earlier sources, the record source requires all three,
+and the Hash source requires all four; omitted later arguments retain the
 earlier setup shapes. Omitting every source argument retains the historical
 direct-current-source setup.
 

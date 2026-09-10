@@ -26,6 +26,7 @@ enum Gate3TypeDefinition
 	Record(type_id: String, fields: Array<Gate3Field>)
 	Tagged(type_id: String, variants: Array<Gate3Variant>)
 	String(type_id: String)
+	Hash(type_id: String)
 	Array(type_id: String, element_type: Gate3ValueType)
 	Function(type_id: String, parameter_types: Array<Gate3ValueType>, result_type: Gate3ValueType?)
 end
@@ -34,6 +35,7 @@ enum Gate3LayoutKind
 	Record
 	Tagged
 	String
+	Hash
 	Array
 	Function
 end
@@ -160,6 +162,19 @@ def _gate3_compute_layout(
 		return _gate3_tagged_layout(definitions, type_id, variants, next_visiting, path)
 	when Gate3TypeDefinition::String(_id)
 		return _gate3_managed_reference_layout(type_id, Gate3LayoutKind::String)
+	when Gate3TypeDefinition::Hash(_id)
+		if type_id != "Hash<String, Integer>"
+			return Result<Gate3Layout, Diagnostic>::Err(boundary_diagnostic("TRBN0004", path, "unsupported Hash type"))
+		end
+		key_definition := _gate3_definition(definitions, "String")
+		if key_definition != nil
+			case key_definition
+			when Gate3TypeDefinition::String(_key_id)
+				return _gate3_managed_reference_layout(type_id, Gate3LayoutKind::Hash)
+			else
+			end
+		end
+		return Result<Gate3Layout, Diagnostic>::Err(boundary_diagnostic("TRBN0004", path + "/key", "Hash requires the canonical String type"))
 	when Gate3TypeDefinition::Array(_id, element_type)
 		try _gate3_verify_storable_type(definitions, element_type, path + "/element")
 		try _gate3_verify_array_element(definitions, element_type, path + "/element")
@@ -518,6 +533,8 @@ def _gate3_definition_id(definition: Gate3TypeDefinition): String
 	when Gate3TypeDefinition::Record(type_id, _fields)
 		return type_id
 	when Gate3TypeDefinition::Tagged(type_id, _variants)
+		return type_id
+	when Gate3TypeDefinition::Hash(type_id)
 		return type_id
 	when Gate3TypeDefinition::String(type_id)
 		return type_id
