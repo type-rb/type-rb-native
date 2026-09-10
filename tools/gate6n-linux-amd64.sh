@@ -3,8 +3,8 @@
 set -eu
 
 PRE_IMPLEMENTATION_REVISION=266c996668a4c3e0ad6eb833ca646b73ca7e56e1
-TYPE_RB_REVISION=6cbd4025545d44a1de211335f9197772077bb478
-TYPE_RB_VERSION=0.4.6-dev
+TYPE_RB_REVISION=bae19032aa1bb7b263bc827d02606edc6e981c52
+TYPE_RB_VERSION=0.4.7-dev
 ROOT_QBE_SIZE=658639
 ROOT_QBE_SHA256=62db3c31527a670c3050051a9fa27bf142b6c5deaab81ef8234104bd467aa95a
 PROFILE=linux-amd64-v0
@@ -15,7 +15,7 @@ APPLICATION_RUNTIME_ELAPSED_REPETITIONS=32
 usage() {
 	cat >&2 <<'EOF'
 usage: gate6n-linux-amd64.sh CANDIDATE_ROOT ROOT_QBE QBE CC
-       REFERENCE_TRB GO WORKSPACE EVIDENCE OUTPUT_COMPILER [SEED_SOURCE_ROOT [LOOP_SOURCE_ROOT [BOOLEAN_SOURCE_ROOT [RECORD_SOURCE_ROOT]]]]
+       REFERENCE_TRB GO WORKSPACE EVIDENCE OUTPUT_COMPILER [SEED_SOURCE_ROOT [LOOP_SOURCE_ROOT [BOOLEAN_SOURCE_ROOT [RECORD_SOURCE_ROOT [HASH_SOURCE_ROOT]]]]]
 EOF
 	exit 64
 }
@@ -166,7 +166,7 @@ require_go_build() {
 	test -x "$output" || fail "$label did not publish an executable"
 }
 
-test "$#" -eq 9 || test "$#" -eq 10 || test "$#" -eq 11 || test "$#" -eq 12 || test "$#" -eq 13 || usage
+test "$#" -eq 9 || test "$#" -eq 10 || test "$#" -eq 11 || test "$#" -eq 12 || test "$#" -eq 13 || test "$#" -eq 14 || usage
 
 candidate_root=$1
 root_qbe=$2
@@ -181,6 +181,7 @@ seed_source_root=${10:-$candidate_root}
 loop_source_root=${11:-}
 boolean_source_root=${12:-}
 record_source_root=${13:-}
+hash_source_root=${14:-}
 
 script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 verifier_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
@@ -1010,6 +1011,15 @@ if test -n "$record_source_root"; then
 	record_entry=$record_source_root/compiler/src/compiler.trb
 	test -f "$record_entry" || fail "record compiler entry is missing"
 fi
+hash_entry=
+if test -n "$hash_source_root"; then
+	test -n "$record_source_root" || fail "Hash source requires the accepted record Array source"
+	require_clean_revision "$hash_source_root" "accepted Hash source"
+	test "$(git -C "$hash_source_root" rev-parse HEAD)" = \
+		8a6d9ff73b14a97bca1b010ddaad6a38972b5373 || fail "Hash source revision differs"
+	hash_entry=$hash_source_root/compiler/src/compiler.trb
+	test -f "$hash_entry" || fail "Hash compiler entry is missing"
+fi
 portable_config=$candidate_root/corpus/gate6m/portable-entry/trbconfig.jsonc
 portable_source=$candidate_root/corpus/gate6m/portable-entry/src/main.trb
 failure_config=$candidate_root/corpus/gate6m/runtime-failures/trbconfig.jsonc
@@ -1226,6 +1236,41 @@ if test -n "$record_source_root"; then
 	runtime_seed=$record_transition
 fi
 
+if test -n "$hash_source_root"; then
+	mkdir -p "$workspace/setup/hash-syntax"
+	hash_qbe=$workspace/setup/hash-syntax/compiler.ssa
+	hash_assembly=$workspace/setup/hash-syntax/compiler.s
+	hash_transition=$workspace/setup/hash-syntax/compiler
+	strace -f -e trace=process -o "$evidence/setup/hash-emit-process.trace" \
+		"$record_transition" emit-qbe "$hash_entry" \
+		> "$hash_qbe" 2> "$evidence/setup/hash-emit.stderr" || fail "hash source emission failed"
+	require_empty_file "$evidence/setup/hash-emit.stderr" "hash source emission wrote stderr"
+	test -s "$hash_qbe" || fail "hash source QBE is empty"
+	require_forbidden_processes_absent "$evidence/setup/hash-emit-process.trace" "hash source emission"
+	strace -f -e trace=process -o "$evidence/setup/hash-qbe-process.trace" \
+		"$qbe" -t amd64_sysv -o "$hash_assembly" "$hash_qbe" \
+		> "$evidence/setup/hash-qbe.stdout" 2> "$evidence/setup/hash-qbe.stderr" || fail "hash QBE translation failed"
+	require_empty_file "$evidence/setup/hash-qbe.stdout" "hash QBE translation wrote stdout"
+	require_empty_file "$evidence/setup/hash-qbe.stderr" "hash QBE translation wrote stderr"
+	test -s "$hash_assembly" || fail "hash assembly is empty"
+	strace -f -e trace=process -o "$evidence/setup/hash-link-process.trace" \
+		"$cc" -xassembler "$hash_assembly" -fuse-ld=lld \
+		-Wl,--gc-sections,--strip-all -lm -o "$hash_transition" \
+		> "$evidence/setup/hash-link.stdout" 2> "$evidence/setup/hash-link.stderr" || fail "hash transition link failed"
+	require_empty_file "$evidence/setup/hash-link.stdout" "hash transition link wrote stdout"
+	require_empty_file "$evidence/setup/hash-link.stderr" "hash transition link wrote stderr"
+	test -x "$hash_transition" || fail "hash transition compiler is missing"
+	require_tool_observed "$evidence/setup/hash-link-process.trace" 'execve\("[^"]*/ld\.lld"' "hash transition LLD"
+	strace -f -e trace=process -o "$evidence/setup/hash-check-process.trace" \
+		"$hash_transition" check "$candidate_root/compiler/conformance/valid/hash-values.trb" \
+		> "$evidence/setup/hash-check.stdout" 2> "$evidence/setup/hash-check.stderr" || fail "Hash bridge rejected Hash values"
+	printf 'ok\n' > "$evidence/setup/hash-check.expected"
+	cmp "$evidence/setup/hash-check.expected" "$evidence/setup/hash-check.stdout" > /dev/null || fail "hash check stdout differs"
+	require_empty_file "$evidence/setup/hash-check.stderr" "hash check wrote stderr"
+	require_forbidden_processes_absent "$evidence/setup/hash-check-process.trace" "Hash check"
+	runtime_seed=$hash_transition
+fi
+
 strace -f -e trace=process -o "$evidence/setup/current-runtime-emit-process.trace" \
 	"$runtime_seed" emit-qbe "$compiler_entry" \
 	> "$runtime_qbe" \
@@ -1285,6 +1330,12 @@ require_tool_observed "$evidence/setup/current-runtime-link-process.trace" 'exec
 		grep execve "$evidence/setup/record-link-process.trace"
 		grep execve "$evidence/setup/record-check-process.trace"
 	fi
+	if test -n "$hash_source_root"; then
+		grep execve "$evidence/setup/hash-emit-process.trace"
+		grep execve "$evidence/setup/hash-qbe-process.trace"
+		grep execve "$evidence/setup/hash-link-process.trace"
+		grep execve "$evidence/setup/hash-check-process.trace"
+	fi
 	grep execve "$evidence/setup/current-runtime-emit-process.trace"
 	grep execve "$evidence/setup/current-runtime-qbe-process.trace"
 	grep execve "$evidence/setup/current-runtime-link-process.trace"
@@ -1323,6 +1374,14 @@ require_tool_observed "$evidence/setup/current-runtime-link-process.trace" 'exec
 		printf 'record_transition_qbe_sha256=%s\n' "$(sha256 "$record_qbe")"
 		printf 'record_transition_size=%s\n' "$(file_size "$record_transition")"
 		printf 'record_transition_sha256=%s\n' "$(sha256 "$record_transition")"
+	fi
+	if test -n "$hash_source_root"; then
+		printf 'hash_source_revision=%s\n' "$(git -C "$hash_source_root" rev-parse HEAD)"
+		printf 'hash_source_entry_sha256=%s\n' "$(sha256 "$hash_entry")"
+		printf 'hash_transition_qbe_size=%s\n' "$(file_size "$hash_qbe")"
+		printf 'hash_transition_qbe_sha256=%s\n' "$(sha256 "$hash_qbe")"
+		printf 'hash_transition_size=%s\n' "$(file_size "$hash_transition")"
+		printf 'hash_transition_sha256=%s\n' "$(sha256 "$hash_transition")"
 	fi
 	printf 'current_runtime_qbe_size=%s\n' "$(file_size "$runtime_qbe")"
 	printf 'current_runtime_qbe_sha256=%s\n' "$(sha256 "$runtime_qbe")"

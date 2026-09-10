@@ -1,6 +1,6 @@
 # Ordinary Hash implementation
 
-Status: implementation candidate for [issue #400](https://github.com/type-rb/type-rb-native/issues/400).
+Status: ordinary implementation accepted in [PR #401](https://github.com/type-rb/type-rb-native/pull/401).
 The separate [Hash cost decision](decisions/0033-hash-compiler-budget.md)
 records the acceptance budget and required full validation. This subset is not
 a claim of complete TypeRB library support.
@@ -98,3 +98,29 @@ records and Arrays are self-hosted using the accepted record-Array seed. Using
 Hash collections in compiler implementation source awaits the accepted feature
 and the separate verified seed handoff. Existing unaccepted Array optimization
 work is not a prerequisite or an implicit dependency.
+
+## Compiler self-use recovery boundary
+
+[Issue #403](https://github.com/type-rb/type-rb-native/issues/403) establishes
+the prerequisites for replacing compiler name indexes. The reference pin
+`bae19032aa1bb7b263bc827d02606edc6e981c52` supplies internal snapshot-v4 data
+for `Hash<String, Integer>` construction, indexed assignment, required lookup
+and key presence. It retains source origins and receiver/key/RHS order, with
+explicit rejection of other Hash shapes and operations in this recovery path.
+Ordinary Hash coverage remains wider.
+
+The recovery MIR checks canonical key layout, Hash receiver identity, operand
+types, entry-list arity and source origins. `recovery_hash_runtime.trb` owns
+only this snapshot ABI's storage: content-hashed String buckets, Integer values,
+geometric growth and the existing precise collector's root frames. It is emitted
+only for snapshots containing Hash values; existing snapshots keep their output.
+Tests exercise empty and duplicate keys, record/closure aliases, growth, forced
+collection, missing-key failure and malformed metadata.
+
+Linux amd64 keeps the immutable initial root and existing setup bridges, then
+builds exact accepted Hash source `8a6d9ff73b14a97bca1b010ddaad6a38972b5373`
+before reading candidate source. Its process traces, source/compiler identities
+and capability probe are setup-only. Ordinary candidate B2/B3/B4 and all existing
+bounds remain unchanged. This neither republishes an old seed nor substitutes
+snapshot recovery for the ordinary chain. Compiler Hash self-use still awaits
+the separate verified checkout seed handoff.

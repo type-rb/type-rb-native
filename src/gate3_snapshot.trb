@@ -150,6 +150,16 @@ def _gate3_decode_type_definition(value: JSON::Value, path: String): Result<Gate
 		end
 		return Result<Gate3TypeDefinition, Diagnostic>::Ok(Gate3TypeDefinition::String(type_id))
 	end
+	if kind == "hash"
+		fields := try strict_object(value, path, ["kind", "id", "key", "element"])
+		type_id := try required_string(fields, "id", path, true)
+		key := try required_string(fields, "key", path, true)
+		element := try required_string(fields, "element", path, true)
+		if type_id != "Hash<String, Integer>" || key != "String" || element != "Integer"
+			return Result<Gate3TypeDefinition, Diagnostic>::Err(boundary_diagnostic("TRBN0004", path, "unsupported Hash type"))
+		end
+		return Result<Gate3TypeDefinition, Diagnostic>::Ok(Gate3TypeDefinition::Hash(type_id))
+	end
 	if kind == "array"
 		fields := try strict_object(value, path, ["kind", "id", "element"])
 		return Result<Gate3TypeDefinition, Diagnostic>::Ok(
@@ -599,6 +609,46 @@ def _gate3_decode_instruction(
 				try decode_origin(try required_field(fields, "origin", path), path + "/origin"),
 			)
 		)
+	end
+	if op == "hash_construct"
+		fields := try strict_object(value, path, ["op", "result", "type", "keys", "values", "origin"])
+		return Result<Gate3Instruction, Diagnostic>::Ok(Gate3Instruction::HashConstruct(
+				try required_string(fields, "result", path, true),
+				try required_string(fields, "type", path, true),
+				try _gate3_required_string_array_with_limit(fields, "keys", path, max_array_arguments),
+				try _gate3_required_string_array_with_limit(fields, "values", path, max_array_arguments),
+				try decode_origin(try required_field(fields, "origin", path), path + "/origin"),
+			))
+	end
+	if op == "hash_get"
+		fields := try strict_object(value, path, ["op", "result", "type", "hash", "key", "origin"])
+		return Result<Gate3Instruction, Diagnostic>::Ok(Gate3Instruction::HashGet(
+				try required_string(fields, "result", path, true),
+				try required_string(fields, "type", path, true),
+				try required_string(fields, "hash", path, true),
+				try required_string(fields, "key", path, true),
+				try decode_origin(try required_field(fields, "origin", path), path + "/origin"),
+			))
+	end
+	if op == "hash_contains"
+		fields := try strict_object(value, path, ["op", "result", "type", "hash", "key", "origin"])
+		return Result<Gate3Instruction, Diagnostic>::Ok(Gate3Instruction::HashContains(
+				try required_string(fields, "result", path, true),
+				try required_string(fields, "type", path, true),
+				try required_string(fields, "hash", path, true),
+				try required_string(fields, "key", path, true),
+				try decode_origin(try required_field(fields, "origin", path), path + "/origin"),
+			))
+	end
+	if op == "hash_set"
+		fields := try strict_object(value, path, ["op", "type", "hash", "key", "value", "origin"])
+		return Result<Gate3Instruction, Diagnostic>::Ok(Gate3Instruction::HashSet(
+				try required_string(fields, "type", path, true),
+				try required_string(fields, "hash", path, true),
+				try required_string(fields, "key", path, true),
+				try required_string(fields, "value", path, true),
+				try decode_origin(try required_field(fields, "origin", path), path + "/origin"),
+			))
 	end
 	if op == "array_construct"
 		fields := try strict_object(value, path, ["op", "result", "type", "arguments", "origin"])

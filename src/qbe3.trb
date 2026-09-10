@@ -1,3 +1,4 @@
+import { emit_recovery_hash_runtime } from recovery_hash_runtime
 import { Diagnostic, boundary_diagnostic } from diagnostic
 import { ComparisonOperator, FloatBinaryOperator, Gate1Instruction, IntegerBinaryOperator, ScalarType } from gate1_mir
 import { Gate3FieldLayout, Gate3Layout, Gate3TypeDefinition, Gate3ValueType, Gate3VariantLayout, compute_gate3_layout, gate3_type_definition, gate3_value_is_managed } from gate3_layout
@@ -134,6 +135,9 @@ def _emit_gate3_qbe(
 	try _qbe3_emit_descriptors(native_module, writer)
 	_qbe3_emit_runtime(writer)
 	emit_gate3_runtime(writer)
+	if gate3_type_definition(native_module.types, "Hash<String, Integer>") != nil
+		emit_recovery_hash_runtime(writer)
+	end
 	if gate4_bootstrap
 		_qbe3_emit_gate4_bootstrap_runtime(writer)
 	end
@@ -372,6 +376,7 @@ def _qbe3_emit_descriptors(
 		definition := native_module.types[index]
 		symbol := _qbe3_type_descriptor(index)
 		case definition
+		when Gate3TypeDefinition::Hash(_type_id)
 		when Gate3TypeDefinition::String(_type_id)
 		when Gate3TypeDefinition::Array(_type_id, element_type)
 			mut managed := "0"
@@ -935,6 +940,14 @@ def _qbe3_instruction_type(
 		return Result<Gate3ValueType, Diagnostic>::Ok(Gate3ValueType::Aggregate("String"))
 	when Gate3Instruction::WriteString(_value, _newline, _origin)
 		return Result<Gate3ValueType, Diagnostic>::Ok(Gate3ValueType::Scalar(ScalarType::Void))
+	when Gate3Instruction::HashConstruct(_result, type_id, _keys, _values, _origin)
+		return Result<Gate3ValueType, Diagnostic>::Ok(Gate3ValueType::Aggregate(type_id))
+	when Gate3Instruction::HashGet(_result, _type_id, _hash, _key, _origin)
+		return Result<Gate3ValueType, Diagnostic>::Ok(Gate3ValueType::Scalar(ScalarType::Integer))
+	when Gate3Instruction::HashContains(_result, _type_id, _hash, _key, _origin)
+		return Result<Gate3ValueType, Diagnostic>::Ok(Gate3ValueType::Scalar(ScalarType::Boolean))
+	when Gate3Instruction::HashSet(_type_id, _hash, _key, _value, _origin)
+		return Result<Gate3ValueType, Diagnostic>::Ok(Gate3ValueType::Scalar(ScalarType::Void))
 	when Gate3Instruction::ArrayConstruct(_result, type_id, _arguments, _origin)
 		return Result<Gate3ValueType, Diagnostic>::Ok(Gate3ValueType::Aggregate(type_id))
 	when Gate3Instruction::ArraySize(_result, _type_id, _array, _origin)
@@ -1267,6 +1280,24 @@ def _qbe3_emit_instruction(
 			newline_value = "1"
 		end
 		_qbe_line(writer, "\tcall $trbn_write_string(l " + context.values.fetch(value) + ", w " + newline_value + ")")
+	when Gate3Instruction::HashConstruct(result, _type_id, entry_keys, entry_values, origin)
+		_qbe3_emit_origin(native_module, origin, writer)
+		_qbe_line(writer, "\t" + context.values.fetch(result) + " =l call $trbn_hash_new(l 8)")
+		_qbe_line(writer, "\tstorel " + context.values.fetch(result) + ", " + context.root_slots.fetch(result))
+		mut index := 0
+		while index < entry_keys.size()
+			_qbe_line(writer, "\tcall $trbn_hash_set(l " + context.values.fetch(result) + ", l " + context.values.fetch(entry_keys[index]) + ", l " + context.values.fetch(entry_values[index]) + ")")
+			index += 1
+		end
+	when Gate3Instruction::HashGet(result, _type_id, hash, key, origin)
+		_qbe3_emit_origin(native_module, origin, writer)
+		_qbe_line(writer, "\t" + context.values.fetch(result) + " =l call $trbn_hash_get(l " + context.values.fetch(hash) + ", l " + context.values.fetch(key) + ")")
+	when Gate3Instruction::HashContains(result, _type_id, hash, key, origin)
+		_qbe3_emit_origin(native_module, origin, writer)
+		_qbe_line(writer, "\t" + context.values.fetch(result) + " =w call $trbn_hash_contains(l " + context.values.fetch(hash) + ", l " + context.values.fetch(key) + ")")
+	when Gate3Instruction::HashSet(_type_id, hash, key, value, origin)
+		_qbe3_emit_origin(native_module, origin, writer)
+		_qbe_line(writer, "\tcall $trbn_hash_set(l " + context.values.fetch(hash) + ", l " + context.values.fetch(key) + ", l " + context.values.fetch(value) + ")")
 	when Gate3Instruction::ArrayConstruct(result, type_id, arguments, origin)
 		_qbe3_emit_origin(native_module, origin, writer)
 		descriptor := _qbe3_type_descriptor(_qbe3_type_index(native_module.types, type_id))
@@ -2095,6 +2126,8 @@ def _qbe3_type_index(definitions: Array<Gate3TypeDefinition>, type_id: String): 
 		when Gate3TypeDefinition::Record(id, _fields)
 			candidate = id
 		when Gate3TypeDefinition::Tagged(id, _variants)
+			candidate = id
+		when Gate3TypeDefinition::Hash(id)
 			candidate = id
 		when Gate3TypeDefinition::String(id)
 			candidate = id
