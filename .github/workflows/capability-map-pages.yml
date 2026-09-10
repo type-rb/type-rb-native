@@ -4,16 +4,19 @@ on:
   push:
     branches:
       - main
-    paths:
-      - .github/workflows/capability-map-pages.yml
-      - docs/capabilities/**
-      - tools/capability-map-check.mjs
-      - tools/benchmark-pages-data.mjs
-      - tools/benchmark-pages-check.mjs
   workflow_dispatch:
+  workflow_run:
+    workflows: [Daily performance snapshot]
+    types: [completed]
+    branches: [main]
 
 permissions:
   contents: read
+  actions: read
+
+concurrency:
+  group: capability-map-pages
+  cancel-in-progress: false
 
 jobs:
   verify:
@@ -21,6 +24,9 @@ jobs:
     steps:
       - name: Check out TypeRB Native
         uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
 
       - name: Check the capability catalog
         run: node tools/capability-map-check.mjs
@@ -30,6 +36,16 @@ jobs:
           node tools/benchmark-pages-data.mjs --check
           node tools/benchmark-pages-check.mjs
 
+      - name: Compose the latest daily data without committing generated measurements
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRIGGER_RUN_ID: ${{ github.event.workflow_run.id }}
+          TRIGGER_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+        run: |
+          python3 tools/daily-performance/state.py restore --state "$RUNNER_TEMP/daily-state.json"
+          python3 tools/daily-performance/state.py site --state "$RUNNER_TEMP/daily-state.json" \
+            --output docs/capabilities/benchmarks/daily-state.json
+
       - name: Upload the GitHub Pages artifact
         uses: actions/upload-pages-artifact@v5
         with:
@@ -37,8 +53,8 @@ jobs:
 
   deploy:
     # PR verification belongs to the required documentation authority. A main push
-    # publishes automatically, while workflow_dispatch can redeploy the current
-    # committed snapshot without rerunning any formal benchmark.
+    # refreshes freshness metadata, while daily completion refreshes measurements.
+    # Neither event compiles a program or reruns a benchmark here.
     needs: verify
     runs-on: ubuntu-latest
     permissions:
