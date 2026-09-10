@@ -1,6 +1,20 @@
 # Current reference compatibility
 
-The current development pin is TypeRB `0.4.6-dev` at
+The development pin is TypeRB `0.4.7-dev` at
+`bae19032aa1bb7b263bc827d02606edc6e981c52`, the accepted
+[Hash snapshot-v4 extension](https://github.com/type-rb/type-rb/pull/668).
+It adds data-only String/Integer Hash construction, assignment, required lookup
+and key presence. Native recovery integration is tracked in
+[PR #405](https://github.com/type-rb/type-rb-native/pull/405); local focused
+execution verifies growth, forced collection, aliases, source effects and
+missing keys. Full hosted acceptance is pending. The existing compatibility
+manifest evidence pointer below remains the last completed source-era cohort
+until this integration's full acceptance is recorded. No historical observation
+is relabelled with the new pin.
+
+## Previous reference pin and retained authorities
+
+The previous development pin is TypeRB `0.4.6-dev` at
 `6cbd4025545d44a1de211335f9197772077bb478`, the merged
 [record Array snapshot extension](https://github.com/type-rb/type-rb/pull/663) and
 [recursive record registration correction](https://github.com/type-rb/type-rb/pull/664).
