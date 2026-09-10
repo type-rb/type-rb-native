@@ -570,6 +570,26 @@ def mir_array_headers_equal(left: Array<Integer>, right: Array<Integer>): Boolea
 	return true
 end
 
+# Resolve the live lexical declaration once for both header lifetime analyses.
+def mir_array_local_declaration(operations: Array<Gate4MirArrayOperation>, index: Integer): Integer
+	access := operations[index]
+	mut declaration := index - 1
+	while declaration >= 0
+		binding := operations[declaration]
+		if binding.kind == 3 && access.operand >= binding.operand
+			return - 1
+		end
+		if binding.kind == 2 && binding.operand == access.operand
+			if binding.origin >= access.origin
+				return - 1
+			end
+			return declaration
+		end
+		declaration -= 1
+	end
+	return - 1
+end
+
 # Header regions retain parameter declarations (kind 1: type 0 scalar,
 # 1 immutable Array, 2 mutable Array), local Array declarations
 # (2: local ordinal), scope exits (3: restored local count), parameter accesses
@@ -651,30 +671,11 @@ def gate4_mir_array_headers(operations: Array<Gate4MirArrayOperation>): MirArray
 			end
 			mir_array_header_select(selected, slot)
 		elsif kind == 5
-			mut declaration := index - 1
-			mut found := false
-			while declaration >= parameter_count
-				binding := operations[declaration]
-				if binding.kind == 3
-					if slot >= binding.operand
-						return MirArrayHeaderPlan.new(declarations: [], valid: false)
-					end
-				end
-				if binding.kind == 2
-					if binding.operand == slot
-						if binding.origin >= origin
-							return MirArrayHeaderPlan.new(declarations: [], valid: false)
-						end
-						mir_array_header_select(selected, declaration)
-						found = true
-						break
-					end
-				end
-				declaration -= 1
-			end
-			if !found
+			declaration := mir_array_local_declaration(operations, index)
+			if declaration < parameter_count
 				return MirArrayHeaderPlan.new(declarations: [], valid: false)
 			end
+			mir_array_header_select(selected, declaration)
 		elsif kind >= 7 && kind <= 12
 			if origin <= control_origin || slot < parameter_count
 				return MirArrayHeaderPlan.new(declarations: [], valid: false)
@@ -759,14 +760,7 @@ def mir_array_loop_headers(operations: Array<Gate4MirArrayOperation>): Array<Int
 				elsif operation.kind == 4 || operation.kind == 5
 					mut declaration := operation.operand
 					if operation.kind == 5
-						declaration = finish - 1
-						while declaration >= 0
-							binding := operations[declaration]
-							if binding.kind == 2 && binding.operand == operation.operand
-								break
-							end
-							declaration -= 1
-						end
+						declaration = mir_array_local_declaration(operations, finish)
 					end
 					if declaration >= 0 && declaration < start && operation.operand < operations[start].operand
 						mir_array_header_select(selected, declaration)
