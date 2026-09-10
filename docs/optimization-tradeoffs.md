@@ -36,6 +36,9 @@ The separately validated [scalar guard budget](decisions/0031-scalar-guard-compi
 retains its bounded range-analysis cost without changing those ratios.
 The separately validated [loop-local header budget](decisions/0032-loop-local-header-compiler-budget.md)
 retains verified loop-effect analysis under the same relative limits.
+The separately validated [Hash capability budget](decisions/0033-hash-compiler-budget.md)
+retains compact Hash support, with a one-time source-pinned compiler size and
+self-build allowance. Subsequent compiler changes use ordinary ratios again.
 A cost failure blocks ordinary acceptance, not necessarily
 further investigation. There is no general relaxed percentage or automatic
 conversion from an evaluation budget to a merge budget.

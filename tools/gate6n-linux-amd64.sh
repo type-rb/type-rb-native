@@ -7,7 +7,6 @@ TYPE_RB_REVISION=6cbd4025545d44a1de211335f9197772077bb478
 TYPE_RB_VERSION=0.4.6-dev
 ROOT_QBE_SIZE=658639
 ROOT_QBE_SHA256=62db3c31527a670c3050051a9fa27bf142b6c5deaab81ef8234104bd467aa95a
-MAX_COMPILER_SIZE=310000
 PROFILE=linux-amd64-v0
 RUNNER_IMAGE=ubuntu-24.04
 APPLICATION_BUILD_ELAPSED_REPETITIONS=8
@@ -185,6 +184,9 @@ record_source_root=${13:-}
 
 script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 verifier_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
+. "$script_directory/compiler-project.sh"
+. "$script_directory/native-mir-transition-policy.sh"
+MAX_COMPILER_SIZE=$(native_mir_target_compiler_limit "$PROFILE")
 external_recipe=$verifier_root/tools/gate6n-external-build.sh
 measurement_controller=$verifier_root/tools/gate6n-measure.py
 
