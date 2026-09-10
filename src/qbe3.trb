@@ -679,43 +679,52 @@ def _qbe3_context(
 		end
 		block_index += 1
 	end
+	# Resolve each parameter once and redirect every alias to the removed
+	# definition. Later passes only consider unresolved block parameters.
 	mut alias_pass := 0
-	while alias_pass < function.blocks.size()
+	mut changed := true
+	while alias_pass < function.blocks.size() && changed
+		changed = false
 		block_index = 0
 		while block_index < function.blocks.size()
 			block := function.blocks[block_index]
 			parameter_index = 0
 			while parameter_index < block.parameters.size()
 				parameter := block.parameters[parameter_index]
-				incoming := _qbe3_common_incoming_value(
-					function,
-					block.id,
-					parameter_index,
-					values.fetch(parameter.id),
-					values,
-				)
-				if !incoming.empty?()
-					case parameter.value_type
-					when Gate3ValueType::Scalar(_scalar)
-						values[parameter.id] = incoming
-						aliased_parameters[parameter.id] = true
-					when Gate3ValueType::Aggregate(_type_id)
-						if try gate3_value_is_managed(native_module.types, parameter.value_type)
-							incoming_root := _qbe3_common_incoming_root(
-								function,
-								block.id,
-								parameter_index,
-								root_slots.fetch(parameter.id),
-								root_slots,
-							)
-							if !incoming_root.empty?()
-								values[parameter.id] = incoming
-								root_slots[parameter.id] = incoming_root
-								aliased_parameters[parameter.id] = true
-							end
-						else
-							values[parameter.id] = incoming
+				if !aliased_parameters.key?(parameter.id)
+					incoming := _qbe3_common_incoming_value(
+						function,
+						block.id,
+						parameter_index,
+						values.fetch(parameter.id),
+						values,
+					)
+					if !incoming.empty?()
+						case parameter.value_type
+						when Gate3ValueType::Scalar(_scalar)
+							_qbe3_redirect_alias(values, values.fetch(parameter.id), incoming)
 							aliased_parameters[parameter.id] = true
+							changed = true
+						when Gate3ValueType::Aggregate(_type_id)
+							if try gate3_value_is_managed(native_module.types, parameter.value_type)
+								incoming_root := _qbe3_common_incoming_root(
+									function,
+									block.id,
+									parameter_index,
+									root_slots.fetch(parameter.id),
+									root_slots,
+								)
+								if !incoming_root.empty?()
+									_qbe3_redirect_alias(values, values.fetch(parameter.id), incoming)
+									_qbe3_redirect_alias(root_slots, root_slots.fetch(parameter.id), incoming_root)
+									aliased_parameters[parameter.id] = true
+									changed = true
+								end
+							else
+								_qbe3_redirect_alias(values, values.fetch(parameter.id), incoming)
+								aliased_parameters[parameter.id] = true
+								changed = true
+							end
 						end
 					end
 				end
@@ -737,6 +746,21 @@ def _qbe3_context(
 			root_count: next_root,
 		)
 	)
+end
+
+# Operand strings are shared by earlier aliases. Replacing only the current
+# parameter would leave references to a definition whose load is now omitted.
+def _qbe3_redirect_alias(mut values: Hash<String, String>, previous: String, replacement: String)
+	keys := values.keys()
+	mut index := 0
+	while index < keys.size()
+		key := keys[index]
+		if values.fetch(key) == previous
+			values[key] = replacement
+		end
+		index += 1
+	end
+	return
 end
 
 def _qbe3_common_incoming_value(

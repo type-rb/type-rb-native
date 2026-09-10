@@ -26,7 +26,7 @@ Every indexed access retains normalization and its own bounds check, including
 negative indices, empty Arrays and Arrays of different lengths. Selecting two
 bindings does not assert that their Arrays are disjoint or equally sized.
 
-Any Array binding reassignment disables all stable headers in the function.
+Any Array binding reassignment disables the function-wide stable-header proof.
 Unknown calls, allocation, Array growth, loop transfers and escaping local
 scopes retain their conservative barriers. A readonly alias
 alone cannot establish header stability when another alias can grow the Array.
@@ -47,8 +47,7 @@ Array-region operation family records each marker's token origin and entry
 local count. MIR validates nesting, arm order, matching scope-exit counts and
 origins, increasing marker origins and balanced joins before selecting headers.
 Malformed control rejects the region, including an arm after `else`, a missing
-scope restoration or an unmatched join. A real opaque effect still collapses
-the projection to its canonical barrier; it supplies no header facts.
+scope restoration or an unmatched join. Opaque effects are retained in order and still disable the function-wide proof.
 
 Conditional statement checking has a dedicated helper in the checked-program
 owner. Scalar branch/range facts remain conservative, and the backend receives
@@ -58,3 +57,36 @@ allocation or rebinding still blocks the entire function, and an accessed
 branch-local Array that leaves scope remains ineligible.
 [Issue #384](https://github.com/type-rb/type-rb-native/issues/384) records this
 structural and checker-organization extension and its verification evidence.
+
+## Loop-local lifetimes
+
+The checker retains the complete effect projection, including loop starts (11)
+and exits (12). Both carry the entry local count; the exit follows a matching
+scope restoration at the same token origin. The same MIR control stack verifies
+conditional/loop nesting and rejects mismatched kinds, scopes, origins and joins.
+
+When the function-wide proof is unavailable, MIR selects independent loop-local
+headers. A selected loop has no opaque effect anywhere in its condition or body,
+including nested control flow. Its bindings must be alive before the loop starts.
+Initialization and later effects outside the loop do not invalidate this proof.
+The pass prefers an eligible enclosing loop to duplicate nested placements; a
+blocked outer loop still permits independently safe inner loops. Local bindings
+created inside the selected loop are not hoisted. This is conservative effect
+isolation, not general alias analysis or partial-path effect reasoning.
+
+The named `array_loop_headers` plan contains ordered triples of start operation,
+end operation and declaration indexes. The verifier independently derives the
+complete plan and rejects missing, duplicated, reordered or forged placements.
+Input MIR cannot supply either global or loop-local optimization facts.
+
+The QBE adapter loads each selected header before the first loop condition. Its
+active header stack is restored on lexical loop exit, so adjacent loops and later
+growth cannot consume a stale cached header. Existing GC roots remain responsible
+for Array reachability. Unknown calls, allocation, rebinding, growth and loop
+transfers inside the selected lifetime disqualify it. Element updates through
+aliases remain observable; all bounds and negative-index checks are retained.
+The ordinary compiler and CLI source use this same verified implementation.
+
+[Issue #388](https://github.com/type-rb/type-rb-native/issues/388) records the
+bounded slice. Runtime gains, full target acceptance and published performance
+remain separate evidence; this representation alone makes no speed claim.

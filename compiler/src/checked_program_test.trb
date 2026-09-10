@@ -58,24 +58,31 @@ describe("Checked program and MIR construction") do
 end
 
 describe("Checked Array region construction") do
-	test("retains ordered operations and sticky opaque barriers") do
+	test("retains ordered effects without discarding later operations") do
 		mut locals := gate4_locals_new(32)
-		gate4_array_region_operation(locals, 1, 1, 10)
-		gate4_array_region_operation(locals, 1, 2, 11)
-		gate4_array_region_operation(locals, 4, 0, 12)
-		expect(locals.mir_array).to_equal([Gate4MirArrayOperation.new(kind: 1, operand: 1, origin: 10), Gate4MirArrayOperation.new(kind: 1, operand: 2, origin: 11), Gate4MirArrayOperation.new(kind: 4, operand: 0, origin: 12)])
-		gate4_array_region_operation(locals, 6, 0, 13)
-		gate4_array_region_operation(locals, 4, 0, 14)
-		expect(locals.mir_array).to_equal([Gate4MirArrayOperation.new(kind: 6, operand: 1, origin: 13), Gate4MirArrayOperation.new(kind: 1, operand: 2, origin: 11), Gate4MirArrayOperation.new(kind: 4, operand: 0, origin: 12)])
-		gate4_array_region_operation(locals, 6, 0, 15)
-		expect(locals.mir_array).to_equal([Gate4MirArrayOperation.new(kind: 6, operand: 1, origin: 15), Gate4MirArrayOperation.new(kind: 1, operand: 2, origin: 11), Gate4MirArrayOperation.new(kind: 4, operand: 0, origin: 12)])
+		operations := [
+			Gate4MirArrayOperation.new(kind: 1, operand: 1, origin: 10),
+			Gate4MirArrayOperation.new(kind: 1, operand: 2, origin: 11),
+			Gate4MirArrayOperation.new(kind: 4, operand: 0, origin: 12),
+			Gate4MirArrayOperation.new(kind: 6, operand: 0, origin: 13),
+			Gate4MirArrayOperation.new(kind: 4, operand: 0, origin: 14),
+			Gate4MirArrayOperation.new(kind: 6, operand: 0, origin: 15),
+		]
+		mut index := 0
+		while index < operations.size()
+			operation := operations[index]
+			gate4_array_region_operation(locals, operation.kind, operation.operand, operation.origin)
+			index += 1
+		end
+		expect(locals.mir_array).to_equal(operations)
+		expect(locals.mir_assignment[0]).to_equal([operations[3], operations[5]])
 	end
 
-	test("keeps an initial opaque effect without later parameters or accesses") do
+	test("retains initialization before later declarations and accesses") do
 		mut locals := gate4_locals_new(32)
 		gate4_array_region_operation(locals, 6, 0, 3)
-		gate4_array_region_operation(locals, 1, 1, 4)
-		gate4_array_region_operation(locals, 4, 0, 5)
-		expect(locals.mir_array).to_equal([Gate4MirArrayOperation.new(kind: 6, operand: 0, origin: 3)])
+		gate4_array_region_operation(locals, 2, 0, 4)
+		gate4_array_region_operation(locals, 5, 0, 5)
+		expect(locals.mir_array).to_equal([Gate4MirArrayOperation.new(kind: 6, operand: 0, origin: 3), Gate4MirArrayOperation.new(kind: 2, operand: 0, origin: 4), Gate4MirArrayOperation.new(kind: 5, operand: 0, origin: 5)])
 	end
 end

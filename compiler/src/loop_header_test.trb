@@ -1,0 +1,89 @@
+import { describe, expect, test } from trb/std/test
+import { assignment_effect_state } from array_assignment_test
+import { gate4_mir_test_module } from mir_test
+import { Gate4MirArrayOperation, gate4_optimize_verified_mir, gate4_verify_mir } from mir
+
+# A barrier before a loop must not become a barrier inside that loop.
+def loop_header_region(): Array<Gate4MirArrayOperation>
+	return [
+		Gate4MirArrayOperation.new(kind: 6, operand: 0, origin: 1),
+		Gate4MirArrayOperation.new(kind: 2, operand: 0, origin: 2),
+		Gate4MirArrayOperation.new(kind: 11, operand: 1, origin: 10),
+		Gate4MirArrayOperation.new(kind: 5, operand: 0, origin: 12),
+		Gate4MirArrayOperation.new(kind: 3, operand: 1, origin: 20),
+		Gate4MirArrayOperation.new(kind: 12, operand: 1, origin: 20),
+		Gate4MirArrayOperation.new(kind: 6, operand: 0, origin: 21),
+	]
+end
+
+describe("MIR loop-local Array headers") do
+	test("isolates initialization and later effects from a verified loop lifetime") do
+		mut native_module := gate4_mir_test_module(false, false)
+		native_module.array_regions.push(loop_header_region())
+		expect(gate4_verify_mir(native_module, false)).to_equal("")
+		gate4_optimize_verified_mir(native_module)
+		expect(native_module.array_headers).to_equal([[]])
+		expect(native_module.array_loop_headers).to_equal([[2, 5, 1]])
+		expect(gate4_verify_mir(native_module, true)).to_equal("")
+		gate4_optimize_verified_mir(native_module)
+		expect(native_module.array_loop_headers).to_equal([[2, 5, 1]])
+	end
+
+	test("rejects forged loop entry exit binding order and duplicate placements") do
+		plans: Array<Array<Integer>> := [[0, 5, 1], [2, 6, 1], [2, 5, 0], [2, 5], [2, 5, 1, 2, 5, 1], []]
+		mut index := 0
+		while index < plans.size()
+			mut native_module := gate4_mir_test_module(false, false)
+			native_module.array_regions.push(loop_header_region())
+			gate4_optimize_verified_mir(native_module)
+			native_module.array_loop_headers[0] = plans[index]
+			expect(gate4_verify_mir(native_module, true)).to_equal("MIR optimized Array-header fact is invalid")
+			index += 1
+		end
+	end
+
+	test("rejects mixed conditional and loop markers or altered entry scopes") do
+		changes := [[2, 7, 1, 10], [5, 10, 1, 20], [5, 12, 2, 20], [4, 3, 0, 20], [5, 12, 1, 19], [2, 11, 0, 10]]
+		mut index := 0
+		while index < changes.size()
+			mut native_module := gate4_mir_test_module(false, false)
+			mut region := loop_header_region()
+			change := changes[index]
+			region[change[0]] = Gate4MirArrayOperation.new(kind: change[1], operand: change[2], origin: change[3])
+			native_module.array_regions.push(region)
+			expect(gate4_verify_mir(native_module, false)).to_equal("MIR Array region is invalid")
+			index += 1
+		end
+	end
+
+	test("keeps initialized Arrays stable in an effect-free computation loop") do
+		state := assignment_effect_state("def main()\nmut values := [1, 2]\nvalues.push(3)\nmut i := 0\nwhile i < values.size()\nvalues[i] += 1\ni += 1\nend\nvalues.push(4)\nend\n")
+		expect(state.scalar_mir.array_headers[0]).to_equal([])
+		expect(state.scalar_mir.array_loop_headers[0].size()).to_equal(3)
+	end
+
+	test("keeps nested clean loops available inside an effectful outer loop") do
+		state := assignment_effect_state("def main()\nmut values := [1, 2]\nmut outer := 0\nwhile outer < 2\nvalues.push(3)\nmut i := 0\nwhile i < values.size()\nvalues[i] += 1\ni += 1\nend\nouter += 1\nend\nend\n")
+		expect(state.scalar_mir.array_loop_headers[0].size()).to_equal(3)
+	end
+
+	test("prefers one enclosing clean lifetime over duplicate nested headers") do
+		state := assignment_effect_state("def main()\nmut values := [1, 2]\nmut outer := 0\nwhile outer < 2\nmut i := 0\nwhile i < values.size()\nvalues[i] += 1\ni += 1\nend\nouter += 1\nend\nend\n")
+		expect(state.scalar_mir.array_loop_headers[0].size()).to_equal(3)
+	end
+
+	test("blocks loop-local headers on conditional alias growth rebinding and transfers") do
+		bodies := ["alias.push(3)", "if i == 0\nalias.push(3)\nend", "values = [4, 5]", "next", "break"]
+		mut index := 0
+		while index < bodies.size()
+			state := assignment_effect_state("def main()\nmut values := [1, 2]\nmut alias := values\nmut i := 0\nwhile i < values.size()\nvalues[i] += 1\ni += 1\n" + bodies[index] + "\nend\nend\n")
+			expect(state.scalar_mir.array_loop_headers[0]).to_equal([])
+			index += 1
+		end
+	end
+
+	test("does not hoist loop-local declarations before their initialization") do
+		state := assignment_effect_state("def run(values: Array<Integer>)\nmut i := 0\nwhile i < values.size()\nlocal := values\ni += local[0]\nend\nend\ndef main()\nrun([1])\nend\n")
+		expect(state.scalar_mir.array_loop_headers[0]).to_equal([])
+	end
+end
