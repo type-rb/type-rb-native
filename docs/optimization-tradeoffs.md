@@ -134,6 +134,10 @@ Do not use an admin bypass or a diagnostic exit status to turn failed acceptance
 green. Full correctness and the registered performance contract must pass under
 the approved policy. Preserve the original failure and the later decision.
 
-Pages performance values change only with complete accepted evidence. Compiler
-size cleanup, a diagnostic runtime gain, and a revised policy alone do not
-establish application speedup or Pure Go parity.
+The detailed cross-language Pages comparison changes only with complete
+accepted formal evidence. The separate [daily performance page](daily-performance.md)
+publishes bounded diagnostic observations from accepted main, including
+regressions and failed cases; it does not grant optimization acceptance or
+replace individual rows in the formal comparison. Compiler size cleanup, a
+focused diagnostic runtime gain, and a revised policy alone do not establish
+general application speedup or Pure Go parity.
