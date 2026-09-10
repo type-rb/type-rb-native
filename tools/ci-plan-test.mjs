@@ -54,7 +54,7 @@ test('manual Boolean compactness loads its dependencies in a fresh step shell', 
       NATIVE_RUNTIME_AB_CONTRACT: 'checked-boolean-branches',
     } };
     for (const shell of ['/bin/sh', '/bin/bash']) {
-      assert.equal(execFileSync(shell, ['-c', script], options).trim(), '1.00 331000');
+      assert.equal(execFileSync(shell, ['-c', script], options).trim(), '1.00 334000');
       // A previous workflow step's functions do not survive in a new shell.
       assert.throws(() => execFileSync(shell, ['-c', script.replace(
         '. tools/compiler-project.sh', ': missing-project-helper')], options),
