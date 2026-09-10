@@ -18,15 +18,14 @@ NATIVE_MIR_FLOAT_ARRAY_REDUCTION_MARKER=compiler/native-mir-float-array-reductio
 NATIVE_MIR_GUARDED_MULTIPLY_MARKER=compiler/native-mir-guarded-integer-multiply-v1.txt
 NATIVE_MIR_GUARDED_ADD_MARKER=compiler/native-mir-guarded-integer-add-v1.txt
 NATIVE_MIR_STABLE_ARRAY_HEADER_MARKER=compiler/native-mir-stable-array-header-v1.txt
-# Decisions 0029-0032 account for safe Array assignment, named record
-# Arrays, bounded scalar Integer guards and loop-local header proofs.
+# Decisions 0029-0033 retain ordinary collection support, bounded scalar
+# Integer guards and loop-local header proofs. Hash adds a measured capability.
 # Historical markers retain their original budgets and ratio requirements.
-NATIVE_MIR_DARWIN_COMPILER_LIMIT=366000
-NATIVE_MIR_LINUX_COMPILER_LIMIT=334000
-# Linux amd64 remains below its pre-existing ceiling; the control-flow
-# envelope does not grant that target any additional space.
-NATIVE_MIR_LINUX_AMD64_COMPILER_LIMIT=310000
-NATIVE_MIR_COMBINED_COMPILER_LIMIT=700000
+NATIVE_MIR_DARWIN_COMPILER_LIMIT=400000
+NATIVE_MIR_LINUX_COMPILER_LIMIT=370000
+# Hash fixed-point evidence requires 315,552 bytes on Linux amd64.
+NATIVE_MIR_LINUX_AMD64_COMPILER_LIMIT=316000
+NATIVE_MIR_COMBINED_COMPILER_LIMIT=770000
 NATIVE_MIR_DARWIN_TEXT_LIMIT=250904
 NATIVE_MIR_LINUX_TEXT_LIMIT=253424
 NATIVE_MIR_TARGET_NEUTRAL_QBE_LIMIT=1120000
@@ -55,6 +54,24 @@ NATIVE_MIR_CONTROL_FLOW_BUILD_RATIO_LIMIT=1.25
 NATIVE_MIR_ORDINARY_RATIO_LIMIT=1.05
 NATIVE_MIR_RSS_RATIO_LIMIT=1.05
 NATIVE_MIR_CATASTROPHIC_RATIO_LIMIT=2.0
+
+# Decision 0033: a one-time Hash capability transition, pinned to both source
+# trees. A later compiler change (including tests) restores ordinary ratios.
+NATIVE_MIR_HASH_CANDIDATE_TREE=fd6f68e3647e0bca1b1f21d150164355bff92011
+NATIVE_MIR_HASH_BASELINE_TREE=0a328521aeb97e0035bb8ab4824598ec981708ac
+NATIVE_MIR_HASH_COMPILER_RATIO_LIMIT=1.12
+NATIVE_MIR_HASH_BUILD_RATIO_LIMIT=1.15
+
+native_mir_hash_source_matches() {
+	test "$(git -C "$1" rev-parse HEAD:compiler/src 2>/dev/null)" = "$2" &&
+		git -C "$1" diff --quiet HEAD -- compiler/src &&
+		test -z "$(git -C "$1" ls-files --others --exclude-standard -- compiler/src)"
+}
+
+native_mir_hash_transition() {
+	native_mir_hash_source_matches "$1" "$NATIVE_MIR_HASH_CANDIDATE_TREE" &&
+		native_mir_hash_source_matches "$2" "$NATIVE_MIR_HASH_BASELINE_TREE"
+}
 
 native_mir_marker_path() (
 	project=$(native_compiler_project_directory "$1") || exit 1
@@ -531,6 +548,10 @@ native_mir_stable_array_header_transition() {
 
 native_mir_transition_mode() {
 	native_mir_roots_valid "$1" "$2" || return 1
+	if native_mir_hash_transition "$1" "$2"; then
+		printf '%s\n' "hash-capability-transition"
+		return 0
+	fi
 	if native_mir_foundation_transition "$1" "$2"; then
 		printf '%s\n' foundation-transition
 	else
@@ -572,6 +593,10 @@ native_mir_transition_mode() {
 
 native_mir_compiler_ratio_limit() {
 	native_mir_roots_valid "$1" "$2" || return 1
+	if native_mir_hash_transition "$1" "$2"; then
+		printf '%s\n' "$NATIVE_MIR_HASH_COMPILER_RATIO_LIMIT"
+		return 0
+	fi
 	if native_mir_foundation_transition "$1" "$2"; then
 		printf '%s\n' "$NATIVE_MIR_FOUNDATION_COMPILER_RATIO_LIMIT"
 	else
@@ -589,6 +614,10 @@ native_mir_compiler_ratio_limit() {
 
 native_mir_build_ratio_limit() {
 	native_mir_roots_valid "$1" "$2" || return 1
+	if native_mir_hash_transition "$1" "$2"; then
+		printf '%s\n' "$NATIVE_MIR_HASH_BUILD_RATIO_LIMIT"
+		return 0
+	fi
 	if native_mir_foundation_transition "$1" "$2"; then
 		printf '%s\n' "$NATIVE_MIR_FOUNDATION_BUILD_RATIO_LIMIT"
 	else
