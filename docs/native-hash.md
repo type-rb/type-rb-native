@@ -67,7 +67,10 @@ uses the existing collector and its cycle handling, without a separate GC kind.
 
 `repl_model.trb` separates value identity/storage from rendering and evaluation.
 `repl_hash.trb` implements hash-table buckets containing pool identities, with
-content equality for String keys. Deletion clears both bucket references;
+content equality for String keys. Its bounded byte scan reuses the internal
+CLI byte reader without allocating a String per character. Scalar pool entries
+share a read-only empty child list; language aggregate lists remain independent.
+Deletion clears both bucket references;
 empty tables release their Arrays and sparse ones shrink. `repl_values.trb`
 traces live Hash keys/values during the existing between-submission pool
 compaction, preserving aliases and cycles. Runtime state is not reconstructed

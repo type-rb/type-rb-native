@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Registered one-cohort comparison of the REPL byte-reading refinement."""
+"""Registered one-cohort comparison of a bounded REPL storage refinement."""
 import argparse
 import hashlib
 import json
