@@ -248,3 +248,6 @@ compares evaluation, side effects and type rejection with the pinned reference.
 Empty interpolation markers remain literal as in that reference. Malformed
 nonempty expressions and unterminated interpolation receive diagnostics; no
 implicit conversion or unchecked evaluation is introduced.
+
+The [key-reader interruption checks](native-cli-interruption.md) document the
+nonblocking read boundary, exact flag restoration and deterministic regressions.

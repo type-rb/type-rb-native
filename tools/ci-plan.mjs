@@ -61,6 +61,7 @@ export const cliInputs = new Set([
   'tools/build-native.sh',
   'tools/check-native-cli.sh',
   'tools/native-cli-test.py',
+  'tools/native-cli-key-test.py',
   'tools/native-puts-test.py',
   'tools/native-diagnostics-test.py',
   'tools/native-interpolation-test.py',
