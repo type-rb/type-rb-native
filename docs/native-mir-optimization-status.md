@@ -10,26 +10,32 @@ deferral/re-entry conditions for unaccepted Array-loop PR #307. The accepted
 ownership and historical measurements below remain unchanged.
 
 The [stable Array-header projection](native-mir-local-array-headers.md) now
-verifies harmless conditional structure, with conditional checking extracted
-from the block checker. Parameter and outer-local headers can survive checked
-branches; opaque effects and branch-local escaping bindings remain barriers.
-This advances basic control representation without a full CFG or new bounds
-proof. The subsequent [block-checker cleanup](https://github.com/type-rb/type-rb-native/issues/386)
-separates while checking and flattens statement dispatch without changing MIR
-admission. Published benchmark tables remain tied to their recorded revision.
+retains ordered effects and verifies individual while regions. Parameter and
+outer-local headers can survive harmless branches; a clean loop can reuse
+headers even when an unrelated effect prevents a function-wide proof. Opaque
+effects inside the selected loop and escaping branch-local bindings remain
+barriers. MIR owns lexical resolution and placement; the adapter consumes the
+verified scope. All element bounds checks remain.
+
+The [block-checker cleanup](https://github.com/type-rb/type-rb-native/issues/386)
+separates conditional/while checking and flattens statement dispatch. The
+[loop-local header slice](https://github.com/type-rb/type-rb-native/pull/389)
+also shares declaration lookup and invalid-plan construction. A named loop
+placement carrier is the next bounded organization candidate; it needs its own
+recovery/fixed-point and cost gate and is not part of this published cohort.
 
 ## Scalar Integer region checkpoint
 
 [Verified scalar range guards](native-mir-scalar-guards.md) move the proof for
 several checked Integer operations into one bounded MIR region. A single
 runtime guard selects the proved path; other inputs retain checked semantics.
-The complete current Linux arm64 cohort puts Native ahead of Pure Go for
-spectral-norm. That published cohort retains the large assignment regressions
-measured before PR #376. Current accepted main has since recovered both n-body
-and fannkuch against the exact former published baseline while retaining the
-spectral gain; see [numeric regression recovery](native-numeric-regression-recovery.md).
-The historical Pages seconds remain tied to their original revision. This does
-not broaden MIR admission or establish general performance parity.
+The current Linux arm64 cohort measures accepted source `8980b597`, including
+the assignment recovery and subsequent Array-header improvements. It retains
+Native's spectral-norm lead over Pure Go and replaces the earlier published
+n-body/fannkuch regression snapshot; see
+[numeric regression recovery](native-numeric-regression-recovery.md). Controlled
+local comparisons remain separate from formal cross-language measurements.
+This does not establish general performance parity.
 
 ## Current ownership checkpoint
 
@@ -59,11 +65,11 @@ operand and source origin in both the local buffer and published regions.
 Parameter positions are operation ordinals; the verifier no longer decodes
 three-cell offsets. Parameter-prefix ordering, operand/origin checks, mutable
 and scalar exclusions, opaque barriers and forged-fact rejection remain.
-Construction preserves sticky opaque effects and publishes the same final
-single-effect region. Partial triples are excluded by the type. This is the
-bounded carrier slice in
-[issue #368](https://github.com/type-rb/type-rb-native/issues/368), with no new
-header proof, access-check removal or optimization admission.
+The original carrier-only slice in
+[issue #368](https://github.com/type-rb/type-rb-native/issues/368) preserved the
+then-current sticky opaque effect and excluded partial triples by type without
+changing admission. The later loop-local slice retains the full ordered stream
+and adds verified structured scope markers; it does not remove element checks.
 
 Structural validation precedes value-definition counting and cross-block
 lookups. Function and block ranges must be valid
@@ -427,8 +433,8 @@ Public evidence:
 - [Array reduction target regressions](https://github.com/type-rb/type-rb-native/actions/runs/33697599529)
 - [Array reduction persistent-worker checks](https://github.com/type-rb/type-rb-native/actions/runs/33697599556)
 - [Array reduction complete Native gates](https://github.com/type-rb/type-rb-native/actions/runs/33697599531)
-- [current complete formal runtime result](../results/2026-09-09-benchmarksgame-runtime-scalar-range-guards-linux-arm64/README.md)
-- [current complete formal build result](../results/2026-09-09-benchmarksgame-build-scalar-range-guards-linux-arm64/README.md)
+- [current complete formal runtime result](../results/2026-09-10-benchmarksgame-runtime-loop-local-headers-linux-arm64/README.md)
+- [current complete formal build result](../results/2026-09-10-benchmarksgame-build-loop-local-headers-linux-arm64/README.md)
 
 ## Stable Array binding headers
 

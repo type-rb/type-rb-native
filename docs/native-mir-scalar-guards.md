@@ -52,9 +52,9 @@ runtime/build evidence is required before changing Pages performance claims.
 
 ## Evidence and remaining scope
 
-The [accepted checkpoint](../results/2026-09-09-scalar-range-guards-accepted-darwin-linux-arm64/README.md)
+The [accepted checkpoint](https://github.com/type-rb/type-rb-native/blob/8980b5978f0e8519964d200b7f7799b741796478/results/2026-09-09-scalar-range-guards-accepted-darwin-linux-arm64/README.md)
 records safety/recovery checks, compiler costs, the local interleaved comparison
-and earlier rejected attempts. The [complete formal runtime cohort](../results/2026-09-09-benchmarksgame-runtime-scalar-range-guards-linux-arm64/README.md)
+and earlier rejected attempts. The [complete formal runtime cohort](https://github.com/type-rb/type-rb-native/blob/8980b5978f0e8519964d200b7f7799b741796478/results/2026-09-09-benchmarksgame-runtime-scalar-range-guards-linux-arm64/README.md)
 uses revision `2841cb93` on Linux arm64. Its one-core spectral-norm median is
 2.30664 seconds versus Pure Go's 3.21933 seconds; CPU time also improves.
 The two other kernels remain slower, and the local cumulative comparison

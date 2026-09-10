@@ -17,22 +17,21 @@ Daily measurements do not change the acceptance authorities below.
 
 ## Status
 
-The capability corpus and the first formal runtime and build/distribution
-layers are complete. All three performance inputs pass through the pinned Go
-reference compiler, ordinary self-hosted Native compiler, and five pinned
-context implementations with exact published output. The
-[current Linux arm64 result](../results/2026-09-09-benchmarksgame-runtime-scalar-range-guards-linux-arm64/README.md)
-retains every registered observation and measures revision `2841cb93`,
-accepted through PR #372. Native spectral-norm takes 2.30664 seconds against
-Pure Go's 3.21933 seconds in the one-core lane, using 28.35% less wall time.
-The other two numeric kernels remain slower; this is not general language
-parity. The independent
-[build result](../results/2026-09-09-benchmarksgame-build-scalar-range-guards-linux-arm64/README.md)
-finds that Native needs 33.9% to 40.7% of TypeRB Go's build wall time.
-This is a complete fresh runtime and build cohort with a single compiler
-revision. The local interleaved Native comparison measures the scalar range
-guard's effect separately; differences between publication dates are not
-causal evidence.
+The capability corpus and formal runtime and build/distribution layers cover
+three numeric cases. The [current Linux arm64 result](../results/2026-09-10-benchmarksgame-runtime-loop-local-headers-linux-arm64/README.md)
+retains every registered observation at accepted Native revision `8980b597`,
+including assignment recovery and subsequent MIR Array-header improvements.
+One-core spectral-norm takes 2.25684 seconds versus Pure Go's 3.21985 seconds,
+29.91% less wall time. N-body and fannkuch take 7.87414 and 61.8302 seconds;
+both recover the earlier published regressions and improve beyond the former
+pre-regression snapshot, while remaining slower than Pure Go.
+
+The [same-source build result](../results/2026-09-10-benchmarksgame-build-loop-local-headers-linux-arm64/README.md)
+finds that Native uses 38.2% to 39.7% of TypeRB Go's build wall time. All 546
+runtime and 78 build observations are retained. Separate local Native A/B
+cohorts assess individual optimization effects; changes between publication
+dates do not establish causal attribution. These three programs do not establish
+general language parity.
 
 ## Runtime objective and benchmark expansion
 
@@ -171,7 +170,7 @@ BenchExec `runexec` 3.35, runs correctness before timing, rotates all seven
 candidates through two warmup and eleven retained rounds, and preserves every
 failure and raw process-tree metric. One-core and four-core lanes are separate.
 This controller measures complete fresh processes only. Its current
-[formal result](../results/2026-09-09-benchmarksgame-runtime-scalar-range-guards-linux-arm64/README.md)
+[formal result](../results/2026-09-10-benchmarksgame-runtime-loop-local-headers-linux-arm64/README.md)
 publishes all one-core and four-core raw observations, independently reproduced
 medians, and exact artifact identities. Compiler measurements and complete
 artifact/distribution inventory use the separate
@@ -180,7 +179,7 @@ measures alternating clean outputs through both TypeRB backends, verifies every
 measured artifact, process-traces representative builds, and separates
 controlled payloads from platform prerequisites and deploy artifacts. Its
 current
-[formal result](../results/2026-09-09-benchmarksgame-build-scalar-range-guards-linux-arm64/README.md)
+[formal result](../results/2026-09-10-benchmarksgame-build-loop-local-headers-linux-arm64/README.md)
 publishes all raw observations, independently reproduced medians, artifact
 variants, process closure, dynamic dependencies, and distribution totals. See
 [Decision 0024](decisions/0024-benchexec-runtime-controller.md) and
