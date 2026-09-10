@@ -111,11 +111,13 @@ def run(args):
         role["bytes"] = Path(role["path"]).stat().st_size
     evidence = Path(args.evidence).resolve()
     evidence.mkdir(parents=True, exist_ok=False)
+    shutil.copytree(ROOT / "benchmarks/benchmarksgame/licenses", evidence / "licenses")
     rows = []
     raw = []
     # Unset instrumentation: allocation accounting gets its own untimed probe.
     environment = {key: value for key, value in os.environ.items()
                    if not key.startswith("TYPE_RB_NATIVE_RUNTIME_")}
+    environment["LC_ALL"] = "C"
     for case in suite["cases"]:
         case_dir = evidence / case["id"]
         expected = source_case(case, case_dir)

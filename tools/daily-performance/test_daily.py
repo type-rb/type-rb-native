@@ -93,9 +93,9 @@ class DailyTests(unittest.TestCase):
             if endpoint.endswith("/daily-performance.yml"): return {"id": 100}
             if "?name=" in endpoint: return {"artifacts": artifacts}
             if "/runs/" in endpoint:
-                return {"workflow_id": 99 if endpoint.endswith("/1") else 100,
+                return {"workflow_id": 99 if endpoint.endswith("/2") else 100, "status": "completed",
                         "event": "workflow_dispatch", "head_repository": {"full_name": "type-rb/type-rb-native"}}
-            self.assertTrue(endpoint.endswith("/2/zip"))
+            self.assertTrue(endpoint.endswith("/1/zip"))
             return archive.getvalue()
         with tempfile.TemporaryDirectory() as directory, patch.object(state, "gh", side_effect=gh), \
              patch.dict(os.environ, {"GITHUB_REPOSITORY": "type-rb/type-rb-native"}):
