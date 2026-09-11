@@ -153,3 +153,8 @@ regressions and failed cases; it does not grant optimization acceptance or
 replace individual rows in the formal comparison. Compiler size cleanup, a
 focused diagnostic runtime gain, and a revised policy alone do not establish
 general application speedup or Pure Go parity.
+
+The separate [String output budget](decisions/0037-string-output-compiler-budget.md)
+retains the measured stack-vector runtime cost through an amd64-only absolute
+ceiling. It grants no self-build ratio exception: the output candidate must
+pass ordinary 1.05 after retiring Decision 0036's exhausted source selector.
