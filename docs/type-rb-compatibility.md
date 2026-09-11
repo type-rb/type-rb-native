@@ -217,6 +217,25 @@ formatted and checked by the pinned reference compiler.
 
 ## Source pins and bootstrap seeds
 
+The quick PR job validates reference checkout configuration before downloading
+or building the reference compiler. `tools/compatibility_manifest.py` inventories
+all 13 checkouts in 12 maintained workflows, their post-checkout identity checks,
+and the Linux amd64 controller pin. Missing, added, or changed consumers require
+an explicit validator update. Mutation tests exercise each checkout separately.
+The later executable version check remains required before matrix fan-out.
+
+Gate Zero, PR validation, worker memory, formal runtime/build benchmarks, and
+the Linux amd64 workflow follow `TYPE_RB_REVISION`. Daily and weekly workflows
+derive it from the checked-out file before their reference checkout. The
+Array-push, temporary-push GC, and dynamic-Array-address experiments retain
+`bae19032aa1bb7b263bc827d02606edc6e981c52`; both Gate 6M checkouts retain
+`5dc09070cf7f88a569279f5e63982a6de59d692c`. These historical pins are checked
+explicitly and must not be advanced with the current development oracle.
+
+This is a strict check of the maintained block-mapping and shell spellings,
+not a general YAML or shell interpreter. Post-checkout Git identity and the
+reference executable version are still checked when the workflows run.
+
 The reference pin and a Native bootstrap seed answer different questions:
 
 - `TYPE_RB_REVISION` selects the exact syntax, semantics, formatter, and
