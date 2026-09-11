@@ -19,7 +19,7 @@ source = args.source or repo / 'compiler/src/qbe_runtime.trb'
 functions = []
 for literal in re.findall(r'"(?:[^"\\]|\\.)*"', source.read_text()):
     decoded = json.loads(literal)
-    functions.extend(re.findall(r'^function \$g4_puts\(l %[A-Za-z_][A-Za-z0-9_]*\) \{.*?^\}', decoded, re.M | re.S))
+    functions.extend(re.findall(r'^function \$g4_puts\(l %string\) \{.*?^\}', decoded, re.M | re.S))
 assert len(functions) == 1, 'expected one canonical String puts body'
 body = functions[0]
 il = 'data $g4_newline = { b 10 }\nexport ' + body.replace('call $writev(', 'call $test_writev(') + '\n'
