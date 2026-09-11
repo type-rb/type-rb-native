@@ -298,6 +298,15 @@ recovery import boundary use the same canonical names, without aliases.
 Historical accounts above retain their source-era identifiers. Gate-derived
 helper names and the separate snapshot model remain subsequent ownership work.
 
+The first compiler-authored Array traversal slice follows the verified Array
+seed and checkout handoff. `checked_hash_verify` and `project_config_has_key`
+replace their manual cursors with `each`; MIR function lookup uses
+`each.with_index` and is renamed from `gate4_mir_function_index` to
+`mir_function_index`. Current callers, tests and strict recovery import prefixes
+change together, without an alias. The same tables, first-match/early-return
+behavior and MIR facts remain. This removes one active gate-derived helper name;
+it does not change lookup representation or claim an application speedup.
+
 ## Recovery program fixtures
 
 The active authored-program recovery fixtures now live in

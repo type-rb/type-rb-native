@@ -318,7 +318,8 @@ PR #418 accepted the ordinary implementation at
 and seed observers at `d2980f14d1b64e5ce3544dd7133e7f5871644e4e`. Both complete
 CI cohorts pass ordinary limits. The [verified seed handoff](bootstrap-seed-updates.md#current-verified-checkout-seed)
 records preparation, immutable publication and fresh actual-asset verification.
-Compiler-source adoption remains a subsequent verified change.
+The subsequent compiler-source adoption uses the verified checkout seed and
+accepted-source amd64 bridge for the three read-only traversals below.
 
 The current slice supports statement `Array#each` and `Array#each.with_index`,
 with optional empty call parentheses, `do |value[, index]| ... end`, and
@@ -341,8 +342,10 @@ assignment plans. Existing runtime and compiler performance checks still apply.
 The matching reference pin and maintained snapshot-v4 fixtures cover authored
 Array iteration through existing recovery operations, including forced and
 automatic collection. Float Arrays, Range/Iterable, batches, and value-producing
-iteration remain outside the snapshot subset. The verified seed and checkout
-handoff permit the next bounded compiler-source adoption of Array iteration.
+iteration remain outside the snapshot subset. Compiler source uses `each` for
+checked Hash-plan verification and project-key membership, and `each.with_index`
+for MIR function lookup. These read-only traversals preserve early return,
+first-match ordering, empty/missing behavior and exact String equality.
 Range/Iterable, batch iteration, expression-position iteration,
 and the remaining Array APIs stay tracked in issue #410. The current Array API
 has no removal operation; the live-header implementation does not establish
