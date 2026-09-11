@@ -100,6 +100,63 @@ documentation-only delta must not erase an unfinished code validation.
 Full multi-language benchmark refreshes and Native runtime A/B remain manual.
 Manual measurements supplement rather than replace current PR acceptance.
 
+## Focused compiler preflight feedback
+
+Before making a compiler PR ready, use the existing standalone workflows when
+a target-size or compiler-cost question needs earlier feedback. Do not dispatch
+another copy of a comparison that is already running for that exact candidate.
+[Issue #425](https://github.com/type-rb/type-rb-native/issues/425) tracks this path;
+it changes no acceptance dependency or measurement limit.
+
+Start from a clean, committed and pushed PR branch. Record its exact commit and
+the baseline chosen in the registered comparison; do not replace that baseline
+with a newer main revision between observations. The baseline must be an ancestor
+of the candidate. Local ordinary fixed points and relevant correctness checks
+remain prerequisites; record which full authorities are still pending.
+
+```sh
+test -z "$(git status --porcelain)"
+candidate_ref=$(git symbolic-ref --short HEAD)
+candidate_revision=$(git rev-parse HEAD)
+test "$(git ls-remote --heads origin "refs/heads/$candidate_ref" | cut -f1)" = "$candidate_revision"
+```
+
+For a cost comparison, set `baseline_revision` to its registered full commit ID
+and verify `git merge-base --is-ancestor "$baseline_revision" "$candidate_revision"`.
+
+For the Linux amd64 artifact and its arm64 target-neutral control, dispatch the
+existing target controller:
+
+```sh
+gh workflow run gate6n-linux-amd64.yml --ref "$candidate_ref"
+```
+
+For a separately registered compiler-cost comparison, the existing compactness
+workflow accepts an explicit baseline instead of its historical default:
+
+```sh
+gh workflow run static-string-compactness.yml --ref "$candidate_ref" \
+  -f "baseline_revision=$baseline_revision"
+```
+
+Select the newly created dispatch by its run ID, then use
+`gh run view RUN_ID --json event,headBranch,headSha,status,conclusion` to verify
+that it is a manual run of the expected candidate commit. If the branch moved
+or several runs are ambiguous, resolve the identity before interpreting results;
+do not dispatch again merely to obtain an easier match. Retain the run ID,
+verifier/policy revision, baseline and toolchain identities with the evidence.
+
+Inspect completed target artifacts as soon as they are available. Report actual
+fixed-point executable sizes and their enforced limits: shorter source or QBE
+Strings can compress less well and produce a larger compiler. For latency work,
+record the first actionable failure time separately from full-suite completion.
+Host-local or emulated checks are diagnostics, not hosted runtime comparisons.
+
+Retain failed and partial evidence and clean only owned workspaces. Apply the
+registered run budget rather than retrying an unchanged failure. Passing this
+preflight does not make a draft mergeable or replace fresh complete PR acceptance;
+the formal multi-language benchmark remains a separate manual operation.
+
 ## Further latency boundaries
 
 Ordinary acceptance cost limits remain unchanged by the
