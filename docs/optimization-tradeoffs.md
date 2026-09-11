@@ -46,8 +46,9 @@ ordinary ratios unchanged. The separately validated
 checked ordinary iteration through narrow complete-compiler ceilings, also
 without changing relative limits. The separate
 [Array self-build decision](decisions/0036-array-iteration-self-build-budget.md)
-permits an arm64 self-build ratio of 1.08 for one exact compiler-source pair;
-all other ordinary comparisons retain the 1.05 ratio. A cost failure blocks
+permitted an arm64 self-build ratio of 1.08 for one exact compiler-source pair;
+that cohort failed and its old source is no longer eligible. The later Linux
+assessment below has a separate source and scope. A cost failure blocks
 ordinary acceptance, not necessarily further investigation. There is no general relaxed percentage or automatic
 conversion from an evaluation budget to a merge budget.
 
@@ -162,3 +163,9 @@ The separate [declaration-index assessment](decisions/0038-declaration-index-mem
 records a measured large-source time/space trade after its diagnostic RSS
 condition failed. It changes no ordinary CI limit and grants no reusable memory
 allowance; implementation acceptance remains separate.
+
+The later [Linux Array assessment](decisions/0039-linux-array-self-build-assessment.md)
+retains one exact post-refinement source pair at 1.07 for Linux self-build time
+only. Decision 0036's old source is excluded; every other cost and source keeps
+its existing contract. The new policy must pass independently before its single
+full implementation acceptance cohort.

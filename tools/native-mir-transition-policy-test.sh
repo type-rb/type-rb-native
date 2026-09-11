@@ -289,22 +289,22 @@ if native_mir_clean_compiler_tree "$test_root/ordinary" >/dev/null; then exit 1;
 (
  native_mir_clean_compiler_tree() {
   case "$1" in
-   "$test_root/ordinary/candidate") printf '%s\n' bc4cdfd82560401970e07ef7ef965d8bdb22b612 ;;
+   "$test_root/ordinary/candidate") printf '%s\n' bb47cf20daf6a3c2903f75098021ab163ad72638 ;;
    "$test_root/ordinary/control") printf '%s\n' 47e078f2d8b38429e52935db8a46c00ccb5a6efb ;;
+   "$test_root/ordinary/expired") printf '%s\n' bc4cdfd82560401970e07ef7ef965d8bdb22b612 ;;
+   "$test_root/ordinary/rejected") printf '%s\n' 93201ae957f77ee5bcae9f70cd0b3ea51d02c5a7 ;;
    *) return 1 ;;
   esac
  }
- for role in candidate control other; do
+ for role in candidate control expired rejected other; do
   mkdir -p "$test_root/ordinary/$role/compiler/src"
   printf '{}\n' > "$test_root/ordinary/$role/compiler/trbconfig.jsonc"
   : > "$test_root/ordinary/$role/compiler/src/compiler.trb"
  done
  pair_candidate=$test_root/ordinary/candidate
  pair_control=$test_root/ordinary/control
- for profile in darwin-arm64-v0 linux-arm64-v0; do
-  test "$(native_mir_build_ratio_limit "$pair_candidate" "$pair_control" "$profile")" = 1.08
- done
- for profile in linux-amd64-v0 unknown ''; do
+ test "$(native_mir_build_ratio_limit "$pair_candidate" "$pair_control" linux-arm64-v0)" = 1.07
+ for profile in darwin-arm64-v0 linux-amd64-v0 unknown ''; do
   test "$(native_mir_build_ratio_limit "$pair_candidate" "$pair_control" "$profile")" = 1.05
  done
  test "$(native_mir_build_ratio_limit "$pair_candidate" "$pair_control")" = 1.05
@@ -312,6 +312,9 @@ if native_mir_clean_compiler_tree "$test_root/ordinary" >/dev/null; then exit 1;
  test "$(native_mir_build_ratio_limit "$pair_candidate" "$pair_candidate" linux-arm64-v0)" = 1.05
  test "$(native_mir_build_ratio_limit "$test_root/ordinary/other" "$pair_control" linux-arm64-v0)" = 1.05
  test "$(native_mir_build_ratio_limit "$pair_candidate" "$test_root/ordinary/other" linux-arm64-v0)" = 1.05
+ test "$(native_mir_build_ratio_limit "$test_root/ordinary/expired" "$pair_control" linux-arm64-v0)" = 1.05
+ test "$(native_mir_build_ratio_limit "$test_root/ordinary/expired" "$pair_control" darwin-arm64-v0)" = 1.05
+ test "$(native_mir_build_ratio_limit "$test_root/ordinary/rejected" "$pair_control" linux-arm64-v0)" = 1.05
  test "$(native_mir_compiler_ratio_limit "$pair_candidate" "$pair_control")" = 1.05
 )
 printf '%s\n' 'Source-bound Array self-build policy checks passed'
