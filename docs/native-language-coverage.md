@@ -221,7 +221,7 @@ Array storage and narrows loads to the Boolean scalar ABI. MIR verification
 rejects Integer elements, Boolean indices and mismatched Array receivers.
 The `boolean-array-recovery` fixture checks RHS reallocation and retained
 negative-index positions through snapshot execution and compiler generations.
-The separate `fixtures/gate3/programs/boolean-array-closure` case retains
+The separate `fixtures/recovery/programs/boolean-array-closure` case retains
 record/closure capture coverage within snapshot recovery; it does not claim
 ordinary alias or closure support. Focused runtime tests retain nested arrays
 across explicit collection.
@@ -331,10 +331,12 @@ local slots aligned with MIR identities used by nested loop-header placement.
 Sparse origin maps share the same absent-entry read with Hash and Array
 assignment plans. Existing runtime and compiler performance checks still apply.
 
-This is ordinary compilation/execution/REPL coverage, not a claim that snapshot
-v4 can recover authored iteration blocks. The compiler implementation continues
-to use its accepted source subset until recovery and an immutable seed handoff
-are complete. Range/Iterable, batch iteration, expression-position iteration,
+The matching reference pin and maintained snapshot-v4 fixtures cover authored
+Array iteration through existing recovery operations, including forced and
+automatic collection. Float Arrays, Range/Iterable, batches, and value-producing
+iteration remain outside the snapshot subset. The compiler implementation
+continues to use its accepted source subset until an immutable seed handoff is
+complete. Range/Iterable, batch iteration, expression-position iteration,
 and the remaining Array APIs stay tracked in issue #410. The current Array API
 has no removal operation; the live-header implementation does not establish
 conformance for a future shrinking operation.

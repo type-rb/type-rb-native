@@ -1,6 +1,8 @@
 # 0039: Retain the assessed Linux Array self-build cost
 
-Status: proposed. Validate this policy independently before implementation acceptance.
+Status: policy accepted through [PR #428](https://github.com/type-rb/type-rb-native/pull/428).
+The one registered implementation cohort failed; this allowance is exhausted.
+The subsequent String-index runtime candidate uses ordinary limits.
 
 ## Measured capability and remaining failure
 
@@ -87,3 +89,26 @@ keep this decision as history. Complete recovery and immutable seed verification
 then adopt Array iteration in the already registered bounded compiler traversal
 slice and proceed with Range/MIR/organization work. A seed or Pages publication
 cannot follow from this policy decision alone.
+
+## Following recovery cleanup
+
+The recovery integration removes the source selector, its Git-cleanliness helper,
+the workflow profile argument and their dedicated tests. It may merge only after
+the Array parent has full acceptance and is on main; its comparison then uses
+the same-feature Array baseline and ordinary 1.05. Historical observations and
+this decision remain intact. This cleanup does not publish a seed.
+
+## Final result and subsequent source
+
+The [one registered final 1b cohort](https://github.com/type-rb/type-rb-native/actions/runs/34622882942)
+failed Linux own-source time at 1.730 to 1.870 seconds, ratio 1.080925 over the
+actual 1.07 bound. Darwin passed at 1.044177. This decision grants no repeat or
+larger allowance. Its complete observations remain linked from
+[the result and profiling record](https://github.com/type-rb/type-rb-native/issues/410#issuecomment-5637946459).
+
+The later [bounded String-index improvement](https://github.com/type-rb/type-rb-native/issues/429)
+changes compiler source to tree `2c5449437f0b1b216bdc9aa810c00804a1f76cae`.
+It cannot match this selector. Its early target/cost checks and single registered
+local benefit/control cohort pass under ordinary limits. Fresh full acceptance
+remains separate. This recovery cleanup retires the now-unused selector while
+preserving the failed historical outcome and all ordinary 1.05 contracts.

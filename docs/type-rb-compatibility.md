@@ -2,7 +2,7 @@
 
 TypeRB Native follows exact reference revisions while it is experimental. The
 current source and semantic oracle is TypeRB
-`52f3928a0b5194cfae9c7a75e7f56e1f243ff8d1` (`0.4.7-dev`), recorded in
+`570bf6f64c7ca2412d0b4ffe06cd186cd53bdf4c` (`0.4.7-dev`), recorded in
 `TYPE_RB_REVISION`. This is an exact development pin, not a supported version
 range.
 
@@ -46,8 +46,29 @@ own fresh shallow Arrays, and do not resume an exhausted iterator after the
 final partial batch. Reference REPL iteration has no fixed count cap.
 
 These fixes establish the oracle for [ordinary Array iteration](https://github.com/type-rb/type-rb-native/issues/410).
-Pinning does not itself add ordinary Native Array/Range iteration or extend the
-snapshot recovery subset. Existing immutable seed identities remain unchanged.
+Pinning does not itself add ordinary Native Array/Range iteration. Existing immutable seed identities remain unchanged.
+
+## Array iteration snapshot update
+
+The pin also includes [TypeRB PR #679](https://github.com/type-rb/type-rb/pull/679).
+Snapshot v4 lowers direct Array `each` and `each.with_index` to existing Array
+operations and control-flow edges. It retains the evaluated receiver, reads
+live length and elements, carries outer bindings across edges, and preserves
+nearest-loop transfers and method returns. Capture discovery includes iteration
+sources and bodies. No snapshot opcode or format version changes.
+
+Maintained `array-iteration-values` and `array-iteration-managed` recovery
+fixtures exercise evaluation, mutation, rebinding, lexical shadowing, nested
+and mixed loops, empty sources, early return, managed records, function values,
+nested Arrays, Boolean and String elements. Collections inserted after Array
+access/mutation verify roots; the managed fixture also triggers automatic
+collections. Hash recovery shares the same fixture runner without changing its
+existing outcomes or collection checks.
+
+Float Arrays, Range/Iterable sources, batches, and result-producing iteration
+remain outside this snapshot subset. This source-recovery coverage and the
+ordinary iteration implementation remain separate from the immutable seed
+handoff required before compiler implementation source adopts `each`.
 
 ## Record Array snapshot update
 

@@ -174,6 +174,28 @@ PR #405 supplies the separate checkout pin handoff, matching snapshot recovery
 and the accepted-source Linux amd64 setup bridge. Compiler Hash self-use follows
 this prerequisite; no compiler/application speedup is claimed by the handoff.
 
+## Pending Array iteration refresh
+
+[Issue #410](https://github.com/type-rb/type-rb-native/issues/410) tracks the
+next `bootstrap-seed-2026-09-11-array-iteration` refresh. Its preparation
+observer retains the exact immutable Hash predecessor recorded below, adds
+the three ordinary Array iteration fixtures and requires matching snapshot
+recovery before compiler source adopts authored iteration. Preparation remains
+blocked until PR #418 has full acceptance and its accepted source revision
+and compiler closure are registered here. Observer preparation is not a seed.
+
+Only this new tag uses the complete-compiler ceilings from Decision 0035:
+417,000 Darwin arm64 bytes, 388,000 Linux arm64 bytes and 805,000 combined.
+All earlier tags retain their exact predecessor identities and size contracts.
+Adjacent-generation, retained-observation, corpus, process, attestation and
+immutable-publication checks remain unchanged. Decision 0036's feature/control
+self-build allowance is not a seed-generation allowance.
+
+The checkout seed remains the verified Hash release. After accepted-source
+registration and reviewed observer integration, preparation, separate attested
+publication and fresh actual-asset verification precede a separate checkout-pin
+PR. Compiler-source self-use follows that verified handoff.
+
 ## Current verified checkout seed
 
 Checkout builds pin [bootstrap-seed-2026-09-10-hash](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-09-10-hash),
