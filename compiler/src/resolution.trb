@@ -482,6 +482,9 @@ def gate4_resolution_local_add(
 end
 
 def gate4_resolution_keyword(name: String): Boolean
+	if name == "do"
+		return true
+	end
 	mut keyword := false
 	if name == "if"
 		keyword = true
@@ -861,6 +864,17 @@ def gate4_resolve_function_body(
 		)
 		parameter_index += 1
 	end
+	mut iteration_index := 0
+	while iteration_index < state.iterations.size()
+		iteration := state.iterations[iteration_index]
+		if iteration.origin >= gate4_load_integer(state.function_body_starts, function_index) && iteration.finish <= gate4_load_integer(state.function_body_ends, function_index)
+			gate4_resolution_local_add(locals, gate4_load_string(state.token_texts, iteration.element_origin), "", 1)
+			if iteration.index_origin >= 0
+				gate4_resolution_local_add(locals, gate4_load_string(state.token_texts, iteration.index_origin), "", 1)
+			end
+		end
+		iteration_index += 1
+	end
 	mut index := gate4_load_integer(state.function_body_starts, function_index)
 	finish := gate4_load_integer(state.function_body_ends, function_index)
 	mut skipping_type := false
@@ -878,6 +892,9 @@ def gate4_resolve_function_body(
 					mut leading := index == gate4_load_integer(state.function_body_starts, function_index)
 					if !leading
 						leading = gate4_load_integer(state.token_kinds, index - 1) == 4
+						if !leading
+							leading = gate4_token_is(state, index - 1, "|")
+						end
 					end
 					if leading
 						keyword = true
