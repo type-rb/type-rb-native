@@ -1,4 +1,4 @@
-import { qbe_output_append, qbe_output_branch, qbe_output_line, qbe_output_new } from qbe_output
+import { qbe_output_append, qbe_output_branch, qbe_output_chunk, qbe_output_line, qbe_output_new } from qbe_output
 import { gate4_load_string } from storage
 import { describe, expect, test } from trb/std/test
 
@@ -21,5 +21,38 @@ describe("QBE output construction") do
 		expect(output.count[0]).to_equal(3)
 		expect(output.runtime_flags[0]).to_equal(1)
 		expect(output.runtime_flags[1]).to_equal(0)
+	end
+
+	test("preserves empty and embedded lines across bounded output chunks") do
+		mut output := qbe_output_new(16, [0])
+		mut position := [0]
+		expect(position[0] < output.count[0]).to_be_false()
+		qbe_output_line(output, "")
+		qbe_output_line(output, "head\nbody\n")
+		qbe_output_line(output, "")
+		expect(qbe_output_chunk(output, position) + "\n").to_equal("\nhead\nbody\n\n\n")
+		expect(position[0]).to_equal(3)
+	end
+
+	test("splits at the byte bound and passes oversized original lines directly") do
+		mut full := ""
+		while full.size() < 4094
+			full = full + "a"
+		end
+		mut output := qbe_output_new(16, [0])
+		qbe_output_line(output, full)
+		qbe_output_line(output, "b")
+		qbe_output_line(output, "")
+		qbe_output_line(output, full + "xyz")
+		qbe_output_line(output, "tail")
+		mut position := [0]
+		expect(qbe_output_chunk(output, position)).to_equal(full + "\nb")
+		expect(position[0]).to_equal(2)
+		expect(qbe_output_chunk(output, position)).to_equal("")
+		expect(position[0]).to_equal(3)
+		expect(qbe_output_chunk(output, position)).to_equal(full + "xyz")
+		expect(position[0]).to_equal(4)
+		expect(qbe_output_chunk(output, position)).to_equal("tail")
+		expect(position[0]).to_equal(5)
 	end
 end
