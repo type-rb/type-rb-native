@@ -9,11 +9,13 @@ recovery fixtures cover live traversal, retained receivers, lexical bindings,
 loop transfers, and roots across forced/automatic collections. Hash recovery
 uses the same fixture runner, preserving its success and missing-key outcomes.
 
-The six focused Array/Hash recovery tests pass with the exact new reference
-checkout. Full recovery-enabled root/compiler and hosted acceptance are still
-required for this pin. No ordinary compiler-source adoption, immutable seed
-handoff, performance acceptance, or Pages update is inferred from the focused
-result. The previous completed compatibility authorities remain below.
+The six focused Array/Hash recovery tests and all 109 root and 198 compiler
+tests pass with the exact new reference checkout at Native
+`e7728081187f53ba275e8770b9029a622e262e79`. Recovery and QBE execution are enabled,
+including ordinary regeneration, generation controls and managed collection.
+Hosted acceptance is still required for this pin. No ordinary compiler-source
+adoption, immutable seed handoff, performance acceptance or Pages update is
+inferred from the local results. Previous completed authorities remain below.
 
 ## Previous collection iteration reference
 
