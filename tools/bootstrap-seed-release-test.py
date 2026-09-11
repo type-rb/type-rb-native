@@ -185,7 +185,7 @@ class SeedReleaseTests(unittest.TestCase):
                     seed.validate_manifest(changed, self.revision, tag)
             manifest["targets"][0]["size"] = 349296
             manifest["targets"][1]["size"] = 325864
-            if tag in ("bootstrap-seed-2026-09-08-boolean-arrays", "bootstrap-seed-2026-09-09-record-arrays", "bootstrap-seed-2026-09-10-hash"):
+            if tag in ("bootstrap-seed-2026-09-08-boolean-arrays", "bootstrap-seed-2026-09-09-record-arrays", "bootstrap-seed-2026-09-10-hash", "bootstrap-seed-2026-09-11-array-iteration"):
                 seed.validate_manifest(manifest, self.revision, tag)
             else:
                 with self.assertRaises(ValueError):
@@ -198,7 +198,7 @@ class SeedReleaseTests(unittest.TestCase):
             manifest["predecessor"] = seed.PREDECESSORS[tag]
             manifest["targets"][0]["size"] = 365808
             manifest["targets"][1]["size"] = 327736
-            if tag in ("bootstrap-seed-2026-09-09-record-arrays", "bootstrap-seed-2026-09-10-hash"):
+            if tag in ("bootstrap-seed-2026-09-09-record-arrays", "bootstrap-seed-2026-09-10-hash", "bootstrap-seed-2026-09-11-array-iteration"):
                 seed.validate_manifest(manifest, self.revision, tag)
             else:
                 with self.assertRaises(ValueError):
@@ -211,14 +211,42 @@ class SeedReleaseTests(unittest.TestCase):
             manifest["predecessor"] = seed.PREDECESSORS[tag]
             manifest["targets"][0]["size"] = 398888
             manifest["targets"][1]["size"] = 368936
-            if tag == "bootstrap-seed-2026-09-10-hash":
+            if tag in ("bootstrap-seed-2026-09-10-hash", "bootstrap-seed-2026-09-11-array-iteration"):
                 seed.validate_manifest(manifest, self.revision, tag)
             else:
                 with self.assertRaises(ValueError):
                     seed.validate_manifest(manifest, self.revision, tag)
 
+    def test_iteration_budget_does_not_relax_historical_manifests(self):
+        for tag in seed.PREDECESSORS:
+            manifest = copy.deepcopy(self.manifest)
+            manifest["releaseTag"] = tag
+            manifest["predecessor"] = seed.PREDECESSORS[tag]
+            manifest["targets"][0]["size"] = 415432
+            manifest["targets"][1]["size"] = 387192
+            if tag == "bootstrap-seed-2026-09-11-array-iteration":
+                seed.validate_manifest(manifest, self.revision, tag)
+            else:
+                with self.assertRaises(ValueError):
+                    seed.validate_manifest(manifest, self.revision, tag)
+
+    def test_iteration_refresh_authenticates_hash_and_checks_iteration(self):
+        root = Path(__file__).resolve().parent.parent
+        workflow = (root / ".github/workflows/bootstrap-seed-refresh.yml").read_text()
+        self.assertEqual(seed.TAG, "bootstrap-seed-2026-09-11-array-iteration")
+        self.assertIn("tag=bootstrap-seed-2026-09-10-hash", workflow)
+        self.assertIn("revision=79f699e9245f79131646ebf43207f6b7526c4f68", workflow)
+        self.assertIn("'bootstrap-seed-2026-09-11-array-iteration' || github.sha", workflow)
+        self.assertIn("tag=bootstrap-seed-2026-09-11-array-iteration", workflow)
+        observer = (root / "tools/bootstrap-seed-refresh.sh").read_text()
+        for fixture in ("array-iteration-live", "array-iteration-control", "array-iteration-managed"):
+            self.assertIn(fixture, observer)
+            self.assertTrue((root / "compiler/conformance/valid" / (fixture + ".trb")).is_file())
+
     def test_download_verification_preserves_the_previous_tag(self):
-        for tag in ("bootstrap-seed-2026-09-07", "bootstrap-seed-2026-09-08", "bootstrap-seed-2026-09-08-loop-transfers", "bootstrap-seed-2026-09-08-boolean-arrays"):
+        for tag in seed.PREDECESSORS:
+            if tag == seed.TAG:
+                continue
             self.manifest["releaseTag"] = tag
             self.manifest["predecessor"] = seed.PREDECESSORS[tag]
             self.manifest_path.write_text(json.dumps(self.manifest))
