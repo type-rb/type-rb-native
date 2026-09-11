@@ -1,6 +1,9 @@
 # 0038: Retain the measured declaration-index memory trade
 
-Status: proposed. Implementation acceptance still requires complete ordinary CI.
+Status: trade-off assessment accepted through [PR #427](https://github.com/type-rb/type-rb-native/pull/427).
+Implementation accepted through [PR #418](https://github.com/type-rb/type-rb-native/pull/418)
+after its [complete final CI](https://github.com/type-rb/type-rb-native/actions/runs/34630185576).
+The original diagnostic RSS failure and the assessed trade below remain unchanged.
 
 ## Problem and scope
 

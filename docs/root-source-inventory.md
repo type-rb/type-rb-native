@@ -3,7 +3,7 @@
 ## Scope and reading the inventory
 
 The current table covers all 54 root `src/*.trb` files at
-`d3dd2aabb6b117c8936817a7c42863f134a2d77c` ([PR #423](https://github.com/type-rb/type-rb-native/pull/423)).
+`d2980f14d1b64e5ce3544dd7133e7f5871644e4e` ([PR #423](https://github.com/type-rb/type-rb-native/pull/423)).
 Imports and direct consumers were rechecked together, including Boolean/record
 Array tests, block-parameter alias tests, Hash recovery and the shared authored
 program runner. The initial 45-file inventory belonged to
