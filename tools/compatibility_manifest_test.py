@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import copy
+import re
+import shutil
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -14,10 +17,12 @@ ROOT = TOOLS.parent
 sys.path.insert(0, str(TOOLS))
 
 from compatibility_manifest import (  # noqa: E402
+    REFERENCE_WORKFLOWS,
     ValidationError,
     load_json_strict,
     load_json_text_strict,
     validate_manifest_data,
+    validate_reference_checkouts,
 )
 
 
@@ -126,6 +131,113 @@ class CompatibilityManifestTest(unittest.TestCase):
             mutate(changed)
             with self.assertRaisesRegex(ValidationError, "exactly cover"):
                 self.validate(changed)
+
+
+class ReferenceCheckoutTest(unittest.TestCase):
+    def setUp(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        self.revision = (ROOT / "TYPE_RB_REVISION").read_text().strip()
+        self.files = {}
+        for relative in [*(f".github/workflows/{name}" for name in REFERENCE_WORKFLOWS),
+                         "tools/gate6n-linux-amd64.sh"]:
+            path = self.root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ROOT / relative, path)
+            self.files[path] = path.read_text()
+
+    def validate(self) -> None:
+        validate_reference_checkouts(self.root, self.revision)
+
+    def reject(self, path: Path, source: str) -> None:
+        with self.subTest(path=path.name, source=source[:80]):
+            try:
+                path.write_text(source)
+                with self.assertRaises(ValidationError):
+                    self.validate()
+            finally:
+                path.write_text(self.files[path])
+
+    def test_all_current_and_frozen_consumers_are_accepted(self) -> None:
+        self.validate()
+
+    def test_each_checkout_ref_cannot_change_or_disappear(self) -> None:
+        checked = 0
+        for name, (_, count) in REFERENCE_WORKFLOWS.items():
+            path = self.root / ".github/workflows" / name
+            source = self.files[path]
+            refs = list(re.finditer(
+                r"(?m)^ +repository: type-rb/type-rb\n +ref: ([^\n]+)", source))
+            self.assertEqual(len(refs), count)
+            for ref in refs:
+                for value in ("main", "a" * 40, ""):
+                    self.reject(path, source[:ref.start(1)] + value + source[ref.end(1):])
+                self.reject(path, source[:ref.start(1)].rsplit("\n", 1)[0] +
+                            source[ref.end(1):])
+                checked += 1
+        self.assertEqual(checked, 13)
+
+    def test_environment_pins_retain_current_or_historical_identity(self) -> None:
+        for name, (mode, _) in REFERENCE_WORKFLOWS.items():
+            if mode in ("direct", "derived"):
+                continue
+            path = self.root / ".github/workflows" / name
+            source = self.files[path]
+            for value in ("a" * 40, ""):
+                self.reject(path, re.sub(r"(?m)^( *TYPE_RB_REVISION: *)\S+", rf"\g<1>{value}", source))
+            if mode != "environment":
+                self.reject(path, source.replace(mode, self.revision))
+
+    def test_derived_pins_require_the_canonical_producer_before_checkout(self) -> None:
+        producer = 'run: echo "revision=$(cat TYPE_RB_REVISION)" >> "$GITHUB_OUTPUT"'
+        for name in ("daily-performance.yml", "weekly-performance.yml"):
+            path = self.root / ".github/workflows" / name
+            source = self.files[path]
+            for old, new in (("id: reference", "id: other"),
+                             (producer, producer.replace("cat TYPE_RB_REVISION", "echo main")),
+                             (producer, "# " + producer)):
+                self.reject(path, source.replace(old, new))
+            self.reject(path, source.replace(producer, "run: true") + "\n" + producer + "\n")
+
+    def test_identity_checks_cannot_be_removed_or_commented_out(self) -> None:
+        for path, source in self.files.items():
+            identities = list(re.finditer(
+                r"(?m)^([ \t]*(?:run: )?)(test [^\n]* = [^\n]*)$",
+                source))
+            self.assertTrue(identities, path.name)
+            for identity in identities:
+                if identity[2].endswith("\\"):
+                    continue
+                if not any(token in identity[2] for token in
+                           ("TYPE_RB_REVISION", "git -C .type-rb rev-parse HEAD")):
+                    continue
+                for prefix in ("# ", ": removed # "):
+                    # A shell no-op containing an old assertion is not a check.
+                    self.reject(path, source[:identity.start(2)] + prefix + source[identity.start(2):])
+
+    def test_missing_consumers_and_controller_fail_deterministically(self) -> None:
+        for path, source in self.files.items():
+            with self.subTest(path=path.name):
+                try:
+                    path.unlink()
+                    with self.assertRaises(ValidationError):
+                        self.validate()
+                finally:
+                    path.write_text(source)
+        controller = self.root / "tools/gate6n-linux-amd64.sh"
+        self.reject(controller, self.files[controller].replace(self.revision, "a" * 40))
+
+    def test_added_and_duplicate_checkout_consumers_require_registration(self) -> None:
+        path = self.root / ".github/workflows/new.yml"
+        for source in ('repository: type-rb/type-rb\nref: main\n',
+                       'env:\n  ORACLE_REPOSITORY: type-rb/type-rb\n'):
+            path.write_text(source)
+            with self.assertRaisesRegex(ValidationError, "inventory differs"):
+                self.validate()
+        path.unlink()
+        known = self.root / ".github/workflows/gate-zero.yml"
+        self.reject(known, self.files[known] + '\n      - with:\n          repository: type-rb/type-rb\n          ref: ' + self.revision + '\n')
 
 
 if __name__ == "__main__":

@@ -54,7 +54,7 @@ test('manual Boolean compactness loads its dependencies in a fresh step shell', 
       NATIVE_RUNTIME_AB_CONTRACT: 'checked-boolean-branches',
     } };
     for (const shell of ['/bin/sh', '/bin/bash']) {
-      assert.equal(execFileSync(shell, ['-c', script], options).trim(), '1.00 370000');
+      assert.equal(execFileSync(shell, ['-c', script], options).trim(), '1.00 388000');
       // A previous workflow step's functions do not survive in a new shell.
       assert.throws(() => execFileSync(shell, ['-c', script.replace(
         '. tools/compiler-project.sh', ': missing-project-helper')], options),
@@ -72,11 +72,19 @@ test('compatibility checks precede matrix fan-out and remain in standalone valid
   assert(quick, 'quick stage must exist');
   const build = quick.indexOf('go build -C .type-rb');
   const formatting = quick.indexOf('Check formatting and core types');
+  const checkout = quick.indexOf('repository: type-rb/type-rb');
+  const preflight = quick.indexOf('Validate every reference checkout before toolchain setup');
+  assert(preflight >= 0 && preflight < checkout && checkout < build);
+  for (const command of ['python3 -m unittest tools/compatibility_manifest_test.py',
+    'python3 tools/compatibility_manifest.py\n']) {
+    const check = quick.indexOf(command, preflight);
+    assert(check > preflight && check < checkout, 'static pin checks precede reference checkout');
+  }
   for (const command of [
     'python3 -m unittest tools/compatibility_manifest_test.py',
     'python3 tools/compatibility_manifest.py --reference-trb "$RUNNER_TEMP/trb"',
   ]) {
-    const check = quick.indexOf(command);
+    const check = quick.indexOf(command, build);
     assert(build >= 0 && check > build && formatting > check,
       `${command} must run after reference build and before later quick checks`);
     assert(standalone.includes(command), 'standalone validation must retain the same check');
