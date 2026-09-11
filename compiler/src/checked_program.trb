@@ -1,11 +1,12 @@
+import { MirIteration, mir_iteration_shape_valid, mir_iteration_valid } from iteration_mir
 import { hash_key_type, hash_type, hash_value_type } from hash_types
 import { mir_hash_operation } from hash_mir
 import { checked_hash_binding_target, checked_hash_method, checked_hash_plan, checked_hash_publish } from hash_checked
-import { gate4_load_integer, gate4_load_string, gate4_storage_chunk_size, gate4_store_integer, gate4_store_string } from storage
+import { gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, sparse_integer_at } from storage
 import { gate4_float_literal_in_range, gate4_integer_literal_in_range, gate4_number_is_float, gate4_small_nonnegative_integer_operand } from literals
 import { MirArrayOperation, MirBlock, MirFunction, MirInstruction, MirLoopTransfer, MirValue, gate4_mir_array_element_type, gate4_mir_function_index, gate4_mir_instruction_with_payload, mir_array_assignment_plan, mir_array_assignment_valid, mir_logical_plan, mir_loop_transfer_valid } from mir
 import { Gate4Compiler, Gate4Locals, gate4_diagnostic, gate4_has_diagnostic, gate4_local_add, gate4_local_find, gate4_terminal_token } from state
-import { finish_statement, gate4_advance, gate4_binary_operator_id, gate4_binary_precedence, gate4_declaration_start, gate4_expect, gate4_expect_identifier, gate4_parse_type, gate4_skip_newlines, gate4_token_is, syntax_conditional_tail, syntax_loop_transfer_kind } from parser
+import { finish_statement, gate4_advance, gate4_binary_operator_id, gate4_binary_precedence, gate4_declaration_start, gate4_expect, gate4_expect_identifier, gate4_parse_type, gate4_skip_newlines, gate4_token_is, syntax_block_end, syntax_conditional_tail, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_statement_boundary } from parser
 import { gate4_array_element_type, gate4_array_type, gate4_common_array_element_type, gate4_find_field, gate4_find_record_type, gate4_find_visible_function, gate4_find_visible_record, gate4_record_type, gate4_resolve_type_name, gate4_standard_package_import, gate4_standard_package_root, gate4_type_display } from resolution
 
 record Gate4CheckedValue
@@ -921,6 +922,10 @@ def gate4_check_postfix(
 			if gate4_token_is(state, position[0], ".")
 				gate4_advance(position)
 				member := gate4_expect_identifier(state, position)
+				if member == "each" && syntax_iteration_suffix(state, position[0] - 2) >= 0
+					position[0] -= 2
+					break
+				end
 				if gate4_token_is(state, position[0], "(")
 					if member != "size"
 						gate4_scalar_mir_disable(locals)
@@ -1591,6 +1596,143 @@ def gate4_check_conditional(
 	return finish_statement(state, position)
 end
 
+def checked_iteration_shape(state: Gate4Compiler, plan: MirIteration, origin: Integer): Boolean
+	if !mir_iteration_shape_valid(plan, origin, state.token_count[0])
+		return false
+	end
+	# The parser pairs both boundaries. A stale end cannot silently skip
+	# statements or retarget a checked iteration to a different lexical body.
+	if sparse_integer_at(state.iteration_origins, plan.body_finish) != - sparse_integer_at(state.iteration_origins, origin)
+		return false
+	end
+	delimiter := syntax_iteration_suffix(state, plan.receiver_finish)
+	if delimiter < 0
+		return false
+	end
+	if plan.element_origin != delimiter + 2 || !gate4_token_is(state, delimiter + 1, "|")
+		return false
+	end
+	mut indexed := false
+	mut suffix := plan.receiver_finish + 2
+	while suffix < delimiter
+		if gate4_token_is(state, suffix, "with_index")
+			indexed = true
+		end
+		suffix += 1
+	end
+	if ((indexed && plan.index_origin < 0) || (!indexed && plan.index_origin >= 0)) || gate4_load_integer(state.token_kinds, plan.element_origin) != 1
+		return false
+	end
+	mut close := plan.element_origin + 1
+	if plan.index_origin >= 0
+		if plan.index_origin != close + 1 || !gate4_token_is(state, close, ",") || gate4_load_integer(state.token_kinds, plan.index_origin) != 1
+			return false
+		end
+		close = plan.index_origin + 1
+	end
+	if !gate4_token_is(state, close, "|")
+		return false
+	end
+	if gate4_token_is(state, delimiter, "do") && gate4_load_integer(state.token_kinds, close + 1) != 4
+		return false
+	end
+	mut cursor := close + 1
+	while gate4_load_integer(state.token_kinds, cursor) == 4
+		cursor += 1
+	end
+	mut terminator := "end"
+	if gate4_token_is(state, delimiter, "{")
+		terminator = "}"
+	end
+	if cursor != plan.body_start
+		return false
+	end
+	return gate4_token_is(state, plan.body_finish, terminator)
+end
+
+def checked_iteration_require(mut state: Gate4Compiler, origin: Integer, parent_loop: Integer): MirIteration
+	encoded := sparse_integer_at(state.iteration_origins, origin)
+	invalid := MirIteration.new(origin: - 1, receiver_finish: - 1, element_origin: - 1, index_origin: - 1, body_start: - 1, body_finish: - 1, finish: - 1, parent_loop: - 1, type_name: "", element_type: "")
+	if encoded > 0 && encoded <= state.iterations.size()
+		plan := state.iterations[encoded - 1]
+		if checked_iteration_shape(state, plan, origin) && plan.parent_loop == parent_loop
+			if mir_iteration_valid(plan, origin, state.token_count[0], plan.type_name, gate4_array_element_type(plan.type_name))
+				return plan
+			end
+		end
+	end
+	mut line := 1
+	if origin >= 0 && origin < state.token_count[0]
+		line = gate4_load_integer(state.token_lines, origin)
+	end
+	gate4_diagnostic(state, "TRBN4004", line, "invalid checked Array iteration")
+	return invalid
+end
+
+def checked_iteration_binding(mut locals: Gate4Locals, name: String, type_name: String)
+	index := locals.count[0]
+	gate4_store_string(locals.names, index, name)
+	gate4_store_string(locals.types, index, type_name)
+	gate4_store_integer(locals.mutable, index, 1)
+	gate4_store_integer(locals.mir_values, index, 0)
+	locals.count[0] = index + 1
+end
+
+def checked_iteration(mut state: Gate4Compiler, mut position: Array<Integer>, mut locals: Gate4Locals, result_type: String, parent_loop: Integer): Boolean
+	origin := position[0]
+	encoded := sparse_integer_at(state.iteration_origins, origin)
+	if encoded < 1 || encoded > state.iterations.size()
+		return false
+	end
+	shape := state.iterations[encoded - 1]
+	if !checked_iteration_shape(state, shape, origin)
+		gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, origin), "invalid Array iteration syntax plan")
+		return false
+	end
+	gate4_scalar_mir_disable(locals)
+	gate4_array_region_operation(locals, 11, locals.count[0], origin)
+	gate4_array_region_operation(locals, 6, 0, origin)
+	mut fact_index := 0
+	while fact_index < locals.count[0]
+		if gate4_load_integer(locals.mutable, fact_index) < 0
+			gate4_store_integer(locals.mutable, fact_index, 1)
+		end
+		fact_index += 1
+	end
+	receiver := gate4_check_expression(state, position, locals, 1, "")
+	element_type := gate4_array_element_type(receiver.type_name)
+	if element_type == "" || position[0] != shape.receiver_finish
+		gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, origin), "ordinary each requires a supported Array receiver")
+		return false
+	end
+	plan := MirIteration.new(origin: origin, receiver_finish: shape.receiver_finish, element_origin: shape.element_origin, index_origin: shape.index_origin, body_start: shape.body_start, body_finish: shape.body_finish, finish: shape.finish, parent_loop: parent_loop, type_name: receiver.type_name, element_type: element_type)
+	state.iterations[encoded - 1] = plan
+	checked_iteration_require(state, origin, parent_loop)
+	saved := locals.count[0]
+	# Match the hidden lexical slots used by the adapter so verified header
+	# placements for declarations inside this loop keep their local identities.
+	checked_iteration_binding(locals, "$iteration.receiver", receiver.type_name)
+	checked_iteration_binding(locals, "$iteration.cursor", "Integer")
+	checked_iteration_binding(locals, gate4_load_string(state.token_texts, plan.element_origin), element_type)
+	if plan.index_origin >= 0
+		if gate4_load_string(state.token_texts, plan.element_origin) == gate4_load_string(state.token_texts, plan.index_origin)
+			gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, plan.index_origin), "iteration block parameter is duplicated")
+			return false
+		end
+		checked_iteration_binding(locals, gate4_load_string(state.token_texts, plan.index_origin), "Integer")
+	end
+	position[0] = plan.body_start
+	gate4_check_block(state, position, locals, result_type, origin)
+	if position[0] != plan.body_finish
+		gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, origin), "invalid Array iteration body boundary")
+	end
+	gate4_array_region_operation(locals, 3, saved, plan.body_finish)
+	gate4_array_region_operation(locals, 12, saved, plan.body_finish)
+	locals.count[0] = saved
+	position[0] = plan.finish
+	return finish_statement(state, position)
+end
+
 def checked_while(
 		mut state: Gate4Compiler,
 		mut position: Array<Integer>,
@@ -1751,12 +1893,12 @@ def gate4_check_block(
 	while true
 		if locals.mir_state[0] > 0
 			if locals.mir_state[4] >= 0
-				if !gate4_token_is(state, position[0], "end")
+				if !syntax_block_end(state, position[0])
 					gate4_scalar_mir_disable(locals)
 				end
 			else
 				if locals.mir_state[4] == - 2
-					if !gate4_token_is(state, position[0], "end")
+					if !syntax_block_end(state, position[0])
 						gate4_scalar_mir_disable(locals)
 					end
 				end
@@ -1767,7 +1909,7 @@ def gate4_check_block(
 			break
 		elsif syntax_loop_transfer_kind(state, position[0]) > 0
 			if loop_origin < 0
-				gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, position[0]), gate4_load_string(state.token_texts, position[0]) + " is only valid inside while")
+				gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, position[0]), gate4_load_string(state.token_texts, position[0]) + " is only valid inside a loop")
 			else
 				gate4_store_integer(state.loop_transfer_kinds, position[0], syntax_loop_transfer_kind(state, position[0]))
 				gate4_store_integer(state.loop_transfer_targets, position[0], loop_origin + 1)
@@ -1785,7 +1927,7 @@ def gate4_check_block(
 			end
 			gate4_advance(position)
 			finish_statement(state, position)
-		elsif gate4_token_is(state, position[0], "end") || syntax_conditional_tail(state, position[0])
+		elsif syntax_block_end(state, position[0]) || syntax_conditional_tail(state, position[0])
 			break
 		elsif gate4_token_is(state, position[0], "if")
 			if !gate4_check_conditional(state, position, locals, result_type, loop_origin)
@@ -1795,10 +1937,14 @@ def gate4_check_block(
 			if !checked_while(state, position, locals, result_type)
 				return false
 			end
+		elsif sparse_integer_at(state.iteration_origins, position[0]) > 0
+			if !checked_iteration(state, position, locals, result_type, loop_origin)
+				return false
+			end
 		elsif gate4_token_is(state, position[0], "return")
 			line := gate4_load_integer(state.token_lines, position[0])
 			gate4_advance(position)
-			if gate4_load_integer(state.token_kinds, position[0]) == 4
+			if syntax_statement_boundary(state, position[0])
 				if result_type != "Void"
 					gate4_diagnostic(state, "TRBN4004", line, "return value is required")
 				else
@@ -1880,6 +2026,15 @@ def checked_loop_transfer_kind(mut state: Gate4Compiler, origin: Integer, loop_o
 	if mir_loop_transfer_valid(plan, origin, syntax_loop_transfer_kind(state, origin), loop_origin, state.token_count[0])
 		if gate4_token_is(state, loop_origin, "while")
 			return plan.kind
+		end
+		encoded_iteration := sparse_integer_at(state.iteration_origins, loop_origin)
+		if encoded_iteration > 0 && encoded_iteration <= state.iterations.size()
+			iteration := state.iterations[encoded_iteration - 1]
+			if checked_iteration_shape(state, iteration, loop_origin) && mir_iteration_valid(iteration, loop_origin, state.token_count[0], iteration.type_name, gate4_array_element_type(iteration.type_name))
+				if origin >= iteration.body_start && origin < iteration.body_finish
+					return plan.kind
+				end
+			end
 		end
 	end
 	gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, origin), "invalid checked loop transfer target")
@@ -2214,19 +2369,7 @@ def checked_array_assignment_store(state: Gate4Compiler, index_origin: Integer):
 end
 
 def checked_array_assignment_target(state: Gate4Compiler, origin: Integer): Integer
-	storage := state.array_assignment_targets
-	if origin < 0
-		return 0
-	end
-	if origin >= storage.used[0]
-		return 0
-	end
-	chunk_size := gate4_storage_chunk_size()
-	chunk := storage.chunks[0][origin / chunk_size]
-	if chunk.size() == 0
-		return 0
-	end
-	region := chunk[origin % chunk_size] - 1
+	region := sparse_integer_at(state.array_assignment_targets, origin) - 1
 	if region < 0
 		return 0
 	end

@@ -1,6 +1,6 @@
 # 0035: Compiler budget for checked Array iteration
 
-Status: proposed; accepted only on integration of the separately validated policy PR.
+Status: accepted through [PR #420](https://github.com/type-rb/type-rb-native/pull/420).
 
 ## Capability and observed cost
 

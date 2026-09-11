@@ -20,7 +20,7 @@ class LanguageCoverageTests(unittest.TestCase):
 
     def test_registry_and_distinct_execution_paths(self):
         cases = coverage.validate(self.document)
-        self.assertEqual(len(cases), 16)
+        self.assertEqual(len(cases), 17)
         utf8 = next(case for case in cases if case["id"] == "utf8-string")
         expected = coverage.expected_native(utf8)
         self.assertEqual(expected["check"]["code"], 0)

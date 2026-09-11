@@ -18,3 +18,4 @@
 | UTF-8 String literal | accepts | rejects | not reached | rejects |
 | Array of named records | accepts | accepts | matches reference | matches reference |
 | Hash literal and required lookup | accepts | accepts | matches reference | matches reference |
+| Array each with live growth and index | accepts | accepts | matches reference | matches reference |

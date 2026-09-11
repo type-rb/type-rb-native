@@ -11,6 +11,14 @@ B2 and do not retroactively widen recovery.
 
 The valid cases cover:
 
+- ordinary Array `each` and `each.with_index` using retained live receivers,
+  growth/reallocation, future-element replacement, source rebinding, block
+  shadowing, scalar/managed elements and nested header placements in
+  `valid/array-iteration-live.trb`; nested transfers and returns in
+  `valid/array-iteration-control.trb`; and roots of replaced managed elements
+  across automatic collection in `valid/array-iteration-managed.trb`. These
+  begin with the updated ordinary B2 and are also exercised through the REPL;
+
 - stable Array assignment positions across RHS growth and index-side effects
   in `valid/array-assignment-targets.trb`, retained nested owners and compound
   String values across collection in `valid/array-assignment-managed.trb`,
@@ -176,3 +184,9 @@ empty inputs. `runtime-invalid/stable-array-bindings-bounds.trb` uses unequal
 lengths to require the indexed Array's own check. Both also run through ordinary
 CLI compilation and the independent REPL evaluator. MIR tests reject missing,
 duplicate, reordered and foreign entries in the complete stable-header list.
+
+`valid/string-index-lifetime.trb` retains indexed String values in Arrays and
+Hash keys while heap-allocated receivers are replaced and automatic collection
+occurs. It checks both index signs and byte contents. The separate runtime ABI
+observer exercises all 256 byte payloads, NUL termination and required bounds
+failures; that internal byte coverage does not claim ordinary Unicode support.

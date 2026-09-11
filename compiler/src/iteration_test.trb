@@ -1,0 +1,96 @@
+import { checked_iteration_require } from checked_program
+import { MirIteration, mir_iteration_shape_valid, mir_iteration_valid } from iteration_mir
+import { gate4_integer_storage, gate4_store_integer, sparse_integer_at } from storage
+import { gate4_check, gate4_emit_qbe, gate4_lex } from compiler
+import { Gate4Compiler, gate4_compiler_new, gate4_has_diagnostic } from state
+import { gate4_parse_module } from parser
+import { gate4_resolve } from resolution
+import { describe, expect, test } from trb/std/test
+
+describe("Array iteration") do
+	test("checks and emits a live receiver with indexed bindings and loop transfers") do
+		source := "def main()\nmut values := [1, 2]\nvalues.each.with_index do |value, index|\nif value == 1\nvalues.push(3)\nnext\nend\nputs(value)\nputs(index)\nend\nend\n"
+		mut state := gate4_compiler_new(source.size() * 3 + 16)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_true()
+		expect(gate4_check(state)).to_be_true()
+		gate4_emit_qbe(state)
+		expect(gate4_has_diagnostic(state)).to_be_false()
+	end
+end
+
+def iteration_test_state(source: String): Gate4Compiler
+	mut state := gate4_compiler_new(source.size() * 3 + 16)
+	expect(gate4_lex(state, source)).to_be_true()
+	expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+	expect(gate4_resolve(state)).to_be_true()
+	expect(gate4_check(state)).to_be_true()
+	return state
+end
+
+describe("Array iteration MIR") do
+	test("treats unallocated sparse origin entries as absent") do
+		mut storage := gate4_integer_storage(1024)
+		expect(sparse_integer_at(storage, 0)).to_equal(0)
+		gate4_store_integer(storage, 800, 9)
+		expect(sparse_integer_at(storage, - 1)).to_equal(0)
+		expect(sparse_integer_at(storage, 800)).to_equal(9)
+		expect(sparse_integer_at(storage, 500)).to_equal(0)
+		expect(sparse_integer_at(storage, 900)).to_equal(0)
+	end
+
+	test("verifies source ranges, receiver types, and nearest loop ownership") do
+		plan := MirIteration.new(origin: 4, receiver_finish: 5, element_origin: 9, index_origin: 11, body_start: 14, body_finish: 20, finish: 21, parent_loop: - 1, type_name: "Array<Integer>", element_type: "Integer")
+		expect(mir_iteration_valid(plan, 4, 22, "Array<Integer>", "Integer")).to_be_true()
+		expect(mir_iteration_valid(plan, 3, 22, "Array<Integer>", "Integer")).to_be_false()
+		expect(mir_iteration_valid(plan, 4, 21, "Array<Integer>", "Integer")).to_be_false()
+		expect(mir_iteration_valid(plan, 4, 22, "Array<String>", "String")).to_be_false()
+		expect(mir_iteration_valid(plan, 4, 22, "Array<Integer>", "")).to_be_false()
+		expect(mir_iteration_shape_valid(plan, 4, 0)).to_be_false()
+		expect(mir_iteration_shape_valid(plan, 4, - 9007199254740991)).to_be_false()
+	end
+
+	test("rejects missing, cross-origin, and stale typed operation plans") do
+		source := "def main()\n[1, 2].each.with_index do |value, index|\nputs(value)\nputs(index)\nend\nend\n"
+		mut mode := 0
+		while mode < 8
+			mut state := iteration_test_state(source)
+			plan := state.iterations[0]
+			mut element_type := plan.element_type
+			mut parent_loop := plan.parent_loop
+			mut index_origin := plan.index_origin
+			mut body_finish := plan.body_finish
+			mut finish := plan.finish
+			mut receiver_finish := plan.receiver_finish
+			if mode == 0
+				gate4_store_integer(state.iteration_origins, plan.origin, 0)
+			elsif mode == 1
+				gate4_store_integer(state.iteration_origins, plan.origin, 99)
+			elsif mode == 2
+				element_type = "String"
+			elsif mode == 3
+				parent_loop = plan.origin
+			elsif mode == 4
+				index_origin =- 1
+			elsif mode == 5
+				body_finish = 9007199254740991
+				finish = 9007199254740991
+			elsif mode == 6
+				receiver_finish += 1
+			else
+				gate4_store_integer(state.iteration_origins, plan.body_finish, 0)
+			end
+			state.iterations[0] = MirIteration.new(origin: plan.origin, receiver_finish: receiver_finish, element_origin: plan.element_origin, index_origin: index_origin, body_start: plan.body_start, body_finish: body_finish, finish: finish, parent_loop: parent_loop, type_name: plan.type_name, element_type: element_type)
+			checked_iteration_require(state, plan.origin, - 1)
+			expect(gate4_has_diagnostic(state)).to_be_true()
+			mode += 1
+		end
+	end
+
+	test("emits brace returns and transfers including unreachable syntax") do
+		mut state := iteration_test_state("def main()\n[1].each { |_value| return }\n[2].each { |_value| break }\nend\n")
+		gate4_emit_qbe(state)
+		expect(gate4_has_diagnostic(state)).to_be_false()
+	end
+end

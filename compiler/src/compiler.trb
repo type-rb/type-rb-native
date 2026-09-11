@@ -1,11 +1,11 @@
-import { Gate4IntegerStorage, Gate4StringStorage, gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage } from storage
+import { Gate4IntegerStorage, Gate4StringStorage, gate4_integer_storage, gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, gate4_string_storage, sparse_integer_at } from storage
 import { gate4_path_basename, gate4_path_directory, gate4_path_join, gate4_string_ends_with, gate4_string_starts_with, gate4_string_without_suffix } from path
 import { gate4_ascii_code, gate4_integer_string, gate4_number_is_float, gate4_number_without_underscores, gate4_small_nonnegative_integer_operand } from literals
 import { gate4_mir_block_index, gate4_mir_function_index, gate4_mir_value_type, gate4_optimize_verified_mir, gate4_verify_mir, mir_logical_short_value } from mir
 import { Gate4Compiler, find_name_index, gate4_add_module, gate4_compiler_new, gate4_diagnostic, gate4_find_module, gate4_has_diagnostic, gate4_local_add, gate4_locals_new } from state
-import { finish_statement, gate4_advance, gate4_binary_operator_id, gate4_binary_precedence, gate4_declaration_start, gate4_expect, gate4_expect_identifier, gate4_parse_module, gate4_parse_type, gate4_skip_newlines, gate4_token_is, parse_statement_block, syntax_conditional_tail, syntax_loop_transfer_kind } from parser
+import { finish_statement, gate4_advance, gate4_binary_operator_id, gate4_binary_precedence, gate4_declaration_start, gate4_expect, gate4_expect_identifier, gate4_parse_module, gate4_parse_type, gate4_skip_newlines, gate4_token_is, parse_statement_block, syntax_block_end, syntax_conditional_tail, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_statement_boundary } from parser
 import { gate4_array_element_type, gate4_array_type, gate4_common_array_element_type, gate4_find_field, gate4_find_function_in_module, gate4_find_record_type, gate4_find_visible_function, gate4_find_visible_record, gate4_import_path_value, gate4_normalize_import_path, gate4_record_type, gate4_resolve, gate4_resolve_type_name, gate4_standard_package_import, gate4_standard_package_root, gate4_standard_package_target, gate4_validate_import_usage } from resolution
-import { checked_array_assignment_plan, checked_array_assignment_reads_old, checked_array_assignment_store, checked_array_assignment_target, checked_binary_plan_type, checked_loop_transfer_kind, gate4_check_block, gate4_mir_add_parameter, gate4_mir_nonnegative_fact, gate4_scalar_leaf_inline_eligible, gate4_scalar_mir_begin, gate4_scalar_mir_commit } from checked_program
+import { checked_array_assignment_plan, checked_array_assignment_reads_old, checked_array_assignment_store, checked_array_assignment_target, checked_binary_plan_type, checked_iteration_require, checked_loop_transfer_kind, gate4_check_block, gate4_mir_add_parameter, gate4_mir_nonnegative_fact, gate4_scalar_leaf_inline_eligible, gate4_scalar_mir_begin, gate4_scalar_mir_commit } from checked_program
 import { QbeOutput, qbe_output_append, qbe_output_branch, qbe_output_line, qbe_output_new } from qbe_output
 import { emit_boolean_puts_runtime, emit_float_array_runtime, emit_float_to_integer_runtime, emit_integer_to_string_runtime, emit_process_runtime, emit_qbe_runtime, emit_string_to_integer_runtime } from qbe_runtime
 import { parse_project_config } from project_config
@@ -541,40 +541,14 @@ def gate4_emit_loop_root_compaction(mut context: Gate4EmitContext, mut output: Q
 	return
 end
 
-def gate4_function_reassigns_parameter(
-		state: Gate4Compiler,
-		function_index: Integer,
-		name: String,
-	): Boolean
+def gate4_function_reassigns_parameter(state: Gate4Compiler, function_index: Integer, name: String): Boolean
 	mut index := gate4_load_integer(state.function_body_starts, function_index)
-	mut depth := 0
-	while index < state.token_count[0]
-		# String contents cannot open or close a block or rebind a parameter.
-		if gate4_load_integer(state.token_kinds, index) == 1
-			text := gate4_load_string(state.token_texts, index)
-			if text == "if"
-				depth += 1
-			else
-				if text == "while"
-					depth += 1
-				else
-					if text == "end"
-						if depth == 0
-							return false
-						end
-						depth -= 1
-					else
-						if text == name
-							next_token := gate4_load_string(state.token_texts, index + 1)
-							if next_token == "="
-								return true
-							end
-							if gate4_binary_operator_id(next_token) >= 17
-								return true
-							end
-						end
-					end
-				end
+	finish := gate4_load_integer(state.function_body_ends, function_index)
+	while index < finish
+		if gate4_load_integer(state.token_kinds, index) == 1 && gate4_load_string(state.token_texts, index) == name
+			next_token := gate4_load_string(state.token_texts, index + 1)
+			if next_token == "=" || gate4_binary_operator_id(next_token) >= 17
+				return true
 			end
 		end
 		index += 1
@@ -1840,6 +1814,10 @@ def gate4_emit_postfix(
 			if gate4_token_is(state, position[0], ".")
 				gate4_advance(position)
 				member := gate4_expect_identifier(state, position)
+				if member == "each" && syntax_iteration_suffix(state, position[0] - 2) >= 0
+					position[0] -= 2
+					break
+				end
 				if gate4_token_is(state, position[0], "(")
 					if value.category < 4
 						if value.category == 2
@@ -2553,6 +2531,100 @@ def gate4_emit_simple_statement(
 	return finish_statement(state, position)
 end
 
+def emit_array_iteration(
+		mut state: Gate4Compiler,
+		mut position: Array<Integer>,
+		mut context: Gate4EmitContext,
+		mut output: QbeOutput,
+		result_type: String,
+		parent_loop: Integer,
+	): Boolean
+	plan := checked_iteration_require(state, position[0], parent_loop)
+	if gate4_has_diagnostic(state)
+		return false
+	end
+	gate4_invalidate_array_header_cache(context)
+	receiver := gate4_emit_expression(state, position, context, output, 1, plan.type_name)
+	if receiver.type_name != plan.type_name || position[0] != plan.receiver_finish
+		gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, plan.origin), "Array iteration receiver disagrees with checked MIR")
+		return false
+	end
+	saved_count := context.local_count[0]
+	header_count := context.array_header_count[0]
+	# Hidden locals keep the receiver and cursor independent of user bindings.
+	receiver_slot := gate4_emit_add_local(context, output, "$iteration.receiver", plan.type_name, receiver.operand, false)
+	cursor_slot := gate4_emit_add_local(context, output, "$iteration.cursor", "Integer", "0", false)
+	mut zero := "0"
+	if plan.element_type == "Float"
+		zero = "d_0"
+	end
+	element_slot := gate4_emit_add_local(context, output, gate4_load_string(state.token_texts, plan.element_origin), plan.element_type, zero, false)
+	mut index_slot := ""
+	if plan.index_origin >= 0
+		index_slot = gate4_emit_add_local(context, output, gate4_load_string(state.token_texts, plan.index_origin), "Integer", "0", false)
+	end
+	header := gate4_emit_label(context)
+	body := gate4_emit_label(context)
+	advance := gate4_emit_label(context)
+	done := gate4_emit_label(context)
+	qbe_output_line(output, "\tjmp " + header)
+	qbe_output_line(output, header)
+	array := gate4_emit_temporary(context)
+	cursor := gate4_emit_temporary(context)
+	length_slot := gate4_emit_temporary(context)
+	length := gate4_emit_temporary(context)
+	available := gate4_emit_temporary(context)
+	qbe_output_line(output, "\t" + array + " =l loadl " + receiver_slot)
+	qbe_output_line(output, "\t" + cursor + " =l loadl " + cursor_slot)
+	qbe_output_line(output, "\t" + length_slot + " =l add " + array + ", 8")
+	qbe_output_line(output, "\t" + length + " =l loadl " + length_slot)
+	qbe_output_line(output, "\t" + available + " =w csltl " + cursor + ", " + length)
+	qbe_output_branch(output, available, body, done)
+	qbe_output_line(output, body)
+	data_slot := gate4_emit_temporary(context)
+	data := gate4_emit_temporary(context)
+	offset := gate4_emit_temporary(context)
+	address := gate4_emit_temporary(context)
+	element := gate4_emit_temporary(context)
+	qbe_output_line(output, "\t" + data_slot + " =l add " + array + ", 24")
+	qbe_output_line(output, "\t" + data + " =l loadl " + data_slot)
+	qbe_output_line(output, "\t" + offset + " =l mul " + cursor + ", 8")
+	qbe_output_line(output, "\t" + address + " =l add " + data + ", " + offset)
+	gate4_emit_typed_load(output, element, plan.element_type, address)
+	gate4_emit_typed_store(output, plan.element_type, element, element_slot)
+	if index_slot != ""
+		gate4_emit_typed_store(output, "Integer", cursor, index_slot)
+	end
+	# The Array may lose its current element during the body. Root the binding
+	# as well as the retained receiver before any body allocation can collect.
+	gate4_emit_loop_root_compaction(context, output)
+	context.loop_depth[0] = context.loop_depth[0] + 1
+	position[0] = plan.body_start
+	body_terminated := gate4_emit_block(state, position, context, output, result_type, plan.origin, advance, done)
+	if position[0] != plan.body_finish
+		gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, plan.origin), "Array iteration body disagrees with checked MIR")
+		return false
+	end
+	if body_terminated == 0
+		qbe_output_line(output, "\tjmp " + advance)
+	end
+	qbe_output_line(output, advance)
+	current := gate4_emit_temporary(context)
+	incremented := gate4_emit_temporary(context)
+	qbe_output_line(output, "\t" + current + " =l loadl " + cursor_slot)
+	qbe_output_line(output, "\t" + incremented + " =l add " + current + ", 1")
+	qbe_output_line(output, "\tstorel " + incremented + ", " + cursor_slot)
+	qbe_output_line(output, "\tjmp " + header)
+	qbe_output_line(output, done)
+	context.local_count[0] = saved_count
+	context.loop_depth[0] = context.loop_depth[0] - 1
+	context.array_header_count[0] = header_count
+	gate4_invalidate_array_header_cache(context)
+	gate4_emit_loop_root_compaction(context, output)
+	position[0] = plan.finish
+	return finish_statement(state, position)
+end
+
 def gate4_emit_block(
 		mut state: Gate4Compiler,
 		mut position: Array<Integer>,
@@ -2583,7 +2655,9 @@ def gate4_emit_block(
 			gate4_advance(position)
 			finish_statement(state, position)
 			terminated = 1
-		elsif gate4_token_is(state, position[0], "end")
+		elsif sparse_integer_at(state.iteration_origins, position[0]) > 0
+			emit_array_iteration(state, position, context, output, result_type, loop_origin)
+		elsif syntax_block_end(state, position[0])
 			complete = true
 		else
 			if syntax_conditional_tail(state, position[0])
@@ -2694,7 +2768,7 @@ def gate4_emit_block(
 					else
 						if gate4_token_is(state, position[0], "return")
 							gate4_advance(position)
-							if gate4_load_integer(state.token_kinds, position[0]) == 4
+							if syntax_statement_boundary(state, position[0])
 								qbe_output_line(output, "\tjmp @return")
 							else
 								value := gate4_emit_expression(state, position, context, output, 1, result_type)
@@ -3732,7 +3806,7 @@ def gate4_scan_symbol(
 	end
 	mut supported := symbol.size() == 2
 	if !supported
-		supported = gate4_character_in(character, "()[]{}:,.+-*/%<>=!")
+		supported = gate4_character_in(character, "()[]{}:,.+-*/%<>=!|")
 	end
 	if supported
 		gate4_push_token(state, 5, symbol, line)
@@ -3774,9 +3848,11 @@ def gate4_lex_source(mut state: Gate4Compiler, source: String, terminal_kind: In
 				if character == "\r"
 					gate4_advance(position)
 				else
-					if character == "\n"
-						gate4_push_token(state, 4, "\n", line)
-						line += 1
+					if character == "\n" || character == ";"
+						gate4_push_token(state, 4, character, line)
+						if character == "\n"
+							line += 1
+						end
 						gate4_advance(position)
 					else
 						if character == "#"

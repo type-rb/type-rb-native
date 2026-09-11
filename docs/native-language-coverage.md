@@ -1,10 +1,11 @@
 # Ordinary Native language coverage
 
-Status: a 16-case ordinary-path inventory and regression contract are
+Status: a 17-case ordinary-path inventory and regression contract are
 available. Statement `elsif` and bare `break` / `next` in `while` are covered by ordinary
 compiler and REPL regressions. The ordinary Boolean-array case is also covered.
 Hash literals and required lookup now have an ordinary-path inventory case;
 [Hash implementation details](native-hash.md) enumerate the wider tested boundary.
+Array `each` / `each.with_index` have an ordinary iteration case and compiler/REPL regressions for live growth, retained receivers, nested transfers and managed elements.
 The inventory remains a bounded set of examples, not complete language support.
 Track the first bounded delivery in [issue #326](https://github.com/type-rb/type-rb-native/issues/326).
 
@@ -157,13 +158,14 @@ remains eligible for separately verified cleanup.
 
 ## Ordinary loop transfers
 
-Bare `break` exits the nearest enclosing `while`; bare `next` transfers to its
-header and reevaluates the condition, including its effects. Nested loops own
-their transfers, while `return` still exits the function. Every statement is
+Bare `break` exits the nearest enclosing loop. For `while`, bare `next`
+transfers to its header and reevaluates the condition, including its effects;
+for Array iteration, it advances the cursor before the next live-length check.
+Nested loops own their transfers, while `return` still exits the function. Every statement is
 checked, including unreachable transfers. Transfers outside a loop and transfer
 values are rejected. Existing contextual `next` bindings remain supported.
-Use an ordinary `if` guard in this subset: postfix conditional transfers and
-iteration blocks remain unsupported. The REPL currently reports incomplete
+Use an ordinary `if` guard in this subset: postfix conditional transfers remain
+unsupported. The REPL currently reports incomplete
 input for a postfix `break if` submission; it does not execute that submission.
 
 The checker stores the kind and nearest-loop target at the exact statement
@@ -308,3 +310,39 @@ costs separately. Update the corresponding issue and this coverage record when
 a feature passes; keep planned work distinct from accepted behavior. Publish
 Pages coverage at accepted checkpoints without rerunning the formal runtime
 benchmarks unless accepted runtime evidence has actually changed.
+
+## Ordinary Array iteration
+
+The current slice supports statement `Array#each` and `Array#each.with_index`,
+with optional empty call parentheses, `do |value[, index]| ... end`, and
+single-line brace blocks. Brace statements may be separated by semicolons;
+multiline brace blocks are explicitly rejected for now. Block parameters have
+the reference's mutable local bindings and lexical shadowing. The receiver is
+evaluated once; each step reloads its current length and storage, so `push`
+and replacement of a future element are observed. Rebinding the source local
+does not retarget an active iteration. `next` advances the internal cursor,
+`break` exits the nearest loop, and `return` exits the enclosing function.
+
+The structured `MirIteration` operation connects receiver and element types,
+source/body boundaries, and nearest-loop ownership. Ordinary code generation
+and the REPL consume the same checked plan. Emission roots both the retained
+Array and the current managed element across body allocation, and keeps hidden
+local slots aligned with MIR identities used by nested loop-header placement.
+Sparse origin maps share the same absent-entry read with Hash and Array
+assignment plans. Existing runtime and compiler performance checks still apply.
+
+This is ordinary compilation/execution/REPL coverage, not a claim that snapshot
+v4 can recover authored iteration blocks. The compiler implementation continues
+to use its accepted source subset until recovery and an immutable seed handoff
+are complete. Range/Iterable, batch iteration, expression-position iteration,
+and the remaining Array APIs stay tracked in issue #410. The current Array API
+has no removal operation; the live-header implementation does not establish
+conformance for a future shrinking operation.
+
+Compiler recovery metadata now uses a separate 40 MiB input bound (previously
+32 MiB). The first complete Array iteration compiler snapshot is 34,616,510
+bytes and exceeds the former bound by 1,062,078 bytes; this is verbose recovery
+JSON, not an application or shipped compiler binary. The ordinary 4 MiB
+snapshot entry, schema/type/instruction bounds and compiler cost gates remain
+unchanged. The failed 32 MiB recovery attempt remains part of the validation
+record; a larger decode budget alone does not establish successful recovery.
