@@ -41,8 +41,11 @@ retains compact Hash support, with a one-time source-pinned compiler size and
 self-build allowance. Subsequent compiler changes use ordinary ratios again.
 The separately validated [Hash index budget](decisions/0034-hash-index-compiler-budget.md)
 retains compiler Hash self-use through a narrow amd64 ceiling revision, with
-ordinary ratios unchanged. A cost failure blocks ordinary acceptance, not necessarily
-further investigation. There is no general relaxed percentage or automatic
+ordinary ratios unchanged. The separately validated
+[Array iteration budget](decisions/0035-array-iteration-compiler-budget.md) retains
+checked ordinary iteration through narrow complete-compiler ceilings, also
+without changing relative limits. A cost failure blocks ordinary acceptance,
+not necessarily further investigation. There is no general relaxed percentage or automatic
 conversion from an evaluation budget to a merge budget.
 
 Correctness, portable semantics, memory safety, failure ordering, MIR ownership,
