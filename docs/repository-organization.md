@@ -286,3 +286,14 @@ vectors and active recovery families remain outside this bounded change.
 Decision 0033's expired source-tree-specific Hash transition hook is removed.
 Subsequent compiler changes use ordinary ratios; accepted absolute ceilings,
 frozen baselines and historical marker contracts remain unchanged.
+
+## Ordinary MIR model names
+
+The bounded O4 slice in [issue #408](https://github.com/type-rb/type-rb-native/issues/408)
+replaces the six active `Gate4Mir...` record names with `MirArrayOperation`,
+`MirInstruction`, `MirBlock`, `MirFunction`, `MirValue`, and `MirModule`.
+Fields, declaration order, verification, optimization, and backend behavior
+remain unchanged. Frontend/state consumers, focused tests, and the exact
+recovery import boundary use the same canonical names, without aliases.
+Historical accounts above retain their source-era identifiers. Gate-derived
+helper names and the separate snapshot model remain subsequent ownership work.

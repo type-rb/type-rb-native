@@ -5,7 +5,7 @@ import { gate4_resolve } from resolution
 import { Gate4Compiler, gate4_compiler_new, gate4_has_diagnostic } from state
 import { gate4_load_string, gate4_store_integer } from storage
 import { checked_array_assignment_plan, checked_array_assignment_store } from checked_program
-import { Gate4MirArrayOperation, mir_array_assignment_plan, mir_array_assignment_valid } from mir
+import { MirArrayOperation, mir_array_assignment_plan, mir_array_assignment_valid } from mir
 
 describe("Checked Array assignment targets") do
 	test("verifies paired target and store origins") do
@@ -62,10 +62,10 @@ end
 
 describe("MIR Array assignment effects") do
 	test("derives separate root and storage lifetimes from the effect region") do
-		capture := Gate4MirArrayOperation.new(kind: 1, operand: 0, origin: 3)
-		check := Gate4MirArrayOperation.new(kind: 2, operand: 3, origin: 6)
-		store := Gate4MirArrayOperation.new(kind: 5, operand: 3, origin: 7)
-		barrier := Gate4MirArrayOperation.new(kind: 6, operand: 0, origin: 5)
+		capture := MirArrayOperation.new(kind: 1, operand: 0, origin: 3)
+		check := MirArrayOperation.new(kind: 2, operand: 3, origin: 6)
+		store := MirArrayOperation.new(kind: 5, operand: 3, origin: 7)
+		barrier := MirArrayOperation.new(kind: 6, operand: 0, origin: 5)
 		expect(mir_array_assignment_plan([capture, check, store], 3, 7, 12)).to_equal(2)
 		expect(mir_array_assignment_plan([capture, barrier, check, store], 3, 7, 12)).to_equal(1)
 		expect(mir_array_assignment_plan([capture, check, barrier, store], 3, 7, 12)).to_equal(0)
@@ -74,9 +74,9 @@ describe("MIR Array assignment effects") do
 	end
 
 	test("rejects incomplete reordered and foreign assignment operations") do
-		capture := Gate4MirArrayOperation.new(kind: 1, operand: 0, origin: 3)
-		check := Gate4MirArrayOperation.new(kind: 2, operand: 3, origin: 6)
-		store := Gate4MirArrayOperation.new(kind: 5, operand: 3, origin: 7)
+		capture := MirArrayOperation.new(kind: 1, operand: 0, origin: 3)
+		check := MirArrayOperation.new(kind: 2, operand: 3, origin: 6)
+		store := MirArrayOperation.new(kind: 5, operand: 3, origin: 7)
 		expect(mir_array_assignment_plan([], 3, 7, 12)).to_equal(- 1)
 		expect(mir_array_assignment_plan([capture, store], 3, 7, 12)).to_equal(- 1)
 		expect(mir_array_assignment_plan([check, capture, store], 3, 7, 12)).to_equal(- 1)
@@ -85,7 +85,7 @@ describe("MIR Array assignment effects") do
 		expect(mir_array_assignment_plan([capture, check, store, check], 3, 7, 12)).to_equal(- 1)
 		expect(mir_array_assignment_plan([capture, check, store], 4, 7, 12)).to_equal(- 1)
 		expect(mir_array_assignment_plan([capture, check, store], 3, 8, 12)).to_equal(- 1)
-		invalid := [Gate4MirArrayOperation.new(kind: 99, operand: 0, origin: 5), Gate4MirArrayOperation.new(kind: 6, operand: 1, origin: 5), Gate4MirArrayOperation.new(kind: 6, operand: 0, origin: 12)]
+		invalid := [MirArrayOperation.new(kind: 99, operand: 0, origin: 5), MirArrayOperation.new(kind: 6, operand: 1, origin: 5), MirArrayOperation.new(kind: 6, operand: 0, origin: 12)]
 		mut cursor := 0
 		while cursor < invalid.size()
 			expect(mir_array_assignment_plan([capture, invalid[cursor], check, store], 3, 7, 12)).to_equal(- 1)
@@ -127,7 +127,7 @@ describe("MIR Array assignment effects") do
 	test("revalidates a changed region before lowering") do
 		mut state := assignment_effect_state("def main()\nmut values := [1, 2]\nvalues[0] = 3\nend\n")
 		mut region := state.array_assignment_regions[0]
-		region[0] = Gate4MirArrayOperation.new(kind: 99, operand: 0, origin: region[0].origin)
+		region[0] = MirArrayOperation.new(kind: 99, operand: 0, origin: region[0].origin)
 		gate4_emit_qbe(state)
 		expect(gate4_has_diagnostic(state)).to_be_true()
 		expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("invalid checked Array assignment region")
