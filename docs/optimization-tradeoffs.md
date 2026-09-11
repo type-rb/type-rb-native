@@ -46,8 +46,9 @@ ordinary ratios unchanged. The separately validated
 checked ordinary iteration through narrow complete-compiler ceilings, also
 without changing relative limits. The separate
 [Array self-build decision](decisions/0036-array-iteration-self-build-budget.md)
-permits an arm64 self-build ratio of 1.08 for one exact compiler-source pair;
-all other ordinary comparisons retain the 1.05 ratio. A cost failure blocks
+registered a one-time arm64 self-build ratio of 1.08 for one exact compiler-source
+pair. Its final cohort failed; the exhausted selector is removed before the
+subsequent output-runtime candidate, which uses ordinary 1.05 comparisons. A cost failure blocks
 ordinary acceptance, not necessarily further investigation. There is no general relaxed percentage or automatic
 conversion from an evaluation budget to a merge budget.
 
