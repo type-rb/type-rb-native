@@ -2,7 +2,7 @@
 
 TypeRB Native follows exact reference revisions while it is experimental. The
 current source and semantic oracle is TypeRB
-`6cbd4025545d44a1de211335f9197772077bb478` (`0.4.6-dev`), recorded in
+`52f3928a0b5194cfae9c7a75e7f56e1f243ff8d1` (`0.4.7-dev`), recorded in
 `TYPE_RB_REVISION`. This is an exact development pin, not a supported version
 range.
 
@@ -33,6 +33,21 @@ The earlier scoped-file successor is registered in
 [Darwin/Linux arm64 result](https://github.com/type-rb/type-rb-native/blob/5cf61c740aa600c34ed94f1b130ea2ffefd9e783/results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/README.md)
 passes the selected-reference, migration, exact-baseline, target-regression,
 fixed-point, process, resource, and size criteria.
+
+## Collection iteration reference
+
+The pin includes [TypeRB PR #671](https://github.com/type-rb/type-rb/pull/671),
+[PR #676](https://github.com/type-rb/type-rb/pull/676), and
+[PR #677](https://github.com/type-rb/type-rb/pull/677). Direct and Iterable-bound
+Range iteration retain captured bounds and consume values incrementally. Array
+`each` retains its receiver and observes current length and elements, including
+mutation and reallocation during the block. Batches keep their requested size,
+own fresh shallow Arrays, and do not resume an exhausted iterator after the
+final partial batch. Reference REPL iteration has no fixed count cap.
+
+These fixes establish the oracle for [ordinary Array iteration](https://github.com/type-rb/type-rb-native/issues/410).
+Pinning does not itself add ordinary Native Array/Range iteration or extend the
+snapshot recovery subset. Existing immutable seed identities remain unchanged.
 
 ## Record Array snapshot update
 

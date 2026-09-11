@@ -1,5 +1,16 @@
 # Current reference compatibility
 
+Candidate reference: TypeRB `0.4.7-dev` at
+`52f3928a0b5194cfae9c7a75e7f56e1f243ff8d1`, the accepted live Array iteration and repeatable
+Range/Iterable boundary fixes. This selection is being validated for the
+ordinary iteration work in [issue #410](https://github.com/type-rb/type-rb-native/issues/410).
+Fresh Native conformance/recovery/target authorities are required before this
+candidate becomes the current compatibility claim. The previous completed
+compatibility cohort below remains identified separately until that validation
+finishes.
+
+## Previous Hash reference compatibility
+
 The development pin is TypeRB `0.4.7-dev` at
 `bae19032aa1bb7b263bc827d02606edc6e981c52`, the accepted
 [Hash snapshot-v4 extension](https://github.com/type-rb/type-rb/pull/668).
