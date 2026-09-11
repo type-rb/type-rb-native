@@ -1026,7 +1026,7 @@ if test -n "$iteration_source_root"; then
 	test -n "$hash_source_root" || fail "Array iteration source requires the accepted Hash source"
 	require_clean_revision "$iteration_source_root" "accepted Array iteration source"
 	test "$(git -C "$iteration_source_root" rev-parse HEAD)" = \
-		a66bb1f7853df36967603686908aa5d8705ac6c5 || fail "Array iteration source revision differs"
+		508f721f8964d67a5893e547d2e2fb3de5b20a63 || fail "Array iteration source revision differs"
 	iteration_entry=$iteration_source_root/compiler/src/compiler.trb
 	test -f "$iteration_entry" || fail "Array iteration compiler entry is missing"
 fi

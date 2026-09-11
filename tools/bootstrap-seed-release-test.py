@@ -17,7 +17,7 @@ class SeedReleaseTests(unittest.TestCase):
         root = Path(__file__).resolve().parent.parent
         for name in ("static-string-compactness", "runtime-worker-memory",
                      "benchmarksgame-formal", "benchmarksgame-build-formal",
-                     "gate6n-linux-amd64"):
+                     "gate6n-linux-amd64", "daily-performance", "weekly-performance"):
             with self.subTest(workflow=name):
                 workflow = (root / ".github/workflows" / (name + ".yml")).read_text()
                 self.assertIn("bootstrap-seed-2026-09-10-hash", workflow)
@@ -97,12 +97,12 @@ class SeedReleaseTests(unittest.TestCase):
         workflow = (root / ".github/workflows/gate6n-linux-amd64.yml").read_text()
         self.assertIn('test -n "$hash_source_root" || fail "Array iteration source requires the accepted Hash source"', observer)
         self.assertIn('require_clean_revision "$iteration_source_root"', observer)
-        self.assertIn('a66bb1f7853df36967603686908aa5d8705ac6c5 || fail "Array iteration source revision differs"', observer)
+        self.assertIn('508f721f8964d67a5893e547d2e2fb3de5b20a63 || fail "Array iteration source revision differs"', observer)
         self.assertIn('"$hash_transition" emit-qbe "$iteration_entry"', observer)
         self.assertIn('runtime_seed=$iteration_transition', observer)
         self.assertIn('"$runtime_seed" emit-qbe "$compiler_entry"', observer)
         self.assertIn('"$iteration_transition" check "$candidate_root/compiler/conformance/valid/array-iteration-$iteration_case.trb"', observer)
-        self.assertIn('AMD64_ITERATION_SETUP_REVISION: a66bb1f7853df36967603686908aa5d8705ac6c5', workflow)
+        self.assertIn('AMD64_ITERATION_SETUP_REVISION: 508f721f8964d67a5893e547d2e2fb3de5b20a63', workflow)
         self.assertIn('"$GITHUB_WORKSPACE/.gate6n-iteration-source"', workflow)
 
     def test_refresh_roles_match_the_existing_compatibility_boundary(self):
