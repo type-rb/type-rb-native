@@ -15,7 +15,7 @@ APPLICATION_RUNTIME_ELAPSED_REPETITIONS=32
 usage() {
 	cat >&2 <<'EOF'
 usage: gate6n-linux-amd64.sh CANDIDATE_ROOT ROOT_QBE QBE CC
-       REFERENCE_TRB GO WORKSPACE EVIDENCE OUTPUT_COMPILER [SEED_SOURCE_ROOT [LOOP_SOURCE_ROOT [BOOLEAN_SOURCE_ROOT [RECORD_SOURCE_ROOT [HASH_SOURCE_ROOT]]]]]
+       REFERENCE_TRB GO WORKSPACE EVIDENCE OUTPUT_COMPILER [SEED_SOURCE_ROOT [LOOP_SOURCE_ROOT [BOOLEAN_SOURCE_ROOT [RECORD_SOURCE_ROOT [HASH_SOURCE_ROOT [ITERATION_SOURCE_ROOT]]]]]]
 EOF
 	exit 64
 }
@@ -166,7 +166,7 @@ require_go_build() {
 	test -x "$output" || fail "$label did not publish an executable"
 }
 
-test "$#" -eq 9 || test "$#" -eq 10 || test "$#" -eq 11 || test "$#" -eq 12 || test "$#" -eq 13 || test "$#" -eq 14 || usage
+test "$#" -eq 9 || test "$#" -eq 10 || test "$#" -eq 11 || test "$#" -eq 12 || test "$#" -eq 13 || test "$#" -eq 14 || test "$#" -eq 15 || usage
 
 candidate_root=$1
 root_qbe=$2
@@ -182,6 +182,7 @@ loop_source_root=${11:-}
 boolean_source_root=${12:-}
 record_source_root=${13:-}
 hash_source_root=${14:-}
+iteration_source_root=${15:-}
 
 script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 verifier_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
@@ -1020,6 +1021,15 @@ if test -n "$hash_source_root"; then
 	hash_entry=$hash_source_root/compiler/src/compiler.trb
 	test -f "$hash_entry" || fail "Hash compiler entry is missing"
 fi
+iteration_entry=
+if test -n "$iteration_source_root"; then
+	test -n "$hash_source_root" || fail "Array iteration source requires the accepted Hash source"
+	require_clean_revision "$iteration_source_root" "accepted Array iteration source"
+	test "$(git -C "$iteration_source_root" rev-parse HEAD)" = \
+		508f721f8964d67a5893e547d2e2fb3de5b20a63 || fail "Array iteration source revision differs"
+	iteration_entry=$iteration_source_root/compiler/src/compiler.trb
+	test -f "$iteration_entry" || fail "Array iteration compiler entry is missing"
+fi
 portable_config=$candidate_root/corpus/gate6m/portable-entry/trbconfig.jsonc
 portable_source=$candidate_root/corpus/gate6m/portable-entry/src/main.trb
 failure_config=$candidate_root/corpus/gate6m/runtime-failures/trbconfig.jsonc
@@ -1271,6 +1281,43 @@ if test -n "$hash_source_root"; then
 	runtime_seed=$hash_transition
 fi
 
+if test -n "$iteration_source_root"; then
+	mkdir -p "$workspace/setup/iteration-syntax"
+	iteration_qbe=$workspace/setup/iteration-syntax/compiler.ssa
+	iteration_assembly=$workspace/setup/iteration-syntax/compiler.s
+	iteration_transition=$workspace/setup/iteration-syntax/compiler
+	strace -f -e trace=process -o "$evidence/setup/iteration-emit-process.trace" \
+		"$hash_transition" emit-qbe "$iteration_entry" \
+		> "$iteration_qbe" 2> "$evidence/setup/iteration-emit.stderr" || fail "iteration source emission failed"
+	require_empty_file "$evidence/setup/iteration-emit.stderr" "iteration source emission wrote stderr"
+	test -s "$iteration_qbe" || fail "iteration source QBE is empty"
+	require_forbidden_processes_absent "$evidence/setup/iteration-emit-process.trace" "iteration source emission"
+	strace -f -e trace=process -o "$evidence/setup/iteration-qbe-process.trace" \
+		"$qbe" -t amd64_sysv -o "$iteration_assembly" "$iteration_qbe" \
+		> "$evidence/setup/iteration-qbe.stdout" 2> "$evidence/setup/iteration-qbe.stderr" || fail "iteration QBE translation failed"
+	require_empty_file "$evidence/setup/iteration-qbe.stdout" "iteration QBE translation wrote stdout"
+	require_empty_file "$evidence/setup/iteration-qbe.stderr" "iteration QBE translation wrote stderr"
+	test -s "$iteration_assembly" || fail "iteration assembly is empty"
+	strace -f -e trace=process -o "$evidence/setup/iteration-link-process.trace" \
+		"$cc" -xassembler "$iteration_assembly" -fuse-ld=lld \
+		-Wl,--gc-sections,--strip-all -lm -o "$iteration_transition" \
+		> "$evidence/setup/iteration-link.stdout" 2> "$evidence/setup/iteration-link.stderr" || fail "iteration transition link failed"
+	require_empty_file "$evidence/setup/iteration-link.stdout" "iteration transition link wrote stdout"
+	require_empty_file "$evidence/setup/iteration-link.stderr" "iteration transition link wrote stderr"
+	test -x "$iteration_transition" || fail "iteration transition compiler is missing"
+	require_tool_observed "$evidence/setup/iteration-link-process.trace" 'execve\("[^"]*/ld\.lld"' "iteration transition LLD"
+	for iteration_case in live control managed; do
+		strace -f -e trace=process -o "$evidence/setup/iteration-$iteration_case-check-process.trace" \
+			"$iteration_transition" check "$candidate_root/compiler/conformance/valid/array-iteration-$iteration_case.trb" \
+			> "$evidence/setup/iteration-$iteration_case-check.stdout" 2> "$evidence/setup/iteration-$iteration_case-check.stderr" || fail "Array iteration bridge rejected $iteration_case"
+		printf 'ok\n' > "$evidence/setup/iteration-$iteration_case-check.expected"
+		cmp "$evidence/setup/iteration-$iteration_case-check.expected" "$evidence/setup/iteration-$iteration_case-check.stdout" > /dev/null || fail "iteration check stdout differs"
+		require_empty_file "$evidence/setup/iteration-$iteration_case-check.stderr" "iteration check wrote stderr"
+		require_forbidden_processes_absent "$evidence/setup/iteration-$iteration_case-check-process.trace" "Array iteration check"
+	done
+	runtime_seed=$iteration_transition
+fi
+
 strace -f -e trace=process -o "$evidence/setup/current-runtime-emit-process.trace" \
 	"$runtime_seed" emit-qbe "$compiler_entry" \
 	> "$runtime_qbe" \
@@ -1336,6 +1383,14 @@ require_tool_observed "$evidence/setup/current-runtime-link-process.trace" 'exec
 		grep execve "$evidence/setup/hash-link-process.trace"
 		grep execve "$evidence/setup/hash-check-process.trace"
 	fi
+	if test -n "$iteration_source_root"; then
+		grep execve "$evidence/setup/iteration-emit-process.trace"
+		grep execve "$evidence/setup/iteration-qbe-process.trace"
+		grep execve "$evidence/setup/iteration-link-process.trace"
+		for iteration_case in live control managed; do
+			grep execve "$evidence/setup/iteration-$iteration_case-check-process.trace"
+		done
+	fi
 	grep execve "$evidence/setup/current-runtime-emit-process.trace"
 	grep execve "$evidence/setup/current-runtime-qbe-process.trace"
 	grep execve "$evidence/setup/current-runtime-link-process.trace"
@@ -1382,6 +1437,14 @@ require_tool_observed "$evidence/setup/current-runtime-link-process.trace" 'exec
 		printf 'hash_transition_qbe_sha256=%s\n' "$(sha256 "$hash_qbe")"
 		printf 'hash_transition_size=%s\n' "$(file_size "$hash_transition")"
 		printf 'hash_transition_sha256=%s\n' "$(sha256 "$hash_transition")"
+	fi
+	if test -n "$iteration_source_root"; then
+		printf 'iteration_source_revision=%s\n' "$(git -C "$iteration_source_root" rev-parse HEAD)"
+		printf 'iteration_source_entry_sha256=%s\n' "$(sha256 "$iteration_entry")"
+		printf 'iteration_transition_qbe_size=%s\n' "$(file_size "$iteration_qbe")"
+		printf 'iteration_transition_qbe_sha256=%s\n' "$(sha256 "$iteration_qbe")"
+		printf 'iteration_transition_size=%s\n' "$(file_size "$iteration_transition")"
+		printf 'iteration_transition_sha256=%s\n' "$(sha256 "$iteration_transition")"
 	fi
 	printf 'current_runtime_qbe_size=%s\n' "$(file_size "$runtime_qbe")"
 	printf 'current_runtime_qbe_sha256=%s\n' "$(sha256 "$runtime_qbe")"
