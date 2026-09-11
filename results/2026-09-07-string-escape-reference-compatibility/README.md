@@ -1,6 +1,28 @@
 # Current reference compatibility
 
 The development pin is TypeRB `0.4.7-dev` at
+`52f3928a0b5194cfae9c7a75e7f56e1f243ff8d1`, including the accepted live Array
+iteration and repeatable Range/Iterable boundary fixes. All 17 selected checks
+pass for Native `563036f26f84090339ae8d516f4d019caca1e16c` in
+[run 34556980977](https://github.com/type-rb/type-rb-native/actions/runs/34556980977).
+Local full recovery-enabled validation passes 107 root and 193 compiler tests;
+formatting, reference checking and compatibility validation also pass.
+
+The initial [run 34556559394](https://github.com/type-rb/type-rb-native/actions/runs/34556559394)
+fails the quick job's exact reference identity check because the workflow still
+checks out the previous pin. Updating the remaining active quick, worker-memory,
+formal-build and amd64 workflow pins fixes that configuration mismatch. Frozen
+source-era experiment pins remain unchanged. The successful run above retains
+all ordinary recovery, target, memory and compiler-cost authorities.
+
+This establishes reference compatibility for the upcoming ordinary iteration
+work in [issue #410](https://github.com/type-rb/type-rb-native/issues/410).
+It does not add Native Array/Range block support, extend snapshot v4, or change
+immutable seed assets. Previous completed cohorts retain their identities below.
+
+## Previous Hash reference compatibility
+
+The development pin is TypeRB `0.4.7-dev` at
 `bae19032aa1bb7b263bc827d02606edc6e981c52`, the accepted
 [Hash snapshot-v4 extension](https://github.com/type-rb/type-rb/pull/668).
 It adds data-only String/Integer Hash construction, assignment, required lookup
@@ -12,8 +34,8 @@ checks pass for `fcb9e610eb6478d545b47950b027f05ff919e2c2` in
 The first final attempt retains a failed Darwin wall ratio despite identical
 control/candidate compiler and QBE bytes; one fresh-runner retry passes the
 unchanged policy. Growth, forced collection, aliases, source effects, missing
-keys and malformed Hash metadata are covered. The compatibility pointer now
-identifies this completed cohort; older observations below retain their pins.
+keys and malformed Hash metadata are covered. This was the previous completed
+compatibility cohort; older observations below retain their pins.
 
 ## Previous reference pin and retained authorities
 
