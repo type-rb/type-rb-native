@@ -44,8 +44,11 @@ retains compiler Hash self-use through a narrow amd64 ceiling revision, with
 ordinary ratios unchanged. The separately validated
 [Array iteration budget](decisions/0035-array-iteration-compiler-budget.md) retains
 checked ordinary iteration through narrow complete-compiler ceilings, also
-without changing relative limits. A cost failure blocks ordinary acceptance,
-not necessarily further investigation. There is no general relaxed percentage or automatic
+without changing relative limits. The separate
+[Array self-build decision](decisions/0036-array-iteration-self-build-budget.md)
+permits an arm64 self-build ratio of 1.08 for one exact compiler-source pair;
+all other ordinary comparisons retain the 1.05 ratio. A cost failure blocks
+ordinary acceptance, not necessarily further investigation. There is no general relaxed percentage or automatic
 conversion from an evaluation budget to a merge budget.
 
 Correctness, portable semantics, memory safety, failure ordering, MIR ownership,
