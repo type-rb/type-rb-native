@@ -316,8 +316,9 @@ benchmarks unless accepted runtime evidence has actually changed.
 PR #418 accepted the ordinary implementation at
 `508f721f8964d67a5893e547d2e2fb3de5b20a63`; PR #423 accepted matching recovery
 and seed observers at `d2980f14d1b64e5ce3544dd7133e7f5871644e4e`. Both complete
-CI cohorts pass ordinary limits. The [handoff registration](bootstrap-seed-updates.md#registered-array-iteration-refresh)
-precedes publication and compiler-source adoption; these remain separate steps.
+CI cohorts pass ordinary limits. The [verified seed handoff](bootstrap-seed-updates.md#current-verified-checkout-seed)
+records preparation, immutable publication and fresh actual-asset verification.
+Compiler-source adoption remains a subsequent verified change.
 
 The current slice supports statement `Array#each` and `Array#each.with_index`,
 with optional empty call parentheses, `do |value[, index]| ... end`, and
@@ -340,9 +341,9 @@ assignment plans. Existing runtime and compiler performance checks still apply.
 The matching reference pin and maintained snapshot-v4 fixtures cover authored
 Array iteration through existing recovery operations, including forced and
 automatic collection. Float Arrays, Range/Iterable, batches, and value-producing
-iteration remain outside the snapshot subset. The compiler implementation
-continues to use its accepted source subset until an immutable seed handoff is
-complete. Range/Iterable, batch iteration, expression-position iteration,
+iteration remain outside the snapshot subset. The verified seed and checkout
+handoff permit the next bounded compiler-source adoption of Array iteration.
+Range/Iterable, batch iteration, expression-position iteration,
 and the remaining Array APIs stay tracked in issue #410. The current Array API
 has no removal operation; the live-header implementation does not establish
 conformance for a future shrinking operation.

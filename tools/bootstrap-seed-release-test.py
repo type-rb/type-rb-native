@@ -20,8 +20,8 @@ class SeedReleaseTests(unittest.TestCase):
                      "gate6n-linux-amd64", "daily-performance", "weekly-performance"):
             with self.subTest(workflow=name):
                 workflow = (root / ".github/workflows" / (name + ".yml")).read_text()
-                self.assertIn("bootstrap-seed-2026-09-10-hash", workflow)
-                self.assertIn("79f699e9245f79131646ebf43207f6b7526c4f68", workflow)
+                self.assertIn("bootstrap-seed-2026-09-11-array-iteration", workflow)
+                self.assertIn("b4a1b383e5678907649334203f534ae62fa42af6", workflow)
                 self.assertIn("tools/bootstrap-seed-download.sh", workflow)
         workflow = (root / ".github/workflows/gate6n-linux-amd64.yml").read_text()
         self.assertIn("ROOT_RELEASE_TAG: bootstrap-seed-2026-08-30", workflow)

@@ -76,8 +76,10 @@ at `d2980f14d1b64e5ce3544dd7133e7f5871644e4e` validates this exact reference pin
 CLI/REPL, all three targets and ordinary cost bounds pass. The parent ordinary
 implementation was accepted separately in PR #418. This current CI proof does
 not relabel the older retained compatibility cohort or immutable seed evidence
-in `compatibility/current.json`. The next seed remains subject to the
-[registered handoff](bootstrap-seed-updates.md#registered-array-iteration-refresh).
+in `compatibility/current.json`. The [verified Array iteration seed handoff](bootstrap-seed-updates.md#current-verified-checkout-seed)
+records the separate preparation, immutable publication and fresh actual-asset
+verification. Compiler-source adoption follows the checkout and amd64 bridge
+handoff; the historical compatibility cohort remains unchanged.
 
 ## Record Array snapshot update
 
