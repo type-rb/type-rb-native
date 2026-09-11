@@ -32,13 +32,13 @@ def mir_loop_transfer_valid(plan: MirLoopTransfer, origin: Integer, kind: Intege
 	return origin < token_count
 end
 
-record Gate4MirArrayOperation
+record MirArrayOperation
 	kind: Integer
 	operand: Integer
 	origin: Integer
 end
 
-record Gate4MirInstruction
+record MirInstruction
 	kind: Integer
 	result: Integer
 	first: Integer
@@ -49,8 +49,8 @@ record Gate4MirInstruction
 	line: Integer
 end
 
-def gate4_mir_instruction_with_payload(instruction: Gate4MirInstruction, payload: Integer): Gate4MirInstruction
-	return Gate4MirInstruction.new(
+def gate4_mir_instruction_with_payload(instruction: MirInstruction, payload: Integer): MirInstruction
+	return MirInstruction.new(
 		kind: instruction.kind,
 		result: instruction.result,
 		first: instruction.first,
@@ -62,7 +62,7 @@ def gate4_mir_instruction_with_payload(instruction: Gate4MirInstruction, payload
 	)
 end
 
-record Gate4MirBlock
+record MirBlock
 	id: Integer
 	source_id: Integer
 	line: Integer
@@ -81,7 +81,7 @@ record Gate4MirBlock
 	return_value: Integer
 end
 
-record Gate4MirFunction
+record MirFunction
 	integer_guard: Integer
 	id: Integer
 	entry_block: Integer
@@ -93,7 +93,7 @@ record Gate4MirFunction
 	block_count: Integer
 end
 
-record Gate4MirValue
+record MirValue
 	function_id: Integer
 	id: Integer
 	type_id: Integer
@@ -108,15 +108,15 @@ end
 # A verified pass may mark the complete Array induction plan as optimized
 # (kind 5, mode 2). The verifier re-derives the loop proof before a backend may
 # consume its invariant header and redundant-check decisions.
-record Gate4MirModule
+record MirModule
 	source_count: Array<Integer>
 	entry_function: Array<Integer>
-	functions: Array<Gate4MirFunction>
-	blocks: Array<Gate4MirBlock>
-	values: Array<Gate4MirValue>
-	instructions: Array<Gate4MirInstruction>
+	functions: Array<MirFunction>
+	blocks: Array<MirBlock>
+	values: Array<MirValue>
+	instructions: Array<MirInstruction>
 	arguments: Array<Integer>
-	array_regions: Array<Array<Gate4MirArrayOperation>>
+	array_regions: Array<Array<MirArrayOperation>>
 	array_headers: Array<Array<Integer>>
 	array_loop_headers: Array<Array<Integer>>
 	literal_texts: Array<String>
@@ -169,7 +169,7 @@ def gate4_mir_origin_valid(source: Integer, line: Integer, source_count: Integer
 	return false
 end
 
-def gate4_mir_function_index(native_module: Gate4MirModule, function_id: Integer): Integer
+def gate4_mir_function_index(native_module: MirModule, function_id: Integer): Integer
 	mut index := 0
 	while index < native_module.functions.size()
 		row := native_module.functions[index]
@@ -182,8 +182,8 @@ def gate4_mir_function_index(native_module: Gate4MirModule, function_id: Integer
 end
 
 def gate4_mir_block_index(
-		native_module: Gate4MirModule,
-		function: Gate4MirFunction,
+		native_module: MirModule,
+		function: MirFunction,
 		block_id: Integer,
 	): Integer
 	mut index := function.block_start
@@ -198,7 +198,7 @@ def gate4_mir_block_index(
 end
 
 def gate4_mir_value_index(
-		native_module: Gate4MirModule,
+		native_module: MirModule,
 		function_id: Integer,
 		value_id: Integer,
 	): Integer
@@ -216,7 +216,7 @@ def gate4_mir_value_index(
 end
 
 def gate4_mir_value_type(
-		native_module: Gate4MirModule,
+		native_module: MirModule,
 		function_id: Integer,
 		value_id: Integer,
 	): Integer
@@ -238,7 +238,7 @@ def gate4_mir_array_element_type(type_id: Integer): Integer
 end
 
 def gate4_mir_argument_contains(
-		native_module: Gate4MirModule,
+		native_module: MirModule,
 		start: Integer,
 		count: Integer,
 		value_id: Integer,
@@ -255,9 +255,9 @@ def gate4_mir_argument_contains(
 end
 
 def gate4_mir_value_available(
-		native_module: Gate4MirModule,
-		function: Gate4MirFunction,
-		block: Gate4MirBlock,
+		native_module: MirModule,
+		function: MirFunction,
+		block: MirBlock,
 		instruction_finish: Integer,
 		value_id: Integer,
 	): Boolean
@@ -278,8 +278,8 @@ def gate4_mir_value_available(
 end
 
 def gate4_mir_definition_count(
-		native_module: Gate4MirModule,
-		function: Gate4MirFunction,
+		native_module: MirModule,
+		function: MirFunction,
 		value_id: Integer,
 	): Integer
 	mut count := 0
@@ -317,8 +317,8 @@ def gate4_mir_definition_count(
 end
 
 def gate4_mir_failure_error(
-		native_module: Gate4MirModule,
-		function: Gate4MirFunction,
+		native_module: MirModule,
+		function: MirFunction,
 		failure: Integer,
 	): String
 	block_index := gate4_mir_block_index(native_module, function, failure)
@@ -332,8 +332,8 @@ def gate4_mir_failure_error(
 end
 
 def gate4_mir_exact_integer_literal(
-		native_module: Gate4MirModule,
-		instruction: Gate4MirInstruction,
+		native_module: MirModule,
+		instruction: MirInstruction,
 		text: String,
 	): Boolean
 	if instruction.kind != 6
@@ -350,10 +350,10 @@ def gate4_mir_exact_integer_literal(
 end
 
 def gate4_mir_induction_address(
-		native_module: Gate4MirModule,
-		function: Gate4MirFunction,
-		block: Gate4MirBlock,
-		instruction: Gate4MirInstruction,
+		native_module: MirModule,
+		function: MirFunction,
+		block: MirBlock,
+		instruction: MirInstruction,
 	): Boolean
 	if function.block_count != 6
 		return false
@@ -575,7 +575,7 @@ def mir_invalid_array_header(): MirArrayHeaderPlan
 end
 
 # Resolve the live lexical declaration once for both header lifetime analyses.
-def mir_array_local_declaration(operations: Array<Gate4MirArrayOperation>, index: Integer): Integer
+def mir_array_local_declaration(operations: Array<MirArrayOperation>, index: Integer): Integer
 	access := operations[index]
 	mut declaration := index - 1
 	while declaration >= 0
@@ -605,12 +605,12 @@ end
 # Selected declarations are unique operation indexes. Malformed regions
 # return an invalid plan. A local's header is loaded at its declaration,
 # never before its initializer. Every element access still checks bounds.
-def gate4_mir_array_headers(operations: Array<Gate4MirArrayOperation>): MirArrayHeaderPlan
+def gate4_mir_array_headers(operations: Array<MirArrayOperation>): MirArrayHeaderPlan
 	mut parameter_count := 0
 	mut parameter_origin :=- 1
 	mut selected: Array<Integer> := []
 	mut blocked := false
-	mut controls: Array<Gate4MirArrayOperation> := []
+	mut controls: Array<MirArrayOperation> := []
 	mut depth := 0
 	mut control_origin :=- 1
 	mut index := 0
@@ -744,7 +744,7 @@ end
 # Consume an already verified region. Each triple names its loop start/end
 # operation and one binding declaration. Prefer the outermost effect-free loop;
 # all selected bindings must exist before its condition is first evaluated.
-def mir_array_loop_headers(operations: Array<Gate4MirArrayOperation>): Array<Integer>
+def mir_array_loop_headers(operations: Array<MirArrayOperation>): Array<Integer>
 	mut plan: Array<Integer> := []
 	mut start := 0
 	while start < operations.size()
@@ -823,7 +823,7 @@ end
 # A nonzero guard is an exclusive power-of-two bound on every Integer
 # parameter. All intermediate Integer ranges must fit the portable domain.
 # This bounded proof accepts only a complete straight-line scalar entry.
-def mir_scalar_guard_proves(native_module: Gate4MirModule, function: Gate4MirFunction, limit: Integer): Integer
+def mir_scalar_guard_proves(native_module: MirModule, function: MirFunction, limit: Integer): Integer
 	if function.block_count != 2 || function.parameter_count < 1 || function.parameter_count > 4
 		return - 1
 	end
@@ -907,7 +907,7 @@ def mir_scalar_guard_proves(native_module: Gate4MirModule, function: Gate4MirFun
 	return 1
 end
 
-def mir_scalar_guard(native_module: Gate4MirModule, function: Gate4MirFunction): Integer
+def mir_scalar_guard(native_module: MirModule, function: MirFunction): Integer
 	if native_module.array_regions.size() > 32
 		return 0
 	end
@@ -929,11 +929,11 @@ def mir_scalar_guard(native_module: Gate4MirModule, function: Gate4MirFunction):
 	return 0
 end
 
-def mir_function_with_guard(function: Gate4MirFunction, guard: Integer): Gate4MirFunction
-	return Gate4MirFunction.new(integer_guard: guard, id: function.id, entry_block: function.entry_block, source_id: function.source_id, line: function.line, parameter_start: function.parameter_start, parameter_count: function.parameter_count, block_start: function.block_start, block_count: function.block_count)
+def mir_function_with_guard(function: MirFunction, guard: Integer): MirFunction
+	return MirFunction.new(integer_guard: guard, id: function.id, entry_block: function.entry_block, source_id: function.source_id, line: function.line, parameter_start: function.parameter_start, parameter_count: function.parameter_count, block_start: function.block_start, block_count: function.block_count)
 end
 
-def gate4_optimize_verified_mir(mut native_module: Gate4MirModule)
+def gate4_optimize_verified_mir(mut native_module: MirModule)
 	mut index := 0
 	while index < native_module.instructions.size()
 		instruction := native_module.instructions[index]
@@ -989,9 +989,9 @@ def gate4_optimize_verified_mir(mut native_module: Gate4MirModule)
 end
 
 def gate4_mir_instruction_error(
-		native_module: Gate4MirModule,
-		function: Gate4MirFunction,
-		block: Gate4MirBlock,
+		native_module: MirModule,
+		function: MirFunction,
+		block: MirBlock,
 		instruction_index: Integer,
 	): String
 	instruction := native_module.instructions[instruction_index]
@@ -1328,9 +1328,9 @@ def gate4_mir_instruction_error(
 end
 
 def gate4_mir_target_arguments_error(
-		native_module: Gate4MirModule,
-		function: Gate4MirFunction,
-		block: Gate4MirBlock,
+		native_module: MirModule,
+		function: MirFunction,
+		block: MirBlock,
 		target: Integer,
 		start: Integer,
 		count: Integer,
@@ -1367,9 +1367,9 @@ def gate4_mir_target_arguments_error(
 end
 
 def gate4_mir_terminator_error(
-		native_module: Gate4MirModule,
-		function: Gate4MirFunction,
-		block: Gate4MirBlock,
+		native_module: MirModule,
+		function: MirFunction,
+		block: MirBlock,
 	): String
 	kind := block.terminator
 	if kind == 1
@@ -1477,7 +1477,7 @@ end
 
 # Validate storage before definition counting or cross-block semantic checks.
 # Range checks use subtraction so malformed large counts cannot overflow.
-def gate4_mir_function_structure_error(native_module: Gate4MirModule, function: Gate4MirFunction): String
+def gate4_mir_function_structure_error(native_module: MirModule, function: MirFunction): String
 	if !gate4_mir_range_valid(function.parameter_start, function.parameter_count, native_module.arguments.size())
 		return "MIR function parameter range is invalid"
 	end
@@ -1505,7 +1505,7 @@ def gate4_mir_function_structure_error(native_module: Gate4MirModule, function: 
 	return ""
 end
 
-def gate4_mir_function_error(native_module: Gate4MirModule, function: Gate4MirFunction): String
+def gate4_mir_function_error(native_module: MirModule, function: MirFunction): String
 	if gate4_mir_block_index(native_module, function, function.entry_block) < 0
 		return "MIR function entry block does not exist"
 	end
@@ -1557,7 +1557,7 @@ def gate4_mir_function_error(native_module: Gate4MirModule, function: Gate4MirFu
 	return ""
 end
 
-def gate4_verify_mir(native_module: Gate4MirModule, optimized: Boolean): String
+def gate4_verify_mir(native_module: MirModule, optimized: Boolean): String
 	if native_module.source_count[0] <= 0
 		return "MIR module has no sources"
 	end
@@ -1696,7 +1696,7 @@ end
 # 0 reloads current storage, 1 reuses the checked address with a rooted owner,
 # and 2 also proves that no owner root is needed across the index and RHS.
 # Unknown/malformed operations never authorize removing either safeguard.
-def mir_array_assignment_plan(operations: Array<Gate4MirArrayOperation>, index_origin: Integer, store_origin: Integer, token_count: Integer): Integer
+def mir_array_assignment_plan(operations: Array<MirArrayOperation>, index_origin: Integer, store_origin: Integer, token_count: Integer): Integer
 	if !mir_array_assignment_valid(index_origin, store_origin, index_origin, token_count)
 		return - 1
 	end
