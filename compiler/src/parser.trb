@@ -25,6 +25,20 @@ def gate4_declaration_start(state: Gate4Compiler, index: Integer): Boolean
 	return gate4_token_is(state, index + 1, ":")
 end
 
+def syntax_block_end(state: Gate4Compiler, index: Integer): Boolean
+	kind := gate4_load_integer(state.token_kinds, index)
+	if kind != 1
+		if kind != 5
+			return false
+		end
+	end
+	word := gate4_load_string(state.token_texts, index)
+	if word == "end"
+		return true
+	end
+	return word == "}"
+end
+
 def syntax_conditional_tail(state: Gate4Compiler, index: Integer): Boolean
 	if gate4_token_is(state, index, "else")
 		return true
@@ -342,11 +356,12 @@ def gate4_parse_primary_syntax(mut state: Gate4Compiler, mut position: Array<Int
 			end
 		else
 			if gate4_token_is(state, position[0], ".")
-				if gate4_token_is(state, position[0] + 1, "each") && syntax_iteration_suffix(state, position[0]) >= 0
+				gate4_advance(position)
+				member := gate4_expect_identifier(state, position)
+				if member == "each" && syntax_iteration_suffix(state, position[0] - 2) >= 0
+					position[0] -= 2
 					break
 				end
-				gate4_advance(position)
-				gate4_expect_identifier(state, position)
 				if gate4_has_diagnostic(state)
 					return false
 				end
@@ -487,10 +502,10 @@ def parse_simple_statement(mut state: Gate4Compiler, mut position: Array<Integer
 	if !gate4_parse_expression_syntax(state, position, 1)
 		return false
 	end
-	if syntax_iteration_suffix(state, position[0]) >= 0
+	operator := gate4_load_string(state.token_texts, position[0])
+	if operator == "." && syntax_iteration_suffix(state, position[0]) >= 0
 		return parse_iteration_statement(state, position, origin)
 	end
-	operator := gate4_load_string(state.token_texts, position[0])
 	if operator == "="
 		gate4_advance(position)
 		if !gate4_parse_expression_syntax(state, position, 1)
@@ -523,7 +538,7 @@ def parse_statement_block(mut state: Gate4Compiler, mut position: Array<Integer>
 		if gate4_terminal_token(state, position[0])
 			gate4_diagnostic(state, "TRBN4002", gate4_load_integer(state.token_lines, position[0]), "expected end")
 			break
-		elsif gate4_token_is(state, position[0], "end") || gate4_token_is(state, position[0], "}")
+		elsif syntax_block_end(state, position[0])
 			break
 		elsif syntax_conditional_tail(state, position[0])
 			break

@@ -6,7 +6,7 @@ import { gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store
 import { gate4_float_literal_in_range, gate4_integer_literal_in_range, gate4_number_is_float, gate4_small_nonnegative_integer_operand } from literals
 import { MirArrayOperation, MirBlock, MirFunction, MirInstruction, MirLoopTransfer, MirValue, gate4_mir_array_element_type, gate4_mir_function_index, gate4_mir_instruction_with_payload, mir_array_assignment_plan, mir_array_assignment_valid, mir_logical_plan, mir_loop_transfer_valid } from mir
 import { Gate4Compiler, Gate4Locals, gate4_diagnostic, gate4_has_diagnostic, gate4_local_add, gate4_local_find, gate4_terminal_token } from state
-import { finish_statement, gate4_advance, gate4_binary_operator_id, gate4_binary_precedence, gate4_declaration_start, gate4_expect, gate4_expect_identifier, gate4_parse_type, gate4_skip_newlines, gate4_token_is, syntax_conditional_tail, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_statement_boundary } from parser
+import { finish_statement, gate4_advance, gate4_binary_operator_id, gate4_binary_precedence, gate4_declaration_start, gate4_expect, gate4_expect_identifier, gate4_parse_type, gate4_skip_newlines, gate4_token_is, syntax_block_end, syntax_conditional_tail, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_statement_boundary } from parser
 import { gate4_array_element_type, gate4_array_type, gate4_common_array_element_type, gate4_find_field, gate4_find_record_type, gate4_find_visible_function, gate4_find_visible_record, gate4_record_type, gate4_resolve_type_name, gate4_standard_package_import, gate4_standard_package_root, gate4_type_display } from resolution
 
 record Gate4CheckedValue
@@ -920,11 +920,12 @@ def gate4_check_postfix(
 			end
 		else
 			if gate4_token_is(state, position[0], ".")
-				if gate4_token_is(state, position[0] + 1, "each") && syntax_iteration_suffix(state, position[0]) >= 0
-					break
-				end
 				gate4_advance(position)
 				member := gate4_expect_identifier(state, position)
+				if member == "each" && syntax_iteration_suffix(state, position[0] - 2) >= 0
+					position[0] -= 2
+					break
+				end
 				if gate4_token_is(state, position[0], "(")
 					if member != "size"
 						gate4_scalar_mir_disable(locals)
@@ -1892,12 +1893,12 @@ def gate4_check_block(
 	while true
 		if locals.mir_state[0] > 0
 			if locals.mir_state[4] >= 0
-				if !(gate4_token_is(state, position[0], "end") || gate4_token_is(state, position[0], "}"))
+				if !syntax_block_end(state, position[0])
 					gate4_scalar_mir_disable(locals)
 				end
 			else
 				if locals.mir_state[4] == - 2
-					if !(gate4_token_is(state, position[0], "end") || gate4_token_is(state, position[0], "}"))
+					if !syntax_block_end(state, position[0])
 						gate4_scalar_mir_disable(locals)
 					end
 				end
@@ -1926,7 +1927,7 @@ def gate4_check_block(
 			end
 			gate4_advance(position)
 			finish_statement(state, position)
-		elsif(gate4_token_is(state, position[0], "end") || gate4_token_is(state, position[0], "}")) || syntax_conditional_tail(state, position[0])
+		elsif syntax_block_end(state, position[0]) || syntax_conditional_tail(state, position[0])
 			break
 		elsif gate4_token_is(state, position[0], "if")
 			if !gate4_check_conditional(state, position, locals, result_type, loop_origin)

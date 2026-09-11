@@ -3,7 +3,7 @@ import { gate4_path_basename, gate4_path_directory, gate4_path_join, gate4_strin
 import { gate4_ascii_code, gate4_integer_string, gate4_number_is_float, gate4_number_without_underscores, gate4_small_nonnegative_integer_operand } from literals
 import { gate4_mir_block_index, gate4_mir_function_index, gate4_mir_value_type, gate4_optimize_verified_mir, gate4_verify_mir, mir_logical_short_value } from mir
 import { Gate4Compiler, find_name_index, gate4_add_module, gate4_compiler_new, gate4_diagnostic, gate4_find_module, gate4_has_diagnostic, gate4_local_add, gate4_locals_new } from state
-import { finish_statement, gate4_advance, gate4_binary_operator_id, gate4_binary_precedence, gate4_declaration_start, gate4_expect, gate4_expect_identifier, gate4_parse_module, gate4_parse_type, gate4_skip_newlines, gate4_token_is, parse_statement_block, syntax_conditional_tail, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_statement_boundary } from parser
+import { finish_statement, gate4_advance, gate4_binary_operator_id, gate4_binary_precedence, gate4_declaration_start, gate4_expect, gate4_expect_identifier, gate4_parse_module, gate4_parse_type, gate4_skip_newlines, gate4_token_is, parse_statement_block, syntax_block_end, syntax_conditional_tail, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_statement_boundary } from parser
 import { gate4_array_element_type, gate4_array_type, gate4_common_array_element_type, gate4_find_field, gate4_find_function_in_module, gate4_find_record_type, gate4_find_visible_function, gate4_find_visible_record, gate4_import_path_value, gate4_normalize_import_path, gate4_record_type, gate4_resolve, gate4_resolve_type_name, gate4_standard_package_import, gate4_standard_package_root, gate4_standard_package_target, gate4_validate_import_usage } from resolution
 import { checked_array_assignment_plan, checked_array_assignment_reads_old, checked_array_assignment_store, checked_array_assignment_target, checked_binary_plan_type, checked_iteration_require, checked_loop_transfer_kind, gate4_check_block, gate4_mir_add_parameter, gate4_mir_nonnegative_fact, gate4_scalar_leaf_inline_eligible, gate4_scalar_mir_begin, gate4_scalar_mir_commit } from checked_program
 import { QbeOutput, qbe_output_append, qbe_output_branch, qbe_output_line, qbe_output_new } from qbe_output
@@ -1812,11 +1812,12 @@ def gate4_emit_postfix(
 			value = gate4_emit_direct_call(state, position, context, output, value)
 		else
 			if gate4_token_is(state, position[0], ".")
-				if gate4_token_is(state, position[0] + 1, "each") && syntax_iteration_suffix(state, position[0]) >= 0
-					break
-				end
 				gate4_advance(position)
 				member := gate4_expect_identifier(state, position)
+				if member == "each" && syntax_iteration_suffix(state, position[0] - 2) >= 0
+					position[0] -= 2
+					break
+				end
 				if gate4_token_is(state, position[0], "(")
 					if value.category < 4
 						if value.category == 2
@@ -2656,7 +2657,7 @@ def gate4_emit_block(
 			terminated = 1
 		elsif sparse_integer_at(state.iteration_origins, position[0]) > 0
 			emit_array_iteration(state, position, context, output, result_type, loop_origin)
-		elsif(gate4_token_is(state, position[0], "end") || gate4_token_is(state, position[0], "}"))
+		elsif syntax_block_end(state, position[0])
 			complete = true
 		else
 			if syntax_conditional_tail(state, position[0])

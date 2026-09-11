@@ -4,7 +4,7 @@ import { repl_hash_new, repl_hash_set, repl_hash_get, repl_hash_slot, repl_hash_
 import trb/std/math
 import { Gate4Compiler } from state
 import { sparse_integer_at, gate4_load_integer, gate4_load_string } from storage
-import { syntax_statement_boundary, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_conditional_tail, gate4_token_is, gate4_binary_operator_id, gate4_binary_precedence, gate4_parse_expression_syntax, gate4_parse_type, gate4_skip_newlines, gate4_declaration_start } from parser
+import { syntax_statement_boundary, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_block_end, syntax_conditional_tail, gate4_token_is, gate4_binary_operator_id, gate4_binary_precedence, gate4_parse_expression_syntax, gate4_parse_type, gate4_skip_newlines, gate4_declaration_start } from parser
 import { mir_logical_short_value } from mir
 import { checked_iteration_require, checked_loop_transfer_kind } from checked_program
 import { gate4_find_visible_function, gate4_find_visible_record, gate4_find_record_type, gate4_find_field, gate4_record_type, gate4_array_element_type } from resolution
@@ -452,12 +452,13 @@ def repl_postfix(mut state: Gate4Compiler, mut position: Array<Integer>, mut sto
 			end
 		else
 			if gate4_token_is(state, position[0], ".")
-				if gate4_token_is(state, position[0] + 1, "each") && syntax_iteration_suffix(state, position[0]) >= 0
-					break
-				end
 				position[0] += 1
 				member := gate4_load_string(state.token_texts, position[0])
 				position[0] += 1
+				if member == "each" && syntax_iteration_suffix(state, position[0] - 2) >= 0
+					position[0] -= 2
+					break
+				end
 				if gate4_token_is(state, position[0], "(")
 					if value.type_name == "Hash" || hash_key_type(value.type_name) != ""
 						result = repl_reference(repl_hash_method(state, position, store, environment, result.value))
@@ -809,7 +810,7 @@ def repl_block(mut state: Gate4Compiler, mut position: Array<Integer>, mut store
 		if store.error[0] != ""
 			return 0
 		end
-		if (gate4_token_is(state, position[0], "end") || gate4_token_is(state, position[0], "}"))
+		if syntax_block_end(state, position[0])
 			complete = true
 		else
 			if syntax_conditional_tail(state, position[0])
