@@ -25,8 +25,8 @@ guide, not a finding that every gate-numbered file is obsolete.
 | `tools/`, `.github/workflows/`, compatibility and transition metadata | Current consumers of source paths, names, runtime output, and exact identities. Move references atomically with implementation changes. |
 | `results/`, dated gate plans and accepted decisions | Historical evidence. Preserve gate labels, recorded commands, hashes, and revisions rather than rewriting history to resemble the current layout. |
 
-In particular, the root project config compiles `src/`, and recovery helpers
-validate the compiler's exact imports. The runtime-generation path also feeds
+In particular, `trbconfig.reference.jsonc` selects root `src/`, and recovery
+helpers validate the compiler's exact imports. The runtime-generation path also feeds
 bootstrap tooling. A filename search alone cannot establish dead code.
 
 ## Ordered checkpoints
@@ -40,7 +40,7 @@ bootstrap tooling. A filename search alone cannot establish dead code.
 | O5 — Retire superseded implementation | When a replacement covers the old path's actual consumers | Delete only proven-unused implementation and compatibility shims after dependency and coverage checks. Preserve useful regression inputs and immutable historical evidence. |
 
 O1 supplied the initial documentation cleanup. O2's
-[root source inventory](root-source-inventory.md) covers all 45 source files
+[root source inventory](root-source-inventory.md) covers all 54 source files
 and records the first matched-Go driver move under
 [issue #258](https://github.com/type-rb/type-rb-native/issues/258). The subsequent
 [recovery naming slice](https://github.com/type-rb/type-rb-native/issues/272)
