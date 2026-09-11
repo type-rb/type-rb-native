@@ -157,3 +157,8 @@ The separate [String output budget](decisions/0037-string-output-compiler-budget
 retains the measured stack-vector runtime cost through an amd64-only absolute
 ceiling. It grants no self-build ratio exception: the output candidate must
 pass ordinary 1.05 after retiring Decision 0036's exhausted source selector.
+
+The separate [declaration-index assessment](decisions/0038-declaration-index-memory-tradeoff.md)
+records a measured large-source time/space trade after its diagnostic RSS
+condition failed. It changes no ordinary CI limit and grants no reusable memory
+allowance; implementation acceptance remains separate.
