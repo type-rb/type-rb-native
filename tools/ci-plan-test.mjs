@@ -72,11 +72,19 @@ test('compatibility checks precede matrix fan-out and remain in standalone valid
   assert(quick, 'quick stage must exist');
   const build = quick.indexOf('go build -C .type-rb');
   const formatting = quick.indexOf('Check formatting and core types');
+  const checkout = quick.indexOf('repository: type-rb/type-rb');
+  const preflight = quick.indexOf('Validate every reference checkout before toolchain setup');
+  assert(preflight >= 0 && preflight < checkout && checkout < build);
+  for (const command of ['python3 -m unittest tools/compatibility_manifest_test.py',
+    'python3 tools/compatibility_manifest.py\n']) {
+    const check = quick.indexOf(command, preflight);
+    assert(check > preflight && check < checkout, 'static pin checks precede reference checkout');
+  }
   for (const command of [
     'python3 -m unittest tools/compatibility_manifest_test.py',
     'python3 tools/compatibility_manifest.py --reference-trb "$RUNNER_TEMP/trb"',
   ]) {
-    const check = quick.indexOf(command);
+    const check = quick.indexOf(command, build);
     assert(build >= 0 && check > build && formatting > check,
       `${command} must run after reference build and before later quick checks`);
     assert(standalone.includes(command), 'standalone validation must retain the same check');

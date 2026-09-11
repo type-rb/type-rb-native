@@ -157,6 +157,111 @@ def _expected_targets(seed_manifest: dict[str, Any]) -> list[dict[str, str]]:
     return targets
 
 
+# Exact inventory of reference consumers. Historical experiments retain their
+# source-era oracle; they must not follow a development pin update.
+REFERENCE_WORKFLOWS = {
+    "gate-zero.yml": ("direct", 1),
+    "pull-request.yml": ("direct", 1),
+    "runtime-worker-memory.yml": ("environment", 1),
+    "benchmarksgame-formal.yml": ("environment", 1),
+    "benchmarksgame-build-formal.yml": ("environment", 1),
+    "gate6n-linux-amd64.yml": ("environment", 1),
+    "daily-performance.yml": ("derived", 1),
+    "weekly-performance.yml": ("derived", 1),
+    "array-push-fast-path.yml": ("bae19032aa1bb7b263bc827d02606edc6e981c52", 1),
+    "gc-temp-push-fast-path.yml": ("bae19032aa1bb7b263bc827d02606edc6e981c52", 1),
+    "dynamic-array-address.yml": ("bae19032aa1bb7b263bc827d02606edc6e981c52", 1),
+    "gate6m-formal.yml": ("5dc09070cf7f88a569279f5e63982a6de59d692c", 2),
+}
+
+
+def _reference_refs(source: str, name: str) -> list[str]:
+    """Read the supported checkout-with mapping without a YAML dependency.
+
+    These maintained workflows use block mappings. Unknown/ambiguous spellings
+    fail closed rather than guessing at an equivalent checkout expression.
+    """
+    lines = source.splitlines()
+    refs: list[str] = []
+    for index, line in enumerate(lines):
+        match = re.fullmatch(r"( +)repository: *['\"]?type-rb/type-rb['\"]? *(?:#.*)?", line)
+        if match is None:
+            continue
+        indent = len(match[1])
+        start, finish = index, index + 1
+        while start > 0 and (not lines[start - 1].strip() or len(lines[start - 1]) - len(lines[start - 1].lstrip()) >= indent):
+            start -= 1
+        while finish < len(lines) and (not lines[finish].strip() or len(lines[finish]) - len(lines[finish].lstrip()) >= indent):
+            finish += 1
+        values = [m[1] for text in lines[start:finish]
+                  if (m := re.fullmatch(r" {" + str(indent) + r"}ref: *(.*?) *", text))]
+        if len(values) != 1:
+            raise ValidationError(f"reference checkout {name}: expected one ref per checkout")
+        refs.append(values[0])
+    return refs
+
+
+def validate_reference_checkouts(root: Path, revision: str) -> dict[str, str]:
+    directory = root / ".github/workflows"
+    sources = {path.name: _require_text(path, [], "reference checkout")
+               for pattern in ("*.yml", "*.yaml") for path in sorted(directory.glob(pattern))}
+    sources = {name: _without_comment_lines(source) for name, source in sources.items()}
+    # Catch an added literal consumer, including an unrecognized mapping shape.
+    observed = {name for name, source in sources.items()
+                if re.search(r"type-rb/type-rb(?![-\w/])", source)}
+    expected = set(REFERENCE_WORKFLOWS)
+    if observed != expected:
+        raise ValidationError("reference checkout inventory differs: missing=" +
+                              ",".join(sorted(expected - observed)) + " added=" +
+                              ",".join(sorted(observed - expected)))
+    for name, (mode, count) in REFERENCE_WORKFLOWS.items():
+        source = sources[name]
+        refs = _reference_refs(source, name)
+        if mode == "direct":
+            expected_ref = revision
+            identities = ['test "$(cat TYPE_RB_REVISION)" = "$(git -C .type-rb rev-parse HEAD)"']
+        elif mode == "derived":
+            expected_ref = "${{ steps.reference.outputs.revision }}"
+            producer = 'run: echo "revision=$(cat TYPE_RB_REVISION)" >> "$GITHUB_OUTPUT"'
+            checkout = source.find("repository: type-rb/type-rb")
+            if (len(re.findall(r"(?m)^ +id: reference$", source)) != 1 or
+                    _command_count(source, producer) != 1 or
+                    checkout < 0 or source.index(producer) > checkout):
+                raise ValidationError(f"reference checkout {name}: canonical producer differs")
+            identities = ['test "$(git -C .type-rb rev-parse HEAD)" = "$(cat TYPE_RB_REVISION)"']
+        else:
+            expected_ref = "${{ env.TYPE_RB_REVISION }}"
+            pin = revision if mode == "environment" else mode
+            pins = re.findall(r"(?m)^ *TYPE_RB_REVISION: *(\S+) *$", source)
+            if pins != [pin]:
+                raise ValidationError(f"reference checkout {name}: environment pin differs")
+            identities = ['test "$(git -C .type-rb rev-parse HEAD)" = "$TYPE_RB_REVISION"']
+            canonical = ".gate6n-candidate/TYPE_RB_REVISION" if name == "gate6n-linux-amd64.yml" else "TYPE_RB_REVISION"
+            identities.append(f'test "$(cat {canonical})" = "$TYPE_RB_REVISION"')
+        if refs != [expected_ref] * count:
+            raise ValidationError(f"reference checkout {name}: exact checkout refs differ")
+        for identity in identities:
+            if _command_count(source, identity) != count:
+                raise ValidationError(f"reference checkout {name}: post-checkout identity differs")
+    controller = root / "tools/gate6n-linux-amd64.sh"
+    source = _without_comment_lines(_require_text(controller, [], "reference controller"))
+    if re.findall(r"(?m)^TYPE_RB_REVISION=(\S+)$", source) != [revision]:
+        raise ValidationError("reference checkout gate6n-linux-amd64.sh: controller pin differs")
+    identity = 'test "$(tr -d \'\\n\' < "$candidate_root/TYPE_RB_REVISION")" = "$TYPE_RB_REVISION" ||'
+    if _command_count(source, identity) != 1:
+        raise ValidationError("reference checkout gate6n-linux-amd64.sh: candidate identity differs")
+    return sources
+
+
+def _without_comment_lines(source: str) -> str:
+    return "\n".join(line for line in source.split("\n")
+                     if not line.lstrip().startswith("#"))
+
+
+def _command_count(source: str, command: str) -> int:
+    return len(re.findall(r"(?m)^[ \t]*(?:run: )?" + re.escape(command) + r"[ \t]*$", source))
+
+
 def validate_repository_values(
     root: Path, manifest: dict[str, Any], reference_trb: Path | None = None
 ) -> None:
@@ -167,28 +272,8 @@ def validate_repository_values(
     if manifest["typeRB"]["revision"] != type_rb_revision:
         raise ValidationError("typeRB.revision disagrees with TYPE_RB_REVISION")
 
-    workflow = _require_text(
-        root / ".github/workflows/gate-zero.yml",
-        [f"ref: {type_rb_revision}"],
-        "reference checkout",
-    )
-    checkout_revisions = re.findall(r"(?m)^\s*ref:\s*([0-9a-f]{40})\s*$", workflow)
-    if checkout_revisions != [type_rb_revision]:
-        raise ValidationError("gate-zero reference checkout is not the single exact TypeRB revision")
-
-    benchmark_workflow = _require_text(
-        root / ".github/workflows/benchmarksgame-formal.yml",
-        [
-            f"TYPE_RB_REVISION: {type_rb_revision}",
-            "ref: ${{ env.TYPE_RB_REVISION }}",
-        ],
-        "formal benchmark reference checkout",
-    )
-    benchmark_revisions = re.findall(
-        r"(?m)^\s*TYPE_RB_REVISION:\s*([0-9a-f]{40})\s*$", benchmark_workflow
-    )
-    if benchmark_revisions != [type_rb_revision]:
-        raise ValidationError("formal benchmark does not pin the exact TypeRB revision")
+    workflows = validate_reference_checkouts(root, type_rb_revision)
+    workflow = workflows["gate-zero.yml"]
 
     if reference_trb is not None:
         try:
