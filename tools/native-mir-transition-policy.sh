@@ -586,8 +586,8 @@ native_mir_compiler_ratio_limit() {
 	fi
 }
 
-# Decision 0036 is one source-bound arm64 self-build comparison, not a new
-# ordinary percentage. Remove this hook after Array iteration is the baseline.
+# Decision 0039 permits one Linux self-build comparison for the assessed Array,
+# output and declaration-index source. Remove this hook once it is the baseline.
 native_mir_clean_compiler_tree() (
 	prefix=$(git -C "$1" rev-parse --show-prefix 2>/dev/null) || exit 1
 	test -z "$prefix" || exit 1
@@ -598,17 +598,17 @@ native_mir_clean_compiler_tree() (
 
 native_mir_array_iteration_build_allowance() {
 	case "${3-}" in
-		darwin-arm64-v0|linux-arm64-v0) ;;
+		linux-arm64-v0) ;;
 		*) return 1 ;;
 	esac
-	test "$(native_mir_clean_compiler_tree "$1")" = bc4cdfd82560401970e07ef7ef965d8bdb22b612 || return 1
+	test "$(native_mir_clean_compiler_tree "$1")" = bb47cf20daf6a3c2903f75098021ab163ad72638 || return 1
 	test "$(native_mir_clean_compiler_tree "$2")" = 47e078f2d8b38429e52935db8a46c00ccb5a6efb
 }
 
 native_mir_build_ratio_limit() {
 	native_mir_roots_valid "$1" "$2" || return 1
 	if native_mir_array_iteration_build_allowance "$1" "$2" "${3-}"; then
-		printf '%s\n' 1.08
+		printf '%s\n' 1.07
 		return 0
 	fi
 	if native_mir_foundation_transition "$1" "$2"; then

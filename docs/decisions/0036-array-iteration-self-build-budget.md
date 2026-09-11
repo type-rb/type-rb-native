@@ -1,6 +1,13 @@
 # 0036: Source-bound self-build budget for checked Array iteration
 
-Status: accepted only on integration of the separately validated policy PR.
+Status: accepted through [PR #422](https://github.com/type-rb/type-rb-native/pull/422).
+
+The registered final cohort failed both targets under the correctly selected
+1.08 bound. The following output-runtime candidate has a different compiler
+tree and was measured under ordinary 1.05 comparisons. The old source pair no
+longer qualifies. [Decision 0039](0039-linux-array-self-build-assessment.md)
+separately assesses the later Linux-only comparison; the accepted decision and
+failed observations below remain intact.
 
 ## Capability, controls and failed acceptance
 
@@ -99,3 +106,20 @@ the expired selector, workflow argument and its dedicated tests in the following
 recovery/policy cleanup; do not carry the exception into compiler self-use or
 another syntax slice. The decision record remains. This changes no seed release,
 Pages result, supported-language contract or Pure Go performance claim.
+
+## Exhausted allowance and output follow-up
+
+The one [final cohort](https://github.com/type-rb/type-rb-native/actions/runs/34595389857)
+at `eb7ef16cd742fb7442e5d6fd029858ea2a7d5c05` applied 1.08 correctly but failed
+Linux wall time 1.955 to 2.140 s (1.094629) and Darwin 2.195 to 2.385 s
+(1.086560). Compiler byte ratios still passed. Later performance checks remain
+unaccepted. This cohort is not retried or reclassified by removing its selector.
+
+[Issue #421](https://github.com/type-rb/type-rb-native/issues/421) investigates
+output cost instead. Its first bounded String-copy buffer improved identical-source
+wall time but failed RSS and was reverted. The next implementation uses stack
+vectors for ordinary String output, including positive short-write progress,
+without a heap buffer or new MIR semantics. It requires normal 1.05 acceptance
+and every correctness/recovery/target authority; no seed or Pages update follows
+from a local diagnostic. The failed prototype, interrupted diagnostic expectation
+and its correction remain recorded in that issue.
