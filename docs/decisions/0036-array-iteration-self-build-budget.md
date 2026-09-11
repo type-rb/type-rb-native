@@ -4,8 +4,9 @@ Status: accepted through [PR #422](https://github.com/type-rb/type-rb-native/pul
 
 The registered final cohort failed both targets under the correctly selected
 1.08 bound. The following output-runtime candidate has a different compiler
-tree and uses ordinary 1.05 comparisons. The exhausted source-pair selector,
-workflow argument and dedicated tests are removed; the accepted decision and
+tree and was measured under ordinary 1.05 comparisons. The old source pair no
+longer qualifies. [Decision 0039](0039-linux-array-self-build-assessment.md)
+separately assesses the later Linux-only comparison; the accepted decision and
 failed observations below remain intact.
 
 ## Capability, controls and failed acceptance
