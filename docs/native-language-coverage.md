@@ -336,6 +336,8 @@ source/body boundaries, and nearest-loop ownership. Ordinary code generation
 and the REPL consume the same checked plan. Emission roots both the retained
 Array and the current managed element across body allocation, and keeps hidden
 local slots aligned with MIR identities used by nested loop-header placement.
+The shared shape and checked-plan accessors live in `iteration_checked.trb`;
+the compiler, recursive checker and REPL import this single proof owner.
 Sparse origin maps share the same absent-entry read with Hash and Array
 assignment plans. Existing runtime and compiler performance checks still apply.
 

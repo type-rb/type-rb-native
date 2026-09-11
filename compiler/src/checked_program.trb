@@ -1,4 +1,5 @@
-import { MirIteration, mir_iteration_shape_valid, mir_iteration_valid } from iteration_mir
+import { MirIteration, mir_iteration_valid } from iteration_mir
+import { checked_iteration_require, checked_iteration_shape } from iteration_checked
 import { hash_key_type, hash_type, hash_value_type } from hash_types
 import { mir_hash_operation } from hash_mir
 import { checked_hash_binding_target, checked_hash_method, checked_hash_plan, checked_hash_publish } from hash_checked
@@ -1594,79 +1595,6 @@ def gate4_check_conditional(
 	gate4_array_region_operation(locals, 10, saved_count, position[0])
 	gate4_expect(state, position, "end")
 	return finish_statement(state, position)
-end
-
-def checked_iteration_shape(state: Gate4Compiler, plan: MirIteration, origin: Integer): Boolean
-	if !mir_iteration_shape_valid(plan, origin, state.token_count[0])
-		return false
-	end
-	# The parser pairs both boundaries. A stale end cannot silently skip
-	# statements or retarget a checked iteration to a different lexical body.
-	if sparse_integer_at(state.iteration_origins, plan.body_finish) != - sparse_integer_at(state.iteration_origins, origin)
-		return false
-	end
-	delimiter := syntax_iteration_suffix(state, plan.receiver_finish)
-	if delimiter < 0
-		return false
-	end
-	if plan.element_origin != delimiter + 2 || !gate4_token_is(state, delimiter + 1, "|")
-		return false
-	end
-	mut indexed := false
-	mut suffix := plan.receiver_finish + 2
-	while suffix < delimiter
-		if gate4_token_is(state, suffix, "with_index")
-			indexed = true
-		end
-		suffix += 1
-	end
-	if ((indexed && plan.index_origin < 0) || (!indexed && plan.index_origin >= 0)) || gate4_load_integer(state.token_kinds, plan.element_origin) != 1
-		return false
-	end
-	mut close := plan.element_origin + 1
-	if plan.index_origin >= 0
-		if plan.index_origin != close + 1 || !gate4_token_is(state, close, ",") || gate4_load_integer(state.token_kinds, plan.index_origin) != 1
-			return false
-		end
-		close = plan.index_origin + 1
-	end
-	if !gate4_token_is(state, close, "|")
-		return false
-	end
-	if gate4_token_is(state, delimiter, "do") && gate4_load_integer(state.token_kinds, close + 1) != 4
-		return false
-	end
-	mut cursor := close + 1
-	while gate4_load_integer(state.token_kinds, cursor) == 4
-		cursor += 1
-	end
-	mut terminator := "end"
-	if gate4_token_is(state, delimiter, "{")
-		terminator = "}"
-	end
-	if cursor != plan.body_start
-		return false
-	end
-	return gate4_token_is(state, plan.body_finish, terminator)
-end
-
-def checked_iteration_require(mut state: Gate4Compiler, origin: Integer, parent_loop: Integer): MirIteration
-	encoded := sparse_integer_at(state.iteration_origins, origin)
-	invalid := MirIteration.new(origin: - 1, receiver_finish: - 1, element_origin: - 1, index_origin: - 1, body_start: - 1, body_finish: - 1, finish: - 1, parent_loop: - 1, type_name: "", element_type: "")
-	if encoded > 0 && encoded <= state.iterations.size()
-		plan := state.iterations[encoded - 1]
-		if checked_iteration_shape(state, plan, origin) && plan.parent_loop == parent_loop
-			if mir_iteration_valid(plan, origin, state.token_count[0], plan.type_name, gate4_array_element_type(plan.type_name))
-				return plan
-			end
-		end
-	end
-	mut line := 1
-	if origin >= 0 && origin < state.token_count[0]
-		line = gate4_load_integer(state.token_lines, origin)
-	end
-	gate4_diagnostic(state, "TRBN4004", line, "invalid checked Array iteration")
-	return invalid
 end
 
 def checked_iteration_binding(mut locals: Gate4Locals, name: String, type_name: String)

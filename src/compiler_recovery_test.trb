@@ -1379,7 +1379,7 @@ def _prepare_compiler_closure(
 		omitted: String,
 	): Result<Boolean, String>
 	try _recovery_reset_directory(directory)
-	names := ["compiler", "storage", "path", "mir", "literals", "state", "parser", "resolution", "checked_program", "qbe_output", "qbe_runtime", "project_config", "hash_types", "hash_mir", "hash_checked", "hash_runtime", "iteration_mir"]
+	names := ["compiler", "storage", "path", "mir", "literals", "state", "parser", "resolution", "checked_program", "qbe_output", "qbe_runtime", "project_config", "hash_types", "hash_mir", "hash_checked", "hash_runtime", "iteration_mir", "iteration_checked"]
 	mut index := 0
 	while index < names.size()
 		if names[index] != omitted
@@ -1411,6 +1411,7 @@ def _recovery_verify_compiler_source_closure(
 		hash_checked: String,
 		hash_runtime: String,
 		iteration_mir: String,
+		iteration_checked: String,
 		workspace: String,
 	): Result<Boolean, String>
 	canonical := try _recovery_process(executable, ["emit-qbe", compiler_path])
@@ -1449,12 +1450,13 @@ def _recovery_verify_compiler_source_closure(
 	hash_checked_mutation := try _recovery_replace_once(hash_checked, "invalid checked Hash operation", "invalid verified Hash operation")
 	hash_runtime_mutation := try _recovery_replace_once(hash_runtime, "Hash key is missing", "Hash key was absent")
 	iteration_mir_mutation := try _recovery_replace_once(iteration_mir, "plan.parent_loop < - 1", "plan.parent_loop < - 2")
-	names := ["compiler", "storage", "path", "mir", "literals", "state", "parser", "resolution", "checked_program", "qbe_output", "qbe_runtime", "project_config", "hash_types", "hash_mir", "hash_checked", "hash_runtime", "iteration_mir"]
-	sources := [entry, storage, path, mir, literals, state, parser, resolution, checked_program, qbe_output, qbe_runtime, project_config, hash_types, hash_mir, hash_checked, hash_runtime, iteration_mir]
-	mutations := [entry, storage_mutation, path_mutation, mir_mutation, literal_mutation, state_mutation, parser_mutation, resolution_mutation, checked_program_mutation, qbe_output_mutation, qbe_runtime_mutation, project_config_mutation, hash_types_mutation, hash_mir_mutation, hash_checked_mutation, hash_runtime_mutation, iteration_mir_mutation]
+	iteration_checked_mutation := try _recovery_replace_once(iteration_checked, "invalid checked Array iteration", "invalid verified Array iteration")
+	names := ["compiler", "storage", "path", "mir", "literals", "state", "parser", "resolution", "checked_program", "qbe_output", "qbe_runtime", "project_config", "hash_types", "hash_mir", "hash_checked", "hash_runtime", "iteration_mir", "iteration_checked"]
+	sources := [entry, storage, path, mir, literals, state, parser, resolution, checked_program, qbe_output, qbe_runtime, project_config, hash_types, hash_mir, hash_checked, hash_runtime, iteration_mir, iteration_checked]
+	mutations := [entry, storage_mutation, path_mutation, mir_mutation, literal_mutation, state_mutation, parser_mutation, resolution_mutation, checked_program_mutation, qbe_output_mutation, qbe_runtime_mutation, project_config_mutation, hash_types_mutation, hash_mir_mutation, hash_checked_mutation, hash_runtime_mutation, iteration_mir_mutation, iteration_checked_mutation]
 	mut index := 1
 	while index < names.size()
-		mut changed := [entry, storage, path, mir, literals, state, parser, resolution, checked_program, qbe_output, qbe_runtime, project_config, hash_types, hash_mir, hash_checked, hash_runtime, iteration_mir]
+		mut changed := [entry, storage, path, mir, literals, state, parser, resolution, checked_program, qbe_output, qbe_runtime, project_config, hash_types, hash_mir, hash_checked, hash_runtime, iteration_mir, iteration_checked]
 		changed[index] = mutations[index]
 		directory := workspace + "/gate6f-compiler-" + names[index] + "-mutation"
 		try _prepare_compiler_closure(directory, changed, "")
@@ -2171,6 +2173,14 @@ describe("Native compiler recovery") do
 					expect(false).to_be_true()
 					""
 				end
+				iteration_checked_source := case native_read_text(root + "/compiler/src/iteration_checked.trb")
+				when Result::Ok(source)
+					source
+				when Result::Err(error)
+					puts(error.operation + ": " + error.message)
+					expect(false).to_be_true()
+					""
+				end
 				recovery_source := case flatten_compiler_recovery_source(
 						compiler_source,
 						storage_source,
@@ -2189,6 +2199,7 @@ describe("Native compiler recovery") do
 						hash_checked_source,
 						hash_runtime_source,
 						iteration_mir_source,
+						iteration_checked_source,
 					)
 				when Result::Ok(source)
 					source
@@ -2295,6 +2306,12 @@ describe("Native compiler recovery") do
 					expect(false).to_be_true()
 				end
 				case native_write_text(workspace + "/iteration_mir.trb", iteration_mir_source)
+				when Result::Ok(_unit)
+				when Result::Err(error)
+					puts(error.operation + ": " + error.message)
+					expect(false).to_be_true()
+				end
+				case native_write_text(workspace + "/iteration_checked.trb", iteration_checked_source)
 				when Result::Ok(_unit)
 				when Result::Err(error)
 					puts(error.operation + ": " + error.message)
@@ -2454,6 +2471,7 @@ describe("Native compiler recovery") do
 								hash_checked_source,
 								hash_runtime_source,
 								iteration_mir_source,
+								iteration_checked_source,
 								workspace,
 							)
 						when Result::Ok(_value)
