@@ -3,6 +3,7 @@ import copy
 import importlib.util
 import json
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 
@@ -72,6 +73,37 @@ class SeedReleaseTests(unittest.TestCase):
         self.assertIn('"$hash_transition" check "$candidate_root/compiler/conformance/valid/hash-values.trb"', observer)
         self.assertIn('AMD64_HASH_SETUP_REVISION: 8a6d9ff73b14a97bca1b010ddaad6a38972b5373', workflow)
         self.assertIn('"$GITHUB_WORKSPACE/.gate6n-hash-source"', workflow)
+
+    def test_iteration_bridge_preserves_historical_argument_shapes(self):
+        script = Path(__file__).with_name("gate6n-linux-amd64.sh").resolve()
+        missing = str(Path(self.temporary.name) / "missing-source")
+        for count in range(8, 17):
+            with self.subTest(arguments=count):
+                result = subprocess.run(["/bin/sh", str(script), *([missing] * count)],
+                                        capture_output=True, text=True, timeout=10)
+                if 9 <= count <= 15:
+                    self.assertEqual(result.returncode, 1, result.stderr)
+                    self.assertTrue(result.stderr.startswith("gate6n-linux-amd64:"), result.stderr)
+                    self.assertNotIn("usage:", result.stderr)
+                else:
+                    self.assertEqual(result.returncode, 64, result.stderr)
+                    self.assertIn("usage: gate6n-linux-amd64.sh", result.stderr)
+                self.assertEqual(result.stdout, "")
+                self.assertFalse(Path(missing).exists())
+
+    def test_iteration_bridge_retains_source_and_candidate_boundaries(self):
+        root = Path(__file__).resolve().parent.parent
+        observer = (root / "tools/gate6n-linux-amd64.sh").read_text()
+        workflow = (root / ".github/workflows/gate6n-linux-amd64.yml").read_text()
+        self.assertIn('test -n "$hash_source_root" || fail "Array iteration source requires the accepted Hash source"', observer)
+        self.assertIn('require_clean_revision "$iteration_source_root"', observer)
+        self.assertIn('a66bb1f7853df36967603686908aa5d8705ac6c5 || fail "Array iteration source revision differs"', observer)
+        self.assertIn('"$hash_transition" emit-qbe "$iteration_entry"', observer)
+        self.assertIn('runtime_seed=$iteration_transition', observer)
+        self.assertIn('"$runtime_seed" emit-qbe "$compiler_entry"', observer)
+        self.assertIn('"$iteration_transition" check "$candidate_root/compiler/conformance/valid/array-iteration-$iteration_case.trb"', observer)
+        self.assertIn('AMD64_ITERATION_SETUP_REVISION: a66bb1f7853df36967603686908aa5d8705ac6c5', workflow)
+        self.assertIn('"$GITHUB_WORKSPACE/.gate6n-iteration-source"', workflow)
 
     def test_refresh_roles_match_the_existing_compatibility_boundary(self):
         observer = Path(__file__).with_name("bootstrap-seed-refresh.sh").read_text()
