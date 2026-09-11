@@ -1,6 +1,6 @@
 # 0037: Compiler budget for stack-vector String output
 
-Status: proposed; accepted only on integration of the separately validated policy PR.
+Status: accepted through [PR #424](https://github.com/type-rb/type-rb-native/pull/424).
 
 ## Capability, benefit and retained failures
 
