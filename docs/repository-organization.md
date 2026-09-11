@@ -297,3 +297,14 @@ remain unchanged. Frontend/state consumers, focused tests, and the exact
 recovery import boundary use the same canonical names, without aliases.
 Historical accounts above retain their source-era identifiers. Gate-derived
 helper names and the separate snapshot model remain subsequent ownership work.
+
+## Recovery program fixtures
+
+The active authored-program recovery fixtures now live in
+`fixtures/recovery/programs/`. Boolean and record Array closure programs retain
+their exact inputs and outputs; Hash programs share the same runner with the
+new Array iteration cases. The runner owns snapshot export, decoding, selected
+collection probes, build, and execution, while each test keeps its expected
+outcome. This removes the gate-numbered path for these live programs without
+moving historical snapshots, changing their protocols, or claiming that other
+gate-derived source names have been retired.

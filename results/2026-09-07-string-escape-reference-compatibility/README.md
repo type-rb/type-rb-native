@@ -1,6 +1,23 @@
 # Current reference compatibility
 
 The development pin is TypeRB `0.4.7-dev` at
+`570bf6f64c7ca2412d0b4ffe06cd186cd53bdf4c`, including the accepted direct Array
+iteration snapshot extension from
+[TypeRB PR #679](https://github.com/type-rb/type-rb/pull/679).
+No snapshot opcode or format version changes. Maintained value and managed
+recovery fixtures cover live traversal, retained receivers, lexical bindings,
+loop transfers, and roots across forced/automatic collections. Hash recovery
+uses the same fixture runner, preserving its success and missing-key outcomes.
+
+The six focused Array/Hash recovery tests pass with the exact new reference
+checkout. Full recovery-enabled root/compiler and hosted acceptance are still
+required for this pin. No ordinary compiler-source adoption, immutable seed
+handoff, performance acceptance, or Pages update is inferred from the focused
+result. The previous completed compatibility authorities remain below.
+
+## Previous collection iteration reference
+
+The development pin is TypeRB `0.4.7-dev` at
 `52f3928a0b5194cfae9c7a75e7f56e1f243ff8d1`, including the accepted live Array
 iteration and repeatable Range/Iterable boundary fixes. All 17 selected checks
 pass for Native `563036f26f84090339ae8d516f4d019caca1e16c` in
