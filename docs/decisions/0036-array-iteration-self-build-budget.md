@@ -1,6 +1,11 @@
 # 0036: Source-bound self-build budget for checked Array iteration
 
-Status: accepted only on integration of the separately validated policy PR.
+Status: accepted through [PR #422](https://github.com/type-rb/type-rb-native/pull/422).
+
+The recovery follow-up removes the source-pair selector, workflow argument and
+dedicated tests. It can integrate only after ordinary Array iteration becomes
+the accepted baseline. Subsequent ordinary self-build comparisons use 1.05;
+the historical capability decision and failed measurements below remain intact.
 
 ## Capability, controls and failed acceptance
 
