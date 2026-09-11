@@ -184,3 +184,9 @@ empty inputs. `runtime-invalid/stable-array-bindings-bounds.trb` uses unequal
 lengths to require the indexed Array's own check. Both also run through ordinary
 CLI compilation and the independent REPL evaluator. MIR tests reject missing,
 duplicate, reordered and foreign entries in the complete stable-header list.
+
+`valid/string-index-lifetime.trb` retains indexed String values in Arrays and
+Hash keys while heap-allocated receivers are replaced and automatic collection
+occurs. It checks both index signs and byte contents. The separate runtime ABI
+observer exercises all 256 byte payloads, NUL termination and required bounds
+failures; that internal byte coverage does not claim ordinary Unicode support.

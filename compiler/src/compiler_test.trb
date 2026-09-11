@@ -1446,6 +1446,30 @@ describe("Gate 4 TypeRB frontend") do
 		expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("duplicate function declaration main")
 	end
 
+	test("reports the first repeated function while retaining last-match lookup") do
+		source := "def value(): Integer\n\treturn 1\nend\n\ndef value(): Integer\n\treturn 2\nend\n\ndef value(): Integer\n\treturn 3\nend\n\ndef main()\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_find_function_in_module(state, state.entry_module[0], "value")).to_equal(2)
+		expect(gate4_resolve(state)).to_be_false()
+		expect(gate4_load_string(state.diagnostic_codes, 0)).to_equal("TRBN4003")
+		expect(gate4_load_integer(state.diagnostic_lines, 0)).to_equal(5)
+		expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("duplicate function declaration value")
+		expect(gate4_find_function_in_module(state, state.entry_module[0], "value")).to_equal(2)
+	end
+
+	test("preserves an earlier declaration error before a duplicate function") do
+		source := "def value(item: Missing): Integer\n\treturn 1\nend\n\ndef value(): Integer\n\treturn 2\nend\n\ndef main()\n\treturn\nend\n"
+		mut state := gate4_compiler_new(source.size() + 1)
+		expect(gate4_lex(state, source)).to_be_true()
+		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(gate4_resolve(state)).to_be_false()
+		expect(gate4_load_string(state.diagnostic_codes, 0)).to_equal("TRBN4003")
+		expect(gate4_load_integer(state.diagnostic_lines, 0)).to_equal(1)
+		expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("unknown parameter type Missing")
+	end
+
 	test("rejects an unresolved direct call during resolution") do
 		source := "def main()\n\tmissing()\n\treturn\nend\n"
 		mut state := gate4_compiler_new(source.size() + 1)

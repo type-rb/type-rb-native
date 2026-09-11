@@ -174,26 +174,33 @@ PR #405 supplies the separate checkout pin handoff, matching snapshot recovery
 and the accepted-source Linux amd64 setup bridge. Compiler Hash self-use follows
 this prerequisite; no compiler/application speedup is claimed by the handoff.
 
-## Pending Array iteration refresh
+## Registered Array iteration refresh
 
-[Issue #410](https://github.com/type-rb/type-rb-native/issues/410) tracks the
-next `bootstrap-seed-2026-09-11-array-iteration` refresh. Its preparation
-observer retains the exact immutable Hash predecessor recorded below, adds
-the three ordinary Array iteration fixtures and requires matching snapshot
-recovery before compiler source adopts authored iteration. Preparation remains
-blocked until PR #418 has full acceptance and its accepted source revision
-and compiler closure are registered here. Observer preparation is not a seed.
+[The accepted-source registration](https://github.com/type-rb/type-rb-native/issues/410#issuecomment-5638961656)
+activates `bootstrap-seed-2026-09-11-array-iteration` from accepted implementation
+`508f721f8964d67a5893e547d2e2fb3de5b20a63` (PR #418). Its compiler tree is
+`2c5449437f0b1b216bdc9aa810c00804a1f76cae`: 17 canonical modules, 455,536 source
+bytes and 12,762 lines. Compiler entry SHA-256 is
+`5fce7c0bbd795a49a903dbb65260736749c7c4833e7cc76c86df5dcc364d6f8c`.
+
+PR #423 adds matching snapshot recovery and reviewed observers at
+`d2980f14d1b64e5ce3544dd7133e7f5871644e4e`, with the identical compiler tree.
+Both [ordinary acceptance](https://github.com/type-rb/type-rb-native/actions/runs/34630185576)
+and [recovery integration](https://github.com/type-rb/type-rb-native/actions/runs/34630338541)
+passed all 17 authorities before merging to main. Preparation retains the exact
+immutable Hash predecessor below and adds the three ordinary Array probes.
+The run records the exact accepted main source/observer revision it uses.
+Registration and observer acceptance do not mean a seed has been published.
 
 Only this new tag uses the complete-compiler ceilings from Decision 0035:
 417,000 Darwin arm64 bytes, 388,000 Linux arm64 bytes and 805,000 combined.
 All earlier tags retain their exact predecessor identities and size contracts.
 Adjacent-generation, retained-observation, corpus, process, attestation and
-immutable-publication checks remain unchanged. Decision 0036's feature/control
-self-build allowance is not a seed-generation allowance.
+immutable-publication checks remain unchanged. Decisions 0036 and 0039 have
+failed, exhausted feature/control cohorts; neither changes seed-generation bounds.
 
-The checkout seed remains the verified Hash release. After accepted-source
-registration and reviewed observer integration, preparation, separate attested
-publication and fresh actual-asset verification precede a separate checkout-pin
+The checkout seed remains the verified Hash release. Preparation, separate
+attested publication and fresh actual-asset verification precede a checkout-pin
 PR. Compiler-source self-use follows that verified handoff.
 
 ## Current verified checkout seed

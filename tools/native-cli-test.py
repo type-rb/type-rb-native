@@ -39,7 +39,8 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
                       'record-array-effects', 'record-array-managed', 'local-array-header-mir',
                       'stable-array-bindings', 'conditional-array-headers', 'loop-array-headers',
                       'hash-values', 'hash-managed', 'hash-cycles',
-                      'array-iteration-live', 'array-iteration-control', 'array-iteration-managed'):
+                      'array-iteration-live', 'array-iteration-control', 'array-iteration-managed',
+                      'string-index-lifetime'):
         fixture = repository / 'compiler/conformance/valid' / (case_name + '.trb')
         expected = fixture.with_suffix('.out').read_text()
         case_source = root / (case_name + '.trb')
@@ -50,7 +51,7 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
         assert subprocess.check_output([case_output], text=True, timeout=30) == expected
         if case_name in ('elsif-managed', 'loop-transfer-managed', 'array-assignment-managed',
                          'boolean-array-managed', 'record-array-managed', 'hash-managed', 'hash-cycles',
-                         'array-iteration-managed'):
+                         'array-iteration-managed', 'string-index-lifetime'):
             collected = subprocess.run([case_output], text=True, capture_output=True,
                                        env=dict(env, TYPE_RB_NATIVE_RUNTIME_STATS='1'), timeout=30)
             assert collected.returncode == 0 and collected.stdout == expected

@@ -46,9 +46,9 @@ ordinary ratios unchanged. The separately validated
 checked ordinary iteration through narrow complete-compiler ceilings, also
 without changing relative limits. The separate
 [Array self-build decision](decisions/0036-array-iteration-self-build-budget.md)
-registered a one-time arm64 self-build ratio of 1.08 for one exact compiler-source
-pair. Its final cohort failed; the exhausted selector is removed before the
-subsequent output-runtime candidate, which uses ordinary 1.05 comparisons. A cost failure blocks
+permitted an arm64 self-build ratio of 1.08 for one exact compiler-source pair;
+that cohort failed and its old source is no longer eligible. The later Linux
+assessment below has a separate source and scope. A cost failure blocks
 ordinary acceptance, not necessarily further investigation. There is no general relaxed percentage or automatic
 conversion from an evaluation budget to a merge budget.
 
@@ -153,3 +153,19 @@ regressions and failed cases; it does not grant optimization acceptance or
 replace individual rows in the formal comparison. Compiler size cleanup, a
 focused diagnostic runtime gain, and a revised policy alone do not establish
 general application speedup or Pure Go parity.
+
+The separate [String output budget](decisions/0037-string-output-compiler-budget.md)
+retains the measured stack-vector runtime cost through an amd64-only absolute
+ceiling. It grants no self-build ratio exception: the output candidate must
+pass ordinary 1.05 after retiring Decision 0036's exhausted source selector.
+
+The separate [declaration-index assessment](decisions/0038-declaration-index-memory-tradeoff.md)
+records a measured large-source time/space trade after its diagnostic RSS
+condition failed. It changes no ordinary CI limit and grants no reusable memory
+allowance; implementation acceptance remains separate.
+
+The later [Linux Array assessment](decisions/0039-linux-array-self-build-assessment.md)
+retains one exact post-refinement source pair at 1.07 for Linux self-build time
+only. Decision 0036's old source is excluded; every other cost and source keeps
+its existing contract. The new policy must pass independently before its single
+full implementation acceptance cohort.
