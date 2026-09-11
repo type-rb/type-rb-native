@@ -307,6 +307,18 @@ change together, without an alias. The same tables, first-match/early-return
 behavior and MIR facts remain. This removes one active gate-derived helper name;
 it does not change lookup representation or claim an application speedup.
 
+## Shared iteration proofs
+
+The shared iteration proof boundary now lives in
+`compiler/src/iteration_checked.trb`. It owns `checked_iteration_shape` and
+`checked_iteration_require`, extracted unchanged from `checked_program.trb`.
+The recursive checker, compiler entry and REPL import this one implementation;
+the proof module never imports the recursive checker or emitter. The canonical
+compiler bundle and strict recovery closure include the new eighteenth module,
+with matching import validation, deterministic flattening and mutation tests.
+This separates reusable checks before Range work without changing the current
+Array contract or adding a new MIR fact.
+
 ## Recovery program fixtures
 
 The active authored-program recovery fixtures now live in
