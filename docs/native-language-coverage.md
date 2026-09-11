@@ -158,13 +158,14 @@ remains eligible for separately verified cleanup.
 
 ## Ordinary loop transfers
 
-Bare `break` exits the nearest enclosing `while`; bare `next` transfers to its
-header and reevaluates the condition, including its effects. Nested loops own
-their transfers, while `return` still exits the function. Every statement is
+Bare `break` exits the nearest enclosing loop. For `while`, bare `next`
+transfers to its header and reevaluates the condition, including its effects;
+for Array iteration, it advances the cursor before the next live-length check.
+Nested loops own their transfers, while `return` still exits the function. Every statement is
 checked, including unreachable transfers. Transfers outside a loop and transfer
 values are rejected. Existing contextual `next` bindings remain supported.
-Use an ordinary `if` guard in this subset: postfix conditional transfers and
-iteration blocks remain unsupported. The REPL currently reports incomplete
+Use an ordinary `if` guard in this subset: postfix conditional transfers remain
+unsupported. The REPL currently reports incomplete
 input for a postfix `break if` submission; it does not execute that submission.
 
 The checker stores the kind and nearest-loop target at the exact statement
