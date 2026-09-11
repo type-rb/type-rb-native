@@ -35,7 +35,7 @@ cp "$script_directory/../$NATIVE_MIR_STABLE_ARRAY_HEADER_MARKER" \
 
 test "$(native_mir_target_compiler_limit darwin-arm64-v0)" = 417000
 test "$(native_mir_target_compiler_limit linux-arm64-v0)" = 388000
-test "$(native_mir_target_compiler_limit linux-amd64-v0)" = 331000
+test "$(native_mir_target_compiler_limit linux-amd64-v0)" = 332000
 test "$NATIVE_MIR_COMBINED_COMPILER_LIMIT" = 805000
 test "$(native_mir_target_text_limit darwin-arm64-v0)" = 250904
 test "$(native_mir_target_text_limit linux-arm64-v0)" = 253424

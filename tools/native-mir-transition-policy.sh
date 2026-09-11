@@ -23,8 +23,8 @@ NATIVE_MIR_STABLE_ARRAY_HEADER_MARKER=compiler/native-mir-stable-array-header-v1
 # Historical markers retain their original budgets and ratio requirements.
 NATIVE_MIR_DARWIN_COMPILER_LIMIT=417000
 NATIVE_MIR_LINUX_COMPILER_LIMIT=388000
-# Decision 0035 retains Array iteration at 330,560 amd64 bytes.
-NATIVE_MIR_LINUX_AMD64_COMPILER_LIMIT=331000
+# Decisions 0035 and 0037 retain checked Array iteration and stack-vector output.
+NATIVE_MIR_LINUX_AMD64_COMPILER_LIMIT=332000
 NATIVE_MIR_COMBINED_COMPILER_LIMIT=805000
 NATIVE_MIR_DARWIN_TEXT_LIMIT=250904
 NATIVE_MIR_LINUX_TEXT_LIMIT=253424
