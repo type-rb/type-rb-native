@@ -2,11 +2,13 @@
 
 ## Scope and reading the inventory
 
-This inventories all 45 root `src/*.trb` files for the first support-code
-organization slice, [issue #258](https://github.com/type-rb/type-rb-native/issues/258),
-against baseline `2522a995fdf48985745ccf9cfef945da6e7f17b1`.
-The inventory now includes the matched-driver and compiler-recovery naming moves and
-the two recovery-workspace support files (47 current root source files).
+The current table covers all 54 root `src/*.trb` files at
+`d2980f14d1b64e5ce3544dd7133e7f5871644e4e` ([PR #423](https://github.com/type-rb/type-rb-native/pull/423)).
+Imports and direct consumers were rechecked together, including Boolean/record
+Array tests, block-parameter alias tests, Hash recovery and the shared authored
+program runner. The initial 45-file inventory belonged to
+[issue #258](https://github.com/type-rb/type-rb-native/issues/258) at
+`2522a995fdf48985745ccf9cfef945da6e7f17b1`; the move history remains below.
 No file has been classified for retirement: every implementation has callers
 or an explicit recovery/verification role, and every test remains discovered.
 
@@ -27,64 +29,75 @@ do not authorize merging the snapshot and ordinary self-hosted MIRs.
 The recovery workspace owner and its tests were added under
 [issue #295](https://github.com/type-rb/type-rb-native/issues/295). They depend
 only on `native_file_system` and standard-library process/result/test support;
-their only direct consumers are `compiler_recovery_test` and
-`compiler_recovery_workspace_test`. They are test/recovery support, not part of
+their direct consumers now also include `recovery_fixture`, which shares
+program export/build/execution between Hash and Array iteration tests.
+They are test/recovery support, not part of
 the ordinary compiler closure. See [the ownership contract](ci-validation.md#recovery-workspace-ownership)
 for the receipt, CI consumers, cleanup and negative controls.
 
 | File in `src/` | Responsibility | Local imports | Direct consumers | Disposition / proposed destination |
 | --- | --- | --- | --- | --- |
-| [diagnostic.trb](../src/diagnostic.trb) | Shared deterministic diagnostics | — | `gate0`, `gate1_mir`, `gate1_snapshot`, `aggregate_layout`, `gate2_mir`, `gate2_snapshot`, `gate3_layout`, `gate3_mir`, `gate3_snapshot`, `json_boundary`, `native_mir`, `qbe`, `qbe2`, `qbe3`, `snapshot` | Keep: `diagnostic.trb` |
+| [aggregate_layout.trb](../src/aggregate_layout.trb) | Heap-free aggregate layout | `diagnostic`, `gate1_mir` | `aggregate_layout_test`, `gate2_mir`, `gate2_mir_test`, `gate2_snapshot`, `qbe2` | Moved: `aggregate_layout.trb` |
+| [aggregate_layout_test.trb](../src/aggregate_layout_test.trb) | Test: Gate 2 static aggregate layout | `aggregate_layout`, `gate1_mir` | Root test discovery | Moved: `aggregate_layout_test.trb` |
+| [compiler_recovery_source.trb](../src/compiler_recovery_source.trb) | Strict recovery source closure/flattening | `native_file_system` | `compiler_recovery_source_test`, `compiler_recovery_test`, `gate1_driver` | Moved: `compiler_recovery_source.trb` |
+| [compiler_recovery_source_test.trb](../src/compiler_recovery_source_test.trb) | Test: Compiler recovery source closure | `compiler_recovery_source` | Root test discovery | Moved: `compiler_recovery_source_test.trb` |
+| [compiler_recovery_test.trb](../src/compiler_recovery_test.trb) | Test: Compiler recovery, ordinary builds and conformance | `gate3_snapshot`, `gate3_toolchain`, `recovery_generation`, `matched_go_driver`, `compiler_recovery_source`, `compiler_recovery_workspace`, `native_file_system` | Root test discovery | Moved: `compiler_recovery_test.trb` |
+| [compiler_recovery_workspace.trb](../src/compiler_recovery_workspace.trb) | Recovery workspace ownership, receipts and validation | `native_file_system` | `compiler_recovery_test`, `compiler_recovery_workspace_test`, `recovery_fixture` | Keep: `compiler_recovery_workspace.trb` |
+| [compiler_recovery_workspace_test.trb](../src/compiler_recovery_workspace_test.trb) | Test: Recovery workspace ownership and rejection boundaries | `compiler_recovery_workspace`, `native_file_system` | Root test discovery | Keep: `compiler_recovery_workspace_test.trb` |
+| [diagnostic.trb](../src/diagnostic.trb) | Shared deterministic diagnostics | — | `aggregate_layout`, `gate0`, `gate1_mir`, `gate1_snapshot`, `gate2_mir`, `gate2_snapshot`, `gate3_layout`, `gate3_mir`, `gate3_snapshot`, `json_boundary`, `native_mir`, `qbe`, `qbe2`, `qbe3`, `snapshot` | Keep: `diagnostic.trb` |
 | [gate0.trb](../src/gate0.trb) | Snapshot v1 validate/lower entry | `diagnostic`, `native_mir`, `snapshot` | `gate0_test` | Keep; rename later: `snapshot_boundary.trb` |
 | [gate0_test.trb](../src/gate0_test.trb) | Test: Gate 0 boundary | `gate0`, `native_mir`, `snapshot`, `native_file_system` | Root test discovery | Keep; rename later: `snapshot_boundary_test.trb` |
 | [gate1_differential_test.trb](../src/gate1_differential_test.trb) | Test: Gate 1 source-connected differential corpus | `gate1_snapshot`, `gate1_toolchain`, `native_file_system` | Root test discovery | Keep; rename later: `scalar_differential_test.trb` |
 | [gate1_driver.trb](../src/gate1_driver.trb) | Snapshot/recovery/comparison CLI entry | `gate1_snapshot`, `gate1_toolchain`, `gate2_snapshot`, `gate2_toolchain`, `gate3_snapshot`, `gate3_toolchain`, `recovery_generation`, `matched_go_driver`, `compiler_recovery_source`, `native_file_system` | Root executable CLI | Keep; rename later: `bootstrap_driver.trb` |
-| [gate1_mir.trb](../src/gate1_mir.trb) | Scalar MIR and shared scalar operators | `diagnostic`, `native_mir`, `snapshot` | `gate1_snapshot`, `gate1_test`, `gate1_toolchain`, `aggregate_layout`, `aggregate_layout_test`, `gate2_mir`, `gate2_mir_test`, `gate2_snapshot`, `gate3_capture_test`, `gate3_gc_test`, `gate3_integer_array_test`, `gate3_layout`, `gate3_layout_test`, `gate3_mir`, `gate3_mir_test`, `gate3_snapshot`, `qbe`, `qbe2`, `qbe3` | Keep; rename later: `scalar_mir.trb` |
+| [gate1_mir.trb](../src/gate1_mir.trb) | Scalar MIR and shared scalar operators | `diagnostic`, `native_mir`, `snapshot` | `aggregate_layout`, `aggregate_layout_test`, `gate1_snapshot`, `gate1_test`, `gate1_toolchain`, `gate2_mir`, `gate2_mir_test`, `gate2_snapshot`, `gate3_boolean_array_test`, `gate3_capture_test`, `gate3_gc_test`, `gate3_integer_array_test`, `gate3_layout`, `gate3_layout_test`, `gate3_mir`, `gate3_mir_test`, `gate3_record_array_test`, `gate3_snapshot`, `qbe`, `qbe2`, `qbe3`, `qbe3_alias_test`, `recovery_hash_test` | Keep; rename later: `scalar_mir.trb` |
 | [gate1_snapshot.trb](../src/gate1_snapshot.trb) | Snapshot v2 scalar decoder | `diagnostic`, `gate1_mir`, `native_mir`, `json_boundary`, `snapshot` | `gate1_differential_test`, `gate1_driver`, `gate1_test` | Keep; rename later: `scalar_snapshot.trb` |
 | [gate1_test.trb](../src/gate1_test.trb) | Test: Gate 1 scalar QBE path | `gate1_mir`, `gate1_toolchain`, `gate1_snapshot`, `native_mir`, `qbe`, `snapshot`, `native_file_system` | Root test discovery | Keep; rename later: `scalar_qbe_test.trb` |
 | [gate1_toolchain.trb](../src/gate1_toolchain.trb) | Scalar QBE tool invocation | `gate1_mir`, `qbe`, `native_file_system` | `gate1_differential_test`, `gate1_driver`, `gate1_test` | Keep; rename later: `scalar_toolchain.trb` |
 | [gate2_differential_test.trb](../src/gate2_differential_test.trb) | Test: Gate 2 source-connected differential corpus | `gate2_snapshot`, `gate2_toolchain`, `native_file_system` | Root test discovery | Keep; rename later: `aggregate_differential_test.trb` |
-| [aggregate_layout.trb](../src/aggregate_layout.trb) | Heap-free aggregate layout | `diagnostic`, `gate1_mir` | `aggregate_layout_test`, `gate2_mir`, `gate2_mir_test`, `gate2_snapshot`, `qbe2` | Moved: `aggregate_layout.trb` |
-| [aggregate_layout_test.trb](../src/aggregate_layout_test.trb) | Test: Gate 2 static aggregate layout | `aggregate_layout`, `gate1_mir` | Root test discovery | Moved: `aggregate_layout_test.trb` |
 | [gate2_mir.trb](../src/gate2_mir.trb) | Heap-free aggregate MIR/verifier | `diagnostic`, `gate1_mir`, `aggregate_layout`, `native_mir`, `snapshot` | `gate2_mir_test`, `gate2_snapshot`, `gate2_toolchain`, `qbe2` | Keep; rename later: `aggregate_mir.trb` |
 | [gate2_mir_test.trb](../src/gate2_mir_test.trb) | Test: Gate 2 aggregate MIR | `gate1_mir`, `aggregate_layout`, `gate2_mir`, `gate2_toolchain`, `native_mir`, `qbe2`, `snapshot`, `native_file_system` | Root test discovery | Keep; rename later: `aggregate_mir_test.trb` |
 | [gate2_snapshot.trb](../src/gate2_snapshot.trb) | Snapshot v3 aggregate decoder | `diagnostic`, `gate1_mir`, `gate2_mir`, `aggregate_layout`, `native_mir`, `json_boundary`, `snapshot` | `gate1_driver`, `gate2_differential_test`, `gate2_snapshot_test` | Keep; rename later: `aggregate_snapshot.trb` |
 | [gate2_snapshot_test.trb](../src/gate2_snapshot_test.trb) | Test: Gate 2 snapshot v3 | `gate2_snapshot`, `gate2_toolchain`, `qbe2`, `native_file_system` | Root test discovery | Keep; rename later: `aggregate_snapshot_test.trb` |
 | [gate2_toolchain.trb](../src/gate2_toolchain.trb) | Aggregate QBE tool invocation | `gate2_mir`, `qbe2`, `native_file_system` | `gate1_driver`, `gate2_differential_test`, `gate2_mir_test`, `gate2_snapshot_test` | Keep; rename later: `aggregate_toolchain.trb` |
+| [gate3_boolean_array_test.trb](../src/gate3_boolean_array_test.trb) | Test: Managed Boolean Array MIR and runtime | `gate1_mir`, `gate3_layout`, `gate3_mir`, `gate3_toolchain`, `native_mir`, `snapshot`, `native_file_system` | Root test discovery | Keep; rename later: `managed_boolean_array_test.trb` |
 | [gate3_capture_test.trb](../src/gate3_capture_test.trb) | Test: Gate 3 closure capture runtime | `gate1_mir`, `gate3_layout`, `gate3_mir`, `gate3_toolchain`, `native_mir`, `snapshot`, `native_file_system` | Root test discovery | Keep; rename later: `closure_capture_test.trb` |
 | [gate3_differential_test.trb](../src/gate3_differential_test.trb) | Test: Gate 3 source-connected differential corpus | `gate3_snapshot`, `gate3_toolchain`, `qbe3`, `native_file_system` | Root test discovery | Keep; rename later: `managed_differential_test.trb` |
 | [gate3_gc_test.trb](../src/gate3_gc_test.trb) | Test: Gate 3 tracing collector | `gate1_mir`, `gate3_layout`, `gate3_mir`, `gate3_toolchain`, `native_mir`, `snapshot`, `native_file_system` | Root test discovery | Keep; rename later: `managed_gc_test.trb` |
 | [gate3_integer_array_test.trb](../src/gate3_integer_array_test.trb) | Test: Gate 3 Integer Array runtime | `gate1_mir`, `gate3_layout`, `gate3_mir`, `gate3_toolchain`, `native_mir`, `snapshot`, `native_file_system` | Root test discovery | Keep; rename later: `managed_integer_array_test.trb` |
-| [gate3_layout.trb](../src/gate3_layout.trb) | Managed-reference aggregate layout | `diagnostic`, `gate1_mir` | `gate3_capture_test`, `gate3_gc_test`, `gate3_integer_array_test`, `gate3_layout_test`, `gate3_managed_aggregate_test`, `gate3_mir`, `gate3_mir_test`, `gate3_snapshot`, `qbe3` | Keep; rename later: `managed_layout.trb` |
+| [gate3_layout.trb](../src/gate3_layout.trb) | Managed-reference aggregate layout | `diagnostic`, `gate1_mir` | `gate3_boolean_array_test`, `gate3_capture_test`, `gate3_gc_test`, `gate3_integer_array_test`, `gate3_layout_test`, `gate3_managed_aggregate_test`, `gate3_mir`, `gate3_mir_test`, `gate3_record_array_test`, `gate3_snapshot`, `qbe3`, `qbe3_alias_test`, `recovery_hash_test` | Keep; rename later: `managed_layout.trb` |
 | [gate3_layout_test.trb](../src/gate3_layout_test.trb) | Test: Gate 3 static aggregate layout | `gate3_layout`, `gate1_mir` | Root test discovery | Keep; rename later: `managed_layout_test.trb` |
 | [gate3_managed_aggregate_test.trb](../src/gate3_managed_aggregate_test.trb) | Test: Gate 3 managed aggregate runtime | `gate3_layout`, `gate3_mir`, `gate3_toolchain`, `native_mir`, `snapshot`, `native_file_system` | Root test discovery | Keep; rename later: `managed_aggregate_test.trb` |
-| [gate3_mir.trb](../src/gate3_mir.trb) | Managed MIR/verifier | `diagnostic`, `gate1_mir`, `gate3_layout`, `native_mir`, `snapshot` | `gate3_capture_test`, `gate3_gc_test`, `gate3_integer_array_test`, `gate3_managed_aggregate_test`, `gate3_mir_test`, `gate3_snapshot`, `gate3_toolchain`, `qbe3` | Keep; rename later: `managed_mir.trb` |
+| [gate3_mir.trb](../src/gate3_mir.trb) | Managed MIR/verifier | `diagnostic`, `gate1_mir`, `gate3_layout`, `native_mir`, `snapshot` | `gate3_boolean_array_test`, `gate3_capture_test`, `gate3_gc_test`, `gate3_integer_array_test`, `gate3_managed_aggregate_test`, `gate3_mir_test`, `gate3_record_array_test`, `gate3_snapshot`, `gate3_toolchain`, `qbe3`, `qbe3_alias_test`, `recovery_fixture`, `recovery_hash_test` | Keep; rename later: `managed_mir.trb` |
 | [gate3_mir_test.trb](../src/gate3_mir_test.trb) | Test: Gate 3 aggregate MIR | `gate1_mir`, `gate3_layout`, `gate3_mir`, `native_mir`, `snapshot` | Root test discovery | Keep; rename later: `managed_mir_test.trb` |
+| [gate3_record_array_test.trb](../src/gate3_record_array_test.trb) | Test: Managed record Array MIR and runtime | `gate1_mir`, `gate3_layout`, `gate3_mir`, `gate3_toolchain`, `native_mir`, `snapshot`, `native_file_system` | Root test discovery | Keep; rename later: `managed_record_array_test.trb` |
 | [gate3_runtime.trb](../src/gate3_runtime.trb) | Managed QBE runtime generation | `qbe` | `qbe3` | Keep; rename later: `managed_runtime.trb` |
-| [gate3_snapshot.trb](../src/gate3_snapshot.trb) | Snapshot v4 decoder, including compiler recovery | `diagnostic`, `gate1_mir`, `gate3_mir`, `gate3_layout`, `native_mir`, `json_boundary`, `snapshot` | `gate1_driver`, `gate3_differential_test`, `gate3_snapshot_test`, `compiler_recovery_test`, `qbe3_test` | Keep; rename later: `managed_snapshot.trb` |
+| [gate3_snapshot.trb](../src/gate3_snapshot.trb) | Snapshot v4 decoder, including compiler recovery | `diagnostic`, `gate1_mir`, `gate3_mir`, `gate3_layout`, `native_mir`, `json_boundary`, `snapshot` | `compiler_recovery_test`, `gate1_driver`, `gate3_differential_test`, `gate3_snapshot_test`, `qbe3_test`, `recovery_fixture` | Keep; rename later: `managed_snapshot.trb` |
 | [gate3_snapshot_test.trb](../src/gate3_snapshot_test.trb) | Test: Gate 3 snapshot v4 | `gate3_snapshot`, `native_file_system` | Root test discovery | Keep; rename later: `managed_snapshot_test.trb` |
-| [gate3_toolchain.trb](../src/gate3_toolchain.trb) | Managed executable and recovery builds | `gate3_mir`, `qbe3`, `native_file_system` | `gate1_driver`, `gate3_capture_test`, `gate3_differential_test`, `gate3_gc_test`, `gate3_integer_array_test`, `gate3_managed_aggregate_test`, `compiler_recovery_test`, `qbe3_test` | Keep; rename later: `managed_toolchain.trb` |
-| [compiler_recovery_test.trb](../src/compiler_recovery_test.trb) | Test: Compiler recovery, ordinary builds and conformance | `gate3_snapshot`, `gate3_toolchain`, `recovery_generation`, `matched_go_driver`, `compiler_recovery_source`, `native_file_system` | Root test discovery | Moved: `compiler_recovery_test.trb` |
-| [recovery_generation.trb](../src/recovery_generation.trb) | Hidden-input recovery generation runner | `native_file_system` | `gate1_driver`, `compiler_recovery_test` | Moved: `recovery_generation.trb` |
-| [compiler_recovery_source.trb](../src/compiler_recovery_source.trb) | Strict recovery source closure/flattening | `native_file_system` | `gate1_driver`, `compiler_recovery_test`, `compiler_recovery_source_test` | Moved: `compiler_recovery_source.trb` |
-| [compiler_recovery_source_test.trb](../src/compiler_recovery_source_test.trb) | Test: Compiler recovery source closure | `compiler_recovery_source` | Root test discovery | Moved: `compiler_recovery_source_test.trb` |
+| [gate3_toolchain.trb](../src/gate3_toolchain.trb) | Managed executable and recovery builds | `gate3_mir`, `qbe3`, `native_file_system` | `compiler_recovery_test`, `gate1_driver`, `gate3_boolean_array_test`, `gate3_capture_test`, `gate3_differential_test`, `gate3_gc_test`, `gate3_integer_array_test`, `gate3_managed_aggregate_test`, `gate3_record_array_test`, `qbe3_alias_test`, `qbe3_test`, `recovery_fixture` | Keep; rename later: `managed_toolchain.trb` |
 | [json_boundary.trb](../src/json_boundary.trb) | Shared strict JSON field decoding | `diagnostic` | `gate1_snapshot`, `gate2_snapshot`, `gate3_snapshot` | Keep: `json_boundary.trb` |
-| [matched_go_driver.trb](../src/matched_go_driver.trb) | Matched Go comparison source/build adapter | `native_file_system` | `gate1_driver`, `compiler_recovery_test`, `matched_go_driver_test` | Moved in this slice: `matched_go_driver.trb` |
-| [matched_go_driver_test.trb](../src/matched_go_driver_test.trb) | Test: Matched Go compiler comparison driver | `matched_go_driver` | Root test discovery | Moved in this slice: `matched_go_driver_test.trb` |
-| [native_file_system.trb](../src/native_file_system.trb) | Reference-side file/process test support | — | `gate0_test`, `gate1_differential_test`, `gate1_driver`, `gate1_test`, `gate1_toolchain`, `gate2_differential_test`, `gate2_mir_test`, `gate2_snapshot_test`, `gate2_toolchain`, `gate3_capture_test`, `gate3_differential_test`, `gate3_gc_test`, `gate3_integer_array_test`, `gate3_managed_aggregate_test`, `gate3_snapshot_test`, `gate3_toolchain`, `compiler_recovery_test`, `recovery_generation`, `compiler_recovery_source`, `matched_go_driver`, `native_file_system_test`, `qbe3_test` | Keep: `native_file_system.trb` |
+| [matched_go_driver.trb](../src/matched_go_driver.trb) | Matched Go comparison source/build adapter | `native_file_system` | `compiler_recovery_test`, `gate1_driver`, `matched_go_driver_test` | Moved: `matched_go_driver.trb` |
+| [matched_go_driver_test.trb](../src/matched_go_driver_test.trb) | Test: Matched Go compiler comparison driver | `matched_go_driver` | Root test discovery | Moved: `matched_go_driver_test.trb` |
+| [native_file_system.trb](../src/native_file_system.trb) | Reference-side file/process test support | — | `compiler_recovery_source`, `compiler_recovery_test`, `compiler_recovery_workspace`, `compiler_recovery_workspace_test`, `gate0_test`, `gate1_differential_test`, `gate1_driver`, `gate1_test`, `gate1_toolchain`, `gate2_differential_test`, `gate2_mir_test`, `gate2_snapshot_test`, `gate2_toolchain`, `gate3_boolean_array_test`, `gate3_capture_test`, `gate3_differential_test`, `gate3_gc_test`, `gate3_integer_array_test`, `gate3_managed_aggregate_test`, `gate3_record_array_test`, `gate3_snapshot_test`, `gate3_toolchain`, `matched_go_driver`, `native_file_system_test`, `qbe3_alias_test`, `qbe3_test`, `recovery_fixture`, `recovery_generation` | Keep: `native_file_system.trb` |
 | [native_file_system_test.trb](../src/native_file_system_test.trb) | Test: Native filesystem support | `native_file_system` | Root test discovery | Keep: `native_file_system_test.trb` |
-| [native_mir.trb](../src/native_mir.trb) | Snapshot v1 MIR and shared source identities | `diagnostic`, `snapshot` | `gate0`, `gate0_test`, `gate1_mir`, `gate1_snapshot`, `gate1_test`, `gate2_mir`, `gate2_mir_test`, `gate2_snapshot`, `gate3_capture_test`, `gate3_gc_test`, `gate3_integer_array_test`, `gate3_managed_aggregate_test`, `gate3_mir`, `gate3_mir_test`, `gate3_snapshot` | Keep; rename later: `snapshot_mir.trb` |
-| [qbe.trb](../src/qbe.trb) | Scalar QBE plus shared emission helpers | `diagnostic`, `gate1_mir`, `snapshot` | `gate1_test`, `gate1_toolchain`, `gate3_runtime`, `qbe2`, `qbe3` | Keep; rename later: `scalar_qbe.trb` |
+| [native_mir.trb](../src/native_mir.trb) | Snapshot v1 MIR and shared source identities | `diagnostic`, `snapshot` | `gate0`, `gate0_test`, `gate1_mir`, `gate1_snapshot`, `gate1_test`, `gate2_mir`, `gate2_mir_test`, `gate2_snapshot`, `gate3_boolean_array_test`, `gate3_capture_test`, `gate3_gc_test`, `gate3_integer_array_test`, `gate3_managed_aggregate_test`, `gate3_mir`, `gate3_mir_test`, `gate3_record_array_test`, `gate3_snapshot`, `qbe3_alias_test`, `recovery_hash_test` | Keep; rename later: `snapshot_mir.trb` |
+| [qbe.trb](../src/qbe.trb) | Scalar QBE plus shared emission helpers | `diagnostic`, `gate1_mir`, `snapshot` | `gate1_test`, `gate1_toolchain`, `gate3_runtime`, `qbe2`, `qbe3`, `recovery_hash_runtime` | Keep; rename later: `scalar_qbe.trb` |
 | [qbe2.trb](../src/qbe2.trb) | Aggregate QBE adapter | `diagnostic`, `gate1_mir`, `aggregate_layout`, `gate2_mir`, `qbe`, `snapshot` | `gate2_mir_test`, `gate2_snapshot_test`, `gate2_toolchain` | Keep; rename later: `aggregate_qbe.trb` |
-| [qbe3.trb](../src/qbe3.trb) | Managed/recovery QBE adapter | `diagnostic`, `gate1_mir`, `gate3_layout`, `gate3_runtime`, `gate3_mir`, `qbe`, `snapshot` | `gate3_differential_test`, `gate3_toolchain`, `qbe3_test` | Keep; rename later: `managed_qbe.trb` |
+| [qbe3.trb](../src/qbe3.trb) | Managed/recovery QBE adapter | `recovery_hash_runtime`, `diagnostic`, `gate1_mir`, `gate3_layout`, `gate3_runtime`, `gate3_mir`, `qbe`, `snapshot` | `gate3_differential_test`, `gate3_toolchain`, `qbe3_test` | Keep; rename later: `managed_qbe.trb` |
+| [qbe3_alias_test.trb](../src/qbe3_alias_test.trb) | Test: Managed block-parameter alias cycles and reordered blocks | `gate3_toolchain`, `native_file_system`, `snapshot`, `gate1_mir`, `gate3_layout`, `gate3_mir`, `native_mir` | Root test discovery | Keep; rename later: `managed_qbe_alias_test.trb` |
 | [qbe3_test.trb](../src/qbe3_test.trb) | Test: Gate 3 managed QBE runtime | `gate3_snapshot`, `gate3_toolchain`, `qbe3`, `native_file_system` | Root test discovery | Keep; rename later: `managed_qbe_test.trb` |
-| [snapshot.trb](../src/snapshot.trb) | Snapshot v1 schema and shared source origins | `diagnostic` | `gate0`, `gate0_test`, `gate1_mir`, `gate1_snapshot`, `gate1_test`, `gate2_mir`, `gate2_mir_test`, `gate2_snapshot`, `gate3_capture_test`, `gate3_gc_test`, `gate3_integer_array_test`, `gate3_managed_aggregate_test`, `gate3_mir`, `gate3_mir_test`, `gate3_snapshot`, `native_mir`, `qbe`, `qbe2`, `qbe3` | Keep; rename later: `snapshot_v1.trb` |
+| [recovery_fixture.trb](../src/recovery_fixture.trb) | Shared authored-program snapshot export, collection probes, build and execution | `compiler_recovery_workspace`, `gate3_mir`, `gate3_snapshot`, `gate3_toolchain`, `native_file_system` | `recovery_hash_test`, `recovery_iteration_test` | Keep: `recovery_fixture.trb` |
+| [recovery_generation.trb](../src/recovery_generation.trb) | Hidden-input recovery generation runner | `native_file_system` | `compiler_recovery_test`, `gate1_driver` | Moved: `recovery_generation.trb` |
+| [recovery_hash_runtime.trb](../src/recovery_hash_runtime.trb) | Snapshot-only Hash runtime using managed recovery ABI and roots | `qbe` | `qbe3` | Keep: `recovery_hash_runtime.trb` |
+| [recovery_hash_test.trb](../src/recovery_hash_test.trb) | Test: Hash recovery, MIR rejection and required-key failure | `recovery_fixture`, `gate1_mir`, `gate3_layout`, `gate3_mir`, `native_mir`, `snapshot` | Root test discovery | Keep: `recovery_hash_test.trb` |
+| [recovery_iteration_test.trb](../src/recovery_iteration_test.trb) | Test: Array iteration snapshot control flow and managed lifetimes | `recovery_fixture` | Root test discovery | Keep: `recovery_iteration_test.trb` |
+| [snapshot.trb](../src/snapshot.trb) | Snapshot v1 schema and shared source origins | `diagnostic` | `gate0`, `gate0_test`, `gate1_mir`, `gate1_snapshot`, `gate1_test`, `gate2_mir`, `gate2_mir_test`, `gate2_snapshot`, `gate3_boolean_array_test`, `gate3_capture_test`, `gate3_gc_test`, `gate3_integer_array_test`, `gate3_managed_aggregate_test`, `gate3_mir`, `gate3_mir_test`, `gate3_record_array_test`, `gate3_snapshot`, `native_mir`, `qbe`, `qbe2`, `qbe3`, `qbe3_alias_test`, `recovery_hash_test` | Keep; rename later: `snapshot_v1.trb` |
 
 ## Non-import consumers and verification
 
-- Root `trbconfig.jsonc` selects `src/`; reference `trb check` checks the
-  root project, and `trb test` discovers all `*_test.trb` files. Production
-  root builds include the reachable CLI implementation, not test definitions.
+- `trbconfig.reference.jsonc` selects `src/` for reference checks and root
+  test discovery; use `--config trbconfig.reference.jsonc` explicitly. The
+  default `trbconfig.jsonc` selects the runnable Native `examples/` project.
+  Root recovery builds include the reachable CLI implementation, not tests.
   Both `pull-request.yml` quick checks and `gate-zero.yml` exercise this
   project; the latter enables recovery and QBE-backed tests. Preserve these
   paths and environment controls when moving any row.
@@ -105,10 +118,10 @@ for the receipt, CI consumers, cleanup and negative controls.
   resolution consumes shared state and syntax, and checked-program construction
   consumes resolution, never back on the compiler entry. Root helpers do not become ordinary compiler
   modules just because the reference root project compiles them.
-  `compiler_recovery_source.trb` validates the entry, MIR, state, parser, resolution,
-  checked-program, QBE-output and QBE-runtime import prefixes and derives a
-  recovery-only flat source from eleven canonical inputs. Compiler module extraction must
-  update this derivation and its tests together.
+  `compiler_recovery_source.trb` validates the exact imports for seventeen
+  canonical inputs, including project configuration, Hash and iteration MIR
+  owners, and derives a recovery-only flat source. Compiler module extraction
+  must update this derivation and its tests together.
 - `tools/bootstrap-seed.sh` and current target/memory/performance workflows
   build the ordinary closure through explicit paths. `tools/gate6*-benchmark`
   also retain closure/path assumptions and historical command shapes.

@@ -70,6 +70,15 @@ remain outside this snapshot subset. This source-recovery coverage and the
 ordinary iteration implementation remain separate from the immutable seed
 handoff required before compiler implementation source adopts `each`.
 
+The [full accepted integration](https://github.com/type-rb/type-rb-native/actions/runs/34630338541)
+at `d2980f14d1b64e5ce3544dd7133e7f5871644e4e` validates this exact reference pin:
+109 root and 200 compiler tests, ordinary/recovered generations, managed runtime,
+CLI/REPL, all three targets and ordinary cost bounds pass. The parent ordinary
+implementation was accepted separately in PR #418. This current CI proof does
+not relabel the older retained compatibility cohort or immutable seed evidence
+in `compatibility/current.json`. The next seed remains subject to the
+[registered handoff](bootstrap-seed-updates.md#registered-array-iteration-refresh).
+
 ## Record Array snapshot update
 
 The current pin includes [TypeRB PR #663](https://github.com/type-rb/type-rb/pull/663).

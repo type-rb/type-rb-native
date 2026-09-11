@@ -313,6 +313,12 @@ benchmarks unless accepted runtime evidence has actually changed.
 
 ## Ordinary Array iteration
 
+PR #418 accepted the ordinary implementation at
+`508f721f8964d67a5893e547d2e2fb3de5b20a63`; PR #423 accepted matching recovery
+and seed observers at `d2980f14d1b64e5ce3544dd7133e7f5871644e4e`. Both complete
+CI cohorts pass ordinary limits. The [handoff registration](bootstrap-seed-updates.md#registered-array-iteration-refresh)
+precedes publication and compiler-source adoption; these remain separate steps.
+
 The current slice supports statement `Array#each` and `Array#each.with_index`,
 with optional empty call parentheses, `do |value[, index]| ... end`, and
 single-line brace blocks. Brace statements may be separated by semicolons;

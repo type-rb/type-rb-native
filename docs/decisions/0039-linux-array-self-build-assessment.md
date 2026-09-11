@@ -109,6 +109,8 @@ larger allowance. Its complete observations remain linked from
 The later [bounded String-index improvement](https://github.com/type-rb/type-rb-native/issues/429)
 changes compiler source to tree `2c5449437f0b1b216bdc9aa810c00804a1f76cae`.
 It cannot match this selector. Its early target/cost checks and single registered
-local benefit/control cohort pass under ordinary limits. Fresh full acceptance
-remains separate. This recovery cleanup retires the now-unused selector while
-preserving the failed historical outcome and all ordinary 1.05 contracts.
+local benefit/control cohort pass under ordinary limits. Its separate
+[full final cohort](https://github.com/type-rb/type-rb-native/actions/runs/34630185576)
+passes all 17 authorities under ordinary 1.05 before PR #418 merges. PR #423
+then retires the unused selector with its own complete same-feature validation.
+This preserves the failed historical outcome and every ordinary contract.
