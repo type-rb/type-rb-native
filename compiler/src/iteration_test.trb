@@ -1,3 +1,4 @@
+import { checked_loop_transfer_kind } from checked_program
 import { checked_iteration_require } from iteration_checked
 import { MirIteration, mir_iteration_shape_valid, mir_iteration_valid } from iteration_mir
 import { gate4_integer_storage, gate4_store_integer, sparse_integer_at } from storage
@@ -41,7 +42,7 @@ describe("Array iteration MIR") do
 	end
 
 	test("verifies source ranges, receiver types, and nearest loop ownership") do
-		plan := MirIteration.new(origin: 4, receiver_finish: 5, element_origin: 9, index_origin: 11, body_start: 14, body_finish: 20, finish: 21, parent_loop: - 1, type_name: "Array<Integer>", element_type: "Integer")
+		plan := MirIteration.new(origin: 4, receiver_finish: 5, element_origin: 9, index_origin: 11, body_start: 14, body_finish: 20, finish: 21, parent_loop: - 1, source_kind: 1, type_name: "Array<Integer>", element_type: "Integer")
 		expect(mir_iteration_valid(plan, 4, 22, "Array<Integer>", "Integer")).to_be_true()
 		expect(mir_iteration_valid(plan, 3, 22, "Array<Integer>", "Integer")).to_be_false()
 		expect(mir_iteration_valid(plan, 4, 21, "Array<Integer>", "Integer")).to_be_false()
@@ -81,7 +82,7 @@ describe("Array iteration MIR") do
 			else
 				gate4_store_integer(state.iteration_origins, plan.body_finish, 0)
 			end
-			state.iterations[0] = MirIteration.new(origin: plan.origin, receiver_finish: receiver_finish, element_origin: plan.element_origin, index_origin: index_origin, body_start: plan.body_start, body_finish: body_finish, finish: finish, parent_loop: parent_loop, type_name: plan.type_name, element_type: element_type)
+			state.iterations[0] = MirIteration.new(origin: plan.origin, receiver_finish: receiver_finish, element_origin: plan.element_origin, index_origin: index_origin, body_start: plan.body_start, body_finish: body_finish, finish: finish, parent_loop: parent_loop, source_kind: 1, type_name: plan.type_name, element_type: element_type)
 			checked_iteration_require(state, plan.origin, - 1)
 			expect(gate4_has_diagnostic(state)).to_be_true()
 			mode += 1
@@ -92,5 +93,33 @@ describe("Array iteration MIR") do
 		mut state := iteration_test_state("def main()\n[1].each { |_value| return }\n[2].each { |_value| break }\nend\n")
 		gate4_emit_qbe(state)
 		expect(gate4_has_diagnostic(state)).to_be_false()
+	end
+end
+
+describe("iteration source proof") do
+	test("both traversal and transfer consumers reject an invalid source kind") do
+		mut source := 0
+		while source < 2
+			mut receiver := "[1, 2]"
+			if source == 1
+				receiver = "(1..2)"
+			end
+			mut kind := 0
+			while kind < 4
+				if kind != source + 1
+					mut state := iteration_test_state("def main()\n" + receiver + ".each do |value|\nnext\nend\nend\n")
+					plan := state.iterations[0]
+					expect(checked_loop_transfer_kind(state, plan.body_start, plan.origin)).to_equal(2)
+					state.iterations[0] = MirIteration.new(origin: plan.origin, receiver_finish: plan.receiver_finish, element_origin: plan.element_origin, index_origin: plan.index_origin, body_start: plan.body_start, body_finish: plan.body_finish, finish: plan.finish, parent_loop: plan.parent_loop, source_kind: kind, type_name: plan.type_name, element_type: plan.element_type)
+					checked_iteration_require(state, plan.origin, - 1)
+					expect(gate4_has_diagnostic(state)).to_be_true()
+					state.diagnostic_count[0] = 0
+					expect(checked_loop_transfer_kind(state, plan.body_start, plan.origin)).to_equal(0)
+					expect(gate4_has_diagnostic(state)).to_be_true()
+				end
+				kind += 1
+			end
+			source += 1
+		end
 	end
 end

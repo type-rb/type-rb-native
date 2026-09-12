@@ -1,5 +1,31 @@
 # Current reference compatibility
 
+The Range implementation candidate selects TypeRB `0.4.7-dev` at
+`eb1f705e00235e608ea9283ffa90ea55cf9965f2`, including the Range element-argument
+assignability correction in [TypeRB PR #683](https://github.com/type-rb/type-rb/pull/683).
+The source slice is registered in
+[issue #410](https://github.com/type-rb/type-rb-native/issues/410#issuecomment-5644960663).
+Its compiler implementation is `e12512e69813ee92b1db4d307379103c7977b2ee`, stacked
+on the separate short-circuit correctness fix in
+[PR #437](https://github.com/type-rb/type-rb-native/pull/437).
+
+This pin accompanies direct ordinary `Range<Integer>` values and iteration;
+it does not reinterpret previous compatibility results. Maintained cases cover
+endpoint retention, supported carriers, portable extrema, source-plan rejection,
+lexical transfers and managed lifetimes. Unsupported Range annotation lowering
+remains [TypeRB #684](https://github.com/type-rb/type-rb/issues/684), and logical
+value expressions in snapshot export remain
+[TypeRB #685](https://github.com/type-rb/type-rb/issues/685). The implementation
+uses the supported recovery subset; authored Range snapshot export and compiler
+source adoption require later independent work.
+
+Current full recovery/target/cost acceptance is pending. The existing size and
+1.05 limits are unchanged, including the currently known Range compiler-size
+miss. This compatibility target is not a feature or cost exception. Immutable
+seeds, frozen controls and previous cohort identities remain unchanged below.
+
+## Previous Range endpoint compatibility prerequisite
+
 The development pin is TypeRB `0.4.7-dev` at
 `27a6bdd882084d5660fc9090006eb7e2a44d706c`, including the Range endpoint
 evaluation fixes in [TypeRB PR #680](https://github.com/type-rb/type-rb/pull/680)

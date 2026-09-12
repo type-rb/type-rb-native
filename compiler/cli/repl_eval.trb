@@ -4,10 +4,10 @@ import { repl_hash_new, repl_hash_set, repl_hash_get, repl_hash_slot, repl_hash_
 import trb/std/math
 import { Gate4Compiler } from state
 import { sparse_integer_at, gate4_load_integer, gate4_load_string } from storage
-import { syntax_statement_boundary, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_block_end, syntax_conditional_tail, gate4_token_is, gate4_binary_operator_id, gate4_binary_precedence, gate4_parse_expression_syntax, gate4_parse_type, gate4_skip_newlines, gate4_declaration_start } from parser
+import { syntax_statement_boundary, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_block_end, syntax_conditional_tail, gate4_token_is, gate4_binary_operator_id, syntax_expression_precedence, gate4_parse_expression_syntax, gate4_parse_type, gate4_skip_newlines, gate4_declaration_start } from parser
 import { mir_logical_short_value } from mir
 import { checked_loop_transfer_kind } from checked_program
-import { checked_iteration_require } from iteration_checked
+import { checked_iteration_require, checked_range_require } from iteration_checked
 import { gate4_find_visible_function, gate4_find_visible_record, gate4_find_record_type, gate4_find_field, gate4_record_type, gate4_array_element_type } from resolution
 import { gate4_number_is_float, gate4_number_without_underscores, gate4_integer_string } from literals
 import { native_cli_float, native_cli_interrupt } from host
@@ -519,6 +519,7 @@ def repl_postfix(mut state: Gate4Compiler, mut position: Array<Integer>, mut sto
 end
 
 def repl_expression(mut state: Gate4Compiler, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, minimum: Integer, expected: String): ReplReference
+	expression_origin := position[0]
 	mut result := repl_postfix(state, position, store, environment, expected)
 	mut complete := false
 	while !complete
@@ -526,7 +527,7 @@ def repl_expression(mut state: Gate4Compiler, mut position: Array<Integer>, mut 
 			return repl_reference(0)
 		end
 		operator := gate4_load_string(state.token_texts, position[0])
-		precedence := gate4_binary_precedence(operator)
+		precedence := syntax_expression_precedence(operator)
 		if precedence < minimum
 			complete = true
 		else
@@ -551,8 +552,21 @@ def repl_expression(mut state: Gate4Compiler, mut position: Array<Integer>, mut 
 					result = repl_reference(repl_expression(state, position, store, environment, precedence + 1, "Boolean").value)
 				end
 			else
+				end_origin := position[0]
 				right := repl_expression(state, position, store, environment, precedence + 1, "")
-				result = repl_reference(repl_numeric(store, result.value, operator, right.value))
+				if precedence == 3
+					if store.error[0] != ""
+						return repl_reference(0)
+					end
+					plan := checked_range_require(state, expression_origin, origin, end_origin, position[0])
+					if plan.origin < 0 || store.types[result.value] != plan.start_type || store.types[right.value] != plan.end_type
+						store.error[0] = "Range operands disagree with checked MIR"
+						return repl_reference(0)
+					end
+					result = repl_reference(repl_value(store, "Range<Integer>", 0, 0.0, "", [result.value, right.value, repl_integer(store, plan.exclusive)]))
+				else
+					result = repl_reference(repl_numeric(store, result.value, operator, right.value))
+				end
 			end
 		end
 	end
@@ -595,7 +609,7 @@ end
 def repl_iteration(mut state: Gate4Compiler, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, mut flow: Array<Integer>, parent_loop: Integer): Integer
 	plan := checked_iteration_require(state, position[0], parent_loop)
 	if plan.origin < 0
-		store.error[0] = "invalid checked Array iteration"
+		store.error[0] = "invalid checked iteration"
 		return 0
 	end
 	receiver := repl_expression(state, position, store, environment, 1, plan.type_name).value
@@ -603,17 +617,38 @@ def repl_iteration(mut state: Gate4Compiler, mut position: Array<Integer>, mut s
 		return 0
 	end
 	if store.types[receiver] != plan.type_name || position[0] != plan.receiver_finish
-		store.error[0] = "Array iteration receiver disagrees with checked MIR"
+		store.error[0] = "iteration receiver disagrees with checked MIR"
 		return 0
 	end
 	saved := environment.count[0]
 	mut cursor := 0
+	mut ordinal := 0
+	mut bound := 0
+	mut exclusive := 0
+	if plan.source_kind == 2
+		cursor = store.integers[store.children[receiver][0]]
+		bound = store.integers[store.children[receiver][1]]
+		exclusive = store.integers[store.children[receiver][2]]
+	end
 	mut result := 0
-	while cursor < store.children[receiver].size()
+	while true
+		if plan.source_kind == 1
+			if cursor >= store.children[receiver].size()
+				break
+			end
+		elsif cursor > bound || (cursor == bound && exclusive == 1)
+			break
+		end
 		environment.count[0] = saved
-		repl_bind(environment, gate4_load_string(state.token_texts, plan.element_origin), store.children[receiver][cursor], 1)
+		mut element := 0
+		if plan.source_kind == 1
+			element = store.children[receiver][cursor]
+		else
+			element = repl_integer(store, cursor)
+		end
+		repl_bind(environment, gate4_load_string(state.token_texts, plan.element_origin), element, 1)
 		if plan.index_origin >= 0
-			repl_bind(environment, gate4_load_string(state.token_texts, plan.index_origin), repl_integer(store, cursor), 1)
+			repl_bind(environment, gate4_load_string(state.token_texts, plan.index_origin), repl_integer(store, ordinal), 1)
 		end
 		position[0] = plan.body_start
 		result = repl_block(state, position, store, environment, flow, plan.origin)
@@ -627,6 +662,20 @@ def repl_iteration(mut state: Gate4Compiler, mut position: Array<Integer>, mut s
 		end
 		if store.error[0] != ""
 			break
+		end
+		if plan.source_kind == 2 && cursor == bound
+			break
+		end
+		if plan.index_origin >= 0
+			# There is no next ordinal when the exclusive endpoint is next.
+			if plan.source_kind == 2 && exclusive == 1 && cursor + 1 == bound
+				break
+			end
+			if ordinal == 9007199254740991
+				store.error[0] = "panic: Integer is outside the portable range"
+				break
+			end
+			ordinal += 1
 		end
 		cursor += 1
 	end
