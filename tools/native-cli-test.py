@@ -79,7 +79,7 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
         assert failed.stderr == fixture.with_suffix('.stderr').read_text(), failed
         submission = fixture.read_text().replace('def main()', 'def endpoint_failure_case()')
         rejection = run('repl', text=submission + '\nendpoint_failure_case()\n:quit\n')
-        assert 'panic: division by zero' in rejection, rejection
+        assert 'error: division by zero' in rejection, rejection
         assert 'unexpected RHS' not in rejection and 'checked MIR' not in rejection, rejection
     for case_name in ('boolean-array-negative', 'boolean-array-past-end',
                       'record-array-negative', 'record-array-past-end', 'local-array-header-bounds',
