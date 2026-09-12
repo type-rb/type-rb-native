@@ -60,6 +60,14 @@ test('integration explicitly passes migration mode while standalone workflows re
     assert.match(workflow, /workflow_call:\n    inputs:\n      cost_mode:[\s\S]*?default: strict/);
     assert(workflow.includes("NATIVE_MIR_COST_MODE: ${{ inputs.cost_mode || 'strict' }}"));
   }
+  // Diagnostic trends must reach measurement even when a new compiler exceeds
+  // the historical seed byte ceiling; the measured workload is unchanged.
+  for (const name of ['daily-performance', 'weekly-performance']) {
+    const workflow = readFileSync(new URL(`../.github/workflows/${name}.yml`, import.meta.url), 'utf8');
+    const prepare = workflow.match(/      - name: Close the current[^]*?(?=\n      - name:)/)?.[0];
+    assert(prepare?.includes('          NATIVE_MIR_COST_MODE: mir-migration'));
+    assert(prepare.includes('/bin/sh tools/daily-performance/prepare-compilers.sh'));
+  }
 });
 
 test('amd64 migration still verifies binary format and records identities after skipped measurements', () => {

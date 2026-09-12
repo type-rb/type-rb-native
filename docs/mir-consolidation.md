@@ -90,6 +90,8 @@ allowance is used. Green migration CI proves integration correctness, not
 performance qualification or a passing cost comparison that did not run.
 
 Existing daily/weekly measurement schedules remain the trend feedback loop.
+Their compiler preparation also observes historical byte overruns so that
+diagnostic workloads can run; measured programs and repetitions are unchanged.
 Use their evidence to detect large regressions and choose investigations, without
 repeatedly tuning an unchanged small overrun. A coherent architecture checkpoint
 or an unexpected material change warrants a focused measurement; each small
