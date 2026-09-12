@@ -28,6 +28,8 @@ All `docs/` and configuration paths below are relative to the repository root.
 | Reference pin or compatibility | `docs/type-rb-compatibility.md`, `docs/versioning.md`, and the cross-repository procedure in `CONTRIBUTING.md`. |
 | Documentation, instructions, or metadata only | Check changed text, links, metadata and the applicable documentation CI. Compiler/bootstrap/benchmark runs are not implied. |
 
+Read `docs/mir-consolidation.md` for the current larger milestone, permitted
+intermediate cost regressions and integration/qualification distinction.
 Use `README.md` for orientation when project context is missing. Small fixes and
 documentation corrections do not need a new experiment proposal. For material
 experiments and source-organization slices, use the owning plan's registration
@@ -63,8 +65,9 @@ without introducing a new approval checkpoint. If a skill instruction requires
 a pause, identify the exact file and instruction, and explain the unresolved
 decision; do not turn an optional recommendation into a mandatory approval.
 
-When the user has authorized continued development, register and pursue the next
-bounded slice only within that authorization and budget. Honor later limits
-such as one small task or stopping with an open PR. Use issue-closing keywords
+When the user has authorized continued development, pursue the active milestone
+through cohesive ownership changes within that authorization and budget. Avoid
+turning each helper move or size overrun into a separate acceptance milestone.
+Honor later limits such as one small task or stopping with an open PR. Use issue-closing keywords
 only when the reviewed PR actually completes the issue; even a negated closing
 keyword can close it on merge.

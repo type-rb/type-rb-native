@@ -29,6 +29,14 @@ In particular, `trbconfig.reference.jsonc` selects root `src/`, and recovery
 helpers validate the compiler's exact imports. The runtime-generation path also feeds
 bootstrap tooling. A filename search alone cannot establish dead code.
 
+## Active consolidation cadence
+
+The [MIR consolidation milestone](mir-consolidation.md) supersedes the old
+per-slice scheduling below. Combine connected ownership moves and retire their
+superseded code within cohesive PRs. Keep recovery/consumer updates atomic, but
+do not require an independent full performance cohort for each helper or module.
+Historical checkpoints below explain completed work, not mandatory work sizing.
+
 ## Ordered checkpoints
 
 | Checkpoint | Start condition | Deliverable / completion condition |
@@ -152,8 +160,9 @@ may proceed while code authorities run. Improve a measured CI bottleneck
 without weakening the acceptance authorities or running formal benchmarks for
 documentation-only changes.
 
-Before each code slice, register its exact files, baseline, expected generated
-identity effects, and acceptance checks in a public issue. If O2 encounters a
+Use the active milestone issue and cohesive PRs to record scope, identities,
+expected generated-output effects and relevant validation. Register a separate
+issue when scope or a real design question changes, not for every code slice. If O2 encounters a
 correctness or recovery blocker, publish the precise blocker and next repair,
 then choose another independent support slice when possible. Do not silently
 postpone organization until an unspecified final cleanup phase. Revisit the

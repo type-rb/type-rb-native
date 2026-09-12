@@ -2,6 +2,11 @@ name: Persistent worker memory lifecycle
 
 on:
   workflow_call:
+    inputs:
+      cost_mode:
+        description: Strict cost qualification or MIR migration observations
+        type: string
+        default: strict
   workflow_dispatch:
     inputs:
       release_tag:
@@ -14,6 +19,7 @@ permissions:
   contents: read
 
 env:
+  NATIVE_MIR_COST_MODE: ${{ inputs.cost_mode || 'strict' }}
   TYPE_RB_REVISION: 27a6bdd882084d5660fc9090006eb7e2a44d706c
   TYPE_RB_VERSION: 0.4.7-dev
   QBE_VERSION: "1.3"
@@ -296,6 +302,7 @@ jobs:
         run: |
           . tools/compiler-project.sh
           . tools/native-mir-transition-policy.sh
+          . tools/compiler-cost.sh
           native_mir_transition_markers_valid "$GITHUB_WORKSPACE"
           cmp \
             evidence/runtime-worker-darwin-arm64/build-evidence/compiler-first.ssa \
@@ -306,9 +313,9 @@ jobs:
           darwin_size=$(cat evidence/runtime-worker-darwin-arm64/worker-smoke-evidence/compiler-size-bytes.txt)
           linux_size=$(cat evidence/runtime-worker-linux-arm64/worker-smoke-evidence/compiler-size-bytes.txt)
           combined_size=$((darwin_size + linux_size))
-          test "$darwin_size" -le "$NATIVE_MIR_DARWIN_COMPILER_LIMIT"
-          test "$linux_size" -le "$NATIVE_MIR_LINUX_COMPILER_LIMIT"
-          test "$combined_size" -le "$NATIVE_MIR_COMBINED_COMPILER_LIMIT"
+          compiler_cost_check darwin-compiler-bytes "$darwin_size" "$NATIVE_MIR_DARWIN_COMPILER_LIMIT" > evidence/cross-target-costs.txt
+          compiler_cost_check linux-compiler-bytes "$linux_size" "$NATIVE_MIR_LINUX_COMPILER_LIMIT" >> evidence/cross-target-costs.txt
+          compiler_cost_check combined-compiler-bytes "$combined_size" "$NATIVE_MIR_COMBINED_COMPILER_LIMIT" >> evidence/cross-target-costs.txt
           {
             printf 'darwin_stripped_compiler_bytes=%s\n' "$darwin_size"
             printf 'linux_stripped_compiler_bytes=%s\n' "$linux_size"
@@ -321,4 +328,6 @@ jobs:
         with:
           name: runtime-worker-cross-target
           retention-days: 30
-          path: evidence/cross-target-summary.txt
+          path: |
+            evidence/cross-target-summary.txt
+            evidence/cross-target-costs.txt

@@ -93,6 +93,12 @@ backend. Neither is built merely to populate a comparison table.
 
 ## Self-hosted MIR optimization transition
 
+The active [MIR consolidation milestone](mir-consolidation.md) supersedes the
+per-slice cost envelopes and registration cadence below during migration.
+Preserve correctness and architectural boundaries, but complete cohesive
+ownership changes before milestone performance qualification. The earlier
+contracts remain historical and standalone strict measurement references.
+
 The early bootstrap path proved a distinct Native MIR. The compact self-hosted
 compiler later reached closure through direct QBE emission, with several local
 semantic facts represented in emitter state. Before adding broader range,

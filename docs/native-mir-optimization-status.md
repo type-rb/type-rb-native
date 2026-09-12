@@ -2,6 +2,12 @@
 
 ## Current development focus
 
+The active [MIR consolidation milestone](mir-consolidation.md) replaces per-slice
+performance acceptance with explicit migration observations. Prioritize completing
+verified MIR ownership and removing the ordinary direct path through cohesive
+changes. Correctness remains required; daily/weekly trends and milestone-wide
+performance qualification retain the final performance goals.
+
 Basic ordinary language coverage and compiler-source readability now take
 priority over additional benchmark tuning. Required checked/MIR semantics and
 verification remain part of each feature, not deferred cleanup. See the

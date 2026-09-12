@@ -144,6 +144,8 @@ test ! -e "$evidence" || fail "evidence path already exists"
 script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repository_root=$(CDPATH= cd -- "$script_directory/../.." && pwd)
 . "$script_directory/../compiler-project.sh"
+. "$script_directory/../compiler-cost.sh"
+compiler_cost_mode > /dev/null || exit 64
 compiler_project=$(native_compiler_project_directory "$repository_root") || exit 1
 transition_policy=$repository_root/tools/native-mir-transition-policy.sh
 control_flow_marker=$compiler_project/native-mir-control-flow-v1.txt
@@ -212,7 +214,8 @@ else
 fi
 stripped_compiler_size=$(file_size "$workspace/compiler.stripped")
 printf '%s\n' "$stripped_compiler_size" > "$evidence/compiler-size-bytes.txt"
-test "$stripped_compiler_size" -le "$MAX_COMPILER_SIZE" ||
+compiler_cost_check compiler-bytes "$stripped_compiler_size" "$MAX_COMPILER_SIZE" \
+	>> "$evidence/cost-observations.txt" ||
 	fail "stripped compiler exceeds $MAX_COMPILER_SIZE bytes: $stripped_compiler_size"
 
 stdout=$evidence/stdout.txt
@@ -296,7 +299,8 @@ else
 	test -n "$elapsed" || fail "runtime elapsed time is missing"
 	printf 'elapsed_seconds=%s\n' "$elapsed" > "$evidence/runtime.txt"
 	if test "$mode" = smoke; then
-		awk -v elapsed="$elapsed" -v limit="$MAX_SMOKE_SECONDS" 'BEGIN {exit !(elapsed <= limit)}' ||
+		compiler_cost_check smoke-seconds "$elapsed" "$MAX_SMOKE_SECONDS" \
+			>> "$evidence/cost-observations.txt" ||
 			fail "smoke runtime exceeds 5x the registered 0.85-second baseline"
 	fi
 	if test "$mode" = asan; then

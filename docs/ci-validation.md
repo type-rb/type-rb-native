@@ -6,6 +6,23 @@ including deletions and both sides of renames. Git output is streamed with NUL
 separators; large evidence inventories, unusual filenames and unknown paths
 cannot silently truncate or bypass validation. Git failures reject planning.
 
+## Active MIR integration mode
+
+[Issue #439](mir-consolidation.md) establishes an explicit `mir-migration` mode
+for PR/main integration. All applicable correctness, recovery, target identity,
+process, memory-lifetime, sanitizer and cleanup jobs remain required. Compiler
+size and smoke-time limits write observations with their actual exceeded
+status; they do not stop correctness verification. Standalone tools and workflows
+default to `strict`, and unknown modes or malformed measurements fail.
+
+Migration changes omit the separate arm64 comparison and the amd64
+repeated formal timing series. Binary-format, dependency, generation, output and
+failure checks still execute. CI workflow/routing/policy changes also retain
+controller tests and applicable integration correctness, without restoring the
+strict cost matrix. Daily/weekly diagnostic schedules remain.
+The matrix and historical scheduling below describe the strict contract; green
+migration CI must not be reported as a performance-qualified result.
+
 ## Required authorities
 
 | Changed surface | Required PR validation |
@@ -98,7 +115,8 @@ remain available. Main pushes do not cancel earlier validations: a later
 documentation-only delta must not erase an unfinished code validation.
 
 Full multi-language benchmark refreshes and Native runtime A/B remain manual.
-Manual measurements supplement rather than replace current PR acceptance.
+During MIR migration they supply milestone qualification separately from
+integration correctness; ordinary compiler edits do not wait for detailed costs.
 
 ## Focused compiler preflight feedback
 
@@ -159,8 +177,9 @@ the formal multi-language benchmark remains a separate manual operation.
 
 ## Further latency boundaries
 
-Ordinary acceptance cost limits remain unchanged by the
-[trade-off policy](optimization-tradeoffs.md). A registered bounded diagnostic
+Standalone strict acceptance limits remain unchanged by the
+[trade-off policy](optimization-tradeoffs.md). Active migration integration
+instead follows the explicit observation contract above. A registered bounded diagnostic
 may use standalone measurement controllers when ordinary compactness fails;
 label that evidence diagnostic and retain the ordinary failed status. This
 does not enable a hidden CI skip, a force-merge path, or a new benchmark on every

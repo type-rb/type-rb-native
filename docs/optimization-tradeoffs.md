@@ -1,5 +1,10 @@
 # Optimization costs and trade-off evaluation
 
+The active [MIR consolidation policy](mir-consolidation.md) supersedes per-slice
+cost acceptance during the migration. Temporary cost regressions are allowed in
+explicit migration integration; full correctness remains required. Strict/manual
+contracts below remain available. Their historical failures are not relabeled.
+
 Status: adopted on 2026-09-07. This policy governs future decisions; it does
 not relabel any earlier failed measurement or accept an existing candidate.
 
