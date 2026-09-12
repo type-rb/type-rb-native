@@ -170,7 +170,7 @@ if test "$input_role" = transition; then
 fi
 if test "$profile" = linux-amd64-v0; then
 	# There is no published amd64 platform seed. This profile may only verify
-	# the setup-only transition produced by the Gate 6N target-specific path.
+	# the setup-only transition produced by the Linux amd64 target-specific path.
 	test "$mode" = previous || usage
 	test "$input_role" = transition || usage
 fi

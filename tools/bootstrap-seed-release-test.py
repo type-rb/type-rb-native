@@ -20,8 +20,8 @@ class SeedReleaseTests(unittest.TestCase):
                      "linux-amd64-targets", "daily-performance", "weekly-performance"):
             with self.subTest(workflow=name):
                 workflow = (root / ".github/workflows" / (name + ".yml")).read_text()
-                self.assertIn("bootstrap-seed-2026-09-11-array-iteration", workflow)
-                self.assertIn("b4a1b383e5678907649334203f534ae62fa42af6", workflow)
+                self.assertIn("bootstrap-seed-2026-09-12-compiler-names", workflow)
+                self.assertIn("d7ffb9384229125216696a220c7f370422472178", workflow)
                 self.assertIn("tools/bootstrap-seed-download.sh", workflow)
         workflow = (root / ".github/workflows/linux-amd64-targets.yml").read_text()
         self.assertIn("ROOT_RELEASE_TAG: bootstrap-seed-2026-08-30", workflow)

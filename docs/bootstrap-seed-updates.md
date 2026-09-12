@@ -206,12 +206,13 @@ is a subsequent verified source change.
 
 ## Registered compiler-name retirement refresh
 
-Issue #412 registers `bootstrap-seed-2026-09-12-compiler-names` to complete the
-removal of stage-derived compiler names. Preparation must use the accepted main
-revision containing the role-named compiler and six predecessor-intrinsic bridges;
-record that exact accepted revision and closure before dispatch. Its predecessor
-is the verified Array-iteration release below. Registration alone does not mean
-that a new seed has been built, published, or accepted.
+[Issue #412](https://github.com/type-rb/type-rb-native/issues/412#issuecomment-5645912134)
+registers `bootstrap-seed-2026-09-12-compiler-names` from accepted source
+`d7ffb9384229125216696a220c7f370422472178` (PR #442). The compiler closure has
+19 implementation modules and 451,834 source bytes, with entry SHA-256
+`9d3fc404ea55f459ef4bf5417112f0bb47054077ea94f3f6a5d57fbc23958ad0` and
+compiler source tree `4fc8da9eedafadda9dce7fb80357d8db2594b382`.
+Its predecessor is the verified Array-iteration release recorded in the history below.
 
 The refresh retains adjacent-generation checks, repeated fixed points, complete
 conformance, process boundaries, signed provenance and fresh published-asset
@@ -221,33 +222,32 @@ sizes remain authenticated observations, without an integration size ceiling.
 Every earlier tag retains its own unchanged strict size limits. No old failure
 or result is reclassified, and this handoff is not Pure Go performance qualification.
 
-After both published assets pass verification, a separate checkout handoff removes
-the six old intrinsic declarations and recognition paths. Linux amd64 also needs
-an exact accepted source bridge from the Array-iteration compiler to the renamed
-intrinsic compiler before those names can disappear from candidate source. Complete
-both transitions before resuming broader MIR work; keep issue #412 open until then.
+Preparation, attested immutable publication and fresh published-asset verification
+passed on both arm64 targets. The checkout handoff removes all six predecessor
+intrinsic declarations and their recognition paths. Linux amd64 uses the exact
+accepted compiler-name source bridge before reading the successor source.
+Ordinary intrinsic omission now uses declaration identity rather than an assumed
+position in the function table; flat recovery and CLI fallbacks remain explicit.
 
 ## Current verified checkout seed
 
-Checkout builds pin [bootstrap-seed-2026-09-11-array-iteration](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-09-11-array-iteration),
+Checkout builds pin [bootstrap-seed-2026-09-12-compiler-names](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-09-12-compiler-names),
 an immutable experimental prerelease from accepted source
-`b4a1b383e5678907649334203f534ae62fa42af6`. Its compiler source tree is
-`2c5449437f0b1b216bdc9aa810c00804a1f76cae`, unchanged from accepted PR #418;
-PR #423 supplied matching recovery and reviewed preparation observers, and
-PR #430 recorded the accepted source handoff.
+`d7ffb9384229125216696a220c7f370422472178`. Its compiler source tree is
+`4fc8da9eedafadda9dce7fb80357d8db2594b382` from PR #442.
 
-- [Preparation and attestations](https://github.com/type-rb/type-rb-native/actions/runs/34634652111) passed both arm64 targets and all 28 retained observations. All four original assets were authenticated against the exact source and hosted preparation workflow before publication.
-- [Fresh published-asset verification](https://github.com/type-rb/type-rb-native/actions/runs/34635238685) passed both targets, including equality of each downloaded seed with B1/B2/B3/B4, the complete corpus, all 42 retained generation observations and ordinary Linux process boundaries. Darwin retains its explicit boundary-only inventory.
-- Darwin compiler: 415,480 bytes, SHA-256 `7ba29a5897782366569be9b2be3461f59fcf3e8feccfe41694ae4a29c457d19a` (asset 557804544).
-- Linux compiler: 387,984 bytes, SHA-256 `8c9d2ea099880ebbce4f4e91230b1cfab40e3fce4c145adacba36718ddbc5852` (asset 557804541).
-- Combined: 803,464 bytes, below the registered 805,000-byte bound.
-- Manifest: SHA-256 `3e3c71b9921a81d58224e67833957dcd281840dd80204cb114f54700332b39b0` (asset 557804540).
-- Checksum index: SHA-256 `fdf1d868b8827934d0011fd765026fb173b7ec459bb000b5939721d36bd5e956` (asset 557804542).
+- [Preparation and attestations](https://github.com/type-rb/type-rb-native/actions/runs/34694042015) passed both arm64 targets and all 28 retained observations. All four assets were authenticated against the exact source and hosted preparation workflow before publication.
+- [Fresh published-asset verification](https://github.com/type-rb/type-rb-native/actions/runs/34694464071) passed both targets, including equality of each downloaded seed with B1/B2/B3/B4, the complete corpus, all 42 retained generation observations and ordinary Linux process boundaries. Darwin retains its explicit boundary-only inventory.
+- Darwin compiler: 432,008 bytes, SHA-256 `28d1b5a3aa42013ea8876173dbf760f7e71ee221a69bf16c915e485ccf60bdd9` (asset 559250651).
+- Linux compiler: 394,352 bytes, SHA-256 `40cf35282750792c60dee1efdbdf331681ee7b5dd7efb5fae7a551824db4221c` (asset 559250648).
+- Combined: 826,360 bytes. These are authenticated MIR migration observations, not a passing historical size comparison.
+- Manifest: SHA-256 `04a0242b06818641e72d65ccbe4ece79380d875768772e60500fa36f05559c83` (asset 559250654).
+- Checksum index: SHA-256 `fb66a448d3aaf1f590c7495fa456f1ed68013990367b06ff0adab04530f3267e` (asset 559250647).
 
-The immutable [Hash predecessor](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-09-10-hash)
-remains at `79f699e9245f79131646ebf43207f6b7526c4f68`. Its exact identities,
+The immutable [Array-iteration predecessor](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-09-11-array-iteration)
+remains at `b4a1b383e5678907649334203f534ae62fa42af6`. Its exact identities,
 preparation/verification runs and earlier predecessor history remain in the
-[source-era handoff record](https://github.com/type-rb/type-rb-native/blob/b4a1b383e5678907649334203f534ae62fa42af6/docs/bootstrap-seed-updates.md#current-verified-checkout-seed).
+[source-era handoff record](https://github.com/type-rb/type-rb-native/blob/d7ffb9384229125216696a220c7f370422472178/docs/bootstrap-seed-updates.md#current-verified-checkout-seed).
 Every historical tag retains its exact predecessor and size contracts.
 
 Compiler binaries and detailed run artifacts remain outside Git. This compact
@@ -257,7 +257,7 @@ or claim a runtime speedup.
 ## Active CI consumers versus historical recovery
 
 Current compiler-cost, worker-memory, formal runtime/build benchmark, daily/weekly
-performance and Linux arm64 regression workflows use the exact Array iteration
+performance and Linux arm64 regression workflows use the exact compiler-name
 seed and the shared strict download/authentication helper. Their manual seed input must match the recorded
 source revision; an older or unknown tag fails rather than bypassing provenance.
 Changing a setup seed does not move a frozen benchmark baseline or change any
@@ -274,7 +274,10 @@ Boolean Array fixture. It then builds exact accepted record-capable source
 `8a6d9ff73b14a97bca1b010ddaad6a38972b5373` and checks the Hash fixture.
 It next builds accepted Array iteration source
 `508f721f8964d67a5893e547d2e2fb3de5b20a63` and checks live iteration, control
-transfer and managed-value fixtures before reading **candidate** source. The subsequent
+transfer and managed-value fixtures. It then builds the accepted compiler-name
+bridge `6ca79d22cde2ddba5fe836c66899b6e08a6511dc`, verifies its exact entry digest,
+and checks the **candidate** source with that bridge. Only this setup transition
+retains the predecessor declaration spellings. The subsequent
 candidate-runtime transition stays separate so a future runtime change still
 precedes ordinary B2/B3/B4. These ordinary and measured generations remain the
 candidate.

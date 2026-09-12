@@ -917,7 +917,7 @@ compiler_cost_check application-bytes-times-five "$((native_stripped_size * 5))"
 	fail "CC expansion probe failed"
 require_empty_file "$evidence/cc-expansion.stdout" "CC expansion probe wrote stdout"
 
-require_clean_revision "$candidate_root" "Gate 6N candidate after verification"
+require_clean_revision "$candidate_root" "Linux target candidate after verification"
 require_no_intermediates "$workspace"
 printf 'linux-amd64-targets: passed\n'
 }
@@ -975,7 +975,7 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-require_clean_revision "$candidate_root" "Gate 6N candidate"
+require_clean_revision "$candidate_root" "Linux target candidate"
 test "$(tr -d '\n' < "$candidate_root/TYPE_RB_REVISION")" = "$TYPE_RB_REVISION" ||
 	fail "candidate TypeRB revision pin differs"
 test "$("$reference_trb" version)" = "$TYPE_RB_VERSION" || fail "reference TypeRB version differs"
