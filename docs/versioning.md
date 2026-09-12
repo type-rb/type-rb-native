@@ -114,4 +114,4 @@ evidence. CI runs both commands with the compiler built from the exact pinned
 TypeRB revision.
 
 The decision boundary is recorded in
-[Decision 0020](decisions/0020-independent-native-versioning.md).
+[Decision 0020](https://github.com/type-rb/type-rb-native/blob/7726ff18e9230cd149e9f0c317577f6429f907fc/docs/decisions/0020-independent-native-versioning.md).

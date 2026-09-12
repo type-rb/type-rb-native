@@ -2,7 +2,7 @@
 
 This plan implements the bounded benchmark work registered in
 [issue #103](https://github.com/type-rb/type-rb-native/issues/103). It follows
-[Decision 0023](decisions/0023-reproducible-benchmark-layers.md) and keeps the
+[Decision 0023](https://github.com/type-rb/type-rb-native/blob/7726ff18e9230cd149e9f0c317577f6429f907fc/docs/decisions/0023-reproducible-benchmark-layers.md) and keeps the
 identical-TypeRB comparison separate from cross-language implementation
 context.
 
@@ -182,7 +182,7 @@ current
 [formal result](../results/2026-09-10-benchmarksgame-build-loop-local-headers-linux-arm64/README.md)
 publishes all raw observations, independently reproduced medians, artifact
 variants, process closure, dynamic dependencies, and distribution totals. See
-[Decision 0024](decisions/0024-benchexec-runtime-controller.md) and
+[Decision 0024](https://github.com/type-rb/type-rb-native/blob/7726ff18e9230cd149e9f0c317577f6429f907fc/docs/decisions/0024-benchexec-runtime-controller.md) and
 [Decision 0027](decisions/0027-formal-build-distribution-controller.md). The
 dispatch-only [runtime workflow](../.github/workflows/benchmarksgame-formal.yml)
 and [build workflow](../.github/workflows/benchmarksgame-build-formal.yml)

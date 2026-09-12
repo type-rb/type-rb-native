@@ -2,7 +2,7 @@
 
 The ordinary self-hosted compiler now emits managed Strings, Arrays, and
 reference-containing records through the exact-root tracing model established
-by Gate 3. This stage closes the process-lifetime allocation policy that was
+by the managed snapshot recovery path. This stage closes the process-lifetime allocation policy that was
 acceptable for behavioral self-hosting but unsuitable for persistent Web and
 Job processes.
 

@@ -1,0 +1,61 @@
+import { MirFunction, MirModule, mir_instruction_with_payload } from mir
+import { mir_array_headers, mir_array_loop_headers, mir_scalar_guard } from mir_analysis
+
+def mir_function_with_guard(function: MirFunction, guard: Integer): MirFunction
+	return MirFunction.new(kind: function.kind, integer_guard: guard, id: function.id, entry_block: function.entry_block, source_id: function.source_id, line: function.line, parameter_start: function.parameter_start, parameter_count: function.parameter_count, block_start: function.block_start, block_count: function.block_count)
+end
+
+def optimize_verified_mir(mut native_module: MirModule)
+	mut index := 0
+	while index < native_module.instructions.size()
+		instruction := native_module.instructions[index]
+		mut payload := instruction.payload
+		if instruction.kind == 5
+			if payload == 1
+				payload = 2
+			end
+		end
+		if instruction.kind == 7
+			if instruction.failure >= 0
+				if payload == 1
+					payload = 13
+				elsif payload == 3
+					payload = 12
+				end
+			end
+		end
+		if payload != instruction.payload
+			native_module.instructions[index] = mir_instruction_with_payload(instruction, payload)
+		end
+		index += 1
+	end
+	index = 0
+	while index < native_module.functions.size()
+		function := native_module.functions[index]
+		native_module.functions[index] = mir_function_with_guard(function, mir_scalar_guard(native_module, function))
+		index += 1
+	end
+	index = 0
+	while index < native_module.array_regions.size()
+		header := mir_array_headers(native_module.array_regions[index])
+		if !header.valid
+			return
+		end
+		mut loops: Array<Integer> := []
+		if header.declarations.size() == 0
+			loops = mir_array_loop_headers(native_module.array_regions[index])
+		end
+		if native_module.array_loop_headers.size() == index
+			native_module.array_loop_headers.push(loops)
+		else
+			native_module.array_loop_headers[index] = loops
+		end
+		if native_module.array_headers.size() == index
+			native_module.array_headers.push(header.declarations)
+		else
+			native_module.array_headers[index] = header.declarations
+		end
+		index += 1
+	end
+	return
+end

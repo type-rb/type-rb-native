@@ -36,7 +36,7 @@ outward-facing text before publication.
   of truth. Preserve exact semantics, origins, and deterministic diagnostics;
   reject unsupported input instead of introducing a native-only dialect,
   unchecked fallback, or `Any` escape hatch.
-- Keep the reference repository consumer-neutral. Native gate mappings, backend
+- Keep the reference repository consumer-neutral. Native snapshot compatibility mappings, backend
   plans, pins, bridge compatibility and retirement conditions belong here.
   Reference changes must be justified by reference semantics, without Native
   terminology or consumer aliases. Follow `CONTRIBUTING.md` for that workflow.
@@ -60,7 +60,7 @@ outward-facing text before publication.
   syntax with MIR checks and verified compiler self-use. Deferred optimizer
   acceptance does not block language work.
 - For source organization, follow `docs/repository-organization.md`, including
-  root gate-numbered files and symbols. At accepted optimization checkpoints,
+  root recovery files and symbols. At accepted optimization checkpoints,
   advance a bounded cleanup or record its concrete blocker within the task's
   scope. Preserve applicable recovery/measurement checks and immutable history.
 - Before adopting new syntax in compiler source or changing seeds, follow

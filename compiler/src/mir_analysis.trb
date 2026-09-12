@@ -1,0 +1,705 @@
+import { ascii_code } from literals
+import { MirArrayOperation, MirBlock, MirFunction, MirInstruction, MirModule, mir_array_element_type, mir_table_span_valid, mir_value_type } from mir
+
+def mir_exact_integer_literal(
+		native_module: MirModule,
+		instruction: MirInstruction,
+		text: String,
+	): Boolean
+	if instruction.kind != 6
+		return false
+	end
+	literal := instruction.payload
+	if literal < 0
+		return false
+	end
+	if literal >= native_module.literal_texts.size()
+		return false
+	end
+	return native_module.literal_texts[literal] == text
+end
+
+def mir_induction_address(
+		native_module: MirModule,
+		function: MirFunction,
+		block: MirBlock,
+		instruction: MirInstruction,
+	): Boolean
+	if function.block_count != 6
+		return false
+	end
+	if function.parameter_count != 1
+		return false
+	end
+	array_type := mir_value_type(native_module, function.id, native_module.arguments[function.parameter_start])
+	if mir_array_element_type(array_type) == 0
+		return false
+	end
+	entry := native_module.blocks[function.block_start]
+	header := native_module.blocks[function.block_start + 1]
+	body := native_module.blocks[function.block_start + 2]
+	exit := native_module.blocks[function.block_start + 3]
+	if block.id != body.id
+		return false
+	end
+	if entry.terminator != 1
+		return false
+	end
+	if header.terminator != 2
+		return false
+	end
+	if body.terminator != 1
+		return false
+	end
+	if entry.first_target != header.id
+		return false
+	end
+	if header.first_target != body.id
+		return false
+	end
+	if header.second_target != exit.id
+		return false
+	end
+	if body.first_target != header.id
+		return false
+	end
+	if header.parameter_count < 1
+		return false
+	end
+	if header.parameter_count > 2
+		return false
+	end
+	if body.parameter_count != header.parameter_count
+		return false
+	end
+	header_value := native_module.arguments[header.parameter_start]
+	body_value := native_module.arguments[body.parameter_start]
+	if instruction.second != body_value
+		return false
+	end
+	if native_module.arguments[header.first_argument_start] != header_value
+		return false
+	end
+	if entry.instruction_count != header.parameter_count
+		return false
+	end
+	if header.instruction_count != 2
+		return false
+	end
+	if body.instruction_count != header.parameter_count + 3
+		return false
+	end
+	zero := native_module.instructions[entry.instruction_start]
+	if !mir_exact_integer_literal(native_module, zero, "0")
+		return false
+	end
+	if native_module.arguments[entry.first_argument_start] != zero.result
+		return false
+	end
+	length := native_module.instructions[header.instruction_start]
+	comparison := native_module.instructions[header.instruction_start + 1]
+	if length.kind != 4
+		return false
+	end
+	if comparison.kind != 7
+		return false
+	end
+	if comparison.payload != 8
+		return false
+	end
+	if comparison.first != header_value
+		return false
+	end
+	if comparison.second != length.result
+		return false
+	end
+	if header.condition != comparison.result
+		return false
+	end
+	load := native_module.instructions[body.instruction_start + 1]
+	if load.kind != 10
+		return false
+	end
+	if load.first != instruction.result
+		return false
+	end
+	one := native_module.instructions[body.instruction_start + body.instruction_count - 2]
+	add := native_module.instructions[body.instruction_start + body.instruction_count - 1]
+	if !mir_exact_integer_literal(native_module, one, "1")
+		return false
+	end
+	if add.kind != 7
+		return false
+	end
+	if add.payload != 1
+		if add.payload != 13
+			return false
+		end
+	end
+	if add.first != body_value
+		return false
+	end
+	if add.second != one.result
+		return false
+	end
+	if native_module.arguments[body.first_argument_start] != add.result
+		return false
+	end
+	if header.parameter_count == 1
+		return true
+	end
+	if entry.first_argument_count != 2
+		return false
+	end
+	if header.first_argument_count != 2
+		return false
+	end
+	if header.second_argument_count != 1
+		return false
+	end
+	if body.first_argument_count != 2
+		return false
+	end
+	if exit.parameter_count != 1
+		return false
+	end
+	if !mir_table_span_valid(exit.parameter_start, 1, native_module.arguments.size())
+		return false
+	end
+	accumulator_zero := native_module.instructions[entry.instruction_start + 1]
+	mut zero_literal := "0"
+	if array_type == 6
+		zero_literal = "0.0"
+	end
+	if !mir_exact_integer_literal(native_module, accumulator_zero, zero_literal)
+		return false
+	end
+	header_accumulator := native_module.arguments[header.parameter_start + 1]
+	body_accumulator := native_module.arguments[body.parameter_start + 1]
+	exit_accumulator := native_module.arguments[exit.parameter_start]
+	if native_module.arguments[entry.first_argument_start + 1] != accumulator_zero.result
+		return false
+	end
+	if native_module.arguments[header.first_argument_start + 1] != header_accumulator
+		return false
+	end
+	if native_module.arguments[header.second_argument_start] != header_accumulator
+		return false
+	end
+	reduction := native_module.instructions[body.instruction_start + 2]
+	if reduction.kind != 7
+		return false
+	end
+	if reduction.payload != 1
+		if reduction.payload != 13
+			return false
+		end
+	end
+	if reduction.first != body_accumulator
+		return false
+	end
+	if reduction.second != load.result
+		return false
+	end
+	if native_module.arguments[body.first_argument_start + 1] != reduction.result
+		return false
+	end
+	if exit.return_value != exit_accumulator
+		return false
+	end
+	return true
+end
+
+record MirArrayHeaderPlan
+	declarations: Array<Integer>
+	valid: Boolean
+end
+
+def mir_array_header_select(mut selected: Array<Integer>, declaration: Integer)
+	mut index := 0
+	while index < selected.size()
+		if selected[index] == declaration
+			return
+		end
+		index += 1
+	end
+	selected.push(declaration)
+end
+
+def mir_array_headers_equal(left: Array<Integer>, right: Array<Integer>): Boolean
+	if left.size() != right.size()
+		return false
+	end
+	mut index := 0
+	while index < left.size()
+		if left[index] != right[index]
+			return false
+		end
+		index += 1
+	end
+	return true
+end
+
+def mir_invalid_array_header(): MirArrayHeaderPlan
+	return MirArrayHeaderPlan.new(declarations: [], valid: false)
+end
+
+# Resolve the live lexical declaration once for both header lifetime analyses.
+def mir_array_local_declaration(operations: Array<MirArrayOperation>, index: Integer): Integer
+	access := operations[index]
+	mut declaration := index - 1
+	while declaration >= 0
+		binding := operations[declaration]
+		if binding.kind == 3 && access.operand >= binding.operand
+			return - 1
+		end
+		if binding.kind == 2 && binding.operand == access.operand
+			if binding.origin >= access.origin
+				return - 1
+			end
+			return declaration
+		end
+		declaration -= 1
+	end
+	return - 1
+end
+
+# Header regions retain parameter declarations (kind 1: type 0 scalar,
+# 1 immutable Array, 2 mutable Array), local Array declarations
+# (2: local ordinal), scope exits (3: restored local count), parameter accesses
+# (4: ordinal), local accesses (5: ordinal), and opaque barriers (6: zero).
+# Conditional starts (7), elsif (8), else (9), and joins (10) carry the
+# entry local count. Each arm restores that scope before its next marker.
+# Loop starts (11) and exits (12) use the same stack and scope restoration.
+# Parameter origins use declaration indexes; other operations use token origins.
+# Selected declarations are unique operation indexes. Malformed regions
+# return an invalid plan. A local's header is loaded at its declaration,
+# never before its initializer. Every element access still checks bounds.
+def mir_array_headers(operations: Array<MirArrayOperation>): MirArrayHeaderPlan
+	mut parameter_count := 0
+	mut parameter_origin :=- 1
+	mut selected: Array<Integer> := []
+	mut blocked := false
+	mut controls: Array<MirArrayOperation> := []
+	mut depth := 0
+	mut control_origin :=- 1
+	mut index := 0
+	while index < operations.size()
+		operation := operations[index]
+		kind := operation.kind
+		slot := operation.operand
+		origin := operation.origin
+		if origin < 0
+			return mir_invalid_array_header()
+		end
+		if slot < 0
+			return mir_invalid_array_header()
+		end
+		if kind == 1
+			if index != parameter_count
+				return mir_invalid_array_header()
+			end
+			if slot > 2
+				return mir_invalid_array_header()
+			end
+			if origin <= parameter_origin
+				return mir_invalid_array_header()
+			end
+			parameter_origin = origin
+			parameter_count += 1
+		elsif kind == 2
+			if slot < parameter_count
+				return mir_invalid_array_header()
+			end
+			if depth > 0
+				if slot < controls[depth - 1].operand
+					return mir_invalid_array_header()
+				end
+			end
+		elsif kind == 3
+			if slot < parameter_count
+				return mir_invalid_array_header()
+			end
+			if depth > 0
+				if slot < controls[depth - 1].operand
+					return mir_invalid_array_header()
+				end
+			end
+			mut selected_index := 0
+			while selected_index < selected.size()
+				binding := operations[selected[selected_index]]
+				if binding.kind == 2
+					if binding.operand >= slot
+						blocked = true
+					end
+				end
+				selected_index += 1
+			end
+		elsif kind == 4
+			if slot >= parameter_count
+				return mir_invalid_array_header()
+			end
+			binding_type := operations[slot].operand
+			if binding_type == 0
+				return mir_invalid_array_header()
+			end
+			mir_array_header_select(selected, slot)
+		elsif kind == 5
+			declaration := mir_array_local_declaration(operations, index)
+			if declaration < parameter_count
+				return mir_invalid_array_header()
+			end
+			mir_array_header_select(selected, declaration)
+		elsif kind >= 7 && kind <= 12
+			if origin <= control_origin || slot < parameter_count
+				return mir_invalid_array_header()
+			end
+			control_origin = origin
+			if kind == 7 || kind == 11
+				if depth > 0
+					if slot < controls[depth - 1].operand
+						return mir_invalid_array_header()
+					end
+				end
+				if depth == controls.size()
+					controls.push(operation)
+				else
+					controls[depth] = operation
+				end
+				depth += 1
+			else
+				if depth == 0 || index == 0
+					return mir_invalid_array_header()
+				end
+				frame := controls[depth - 1]
+				exit_operation := operations[index - 1]
+				if slot != frame.operand || exit_operation.kind != 3
+					return mir_invalid_array_header()
+				end
+				if exit_operation.operand != slot || exit_operation.origin != origin
+					return mir_invalid_array_header()
+				end
+				if (frame.kind == 11 && kind != 12) || (frame.kind != 11 && kind == 12)
+					return mir_invalid_array_header()
+				end
+				if kind == 10 || kind == 12
+					depth -= 1
+				else
+					if frame.kind == 9
+						return mir_invalid_array_header()
+					end
+					controls[depth - 1] = operation
+				end
+			end
+		else
+			if kind != 6
+				return mir_invalid_array_header()
+			end
+			if slot != 0
+				return mir_invalid_array_header()
+			end
+			blocked = true
+		end
+		index += 1
+	end
+	if depth != 0
+		return mir_invalid_array_header()
+	end
+	if blocked
+		return MirArrayHeaderPlan.new(declarations: [], valid: true)
+	end
+	return MirArrayHeaderPlan.new(declarations: selected, valid: true)
+end
+
+# Consume an already verified region. Each triple names its loop start/end
+# operation and one binding declaration. Prefer the outermost effect-free loop;
+# all selected bindings must exist before its condition is first evaluated.
+def mir_array_loop_headers(operations: Array<MirArrayOperation>): Array<Integer>
+	mut plan: Array<Integer> := []
+	mut start := 0
+	while start < operations.size()
+		if operations[start].kind == 11
+			mut depth := 1
+			mut finish := start + 1
+			mut blocked := false
+			mut selected: Array<Integer> := []
+			while finish < operations.size() && depth > 0
+				operation := operations[finish]
+				if operation.kind == 11
+					depth += 1
+				elsif operation.kind == 12
+					depth -= 1
+				elsif operation.kind == 6
+					blocked = true
+				elsif operation.kind == 4 || operation.kind == 5
+					mut declaration := operation.operand
+					if operation.kind == 5
+						declaration = mir_array_local_declaration(operations, finish)
+					end
+					if declaration >= 0 && declaration < start && operation.operand < operations[start].operand
+						mir_array_header_select(selected, declaration)
+					end
+				end
+				finish += 1
+			end
+			if !blocked
+				mut index := 0
+				while index < selected.size()
+					plan.push(start)
+					plan.push(finish - 1)
+					plan.push(selected[index])
+					index += 1
+				end
+				start = finish - 1
+			end
+		end
+		start += 1
+	end
+	return plan
+end
+
+record MirScalarRange
+	low: Integer
+	high: Integer
+end
+
+# Parse only a nonnegative portable decimal; malformed MIR must not make
+# range analysis itself fail or overflow. Underscores carry no value.
+def mir_scalar_literal(text: String): Integer
+	mut digits := 0
+	mut value := 0
+	mut index := 0
+	while index < text.size()
+		character := text[index]
+		if character != "_"
+			digit := ascii_code(character) - 48
+			if digit < 0 || digit > 9
+				return - 1
+			end
+			if value > (9007199254740991 - digit) / 10
+				return - 1
+			end
+			digits += 1
+			value = value * 10 + digit
+		end
+		index += 1
+	end
+	if digits == 0
+		return - 1
+	end
+	return value
+end
+
+# A nonzero guard is an exclusive power-of-two bound on every Integer
+# parameter. All intermediate Integer ranges must fit the portable domain.
+# This bounded proof accepts only a complete straight-line scalar entry.
+def mir_scalar_guard_proves(native_module: MirModule, function: MirFunction, limit: Integer): Integer
+	if function.block_count != 2 || function.parameter_count < 1 || function.parameter_count > 4
+		return - 1
+	end
+	block := native_module.blocks[function.block_start]
+	if block.id != function.entry_block || block.terminator != 3 || block.instruction_count > 32
+		return - 1
+	end
+	mut ranges: Array<MirScalarRange> := []
+	mut index := 0
+	while index < function.parameter_count
+		value := native_module.arguments[function.parameter_start + index]
+		if value != index || mir_value_type(native_module, function.id, value) != 1
+			return - 1
+		end
+		ranges.push(MirScalarRange.new(low: 0, high: limit - 1))
+		index += 1
+	end
+	mut checked := 0
+	index = block.instruction_start
+	finish := index + block.instruction_count
+	while index < finish
+		instruction := native_module.instructions[index]
+		if instruction.result != ranges.size()
+			return - 1
+		end
+		mut low := 0
+		mut high := 0
+		result_type := mir_value_type(native_module, function.id, instruction.result)
+		if instruction.kind == 6
+			if result_type == 1
+				low = mir_scalar_literal(native_module.literal_texts[instruction.payload])
+				if low < 0
+					return - 1
+				end
+				high = low
+			end
+		elsif instruction.kind == 7
+			if result_type == 1
+				left := instruction.first
+				right := instruction.second
+				if left < 0 || right < 0 || left >= ranges.size() || right >= ranges.size()
+					return - 1
+				end
+				left_range := ranges[left]
+				right_range := ranges[right]
+				operator := instruction.payload
+				if operator == 1 || operator == 13
+					if left_range.high > 9007199254740991 - right_range.high
+						return 0
+					end
+					low = left_range.low + right_range.low
+					high = left_range.high + right_range.high
+				elsif operator == 3 || operator == 12
+					if right_range.high > 0
+						if left_range.high > 9007199254740991 / right_range.high
+							return 0
+						end
+					end
+					low = left_range.low * right_range.low
+					high = left_range.high * right_range.high
+				elsif operator == 4
+					if right_range.low == 0
+						return - 1
+					end
+					low = left_range.low / right_range.high
+					high = left_range.high / right_range.low
+				else
+					return - 1
+				end
+				checked += 1
+			end
+		elsif instruction.kind != 9
+			return - 1
+		end
+		ranges.push(MirScalarRange.new(low: low, high: high))
+		index += 1
+	end
+	if checked < 3
+		return - 1
+	end
+	return 1
+end
+
+def mir_scalar_guard(native_module: MirModule, function: MirFunction): Integer
+	if native_module.array_regions.size() > 32
+		return 0
+	end
+	if function.block_count != 2 || function.parameter_count < 1 || function.parameter_count > 4
+		return 0
+	end
+	# Begin with the existing multiplication fast-path operand domain and
+	# shrink the common input domain until the entire region is safe.
+	mut limit := 67108864
+	while limit >= 2
+		proof := mir_scalar_guard_proves(native_module, function, limit)
+		if proof < 0
+			return 0
+		elsif proof > 0
+			return limit
+		end
+		limit = limit / 2
+	end
+	return 0
+end
+
+# A checked assignment region retains its Array owner and normalized position.
+# The initial check precedes the RHS; the final store checks current storage.
+def mir_array_assignment_valid(index_origin: Integer, store_origin: Integer, reverse_origin: Integer, token_count: Integer): Boolean
+	if index_origin < 0
+		return false
+	end
+	if index_origin >= store_origin
+		return false
+	end
+	if store_origin >= token_count
+		return false
+	end
+	return reverse_origin == index_origin
+end
+
+# Assignment regions retain source-indexed capture (1), checked index (2),
+# conservative effect barriers (6), and final store (5). Plans are recomputed:
+# 0 reloads current storage, 1 reuses the checked address with a rooted owner,
+# and 2 also proves that no owner root is needed across the index and RHS.
+# Unknown/malformed operations never authorize removing either safeguard.
+def mir_array_assignment_plan(operations: Array<MirArrayOperation>, index_origin: Integer, store_origin: Integer, token_count: Integer): Integer
+	if !mir_array_assignment_valid(index_origin, store_origin, index_origin, token_count)
+		return - 1
+	end
+	mut phase := 0
+	mut plan := 2
+	mut cursor := 0
+	while cursor < operations.size()
+		operation := operations[cursor]
+		if operation.origin < 0
+			return - 1
+		end
+		if operation.origin >= token_count
+			return - 1
+		end
+		if operation.kind == 1
+			if operation.operand != 0
+				return - 1
+			end
+			if operation.origin == index_origin
+				if phase != 0
+					return - 1
+				end
+				phase = 1
+			end
+		elsif operation.kind == 2
+			if operation.operand < 0
+				return - 1
+			end
+			if operation.operand >= operation.origin
+				return - 1
+			end
+			if operation.operand == index_origin
+				if phase != 1
+					return - 1
+				end
+				if operation.origin >= store_origin
+					return - 1
+				end
+				phase = 2
+			end
+		elsif operation.kind == 6
+			if operation.operand != 0
+				return - 1
+			end
+			if phase == 1
+				plan = 1
+			elsif phase == 2
+				plan = 0
+			end
+		elsif operation.kind == 5
+			if cursor != operations.size() - 1
+				return - 1
+			end
+			if phase != 2
+				return - 1
+			end
+			if operation.origin != store_origin
+				return - 1
+			end
+			if operation.operand != index_origin
+				return - 1
+			end
+			phase = 3
+		else
+			return - 1
+		end
+		cursor += 1
+	end
+	if phase != 3
+		return - 1
+	end
+	return plan
+end
+
+def mir_scalar_result_fact(instruction: MirInstruction, facts: Array<Integer>): Integer
+	if instruction.kind == 6
+		return instruction.first
+	end
+	if instruction.kind == 8 && instruction.payload == 3
+		return facts[instruction.first]
+	end
+	return 0
+end

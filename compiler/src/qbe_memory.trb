@@ -1,0 +1,382 @@
+import { native_managed_type } from hash_types
+import { integer_string } from literals
+import { QbeEmitContext, QbeValue, emit_label, emit_temporary, emit_typed_load, emit_typed_store, emitted_value } from qbe_context
+import { QbeOutput, qbe_output_branch, qbe_output_line } from qbe_output
+import { load_integer, load_string, store_integer, store_string } from storage
+
+def note_gc_state(mut context: QbeEmitContext, safe_point: Boolean)
+	mut roots := context.temporary_roots_used
+	if safe_point
+		roots[1] = roots[1] + 1
+		if roots[0] == 1
+			roots[0] = 2
+		end
+	else
+		if roots[0] == 0
+			roots[0] = 1
+		end
+	end
+	return
+end
+
+def emit_array_push(
+		mut context: QbeEmitContext,
+		mut output: QbeOutput,
+		array: String,
+		element_type: String,
+		operand: String,
+	)
+	# Growing an Array may collect before its backing storage is reallocated.
+	note_gc_state(context, true)
+	invalidate_array_header_cache(context)
+	if element_type == "Float"
+		output.runtime_flags[0] = 1
+		qbe_output_line(
+			output,
+			"\tcall $trbn_array_push_d(l " + array + ", d " + operand + ")",
+		)
+		return
+	end
+	qbe_output_line(
+		output,
+		"\tcall $trbn_array_push_paced(l " + array + ", l " + operand + ")",
+	)
+end
+
+def owned_managed_local_count(context: QbeEmitContext): Integer
+	mut count := 0
+	mut local_index := 0
+	while local_index < context.local_count[0]
+		if native_managed_type(load_string(context.local_types, local_index))
+			if load_integer(context.local_inherited, local_index) == 0
+				count += 1
+			end
+		end
+		local_index += 1
+	end
+	return count
+end
+
+def emit_loop_root_compaction(mut context: QbeEmitContext, mut output: QbeOutput)
+	# Replace this function's temporary-root segment with its currently live
+	# managed locals. The prologue reserves the maximum segment first, so loop
+	# headers never reallocate while rewriting roots.
+	managed_count := owned_managed_local_count(context)
+	if managed_count == 0
+		qbe_output_line(output, "\tcall $trbn_gc_temp_reset(l %temporary_roots)")
+		return
+	end
+	qbe_output_line(output, "{")
+	data := emit_temporary(context)
+	base_offset := emit_temporary(context)
+	base := emit_temporary(context)
+	qbe_output_line(output, "\t" + data + " =l loadl $trbn_gc_temp_data")
+	qbe_output_line(output, "\t" + base_offset + " =l mul %temporary_roots, 8")
+	qbe_output_line(output, "\t" + base + " =l add " + data + ", " + base_offset)
+	mut local_index := 0
+	mut managed_index := 0
+	while local_index < context.local_count[0]
+		if native_managed_type(load_string(context.local_types, local_index))
+			if load_integer(context.local_inherited, local_index) == 0
+				note_gc_state(context, false)
+				value := emit_temporary(context)
+				mut slot := base
+				if managed_index > 0
+					slot = emit_temporary(context)
+					qbe_output_line(
+						output,
+						"\t" + slot + " =l add " + base + ", " + integer_string(managed_index * 8),
+					)
+				end
+				qbe_output_line(
+					output,
+					"\t" + value + " =l loadl " + load_string(context.local_slots, local_index),
+				)
+				qbe_output_line(output, "\tstorel " + value + ", " + slot)
+				managed_index += 1
+			end
+		end
+		local_index += 1
+	end
+	root_count := emit_temporary(context)
+	qbe_output_line(
+		output,
+		"\t" + root_count + " =l add %temporary_roots, " + integer_string(managed_count),
+	)
+	qbe_output_line(output, "\tstorel " + root_count + ", $trbn_gc_temp_count")
+	qbe_output_line(output, "}")
+	return
+end
+
+def emit_root_value(
+		mut context: QbeEmitContext,
+		type_name: String,
+	)
+	if native_managed_type(type_name)
+		# Managed results are produced by allocation or by calls whose allocation
+		# behavior is intentionally opaque at this boundary.
+		note_gc_state(context, true)
+		context.temporary_roots_used[0] = 2
+	end
+	return
+end
+
+def note_managed_alias(
+		mut context: QbeEmitContext,
+		type_name: String,
+	)
+	if native_managed_type(type_name)
+		# The owner remains reachable through its caller, allocation, or managed
+		# local root until the alias is consumed. Loop compaction transfers an
+		# alias retained as a local, so a duplicate temporary root is unnecessary.
+		note_gc_state(context, false)
+	end
+	return
+end
+
+def invalidate_array_header_cache(mut context: QbeEmitContext)
+	context.array_header_fallback[0][0] = "@none"
+	context.array_header_fallback[1][0] = "@none"
+end
+
+def emit_array_header(
+		mut context: QbeEmitContext,
+		mut output: QbeOutput,
+		array: String,
+		key: String,
+		cache_index: Integer,
+		offset: String,
+	): String
+	mut stable_index := 0
+	while stable_index < context.array_header_count[0]
+		stable := context.array_headers[stable_index]
+		if key == stable[0]
+			return stable[cache_index]
+		end
+		stable_index += 1
+	end
+	mut caches := context.array_header_fallback
+	mut cache := caches[0]
+	if key != ""
+		if cache[0] != key
+			previous_cache := cache
+			cache = caches[1]
+			if cache[0] != key
+				cache[0] = key
+				cache[1] = ""
+				cache[2] = ""
+			end
+			caches[1] = previous_cache
+			caches[0] = cache
+		end
+		cached := cache[cache_index]
+		if cached != ""
+			return cached
+		end
+	end
+	address := emit_temporary(context)
+	value := emit_temporary(context)
+	qbe_output_line(output, "\t" + address + " =l add " + array + ", " + offset)
+	qbe_output_line(output, "\t" + value + " =l loadl " + address)
+	if key != ""
+		cache[cache_index] = value
+	end
+	return value
+end
+
+def header_binding_selected(bindings: Array<Integer>, binding: Integer): Boolean
+	mut index := 0
+	while index < bindings.size()
+		if bindings[index] == binding
+			return true
+		end
+		index += 1
+	end
+	return false
+end
+
+# The adapter installs only bindings selected and verified by MIR.
+def install_stable_array_header(mut context: QbeEmitContext, mut output: QbeOutput, array: String, slot: String)
+	length := emit_array_header(context, output, array, slot, 1, "8")
+	data := emit_array_header(context, output, array, slot, 2, "24")
+	index := context.array_header_count[0]
+	if index == context.array_headers.size()
+		context.array_headers.push([slot, length, data])
+	else
+		context.array_headers[index] = [slot, length, data]
+	end
+	context.array_header_count[0] = index + 1
+end
+
+# Placements and lexical slots have already been selected and verified by MIR.
+def emit_loop_array_headers(mut context: QbeEmitContext, mut output: QbeOutput, origin: Integer)
+	mut index := 0
+	while index < context.array_loop_headers.size()
+		placement := context.array_loop_headers[index]
+		if placement[0] == origin
+			slot := load_string(context.local_slots, placement[2])
+			array := emit_temporary(context)
+			qbe_output_line(output, "\t" + array + " =l loadl " + slot)
+			install_stable_array_header(context, output, array, slot)
+		end
+		index += 1
+	end
+end
+
+def emit_array_data_address(
+		mut context: QbeEmitContext,
+		mut output: QbeOutput,
+		data: String,
+		index: String,
+	): String
+	offset := emit_temporary(context)
+	address := emit_temporary(context)
+	qbe_output_line(output, "\t" + offset + " =l mul " + index + ", 8")
+	qbe_output_line(output, "\t" + address + " =l add " + data + ", " + offset)
+	return address
+end
+
+def emit_array_address(
+		mut context: QbeEmitContext,
+		mut output: QbeOutput,
+		array: String,
+		array_key: String,
+		requested: String,
+		requested_nonnegative: Integer,
+	): String
+	length := emit_array_header(context, output, array, array_key, 1, "8")
+	known_nonnegative := requested_nonnegative == 2
+	mut index := requested
+	valid := emit_temporary(context)
+	load_label := emit_label(context)
+	if !known_nonnegative
+		negative_mask := emit_temporary(context)
+		adjustment := emit_temporary(context)
+		index = emit_temporary(context)
+		qbe_output_line(output, "\t" + negative_mask + " =l sar " + requested + ", 63")
+		qbe_output_line(output, "\t" + adjustment + " =l and " + length + ", " + negative_mask)
+		qbe_output_line(output, "\t" + index + " =l add " + requested + ", " + adjustment)
+	end
+	qbe_output_line(output, "\t" + valid + " =w cultl " + index + ", " + length)
+	qbe_output_branch(output, valid, load_label, "@array_bounds_failure")
+	context.array_bounds_failure_used[0] = true
+	qbe_output_line(output, load_label)
+	data := emit_array_header(context, output, array, array_key, 2, "24")
+	return emit_array_data_address(context, output, data, index)
+end
+
+def emit_add_local(
+		mut context: QbeEmitContext,
+		mut output: QbeOutput,
+		name: String,
+		type_name: String,
+		initial: String,
+		inherited_root: Boolean,
+	): String
+	index := context.local_count[0]
+	slot_index := context.slot_count[0]
+	slot := "%v" + integer_string(slot_index)
+	context.slot_count[0] = slot_index + 1
+	store_string(context.local_names, index, name)
+	store_string(context.local_types, index, type_name)
+	store_string(context.local_slots, index, slot)
+	store_integer(context.local_direct, index, 0)
+	mut inherited := 0
+	if inherited_root
+		inherited = 1
+	end
+	store_integer(context.local_inherited, index, inherited)
+	context.local_count[0] = index + 1
+	if native_managed_type(type_name)
+		if inherited == 0
+			# Lexical blocks restore local_count, so retain the maximum active
+			# managed-local count separately for the function prologue.
+			managed_count := owned_managed_local_count(context)
+			if managed_count > context.managed_local_high_water[0]
+				context.managed_local_high_water[0] = managed_count
+			end
+		end
+	end
+	emit_typed_store(output, type_name, initial, slot)
+	return slot
+end
+
+def emit_loaded_local(
+		mut context: QbeEmitContext,
+		mut output: QbeOutput,
+		index: Integer,
+	): QbeValue
+	type_name := load_string(context.local_types, index)
+	if load_integer(context.local_direct, index) == 1
+		return emitted_value(
+			load_string(context.local_slots, index),
+			type_name,
+			0,
+			"",
+			"",
+		)
+	end
+	operand := emit_temporary(context)
+	emit_typed_load(
+		output,
+		operand,
+		type_name,
+		load_string(context.local_slots, index),
+	)
+	return emitted_value(
+		operand,
+		type_name,
+		0,
+		"",
+		load_string(context.local_slots, index),
+	)
+end
+
+def emit_address(
+		mut context: QbeEmitContext,
+		mut output: QbeOutput,
+		base: String,
+		offset: Integer,
+	): String
+	if offset == 0
+		return base
+	end
+	address := emit_temporary(context)
+	qbe_output_line(output, "\t" + address + " =l add " + base + ", " + integer_string(offset))
+	return address
+end
+
+def emit_hash_root(mut context: QbeEmitContext, mut output: QbeOutput, operand: String)
+	qbe_output_line(output, "\tcall $trbn_gc_temp_push(l " + operand + ")")
+	context.temporary_roots_used[0] = 2
+end
+
+def emit_hash_bits(mut context: QbeEmitContext, mut output: QbeOutput, operand: String, type_name: String): String
+	if type_name != "Float"
+		return operand
+	end
+	bits := emit_temporary(context)
+	qbe_output_line(output, "\t" + bits + " =l cast " + operand)
+	return bits
+end
+
+def emit_hash_value(mut context: QbeEmitContext, mut output: QbeOutput, operand: String, type_name: String): QbeValue
+	if type_name == "Float"
+		value := emit_temporary(context)
+		qbe_output_line(output, "\t" + value + " =d cast " + operand)
+		return emitted_value(value, type_name, 0, "", "")
+	end
+	if native_managed_type(type_name)
+		emit_hash_root(context, output, operand)
+	end
+	return emitted_value(operand, type_name, 0, "", "")
+end
+
+def emit_hash_set(mut context: QbeEmitContext, mut output: QbeOutput, owner: String, key: String, value: String, type_name: String)
+	if native_managed_type(type_name)
+		emit_hash_root(context, output, value)
+	end
+	bits := emit_hash_bits(context, output, value, type_name)
+	qbe_output_line(output, "\tcall $trbn_hash_set(l " + owner + ", l " + key + ", l " + bits + ")")
+	note_gc_state(context, true)
+end

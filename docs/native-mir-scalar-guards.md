@@ -9,7 +9,7 @@ each operation separately leaves multiple branches in small inlined numeric
 helpers. The pass proves a common nonnegative parameter range for the
 whole region and guards that range once at an existing inline call site.
 
-`Gate4MirFunction.integer_guard` is zero in input MIR. A nonzero value is an
+`MirFunction.integer_guard` is zero in input MIR. A nonzero value is an
 exclusive power-of-two upper bound for every parameter. The pass tries the
 existing multiplication fast-path domain, 2^26, then successively halves it.
 An unsigned comparison of the bitwise union of the parameters against this

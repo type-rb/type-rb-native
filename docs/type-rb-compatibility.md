@@ -144,7 +144,7 @@ assignment repair itself adds no source forms or collection methods.
 Validation and acceptance for this correctness slice follow
 [issue #342](https://github.com/type-rb/type-rb-native/issues/342), including
 full recovery suites, ordinary regeneration, conformance, GC and unchanged
-compiler/application cost gates. Reference pinning alone is not acceptance.
+compiler/application cost checks. Reference pinning alone is not acceptance.
 
 ## Loop-transfer snapshot update
 
@@ -279,11 +279,11 @@ and the Linux amd64 controller pin. Missing, added, or changed consumers require
 an explicit validator update. Mutation tests exercise each checkout separately.
 The later executable version check remains required before matrix fan-out.
 
-Gate Zero, PR validation, worker memory, formal runtime/build benchmarks, and
+Snapshot validation, PR validation, worker memory, formal runtime/build benchmarks, and
 the Linux amd64 workflow follow `TYPE_RB_REVISION`. Daily and weekly workflows
 derive it from the checked-out file before their reference checkout. The
 Array-push, temporary-push GC, and dynamic-Array-address experiments retain
-`bae19032aa1bb7b263bc827d02606edc6e981c52`; both Gate 6M checkouts retain
+`bae19032aa1bb7b263bc827d02606edc6e981c52`; both historical portable-entry checkouts retain
 `5dc09070cf7f88a569279f5e63982a6de59d692c`. These historical pins are checked
 explicitly and must not be advanced with the current development oracle.
 
@@ -318,8 +318,8 @@ from the immutable seed release's target-neutral root QBE, not from an amd64
 seed executable. Its exact current chain and workflow are therefore recorded
 as target-chain evidence in compatibility schema version 2, while the
 immutable seed manifest remains unchanged. See the
-[Gate 6N result](../results/2026-08-31-gate6n-linux-amd64/README.md) and
-[Decision 0026](decisions/0026-recovered-target-chain-evidence.md).
+[Historical Linux amd64 result](../results/2026-08-31-gate6n-linux-amd64/README.md) and
+[Decision 0026](https://github.com/type-rb/type-rb-native/blob/7726ff18e9230cd149e9f0c317577f6429f907fc/docs/decisions/0026-recovered-target-chain-evidence.md).
 Native SemVer is now independently defined for experimental development, but
 TypeRB compatibility ranges, stable installation policy, and support promises
 remain deferred. The current schema can express only this exact verified

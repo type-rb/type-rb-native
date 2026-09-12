@@ -13,7 +13,7 @@ Build a TypeRB-specific native AOT pipeline with these primary outcomes:
 
 The compiler and runtime are implemented in TypeRB, reproduce themselves, and
 must retain competitive build time and generated-code behavior once the
-complete self-hosted toolchain is measured. Early gates establish this outcome
+complete self-hosted toolchain is measured. Early checks establish this outcome
 incrementally; they are not a sequence of throwaway demonstrations.
 
 Secondary outcomes include compiler and runtime peak memory, startup latency,
@@ -26,6 +26,11 @@ runtime changes, but it is not the final execution-performance ceiling.
 Cross-language runtime context uses pinned established implementations without
 an intentionally unoptimized, unstripped, cold, or otherwise disadvantaged
 configuration.
+
+The active [MIR consolidation policy](mir-consolidation.md) supersedes the
+per-checkpoint cost scheduling below during migration. Its fixed baselines and
+correctness requirements remain binding; detailed cost qualification follows
+the coherent milestone.
 
 ## Principles
 
@@ -42,12 +47,12 @@ configuration.
 - Microbenchmarks diagnose a phase; representative programs determine
   viability.
 
-Before a gate begins, its issue must record metric-specific non-inferiority
-bounds, a minimum meaningful primary-metric improvement where the gate is
+Before a checkpoint begins, its issue must record metric-specific non-inferiority
+bounds, a minimum meaningful primary-metric improvement where the checkpoint is
 expected to provide one, and catastrophic-regression limits. A miss identifies
 required engineering work or an architectural decision; it does not by itself
 end the native implementation. Targets cannot be weakened after results are
-reviewed merely to label a gate complete.
+reviewed merely to label a checkpoint complete.
 
 Follow [Optimization costs and trade-off evaluation](optimization-tradeoffs.md).
 Ordinary acceptance retains existing limits; a preregistered, candidate-specific
@@ -71,7 +76,7 @@ blocks language coverage. Existing performance goals and cost authorities remain
 ## Candidate sequence
 
 Backend candidates are not implemented to production completeness in parallel.
-They advance through small shared gates, and only implementations with a clear
+They advance through small shared checks, and only implementations with a clear
 role continue to accumulate maintenance cost.
 
 1. Use hand-authored bootstrap and MIR fixtures to validate the boundary.
@@ -87,7 +92,7 @@ This order is a starting hypothesis, not a compatibility promise.
 
 TinyGo may be measured once as a time-boxed calibration of the optimized Go
 baseline. It is not a path to the required Go-independent compiler and is not
-a gate deliverable. A C emitter is likewise deferred unless later profiling
+a checkpoint deliverable. A C emitter is likewise deferred unless later profiling
 shows that it answers a specific question more cheaply than the selected
 backend. Neither is built merely to populate a comparison table.
 
@@ -136,7 +141,7 @@ uses the separate registration/decision procedure above, not a silent expansion
 of this envelope.
 
 Historical MIR transition measurements and their exact source-era bounds are
-preserved in the [gate reference](gate-reference.md#mir-transition-history).
+preserved in the [historical record](https://github.com/type-rb/type-rb-native/blob/7726ff18e9230cd149e9f0c317577f6429f907fc/docs/gate-reference.md#mir-transition-history).
 The [current MIR status](native-mir-optimization-status.md) records accepted
 ownership and the remaining direct path; it is not complete general-purpose
 MIR lowering. The [transition policy](../tools/native-mir-transition-policy.sh)
@@ -155,57 +160,15 @@ Array, allocation, and I/O behavior. Its first role is a bounded
 optimization-ceiling comparison over the same MIR and ABI, not a second copy of
 TypeRB semantic analysis.
 
-## Repository organization checkpoints
+## Repository organization
 
-Repository maintenance is scheduled alongside the MIR transition, not deferred
-until performance parity or product promotion. Follow the
-[organization schedule](repository-organization.md): concise documentation
-entry points and the initial support-source inventory/move are complete.
-Compiler decomposition now follows the accepted partial checked-binary
-ownership checkpoint; continue one responsibility at a time. The scope
-includes root `src/gateN_*` files, numbered QBE adapters, tests, tooling, and
-implementation symbols as well as `compiler/gate4/`.
+Use the [current ownership map](repository-organization.md) and the
+[MIR consolidation milestone](mir-consolidation.md). Combine connected semantic
+ownership moves and retire their superseded code with the consumers. Keep recovery,
+ordinary fixed points, lifetime and target correctness blocking; defer detailed
+performance qualification until the coherent milestone.
 
-Keep these changes independently reviewable and preserve every applicable
-recovery, fixed-point, correctness, measurement, and compactness requirement.
-Historical gate evidence remains intact. A passed optimization checkpoint
-must identify the next bounded organization slice or its explicit blocker.
-
-## Gates
-
-The detailed gate contracts and their recorded measurements are preserved in
-[the gate reference](gate-reference.md). They describe successive engineering
-checkpoints, not active source layers or current product support. Use the
-[current capability map](https://type-rb.github.io/type-rb-native/) and
-[MIR status](native-mir-optimization-status.md) for current coverage.
-
-### Gate 0: Boundary
-
-See the [preserved contract](gate-reference.md#gate-0-boundary).
-
-### Gate 1: Heap-free execution
-
-See the [preserved contract](gate-reference.md#gate-1-heap-free-execution).
-
-### Gate 2: Heap-free aggregate value model
-
-See the [preserved contract](gate-reference.md#gate-2-heap-free-aggregate-value-model).
-
-### Gate 3: Runtime viability
-
-See the [preserved contract](gate-reference.md#gate-3-runtime-viability).
-
-### Gate 4: Self-hosting compiler completeness
-
-See the [preserved contract](gate-reference.md#gate-4-self-hosting-compiler-completeness).
-
-### Gate 5: Matched self-hosted compiler baseline
-
-See the [preserved contract](gate-reference.md#gate-5-matched-self-hosted-compiler-baseline).
-
-### Gate 6: Self-hosted product feasibility
-
-See the [preserved contract](gate-reference.md#gate-6-self-hosted-product-feasibility).
+Completed experimental contracts are available in the [historical record](history.md).
 
 ## Correctness checks
 
@@ -286,7 +249,7 @@ Preserve active measurement cohorts, frozen baselines and seed consumers.
 
 A backend implementation remains active only when it:
 
-- passes the current correctness and reproducibility gates;
+- passes the current correctness and reproducibility checks;
 - satisfies the pre-registered non-inferiority and catastrophic-regression
   limits;
 - achieves the pre-registered minimum improvement in at least one primary
@@ -303,7 +266,7 @@ merely because they win a microbenchmark.
 
 A secondary improvement may justify a bounded diagnostic experiment, but it
 does not pass product feasibility when all three primary outcomes miss their
-registered gates.
+registered checks.
 
 ## Reassessment policy
 

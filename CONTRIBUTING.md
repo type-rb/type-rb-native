@@ -8,7 +8,7 @@ question without implying that a production native backend has been accepted.
 
 Open an issue before a material experiment. Record durable architectural
 decisions under `docs/decisions/`; keep scoped implementation work and its
-acceptance gate in the issue.
+acceptance checkpoint in the issue.
 
 The proposal should record:
 
@@ -16,7 +16,7 @@ The proposal should record:
 - the supported TypeRB and Native MIR subset;
 - the reference compiler revision;
 - the baseline and candidate configurations;
-- the measurements and acceptance or removal gate; and
+- the measurements and acceptance or removal checkpoint; and
 - the parts intentionally left unsupported.
 
 Small fixes and documentation corrections do not need a separate experiment
@@ -26,7 +26,7 @@ temporary cost policy; individual helper moves do not need a new proposal.
 
 Follow the [repository organization schedule](docs/repository-organization.md)
 for source moves and naming cleanup. Inventory consumers before removing
-gate-labelled code, keep mechanical changes separate from optimization, and
+recovery and ordinary compiler code, keep mechanical changes separate from optimization, and
 preserve recovery and measurement coverage. Keep routine checkpoint narratives
 out of the root README; link to the owning status page or dated evidence.
 
@@ -55,7 +55,7 @@ invocations, and distribution costs are explicit. Do not introduce a permanent
 Go, Rust, Zig, or C host implementation as an intermediate shortcut.
 
 Use the pinned reference compiler revision recorded in `TYPE_RB_REVISION` for
-gate verification. A revision update is a reviewed compatibility change, not
+checkpoint verification. A revision update is a reviewed compatibility change, not
 an incidental tool upgrade.
 
 ## Cross-repository changes
@@ -65,10 +65,10 @@ temporary producer change is required upstream:
 
 - define and name it only in terms of reference-compiler behavior;
 - keep it internal, narrow, versioned, data-only, and removable;
-- do not mention TypeRB Native, gate numbers, native-backend plans, or
+- do not mention TypeRB Native, experimental checkpoint names, native-backend plans, or
   consumer-specific aliases in upstream code, diagnostics, tests,
   documentation, changelog entries, commits, or pull requests; and
-- record the integration command, gate mapping, exact merged revision,
+- record the integration command, snapshot compatibility mapping, exact merged revision,
   compatibility note, and removal condition in this repository.
 
 Before opening the upstream pull request, audit both its diff and proposed

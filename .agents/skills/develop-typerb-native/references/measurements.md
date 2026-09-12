@@ -30,7 +30,7 @@ history and link retired evidence to its exact Git revision. Use a verified
 public archive only when detailed evidence has a durable purpose. Run the
 lifecycle/global-budget check with the actual PR base before publishing results.
 
-For executable gates, run the same differential corpus through the optimized
+For executable checks, run the same differential corpus through the optimized
 Go reference baseline and every active native candidate. Count frontend,
 serialization, lowering, code generation, assembly, linking, runtime, sidecar,
 and distribution costs according to `docs/experiment-plan.md`.

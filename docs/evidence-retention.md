@@ -37,9 +37,9 @@ source-era inventories to an exact Git revision or an existing verified archive.
 ## Completed and intermediate work
 
 Keep significant conclusions, important numbers and rejected-approach reasons in
-the [development history](development-history.md) or the relevant decision/PR.
+the [development history](https://github.com/type-rb/type-rb-native/blob/7726ff18e9230cd149e9f0c317577f6429f907fc/docs/development-history.md) or the relevant decision/PR.
 Retain useful regression cases in their maintained test owner. Do not keep a
-dated folder merely because it passed a gate, was once a baseline, or is linked
+dated folder merely because it passed a checkpoint, was once a baseline, or is linked
 from historical prose: historical links should use the exact archived revision.
 
 During an experiment, keep successful and failed observations until the decision

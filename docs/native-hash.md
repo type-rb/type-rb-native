@@ -99,7 +99,7 @@ the index when parsing succeeds. A missing name remains `-1`; replacing an entry
 preserves the previous last-declaration lookup rule without changing duplicate
 diagnostics. Declaration vectors retain their stable ordering and identities.
 
-This removes `Gate4SymbolIndex` and its bucket/chain/growth/rebuild helpers.
+This removes the former custom symbol index and its bucket/chain/growth/rebuild helpers.
 `find_name_index` and `function_index_key` own the small lookup boundary; the
 ordinary Hash runtime owns storage and content equality. The key separates the
 decimal module identity from the name with `:`. Import-cycle traversal now owns

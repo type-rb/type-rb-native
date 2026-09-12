@@ -1,0 +1,85 @@
+import { integer_string } from literals
+import { MirFunction, mir_block_index, mir_function_index } from mir
+import { mir_scalar_result_fact } from mir_analysis
+import { QbeEmitContext, emit_label, emit_temporary, emit_typed_store, qbe_type, scalar_type_name } from qbe_context
+import { emit_mir_scalar_instruction } from qbe_mir
+import { QbeOutput, qbe_output_branch, qbe_output_line } from qbe_output
+import { CompilerState } from state
+
+# The adapter consumes block parameters and typed operands. Edge copies are
+# parallel assignments: capture every source before changing a destination.
+def emit_control_mir_edge(state: CompilerState, function: MirFunction, target: Integer, start: Integer, count: Integer, operands: Array<String>, types: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput)
+	block := state.scalar_mir.blocks[mir_block_index(state.scalar_mir, function, target)]
+	mut captured: Array<String> := []
+	mut index := 0
+	while index < count
+		value := state.scalar_mir.arguments[start + index]
+		temporary := emit_temporary(context)
+		qbe_output_line(output, "\t" + temporary + " =" + qbe_type(types[value]) + " copy " + operands[value])
+		captured.push(temporary)
+		index += 1
+	end
+	index = 0
+	while index < count
+		value := state.scalar_mir.arguments[block.parameter_start + index]
+		qbe_output_line(output, "\t" + operands[value] + " =" + qbe_type(types[value]) + " copy " + captured[index])
+		index += 1
+	end
+	qbe_output_line(output, "\tjmp @mir_" + integer_string(target))
+end
+
+def emit_control_mir(state: CompilerState, function_index: Integer, result_type: String, mut context: QbeEmitContext, mut output: QbeOutput)
+	function := state.scalar_mir.functions[mir_function_index(state.scalar_mir, function_index)]
+	mut operands: Array<String> := []
+	mut types: Array<String> := []
+	mut facts: Array<Integer> := []
+	state.scalar_mir.values.each do |value|
+		if value.function_id == function_index
+			while operands.size() <= value.id
+				operands.push("")
+				types.push("")
+				facts.push(0)
+			end
+			operands[value.id] = "%mir_value" + integer_string(value.id)
+			types[value.id] = scalar_type_name(value.type_id)
+		end
+	end
+	mut index := 0
+	while index < function.parameter_count
+		value := state.scalar_mir.arguments[function.parameter_start + index]
+		operands[value] = "%p" + integer_string(index)
+		index += 1
+	end
+	qbe_output_line(output, "\tjmp @mir_" + integer_string(function.entry_block))
+	mut block_index := function.block_start
+	while block_index < function.block_start + function.block_count
+		block := state.scalar_mir.blocks[block_index]
+		qbe_output_line(output, "@mir_" + integer_string(block.id))
+		index = block.instruction_start
+		while index < block.instruction_start + block.instruction_count
+			instruction := state.scalar_mir.instructions[index]
+			value := emit_mir_scalar_instruction(state, function_index, instruction, operands, types, facts, context, output, false, false)
+			operands[instruction.result] = value.operand
+			facts[instruction.result] = mir_scalar_result_fact(instruction, facts)
+			index += 1
+		end
+		if block.terminator == 1
+			emit_control_mir_edge(state, function, block.first_target, block.first_argument_start, block.first_argument_count, operands, types, context, output)
+		elsif block.terminator == 2
+			first := emit_label(context)
+			second := emit_label(context)
+			qbe_output_branch(output, operands[block.condition], first, second)
+			qbe_output_line(output, first)
+			emit_control_mir_edge(state, function, block.first_target, block.first_argument_start, block.first_argument_count, operands, types, context, output)
+			qbe_output_line(output, second)
+			emit_control_mir_edge(state, function, block.second_target, block.second_argument_start, block.second_argument_count, operands, types, context, output)
+		elsif block.terminator == 3
+			emit_typed_store(output, result_type, operands[block.return_value], "%return_value")
+			qbe_output_line(output, "\tjmp @return")
+		else
+			qbe_output_line(output, "\tcall $trbn_fail(l $trbn_integer_range_error, l 45)")
+			qbe_output_line(output, "\thlt")
+		end
+		block_index += 1
+	end
+end

@@ -1,0 +1,281 @@
+import { integer_string, number_without_underscores } from literals
+import { MirInstruction, mir_block_index, mir_function_index, mir_value_type } from mir
+import { mir_scalar_result_fact } from mir_analysis
+import { QbeEmitContext, QbeValue, emit_label, emit_temporary, emit_typed_load, emit_typed_store, emitted_value, scalar_type_name } from qbe_context
+import { emit_array_data_address, emit_array_header } from qbe_memory
+import { emit_checked_integer_operation, lower_binary_operand } from qbe_numeric
+import { QbeOutput, qbe_output_branch, qbe_output_line } from qbe_output
+import { CompilerState } from state
+import { store_string } from storage
+
+def emit_mir_scalar_instruction(
+		state: CompilerState,
+		function_index: Integer,
+		instruction: MirInstruction,
+		operands: Array<String>,
+		types: Array<String>,
+		facts: Array<Integer>,
+		mut context: QbeEmitContext,
+		mut output: QbeOutput,
+		inline: Boolean,
+		safe: Boolean,
+	): QbeValue
+	result_type := scalar_type_name(
+		mir_value_type(state.scalar_mir, function_index, instruction.result),
+	)
+	mut result := emitted_value("", result_type, 0, "", "")
+	if instruction.kind == 6
+		literal := number_without_underscores(state.scalar_mir.literal_texts[instruction.payload])
+		mut operand := literal
+		if result_type == "Boolean"
+			operand = "0"
+			if literal == "true"
+				operand = "1"
+			end
+		end
+		if result_type == "Float"
+			operand = "d_" + literal
+		end
+		result = emitted_value(operand, result_type, 0, "", "")
+	else
+		if instruction.kind == 7
+			left_id := instruction.first
+			right_id := instruction.second
+			mut operator_id := instruction.payload
+			mut guarded_operator := instruction.payload
+			if operator_id == 12
+				operator_id = 3
+			end
+			if operator_id == 13
+				operator_id = 1
+			end
+			if !inline
+				guarded_operator = 0
+			end
+			mut operand := ""
+			if safe && result_type == "Integer"
+				operand = emit_temporary(context)
+				mut operation := "add"
+				if operator_id == 3
+					operation = "mul"
+				elsif operator_id == 4
+					operation = "udiv"
+				end
+				qbe_output_line(output, "\t" + operand + " =l " + operation + " " + operands[left_id] + ", " + operands[right_id])
+			else
+				operand = lower_binary_operand(
+					context,
+					output,
+					operator_id,
+					emitted_value(operands[left_id], types[left_id], 0, "", ""),
+					emitted_value(operands[right_id], types[right_id], 0, "", ""),
+					result_type,
+					facts[left_id] == 1,
+					facts[right_id] == 1,
+					guarded_operator,
+				)
+			end
+			result = emitted_value(operand, result_type, 0, "", "")
+		else
+			if instruction.kind == 8
+				value_id := instruction.first
+				if instruction.payload == 1
+					operand := emit_temporary(context)
+					qbe_output_line(output, "\t" + operand + " =l ceql " + operands[value_id] + ", 0")
+					result = emitted_value(operand, "Boolean", 0, "", "")
+				else
+					if instruction.payload == 2
+						operand := emit_temporary(context)
+						if result_type == "Float"
+							qbe_output_line(output, "\t" + operand + " =d sub d_-0.0, " + operands[value_id])
+						else
+							qbe_output_line(output, "\t" + operand + " =l call $trbn_integer_subtract(l 0, l " + operands[value_id] + ")")
+						end
+						result = emitted_value(operand, result_type, 0, "", "")
+					else
+						result = emitted_value(operands[value_id], result_type, 0, "", "")
+					end
+				end
+			else
+				value_id := instruction.first
+				operand := emit_temporary(context)
+				qbe_output_line(output, "\t" + operand + " =d sltof " + operands[value_id])
+				result = emitted_value(operand, "Float", 0, "", "")
+			end
+		end
+	end
+	return result
+end
+
+def emit_scalar_mir_body(
+		state: CompilerState,
+		function_index: Integer,
+		argument_operands: Array<String>,
+		argument_types: Array<String>,
+		argument_facts: Array<Integer>,
+		mut context: QbeEmitContext,
+		mut output: QbeOutput,
+		inline: Boolean,
+		safe: Boolean,
+	): QbeValue
+	saved_inline_depth := context.scalar_inline_depth[0]
+	if inline
+		context.scalar_inline_depth[0] = saved_inline_depth + 1
+	end
+	mut operands: Array<String> := []
+	mut types: Array<String> := []
+	mut facts: Array<Integer> := []
+	mut index := 0
+	while index < argument_operands.size()
+		operands.push(argument_operands[index])
+		types.push(argument_types[index])
+		facts.push(argument_facts[index])
+		index += 1
+	end
+	function := state.scalar_mir.functions[mir_function_index(state.scalar_mir, function_index)]
+	block := state.scalar_mir.blocks[mir_block_index(state.scalar_mir, function, function.entry_block)]
+	index = block.instruction_start
+	finish := index + block.instruction_count
+	while index < finish
+		instruction := state.scalar_mir.instructions[index]
+		result := emit_mir_scalar_instruction(state, function_index, instruction, operands, types, facts, context, output, inline, safe)
+		result_fact := mir_scalar_result_fact(instruction, facts)
+		operands.push(result.operand)
+		types.push(result.type_name)
+		facts.push(result_fact)
+		index += 1
+	end
+	context.scalar_inline_depth[0] = saved_inline_depth
+	return emitted_value(operands[block.return_value], types[block.return_value], 0, "", "")
+end
+
+def emit_scalar_mir(
+		state: CompilerState,
+		function_index: Integer,
+		argument_operands: Array<String>,
+		argument_types: Array<String>,
+		argument_facts: Array<Integer>,
+		mut context: QbeEmitContext,
+		mut output: QbeOutput,
+		inline: Boolean,
+	): QbeValue
+	function := state.scalar_mir.functions[mir_function_index(state.scalar_mir, function_index)]
+	if !inline || function.integer_guard == 0
+		return emit_scalar_mir_body(state, function_index, argument_operands, argument_types, argument_facts, context, output, inline, false)
+	end
+	mut combined := argument_operands[0]
+	mut index := 1
+	while index < argument_operands.size()
+		merged := emit_temporary(context)
+		qbe_output_line(output, "\t" + merged + " =l or " + combined + ", " + argument_operands[index])
+		combined = merged
+		index += 1
+	end
+	valid := emit_temporary(context)
+	fast := emit_label(context)
+	slow := emit_label(context)
+	complete := emit_label(context)
+	result := emit_temporary(context)
+	qbe_output_line(output, "\t" + valid + " =w cultl " + combined + ", " + integer_string(function.integer_guard))
+	qbe_output_branch(output, valid, fast, slow)
+	qbe_output_line(output, slow)
+	checked := emit_scalar_mir_body(state, function_index, argument_operands, argument_types, argument_facts, context, output, inline, false)
+	mut width := "l"
+	if checked.type_name == "Float"
+		width = "d"
+	end
+	qbe_output_line(output, "\t" + result + " =" + width + " copy " + checked.operand)
+	qbe_output_line(output, "\tjmp " + complete)
+	qbe_output_line(output, fast)
+	unchecked := emit_scalar_mir_body(state, function_index, argument_operands, argument_types, argument_facts, context, output, inline, true)
+	qbe_output_line(output, "\t" + result + " =" + width + " copy " + unchecked.operand)
+	qbe_output_line(output, complete)
+	return emitted_value(result, checked.type_name, 0, "", "")
+end
+
+def emit_induction_mir(
+		state: CompilerState,
+		function_index: Integer,
+		element_type: String,
+		mut context: QbeEmitContext,
+		mut output: QbeOutput,
+	)
+	function := state.scalar_mir.functions[mir_function_index(state.scalar_mir, function_index)]
+	header := state.scalar_mir.blocks[function.block_start + 1]
+	body := state.scalar_mir.blocks[function.block_start + 2]
+	address_instruction := state.scalar_mir.instructions[body.instruction_start]
+	if address_instruction.payload != 2
+		return
+	end
+	float_elements := element_type == "Float"
+	reduction := header.parameter_count == 2
+	header_label := emit_label(context)
+	body_label := emit_label(context)
+	exit_label := emit_label(context)
+	index := emit_temporary(context)
+	advanced := emit_temporary(context)
+	mut accumulator := ""
+	mut accumulated := ""
+	if reduction
+		accumulator = emit_temporary(context)
+		accumulated = emit_temporary(context)
+	end
+	length := emit_array_header(context, output, "%p0", "", 1, "8")
+	data := emit_array_header(context, output, "%p0", "", 2, "24")
+	qbe_output_line(output, "\tjmp " + header_label)
+	qbe_output_line(output, header_label)
+	phi_line := output.count[0]
+	qbe_output_line(output, "")
+	mut accumulator_phi_line :=- 1
+	if reduction
+		accumulator_phi_line = output.count[0]
+		qbe_output_line(output, "")
+	end
+	condition := emit_temporary(context)
+	qbe_output_line(output, "\t" + condition + " =w csltl " + index + ", " + length)
+	qbe_output_branch(output, condition, body_label, exit_label)
+	qbe_output_line(output, body_label)
+	address := emit_array_data_address(context, output, data, index)
+	loaded := emit_temporary(context)
+	emit_typed_load(output, loaded, element_type, address)
+	mut increment_predecessor := body_label
+	if reduction
+		if float_elements
+			qbe_output_line(output, "\t" + accumulated + " =d add " + accumulator + ", " + loaded)
+		else
+			increment_predecessor = emit_checked_integer_operation(
+				context,
+				output,
+				accumulated,
+				accumulator,
+				loaded,
+				"add",
+				false,
+			)
+		end
+	end
+	qbe_output_line(output, "\t" + advanced + " =l add " + index + ", 1")
+	store_string(
+		output.lines,
+		phi_line,
+		"\t" + index + " =l phi @start 0, " + increment_predecessor + " " + advanced,
+	)
+	if reduction
+		mut phi_operation := " =l phi @start 0, "
+		if float_elements
+			phi_operation = " =d phi @start d_0.0, "
+		end
+		store_string(
+			output.lines,
+			accumulator_phi_line,
+			"\t" + accumulator + phi_operation +
+			increment_predecessor + " " + accumulated,
+		)
+	end
+	qbe_output_line(output, "\tjmp " + header_label)
+	qbe_output_line(output, exit_label)
+	if reduction
+		emit_typed_store(output, element_type, accumulator, "%return_value")
+	end
+	qbe_output_line(output, "\tjmp @return")
+end
