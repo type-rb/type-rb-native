@@ -1,60 +1,19 @@
-import { CheckedValue, array_region_operation, checked_assignment_operation, checked_mir_value, checked_value, mir_checked_value, scalar_leaf_inline_eligible, scalar_mir_binary, scalar_mir_convert_float, scalar_mir_disable, scalar_mir_instruction, scalar_mir_literal, scalar_mir_type, scalar_mir_unary, scalar_mir_value } from checked_values
+import { binary_result_type, check_expected, numeric_type, type_diagnostic } from checked_types
+import { CheckedValue, array_region_operation, checked_assignment_operation, checked_mir_value, checked_value, mir_checked_value, scalar_leaf_inline_eligible, scalar_mir_binary, scalar_mir_convert_float, scalar_mir_disable, scalar_mir_instruction, scalar_mir_literal, scalar_mir_unary, scalar_mir_value } from checked_values
 import { checked_hash_binding_target, checked_hash_method, checked_hash_plan, checked_hash_publish } from hash_checked
 import { mir_hash_operation } from hash_mir
 import { hash_key_type, hash_type, hash_value_type } from hash_types
 import { checked_iteration_require, checked_iteration_shape, checked_range_require, iteration_element_type } from iteration_checked
 import { MirIteration, MirRangeConstruction, mir_iteration_valid } from iteration_mir
 import { float_literal_in_range, integer_literal_in_range, number_is_float, small_nonnegative_integer_operand } from literals
-import { MirLoopTransfer, mir_array_element_type, mir_logical_plan, mir_loop_transfer_valid } from mir
+import { MirLoopTransfer, mir_array_element_type, mir_loop_transfer_valid, mir_type_id } from mir
 import { mir_array_assignment_plan, mir_array_assignment_valid } from mir_analysis
-import { mir_control_allocate, mir_control_branch, mir_control_enter, mir_control_jump, mir_control_prepare, mir_control_return } from mir_control
+import { mir_checked_call } from mir_calls
+import { mir_control_active, mir_control_allocate, mir_control_assign, mir_control_branch, mir_control_enter, mir_control_jump, mir_control_loop_begin, mir_control_loop_branch, mir_control_loop_end, mir_control_prepare, mir_control_return, mir_control_transfer } from mir_control
 import { advance, binary_operator_id, declaration_start, expect, expect_identifier, finish_statement, parse_type, skip_newlines, syntax_block_end, syntax_conditional_tail, syntax_expression_precedence, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_statement_boundary, token_is } from parser
 import { array_element_type, array_type, common_array_element_type, find_field, find_record_type, find_visible_function, find_visible_record, record_type, resolve_type_name, standard_package_import, standard_package_root, type_display } from resolution
 import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_add, local_find, terminal_token } from state
 import { load_integer, load_string, sparse_integer_at, store_integer, store_string } from storage
-
-def type_diagnostic(
-		mut state: CompilerState,
-		line: Integer,
-		message: String,
-	): CheckedValue
-	diagnostic(state, "TRBN4004", line, message)
-	return checked_value("Invalid", 0, 9007199254740991, 0)
-end
-
-def numeric_type(type_name: String): Boolean
-	if type_name == "Integer"
-		return true
-	end
-	return type_name == "Float"
-end
-
-def check_expected(
-		mut state: CompilerState,
-		actual: String,
-		expected: String,
-		line: Integer,
-	): Boolean
-	if expected == ""
-		return true
-	end
-	mut assignable := actual == expected
-	if !assignable
-		if actual == "Integer"
-			assignable = expected == "Float"
-		end
-	end
-	if assignable
-		return true
-	end
-	diagnostic(
-		state,
-		"TRBN4004",
-		line,
-		"expected " + type_display(state, expected) + ", found " + type_display(state, actual),
-	)
-	return false
-end
 
 def checked_hash_literal(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, expected: String): CheckedValue
 	origin := position[0]
@@ -392,7 +351,8 @@ def check_call(
 		callee_category: Integer,
 		callee_name: String,
 	): CheckedValue
-	line := load_integer(state.token_lines, position[0])
+	origin := position[0]
+	line := load_integer(state.token_lines, origin)
 	advance(position)
 	skip_newlines(state, position)
 	mut function_index := find_visible_function(state, state.active_module[0], callee_name)
@@ -422,6 +382,7 @@ def check_call(
 		end
 	end
 	mut argument_count := 0
+	mut mir_arguments: Array<Integer> := []
 	mut finished := false
 	while !finished
 		if token_is(state, position[0], ")")
@@ -444,6 +405,7 @@ def check_call(
 				end
 			end
 			argument := check_expression(state, position, locals, 1, argument_expected)
+			mir_arguments.push(checked_mir_value(argument))
 			if function_index >= 0 && argument_count < parameter_count && hash_key_type(argument_expected) != ""
 				if load_integer(state.parameter_mutable, parameter_start + argument_count) != 0
 					if checked_readonly_reference_binding(state, locals, argument)
@@ -482,7 +444,7 @@ def check_call(
 	if argument_count != parameter_count
 		diagnostic(state, "TRBN4004", line, "call argument count does not match " + callee_name)
 	end
-	return checked_value(result_type, 0, 9007199254740991, 0)
+	return mir_checked_call(state, locals, function_index, mir_arguments, result_type, origin)
 end
 
 def check_record_new(
@@ -636,7 +598,6 @@ def check_postfix(
 			if !effect_free
 				array_region_operation(locals, 6, 0, position[0])
 			end
-			scalar_mir_disable(locals)
 			if value.category < 0
 				value = checked_value(value.type_name, 0, value.origin, value.mutable)
 			end
@@ -763,7 +724,7 @@ def check_postfix(
 						if element_type != ""
 							if receiver_id >= 0
 								if index_id >= 0
-									array_type := scalar_mir_type(value.type_name)
+									array_type := mir_type_id(value.type_name)
 									address := scalar_mir_value(
 										state,
 										locals,
@@ -818,115 +779,6 @@ def check_postfix(
 		end
 	end
 	return value
-end
-
-def checked_binary_plan_type(plan: Integer): String
-	if plan >= 17
-		if plan <= 21
-			return "Integer"
-		end
-	end
-	if plan >= 33
-		if plan <= 36
-			return "Float"
-		end
-	end
-	if plan >= 54
-		if plan <= 59
-			return "Boolean"
-		end
-	end
-	if plan == 65
-		return "String"
-	end
-	return "Invalid"
-end
-
-def binary_result_type(
-		mut state: CompilerState,
-		operator: String,
-		left: String,
-		right: String,
-		line: Integer,
-		origin: Integer,
-	): String
-	if left == "Range<Integer>" || right == "Range<Integer>"
-		diagnostic(state, "TRBN4004", line, "Range comparison is not supported")
-		return "Invalid"
-	end
-	operator_id := binary_operator_id(operator)
-	if operator_id >= 12
-		if operator_id <= 13
-			plan := mir_logical_plan(operator_id, left, right)
-			if plan == 0
-				diagnostic(state, "TRBN4004", line, "logical operands must be Boolean")
-				return "Invalid"
-			end
-			store_integer(state.mir_nonnegative_facts, origin, plan)
-			return "Boolean"
-		end
-	end
-	mut numeric_pair := false
-	if numeric_type(left)
-		if numeric_type(right)
-			numeric_pair = true
-		end
-	end
-	if left != right
-		if !numeric_pair
-			diagnostic(state, "TRBN4004", line, "binary operands have different types")
-			return "Invalid"
-		end
-	end
-	mut numeric_tag := 16
-	if left == "Float"
-		numeric_tag = 32
-	end
-	if right == "Float"
-		numeric_tag = 32
-	end
-	mut plan := 0
-	if operator_id >= 1
-		if operator_id <= 4
-			if numeric_pair
-				plan = numeric_tag + operator_id
-			else
-				if operator_id == 1
-					if left == "String"
-						plan = 65
-					end
-				end
-			end
-		else
-			if operator_id == 5
-				if left == "Integer"
-					if right == "Integer"
-						plan = 21
-					end
-				end
-			else
-				if numeric_pair
-					plan = 48 + operator_id
-				else
-					if operator_id <= 7
-						if left == right
-							plan = 48 + operator_id
-						end
-					end
-				end
-			end
-		end
-	end
-	if plan != 0
-		store_integer(state.mir_nonnegative_facts, origin, plan)
-		return checked_binary_plan_type(plan)
-	end
-	mut display_type := left
-	if right == "Float"
-		display_type = "Float"
-	end
-	diagnostic(state, "TRBN4004", line, "unsupported operator " + operator + " for " + display_type)
-	return "Invalid"
 end
 
 def check_expression_value(
@@ -1067,9 +919,6 @@ def check_declaration(
 	mut mutable := 0
 	if token_is(state, position[0], "mut")
 		mutable = 1
-		if locals.mir_state[0] < 2
-			scalar_mir_disable(locals)
-		end
 		advance(position)
 	end
 	declaration_origin := position[0]
@@ -1170,7 +1019,7 @@ def check_declaration(
 			else
 				scalar_mir_disable(locals)
 			end
-		else
+		elsif locals.mir_state[0] == 0
 			# The direct fallback retains its existing adjacent-loop marker until
 			# the remaining Array-owning functions move through MIR.
 			store_integer(locals.mutable, locals.count[0] - 1, position[0] + 3)
@@ -1206,6 +1055,7 @@ def check_simple_statement(
 		advance(position)
 		right := check_expression(state, position, locals, 1, left.type_name)
 		checked_hash_refine(state, locals, left.origin, right.type_name)
+		mir_control_assign(state, locals, left, right)
 		if locals.mir_state[0] >= 2
 			scalar_mir_disable(locals)
 		end
@@ -1220,6 +1070,10 @@ def check_simple_statement(
 			result_type := binary_result_type(state, compound, left.type_name, right.type_name, line, operator_origin)
 			if result_type == "String"
 				array_region_operation(locals, 6, 0, position[0])
+			end
+			if locals.mir_state[0] == 1
+				value := scalar_mir_binary(state, locals, compound, left, right, result_type, operator_origin)
+				mir_control_assign(state, locals, left, value)
 			end
 			if locals.mir_state[0] >= 2
 				local_index := local_find(locals, load_string(state.token_texts, left.origin))
@@ -1335,7 +1189,7 @@ def check_conditional(
 	check_block(state, position, locals, result_type, loop_origin)
 	array_region_operation(locals, 3, saved_count, position[0])
 	locals.count[0] = saved_count
-	incoming += mir_control_jump(state, locals, join)
+	incoming += mir_control_jump(state, locals, join, saved_count)
 	mir_control_enter(state, locals, alternate, line)
 	while token_is(state, position[0], "elsif")
 		array_region_operation(locals, 8, saved_count, position[0])
@@ -1348,7 +1202,7 @@ def check_conditional(
 		check_block(state, position, locals, result_type, loop_origin)
 		array_region_operation(locals, 3, saved_count, position[0])
 		locals.count[0] = saved_count
-		incoming += mir_control_jump(state, locals, join)
+		incoming += mir_control_jump(state, locals, join, saved_count)
 		mir_control_enter(state, locals, alternate, branch_line)
 		if has_diagnostic(state)
 			return false
@@ -1362,7 +1216,7 @@ def check_conditional(
 		array_region_operation(locals, 3, saved_count, position[0])
 		locals.count[0] = saved_count
 	end
-	incoming += mir_control_jump(state, locals, join)
+	incoming += mir_control_jump(state, locals, join, saved_count)
 	if incoming > 0
 		mir_control_enter(state, locals, join, load_integer(state.token_lines, position[0]))
 	end
@@ -1442,12 +1296,35 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 	return finish_statement(state, position)
 end
 
+def checked_scalar_while(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, result_type: String): Boolean
+	origin := position[0]
+	line := load_integer(state.token_lines, origin)
+	count := locals.count[0]
+	array_region_operation(locals, 11, count, origin)
+	exit := mir_control_loop_begin(state, locals, origin, line)
+	advance(position)
+	condition := check_expression(state, position, locals, 1, "Boolean")
+	check_expected(state, condition.type_name, "Boolean", line)
+	finish_statement(state, position)
+	mir_control_loop_branch(state, locals, condition, exit, line)
+	check_block(state, position, locals, result_type, origin)
+	array_region_operation(locals, 3, count, position[0])
+	array_region_operation(locals, 12, count, position[0])
+	locals.count[0] = count
+	mir_control_loop_end(state, locals, load_integer(state.token_lines, position[0]))
+	expect(state, position, "end")
+	return finish_statement(state, position)
+end
+
 def checked_while(
 		mut state: CompilerState,
 		mut position: Array<Integer>,
 		mut locals: CheckedLocals,
 		result_type: String,
 	): Boolean
+	if locals.mir_state[0] == 1
+		return checked_scalar_while(state, position, locals, result_type)
+	end
 	loop_start := position[0]
 	array_region_operation(locals, 11, locals.count[0], loop_start)
 	mut candidate := locals.count[0] - 1
@@ -1469,7 +1346,7 @@ def checked_while(
 			locals.mir_state[12] = body_value
 			store_integer(locals.mir_values, candidate, header_value + 1)
 			if locals.mir_state[0] == 3
-				accumulator_type := scalar_mir_type(result_type)
+				accumulator_type := mir_type_id(result_type)
 				accumulator_header := scalar_mir_value(
 					state, locals, accumulator_type, loop_start,
 				)
@@ -1600,6 +1477,11 @@ def check_block(
 	): Boolean
 	skip_newlines(state, position)
 	while true
+		if mir_control_active(locals) && locals.mir_control[6] == 1
+			if !syntax_block_end(state, position[0]) && !syntax_conditional_tail(state, position[0])
+				scalar_mir_disable(locals)
+			end
+		end
 		if locals.mir_state[0] > 0
 			if locals.mir_state[4] >= 0
 				if !syntax_block_end(state, position[0]) && !syntax_conditional_tail(state, position[0])
@@ -1622,9 +1504,9 @@ def check_block(
 			else
 				store_integer(state.loop_transfer_kinds, position[0], syntax_loop_transfer_kind(state, position[0]))
 				store_integer(state.loop_transfer_targets, position[0], loop_origin + 1)
-				# A transfer can skip any subsequent update, access or effect. No
-				# complete induction plan or enclosing nonnegative proof survives.
-				scalar_mir_disable(locals)
+				# Transfers carry the enclosing scalar environment; Array induction
+				# and nonnegative side proofs still cannot survive an early edge.
+				mir_control_transfer(state, locals, loop_origin, syntax_loop_transfer_kind(state, position[0]))
 				array_region_operation(locals, 6, 0, position[0])
 				mut fact_index := 0
 				while fact_index < locals.count[0]
@@ -1657,6 +1539,10 @@ def check_block(
 				if result_type != "Void"
 					diagnostic(state, "TRBN4004", line, "return value is required")
 				else
+					if mir_control_active(locals)
+						mir_control_return(state, locals, - 1)
+						locals.mir_state[4] =- 2
+					end
 					if locals.mir_state[0] == 2
 						if locals.mir_state[5] == - 2
 							locals.mir_state[4] =- 2
@@ -1685,9 +1571,6 @@ def check_block(
 		elsif declaration_start(state, position[0])
 			check_declaration(state, position, locals)
 		else
-			if locals.mir_state[0] < 2
-				scalar_mir_disable(locals)
-			end
 			statement_start := position[0]
 			check_simple_statement(state, position, locals)
 			tracked := local_find(

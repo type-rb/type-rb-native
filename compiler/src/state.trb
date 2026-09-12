@@ -1,7 +1,7 @@
 import { MirHashOperation } from hash_mir
 import { MirIteration, MirRangeConstruction } from iteration_mir
 import { integer_string } from literals
-import { MirArrayOperation, MirBlock, MirInstruction, MirModule, MirValue } from mir
+import { MirArrayOperation, MirBlock, MirCall, MirControlLoop, MirInstruction, MirModule, MirValue } from mir
 import { IntegerStorage, StringStorage, integer_storage, load_integer, load_string, store_integer, store_string, string_storage } from storage
 
 record CompilerState
@@ -86,6 +86,7 @@ def compiler_new(capacity: Integer): CompilerState
 		loop_transfer_kinds: integer_storage(capacity),
 		loop_transfer_targets: integer_storage(capacity),
 		scalar_mir: MirModule.new(
+			signatures: [], calls: [],
 			source_count: [1],
 			entry_function: [0],
 			functions: [],
@@ -209,6 +210,8 @@ record CheckedLocals
 	mir_assignment: Array<Array<MirArrayOperation>>
 	mir_control: Array<Integer>
 	mir_blocks: Array<MirBlock>
+	mir_loops: Array<MirControlLoop>
+	mir_calls: Array<MirCall>
 	mir_arguments: Array<Integer>
 	mir_state: Array<Integer>
 	count: Array<Integer>
@@ -227,9 +230,11 @@ def locals_new(capacity: Integer): CheckedLocals
 		mir_array: [],
 		mir_assignment: [[]],
 		# active, current/next block, instruction start, parameter span,
-		# terminated, and source line for general checked control flow.
-		mir_control: [0, 0, 0, 0, 0, 0, 0, 0],
+		# terminated, source line and lexical loop depth for checked control flow.
+		mir_control: [0, 0, 0, 0, 0, 0, 0, 0, 0],
 		mir_blocks: [],
+		mir_loops: [],
+		mir_calls: [],
 		mir_arguments: [],
 		# active, function, next value, Integer failure, return value,
 		# induction local, entry instruction count, header condition,

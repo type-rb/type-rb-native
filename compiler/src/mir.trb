@@ -79,10 +79,18 @@ record MirBlock
 	return_value: Integer
 end
 
+record MirControlLoop
+	origin: Integer
+	header: Integer
+	exit: Integer
+	binding_count: Integer
+end
+
 record MirFunction
 	# 0: independent MIR fixture; 1: scalar leaf; 2: verified induction;
 	# 3: general scalar control flow. Adapter selection is explicit.
 	kind: Integer
+	result_type: String
 	integer_guard: Integer
 	id: Integer
 	entry_block: Integer
@@ -109,7 +117,28 @@ end
 # A verified pass may mark the complete Array induction plan as optimized
 # (kind 5, mode 2). The verifier re-derives the loop proof before a backend may
 # consume its invariant header and redundant-check decisions.
+record MirSignature
+	id: Integer
+	# 0: ordinary declaration; 1: retained runtime/host adapter.
+	kind: Integer
+	source_id: Integer
+	line: Integer
+	parameter_types: Array<String>
+	parameter_mutable: Array<Integer>
+	result_type: String
+end
+
+record MirCall
+	callee: Integer
+	argument_start: Integer
+	argument_count: Integer
+	# Conservative ordinary call effects: allocation, mutation, I/O, failure.
+	effects: Integer
+end
+
 record MirModule
+	signatures: Array<MirSignature>
+	calls: Array<MirCall>
 	source_count: Array<Integer>
 	entry_function: Array<Integer>
 	functions: Array<MirFunction>
@@ -327,4 +356,51 @@ def mir_failure_error(
 		return "MIR failure target is not a trap block"
 	end
 	return ""
+end
+
+def mir_type_id(type_name: String): Integer
+	if type_name == "Integer"
+		return 1
+	end
+	if type_name == "Boolean"
+		return 2
+	end
+	if type_name == "Float"
+		return 5
+	end
+	if type_name == "Array<Integer>"
+		return 3
+	end
+	if type_name == "Array<Float>"
+		return 6
+	end
+	if type_name == "Address"
+		return 4
+	end
+	return 0
+end
+
+def mir_type_name(type_id: Integer): String
+	if type_id == 0
+		return "Void"
+	end
+	if type_id == 1
+		return "Integer"
+	end
+	if type_id == 2
+		return "Boolean"
+	end
+	if type_id == 5
+		return "Float"
+	end
+	if type_id == 3
+		return "Array<Integer>"
+	end
+	if type_id == 6
+		return "Array<Float>"
+	end
+	if type_id == 4
+		return "Address"
+	end
+	return "Invalid"
 end

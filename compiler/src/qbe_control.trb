@@ -1,7 +1,7 @@
 import { integer_string } from literals
-import { MirFunction, mir_block_index, mir_function_index } from mir
+import { MirFunction, mir_block_index, mir_function_index, mir_type_name } from mir
 import { mir_scalar_result_fact } from mir_analysis
-import { QbeEmitContext, emit_label, emit_temporary, emit_typed_store, qbe_type, scalar_type_name } from qbe_context
+import { QbeEmitContext, emit_label, emit_temporary, emit_typed_store, qbe_type } from qbe_context
 import { emit_mir_scalar_instruction } from qbe_mir
 import { QbeOutput, qbe_output_branch, qbe_output_line } from qbe_output
 import { CompilerState } from state
@@ -41,7 +41,7 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 				facts.push(0)
 			end
 			operands[value.id] = "%mir_value" + integer_string(value.id)
-			types[value.id] = scalar_type_name(value.type_id)
+			types[value.id] = mir_type_name(value.type_id)
 		end
 	end
 	mut index := 0
@@ -59,8 +59,10 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 		while index < block.instruction_start + block.instruction_count
 			instruction := state.scalar_mir.instructions[index]
 			value := emit_mir_scalar_instruction(state, function_index, instruction, operands, types, facts, context, output, false, false)
-			operands[instruction.result] = value.operand
-			facts[instruction.result] = mir_scalar_result_fact(instruction, facts)
+			if instruction.result >= 0
+				operands[instruction.result] = value.operand
+				facts[instruction.result] = mir_scalar_result_fact(instruction, facts)
+			end
 			index += 1
 		end
 		if block.terminator == 1
@@ -74,7 +76,9 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 			qbe_output_line(output, second)
 			emit_control_mir_edge(state, function, block.second_target, block.second_argument_start, block.second_argument_count, operands, types, context, output)
 		elsif block.terminator == 3
-			emit_typed_store(output, result_type, operands[block.return_value], "%return_value")
+			if result_type != "Void"
+				emit_typed_store(output, result_type, operands[block.return_value], "%return_value")
+			end
 			qbe_output_line(output, "\tjmp @return")
 		else
 			qbe_output_line(output, "\tcall $trbn_fail(l $trbn_integer_range_error, l 45)")

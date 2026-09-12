@@ -30,11 +30,14 @@ end
 
 describe("general scalar MIR control") do
 	test("checks nested branches, elsif, early returns and continuing joins") do
-		bodies := [
+		mut bodies := [
 			"\tif value < 0\n\t\treturn -value\n\telse\n\t\treturn value + 1\n\tend",
 			"\toffset := value + 1\n\tif value < 0\n\t\tif offset == 0\n\t\t\treturn 4\n\t\tend\n\t\treturn offset\n\telsif value == 0\n\t\treturn 7\n\tend\n\treturn offset * 2",
 			"\tif value < 0\n\t\tunused := value + 1\n\telse\n\t\tunused := value + 2\n\tend\n\treturn value",
 		]
+		bodies.push("\tmut total := value\n\tif value < 0\n\t\ttotal = -value\n\telse\n\t\ttotal += 2\n\tend\n\treturn total")
+		bodies.push("\tmut total := 0\n\tmut i := 0\n\twhile i < value\n\t\ti += 1\n\t\tif i == 2\n\t\t\tnext\n\t\tend\n\t\tlocal := i * 2\n\t\tif i > 5\n\t\t\tbreak\n\t\tend\n\t\ttotal += local\n\tend\n\treturn total")
+		bodies.push("\tmut total := 0\n\tmut i := 0\n\twhile i < value\n\t\tmut j := 0\n\t\twhile j < i\n\t\t\tj += 1\n\t\t\tif j == 2\n\t\t\t\tbreak\n\t\t\tend\n\t\t\ttotal += j\n\t\tend\n\t\ti += 1\n\tend\n\treturn total")
 		bodies.each do |body|
 			state := control_test_state(body)
 			expect(state.diagnostic_count[0]).to_equal(0)
@@ -73,7 +76,13 @@ describe("general scalar MIR control") do
 		mut state := control_test_state("\tif value < 0\n\t\treturn -value\n\telse\n\t\treturn value\n\tend")
 		index := mir_function_index(state.scalar_mir, 0)
 		function := state.scalar_mir.functions[index]
-		state.scalar_mir.functions[index] = MirFunction.new(kind: 2, integer_guard: 0, id: function.id, entry_block: function.entry_block, source_id: function.source_id, line: function.line, parameter_start: function.parameter_start, parameter_count: function.parameter_count, block_start: function.block_start, block_count: function.block_count)
+		state.scalar_mir.functions[index] = MirFunction.new(kind: 2, result_type: function.result_type, integer_guard: 0, id: function.id, entry_block: function.entry_block, source_id: function.source_id, line: function.line, parameter_start: function.parameter_start, parameter_count: function.parameter_count, block_start: function.block_start, block_count: function.block_count)
 		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR induction adapter shape differs")
 	end
+	test("diagnoses an assignment to a computed expression without indexing its absent origin") do
+		state := control_test_state("\tvalue + 1 = 2\n\treturn value")
+		expect(state.diagnostic_count[0]).to_equal(1)
+		expect(load_string(state.diagnostic_messages, 0)).to_equal("assignment target is immutable")
+	end
+
 end

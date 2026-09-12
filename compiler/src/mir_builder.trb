@@ -1,5 +1,5 @@
-import { array_region_operation, mir_add_value, scalar_mir_type } from checked_values
-import { MirFunction, mir_instruction_with_payload } from mir
+import { array_region_operation, mir_add_value } from checked_values
+import { MirFunction, mir_instruction_with_payload, mir_type_id } from mir
 import { mir_block } from mir_construction
 import { mir_control_active, mir_control_commit } from mir_control
 import { array_element_type } from resolution
@@ -14,16 +14,18 @@ def scalar_mir_begin(
 	locals.mir_state[1] = function_index
 	result_type := load_string(state.function_result_types, function_index)
 	mut mode := 1
-	if scalar_mir_type(result_type) == 0
+	if mir_type_id(result_type) == 0
 		if result_type != "Void"
 			return
 		end
-		mode = 2
 	end
 	parameter_start := load_integer(state.function_parameter_starts, function_index)
 	parameter_finish := parameter_start + load_integer(state.function_parameter_counts, function_index)
 	if parameter_finish - parameter_start == 1
 		parameter_type := load_string(state.parameter_types, parameter_start)
+		if result_type == "Void" && array_element_type(parameter_type) != ""
+			mode = 2
+		end
 		if array_element_type(parameter_type) == result_type
 			mode = 3
 		end
@@ -39,9 +41,12 @@ def scalar_mir_begin(
 	mut parameter_index := parameter_start
 	while parameter_index < parameter_finish
 		if load_integer(state.parameter_mutable, parameter_index) != 0
-			return
+			type_id := mir_type_id(load_string(state.parameter_types, parameter_index))
+			if type_id != 1 && type_id != 2 && type_id != 5
+				return
+			end
 		end
-		if scalar_mir_type(load_string(state.parameter_types, parameter_index)) == 0
+		if mir_type_id(load_string(state.parameter_types, parameter_index)) == 0
 			return
 		end
 		parameter_index += 1
@@ -72,7 +77,7 @@ def mir_add_parameter(
 		return
 	end
 	value_id := mir_add_value(
-		state, locals, scalar_mir_type(type_name), load_integer(state.parameter_lines, parameter_index),
+		state, locals, mir_type_id(type_name), load_integer(state.parameter_lines, parameter_index),
 	)
 	store_integer(locals.mir_values, locals.count[0] - 1, value_id + 1)
 	return
@@ -132,7 +137,7 @@ def scalar_mir_commit(
 	if mode >= 2
 		kind = 2
 	end
-	native_module.functions.push(MirFunction.new(kind: kind, integer_guard: 0, id: function_index, entry_block: entry_block, source_id: source, line: line, parameter_start: argument_base, parameter_count: parameter_count, block_start: block_base, block_count: block_count))
+	native_module.functions.push(MirFunction.new(kind: kind, result_type: load_string(state.function_result_types, function_index), integer_guard: 0, id: function_index, entry_block: entry_block, source_id: source, line: line, parameter_start: argument_base, parameter_count: parameter_count, block_start: block_base, block_count: block_count))
 	mut index := 0
 	while index < parameter_count
 		native_module.arguments.push(index)

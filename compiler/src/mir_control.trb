@@ -1,10 +1,10 @@
-import { CheckedValue, checked_mir_value, mir_add_value, scalar_mir_disable, scalar_mir_type } from checked_values
-import { MirFunction, mir_instruction_with_payload } from mir
+import { CheckedValue, checked_mir_value, mir_add_value, scalar_mir_disable } from checked_values
+import { MirCall, MirControlLoop, MirFunction, mir_instruction_with_payload, mir_type_id } from mir
 import { mir_block } from mir_construction
-import { CheckedLocals, CompilerState } from state
+import { CheckedLocals, CompilerState, local_find } from state
 import { load_integer, load_string, store_integer } from storage
 
-# Function-local construction of typed conditional blocks. Every live binding
+# Function-local construction of typed scalar blocks. Every live binding
 # crosses a control edge as an explicit value argument, including branch-local
 # aliases used after a nested conditional. No source span is an executable op.
 def mir_control_prepare(state: CompilerState, mut locals: CheckedLocals)
@@ -17,7 +17,7 @@ def mir_control_prepare(state: CompilerState, mut locals: CheckedLocals)
 	end
 	mut index := 0
 	while index < locals.count[0]
-		type_id := scalar_mir_type(load_string(locals.types, index))
+		type_id := mir_type_id(load_string(locals.types, index))
 		if type_id != 1 && type_id != 2 && type_id != 5
 			scalar_mir_disable(locals)
 			return
@@ -47,10 +47,10 @@ def mir_control_allocate(mut locals: CheckedLocals): Integer
 	return block
 end
 
-def mir_control_arguments(mut locals: CheckedLocals): Integer
+def mir_control_arguments(mut locals: CheckedLocals, count: Integer): Integer
 	start := locals.mir_arguments.size()
 	mut index := 0
-	while index < locals.count[0]
+	while index < count
 		locals.mir_arguments.push(load_integer(locals.mir_values, index) - 1)
 		index += 1
 	end
@@ -83,7 +83,7 @@ def mir_control_enter(state: CompilerState, mut locals: CheckedLocals, block: In
 	locals.mir_state[4] =- 1
 	mut index := 0
 	while index < locals.count[0]
-		type_id := scalar_mir_type(load_string(locals.types, index))
+		type_id := mir_type_id(load_string(locals.types, index))
 		value := mir_add_value(state, locals, type_id, line)
 		locals.mir_arguments.push(value)
 		store_integer(locals.mir_values, index, value + 1)
@@ -102,29 +102,115 @@ def mir_control_branch(state: CompilerState, mut locals: CheckedLocals, conditio
 	end
 	first := mir_control_allocate(locals)
 	second := mir_control_allocate(locals)
-	arguments := mir_control_arguments(locals)
+	arguments := mir_control_arguments(locals, locals.count[0])
 	mir_control_finish(state, locals, 2, value, first, second, arguments, locals.count[0], - 1)
 	mir_control_enter(state, locals, first, line)
 	return second
 end
 
-def mir_control_jump(state: CompilerState, mut locals: CheckedLocals, target: Integer): Integer
+def mir_control_jump(state: CompilerState, mut locals: CheckedLocals, target: Integer, count: Integer): Integer
 	if !mir_control_active(locals)
 		return 0
 	end
 	if locals.mir_control[6] == 1
 		return 0
 	end
-	arguments := mir_control_arguments(locals)
+	arguments := mir_control_arguments(locals, count)
 	# A jump has one argument span; keep the unused alternate span empty.
 	locals.mir_blocks.push(mir_block(
 			locals.mir_control[1], state.active_module[0], locals.mir_control[7],
 			locals.mir_control[4], locals.mir_control[5],
 			locals.mir_control[3], locals.mir_instructions.size() - locals.mir_control[3],
-			1, - 1, target, - 1, arguments, locals.count[0], 0, 0, - 1,
+			1, - 1, target, - 1, arguments, count, 0, 0, - 1,
 		))
 	locals.mir_control[6] = 1
 	return 1
+end
+
+# Mutable scalar locals denote the current SSA value, never a memory address.
+def mir_control_assign(state: CompilerState, mut locals: CheckedLocals, target: CheckedValue, value: CheckedValue)
+	if locals.mir_state[0] != 1
+		return
+	end
+	if target.origin < 0 || target.origin >= state.token_count[0]
+		scalar_mir_disable(locals)
+		return
+	end
+	index := local_find(locals, load_string(state.token_texts, target.origin))
+	operand := checked_mir_value(value)
+	if index < 0 || operand < 0
+		scalar_mir_disable(locals)
+		return
+	end
+	store_integer(locals.mir_values, index, operand + 1)
+end
+
+def mir_control_loop_begin(state: CompilerState, mut locals: CheckedLocals, origin: Integer, line: Integer): Integer
+	mir_control_prepare(state, locals)
+	if !mir_control_active(locals)
+		return - 1
+	end
+	header := mir_control_allocate(locals)
+	exit := mir_control_allocate(locals)
+	frame := MirControlLoop.new(origin: origin, header: header, exit: exit, binding_count: locals.count[0])
+	depth := locals.mir_control[8]
+	if depth == locals.mir_loops.size()
+		locals.mir_loops.push(frame)
+	else
+		locals.mir_loops[depth] = frame
+	end
+	locals.mir_control[8] = depth + 1
+	mir_control_jump(state, locals, header, locals.count[0])
+	mir_control_enter(state, locals, header, line)
+	return exit
+end
+
+def mir_control_loop_branch(state: CompilerState, mut locals: CheckedLocals, condition: CheckedValue, exit: Integer, line: Integer)
+	if !mir_control_active(locals)
+		return
+	end
+	value := checked_mir_value(condition)
+	if value < 0
+		scalar_mir_disable(locals)
+		return
+	end
+	body := mir_control_allocate(locals)
+	arguments := mir_control_arguments(locals, locals.count[0])
+	mir_control_finish(state, locals, 2, value, body, exit, arguments, locals.count[0], - 1)
+	mir_control_enter(state, locals, body, line)
+end
+
+def mir_control_transfer(state: CompilerState, mut locals: CheckedLocals, origin: Integer, kind: Integer)
+	if !mir_control_active(locals)
+		scalar_mir_disable(locals)
+		return
+	end
+	depth := locals.mir_control[8]
+	if depth == 0
+		scalar_mir_disable(locals)
+		return
+	end
+	frame := locals.mir_loops[depth - 1]
+	if frame.origin != origin
+		scalar_mir_disable(locals)
+		return
+	end
+	mut target := frame.header
+	if kind == 1
+		target = frame.exit
+	end
+	mir_control_jump(state, locals, target, frame.binding_count)
+end
+
+def mir_control_loop_end(state: CompilerState, mut locals: CheckedLocals, line: Integer)
+	if !mir_control_active(locals)
+		return
+	end
+	depth := locals.mir_control[8] - 1
+	frame := locals.mir_loops[depth]
+	mir_control_jump(state, locals, frame.header, frame.binding_count)
+	locals.mir_control[8] = depth
+	mir_control_enter(state, locals, frame.exit, line)
 end
 
 def mir_control_return(state: CompilerState, mut locals: CheckedLocals, value: Integer)
@@ -141,6 +227,7 @@ def mir_control_commit(mut state: CompilerState, function_index: Integer, locals
 	block_base := native_module.blocks.size()
 	instruction_base := native_module.instructions.size()
 	literal_base := native_module.literal_texts.size()
+	call_base := native_module.calls.size()
 	source := state.active_module[0]
 	line := load_integer(state.function_lines, function_index)
 	if native_module.functions.size() == 0
@@ -151,7 +238,7 @@ def mir_control_commit(mut state: CompilerState, function_index: Integer, locals
 		native_module.source_count[0] = count
 		native_module.entry_function[0] = function_index
 	end
-	native_module.functions.push(MirFunction.new(kind: 3, integer_guard: 0, id: function_index, entry_block: function_index * 2, source_id: source, line: line, parameter_start: argument_base, parameter_count: parameter_count, block_start: block_base, block_count: locals.mir_blocks.size() + 1))
+	native_module.functions.push(MirFunction.new(kind: 3, result_type: load_string(state.function_result_types, function_index), integer_guard: 0, id: function_index, entry_block: function_index * 2, source_id: source, line: line, parameter_start: argument_base, parameter_count: parameter_count, block_start: block_base, block_count: locals.mir_blocks.size() + 1))
 	mut index := 0
 	while index < parameter_count
 		native_module.arguments.push(index)
@@ -169,11 +256,16 @@ def mir_control_commit(mut state: CompilerState, function_index: Integer, locals
 	locals.mir_instructions.each do |instruction|
 		if instruction.kind == 6
 			native_module.instructions.push(mir_instruction_with_payload(instruction, instruction.payload + literal_base))
+		elsif instruction.kind == 11
+			native_module.instructions.push(mir_instruction_with_payload(instruction, instruction.payload + call_base))
 		else
 			native_module.instructions.push(instruction)
 		end
 	end
 	local_arguments := argument_base + parameter_count
+	locals.mir_calls.each do |call|
+		native_module.calls.push(MirCall.new(callee: call.callee, argument_start: call.argument_start + local_arguments, argument_count: call.argument_count, effects: call.effects))
+	end
 	locals.mir_blocks.each do |block|
 		native_module.blocks.push(mir_block(
 				block.id, block.source_id, block.line,

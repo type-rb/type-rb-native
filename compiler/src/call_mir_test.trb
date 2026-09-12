@@ -1,0 +1,106 @@
+import { check, emit_qbe, lex } from compiler
+import { control_test_output } from control_mir_test
+import { MirCall, MirFunction, MirSignature, MirValue, mir_function_index } from mir
+import { verify_mir } from mir_verifier
+import { parse_module } from parser
+import { resolve } from resolution
+import { CompilerState, compiler_new } from state
+import { load_integer, store_string } from storage
+import { describe, expect, test } from trb/std/test
+
+def call_test_state(): CompilerState
+	source := "def walk(value: Integer): Integer\n\tmut result := value\n\tmut index := 0\n\twhile index < value\n\t\tindex += 1\n\t\tif index == 2\n\t\t\tannounce(index)\n\t\t\tnext\n\t\tend\n\t\tresult = step(result)\n\tend\n\treturn sum_to(result)\nend\ndef step(value: Integer): Integer\n\treturn value + 1\nend\ndef announce(value: Integer)\n\tputs(value)\n\treturn\nend\ndef sum_to(value: Integer): Integer\n\tif value < 1\n\t\treturn 0\n\tend\n\treturn value + sum_to(value - 1)\nend\ndef empty()\nend\ndef notify()\n\tempty()\n\tannounce(9)\n\treturn\nend\ndef main()\n\tputs(walk(3))\n\treturn\nend\n"
+	mut state := compiler_new(source.size() * 3 + 16)
+	lex(state, source)
+	parse_module(state, 0, state.entry_module[0])
+	resolve(state)
+	check(state)
+	return state
+end
+
+describe("MIR declaration-bound calls") do
+	test("connects forward recursive and Void calls across mutable control flow") do
+		state := call_test_state()
+		expect(state.diagnostic_count[0]).to_equal(0)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		expect(state.scalar_mir.signatures.size()).to_equal(7)
+		[0, 3, 4, 5].each do |id|
+			index := mir_function_index(state.scalar_mir, id)
+			expect(index >= 0).to_be_true()
+			if index >= 0
+				expect(state.scalar_mir.functions[index].kind).to_equal(3)
+			end
+		end
+		# The effectful scalar callee still owns its existing managed I/O path.
+		expect(mir_function_index(state.scalar_mir, 2)).to_equal(- 1)
+		expect(state.scalar_mir.calls.size()).to_equal(6)
+		state.scalar_mir.calls.each do |call|
+			expect(call.effects).to_equal(15)
+		end
+	end
+
+	test("emits calls loops and transfers after their checked bodies are unavailable") do
+		mut state := call_test_state()
+		expect(state.diagnostic_count[0]).to_equal(0)
+		before := control_test_output(emit_qbe(state))
+		state.scalar_mir.functions.each do |function|
+			mut index := load_integer(state.function_body_starts, function.id)
+			while index < load_integer(state.function_body_ends, function.id)
+				store_string(state.token_texts, index, "unavailable")
+				index += 1
+			end
+		end
+		expect(control_test_output(emit_qbe(state))).to_equal(before)
+		expect(before.include?("call $trbnf1(")).to_be_true()
+		expect(before.include?("call $trbnf2(")).to_be_true()
+		expect(before.include?("call $trbnf3(")).to_be_true()
+		# A MIR call must retain a leaf definition otherwise eligible for omission.
+		expect(before.include?("function l $trbnf1(")).to_be_true()
+	end
+
+	test("rejects missing callees effects argument arity and invalid argument spans") do
+		mut index := 0
+		while index < 5
+			mut state := call_test_state()
+			call := state.scalar_mir.calls[0]
+			mut callee := call.callee
+			mut effects := call.effects
+			mut start := call.argument_start
+			mut count := call.argument_count
+			if index == 0
+				callee = 99
+			elsif index == 1
+				effects = 0
+			elsif index == 2
+				count = 0
+			elsif index == 3
+				start = 9007199254740991
+			else
+				state.scalar_mir.arguments[start] = 9007199254740991
+			end
+			state.scalar_mir.calls[0] = MirCall.new(callee: callee, effects: effects, argument_start: start, argument_count: count)
+			expect(verify_mir(state.scalar_mir, true).empty?()).to_be_false()
+			index += 1
+		end
+	end
+
+	test("rejects a callee declaration with mismatched argument or return types") do
+		["Boolean", "Float"].each do |type_name|
+			mut state := call_test_state()
+			signature := state.scalar_mir.signatures[2]
+			state.scalar_mir.signatures[2] = MirSignature.new(id: signature.id, kind: signature.kind, source_id: signature.source_id, line: signature.line, parameter_types: [type_name], parameter_mutable: [0], result_type: signature.result_type)
+			expect(verify_mir(state.scalar_mir, true)).to_equal("MIR call argument type differs")
+		end
+		mut state := call_test_state()
+		function := state.scalar_mir.functions[0]
+		state.scalar_mir.functions[0] = MirFunction.new(kind: function.kind, result_type: "Boolean", integer_guard: function.integer_guard, id: function.id, entry_block: function.entry_block, source_id: function.source_id, line: function.line, parameter_start: function.parameter_start, parameter_count: function.parameter_count, block_start: function.block_start, block_count: function.block_count)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR function declaration differs")
+	end
+	test("rejects managed live values before accepting scalar call adaptation") do
+		mut state := call_test_state()
+		value := state.scalar_mir.values[0]
+		state.scalar_mir.values[0] = MirValue.new(function_id: value.function_id, id: value.id, type_id: 3, source_id: value.source_id, line: value.line)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR scalar control value type differs")
+	end
+
+end

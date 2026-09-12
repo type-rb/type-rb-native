@@ -1,0 +1,158 @@
+import { CheckedValue, checked_value } from checked_values
+import { mir_logical_plan } from mir
+import { binary_operator_id } from parser
+import { type_display } from resolution
+import { CompilerState, diagnostic } from state
+import { store_integer } from storage
+
+def type_diagnostic(
+		mut state: CompilerState,
+		line: Integer,
+		message: String,
+	): CheckedValue
+	diagnostic(state, "TRBN4004", line, message)
+	return checked_value("Invalid", 0, 9007199254740991, 0)
+end
+
+def numeric_type(type_name: String): Boolean
+	if type_name == "Integer"
+		return true
+	end
+	return type_name == "Float"
+end
+
+def check_expected(
+		mut state: CompilerState,
+		actual: String,
+		expected: String,
+		line: Integer,
+	): Boolean
+	if expected == ""
+		return true
+	end
+	mut assignable := actual == expected
+	if !assignable
+		if actual == "Integer"
+			assignable = expected == "Float"
+		end
+	end
+	if assignable
+		return true
+	end
+	diagnostic(
+		state,
+		"TRBN4004",
+		line,
+		"expected " + type_display(state, expected) + ", found " + type_display(state, actual),
+	)
+	return false
+end
+
+def checked_binary_plan_type(plan: Integer): String
+	if plan >= 17
+		if plan <= 21
+			return "Integer"
+		end
+	end
+	if plan >= 33
+		if plan <= 36
+			return "Float"
+		end
+	end
+	if plan >= 54
+		if plan <= 59
+			return "Boolean"
+		end
+	end
+	if plan == 65
+		return "String"
+	end
+	return "Invalid"
+end
+
+def binary_result_type(
+		mut state: CompilerState,
+		operator: String,
+		left: String,
+		right: String,
+		line: Integer,
+		origin: Integer,
+	): String
+	if left == "Range<Integer>" || right == "Range<Integer>"
+		diagnostic(state, "TRBN4004", line, "Range comparison is not supported")
+		return "Invalid"
+	end
+	operator_id := binary_operator_id(operator)
+	if operator_id >= 12
+		if operator_id <= 13
+			plan := mir_logical_plan(operator_id, left, right)
+			if plan == 0
+				diagnostic(state, "TRBN4004", line, "logical operands must be Boolean")
+				return "Invalid"
+			end
+			store_integer(state.mir_nonnegative_facts, origin, plan)
+			return "Boolean"
+		end
+	end
+	mut numeric_pair := false
+	if numeric_type(left)
+		if numeric_type(right)
+			numeric_pair = true
+		end
+	end
+	if left != right
+		if !numeric_pair
+			diagnostic(state, "TRBN4004", line, "binary operands have different types")
+			return "Invalid"
+		end
+	end
+	mut numeric_tag := 16
+	if left == "Float"
+		numeric_tag = 32
+	end
+	if right == "Float"
+		numeric_tag = 32
+	end
+	mut plan := 0
+	if operator_id >= 1
+		if operator_id <= 4
+			if numeric_pair
+				plan = numeric_tag + operator_id
+			else
+				if operator_id == 1
+					if left == "String"
+						plan = 65
+					end
+				end
+			end
+		else
+			if operator_id == 5
+				if left == "Integer"
+					if right == "Integer"
+						plan = 21
+					end
+				end
+			else
+				if numeric_pair
+					plan = 48 + operator_id
+				else
+					if operator_id <= 7
+						if left == right
+							plan = 48 + operator_id
+						end
+					end
+				end
+			end
+		end
+	end
+	if plan != 0
+		store_integer(state.mir_nonnegative_facts, origin, plan)
+		return checked_binary_plan_type(plan)
+	end
+	mut display_type := left
+	if right == "Float"
+		display_type = "Float"
+	end
+	diagnostic(state, "TRBN4004", line, "unsupported operator " + operator + " for " + display_type)
+	return "Invalid"
+end

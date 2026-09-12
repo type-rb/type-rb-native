@@ -1,0 +1,179 @@
+import { CheckedValue, checked_value, mir_checked_value, scalar_mir_disable, scalar_mir_instruction, scalar_mir_value } from checked_values
+import { MirBlock, MirCall, MirFunction, MirInstruction, MirModule, MirSignature, mir_origin_valid, mir_table_span_valid, mir_type_id, mir_type_name, mir_value_available, mir_value_type } from mir
+import { mir_control_active, mir_control_prepare } from mir_control
+import { compiler_entry_function, compiler_runtime_intrinsic } from resolution
+import { CheckedLocals, CompilerState } from state
+import { load_integer, load_string } from storage
+
+# Capture declaration identity and portable types before checking any body.
+# A callee can remain on the checked direct route while its scalar caller uses
+# MIR. Recursive and forward calls therefore need no body/order inference.
+def mir_declare_signatures(mut state: CompilerState)
+	mut source_count := state.module_count[0]
+	if source_count == 0
+		source_count = 1
+	end
+	state.scalar_mir.source_count[0] = source_count
+	compiler_runtime := compiler_entry_function(state) >= 0
+	mut index := 0
+	while index < state.function_count[0]
+		start := load_integer(state.function_parameter_starts, index)
+		count := load_integer(state.function_parameter_counts, index)
+		mut types: Array<String> := []
+		mut mutable: Array<Integer> := []
+		mut parameter := 0
+		while parameter < count
+			types.push(load_string(state.parameter_types, start + parameter))
+			mutable.push(load_integer(state.parameter_mutable, start + parameter))
+			parameter += 1
+		end
+		source := load_integer(state.function_modules, index)
+		mut kind := 0
+		if compiler_runtime_intrinsic(load_string(state.function_names, index))
+			kind = 1
+		end
+		if compiler_runtime && load_string(state.module_names, source) == "host"
+			kind = 1
+		end
+		state.scalar_mir.signatures.push(MirSignature.new(id: index, kind: kind, source_id: source, line: load_integer(state.function_lines, index), parameter_types: types, parameter_mutable: mutable, result_type: load_string(state.function_result_types, index)))
+		index += 1
+	end
+end
+
+def mir_call_scalar_type(type_name: String): Boolean
+	return type_name == "Integer" || type_name == "Boolean" || type_name == "Float"
+end
+
+def mir_checked_call(mut state: CompilerState, mut locals: CheckedLocals, callee: Integer, arguments: Array<Integer>, result_type: String, origin: Integer): CheckedValue
+	if callee < 0 || callee >= state.scalar_mir.signatures.size()
+		scalar_mir_disable(locals)
+		return checked_value(result_type, 0, 9007199254740991, 0)
+	end
+	signature := state.scalar_mir.signatures[callee]
+	if signature.kind != 0 || (result_type != "Void" && !mir_call_scalar_type(result_type))
+		scalar_mir_disable(locals)
+	end
+	signature.parameter_types.each do |type_name|
+		if !mir_call_scalar_type(type_name)
+			scalar_mir_disable(locals)
+		end
+	end
+	arguments.each do |value|
+		if value < 0
+			scalar_mir_disable(locals)
+		end
+	end
+	mir_control_prepare(state, locals)
+	if !mir_control_active(locals)
+		return checked_value(result_type, 0, 9007199254740991, 0)
+	end
+	start := locals.mir_arguments.size()
+	arguments.each do |value|
+		locals.mir_arguments.push(value)
+	end
+	call := locals.mir_calls.size()
+	locals.mir_calls.push(MirCall.new(callee: callee, argument_start: start, argument_count: arguments.size(), effects: 15))
+	mut result :=- 1
+	if result_type != "Void"
+		result = scalar_mir_value(state, locals, mir_type_id(result_type), origin)
+	end
+	scalar_mir_instruction(state, locals, 11, result, - 1, - 1, call, - 1, load_integer(state.token_lines, origin))
+	if result < 0
+		return checked_value(result_type, 0, 9007199254740991, 0)
+	end
+	return mir_checked_value(result_type, result, 9007199254740991, 0)
+end
+
+def mir_signatures_error(native_module: MirModule): String
+	mut index := 0
+	while index < native_module.signatures.size()
+		signature := native_module.signatures[index]
+		if signature.id != index || signature.kind < 0 || signature.kind > 1
+			return "MIR declaration identity is invalid"
+		end
+		if !mir_origin_valid(signature.source_id, signature.line, native_module.source_count[0])
+			return "MIR declaration origin is invalid"
+		end
+		if signature.parameter_types.size() != signature.parameter_mutable.size() || signature.result_type == ""
+			return "MIR declaration types are invalid"
+		end
+		mut parameter := 0
+		while parameter < signature.parameter_types.size()
+			if signature.parameter_types[parameter] == "" || signature.parameter_types[parameter] == "Void"
+				return "MIR declaration parameter type is invalid"
+			end
+			mutable := signature.parameter_mutable[parameter]
+			if mutable != 0 && mutable != 1
+				return "MIR declaration parameter mutability is invalid"
+			end
+			parameter += 1
+		end
+		index += 1
+	end
+	return ""
+end
+
+def mir_function_signature_error(native_module: MirModule, function: MirFunction): String
+	if function.kind == 0
+		return ""
+	end
+	if function.id < 0 || function.id >= native_module.signatures.size()
+		return "MIR function declaration is missing"
+	end
+	signature := native_module.signatures[function.id]
+	if function.source_id != signature.source_id || function.line != signature.line || function.result_type != signature.result_type || function.parameter_count != signature.parameter_types.size()
+		return "MIR function declaration differs"
+	end
+	mut index := 0
+	while index < function.parameter_count
+		value := native_module.arguments[function.parameter_start + index]
+		if mir_type_name(mir_value_type(native_module, function.id, value)) != signature.parameter_types[index]
+			return "MIR function parameter type differs"
+		end
+		index += 1
+	end
+	return ""
+end
+
+def mir_call_error(native_module: MirModule, function: MirFunction, block: MirBlock, instruction_index: Integer, instruction: MirInstruction): String
+	if instruction.payload < 0 || instruction.payload >= native_module.calls.size()
+		return "MIR call record is missing"
+	end
+	if instruction.first != - 1 || instruction.second != - 1 || instruction.failure != - 1
+		return "MIR call instruction shape differs"
+	end
+	call := native_module.calls[instruction.payload]
+	if call.callee < 0 || call.callee >= native_module.signatures.size()
+		return "MIR call declaration is missing"
+	end
+	signature := native_module.signatures[call.callee]
+	if signature.kind != 0 || call.effects != 15
+		return "MIR call effects or adapter differ"
+	end
+	if !mir_table_span_valid(call.argument_start, call.argument_count, native_module.arguments.size())
+		return "MIR call argument range is invalid"
+	end
+	if call.argument_count != signature.parameter_types.size()
+		return "MIR call argument arity differs"
+	end
+	mut index := 0
+	while index < call.argument_count
+		value := native_module.arguments[call.argument_start + index]
+		if !mir_value_available(native_module, function, block, instruction_index, value)
+			return "MIR call argument is undefined"
+		end
+		type_name := signature.parameter_types[index]
+		if !mir_call_scalar_type(type_name) || mir_type_name(mir_value_type(native_module, function.id, value)) != type_name
+			return "MIR call argument type differs"
+		end
+		index += 1
+	end
+	if signature.result_type == "Void"
+		if instruction.result != - 1
+			return "MIR Void call cannot define a value"
+		end
+	elsif !mir_call_scalar_type(signature.result_type) || mir_type_name(mir_value_type(native_module, function.id, instruction.result)) != signature.result_type
+		return "MIR call result type differs"
+	end
+	return ""
+end

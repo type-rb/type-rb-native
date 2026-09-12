@@ -1,4 +1,5 @@
-import { check_block, checked_array_assignment_plan, checked_array_assignment_reads_old, checked_array_assignment_store, checked_array_assignment_target, checked_binary_plan_type, checked_loop_transfer_kind, mir_nonnegative_fact } from checked_program
+import { checked_binary_plan_type } from checked_types
+import { check_block, checked_array_assignment_plan, checked_array_assignment_reads_old, checked_array_assignment_store, checked_array_assignment_target, checked_loop_transfer_kind, mir_nonnegative_fact } from checked_program
 import { scalar_leaf_inline_eligible } from checked_values
 import { checked_hash_plan, checked_hash_require, checked_hash_valid, checked_hash_verify } from hash_checked
 import { mir_hash_key_managed, mir_hash_value_managed } from hash_mir
@@ -8,6 +9,8 @@ import { checked_iteration_require, checked_range_require } from iteration_check
 import { integer_string, number_is_float, number_without_underscores, small_nonnegative_integer_operand } from literals
 import { mir_function_index, mir_logical_short_value } from mir
 import { mir_add_parameter, scalar_mir_begin, scalar_mir_commit } from mir_builder
+import { mir_declare_signatures } from mir_calls
+import { mir_control_active, mir_control_prepare, mir_control_return } from mir_control
 import { optimize_verified_mir } from mir_passes
 import { verify_mir } from mir_verifier
 import { advance, binary_operator_id, declaration_start, expect, expect_identifier, finish_statement, parse_module, parse_statement_block, parse_type, skip_newlines, syntax_block_end, syntax_conditional_tail, syntax_expression_precedence, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_statement_boundary, token_is } from parser
@@ -21,7 +24,7 @@ import { emit_induction_mir, emit_scalar_mir } from qbe_mir
 import { emit_integer_call, lower_binary_operand, take_inline_budget } from qbe_numeric
 import { QbeOutput, qbe_output_append, qbe_output_branch, qbe_output_chunk, qbe_output_line, qbe_output_new } from qbe_output
 import { emit_boolean_puts_runtime, emit_float_array_runtime, emit_float_to_integer_runtime, emit_integer_to_string_runtime, emit_process_runtime, emit_qbe_runtime, emit_string_to_integer_runtime } from qbe_runtime
-import { array_element_type, array_type, common_array_element_type, compiler_entry_function, find_field, find_function_in_module, find_record_type, find_visible_function, find_visible_record, import_path_value, normalize_import_path, record_type, resolve, resolve_type_name, standard_package_import, standard_package_root, standard_package_target, validate_import_usage } from resolution
+import { array_element_type, array_type, common_array_element_type, compiler_entry_function, compiler_runtime_intrinsic, find_field, find_function_in_module, find_record_type, find_visible_function, find_visible_record, import_path_value, normalize_import_path, record_type, resolve, resolve_type_name, standard_package_import, standard_package_root, standard_package_target, validate_import_usage } from resolution
 import { CompilerState, add_module, compiler_new, diagnostic, find_module, find_name_index, has_diagnostic, local_add, locals_new } from state
 import { load_integer, load_string, sparse_integer_at, store_integer, store_string } from storage
 
@@ -1908,13 +1911,6 @@ def emit_entry(mut state: CompilerState, mut output: QbeOutput)
 	return
 end
 
-def compiler_runtime_intrinsic(name: String): Boolean
-	if name == "compiler_reset_temporary_storage" || name == "compiler_file_exists" || name == "compiler_read_source" || name == "compiler_source_slice" || name == "compiler_collect_project_sources" || name == "compiler_eputs"
-		return true
-	end
-	return false
-end
-
 def emit_qbe(mut state: CompilerState): QbeOutput
 	mut output := qbe_output_new(state.token_count[0] * 24 + 4096, [0, 0, 0, 0, 0, 0])
 	emit_static_strings(state, output)
@@ -3239,6 +3235,10 @@ def check_function(
 		end
 		parameter_index += 1
 	end
+	result_type := load_string(state.function_result_types, function_index)
+	if result_type == "Void" && locals.mir_state[0] == 1
+		mir_control_prepare(state, locals)
+	end
 	# The second cursor cell carries one adjacent declaration fact into a loop.
 	mut position := [load_integer(state.function_body_starts, function_index), 0]
 	check_block(state, position, locals, load_string(state.function_result_types, function_index), - 1)
@@ -3249,6 +3249,9 @@ def check_function(
 			load_integer(state.function_lines, function_index),
 			"checker did not consume the complete function body",
 		)
+	end
+	if result_type == "Void" && mir_control_active(locals) && locals.mir_control[6] == 0
+		mir_control_return(state, locals, - 1)
 	end
 	state.scalar_mir.array_regions.push(locals.mir_array)
 	if !has_diagnostic(state)
@@ -3267,6 +3270,7 @@ def check_function(
 end
 
 def check(mut state: CompilerState): Boolean
+	mir_declare_signatures(state)
 	mut function_index := 0
 	while function_index < state.function_count[0]
 		check_function(state, function_index)

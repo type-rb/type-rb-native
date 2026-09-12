@@ -1,6 +1,7 @@
 import { float_literal_in_range, number_is_float, small_nonnegative_integer_operand } from literals
-import { MirBlock, MirFunction, MirModule, mir_array_element_type, mir_block_index, mir_definition_count, mir_failure_error, mir_function_index, mir_origin_valid, mir_table_span_valid, mir_value_available, mir_value_type } from mir
+import { MirBlock, MirFunction, MirModule, mir_array_element_type, mir_block_index, mir_definition_count, mir_failure_error, mir_function_index, mir_origin_valid, mir_table_span_valid, mir_type_name, mir_value_available, mir_value_type } from mir
 import { mir_array_headers, mir_array_headers_equal, mir_array_loop_headers, mir_induction_address, mir_scalar_guard, mir_scalar_literal } from mir_analysis
+import { mir_call_error, mir_function_signature_error, mir_signatures_error } from mir_calls
 
 def mir_instruction_error(
 		native_module: MirModule,
@@ -30,6 +31,9 @@ def mir_instruction_error(
 		instruction_index,
 		instruction.second,
 	)
+	if instruction.kind == 11
+		return mir_call_error(native_module, function, block, instruction_index, instruction)
+	end
 	if instruction.kind == 1
 		if result_type != 1
 			return "MIR Integer constant result type differs"
@@ -442,6 +446,9 @@ def mir_terminator_error(
 		return "MIR branch shape differs"
 	end
 	if kind == 3
+		if block.return_value < - 1 && (function.kind != 2 || block.return_value != - 2)
+			return "MIR return shape differs"
+		end
 		if block.condition == - 1
 			if block.first_target == - 1
 				if block.second_target == - 1
@@ -457,6 +464,13 @@ def mir_terminator_error(
 									)
 									return "MIR return value is undefined"
 								end
+							end
+							mut type_name := "Void"
+							if block.return_value >= 0
+								type_name = mir_type_name(mir_value_type(native_module, function.id, block.return_value))
+							end
+							if type_name != function.result_type
+								return "MIR return type differs from declaration"
 							end
 							return ""
 						end
@@ -550,14 +564,14 @@ def mir_adapter_error(native_module: MirModule, function: MirFunction): String
 		mut index := block.instruction_start
 		while index < block.instruction_start + block.instruction_count
 			kind := native_module.instructions[index].kind
-			if kind < 6 || kind > 9
+			if (kind < 6 || kind > 9) && (function.kind != 3 || kind != 11)
 				return "MIR scalar control operation is unsupported"
 			end
 			index += 1
 		end
 		if block.terminator == 3
 			type_id := mir_value_type(native_module, function.id, block.return_value)
-			if function.kind == 3 && type_id != 1 && type_id != 2 && type_id != 5
+			if function.kind == 3 && type_id != 0 && type_id != 1 && type_id != 2 && type_id != 5
 				return "MIR scalar return type differs"
 			end
 			if returned_type != 0 && returned_type != type_id
@@ -576,8 +590,21 @@ def mir_function_error(native_module: MirModule, function: MirFunction): String
 	if function.kind < 0 || function.kind > 3
 		return "MIR function adapter kind is invalid"
 	end
+	if function.kind == 3
+		native_module.values.each do |value|
+			if value.function_id == function.id
+				if value.type_id != 1 && value.type_id != 2 && value.type_id != 5
+					return "MIR scalar control value type differs"
+				end
+			end
+		end
+	end
 	if mir_block_index(native_module, function, function.entry_block) < 0
 		return "MIR function entry block does not exist"
+	end
+	signature_error := mir_function_signature_error(native_module, function)
+	if signature_error != ""
+		return signature_error
 	end
 	mut index := function.parameter_start
 	mut finish := index + function.parameter_count
@@ -630,6 +657,10 @@ end
 def verify_mir(native_module: MirModule, optimized: Boolean): String
 	if native_module.source_count[0] <= 0
 		return "MIR module has no sources"
+	end
+	signature_error := mir_signatures_error(native_module)
+	if signature_error != ""
+		return signature_error
 	end
 	mut entry_found := false
 	mut index := 0
