@@ -7,7 +7,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parent.parent
 IDENTIFIER = re.compile(r"(?<![A-Za-z0-9])_*(?:Gate[0-6]|GATE[0-6]_+|gate[0-6]|qbe[23]_|trbn_g[0-6])[A-Za-z0-9_]*\b")
-PATH_NAME = re.compile(r"(?:gate[-_]?[0-6]|gate-zero|qbe[23])(?:[_.-]|$)", re.I)
+PATH_NAME = re.compile(r"(?:gate[-_]?[0-6][a-z]*|gate-zero|qbe[23])(?:[_.-]|$)", re.I)
 
 
 def main():
