@@ -39,8 +39,10 @@ test('MIR migration defers compiler comparisons but preserves every correctness 
   }
   for (const path of ['.github/workflows/gate-zero.yml', 'tools/ci-run-suites.mjs',
     'tools/compiler-cost.sh', 'tools/native-mir-transition-policy.sh']) {
-    assert.equal(classify([path], false, 'mir-migration').performance, true);
-    assert.equal(classify([path, 'compiler/src/compiler.trb'], false, 'mir-migration').performance, true);
+    const strict = classify([path], false);
+    assert.equal(strict.performance, true);
+    assert.deepEqual(classify([path], false, 'mir-migration'), { ...strict, performance: false });
+    assert.equal(classify([path, 'compiler/src/compiler.trb'], false, 'mir-migration').performance, false);
   }
   for (const mode of ['', 'migration', 'STRICT', null]) {
     assert.throws(() => classify(['compiler/src/compiler.trb'], false, mode), /Invalid/);

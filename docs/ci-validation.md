@@ -15,10 +15,11 @@ size and smoke-time limits write observations with their actual exceeded
 status; they do not stop correctness verification. Standalone tools and workflows
 default to `strict`, and unknown modes or malformed measurements fail.
 
-Routine compiler changes omit the separate arm64 comparison and the amd64
+Migration changes omit the separate arm64 comparison and the amd64
 repeated formal timing series. Binary-format, dependency, generation, output and
-failure checks still execute. CI workflow/routing/policy changes retain the arm64
-comparison as controller validation. Daily/weekly diagnostic schedules remain.
+failure checks still execute. CI workflow/routing/policy changes also retain
+controller tests and applicable integration correctness, without restoring the
+strict cost matrix. Daily/weekly diagnostic schedules remain.
 The matrix and historical scheduling below describe the strict contract; green
 migration CI must not be reported as a performance-qualified result.
 
