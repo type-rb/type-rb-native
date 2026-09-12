@@ -40,6 +40,7 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
                       'stable-array-bindings', 'conditional-array-headers', 'loop-array-headers',
                       'hash-values', 'hash-managed', 'hash-cycles',
                       'array-iteration-live', 'array-iteration-control', 'array-iteration-managed',
+                      'logical-loop-stack',
                       'string-index-lifetime'):
         fixture = repository / 'compiler/conformance/valid' / (case_name + '.trb')
         expected = fixture.with_suffix('.out').read_text()
