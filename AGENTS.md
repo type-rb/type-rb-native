@@ -1,87 +1,73 @@
 # TypeRB Native
 
-Keep committed documentation, code comments, commit messages, and pull request
-text in English.
+Use English for committed documentation, code comments, commit messages, and
+pull request text. This is an experimental research project, not a supported
+TypeRB backend or product commitment.
+
+## Scope and completion
+
+Carry the user's requested task through its stated completion point. Use existing
+authorization for routine implementation choices, reversible checks, and fixes
+within that scope. Ask only for missing information or an unresolved decision
+that materially changes the result or requires new authority. A request to
+prepare a PR for review ends with an open PR; it does not authorize a merge or
+another development slice. Later task and budget limits narrow earlier standing
+direction to continue.
+
+Read documents relevant to the affected surface. Use the
+[development skill](.agents/skills/develop-typerb-native/SKILL.md) for compiler,
+MIR, runtime, recovery, or performance work and its conditional reference map
+for specialized constraints. For routine documentation edits, check the changed
+text and applicable documentation CI. For code, complete the authorities in
+[CI validation](docs/ci-validation.md); avoid redundant runs after they pass
+unless a new change, failure, or unresolved concern warrants them.
 
 ## Public repository boundary
 
-- Keep every repository artifact, issue, pull request, and release note
-  explainable solely from public information in this repository or other public
-  sources.
-- Never include names, URLs, local paths, quotations, descriptions, or
-  provenance from private repositories, applications, data, or discussions.
-- Reproduce externally discovered problems with generic synthetic examples and
-  a self-contained public rationale that does not reveal private provenance.
+Keep every outward-facing artifact explainable solely from public information
+in this repository or other public sources. Never publish private names, URLs,
+local paths, quotations, data, implementation details, or provenance. Use
+self-contained generic reproductions, and inspect the complete diff and
+outward-facing text before publication.
 
-Treat this repository as an experimental research project, not as a supported
-TypeRB backend or product commitment.
+## Implementation invariants
 
-Follow `docs/native-language-coverage.md` for current feature selection. Keep
-ordinary check/build/execution/REPL claims separate from snapshot recovery.
-Pair basic syntax with its MIR safety checks and verified compiler self-use;
-do not make deferred optimization acceptance a prerequisite for language work.
+- `type-rb/type-rb` at `TYPE_RB_REVISION` is the language and conformance source
+  of truth. Preserve exact semantics, origins, and deterministic diagnostics;
+  reject unsupported input instead of introducing a native-only dialect,
+  unchecked fallback, or `Any` escape hatch.
+- Keep the reference repository consumer-neutral. Native gate mappings, backend
+  plans, pins, bridge compatibility and retirement conditions belong here.
+  Reference changes must be justified by reference semantics, without Native
+  terminology or consumer aliases. Follow `CONTRIBUTING.md` for that workflow.
+- Write repository-owned compiler and runtime implementation in TypeRB.
+  External backend/toolchain/system dependencies are allowed with explicit roles
+  and costs. Ordinary self-hosting must reproduce from Native source; recovery
+  through the Go reference compiler is separate evidence.
+- Put TypeRB facts and optimizations in verified Native MIR and target-independent
+  passes. Backend adapters consume them; they must not rediscover ranges, index
+  validity, loop structure, call effects, Array-header stability, or GC safety.
+  Finish registered direct-QBE experiments as migration evidence and remove
+  superseded emitter ownership before broadening the fact family.
+- Keep snapshots, MIR, ABI profiles, and runtime interfaces internal and unstable
+  until an explicit promotion decision. Do not add release/package machinery,
+  a second frontend, or another backend without a concrete accepted need.
 
-Follow `docs/repository-organization.md` for staged source and documentation
-cleanup. Include root gate-numbered files and symbols, not just directories.
-At accepted optimization checkpoints, advance the next bounded organization
-slice or record its concrete blocker; do not defer all cleanup until promotion.
-Keep the README concise and historical evidence immutable. Source moves must
-retain their applicable code/recovery/measurement checks.
+## Conditional project guidance
 
-- Use `type-rb/type-rb` as the source of truth for TypeRB syntax, semantics,
-  diagnostics, packages, and conformance behavior.
-- Do not introduce native-only language semantics or silently weaken portable
-  behavior to improve a benchmark.
-- Keep Native MIR, target ABI profiles, and backend details internal and explicitly
-  unstable until a separate promotion decision is accepted.
-- Keep the reference TypeRB repository consumer-neutral and independent of this
-  experiment. Its code, diagnostics, tests, documentation, changelog, commits,
-  and pull requests must not name TypeRB Native, this repository's gates,
-  native-backend plans, or consumer-specific compatibility aliases.
-- Any temporary bootstrap capability added to the reference repository must be
-  justified and named only by reference-compiler semantics. Keep it narrow,
-  versioned, data-only, internal, and removable.
-- Keep all Native integration commands, revision pins, gate mappings, bridge
-  compatibility notes, and retirement conditions in this repository.
-- Put backend-specific lowering behind a common verified Native MIR boundary.
-  Same-target comparisons use the same ABI profile. Do not duplicate the
-  frontend or runtime semantics for each backend candidate.
-- Put TypeRB semantic facts and optimization decisions in Native MIR analysis
-  and target-independent passes. Backend adapters may legalize and select
-  instructions, but must not rediscover Integer ranges, index validity, loop
-  structure, call effects, Array-header stability, or GC safety from source or
-  backend text.
-- Treat the current self-hosted direct-QBE path as migration evidence rather
-  than the target optimizer architecture. Finish already registered narrow
-  experiments, but do not add new non-trivial semantic analysis to its emitter.
-- Follow `docs/optimization-tradeoffs.md`: ordinary cost limits remain the
-  default acceptance gate, while a preregistered candidate-specific diagnostic
-  may measure runtime benefit despite a cost miss. Never infer merge approval
-  from a diagnostic budget or rewrite historical failures. Preserve correctness,
-  safety, self-hosting and full acceptance authorities.
-- Track both a same-feature control and the frozen cumulative Native baseline;
-  do not compound successive 5% allowances or infer current Go headroom from an
-  older small-program snapshot. Report compiler and application costs separately.
-- Remove superseded emitter ownership, but distinguish duplicate migration code
-  from the justified cost of useful MIR passes. QBE text is a diagnostic signal,
-  not a shipped artifact; its ordinary CI limit is unchanged. After two bounded
-  size-only attempts without a current benefit assessment, explicitly reassess
-  whether to measure the benefit, review the trade, or defer before continuing.
-- Record benchmark inputs, commands, revisions, hardware, operating system,
-  toolchain versions, cache state, repetitions, and raw results. Include every
-  required sidecar, linker, and runtime in size comparisons.
-- Prefer explicit unsupported-feature diagnostics to fallback semantics,
-  unchecked lowering, or `Any`-shaped escape hatches.
-- Add only the structure required by the current experiment gate. Do not add
-  release, package, or compatibility machinery before a real consumer needs it.
-- Write repository-owned compiler and runtime implementation source in TypeRB.
-  External code generators, assemblers, linkers, SDKs, and system libraries are
-  allowed when their role and cost are explicit.
-- Treat reproducible TypeRB self-hosting as a required promotion outcome. The
-  Go reference compiler is an early bootstrap and differential oracle, not part
-  of the ordinary final release path.
-- Follow `docs/bootstrap-seed-updates.md` before using newly supported syntax
-  in compiler implementation source. Refresh from accepted main when needed;
-  retain immutable historical seeds and verify actual published assets before
-  switching exact checkout pins. Do not use an unaccepted candidate as a seed
-  or add a floating latest download to bypass this boundary.
+- For language coverage, follow `docs/native-language-coverage.md`: pair basic
+  syntax with MIR checks and verified compiler self-use. Deferred optimizer
+  acceptance does not block language work.
+- For source organization, follow `docs/repository-organization.md`, including
+  root gate-numbered files and symbols. At accepted optimization checkpoints,
+  advance a bounded cleanup or record its concrete blocker within the task's
+  scope. Preserve applicable recovery/measurement checks and immutable history.
+- Before adopting new syntax in compiler source or changing seeds, follow
+  `docs/bootstrap-seed-updates.md`. Verify actual published immutable assets
+  before changing exact pins; unaccepted candidates and floating downloads are
+  not replacement seeds.
+- For optimization or measurement work, follow `docs/optimization-tradeoffs.md`
+  and `docs/experiment-plan.md`. Ordinary 1.05 ratios and absolute ceilings remain
+  in force. A registered diagnostic is not merge approval. Retain failures and
+  compare same-feature and frozen cumulative baselines; report compiler and
+  application costs separately, counting all required dependencies.

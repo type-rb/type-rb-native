@@ -73,7 +73,20 @@ title and body for project terminology. Update `TYPE_RB_REVISION` and CI only
 after the upstream change is merged, then run the complete native checks with
 the exact pinned compiler.
 
-Run the Gate 0 checks from the repository root:
+## Validation scope
+
+Choose checks using [CI validation](docs/ci-validation.md) and the actual changed
+paths. Documentation-only corrections need text, link, metadata and applicable
+documentation checks; they do not require compiler recovery or benchmark runs.
+Code changes retain their required correctness, recovery, target, memory and
+cost authorities. After relevant checks pass, repeat or expand them for new
+changes, failures or unresolved concerns rather than by default.
+
+For compiler-source changes, also enable the recovery/QBE environment described
+in [the compiler recovery guidance](.agents/skills/develop-typerb-native/references/bootstrap.md).
+An optional test that skips recovery does not count as recovery evidence.
+
+For source and compatibility validation, run the maintained root checks:
 
 ```sh
 trb fmt --check .
