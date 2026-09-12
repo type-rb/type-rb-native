@@ -105,6 +105,14 @@ class SeedReleaseTests(unittest.TestCase):
         self.assertIn('AMD64_ITERATION_SETUP_REVISION: 508f721f8964d67a5893e547d2e2fb3de5b20a63', workflow)
         self.assertIn('"$GITHUB_WORKSPACE/.native-target-iteration-source"', workflow)
 
+    def test_target_fixture_identity_matches_current_sources(self):
+        root = Path(__file__).resolve().parent.parent
+        observer = (root / "tools/linux-amd64-targets.sh").read_text()
+        for relative in ("portable-entry/trbconfig.jsonc", "portable-entry/src/main.trb",
+                         "runtime-failures/trbconfig.jsonc", "runtime-failures/src/main.trb"):
+            with self.subTest(source=relative):
+                self.assertIn(seed.digest(root / "corpus/portable-entry" / relative), observer)
+
     def test_refresh_roles_match_the_existing_compatibility_boundary(self):
         observer = Path(__file__).with_name("bootstrap-seed-refresh.sh").read_text()
         self.assertIn('build_step "$seed" setup-first setup', observer)
