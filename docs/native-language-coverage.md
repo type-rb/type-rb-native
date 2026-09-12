@@ -289,23 +289,26 @@ This is the bounded self-use slice in
 [issue #349](https://github.com/type-rb/type-rb-native/issues/349).
 Other MIR row families and deferred optimization remain separate.
 
-## Deferred Array-loop candidate
+## Retired Array-loop integration branch
 
-[PR #307](https://github.com/type-rb/type-rb-native/pull/307) and
-[issue #303](https://github.com/type-rb/type-rb-native/issues/303) are deferred,
-not accepted or abandoned. Freeze the current candidate at
-`96871cce7bf8bcd39717cb2b1af992cebfdb8dcd`; retain its
-[adoption review](https://github.com/type-rb/type-rb-native/blob/96871cce7bf8bcd39717cb2b1af992cebfdb8dcd/docs/native-mir-loop-bounds-adoption.md),
-failed cost observations and frozen cumulative baseline. Start basic syntax
-work from accepted main, not from that unaccepted optimization branch.
+[PR #307](https://github.com/type-rb/type-rb-native/pull/307) is closed and
+superseded by the [MIR consolidation milestone](mir-consolidation.md).
+Its frozen head `96871cce7bf8bcd39717cb2b1af992cebfdb8dcd` preserves the
+[implementation and adoption review](https://github.com/type-rb/type-rb-native/blob/96871cce7bf8bcd39717cb2b1af992cebfdb8dcd/docs/native-mir-loop-bounds-adoption.md)
+and all historical failed measurements. It is not an accepted optimization.
 
-Reassess after the first ordinary coverage/control-syntax checkpoint, or when a
-concrete representation change can reduce its maintenance or measured cost.
-Its merge is not a prerequisite for language coverage. Do not automatically
-renew expired measurement budgets, rerun known unchanged failures, relabel the
-small gain as a passing earlier criterion, or change Pages performance values.
-Any renewed adoption proposal still needs current costs, benefit uncertainty,
-explicit policy and all remaining correctness/target/memory authorities.
+The independent bounded QBE output batching and byte-preservation tests are
+ported to current source, together with valid nested/negative-index and failing
+overflow/short-output conformance cases. This does not omit Array bounds checks
+or claim a measured application speedup.
+
+[Issue #303](https://github.com/type-rb/type-rb-native/issues/303) retains the
+useful dominating-guard, binding-version and Array-identity proof work under
+the current milestone. Adapt it to shared verified MIR and current effects;
+do not reinstate the old six-cell projection over the newer loop-local header,
+iteration, assignment and lifetime owners. Retain producer/verifier adversarial
+controls when reconnecting the proof. Old numeric investigation budgets are
+historical, not current integration authority.
 
 ## Checkpoint reporting
 

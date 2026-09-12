@@ -1,4 +1,4 @@
-import { qbe_output_append, qbe_output_branch, qbe_output_line, qbe_output_new } from qbe_output
+import { qbe_output_append, qbe_output_branch, qbe_output_chunk, qbe_output_line, qbe_output_new } from qbe_output
 import { gate4_load_string } from storage
 import { describe, expect, test } from trb/std/test
 
@@ -21,5 +21,42 @@ describe("QBE output construction") do
 		expect(output.count[0]).to_equal(3)
 		expect(output.runtime_flags[0]).to_equal(1)
 		expect(output.runtime_flags[1]).to_equal(0)
+	end
+end
+
+describe("QBE output chunks") do
+	test("preserves empty lines, embedded newlines and the terminal newline") do
+		mut output := qbe_output_new(8, [])
+		lines := ["", "alpha\nbeta", "", "omega", ""]
+		mut expected := ""
+		mut index := 0
+		while index < lines.size()
+			qbe_output_line(output, lines[index])
+			expected += lines[index] + "\n"
+			index += 1
+		end
+		mut position := [0]
+		expect(qbe_output_chunk(output, position) + "\n").to_equal(expected)
+		expect(position[0]).to_equal(lines.size())
+	end
+
+	test("keeps boundary and oversized lines intact and consumes each once") do
+		mut output := qbe_output_new(8, [])
+		mut long := ""
+		while long.size() < 4095
+			long += "x"
+		end
+		qbe_output_line(output, long)
+		qbe_output_line(output, "")
+		qbe_output_line(output, "tail")
+		qbe_output_line(output, long + "oversized")
+		qbe_output_line(output, "last")
+		mut position := [0]
+		expect(qbe_output_chunk(output, position)).to_equal(long + "\n")
+		expect(position[0]).to_equal(2)
+		expect(qbe_output_chunk(output, position)).to_equal("tail")
+		expect(qbe_output_chunk(output, position)).to_equal(long + "oversized")
+		expect(qbe_output_chunk(output, position)).to_equal("last")
+		expect(position[0]).to_equal(5)
 	end
 end
