@@ -2335,27 +2335,29 @@ def lower_checked_logical(
 		return gate4_emitted_value("0", "Invalid", 0, "", "")
 	end
 	rhs := gate4_emit_label(context)
+	short := gate4_emit_label(context)
+	rhs_done := gate4_emit_label(context)
 	merge := gate4_emit_label(context)
-	slot := gate4_emit_temporary(context)
-	qbe_output_line(output, "\t" + slot + " =l alloc8 8")
-	qbe_output_line(output, "\tstorel " + gate4_integer_string(short_value) + ", " + slot)
 	if short_value == 1
-		qbe_output_branch(output, left.operand, merge, rhs)
+		qbe_output_branch(output, left.operand, short, rhs)
 	else
-		qbe_output_branch(output, left.operand, rhs, merge)
+		qbe_output_branch(output, left.operand, rhs, short)
 	end
+	qbe_output_line(output, short)
+	qbe_output_line(output, "\tjmp " + merge)
 	qbe_output_line(output, rhs)
 	# Header temporaries created on either conditional path do not dominate
 	# the merge. The shared managed-root stack remains runtime path-sensitive.
 	gate4_invalidate_array_header_cache(context)
 	right := gate4_emit_expression(state, position, context, output, minimum_precedence, "Boolean")
-	qbe_output_line(output, "\tstorel " + right.operand + ", " + slot)
+	qbe_output_line(output, "\tjmp " + rhs_done)
+	qbe_output_line(output, rhs_done)
 	qbe_output_line(output, "\tjmp " + merge)
 	qbe_output_line(output, merge)
 	result := gate4_emit_temporary(context)
-	# The local Boolean slot gives nested RHS regions one merge without
-	# reconstructing their final predecessor. QBE promotes this private slot.
-	qbe_output_line(output, "\t" + result + " =l loadl " + slot)
+	# Explicit incoming blocks keep nested RHS regions valid SSA. A stack slot
+	# allocated here would accumulate on every visit inside a loop.
+	qbe_output_line(output, "\t" + result + " =l phi " + short + " " + gate4_integer_string(short_value) + ", " + rhs_done + " " + right.operand)
 	gate4_invalidate_array_header_cache(context)
 	return gate4_emitted_value(result, "Boolean", 0, "", "")
 end
