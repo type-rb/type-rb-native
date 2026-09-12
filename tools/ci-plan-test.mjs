@@ -313,11 +313,17 @@ test('CLI classifies real historical-to-documentation and current-project rename
     git('add', '-A');
     git('commit', '-m', 'Move synthetic fixture');
     const head = git('rev-parse', 'HEAD');
-    const output = execFileSync(process.execPath,
-      [fileURLToPath(new URL('./ci-plan.mjs', import.meta.url)), base, head, 'false'],
-      { cwd: directory, encoding: 'utf8' });
-    assert.deepEqual(Object.fromEntries(output.trim().split('\n').map(row => row.split('='))),
-      { code: 'true', quick: 'true', documentation: 'true', memory: 'true', performance: 'true', draft: 'false', tooling: 'true', cli: 'true' });
+    const args = [fileURLToPath(new URL('./ci-plan.mjs', import.meta.url)), base, head, 'false'];
+    for (const mode of ['strict', 'mir-migration']) {
+      const output = execFileSync(process.execPath, args, { cwd: directory, encoding: 'utf8',
+        env: { ...process.env, NATIVE_MIR_COST_MODE: mode } });
+      assert.deepEqual(Object.fromEntries(output.trim().split('\n').map(row => row.split('='))),
+        { code: 'true', quick: 'true', documentation: 'true', memory: 'true', performance: String(mode === 'strict'),
+          draft: 'false', tooling: 'true', cli: 'true' });
+    }
+    assert.throws(() => execFileSync(process.execPath, args, { cwd: directory, encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, NATIVE_MIR_COST_MODE: 'invalid' } }),
+    error => error.status !== 0 && error.stderr.includes('Invalid compiler cost mode'));
     mkdirSync(join(directory, 'compiler/src'), { recursive: true });
     renameSync(join(directory, 'docs/example.md'), join(directory, 'compiler/src/current.trb'));
     git('add', '-A');
