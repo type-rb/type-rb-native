@@ -1,31 +1,31 @@
-import { gate4_check, gate4_emit_qbe, gate4_lex } from compiler
-import { gate4_parse_module, syntax_expression_precedence } from parser
-import { gate4_resolve } from resolution
-import { Gate4Compiler, gate4_compiler_new } from state
-import { gate4_load_integer, gate4_load_string, gate4_store_integer } from storage
+import { check, emit_qbe, lex } from compiler
+import { parse_module, syntax_expression_precedence } from parser
+import { resolve } from resolution
+import { CompilerState, compiler_new } from state
+import { load_integer, load_string, store_integer } from storage
 import { mir_logical_plan, mir_logical_short_value } from mir
 import { describe, expect, test } from trb/std/test
 
-def logical_checked_source(source: String): Gate4Compiler
-	mut state := gate4_compiler_new(source.size() + 1)
-	expect(gate4_lex(state, source)).to_be_true()
-	expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
-	expect(gate4_resolve(state)).to_be_true()
+def logical_checked_source(source: String): CompilerState
+	mut state := compiler_new(source.size() + 1)
+	expect(lex(state, source)).to_be_true()
+	expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
+	expect(resolve(state)).to_be_true()
 	return state
 end
 
 describe("Short-circuit Boolean expressions") do
 	test("recognizes logical and block pipes but rejects bitwise expressions") do
-		mut valid := gate4_compiler_new(64)
-		expect(gate4_lex(valid, "true||false&&true")).to_be_true()
-		expect(gate4_load_string(valid.token_texts, 1)).to_equal("||")
-		expect(gate4_load_string(valid.token_texts, 3)).to_equal("&&")
+		mut valid := compiler_new(64)
+		expect(lex(valid, "true||false&&true")).to_be_true()
+		expect(load_string(valid.token_texts, 1)).to_equal("||")
+		expect(load_string(valid.token_texts, 3)).to_equal("&&")
 		invalid := ["true|false", "true&false", "true|||false", "true&&&false"]
 		mut index := 0
 		while index < invalid.size()
-			mut state := gate4_compiler_new(64)
-			if gate4_lex(state, "def main()\nputs(" + invalid[index] + ")\nend\n")
-				expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_false()
+			mut state := compiler_new(64)
+			if lex(state, "def main()\nputs(" + invalid[index] + ")\nend\n")
+				expect(parse_module(state, 0, state.entry_module[0])).to_be_false()
 			end
 			index += 1
 		end
@@ -87,7 +87,7 @@ describe("Short-circuit Boolean expressions") do
 		while index < expressions.size()
 			source := "def main()\n\tputs(" + expressions[index] + ")\n\treturn\nend\n"
 			mut state := logical_checked_source(source)
-			expect(gate4_check(state)).to_be_false()
+			expect(check(state)).to_be_false()
 			expect(state.diagnostic_count[0] > 0).to_be_true()
 			index += 1
 		end
@@ -95,19 +95,19 @@ describe("Short-circuit Boolean expressions") do
 
 	test("still resolves a name on a skipped right-hand side") do
 		source := "def main()\n\tputs(true || missing)\n\treturn\nend\n"
-		mut state := gate4_compiler_new(source.size() + 1)
-		expect(gate4_lex(state, source)).to_be_true()
-		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
-		expect(gate4_resolve(state)).to_be_false()
+		mut state := compiler_new(source.size() + 1)
+		expect(lex(state, source)).to_be_true()
+		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(resolve(state)).to_be_false()
 		expect(state.diagnostic_count[0] > 0).to_be_true()
 	end
 
 	test("never records conditional operands as eager scalar MIR") do
 		source := "def choose(a: Boolean, b: Boolean, c: Boolean): Boolean\n\treturn !a && (b || c)\nend\ndef main()\n\tputs(choose(false, false, true))\n\treturn\nend\n"
 		mut state := logical_checked_source(source)
-		expect(gate4_check(state)).to_be_true()
+		expect(check(state)).to_be_true()
 		expect(state.scalar_mir.functions.size()).to_equal(0)
-		gate4_emit_qbe(state)
+		emit_qbe(state)
 		expect(state.diagnostic_count[0]).to_equal(0)
 	end
 
@@ -121,15 +121,15 @@ describe("Short-circuit Boolean expressions") do
 				if invalid[candidate] != 76 + index
 					source := "def main()\n\tputs(true " + operators[index] + " false)\n\treturn\nend\n"
 					mut state := logical_checked_source(source)
-					expect(gate4_check(state)).to_be_true()
+					expect(check(state)).to_be_true()
 					mut origin := 0
-					while gate4_load_string(state.token_texts, origin) != operators[index]
+					while load_string(state.token_texts, origin) != operators[index]
 						origin += 1
 					end
-					expect(gate4_load_integer(state.mir_nonnegative_facts, origin)).to_equal(76 + index)
-					gate4_store_integer(state.mir_nonnegative_facts, origin, invalid[candidate])
-					gate4_emit_qbe(state)
-					expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("invalid checked logical plan")
+					expect(load_integer(state.mir_nonnegative_facts, origin)).to_equal(76 + index)
+					store_integer(state.mir_nonnegative_facts, origin, invalid[candidate])
+					emit_qbe(state)
+					expect(load_string(state.diagnostic_messages, 0)).to_equal("invalid checked logical plan")
 				end
 				candidate += 1
 			end

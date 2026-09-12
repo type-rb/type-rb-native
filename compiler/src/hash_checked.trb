@@ -1,29 +1,29 @@
-import { gate4_array_element_type, gate4_find_record_type } from resolution
+import { array_element_type, find_record_type } from resolution
 import { hash_key_type, hash_value_type } from hash_types
-import { Gate4Compiler, gate4_diagnostic } from state
-import { gate4_load_integer, gate4_load_string, gate4_store_integer, sparse_integer_at } from storage
+import { CompilerState, diagnostic } from state
+import { load_integer, load_string, sparse_integer_at, store_integer } from storage
 import { MirHashOperation, mir_hash_operation, mir_hash_valid } from hash_mir
-import { gate4_token_is } from parser
+import { token_is } from parser
 
-def checked_hash_index_at(state: Gate4Compiler, origin: Integer): Integer
+def checked_hash_index_at(state: CompilerState, origin: Integer): Integer
 	return sparse_integer_at(state.hash_origins, origin) - 1
 end
 
 # Publish a single named plan per source operation; the origin table is only an
 # index into verified MIR, never an independent collection semantics store.
-def checked_hash_publish(mut state: Gate4Compiler, plan: MirHashOperation)
+def checked_hash_publish(mut state: CompilerState, plan: MirHashOperation)
 	mut operations := state.hash_operations
 	index := checked_hash_index_at(state, plan.origin)
 	if index >= 0
 		operations[index] = plan
 	else
 		operations.push(plan)
-		gate4_store_integer(state.hash_origins, plan.origin, operations.size())
+		store_integer(state.hash_origins, plan.origin, operations.size())
 	end
-	gate4_store_integer(state.hash_origins, plan.finish, gate4_load_integer(state.hash_origins, plan.origin))
+	store_integer(state.hash_origins, plan.finish, load_integer(state.hash_origins, plan.origin))
 end
 
-def checked_hash_plan(state: Gate4Compiler, origin: Integer): MirHashOperation
+def checked_hash_plan(state: CompilerState, origin: Integer): MirHashOperation
 	if origin >= 0 && origin < state.token_count[0]
 		index := checked_hash_index_at(state, origin)
 		if index >= 0 && index < state.hash_operations.size()
@@ -58,7 +58,7 @@ def checked_hash_method(method: String): Integer
 	return 0
 end
 
-def checked_hash_valid(state: Gate4Compiler, plan: MirHashOperation, pending: Boolean): Boolean
+def checked_hash_valid(state: CompilerState, plan: MirHashOperation, pending: Boolean): Boolean
 	if !mir_hash_valid(plan, state.token_count[0], pending)
 		return false
 	end
@@ -71,38 +71,38 @@ def checked_hash_valid(state: Gate4Compiler, plan: MirHashOperation, pending: Bo
 		end
 	end
 	if plan.kind == 1
-		if gate4_token_is(state, plan.origin, "{") && gate4_token_is(state, plan.finish, "}")
+		if token_is(state, plan.origin, "{") && token_is(state, plan.finish, "}")
 			return true
 		end
 		return false
 	end
 	if plan.kind == 2 || plan.kind == 3
-		if !gate4_token_is(state, plan.origin, "[") || !gate4_token_is(state, plan.finish, "]")
+		if !token_is(state, plan.origin, "[") || !token_is(state, plan.finish, "]")
 			return false
 		end
 		if plan.kind == 3
-			return gate4_token_is(state, plan.finish + 1, "=")
+			return token_is(state, plan.finish + 1, "=")
 		end
 		return true
 	end
-	if gate4_token_is(state, plan.origin, "(") && gate4_token_is(state, plan.finish, ")") && plan.kind == checked_hash_method(gate4_load_string(state.token_texts, plan.origin - 1))
+	if token_is(state, plan.origin, "(") && token_is(state, plan.finish, ")") && plan.kind == checked_hash_method(load_string(state.token_texts, plan.origin - 1))
 		return true
 	end
 	return false
 end
 
-def checked_hash_require(mut state: Gate4Compiler, origin: Integer, type_name: String): MirHashOperation
+def checked_hash_require(mut state: CompilerState, origin: Integer, type_name: String): MirHashOperation
 	plan := checked_hash_plan(state, origin)
 	if !checked_hash_valid(state, plan, false) || plan.origin != origin || plan.type_name != type_name
-		gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, origin), "invalid checked Hash operation")
+		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "invalid checked Hash operation")
 	end
 	return plan
 end
 
-def checked_hash_verify(mut state: Gate4Compiler): Boolean
+def checked_hash_verify(mut state: CompilerState): Boolean
 	state.hash_operations.each do |plan|
 		if !checked_hash_valid(state, plan, state.hash_repl[0])
-			gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, plan.origin), "unresolved or invalid Hash operation; annotate Hash<K, V>")
+			diagnostic(state, "TRBN4004", load_integer(state.token_lines, plan.origin), "unresolved or invalid Hash operation; annotate Hash<K, V>")
 			return false
 		end
 	end
@@ -111,7 +111,7 @@ end
 
 # A fresh value may be passed to a mutable parameter, but mutation syntax
 # requires a binding. Follow checked indexed receivers without token guessing.
-def checked_hash_binding_target(state: Gate4Compiler, origin: Integer): Boolean
+def checked_hash_binding_target(state: CompilerState, origin: Integer): Boolean
 	mut root := origin
 	mut depth := 0
 	while depth < state.token_count[0]
@@ -128,16 +128,16 @@ def checked_hash_binding_target(state: Gate4Compiler, origin: Integer): Boolean
 	return false
 end
 
-def checked_hash_value_layout(state: Gate4Compiler, type_name: String): Boolean
+def checked_hash_value_layout(state: CompilerState, type_name: String): Boolean
 	if type_name == "Integer" || type_name == "Float" || type_name == "Boolean" || type_name == "String" || type_name == "Range<Integer>"
 		return true
 	end
 	if hash_key_type(type_name) != ""
 		return checked_hash_value_layout(state, hash_value_type(type_name))
 	end
-	element := gate4_array_element_type(type_name)
+	element := array_element_type(type_name)
 	if element != ""
 		return checked_hash_value_layout(state, element)
 	end
-	return gate4_find_record_type(state, type_name) >= 0
+	return find_record_type(state, type_name) >= 0
 end

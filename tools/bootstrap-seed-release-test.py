@@ -17,21 +17,21 @@ class SeedReleaseTests(unittest.TestCase):
         root = Path(__file__).resolve().parent.parent
         for name in ("static-string-compactness", "runtime-worker-memory",
                      "benchmarksgame-formal", "benchmarksgame-build-formal",
-                     "gate6n-linux-amd64", "daily-performance", "weekly-performance"):
+                     "linux-amd64-targets", "daily-performance", "weekly-performance"):
             with self.subTest(workflow=name):
                 workflow = (root / ".github/workflows" / (name + ".yml")).read_text()
                 self.assertIn("bootstrap-seed-2026-09-11-array-iteration", workflow)
                 self.assertIn("b4a1b383e5678907649334203f534ae62fa42af6", workflow)
                 self.assertIn("tools/bootstrap-seed-download.sh", workflow)
-        workflow = (root / ".github/workflows/gate6n-linux-amd64.yml").read_text()
+        workflow = (root / ".github/workflows/linux-amd64-targets.yml").read_text()
         self.assertIn("ROOT_RELEASE_TAG: bootstrap-seed-2026-08-30", workflow)
-        self.assertIn("path: .gate6n-seed-source", workflow)
-        self.assertIn('"$GITHUB_WORKSPACE/.gate6n-seed-source"', workflow)
+        self.assertIn("path: .native-target-seed-source", workflow)
+        self.assertIn('"$GITHUB_WORKSPACE/.native-target-seed-source"', workflow)
         self.assertIn("AMD64_LOOP_SETUP_REVISION: 4e1d0b4aee97b9a5bd73a98f918b31d47985da25", workflow)
-        self.assertIn('"$GITHUB_WORKSPACE/.gate6n-loop-source"', workflow)
+        self.assertIn('"$GITHUB_WORKSPACE/.native-target-loop-source"', workflow)
 
     def test_amd64_bridge_does_not_replace_ordinary_candidate_input(self):
-        observer = Path(__file__).with_name("gate6n-linux-amd64.sh").read_text()
+        observer = Path(__file__).with_name("linux-amd64-targets.sh").read_text()
         self.assertIn('"$root_compiler" emit-qbe "$seed_entry"', observer)
         self.assertIn('runtime_seed=$first_transition', observer)
         self.assertIn('"$first_transition" emit-qbe "$loop_entry"', observer)
@@ -48,8 +48,8 @@ class SeedReleaseTests(unittest.TestCase):
 
     def test_boolean_bridge_requires_the_exact_accepted_source(self):
         root = Path(__file__).resolve().parent.parent
-        observer = (root / "tools/gate6n-linux-amd64.sh").read_text()
-        workflow = (root / ".github/workflows/gate6n-linux-amd64.yml").read_text()
+        observer = (root / "tools/linux-amd64-targets.sh").read_text()
+        workflow = (root / ".github/workflows/linux-amd64-targets.yml").read_text()
         self.assertIn('test -n "$loop_source_root" || fail "Boolean source requires the accepted loop source"', observer)
         self.assertIn('require_clean_revision "$boolean_source_root"', observer)
         self.assertIn('57cb41ad6be91716e31fa555ed8ea8c8ce7a5f51 || fail "boolean source revision differs"', observer)
@@ -58,12 +58,12 @@ class SeedReleaseTests(unittest.TestCase):
         self.assertIn('"$runtime_seed" emit-qbe "$compiler_entry"', observer)
         self.assertIn('"$boolean_transition" check "$candidate_root/compiler/conformance/valid/boolean-array-values.trb"', observer)
         self.assertIn('AMD64_BOOLEAN_SETUP_REVISION: 57cb41ad6be91716e31fa555ed8ea8c8ce7a5f51', workflow)
-        self.assertIn('"$GITHUB_WORKSPACE/.gate6n-boolean-source"', workflow)
+        self.assertIn('"$GITHUB_WORKSPACE/.native-target-boolean-source"', workflow)
 
     def test_hash_bridge_requires_the_exact_accepted_source(self):
         root = Path(__file__).resolve().parent.parent
-        observer = (root / "tools/gate6n-linux-amd64.sh").read_text()
-        workflow = (root / ".github/workflows/gate6n-linux-amd64.yml").read_text()
+        observer = (root / "tools/linux-amd64-targets.sh").read_text()
+        workflow = (root / ".github/workflows/linux-amd64-targets.yml").read_text()
         self.assertIn('test -n "$record_source_root" || fail "Hash source requires the accepted record Array source"', observer)
         self.assertIn('require_clean_revision "$hash_source_root"', observer)
         self.assertIn('8a6d9ff73b14a97bca1b010ddaad6a38972b5373 || fail "Hash source revision differs"', observer)
@@ -72,10 +72,10 @@ class SeedReleaseTests(unittest.TestCase):
         self.assertIn('"$runtime_seed" emit-qbe "$compiler_entry"', observer)
         self.assertIn('"$hash_transition" check "$candidate_root/compiler/conformance/valid/hash-values.trb"', observer)
         self.assertIn('AMD64_HASH_SETUP_REVISION: 8a6d9ff73b14a97bca1b010ddaad6a38972b5373', workflow)
-        self.assertIn('"$GITHUB_WORKSPACE/.gate6n-hash-source"', workflow)
+        self.assertIn('"$GITHUB_WORKSPACE/.native-target-hash-source"', workflow)
 
     def test_iteration_bridge_preserves_historical_argument_shapes(self):
-        script = Path(__file__).with_name("gate6n-linux-amd64.sh").resolve()
+        script = Path(__file__).with_name("linux-amd64-targets.sh").resolve()
         missing = str(Path(self.temporary.name) / "missing-source")
         for count in range(8, 17):
             with self.subTest(arguments=count):
@@ -83,18 +83,18 @@ class SeedReleaseTests(unittest.TestCase):
                                         capture_output=True, text=True, timeout=10)
                 if 9 <= count <= 15:
                     self.assertEqual(result.returncode, 1, result.stderr)
-                    self.assertTrue(result.stderr.startswith("gate6n-linux-amd64:"), result.stderr)
+                    self.assertTrue(result.stderr.startswith("linux-amd64-targets:"), result.stderr)
                     self.assertNotIn("usage:", result.stderr)
                 else:
                     self.assertEqual(result.returncode, 64, result.stderr)
-                    self.assertIn("usage: gate6n-linux-amd64.sh", result.stderr)
+                    self.assertIn("usage: linux-amd64-targets.sh", result.stderr)
                 self.assertEqual(result.stdout, "")
                 self.assertFalse(Path(missing).exists())
 
     def test_iteration_bridge_retains_source_and_candidate_boundaries(self):
         root = Path(__file__).resolve().parent.parent
-        observer = (root / "tools/gate6n-linux-amd64.sh").read_text()
-        workflow = (root / ".github/workflows/gate6n-linux-amd64.yml").read_text()
+        observer = (root / "tools/linux-amd64-targets.sh").read_text()
+        workflow = (root / ".github/workflows/linux-amd64-targets.yml").read_text()
         self.assertIn('test -n "$hash_source_root" || fail "Array iteration source requires the accepted Hash source"', observer)
         self.assertIn('require_clean_revision "$iteration_source_root"', observer)
         self.assertIn('508f721f8964d67a5893e547d2e2fb3de5b20a63 || fail "Array iteration source revision differs"', observer)
@@ -103,7 +103,7 @@ class SeedReleaseTests(unittest.TestCase):
         self.assertIn('"$runtime_seed" emit-qbe "$compiler_entry"', observer)
         self.assertIn('"$iteration_transition" check "$candidate_root/compiler/conformance/valid/array-iteration-$iteration_case.trb"', observer)
         self.assertIn('AMD64_ITERATION_SETUP_REVISION: 508f721f8964d67a5893e547d2e2fb3de5b20a63', workflow)
-        self.assertIn('"$GITHUB_WORKSPACE/.gate6n-iteration-source"', workflow)
+        self.assertIn('"$GITHUB_WORKSPACE/.native-target-iteration-source"', workflow)
 
     def test_refresh_roles_match_the_existing_compatibility_boundary(self):
         observer = Path(__file__).with_name("bootstrap-seed-refresh.sh").read_text()
@@ -207,6 +207,8 @@ class SeedReleaseTests(unittest.TestCase):
             manifest = copy.deepcopy(self.manifest)
             manifest["releaseTag"] = tag
             manifest["predecessor"] = seed.PREDECESSORS[tag]
+            if seed.LIMITS[tag][2] is None:
+                continue
             for target, limit in zip(manifest["targets"], seed.LIMITS[tag][:2]):
                 target["size"] = limit
             seed.validate_manifest(manifest, self.revision, tag)
@@ -217,7 +219,7 @@ class SeedReleaseTests(unittest.TestCase):
                     seed.validate_manifest(changed, self.revision, tag)
             manifest["targets"][0]["size"] = 349296
             manifest["targets"][1]["size"] = 325864
-            if tag in ("bootstrap-seed-2026-09-08-boolean-arrays", "bootstrap-seed-2026-09-09-record-arrays", "bootstrap-seed-2026-09-10-hash", "bootstrap-seed-2026-09-11-array-iteration"):
+            if tag == seed.TAG or tag in ("bootstrap-seed-2026-09-08-boolean-arrays", "bootstrap-seed-2026-09-09-record-arrays", "bootstrap-seed-2026-09-10-hash", "bootstrap-seed-2026-09-11-array-iteration"):
                 seed.validate_manifest(manifest, self.revision, tag)
             else:
                 with self.assertRaises(ValueError):
@@ -230,7 +232,7 @@ class SeedReleaseTests(unittest.TestCase):
             manifest["predecessor"] = seed.PREDECESSORS[tag]
             manifest["targets"][0]["size"] = 365808
             manifest["targets"][1]["size"] = 327736
-            if tag in ("bootstrap-seed-2026-09-09-record-arrays", "bootstrap-seed-2026-09-10-hash", "bootstrap-seed-2026-09-11-array-iteration"):
+            if tag == seed.TAG or tag in ("bootstrap-seed-2026-09-09-record-arrays", "bootstrap-seed-2026-09-10-hash", "bootstrap-seed-2026-09-11-array-iteration"):
                 seed.validate_manifest(manifest, self.revision, tag)
             else:
                 with self.assertRaises(ValueError):
@@ -243,7 +245,7 @@ class SeedReleaseTests(unittest.TestCase):
             manifest["predecessor"] = seed.PREDECESSORS[tag]
             manifest["targets"][0]["size"] = 398888
             manifest["targets"][1]["size"] = 368936
-            if tag in ("bootstrap-seed-2026-09-10-hash", "bootstrap-seed-2026-09-11-array-iteration"):
+            if tag == seed.TAG or tag in ("bootstrap-seed-2026-09-10-hash", "bootstrap-seed-2026-09-11-array-iteration"):
                 seed.validate_manifest(manifest, self.revision, tag)
             else:
                 with self.assertRaises(ValueError):
@@ -256,24 +258,44 @@ class SeedReleaseTests(unittest.TestCase):
             manifest["predecessor"] = seed.PREDECESSORS[tag]
             manifest["targets"][0]["size"] = 415432
             manifest["targets"][1]["size"] = 387192
-            if tag == "bootstrap-seed-2026-09-11-array-iteration":
+            if tag in (seed.TAG, "bootstrap-seed-2026-09-11-array-iteration"):
                 seed.validate_manifest(manifest, self.revision, tag)
             else:
                 with self.assertRaises(ValueError):
                     seed.validate_manifest(manifest, self.revision, tag)
 
-    def test_iteration_refresh_authenticates_hash_and_checks_iteration(self):
+    def test_name_refresh_authenticates_iteration_and_checks_basic_features(self):
         root = Path(__file__).resolve().parent.parent
         workflow = (root / ".github/workflows/bootstrap-seed-refresh.yml").read_text()
-        self.assertEqual(seed.TAG, "bootstrap-seed-2026-09-11-array-iteration")
-        self.assertIn("tag=bootstrap-seed-2026-09-10-hash", workflow)
-        self.assertIn("revision=79f699e9245f79131646ebf43207f6b7526c4f68", workflow)
-        self.assertIn("'bootstrap-seed-2026-09-11-array-iteration' || github.sha", workflow)
+        self.assertEqual(seed.TAG, "bootstrap-seed-2026-09-12-compiler-names")
+        self.assertIn("tag=bootstrap-seed-2026-09-11-array-iteration", workflow)
+        self.assertIn("revision=b4a1b383e5678907649334203f534ae62fa42af6", workflow)
+        self.assertIn("'bootstrap-seed-2026-09-12-compiler-names' || github.sha", workflow)
         self.assertIn("tag=bootstrap-seed-2026-09-11-array-iteration", workflow)
         observer = (root / "tools/bootstrap-seed-refresh.sh").read_text()
-        for fixture in ("array-iteration-live", "array-iteration-control", "array-iteration-managed"):
+        for fixture in ("array-iteration-live", "array-iteration-control", "array-iteration-managed", "range-values", "range-streaming", "range-extrema", "range-managed"):
             self.assertIn(fixture, observer)
             self.assertTrue((root / "compiler/conformance/valid" / (fixture + ".trb")).is_file())
+
+    def test_migration_size_observations_keep_identity_and_types_strict(self):
+        manifest = copy.deepcopy(self.manifest)
+        for target in manifest["targets"]:
+            target["size"] = 900000
+        seed.validate_manifest(manifest, self.revision)
+        for value in (True, 0, -1, 1.5, None, "900000"):
+            changed = copy.deepcopy(manifest)
+            changed["targets"][0]["size"] = value
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                seed.validate_manifest(changed, self.revision)
+        # The current tag cannot make predecessor overruns acceptable.
+        for tag in seed.PREDECESSORS:
+            if tag == seed.TAG:
+                continue
+            changed = copy.deepcopy(manifest)
+            changed["releaseTag"] = tag
+            changed["predecessor"] = seed.PREDECESSORS[tag]
+            with self.subTest(tag=tag), self.assertRaises(ValueError):
+                seed.validate_manifest(changed, self.revision, tag)
 
     def test_download_verification_preserves_the_previous_tag(self):
         for tag in seed.PREDECESSORS:

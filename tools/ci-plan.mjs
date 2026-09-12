@@ -33,7 +33,7 @@ export const toolingTests = new Set([
   'tools/recovery-workspace-test.mjs',
   'tools/bootstrap-seed-manifest-test.sh',
   'tools/bootstrap-seed-arguments-test.sh',
-  'tools/gate6n-measure-test.py',
+  'tools/measure-command-test.py',
   'tools/benchmarksgame-formal/runtime-controller-test.sh',
   'tools/native-runtime-ab/runtime-controller-test.sh',
   'tools/benchmarksgame-build-formal/build-controller-test.sh',

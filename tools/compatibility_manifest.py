@@ -160,18 +160,18 @@ def _expected_targets(seed_manifest: dict[str, Any]) -> list[dict[str, str]]:
 # Exact inventory of reference consumers. Historical experiments retain their
 # source-era oracle; they must not follow a development pin update.
 REFERENCE_WORKFLOWS = {
-    "gate-zero.yml": ("direct", 1),
+    "native-validation.yml": ("direct", 1),
     "pull-request.yml": ("direct", 1),
     "runtime-worker-memory.yml": ("environment", 1),
     "benchmarksgame-formal.yml": ("environment", 1),
     "benchmarksgame-build-formal.yml": ("environment", 1),
-    "gate6n-linux-amd64.yml": ("environment", 1),
+    "linux-amd64-targets.yml": ("environment", 1),
     "daily-performance.yml": ("derived", 1),
     "weekly-performance.yml": ("derived", 1),
     "array-push-fast-path.yml": ("bae19032aa1bb7b263bc827d02606edc6e981c52", 1),
     "gc-temp-push-fast-path.yml": ("bae19032aa1bb7b263bc827d02606edc6e981c52", 1),
     "dynamic-array-address.yml": ("bae19032aa1bb7b263bc827d02606edc6e981c52", 1),
-    "gate6m-formal.yml": ("5dc09070cf7f88a569279f5e63982a6de59d692c", 2),
+    "historical-portable-entry.yml": ("5dc09070cf7f88a569279f5e63982a6de59d692c", 2),
 }
 
 
@@ -236,20 +236,20 @@ def validate_reference_checkouts(root: Path, revision: str) -> dict[str, str]:
             if pins != [pin]:
                 raise ValidationError(f"reference checkout {name}: environment pin differs")
             identities = ['test "$(git -C .type-rb rev-parse HEAD)" = "$TYPE_RB_REVISION"']
-            canonical = ".gate6n-candidate/TYPE_RB_REVISION" if name == "gate6n-linux-amd64.yml" else "TYPE_RB_REVISION"
+            canonical = ".native-target-candidate/TYPE_RB_REVISION" if name == "linux-amd64-targets.yml" else "TYPE_RB_REVISION"
             identities.append(f'test "$(cat {canonical})" = "$TYPE_RB_REVISION"')
         if refs != [expected_ref] * count:
             raise ValidationError(f"reference checkout {name}: exact checkout refs differ")
         for identity in identities:
             if _command_count(source, identity) != count:
                 raise ValidationError(f"reference checkout {name}: post-checkout identity differs")
-    controller = root / "tools/gate6n-linux-amd64.sh"
+    controller = root / "tools/linux-amd64-targets.sh"
     source = _without_comment_lines(_require_text(controller, [], "reference controller"))
     if re.findall(r"(?m)^TYPE_RB_REVISION=(\S+)$", source) != [revision]:
-        raise ValidationError("reference checkout gate6n-linux-amd64.sh: controller pin differs")
+        raise ValidationError("reference checkout linux-amd64-targets.sh: controller pin differs")
     identity = 'test "$(tr -d \'\\n\' < "$candidate_root/TYPE_RB_REVISION")" = "$TYPE_RB_REVISION" ||'
     if _command_count(source, identity) != 1:
-        raise ValidationError("reference checkout gate6n-linux-amd64.sh: candidate identity differs")
+        raise ValidationError("reference checkout linux-amd64-targets.sh: candidate identity differs")
     return sources
 
 
@@ -273,7 +273,7 @@ def validate_repository_values(
         raise ValidationError("typeRB.revision disagrees with TYPE_RB_REVISION")
 
     workflows = validate_reference_checkouts(root, type_rb_revision)
-    workflow = workflows["gate-zero.yml"]
+    workflow = workflows["native-validation.yml"]
 
     if reference_trb is not None:
         try:
@@ -293,7 +293,7 @@ def validate_repository_values(
 
     snapshot_version = manifest["bootstrap"]["snapshotSchemaVersion"]
     snapshot_source = _require_text(
-        root / "src/gate3_snapshot.trb",
+        root / "src/recovery_managed_snapshot.trb",
         [f"if version != {snapshot_version}"],
         "bootstrap snapshot",
     )

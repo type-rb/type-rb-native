@@ -1,26 +1,26 @@
 import { recover_program_fixture } from recovery_fixture
-import { Gate1Instruction } from gate1_mir
-import { Gate3TypeDefinition } from gate3_layout
-import { Gate3Block, Gate3Function, Gate3Instruction, Gate3Module, Gate3ResultType, Gate3Terminator, verify_gate3_mir } from gate3_mir
+import { RecoveryScalarInstruction } from recovery_scalar_mir
+import { RecoveryManagedTypeDefinition } from recovery_managed_layout
+import { RecoveryManagedBlock, RecoveryManagedFunction, RecoveryManagedInstruction, RecoveryManagedModule, RecoveryManagedResultType, RecoveryManagedTerminator, verify_recovery_managed_mir } from recovery_managed_mir
 import { NativeSource } from native_mir
 import { SourceOrigin } from snapshot
 import trb/std/result
 import { describe, expect, test } from trb/std/test
 
-def hash_recovery_module(extra: Gate3Instruction): Gate3Module
+def hash_recovery_module(extra: RecoveryManagedInstruction): RecoveryManagedModule
 	origin := SourceOrigin.new(source_id: "main", start_line: 1, start_column: 1, end_line: 1, end_column: 8)
-	return Gate3Module.new(
+	return RecoveryManagedModule.new(
 		id: "hash-test", entry_function: "main",
 		sources: [NativeSource.new(id: "main", path: "main.trb")],
-		types: [Gate3TypeDefinition::String("String"), Gate3TypeDefinition::Hash("Hash<String, Integer>")],
-		functions: [Gate3Function.new(id: "main", name: "main", parameters: [], result_type: Gate3ResultType::Void, entry: "entry", origin: origin,
-				blocks: [Gate3Block.new(id: "entry", parameters: [], origin: origin,
+		types: [RecoveryManagedTypeDefinition::String("String"), RecoveryManagedTypeDefinition::Hash("Hash<String, Integer>")],
+		functions: [RecoveryManagedFunction.new(id: "main", name: "main", parameters: [], result_type: RecoveryManagedResultType::Void, entry: "entry", origin: origin,
+				blocks: [RecoveryManagedBlock.new(id: "entry", parameters: [], origin: origin,
 						instructions: [
-							Gate3Instruction::StringLiteral("key", "key", origin),
-							Gate3Instruction::Scalar(Gate1Instruction::IntegerLiteral("value", 2, origin)),
-							Gate3Instruction::HashConstruct("table", "Hash<String, Integer>", [], [], origin),
+							RecoveryManagedInstruction::StringLiteral("key", "key", origin),
+							RecoveryManagedInstruction::Scalar(RecoveryScalarInstruction::IntegerLiteral("value", 2, origin)),
+							RecoveryManagedInstruction::HashConstruct("table", "Hash<String, Integer>", [], [], origin),
 							extra,
-						], terminator: Gate3Terminator::Return(nil, origin))])],
+						], terminator: RecoveryManagedTerminator::Return(nil, origin))])],
 	)
 end
 
@@ -45,16 +45,16 @@ describe("Hash snapshot recovery") do
 	test("rejects malformed types, entry counts and operands") do
 		origin := SourceOrigin.new(source_id: "main", start_line: 1, start_column: 1, end_line: 1, end_column: 8)
 		cases := [
-			Gate3Instruction::HashConstruct("bad", "Hash<String, Integer>", ["key"], [], origin),
-			Gate3Instruction::HashGet("bad", "String", "table", "key", origin),
-			Gate3Instruction::HashGet("bad", "Hash<String, Integer>", "value", "key", origin),
-			Gate3Instruction::HashGet("bad", "Hash<String, Integer>", "table", "value", origin),
-			Gate3Instruction::HashContains("bad", "Hash<String, Integer>", "table", "undefined", origin),
-			Gate3Instruction::HashSet("Hash<String, Integer>", "table", "key", "key", origin),
+			RecoveryManagedInstruction::HashConstruct("bad", "Hash<String, Integer>", ["key"], [], origin),
+			RecoveryManagedInstruction::HashGet("bad", "String", "table", "key", origin),
+			RecoveryManagedInstruction::HashGet("bad", "Hash<String, Integer>", "value", "key", origin),
+			RecoveryManagedInstruction::HashGet("bad", "Hash<String, Integer>", "table", "value", origin),
+			RecoveryManagedInstruction::HashContains("bad", "Hash<String, Integer>", "table", "undefined", origin),
+			RecoveryManagedInstruction::HashSet("Hash<String, Integer>", "table", "key", "key", origin),
 		]
 		mut index := 0
 		while index < cases.size()
-			case verify_gate3_mir(hash_recovery_module(cases[index]))
+			case verify_recovery_managed_mir(hash_recovery_module(cases[index]))
 			when Result::Ok(_value)
 				expect(false).to_be_true()
 			when Result::Err(_error)
@@ -65,10 +65,10 @@ describe("Hash snapshot recovery") do
 
 	test("rejects a forged String key layout") do
 		origin := SourceOrigin.new(source_id: "main", start_line: 1, start_column: 1, end_line: 1, end_column: 8)
-		native_module := hash_recovery_module(Gate3Instruction::HashGet("found", "Hash<String, Integer>", "table", "key", origin))
+		native_module := hash_recovery_module(RecoveryManagedInstruction::HashGet("found", "Hash<String, Integer>", "table", "key", origin))
 		mut types := native_module.types
-		types[0] = Gate3TypeDefinition::Record("String", [])
-		case verify_gate3_mir(native_module)
+		types[0] = RecoveryManagedTypeDefinition::Record("String", [])
+		case verify_recovery_managed_mir(native_module)
 		when Result::Ok(_value)
 			expect(false).to_be_true()
 		when Result::Err(_error)

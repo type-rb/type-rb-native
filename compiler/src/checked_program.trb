@@ -3,14 +3,14 @@ import { checked_iteration_require, checked_iteration_shape, checked_range_requi
 import { hash_key_type, hash_type, hash_value_type } from hash_types
 import { mir_hash_operation } from hash_mir
 import { checked_hash_binding_target, checked_hash_method, checked_hash_plan, checked_hash_publish } from hash_checked
-import { gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, sparse_integer_at } from storage
-import { gate4_float_literal_in_range, gate4_integer_literal_in_range, gate4_number_is_float, gate4_small_nonnegative_integer_operand } from literals
-import { MirArrayOperation, MirBlock, MirFunction, MirInstruction, MirLoopTransfer, MirValue, gate4_mir_array_element_type, gate4_mir_instruction_with_payload, mir_array_assignment_plan, mir_array_assignment_valid, mir_function_index, mir_logical_plan, mir_loop_transfer_valid } from mir
-import { Gate4Compiler, Gate4Locals, gate4_diagnostic, gate4_has_diagnostic, gate4_local_add, gate4_local_find, gate4_terminal_token } from state
-import { finish_statement, gate4_advance, gate4_binary_operator_id, gate4_declaration_start, gate4_expect, gate4_expect_identifier, gate4_parse_type, gate4_skip_newlines, gate4_token_is, syntax_block_end, syntax_conditional_tail, syntax_expression_precedence, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_statement_boundary } from parser
-import { gate4_array_element_type, gate4_array_type, gate4_common_array_element_type, gate4_find_field, gate4_find_record_type, gate4_find_visible_function, gate4_find_visible_record, gate4_record_type, gate4_resolve_type_name, gate4_standard_package_import, gate4_standard_package_root, gate4_type_display } from resolution
+import { load_integer, load_string, sparse_integer_at, store_integer, store_string } from storage
+import { float_literal_in_range, integer_literal_in_range, number_is_float, small_nonnegative_integer_operand } from literals
+import { MirArrayOperation, MirBlock, MirFunction, MirInstruction, MirLoopTransfer, MirValue, mir_array_assignment_plan, mir_array_assignment_valid, mir_array_element_type, mir_function_index, mir_instruction_with_payload, mir_logical_plan, mir_loop_transfer_valid } from mir
+import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_add, local_find, terminal_token } from state
+import { advance, binary_operator_id, declaration_start, expect, expect_identifier, finish_statement, parse_type, skip_newlines, syntax_block_end, syntax_conditional_tail, syntax_expression_precedence, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_statement_boundary, token_is } from parser
+import { array_element_type, array_type, common_array_element_type, find_field, find_record_type, find_visible_function, find_visible_record, record_type, resolve_type_name, standard_package_import, standard_package_root, type_display } from resolution
 
-record Gate4CheckedValue
+record CheckedValue
 	type_name: String
 	category: Integer
 	# Exact token index; the portable Integer maximum represents no source value.
@@ -18,7 +18,7 @@ record Gate4CheckedValue
 	mutable: Integer
 end
 
-def gate4_scalar_leaf_inline_eligible(state: Gate4Compiler, function_index: Integer): Boolean
+def scalar_leaf_inline_eligible(state: CompilerState, function_index: Integer): Boolean
 	index := mir_function_index(state.scalar_mir, function_index)
 	if index < 0
 		return false
@@ -26,13 +26,13 @@ def gate4_scalar_leaf_inline_eligible(state: Gate4Compiler, function_index: Inte
 	return state.scalar_mir.functions[index].block_count == 2
 end
 
-def checked_assignment_operation(mut locals: Gate4Locals, kind: Integer, operand: Integer, origin: Integer)
+def checked_assignment_operation(mut locals: CheckedLocals, kind: Integer, operand: Integer, origin: Integer)
 	mut operations := locals.mir_assignment[0]
 	operations.push(MirArrayOperation.new(kind: kind, operand: operand, origin: origin))
 end
 
-def gate4_array_region_operation(
-		mut locals: Gate4Locals,
+def array_region_operation(
+		mut locals: CheckedLocals,
 		kind: Integer,
 		operand: Integer,
 		origin: Integer,
@@ -44,13 +44,13 @@ def gate4_array_region_operation(
 	operations.push(MirArrayOperation.new(kind: kind, operand: operand, origin: origin))
 end
 
-def gate4_checked_value(
+def checked_value(
 		type_name: String,
 		category: Integer,
 		origin: Integer,
 		mutable: Integer,
-	): Gate4CheckedValue
-	return Gate4CheckedValue.new(
+	): CheckedValue
+	return CheckedValue.new(
 		type_name: type_name,
 		category: category,
 		origin: origin,
@@ -58,7 +58,7 @@ def gate4_checked_value(
 	)
 end
 
-def gate4_scalar_mir_type(type_name: String): Integer
+def scalar_mir_type(type_name: String): Integer
 	if type_name == "Integer"
 		return 1
 	end
@@ -80,30 +80,30 @@ def gate4_scalar_mir_type(type_name: String): Integer
 	return 0
 end
 
-def gate4_checked_mir_value(value: Gate4CheckedValue): Integer
+def checked_mir_value(value: CheckedValue): Integer
 	if value.category < 0
 		return - value.category - 1
 	end
 	return - 1
 end
 
-def gate4_mir_checked_value(
+def mir_checked_value(
 		type_name: String,
 		value_id: Integer,
 		origin: Integer,
 		mutable: Integer,
-	): Gate4CheckedValue
-	return gate4_checked_value(type_name, - value_id - 1, origin, mutable)
+	): CheckedValue
+	return checked_value(type_name, - value_id - 1, origin, mutable)
 end
 
-def gate4_scalar_mir_disable(mut locals: Gate4Locals)
+def scalar_mir_disable(mut locals: CheckedLocals)
 	locals.mir_state[0] = 0
 	return
 end
 
-def gate4_scalar_mir_value(
-		mut state: Gate4Compiler,
-		mut locals: Gate4Locals,
+def scalar_mir_value(
+		mut state: CompilerState,
+		mut locals: CheckedLocals,
 		type_id: Integer,
 		origin: Integer,
 	): Integer
@@ -111,15 +111,15 @@ def gate4_scalar_mir_value(
 		return - 1
 	end
 	if type_id == 0
-		gate4_scalar_mir_disable(locals)
+		scalar_mir_disable(locals)
 		return - 1
 	end
-	return gate4_mir_add_value(state, locals, type_id, gate4_load_integer(state.token_lines, origin))
+	return mir_add_value(state, locals, type_id, load_integer(state.token_lines, origin))
 end
 
-def gate4_mir_add_value(
-		state: Gate4Compiler,
-		mut locals: Gate4Locals,
+def mir_add_value(
+		state: CompilerState,
+		mut locals: CheckedLocals,
 		type_id: Integer,
 		line: Integer,
 	): Integer
@@ -135,9 +135,9 @@ def gate4_mir_add_value(
 	return value_id
 end
 
-def gate4_scalar_mir_instruction(
-		state: Gate4Compiler,
-		mut locals: Gate4Locals,
+def scalar_mir_instruction(
+		state: CompilerState,
+		mut locals: CheckedLocals,
 		kind: Integer,
 		result: Integer,
 		first: Integer,
@@ -158,77 +158,77 @@ def gate4_scalar_mir_instruction(
 		))
 end
 
-def gate4_scalar_mir_literal(
-		mut state: Gate4Compiler,
-		mut locals: Gate4Locals,
+def scalar_mir_literal(
+		mut state: CompilerState,
+		mut locals: CheckedLocals,
 		type_name: String,
 		origin: Integer,
 		text: String,
-	): Gate4CheckedValue
-	value_id := gate4_scalar_mir_value(state, locals, gate4_scalar_mir_type(type_name), origin)
+	): CheckedValue
+	value_id := scalar_mir_value(state, locals, scalar_mir_type(type_name), origin)
 	if value_id < 0
-		return gate4_checked_value(type_name, 0, origin, 0)
+		return checked_value(type_name, 0, origin, 0)
 	end
 	literal_index := locals.mir_literal_texts.size()
 	mut fact := 0
 	if type_name == "Integer"
-		if gate4_small_nonnegative_integer_operand(text)
+		if small_nonnegative_integer_operand(text)
 			fact = 1
 		end
 	end
 	locals.mir_literal_texts.push(text)
-	gate4_scalar_mir_instruction(
-		state, locals, 6, value_id, fact, - 1, literal_index, - 1, gate4_load_integer(state.token_lines, origin),
+	scalar_mir_instruction(
+		state, locals, 6, value_id, fact, - 1, literal_index, - 1, load_integer(state.token_lines, origin),
 	)
-	return gate4_mir_checked_value(type_name, value_id, origin, 0)
+	return mir_checked_value(type_name, value_id, origin, 0)
 end
 
-def gate4_scalar_mir_binary(
-		mut state: Gate4Compiler,
-		mut locals: Gate4Locals,
+def scalar_mir_binary(
+		mut state: CompilerState,
+		mut locals: CheckedLocals,
 		operator: String,
-		left: Gate4CheckedValue,
-		right: Gate4CheckedValue,
+		left: CheckedValue,
+		right: CheckedValue,
 		result_type: String,
 		origin: Integer,
-	): Gate4CheckedValue
-	left_id := gate4_checked_mir_value(left)
-	right_id := gate4_checked_mir_value(right)
-	operator_id := gate4_binary_operator_id(operator)
+	): CheckedValue
+	left_id := checked_mir_value(left)
+	right_id := checked_mir_value(right)
+	operator_id := binary_operator_id(operator)
 	if left_id < 0
-		gate4_scalar_mir_disable(locals)
+		scalar_mir_disable(locals)
 	end
 	if right_id < 0
-		gate4_scalar_mir_disable(locals)
+		scalar_mir_disable(locals)
 	end
 	if operator_id == 0
-		gate4_scalar_mir_disable(locals)
+		scalar_mir_disable(locals)
 	end
 	if locals.mir_state[0] == 0
-		return gate4_checked_value(result_type, 0, 9007199254740991, 0)
+		return checked_value(result_type, 0, 9007199254740991, 0)
 	end
-	value_id := gate4_scalar_mir_value(state, locals, gate4_scalar_mir_type(result_type), origin)
+	value_id := scalar_mir_value(state, locals, scalar_mir_type(result_type), origin)
 	mut failure :=- 1
 	if result_type == "Integer"
 		if operator_id <= 5
 			failure = locals.mir_state[3]
 		end
 	end
-	gate4_scalar_mir_instruction(
-		state, locals, 7, value_id, left_id, right_id, operator_id, failure, gate4_load_integer(state.token_lines, origin),
+	scalar_mir_instruction(
+		state, locals, 7, value_id, left_id, right_id, operator_id, failure, load_integer(state.token_lines, origin),
 	)
-	return gate4_mir_checked_value(result_type, value_id, 9007199254740991, 0)
+	return mir_checked_value(result_type, value_id, 9007199254740991, 0)
 end
 
-def gate4_scalar_mir_unary(
-		mut state: Gate4Compiler,
-		mut locals: Gate4Locals,
+def scalar_mir_unary(
+		mut state: CompilerState,
+		mut locals: CheckedLocals,
 		operator: String,
-		value: Gate4CheckedValue,
+		value: CheckedValue,
 		result_type: String,
 		origin: Integer,
-	): Gate4CheckedValue
-	operand := gate4_checked_mir_value(value)
+	): CheckedValue
+	operand := checked_mir_value(value)
 	mut operator_id := 0
 	if operator == "!"
 		operator_id = 1
@@ -240,57 +240,57 @@ def gate4_scalar_mir_unary(
 		operator_id = 3
 	end
 	if operand < 0
-		gate4_scalar_mir_disable(locals)
+		scalar_mir_disable(locals)
 	end
 	if operator_id == 0
-		gate4_scalar_mir_disable(locals)
+		scalar_mir_disable(locals)
 	end
 	if locals.mir_state[0] == 0
-		return gate4_checked_value(result_type, 0, 9007199254740991, 0)
+		return checked_value(result_type, 0, 9007199254740991, 0)
 	end
-	result := gate4_scalar_mir_value(state, locals, gate4_scalar_mir_type(result_type), origin)
-	gate4_scalar_mir_instruction(
-		state, locals, 8, result, operand, - 1, operator_id, - 1, gate4_load_integer(state.token_lines, origin),
+	result := scalar_mir_value(state, locals, scalar_mir_type(result_type), origin)
+	scalar_mir_instruction(
+		state, locals, 8, result, operand, - 1, operator_id, - 1, load_integer(state.token_lines, origin),
 	)
-	return gate4_mir_checked_value(result_type, result, 9007199254740991, 0)
+	return mir_checked_value(result_type, result, 9007199254740991, 0)
 end
 
-def gate4_scalar_mir_convert_float(
-		mut state: Gate4Compiler,
-		mut locals: Gate4Locals,
-		value: Gate4CheckedValue,
+def scalar_mir_convert_float(
+		mut state: CompilerState,
+		mut locals: CheckedLocals,
+		value: CheckedValue,
 		origin: Integer,
-	): Gate4CheckedValue
-	operand := gate4_checked_mir_value(value)
+	): CheckedValue
+	operand := checked_mir_value(value)
 	if operand < 0
-		gate4_scalar_mir_disable(locals)
+		scalar_mir_disable(locals)
 		return value
 	end
-	result := gate4_scalar_mir_value(state, locals, 5, origin)
-	gate4_scalar_mir_instruction(
-		state, locals, 9, result, operand, - 1, 0, - 1, gate4_load_integer(state.token_lines, origin),
+	result := scalar_mir_value(state, locals, 5, origin)
+	scalar_mir_instruction(
+		state, locals, 9, result, operand, - 1, 0, - 1, load_integer(state.token_lines, origin),
 	)
-	return gate4_mir_checked_value("Float", result, 9007199254740991, 0)
+	return mir_checked_value("Float", result, 9007199254740991, 0)
 end
 
-def gate4_type_diagnostic(
-		mut state: Gate4Compiler,
+def type_diagnostic(
+		mut state: CompilerState,
 		line: Integer,
 		message: String,
-	): Gate4CheckedValue
-	gate4_diagnostic(state, "TRBN4004", line, message)
-	return gate4_checked_value("Invalid", 0, 9007199254740991, 0)
+	): CheckedValue
+	diagnostic(state, "TRBN4004", line, message)
+	return checked_value("Invalid", 0, 9007199254740991, 0)
 end
 
-def gate4_numeric_type(type_name: String): Boolean
+def numeric_type(type_name: String): Boolean
 	if type_name == "Integer"
 		return true
 	end
 	return type_name == "Float"
 end
 
-def gate4_check_expected(
-		mut state: Gate4Compiler,
+def check_expected(
+		mut state: CompilerState,
 		actual: String,
 		expected: String,
 		line: Integer,
@@ -307,136 +307,136 @@ def gate4_check_expected(
 	if assignable
 		return true
 	end
-	gate4_diagnostic(
+	diagnostic(
 		state,
 		"TRBN4004",
 		line,
-		"expected " + gate4_type_display(state, expected) + ", found " + gate4_type_display(state, actual),
+		"expected " + type_display(state, expected) + ", found " + type_display(state, actual),
 	)
 	return false
 end
 
-def checked_hash_literal(mut state: Gate4Compiler, mut position: Array<Integer>, mut locals: Gate4Locals, expected: String): Gate4CheckedValue
+def checked_hash_literal(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, expected: String): CheckedValue
 	origin := position[0]
-	line := gate4_load_integer(state.token_lines, origin)
+	line := load_integer(state.token_lines, origin)
 	mut key_type := hash_key_type(expected)
 	mut value_type := hash_value_type(expected)
 	mut entries := 0
-	gate4_advance(position)
-	gate4_skip_newlines(state, position)
-	while !gate4_token_is(state, position[0], "}")
-		key := gate4_check_expression(state, position, locals, 1, key_type)
+	advance(position)
+	skip_newlines(state, position)
+	while !token_is(state, position[0], "}")
+		key := check_expression(state, position, locals, 1, key_type)
 		if key.type_name != "Integer" && key.type_name != "String"
-			return gate4_type_diagnostic(state, line, "Hash key must be String or Integer")
+			return type_diagnostic(state, line, "Hash key must be String or Integer")
 		end
 		key_type = key.type_name
-		if !gate4_expect(state, position, "=>")
-			return gate4_checked_value("Invalid", 0, origin, 0)
+		if !expect(state, position, "=>")
+			return checked_value("Invalid", 0, origin, 0)
 		end
-		value := gate4_check_expression(state, position, locals, 1, hash_value_type(expected))
+		value := check_expression(state, position, locals, 1, hash_value_type(expected))
 		if hash_value_type(expected) == ""
-			common := gate4_common_array_element_type(value_type, value.type_name)
+			common := common_array_element_type(value_type, value.type_name)
 			if common == ""
-				return gate4_type_diagnostic(state, line, "incompatible Hash value types")
+				return type_diagnostic(state, line, "incompatible Hash value types")
 			end
 			value_type = common
 		end
 		entries += 1
-		gate4_skip_newlines(state, position)
-		if !gate4_token_is(state, position[0], ",")
+		skip_newlines(state, position)
+		if !token_is(state, position[0], ",")
 			break
 		end
-		gate4_advance(position)
-		gate4_skip_newlines(state, position)
+		advance(position)
+		skip_newlines(state, position)
 	end
 	finish := position[0]
-	gate4_expect(state, position, "}")
+	expect(state, position, "}")
 	mut type_name := "Hash"
 	if key_type != "" && value_type != ""
 		type_name = hash_type(key_type, value_type)
 	end
 	checked_hash_publish(state, mir_hash_operation(1, origin, finish, origin, type_name, true, entries))
-	return gate4_checked_value(type_name, 0, origin, 1)
+	return checked_value(type_name, 0, origin, 1)
 end
 
-def checked_hash_index(mut state: Gate4Compiler, mut position: Array<Integer>, mut locals: Gate4Locals, receiver: Gate4CheckedValue): Gate4CheckedValue
+def checked_hash_index(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue): CheckedValue
 	origin := position[0]
-	line := gate4_load_integer(state.token_lines, origin)
-	gate4_advance(position)
-	key := gate4_check_expression(state, position, locals, 1, hash_key_type(receiver.type_name))
+	line := load_integer(state.token_lines, origin)
+	advance(position)
+	key := check_expression(state, position, locals, 1, hash_key_type(receiver.type_name))
 	if key.type_name != "Integer" && key.type_name != "String"
-		return gate4_type_diagnostic(state, line, "Hash key must be String or Integer")
+		return type_diagnostic(state, line, "Hash key must be String or Integer")
 	end
 	finish := position[0]
-	gate4_expect(state, position, "]")
+	expect(state, position, "]")
 	mut kind := 2
-	if gate4_token_is(state, position[0], "=")
+	if token_is(state, position[0], "=")
 		kind = 3
 	end
-	if gate4_binary_operator_id(gate4_load_string(state.token_texts, position[0])) >= 17
-		return gate4_type_diagnostic(state, line, "compound assignment to Hash entries is unsupported")
+	if binary_operator_id(load_string(state.token_texts, position[0])) >= 17
+		return type_diagnostic(state, line, "compound assignment to Hash entries is unsupported")
 	end
 	mut type_name := receiver.type_name
 	if type_name == "Hash"
 		if kind != 3
-			return gate4_type_diagnostic(state, line, "cannot index an untyped Hash; add Hash<K, V> annotation")
+			return type_diagnostic(state, line, "cannot index an untyped Hash; add Hash<K, V> annotation")
 		end
 		type_name = hash_type(key.type_name, "")
 	end
 	if kind == 3 && !checked_hash_binding_target(state, receiver.origin)
-		return gate4_type_diagnostic(state, line, "assignment requires a mutable binding")
+		return type_diagnostic(state, line, "assignment requires a mutable binding")
 	end
 	checked_hash_publish(state, mir_hash_operation(kind, origin, finish, receiver.origin, type_name, receiver.mutable != 0, 0))
-	gate4_scalar_mir_disable(locals)
-	gate4_array_region_operation(locals, 6, 0, origin)
-	return gate4_checked_value(hash_value_type(type_name), 0, origin, receiver.mutable)
+	scalar_mir_disable(locals)
+	array_region_operation(locals, 6, 0, origin)
+	return checked_value(hash_value_type(type_name), 0, origin, receiver.mutable)
 end
 
-def checked_hash_refine(mut state: Gate4Compiler, mut locals: Gate4Locals, origin: Integer, value_type: String)
+def checked_hash_refine(mut state: CompilerState, mut locals: CheckedLocals, origin: Integer, value_type: String)
 	plan := checked_hash_plan(state, origin)
 	if plan.kind != 3 || plan.value_type != ""
 		return
 	end
-	binding := gate4_local_find(locals, gate4_load_string(state.token_texts, plan.receiver_origin))
+	binding := local_find(locals, load_string(state.token_texts, plan.receiver_origin))
 	if binding < 0
-		gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, origin), "empty Hash requires a typed binding")
+		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "empty Hash requires a typed binding")
 		return
 	end
 	type_name := hash_type(plan.key_type, value_type)
-	gate4_store_string(locals.types, binding, type_name)
-	literal_origin := gate4_load_integer(locals.hash_literal_origins, binding) - 1
+	store_string(locals.types, binding, type_name)
+	literal_origin := load_integer(locals.hash_literal_origins, binding) - 1
 	literal := checked_hash_plan(state, literal_origin)
 	if literal.kind != 1
-		gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, origin), "empty Hash requires a typed binding")
+		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "empty Hash requires a typed binding")
 		return
 	end
 	checked_hash_publish(state, mir_hash_operation(1, literal.origin, literal.finish, literal.receiver_origin, type_name, true, 0))
 	checked_hash_publish(state, mir_hash_operation(3, plan.origin, plan.finish, plan.receiver_origin, type_name, plan.mutable, 0))
 end
 
-def checked_hash_call(mut state: Gate4Compiler, mut position: Array<Integer>, mut locals: Gate4Locals, receiver: Gate4CheckedValue, method: String): Gate4CheckedValue
+def checked_hash_call(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue, method: String): CheckedValue
 	origin := position[0]
-	line := gate4_load_integer(state.token_lines, origin)
+	line := load_integer(state.token_lines, origin)
 	kind := checked_hash_method(method)
 	if kind == 0
-		return gate4_type_diagnostic(state, line, "unsupported Hash method " + method)
+		return type_diagnostic(state, line, "unsupported Hash method " + method)
 	end
 	if receiver.type_name == "Hash" && kind != 4 && kind != 12
-		return gate4_type_diagnostic(state, line, "Hash method requires a concrete Hash<K, V> type")
+		return type_diagnostic(state, line, "Hash method requires a concrete Hash<K, V> type")
 	end
 	if kind == 6 || kind == 9
 		if receiver.mutable == 0 || !checked_hash_binding_target(state, receiver.origin)
-			return gate4_type_diagnostic(state, line, "Hash mutation requires a mutable binding")
+			return type_diagnostic(state, line, "Hash mutation requires a mutable binding")
 		end
 	end
-	gate4_advance(position)
+	advance(position)
 	mut result_type := receiver.type_name
 	if kind == 5 || kind == 6 || kind == 13
-		gate4_check_expression(state, position, locals, 1, hash_key_type(receiver.type_name))
+		check_expression(state, position, locals, 1, hash_key_type(receiver.type_name))
 		result_type = hash_value_type(receiver.type_name)
 	end
 	if kind == 8 || kind == 9
-		gate4_check_expression(state, position, locals, 1, receiver.type_name)
+		check_expression(state, position, locals, 1, receiver.type_name)
 	end
 	if kind == 4
 		result_type = "Integer"
@@ -445,217 +445,217 @@ def checked_hash_call(mut state: Gate4Compiler, mut position: Array<Integer>, mu
 	elsif kind == 9
 		result_type = "Void"
 	elsif kind == 10
-		result_type = gate4_array_type(hash_key_type(receiver.type_name))
+		result_type = array_type(hash_key_type(receiver.type_name))
 	elsif kind == 11
-		result_type = gate4_array_type(hash_value_type(receiver.type_name))
+		result_type = array_type(hash_value_type(receiver.type_name))
 	end
 	if result_type == ""
-		return gate4_type_diagnostic(state, line, "unsupported Hash result representation")
+		return type_diagnostic(state, line, "unsupported Hash result representation")
 	end
-	gate4_skip_newlines(state, position)
+	skip_newlines(state, position)
 	finish := position[0]
-	gate4_expect(state, position, ")")
+	expect(state, position, ")")
 	checked_hash_publish(state, mir_hash_operation(kind, origin, finish, receiver.origin, receiver.type_name, receiver.mutable != 0, 0))
-	gate4_scalar_mir_disable(locals)
+	scalar_mir_disable(locals)
 	if kind != 4 && kind != 5 && kind != 12
-		gate4_array_region_operation(locals, 6, 0, origin)
+		array_region_operation(locals, 6, 0, origin)
 	end
-	return gate4_checked_value(result_type, 0, 9007199254740991, 0)
+	return checked_value(result_type, 0, 9007199254740991, 0)
 end
 
-def gate4_check_array_literal(
-		mut state: Gate4Compiler,
+def check_array_literal(
+		mut state: CompilerState,
 		mut position: Array<Integer>,
-		mut locals: Gate4Locals,
+		mut locals: CheckedLocals,
 		expected: String,
-	): Gate4CheckedValue
-	line := gate4_load_integer(state.token_lines, position[0])
-	gate4_advance(position)
-	gate4_skip_newlines(state, position)
-	contextual_element_type := gate4_array_element_type(expected)
+	): CheckedValue
+	line := load_integer(state.token_lines, position[0])
+	advance(position)
+	skip_newlines(state, position)
+	contextual_element_type := array_element_type(expected)
 	mut element_type := contextual_element_type
 	mut finished := false
 	while !finished
-		if gate4_token_is(state, position[0], "]")
+		if token_is(state, position[0], "]")
 			finished = true
 		else
-			value := gate4_check_expression(state, position, locals, 1, contextual_element_type)
+			value := check_expression(state, position, locals, 1, contextual_element_type)
 			if contextual_element_type == ""
-				common_type := gate4_common_array_element_type(element_type, value.type_name)
+				common_type := common_array_element_type(element_type, value.type_name)
 				if common_type == ""
-					gate4_check_expected(
+					check_expected(
 						state,
 						value.type_name,
 						element_type,
-						gate4_load_integer(state.token_lines, position[0]),
+						load_integer(state.token_lines, position[0]),
 					)
 				else
 					element_type = common_type
 				end
 			end
-			if gate4_token_is(state, position[0], ",")
-				gate4_advance(position)
-				gate4_skip_newlines(state, position)
+			if token_is(state, position[0], ",")
+				advance(position)
+				skip_newlines(state, position)
 			else
 				finished = true
 			end
 		end
 	end
-	if !gate4_expect(state, position, "]")
-		return gate4_checked_value("Invalid", 0, 9007199254740991, 0)
+	if !expect(state, position, "]")
+		return checked_value("Invalid", 0, 9007199254740991, 0)
 	end
 	if element_type == ""
-		return gate4_type_diagnostic(state, line, "empty Array literal requires a contextual type")
+		return type_diagnostic(state, line, "empty Array literal requires a contextual type")
 	end
-	result_type := gate4_array_type(element_type)
+	result_type := array_type(element_type)
 	if result_type == ""
-		return gate4_type_diagnostic(state, line, "unsupported Array element type " + element_type)
+		return type_diagnostic(state, line, "unsupported Array element type " + element_type)
 	end
-	return gate4_checked_value(result_type, 0, 9007199254740991, 1)
+	return checked_value(result_type, 0, 9007199254740991, 1)
 end
 
-def gate4_check_primary(
-		mut state: Gate4Compiler,
+def check_primary(
+		mut state: CompilerState,
 		mut position: Array<Integer>,
-		mut locals: Gate4Locals,
+		mut locals: CheckedLocals,
 		expected: String,
-	): Gate4CheckedValue
+	): CheckedValue
 	origin := position[0]
-	line := gate4_load_integer(state.token_lines, origin)
-	kind := gate4_load_integer(state.token_kinds, origin)
+	line := load_integer(state.token_lines, origin)
+	kind := load_integer(state.token_kinds, origin)
 	if kind == 2
-		literal := gate4_load_string(state.token_texts, origin)
-		gate4_advance(position)
-		if gate4_number_is_float(literal)
-			if !gate4_float_literal_in_range(literal)
-				return gate4_type_diagnostic(state, line, "Float literal is outside the finite binary64 range")
+		literal := load_string(state.token_texts, origin)
+		advance(position)
+		if number_is_float(literal)
+			if !float_literal_in_range(literal)
+				return type_diagnostic(state, line, "Float literal is outside the finite binary64 range")
 			end
-			return gate4_scalar_mir_literal(state, locals, "Float", origin, literal)
+			return scalar_mir_literal(state, locals, "Float", origin, literal)
 		end
-		if !gate4_integer_literal_in_range(literal)
-			return gate4_type_diagnostic(state, line, "Integer literal is outside the portable range")
+		if !integer_literal_in_range(literal)
+			return type_diagnostic(state, line, "Integer literal is outside the portable range")
 		end
-		return gate4_scalar_mir_literal(state, locals, "Integer", origin, literal)
+		return scalar_mir_literal(state, locals, "Integer", origin, literal)
 	end
 	if kind == 3
-		gate4_scalar_mir_disable(locals)
-		gate4_advance(position)
-		return gate4_checked_value("String", 0, origin, 0)
+		scalar_mir_disable(locals)
+		advance(position)
+		return checked_value("String", 0, origin, 0)
 	end
-	if gate4_token_is(state, position[0], "{")
-		gate4_array_region_operation(locals, 6, 0, origin)
-		gate4_scalar_mir_disable(locals)
+	if token_is(state, position[0], "{")
+		array_region_operation(locals, 6, 0, origin)
+		scalar_mir_disable(locals)
 		return checked_hash_literal(state, position, locals, expected)
 	end
-	if gate4_token_is(state, position[0], "[")
-		gate4_array_region_operation(locals, 6, 0, origin)
-		gate4_scalar_mir_disable(locals)
-		return gate4_check_array_literal(state, position, locals, expected)
+	if token_is(state, position[0], "[")
+		array_region_operation(locals, 6, 0, origin)
+		scalar_mir_disable(locals)
+		return check_array_literal(state, position, locals, expected)
 	end
-	if gate4_token_is(state, position[0], "(")
-		gate4_advance(position)
-		gate4_skip_newlines(state, position)
-		value := gate4_check_expression_value(state, position, locals, 1, expected)
-		gate4_skip_newlines(state, position)
-		gate4_expect(state, position, ")")
+	if token_is(state, position[0], "(")
+		advance(position)
+		skip_newlines(state, position)
+		value := check_expression_value(state, position, locals, 1, expected)
+		skip_newlines(state, position)
+		expect(state, position, ")")
 		return value
 	end
-	if gate4_token_is(state, position[0], "!")
-		gate4_advance(position)
-		value := gate4_check_postfix(
+	if token_is(state, position[0], "!")
+		advance(position)
+		value := check_postfix(
 			state,
 			position,
 			locals,
-			gate4_check_primary(state, position, locals, "Boolean"),
+			check_primary(state, position, locals, "Boolean"),
 		)
-		gate4_check_expected(state, value.type_name, "Boolean", line)
-		return gate4_scalar_mir_unary(state, locals, "!", value, "Boolean", origin)
+		check_expected(state, value.type_name, "Boolean", line)
+		return scalar_mir_unary(state, locals, "!", value, "Boolean", origin)
 	end
-	if gate4_token_is(state, position[0], "-")
-		gate4_advance(position)
-		value := gate4_check_postfix(
+	if token_is(state, position[0], "-")
+		advance(position)
+		value := check_postfix(
 			state,
 			position,
 			locals,
-			gate4_check_primary(state, position, locals, ""),
+			check_primary(state, position, locals, ""),
 		)
-		if !gate4_numeric_type(value.type_name)
-			return gate4_type_diagnostic(state, line, "unary - requires Integer or Float")
+		if !numeric_type(value.type_name)
+			return type_diagnostic(state, line, "unary - requires Integer or Float")
 		end
-		return gate4_scalar_mir_unary(state, locals, "-", value, value.type_name, origin)
+		return scalar_mir_unary(state, locals, "-", value, value.type_name, origin)
 	end
-	if gate4_token_is(state, position[0], "+")
-		gate4_advance(position)
-		value := gate4_check_postfix(
+	if token_is(state, position[0], "+")
+		advance(position)
+		value := check_postfix(
 			state,
 			position,
 			locals,
-			gate4_check_primary(state, position, locals, ""),
+			check_primary(state, position, locals, ""),
 		)
-		if !gate4_numeric_type(value.type_name)
-			return gate4_type_diagnostic(state, line, "unary + requires Integer or Float")
+		if !numeric_type(value.type_name)
+			return type_diagnostic(state, line, "unary + requires Integer or Float")
 		end
-		return gate4_scalar_mir_unary(state, locals, "+", value, value.type_name, origin)
+		return scalar_mir_unary(state, locals, "+", value, value.type_name, origin)
 	end
 	if kind == 1
-		name := gate4_load_string(state.token_texts, origin)
-		gate4_advance(position)
+		name := load_string(state.token_texts, origin)
+		advance(position)
 		if name == "true"
-			return gate4_scalar_mir_literal(state, locals, "Boolean", origin, "true")
+			return scalar_mir_literal(state, locals, "Boolean", origin, "true")
 		end
 		if name == "false"
-			return gate4_scalar_mir_literal(state, locals, "Boolean", origin, "false")
+			return scalar_mir_literal(state, locals, "Boolean", origin, "false")
 		end
-		local_index := gate4_local_find(locals, name)
+		local_index := local_find(locals, name)
 		if local_index >= 0
-			mir_value := gate4_load_integer(locals.mir_values, local_index)
+			mir_value := load_integer(locals.mir_values, local_index)
 			if locals.mir_state[0] > 0
 				if mir_value > 0
-					return gate4_mir_checked_value(
-						gate4_load_string(locals.types, local_index),
+					return mir_checked_value(
+						load_string(locals.types, local_index),
 						mir_value - 1,
 						origin,
-						gate4_load_integer(locals.mutable, local_index),
+						load_integer(locals.mutable, local_index),
 					)
 				end
-				gate4_scalar_mir_disable(locals)
+				scalar_mir_disable(locals)
 			end
-			return gate4_checked_value(
-				gate4_load_string(locals.types, local_index),
+			return checked_value(
+				load_string(locals.types, local_index),
 				0,
 				origin,
-				gate4_load_integer(locals.mutable, local_index),
+				load_integer(locals.mutable, local_index),
 			)
 		end
-		standard_package := gate4_standard_package_import(state, state.active_module[0], name)
+		standard_package := standard_package_import(state, state.active_module[0], name)
 		if standard_package < - 1
-			return gate4_checked_value(gate4_standard_package_root(standard_package), 2 - standard_package, origin, 0)
+			return checked_value(standard_package_root(standard_package), 2 - standard_package, origin, 0)
 		end
 		if name == "puts"
-			return gate4_checked_value("", 1, origin, 0)
+			return checked_value("", 1, origin, 0)
 		end
-		if gate4_find_visible_function(state, state.active_module[0], name) >= 0
-			return gate4_checked_value("", 1, origin, 0)
+		if find_visible_function(state, state.active_module[0], name) >= 0
+			return checked_value("", 1, origin, 0)
 		end
-		if gate4_find_visible_record(state, state.active_module[0], name) >= 0
-			return gate4_checked_value("", 2, origin, 0)
+		if find_visible_record(state, state.active_module[0], name) >= 0
+			return checked_value("", 2, origin, 0)
 		end
-		return gate4_type_diagnostic(state, line, "unresolved value " + name)
+		return type_diagnostic(state, line, "unresolved value " + name)
 	end
-	return gate4_type_diagnostic(state, line, "expected an expression")
+	return type_diagnostic(state, line, "expected an expression")
 end
 
-def gate4_check_call(
-		mut state: Gate4Compiler,
+def check_call(
+		mut state: CompilerState,
 		mut position: Array<Integer>,
-		mut locals: Gate4Locals,
+		mut locals: CheckedLocals,
 		callee_category: Integer,
 		callee_name: String,
-	): Gate4CheckedValue
-	line := gate4_load_integer(state.token_lines, position[0])
-	gate4_advance(position)
-	gate4_skip_newlines(state, position)
-	mut function_index := gate4_find_visible_function(state, state.active_module[0], callee_name)
+	): CheckedValue
+	line := load_integer(state.token_lines, position[0])
+	advance(position)
+	skip_newlines(state, position)
+	mut function_index := find_visible_function(state, state.active_module[0], callee_name)
 	mut parameter_start := 0
 	mut parameter_count := 1
 	mut result_type := "Void"
@@ -672,11 +672,11 @@ def gate4_check_call(
 				result_type = "Float"
 			else
 				if function_index >= 0
-					parameter_start = gate4_load_integer(state.function_parameter_starts, function_index)
-					parameter_count = gate4_load_integer(state.function_parameter_counts, function_index)
-					result_type = gate4_load_string(state.function_result_types, function_index)
+					parameter_start = load_integer(state.function_parameter_starts, function_index)
+					parameter_count = load_integer(state.function_parameter_counts, function_index)
+					result_type = load_string(state.function_result_types, function_index)
 				else
-					gate4_diagnostic(state, "TRBN4004", line, "value is not callable")
+					diagnostic(state, "TRBN4004", line, "value is not callable")
 				end
 			end
 		end
@@ -684,7 +684,7 @@ def gate4_check_call(
 	mut argument_count := 0
 	mut finished := false
 	while !finished
-		if gate4_token_is(state, position[0], ")")
+		if token_is(state, position[0], ")")
 			finished = true
 		else
 			argument_origin := position[0]
@@ -699,15 +699,15 @@ def gate4_check_call(
 					if callee_name == "puts"
 						argument_expected = ""
 					else
-						argument_expected = gate4_load_string(state.parameter_types, parameter_start + argument_count)
+						argument_expected = load_string(state.parameter_types, parameter_start + argument_count)
 					end
 				end
 			end
-			argument := gate4_check_expression(state, position, locals, 1, argument_expected)
+			argument := check_expression(state, position, locals, 1, argument_expected)
 			if function_index >= 0 && argument_count < parameter_count && hash_key_type(argument_expected) != ""
-				if gate4_load_integer(state.parameter_mutable, parameter_start + argument_count) != 0
+				if load_integer(state.parameter_mutable, parameter_start + argument_count) != 0
 					if checked_readonly_reference_binding(state, locals, argument)
-						gate4_diagnostic(state, "TRBN4004", line, "mutable Hash argument requires a mutable binding or fresh value")
+						diagnostic(state, "TRBN4004", line, "mutable Hash argument requires a mutable binding or fresh value")
 					end
 				end
 			end
@@ -715,62 +715,62 @@ def gate4_check_call(
 				if argument.type_name != "String"
 					if argument.type_name != "Integer"
 						if argument.type_name != "Boolean"
-							gate4_diagnostic(state, "TRBN4004", line, "puts does not yet support " + gate4_type_display(state, argument.type_name))
+							diagnostic(state, "TRBN4004", line, "puts does not yet support " + type_display(state, argument.type_name))
 						end
 					end
 				end
 			end
 			if argument.type_name == "Integer"
 				if argument.origin != 9007199254740991
-					if gate4_small_nonnegative_integer_operand(
-							gate4_load_string(state.token_texts, argument.origin),
+					if small_nonnegative_integer_operand(
+							load_string(state.token_texts, argument.origin),
 						)
-						gate4_store_integer(state.mir_nonnegative_facts, argument_origin, 1)
+						store_integer(state.mir_nonnegative_facts, argument_origin, 1)
 					end
 				end
 			end
 			argument_count += 1
-			if gate4_token_is(state, position[0], ",")
-				gate4_advance(position)
-				gate4_skip_newlines(state, position)
+			if token_is(state, position[0], ",")
+				advance(position)
+				skip_newlines(state, position)
 			else
 				finished = true
 			end
 		end
 	end
-	gate4_expect(state, position, ")")
+	expect(state, position, ")")
 	if argument_count != parameter_count
-		gate4_diagnostic(state, "TRBN4004", line, "call argument count does not match " + callee_name)
+		diagnostic(state, "TRBN4004", line, "call argument count does not match " + callee_name)
 	end
-	return gate4_checked_value(result_type, 0, 9007199254740991, 0)
+	return checked_value(result_type, 0, 9007199254740991, 0)
 end
 
-def gate4_check_record_new(
-		mut state: Gate4Compiler,
+def check_record_new(
+		mut state: CompilerState,
 		mut position: Array<Integer>,
-		mut locals: Gate4Locals,
+		mut locals: CheckedLocals,
 		record_name: String,
-	): Gate4CheckedValue
-	record_index := gate4_find_visible_record(state, state.active_module[0], record_name)
-	gate4_array_region_operation(locals, 6, 0, position[0])
-	line := gate4_load_integer(state.token_lines, position[0])
-	gate4_advance(position)
-	gate4_skip_newlines(state, position)
-	field_start := gate4_load_integer(state.record_field_starts, record_index)
-	field_count := gate4_load_integer(state.record_field_counts, record_index)
+	): CheckedValue
+	record_index := find_visible_record(state, state.active_module[0], record_name)
+	array_region_operation(locals, 6, 0, position[0])
+	line := load_integer(state.token_lines, position[0])
+	advance(position)
+	skip_newlines(state, position)
+	field_start := load_integer(state.record_field_starts, record_index)
+	field_count := load_integer(state.record_field_counts, record_index)
 	mut argument_index := 0
 	mut finished := false
 	while !finished
-		if gate4_token_is(state, position[0], ")")
+		if token_is(state, position[0], ")")
 			finished = true
 		else
-			label := gate4_expect_identifier(state, position)
-			gate4_expect(state, position, ":")
+			label := expect_identifier(state, position)
+			expect(state, position, ":")
 			mut expected := "Invalid"
 			if argument_index < field_count
-				expected = gate4_load_string(state.field_types, field_start + argument_index)
-				if label != gate4_load_string(state.field_names, field_start + argument_index)
-					gate4_diagnostic(
+				expected = load_string(state.field_types, field_start + argument_index)
+				if label != load_string(state.field_names, field_start + argument_index)
+					diagnostic(
 						state,
 						"TRBN4004",
 						line,
@@ -778,158 +778,158 @@ def gate4_check_record_new(
 					)
 				end
 			end
-			gate4_check_expression(state, position, locals, 1, expected)
+			check_expression(state, position, locals, 1, expected)
 			argument_index += 1
-			if gate4_token_is(state, position[0], ",")
-				gate4_advance(position)
-				gate4_skip_newlines(state, position)
+			if token_is(state, position[0], ",")
+				advance(position)
+				skip_newlines(state, position)
 			else
 				finished = true
 			end
 		end
 	end
-	gate4_expect(state, position, ")")
+	expect(state, position, ")")
 	if argument_index != field_count
-		gate4_diagnostic(state, "TRBN4004", line, "record field count does not match " + record_name)
+		diagnostic(state, "TRBN4004", line, "record field count does not match " + record_name)
 	end
-	return gate4_checked_value(gate4_record_type(record_index), 0, 9007199254740991, 1)
+	return checked_value(record_type(record_index), 0, 9007199254740991, 1)
 end
 
-def gate4_check_method_call(
-		mut state: Gate4Compiler,
+def check_method_call(
+		mut state: CompilerState,
 		mut position: Array<Integer>,
-		mut locals: Gate4Locals,
-		receiver: Gate4CheckedValue,
+		mut locals: CheckedLocals,
+		receiver: CheckedValue,
 		method: String,
-	): Gate4CheckedValue
+	): CheckedValue
 	if hash_key_type(receiver.type_name) != "" || receiver.type_name == "Hash"
 		return checked_hash_call(state, position, locals, receiver, method)
 	end
-	line := gate4_load_integer(state.token_lines, position[0])
-	gate4_advance(position)
-	gate4_skip_newlines(state, position)
+	line := load_integer(state.token_lines, position[0])
+	advance(position)
+	skip_newlines(state, position)
 	if method == "size"
-		gate4_expect(state, position, ")")
+		expect(state, position, ")")
 		if receiver.type_name == "String"
-			gate4_scalar_mir_disable(locals)
-			return gate4_checked_value("Integer", 0, 9007199254740991, 0)
+			scalar_mir_disable(locals)
+			return checked_value("Integer", 0, 9007199254740991, 0)
 		end
-		if gate4_array_element_type(receiver.type_name) != ""
+		if array_element_type(receiver.type_name) != ""
 			if locals.mir_state[0] >= 2
-				receiver_id := gate4_checked_mir_value(receiver)
+				receiver_id := checked_mir_value(receiver)
 				if receiver_id >= 0
-					result := gate4_scalar_mir_value(state, locals, 1, receiver.origin)
-					gate4_scalar_mir_instruction(
+					result := scalar_mir_value(state, locals, 1, receiver.origin)
+					scalar_mir_instruction(
 						state, locals, 4, result, receiver_id, - 1, 0, - 1, line,
 					)
-					return gate4_mir_checked_value("Integer", result, receiver.origin, 0)
+					return mir_checked_value("Integer", result, receiver.origin, 0)
 				end
 			end
-			gate4_scalar_mir_disable(locals)
-			return gate4_checked_value("Integer", 0, 9007199254740991, 0)
+			scalar_mir_disable(locals)
+			return checked_value("Integer", 0, 9007199254740991, 0)
 		end
-		return gate4_type_diagnostic(state, line, "size is unavailable on " + gate4_type_display(state, receiver.type_name))
+		return type_diagnostic(state, line, "size is unavailable on " + type_display(state, receiver.type_name))
 	end
 	if method == "push"
-		gate4_array_region_operation(locals, 6, 0, position[0])
-		element_type := gate4_array_element_type(receiver.type_name)
+		array_region_operation(locals, 6, 0, position[0])
+		element_type := array_element_type(receiver.type_name)
 		if element_type == ""
-			return gate4_type_diagnostic(state, line, "push is unavailable on " + gate4_type_display(state, receiver.type_name))
+			return type_diagnostic(state, line, "push is unavailable on " + type_display(state, receiver.type_name))
 		end
 		if receiver.mutable == 0
-			gate4_diagnostic(state, "TRBN4004", line, "push receiver is immutable")
+			diagnostic(state, "TRBN4004", line, "push receiver is immutable")
 		end
-		gate4_check_expression(state, position, locals, 1, element_type)
-		gate4_skip_newlines(state, position)
-		gate4_expect(state, position, ")")
-		return gate4_checked_value("Void", 0, 9007199254740991, 0)
+		check_expression(state, position, locals, 1, element_type)
+		skip_newlines(state, position)
+		expect(state, position, ")")
+		return checked_value("Void", 0, 9007199254740991, 0)
 	end
 	if method == "to_i"
-		gate4_expect(state, position, ")")
+		expect(state, position, ")")
 		if receiver.type_name == "String"
-			return gate4_checked_value("Integer", 0, 9007199254740991, 0)
+			return checked_value("Integer", 0, 9007199254740991, 0)
 		end
 		if receiver.type_name == "Float"
-			return gate4_checked_value("Integer", 0, 9007199254740991, 0)
+			return checked_value("Integer", 0, 9007199254740991, 0)
 		end
 	end
 	if method == "to_s"
-		gate4_array_region_operation(locals, 6, 0, position[0])
-		gate4_expect(state, position, ")")
+		array_region_operation(locals, 6, 0, position[0])
+		expect(state, position, ")")
 		if receiver.type_name == "Integer"
-			return gate4_checked_value("String", 0, 9007199254740991, 0)
+			return checked_value("String", 0, 9007199254740991, 0)
 		end
 	end
-	return gate4_type_diagnostic(state, line, "unsupported method " + method)
+	return type_diagnostic(state, line, "unsupported method " + method)
 end
 
-def gate4_check_postfix(
-		mut state: Gate4Compiler,
+def check_postfix(
+		mut state: CompilerState,
 		mut position: Array<Integer>,
-		mut locals: Gate4Locals,
-		initial: Gate4CheckedValue,
-	): Gate4CheckedValue
-	mut value := gate4_checked_value(initial.type_name, initial.category, initial.origin, initial.mutable)
+		mut locals: CheckedLocals,
+		initial: CheckedValue,
+	): CheckedValue
+	mut value := checked_value(initial.type_name, initial.category, initial.origin, initial.mutable)
 	mut scanning := true
 	while scanning
-		if gate4_token_is(state, position[0], "[")
+		if token_is(state, position[0], "[")
 			if hash_key_type(value.type_name) != "" || value.type_name == "Hash"
 				value = checked_hash_index(state, position, locals, value)
-				if gate4_has_diagnostic(state)
+				if has_diagnostic(state)
 					return value
 				end
 				next
 			end
 		end
-		if gate4_token_is(state, position[0], "(")
+		if token_is(state, position[0], "(")
 			mut effect_free := value.category == 5
 			if value.category == 1
-				callee := gate4_find_visible_function(
+				callee := find_visible_function(
 					state,
 					state.active_module[0],
-					gate4_load_string(state.token_texts, value.origin),
+					load_string(state.token_texts, value.origin),
 				)
 				if callee >= 0
-					effect_free = gate4_scalar_leaf_inline_eligible(state, callee)
+					effect_free = scalar_leaf_inline_eligible(state, callee)
 				end
 			end
 			if !effect_free
-				gate4_array_region_operation(locals, 6, 0, position[0])
+				array_region_operation(locals, 6, 0, position[0])
 			end
-			gate4_scalar_mir_disable(locals)
+			scalar_mir_disable(locals)
 			if value.category < 0
-				value = gate4_checked_value(value.type_name, 0, value.origin, value.mutable)
+				value = checked_value(value.type_name, 0, value.origin, value.mutable)
 			end
 			if value.category == 3
-				value = gate4_checked_value(value.type_name, 0, value.origin, value.mutable)
+				value = checked_value(value.type_name, 0, value.origin, value.mutable)
 			end
 			if value.category == 0
-				value = gate4_type_diagnostic(
+				value = type_diagnostic(
 					state,
-					gate4_load_integer(state.token_lines, position[0]),
+					load_integer(state.token_lines, position[0]),
 					"value is not directly callable",
 				)
 				scanning = false
 			else
-				value = gate4_check_call(
+				value = check_call(
 					state,
 					position,
 					locals,
 					value.category,
-					gate4_load_string(state.token_texts, value.origin),
+					load_string(state.token_texts, value.origin),
 				)
 			end
 		else
-			if gate4_token_is(state, position[0], ".")
-				gate4_advance(position)
-				member := gate4_expect_identifier(state, position)
+			if token_is(state, position[0], ".")
+				advance(position)
+				member := expect_identifier(state, position)
 				if member == "each" && syntax_iteration_suffix(state, position[0] - 2) >= 0
 					position[0] -= 2
 					break
 				end
-				if gate4_token_is(state, position[0], "(")
+				if token_is(state, position[0], "(")
 					if member != "size"
-						gate4_scalar_mir_disable(locals)
+						scalar_mir_disable(locals)
 					end
 					if value.category >= 4
 						mut expected_member := "sqrt"
@@ -937,9 +937,9 @@ def gate4_check_postfix(
 							expected_member = "argv"
 						end
 						if member != expected_member
-							value = gate4_type_diagnostic(
+							value = type_diagnostic(
 								state,
-								gate4_load_integer(state.token_lines, position[0]),
+								load_integer(state.token_lines, position[0]),
 								"unsupported standard package member",
 							)
 							scanning = false
@@ -947,47 +947,47 @@ def gate4_check_postfix(
 					else
 						if value.category == 2
 							if member == "new"
-								value = gate4_check_record_new(
+								value = check_record_new(
 									state,
 									position,
 									locals,
-									gate4_load_string(state.token_texts, value.origin),
+									load_string(state.token_texts, value.origin),
 								)
 							else
-								value = gate4_type_diagnostic(
+								value = type_diagnostic(
 									state,
-									gate4_load_integer(state.token_lines, position[0]),
+									load_integer(state.token_lines, position[0]),
 									"unsupported record constructor member " + member,
 								)
 								scanning = false
 							end
 						else
-							value = gate4_check_method_call(state, position, locals, value, member)
+							value = check_method_call(state, position, locals, value, member)
 						end
 					end
 				else
-					record_index := gate4_find_record_type(state, value.type_name)
+					record_index := find_record_type(state, value.type_name)
 					if record_index < 0
-						value = gate4_type_diagnostic(
+						value = type_diagnostic(
 							state,
-							gate4_load_integer(state.token_lines, position[0]),
+							load_integer(state.token_lines, position[0]),
 							"field access requires a record value",
 						)
 						scanning = false
 					else
-						field_index := gate4_find_field(state, record_index, member)
+						field_index := find_field(state, record_index, member)
 						if field_index < 0
-							value = gate4_type_diagnostic(
+							value = type_diagnostic(
 								state,
-								gate4_load_integer(state.token_lines, position[0]),
-								"unknown field " + member + " on " + gate4_type_display(state, value.type_name),
+								load_integer(state.token_lines, position[0]),
+								"unknown field " + member + " on " + type_display(state, value.type_name),
 							)
 							scanning = false
 						else
 							# Category 3 marks a readonly field binding; mutable retains
 							# the value capability for subsequent indexing or methods.
-							value = gate4_checked_value(
-								gate4_load_string(state.field_types, field_index),
+							value = checked_value(
+								load_string(state.field_types, field_index),
 								3,
 								9007199254740991,
 								value.mutable,
@@ -996,78 +996,78 @@ def gate4_check_postfix(
 					end
 				end
 			else
-				if gate4_token_is(state, position[0], "[")
+				if token_is(state, position[0], "[")
 					index_origin := position[0]
 					checked_assignment_operation(locals, 1, 0, index_origin)
-					line := gate4_load_integer(state.token_lines, position[0])
-					receiver_id := gate4_checked_mir_value(value)
-					gate4_advance(position)
-					index := gate4_check_expression(state, position, locals, 1, "Integer")
-					index_id := gate4_checked_mir_value(index)
+					line := load_integer(state.token_lines, position[0])
+					receiver_id := checked_mir_value(value)
+					advance(position)
+					index := check_expression(state, position, locals, 1, "Integer")
+					index_id := checked_mir_value(index)
 					checked_assignment_operation(locals, 2, index_origin, position[0])
 					if value.origin < state.token_count[0]
-						array_local := gate4_local_find(locals, gate4_load_string(state.token_texts, value.origin))
+						array_local := local_find(locals, load_string(state.token_texts, value.origin))
 						if array_local >= 0
-							if gate4_array_element_type(gate4_load_string(locals.types, array_local)) != ""
-								if array_local < gate4_load_integer(state.function_parameter_counts, locals.mir_state[1])
-									gate4_array_region_operation(locals, 4, array_local, position[0])
+							if array_element_type(load_string(locals.types, array_local)) != ""
+								if array_local < load_integer(state.function_parameter_counts, locals.mir_state[1])
+									array_region_operation(locals, 4, array_local, position[0])
 								else
-									gate4_array_region_operation(locals, 5, array_local, position[0])
+									array_region_operation(locals, 5, array_local, position[0])
 								end
 							end
 						end
 					end
 					mut lowered := false
 					if locals.mir_state[0] >= 2
-						element_type := gate4_array_element_type(value.type_name)
+						element_type := array_element_type(value.type_name)
 						if element_type != ""
 							if receiver_id >= 0
 								if index_id >= 0
-									array_type := gate4_scalar_mir_type(value.type_name)
-									address := gate4_scalar_mir_value(
+									array_type := scalar_mir_type(value.type_name)
+									address := scalar_mir_value(
 										state,
 										locals,
 										array_type + 1,
 										value.origin,
 									)
-									gate4_scalar_mir_instruction(
+									scalar_mir_instruction(
 										state, locals, 5, address, receiver_id, index_id, 1, locals.mir_state[11], line,
 									)
-									loaded := gate4_scalar_mir_value(
+									loaded := scalar_mir_value(
 										state,
 										locals,
-										gate4_mir_array_element_type(array_type),
+										mir_array_element_type(array_type),
 										value.origin,
 									)
-									gate4_scalar_mir_instruction(
+									scalar_mir_instruction(
 										state, locals, 10, loaded, address, - 1, 0, - 1, line,
 									)
-									value = gate4_mir_checked_value(element_type, loaded, index_origin, value.mutable)
+									value = mir_checked_value(element_type, loaded, index_origin, value.mutable)
 									lowered = true
 								end
 							end
 						end
 					end
 					if !lowered
-						gate4_scalar_mir_disable(locals)
-						gate4_store_integer(state.mir_nonnegative_facts, position[0], index.mutable)
+						scalar_mir_disable(locals)
+						store_integer(state.mir_nonnegative_facts, position[0], index.mutable)
 					end
-					gate4_expect(state, position, "]")
+					expect(state, position, "]")
 					if !lowered
 						if value.type_name == "String"
-							gate4_array_region_operation(locals, 6, 0, position[0])
-							value = gate4_checked_value("String", 0, 9007199254740991, 0)
+							array_region_operation(locals, 6, 0, position[0])
+							value = checked_value("String", 0, 9007199254740991, 0)
 						else
-							element_type := gate4_array_element_type(value.type_name)
+							element_type := array_element_type(value.type_name)
 							if element_type == ""
-								value = gate4_type_diagnostic(
+								value = type_diagnostic(
 									state,
 									line,
 									"indexing is unavailable on " + value.type_name,
 								)
 								scanning = false
 							else
-								value = gate4_checked_value(element_type, 0, index_origin, value.mutable)
+								value = checked_value(element_type, 0, index_origin, value.mutable)
 							end
 						end
 					end
@@ -1102,8 +1102,8 @@ def checked_binary_plan_type(plan: Integer): String
 	return "Invalid"
 end
 
-def gate4_binary_result_type(
-		mut state: Gate4Compiler,
+def binary_result_type(
+		mut state: CompilerState,
 		operator: String,
 		left: String,
 		right: String,
@@ -1111,30 +1111,30 @@ def gate4_binary_result_type(
 		origin: Integer,
 	): String
 	if left == "Range<Integer>" || right == "Range<Integer>"
-		gate4_diagnostic(state, "TRBN4004", line, "Range comparison is not supported")
+		diagnostic(state, "TRBN4004", line, "Range comparison is not supported")
 		return "Invalid"
 	end
-	operator_id := gate4_binary_operator_id(operator)
+	operator_id := binary_operator_id(operator)
 	if operator_id >= 12
 		if operator_id <= 13
 			plan := mir_logical_plan(operator_id, left, right)
 			if plan == 0
-				gate4_diagnostic(state, "TRBN4004", line, "logical operands must be Boolean")
+				diagnostic(state, "TRBN4004", line, "logical operands must be Boolean")
 				return "Invalid"
 			end
-			gate4_store_integer(state.mir_nonnegative_facts, origin, plan)
+			store_integer(state.mir_nonnegative_facts, origin, plan)
 			return "Boolean"
 		end
 	end
 	mut numeric_pair := false
-	if gate4_numeric_type(left)
-		if gate4_numeric_type(right)
+	if numeric_type(left)
+		if numeric_type(right)
 			numeric_pair = true
 		end
 	end
 	if left != right
 		if !numeric_pair
-			gate4_diagnostic(state, "TRBN4004", line, "binary operands have different types")
+			diagnostic(state, "TRBN4004", line, "binary operands have different types")
 			return "Invalid"
 		end
 	end
@@ -1178,36 +1178,36 @@ def gate4_binary_result_type(
 		end
 	end
 	if plan != 0
-		gate4_store_integer(state.mir_nonnegative_facts, origin, plan)
+		store_integer(state.mir_nonnegative_facts, origin, plan)
 		return checked_binary_plan_type(plan)
 	end
 	mut display_type := left
 	if right == "Float"
 		display_type = "Float"
 	end
-	gate4_diagnostic(state, "TRBN4004", line, "unsupported operator " + operator + " for " + display_type)
+	diagnostic(state, "TRBN4004", line, "unsupported operator " + operator + " for " + display_type)
 	return "Invalid"
 end
 
-def gate4_check_expression_value(
-		mut state: Gate4Compiler,
+def check_expression_value(
+		mut state: CompilerState,
 		mut position: Array<Integer>,
-		mut locals: Gate4Locals,
+		mut locals: CheckedLocals,
 		minimum_precedence: Integer,
 		expected: String,
-	): Gate4CheckedValue
+	): CheckedValue
 	expression_origin := position[0]
-	line := gate4_load_integer(state.token_lines, position[0])
-	mut value := gate4_check_postfix(
+	line := load_integer(state.token_lines, position[0])
+	mut value := check_postfix(
 		state,
 		position,
 		locals,
-		gate4_check_primary(state, position, locals, expected),
+		check_primary(state, position, locals, expected),
 	)
 	mut scanning := true
 	while scanning
 		operator_origin := position[0]
-		operator := gate4_load_string(state.token_texts, position[0])
+		operator := load_string(state.token_texts, position[0])
 		precedence := syntax_expression_precedence(operator)
 		if precedence < minimum_precedence
 			scanning = false
@@ -1215,32 +1215,32 @@ def gate4_check_expression_value(
 			if precedence <= 2
 				# The flat scalar/Array projections cannot represent a conditional
 				# RHS. Keep the structured logical plan and never hoist RHS work.
-				gate4_scalar_mir_disable(locals)
-				gate4_array_region_operation(locals, 6, 0, operator_origin)
+				scalar_mir_disable(locals)
+				array_region_operation(locals, 6, 0, operator_origin)
 			end
-			gate4_advance(position)
-			gate4_skip_newlines(state, position)
+			advance(position)
+			skip_newlines(state, position)
 			end_origin := position[0]
-			right := gate4_check_expression(state, position, locals, precedence + 1, "")
+			right := check_expression(state, position, locals, precedence + 1, "")
 			if precedence == 3
-				gate4_scalar_mir_disable(locals)
-				gate4_array_region_operation(locals, 6, 0, operator_origin)
+				scalar_mir_disable(locals)
+				array_region_operation(locals, 6, 0, operator_origin)
 				if value.type_name != "Integer" || right.type_name != "Integer"
-					return gate4_type_diagnostic(state, line, "Range endpoints must be Integer")
+					return type_diagnostic(state, line, "Range endpoints must be Integer")
 				end
 				mut exclusive := 0
 				if operator == "..."
 					exclusive = 1
 				end
 				state.ranges.push(MirRangeConstruction.new(origin: expression_origin, operator_origin: operator_origin, end_origin: end_origin, finish: position[0], exclusive: exclusive, start_type: value.type_name, end_type: right.type_name))
-				gate4_store_integer(state.range_origins, operator_origin, state.ranges.size())
+				store_integer(state.range_origins, operator_origin, state.ranges.size())
 				checked_range_require(state, expression_origin, operator_origin, end_origin, position[0])
-				value = gate4_checked_value("Range<Integer>", 0, expression_origin, 0)
+				value = checked_value("Range<Integer>", 0, expression_origin, 0)
 				next
 			end
-			result_type := gate4_binary_result_type(state, operator, value.type_name, right.type_name, line, operator_origin)
+			result_type := binary_result_type(state, operator, value.type_name, right.type_name, line, operator_origin)
 			if result_type == "String"
-				gate4_array_region_operation(locals, 6, 0, operator_origin)
+				array_region_operation(locals, 6, 0, operator_origin)
 			end
 			# The compact origin marker exists only while structured checking derives
 			# a backend-neutral loop fact and its enclosing-loop dependency.
@@ -1248,8 +1248,8 @@ def gate4_check_expression_value(
 			if operator == "+"
 				if value.mutable < 0
 					if right.origin != 9007199254740991
-						if gate4_small_nonnegative_integer_operand(
-								gate4_load_string(state.token_texts, right.origin),
+						if small_nonnegative_integer_operand(
+								load_string(state.token_texts, right.origin),
 							)
 							fact = value.mutable
 						end
@@ -1257,9 +1257,9 @@ def gate4_check_expression_value(
 				end
 			end
 			if precedence <= 2
-				value = gate4_checked_value(result_type, 0, 9007199254740991, 0)
+				value = checked_value(result_type, 0, 9007199254740991, 0)
 			else
-				value = gate4_scalar_mir_binary(
+				value = scalar_mir_binary(
 					state,
 					locals,
 					operator,
@@ -1270,37 +1270,37 @@ def gate4_check_expression_value(
 				)
 			end
 			if fact != 0
-				value = gate4_checked_value(value.type_name, value.category, value.origin, fact)
+				value = checked_value(value.type_name, value.category, value.origin, fact)
 			end
 		end
 	end
 	return value
 end
 
-def gate4_check_expression(
-		mut state: Gate4Compiler,
+def check_expression(
+		mut state: CompilerState,
 		mut position: Array<Integer>,
-		mut locals: Gate4Locals,
+		mut locals: CheckedLocals,
 		minimum_precedence: Integer,
 		expected: String,
-	): Gate4CheckedValue
+	): CheckedValue
 	# Context guides Array literals without coercing a grouped operand early.
 	expression_origin := position[0]
-	line := gate4_load_integer(state.token_lines, expression_origin)
-	mut value := gate4_check_expression_value(state, position, locals, minimum_precedence, expected)
-	gate4_check_expected(state, value.type_name, expected, line)
+	line := load_integer(state.token_lines, expression_origin)
+	mut value := check_expression_value(state, position, locals, minimum_precedence, expected)
+	check_expected(state, value.type_name, expected, line)
 	if expected == "Float"
 		if value.type_name == "Integer"
-			value = gate4_scalar_mir_convert_float(state, locals, value, expression_origin)
+			value = scalar_mir_convert_float(state, locals, value, expression_origin)
 		end
 	end
 	return value
 end
 
 def checked_readonly_reference_binding(
-		state: Gate4Compiler,
-		locals: Gate4Locals,
-		value: Gate4CheckedValue,
+		state: CompilerState,
+		locals: CheckedLocals,
+		value: CheckedValue,
 	): Boolean
 	if value.mutable != 0
 		return false
@@ -1311,47 +1311,47 @@ def checked_readonly_reference_binding(
 	if value.origin >= state.token_count[0]
 		return false
 	end
-	if gate4_array_element_type(value.type_name) == "" && hash_key_type(value.type_name) == "" && value.type_name != "Hash"
-		if gate4_find_record_type(state, value.type_name) < 0
+	if array_element_type(value.type_name) == "" && hash_key_type(value.type_name) == "" && value.type_name != "Hash"
+		if find_record_type(state, value.type_name) < 0
 			return false
 		end
 	end
-	return gate4_local_find(locals, gate4_load_string(state.token_texts, value.origin)) >= 0
+	return local_find(locals, load_string(state.token_texts, value.origin)) >= 0
 end
 
-def gate4_check_declaration(
-		mut state: Gate4Compiler,
+def check_declaration(
+		mut state: CompilerState,
 		mut position: Array<Integer>,
-		mut locals: Gate4Locals,
+		mut locals: CheckedLocals,
 	): Boolean
 	mut mutable := 0
-	if gate4_token_is(state, position[0], "mut")
+	if token_is(state, position[0], "mut")
 		mutable = 1
 		if locals.mir_state[0] < 2
-			gate4_scalar_mir_disable(locals)
+			scalar_mir_disable(locals)
 		end
-		gate4_advance(position)
+		advance(position)
 	end
 	declaration_origin := position[0]
-	line := gate4_load_integer(state.token_lines, position[0])
-	name := gate4_expect_identifier(state, position)
+	line := load_integer(state.token_lines, position[0])
+	name := expect_identifier(state, position)
 	mut declared_type := ""
-	if gate4_token_is(state, position[0], ":")
-		gate4_advance(position)
-		declared_type = gate4_parse_type(state, position)
-		resolved_type := gate4_resolve_type_name(state, state.active_module[0], declared_type, false)
+	if token_is(state, position[0], ":")
+		advance(position)
+		declared_type = parse_type(state, position)
+		resolved_type := resolve_type_name(state, state.active_module[0], declared_type, false)
 		if resolved_type == ""
-			gate4_diagnostic(state, "TRBN4004", line, "unknown local type " + declared_type)
+			diagnostic(state, "TRBN4004", line, "unknown local type " + declared_type)
 		else
 			declared_type = resolved_type
 		end
 	end
-	gate4_expect(state, position, ":=")
-	value := gate4_check_expression(state, position, locals, 1, declared_type)
+	expect(state, position, ":=")
+	value := check_expression(state, position, locals, 1, declared_type)
 	value_type := value.type_name
 	if mutable == 1
 		if checked_readonly_reference_binding(state, locals, value)
-			gate4_diagnostic(state, "TRBN4004", line, "cannot initialize mutable " + name + " from an immutable value")
+			diagnostic(state, "TRBN4004", line, "cannot initialize mutable " + name + " from an immutable value")
 		end
 	end
 	mut fact := 0
@@ -1360,7 +1360,7 @@ def gate4_check_declaration(
 			fact = value.mutable
 		end
 		if value.origin != 9007199254740991
-			zero := gate4_load_string(state.token_texts, value.origin)
+			zero := load_string(state.token_texts, value.origin)
 			if zero == "0"
 				fact = 2
 			end
@@ -1374,28 +1374,28 @@ def gate4_check_declaration(
 		local_type = value_type
 	end
 	if local_type == "Void"
-		gate4_diagnostic(state, "TRBN4004", line, "local binding cannot have type Void")
+		diagnostic(state, "TRBN4004", line, "local binding cannot have type Void")
 	end
-	added := gate4_local_add(state, locals, name, local_type, mutable, line)
+	added := local_add(state, locals, name, local_type, mutable, line)
 	if added && local_type == "Hash"
 		if checked_hash_plan(state, value.origin).kind != 1
-			gate4_diagnostic(state, "TRBN4004", line, "untyped Hash aliases require a Hash<K, V> annotation")
+			diagnostic(state, "TRBN4004", line, "untyped Hash aliases require a Hash<K, V> annotation")
 			return false
 		end
-		gate4_store_integer(locals.hash_literal_origins, locals.count[0] - 1, value.origin + 1)
+		store_integer(locals.hash_literal_origins, locals.count[0] - 1, value.origin + 1)
 	end
 	if !added
 		fact = 0
 	else
-		if gate4_array_element_type(local_type) != ""
-			gate4_array_region_operation(locals, 2, locals.count[0] - 1, declaration_origin)
+		if array_element_type(local_type) != ""
+			array_region_operation(locals, 2, locals.count[0] - 1, declaration_origin)
 		end
-		mir_value := gate4_checked_mir_value(value)
+		mir_value := checked_mir_value(value)
 		if locals.mir_state[0] > 0
 			if mir_value >= 0
-				gate4_store_integer(locals.mir_values, locals.count[0] - 1, mir_value + 1)
+				store_integer(locals.mir_values, locals.count[0] - 1, mir_value + 1)
 			else
-				gate4_scalar_mir_disable(locals)
+				scalar_mir_disable(locals)
 			end
 		end
 	end
@@ -1403,7 +1403,7 @@ def gate4_check_declaration(
 	if locals.mir_state[0] >= 2
 		if mutable == 1
 			if fact == 0
-				gate4_scalar_mir_disable(locals)
+				scalar_mir_disable(locals)
 			end
 		end
 	end
@@ -1421,68 +1421,68 @@ def gate4_check_declaration(
 							locals.mir_state[13] = locals.count[0] - 1
 							locals.mir_state[6] = locals.mir_instructions.size()
 						else
-							gate4_scalar_mir_disable(locals)
+							scalar_mir_disable(locals)
 						end
 					else
-						gate4_scalar_mir_disable(locals)
+						scalar_mir_disable(locals)
 					end
 				end
 			else
-				gate4_scalar_mir_disable(locals)
+				scalar_mir_disable(locals)
 			end
 		else
 			# The direct fallback retains its existing adjacent-loop marker until
 			# the remaining Array-owning functions move through MIR.
-			gate4_store_integer(locals.mutable, locals.count[0] - 1, position[0] + 3)
+			store_integer(locals.mutable, locals.count[0] - 1, position[0] + 3)
 			position[1] = fact
 		end
 	end
 	return finished
 end
 
-def gate4_check_simple_statement(
-		mut state: Gate4Compiler,
+def check_simple_statement(
+		mut state: CompilerState,
 		mut position: Array<Integer>,
-		mut locals: Gate4Locals,
+		mut locals: CheckedLocals,
 	): Boolean
 	locals.mir_assignment[0] = []
-	line := gate4_load_integer(state.token_lines, position[0])
-	left := gate4_check_expression(state, position, locals, 1, "")
+	line := load_integer(state.token_lines, position[0])
+	left := check_expression(state, position, locals, 1, "")
 	operator_origin := position[0]
-	operator := gate4_load_string(state.token_texts, position[0])
+	operator := load_string(state.token_texts, position[0])
 	mut assignment := operator == "="
-	if gate4_binary_operator_id(operator) >= 17
+	if binary_operator_id(operator) >= 17
 		assignment = true
 	end
 	if assignment
 		if left.category == 3
-			gate4_diagnostic(state, "TRBN4004", line, "record field is readonly")
+			diagnostic(state, "TRBN4004", line, "record field is readonly")
 		end
 	end
 	if operator == "="
 		if left.mutable == 0
-			gate4_diagnostic(state, "TRBN4004", line, "assignment target is immutable")
+			diagnostic(state, "TRBN4004", line, "assignment target is immutable")
 		end
-		gate4_advance(position)
-		right := gate4_check_expression(state, position, locals, 1, left.type_name)
+		advance(position)
+		right := check_expression(state, position, locals, 1, left.type_name)
 		checked_hash_refine(state, locals, left.origin, right.type_name)
 		if locals.mir_state[0] >= 2
-			gate4_scalar_mir_disable(locals)
+			scalar_mir_disable(locals)
 		end
 	else
-		if gate4_binary_operator_id(operator) >= 17
+		if binary_operator_id(operator) >= 17
 			compound := operator[0]
 			if left.mutable == 0
-				gate4_diagnostic(state, "TRBN4004", line, "assignment target is immutable")
+				diagnostic(state, "TRBN4004", line, "assignment target is immutable")
 			end
-			gate4_advance(position)
-			right := gate4_check_expression(state, position, locals, 1, left.type_name)
-			result_type := gate4_binary_result_type(state, compound, left.type_name, right.type_name, line, operator_origin)
+			advance(position)
+			right := check_expression(state, position, locals, 1, left.type_name)
+			result_type := binary_result_type(state, compound, left.type_name, right.type_name, line, operator_origin)
 			if result_type == "String"
-				gate4_array_region_operation(locals, 6, 0, position[0])
+				array_region_operation(locals, 6, 0, position[0])
 			end
 			if locals.mir_state[0] >= 2
-				local_index := gate4_local_find(locals, gate4_load_string(state.token_texts, left.origin))
+				local_index := local_find(locals, load_string(state.token_texts, left.origin))
 				mut accumulator := false
 				if locals.mir_state[0] == 3
 					if locals.mir_state[18] == 0
@@ -1502,10 +1502,10 @@ def gate4_check_simple_statement(
 					unit_step = right.origin != 9007199254740991
 				end
 				if unit_step
-					unit_step = gate4_load_string(state.token_texts, right.origin) == "1"
+					unit_step = load_string(state.token_texts, right.origin) == "1"
 				end
 				if accumulator
-					result := gate4_scalar_mir_binary(
+					result := scalar_mir_binary(
 						state,
 						locals,
 						compound,
@@ -1514,13 +1514,13 @@ def gate4_check_simple_statement(
 						result_type,
 						left.origin,
 					)
-					result_id := gate4_checked_mir_value(result)
-					gate4_store_integer(locals.mir_values, local_index, result_id + 1)
+					result_id := checked_mir_value(result)
+					store_integer(locals.mir_values, local_index, result_id + 1)
 					locals.mir_state[17] = result_id
 					locals.mir_state[18] = 1
 				else
 					if unit_step
-						result := gate4_scalar_mir_binary(
+						result := scalar_mir_binary(
 							state,
 							locals,
 							compound,
@@ -1529,12 +1529,12 @@ def gate4_check_simple_statement(
 							result_type,
 							left.origin,
 						)
-						result_id := gate4_checked_mir_value(result)
-						gate4_store_integer(locals.mir_values, local_index, result_id + 1)
+						result_id := checked_mir_value(result)
+						store_integer(locals.mir_values, local_index, result_id + 1)
 						locals.mir_state[10] = result_id
 						locals.mir_state[18] = locals.mir_state[18] + 1
 					else
-						gate4_scalar_mir_disable(locals)
+						scalar_mir_disable(locals)
 					end
 				end
 			end
@@ -1542,23 +1542,23 @@ def gate4_check_simple_statement(
 	end
 	if assignment
 		if left.origin < state.token_count[0]
-			if gate4_array_element_type(left.type_name) != ""
-				if !gate4_token_is(state, left.origin, "[")
+			if array_element_type(left.type_name) != ""
+				if !token_is(state, left.origin, "[")
 					# Rebinding an Array variable can invalidate any retained binding
 					# identity. Element stores still leave the header intact.
-					gate4_array_region_operation(locals, 6, 0, operator_origin)
+					array_region_operation(locals, 6, 0, operator_origin)
 				end
 			end
 		end
 	end
 	if assignment
 		if left.origin < state.token_count[0]
-			if gate4_token_is(state, left.origin, "[") && checked_hash_plan(state, left.origin).kind == 0
+			if token_is(state, left.origin, "[") && checked_hash_plan(state, left.origin).kind == 0
 				checked_assignment_operation(locals, 5, left.origin, operator_origin)
 				state.array_assignment_regions.push(locals.mir_assignment[0])
 				region := state.array_assignment_regions.size()
-				gate4_store_integer(state.array_assignment_targets, left.origin, region)
-				gate4_store_integer(state.array_assignment_targets, operator_origin, region)
+				store_integer(state.array_assignment_targets, left.origin, region)
+				store_integer(state.array_assignment_targets, operator_origin, region)
 			end
 		end
 	end
@@ -1567,68 +1567,68 @@ def gate4_check_simple_statement(
 	return finish_statement(state, position)
 end
 
-def gate4_check_conditional(
-		mut state: Gate4Compiler,
+def check_conditional(
+		mut state: CompilerState,
 		mut position: Array<Integer>,
-		mut locals: Gate4Locals,
+		mut locals: CheckedLocals,
 		result_type: String,
 		loop_origin: Integer,
 	): Boolean
 	saved_count := locals.count[0]
-	gate4_array_region_operation(locals, 7, saved_count, position[0])
-	gate4_scalar_mir_disable(locals)
+	array_region_operation(locals, 7, saved_count, position[0])
+	scalar_mir_disable(locals)
 	mut fact_index := 0
 	while fact_index < locals.count[0]
-		if gate4_load_integer(locals.mutable, fact_index) < 0
-			gate4_store_integer(locals.mutable, fact_index, 1)
+		if load_integer(locals.mutable, fact_index) < 0
+			store_integer(locals.mutable, fact_index, 1)
 		end
 		fact_index += 1
 	end
-	line := gate4_load_integer(state.token_lines, position[0])
-	gate4_advance(position)
-	condition := gate4_check_expression(state, position, locals, 1, "Boolean")
-	gate4_check_expected(state, condition.type_name, "Boolean", line)
+	line := load_integer(state.token_lines, position[0])
+	advance(position)
+	condition := check_expression(state, position, locals, 1, "Boolean")
+	check_expected(state, condition.type_name, "Boolean", line)
 	finish_statement(state, position)
-	gate4_check_block(state, position, locals, result_type, loop_origin)
-	gate4_array_region_operation(locals, 3, saved_count, position[0])
+	check_block(state, position, locals, result_type, loop_origin)
+	array_region_operation(locals, 3, saved_count, position[0])
 	locals.count[0] = saved_count
-	while gate4_token_is(state, position[0], "elsif")
-		gate4_array_region_operation(locals, 8, saved_count, position[0])
-		branch_line := gate4_load_integer(state.token_lines, position[0])
-		gate4_advance(position)
-		branch_condition := gate4_check_expression(state, position, locals, 1, "Boolean")
-		gate4_check_expected(state, branch_condition.type_name, "Boolean", branch_line)
+	while token_is(state, position[0], "elsif")
+		array_region_operation(locals, 8, saved_count, position[0])
+		branch_line := load_integer(state.token_lines, position[0])
+		advance(position)
+		branch_condition := check_expression(state, position, locals, 1, "Boolean")
+		check_expected(state, branch_condition.type_name, "Boolean", branch_line)
 		finish_statement(state, position)
-		gate4_check_block(state, position, locals, result_type, loop_origin)
-		gate4_array_region_operation(locals, 3, saved_count, position[0])
+		check_block(state, position, locals, result_type, loop_origin)
+		array_region_operation(locals, 3, saved_count, position[0])
 		locals.count[0] = saved_count
-		if gate4_has_diagnostic(state)
+		if has_diagnostic(state)
 			return false
 		end
 	end
-	if gate4_token_is(state, position[0], "else")
-		gate4_array_region_operation(locals, 9, saved_count, position[0])
-		gate4_advance(position)
+	if token_is(state, position[0], "else")
+		array_region_operation(locals, 9, saved_count, position[0])
+		advance(position)
 		finish_statement(state, position)
-		gate4_check_block(state, position, locals, result_type, loop_origin)
-		gate4_array_region_operation(locals, 3, saved_count, position[0])
+		check_block(state, position, locals, result_type, loop_origin)
+		array_region_operation(locals, 3, saved_count, position[0])
 		locals.count[0] = saved_count
 	end
-	gate4_array_region_operation(locals, 10, saved_count, position[0])
-	gate4_expect(state, position, "end")
+	array_region_operation(locals, 10, saved_count, position[0])
+	expect(state, position, "end")
 	return finish_statement(state, position)
 end
 
-def checked_iteration_binding(mut locals: Gate4Locals, name: String, type_name: String)
+def checked_iteration_binding(mut locals: CheckedLocals, name: String, type_name: String)
 	index := locals.count[0]
-	gate4_store_string(locals.names, index, name)
-	gate4_store_string(locals.types, index, type_name)
-	gate4_store_integer(locals.mutable, index, 1)
-	gate4_store_integer(locals.mir_values, index, 0)
+	store_string(locals.names, index, name)
+	store_string(locals.types, index, type_name)
+	store_integer(locals.mutable, index, 1)
+	store_integer(locals.mir_values, index, 0)
 	locals.count[0] = index + 1
 end
 
-def checked_iteration(mut state: Gate4Compiler, mut position: Array<Integer>, mut locals: Gate4Locals, result_type: String, parent_loop: Integer): Boolean
+def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, result_type: String, parent_loop: Integer): Boolean
 	origin := position[0]
 	encoded := sparse_integer_at(state.iteration_origins, origin)
 	if encoded < 1 || encoded > state.iterations.size()
@@ -1636,23 +1636,23 @@ def checked_iteration(mut state: Gate4Compiler, mut position: Array<Integer>, mu
 	end
 	shape := state.iterations[encoded - 1]
 	if !checked_iteration_shape(state, shape, origin)
-		gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, origin), "invalid iteration syntax plan")
+		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "invalid iteration syntax plan")
 		return false
 	end
-	gate4_scalar_mir_disable(locals)
-	gate4_array_region_operation(locals, 11, locals.count[0], origin)
-	gate4_array_region_operation(locals, 6, 0, origin)
+	scalar_mir_disable(locals)
+	array_region_operation(locals, 11, locals.count[0], origin)
+	array_region_operation(locals, 6, 0, origin)
 	mut fact_index := 0
 	while fact_index < locals.count[0]
-		if gate4_load_integer(locals.mutable, fact_index) < 0
-			gate4_store_integer(locals.mutable, fact_index, 1)
+		if load_integer(locals.mutable, fact_index) < 0
+			store_integer(locals.mutable, fact_index, 1)
 		end
 		fact_index += 1
 	end
-	receiver := gate4_check_expression(state, position, locals, 1, "")
+	receiver := check_expression(state, position, locals, 1, "")
 	element_type := iteration_element_type(receiver.type_name)
 	if element_type == "" || position[0] != shape.receiver_finish
-		gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, origin), "ordinary each requires a supported Array or Range receiver")
+		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "ordinary each requires a supported Array or Range receiver")
 		return false
 	end
 	mut source_kind := 1
@@ -1670,34 +1670,34 @@ def checked_iteration(mut state: Gate4Compiler, mut position: Array<Integer>, mu
 	if source_kind == 2 && plan.index_origin >= 0
 		checked_iteration_binding(locals, "$iteration.ordinal", "Integer")
 	end
-	checked_iteration_binding(locals, gate4_load_string(state.token_texts, plan.element_origin), element_type)
+	checked_iteration_binding(locals, load_string(state.token_texts, plan.element_origin), element_type)
 	if plan.index_origin >= 0
-		if gate4_load_string(state.token_texts, plan.element_origin) == gate4_load_string(state.token_texts, plan.index_origin)
-			gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, plan.index_origin), "iteration block parameter is duplicated")
+		if load_string(state.token_texts, plan.element_origin) == load_string(state.token_texts, plan.index_origin)
+			diagnostic(state, "TRBN4004", load_integer(state.token_lines, plan.index_origin), "iteration block parameter is duplicated")
 			return false
 		end
-		checked_iteration_binding(locals, gate4_load_string(state.token_texts, plan.index_origin), "Integer")
+		checked_iteration_binding(locals, load_string(state.token_texts, plan.index_origin), "Integer")
 	end
 	position[0] = plan.body_start
-	gate4_check_block(state, position, locals, result_type, origin)
+	check_block(state, position, locals, result_type, origin)
 	if position[0] != plan.body_finish
-		gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, origin), "invalid iteration body boundary")
+		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "invalid iteration body boundary")
 	end
-	gate4_array_region_operation(locals, 3, saved, plan.body_finish)
-	gate4_array_region_operation(locals, 12, saved, plan.body_finish)
+	array_region_operation(locals, 3, saved, plan.body_finish)
+	array_region_operation(locals, 12, saved, plan.body_finish)
 	locals.count[0] = saved
 	position[0] = plan.finish
 	return finish_statement(state, position)
 end
 
 def checked_while(
-		mut state: Gate4Compiler,
+		mut state: CompilerState,
 		mut position: Array<Integer>,
-		mut locals: Gate4Locals,
+		mut locals: CheckedLocals,
 		result_type: String,
 	): Boolean
 	loop_start := position[0]
-	gate4_array_region_operation(locals, 11, locals.count[0], loop_start)
+	array_region_operation(locals, 11, locals.count[0], loop_start)
 	mut candidate := locals.count[0] - 1
 	mut active := false
 	mut line := 0
@@ -1708,83 +1708,83 @@ def checked_while(
 			active = locals.count[0] == locals.mir_state[0]
 		end
 		if active
-			header_value := gate4_scalar_mir_value(
+			header_value := scalar_mir_value(
 				state, locals, 1, loop_start,
 			)
-			body_value := gate4_scalar_mir_value(
+			body_value := scalar_mir_value(
 				state, locals, 1, loop_start,
 			)
 			locals.mir_state[12] = body_value
-			gate4_store_integer(locals.mir_values, candidate, header_value + 1)
+			store_integer(locals.mir_values, candidate, header_value + 1)
 			if locals.mir_state[0] == 3
-				accumulator_type := gate4_scalar_mir_type(result_type)
-				accumulator_header := gate4_scalar_mir_value(
+				accumulator_type := scalar_mir_type(result_type)
+				accumulator_header := scalar_mir_value(
 					state, locals, accumulator_type, loop_start,
 				)
-				accumulator_body := gate4_scalar_mir_value(
+				accumulator_body := scalar_mir_value(
 					state, locals, accumulator_type, loop_start,
 				)
-				accumulator_exit := gate4_scalar_mir_value(
+				accumulator_exit := scalar_mir_value(
 					state, locals, accumulator_type, loop_start,
 				)
 				locals.mir_state[14] = accumulator_header
 				locals.mir_state[15] = accumulator_body
 				locals.mir_state[16] = accumulator_exit
-				gate4_store_integer(
+				store_integer(
 					locals.mir_values,
 					locals.mir_state[13],
 					accumulator_header + 1,
 				)
 			end
 		else
-			gate4_scalar_mir_disable(locals)
+			scalar_mir_disable(locals)
 		end
 	else
-		gate4_scalar_mir_disable(locals)
+		scalar_mir_disable(locals)
 		if candidate >= 0
-			active = gate4_load_integer(locals.mutable, candidate) == loop_start + 3
+			active = load_integer(locals.mutable, candidate) == loop_start + 3
 		end
 		if active
 			# The direct fallback retains its enclosing-loop dependency
 			# until the broader Array-owning slice moves through MIR.
 			line = position[1]
-			gate4_store_integer(locals.mutable, candidate, - loop_start)
+			store_integer(locals.mutable, candidate, - loop_start)
 		end
-		gate4_store_integer(state.mir_nonnegative_facts, loop_start, line)
+		store_integer(state.mir_nonnegative_facts, loop_start, line)
 	end
-	line = gate4_load_integer(state.token_lines, position[0])
-	gate4_advance(position)
-	condition := gate4_check_expression(state, position, locals, 1, "Boolean")
-	gate4_check_expected(state, condition.type_name, "Boolean", line)
+	line = load_integer(state.token_lines, position[0])
+	advance(position)
+	condition := check_expression(state, position, locals, 1, "Boolean")
+	check_expected(state, condition.type_name, "Boolean", line)
 	finish_statement(state, position)
 	if locals.mir_state[0] >= 2
-		condition_id := gate4_checked_mir_value(condition)
+		condition_id := checked_mir_value(condition)
 		if condition_id < 0
-			gate4_scalar_mir_disable(locals)
+			scalar_mir_disable(locals)
 		else
 			locals.mir_state[7] = condition_id
 			locals.mir_state[8] = locals.mir_instructions.size() - locals.mir_state[6]
 			locals.mir_state[9] = locals.mir_instructions.size()
 			if locals.mir_state[8] != 2
-				gate4_scalar_mir_disable(locals)
+				scalar_mir_disable(locals)
 			else
 				first := locals.mir_instructions[locals.mir_state[6]]
 				second := locals.mir_instructions[locals.mir_state[6] + 1]
 				if first.kind != 4
-					gate4_scalar_mir_disable(locals)
+					scalar_mir_disable(locals)
 				end
 				if second.kind != 7
-					gate4_scalar_mir_disable(locals)
+					scalar_mir_disable(locals)
 				else
 					if second.payload != 8
-						gate4_scalar_mir_disable(locals)
+						scalar_mir_disable(locals)
 					end
 				end
 			end
 			if locals.mir_state[0] >= 2
-				gate4_store_integer(locals.mir_values, candidate, locals.mir_state[12] + 1)
+				store_integer(locals.mir_values, candidate, locals.mir_state[12] + 1)
 				if locals.mir_state[0] == 3
-					gate4_store_integer(
+					store_integer(
 						locals.mir_values,
 						locals.mir_state[13],
 						locals.mir_state[15] + 1,
@@ -1794,41 +1794,41 @@ def checked_while(
 		end
 	end
 	saved_count := locals.count[0]
-	gate4_check_block(state, position, locals, result_type, loop_start)
+	check_block(state, position, locals, result_type, loop_start)
 	if locals.mir_state[0] >= 2
 		if locals.mir_state[10] < 0
-			gate4_scalar_mir_disable(locals)
+			scalar_mir_disable(locals)
 		end
 		if locals.count[0] != saved_count + 3 - locals.mir_state[0]
-			gate4_scalar_mir_disable(locals)
+			scalar_mir_disable(locals)
 		end
 		if locals.mir_instructions.size() - locals.mir_state[9] != locals.mir_state[0] + 2
-			gate4_scalar_mir_disable(locals)
+			scalar_mir_disable(locals)
 		end
 		if locals.mir_state[18] != locals.mir_state[0] - 1
-			gate4_scalar_mir_disable(locals)
+			scalar_mir_disable(locals)
 		end
 		if locals.mir_state[0] == 3
 			if locals.mir_state[17] < 0
-				gate4_scalar_mir_disable(locals)
+				scalar_mir_disable(locals)
 			end
 		end
 	else
 		if active
-			if gate4_load_integer(locals.mutable, candidate) >= 0
-				gate4_store_integer(state.mir_nonnegative_facts, loop_start, 0)
+			if load_integer(locals.mutable, candidate) >= 0
+				store_integer(state.mir_nonnegative_facts, loop_start, 0)
 			end
-			gate4_store_integer(locals.mutable, candidate, 1)
+			store_integer(locals.mutable, candidate, 1)
 		end
 	end
-	gate4_array_region_operation(locals, 3, saved_count, position[0])
-	gate4_array_region_operation(locals, 12, saved_count, position[0])
+	array_region_operation(locals, 3, saved_count, position[0])
+	array_region_operation(locals, 12, saved_count, position[0])
 	locals.count[0] = saved_count
-	gate4_expect(state, position, "end")
+	expect(state, position, "end")
 	finish_statement(state, position)
 	if locals.mir_state[0] >= 2
 		if locals.mir_state[0] == 3
-			gate4_store_integer(
+			store_integer(
 				locals.mir_values,
 				locals.mir_state[13],
 				locals.mir_state[16] + 1,
@@ -1836,61 +1836,61 @@ def checked_while(
 		end
 		locals.mir_state[5] =- 2
 	end
-	return !gate4_has_diagnostic(state)
+	return !has_diagnostic(state)
 end
 
-def gate4_check_block(
-		mut state: Gate4Compiler,
+def check_block(
+		mut state: CompilerState,
 		mut position: Array<Integer>,
-		mut locals: Gate4Locals,
+		mut locals: CheckedLocals,
 		result_type: String,
 		loop_origin: Integer,
 	): Boolean
-	gate4_skip_newlines(state, position)
+	skip_newlines(state, position)
 	while true
 		if locals.mir_state[0] > 0
 			if locals.mir_state[4] >= 0
 				if !syntax_block_end(state, position[0])
-					gate4_scalar_mir_disable(locals)
+					scalar_mir_disable(locals)
 				end
 			else
 				if locals.mir_state[4] == - 2
 					if !syntax_block_end(state, position[0])
-						gate4_scalar_mir_disable(locals)
+						scalar_mir_disable(locals)
 					end
 				end
 			end
 		end
-		if gate4_terminal_token(state, position[0])
-			gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, position[0]), "unexpected end of input")
+		if terminal_token(state, position[0])
+			diagnostic(state, "TRBN4004", load_integer(state.token_lines, position[0]), "unexpected end of input")
 			break
 		elsif syntax_loop_transfer_kind(state, position[0]) > 0
 			if loop_origin < 0
-				gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, position[0]), gate4_load_string(state.token_texts, position[0]) + " is only valid inside a loop")
+				diagnostic(state, "TRBN4004", load_integer(state.token_lines, position[0]), load_string(state.token_texts, position[0]) + " is only valid inside a loop")
 			else
-				gate4_store_integer(state.loop_transfer_kinds, position[0], syntax_loop_transfer_kind(state, position[0]))
-				gate4_store_integer(state.loop_transfer_targets, position[0], loop_origin + 1)
+				store_integer(state.loop_transfer_kinds, position[0], syntax_loop_transfer_kind(state, position[0]))
+				store_integer(state.loop_transfer_targets, position[0], loop_origin + 1)
 				# A transfer can skip any subsequent update, access or effect. No
 				# complete induction plan or enclosing nonnegative proof survives.
-				gate4_scalar_mir_disable(locals)
-				gate4_array_region_operation(locals, 6, 0, position[0])
+				scalar_mir_disable(locals)
+				array_region_operation(locals, 6, 0, position[0])
 				mut fact_index := 0
 				while fact_index < locals.count[0]
-					if gate4_load_integer(locals.mutable, fact_index) < 0
-						gate4_store_integer(locals.mutable, fact_index, 1)
+					if load_integer(locals.mutable, fact_index) < 0
+						store_integer(locals.mutable, fact_index, 1)
 					end
 					fact_index += 1
 				end
 			end
-			gate4_advance(position)
+			advance(position)
 			finish_statement(state, position)
 		elsif syntax_block_end(state, position[0]) || syntax_conditional_tail(state, position[0])
 			break
-		elsif gate4_token_is(state, position[0], "if")
-			if !gate4_check_conditional(state, position, locals, result_type, loop_origin)
+		elsif token_is(state, position[0], "if")
+			if !check_conditional(state, position, locals, result_type, loop_origin)
 				return false
 			end
-		elsif gate4_token_is(state, position[0], "while")
+		elsif token_is(state, position[0], "while")
 			if !checked_while(state, position, locals, result_type)
 				return false
 			end
@@ -1898,90 +1898,90 @@ def gate4_check_block(
 			if !checked_iteration(state, position, locals, result_type, loop_origin)
 				return false
 			end
-		elsif gate4_token_is(state, position[0], "return")
-			line := gate4_load_integer(state.token_lines, position[0])
-			gate4_advance(position)
+		elsif token_is(state, position[0], "return")
+			line := load_integer(state.token_lines, position[0])
+			advance(position)
 			if syntax_statement_boundary(state, position[0])
 				if result_type != "Void"
-					gate4_diagnostic(state, "TRBN4004", line, "return value is required")
+					diagnostic(state, "TRBN4004", line, "return value is required")
 				else
 					if locals.mir_state[0] == 2
 						if locals.mir_state[5] == - 2
 							locals.mir_state[4] =- 2
 						else
-							gate4_scalar_mir_disable(locals)
+							scalar_mir_disable(locals)
 						end
 					end
 				end
 			else
 				if result_type == "Void"
-					gate4_diagnostic(state, "TRBN4004", line, "Void function cannot return a value")
+					diagnostic(state, "TRBN4004", line, "Void function cannot return a value")
 				else
-					return_value := gate4_check_expression(state, position, locals, 1, result_type)
+					return_value := check_expression(state, position, locals, 1, result_type)
 					if locals.mir_state[0] > 0
-						mir_value := gate4_checked_mir_value(return_value)
+						mir_value := checked_mir_value(return_value)
 						if mir_value >= 0
 							locals.mir_state[4] = mir_value
 						else
-							gate4_scalar_mir_disable(locals)
+							scalar_mir_disable(locals)
 						end
 					end
 				end
 			end
 			finish_statement(state, position)
-		elsif gate4_declaration_start(state, position[0])
-			gate4_check_declaration(state, position, locals)
+		elsif declaration_start(state, position[0])
+			check_declaration(state, position, locals)
 		else
 			if locals.mir_state[0] < 2
-				gate4_scalar_mir_disable(locals)
+				scalar_mir_disable(locals)
 			end
 			statement_start := position[0]
-			gate4_check_simple_statement(state, position, locals)
-			tracked := gate4_local_find(
+			check_simple_statement(state, position, locals)
+			tracked := local_find(
 				locals,
-				gate4_load_string(state.token_texts, statement_start),
+				load_string(state.token_texts, statement_start),
 			)
 			if tracked >= 0
-				assignment := gate4_load_string(state.token_texts, statement_start + 1)
-				if gate4_load_integer(locals.mutable, tracked) < 0
+				assignment := load_string(state.token_texts, statement_start + 1)
+				if load_integer(locals.mutable, tracked) < 0
 					mut valid := assignment != "="
 					if assignment.size() == 2
 						valid = assignment == "+="
 						if valid
-							valid = gate4_load_string(state.token_texts, statement_start + 2) == "1"
+							valid = load_string(state.token_texts, statement_start + 2) == "1"
 						end
 						if valid
-							valid = gate4_load_integer(state.token_kinds, statement_start + 3) == 4
+							valid = load_integer(state.token_kinds, statement_start + 3) == 4
 						end
 					end
 					if !valid
-						gate4_store_integer(locals.mutable, tracked, 1)
+						store_integer(locals.mutable, tracked, 1)
 					end
 				end
 			end
 		end
-		if gate4_has_diagnostic(state)
+		if has_diagnostic(state)
 			break
 		end
 	end
-	return !gate4_has_diagnostic(state)
+	return !has_diagnostic(state)
 end
 
 # Validate exact source and nearest-loop bindings before an adapter consumes
 # the plan. Zero-filled target storage represents absence, never token zero.
-def checked_loop_transfer_kind(mut state: Gate4Compiler, origin: Integer, loop_origin: Integer): Integer
-	encoded_target := gate4_load_integer(state.loop_transfer_targets, origin)
+def checked_loop_transfer_kind(mut state: CompilerState, origin: Integer, loop_origin: Integer): Integer
+	encoded_target := load_integer(state.loop_transfer_targets, origin)
 	mut target :=- 1
 	if encoded_target > 0
 		target = encoded_target - 1
 	end
 	plan := MirLoopTransfer.new(
-		kind: gate4_load_integer(state.loop_transfer_kinds, origin),
+		kind: load_integer(state.loop_transfer_kinds, origin),
 		origin: origin,
 		target: target,
 	)
 	if mir_loop_transfer_valid(plan, origin, syntax_loop_transfer_kind(state, origin), loop_origin, state.token_count[0])
-		if gate4_token_is(state, loop_origin, "while")
+		if token_is(state, loop_origin, "while")
 			return plan.kind
 		end
 		encoded_iteration := sparse_integer_at(state.iteration_origins, loop_origin)
@@ -1994,37 +1994,37 @@ def checked_loop_transfer_kind(mut state: Gate4Compiler, origin: Integer, loop_o
 			end
 		end
 	end
-	gate4_diagnostic(state, "TRBN4004", gate4_load_integer(state.token_lines, origin), "invalid checked loop transfer target")
+	diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "invalid checked loop transfer target")
 	return 0
 end
 
-def gate4_mir_nonnegative_fact(state: Gate4Compiler, origin: Integer): Integer
-	fact := gate4_load_integer(state.mir_nonnegative_facts, origin)
+def mir_nonnegative_fact(state: CompilerState, origin: Integer): Integer
+	fact := load_integer(state.mir_nonnegative_facts, origin)
 	if fact < 0
-		return gate4_mir_nonnegative_fact(state, - fact)
+		return mir_nonnegative_fact(state, - fact)
 	end
 	return fact
 end
 
-def gate4_scalar_mir_begin(
-		mut state: Gate4Compiler,
+def scalar_mir_begin(
+		mut state: CompilerState,
 		function_index: Integer,
-		mut locals: Gate4Locals,
+		mut locals: CheckedLocals,
 	)
 	locals.mir_state[1] = function_index
-	result_type := gate4_load_string(state.function_result_types, function_index)
+	result_type := load_string(state.function_result_types, function_index)
 	mut mode := 1
-	if gate4_scalar_mir_type(result_type) == 0
+	if scalar_mir_type(result_type) == 0
 		if result_type != "Void"
 			return
 		end
 		mode = 2
 	end
-	parameter_start := gate4_load_integer(state.function_parameter_starts, function_index)
-	parameter_finish := parameter_start + gate4_load_integer(state.function_parameter_counts, function_index)
+	parameter_start := load_integer(state.function_parameter_starts, function_index)
+	parameter_finish := parameter_start + load_integer(state.function_parameter_counts, function_index)
 	if parameter_finish - parameter_start == 1
-		parameter_type := gate4_load_string(state.parameter_types, parameter_start)
-		if gate4_array_element_type(parameter_type) == result_type
+		parameter_type := load_string(state.parameter_types, parameter_start)
+		if array_element_type(parameter_type) == result_type
 			mode = 3
 		end
 	end
@@ -2032,16 +2032,16 @@ def gate4_scalar_mir_begin(
 		if parameter_finish - parameter_start != 1
 			return
 		end
-		if gate4_array_element_type(gate4_load_string(state.parameter_types, parameter_start)) == ""
+		if array_element_type(load_string(state.parameter_types, parameter_start)) == ""
 			return
 		end
 	end
 	mut parameter_index := parameter_start
 	while parameter_index < parameter_finish
-		if gate4_load_integer(state.parameter_mutable, parameter_index) != 0
+		if load_integer(state.parameter_mutable, parameter_index) != 0
 			return
 		end
-		if gate4_scalar_mir_type(gate4_load_string(state.parameter_types, parameter_index)) == 0
+		if scalar_mir_type(load_string(state.parameter_types, parameter_index)) == 0
 			return
 		end
 		parameter_index += 1
@@ -2057,28 +2057,28 @@ def gate4_scalar_mir_begin(
 	return
 end
 
-def gate4_mir_add_parameter(
-		mut state: Gate4Compiler,
-		mut locals: Gate4Locals,
+def mir_add_parameter(
+		mut state: CompilerState,
+		mut locals: CheckedLocals,
 		parameter_index: Integer,
 	)
-	type_name := gate4_load_string(state.parameter_types, parameter_index)
+	type_name := load_string(state.parameter_types, parameter_index)
 	mut tag := 0
-	if gate4_array_element_type(type_name) != ""
-		tag = 1 + gate4_load_integer(state.parameter_mutable, parameter_index)
+	if array_element_type(type_name) != ""
+		tag = 1 + load_integer(state.parameter_mutable, parameter_index)
 	end
-	gate4_array_region_operation(locals, 1, tag, parameter_index)
+	array_region_operation(locals, 1, tag, parameter_index)
 	if locals.mir_state[0] == 0
 		return
 	end
-	value_id := gate4_mir_add_value(
-		state, locals, gate4_scalar_mir_type(type_name), gate4_load_integer(state.parameter_lines, parameter_index),
+	value_id := mir_add_value(
+		state, locals, scalar_mir_type(type_name), load_integer(state.parameter_lines, parameter_index),
 	)
-	gate4_store_integer(locals.mir_values, locals.count[0] - 1, value_id + 1)
+	store_integer(locals.mir_values, locals.count[0] - 1, value_id + 1)
 	return
 end
 
-def gate4_mir_block(
+def mir_block(
 		block_id: Integer,
 		source: Integer,
 		line: Integer,
@@ -2116,10 +2116,10 @@ def gate4_mir_block(
 	)
 end
 
-def gate4_scalar_mir_commit(
-		mut state: Gate4Compiler,
+def scalar_mir_commit(
+		mut state: CompilerState,
 		function_index: Integer,
-		mut locals: Gate4Locals,
+		mut locals: CheckedLocals,
 	): String
 	if locals.mir_state[0] == 0
 		return ""
@@ -2143,8 +2143,8 @@ def gate4_scalar_mir_commit(
 		end
 	end
 	source := state.active_module[0]
-	line := gate4_load_integer(state.function_lines, function_index)
-	parameter_count := gate4_load_integer(state.function_parameter_counts, function_index)
+	line := load_integer(state.function_lines, function_index)
+	parameter_count := load_integer(state.function_parameter_counts, function_index)
 	mut entry_block := function_index * 2
 	mut block_count := 2
 	if mode >= 2
@@ -2186,7 +2186,7 @@ def gate4_scalar_mir_commit(
 		# Relocate a literal payload without mutating the function-local record.
 		mut instruction := locals.mir_instructions[index]
 		if instruction.kind == 6
-			instruction = gate4_mir_instruction_with_payload(instruction, instruction.payload + literal_base)
+			instruction = mir_instruction_with_payload(instruction, instruction.payload + literal_base)
 		end
 		native_module.instructions.push(instruction)
 		index += 1
@@ -2232,40 +2232,40 @@ def gate4_scalar_mir_commit(
 		if mode == 3
 			native_module.arguments.push(locals.mir_state[17])
 		end
-		native_module.blocks.push(gate4_mir_block(
+		native_module.blocks.push(mir_block(
 				entry_block, source, line, entry_argument, 0,
 				instruction_base, locals.mir_state[6],
 				1, - 1, header_block, - 1, entry_argument, block_parameter_count, 0, 0, - 1,
 			))
-		native_module.blocks.push(gate4_mir_block(
+		native_module.blocks.push(mir_block(
 				header_block, source, line, header_parameters, block_parameter_count,
 				instruction_base + locals.mir_state[6], locals.mir_state[8],
 				2, locals.mir_state[7], body_block, exit_block,
 				body_argument, block_parameter_count, exit_argument, exit_parameter_count, - 1,
 			))
-		native_module.blocks.push(gate4_mir_block(
+		native_module.blocks.push(mir_block(
 				body_block, source, line, body_parameters, block_parameter_count,
 				instruction_base + locals.mir_state[9], instruction_count - locals.mir_state[9],
 				1, - 1, header_block, - 1, backedge_argument, block_parameter_count, 0, 0, - 1,
 			))
-		native_module.blocks.push(gate4_mir_block(
+		native_module.blocks.push(mir_block(
 				exit_block, source, line, exit_parameters, exit_parameter_count,
 				instruction_base + instruction_count, 0,
 				3, - 1, - 1, - 1, 0, 0, 0, 0, return_value,
 			))
-		native_module.blocks.push(gate4_mir_block(
+		native_module.blocks.push(mir_block(
 				locals.mir_state[3], source, line, 0, 0,
 				instruction_base + instruction_count, 0,
 				4, - 1, - 1, - 1, 0, 0, 0, 0, - 1,
 			))
-		native_module.blocks.push(gate4_mir_block(
+		native_module.blocks.push(mir_block(
 				locals.mir_state[11], source, line, 0, 0,
 				instruction_base + instruction_count, 0,
 				4, - 1, - 1, - 1, 0, 0, 0, 0, - 1,
 			))
 		return ""
 	end
-	native_module.blocks.push(gate4_mir_block(
+	native_module.blocks.push(mir_block(
 			entry_block,
 			source,
 			line,
@@ -2283,7 +2283,7 @@ def gate4_scalar_mir_commit(
 			0,
 			return_value,
 		))
-	native_module.blocks.push(gate4_mir_block(
+	native_module.blocks.push(mir_block(
 			locals.mir_state[3],
 			source,
 			line,
@@ -2304,7 +2304,7 @@ def gate4_scalar_mir_commit(
 	return ""
 end
 
-def checked_array_assignment_store(state: Gate4Compiler, index_origin: Integer): Integer
+def checked_array_assignment_store(state: CompilerState, index_origin: Integer): Integer
 	store_origin := checked_array_assignment_target(state, index_origin) - 1
 	if store_origin < 0
 		return - 1
@@ -2316,16 +2316,16 @@ def checked_array_assignment_store(state: Gate4Compiler, index_origin: Integer):
 	if !mir_array_assignment_valid(index_origin, store_origin, reverse_origin, state.token_count[0])
 		return - 2
 	end
-	operator := gate4_load_string(state.token_texts, store_origin)
+	operator := load_string(state.token_texts, store_origin)
 	if operator != "="
-		if gate4_binary_operator_id(operator) < 17
+		if binary_operator_id(operator) < 17
 			return - 2
 		end
 	end
 	return store_origin
 end
 
-def checked_array_assignment_target(state: Gate4Compiler, origin: Integer): Integer
+def checked_array_assignment_target(state: CompilerState, origin: Integer): Integer
 	region := sparse_integer_at(state.array_assignment_targets, origin) - 1
 	if region < 0
 		return 0
@@ -2347,8 +2347,8 @@ def checked_array_assignment_target(state: Gate4Compiler, origin: Integer): Inte
 	return state.token_count[0] + 1
 end
 
-def checked_array_assignment_plan(state: Gate4Compiler, index_origin: Integer): Integer
-	region := gate4_load_integer(state.array_assignment_targets, index_origin) - 1
+def checked_array_assignment_plan(state: CompilerState, index_origin: Integer): Integer
+	region := load_integer(state.array_assignment_targets, index_origin) - 1
 	if region < 0
 		return - 1
 	end
@@ -2359,16 +2359,16 @@ def checked_array_assignment_plan(state: Gate4Compiler, index_origin: Integer): 
 	if store_origin < 0
 		return - 1
 	end
-	if gate4_load_integer(state.array_assignment_targets, store_origin) != region + 1
+	if load_integer(state.array_assignment_targets, store_origin) != region + 1
 		return - 1
 	end
 	return mir_array_assignment_plan(state.array_assignment_regions[region], index_origin, store_origin, state.token_count[0])
 end
 
-def checked_array_assignment_reads_old(state: Gate4Compiler, index_origin: Integer): Boolean
+def checked_array_assignment_reads_old(state: CompilerState, index_origin: Integer): Boolean
 	store_origin := checked_array_assignment_store(state, index_origin)
 	if store_origin < 0
 		return false
 	end
-	return !gate4_token_is(state, store_origin, "=")
+	return !token_is(state, store_origin, "=")
 end

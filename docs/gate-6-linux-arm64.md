@@ -12,7 +12,7 @@ boundary is defined by
 Gate 6D is complete at measured TypeRB Native revision
 `68497f68ed1c3770c2a457790a6519962a2cb921`. The target implementation,
 permanent Darwin regression coverage, pinned Linux environment,
-TypeRB-authored [`gate6d-benchmark`](../tools/gate6d-benchmark/README.md), and
+TypeRB-authored [`gate6d-benchmark`](https://github.com/type-rb/type-rb-native/blob/d568d9e712452f66fc9c48d6025bf73b79659661/tools/gate6d-benchmark/README.md), and
 reviewed seven-run result pass every registered condition. This is not a
 release and does not create a supported TypeRB target.
 

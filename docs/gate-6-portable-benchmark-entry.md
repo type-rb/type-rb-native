@@ -68,7 +68,7 @@ path.
 
 ## Correctness evidence
 
-The checked-in `corpus/gate6m` sources are shared with the pinned optimized Go
+The checked-in `corpus/portable-entry` sources are shared with the pinned optimized Go
 backend. The successful application covers real arguments, repeated
 `Process.argv()` freshness, zero and signed zero, both portable Integer
 boundaries, canonical formatting, Integer widening, square root, negative
@@ -129,12 +129,12 @@ correction history, and all retained raw artifacts are in the
 [recorded result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-31-gate6m-portable-benchmark-entry-darwin-linux-arm64/README.md).
 
 The TypeRB-authored
-[Gate 6M benchmark controller](../tools/gate6m-benchmark/README.md) owns the
+[Gate 6M benchmark controller](https://github.com/type-rb/type-rb-native/blob/d568d9e712452f66fc9c48d6025bf73b79659661/tools/gate6m-benchmark/README.md) owns the
 Darwin fixed-point, differential, timing, RSS, size, dependency, and process
 inventory procedure. The manually dispatched
 [formal Gate 6M workflow](../.github/workflows/gate6m-formal.yml) runs that
 controller on `macos-15`, runs the separate
-[Linux arm64 verifier](../tools/gate6m-linux.sh) on `ubuntu-24.04-arm`, and
+[Linux arm64 verifier](https://github.com/type-rb/type-rb-native/blob/d568d9e712452f66fc9c48d6025bf73b79659661/tools/gate6m-linux.sh) on `ubuntu-24.04-arm`, and
 enforces the combined target-size bound. The workflow and verifier remain
 pinned to the registered candidate, TypeRB oracle, QBE source release, and
 immutable previous-Native seed. The reviewed successful artifacts are retained

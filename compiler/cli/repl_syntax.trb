@@ -1,8 +1,8 @@
-import { gate4_string_starts_with } from path
-import { gate4_compiler_new, gate4_has_diagnostic } from state
-import { gate4_load_string } from storage
-import { gate4_token_is } from parser
-import { gate4_character_in, gate4_source_slice, gate4_lex, gate4_interpolation_end, gate4_interpolation_quote_end } from compiler
+import { string_starts_with } from path
+import { compiler_new, has_diagnostic } from state
+import { load_string } from storage
+import { token_is } from parser
+import { character_in, compiler_source_slice, lex, interpolation_end, interpolation_quote_end } from compiler
 import { native_cli_byte, native_cli_character, native_cli_cell_width } from host
 
 # Display spans preserve whitespace, comments and unfinished input. They do not
@@ -15,7 +15,7 @@ record ReplSyntax
 end
 
 def repl_word(character: String): Boolean
-	return gate4_character_in(character, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789")
+	return character_in(character, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789")
 end
 
 def repl_keyword(word: String): Boolean
@@ -56,7 +56,7 @@ def repl_syntax_flat(source: String): ReplSyntax
 		else
 			if character == "\""
 				kind = 2
-				finish := gate4_interpolation_quote_end(source, index)
+				finish := interpolation_quote_end(source, index)
 				if finish < 0
 					index = source.size()
 					kind = 7
@@ -64,13 +64,13 @@ def repl_syntax_flat(source: String): ReplSyntax
 					index = finish + 1
 				end
 			else
-				if gate4_character_in(character, "0123456789")
+				if character_in(character, "0123456789")
 					kind = 3
 					mut loop_7 := true
 					while loop_7
 						mut condition_6 := index < source.size()
 						if condition_6
-							condition_6 = gate4_character_in(source[index], "0123456789_.")
+							condition_6 = character_in(source[index], "0123456789_.")
 						end
 						if condition_6
 							index += 1
@@ -92,7 +92,7 @@ def repl_syntax_flat(source: String): ReplSyntax
 								loop_9 = false
 							end
 						end
-						word := gate4_source_slice(source, start, index)
+						word := compiler_source_slice(source, start, index)
 						if repl_keyword(word)
 							kind = 1
 						else
@@ -106,7 +106,7 @@ def repl_syntax_flat(source: String): ReplSyntax
 							if condition_10
 								kind = 3
 							else
-								if gate4_character_in(character, "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+								if character_in(character, "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
 									kind = 5
 								else
 									mut lookahead := index
@@ -144,7 +144,7 @@ def repl_syntax_flat(source: String): ReplSyntax
 				end
 			end
 		end
-		word := gate4_source_slice(source, start, index)
+		word := compiler_source_slice(source, start, index)
 		spans.starts.push(start)
 		spans.ends.push(index)
 		spans.kinds.push(kind)
@@ -168,7 +168,7 @@ def repl_syntax_span(mut spans: ReplSyntax, source: String, start: Integer, fini
 		spans.starts.push(start)
 		spans.ends.push(finish)
 		spans.kinds.push(kind)
-		spans.words.push(gate4_source_slice(source, start, finish))
+		spans.words.push(compiler_source_slice(source, start, finish))
 	end
 	return
 end
@@ -189,14 +189,14 @@ def repl_string_spans(mut spans: ReplSyntax, source: String, start: Integer, fin
 			end
 			if embedded
 				repl_syntax_span(spans, source, chunk, index, 2)
-				mut end_index := gate4_interpolation_end(source, index + 2)
+				mut end_index := interpolation_end(source, index + 2)
 				mut marker_kind := 1
 				if end_index < 0
 					end_index = finish
 					marker_kind = 7
 				end
 				repl_syntax_span(spans, source, index, index + 2, marker_kind)
-				inner := repl_syntax(gate4_source_slice(source, index + 2, end_index))
+				inner := repl_syntax(compiler_source_slice(source, index + 2, end_index))
 				mut part := 0
 				while part < inner.starts.size()
 					repl_syntax_span(spans, source, index + 2 + inner.starts[part], index + 2 + inner.ends[part], inner.kinds[part])
@@ -487,41 +487,41 @@ def repl_next(text: String, cursor: Integer): Integer
 end
 
 def repl_incomplete(text: String): Boolean
-	mut state := gate4_compiler_new(text.size() * 3 + 16)
-	gate4_lex(state, text)
-	if gate4_has_diagnostic(state)
-		message := gate4_load_string(state.diagnostic_messages, 0)
-		return gate4_string_starts_with(message, "unterminated")
+	mut state := compiler_new(text.size() * 3 + 16)
+	lex(state, text)
+	if has_diagnostic(state)
+		message := load_string(state.diagnostic_messages, 0)
+		return string_starts_with(message, "unterminated")
 	end
 	mut depth := 0
 	mut delimiters := 0
 	mut index := 0
 	while index < state.token_count[0]
-		if gate4_token_is(state, index, "def")
+		if token_is(state, index, "def")
 			depth += 1
 		end
-		if gate4_token_is(state, index, "record")
+		if token_is(state, index, "record")
 			depth += 1
 		end
-		if gate4_token_is(state, index, "if")
+		if token_is(state, index, "if")
 			depth += 1
 		end
-		if gate4_token_is(state, index, "while") || gate4_token_is(state, index, "do")
+		if token_is(state, index, "while") || token_is(state, index, "do")
 			depth += 1
 		end
-		if gate4_token_is(state, index, "end")
+		if token_is(state, index, "end")
 			depth -= 1
 		end
-		if gate4_token_is(state, index, "(")
+		if token_is(state, index, "(")
 			delimiters += 1
 		end
-		if gate4_token_is(state, index, "[") || gate4_token_is(state, index, "{")
+		if token_is(state, index, "[") || token_is(state, index, "{")
 			delimiters += 1
 		end
-		if gate4_token_is(state, index, ")")
+		if token_is(state, index, ")")
 			delimiters -= 1
 		end
-		if gate4_token_is(state, index, "]") || gate4_token_is(state, index, "}")
+		if token_is(state, index, "]") || token_is(state, index, "}")
 			delimiters -= 1
 		end
 		index += 1

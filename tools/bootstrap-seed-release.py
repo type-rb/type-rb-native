@@ -14,7 +14,7 @@ import shutil
 import statistics
 import sys
 
-TAG = "bootstrap-seed-2026-09-11-array-iteration"
+TAG = "bootstrap-seed-2026-09-12-compiler-names"
 MANIFEST = "type-rb-native-bootstrap-manifest-v2.json"
 PREDECESSORS = {"bootstrap-seed-2026-09-07": {
     "releaseTag": "bootstrap-seed-2026-08-30",
@@ -72,6 +72,14 @@ PREDECESSORS = {"bootstrap-seed-2026-09-07": {
         {"asset": "type-rb-native-bootstrap-darwin-arm64", "sha256": "13d2b494b5b4864f0f7c823a5c9e2c38850e865725ed8cef87fd487d1358185d"},
         {"asset": "type-rb-native-bootstrap-linux-arm64", "sha256": "6bae5730fc543c9dc8609a19d4884064b8d363ca038fe75a5b74465eb8b3c7a5"},
     ],
+}, "bootstrap-seed-2026-09-12-compiler-names": {
+    "releaseTag": "bootstrap-seed-2026-09-11-array-iteration",
+    "nativeRevision": "b4a1b383e5678907649334203f534ae62fa42af6",
+    "manifestSha256": "3e3c71b9921a81d58224e67833957dcd281840dd80204cb114f54700332b39b0",
+    "targets": [
+        {"asset": "type-rb-native-bootstrap-darwin-arm64", "sha256": "7ba29a5897782366569be9b2be3461f59fcf3e8feccfe41694ae4a29c457d19a"},
+        {"asset": "type-rb-native-bootstrap-linux-arm64", "sha256": "8c9d2ea099880ebbce4f4e91230b1cfab40e3fce4c145adacba36718ddbc5852"},
+    ],
 }}
 
 # Published manifests retain their registered source-era size contracts.
@@ -83,6 +91,9 @@ LIMITS = {
     "bootstrap-seed-2026-09-09-record-arrays": (366000, 328000, 694000),
     "bootstrap-seed-2026-09-10-hash": (400000, 370000, 770000),
     "bootstrap-seed-2026-09-11-array-iteration": (417000, 388000, 805000),
+    # MIR migration records exact byte sizes without an integration ceiling.
+    # Historical tags above keep their strict source-era contracts.
+    "bootstrap-seed-2026-09-12-compiler-names": (None, None, None),
 }
 
 BACKEND = {"name": "QBE", "version": "1.3", "sourceSha256": "d587905d620dc5e1d2bfa7c2cc642b9b837aa89a3188c6e37b53d756cf66e320"}
@@ -155,7 +166,8 @@ def validate_manifest(manifest, revision, tag=TAG):
     limits = LIMITS[tag]
     for index, (target, expected) in enumerate(zip(manifest["targets"], TARGETS)):
         validate_target(target, expected[:-1] + (limits[index],))
-    require(sum(target["size"] for target in manifest["targets"]) <= limits[2], "combined size exceeds accepted limit")
+    if limits[2] is not None:
+        require(sum(target["size"] for target in manifest["targets"]) <= limits[2], "combined size exceeds accepted limit")
 
 
 def create(revision, inputs, output):

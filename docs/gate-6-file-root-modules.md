@@ -62,7 +62,7 @@ and inside the registered 25% boundary. Native builds 44.89% faster, uses
 48.22% less build RSS and 65.32% less runtime RSS, and produces a stripped
 application 97.82% smaller than Go with no overhead relative to flattened
 Native. The fixed-point compiler is 199,992 stripped bytes. The TypeRB-authored
-[`gate6e-benchmark`](../tools/gate6e-benchmark/README.md) records the compiler
+[`gate6e-benchmark`](https://github.com/type-rb/type-rb-native/blob/d568d9e712452f66fc9c48d6025bf73b79659661/tools/gate6e-benchmark/README.md) records the compiler
 closure, raw series, hashes, dependency inventory, and recovery provenance.
 
 ## Deferred scope

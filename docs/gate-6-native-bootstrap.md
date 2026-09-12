@@ -83,7 +83,7 @@ size and SHA-256 must be identical, stripped compiler code must not grow from
 greater-than-2x regression stops the slice for diagnosis.
 
 The TypeRB-authored
-[`gate6c-benchmark`](../tools/gate6c-benchmark/README.md) accepts a prepared B1
+[`gate6c-benchmark`](https://github.com/type-rb/type-rb-native/blob/d568d9e712452f66fc9c48d6025bf73b79659661/tools/gate6c-benchmark/README.md) accepts a prepared B1
 seed rather than invoking recovery. It constructs and verifies the chained
 fixed point before recording indexed warmups, alternating elapsed-time and RSS
 observations, executable/QBE hashes and sizes, seed provenance, and the exact

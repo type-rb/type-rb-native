@@ -1,11 +1,11 @@
 import { ReplStore, ReplEnvironment, repl_store, repl_value, repl_float, repl_get } from repl_model
 import { repl_hash_new, repl_hash_set } from repl_hash
 import { hash_key_type } from hash_types
-import { Gate4Compiler } from state
-import { gate4_type_display, gate4_find_record_type } from resolution
-import { gate4_load_integer, gate4_load_string } from storage
-import { gate4_integer_string } from literals
-import { gate4_string_starts_with } from path
+import { CompilerState } from state
+import { type_display, find_record_type } from resolution
+import { load_integer, load_string } from storage
+import { integer_string } from literals
+import { string_starts_with } from path
 import { native_cli_float_text } from host
 
 def repl_find(environment: ReplEnvironment, name: String): Integer
@@ -43,10 +43,10 @@ def repl_coerce(mut store: ReplStore, id: Integer, expected: String): Integer
 	return id
 end
 
-def repl_render(state: Gate4Compiler, store: ReplStore, id: Integer, depth: Integer): String
+def repl_render(state: CompilerState, store: ReplStore, id: Integer, depth: Integer): String
 	value := repl_get(store, id)
 	if value.type_name == "Integer"
-		return gate4_integer_string(value.integer)
+		return integer_string(value.integer)
 	end
 	if value.type_name == "Float"
 		return native_cli_float_text(value.floating)
@@ -84,7 +84,7 @@ def repl_render(state: Gate4Compiler, store: ReplStore, id: Integer, depth: Inte
 		if store.integers[value.children[2]] == 1
 			operator = "..."
 		end
-		return gate4_integer_string(store.integers[value.children[0]]) + operator + gate4_integer_string(store.integers[value.children[1]])
+		return integer_string(store.integers[value.children[0]]) + operator + integer_string(store.integers[value.children[1]])
 	end
 	if value.type_name == "Void"
 		return ""
@@ -109,9 +109,9 @@ def repl_render(state: Gate4Compiler, store: ReplStore, id: Integer, depth: Inte
 		end
 		return rendered + "}"
 	end
-	mut result := gate4_type_display(state, value.type_name) + "("
+	mut result := type_display(state, value.type_name) + "("
 	mut closing := ")"
-	if gate4_string_starts_with(value.type_name, "Array<")
+	if string_starts_with(value.type_name, "Array<")
 		result = "["
 		closing = "]"
 	end
@@ -120,10 +120,10 @@ def repl_render(state: Gate4Compiler, store: ReplStore, id: Integer, depth: Inte
 		if index > 0
 			result += ", "
 		end
-		record_index := gate4_find_record_type(state, value.type_name)
+		record_index := find_record_type(state, value.type_name)
 		if record_index >= 0
-			start := gate4_load_integer(state.record_field_starts, record_index)
-			result += gate4_load_string(state.field_names, start + index) + ": "
+			start := load_integer(state.record_field_starts, record_index)
+			result += load_string(state.field_names, start + index) + ": "
 		end
 		result += repl_render(state, store, value.children[index], depth + 1)
 		index += 1

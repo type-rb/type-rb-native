@@ -1,4 +1,4 @@
-# Gate 4 Compiler Conformance Corpus
+# Native Compiler Conformance Corpus
 
 This corpus fixes the behavioral boundary of the self-hosted compiler. Every
 source is passed to the compiler at runtime. The harness runs each applicable
@@ -152,13 +152,13 @@ sources. All three must produce distinct QBE and distinct runtime output. This
 guards against an embedded artifact, a source-insensitive generator, or a
 compiler path that bypasses its runtime input.
 
-The `file-root` directory is the representative Gate 6E import closure used by
+The `file-root` directory is the representative file-root import closure used by
 the permanent bootstrap differential tests. `file-root-flattened.trb` preserves
 the same workload and observable output in one source file so the benchmark can
 isolate file-root module overhead from ordinary Native code generation.
 
 This is an experimental subset corpus, not the TypeRB language conformance
-suite. Full language and package compatibility remains outside Gate 4.
+suite. Full language and package compatibility remains outside the implemented Native subset.
 
 `elsif-recovery` restricts its values to the v4 snapshot subset and verifies
 ordered conditions and managed String joins through snapshot recovery and

@@ -248,7 +248,7 @@ if test -f "$transition_policy" && test -f "$control_flow_marker"; then
 	fi
 fi
 compiler_entry=$compiler_project/src/compiler.trb
-configured_project=$repository_root/corpus/gate6k/configured-project/trbconfig.jsonc
+configured_project=$repository_root/corpus/configured-project/configured-project/trbconfig.jsonc
 
 test -f "$compiler_entry" || fail "compiler entry is missing"
 test -f "$configured_project" || fail "configured-project fixture is missing"
@@ -457,7 +457,7 @@ require_no_intermediates "$failure_directory"
 
 space_directory=$workspace/path-with-spaces/'configured project'
 mkdir -p "$space_directory"
-cp -R "$repository_root/corpus/gate6k/configured-project/." "$space_directory/"
+cp -R "$repository_root/corpus/configured-project/configured-project/." "$space_directory/"
 "$b4" build "$space_directory/trbconfig.jsonc" \
 	--output "$space_directory/program with spaces" \
 	--qbe "$qbe" --cc "$cc" --target "$profile"
@@ -551,13 +551,13 @@ warmup_build() {
 
 if test "$profile" = linux-amd64-v0; then
 	cat > "$evidence/measurement-policy.txt" <<'EOF'
-policy=external-gate6n-controller
+policy=external-native-target-controller
 legacy-bootstrap-observations=excluded
 EOF
 	cat > "$evidence/medians.txt" <<'EOF'
 b1-b2 excluded=setup-only-transition
-b2-b3 excluded=external-gate6n-controller
-b3-b4 excluded=external-gate6n-controller
+b2-b3 excluded=external-native-target-controller
+b3-b4 excluded=external-native-target-controller
 EOF
 else
 	printf 'policy=bootstrap-seed-legacy\n' > "$evidence/measurement-policy.txt"
@@ -665,7 +665,7 @@ if test "$os" = linux; then
 	if grep -E 'execve\("[^"]*/(go|trb|sh|bash|zsh)"' "$evidence/process.trace" > /dev/null; then
 		fail "ordinary Linux trace contains a forbidden executable"
 	fi
-	if grep -F 'g4_project_linker_lld' "$compiler_entry" > /dev/null; then
+	if grep -F 'trbn_project_linker_lld' "$compiler_entry" > /dev/null; then
 		grep -E 'execve\("[^"]*/ld\.lld"' "$evidence/process.trace" > /dev/null ||
 			fail "ordinary Linux trace did not launch ld.lld"
 	fi

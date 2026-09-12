@@ -1,12 +1,12 @@
 import { hash_key_type, hash_type, hash_value_type } from hash_types
-import { gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string } from storage
-import { gate4_path_basename, gate4_path_directory, gate4_string_starts_with, gate4_string_without_suffix } from path
-import { gate4_ascii_code, gate4_integer_string } from literals
-import { Gate4Compiler, Gate4Locals, find_name_index, function_index_key, gate4_diagnostic, gate4_has_diagnostic, gate4_local_find, gate4_locals_new, gate4_terminal_token } from state
-import { gate4_token_is, syntax_loop_transfer_kind } from parser
+import { load_integer, load_string, store_integer, store_string } from storage
+import { path_basename, path_directory, string_starts_with, string_without_suffix } from path
+import { ascii_code, integer_string } from literals
+import { CheckedLocals, CompilerState, diagnostic, find_name_index, function_index_key, has_diagnostic, local_find, locals_new, terminal_token } from state
+import { syntax_loop_transfer_kind, token_is } from parser
 
-def gate4_import_path_value(raw: String): String
-	mut path := gate4_string_without_suffix(raw, ".trb")
+def import_path_value(raw: String): String
+	mut path := string_without_suffix(raw, ".trb")
 	if path == ""
 		return ""
 	end
@@ -72,15 +72,15 @@ def gate4_import_path_value(raw: String): String
 	return normalized
 end
 
-def gate4_normalize_import_path(mut state: Gate4Compiler, raw: String, line: Integer): String
-	normalized := gate4_import_path_value(raw)
+def normalize_import_path(mut state: CompilerState, raw: String, line: Integer): String
+	normalized := import_path_value(raw)
 	if normalized == ""
-		gate4_diagnostic(state, "TRBN4003", line, "invalid project import path " + raw)
+		diagnostic(state, "TRBN4003", line, "invalid project import path " + raw)
 	end
 	return normalized
 end
 
-def gate4_ascii_fold(value: String): String
+def ascii_fold(value: String): String
 	upper := "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	mut result := ""
 	mut index := 0
@@ -102,7 +102,7 @@ def gate4_ascii_fold(value: String): String
 	return result
 end
 
-def gate4_path_root_key(name: String): String
+def path_root_key(name: String): String
 	mut without_underscores := ""
 	mut index := 0
 	while index < name.size()
@@ -111,10 +111,10 @@ def gate4_path_root_key(name: String): String
 		end
 		index += 1
 	end
-	return gate4_ascii_fold(without_underscores)
+	return ascii_fold(without_underscores)
 end
 
-def gate4_standard_package_target(path: String): Integer
+def standard_package_target(path: String): Integer
 	if path == "trb/std/process"
 		return - 2
 	end
@@ -124,34 +124,34 @@ def gate4_standard_package_target(path: String): Integer
 	return - 1
 end
 
-def gate4_standard_package_root(target: Integer): String
+def standard_package_root(target: Integer): String
 	if target == - 2
 		return "Process"
 	end
 	return "Math"
 end
 
-def gate4_standard_package_import(
-		mut state: Gate4Compiler,
+def standard_package_import(
+		mut state: CompilerState,
 		module_index: Integer,
 		name: String,
 	): Integer
-	import_index := gate4_find_import_binding(state, module_index, name)
+	import_index := find_import_binding(state, module_index, name)
 	if import_index < 0
 		return - 1
 	end
-	target := gate4_load_integer(state.import_targets, import_index)
+	target := load_integer(state.import_targets, import_index)
 	if target < - 1
-		gate4_store_integer(state.import_used, import_index, 1)
+		store_integer(state.import_used, import_index, 1)
 	end
 	return target
 end
 
-def gate4_find_record_in_module(state: Gate4Compiler, module_index: Integer, name: String): Integer
+def find_record_in_module(state: CompilerState, module_index: Integer, name: String): Integer
 	mut index := state.record_count[0] - 1
 	while index >= 0
-		if gate4_load_integer(state.record_modules, index) == module_index
-			if gate4_load_string(state.record_names, index) == name
+		if load_integer(state.record_modules, index) == module_index
+			if load_string(state.record_names, index) == name
 				return index
 			end
 		end
@@ -160,15 +160,15 @@ def gate4_find_record_in_module(state: Gate4Compiler, module_index: Integer, nam
 	return - 1
 end
 
-def gate4_find_function_in_module(state: Gate4Compiler, module_index: Integer, name: String): Integer
+def find_function_in_module(state: CompilerState, module_index: Integer, name: String): Integer
 	return find_name_index(state.function_lookup, function_index_key(module_index, name))
 end
 
-def gate4_find_import_binding(state: Gate4Compiler, module_index: Integer, name: String): Integer
-	start := gate4_load_integer(state.module_import_starts, module_index)
-	mut index := start + gate4_load_integer(state.module_import_counts, module_index) - 1
+def find_import_binding(state: CompilerState, module_index: Integer, name: String): Integer
+	start := load_integer(state.module_import_starts, module_index)
+	mut index := start + load_integer(state.module_import_counts, module_index) - 1
 	while index >= start
-		if gate4_load_string(state.import_symbols, index) == name
+		if load_string(state.import_symbols, index) == name
 			return index
 		end
 		index -= 1
@@ -176,63 +176,63 @@ def gate4_find_import_binding(state: Gate4Compiler, module_index: Integer, name:
 	return - 1
 end
 
-def gate4_find_visible_record(mut state: Gate4Compiler, module_index: Integer, name: String): Integer
-	local := gate4_find_record_in_module(state, module_index, name)
+def find_visible_record(mut state: CompilerState, module_index: Integer, name: String): Integer
+	local := find_record_in_module(state, module_index, name)
 	if local >= 0
 		return local
 	end
-	import_index := gate4_find_import_binding(state, module_index, name)
+	import_index := find_import_binding(state, module_index, name)
 	if import_index < 0
 		return - 1
 	end
-	target := gate4_load_integer(state.import_targets, import_index)
+	target := load_integer(state.import_targets, import_index)
 	if target < 0
 		return - 1
 	end
-	resolved := gate4_find_record_in_module(
+	resolved := find_record_in_module(
 		state,
 		target,
-		gate4_load_string(state.import_declarations, import_index),
+		load_string(state.import_declarations, import_index),
 	)
 	if resolved >= 0
-		gate4_store_integer(state.import_used, import_index, 1)
+		store_integer(state.import_used, import_index, 1)
 	end
 	return resolved
 end
 
-def gate4_find_visible_function(mut state: Gate4Compiler, module_index: Integer, name: String): Integer
-	local := gate4_find_function_in_module(state, module_index, name)
+def find_visible_function(mut state: CompilerState, module_index: Integer, name: String): Integer
+	local := find_function_in_module(state, module_index, name)
 	if local >= 0
 		return local
 	end
-	import_index := gate4_find_import_binding(state, module_index, name)
+	import_index := find_import_binding(state, module_index, name)
 	if import_index < 0
 		return - 1
 	end
-	target := gate4_load_integer(state.import_targets, import_index)
+	target := load_integer(state.import_targets, import_index)
 	if target < 0
 		return - 1
 	end
-	resolved := gate4_find_function_in_module(
+	resolved := find_function_in_module(
 		state,
 		target,
-		gate4_load_string(state.import_declarations, import_index),
+		load_string(state.import_declarations, import_index),
 	)
 	if resolved >= 0
-		gate4_store_integer(state.import_used, import_index, 1)
+		store_integer(state.import_used, import_index, 1)
 	end
 	return resolved
 end
 
-def gate4_record_type(record_index: Integer): String
-	return "Record#" + gate4_integer_string(record_index)
+def record_type(record_index: Integer): String
+	return "Record#" + integer_string(record_index)
 end
 
-def gate4_find_record_type(state: Gate4Compiler, type_name: String): Integer
+def find_record_type(state: CompilerState, type_name: String): Integer
 	mut found :=- 1
 	mut index := 0
 	while index < state.record_count[0]
-		if gate4_record_type(index) == type_name
+		if record_type(index) == type_name
 			found = index
 		end
 		index += 1
@@ -240,26 +240,26 @@ def gate4_find_record_type(state: Gate4Compiler, type_name: String): Integer
 	return found
 end
 
-def gate4_type_display(state: Gate4Compiler, type_name: String): String
+def type_display(state: CompilerState, type_name: String): String
 	if hash_key_type(type_name) != ""
-		return "Hash<" + hash_key_type(type_name) + ", " + gate4_type_display(state, hash_value_type(type_name)) + ">"
+		return "Hash<" + hash_key_type(type_name) + ", " + type_display(state, hash_value_type(type_name)) + ">"
 	end
-	record_index := gate4_find_record_type(state, type_name)
+	record_index := find_record_type(state, type_name)
 	if record_index >= 0
-		return gate4_load_string(state.record_names, record_index)
+		return load_string(state.record_names, record_index)
 	end
-	element := gate4_array_element_type(type_name)
+	element := array_element_type(type_name)
 	if element != ""
-		return "Array<" + gate4_type_display(state, element) + ">"
+		return "Array<" + type_display(state, element) + ">"
 	end
 	return type_name
 end
 
-def gate4_find_field(state: Gate4Compiler, record_index: Integer, name: String): Integer
-	start := gate4_load_integer(state.record_field_starts, record_index)
-	mut index := start + gate4_load_integer(state.record_field_counts, record_index) - 1
+def find_field(state: CompilerState, record_index: Integer, name: String): Integer
+	start := load_integer(state.record_field_starts, record_index)
+	mut index := start + load_integer(state.record_field_counts, record_index) - 1
 	while index >= start
-		if gate4_load_string(state.field_names, index) == name
+		if load_string(state.field_names, index) == name
 			return index
 		end
 		index -= 1
@@ -267,7 +267,7 @@ def gate4_find_field(state: Gate4Compiler, record_index: Integer, name: String):
 	return - 1
 end
 
-def gate4_builtin_type_exists(type_name: String, allow_void: Boolean): Boolean
+def builtin_type_exists(type_name: String, allow_void: Boolean): Boolean
 	if type_name == "Integer" || type_name == "Range<Integer>"
 		return true
 	end
@@ -283,47 +283,47 @@ def gate4_builtin_type_exists(type_name: String, allow_void: Boolean): Boolean
 	if type_name == "Void"
 		return allow_void
 	end
-	if gate4_array_element_type(type_name) != ""
+	if array_element_type(type_name) != ""
 		return true
 	end
 	return false
 end
 
-def gate4_resolve_type_name(
-		mut state: Gate4Compiler,
+def resolve_type_name(
+		mut state: CompilerState,
 		module_index: Integer,
 		type_name: String,
 		allow_void: Boolean,
 	): String
 	key := hash_key_type(type_name)
 	if key != ""
-		value := gate4_resolve_type_name(state, module_index, hash_value_type(type_name), false)
+		value := resolve_type_name(state, module_index, hash_value_type(type_name), false)
 		if value == ""
 			return ""
 		end
 		return hash_type(key, value)
 	end
-	if gate4_builtin_type_exists(type_name, allow_void)
+	if builtin_type_exists(type_name, allow_void)
 		return type_name
 	end
-	record_index := gate4_find_visible_record(state, module_index, type_name)
+	record_index := find_visible_record(state, module_index, type_name)
 	if record_index >= 0
-		return gate4_record_type(record_index)
+		return record_type(record_index)
 	end
-	mut element := gate4_array_inner_name(type_name)
+	mut element := array_inner_name(type_name)
 	if element != ""
 		mut depth := 1
 		while depth < 3
-			nested := gate4_array_inner_name(element)
+			nested := array_inner_name(element)
 			if nested == ""
 				break
 			end
 			element = nested
 			depth += 1
 		end
-		leaf := gate4_find_visible_record(state, module_index, element)
+		leaf := find_visible_record(state, module_index, element)
 		if leaf >= 0
-			mut resolved := gate4_record_type(leaf)
+			mut resolved := record_type(leaf)
 			while depth > 0
 				resolved = "Array<" + resolved + ">"
 				depth -= 1
@@ -336,11 +336,11 @@ end
 
 # Extract syntax only; declaration resolution or canonical element validation
 # must establish the type before this spelling reaches checked lowering.
-def gate4_array_inner_name(type_name: String): String
+def array_inner_name(type_name: String): String
 	if type_name.size() < 8
 		return ""
 	end
-	if !gate4_string_starts_with(type_name, "Array<")
+	if !string_starts_with(type_name, "Array<")
 		return ""
 	end
 	finish := type_name.size() - 1
@@ -356,22 +356,22 @@ def gate4_array_inner_name(type_name: String): String
 	return element
 end
 
-def gate4_record_array_element(type_name: String): String
+def record_array_element(type_name: String): String
 	if type_name.size() < 15
 		return ""
 	end
-	element := gate4_array_inner_name(type_name)
+	element := array_inner_name(type_name)
 	mut leaf := element
 	mut depth := 1
 	while depth < 3
-		nested := gate4_array_inner_name(leaf)
+		nested := array_inner_name(leaf)
 		if nested == ""
 			break
 		end
 		leaf = nested
 		depth += 1
 	end
-	if !gate4_string_starts_with(leaf, "Record#")
+	if !string_starts_with(leaf, "Record#")
 		return ""
 	end
 	if leaf.size() < 8
@@ -384,7 +384,7 @@ def gate4_record_array_element(type_name: String): String
 	end
 	mut digit := 7
 	while digit < leaf.size()
-		code := gate4_ascii_code(leaf[digit])
+		code := ascii_code(leaf[digit])
 		if code < 48
 			return ""
 		end
@@ -396,9 +396,9 @@ def gate4_record_array_element(type_name: String): String
 	return element
 end
 
-def gate4_array_element_type(type_name: String): String
+def array_element_type(type_name: String): String
 	if type_name == "Array<Range<Integer>>" || type_name == "Array<Array<Range<Integer>>>" || type_name == "Array<Array<Array<Range<Integer>>>>"
-		return gate4_array_inner_name(type_name)
+		return array_inner_name(type_name)
 	end
 	if type_name == "Array<Integer>"
 		return "Integer"
@@ -436,18 +436,18 @@ def gate4_array_element_type(type_name: String): String
 	if type_name == "Array<Array<Array<Boolean>>>"
 		return "Array<Array<Boolean>>"
 	end
-	return gate4_record_array_element(type_name)
+	return record_array_element(type_name)
 end
 
-def gate4_array_type(element_type: String): String
+def array_type(element_type: String): String
 	result := "Array<" + element_type + ">"
-	if gate4_builtin_type_exists(result, false)
+	if builtin_type_exists(result, false)
 		return result
 	end
 	return ""
 end
 
-def gate4_common_array_element_type(left: String, right: String): String
+def common_array_element_type(left: String, right: String): String
 	if left == ""
 		return right
 	end
@@ -467,24 +467,24 @@ def gate4_common_array_element_type(left: String, right: String): String
 	return ""
 end
 
-def gate4_resolution_local_add(
-		mut locals: Gate4Locals,
+def resolution_local_add(
+		mut locals: CheckedLocals,
 		name: String,
 		type_name: String,
 		mutable: Integer,
 	)
-	if gate4_local_find(locals, name) < 0
+	if local_find(locals, name) < 0
 		index := locals.count[0]
-		gate4_store_string(locals.names, index, name)
-		gate4_store_string(locals.types, index, type_name)
-		gate4_store_integer(locals.mutable, index, mutable)
-		gate4_store_integer(locals.mir_values, index, 0)
+		store_string(locals.names, index, name)
+		store_string(locals.types, index, type_name)
+		store_integer(locals.mutable, index, mutable)
+		store_integer(locals.mir_values, index, 0)
 		locals.count[0] = index + 1
 	end
 	return
 end
 
-def gate4_resolution_keyword(name: String): Boolean
+def resolution_keyword(name: String): Boolean
 	if name == "do"
 		return true
 	end
@@ -519,25 +519,25 @@ def gate4_resolution_keyword(name: String): Boolean
 	return keyword
 end
 
-def gate4_is_typed_local_declaration(state: Gate4Compiler, index: Integer): Boolean
+def is_typed_local_declaration(state: CompilerState, index: Integer): Boolean
 	mut depth := 0
 	mut cursor := index + 2
-	while !gate4_terminal_token(state, cursor)
-		if gate4_load_integer(state.token_kinds, cursor) == 4
+	while !terminal_token(state, cursor)
+		if load_integer(state.token_kinds, cursor) == 4
 			return false
 		end
-		if gate4_token_is(state, cursor, ":=")
+		if token_is(state, cursor, ":=")
 			return depth == 0
 		end
-		if gate4_token_is(state, cursor, ",") && depth == 0
+		if token_is(state, cursor, ",") && depth == 0
 			return false
 		end
-		if gate4_token_is(state, cursor, ")")
+		if token_is(state, cursor, ")")
 			return false
 		end
-		if gate4_token_is(state, cursor, "<")
+		if token_is(state, cursor, "<")
 			depth += 1
-		elsif gate4_token_is(state, cursor, ">")
+		elsif token_is(state, cursor, ">")
 			depth -= 1
 		end
 		cursor += 1
@@ -545,48 +545,48 @@ def gate4_is_typed_local_declaration(state: Gate4Compiler, index: Integer): Bool
 	return false
 end
 
-def gate4_resolve_bare_imports(mut state: Gate4Compiler): Boolean
+def resolve_bare_imports(mut state: CompilerState): Boolean
 	mut import_index := 0
 	while import_index < state.import_count[0]
-		if gate4_load_integer(state.import_kinds, import_index) == 1
-			module_index := gate4_load_integer(state.import_modules, import_index)
+		if load_integer(state.import_kinds, import_index) == 1
+			module_index := load_integer(state.import_modules, import_index)
 			state.active_module[0] = module_index
-			mut target := gate4_load_integer(state.import_targets, import_index)
-			line := gate4_load_integer(state.import_lines, import_index)
+			mut target := load_integer(state.import_targets, import_index)
+			line := load_integer(state.import_lines, import_index)
 			if target == - 1
-				target = gate4_standard_package_target(
-					gate4_import_path_value(gate4_load_string(state.import_paths, import_index)),
+				target = standard_package_target(
+					import_path_value(load_string(state.import_paths, import_index)),
 				)
 				if target < - 1
-					gate4_store_integer(state.import_targets, import_index, target)
+					store_integer(state.import_targets, import_index, target)
 				end
 			end
 			if target < 0
 				if target < - 1
-					declaration := gate4_standard_package_root(target)
-					gate4_store_string(state.import_declarations, import_index, declaration)
-					if gate4_load_string(state.import_symbols, import_index) == ""
-						gate4_store_string(state.import_symbols, import_index, declaration)
+					declaration := standard_package_root(target)
+					store_string(state.import_declarations, import_index, declaration)
+					if load_string(state.import_symbols, import_index) == ""
+						store_string(state.import_symbols, import_index, declaration)
 					end
 				else
-					gate4_diagnostic(state, "TRBN4003", line, "bare import target is unresolved")
+					diagnostic(state, "TRBN4003", line, "bare import target is unresolved")
 					return false
 				end
 			else
-				mut segment := gate4_load_string(state.module_names, target)
-				if gate4_path_basename(segment) == "index"
-					segment = gate4_path_directory(segment)
+				mut segment := load_string(state.module_names, target)
+				if path_basename(segment) == "index"
+					segment = path_directory(segment)
 				end
-				segment = gate4_path_basename(segment)
-				wanted := gate4_path_root_key(segment)
+				segment = path_basename(segment)
+				wanted := path_root_key(segment)
 				mut matches := 0
 				mut declaration := ""
 				mut candidates := ""
 				mut record_index := 0
 				while record_index < state.record_count[0]
-					if gate4_load_integer(state.record_modules, record_index) == target
-						name := gate4_load_string(state.record_names, record_index)
-						if gate4_ascii_fold(name) == wanted
+					if load_integer(state.record_modules, record_index) == target
+						name := load_string(state.record_names, record_index)
+						if ascii_fold(name) == wanted
 							if candidates != ""
 								candidates += ", "
 							end
@@ -597,28 +597,28 @@ def gate4_resolve_bare_imports(mut state: Gate4Compiler): Boolean
 					end
 					record_index += 1
 				end
-				raw_path := gate4_load_string(state.import_paths, import_index)
+				raw_path := load_string(state.import_paths, import_index)
 				if matches == 0
 					mut matching_function := false
 					mut function_index := 0
 					while function_index < state.function_count[0]
-						if gate4_load_integer(state.function_modules, function_index) == target
-							name := gate4_load_string(state.function_names, function_index)
-							if gate4_ascii_fold(name) == wanted
+						if load_integer(state.function_modules, function_index) == target
+							name := load_string(state.function_names, function_index)
+							if ascii_fold(name) == wanted
 								matching_function = true
 							end
 						end
 						function_index += 1
 					end
 					if matching_function
-						gate4_diagnostic(
+						diagnostic(
 							state,
 							"TRBN4003",
 							line,
 							"import " + raw_path + " matches only a top-level function; use an exact named import",
 						)
 					else
-						gate4_diagnostic(
+						diagnostic(
 							state,
 							"TRBN4003",
 							line,
@@ -628,7 +628,7 @@ def gate4_resolve_bare_imports(mut state: Gate4Compiler): Boolean
 					return false
 				end
 				if matches > 1
-					gate4_diagnostic(
+					diagnostic(
 						state,
 						"TRBN4003",
 						line,
@@ -636,9 +636,9 @@ def gate4_resolve_bare_imports(mut state: Gate4Compiler): Boolean
 					)
 					return false
 				end
-				gate4_store_string(state.import_declarations, import_index, declaration)
-				if gate4_load_string(state.import_symbols, import_index) == ""
-					gate4_store_string(state.import_symbols, import_index, declaration)
+				store_string(state.import_declarations, import_index, declaration)
+				if load_string(state.import_symbols, import_index) == ""
+					store_string(state.import_symbols, import_index, declaration)
 				end
 			end
 		end
@@ -647,124 +647,124 @@ def gate4_resolve_bare_imports(mut state: Gate4Compiler): Boolean
 	return true
 end
 
-def gate4_validate_import_bindings(mut state: Gate4Compiler): Boolean
+def validate_import_bindings(mut state: CompilerState): Boolean
 	mut import_index := 0
 	while import_index < state.import_count[0]
-		module_index := gate4_load_integer(state.import_modules, import_index)
+		module_index := load_integer(state.import_modules, import_index)
 		state.active_module[0] = module_index
-		name := gate4_load_string(state.import_symbols, import_index)
-		declaration := gate4_load_string(state.import_declarations, import_index)
-		line := gate4_load_integer(state.import_lines, import_index)
-		target := gate4_load_integer(state.import_targets, import_index)
-		mut other := gate4_load_integer(state.module_import_starts, module_index)
+		name := load_string(state.import_symbols, import_index)
+		declaration := load_string(state.import_declarations, import_index)
+		line := load_integer(state.import_lines, import_index)
+		target := load_integer(state.import_targets, import_index)
+		mut other := load_integer(state.module_import_starts, module_index)
 		while other < import_index
-			other_target := gate4_load_integer(state.import_targets, other)
-			other_declaration := gate4_load_string(state.import_declarations, other)
+			other_target := load_integer(state.import_targets, other)
+			other_declaration := load_string(state.import_declarations, other)
 			if target >= 0
 				if other_target == target
 					if other_declaration == declaration
-						gate4_diagnostic(
+						diagnostic(
 							state,
 							"TRBN4003",
 							line,
-							"declaration " + declaration + " from " + gate4_load_string(state.module_names, target) + " is already imported as " + gate4_load_string(state.import_symbols, other),
+							"declaration " + declaration + " from " + load_string(state.module_names, target) + " is already imported as " + load_string(state.import_symbols, other),
 						)
 					end
 				end
 			end
-			if !gate4_has_diagnostic(state)
-				if gate4_load_string(state.import_symbols, other) == name
-					gate4_diagnostic(state, "TRBN4003", line, "duplicate import binding " + name)
+			if !has_diagnostic(state)
+				if load_string(state.import_symbols, other) == name
+					diagnostic(state, "TRBN4003", line, "duplicate import binding " + name)
 				end
 			end
 			other += 1
 		end
-		if gate4_find_record_in_module(state, module_index, name) >= 0
-			gate4_diagnostic(state, "TRBN4003", line, "import binding conflicts with local declaration " + name)
+		if find_record_in_module(state, module_index, name) >= 0
+			diagnostic(state, "TRBN4003", line, "import binding conflicts with local declaration " + name)
 		end
-		if gate4_find_function_in_module(state, module_index, name) >= 0
-			gate4_diagnostic(state, "TRBN4003", line, "import binding conflicts with local declaration " + name)
+		if find_function_in_module(state, module_index, name) >= 0
+			diagnostic(state, "TRBN4003", line, "import binding conflicts with local declaration " + name)
 		end
 		mut exported := target < - 1
 		if target >= 0
-			if gate4_find_record_in_module(state, target, declaration) >= 0
+			if find_record_in_module(state, target, declaration) >= 0
 				exported = true
 			end
-			if gate4_find_function_in_module(state, target, declaration) >= 0
+			if find_function_in_module(state, target, declaration) >= 0
 				exported = true
 			end
 		end
 		if !exported
-			gate4_diagnostic(state, "TRBN4003", line, "module does not export " + declaration)
+			diagnostic(state, "TRBN4003", line, "module does not export " + declaration)
 		end
 		import_index += 1
 	end
-	return !gate4_has_diagnostic(state)
+	return !has_diagnostic(state)
 end
 
-def gate4_validate_import_usage(mut state: Gate4Compiler): Boolean
+def validate_import_usage(mut state: CompilerState): Boolean
 	mut import_index := 0
 	while import_index < state.import_count[0]
-		if gate4_load_integer(state.import_used, import_index) == 0
-			state.active_module[0] = gate4_load_integer(state.import_modules, import_index)
-			gate4_diagnostic(
+		if load_integer(state.import_used, import_index) == 0
+			state.active_module[0] = load_integer(state.import_modules, import_index)
+			diagnostic(
 				state,
 				"TRBN4003",
-				gate4_load_integer(state.import_lines, import_index),
-				"unused import " + gate4_load_string(state.import_symbols, import_index),
+				load_integer(state.import_lines, import_index),
+				"unused import " + load_string(state.import_symbols, import_index),
 			)
 		end
 		import_index += 1
 	end
-	return !gate4_has_diagnostic(state)
+	return !has_diagnostic(state)
 end
 
-def gate4_resolve_declarations(mut state: Gate4Compiler): Boolean
-	if !gate4_validate_import_bindings(state)
+def resolve_declarations(mut state: CompilerState): Boolean
+	if !validate_import_bindings(state)
 		return false
 	end
 	mut record_index := 0
 	while record_index < state.record_count[0]
-		module_index := gate4_load_integer(state.record_modules, record_index)
+		module_index := load_integer(state.record_modules, record_index)
 		state.active_module[0] = module_index
 		mut other_record := record_index - 1
 		while other_record >= 0
-			if gate4_load_integer(state.record_modules, other_record) != module_index
+			if load_integer(state.record_modules, other_record) != module_index
 				other_record =- 1
 			else
-				if gate4_load_string(state.record_names, other_record) == gate4_load_string(state.record_names, record_index)
-					gate4_diagnostic(
+				if load_string(state.record_names, other_record) == load_string(state.record_names, record_index)
+					diagnostic(
 						state,
 						"TRBN4003",
-						gate4_load_integer(state.record_lines, record_index),
-						"duplicate record declaration " + gate4_load_string(state.record_names, record_index),
+						load_integer(state.record_lines, record_index),
+						"duplicate record declaration " + load_string(state.record_names, record_index),
 					)
 				end
 				other_record -= 1
 			end
 		end
-		start := gate4_load_integer(state.record_field_starts, record_index)
-		finish := start + gate4_load_integer(state.record_field_counts, record_index)
+		start := load_integer(state.record_field_starts, record_index)
+		finish := start + load_integer(state.record_field_counts, record_index)
 		mut field_index := start
 		while field_index < finish
 			mut other_field := start
 			while other_field < field_index
-				if gate4_load_string(state.field_names, other_field) == gate4_load_string(state.field_names, field_index)
-					gate4_diagnostic(
+				if load_string(state.field_names, other_field) == load_string(state.field_names, field_index)
+					diagnostic(
 						state,
 						"TRBN4003",
-						gate4_load_integer(state.field_lines, field_index),
-						"duplicate field declaration " + gate4_load_string(state.field_names, field_index),
+						load_integer(state.field_lines, field_index),
+						"duplicate field declaration " + load_string(state.field_names, field_index),
 					)
 				end
 				other_field += 1
 			end
-			raw_type := gate4_load_string(state.field_types, field_index)
-			resolved_type := gate4_resolve_type_name(state, module_index, raw_type, false)
+			raw_type := load_string(state.field_types, field_index)
+			resolved_type := resolve_type_name(state, module_index, raw_type, false)
 			if resolved_type == ""
-				gate4_diagnostic(state, "TRBN4003", gate4_load_integer(state.field_lines, field_index), "unknown field type " + raw_type)
+				diagnostic(state, "TRBN4003", load_integer(state.field_lines, field_index), "unknown field type " + raw_type)
 			else
-				gate4_store_string(state.field_types, field_index, resolved_type)
+				store_string(state.field_types, field_index, resolved_type)
 			end
 			field_index += 1
 		end
@@ -775,129 +775,129 @@ def gate4_resolve_declarations(mut state: Gate4Compiler): Boolean
 	mut declared_module :=- 1
 	mut function_index := 0
 	while function_index < state.function_count[0]
-		module_index := gate4_load_integer(state.function_modules, function_index)
+		module_index := load_integer(state.function_modules, function_index)
 		if module_index != declared_module
 			declared_functions = {}
 			declared_module = module_index
 		end
 		state.active_module[0] = module_index
 		if module_index == state.entry_module[0]
-			if gate4_load_string(state.function_names, function_index) == "main"
+			if load_string(state.function_names, function_index) == "main"
 				main_count += 1
-				if gate4_load_integer(state.function_parameter_counts, function_index) != 0
-					gate4_diagnostic(state, "TRBN4003", gate4_load_integer(state.function_lines, function_index), "main must take no parameters")
+				if load_integer(state.function_parameter_counts, function_index) != 0
+					diagnostic(state, "TRBN4003", load_integer(state.function_lines, function_index), "main must take no parameters")
 				end
-				if gate4_load_string(state.function_result_types, function_index) != "Void"
-					gate4_diagnostic(
+				if load_string(state.function_result_types, function_index) != "Void"
+					diagnostic(
 						state,
 						"TRBN4003",
-						gate4_load_integer(state.function_lines, function_index),
-						"main must return Void, found " + gate4_load_string(state.function_result_types, function_index),
+						load_integer(state.function_lines, function_index),
+						"main must return Void, found " + load_string(state.function_result_types, function_index),
 					)
 				end
 			end
 		end
-		name := gate4_load_string(state.function_names, function_index)
+		name := load_string(state.function_names, function_index)
 		if declared_functions.key?(name)
-			gate4_diagnostic(
+			diagnostic(
 				state,
 				"TRBN4003",
-				gate4_load_integer(state.function_lines, function_index),
+				load_integer(state.function_lines, function_index),
 				"duplicate function declaration " + name,
 			)
 		else
 			declared_functions[name] = 0
 		end
-		parameter_start := gate4_load_integer(state.function_parameter_starts, function_index)
-		parameter_finish := parameter_start + gate4_load_integer(state.function_parameter_counts, function_index)
+		parameter_start := load_integer(state.function_parameter_starts, function_index)
+		parameter_finish := parameter_start + load_integer(state.function_parameter_counts, function_index)
 		mut parameter_index := parameter_start
 		while parameter_index < parameter_finish
 			mut other_parameter := parameter_start
 			while other_parameter < parameter_index
-				if gate4_load_string(state.parameter_names, other_parameter) == gate4_load_string(state.parameter_names, parameter_index)
-					gate4_diagnostic(
+				if load_string(state.parameter_names, other_parameter) == load_string(state.parameter_names, parameter_index)
+					diagnostic(
 						state,
 						"TRBN4003",
-						gate4_load_integer(state.parameter_lines, parameter_index),
-						"duplicate parameter declaration " + gate4_load_string(state.parameter_names, parameter_index),
+						load_integer(state.parameter_lines, parameter_index),
+						"duplicate parameter declaration " + load_string(state.parameter_names, parameter_index),
 					)
 				end
 				other_parameter += 1
 			end
-			raw_type := gate4_load_string(state.parameter_types, parameter_index)
-			resolved_type := gate4_resolve_type_name(state, module_index, raw_type, false)
+			raw_type := load_string(state.parameter_types, parameter_index)
+			resolved_type := resolve_type_name(state, module_index, raw_type, false)
 			if resolved_type == ""
-				gate4_diagnostic(state, "TRBN4003", gate4_load_integer(state.parameter_lines, parameter_index), "unknown parameter type " + raw_type)
+				diagnostic(state, "TRBN4003", load_integer(state.parameter_lines, parameter_index), "unknown parameter type " + raw_type)
 			else
-				gate4_store_string(state.parameter_types, parameter_index, resolved_type)
+				store_string(state.parameter_types, parameter_index, resolved_type)
 			end
 			parameter_index += 1
 		end
-		raw_result := gate4_load_string(state.function_result_types, function_index)
-		resolved_result := gate4_resolve_type_name(state, module_index, raw_result, true)
+		raw_result := load_string(state.function_result_types, function_index)
+		resolved_result := resolve_type_name(state, module_index, raw_result, true)
 		if resolved_result == ""
-			gate4_diagnostic(state, "TRBN4003", gate4_load_integer(state.function_lines, function_index), "unknown result type " + raw_result)
+			diagnostic(state, "TRBN4003", load_integer(state.function_lines, function_index), "unknown result type " + raw_result)
 		else
-			gate4_store_string(state.function_result_types, function_index, resolved_result)
+			store_string(state.function_result_types, function_index, resolved_result)
 		end
 		function_index += 1
 	end
 	if main_count != 1
 		state.active_module[0] = state.entry_module[0]
-		gate4_diagnostic(state, "TRBN4003", 1, "program must declare exactly one main function")
+		diagnostic(state, "TRBN4003", 1, "program must declare exactly one main function")
 	end
-	return !gate4_has_diagnostic(state)
+	return !has_diagnostic(state)
 end
 
-def gate4_resolve_function_body(
-		mut state: Gate4Compiler,
+def resolve_function_body(
+		mut state: CompilerState,
 		function_index: Integer,
-		mut locals: Gate4Locals,
+		mut locals: CheckedLocals,
 	): Boolean
-	module_index := gate4_load_integer(state.function_modules, function_index)
+	module_index := load_integer(state.function_modules, function_index)
 	state.active_module[0] = module_index
-	parameter_start := gate4_load_integer(state.function_parameter_starts, function_index)
-	parameter_finish := parameter_start + gate4_load_integer(state.function_parameter_counts, function_index)
+	parameter_start := load_integer(state.function_parameter_starts, function_index)
+	parameter_finish := parameter_start + load_integer(state.function_parameter_counts, function_index)
 	mut parameter_index := parameter_start
 	while parameter_index < parameter_finish
-		gate4_resolution_local_add(
+		resolution_local_add(
 			locals,
-			gate4_load_string(state.parameter_names, parameter_index),
-			gate4_load_string(state.parameter_types, parameter_index),
-			gate4_load_integer(state.parameter_mutable, parameter_index),
+			load_string(state.parameter_names, parameter_index),
+			load_string(state.parameter_types, parameter_index),
+			load_integer(state.parameter_mutable, parameter_index),
 		)
 		parameter_index += 1
 	end
 	mut iteration_index := 0
 	while iteration_index < state.iterations.size()
 		iteration := state.iterations[iteration_index]
-		if iteration.origin >= gate4_load_integer(state.function_body_starts, function_index) && iteration.finish <= gate4_load_integer(state.function_body_ends, function_index)
-			gate4_resolution_local_add(locals, gate4_load_string(state.token_texts, iteration.element_origin), "", 1)
+		if iteration.origin >= load_integer(state.function_body_starts, function_index) && iteration.finish <= load_integer(state.function_body_ends, function_index)
+			resolution_local_add(locals, load_string(state.token_texts, iteration.element_origin), "", 1)
 			if iteration.index_origin >= 0
-				gate4_resolution_local_add(locals, gate4_load_string(state.token_texts, iteration.index_origin), "", 1)
+				resolution_local_add(locals, load_string(state.token_texts, iteration.index_origin), "", 1)
 			end
 		end
 		iteration_index += 1
 	end
-	mut index := gate4_load_integer(state.function_body_starts, function_index)
-	finish := gate4_load_integer(state.function_body_ends, function_index)
+	mut index := load_integer(state.function_body_starts, function_index)
+	finish := load_integer(state.function_body_ends, function_index)
 	mut skipping_type := false
 	while index < finish
-		kind := gate4_load_integer(state.token_kinds, index)
-		text := gate4_load_string(state.token_texts, index)
+		kind := load_integer(state.token_kinds, index)
+		text := load_string(state.token_texts, index)
 		if skipping_type
-			if gate4_token_is(state, index, ":=")
+			if token_is(state, index, ":=")
 				skipping_type = false
 			end
 		else
 			if kind == 1
-				mut keyword := gate4_resolution_keyword(text)
+				mut keyword := resolution_keyword(text)
 				if syntax_loop_transfer_kind(state, index) > 0
-					mut leading := index == gate4_load_integer(state.function_body_starts, function_index)
+					mut leading := index == load_integer(state.function_body_starts, function_index)
 					if !leading
-						leading = gate4_load_integer(state.token_kinds, index - 1) == 4
+						leading = load_integer(state.token_kinds, index - 1) == 4
 						if !leading
-							leading = gate4_token_is(state, index - 1, "|")
+							leading = token_is(state, index - 1, "|")
 						end
 					end
 					if leading
@@ -907,60 +907,60 @@ def gate4_resolve_function_body(
 				if keyword
 				else
 					mut previous := ""
-					if index > gate4_load_integer(state.function_body_starts, function_index)
-						previous = gate4_load_string(state.token_texts, index - 1)
+					if index > load_integer(state.function_body_starts, function_index)
+						previous = load_string(state.token_texts, index - 1)
 					end
 					if previous == "."
 					else
-						if gate4_token_is(state, index + 1, ":=")
-							gate4_resolution_local_add(locals, text, "", 0)
+						if token_is(state, index + 1, ":=")
+							resolution_local_add(locals, text, "", 0)
 						else
-							if gate4_token_is(state, index + 1, ":")
-								if gate4_is_typed_local_declaration(state, index)
-									gate4_resolution_local_add(locals, text, "", 0)
+							if token_is(state, index + 1, ":")
+								if is_typed_local_declaration(state, index)
+									resolution_local_add(locals, text, "", 0)
 									skipping_type = true
 								end
 							else
-								if gate4_token_is(state, index + 1, "(")
+								if token_is(state, index + 1, "(")
 									if text != "puts"
-										if gate4_find_visible_function(state, module_index, text) < 0
-											gate4_diagnostic(
+										if find_visible_function(state, module_index, text) < 0
+											diagnostic(
 												state,
 												"TRBN4003",
-												gate4_load_integer(state.token_lines, index),
+												load_integer(state.token_lines, index),
 												"unresolved function " + text,
 											)
 										end
 									end
 								else
-									if gate4_token_is(state, index + 1, ".")
-										if gate4_token_is(state, index + 2, "new")
-											if gate4_find_visible_record(state, module_index, text) < 0
-												gate4_diagnostic(
+									if token_is(state, index + 1, ".")
+										if token_is(state, index + 2, "new")
+											if find_visible_record(state, module_index, text) < 0
+												diagnostic(
 													state,
 													"TRBN4003",
-													gate4_load_integer(state.token_lines, index),
+													load_integer(state.token_lines, index),
 													"unresolved record " + text,
 												)
 											end
 										else
-											if gate4_local_find(locals, text) < 0
-												if gate4_find_import_binding(state, module_index, text) < 0
-													gate4_diagnostic(
+											if local_find(locals, text) < 0
+												if find_import_binding(state, module_index, text) < 0
+													diagnostic(
 														state,
 														"TRBN4003",
-														gate4_load_integer(state.token_lines, index),
+														load_integer(state.token_lines, index),
 														"unresolved local " + text,
 													)
 												end
 											end
 										end
 									else
-										if gate4_local_find(locals, text) < 0
-											gate4_diagnostic(
+										if local_find(locals, text) < 0
+											diagnostic(
 												state,
 												"TRBN4003",
-												gate4_load_integer(state.token_lines, index),
+												load_integer(state.token_lines, index),
 												"unresolved local " + text,
 											)
 										end
@@ -974,21 +974,21 @@ def gate4_resolve_function_body(
 		end
 		index += 1
 	end
-	return !gate4_has_diagnostic(state)
+	return !has_diagnostic(state)
 end
 
-def gate4_resolve(mut state: Gate4Compiler): Boolean
-	if !gate4_resolve_bare_imports(state)
+def resolve(mut state: CompilerState): Boolean
+	if !resolve_bare_imports(state)
 		return false
 	end
-	if !gate4_resolve_declarations(state)
+	if !resolve_declarations(state)
 		return false
 	end
 	mut function_index := 0
 	while function_index < state.function_count[0]
-		mut locals := gate4_locals_new(state.token_count[0] + 1)
-		gate4_resolve_function_body(state, function_index, locals)
+		mut locals := locals_new(state.token_count[0] + 1)
+		resolve_function_body(state, function_index, locals)
 		function_index += 1
 	end
-	return !gate4_has_diagnostic(state)
+	return !has_diagnostic(state)
 end

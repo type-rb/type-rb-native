@@ -185,8 +185,8 @@ jobs:
               > "$directory/SHA256SUMS"
           done
 
-          baseline_calls=$(grep -F -c 'call $g4_gc_temp_push' "$applications/baseline/program.ssa")
-          candidate_calls=$(grep -F -c 'call $g4_gc_temp_push' "$applications/candidate/program.ssa")
+          baseline_calls=$(grep -F -c 'call $trbn_gc_temp_push' "$applications/baseline/program.ssa")
+          candidate_calls=$(grep -F -c 'call $trbn_gc_temp_push' "$applications/candidate/program.ssa")
           test "$baseline_calls" -eq 4
           test "$candidate_calls" -eq 4
 
@@ -215,21 +215,21 @@ jobs:
           for role in baseline candidate; do
             "$QBE" -t arm64 -o "$applications/$role/program.s" \
               "$applications/$role/program.ssa"
-            extract_runtime_helper g4_gc_temp_push \
+            extract_runtime_helper trbn_gc_temp_push \
               "$applications/$role/program.ssa" "$evidence/$role-temp-push.ssa"
-            extract_runtime_helper g4_gc_temp_reserve \
+            extract_runtime_helper trbn_gc_temp_reserve \
               "$applications/$role/program.ssa" "$evidence/$role-temp-reserve.ssa"
-            extract_assembly_helper g4_gc_temp_push \
+            extract_assembly_helper trbn_gc_temp_push \
               "$applications/$role/program.s" "$evidence/$role-temp-push.s"
           done
-          extract_runtime_helper g4_gc_temp_grow \
+          extract_runtime_helper trbn_gc_temp_grow \
             "$applications/candidate/program.ssa" "$evidence/candidate-temp-grow.ssa"
 
           test "$(grep -F -c 'call $realloc' "$evidence/baseline-temp-push.ssa")" -eq 1
-          test "$(grep -F -c 'call $g4_gc_temp_grow' \
+          test "$(grep -F -c 'call $trbn_gc_temp_grow' \
             "$evidence/baseline-temp-push.ssa")" -eq 0
           test "$(grep -F -c \
-            'call $g4_gc_temp_grow(l %value, l %count, l %capacity)' \
+            'call $trbn_gc_temp_grow(l %value, l %count, l %capacity)' \
             "$evidence/candidate-temp-push.ssa")" -eq 1
           test "$(grep -F -c 'call $realloc' "$evidence/candidate-temp-push.ssa")" -eq 0
           test "$(grep -F -c '%nil =w ceql %value, 0' \
@@ -243,13 +243,13 @@ jobs:
           test "$(grep -F -c '%doubled =l mul %capacity, 2' \
             "$evidence/candidate-temp-grow.ssa")" -eq 1
           test "$(grep -F -c 'call $realloc' "$evidence/candidate-temp-grow.ssa")" -eq 1
-          test "$(grep -F -c 'storel %new_data, $g4_gc_temp_data' \
+          test "$(grep -F -c 'storel %new_data, $trbn_gc_temp_data' \
             "$evidence/candidate-temp-grow.ssa")" -eq 1
-          test "$(grep -F -c 'storel %next_capacity, $g4_gc_temp_capacity' \
+          test "$(grep -F -c 'storel %next_capacity, $trbn_gc_temp_capacity' \
             "$evidence/candidate-temp-grow.ssa")" -eq 1
           test "$(grep -F -c 'storel %value, %slot' \
             "$evidence/candidate-temp-grow.ssa")" -eq 1
-          test "$(grep -F -c 'storel %next_count, $g4_gc_temp_count' \
+          test "$(grep -F -c 'storel %next_count, $trbn_gc_temp_count' \
             "$evidence/candidate-temp-grow.ssa")" -eq 1
           cmp "$evidence/baseline-temp-reserve.ssa" "$evidence/candidate-temp-reserve.ssa"
           test "$(grep -E -c '[[:space:]](str|ldr)[[:space:]]+x(19|20|21),[[:space:]]*\[x29' \
@@ -321,16 +321,16 @@ jobs:
             fi
             source="$RUNNER_TEMP/applications/$role/program.ssa"
             boundary="$evidence/$role.ssa"
-            awk '/^function .*\$g4f0\(/ { exit } { print }' "$source" > "$boundary"
+            awk '/^function .*\$trbnf0\(/ { exit } { print }' "$source" > "$boundary"
             printf '%s\n' \
               'export function w $main(w %argc, l %argv) {' \
               '@start' \
               '  %static =l alloc8 8' \
               '  storel 0, %static' \
-              '  call $g4_gc_temp_push(l 0)' \
-              '  call $g4_gc_temp_push(l %static)' \
-              '  %initial_count =l loadl $g4_gc_temp_count' \
-              '  call $g4_gc_temp_reset(l 0)' \
+              '  call $trbn_gc_temp_push(l 0)' \
+              '  call $trbn_gc_temp_push(l %static)' \
+              '  %initial_count =l loadl $trbn_gc_temp_count' \
+              '  call $trbn_gc_temp_reset(l 0)' \
               '  %object =l alloc8 8' \
               '  storel 1, %object' \
               '	jmp @loop' \
@@ -339,13 +339,13 @@ jobs:
               '	%done =w cslel 129, %index' \
               '	jnz %done, @verify, @push' \
               '@push' \
-              '	call $g4_gc_temp_push(l %object)' \
+              '	call $trbn_gc_temp_push(l %object)' \
               '	%next =l add %index, 1' \
               '	jmp @loop' \
               '@verify' \
-              '	%count =l loadl $g4_gc_temp_count' \
-              '	%capacity =l loadl $g4_gc_temp_capacity' \
-              '	%data =l loadl $g4_gc_temp_data' \
+              '	%count =l loadl $trbn_gc_temp_count' \
+              '	%capacity =l loadl $trbn_gc_temp_capacity' \
+              '	%data =l loadl $trbn_gc_temp_data' \
               '	%last_address =l add %data, 1024' \
               '	%last =l loadl %last_address' \
               '	%count_ok =w ceql %count, 129' \
@@ -357,10 +357,10 @@ jobs:
               '  %all_ok =w and %count_capacity_ok, %roots_ok' \
               '	jnz %all_ok, @success, @fail' \
               '@success' \
-              '	call $g4_gc_temp_reset(l 0)' \
+              '	call $trbn_gc_temp_reset(l 0)' \
               '	ret 0' \
               '@fail' \
-              '	call $g4_gc_temp_reset(l 0)' \
+              '	call $trbn_gc_temp_reset(l 0)' \
               '	ret 1' \
               '}' >> "$boundary"
             "$QBE" -t arm64 -o "$evidence/$role.s" "$boundary"

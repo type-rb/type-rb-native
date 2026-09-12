@@ -51,13 +51,11 @@ Marker values, historical hashes and all size/build/RSS thresholds are unchanged
 
 ## Deliberately retained old-path references
 
-- Source-era `tools/gate4-benchmark`, `gate5-benchmark`, and `gate6a` through
-  `gate6k` plus `gate6m` benchmark controllers keep their registered snapshot,
-  import-closure and digest contracts. Their tests remain enabled. They operate
-  on their historical source roots, not a compatibility copy of today's compiler.
-- `tools/gate6m-linux.sh` likewise retains its exact `97b3ac2` source/digest
-  contract and historical path. Current Linux regressions use the newer target
-  workflow and harness, not a relabelled Gate 6M measurement.
+- The source-era benchmark projects and `tools/gate6m-linux.sh` were retired
+  from the current checkout together with their obsolete CI steps. Their exact
+  contracts remain available through [historical reproduction](retired-experiment-tools.md).
+  The historical portable-entry workflow checks out its immutable tooling
+  revision before invoking those names.
 - The five fixed-baseline workflows (`native-mir-foundation`,
   `native-runtime-ab`, `array-push-fast-path`, `dynamic-array-address`, and
   `gc-temp-push-fast-path`) retain old paths for their exact historical baseline

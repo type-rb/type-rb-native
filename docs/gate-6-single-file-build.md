@@ -124,7 +124,7 @@ leaked intermediate, unexpected process, or greater-than-2x time/RSS regression
 stops the slice for diagnosis.
 
 The TypeRB-authored
-[`gate6b-benchmark`](../tools/gate6b-benchmark/README.md) harness constructs the
+[`gate6b-benchmark`](https://github.com/type-rb/type-rb-native/blob/d568d9e712452f66fc9c48d6025bf73b79659661/tools/gate6b-benchmark/README.md) harness constructs the
 fixed point, runs the correctness and executable-identity preflight, records
 two indexed warmups and alternating observations, enforces the compiler-size
 ceiling, and writes the exact process inventory. Its external comparison mode

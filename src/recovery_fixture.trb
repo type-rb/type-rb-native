@@ -1,7 +1,7 @@
 import { allocate_compiler_recovery_workspace } from compiler_recovery_workspace
-import { Gate3Block, Gate3Instruction } from gate3_mir
-import { decode_gate3_snapshot } from gate3_snapshot
-import { build_gate3_executable, build_gate3_instrumented_executable } from gate3_toolchain
+import { RecoveryManagedBlock, RecoveryManagedInstruction } from recovery_managed_mir
+import { decode_recovery_managed_snapshot } from recovery_managed_snapshot
+import { build_recovery_managed_executable, build_recovery_managed_instrumented_executable } from recovery_managed_toolchain
 import { native_read_text, native_write_text } from native_file_system
 import trb/std/process
 import trb/std/result
@@ -42,7 +42,7 @@ def recover_program_fixture(name: String, collect_arrays: Boolean): Result<Proce
 	when Result::Err(error)
 		return Result<Process::Output?, String>::Err(error.message)
 	end
-	native_module := case decode_gate3_snapshot(snapshot)
+	native_module := case decode_recovery_managed_snapshot(snapshot)
 	when Result::Ok(value)
 		value
 	when Result::Err(error)
@@ -57,39 +57,39 @@ def recover_program_fixture(name: String, collect_arrays: Boolean): Result<Proce
 		mut block_index := 0
 		while block_index < blocks.size()
 			block := blocks[block_index]
-			mut instructions: Array<Gate3Instruction> := []
+			mut instructions: Array<RecoveryManagedInstruction> := []
 			mut index := 0
 			while index < block.instructions.size()
 				instruction := block.instructions[index]
 				instructions.push(instruction)
 				case instruction
-				when Gate3Instruction::HashSet(_type, _hash, _key, _value, origin)
-					instructions.push(Gate3Instruction::RuntimeCollect(origin))
-				when Gate3Instruction::ArrayGet(_result, _type, _array, _index, origin)
+				when RecoveryManagedInstruction::HashSet(_type, _hash, _key, _value, origin)
+					instructions.push(RecoveryManagedInstruction::RuntimeCollect(origin))
+				when RecoveryManagedInstruction::ArrayGet(_result, _type, _array, _index, origin)
 					if collect_arrays
-						instructions.push(Gate3Instruction::RuntimeCollect(origin))
+						instructions.push(RecoveryManagedInstruction::RuntimeCollect(origin))
 					end
-				when Gate3Instruction::ArraySet(_type, _array, _index, _value, origin)
+				when RecoveryManagedInstruction::ArraySet(_type, _array, _index, _value, origin)
 					if collect_arrays
-						instructions.push(Gate3Instruction::RuntimeCollect(origin))
+						instructions.push(RecoveryManagedInstruction::RuntimeCollect(origin))
 					end
-				when Gate3Instruction::ArrayPush(_type, _array, _value, origin)
+				when RecoveryManagedInstruction::ArrayPush(_type, _array, _value, origin)
 					if collect_arrays
-						instructions.push(Gate3Instruction::RuntimeCollect(origin))
+						instructions.push(RecoveryManagedInstruction::RuntimeCollect(origin))
 					end
 				else
 				end
 				index += 1
 			end
-			blocks[block_index] = Gate3Block.new(id: block.id, parameters: block.parameters, origin: block.origin, instructions: instructions, terminator: block.terminator)
+			blocks[block_index] = RecoveryManagedBlock.new(id: block.id, parameters: block.parameters, origin: block.origin, instructions: instructions, terminator: block.terminator)
 			block_index += 1
 		end
 		function_index += 1
 	end
 	build := if collect_arrays
-		build_gate3_instrumented_executable(native_module, qbe, "/usr/bin/cc", workspace, workspace + "/" + name)
+		build_recovery_managed_instrumented_executable(native_module, qbe, "/usr/bin/cc", workspace, workspace + "/" + name)
 	else
-		build_gate3_executable(native_module, qbe, "/usr/bin/cc", workspace, workspace + "/" + name)
+		build_recovery_managed_executable(native_module, qbe, "/usr/bin/cc", workspace, workspace + "/" + name)
 	end
 	report := case build
 	when Result::Ok(value)
