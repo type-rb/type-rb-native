@@ -20,8 +20,8 @@ class SeedReleaseTests(unittest.TestCase):
                      "linux-amd64-targets", "daily-performance", "weekly-performance"):
             with self.subTest(workflow=name):
                 workflow = (root / ".github/workflows" / (name + ".yml")).read_text()
-                self.assertIn("bootstrap-seed-2026-09-11-array-iteration", workflow)
-                self.assertIn("b4a1b383e5678907649334203f534ae62fa42af6", workflow)
+                self.assertIn("bootstrap-seed-2026-09-12-compiler-names", workflow)
+                self.assertIn("d7ffb9384229125216696a220c7f370422472178", workflow)
                 self.assertIn("tools/bootstrap-seed-download.sh", workflow)
         workflow = (root / ".github/workflows/linux-amd64-targets.yml").read_text()
         self.assertIn("ROOT_RELEASE_TAG: bootstrap-seed-2026-08-30", workflow)
@@ -74,14 +74,14 @@ class SeedReleaseTests(unittest.TestCase):
         self.assertIn('AMD64_HASH_SETUP_REVISION: 8a6d9ff73b14a97bca1b010ddaad6a38972b5373', workflow)
         self.assertIn('"$GITHUB_WORKSPACE/.native-target-hash-source"', workflow)
 
-    def test_iteration_bridge_preserves_historical_argument_shapes(self):
+    def test_name_bridge_preserves_historical_argument_shapes(self):
         script = Path(__file__).with_name("linux-amd64-targets.sh").resolve()
         missing = str(Path(self.temporary.name) / "missing-source")
-        for count in range(8, 17):
+        for count in range(8, 18):
             with self.subTest(arguments=count):
                 result = subprocess.run(["/bin/sh", str(script), *([missing] * count)],
                                         capture_output=True, text=True, timeout=10)
-                if 9 <= count <= 15:
+                if 9 <= count <= 16:
                     self.assertEqual(result.returncode, 1, result.stderr)
                     self.assertTrue(result.stderr.startswith("linux-amd64-targets:"), result.stderr)
                     self.assertNotIn("usage:", result.stderr)
@@ -104,6 +104,21 @@ class SeedReleaseTests(unittest.TestCase):
         self.assertIn('"$iteration_transition" check "$candidate_root/compiler/conformance/valid/array-iteration-$iteration_case.trb"', observer)
         self.assertIn('AMD64_ITERATION_SETUP_REVISION: 508f721f8964d67a5893e547d2e2fb3de5b20a63', workflow)
         self.assertIn('"$GITHUB_WORKSPACE/.native-target-iteration-source"', workflow)
+
+    def test_compiler_name_bridge_retains_accepted_source_and_process_boundary(self):
+        root = Path(__file__).resolve().parent.parent
+        observer = (root / "tools/linux-amd64-targets.sh").read_text()
+        workflow = (root / ".github/workflows/linux-amd64-targets.yml").read_text()
+        self.assertIn('test -n "$iteration_source_root" || fail "compiler-name source requires the accepted Array iteration source"', observer)
+        self.assertIn('require_clean_revision "$names_source_root"', observer)
+        self.assertIn('6ca79d22cde2ddba5fe836c66899b6e08a6511dc || fail "compiler-name source revision differs"', observer)
+        self.assertIn('9d3fc404ea55f459ef4bf5417112f0bb47054077ea94f3f6a5d57fbc23958ad0 || fail "compiler-name entry digest differs"', observer)
+        self.assertIn('"$runtime_seed" emit-qbe "$names_entry"', observer)
+        self.assertIn('runtime_seed=$names_transition', observer)
+        self.assertIn('"$names_transition" check "$compiler_entry"', observer)
+        self.assertIn('require_forbidden_processes_absent "$evidence/setup/names-check-process.trace"', observer)
+        self.assertIn('AMD64_NAMES_SETUP_REVISION: 6ca79d22cde2ddba5fe836c66899b6e08a6511dc', workflow)
+        self.assertIn('"$GITHUB_WORKSPACE/.native-target-names-source"', workflow)
 
     def test_target_fixture_identity_matches_current_sources(self):
         root = Path(__file__).resolve().parent.parent

@@ -45,12 +45,12 @@ This does not establish general performance parity.
 
 ## Current ownership checkpoint
 
-The function table now uses `Gate4MirFunction` records for identity, entry,
+The function table now uses `MirFunction` records for identity, entry,
 source origin, and parameter/block ranges, alongside the named value carrier.
 Construction, verification, passes and adapter consumers use those fields. This is bounded
 compiler self-use of the accepted record-array seed, not wider MIR admission.
 
-The block table likewise uses `Gate4MirBlock` records for its sixteen fields:
+The block table likewise uses `MirBlock` records for its sixteen fields:
 identity, origin, parameter/instruction ranges, and both terminator edges. The
 shared constructor preserves its existing calling boundary while readers use
 named fields. Record typing excludes truncated blocks; range and control-flow
@@ -58,7 +58,7 @@ verification remains required. [Issue #362](https://github.com/type-rb/type-rb-n
 records this separate block-carrier slice.
 
 The instruction table and function-local instruction buffer now use
-`Gate4MirInstruction` for kind, result, two operands, opcode-specific payload,
+`MirInstruction` for kind, result, two operands, opcode-specific payload,
 failure target and source origin. Literal relocation and verified rewrites
 replace whole readonly records through one payload-copy helper. Readers use
 named fields; instruction length is fixed by its type. Opcode, type, operand
@@ -66,7 +66,7 @@ availability, payload, origin and failure-target validation remain required.
 [Issue #365](https://github.com/type-rb/type-rb-native/issues/365) records this
 instruction-carrier slice. Optimization admission remains unchanged.
 
-Array-region operations now use `Gate4MirArrayOperation` records with kind,
+Array-region operations now use `MirArrayOperation` records with kind,
 operand and source origin in both the local buffer and published regions.
 Parameter positions are operation ordinals; the verifier no longer decodes
 three-cell offsets. Parameter-prefix ordering, operand/origin checks, mutable

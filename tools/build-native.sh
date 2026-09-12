@@ -3,7 +3,7 @@ set -eu
 
 repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cache="$repository_root/.trb/bootstrap"
-seed_release=bootstrap-seed-2026-09-11-array-iteration
+seed_release=bootstrap-seed-2026-09-12-compiler-names
 output="$repository_root/bin"
 fail() { printf 'trbn: %s\n' "$1" >&2; exit 1; }
 sha256_files() {
@@ -27,12 +27,12 @@ case "$(uname -s)/$(uname -m)" in
 	Darwin/arm64)
 		profile=darwin-arm64-v0
 		asset=type-rb-native-bootstrap-darwin-arm64
-		seed_digest=7ba29a5897782366569be9b2be3461f59fcf3e8feccfe41694ae4a29c457d19a
+		seed_digest=28d1b5a3aa42013ea8876173dbf760f7e71ee221a69bf16c915e485ccf60bdd9
 		;;
 	Linux/aarch64)
 		profile=linux-arm64-v0
 		asset=type-rb-native-bootstrap-linux-arm64
-		seed_digest=8c9d2ea099880ebbce4f4e91230b1cfab40e3fce4c145adacba36718ddbc5852
+		seed_digest=40cf35282750792c60dee1efdbdf331681ee7b5dd7efb5fae7a551824db4221c
 		command -v ld.lld >/dev/null 2>&1 || fail 'Linux builds require lld'
 		;;
 	*) fail 'checkout bootstrap currently supports Darwin arm64 and Linux arm64' ;;

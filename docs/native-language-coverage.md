@@ -279,8 +279,8 @@ subsequent calls, Array mutation and explicit collection, plus managed children.
 Removing the scalar-record boxing makes that lifetime regression test fail.
 
 After the [verified record Array seed handoff](bootstrap-seed-updates.md#current-verified-checkout-seed)
-was accepted in PR #356, compiler implementation adopts `Array<Gate4MirValue>`
-for `Gate4MirModule.values` and `Gate4Locals.mir_value_rows`. The named fields
+was accepted in PR #356, compiler implementation adopts `Array<MirValue>`
+for `MirModule.values` and `CheckedLocals.mir_value_rows`. The named fields
 are `function_id`, `id`, `type_id`, `source_id` and `line`; construction, lookup
 and verification share that exact carrier. The wrong tuple length is no longer
 representable. Identity, type range, origins, uniqueness and definition-count

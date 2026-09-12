@@ -56,22 +56,22 @@ record CompilerProjectSources
 	error: String
 end
 
-def gate4_reset_temporary_storage()
+def compiler_reset_temporary_storage()
 	return
 end
 
 # These declarations are typed compiler-runtime intrinsics. Their source bodies
 # keep recovery compilation valid; the self-hosted emitter replaces calls from
 # the compiler executable with the matching QBE runtime operations.
-def gate4_file_exists(_path: String): Boolean
+def compiler_file_exists(_path: String): Boolean
 	return false
 end
 
-def gate4_read_source(_path: String): String
+def compiler_read_source(_path: String): String
 	return ""
 end
 
-def gate4_source_slice(source: String, start: Integer, finish: Integer): String
+def compiler_source_slice(source: String, start: Integer, finish: Integer): String
 	mut value := ""
 	mut index := start
 	while index < finish
@@ -81,7 +81,7 @@ def gate4_source_slice(source: String, start: Integer, finish: Integer): String
 	return value
 end
 
-def gate4_collect_project_sources(_source_root: String, _out_root: String): CompilerProjectSources
+def compiler_collect_project_sources(_source_root: String, _out_root: String): CompilerProjectSources
 	return CompilerProjectSources.new(paths: [], sources: [], error: "")
 end
 
@@ -1607,24 +1607,24 @@ def emit_direct_call(
 				end
 			end
 		end
-		if callee.name == "compiler_file_exists" || callee.name == "gate4_file_exists"
+		if callee.name == "compiler_file_exists"
 			result := emit_temporary(context)
 			qbe_output_line(output, "\t" + result + " =l call $trbn_file_exists(" + arguments + ")")
 			return emitted_value(result, "Boolean", 0, "", "")
 		end
-		if callee.name == "compiler_read_source" || callee.name == "gate4_read_source"
+		if callee.name == "compiler_read_source"
 			result := emit_temporary(context)
 			qbe_output_line(output, "\t" + result + " =l call $trbn_read_source(" + arguments + ")")
 			emit_root_value(context, "String")
 			return emitted_value(result, "String", 0, "", "")
 		end
-		if callee.name == "compiler_source_slice" || callee.name == "gate4_source_slice"
+		if callee.name == "compiler_source_slice"
 			result := emit_temporary(context)
 			qbe_output_line(output, "\t" + result + " =l call $trbn_source_slice(" + arguments + ")")
 			emit_root_value(context, "String")
 			return emitted_value(result, "String", 0, "", "")
 		end
-		if callee.name == "compiler_collect_project_sources" || callee.name == "gate4_collect_project_sources"
+		if callee.name == "compiler_collect_project_sources"
 			result := emit_temporary(context)
 			qbe_output_line(output, "\t" + result + " =l call $trbn_collect_project_sources(" + arguments + ")")
 			emit_root_value(context, result_type)
@@ -1635,11 +1635,11 @@ def emit_direct_call(
 		qbe_output_line(output, "\tcall " + puts_runtime + "(" + arguments + ")")
 		return emitted_value("", "Void", 0, "", "")
 	end
-	if callee.name == "compiler_eputs" || callee.name == "gate4_eputs"
+	if callee.name == "compiler_eputs"
 		qbe_output_line(output, "\tcall $trbn_eputs(" + arguments + ")")
 		return emitted_value("", "Void", 0, "", "")
 	end
-	if callee.name == "compiler_reset_temporary_storage" || callee.name == "gate4_reset_temporary_storage"
+	if callee.name == "compiler_reset_temporary_storage"
 		qbe_output_line(output, "\tcall $trbn_temp_reset()")
 		return emitted_value("", "Void", 0, "", "")
 	end
@@ -3313,6 +3313,13 @@ def emit_entry(mut state: CompilerState, mut output: QbeOutput)
 	return
 end
 
+def compiler_runtime_intrinsic(name: String): Boolean
+	if name == "compiler_reset_temporary_storage" || name == "compiler_file_exists" || name == "compiler_read_source" || name == "compiler_source_slice" || name == "compiler_collect_project_sources" || name == "compiler_eputs"
+		return true
+	end
+	return false
+end
+
 def emit_qbe(mut state: CompilerState): QbeOutput
 	mut output := qbe_output_new(state.token_count[0] * 24 + 4096, [0, 0, 0, 0, 0, 0])
 	emit_static_strings(state, output)
@@ -3335,14 +3342,11 @@ def emit_qbe(mut state: CompilerState): QbeOutput
 		end
 	end
 	mut function_index := 0
-	# Flat recovery input still needs the source fallbacks during its first bootstrap.
-	# Canonical multi-module compiler input uses the runtime intrinsics directly.
-	if compiler_runtime
-		if state.module_count[0] > 1
-			if find_function_in_module(state, state.entry_module[0], "native_cli_main") < 0
-				function_index = 5
-			end
-		end
+	# Flat recovery and CLI input retain their source fallbacks. Ordinary compiler
+	# intrinsics are omitted by declaration identity, independent of source order.
+	mut omit_intrinsics := false
+	if compiler_runtime && state.module_count[0] > 1 && find_function_in_module(state, state.entry_module[0], "native_cli_main") < 0
+		omit_intrinsics = true
 	end
 	mut deferred_function :=- 1
 	while function_index < function_count
@@ -3355,7 +3359,11 @@ def emit_qbe(mut state: CompilerState): QbeOutput
 				end
 			end
 		end
-		if !deferred
+		mut intrinsic := false
+		if omit_intrinsics && load_integer(state.function_modules, function_index) == state.entry_module[0]
+			intrinsic = compiler_runtime_intrinsic(load_string(state.function_names, function_index))
+		end
+		if !deferred && !intrinsic
 			emit_function(state, function_index, output, inline_budget)
 		end
 		function_index += 1
@@ -3390,7 +3398,7 @@ def emit_qbe(mut state: CompilerState): QbeOutput
 	return output
 end
 
-def gate4_eputs(_value: String)
+def compiler_eputs(_value: String)
 	return
 end
 
@@ -4686,34 +4694,6 @@ def check(mut state: CompilerState): Boolean
 		validate_import_usage(state)
 	end
 	return !has_diagnostic(state)
-end
-
-# Native seed bridge: remove these forwarding bodies and old declarations
-# immediately after the renamed compiler seed has been published and verified.
-def compiler_file_exists(path: String): Boolean
-	return gate4_file_exists(path)
-end
-
-def compiler_read_source(path: String): String
-	return gate4_read_source(path)
-end
-
-def compiler_source_slice(source: String, start: Integer, finish: Integer): String
-	return gate4_source_slice(source, start, finish)
-end
-
-def compiler_collect_project_sources(source_root: String, out_root: String): CompilerProjectSources
-	return gate4_collect_project_sources(source_root, out_root)
-end
-
-def compiler_eputs(value: String)
-	gate4_eputs(value)
-	return
-end
-
-def compiler_reset_temporary_storage()
-	gate4_reset_temporary_storage()
-	return
 end
 
 def main()

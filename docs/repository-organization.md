@@ -30,22 +30,33 @@ The compiler's private generated QBE symbols use `trbn` rather than an experimen
 number. Current recovery driver commands and GC report prefixes describe their
 roles. No stable public protocol or snapshot version is changed by this rename.
 
-### Temporary seed compatibility boundary
+### Completed seed handoff and historical references
 
-The published Array-iteration seed recognizes six compiler-runtime declarations
-by their original names. The entry temporarily retains those declarations and
-forwarding wrappers while ordinary callers use `compiler_file_exists`,
+The [verified compiler-name seed](bootstrap-seed-updates.md#current-verified-checkout-seed)
+replaces the Array-iteration seed in current checkout and CI consumers. The six
+compiler-runtime declarations now use only `compiler_file_exists`,
 `compiler_read_source`, `compiler_source_slice`, `compiler_collect_project_sources`,
-`compiler_eputs`, and `compiler_reset_temporary_storage`. Both names are recognized
-during this transition, including unused wrapper emission, so ordinary linking
-and repeated generations remain valid.
+`compiler_eputs`, and `compiler_reset_temporary_storage`. The predecessor names,
+forwarding wrappers and dual recognition paths are removed. Ordinary declarations
+are omitted by identity, independent of declaration order; required flat recovery
+and CLI fallbacks remain. The source-name CI check has no compatibility exceptions.
 
-This is the only active compiler identifier exception. Issue #412 is not complete
-until an accepted successor seed is published and independently verified, the
-checkout pins switch, and these six old declarations/recognizers are removed.
-Complete that handoff before returning to the broader MIR optimization work.
-The historical `compiler/gate4` path resolver is separately retained for frozen
-baselines; it never selects an alternate current compiler implementation.
+The retained checkpoint-name references have explicit historical consumers:
+
+- The `compiler/gate4` path resolver and its tests locate frozen compiler baselines.
+  They reject ambiguous old/new layouts and never select an alternate current implementation.
+- CI planner tests include historical paths to verify complete deletion and rename
+  classification. Frozen standalone comparisons still name their original baseline paths.
+- The historical portable-entry workflow checks out its exact source-era controller;
+  its commands and artifact names retain that reproduction identity.
+- Compatibility metadata authenticates the immutable initial-root evidence.
+  Historical source inventories, decisions, results, seed assets and accepted
+  source transitions retain the names present in those exact revisions.
+
+All current compiler/recovery source identifiers, active file/module names,
+current driver commands and target CI display names use responsibility names.
+Further module decomposition belongs to MIR consolidation, rather than another
+unfinished stage-name compatibility migration.
 
 ## Active consolidation cadence
 
@@ -53,12 +64,10 @@ Completed source-era benchmark controllers are [retired from current CI](retired
 Their immutable reproduction versions remain available; current compiler/recovery
 correctness is tested by the maintained authorities.
 
-Completing active gate-numbered naming cleanup is an immediate priority after
-the in-flight integration work, not something to defer until full MIR or Pure Go
-parity. Inventory all active source, types/functions, recovery consumers, tools
-and CI names together; rename by responsibility or remove superseded code in
-cohesive changes. Historical measurements and immutable seed contracts keep
-accurate original identities. Track any unavoidable compatibility reference
+Active gate-numbered naming cleanup is complete across compiler source, recovery
+consumers, tools and current CI names. Keep future ownership moves cohesive and
+remove superseded code with its consumers. Historical measurements and immutable
+seed contracts keep accurate original identities. Track any unavoidable compatibility reference
 explicitly so it cannot become an unexplained permanent naming exception.
 
 The [MIR consolidation milestone](mir-consolidation.md) supersedes the old

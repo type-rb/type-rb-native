@@ -1,0 +1,46 @@
+import { CompilerProjectSources, check, emit_qbe, load_project_sources } from compiler
+import qbe_output
+import { find_function_in_module, resolve } from resolution
+import { has_diagnostic } from state
+import { load_string } from storage
+import { describe, expect, test } from trb/std/test
+
+def has_function_definition(output: QbeOutput, index: Integer): Boolean
+	mut line := 0
+	while line < output.count[0]
+		text := load_string(output.lines, line)
+		if text.start_with?("function ") && text.include?("$trbnf" + index.to_s() + "(")
+			return true
+		end
+		line += 1
+	end
+	return false
+end
+
+describe("Compiler runtime declaration identity") do
+	test("preserves preceding functions and omits intrinsics independently of declaration order") do
+		mut state := load_project_sources(
+			"/project/trbconfig.jsonc",
+			"/project/src",
+			CompilerProjectSources.new(
+				paths: ["/project/src/main.trb", "/project/src/support.trb"],
+				sources: [
+					"import { result } from support\n\ndef preceding(source: String): Boolean\n\treturn source.size() > 0\nend\n\ndef compiler_main(source: String, mode: String, file_mode: Boolean): Integer\n\tif preceding(source) && compiler_file_exists(source)\n\t\treturn result()\n\tend\n\treturn 0\nend\n\ndef compiler_file_exists(_path: String): Boolean\n\treturn false\nend\n\ndef main()\n\treturn\nend\n",
+					"def result(): Integer\n\treturn 1\nend\n",
+				],
+				error: "",
+			),
+		)
+		expect(has_diagnostic(state)).to_be_false()
+		expect(resolve(state)).to_be_true()
+		expect(check(state)).to_be_true()
+		preceding := find_function_in_module(state, state.entry_module[0], "preceding")
+		intrinsic := find_function_in_module(state, state.entry_module[0], "compiler_file_exists")
+		expect(preceding).to_equal(0)
+		expect(intrinsic > preceding).to_be_true()
+		output := emit_qbe(state)
+		expect(has_diagnostic(state)).to_be_false()
+		expect(has_function_definition(output, preceding)).to_be_true()
+		expect(has_function_definition(output, intrinsic)).to_be_false()
+	end
+end

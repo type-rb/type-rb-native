@@ -15,7 +15,7 @@ APPLICATION_RUNTIME_ELAPSED_REPETITIONS=32
 usage() {
 	cat >&2 <<'EOF'
 usage: linux-amd64-targets.sh CANDIDATE_ROOT ROOT_QBE QBE CC
-       REFERENCE_TRB GO WORKSPACE EVIDENCE OUTPUT_COMPILER [SEED_SOURCE_ROOT [LOOP_SOURCE_ROOT [BOOLEAN_SOURCE_ROOT [RECORD_SOURCE_ROOT [HASH_SOURCE_ROOT [ITERATION_SOURCE_ROOT]]]]]]
+       REFERENCE_TRB GO WORKSPACE EVIDENCE OUTPUT_COMPILER [SEED_SOURCE_ROOT [LOOP_SOURCE_ROOT [BOOLEAN_SOURCE_ROOT [RECORD_SOURCE_ROOT [HASH_SOURCE_ROOT [ITERATION_SOURCE_ROOT [NAMES_SOURCE_ROOT]]]]]]]
 EOF
 	exit 64
 }
@@ -166,7 +166,7 @@ require_go_build() {
 	test -x "$output" || fail "$label did not publish an executable"
 }
 
-test "$#" -eq 9 || test "$#" -eq 10 || test "$#" -eq 11 || test "$#" -eq 12 || test "$#" -eq 13 || test "$#" -eq 14 || test "$#" -eq 15 || usage
+test "$#" -eq 9 || test "$#" -eq 10 || test "$#" -eq 11 || test "$#" -eq 12 || test "$#" -eq 13 || test "$#" -eq 14 || test "$#" -eq 15 || test "$#" -eq 16 || usage
 
 candidate_root=$1
 root_qbe=$2
@@ -183,6 +183,7 @@ boolean_source_root=${12:-}
 record_source_root=${13:-}
 hash_source_root=${14:-}
 iteration_source_root=${15:-}
+names_source_root=${16:-}
 
 script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 verifier_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
@@ -916,7 +917,7 @@ compiler_cost_check application-bytes-times-five "$((native_stripped_size * 5))"
 	fail "CC expansion probe failed"
 require_empty_file "$evidence/cc-expansion.stdout" "CC expansion probe wrote stdout"
 
-require_clean_revision "$candidate_root" "Gate 6N candidate after verification"
+require_clean_revision "$candidate_root" "Linux target candidate after verification"
 require_no_intermediates "$workspace"
 printf 'linux-amd64-targets: passed\n'
 }
@@ -974,7 +975,7 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-require_clean_revision "$candidate_root" "Gate 6N candidate"
+require_clean_revision "$candidate_root" "Linux target candidate"
 test "$(tr -d '\n' < "$candidate_root/TYPE_RB_REVISION")" = "$TYPE_RB_REVISION" ||
 	fail "candidate TypeRB revision pin differs"
 test "$("$reference_trb" version)" = "$TYPE_RB_VERSION" || fail "reference TypeRB version differs"
@@ -1037,6 +1038,16 @@ if test -n "$iteration_source_root"; then
 		508f721f8964d67a5893e547d2e2fb3de5b20a63 || fail "Array iteration source revision differs"
 	iteration_entry=$iteration_source_root/compiler/src/compiler.trb
 	test -f "$iteration_entry" || fail "Array iteration compiler entry is missing"
+fi
+names_entry=
+if test -n "$names_source_root"; then
+	test -n "$iteration_source_root" || fail "compiler-name source requires the accepted Array iteration source"
+	require_clean_revision "$names_source_root" "accepted compiler-name source"
+	test "$(git -C "$names_source_root" rev-parse HEAD)" = \
+		6ca79d22cde2ddba5fe836c66899b6e08a6511dc || fail "compiler-name source revision differs"
+	names_entry=$names_source_root/compiler/src/compiler.trb
+	test -f "$names_entry" || fail "compiler-name entry is missing"
+	test "$(sha256 "$names_entry")" = 9d3fc404ea55f459ef4bf5417112f0bb47054077ea94f3f6a5d57fbc23958ad0 || fail "compiler-name entry digest differs"
 fi
 portable_config=$candidate_root/corpus/portable-entry/portable-entry/trbconfig.jsonc
 portable_source=$candidate_root/corpus/portable-entry/portable-entry/src/main.trb
@@ -1326,6 +1337,41 @@ if test -n "$iteration_source_root"; then
 	runtime_seed=$iteration_transition
 fi
 
+if test -n "$names_source_root"; then
+	mkdir -p "$workspace/setup/names-syntax"
+	names_qbe=$workspace/setup/names-syntax/compiler.ssa
+	names_assembly=$workspace/setup/names-syntax/compiler.s
+	names_transition=$workspace/setup/names-syntax/compiler
+	strace -f -e trace=process -o "$evidence/setup/names-emit-process.trace" \
+		"$runtime_seed" emit-qbe "$names_entry" \
+		> "$names_qbe" 2> "$evidence/setup/names-emit.stderr" || fail "names source emission failed"
+	require_empty_file "$evidence/setup/names-emit.stderr" "names source emission wrote stderr"
+	test -s "$names_qbe" || fail "names source QBE is empty"
+	require_forbidden_processes_absent "$evidence/setup/names-emit-process.trace" "names source emission"
+	strace -f -e trace=process -o "$evidence/setup/names-qbe-process.trace" \
+		"$qbe" -t amd64_sysv -o "$names_assembly" "$names_qbe" \
+		> "$evidence/setup/names-qbe.stdout" 2> "$evidence/setup/names-qbe.stderr" || fail "names QBE translation failed"
+	require_empty_file "$evidence/setup/names-qbe.stdout" "names QBE translation wrote stdout"
+	require_empty_file "$evidence/setup/names-qbe.stderr" "names QBE translation wrote stderr"
+	test -s "$names_assembly" || fail "names assembly is empty"
+	strace -f -e trace=process -o "$evidence/setup/names-link-process.trace" \
+		"$cc" -xassembler "$names_assembly" -fuse-ld=lld \
+		-Wl,--gc-sections,--strip-all -lm -o "$names_transition" \
+		> "$evidence/setup/names-link.stdout" 2> "$evidence/setup/names-link.stderr" || fail "names transition link failed"
+	require_empty_file "$evidence/setup/names-link.stdout" "names transition link wrote stdout"
+	require_empty_file "$evidence/setup/names-link.stderr" "names transition link wrote stderr"
+	test -x "$names_transition" || fail "names transition compiler is missing"
+	require_tool_observed "$evidence/setup/names-link-process.trace" 'execve\("[^"]*/ld\.lld"' "names transition LLD"
+	strace -f -e trace=process -o "$evidence/setup/names-check-process.trace" \
+		"$names_transition" check "$compiler_entry" \
+		> "$evidence/setup/names-check.stdout" 2> "$evidence/setup/names-check.stderr" || fail "compiler-name bridge rejected current source"
+	printf 'ok\n' > "$evidence/setup/names-check.expected"
+	cmp "$evidence/setup/names-check.expected" "$evidence/setup/names-check.stdout" > /dev/null || fail "compiler-name check stdout differs"
+	require_empty_file "$evidence/setup/names-check.stderr" "compiler-name check wrote stderr"
+	require_forbidden_processes_absent "$evidence/setup/names-check-process.trace" "compiler-name check"
+	runtime_seed=$names_transition
+fi
+
 strace -f -e trace=process -o "$evidence/setup/current-runtime-emit-process.trace" \
 	"$runtime_seed" emit-qbe "$compiler_entry" \
 	> "$runtime_qbe" \
@@ -1399,6 +1445,12 @@ require_tool_observed "$evidence/setup/current-runtime-link-process.trace" 'exec
 			grep execve "$evidence/setup/iteration-$iteration_case-check-process.trace"
 		done
 	fi
+	if test -n "$names_source_root"; then
+		grep execve "$evidence/setup/names-emit-process.trace"
+		grep execve "$evidence/setup/names-qbe-process.trace"
+		grep execve "$evidence/setup/names-link-process.trace"
+		grep execve "$evidence/setup/names-check-process.trace"
+	fi
 	grep execve "$evidence/setup/current-runtime-emit-process.trace"
 	grep execve "$evidence/setup/current-runtime-qbe-process.trace"
 	grep execve "$evidence/setup/current-runtime-link-process.trace"
@@ -1453,6 +1505,14 @@ require_tool_observed "$evidence/setup/current-runtime-link-process.trace" 'exec
 		printf 'iteration_transition_qbe_sha256=%s\n' "$(sha256 "$iteration_qbe")"
 		printf 'iteration_transition_size=%s\n' "$(file_size "$iteration_transition")"
 		printf 'iteration_transition_sha256=%s\n' "$(sha256 "$iteration_transition")"
+	fi
+	if test -n "$names_source_root"; then
+		printf 'names_source_revision=%s\n' "$(git -C "$names_source_root" rev-parse HEAD)"
+		printf 'names_source_entry_sha256=%s\n' "$(sha256 "$names_entry")"
+		printf 'names_transition_qbe_size=%s\n' "$(file_size "$names_qbe")"
+		printf 'names_transition_qbe_sha256=%s\n' "$(sha256 "$names_qbe")"
+		printf 'names_transition_size=%s\n' "$(file_size "$names_transition")"
+		printf 'names_transition_sha256=%s\n' "$(sha256 "$names_transition")"
 	fi
 	printf 'current_runtime_qbe_size=%s\n' "$(file_size "$runtime_qbe")"
 	printf 'current_runtime_qbe_sha256=%s\n' "$(sha256 "$runtime_qbe")"
