@@ -1,6 +1,34 @@
 # Current reference compatibility
 
 The development pin is TypeRB `0.4.7-dev` at
+`27a6bdd882084d5660fc9090006eb7e2a44d706c`, including the Range endpoint
+evaluation fixes in [TypeRB PR #680](https://github.com/type-rb/type-rb/pull/680)
+and [PR #681](https://github.com/type-rb/type-rb/pull/681). The compatibility
+prerequisite is registered in
+[issue #410](https://github.com/type-rb/type-rb-native/issues/410#issuecomment-5643802805)
+against accepted Native `675f1c944f8f6fd28445f6fe0f1035f457dc1cd9`.
+
+The exact reference build reports `0.4.7-dev`. Formatting and the root, compiler
+and CLI checks pass (54, 39 and 30 source files). All 19 maintained language
+cases match the selected reference and reviewed Native expectations, including
+their separate check/build/execution/REPL paths. The 16 manifest/checkout tests,
+seven registry-controller tests and generated table checks pass.
+
+The captured-endpoint regression produces `0, 1, 2, 9, 1, 9, 3` in both Go
+execution and the reference REPL. Against the previous reference executable,
+Go execution instead produces `9, 9, 3`, while its REPL already matches the
+specified result. Both direct Range and captured-endpoint cases remain known
+Native rejections; the latter first encounters unsupported function-literal
+syntax. They do not claim ordinary Range support or a runtime improvement.
+
+Full hosted recovery, fixed-point, target, memory and ordinary cost authorities
+are required before accepting this pin. The compiler source, immutable seed
+evidence and historical comparison bounds are unchanged. Previous completed
+authorities retain their original reference pins and source identities below.
+
+## Previous Array iteration snapshot reference
+
+The development pin is TypeRB `0.4.7-dev` at
 `570bf6f64c7ca2412d0b4ffe06cd186cd53bdf4c`, including the accepted direct Array
 iteration snapshot extension from
 [TypeRB PR #679](https://github.com/type-rb/type-rb/pull/679).
