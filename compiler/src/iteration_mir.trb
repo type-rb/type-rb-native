@@ -1,5 +1,5 @@
-# A structured Array traversal retains its receiver once and observes the live
-# header before every element. Cursor advancement is separate from its binding.
+# Structured traversal retains the receiver once. Array reads its live header;
+# Range streams captured bounds. Internal cursors are separate from bindings.
 record MirIteration
 	origin: Integer
 	receiver_finish: Integer
@@ -9,6 +9,7 @@ record MirIteration
 	body_finish: Integer
 	finish: Integer
 	parent_loop: Integer
+	source_kind: Integer
 	type_name: String
 	element_type: String
 end
@@ -43,5 +44,41 @@ def mir_iteration_valid(plan: MirIteration, origin: Integer, token_count: Intege
 	if element_type == "" || plan.type_name != array_type
 		return false
 	end
+	if plan.source_kind == 2
+		if plan.type_name != "Range<Integer>" || element_type != "Integer"
+			return false
+		end
+		return plan.element_type == "Integer"
+	end
+	if plan.source_kind != 1 || plan.type_name == "Range<Integer>"
+		return false
+	end
 	return plan.element_type == element_type
+end
+
+# Construction preserves two evaluated Integer endpoints and one exclusion bit.
+record MirRangeConstruction
+	origin: Integer
+	operator_origin: Integer
+	end_origin: Integer
+	finish: Integer
+	exclusive: Integer
+	start_type: String
+	end_type: String
+end
+
+def mir_range_valid(plan: MirRangeConstruction, origin: Integer, operator_origin: Integer, end_origin: Integer, finish: Integer, token_count: Integer): Boolean
+	if origin < 0 || origin >= operator_origin || operator_origin >= end_origin || end_origin >= finish || finish >= token_count
+		return false
+	end
+	if plan.origin != origin || plan.operator_origin != operator_origin || plan.end_origin != end_origin || plan.finish != finish
+		return false
+	end
+	if plan.exclusive != 0 && plan.exclusive != 1
+		return false
+	end
+	if plan.start_type != "Integer"
+		return false
+	end
+	return plan.end_type == "Integer"
 end

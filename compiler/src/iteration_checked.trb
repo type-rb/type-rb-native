@@ -1,4 +1,4 @@
-import { MirIteration, mir_iteration_shape_valid, mir_iteration_valid } from iteration_mir
+import { MirIteration, MirRangeConstruction, mir_iteration_shape_valid, mir_iteration_valid, mir_range_valid } from iteration_mir
 import { Gate4Compiler, gate4_diagnostic } from state
 import { gate4_load_integer, sparse_integer_at } from storage
 import { gate4_token_is, syntax_iteration_suffix } from parser
@@ -60,11 +60,11 @@ end
 
 def checked_iteration_require(mut state: Gate4Compiler, origin: Integer, parent_loop: Integer): MirIteration
 	encoded := sparse_integer_at(state.iteration_origins, origin)
-	invalid := MirIteration.new(origin: - 1, receiver_finish: - 1, element_origin: - 1, index_origin: - 1, body_start: - 1, body_finish: - 1, finish: - 1, parent_loop: - 1, type_name: "", element_type: "")
+	invalid := MirIteration.new(origin: - 1, receiver_finish: - 1, element_origin: - 1, index_origin: - 1, body_start: - 1, body_finish: - 1, finish: - 1, parent_loop: - 1, source_kind: 1, type_name: "", element_type: "")
 	if encoded > 0 && encoded <= state.iterations.size()
 		plan := state.iterations[encoded - 1]
 		if checked_iteration_shape(state, plan, origin) && plan.parent_loop == parent_loop
-			if mir_iteration_valid(plan, origin, state.token_count[0], plan.type_name, gate4_array_element_type(plan.type_name))
+			if mir_iteration_valid(plan, origin, state.token_count[0], plan.type_name, iteration_element_type(plan.type_name))
 				return plan
 			end
 		end
@@ -73,6 +73,41 @@ def checked_iteration_require(mut state: Gate4Compiler, origin: Integer, parent_
 	if origin >= 0 && origin < state.token_count[0]
 		line = gate4_load_integer(state.token_lines, origin)
 	end
-	gate4_diagnostic(state, "TRBN4004", line, "invalid checked Array iteration")
+	gate4_diagnostic(state, "TRBN4004", line, "invalid checked iteration")
 	return invalid
+end
+
+def iteration_element_type(type_name: String): String
+	if type_name == "Range<Integer>"
+		return "Integer"
+	end
+	return gate4_array_element_type(type_name)
+end
+
+def checked_range_require(mut state: Gate4Compiler, origin: Integer, operator_origin: Integer, end_origin: Integer, finish: Integer): MirRangeConstruction
+	encoded := sparse_integer_at(state.range_origins, operator_origin)
+	if encoded > 0 && encoded <= state.ranges.size()
+		plan := state.ranges[encoded - 1]
+		if mir_range_valid(plan, origin, operator_origin, end_origin, finish, state.token_count[0])
+			mut spelling := ".."
+			if plan.exclusive == 1
+				spelling = "..."
+			end
+			if gate4_token_is(state, operator_origin, spelling)
+				mut next_origin := operator_origin + 1
+				while gate4_load_integer(state.token_kinds, next_origin) == 4
+					next_origin += 1
+				end
+				if next_origin == end_origin
+					return plan
+				end
+			end
+		end
+	end
+	mut line := 1
+	if operator_origin >= 0 && operator_origin < state.token_count[0]
+		line = gate4_load_integer(state.token_lines, operator_origin)
+	end
+	gate4_diagnostic(state, "TRBN4004", line, "invalid checked Range construction")
+	return MirRangeConstruction.new(origin: - 1, operator_origin: - 1, end_origin: - 1, finish: - 1, exclusive: - 1, start_type: "", end_type: "")
 end

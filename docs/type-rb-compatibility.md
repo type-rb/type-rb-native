@@ -2,7 +2,7 @@
 
 TypeRB Native follows exact reference revisions while it is experimental. The
 current source and semantic oracle is TypeRB
-`27a6bdd882084d5660fc9090006eb7e2a44d706c` (`0.4.7-dev`), recorded in
+`eb1f705e00235e608ea9283ffa90ea55cf9965f2` (`0.4.7-dev`), recorded in
 `TYPE_RB_REVISION`. This is an exact development pin, not a supported version
 range.
 
@@ -44,16 +44,18 @@ ranges share this evaluation rule. ORM range predicates use the same constructor
 [PR #682](https://github.com/type-rb/type-rb/pull/682) changes development guidance;
 its compiler source is unchanged from `c030ef671798a10abea01c4ac89fa18ffde79f82`.
 
-This is the compatibility prerequisite for the next
-[ordinary Range slice](https://github.com/type-rb/type-rb-native/issues/410#issuecomment-5643802805).
-The maintained coverage registry separates reference Range behavior from the
-current Native rejection. The direct case reaches the unsupported Range syntax;
-the captured-endpoint case also requires function literals and currently rejects
-that earlier syntax. Updating the oracle adds no ordinary Native Range
-implementation, snapshot operation or compiler-source self-use. Existing Array
-support and all immutable seed identities remain unchanged. Current validation
-is recorded in the [compatibility record](../results/2026-09-07-string-escape-reference-compatibility/README.md);
-older cohorts below retain their original reference and Native identities.
+The exact pin also includes [TypeRB PR #683](https://github.com/type-rb/type-rb/pull/683),
+which checks Range element arguments during assignability. Unsupported Range
+annotation lowering remains tracked separately in
+[TypeRB #684](https://github.com/type-rb/type-rb/issues/684); Native admits only
+`Range<Integer>` in this slice.
+
+The maintained coverage registry now accepts direct ordinary Range iteration.
+The captured-endpoint case still requires unsupported function literals and
+retains their explicit rejection. [Ordinary Range support](native-range.md)
+does not add a snapshot export operation or authorize compiler-source self-use.
+Existing immutable seed identities and older compatibility cohorts retain their
+original reference and Native identities.
 
 ## Collection iteration reference
 

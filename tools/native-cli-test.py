@@ -41,6 +41,8 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
                       'hash-values', 'hash-managed', 'hash-cycles',
                       'array-iteration-live', 'array-iteration-control', 'array-iteration-managed',
                       'logical-loop-stack',
+                      'range-values', 'range-carriers', 'range-extrema', 'range-effects',
+                      'range-precedence', 'range-managed', 'range-streaming',
                       'string-index-lifetime'):
         fixture = repository / 'compiler/conformance/valid' / (case_name + '.trb')
         expected = fixture.with_suffix('.out').read_text()
@@ -52,7 +54,7 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
         assert subprocess.check_output([case_output], text=True, timeout=30) == expected
         if case_name in ('elsif-managed', 'loop-transfer-managed', 'array-assignment-managed',
                          'boolean-array-managed', 'record-array-managed', 'hash-managed', 'hash-cycles',
-                         'array-iteration-managed', 'string-index-lifetime'):
+                         'array-iteration-managed', 'range-managed', 'string-index-lifetime'):
             collected = subprocess.run([case_output], text=True, capture_output=True,
                                        env=dict(env, TYPE_RB_NATIVE_RUNTIME_STATS='1'), timeout=30)
             assert collected.returncode == 0 and collected.stdout == expected
@@ -66,6 +68,19 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
     failure_output = run('repl', text=submission + '\ninvalid_assignment_case()\n:quit\n')
     assert 'out of bounds' in failure_output, failure_output
     assert 'unexpected RHS' not in failure_output, failure_output
+    for case_name in ('range-endpoint-failure', 'range-start-failure'):
+        fixture = repository / 'compiler/conformance/runtime-invalid' / (case_name + '.trb')
+        case_source = root / (case_name + '.trb')
+        case_source.write_text(fixture.read_text())
+        case_output = root / case_name
+        run('build', '--compile', '--outfile', case_output, case_source)
+        failed = subprocess.run([case_output], text=True, capture_output=True, timeout=30)
+        assert failed.returncode != 0 and failed.stdout == '', failed
+        assert failed.stderr == fixture.with_suffix('.stderr').read_text(), failed
+        submission = fixture.read_text().replace('def main()', 'def endpoint_failure_case()')
+        rejection = run('repl', text=submission + '\nendpoint_failure_case()\n:quit\n')
+        assert 'panic: division by zero' in rejection, rejection
+        assert 'unexpected RHS' not in rejection and 'checked MIR' not in rejection, rejection
     for case_name in ('boolean-array-negative', 'boolean-array-past-end',
                       'record-array-negative', 'record-array-past-end', 'local-array-header-bounds',
                       'stable-array-bindings-bounds', 'conditional-array-header-bounds',
@@ -96,7 +111,9 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
                       'record-array-invariance', 'record-array-field-mutation', 'record-array-depth',
                       'record-array-unknown', 'array-iteration-arity', 'array-iteration-duplicate',
                       'array-iteration-escaping', 'array-iteration-receiver',
-                      'array-iteration-constant-mutation', 'array-iteration-multiline-brace'):
+                      'array-iteration-constant-mutation', 'array-iteration-multiline-brace',
+                      'range-float', 'range-string', 'range-comparison', 'range-index',
+                      'range-element-type', 'range-duplicate', 'range-escaping'):
         fixture = repository / 'compiler/conformance/invalid' / (case_name + '.source')
         case_source = root / (case_name + '.trb')
         case_source.write_text(fixture.read_text())
