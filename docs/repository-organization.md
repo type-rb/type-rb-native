@@ -31,6 +31,14 @@ bootstrap tooling. A filename search alone cannot establish dead code.
 
 ## Active consolidation cadence
 
+Completing active gate-numbered naming cleanup is an immediate priority after
+the in-flight integration work, not something to defer until full MIR or Pure Go
+parity. Inventory all active source, types/functions, recovery consumers, tools
+and CI names together; rename by responsibility or remove superseded code in
+cohesive changes. Historical measurements and immutable seed contracts keep
+accurate original identities. Track any unavoidable compatibility reference
+explicitly so it cannot become an unexplained permanent naming exception.
+
 The [MIR consolidation milestone](mir-consolidation.md) supersedes the old
 per-slice scheduling below. Combine connected ownership moves and retire their
 superseded code within cohesive PRs. Keep recovery/consumer updates atomic, but
