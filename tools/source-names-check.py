@@ -6,12 +6,6 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parent.parent
-# Removed with the verified successor seed handoff tracked by issue #412.
-# The published predecessor dispatches these six intrinsics by source name.
-SEED_BRIDGE = {
-    "gate4_file_exists", "gate4_read_source", "gate4_source_slice",
-    "gate4_collect_project_sources", "gate4_eputs", "gate4_reset_temporary_storage",
-}
 IDENTIFIER = re.compile(r"(?<![A-Za-z0-9])_*(?:Gate[0-6]|GATE[0-6]_+|gate[0-6]|qbe[23]_|trbn_g[0-6])[A-Za-z0-9_]*\b")
 PATH_NAME = re.compile(r"(?:gate[-_]?[0-6]|gate-zero|qbe[23])(?:[_.-]|$)", re.I)
 
@@ -32,13 +26,11 @@ def main():
             continue
         for number, line in enumerate(path.read_text().splitlines(), 1):
             for match in IDENTIFIER.finditer(line):
-                if relative == "compiler/src/compiler.trb" and match.group() in SEED_BRIDGE:
-                    continue
                 errors.append(f"{relative}:{number}: retired identifier {match.group()}")
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1
-    print("Active source names passed; six registered predecessor-seed intrinsics remain")
+    print("Active source names passed; no stage-name compatibility identifiers remain")
     return 0
 
 

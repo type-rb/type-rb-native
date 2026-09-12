@@ -2,7 +2,7 @@
 
 ## Scope and reading the inventory
 
-The current table covers all 54 root `src/*.trb` files at
+The historical table covers all 54 root `src/*.trb` files at
 `d2980f14d1b64e5ce3544dd7133e7f5871644e4e` ([PR #423](https://github.com/type-rb/type-rb-native/pull/423)).
 Imports and direct consumers were rechecked together, including Boolean/record
 Array tests, block-parameter alias tests, Hash recovery and the shared authored
@@ -18,11 +18,12 @@ Consumers list direct root importers, not all transitive callers.
 Every test row is consumed by root test discovery even without an importer.
 An empty direct-consumer list is therefore not a dead-code finding.
 
-The proposed names below are destinations within `src/`, not additional
-directories or committed moves. Only rows explicitly marked moved are current
-renames; the other destinations require separate reviewed slices. Shared source identities, scalar types,
-JSON helpers, and QBE helpers must remain one implementation; naming proposals
-do not authorize merging the snapshot and ordinary self-hosted MIRs.
+The proposals and dependency columns below record that historical checkpoint.
+Active modules have since moved to role names; links point to their current
+owners. Use [the current ownership map](repository-organization.md#current-ownership-map)
+for the completed naming migration. Shared snapshot, JSON, scalar and QBE helpers
+remain single implementations; the snapshot and ordinary self-hosted MIRs keep
+their separate responsibilities.
 
 ## File inventory
 
@@ -66,7 +67,7 @@ for the receipt, CI consumers, cleanup and negative controls.
 | [gate3_integer_array_test.trb](../src/recovery_managed_integer_array_test.trb) | Test: Gate 3 Integer Array runtime | `gate1_mir`, `gate3_layout`, `gate3_mir`, `gate3_toolchain`, `native_mir`, `snapshot`, `native_file_system` | Root test discovery | Keep; rename later: `managed_integer_array_test.trb` |
 | [gate3_layout.trb](../src/recovery_managed_layout.trb) | Managed-reference aggregate layout | `diagnostic`, `gate1_mir` | `gate3_boolean_array_test`, `gate3_capture_test`, `gate3_gc_test`, `gate3_integer_array_test`, `gate3_layout_test`, `gate3_managed_aggregate_test`, `gate3_mir`, `gate3_mir_test`, `gate3_record_array_test`, `gate3_snapshot`, `qbe3`, `qbe3_alias_test`, `recovery_hash_test` | Keep; rename later: `managed_layout.trb` |
 | [gate3_layout_test.trb](../src/recovery_managed_layout_test.trb) | Test: Gate 3 static aggregate layout | `gate3_layout`, `gate1_mir` | Root test discovery | Keep; rename later: `managed_layout_test.trb` |
-| [gate3_managed_aggregate_test.trb](../src/recovery_managed_managed_aggregate_test.trb) | Test: Gate 3 managed aggregate runtime | `gate3_layout`, `gate3_mir`, `gate3_toolchain`, `native_mir`, `snapshot`, `native_file_system` | Root test discovery | Keep; rename later: `managed_aggregate_test.trb` |
+| [gate3_managed_aggregate_test.trb](../src/recovery_managed_aggregate_test.trb) | Test: Gate 3 managed aggregate runtime | `gate3_layout`, `gate3_mir`, `gate3_toolchain`, `native_mir`, `snapshot`, `native_file_system` | Root test discovery | Keep; rename later: `managed_aggregate_test.trb` |
 | [gate3_mir.trb](../src/recovery_managed_mir.trb) | Managed MIR/verifier | `diagnostic`, `gate1_mir`, `gate3_layout`, `native_mir`, `snapshot` | `gate3_boolean_array_test`, `gate3_capture_test`, `gate3_gc_test`, `gate3_integer_array_test`, `gate3_managed_aggregate_test`, `gate3_mir_test`, `gate3_record_array_test`, `gate3_snapshot`, `gate3_toolchain`, `qbe3`, `qbe3_alias_test`, `recovery_fixture`, `recovery_hash_test` | Keep; rename later: `managed_mir.trb` |
 | [gate3_mir_test.trb](../src/recovery_managed_mir_test.trb) | Test: Gate 3 aggregate MIR | `gate1_mir`, `gate3_layout`, `gate3_mir`, `native_mir`, `snapshot` | Root test discovery | Keep; rename later: `managed_mir_test.trb` |
 | [gate3_record_array_test.trb](../src/recovery_managed_record_array_test.trb) | Test: Managed record Array MIR and runtime | `gate1_mir`, `gate3_layout`, `gate3_mir`, `gate3_toolchain`, `native_mir`, `snapshot`, `native_file_system` | Root test discovery | Keep; rename later: `managed_record_array_test.trb` |
