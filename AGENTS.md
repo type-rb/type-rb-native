@@ -50,8 +50,9 @@ outward-facing text before publication.
   Finish registered direct-QBE experiments as migration evidence and remove
   superseded emitter ownership before broadening the fact family.
 - Keep snapshots, MIR, ABI profiles, and runtime interfaces internal and unstable
-  until an explicit promotion decision. Do not add release/package machinery,
-  a second frontend, or another backend without a concrete accepted need.
+  until an explicit promotion decision. The long-term three-source-backend and
+  full-language goal is recorded in `docs/mir-consolidation.md`; implement its
+  dependencies without prematurely adding release/package machinery.
 
 ## Conditional project guidance
 
@@ -66,8 +67,12 @@ outward-facing text before publication.
   `docs/bootstrap-seed-updates.md`. Verify actual published immutable assets
   before changing exact pins; unaccepted candidates and floating downloads are
   not replacement seeds.
-- For optimization or measurement work, follow `docs/optimization-tradeoffs.md`
-  and `docs/experiment-plan.md`. Ordinary 1.05 ratios and absolute ceilings remain
-  in force. A registered diagnostic is not merge approval. Retain failures and
-  compare same-feature and frozen cumulative baselines; report compiler and
-  application costs separately, counting all required dependencies.
+- Current development follows `docs/mir-consolidation.md`: prioritize the complete
+  MIR ownership milestone through cohesive changes. Integration uses explicit
+  migration cost observations; temporary performance/size regressions are allowed.
+  Keep correctness, safety and reproducibility blocking. Reserve detailed cost
+  qualification for coherent milestones and use daily/weekly trends in between.
+- For measurements, follow the active milestone policy and
+  `docs/optimization-tradeoffs.md`. Retain failed observations and fixed baselines;
+  report application and compiler/toolchain costs separately. Migration CI is not
+  final performance qualification. Historical strict contracts stay explicit.

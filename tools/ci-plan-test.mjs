@@ -18,6 +18,81 @@ function results(plan) {
   };
 }
 
+test('MIR migration defers compiler comparisons but preserves every correctness authority', () => {
+  for (const paths of [
+    ['compiler/src/compiler.trb'],
+    ['compiler/src/new-mir-pass.trb', 'docs/architecture.md'],
+    ['compiler/conformance/valid/new.trb', 'tools/native-cli-test.py'],
+  ]) {
+    const strict = classify(paths, false);
+    const migration = classify(paths, false, 'mir-migration');
+    assert.equal(strict.performance, true);
+    assert.deepEqual(migration, { ...strict, performance: false });
+    const needs = results(migration);
+    assert.deepEqual(acceptance(needs), []);
+    for (const job of ['quick', 'native', 'targets', 'memory', 'cli', 'tooling']) {
+      for (const result of ['failure', 'cancelled', 'skipped']) {
+        assert(acceptance({ ...needs, [job]: { result } }).length > 0);
+      }
+    }
+    assert.deepEqual(classify(paths, false, 'strict'), strict);
+  }
+  for (const path of ['.github/workflows/gate-zero.yml', 'tools/ci-run-suites.mjs',
+    'tools/compiler-cost.sh', 'tools/native-mir-transition-policy.sh']) {
+    assert.equal(classify([path], false, 'mir-migration').performance, true);
+    assert.equal(classify([path, 'compiler/src/compiler.trb'], false, 'mir-migration').performance, true);
+  }
+  for (const mode of ['', 'migration', 'STRICT', null]) {
+    assert.throws(() => classify(['compiler/src/compiler.trb'], false, mode), /Invalid/);
+  }
+});
+
+test('integration explicitly passes migration mode while standalone workflows remain strict', () => {
+  for (const name of ['pull-request', 'push-validation']) {
+    const workflow = readFileSync(new URL(`../.github/workflows/${name}.yml`, import.meta.url), 'utf8');
+    assert.match(workflow, /^env:\n[\s\S]*?  NATIVE_MIR_COST_MODE: mir-migration$/m);
+    const calls = [...workflow.matchAll(/    uses: \.\/\.github\/workflows\/(gate-zero|gate6n-linux-amd64|runtime-worker-memory)\.yml\n([^]*?)(?=\n  \w|$)/g)];
+    assert.equal(calls.length, name === 'pull-request' ? 3 : 2);
+    for (const call of calls) assert.match(call[2], /    with:\n      cost_mode: mir-migration/);
+  }
+  for (const name of ['gate-zero', 'gate6n-linux-amd64', 'runtime-worker-memory']) {
+    const workflow = readFileSync(new URL(`../.github/workflows/${name}.yml`, import.meta.url), 'utf8');
+    assert.match(workflow, /workflow_call:\n    inputs:\n      cost_mode:[\s\S]*?default: strict/);
+    assert(workflow.includes("NATIVE_MIR_COST_MODE: ${{ inputs.cost_mode || 'strict' }}"));
+  }
+});
+
+test('amd64 migration still verifies binary format and records identities after skipped measurements', () => {
+  const source = readFileSync(new URL('gate6n-linux-amd64.sh', import.meta.url), 'utf8');
+  const tail = source.slice(source.lastIndexOf('\nverify_binary_format\n'));
+  assert(tail.startsWith('\nverify_binary_format\n'));
+  const directory = mkdtempSync(join(tmpdir(), 'native-cost-routing-'));
+  try {
+    const helper = fileURLToPath(new URL('compiler-cost.sh', import.meta.url));
+    for (const shell of ['/bin/sh', '/bin/bash']) {
+      for (const mode of ['strict', 'mir-migration']) {
+        const script = `set -eu\n. "$HELPER"\nverify_binary_format() { echo binary; }\n` +
+          `run_formal_evidence() { echo measured; }\nrecord_target_evidence() { echo identities; }\n${tail}`;
+        const options = { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: {
+          PATH: process.env.PATH, HELPER: helper, evidence: directory, NATIVE_MIR_COST_MODE: mode,
+        } };
+        assert.equal(execFileSync(shell, ['-c', script], options),
+          mode === 'strict' ? 'binary\nmeasured\nidentities\n' : 'binary\nidentities\n');
+        if (mode === 'mir-migration') assert.equal(readFileSync(join(directory, 'measurement-policy.txt'), 'utf8'),
+          'cost_mode=mir-migration\ncomparative_measurements=not-run\n');
+        assert.throws(() => execFileSync(shell, ['-c', script.replace('echo binary;', 'return 91;')], options),
+          error => error.status === 91 && !error.stdout.includes('identities'));
+      }
+    }
+    const identities = source.slice(source.indexOf('\nrecord_target_evidence() {'), source.indexOf('\ntest -x /usr/bin/time'));
+    assert(identities.includes('candidate_fixed_point_qbe_sha256'));
+    assert(identities.includes('require_clean_revision'));
+    assert(identities.includes('require_no_intermediates'));
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('runtime A/B remains manual with separate frozen historical and Boolean contracts', () => {
   const workflow = readFileSync(new URL('../.github/workflows/native-runtime-ab.yml', import.meta.url), 'utf8');
   const entry = readFileSync(new URL('../.github/workflows/pull-request.yml', import.meta.url), 'utf8');

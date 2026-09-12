@@ -4,6 +4,8 @@ set -eu
 
 script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 . "$script_directory/../compiler-project.sh"
+. "$script_directory/../compiler-cost.sh"
+compiler_cost_mode > /dev/null || exit 64
 . "$script_directory/../native-mir-transition-policy.sh"
 native_mir_transition_markers_valid "$script_directory/../.." || {
 	printf '%s\n' 'runtime-worker-soak: invalid Native MIR transition markers' >&2
@@ -290,7 +292,8 @@ else
 fi
 stripped_compiler_size=$(file_size "$workspace/compiler.stripped")
 printf '%s\n' "$stripped_compiler_size" > "$evidence/compiler-size-bytes.txt"
-test "$stripped_compiler_size" -le "$max_compiler_size" ||
+compiler_cost_check compiler-bytes "$stripped_compiler_size" "$max_compiler_size" \
+	>> "$evidence/cost-observations.txt" ||
 	fail "stripped compiler exceeds the registered target limit: $stripped_compiler_size"
 
 reference_program=$workspace/reference/program
@@ -373,7 +376,8 @@ else
 	test -n "$native_elapsed" || fail "Native runtime elapsed time is missing"
 	printf 'elapsed_seconds=%s\n' "$native_elapsed" > "$evidence/native-runtime.txt"
 	if test "$mode" = smoke; then
-		awk -v elapsed="$native_elapsed" -v limit="$MAX_SMOKE_SECONDS" 'BEGIN {exit !(elapsed <= limit)}' ||
+		compiler_cost_check smoke-seconds "$native_elapsed" "$MAX_SMOKE_SECONDS" \
+			>> "$evidence/cost-observations.txt" ||
 			fail "smoke runtime exceeds the registered 2.25-second ceiling"
 		reference_elapsed=$(awk '$1 == "real" {print $2}' "$reference_stderr")
 		test -n "$reference_elapsed" || fail "reference runtime elapsed time is missing"

@@ -24,6 +24,7 @@ const planningTools = new Set(['tools/ci-plan.mjs', 'tools/ci-plan-test.mjs']);
 // Tests with a second Linux authority retain it through planning or quick.
 export const quickToolingTests = new Set([
   'tools/compiler-project-test.sh',
+  'tools/compiler-cost-test.sh',
   'tools/native-mir-transition-policy-test.sh',
 ]);
 export const toolingTests = new Set([
@@ -88,16 +89,18 @@ export const cliInputs = new Set([
   'compiler/cli/repl_hash.trb',
 ]);
 
-export function classify(paths, draft) {
+export function classify(paths, draft, costMode = 'strict') {
+  if (!['strict', 'mir-migration'].includes(costMode)) throw new Error('Invalid compiler cost mode');
   const executable = paths.filter(path => !documentation(path) && !planningTools.has(path));
   const codePaths = executable.filter(path => !toolingTests.has(path) && !cliInputs.has(path));
   const code = codePaths.length > 0;
   const routing = paths.some(path => path.startsWith('.github/workflows/') || path.startsWith('tools/ci-'));
   const compiler = codePaths.some(path => path.startsWith('compiler/')) &&
     !codePaths.every(path => compilerTestInputs.has(path));
-  const policy = codePaths.some(path => path.startsWith('tools/native-mir-') || path.startsWith('tools/compiler-project'));
-  const performance = code && (routing || compiler || policy);
-  const memory = code && (performance || codePaths.some(path => path.startsWith('tools/runtime-worker-soak/')));
+  const policy = codePaths.some(path => path.startsWith('tools/native-mir-') ||
+    path.startsWith('tools/compiler-project') || path.startsWith('tools/compiler-cost'));
+  const performance = code && (routing || policy || (compiler && costMode === 'strict'));
+  const memory = code && (routing || compiler || policy || codePaths.some(path => path.startsWith('tools/runtime-worker-soak/')));
   return {
     code, quick: code || executable.some(path => cliInputs.has(path) || quickToolingTests.has(path)),
     documentation: routing || paths.some(documentation),
@@ -166,7 +169,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     }
     // Include both sides of renames, and preserve arbitrary path characters.
     const paths = await changedPaths(base, head, undefined, mode === 'push');
-    for (const [key, value] of Object.entries(classify(paths, draft === 'true'))) {
+    for (const [key, value] of Object.entries(classify(paths, draft === 'true', process.env.NATIVE_MIR_COST_MODE ?? 'strict'))) {
       console.log(`${key}=${value}`);
     }
   }
