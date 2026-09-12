@@ -113,7 +113,7 @@ Its explicit transitive import closure contains 18 canonical source modules:
 | `checked_program.trb` | Recursive expression/body checking and MIR construction. |
 | `mir.trb` | Core MIR model, verifier, and target-independent passes. |
 | `hash_types.trb`, `hash_mir.trb`, `hash_checked.trb` | Hash types and value layout, operation plans, and their checked source bindings. |
-| `iteration_mir.trb`, `iteration_checked.trb` | Array iteration plans, structural validation, and checked source bindings. |
+| `iteration_mir.trb`, `iteration_checked.trb` | Range construction and Array/Range iteration plans, structural validation, and checked source bindings. |
 | `qbe_output.trb`, `qbe_runtime.trb`, `hash_runtime.trb` | Ordered QBE output and runtime generation, including the Hash runtime. |
 | `project_config.trb` | Project configuration records, JSONC parsing, and validation. |
 | `compiler.trb` | Lexing and source-slicing intrinsics, final checking orchestration, temporary-storage lifetimes, QBE adaptation, and the remaining driver code. |
@@ -121,8 +121,10 @@ Its explicit transitive import closure contains 18 canonical source modules:
 The [shared iteration proof module](../compiler/src/iteration_checked.trb)
 serves the checker, compiler entry, and REPL without importing the recursive
 checker or emitter. Recursive body checking stays in `checked_program.trb`.
-The current iteration plans cover Array `each` and `each.with_index`; Range
-support remains pending in the [language coverage plan](native-language-coverage.md).
+The current iteration plans cover Array and `Range<Integer>` statement `each`
+and `each.with_index`. Checked Range construction retains the two Integer endpoint
+regions and exclusivity; the same source-proof module validates construction
+before ordinary lowering and REPL evaluation. See [Range coverage](native-range.md).
 
 The CLI/REPL under `compiler/cli/` consumes these modules but is outside this
 ordinary core closure. Snapshot recovery derives a temporary flattened source

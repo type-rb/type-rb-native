@@ -102,23 +102,26 @@ def gate4_parse_type(mut state: Gate4Compiler, mut position: Array<Integer>): St
 	return name
 end
 
-def gate4_binary_precedence(operator: String): Integer
-	# Keep spelling recognition in the shared operator catalog.
+def syntax_expression_precedence(operator: String): Integer
+	if operator == ".." || operator == "..."
+		return 3
+	end
+	# Keep scalar spelling recognition in the shared operator catalog.
 	identity := gate4_binary_operator_id(operator)
 	if identity == 0
 		return 0
 	end
 	if identity <= 2
-		return 5
-	end
-	if identity <= 5
 		return 6
 	end
+	if identity <= 5
+		return 7
+	end
 	if identity <= 7
-		return 3
+		return 4
 	end
 	if identity <= 11
-		return 4
+		return 5
 	end
 	if identity == 12
 		return 1
@@ -243,7 +246,7 @@ def parse_iteration_statement(mut state: Gate4Compiler, mut position: Array<Inte
 	end
 	# Re-parsing unreachable syntax must not replace an already checked plan.
 	if sparse_integer_at(state.iteration_origins, origin) == 0
-		state.iterations.push(MirIteration.new(origin: origin, receiver_finish: receiver_finish, element_origin: element_origin, index_origin: index_origin, body_start: body_start, body_finish: body_finish, finish: position[0], parent_loop: - 1, type_name: "", element_type: ""))
+		state.iterations.push(MirIteration.new(origin: origin, receiver_finish: receiver_finish, element_origin: element_origin, index_origin: index_origin, body_start: body_start, body_finish: body_finish, finish: position[0], parent_loop: - 1, source_kind: 1, type_name: "", element_type: ""))
 		gate4_store_integer(state.iteration_origins, origin, state.iterations.size())
 		gate4_store_integer(state.iteration_origins, body_finish, - state.iterations.size())
 	end
@@ -401,7 +404,7 @@ def gate4_parse_expression_syntax(
 	end
 	mut scanning := true
 	while scanning
-		precedence := gate4_binary_precedence(gate4_load_string(state.token_texts, position[0]))
+		precedence := syntax_expression_precedence(gate4_load_string(state.token_texts, position[0]))
 		if precedence < minimum_precedence
 			scanning = false
 		else
