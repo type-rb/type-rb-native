@@ -99,7 +99,7 @@ export function classify(paths, draft, costMode = 'strict') {
     !codePaths.every(path => compilerTestInputs.has(path));
   const policy = codePaths.some(path => path.startsWith('tools/native-mir-') ||
     path.startsWith('tools/compiler-project') || path.startsWith('tools/compiler-cost'));
-  const performance = code && (routing || policy || (compiler && costMode === 'strict'));
+  const performance = code && costMode === 'strict' && (routing || policy || compiler);
   const memory = code && (routing || compiler || policy || codePaths.some(path => path.startsWith('tools/runtime-worker-soak/')));
   return {
     code, quick: code || executable.some(path => cliInputs.has(path) || quickToolingTests.has(path)),

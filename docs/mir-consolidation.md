@@ -79,11 +79,13 @@ ceilings produce retained `within-limit` or `exceeded` observations; an overrun
 cannot stop those correctness checks. Invalid modes or malformed observations
 are errors. Existing workload timeouts and memory-lifecycle checks remain.
 
-Routine compiler PRs omit the separate interleaved arm64 cost matrix. Linux
+Migration PRs omit the separate interleaved arm64 cost matrix. Linux
 amd64 integration retains its compiler generations, binary-format/dependency
 checks, application outputs and failure-order controls but omits its repeated
-formal timing series. CI workflow/routing or cost-policy changes still select the
-arm64 comparison to validate the changed controller. Standalone tools/workflows
+formal timing series. CI workflow/routing and cost-policy changes retain their
+synthetic controller checks and all applicable target/recovery/runtime correctness,
+without restoring old performance ceilings as a naming-cleanup prerequisite.
+Standalone tools/workflows
 default to `strict`; their original thresholds and full measurement series are
 available and failures remain visible. No admin bypass or blanket failed-job
 allowance is used. Green migration CI proves integration correctness, not
