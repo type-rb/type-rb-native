@@ -16,6 +16,15 @@ differential oracle. The completed compiler and runtime owned by this
 repository are written in TypeRB and reproduce themselves without Go in the
 ordinary release/bootstrap path.
 
+## Complete toolchain goal
+
+The [MIR consolidation roadmap](mir-consolidation.md) records the longer goal:
+full TypeRB behavior, Go/Ruby/TypeScript emission and execution, standard-library
+and official-package coverage, and Native output outperforming equivalent Pure
+Go applications in measured runtime, application size and build time. Current
+Native coverage remains partial. Preserve high-level checked semantics for the
+source backends while lowering Native layout/ABI details through its MIR path.
+
 ## Ownership boundary
 
 The [reference TypeRB repository](https://github.com/type-rb/type-rb) owns:

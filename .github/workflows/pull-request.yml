@@ -11,6 +11,10 @@ concurrency:
   group: native-pr-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
+env:
+  # Issue #439: costs are observed during MIR consolidation.
+  NATIVE_MIR_COST_MODE: mir-migration
+
 jobs:
   plan:
     runs-on: ubuntu-latest
@@ -81,6 +85,7 @@ jobs:
       - name: Verify project and transition policy tooling on Linux
         run: |
           sh tools/native-mir-transition-policy-test.sh
+          sh tools/compiler-cost-test.sh
           sh tools/compiler-project-test.sh
       # Reference validity belongs to this oracle job, not the Go-free CLI chain.
       - name: Verify language fixtures against the exact reference compiler
@@ -129,16 +134,22 @@ jobs:
     needs: [plan, quick]
     if: needs.plan.outputs.code == 'true' && needs.plan.outputs.draft == 'false'
     uses: ./.github/workflows/gate-zero.yml
+    with:
+      cost_mode: mir-migration
 
   targets:
     needs: [plan, quick]
     if: needs.plan.outputs.code == 'true' && needs.plan.outputs.draft == 'false'
     uses: ./.github/workflows/gate6n-linux-amd64.yml
+    with:
+      cost_mode: mir-migration
 
   memory:
     needs: [plan, quick]
     if: needs.plan.outputs.memory == 'true' && needs.plan.outputs.draft == 'false'
     uses: ./.github/workflows/runtime-worker-memory.yml
+    with:
+      cost_mode: mir-migration
 
   performance:
     needs: [plan, native, targets, memory, tooling, cli]

@@ -187,6 +187,8 @@ iteration_source_root=${15:-}
 script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 verifier_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
 . "$script_directory/compiler-project.sh"
+. "$script_directory/compiler-cost.sh"
+compiler_cost_mode > /dev/null || exit 64
 . "$script_directory/native-mir-transition-policy.sh"
 MAX_COMPILER_SIZE=$(native_mir_target_compiler_limit "$PROFILE")
 external_recipe=$verifier_root/tools/gate6n-external-build.sh
@@ -204,7 +206,7 @@ done
 python_command=$(command -v python3)
 test -x "$python_command" || fail "resolved Python command is not executable"
 
-run_formal_evidence() {
+verify_binary_format() {
 record_native_elf() {
 	label=$1
 	executable=$2
@@ -271,6 +273,9 @@ printf '%s\n' "$go_ldd_status" > "$evidence/go-elf/ldd.status"
 	> "$evidence/go-elf/go-version-m.stdout" \
 	2> "$evidence/go-elf/go-version-m.stderr" || fail "optimized Go metadata probe failed"
 
+}
+
+run_formal_evidence() {
 measurements=$evidence/measurements.csv
 measurement_logs=$evidence/measurement-logs
 mkdir -p "$measurement_logs"
@@ -833,13 +838,6 @@ require_observations_below_catastrophic adjacent-build b2-b3 6 "$adjacent_strong
 require_observations_below_catastrophic adjacent-build b3-b4 4 "$adjacent_strongest_time"
 require_observations_below_catastrophic adjacent-build b3-b4 6 "$adjacent_strongest_rss"
 
-strip --strip-all -o "$workspace/native-first/program.stripped" "$native_application"
-strip --strip-all -o "$workspace/go/program.stripped" "$go_application"
-native_stripped_size=$(file_size "$workspace/native-first/program.stripped")
-go_stripped_size=$(file_size "$workspace/go/program.stripped")
-test "$((native_stripped_size * 5))" -le "$go_stripped_size" ||
-	fail "Native portable-entry application is not at least 80% smaller than optimized Go"
-
 cat > "$evidence/medians.csv" <<EOF
 metric,native,comparison,limit_percent
 compiler-build-time,$compiler_native_time,$compiler_external_time,125
@@ -851,6 +849,16 @@ application-build-rss,$application_native_build_rss,$application_go_build_rss,12
 application-runtime-time,$application_native_runtime_time,$application_go_runtime_time,125
 application-runtime-rss,$application_native_runtime_rss,$application_go_runtime_rss,125
 EOF
+}
+
+record_target_evidence() {
+strip --strip-all -o "$workspace/native-first/program.stripped" "$native_application"
+strip --strip-all -o "$workspace/go/program.stripped" "$go_application"
+native_stripped_size=$(file_size "$workspace/native-first/program.stripped")
+go_stripped_size=$(file_size "$workspace/go/program.stripped")
+compiler_cost_check application-bytes-times-five "$((native_stripped_size * 5))" "$go_stripped_size" \
+	>> "$evidence/cost-observations.txt" ||
+	fail "Native portable-entry application is not at least 80% smaller than optimized Go"
 
 {
 	printf 'pre_implementation_revision=%s\n' "$PRE_IMPLEMENTATION_REVISION"
@@ -1565,7 +1573,8 @@ test "$(cat "$publication_output/sentinel")" = preserve-publication-directory ||
 require_no_intermediates "$failure_order_directory"
 
 compiler_size=$(file_size "$output_compiler")
-test "$compiler_size" -le "$MAX_COMPILER_SIZE" || fail "candidate compiler exceeds the size bound"
+compiler_cost_check compiler-bytes "$compiler_size" "$MAX_COMPILER_SIZE" \
+	>> "$evidence/cost-observations.txt" || fail "candidate compiler exceeds the size bound"
 {
 	printf 'platform=linux-amd64\n'
 	printf 'raw_compiler_bytes=%s\n' "$compiler_size"
@@ -1725,4 +1734,10 @@ for failure_case in \
 		>> "$evidence/applications/runtime-failures.csv"
 done
 
-run_formal_evidence
+verify_binary_format
+if test "$(compiler_cost_mode)" = strict; then
+	run_formal_evidence
+else
+	printf 'cost_mode=mir-migration\ncomparative_measurements=not-run\n' > "$evidence/measurement-policy.txt"
+fi
+record_target_evidence

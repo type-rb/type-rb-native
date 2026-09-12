@@ -20,7 +20,9 @@ The proposal should record:
 - the parts intentionally left unsupported.
 
 Small fixes and documentation corrections do not need a separate experiment
-proposal.
+proposal. Current MIR work follows the larger
+[consolidation milestone](docs/mir-consolidation.md), including its explicit
+temporary cost policy; individual helper moves do not need a new proposal.
 
 Follow the [repository organization schedule](docs/repository-organization.md)
 for source moves and naming cleanup. Inventory consumers before removing
@@ -28,9 +30,10 @@ gate-labelled code, keep mechanical changes separate from optimization, and
 preserve recovery and measurement coverage. Keep routine checkpoint narratives
 out of the root README; link to the owning status page or dated evidence.
 
-Keep implementation drafts in the quick-feedback stage. After local proof,
-negative-case, and compactness review, mark the PR ready to run complete
-correctness and then comparative measurements. See the
+Keep implementation drafts in the quick-feedback stage. After focused local
+proof and negative-case review, mark cohesive PRs ready for complete correctness.
+During MIR consolidation, detailed comparative cost qualification belongs at
+milestones; costs observed during migration do not establish qualification. See the
 [CI validation stages](docs/ci-validation.md) for routing, manual runs, and
 the fail-closed merge-acceptance check.
 

@@ -147,7 +147,8 @@ def relevant(path):
                             "tools/runtime-memory-soak/", "tools/runtime-worker-soak/",
                             "tools/native-mir-array-loop-recovery/")) or path in (
         "TYPE_RB_REVISION", ".github/workflows/daily-performance.yml", ".github/workflows/weekly-performance.yml",
-        "tools/bootstrap-seed.sh", "tools/bootstrap-seed-download.sh", "tools/compiler-project.sh")
+        "tools/bootstrap-seed.sh", "tools/bootstrap-seed-download.sh", "tools/compiler-project.sh",
+        "tools/compiler-cost.sh")
 
 
 def fingerprint():

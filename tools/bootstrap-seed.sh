@@ -236,6 +236,8 @@ else
 	repository_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
 fi
 . "$script_directory/compiler-project.sh"
+. "$script_directory/compiler-cost.sh"
+compiler_cost_mode > /dev/null || exit 64
 compiler_project=$(native_compiler_project_directory "$repository_root") || fail "invalid compiler project"
 transition_policy=$repository_root/tools/native-mir-transition-policy.sh
 control_flow_marker=$compiler_project/native-mir-control-flow-v1.txt
@@ -743,8 +745,8 @@ if test "$input_role" = ordinary; then
 	size_candidates="$b1 $size_candidates"
 fi
 for compiler in $size_candidates; do
-	test "$(file_size "$compiler")" -le "$MAX_COMPILER_SIZE" ||
-		fail "compiler generation exceeds size bound: $compiler"
+	compiler_cost_check compiler-bytes "$(file_size "$compiler")" "$MAX_COMPILER_SIZE" \
+		>> "$evidence/cost-observations.txt" || fail "compiler generation exceeds size bound: $compiler"
 done
 compiler_size=$(file_size "$b4")
 compiler_sha256=$(sha256 "$b4")

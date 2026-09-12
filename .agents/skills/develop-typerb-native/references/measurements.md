@@ -4,16 +4,14 @@ Read for optimization acceptance, benchmark claims, diagnostic measurements,
 or changes to retained results. Paths below are repository-relative.
 Documentation-only edits do not start a new measurement cohort.
 
-- Before choosing an optimization's cost/benefit path, read
-  `docs/optimization-tradeoffs.md`. Keep ordinary 1.05 ratios and absolute CI
-  ceilings unchanged unless a separate reviewed acceptance decision updates
-  their enforcement. A cost miss is not, by itself, a reason to abandon a
-  promising optimization or spend indefinitely on size-only refinements.
-- Register a candidate-specific diagnostic before measuring beyond an ordinary
-  cost bound: exact identities, cumulative and same-feature controls, numeric
-  investigation ceilings, runtime benefit/control criteria, run budget,
-  correctness prerequisites, expiry and next decision. Do not convert this into
-  automatic merge authority or silently reuse a structural transition marker.
+- Follow `docs/mir-consolidation.md` during the active migration. Integration
+  explicitly observes intermediate cost overruns while correctness, safety and
+  reproducibility remain blocking. Use daily/weekly trends and assess performance
+  at coherent milestones; do not open a new size-budget review for each slice.
+- Outside that phase, use `docs/optimization-tradeoffs.md` and the selected strict
+  contract. Explicit standalone experiments retain exact identities, controls,
+  run budgets and observations. A diagnostic is not final qualification; do not
+  reuse historical source-specific exceptions or relabel a failed observation.
 - Preserve all earlier failed results. Compare actual application build/size and
   runtime separately from compiler self-build/text/QBE/distribution costs; old
   Go measurements do not establish current or general-purpose spare capacity.

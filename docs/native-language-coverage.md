@@ -33,12 +33,12 @@ The near-term order is:
    prerequisites, not a requirement to finish every feature in one category.
    Evaluate UTF-8 literal output separately from a complete Unicode API.
 
-Existing performance, memory, process and reproducibility checks remain in
-force. New benchmark-specific tuning and broad optimizer work are secondary
-while these basic language boundaries are being established. Performance goals
-remain unchanged; a feature is not required to manufacture a runtime speedup
-to justify its existence. A failed cost bound still needs the existing
-[trade-off review](optimization-tradeoffs.md), not automatic relaxation.
+The [MIR consolidation milestone](mir-consolidation.md) now coordinates this
+coverage with the larger ownership migration. Correctness, memory safety, process
+and reproducibility checks remain required. Temporary performance/size regressions
+are observed during integration; detailed qualification occurs at coherent
+milestones. A feature need not manufacture a runtime speedup or a separate size
+budget revision to justify its existence. Final performance goals remain unchanged.
 
 ## Readonly record field correction
 
@@ -119,8 +119,9 @@ timeout with owned-process-group cleanup; these are not performance tests.
 
 ## Feature delivery contract
 
-For each bounded slice, register the exact reference and Native baseline,
-semantics, coverage cases and existing cost authorities before implementation.
+Work within the active milestone and record exact reference/Native identities,
+semantics and coverage in each cohesive PR. Register new semantic scope or material
+experiments when needed; routine ownership moves do not need individual budgets.
 Then deliver parser/checker behavior, checked/MIR representation and validation,
 mechanical lowering, CLI/REPL coverage, and reference differential tests.
 Preserve source diagnostics, evaluation order, branch-local bindings, portable

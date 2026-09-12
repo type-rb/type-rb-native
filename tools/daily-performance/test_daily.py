@@ -31,7 +31,7 @@ class DailyTests(unittest.TestCase):
             self.assertFalse(state.relevant(path), path)
         for path in ["compiler/src/parser.trb", "src/runtime.trb", "TYPE_RB_REVISION",
                      "tools/daily-performance/measure.py", ".github/workflows/daily-performance.yml",
-                     "tools/runtime-worker-soak/workload.trb"]:
+                     "tools/runtime-worker-soak/workload.trb", "tools/compiler-cost.sh"]:
             self.assertTrue(state.relevant(path), path)
 
     def test_unchanged_and_forced_plans(self):
