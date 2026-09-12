@@ -2,7 +2,7 @@
 
 TypeRB Native follows exact reference revisions while it is experimental. The
 current source and semantic oracle is TypeRB
-`570bf6f64c7ca2412d0b4ffe06cd186cd53bdf4c` (`0.4.7-dev`), recorded in
+`27a6bdd882084d5660fc9090006eb7e2a44d706c` (`0.4.7-dev`), recorded in
 `TYPE_RB_REVISION`. This is an exact development pin, not a supported version
 range.
 
@@ -33,6 +33,27 @@ The earlier scoped-file successor is registered in
 [Darwin/Linux arm64 result](https://github.com/type-rb/type-rb-native/blob/5cf61c740aa600c34ed94f1b130ea2ffefd9e783/results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/README.md)
 passes the selected-reference, migration, exact-baseline, target-regression,
 fixed-point, process, resource, and size criteria.
+
+## Range endpoint reference update
+
+The pin includes [TypeRB PR #680](https://github.com/type-rb/type-rb/pull/680)
+and [PR #681](https://github.com/type-rb/type-rb/pull/681). Go Range construction
+retains the evaluated start before evaluating the end expression, including
+when the end mutates a captured start binding. Inclusive, exclusive and reversed
+ranges share this evaluation rule. ORM range predicates use the same constructor.
+[PR #682](https://github.com/type-rb/type-rb/pull/682) changes development guidance;
+its compiler source is unchanged from `c030ef671798a10abea01c4ac89fa18ffde79f82`.
+
+This is the compatibility prerequisite for the next
+[ordinary Range slice](https://github.com/type-rb/type-rb-native/issues/410#issuecomment-5643802805).
+The maintained coverage registry separates reference Range behavior from the
+current Native rejection. The direct case reaches the unsupported Range syntax;
+the captured-endpoint case also requires function literals and currently rejects
+that earlier syntax. Updating the oracle adds no ordinary Native Range
+implementation, snapshot operation or compiler-source self-use. Existing Array
+support and all immutable seed identities remain unchanged. Current validation
+is recorded in the [compatibility record](../results/2026-09-07-string-escape-reference-compatibility/README.md);
+older cohorts below retain their original reference and Native identities.
 
 ## Collection iteration reference
 
@@ -71,7 +92,7 @@ ordinary iteration implementation remain separate from the immutable seed
 handoff required before compiler implementation source adopts `each`.
 
 The [full accepted integration](https://github.com/type-rb/type-rb-native/actions/runs/34630338541)
-at `d2980f14d1b64e5ce3544dd7133e7f5871644e4e` validates this exact reference pin:
+at `d2980f14d1b64e5ce3544dd7133e7f5871644e4e` validates reference `570bf6f64c7ca2412d0b4ffe06cd186cd53bdf4c`:
 109 root and 200 compiler tests, ordinary/recovered generations, managed runtime,
 CLI/REPL, all three targets and ordinary cost bounds pass. The parent ordinary
 implementation was accepted separately in PR #418. This current CI proof does

@@ -19,3 +19,5 @@
 | Array of named records | accepts | accepts | matches reference | matches reference |
 | Hash literal and required lookup | accepts | accepts | matches reference | matches reference |
 | Array each with live growth and index | accepts | accepts | matches reference | matches reference |
+| Range each (inclusive / exclusive / reversed) | rejects | rejects | not reached | rejects |
+| Range with captured endpoint effects (requires fn) | rejects | rejects | not reached | rejects |
