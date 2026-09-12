@@ -89,25 +89,39 @@ can eventually refer to authored TypeRB source.
 The target architecture routes every supported function through verified MIR;
 the remaining direct path is not that finished architecture. The
 [MIR status](native-mir-optimization-status.md) distinguishes implemented
-vertical slices from remaining ownership. In the current source closure,
-`mir.trb` owns the model, verifier, and target-independent passes;
-`literals.trb` owns shared numeric predicates. `state.trb` owns shared compiler
-state, symbol indexes and diagnostics, while `parser.trb` owns syntax parsing,
-token/cursor primitives and the shared operator mapping. `resolution.trb` owns
-declaration/import/type resolution; `checked_program.trb` owns typed-expression
-checking and MIR construction. Shared local state remains in `state.trb`.
-`qbe_output.trb` owns the output container and ordered emission helpers;
-`qbe_runtime.trb` owns runtime QBE generation and selection, depending only on
-that output boundary and shared path predicates. Neither depends on the entry.
-`project_config.trb` owns project configuration records, JSONC parsing and
-validation, with only the shared ASCII predicate as an outbound dependency.
-The compiler driver, experimental CLI and REPL import its parser directly.
-The compiler entry retains lexing and its source-slicing intrinsics, final
-checking orchestration and temporary-storage lifetime boundaries, QBE adaptation
-and the remaining driver code.
-These are single canonical modules with explicit imports, not a second
-compiler implementation. The [organization schedule](repository-organization.md)
-tracks the next responsibility extractions.
+vertical slices from remaining ownership.
+
+### Current compiler source ownership
+
+The ordinary entry is [compiler/src/compiler.trb](../compiler/src/compiler.trb).
+Its explicit transitive import closure contains 18 canonical source modules:
+
+| Modules in `compiler/src/` | Current responsibility |
+| --- | --- |
+| `storage.trb`, `path.trb`, `literals.trb` | Shared storage, path predicates, and numeric/ASCII predicates. |
+| `state.trb` | Compiler state, symbol indexes, shared locals, and diagnostics. |
+| `parser.trb`, `resolution.trb` | Syntax and token boundaries; declaration, import, and type resolution. |
+| `checked_program.trb` | Recursive expression/body checking and MIR construction. |
+| `mir.trb` | Core MIR model, verifier, and target-independent passes. |
+| `hash_types.trb`, `hash_mir.trb`, `hash_checked.trb` | Hash types and value layout, operation plans, and their checked source bindings. |
+| `iteration_mir.trb`, `iteration_checked.trb` | Array iteration plans, structural validation, and checked source bindings. |
+| `qbe_output.trb`, `qbe_runtime.trb`, `hash_runtime.trb` | Ordered QBE output and runtime generation, including the Hash runtime. |
+| `project_config.trb` | Project configuration records, JSONC parsing, and validation. |
+| `compiler.trb` | Lexing and source-slicing intrinsics, final checking orchestration, temporary-storage lifetimes, QBE adaptation, and the remaining driver code. |
+
+The [shared iteration proof module](../compiler/src/iteration_checked.trb)
+serves the checker, compiler entry, and REPL without importing the recursive
+checker or emitter. Recursive body checking stays in `checked_program.trb`.
+The current iteration plans cover Array `each` and `each.with_index`; Range
+support remains pending in the [language coverage plan](native-language-coverage.md).
+
+The CLI/REPL under `compiler/cli/` consumes these modules but is outside this
+ordinary core closure. Snapshot recovery derives a temporary flattened source
+from the canonical modules using
+[strict closure validation](../src/compiler_recovery_source.trb); it does not
+replace file-root imports in ordinary self-hosting. The
+[organization schedule](repository-organization.md) tracks further extraction
+and retirement of remaining gate-derived implementation names.
 
 The ordinary self-hosting sequence
 starts from a previous Native seed, records any setup-only transitions, and
