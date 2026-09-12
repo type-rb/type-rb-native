@@ -1046,11 +1046,11 @@ failure_source=$candidate_root/corpus/portable-entry/runtime-failures/src/main.t
 for required_file in "$compiler_entry" "$portable_config" "$portable_source" "$failure_config" "$failure_source"; do
 	test -f "$required_file" || fail "required source is missing: $required_file"
 done
-test "$(sha256 "$portable_config")" = 4b81aaacced57409eeaa8494c45ecba6fd67868f74075e768e287815cf7c6519 ||
+test "$(sha256 "$portable_config")" = f38bad94e483e16876514e5624e96e11a66eaeb8374e222b14a75c7072dddbf0 ||
 	fail "portable-entry config digest differs"
 test "$(sha256 "$portable_source")" = 67d89532214e49f0a574cc031f33ca0e91f414a63e3185e274d260f80b243f66 ||
 	fail "portable-entry source digest differs"
-test "$(sha256 "$failure_config")" = b9511ce4e0c9e6fcc18fbbdddbcbe1645f3701eb7e10fb6ab5be125eb6b288cc ||
+test "$(sha256 "$failure_config")" = 9a81d83d114df62bbe1f0f3e29404d01e6ae49945a0c3afe44b23fdeef228e98 ||
 	fail "runtime-failure config digest differs"
 test "$(sha256 "$failure_source")" = dc9e4ec4667c09fe1392a64b22cad5727568b7b08954d3fc09640847bb60a086 ||
 	fail "runtime-failure source digest differs"
