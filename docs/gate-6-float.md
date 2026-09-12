@@ -11,7 +11,7 @@ and ownership model is defined by
 
 Gate 6I is complete at measured implementation revision
 `cd2335e6472b4daca8d631b17b889a094959c2f2` with the TypeRB-authored
-[benchmark controller](../tools/gate6i-benchmark/README.md) at revision
+[benchmark controller](https://github.com/type-rb/type-rb-native/blob/d568d9e712452f66fc9c48d6025bf73b79659661/tools/gate6i-benchmark/README.md) at revision
 `073504790b930157b48c1bc6743bc0102f5fe014`. Every registered semantic,
 correctness, performance, memory, size, ownership, fixed-point, and pinned
 Linux arm64 criterion passes. See the

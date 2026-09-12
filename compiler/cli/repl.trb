@@ -3,19 +3,19 @@ import { cli_diagnostic } from diagnostics
 import { ReplCandidates, repl_editor_read, repl_editor_paint } from repl_editor
 import { repl_incomplete, repl_escape } from repl_syntax
 import { repl_history_load, repl_history_save } from repl_history
-import { Gate4Compiler, gate4_compiler_new, gate4_has_diagnostic, gate4_locals_new, gate4_local_add, gate4_diagnostic, gate4_find_module } from state
-import { gate4_load_integer, gate4_load_string, gate4_store_integer } from storage
-import { gate4_parse_module, gate4_token_is, gate4_skip_newlines } from parser
-import { gate4_resolve, gate4_find_function_in_module, gate4_type_display, gate4_find_record_type, gate4_find_record_in_module, gate4_record_type, gate4_array_inner_name } from resolution
-import { gate4_lex, gate4_check, gate4_load_file_root, gate4_read_source, gate4_file_exists, gate4_source_slice, gate4_collect_project_sources, gate4_project_module_name } from compiler
+import { CompilerState, compiler_new, has_diagnostic, locals_new, local_add, diagnostic, find_module } from state
+import { load_integer, load_string, store_integer } from storage
+import { parse_module, token_is, skip_newlines } from parser
+import { resolve, find_function_in_module, type_display, find_record_type, find_record_in_module, record_type, array_inner_name } from resolution
+import { lex, check, load_file_root, compiler_read_source, compiler_file_exists, compiler_source_slice, compiler_collect_project_sources, project_module_name } from compiler
 import { parse_project_config } from project_config
-import { gate4_check_expression } from checked_program
-import { gate4_path_directory, gate4_path_join, gate4_string_starts_with } from path
+import { check_expression } from checked_program
+import { path_directory, path_join, string_starts_with } from path
 import { native_cli_line, native_cli_eof, native_cli_tty, native_cli_write, native_cli_interrupt, native_cli_cwd, native_cli_env, native_cli_mkdir } from host
 import { ReplStore, ReplEnvironment, repl_store, repl_environment } from repl_model
 import { repl_render, repl_compact } from repl_values
 import { repl_statement } from repl_eval
-import { gate4_ascii_code, gate4_integer_string } from literals
+import { ascii_code, integer_string } from literals
 
 record ReplProject
 	imports: String
@@ -60,7 +60,7 @@ def repl_trim(text: String): String
 			scan = false
 		end
 	end
-	return gate4_source_slice(text, start, finish)
+	return compiler_source_slice(text, start, finish)
 end
 
 def repl_lines(text: String): Integer
@@ -79,12 +79,12 @@ def repl_project(config: String): ReplProject
 	if config == ""
 		return ReplProject.new(imports: "import trb/std/math\nimport trb/std/process\n", root: native_cli_cwd(), error: "")
 	end
-	project := parse_project_config(gate4_read_source(config))
+	project := parse_project_config(compiler_read_source(config))
 	if project.error != ""
 		return ReplProject.new(imports: "", root: "", error: project.error)
 	end
-	root := gate4_path_join(gate4_path_directory(config), project.source_dir)
-	bundle := gate4_collect_project_sources(root, gate4_path_join(gate4_path_directory(config), project.out_dir))
+	root := path_join(path_directory(config), project.source_dir)
+	bundle := compiler_collect_project_sources(root, path_join(path_directory(config), project.out_dir))
 	if bundle.error != ""
 		return ReplProject.new(imports: "", root: root, error: bundle.error)
 	end
@@ -92,18 +92,18 @@ def repl_project(config: String): ReplProject
 	mut modules: Array<String> := []
 	mut index := 0
 	while index < bundle.paths.size()
-		mut state := gate4_compiler_new(bundle.sources[index].size() * 3 + 16)
-		gate4_lex(state, bundle.sources[index])
-		if !gate4_has_diagnostic(state)
-			gate4_parse_module(state, 0, 0)
+		mut state := compiler_new(bundle.sources[index].size() * 3 + 16)
+		lex(state, bundle.sources[index])
+		if !has_diagnostic(state)
+			parse_module(state, 0, 0)
 		end
-		if gate4_has_diagnostic(state)
+		if has_diagnostic(state)
 			return ReplProject.new(imports: "", root: root, error: "cannot parse project module " + bundle.paths[index])
 		end
-		module_name := gate4_project_module_name(state, root, bundle.paths[index])
+		module_name := project_module_name(state, root, bundle.paths[index])
 		mut item := 0
 		while item < state.function_count[0]
-			name := gate4_load_string(state.function_names, item)
+			name := load_string(state.function_names, item)
 			if name != "main"
 				names.push(name)
 				modules.push(module_name)
@@ -112,7 +112,7 @@ def repl_project(config: String): ReplProject
 		end
 		item = 0
 		while item < state.record_count[0]
-			names.push(gate4_load_string(state.record_names, item))
+			names.push(load_string(state.record_names, item))
 			modules.push(module_name)
 			item += 1
 		end
@@ -137,31 +137,31 @@ def repl_project(config: String): ReplProject
 	return ReplProject.new(imports: imports, root: root, error: "")
 end
 
-def repl_checked(source: String, root: String): Gate4Compiler
-	mut state := gate4_load_file_root(source, gate4_path_join(root, "__repl__.trb"))
+def repl_checked(source: String, root: String): CompilerState
+	mut state := load_file_root(source, path_join(root, "__repl__.trb"))
 	state.hash_repl[0] = true
-	if !gate4_has_diagnostic(state)
-		gate4_resolve(state)
+	if !has_diagnostic(state)
+		resolve(state)
 	end
 	# A REPL import is an intentional session declaration; it need not be used
 	# by the same submission that introduced it.
 	mut index := 0
 	while index < state.import_count[0]
-		gate4_store_integer(state.import_used, index, 1)
+		store_integer(state.import_used, index, 1)
 		index += 1
 	end
-	if !gate4_has_diagnostic(state)
-		gate4_check(state)
+	if !has_diagnostic(state)
+		check(state)
 	end
 	# Keep the evaluator inside the ordinary runtime's current String boundary.
 	index = 0
 	while index < state.token_count[0]
-		if gate4_load_integer(state.token_kinds, index) == 3
-			text := gate4_load_string(state.token_texts, index)
+		if load_integer(state.token_kinds, index) == 3
+			text := load_string(state.token_texts, index)
 			mut character := 0
 			while character < text.size()
-				if gate4_ascii_code(text[character]) < 0
-					gate4_diagnostic(state, "TRBN4005", gate4_load_integer(state.token_lines, index), "Native REPL currently supports ASCII String literals only")
+				if ascii_code(text[character]) < 0
+					diagnostic(state, "TRBN4005", load_integer(state.token_lines, index), "Native REPL currently supports ASCII String literals only")
 					return state
 				end
 				character += 1
@@ -190,28 +190,28 @@ record ReplSession
 	submissions: Array<String>
 end
 
-def repl_show(mut state: Gate4Compiler, mut session: ReplSession, input: String, prefix: String, type_only: Boolean, display: Boolean): Boolean
+def repl_show(mut state: CompilerState, mut session: ReplSession, input: String, prefix: String, type_only: Boolean, display: Boolean): Boolean
 	state.active_module[0] = state.entry_module[0]
 	line_number := repl_lines(prefix) + 1
-	main := gate4_find_function_in_module(state, state.entry_module[0], "main")
-	mut position := [gate4_load_integer(state.function_body_starts, main)]
-	while gate4_load_integer(state.token_lines, position[0]) < line_number
+	main := find_function_in_module(state, state.entry_module[0], "main")
+	mut position := [load_integer(state.function_body_starts, main)]
+	while load_integer(state.token_lines, position[0]) < line_number
 		position[0] += 1
 	end
-	gate4_skip_newlines(state, position)
-	if gate4_load_integer(state.token_lines, position[0]) >= line_number + repl_lines(input) + 1
+	skip_newlines(state, position)
+	if load_integer(state.token_lines, position[0]) >= line_number + repl_lines(input) + 1
 		return true
 	end
 	if type_only
-		mut locals := gate4_locals_new(session.environment.count[0] + 16)
+		mut locals := locals_new(session.environment.count[0] + 16)
 		mut index := 0
 		while index < session.environment.count[0]
 			id := session.environment.values[index]
-			gate4_local_add(state, locals, session.environment.names[index], session.store.types[id], session.environment.mutable[index], 1)
+			local_add(state, locals, session.environment.names[index], session.store.types[id], session.environment.mutable[index], 1)
 			index += 1
 		end
-		value := gate4_check_expression(state, position, locals, 1, "")
-		puts(repl_editor_paint(gate4_type_display(state, value.type_name), 5, repl_use_color()))
+		value := check_expression(state, position, locals, 1, "")
+		puts(repl_editor_paint(type_display(state, value.type_name), 5, repl_use_color()))
 		return true
 	end
 	session.store.error[0] = ""
@@ -222,10 +222,10 @@ def repl_show(mut state: Gate4Compiler, mut session: ReplSession, input: String,
 	mut evaluating := true
 	mut error_line := line_number
 	while evaluating
-		error_line = gate4_load_integer(state.token_lines, position[0])
+		error_line = load_integer(state.token_lines, position[0])
 		value = repl_statement(state, position, session.store, session.environment, flow, - 1)
-		gate4_skip_newlines(state, position)
-		if gate4_load_integer(state.token_lines, position[0]) >= finish_line
+		skip_newlines(state, position)
+		if load_integer(state.token_lines, position[0]) >= finish_line
 			evaluating = false
 		end
 		if session.store.error[0] != ""
@@ -241,10 +241,10 @@ def repl_show(mut state: Gate4Compiler, mut session: ReplSession, input: String,
 	session.text[1] = repl_bindings(state, session)
 	if session.store.error[0] != ""
 		mut message := session.store.error[0]
-		if gate4_string_starts_with(message, "panic: ")
-			message = gate4_source_slice(message, 7, message.size())
+		if string_starts_with(message, "panic: ")
+			message = compiler_source_slice(message, 7, message.size())
 		end
-		message = "(trb):" + gate4_integer_string(repl_session_lines(session) + error_line - line_number + 1) + ": error: " + message
+		message = "(trb):" + integer_string(repl_session_lines(session) + error_line - line_number + 1) + ": error: " + message
 		native_cli_write(repl_error_text(message) + "\n", 2)
 		return false
 	end
@@ -252,8 +252,8 @@ def repl_show(mut state: Gate4Compiler, mut session: ReplSession, input: String,
 		return true
 	end
 	if session.store.types[value] != "Void"
-		mut rendered := repl_editor_paint(repl_render(state, session.store, value, 0), 2, repl_use_color()) + repl_editor_paint(" : ", 4, repl_use_color()) + repl_editor_paint(gate4_type_display(state, session.store.types[value]), 5, repl_use_color())
-		mut mutable := gate4_string_starts_with(input, "mut ")
+		mut rendered := repl_editor_paint(repl_render(state, session.store, value, 0), 2, repl_use_color()) + repl_editor_paint(" : ", 4, repl_use_color()) + repl_editor_paint(type_display(state, session.store.types[value]), 5, repl_use_color())
+		mut mutable := string_starts_with(input, "mut ")
 		mut index := 0
 		while index < session.environment.count[0]
 			if input == session.environment.names[index]
@@ -287,7 +287,7 @@ def repl_submit(mut session: ReplSession, input: String, type_only: Boolean, dis
 		source = session.text[0] + input + "\ndef main()\n" + session.text[1] + "return\nend\n"
 	end
 	mut state := repl_checked(source, session.project.root)
-	if gate4_has_diagnostic(state)
+	if has_diagnostic(state)
 		mut offset := repl_lines(prefix)
 		if declarations
 			offset = repl_lines(session.text[0])
@@ -329,20 +329,20 @@ def repl_command(mut session: ReplSession, input: String, config: String): ReplC
 		end
 		return ReplCommand.new(session: replayed.session, running: true)
 	end
-	if gate4_string_starts_with(input, ":type ")
-		repl_submit(session, gate4_source_slice(input, 6, input.size()), true, false)
+	if string_starts_with(input, ":type ")
+		repl_submit(session, compiler_source_slice(input, 6, input.size()), true, false)
 		return ReplCommand.new(session: session, running: true)
 	end
-	if gate4_string_starts_with(input, ":load ")
-		path := repl_trim(gate4_source_slice(input, 6, input.size()))
-		if !gate4_file_exists(path)
+	if string_starts_with(input, ":load ")
+		path := repl_trim(compiler_source_slice(input, 6, input.size()))
+		if !compiler_file_exists(path)
 			native_cli_write("trbn: cannot read " + path + "\n", 2)
 			return ReplCommand.new(session: session, running: true)
 		end
-		replayed := repl_replay(session, config, repl_split_source(gate4_read_source(path)))
+		replayed := repl_replay(session, config, repl_split_source(compiler_read_source(path)))
 		return ReplCommand.new(session: replayed.session, running: true)
 	end
-	if gate4_string_starts_with(input, ":")
+	if string_starts_with(input, ":")
 		native_cli_write("trbn: unknown REPL command; use :help\n", 2)
 		return ReplCommand.new(session: session, running: true)
 	end
@@ -366,17 +366,17 @@ def repl_run(config: String): Integer
 	mut history := native_cli_env("TRBN_HISTORY")
 	if history == ""
 		if config != ""
-			directory := gate4_path_join(gate4_path_directory(config), ".trb")
+			directory := path_join(path_directory(config), ".trb")
 			native_cli_mkdir(directory)
-			history = gate4_path_join(directory, "repl_history")
+			history = path_join(directory, "repl_history")
 		else
 			cache := native_cli_env("HOME")
 			if cache != ""
-				directory := gate4_path_join(cache, ".cache")
+				directory := path_join(cache, ".cache")
 				native_cli_mkdir(directory)
-				repl_cache := gate4_path_join(directory, "trbn")
+				repl_cache := path_join(directory, "trbn")
 				native_cli_mkdir(repl_cache)
-				history = gate4_path_join(repl_cache, "repl_history_trb")
+				history = path_join(repl_cache, "repl_history_trb")
 			end
 		end
 	end
@@ -441,7 +441,7 @@ def repl_run(config: String): Integer
 	return 0
 end
 
-def repl_default(state: Gate4Compiler, type_name: String): String
+def repl_default(state: CompilerState, type_name: String): String
 	if type_name == "Hash" || hash_key_type(type_name) != ""
 		return "{}"
 	end
@@ -457,25 +457,25 @@ def repl_default(state: Gate4Compiler, type_name: String): String
 	if type_name == "String"
 		return "\"\""
 	end
-	if gate4_string_starts_with(type_name, "Array<")
+	if string_starts_with(type_name, "Array<")
 		return "[]"
 	end
-	record_index := gate4_find_record_type(state, type_name)
-	start := gate4_load_integer(state.record_field_starts, record_index)
-	count := gate4_load_integer(state.record_field_counts, record_index)
-	mut text := gate4_type_display(state, type_name) + ".new("
+	record_index := find_record_type(state, type_name)
+	start := load_integer(state.record_field_starts, record_index)
+	count := load_integer(state.record_field_counts, record_index)
+	mut text := type_display(state, type_name) + ".new("
 	mut index := 0
 	while index < count
 		if index > 0
 			text += ", "
 		end
-		text += gate4_load_string(state.field_names, start + index) + ": " + repl_default(state, gate4_load_string(state.field_types, start + index))
+		text += load_string(state.field_names, start + index) + ": " + repl_default(state, load_string(state.field_types, start + index))
 		index += 1
 	end
 	return text + ")"
 end
 
-def repl_bindings(state: Gate4Compiler, session: ReplSession): String
+def repl_bindings(state: CompilerState, session: ReplSession): String
 	mut source := ""
 	mut index := 0
 	while index < session.environment.count[0]
@@ -486,7 +486,7 @@ def repl_bindings(state: Gate4Compiler, session: ReplSession): String
 		type_name := session.store.types[id]
 		source += session.environment.names[index]
 		if type_name != "Hash"
-			source += ": " + gate4_type_display(state, type_name)
+			source += ": " + type_display(state, type_name)
 		end
 		source += " := " + repl_default(state, type_name) + "\n"
 		index += 1
@@ -524,8 +524,8 @@ def repl_complete(session: ReplSession): ReplCandidates
 	while index < session.environment.count[0]
 		name := session.environment.names[index]
 		type_name := session.store.types[session.environment.values[index]]
-		repl_candidate(candidates, name, name, gate4_type_display(state, type_name), 0)
-		if gate4_string_starts_with(type_name, "Array<")
+		repl_candidate(candidates, name, name, type_display(state, type_name), 0)
+		if string_starts_with(type_name, "Array<")
 			repl_candidate(candidates, name + ".size", name + ".size()", "size(): Integer", 6)
 			repl_candidate(candidates, name + ".push", name + ".push(", "push(value)", 6)
 		end
@@ -538,14 +538,14 @@ def repl_complete(session: ReplSession): ReplCandidates
 		if type_name == "Integer"
 			repl_candidate(candidates, name + ".to_s", name + ".to_s()", "to_s(): String", 6)
 		end
-		record_index := gate4_find_record_type(state, type_name)
+		record_index := find_record_type(state, type_name)
 		if record_index >= 0
-			start := gate4_load_integer(state.record_field_starts, record_index)
-			count := gate4_load_integer(state.record_field_counts, record_index)
+			start := load_integer(state.record_field_starts, record_index)
+			count := load_integer(state.record_field_counts, record_index)
 			mut field := 0
 			while field < count
-				member := name + "." + gate4_load_string(state.field_names, start + field)
-				repl_candidate(candidates, member, member, gate4_type_display(state, gate4_load_string(state.field_types, start + field)), 0)
+				member := name + "." + load_string(state.field_names, start + field)
+				repl_candidate(candidates, member, member, type_display(state, load_string(state.field_types, start + field)), 0)
 				field += 1
 			end
 		end
@@ -553,8 +553,8 @@ def repl_complete(session: ReplSession): ReplCandidates
 	end
 	index = 0
 	while index < state.function_count[0]
-		if gate4_load_integer(state.function_modules, index) == state.entry_module[0]
-			name := gate4_load_string(state.function_names, index)
+		if load_integer(state.function_modules, index) == state.entry_module[0]
+			name := load_string(state.function_names, index)
 			if name != "main"
 				repl_candidate(candidates, name, repl_function_insertion(state, index, name), repl_function_detail(state, index), 6)
 			end
@@ -563,11 +563,11 @@ def repl_complete(session: ReplSession): ReplCandidates
 	end
 	index = 0
 	while index < state.import_count[0]
-		name := gate4_load_string(state.import_symbols, index)
+		name := load_string(state.import_symbols, index)
 		if name != ""
 			mut imported_function :=- 1
-			if gate4_load_integer(state.import_kinds, index) == 0
-				imported_function = gate4_find_function_in_module(state, gate4_load_integer(state.import_targets, index), name)
+			if load_integer(state.import_kinds, index) == 0
+				imported_function = find_function_in_module(state, load_integer(state.import_targets, index), name)
 			end
 			if imported_function >= 0
 				repl_candidate(candidates, name, repl_function_insertion(state, imported_function, name), repl_function_detail(state, imported_function), 6)
@@ -579,8 +579,8 @@ def repl_complete(session: ReplSession): ReplCandidates
 	end
 	index = 0
 	while index < state.record_count[0]
-		repl_candidate(candidates, gate4_load_string(state.record_names, index), gate4_load_string(state.record_names, index), "record type", 5)
-		repl_candidate(candidates, gate4_load_string(state.record_names, index) + ".new", gate4_load_string(state.record_names, index) + ".new(", "record constructor", 6)
+		repl_candidate(candidates, load_string(state.record_names, index), load_string(state.record_names, index), "record type", 5)
+		repl_candidate(candidates, load_string(state.record_names, index) + ".new", load_string(state.record_names, index) + ".new(", "record constructor", 6)
 		index += 1
 	end
 	return candidates
@@ -588,7 +588,7 @@ end
 
 # Record indexes are compiler-state-local. Preserve nominal identities when a
 # new session declaration changes the ordering of imported record types.
-def repl_remap_records(previous: Gate4Compiler, current: Gate4Compiler, mut store: ReplStore)
+def repl_remap_records(previous: CompilerState, current: CompilerState, mut store: ReplStore)
 	mut index := 0
 	while index < store.types.size()
 		store.types[index] = repl_remap_type(previous, current, store.types[index])
@@ -630,13 +630,13 @@ def repl_replay(mut session: ReplSession, config: String, additional: Array<Stri
 		index += 1
 	end
 	checked := repl_checked(declarations + "def main()\n" + body + "return\nend\n", project.root)
-	if gate4_has_diagnostic(checked)
+	if has_diagnostic(checked)
 		mut offset := repl_lines(project.imports)
 		mut body_offset := repl_lines(declarations) + 1
 		mut input_index := 0
 		mut diagnostic_offset := 0
 		mut submitted_lines := 0
-		line := gate4_load_integer(checked.diagnostic_lines, 0)
+		line := load_integer(checked.diagnostic_lines, 0)
 		while input_index < inputs.size()
 			count := repl_lines(inputs[input_index]) + 1
 			mut start := body_offset
@@ -700,15 +700,15 @@ def repl_split_source(source: String): Array<String>
 end
 
 def repl_is_declaration(input: String): Boolean
-	mut probe := gate4_compiler_new(input.size() * 3 + 16)
-	gate4_lex(probe, input)
+	mut probe := compiler_new(input.size() * 3 + 16)
+	lex(probe, input)
 	mut first := [0]
-	gate4_skip_newlines(probe, first)
-	mut declarations := gate4_token_is(probe, first[0], "def")
-	if gate4_token_is(probe, first[0], "record")
+	skip_newlines(probe, first)
+	mut declarations := token_is(probe, first[0], "def")
+	if token_is(probe, first[0], "record")
 		declarations = true
 	end
-	if gate4_token_is(probe, first[0], "import")
+	if token_is(probe, first[0], "import")
 		declarations = true
 	end
 	return declarations
@@ -753,19 +753,19 @@ def repl_candidate(mut candidates: ReplCandidates, label: String, insertion: Str
 	return
 end
 
-def repl_function_detail(state: Gate4Compiler, index: Integer): String
-	mut detail := gate4_load_string(state.function_names, index) + "("
-	start := gate4_load_integer(state.function_parameter_starts, index)
-	count := gate4_load_integer(state.function_parameter_counts, index)
+def repl_function_detail(state: CompilerState, index: Integer): String
+	mut detail := load_string(state.function_names, index) + "("
+	start := load_integer(state.function_parameter_starts, index)
+	count := load_integer(state.function_parameter_counts, index)
 	mut parameter := 0
 	while parameter < count
 		if parameter > 0
 			detail += ", "
 		end
-		detail += gate4_load_string(state.parameter_names, start + parameter) + ": " + gate4_type_display(state, gate4_load_string(state.parameter_types, start + parameter))
+		detail += load_string(state.parameter_names, start + parameter) + ": " + type_display(state, load_string(state.parameter_types, start + parameter))
 		parameter += 1
 	end
-	return detail + "): " + gate4_type_display(state, gate4_load_string(state.function_result_types, index))
+	return detail + "): " + type_display(state, load_string(state.function_result_types, index))
 end
 
 def repl_use_color(): Boolean
@@ -782,35 +782,35 @@ def repl_error_text(message: String): String
 	return message
 end
 
-def repl_diagnostic(state: Gate4Compiler, offset: Integer)
+def repl_diagnostic(state: CompilerState, offset: Integer)
 	native_cli_write(repl_error_text(cli_diagnostic(state, "(trb)", offset)) + "\n", 2)
 	return
 end
 
-def repl_function_insertion(state: Gate4Compiler, index: Integer, name: String): String
-	if gate4_load_integer(state.function_parameter_counts, index) == 0
+def repl_function_insertion(state: CompilerState, index: Integer, name: String): String
+	if load_integer(state.function_parameter_counts, index) == 0
 		return name + "()"
 	end
 	return name + "("
 end
 
-def repl_remap_type(previous: Gate4Compiler, current: Gate4Compiler, type_name: String): String
+def repl_remap_type(previous: CompilerState, current: CompilerState, type_name: String): String
 	key := hash_key_type(type_name)
 	if key != ""
 		return hash_type(key, repl_remap_type(previous, current, hash_value_type(type_name)))
 	end
-	element := gate4_array_inner_name(type_name)
+	element := array_inner_name(type_name)
 	if element != ""
 		return "Array<" + repl_remap_type(previous, current, element) + ">"
 	end
-	record_index := gate4_find_record_type(previous, type_name)
+	record_index := find_record_type(previous, type_name)
 	if record_index >= 0
-		module_index := gate4_load_integer(previous.record_modules, record_index)
-		module_name := gate4_load_string(previous.module_names, module_index)
-		name := gate4_load_string(previous.record_names, record_index)
-		next_module := gate4_find_module(current, module_name)
-		next_record := gate4_find_record_in_module(current, next_module, name)
-		return gate4_record_type(next_record)
+		module_index := load_integer(previous.record_modules, record_index)
+		module_name := load_string(previous.module_names, module_index)
+		name := load_string(previous.record_names, record_index)
+		next_module := find_module(current, module_name)
+		next_record := find_record_in_module(current, next_module, name)
+		return record_type(next_record)
 	end
 	return type_name
 end

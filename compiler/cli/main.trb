@@ -1,11 +1,11 @@
 import { cli_diagnostic } from diagnostics
-import { Gate4Compiler, gate4_has_diagnostic } from state
-import { gate4_resolve } from resolution
-import { gate4_load_string } from storage
+import { CompilerState, has_diagnostic } from state
+import { resolve } from resolution
+import { load_string } from storage
 import trb/std/process
-import { compiler_main as core_main, gate4_file_exists, gate4_read_source, gate4_load_configured_project, gate4_load_file_root, gate4_check, gate4_emit_qbe, gate4_source_slice } from compiler
+import { compiler_main as core_main, compiler_file_exists, compiler_read_source, load_configured_project, load_file_root, check, emit_qbe, compiler_source_slice } from compiler
 import { parse_project_config } from project_config
-import { gate4_path_directory, gate4_path_basename, gate4_path_join, gate4_string_ends_with, gate4_string_starts_with, gate4_string_without_suffix } from path
+import { path_directory, path_basename, path_join, string_ends_with, string_starts_with, string_without_suffix } from path
 import { native_cli_env, native_cli_cwd, native_cli_program, native_cli_tty, native_cli_write, native_cli_mkdir, native_cli_remove, native_cli_temp, native_cli_execute, native_cli_signals, native_cli_target, native_cli_emit, native_cli_tempfile, native_cli_rename } from host
 import { repl_run } from repl
 
@@ -16,32 +16,32 @@ def compiler_main(source: String, mode: String, file_mode: Boolean): Integer
 end
 
 def compiler_file_main(source: String, path: String, mode: String, file_mode: Boolean): Integer
-	if !gate4_string_ends_with(path, ".trb")
-		mut state := gate4_load_configured_project(source, path)
+	if !string_ends_with(path, ".trb")
+		mut state := load_configured_project(source, path)
 		return cli_compile_state(state, path, mode, file_mode)
 	end
-	mut state := gate4_load_file_root(source, path)
+	mut state := load_file_root(source, path)
 	return cli_compile_state(state, path, mode, file_mode)
 end
 
-def cli_compile_state(mut state: Gate4Compiler, path: String, mode: String, file_mode: Boolean): Integer
-	if !gate4_has_diagnostic(state)
-		gate4_resolve(state)
+def cli_compile_state(mut state: CompilerState, path: String, mode: String, file_mode: Boolean): Integer
+	if !has_diagnostic(state)
+		resolve(state)
 	end
-	if !gate4_has_diagnostic(state)
-		gate4_check(state)
+	if !has_diagnostic(state)
+		check(state)
 	end
-	if !gate4_has_diagnostic(state)
+	if !has_diagnostic(state)
 		if mode == "check"
 			puts("ok")
 			return 0
 		end
 		if mode == "emit-qbe"
-			output := gate4_emit_qbe(state)
-			if !gate4_has_diagnostic(state)
+			output := emit_qbe(state)
+			if !has_diagnostic(state)
 				mut index := 0
 				while index < output.count[0]
-					puts(gate4_load_string(output.lines, index))
+					puts(load_string(output.lines, index))
 					index += 1
 				end
 				return 0
@@ -99,8 +99,8 @@ def cli_parse_argument(mut options: CliOptions, arguments: Array<String>, mut in
 	mut separator := 0
 	while separator < argument.size()
 		if argument[separator] == "="
-			inline_value = gate4_source_slice(argument, separator + 1, argument.size())
-			argument = gate4_source_slice(argument, 0, separator)
+			inline_value = compiler_source_slice(argument, separator + 1, argument.size())
+			argument = compiler_source_slice(argument, 0, separator)
 			has_inline = true
 		end
 		separator += 1
@@ -145,7 +145,7 @@ def cli_parse_argument(mut options: CliOptions, arguments: Array<String>, mut in
 			value = arguments[index[0]]
 			index[0] += 1
 		end
-		if cli_any(value == "", gate4_string_starts_with(value, "--"))
+		if cli_any(value == "", string_starts_with(value, "--"))
 			options.error[0] = "missing value for " + argument
 			return
 		end
@@ -160,7 +160,7 @@ def cli_parse_argument(mut options: CliOptions, arguments: Array<String>, mut in
 		end
 		return
 	end
-	if gate4_string_starts_with(argument, "-")
+	if string_starts_with(argument, "-")
 		options.error[0] = "unknown option " + argument
 		return
 	end
@@ -169,8 +169,8 @@ def cli_parse_argument(mut options: CliOptions, arguments: Array<String>, mut in
 			options.command[0] = argument
 			return
 		end
-		if !gate4_string_ends_with(argument, ".trb")
-			if !gate4_file_exists(argument)
+		if !string_ends_with(argument, ".trb")
+			if !compiler_file_exists(argument)
 				options.error[0] = "unknown command " + argument
 				return
 			end
@@ -198,23 +198,23 @@ def cli_parse(arguments: Array<String>): CliOptions
 end
 
 def cli_absolute(path: String, root: String): String
-	if gate4_string_starts_with(path, "/")
+	if string_starts_with(path, "/")
 		return path
 	end
 	if cli_any(path == ".", path == "")
 		return root
 	end
-	return gate4_path_join(root, path)
+	return path_join(root, path)
 end
 
 def cli_find_config(start: String): String
 	mut root := start
 	while root != ""
-		candidate := gate4_path_join(root, "trbconfig.jsonc")
-		if gate4_file_exists(candidate)
+		candidate := path_join(root, "trbconfig.jsonc")
+		if compiler_file_exists(candidate)
 			return candidate
 		end
-		parent := gate4_path_directory(root)
+		parent := path_directory(root)
 		if root == parent
 			return ""
 		end
@@ -225,7 +225,7 @@ end
 
 def cli_program_path(cwd: String): String
 	program := native_cli_program()
-	if program != gate4_path_basename(program)
+	if program != path_basename(program)
 		return cli_absolute(program, cwd)
 	end
 	paths := native_cli_env("PATH")
@@ -237,9 +237,9 @@ def cli_program_path(cwd: String): String
 			delimiter = paths[index] == ":"
 		end
 		if delimiter
-			directory := cli_absolute(gate4_source_slice(paths, start, index), cwd)
-			candidate := gate4_path_join(directory, program)
-			if gate4_file_exists(candidate)
+			directory := cli_absolute(compiler_source_slice(paths, start, index), cwd)
+			candidate := path_join(directory, program)
+			if compiler_file_exists(candidate)
 				return candidate
 			end
 			start = index + 1
@@ -250,10 +250,10 @@ def cli_program_path(cwd: String): String
 end
 
 def cli_create_directory(path: String): Boolean
-	if gate4_file_exists(path)
+	if compiler_file_exists(path)
 		return true
 	end
-	parent := gate4_path_directory(path)
+	parent := path_directory(path)
 	if parent == path
 		return false
 	end
@@ -314,29 +314,29 @@ def native_cli_main(): Integer
 	end
 	mut source := cli_absolute(options.source[0], cwd)
 	if options.source[0] != ""
-		if !gate4_file_exists(source)
+		if !compiler_file_exists(source)
 			return cli_error("cannot read source " + source)
 		end
 	end
 	mut config := options.config[0]
 	if config != ""
 		config = cli_absolute(config, cwd)
-		if !gate4_file_exists(config)
+		if !compiler_file_exists(config)
 			return cli_error("cannot read configuration " + config)
 		end
 	else
 		mut start := source
-		if gate4_string_ends_with(source, ".trb")
-			start = gate4_path_directory(source)
+		if string_ends_with(source, ".trb")
+			start = path_directory(source)
 		end
 		config = cli_find_config(start)
 	end
 	mut mode := "trb"
-	mut project_name := gate4_string_without_suffix(gate4_path_basename(source), ".trb")
-	mut output_root := gate4_path_directory(source)
+	mut project_name := string_without_suffix(path_basename(source), ".trb")
+	mut output_root := path_directory(source)
 	mut source_output := "build"
 	if config != ""
-		project := parse_project_config(gate4_read_source(config))
+		project := parse_project_config(compiler_read_source(config))
 		if project.error != ""
 			return cli_error(project.error)
 		end
@@ -345,7 +345,7 @@ def native_cli_main(): Integer
 		end
 		project_name = project.name
 		source_output = project.out_dir
-		output_root = gate4_path_directory(config)
+		output_root = path_directory(config)
 		source = config
 	end
 	if options.mode[0] != ""
@@ -365,18 +365,18 @@ def native_cli_main(): Integer
 	if command == "repl"
 		return repl_run(config)
 	end
-	if !gate4_file_exists(source)
+	if !compiler_file_exists(source)
 		return cli_error("cannot read source " + source)
 	end
-	if cli_both(!gate4_string_ends_with(source, ".trb"), config == "")
+	if cli_both(!string_ends_with(source, ".trb"), config == "")
 		return cli_error("no trbconfig.jsonc found; specify a .trb entry file")
 	end
 	if command == "check"
-		return compiler_file_main(gate4_read_source(source), source, "check", true)
+		return compiler_file_main(compiler_read_source(source), source, "check", true)
 	end
 	if cli_both(command == "build", !(options.compile[0] != 0))
 		if (options.stdout[0] != 0)
-			return compiler_file_main(gate4_read_source(source), source, "emit-qbe", true)
+			return compiler_file_main(compiler_read_source(source), source, "emit-qbe", true)
 		end
 		if options.output[0] != ""
 			return cli_error("--outfile requires --compile")
@@ -385,7 +385,7 @@ def native_cli_main(): Integer
 		if !cli_create_directory(directory)
 			return cli_error("cannot create output directory")
 		end
-		output := gate4_path_join(directory, project_name + ".ssa")
+		output := path_join(directory, project_name + ".ssa")
 		temporary := native_cli_tempfile(output)
 		if temporary == ""
 			return cli_error("cannot create intermediate output")
@@ -403,7 +403,7 @@ def native_cli_main(): Integer
 	end
 	mut qbe := native_cli_env("TRBN_QBE")
 	if qbe == ""
-		qbe = gate4_path_join(gate4_path_directory(cli_program_path(cwd)), "qbe")
+		qbe = path_join(path_directory(cli_program_path(cwd)), "qbe")
 	end
 	qbe = cli_absolute(qbe, cwd)
 	mut cc := native_cli_env("TRBN_CC")
@@ -411,7 +411,7 @@ def native_cli_main(): Integer
 		cc = "/usr/bin/cc"
 	end
 	cc = cli_absolute(cc, cwd)
-	if !gate4_file_exists(qbe)
+	if !compiler_file_exists(qbe)
 		return cli_error("QBE is missing; place qbe beside trbn or set TRBN_QBE")
 	end
 	mut temporary := ""
@@ -421,14 +421,14 @@ def native_cli_main(): Integer
 		if temporary == ""
 			return cli_error("cannot create a temporary build directory")
 		end
-		output = gate4_path_join(temporary, "program")
+		output = path_join(temporary, "program")
 	else
 		if output == ""
 			output = "bin/" + project_name
 		end
 		output = cli_absolute(output, output_root)
 	end
-	if !cli_create_directory(gate4_path_directory(output))
+	if !cli_create_directory(path_directory(output))
 		return cli_error("cannot create output directory")
 	end
 	status := native_cli_execute(["compiler", "build", source, "--output", output, "--qbe", qbe, "--cc", cc], 1)

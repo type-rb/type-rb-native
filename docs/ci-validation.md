@@ -83,8 +83,9 @@ the Pages workflow requires documentation validation, not compiler benchmarks.
    commands run unchanged on macOS in the separate `CI tooling controls` workflow.
    Its synthetic checks need no compiled candidate, so it can start after
    planning without waiting for quick feedback. This removes it from the serial
-   path before recovery. Historical TypeRB tool suites and recovery-artifact
-   consumers remain in the Native job after recovery joins.
+   path before recovery. Recovery-artifact consumers remain in the Native job after recovery joins.
+   The retired source-era benchmark controllers are no longer rebuilt or tested
+   against current source; see [their preserved versions](retired-experiment-tools.md).
 3. **Correctness and CLI.** Complete Native, target and applicable memory jobs
    start after quick succeeds on non-draft core PRs. The CLI authority runs after
    quick for applicable changes, including drafts as before.
@@ -146,7 +147,7 @@ For the Linux amd64 artifact and its arm64 target-neutral control, dispatch the
 existing target controller:
 
 ```sh
-gh workflow run gate6n-linux-amd64.yml --ref "$candidate_ref"
+gh workflow run linux-amd64-targets.yml --ref "$candidate_ref"
 ```
 
 For a separately registered compiler-cost comparison, the existing compactness

@@ -142,7 +142,7 @@ byte-identical at 175,920 bytes. Native median time differs from the equivalent
 external recipe by at most 2.55%, adjacent Native generations by at most 0.88%,
 and median RSS by at most 0.35%. See the
 [Gate 6D Linux arm64 plan](gate-6-linux-arm64.md),
-[measurement harness](../tools/gate6d-benchmark/README.md), and
+[measurement harness](https://github.com/type-rb/type-rb-native/blob/d568d9e712452f66fc9c48d6025bf73b79659661/tools/gate6d-benchmark/README.md), and
 [recorded result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-29-gate6d-native-bootstrap-linux-arm64/README.md).
 
 Gate 6E is complete at measured revision
@@ -164,7 +164,7 @@ temporary flat comparator; RSS is effectively flat in both comparisons, and
 both compilers strip to 199,992 bytes. The Gate 6E application retains exact
 bytes and behavior. See the
 [Gate 6F multi-file compiler plan](gate-6-multifile-compiler.md),
-[measurement harness](../tools/gate6f-benchmark/README.md), and
+[measurement harness](https://github.com/type-rb/type-rb-native/blob/d568d9e712452f66fc9c48d6025bf73b79659661/tools/gate6f-benchmark/README.md), and
 [recorded result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-29-gate6f-multifile-compiler-darwin-linux-arm64/README.md).
 
 Gate 6G is complete at measured revision

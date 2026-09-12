@@ -1,9 +1,9 @@
 import { describe, expect, test } from trb/std/test
-import { gate4_check, gate4_emit_qbe, gate4_lex } from compiler
-import { gate4_parse_module } from parser
-import { gate4_resolve } from resolution
-import { Gate4Compiler, gate4_compiler_new, gate4_has_diagnostic } from state
-import { gate4_load_string, gate4_store_integer } from storage
+import { check, emit_qbe, lex } from compiler
+import { parse_module } from parser
+import { resolve } from resolution
+import { CompilerState, compiler_new, has_diagnostic } from state
+import { load_string, store_integer } from storage
 import { checked_array_assignment_plan, checked_array_assignment_store } from checked_program
 import { MirArrayOperation, mir_array_assignment_plan, mir_array_assignment_valid } from mir
 
@@ -20,43 +20,43 @@ describe("Checked Array assignment targets") do
 		source := "def main()\nmut values := [1, 2]\nvalues[-1] = 9\nend\n"
 		mut mode := 0
 		while mode < 4
-			mut state := gate4_compiler_new(source.size() + 1)
-			expect(gate4_lex(state, source)).to_be_true()
-			expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
-			expect(gate4_resolve(state)).to_be_true()
-			expect(gate4_check(state)).to_be_true()
+			mut state := compiler_new(source.size() + 1)
+			expect(lex(state, source)).to_be_true()
+			expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
+			expect(resolve(state)).to_be_true()
+			expect(check(state)).to_be_true()
 			mut store_origin := 0
-			while gate4_load_string(state.token_texts, store_origin) != "="
+			while load_string(state.token_texts, store_origin) != "="
 				store_origin += 1
 			end
 			mut index_origin := store_origin
-			while gate4_load_string(state.token_texts, index_origin) != "["
+			while load_string(state.token_texts, index_origin) != "["
 				index_origin -= 1
 			end
 			expect(checked_array_assignment_store(state, index_origin)).to_equal(store_origin)
 			if mode == 0
-				gate4_store_integer(state.array_assignment_targets, index_origin, 0)
+				store_integer(state.array_assignment_targets, index_origin, 0)
 			elsif mode == 1
-				gate4_store_integer(state.array_assignment_targets, index_origin, state.token_count[0] + 1)
+				store_integer(state.array_assignment_targets, index_origin, state.token_count[0] + 1)
 			elsif mode == 2
-				gate4_store_integer(state.array_assignment_targets, store_origin, index_origin)
+				store_integer(state.array_assignment_targets, store_origin, index_origin)
 			else
-				gate4_store_integer(state.array_assignment_targets, index_origin, index_origin + 1)
+				store_integer(state.array_assignment_targets, index_origin, index_origin + 1)
 			end
-			gate4_emit_qbe(state)
-			expect(gate4_has_diagnostic(state)).to_be_true()
-			expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("invalid checked Array assignment target")
+			emit_qbe(state)
+			expect(has_diagnostic(state)).to_be_true()
+			expect(load_string(state.diagnostic_messages, 0)).to_equal("invalid checked Array assignment target")
 			mode += 1
 		end
 	end
 end
 
-def assignment_effect_state(source: String): Gate4Compiler
-	mut state := gate4_compiler_new(source.size() + 1)
-	expect(gate4_lex(state, source)).to_be_true()
-	expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
-	expect(gate4_resolve(state)).to_be_true()
-	expect(gate4_check(state)).to_be_true()
+def assignment_effect_state(source: String): CompilerState
+	mut state := compiler_new(source.size() + 1)
+	expect(lex(state, source)).to_be_true()
+	expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
+	expect(resolve(state)).to_be_true()
+	expect(check(state)).to_be_true()
 	return state
 end
 
@@ -103,8 +103,8 @@ describe("MIR Array assignment effects") do
 			region := state.array_assignment_regions[0]
 			store := region[region.size() - 1]
 			expect(checked_array_assignment_plan(state, store.operand)).to_equal(2 - cursor)
-			gate4_emit_qbe(state)
-			expect(gate4_has_diagnostic(state)).to_be_false()
+			emit_qbe(state)
+			expect(has_diagnostic(state)).to_be_false()
 			cursor += 1
 		end
 	end
@@ -120,16 +120,16 @@ describe("MIR Array assignment effects") do
 			expect(checked_array_assignment_plan(state, store.operand)).to_equal(2)
 			cursor += 1
 		end
-		gate4_emit_qbe(state)
-		expect(gate4_has_diagnostic(state)).to_be_false()
+		emit_qbe(state)
+		expect(has_diagnostic(state)).to_be_false()
 	end
 
 	test("revalidates a changed region before lowering") do
 		mut state := assignment_effect_state("def main()\nmut values := [1, 2]\nvalues[0] = 3\nend\n")
 		mut region := state.array_assignment_regions[0]
 		region[0] = MirArrayOperation.new(kind: 99, operand: 0, origin: region[0].origin)
-		gate4_emit_qbe(state)
-		expect(gate4_has_diagnostic(state)).to_be_true()
-		expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("invalid checked Array assignment region")
+		emit_qbe(state)
+		expect(has_diagnostic(state)).to_be_true()
+		expect(load_string(state.diagnostic_messages, 0)).to_equal("invalid checked Array assignment region")
 	end
 end

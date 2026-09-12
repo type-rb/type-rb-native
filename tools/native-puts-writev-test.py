@@ -19,10 +19,10 @@ source = args.source or repo / 'compiler/src/qbe_runtime.trb'
 functions = []
 for literal in re.findall(r'"(?:[^"\\]|\\.)*"', source.read_text()):
     decoded = json.loads(literal)
-    functions.extend(re.findall(r'^function \$g4_puts\(l %string\) \{.*?^\}', decoded, re.M | re.S))
+    functions.extend(re.findall(r'^function \$trbn_puts\(l %string\) \{.*?^\}', decoded, re.M | re.S))
 assert len(functions) == 1, 'expected one canonical String puts body'
 body = functions[0]
-il = 'data $g4_newline = { b 10 }\nexport ' + body.replace('call $writev(', 'call $test_writev(') + '\n'
+il = 'data $trbn_newline = { b 10 }\nexport ' + body.replace('call $writev(', 'call $test_writev(') + '\n'
 # This C code observes the platform ABI and injects syscall results. Production
 # output logic remains the extracted TypeRB-owned QBE, not a model of its loop.
 helper = r'''
@@ -39,7 +39,7 @@ struct native_string { uint64_t descriptor; int64_t length; unsigned char bytes[
 _Static_assert(sizeof(void *) == 8 && sizeof(size_t) == 8, "LP64 boundary");
 _Static_assert(sizeof(struct iovec) == 16 && offsetof(struct iovec, iov_len) == 8, "iovec layout");
 _Static_assert(offsetof(struct native_string, bytes) == 16, "String payload layout");
-extern void g4_puts(struct native_string *);
+extern void trbn_puts(struct native_string *);
 static const char *mode;
 static size_t limit;
 static int calls;
@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
     value->descriptor = 0; value->length = length;
     assert(fread(value->bytes, 1, (size_t)length, input) == (size_t)length);
     value->bytes[length] = 0; fclose(input);
-    g4_puts(value);
+    trbn_puts(value);
     fprintf(stderr, "{\"calls\":%d}\n", calls);
     free(value);
     return 0;

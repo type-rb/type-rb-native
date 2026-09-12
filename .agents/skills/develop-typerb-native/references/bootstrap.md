@@ -45,7 +45,7 @@ running the root and `compiler` suites. Without those variables, optional
 tests report success without exercising recovery; do not count that as complete
 bootstrap verification. The recovery snapshot supports a narrower source subset
 than the ordinary Native compiler, so ordinary fixed points alone are not a
-substitute. See the environment in `.github/workflows/gate-zero.yml`.
+substitute. See the environment in `.github/workflows/native-validation.yml`.
 
 Treat a published bootstrap tag, release, and asset set as immutable. Keep a
 release-integrity re-verification pinned to the release source and fixtures,

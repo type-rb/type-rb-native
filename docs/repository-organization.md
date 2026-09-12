@@ -15,21 +15,43 @@ guide, not a finding that every gate-numbered file is obsolete.
 
 ## Current ownership map
 
-| Current area | Role and treatment |
+| Current area | Responsibility |
 | --- | --- |
-| `compiler/src/compiler.trb` and its storage/path/MIR/literal/state/parser/resolution/checked-program/QBE-output/runtime imports | Ordinary self-hosted compiler closure. Shared state/indexes, syntax, resolution, typed checking/MIR construction, MIR model/verifier/passes, QBE output and runtime generation have distinct owners; continue splitting adapter and driver responsibilities and remove checkpoint-derived names incrementally. |
-| `src/gate0.trb`, `snapshot.trb`, `json_boundary.trb`, `diagnostic.trb`, `native_mir.trb` | Initial snapshot validation/MIR boundary and shared support. Classify callers before separating shared code from recovery-only code. |
-| `src/gate1_*`, `gate2_*`, `gate3_*`, `qbe.trb`, `qbe2.trb`, `qbe3.trb` | Versioned snapshot, MIR, layout, QBE, and managed-runtime paths with differential tests. These are not three successive unused compiler copies. Name retained paths by format/capability and role. |
-| `src/recovery_generation.trb`, `matched_go_driver.trb`, `compiler_recovery_source.trb` and associated tests | Recovery generation, matched reference comparison, and strict compiler-source flattening support. Keep them visibly separate from the ordinary compiler. |
-| `src/*_test.trb`, `compiler/conformance/`, `corpus/` | Active correctness evidence. Relocate with their owners and preserve discovery, negative cases, and coverage. |
-| `tools/`, `.github/workflows/`, compatibility and transition metadata | Current consumers of source paths, names, runtime output, and exact identities. Move references atomically with implementation changes. |
-| `results/`, dated gate plans and accepted decisions | Historical evidence. Preserve gate labels, recorded commands, hashes, and revisions rather than rewriting history to resemble the current layout. |
+| `compiler/src/` | Ordinary compiler: `CompilerState`, `CheckedLocals`, `CheckedValue`, `QbeEmitContext`, and `QbeValue` use role names. Storage, parser, resolver, MIR, iteration, Hash, QBE and runtime modules retain their existing ownership. |
+| `src/snapshot_validation.trb` and shared snapshot/diagnostic/MIR modules | Snapshot boundary validation and shared support. |
+| `src/recovery_scalar_*`, `recovery_aggregate_*`, `recovery_managed_*` | Retained scalar, aggregate and managed snapshot recovery, including layout, QBE, runtime and differential tests. These paths cover distinct supported capabilities. |
+| `src/recovery_driver.trb`, `recovery_generation.trb`, `matched_go_driver.trb`, `compiler_recovery_source.trb` | Recovery orchestration, comparison and strict derivation from the canonical compiler modules. Ordinary builds keep their file-root closure. |
+| `compiler/conformance/`, `corpus/`, `fixtures/` | Active correctness cases, grouped by feature or recovery capability. Names and callers move together. |
+| `tools/recovery-bootstrap.sh`, `normalize-compiler.sh`, `linux-amd64-targets.sh`, `external-qbe-build.sh`, `measure-command.py` | Recovery, deterministic linking, target validation and external measurement. |
+| `.github/workflows/native-validation.yml`, `linux-amd64-targets.yml` | Current correctness/recovery and target authorities. |
+| `results/`, dated plans/decisions, immutable seeds | Historical evidence with original names, commands, hashes and revisions. |
 
-In particular, `trbconfig.reference.jsonc` selects root `src/`, and recovery
-helpers validate the compiler's exact imports. The runtime-generation path also feeds
-bootstrap tooling. A filename search alone cannot establish dead code.
+The compiler's private generated QBE symbols use `trbn` rather than an experiment
+number. Current recovery driver commands and GC report prefixes describe their
+roles. No stable public protocol or snapshot version is changed by this rename.
+
+### Temporary seed compatibility boundary
+
+The published Array-iteration seed recognizes six compiler-runtime declarations
+by their original names. The entry temporarily retains those declarations and
+forwarding wrappers while ordinary callers use `compiler_file_exists`,
+`compiler_read_source`, `compiler_source_slice`, `compiler_collect_project_sources`,
+`compiler_eputs`, and `compiler_reset_temporary_storage`. Both names are recognized
+during this transition, including unused wrapper emission, so ordinary linking
+and repeated generations remain valid.
+
+This is the only active compiler identifier exception. Issue #412 is not complete
+until an accepted successor seed is published and independently verified, the
+checkout pins switch, and these six old declarations/recognizers are removed.
+Complete that handoff before returning to the broader MIR optimization work.
+The historical `compiler/gate4` path resolver is separately retained for frozen
+baselines; it never selects an alternate current compiler implementation.
 
 ## Active consolidation cadence
+
+Completed source-era benchmark controllers are [retired from current CI](retired-experiment-tools.md).
+Their immutable reproduction versions remain available; current compiler/recovery
+correctness is tested by the maintained authorities.
 
 Completing active gate-numbered naming cleanup is an immediate priority after
 the in-flight integration work, not something to defer until full MIR or Pure Go

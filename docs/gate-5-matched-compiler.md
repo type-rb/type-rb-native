@@ -83,13 +83,13 @@ therefore relinks each unchanged B1/B2 assembly with the ordinary
 in two separate directories. It then compares the complete Mach-O files.
 
 This policy does not remove or ignore any code or data section. The automated
-[`gate5-normalize.sh`](../tools/gate5-normalize.sh) check also rejects an
+[`gate5-normalize.sh`](../tools/normalize-compiler.sh) check also rejects an
 output that still contains `LC_UUID`. Under this policy B1 and B2 must be
 byte-identical, which is stronger than section-wise equivalence.
 
 ### Measurement harness
 
-[`tools/gate5-benchmark`](../tools/gate5-benchmark) constructs B0 through B3
+[`tools/gate5-benchmark`](https://github.com/type-rb/type-rb-native/blob/d568d9e712452f66fc9c48d6025bf73b79659661/tools/gate5-benchmark) constructs B0 through B3
 and the matched Go artifact, verifies the fixed point and the direct Go-free
 B1-to-B2 recipe, and refuses to record measurements if any compiler output
 differs. It records two indexed warmups followed by the requested repetitions,

@@ -108,7 +108,7 @@ process inventory and raw machine-readable observations are committed before
 Gate 6A closes.
 
 The TypeRB-authored
-[`gate6a-benchmark`](../tools/gate6a-benchmark/README.md) harness constructs the
+[`gate6a-benchmark`](https://github.com/type-rb/type-rb-native/blob/d568d9e712452f66fc9c48d6025bf73b79659661/tools/gate6a-benchmark/README.md) harness constructs the
 fixed point, performs the correctness preflight, records two indexed warmups
 and seven alternating observations, captures up to three peak-RSS observations,
 enforces the registered stripped-size ceiling, and writes the direct process

@@ -141,7 +141,7 @@ class ReferenceCheckoutTest(unittest.TestCase):
         self.revision = (ROOT / "TYPE_RB_REVISION").read_text().strip()
         self.files = {}
         for relative in [*(f".github/workflows/{name}" for name in REFERENCE_WORKFLOWS),
-                         "tools/gate6n-linux-amd64.sh"]:
+                         "tools/linux-amd64-targets.sh"]:
             path = self.root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / relative, path)
@@ -225,7 +225,7 @@ class ReferenceCheckoutTest(unittest.TestCase):
                         self.validate()
                 finally:
                     path.write_text(source)
-        controller = self.root / "tools/gate6n-linux-amd64.sh"
+        controller = self.root / "tools/linux-amd64-targets.sh"
         self.reject(controller, self.files[controller].replace(self.revision, "a" * 40))
 
     def test_added_and_duplicate_checkout_consumers_require_registration(self) -> None:
@@ -236,7 +236,7 @@ class ReferenceCheckoutTest(unittest.TestCase):
             with self.assertRaisesRegex(ValidationError, "inventory differs"):
                 self.validate()
         path.unlink()
-        known = self.root / ".github/workflows/gate-zero.yml"
+        known = self.root / ".github/workflows/native-validation.yml"
         self.reject(known, self.files[known] + '\n      - with:\n          repository: type-rb/type-rb\n          ref: ' + self.revision + '\n')
 
 

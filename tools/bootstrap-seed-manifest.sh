@@ -4,7 +4,7 @@ set -eu
 
 RELEASE_TAG=bootstrap-seed-2026-08-30
 ROOT_ASSET=type-rb-native-bootstrap-root-qbe-v1.ssa
-ROOT_KIND=gate6k-fixed-point-qbe
+ROOT_KIND=configured-project-fixed-point-qbe
 ROOT_SIZE=658639
 ROOT_SHA256=62db3c31527a670c3050051a9fa27bf142b6c5deaab81ef8234104bd467aa95a
 DARWIN_ASSET=type-rb-native-bootstrap-darwin-arm64

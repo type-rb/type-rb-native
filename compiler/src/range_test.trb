@@ -1,18 +1,18 @@
-import { gate4_check, gate4_emit_qbe, gate4_lex } from compiler
+import { check, emit_qbe, lex } from compiler
 import { checked_range_require } from iteration_checked
 import { MirRangeConstruction } from iteration_mir
-import { gate4_binary_operator_id, gate4_parse_module, syntax_expression_precedence } from parser
-import { gate4_resolve } from resolution
-import { Gate4Compiler, gate4_compiler_new, gate4_has_diagnostic } from state
-import { gate4_store_integer, gate4_store_string } from storage
+import { binary_operator_id, parse_module, syntax_expression_precedence } from parser
+import { resolve } from resolution
+import { CompilerState, compiler_new, has_diagnostic } from state
+import { store_integer, store_string } from storage
 import { describe, expect, test } from trb/std/test
 
-def range_test_state(source: String): Gate4Compiler
-	mut state := gate4_compiler_new(source.size() * 3 + 16)
-	expect(gate4_lex(state, source)).to_be_true()
-	expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
-	expect(gate4_resolve(state)).to_be_true()
-	expect(gate4_check(state)).to_be_true()
+def range_test_state(source: String): CompilerState
+	mut state := compiler_new(source.size() * 3 + 16)
+	expect(lex(state, source)).to_be_true()
+	expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
+	expect(resolve(state)).to_be_true()
+	expect(check(state)).to_be_true()
 	return state
 end
 
@@ -20,14 +20,14 @@ describe("checked Range construction") do
 	test("has its own precedence and no scalar arithmetic identity") do
 		expect(syntax_expression_precedence("..")).to_equal(3)
 		expect(syntax_expression_precedence("...")).to_equal(3)
-		expect(gate4_binary_operator_id("..")).to_equal(0)
-		expect(gate4_binary_operator_id("...")).to_equal(0)
+		expect(binary_operator_id("..")).to_equal(0)
+		expect(binary_operator_id("...")).to_equal(0)
 		mut state := range_test_state("def main()\n(1 + 1...2 * 2).each.with_index { |value, index| puts(value + index) }\nend\n")
 		expect(state.ranges.size()).to_equal(1)
 		expect(state.ranges[0].exclusive).to_equal(1)
 		expect(state.iterations[0].source_kind).to_equal(2)
-		gate4_emit_qbe(state)
-		expect(gate4_has_diagnostic(state)).to_be_false()
+		emit_qbe(state)
+		expect(has_diagnostic(state)).to_be_false()
 	end
 
 	test("rejects missing, malformed, stale and mistyped construction proofs") do
@@ -43,9 +43,9 @@ describe("checked Range construction") do
 			mut start_type := plan.start_type
 			mut end_type := plan.end_type
 			if mode == 0
-				gate4_store_integer(state.range_origins, operator_origin, 0)
+				store_integer(state.range_origins, operator_origin, 0)
 			elsif mode == 1
-				gate4_store_integer(state.range_origins, operator_origin, 99)
+				store_integer(state.range_origins, operator_origin, 99)
 			elsif mode == 2
 				origin += 1
 			elsif mode == 3
@@ -61,26 +61,26 @@ describe("checked Range construction") do
 			elsif mode == 8
 				end_type = "String"
 			elsif mode == 9
-				gate4_store_string(state.token_texts, operator_origin, "...")
+				store_string(state.token_texts, operator_origin, "...")
 			elsif mode == 10
-				gate4_store_integer(state.token_kinds, operator_origin, 3)
+				store_integer(state.token_kinds, operator_origin, 3)
 			elsif mode == 11
-				gate4_store_integer(state.token_kinds, operator_origin + 1, 2)
+				store_integer(state.token_kinds, operator_origin + 1, 2)
 			else
 				finish = state.token_count[0]
 			end
 			state.ranges[0] = MirRangeConstruction.new(origin: origin, operator_origin: operator_origin, end_origin: end_origin, finish: finish, exclusive: exclusive, start_type: start_type, end_type: end_type)
 			checked_range_require(state, plan.origin, plan.operator_origin, plan.end_origin, plan.finish)
-			expect(gate4_has_diagnostic(state)).to_be_true()
+			expect(has_diagnostic(state)).to_be_true()
 			mode += 1
 		end
 	end
 
 	test("the adapter rejects a missing constructor proof") do
 		mut state := range_test_state("def main()\n(1..2).each { |value| puts(value) }\nend\n")
-		gate4_store_integer(state.range_origins, state.ranges[0].operator_origin, 0)
-		gate4_emit_qbe(state)
-		expect(gate4_has_diagnostic(state)).to_be_true()
+		store_integer(state.range_origins, state.ranges[0].operator_origin, 0)
+		emit_qbe(state)
+		expect(has_diagnostic(state)).to_be_true()
 	end
 
 	test("rejects out of bounds source requests without indexing invalid tokens") do
@@ -93,7 +93,7 @@ describe("checked Range construction") do
 				origin = state.token_count[0]
 			end
 			checked_range_require(state, plan.origin, origin, plan.end_origin, plan.finish)
-			expect(gate4_has_diagnostic(state)).to_be_true()
+			expect(has_diagnostic(state)).to_be_true()
 			mode += 1
 		end
 	end
@@ -102,11 +102,11 @@ describe("checked Range construction") do
 		cases := ["span := 1.0..2.0", "span := 1..2.0", "span := \"a\"..\"z\"", "span := 1..2..3", "puts((1..2) == (1..2))", "span := 1..2\nputs(span[0])", "span := 1..2\nspan.push(3)"]
 		cases.each do |body|
 			source := "def main()\n" + body + "\nend\n"
-			mut state := gate4_compiler_new(source.size() * 3 + 16)
-			expect(gate4_lex(state, source)).to_be_true()
-			expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
-			expect(gate4_resolve(state)).to_be_true()
-			expect(gate4_check(state)).to_be_false()
+			mut state := compiler_new(source.size() * 3 + 16)
+			expect(lex(state, source)).to_be_true()
+			expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
+			expect(resolve(state)).to_be_true()
+			expect(check(state)).to_be_false()
 		end
 	end
 end

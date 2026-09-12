@@ -2,14 +2,14 @@ import { hash_key_type, hash_value_type } from hash_types
 import { checked_hash_plan } from hash_checked
 import { repl_hash_new, repl_hash_set, repl_hash_get, repl_hash_slot, repl_hash_delete, repl_hash_update } from repl_hash
 import trb/std/math
-import { Gate4Compiler } from state
-import { sparse_integer_at, gate4_load_integer, gate4_load_string } from storage
-import { syntax_statement_boundary, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_block_end, syntax_conditional_tail, gate4_token_is, gate4_binary_operator_id, syntax_expression_precedence, gate4_parse_expression_syntax, gate4_parse_type, gate4_skip_newlines, gate4_declaration_start } from parser
+import { CompilerState } from state
+import { sparse_integer_at, load_integer, load_string } from storage
+import { syntax_statement_boundary, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_block_end, syntax_conditional_tail, token_is, binary_operator_id, syntax_expression_precedence, parse_expression_syntax, parse_type, skip_newlines, declaration_start } from parser
 import { mir_logical_short_value } from mir
 import { checked_loop_transfer_kind } from checked_program
 import { checked_iteration_require, checked_range_require } from iteration_checked
-import { gate4_find_visible_function, gate4_find_visible_record, gate4_find_record_type, gate4_find_field, gate4_record_type, gate4_array_element_type } from resolution
-import { gate4_number_is_float, gate4_number_without_underscores, gate4_integer_string } from literals
+import { find_visible_function, find_visible_record, find_record_type, find_field, record_type, array_element_type } from resolution
+import { number_is_float, number_without_underscores, integer_string } from literals
 import { native_cli_float, native_cli_interrupt } from host
 import { repl_get, ReplStore, ReplEnvironment, ReplReference, repl_value, repl_integer, repl_float, repl_boolean, repl_string, repl_reference, repl_environment } from repl_model
 import { repl_render, repl_find, repl_bind, repl_coerce } from repl_values
@@ -22,7 +22,7 @@ def repl_number(text: String): Integer
 	while index < text.size()
 		mut digit := 0
 		while digit < 10
-			if gate4_integer_string(digit) == text[index]
+			if integer_string(digit) == text[index]
 				result = result * 10 + digit
 			end
 			digit += 1
@@ -53,7 +53,7 @@ def repl_string_integer(mut store: ReplStore, text: String): Integer
 	while index < text.size()
 		mut digit := 0
 		while digit < 10
-			if gate4_integer_string(digit) == text[index]
+			if integer_string(digit) == text[index]
 				if result > (9007199254740991 - digit) / 10
 					store.error[0] = "panic: Integer is outside the portable range"
 					return 0
@@ -207,38 +207,38 @@ def repl_numeric(mut store: ReplStore, left: Integer, operator: String, right: I
 	return repl_integer(store, x % y)
 end
 
-def repl_call(mut state: Gate4Compiler, function: Integer, arguments: Array<Integer>, mut store: ReplStore): Integer
+def repl_call(mut state: CompilerState, function: Integer, arguments: Array<Integer>, mut store: ReplStore): Integer
 	if store.depth[0] > 256
 		store.error[0] = "REPL call depth limit exceeded"
 		return 0
 	end
 	store.depth[0] += 1
 	mut environment := repl_environment()
-	start := gate4_load_integer(state.function_parameter_starts, function)
+	start := load_integer(state.function_parameter_starts, function)
 	mut index := 0
 	while index < arguments.size()
-		type_name := gate4_load_string(state.parameter_types, start + index)
+		type_name := load_string(state.parameter_types, start + index)
 		value := repl_coerce(store, arguments[index], type_name)
-		repl_bind(environment, gate4_load_string(state.parameter_names, start + index), value, gate4_load_integer(state.parameter_mutable, start + index))
+		repl_bind(environment, load_string(state.parameter_names, start + index), value, load_integer(state.parameter_mutable, start + index))
 		index += 1
 	end
-	mut position := [gate4_load_integer(state.function_body_starts, function)]
+	mut position := [load_integer(state.function_body_starts, function)]
 	mut flow := [0]
 	module_name := state.active_module[0]
-	state.active_module[0] = gate4_load_integer(state.function_modules, function)
+	state.active_module[0] = load_integer(state.function_modules, function)
 	result := repl_block(state, position, store, environment, flow, - 1)
 	state.active_module[0] = module_name
 	store.depth[0] -= 1
-	return repl_coerce(store, result, gate4_load_string(state.function_result_types, function))
+	return repl_coerce(store, result, load_string(state.function_result_types, function))
 end
 
-def repl_primary(mut state: Gate4Compiler, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, expected: String): ReplReference
-	text := gate4_load_string(state.token_texts, position[0])
-	kind := gate4_load_integer(state.token_kinds, position[0])
+def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, expected: String): ReplReference
+	text := load_string(state.token_texts, position[0])
+	kind := load_integer(state.token_kinds, position[0])
 	position[0] += 1
 	if kind == 2
-		if gate4_number_is_float(text)
-			return repl_reference(repl_float(store, native_cli_float(gate4_number_without_underscores(text))))
+		if number_is_float(text)
+			return repl_reference(repl_float(store, native_cli_float(number_without_underscores(text))))
 		end
 		return repl_reference(repl_integer(store, repl_number(text)))
 	end
@@ -271,8 +271,8 @@ def repl_primary(mut state: Gate4Compiler, mut position: Array<Integer>, mut sto
 	if text == "{"
 		plan := checked_hash_plan(state, position[0] - 1)
 		id := repl_hash_new(store, plan.type_name, plan.capacity)
-		gate4_skip_newlines(state, position)
-		while !gate4_token_is(state, position[0], "}")
+		skip_newlines(state, position)
+		while !token_is(state, position[0], "}")
 			key := repl_expression(state, position, store, environment, 1, plan.key_type)
 			position[0] += 1
 			item := repl_expression(state, position, store, environment, 1, plan.value_type)
@@ -280,20 +280,20 @@ def repl_primary(mut state: Gate4Compiler, mut position: Array<Integer>, mut sto
 				return repl_reference(0)
 			end
 			repl_hash_set(store, id, key.value, repl_coerce(store, item.value, plan.value_type))
-			gate4_skip_newlines(state, position)
-			if gate4_token_is(state, position[0], ",")
+			skip_newlines(state, position)
+			if token_is(state, position[0], ",")
 				position[0] += 1
 			end
-			gate4_skip_newlines(state, position)
+			skip_newlines(state, position)
 		end
 		position[0] += 1
 		return repl_reference(id)
 	end
 	if text == "["
 		mut children: Array<Integer> := []
-		mut element := gate4_array_element_type(expected)
-		gate4_skip_newlines(state, position)
-		while !gate4_token_is(state, position[0], "]")
+		mut element := array_element_type(expected)
+		skip_newlines(state, position)
+		while !token_is(state, position[0], "]")
 			value := repl_expression(state, position, store, environment, 1, element)
 			if element == ""
 				element = store.types[value.value]
@@ -304,10 +304,10 @@ def repl_primary(mut state: Gate4Compiler, mut position: Array<Integer>, mut sto
 				end
 			end
 			children.push(value.value)
-			if gate4_token_is(state, position[0], ",")
+			if token_is(state, position[0], ",")
 				position[0] += 1
 			end
-			gate4_skip_newlines(state, position)
+			skip_newlines(state, position)
 			if store.error[0] != ""
 				return repl_reference(0)
 			end
@@ -324,23 +324,23 @@ def repl_primary(mut state: Gate4Compiler, mut position: Array<Integer>, mut sto
 	if binding >= 0
 		return ReplReference.new(value: environment.values[binding], binding: binding, container: - 1, slot: - 1)
 	end
-	if gate4_token_is(state, position[0], "(")
-		function := gate4_find_visible_function(state, state.active_module[0], text)
+	if token_is(state, position[0], "(")
+		function := find_visible_function(state, state.active_module[0], text)
 		mut arguments: Array<Integer> := []
 		position[0] += 1
-		gate4_skip_newlines(state, position)
-		while !gate4_token_is(state, position[0], ")")
+		skip_newlines(state, position)
+		while !token_is(state, position[0], ")")
 			mut parameter_type := "String"
 			if function >= 0
-				start := gate4_load_integer(state.function_parameter_starts, function)
-				parameter_type = gate4_load_string(state.parameter_types, start + arguments.size())
+				start := load_integer(state.function_parameter_starts, function)
+				parameter_type = load_string(state.parameter_types, start + arguments.size())
 			end
 			value := repl_expression(state, position, store, environment, 1, parameter_type)
 			arguments.push(repl_coerce(store, value.value, parameter_type))
-			if gate4_token_is(state, position[0], ",")
+			if token_is(state, position[0], ",")
 				position[0] += 1
 			end
-			gate4_skip_newlines(state, position)
+			skip_newlines(state, position)
 			if store.error[0] != ""
 				return repl_reference(0)
 			end
@@ -358,9 +358,9 @@ def repl_primary(mut state: Gate4Compiler, mut position: Array<Integer>, mut sto
 			return repl_reference(repl_call(state, function, arguments, store))
 		end
 	end
-	if gate4_token_is(state, position[0], ".")
+	if token_is(state, position[0], ".")
 		position[0] += 1
-		member := gate4_load_string(state.token_texts, position[0])
+		member := load_string(state.token_texts, position[0])
 		position[0] += 2
 		if text == "Math"
 			argument := repl_expression(state, position, store, environment, 1, "Float")
@@ -372,32 +372,32 @@ def repl_primary(mut state: Gate4Compiler, mut position: Array<Integer>, mut sto
 			position[0] += 1
 			return repl_reference(repl_value(store, "Array<String>", 0, 0.0, "", []))
 		end
-		record_index := gate4_find_visible_record(state, state.active_module[0], text)
+		record_index := find_visible_record(state, state.active_module[0], text)
 		if record_index >= 0
 			if member == "new"
-				start := gate4_load_integer(state.record_field_starts, record_index)
-				count := gate4_load_integer(state.record_field_counts, record_index)
+				start := load_integer(state.record_field_starts, record_index)
+				count := load_integer(state.record_field_counts, record_index)
 				mut children: Array<Integer> := []
 				mut index := 0
 				while index < count
 					children.push(0)
 					index += 1
 				end
-				gate4_skip_newlines(state, position)
-				while !gate4_token_is(state, position[0], ")")
-					name := gate4_load_string(state.token_texts, position[0])
+				skip_newlines(state, position)
+				while !token_is(state, position[0], ")")
+					name := load_string(state.token_texts, position[0])
 					position[0] += 2
-					field := gate4_find_field(state, record_index, name)
-					type_name := gate4_load_string(state.field_types, field)
+					field := find_field(state, record_index, name)
+					type_name := load_string(state.field_types, field)
 					value := repl_expression(state, position, store, environment, 1, type_name)
 					children[field - start] = repl_coerce(store, value.value, type_name)
-					if gate4_token_is(state, position[0], ",")
+					if token_is(state, position[0], ",")
 						position[0] += 1
 					end
-					gate4_skip_newlines(state, position)
+					skip_newlines(state, position)
 				end
 				position[0] += 1
-				return repl_reference(repl_value(store, gate4_record_type(record_index), 0, 0.0, "", children))
+				return repl_reference(repl_value(store, record_type(record_index), 0, 0.0, "", children))
 			end
 		end
 	end
@@ -405,7 +405,7 @@ def repl_primary(mut state: Gate4Compiler, mut position: Array<Integer>, mut sto
 	return repl_reference(0)
 end
 
-def repl_postfix(mut state: Gate4Compiler, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, expected: String): ReplReference
+def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, expected: String): ReplReference
 	mut result := repl_primary(state, position, store, environment, expected)
 	mut complete := false
 	while !complete
@@ -413,7 +413,7 @@ def repl_postfix(mut state: Gate4Compiler, mut position: Array<Integer>, mut sto
 			return repl_reference(0)
 		end
 		value := repl_get(store, result.value)
-		if gate4_token_is(state, position[0], "[")
+		if token_is(state, position[0], "[")
 			if value.type_name == "Hash" || hash_key_type(value.type_name) != ""
 				plan := checked_hash_plan(state, position[0])
 				store.types[result.value] = plan.type_name
@@ -452,23 +452,23 @@ def repl_postfix(mut state: Gate4Compiler, mut position: Array<Integer>, mut sto
 				result = ReplReference.new(value: value.children[index], binding: - 1, container: result.value, slot: index)
 			end
 		else
-			if gate4_token_is(state, position[0], ".")
+			if token_is(state, position[0], ".")
 				position[0] += 1
-				member := gate4_load_string(state.token_texts, position[0])
+				member := load_string(state.token_texts, position[0])
 				position[0] += 1
 				if member == "each" && syntax_iteration_suffix(state, position[0] - 2) >= 0
 					position[0] -= 2
 					break
 				end
-				if gate4_token_is(state, position[0], "(")
+				if token_is(state, position[0], "(")
 					if value.type_name == "Hash" || hash_key_type(value.type_name) != ""
 						result = repl_reference(repl_hash_method(state, position, store, environment, result.value))
 						next
 					end
 					position[0] += 1
 					if member == "push"
-						argument := repl_expression(state, position, store, environment, 1, gate4_array_element_type(value.type_name))
-						store.children[result.value].push(repl_coerce(store, argument.value, gate4_array_element_type(value.type_name)))
+						argument := repl_expression(state, position, store, environment, 1, array_element_type(value.type_name))
+						store.children[result.value].push(repl_coerce(store, argument.value, array_element_type(value.type_name)))
 						result = repl_reference(0)
 					else
 						if member == "size"
@@ -479,7 +479,7 @@ def repl_postfix(mut state: Gate4Compiler, mut position: Array<Integer>, mut sto
 							result = repl_reference(repl_integer(store, size))
 						else
 							if member == "to_s"
-								result = repl_reference(repl_string(store, gate4_integer_string(value.integer)))
+								result = repl_reference(repl_string(store, integer_string(value.integer)))
 							else
 								if member == "to_i"
 									if value.type_name == "Float"
@@ -505,9 +505,9 @@ def repl_postfix(mut state: Gate4Compiler, mut position: Array<Integer>, mut sto
 					end
 					position[0] += 1
 				else
-					record_index := gate4_find_record_type(state, value.type_name)
-					field := gate4_find_field(state, record_index, member)
-					start := gate4_load_integer(state.record_field_starts, record_index)
+					record_index := find_record_type(state, value.type_name)
+					field := find_field(state, record_index, member)
+					start := load_integer(state.record_field_starts, record_index)
 					result = ReplReference.new(value: value.children[field - start], binding: - 1, container: result.value, slot: field - start)
 				end
 			else
@@ -518,7 +518,7 @@ def repl_postfix(mut state: Gate4Compiler, mut position: Array<Integer>, mut sto
 	return result
 end
 
-def repl_expression(mut state: Gate4Compiler, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, minimum: Integer, expected: String): ReplReference
+def repl_expression(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, minimum: Integer, expected: String): ReplReference
 	expression_origin := position[0]
 	mut result := repl_postfix(state, position, store, environment, expected)
 	mut complete := false
@@ -526,25 +526,25 @@ def repl_expression(mut state: Gate4Compiler, mut position: Array<Integer>, mut 
 		if store.error[0] != ""
 			return repl_reference(0)
 		end
-		operator := gate4_load_string(state.token_texts, position[0])
+		operator := load_string(state.token_texts, position[0])
 		precedence := syntax_expression_precedence(operator)
 		if precedence < minimum
 			complete = true
 		else
 			position[0] += 1
 			origin := position[0] - 1
-			gate4_skip_newlines(state, position)
+			skip_newlines(state, position)
 			if precedence <= 2
-				plan := gate4_load_integer(state.mir_nonnegative_facts, origin)
+				plan := load_integer(state.mir_nonnegative_facts, origin)
 				short_value := mir_logical_short_value(plan)
-				if short_value < 0 || plan - 64 != gate4_binary_operator_id(operator)
+				if short_value < 0 || plan - 64 != binary_operator_id(operator)
 					store.error[0] = "invalid checked logical plan"
 					return repl_reference(0)
 				end
 				if store.integers[result.value] == short_value
 					# The frontend already checked both regions. Advance through
 					# skipped syntax without evaluating calls, allocations or traps.
-					if !gate4_parse_expression_syntax(state, position, precedence + 1)
+					if !parse_expression_syntax(state, position, precedence + 1)
 						store.error[0] = "invalid checked logical right-hand side"
 					end
 					result = repl_reference(result.value)
@@ -573,7 +573,7 @@ def repl_expression(mut state: Gate4Compiler, mut position: Array<Integer>, mut 
 	return result
 end
 
-def repl_block_end(state: Gate4Compiler, start: Integer, stop_else: Boolean): Integer
+def repl_block_end(state: CompilerState, start: Integer, stop_else: Boolean): Integer
 	mut position := start
 	mut depth := 0
 	while position < state.token_count[0]
@@ -582,13 +582,13 @@ def repl_block_end(state: Gate4Compiler, start: Integer, stop_else: Boolean): In
 			position = state.iterations[encoded_iteration - 1].finish
 			next
 		end
-		if gate4_token_is(state, position, "if")
+		if token_is(state, position, "if")
 			depth += 1
 		end
-		if gate4_token_is(state, position, "while")
+		if token_is(state, position, "while")
 			depth += 1
 		end
-		if gate4_token_is(state, position, "end")
+		if token_is(state, position, "end")
 			if depth == 0
 				return position
 			end
@@ -606,7 +606,7 @@ def repl_block_end(state: Gate4Compiler, start: Integer, stop_else: Boolean): In
 	return position
 end
 
-def repl_iteration(mut state: Gate4Compiler, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, mut flow: Array<Integer>, parent_loop: Integer): Integer
+def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, mut flow: Array<Integer>, parent_loop: Integer): Integer
 	plan := checked_iteration_require(state, position[0], parent_loop)
 	if plan.origin < 0
 		store.error[0] = "invalid checked iteration"
@@ -646,9 +646,9 @@ def repl_iteration(mut state: Gate4Compiler, mut position: Array<Integer>, mut s
 		else
 			element = repl_integer(store, cursor)
 		end
-		repl_bind(environment, gate4_load_string(state.token_texts, plan.element_origin), element, 1)
+		repl_bind(environment, load_string(state.token_texts, plan.element_origin), element, 1)
 		if plan.index_origin >= 0
-			repl_bind(environment, gate4_load_string(state.token_texts, plan.index_origin), repl_integer(store, ordinal), 1)
+			repl_bind(environment, load_string(state.token_texts, plan.index_origin), repl_integer(store, ordinal), 1)
 		end
 		position[0] = plan.body_start
 		result = repl_block(state, position, store, environment, flow, plan.origin)
@@ -687,11 +687,11 @@ def repl_iteration(mut state: Gate4Compiler, mut position: Array<Integer>, mut s
 	return 0
 end
 
-def repl_statement(mut state: Gate4Compiler, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, mut flow: Array<Integer>, loop_origin: Integer): Integer
+def repl_statement(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, mut flow: Array<Integer>, loop_origin: Integer): Integer
 	if sparse_integer_at(state.iteration_origins, position[0]) > 0
 		return repl_iteration(state, position, store, environment, flow, loop_origin)
 	end
-	if gate4_token_is(state, position[0], "if")
+	if token_is(state, position[0], "if")
 		finish := repl_block_end(state, position[0] + 1, false)
 		saved := environment.count[0]
 		mut result := 0
@@ -702,15 +702,15 @@ def repl_statement(mut state: Gate4Compiler, mut position: Array<Integer>, mut s
 			if store.error[0] != ""
 				return 0
 			end
-			gate4_skip_newlines(state, position)
+			skip_newlines(state, position)
 			if store.integers[condition.value] != 0
 				result = repl_block(state, position, store, environment, flow, loop_origin)
 				complete = true
 			else
 				boundary := repl_block_end(state, position[0], true)
 				position[0] = boundary
-				if !gate4_token_is(state, boundary, "elsif")
-					if gate4_token_is(state, boundary, "else")
+				if !token_is(state, boundary, "elsif")
+					if token_is(state, boundary, "else")
 						position[0] += 1
 						result = repl_block(state, position, store, environment, flow, loop_origin)
 					end
@@ -722,7 +722,7 @@ def repl_statement(mut state: Gate4Compiler, mut position: Array<Integer>, mut s
 		position[0] = finish + 1
 		return result
 	end
-	if gate4_token_is(state, position[0], "while")
+	if token_is(state, position[0], "while")
 		start := position[0] + 1
 		finish := repl_block_end(state, start, false)
 		mut running := true
@@ -763,7 +763,7 @@ def repl_statement(mut state: Gate4Compiler, mut position: Array<Integer>, mut s
 		position[0] += 1
 		return 0
 	end
-	if gate4_token_is(state, position[0], "return")
+	if token_is(state, position[0], "return")
 		position[0] += 1
 		flow[0] = 1
 		if syntax_statement_boundary(state, position[0])
@@ -772,18 +772,18 @@ def repl_statement(mut state: Gate4Compiler, mut position: Array<Integer>, mut s
 		value := repl_expression(state, position, store, environment, 1, "")
 		return value.value
 	end
-	if gate4_declaration_start(state, position[0])
+	if declaration_start(state, position[0])
 		mut mutable := 0
-		if gate4_token_is(state, position[0], "mut")
+		if token_is(state, position[0], "mut")
 			mutable = 1
 			position[0] += 1
 		end
-		name := gate4_load_string(state.token_texts, position[0])
+		name := load_string(state.token_texts, position[0])
 		position[0] += 1
 		mut expected := ""
-		if gate4_token_is(state, position[0], ":")
+		if token_is(state, position[0], ":")
 			position[0] += 1
-			expected = gate4_parse_type(state, position)
+			expected = parse_type(state, position)
 		end
 		position[0] += 1
 		value := repl_expression(state, position, store, environment, 1, expected)
@@ -797,7 +797,7 @@ def repl_statement(mut state: Gate4Compiler, mut position: Array<Integer>, mut s
 	if store.error[0] != ""
 		return 0
 	end
-	operator := gate4_load_string(state.token_texts, position[0])
+	operator := load_string(state.token_texts, position[0])
 	mut assignment := operator == "="
 	if operator == "+="
 		assignment = true
@@ -849,9 +849,9 @@ def repl_statement(mut state: Gate4Compiler, mut position: Array<Integer>, mut s
 	return left.value
 end
 
-def repl_block(mut state: Gate4Compiler, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, mut flow: Array<Integer>, loop_origin: Integer): Integer
+def repl_block(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, mut flow: Array<Integer>, loop_origin: Integer): Integer
 	mut result := 0
-	gate4_skip_newlines(state, position)
+	skip_newlines(state, position)
 	mut complete := false
 	while !complete
 		if native_cli_interrupt(0) != 0
@@ -867,7 +867,7 @@ def repl_block(mut state: Gate4Compiler, mut position: Array<Integer>, mut store
 				complete = true
 			else
 				result = repl_statement(state, position, store, environment, flow, loop_origin)
-				gate4_skip_newlines(state, position)
+				skip_newlines(state, position)
 				if flow[0] != 0
 					complete = true
 				end
@@ -878,7 +878,7 @@ def repl_block(mut state: Gate4Compiler, mut position: Array<Integer>, mut store
 end
 
 # Consume the same checked operation plans as ordinary code generation.
-def repl_hash_method(mut state: Gate4Compiler, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, receiver: Integer): Integer
+def repl_hash_method(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, receiver: Integer): Integer
 	plan := checked_hash_plan(state, position[0])
 	position[0] += 1
 	store.types[receiver] = plan.type_name
@@ -889,7 +889,7 @@ def repl_hash_method(mut state: Gate4Compiler, mut position: Array<Integer>, mut
 	if plan.kind == 8 || plan.kind == 9
 		argument = repl_expression(state, position, store, environment, 1, plan.type_name).value
 	end
-	gate4_skip_newlines(state, position)
+	skip_newlines(state, position)
 	position[0] += 1
 	if store.error[0] != ""
 		return 0

@@ -1,100 +1,100 @@
 import { MirIteration } from iteration_mir
-import { gate4_load_integer, gate4_load_string, gate4_store_integer, gate4_store_string, sparse_integer_at } from storage
-import { Gate4Compiler, function_index_key, gate4_diagnostic, gate4_has_diagnostic, gate4_terminal_token } from state
+import { load_integer, load_string, sparse_integer_at, store_integer, store_string } from storage
+import { CompilerState, diagnostic, function_index_key, has_diagnostic, terminal_token } from state
 
-def gate4_token_is(state: Gate4Compiler, index: Integer, text: String): Boolean
-	kind := gate4_load_integer(state.token_kinds, index)
+def token_is(state: CompilerState, index: Integer, text: String): Boolean
+	kind := load_integer(state.token_kinds, index)
 	if kind != 1
 		if kind != 5
 			return false
 		end
 	end
-	return gate4_load_string(state.token_texts, index) == text
+	return load_string(state.token_texts, index) == text
 end
 
-def gate4_declaration_start(state: Gate4Compiler, index: Integer): Boolean
-	if gate4_token_is(state, index, "mut")
+def declaration_start(state: CompilerState, index: Integer): Boolean
+	if token_is(state, index, "mut")
 		return true
 	end
-	if gate4_load_integer(state.token_kinds, index) != 1
+	if load_integer(state.token_kinds, index) != 1
 		return false
 	end
-	if gate4_token_is(state, index + 1, ":=")
+	if token_is(state, index + 1, ":=")
 		return true
 	end
-	return gate4_token_is(state, index + 1, ":")
+	return token_is(state, index + 1, ":")
 end
 
-def syntax_block_end(state: Gate4Compiler, index: Integer): Boolean
-	kind := gate4_load_integer(state.token_kinds, index)
+def syntax_block_end(state: CompilerState, index: Integer): Boolean
+	kind := load_integer(state.token_kinds, index)
 	if kind != 1
 		if kind != 5
 			return false
 		end
 	end
-	word := gate4_load_string(state.token_texts, index)
+	word := load_string(state.token_texts, index)
 	if word == "end"
 		return true
 	end
 	return word == "}"
 end
 
-def syntax_conditional_tail(state: Gate4Compiler, index: Integer): Boolean
-	if gate4_token_is(state, index, "else")
+def syntax_conditional_tail(state: CompilerState, index: Integer): Boolean
+	if token_is(state, index, "else")
 		return true
 	end
-	return gate4_token_is(state, index, "elsif")
+	return token_is(state, index, "elsif")
 end
 
-def gate4_advance(mut position: Array<Integer>)
+def advance(mut position: Array<Integer>)
 	position[0] = position[0] + 1
 	return
 end
 
-def gate4_skip_newlines(state: Gate4Compiler, mut position: Array<Integer>)
-	while gate4_load_integer(state.token_kinds, position[0]) == 4
+def skip_newlines(state: CompilerState, mut position: Array<Integer>)
+	while load_integer(state.token_kinds, position[0]) == 4
 		position[0] = position[0] + 1
 	end
 	return
 end
 
-def gate4_expect(mut state: Gate4Compiler, mut position: Array<Integer>, text: String): Boolean
-	if gate4_token_is(state, position[0], text)
+def expect(mut state: CompilerState, mut position: Array<Integer>, text: String): Boolean
+	if token_is(state, position[0], text)
 		position[0] = position[0] + 1
 		return true
 	end
-	gate4_diagnostic(
+	diagnostic(
 		state,
 		"TRBN4002",
-		gate4_load_integer(state.token_lines, position[0]),
-		"expected " + text + ", found " + gate4_load_string(state.token_texts, position[0]),
+		load_integer(state.token_lines, position[0]),
+		"expected " + text + ", found " + load_string(state.token_texts, position[0]),
 	)
 	return false
 end
 
-def gate4_expect_identifier(mut state: Gate4Compiler, mut position: Array<Integer>): String
-	if gate4_load_integer(state.token_kinds, position[0]) == 1
-		value := gate4_load_string(state.token_texts, position[0])
+def expect_identifier(mut state: CompilerState, mut position: Array<Integer>): String
+	if load_integer(state.token_kinds, position[0]) == 1
+		value := load_string(state.token_texts, position[0])
 		position[0] = position[0] + 1
 		return value
 	end
-	gate4_diagnostic(state, "TRBN4002", gate4_load_integer(state.token_lines, position[0]), "expected an identifier")
+	diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), "expected an identifier")
 	return ""
 end
 
-def gate4_parse_type(mut state: Gate4Compiler, mut position: Array<Integer>): String
-	name := gate4_expect_identifier(state, position)
-	if gate4_has_diagnostic(state)
+def parse_type(mut state: CompilerState, mut position: Array<Integer>): String
+	name := expect_identifier(state, position)
+	if has_diagnostic(state)
 		return ""
 	end
-	if gate4_token_is(state, position[0], "<")
-		gate4_advance(position)
-		mut argument := gate4_parse_type(state, position)
-		while gate4_token_is(state, position[0], ",")
-			gate4_advance(position)
-			argument += "," + gate4_parse_type(state, position)
+	if token_is(state, position[0], "<")
+		advance(position)
+		mut argument := parse_type(state, position)
+		while token_is(state, position[0], ",")
+			advance(position)
+			argument += "," + parse_type(state, position)
 		end
-		if !gate4_expect(state, position, ">")
+		if !expect(state, position, ">")
 			return ""
 		end
 		return name + "<" + argument + ">"
@@ -107,7 +107,7 @@ def syntax_expression_precedence(operator: String): Integer
 		return 3
 	end
 	# Keep scalar spelling recognition in the shared operator catalog.
-	identity := gate4_binary_operator_id(operator)
+	identity := binary_operator_id(operator)
 	if identity == 0
 		return 0
 	end
@@ -132,93 +132,93 @@ def syntax_expression_precedence(operator: String): Integer
 	return 0
 end
 
-def gate4_parse_arguments_syntax(mut state: Gate4Compiler, mut position: Array<Integer>): Boolean
-	gate4_skip_newlines(state, position)
-	if gate4_token_is(state, position[0], ")")
-		gate4_advance(position)
+def parse_arguments_syntax(mut state: CompilerState, mut position: Array<Integer>): Boolean
+	skip_newlines(state, position)
+	if token_is(state, position[0], ")")
+		advance(position)
 		return true
 	end
 	mut finished := false
 	while !finished
-		gate4_skip_newlines(state, position)
-		if gate4_token_is(state, position[0], ")")
+		skip_newlines(state, position)
+		if token_is(state, position[0], ")")
 			finished = true
 		else
-			if gate4_load_integer(state.token_kinds, position[0]) == 1
-				if gate4_token_is(state, position[0] + 1, ":")
-					gate4_advance(position)
-					gate4_advance(position)
+			if load_integer(state.token_kinds, position[0]) == 1
+				if token_is(state, position[0] + 1, ":")
+					advance(position)
+					advance(position)
 				end
 			end
-			if !gate4_parse_expression_syntax(state, position, 1)
+			if !parse_expression_syntax(state, position, 1)
 				return false
 			end
-			if gate4_token_is(state, position[0], ",")
-				gate4_advance(position)
-				gate4_skip_newlines(state, position)
+			if token_is(state, position[0], ",")
+				advance(position)
+				skip_newlines(state, position)
 			else
 				finished = true
 			end
 		end
 	end
-	gate4_skip_newlines(state, position)
-	return gate4_expect(state, position, ")")
+	skip_newlines(state, position)
+	return expect(state, position, ")")
 end
 
-def syntax_iteration_suffix(state: Gate4Compiler, origin: Integer): Integer
-	if !gate4_token_is(state, origin, ".") || !gate4_token_is(state, origin + 1, "each")
+def syntax_iteration_suffix(state: CompilerState, origin: Integer): Integer
+	if !token_is(state, origin, ".") || !token_is(state, origin + 1, "each")
 		return - 1
 	end
 	mut cursor := origin + 2
-	if gate4_token_is(state, cursor, "(") && gate4_token_is(state, cursor + 1, ")")
+	if token_is(state, cursor, "(") && token_is(state, cursor + 1, ")")
 		cursor += 2
 	end
-	if gate4_token_is(state, cursor, ".") && gate4_token_is(state, cursor + 1, "with_index")
+	if token_is(state, cursor, ".") && token_is(state, cursor + 1, "with_index")
 		cursor += 2
-		if gate4_token_is(state, cursor, "(") && gate4_token_is(state, cursor + 1, ")")
+		if token_is(state, cursor, "(") && token_is(state, cursor + 1, ")")
 			cursor += 2
 		end
 	end
-	if gate4_token_is(state, cursor, "do") || gate4_token_is(state, cursor, "{")
+	if token_is(state, cursor, "do") || token_is(state, cursor, "{")
 		return cursor
 	end
 	return - 1
 end
 
-def parse_iteration_statement(mut state: Gate4Compiler, mut position: Array<Integer>, origin: Integer): Boolean
+def parse_iteration_statement(mut state: CompilerState, mut position: Array<Integer>, origin: Integer): Boolean
 	receiver_finish := position[0]
 	delimiter := syntax_iteration_suffix(state, receiver_finish)
 	if delimiter < 0
 		return false
 	end
-	brace := gate4_token_is(state, delimiter, "{")
+	brace := token_is(state, delimiter, "{")
 	mut indexed := false
 	mut scan := receiver_finish + 2
 	while scan < delimiter
-		if gate4_token_is(state, scan, "with_index")
+		if token_is(state, scan, "with_index")
 			indexed = true
 		end
 		scan += 1
 	end
 	position[0] = delimiter + 1
-	if !gate4_expect(state, position, "|")
+	if !expect(state, position, "|")
 		return false
 	end
 	element_origin := position[0]
-	gate4_expect_identifier(state, position)
+	expect_identifier(state, position)
 	mut index_origin :=- 1
 	if indexed
-		if !gate4_expect(state, position, ",")
+		if !expect(state, position, ",")
 			return false
 		end
 		index_origin = position[0]
-		gate4_expect_identifier(state, position)
+		expect_identifier(state, position)
 	end
-	if !gate4_expect(state, position, "|")
+	if !expect(state, position, "|")
 		return false
 	end
 	if brace
-		gate4_skip_newlines(state, position)
+		skip_newlines(state, position)
 	elsif !finish_statement(state, position)
 		return false
 	end
@@ -231,8 +231,8 @@ def parse_iteration_statement(mut state: Gate4Compiler, mut position: Array<Inte
 		end
 		mut token := delimiter
 		while token < position[0]
-			if gate4_load_integer(state.token_kinds, token) == 4 && gate4_load_string(state.token_texts, token) == "\n"
-				gate4_diagnostic(state, "TRBN4002", gate4_load_integer(state.token_lines, token), "multiline brace iteration is not supported; use do/end")
+			if load_integer(state.token_kinds, token) == 4 && load_string(state.token_texts, token) == "\n"
+				diagnostic(state, "TRBN4002", load_integer(state.token_lines, token), "multiline brace iteration is not supported; use do/end")
 				return false
 			end
 			token += 1
@@ -241,108 +241,108 @@ def parse_iteration_statement(mut state: Gate4Compiler, mut position: Array<Inte
 		return false
 	end
 	body_finish := position[0]
-	if !gate4_expect(state, position, terminator)
+	if !expect(state, position, terminator)
 		return false
 	end
 	# Re-parsing unreachable syntax must not replace an already checked plan.
 	if sparse_integer_at(state.iteration_origins, origin) == 0
 		state.iterations.push(MirIteration.new(origin: origin, receiver_finish: receiver_finish, element_origin: element_origin, index_origin: index_origin, body_start: body_start, body_finish: body_finish, finish: position[0], parent_loop: - 1, source_kind: 1, type_name: "", element_type: ""))
-		gate4_store_integer(state.iteration_origins, origin, state.iterations.size())
-		gate4_store_integer(state.iteration_origins, body_finish, - state.iterations.size())
+		store_integer(state.iteration_origins, origin, state.iterations.size())
+		store_integer(state.iteration_origins, body_finish, - state.iterations.size())
 	end
 	return finish_statement(state, position)
 end
 
-def gate4_parse_primary_syntax(mut state: Gate4Compiler, mut position: Array<Integer>): Boolean
-	hash_literal := gate4_token_is(state, position[0], "{")
+def parse_primary_syntax(mut state: CompilerState, mut position: Array<Integer>): Boolean
+	hash_literal := token_is(state, position[0], "{")
 	if hash_literal
-		gate4_advance(position)
-		gate4_skip_newlines(state, position)
-		while !gate4_token_is(state, position[0], "}")
-			if gate4_load_integer(state.token_kinds, position[0]) == 1 && gate4_token_is(state, position[0] + 1, ":")
-				gate4_store_integer(state.token_kinds, position[0], 3)
-				gate4_store_string(state.token_texts, position[0] + 1, "=>")
+		advance(position)
+		skip_newlines(state, position)
+		while !token_is(state, position[0], "}")
+			if load_integer(state.token_kinds, position[0]) == 1 && token_is(state, position[0] + 1, ":")
+				store_integer(state.token_kinds, position[0], 3)
+				store_string(state.token_texts, position[0] + 1, "=>")
 			end
-			if !gate4_parse_expression_syntax(state, position, 1)
+			if !parse_expression_syntax(state, position, 1)
 				return false
 			end
-			if !gate4_expect(state, position, "=>")
+			if !expect(state, position, "=>")
 				return false
 			end
-			if !gate4_parse_expression_syntax(state, position, 1)
+			if !parse_expression_syntax(state, position, 1)
 				return false
 			end
-			gate4_skip_newlines(state, position)
-			if !gate4_token_is(state, position[0], ",")
+			skip_newlines(state, position)
+			if !token_is(state, position[0], ",")
 				break
 			end
-			gate4_advance(position)
-			gate4_skip_newlines(state, position)
+			advance(position)
+			skip_newlines(state, position)
 		end
-		if !gate4_expect(state, position, "}")
+		if !expect(state, position, "}")
 			return false
 		end
 	end
-	kind := gate4_load_integer(state.token_kinds, position[0])
+	kind := load_integer(state.token_kinds, position[0])
 	if hash_literal
 	elsif kind == 1
-		gate4_advance(position)
+		advance(position)
 	else
 		if kind == 2
-			gate4_advance(position)
+			advance(position)
 		else
 			if kind == 3
-				gate4_advance(position)
+				advance(position)
 			else
-				if gate4_token_is(state, position[0], "(")
-					gate4_advance(position)
-					gate4_skip_newlines(state, position)
-					if !gate4_parse_expression_syntax(state, position, 1)
+				if token_is(state, position[0], "(")
+					advance(position)
+					skip_newlines(state, position)
+					if !parse_expression_syntax(state, position, 1)
 						return false
 					end
-					if !gate4_expect(state, position, ")")
+					if !expect(state, position, ")")
 						return false
 					end
 				else
-					if gate4_token_is(state, position[0], "[")
-						gate4_advance(position)
-						gate4_skip_newlines(state, position)
-						if !gate4_token_is(state, position[0], "]")
+					if token_is(state, position[0], "[")
+						advance(position)
+						skip_newlines(state, position)
+						if !token_is(state, position[0], "]")
 							mut finished := false
 							while !finished
-								if gate4_token_is(state, position[0], "]")
+								if token_is(state, position[0], "]")
 									finished = true
 								else
-									if !gate4_parse_expression_syntax(state, position, 1)
+									if !parse_expression_syntax(state, position, 1)
 										return false
 									end
-									if gate4_token_is(state, position[0], ",")
-										gate4_advance(position)
-										gate4_skip_newlines(state, position)
+									if token_is(state, position[0], ",")
+										advance(position)
+										skip_newlines(state, position)
 									else
 										finished = true
 									end
 								end
 							end
 						end
-						gate4_skip_newlines(state, position)
-						if !gate4_expect(state, position, "]")
+						skip_newlines(state, position)
+						if !expect(state, position, "]")
 							return false
 						end
 					else
-						if gate4_token_is(state, position[0], "!")
-							gate4_advance(position)
-							return gate4_parse_primary_syntax(state, position)
+						if token_is(state, position[0], "!")
+							advance(position)
+							return parse_primary_syntax(state, position)
 						end
-						if gate4_token_is(state, position[0], "-")
-							gate4_advance(position)
-							return gate4_parse_primary_syntax(state, position)
+						if token_is(state, position[0], "-")
+							advance(position)
+							return parse_primary_syntax(state, position)
 						end
-						if gate4_token_is(state, position[0], "+")
-							gate4_advance(position)
-							return gate4_parse_primary_syntax(state, position)
+						if token_is(state, position[0], "+")
+							advance(position)
+							return parse_primary_syntax(state, position)
 						end
-						gate4_diagnostic(state, "TRBN4002", gate4_load_integer(state.token_lines, position[0]), "expected an expression")
+						diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), "expected an expression")
 						return false
 					end
 				end
@@ -351,38 +351,38 @@ def gate4_parse_primary_syntax(mut state: Gate4Compiler, mut position: Array<Int
 	end
 	mut postfix := true
 	while postfix
-		if gate4_token_is(state, position[0], "(")
-			gate4_advance(position)
-			gate4_skip_newlines(state, position)
-			if !gate4_parse_arguments_syntax(state, position)
+		if token_is(state, position[0], "(")
+			advance(position)
+			skip_newlines(state, position)
+			if !parse_arguments_syntax(state, position)
 				return false
 			end
 		else
-			if gate4_token_is(state, position[0], ".")
-				gate4_advance(position)
-				member := gate4_expect_identifier(state, position)
+			if token_is(state, position[0], ".")
+				advance(position)
+				member := expect_identifier(state, position)
 				if member == "each" && syntax_iteration_suffix(state, position[0] - 2) >= 0
 					position[0] -= 2
 					break
 				end
-				if gate4_has_diagnostic(state)
+				if has_diagnostic(state)
 					return false
 				end
-				if gate4_token_is(state, position[0], "(")
-					gate4_advance(position)
-					gate4_skip_newlines(state, position)
-					if !gate4_parse_arguments_syntax(state, position)
+				if token_is(state, position[0], "(")
+					advance(position)
+					skip_newlines(state, position)
+					if !parse_arguments_syntax(state, position)
 						return false
 					end
 				end
 			else
-				if gate4_token_is(state, position[0], "[")
-					gate4_advance(position)
-					gate4_skip_newlines(state, position)
-					if !gate4_parse_expression_syntax(state, position, 1)
+				if token_is(state, position[0], "[")
+					advance(position)
+					skip_newlines(state, position)
+					if !parse_expression_syntax(state, position, 1)
 						return false
 					end
-					if !gate4_expect(state, position, "]")
+					if !expect(state, position, "]")
 						return false
 					end
 				else
@@ -394,23 +394,23 @@ def gate4_parse_primary_syntax(mut state: Gate4Compiler, mut position: Array<Int
 	return true
 end
 
-def gate4_parse_expression_syntax(
-		mut state: Gate4Compiler,
+def parse_expression_syntax(
+		mut state: CompilerState,
 		mut position: Array<Integer>,
 		minimum_precedence: Integer,
 	): Boolean
-	if !gate4_parse_primary_syntax(state, position)
+	if !parse_primary_syntax(state, position)
 		return false
 	end
 	mut scanning := true
 	while scanning
-		precedence := syntax_expression_precedence(gate4_load_string(state.token_texts, position[0]))
+		precedence := syntax_expression_precedence(load_string(state.token_texts, position[0]))
 		if precedence < minimum_precedence
 			scanning = false
 		else
-			gate4_advance(position)
-			gate4_skip_newlines(state, position)
-			if !gate4_parse_expression_syntax(state, position, precedence + 1)
+			advance(position)
+			skip_newlines(state, position)
+			if !parse_expression_syntax(state, position, precedence + 1)
 				return false
 			end
 		end
@@ -418,106 +418,106 @@ def gate4_parse_expression_syntax(
 	return true
 end
 
-def syntax_statement_boundary(state: Gate4Compiler, origin: Integer): Boolean
-	if gate4_load_integer(state.token_kinds, origin) == 4
+def syntax_statement_boundary(state: CompilerState, origin: Integer): Boolean
+	if load_integer(state.token_kinds, origin) == 4
 		return true
 	end
-	return gate4_token_is(state, origin, "}")
+	return token_is(state, origin, "}")
 end
 
-def parse_inline_iteration_body(mut state: Gate4Compiler, mut position: Array<Integer>): Boolean
-	gate4_skip_newlines(state, position)
-	while !gate4_token_is(state, position[0], "}")
-		if gate4_terminal_token(state, position[0])
-			gate4_diagnostic(state, "TRBN4002", gate4_load_integer(state.token_lines, position[0]), "expected } for iteration")
+def parse_inline_iteration_body(mut state: CompilerState, mut position: Array<Integer>): Boolean
+	skip_newlines(state, position)
+	while !token_is(state, position[0], "}")
+		if terminal_token(state, position[0])
+			diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), "expected } for iteration")
 			return false
 		end
 		if syntax_loop_transfer_kind(state, position[0]) > 0
-			gate4_advance(position)
+			advance(position)
 			if !syntax_statement_boundary(state, position[0])
-				gate4_diagnostic(state, "TRBN4002", gate4_load_integer(state.token_lines, position[0]), "loop transfer does not take a value")
+				diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), "loop transfer does not take a value")
 			end
 			finish_statement(state, position)
-		elsif gate4_token_is(state, position[0], "return")
-			gate4_advance(position)
+		elsif token_is(state, position[0], "return")
+			advance(position)
 			if !syntax_statement_boundary(state, position[0])
-				gate4_parse_expression_syntax(state, position, 1)
+				parse_expression_syntax(state, position, 1)
 			end
 			finish_statement(state, position)
-		elsif gate4_declaration_start(state, position[0])
+		elsif declaration_start(state, position[0])
 			parse_declaration_statement(state, position)
 		else
 			parse_simple_statement(state, position)
 		end
-		if gate4_has_diagnostic(state)
+		if has_diagnostic(state)
 			return false
 		end
 	end
 	return true
 end
 
-def finish_statement(mut state: Gate4Compiler, mut position: Array<Integer>): Boolean
-	if gate4_load_integer(state.token_kinds, position[0]) == 4
-		gate4_skip_newlines(state, position)
+def finish_statement(mut state: CompilerState, mut position: Array<Integer>): Boolean
+	if load_integer(state.token_kinds, position[0]) == 4
+		skip_newlines(state, position)
 		return true
 	end
-	if gate4_terminal_token(state, position[0]) || gate4_token_is(state, position[0], "}")
+	if terminal_token(state, position[0]) || token_is(state, position[0], "}")
 		return true
 	end
-	gate4_diagnostic(
+	diagnostic(
 		state,
 		"TRBN4002",
-		gate4_load_integer(state.token_lines, position[0]),
-		"unexpected token " + gate4_load_string(state.token_texts, position[0]) + " after statement",
+		load_integer(state.token_lines, position[0]),
+		"unexpected token " + load_string(state.token_texts, position[0]) + " after statement",
 	)
 	return false
 end
 
-def parse_declaration_statement(mut state: Gate4Compiler, mut position: Array<Integer>): Boolean
+def parse_declaration_statement(mut state: CompilerState, mut position: Array<Integer>): Boolean
 	# The reference treats a statement-leading next as loop control, not a
 	# binding. Keep contextual identifiers (including mut next) unchanged.
-	if gate4_token_is(state, position[0], "next")
-		gate4_diagnostic(state, "TRBN4002", gate4_load_integer(state.token_lines, position[0]), "next does not take a value")
+	if token_is(state, position[0], "next")
+		diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), "next does not take a value")
 		return false
 	end
-	if gate4_token_is(state, position[0], "mut")
-		gate4_advance(position)
+	if token_is(state, position[0], "mut")
+		advance(position)
 	end
-	gate4_expect_identifier(state, position)
-	if gate4_has_diagnostic(state)
+	expect_identifier(state, position)
+	if has_diagnostic(state)
 		return false
 	end
-	if gate4_token_is(state, position[0], ":")
-		gate4_advance(position)
-		gate4_parse_type(state, position)
+	if token_is(state, position[0], ":")
+		advance(position)
+		parse_type(state, position)
 	end
-	if !gate4_expect(state, position, ":=")
+	if !expect(state, position, ":=")
 		return false
 	end
-	if !gate4_parse_expression_syntax(state, position, 1)
+	if !parse_expression_syntax(state, position, 1)
 		return false
 	end
 	return finish_statement(state, position)
 end
 
-def parse_simple_statement(mut state: Gate4Compiler, mut position: Array<Integer>): Boolean
+def parse_simple_statement(mut state: CompilerState, mut position: Array<Integer>): Boolean
 	origin := position[0]
-	if !gate4_parse_expression_syntax(state, position, 1)
+	if !parse_expression_syntax(state, position, 1)
 		return false
 	end
-	operator := gate4_load_string(state.token_texts, position[0])
+	operator := load_string(state.token_texts, position[0])
 	if operator == "." && syntax_iteration_suffix(state, position[0]) >= 0
 		return parse_iteration_statement(state, position, origin)
 	end
 	if operator == "="
-		gate4_advance(position)
-		if !gate4_parse_expression_syntax(state, position, 1)
+		advance(position)
+		if !parse_expression_syntax(state, position, 1)
 			return false
 		end
 	else
-		if gate4_binary_operator_id(operator) >= 17
-			gate4_advance(position)
-			if !gate4_parse_expression_syntax(state, position, 1)
+		if binary_operator_id(operator) >= 17
+			advance(position)
+			if !parse_expression_syntax(state, position, 1)
 				return false
 			end
 		end
@@ -525,34 +525,34 @@ def parse_simple_statement(mut state: Gate4Compiler, mut position: Array<Integer
 	return finish_statement(state, position)
 end
 
-def syntax_loop_transfer_kind(state: Gate4Compiler, origin: Integer): Integer
-	if gate4_token_is(state, origin, "break")
+def syntax_loop_transfer_kind(state: CompilerState, origin: Integer): Integer
+	if token_is(state, origin, "break")
 		return 1
 	end
-	if gate4_token_is(state, origin, "next")
+	if token_is(state, origin, "next")
 		return 2
 	end
 	return 0
 end
 
-def parse_statement_block(mut state: Gate4Compiler, mut position: Array<Integer>): Boolean
-	gate4_skip_newlines(state, position)
+def parse_statement_block(mut state: CompilerState, mut position: Array<Integer>): Boolean
+	skip_newlines(state, position)
 	while true
-		if gate4_terminal_token(state, position[0])
-			gate4_diagnostic(state, "TRBN4002", gate4_load_integer(state.token_lines, position[0]), "expected end")
+		if terminal_token(state, position[0])
+			diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), "expected end")
 			break
 		elsif syntax_block_end(state, position[0])
 			break
 		elsif syntax_conditional_tail(state, position[0])
 			break
-		elsif gate4_token_is(state, position[0], "if")
-			gate4_advance(position)
-			if gate4_parse_expression_syntax(state, position, 1)
+		elsif token_is(state, position[0], "if")
+			advance(position)
+			if parse_expression_syntax(state, position, 1)
 				if finish_statement(state, position)
 					parse_statement_block(state, position)
-					while gate4_token_is(state, position[0], "elsif")
-						gate4_advance(position)
-						if !gate4_parse_expression_syntax(state, position, 1)
+					while token_is(state, position[0], "elsif")
+						advance(position)
+						if !parse_expression_syntax(state, position, 1)
 							return false
 						end
 						if !finish_statement(state, position)
@@ -562,146 +562,146 @@ def parse_statement_block(mut state: Gate4Compiler, mut position: Array<Integer>
 							return false
 						end
 					end
-					if gate4_token_is(state, position[0], "else")
-						gate4_advance(position)
+					if token_is(state, position[0], "else")
+						advance(position)
 						finish_statement(state, position)
 						parse_statement_block(state, position)
 					end
-					if gate4_expect(state, position, "end")
+					if expect(state, position, "end")
 						finish_statement(state, position)
 					end
 				end
 			end
-		elsif gate4_token_is(state, position[0], "while")
-			gate4_advance(position)
-			if gate4_parse_expression_syntax(state, position, 1)
+		elsif token_is(state, position[0], "while")
+			advance(position)
+			if parse_expression_syntax(state, position, 1)
 				if finish_statement(state, position)
 					parse_statement_block(state, position)
-					if gate4_expect(state, position, "end")
+					if expect(state, position, "end")
 						finish_statement(state, position)
 					end
 				end
 			end
 		elsif syntax_loop_transfer_kind(state, position[0]) > 0
-			word := gate4_load_string(state.token_texts, position[0])
-			gate4_advance(position)
+			word := load_string(state.token_texts, position[0])
+			advance(position)
 			if !syntax_statement_boundary(state, position[0])
-				gate4_diagnostic(state, "TRBN4002", gate4_load_integer(state.token_lines, position[0]), word + " does not take a value")
+				diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), word + " does not take a value")
 			else
 				finish_statement(state, position)
 			end
-		elsif gate4_token_is(state, position[0], "return")
-			gate4_advance(position)
+		elsif token_is(state, position[0], "return")
+			advance(position)
 			if !syntax_statement_boundary(state, position[0])
-				if !gate4_terminal_token(state, position[0])
-					gate4_parse_expression_syntax(state, position, 1)
+				if !terminal_token(state, position[0])
+					parse_expression_syntax(state, position, 1)
 				end
 			end
 			finish_statement(state, position)
-		elsif gate4_declaration_start(state, position[0])
+		elsif declaration_start(state, position[0])
 			parse_declaration_statement(state, position)
 		else
 			parse_simple_statement(state, position)
 		end
-		if gate4_has_diagnostic(state)
+		if has_diagnostic(state)
 			break
 		end
 	end
-	return !gate4_has_diagnostic(state)
+	return !has_diagnostic(state)
 end
 
-def gate4_parse_record(mut state: Gate4Compiler, mut position: Array<Integer>): Boolean
-	line := gate4_load_integer(state.token_lines, position[0])
-	gate4_advance(position)
-	name := gate4_expect_identifier(state, position)
+def parse_record(mut state: CompilerState, mut position: Array<Integer>): Boolean
+	line := load_integer(state.token_lines, position[0])
+	advance(position)
+	name := expect_identifier(state, position)
 	if !finish_statement(state, position)
 		return false
 	end
 	record_index := state.record_count[0]
-	gate4_store_string(state.record_names, record_index, name)
-	gate4_store_integer(state.record_modules, record_index, state.active_module[0])
-	gate4_store_integer(state.record_field_starts, record_index, state.field_count[0])
-	gate4_store_integer(state.record_lines, record_index, line)
+	store_string(state.record_names, record_index, name)
+	store_integer(state.record_modules, record_index, state.active_module[0])
+	store_integer(state.record_field_starts, record_index, state.field_count[0])
+	store_integer(state.record_lines, record_index, line)
 	mut count := 0
-	while !gate4_token_is(state, position[0], "end")
-		if gate4_terminal_token(state, position[0])
-			gate4_diagnostic(state, "TRBN4002", gate4_load_integer(state.token_lines, position[0]), "expected end for record " + name)
+	while !token_is(state, position[0], "end")
+		if terminal_token(state, position[0])
+			diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), "expected end for record " + name)
 			return false
 		end
-		field_line := gate4_load_integer(state.token_lines, position[0])
-		field_name := gate4_expect_identifier(state, position)
-		if !gate4_expect(state, position, ":")
+		field_line := load_integer(state.token_lines, position[0])
+		field_name := expect_identifier(state, position)
+		if !expect(state, position, ":")
 			return false
 		end
-		field_type := gate4_parse_type(state, position)
+		field_type := parse_type(state, position)
 		if !finish_statement(state, position)
 			return false
 		end
 		field_index := state.field_count[0]
-		gate4_store_string(state.field_names, field_index, field_name)
-		gate4_store_string(state.field_types, field_index, field_type)
-		gate4_store_integer(state.field_lines, field_index, field_line)
+		store_string(state.field_names, field_index, field_name)
+		store_string(state.field_types, field_index, field_type)
+		store_integer(state.field_lines, field_index, field_line)
 		state.field_count[0] = field_index + 1
 		count += 1
 	end
-	gate4_advance(position)
-	gate4_store_integer(state.record_field_counts, record_index, count)
+	advance(position)
+	store_integer(state.record_field_counts, record_index, count)
 	state.record_count[0] = record_index + 1
 	return finish_statement(state, position)
 end
 
-def gate4_parse_function(mut state: Gate4Compiler, mut position: Array<Integer>): Boolean
-	line := gate4_load_integer(state.token_lines, position[0])
-	gate4_advance(position)
-	name := gate4_expect_identifier(state, position)
-	if !gate4_expect(state, position, "(")
+def parse_function(mut state: CompilerState, mut position: Array<Integer>): Boolean
+	line := load_integer(state.token_lines, position[0])
+	advance(position)
+	name := expect_identifier(state, position)
+	if !expect(state, position, "(")
 		return false
 	end
-	gate4_skip_newlines(state, position)
+	skip_newlines(state, position)
 	parameter_start := state.parameter_count[0]
 	mut parameter_count := 0
-	if !gate4_token_is(state, position[0], ")")
+	if !token_is(state, position[0], ")")
 		mut finished := false
 		while !finished
-			gate4_skip_newlines(state, position)
-			if gate4_token_is(state, position[0], ")")
+			skip_newlines(state, position)
+			if token_is(state, position[0], ")")
 				finished = true
 			else
 				mut mutable := 0
-				if gate4_token_is(state, position[0], "mut")
+				if token_is(state, position[0], "mut")
 					mutable = 1
-					gate4_advance(position)
+					advance(position)
 				end
-				parameter_line := gate4_load_integer(state.token_lines, position[0])
-				parameter_name := gate4_expect_identifier(state, position)
-				if !gate4_expect(state, position, ":")
+				parameter_line := load_integer(state.token_lines, position[0])
+				parameter_name := expect_identifier(state, position)
+				if !expect(state, position, ":")
 					return false
 				end
-				parameter_type := gate4_parse_type(state, position)
+				parameter_type := parse_type(state, position)
 				parameter_index := state.parameter_count[0]
-				gate4_store_string(state.parameter_names, parameter_index, parameter_name)
-				gate4_store_string(state.parameter_types, parameter_index, parameter_type)
-				gate4_store_integer(state.parameter_mutable, parameter_index, mutable)
-				gate4_store_integer(state.parameter_lines, parameter_index, parameter_line)
+				store_string(state.parameter_names, parameter_index, parameter_name)
+				store_string(state.parameter_types, parameter_index, parameter_type)
+				store_integer(state.parameter_mutable, parameter_index, mutable)
+				store_integer(state.parameter_lines, parameter_index, parameter_line)
 				state.parameter_count[0] = parameter_index + 1
 				parameter_count += 1
-				if gate4_token_is(state, position[0], ",")
-					gate4_advance(position)
-					gate4_skip_newlines(state, position)
+				if token_is(state, position[0], ",")
+					advance(position)
+					skip_newlines(state, position)
 				else
 					finished = true
 				end
 			end
 		end
 	end
-	gate4_skip_newlines(state, position)
-	if !gate4_expect(state, position, ")")
+	skip_newlines(state, position)
+	if !expect(state, position, ")")
 		return false
 	end
 	mut result_type := "Void"
-	if gate4_token_is(state, position[0], ":")
-		gate4_advance(position)
-		result_type = gate4_parse_type(state, position)
+	if token_is(state, position[0], ":")
+		advance(position)
+		result_type = parse_type(state, position)
 	end
 	if !finish_statement(state, position)
 		return false
@@ -711,28 +711,28 @@ def gate4_parse_function(mut state: Gate4Compiler, mut position: Array<Integer>)
 		return false
 	end
 	body_end := position[0]
-	if !gate4_expect(state, position, "end")
+	if !expect(state, position, "end")
 		return false
 	end
 	if !finish_statement(state, position)
 		return false
 	end
 	function_index := state.function_count[0]
-	gate4_store_string(state.function_names, function_index, name)
-	gate4_store_integer(state.function_modules, function_index, state.active_module[0])
-	gate4_store_integer(state.function_parameter_starts, function_index, parameter_start)
-	gate4_store_integer(state.function_parameter_counts, function_index, parameter_count)
-	gate4_store_string(state.function_result_types, function_index, result_type)
-	gate4_store_integer(state.function_body_starts, function_index, body_start)
-	gate4_store_integer(state.function_body_ends, function_index, body_end)
-	gate4_store_integer(state.function_lines, function_index, line)
+	store_string(state.function_names, function_index, name)
+	store_integer(state.function_modules, function_index, state.active_module[0])
+	store_integer(state.function_parameter_starts, function_index, parameter_start)
+	store_integer(state.function_parameter_counts, function_index, parameter_count)
+	store_string(state.function_result_types, function_index, result_type)
+	store_integer(state.function_body_starts, function_index, body_start)
+	store_integer(state.function_body_ends, function_index, body_end)
+	store_integer(state.function_lines, function_index, line)
 	state.function_lookup[function_index_key(state.active_module[0], name)] = function_index
 	state.function_count[0] = function_index + 1
 	return true
 end
 
-def gate4_append_import(
-		mut state: Gate4Compiler,
+def append_import(
+		mut state: CompilerState,
 		path: String,
 		declaration: String,
 		binding: String,
@@ -740,171 +740,171 @@ def gate4_append_import(
 		line: Integer,
 	): Integer
 	import_index := state.import_count[0]
-	gate4_store_integer(state.import_modules, import_index, state.active_module[0])
-	gate4_store_string(state.import_paths, import_index, path)
-	gate4_store_string(state.import_symbols, import_index, binding)
-	gate4_store_string(state.import_declarations, import_index, declaration)
-	gate4_store_integer(state.import_kinds, import_index, kind)
-	gate4_store_integer(state.import_lines, import_index, line)
-	gate4_store_integer(state.import_targets, import_index, - 1)
-	gate4_store_integer(state.import_used, import_index, 0)
+	store_integer(state.import_modules, import_index, state.active_module[0])
+	store_string(state.import_paths, import_index, path)
+	store_string(state.import_symbols, import_index, binding)
+	store_string(state.import_declarations, import_index, declaration)
+	store_integer(state.import_kinds, import_index, kind)
+	store_integer(state.import_lines, import_index, line)
+	store_integer(state.import_targets, import_index, - 1)
+	store_integer(state.import_used, import_index, 0)
 	state.import_count[0] = import_index + 1
 	return import_index
 end
 
-def gate4_parse_named_import(mut state: Gate4Compiler, mut position: Array<Integer>, line: Integer): Boolean
-	gate4_advance(position)
-	gate4_skip_newlines(state, position)
+def parse_named_import(mut state: CompilerState, mut position: Array<Integer>, line: Integer): Boolean
+	advance(position)
+	skip_newlines(state, position)
 	import_start := state.import_count[0]
 	mut finished := false
 	while !finished
-		if gate4_token_is(state, position[0], "}")
+		if token_is(state, position[0], "}")
 			finished = true
 		else
-			symbol_line := gate4_load_integer(state.token_lines, position[0])
-			declaration := gate4_expect_identifier(state, position)
-			if gate4_has_diagnostic(state)
+			symbol_line := load_integer(state.token_lines, position[0])
+			declaration := expect_identifier(state, position)
+			if has_diagnostic(state)
 				return false
 			end
-			gate4_skip_newlines(state, position)
+			skip_newlines(state, position)
 			mut binding := declaration
-			if gate4_token_is(state, position[0], "as")
-				gate4_advance(position)
-				gate4_skip_newlines(state, position)
-				binding = gate4_expect_identifier(state, position)
-				if gate4_has_diagnostic(state)
+			if token_is(state, position[0], "as")
+				advance(position)
+				skip_newlines(state, position)
+				binding = expect_identifier(state, position)
+				if has_diagnostic(state)
 					return false
 				end
-				gate4_skip_newlines(state, position)
+				skip_newlines(state, position)
 			end
-			gate4_append_import(state, "", declaration, binding, 0, symbol_line)
-			if gate4_token_is(state, position[0], ",")
-				gate4_advance(position)
-				gate4_skip_newlines(state, position)
+			append_import(state, "", declaration, binding, 0, symbol_line)
+			if token_is(state, position[0], ",")
+				advance(position)
+				skip_newlines(state, position)
 			else
 				finished = true
 			end
 		end
 	end
 	if state.import_count[0] == import_start
-		gate4_diagnostic(state, "TRBN4002", line, "named import must contain at least one declaration")
+		diagnostic(state, "TRBN4002", line, "named import must contain at least one declaration")
 		return false
 	end
-	if !gate4_expect(state, position, "}")
+	if !expect(state, position, "}")
 		return false
 	end
-	gate4_skip_newlines(state, position)
-	if !gate4_expect(state, position, "from")
+	skip_newlines(state, position)
+	if !expect(state, position, "from")
 		return false
 	end
 	mut path := ""
-	while gate4_load_integer(state.token_kinds, position[0]) != 4
-		if gate4_terminal_token(state, position[0])
+	while load_integer(state.token_kinds, position[0]) != 4
+		if terminal_token(state, position[0])
 			if path == ""
-				gate4_diagnostic(state, "TRBN4002", line, "import path is required")
+				diagnostic(state, "TRBN4002", line, "import path is required")
 				return false
 			end
 			mut terminal_index := import_start
 			while terminal_index < state.import_count[0]
-				gate4_store_string(state.import_paths, terminal_index, path)
+				store_string(state.import_paths, terminal_index, path)
 				terminal_index += 1
 			end
 			return true
 		end
-		path += gate4_load_string(state.token_texts, position[0])
-		gate4_advance(position)
+		path += load_string(state.token_texts, position[0])
+		advance(position)
 	end
 	if path == ""
-		gate4_diagnostic(state, "TRBN4002", line, "import path is required")
+		diagnostic(state, "TRBN4002", line, "import path is required")
 		return false
 	end
 	mut import_index := import_start
 	while import_index < state.import_count[0]
-		gate4_store_string(state.import_paths, import_index, path)
+		store_string(state.import_paths, import_index, path)
 		import_index += 1
 	end
 	return finish_statement(state, position)
 end
 
-def gate4_parse_bare_import(mut state: Gate4Compiler, mut position: Array<Integer>, line: Integer): Boolean
+def parse_bare_import(mut state: CompilerState, mut position: Array<Integer>, line: Integer): Boolean
 	mut path := ""
 	mut scanning := true
 	while scanning
-		if gate4_terminal_token(state, position[0])
+		if terminal_token(state, position[0])
 			scanning = false
 		else
-			if gate4_load_integer(state.token_kinds, position[0]) == 4
+			if load_integer(state.token_kinds, position[0]) == 4
 				scanning = false
 			else
-				if gate4_token_is(state, position[0], "as")
+				if token_is(state, position[0], "as")
 					scanning = false
 				else
-					path += gate4_load_string(state.token_texts, position[0])
-					gate4_advance(position)
+					path += load_string(state.token_texts, position[0])
+					advance(position)
 				end
 			end
 		end
 	end
 	if path == ""
-		gate4_diagnostic(state, "TRBN4002", line, "bare import path is required")
+		diagnostic(state, "TRBN4002", line, "bare import path is required")
 		return false
 	end
 	mut binding := ""
-	if gate4_token_is(state, position[0], "as")
-		gate4_advance(position)
-		binding = gate4_expect_identifier(state, position)
-		if gate4_has_diagnostic(state)
+	if token_is(state, position[0], "as")
+		advance(position)
+		binding = expect_identifier(state, position)
+		if has_diagnostic(state)
 			return false
 		end
 	end
-	gate4_append_import(state, path, "", binding, 1, line)
+	append_import(state, path, "", binding, 1, line)
 	return finish_statement(state, position)
 end
 
-def gate4_parse_module(mut state: Gate4Compiler, start: Integer, module_index: Integer): Boolean
+def parse_module(mut state: CompilerState, start: Integer, module_index: Integer): Boolean
 	state.active_module[0] = module_index
 	import_start := state.import_count[0]
-	gate4_store_integer(state.module_import_starts, module_index, import_start)
-	gate4_store_integer(state.module_import_counts, module_index, 0)
+	store_integer(state.module_import_starts, module_index, import_start)
+	store_integer(state.module_import_counts, module_index, 0)
 	mut position := [start]
-	gate4_skip_newlines(state, position)
-	while !gate4_terminal_token(state, position[0])
-		if gate4_token_is(state, position[0], "import")
-			line := gate4_load_integer(state.token_lines, position[0])
-			gate4_advance(position)
-			gate4_skip_newlines(state, position)
-			if gate4_token_is(state, position[0], "{")
-				gate4_parse_named_import(state, position, line)
+	skip_newlines(state, position)
+	while !terminal_token(state, position[0])
+		if token_is(state, position[0], "import")
+			line := load_integer(state.token_lines, position[0])
+			advance(position)
+			skip_newlines(state, position)
+			if token_is(state, position[0], "{")
+				parse_named_import(state, position, line)
 			else
-				gate4_parse_bare_import(state, position, line)
+				parse_bare_import(state, position, line)
 			end
 		else
-			if gate4_token_is(state, position[0], "record")
-				gate4_parse_record(state, position)
+			if token_is(state, position[0], "record")
+				parse_record(state, position)
 			else
-				if gate4_token_is(state, position[0], "def")
-					gate4_parse_function(state, position)
+				if token_is(state, position[0], "def")
+					parse_function(state, position)
 				else
-					gate4_diagnostic(
+					diagnostic(
 						state,
 						"TRBN4002",
-						gate4_load_integer(state.token_lines, position[0]),
-						"unsupported top-level declaration " + gate4_load_string(state.token_texts, position[0]),
+						load_integer(state.token_lines, position[0]),
+						"unsupported top-level declaration " + load_string(state.token_texts, position[0]),
 					)
 				end
 			end
 		end
-		if gate4_has_diagnostic(state)
+		if has_diagnostic(state)
 			return false
 		end
-		gate4_store_integer(
+		store_integer(
 			state.module_import_counts,
 			module_index,
 			state.import_count[0] - import_start,
 		)
-		gate4_skip_newlines(state, position)
+		skip_newlines(state, position)
 	end
-	gate4_store_integer(
+	store_integer(
 		state.module_import_counts,
 		module_index,
 		state.import_count[0] - import_start,
@@ -912,7 +912,7 @@ def gate4_parse_module(mut state: Gate4Compiler, start: Integer, module_index: I
 	return true
 end
 
-def gate4_binary_operator_id(operator: String): Integer
+def binary_operator_id(operator: String): Integer
 	if operator == "+"
 		return 1
 	end

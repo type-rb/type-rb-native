@@ -37,7 +37,7 @@ test('MIR migration defers compiler comparisons but preserves every correctness 
     }
     assert.deepEqual(classify(paths, false, 'strict'), strict);
   }
-  for (const path of ['.github/workflows/gate-zero.yml', 'tools/ci-run-suites.mjs',
+  for (const path of ['.github/workflows/native-validation.yml', 'tools/ci-run-suites.mjs',
     'tools/compiler-cost.sh', 'tools/native-mir-transition-policy.sh']) {
     const strict = classify([path], false);
     assert.equal(strict.performance, true);
@@ -53,11 +53,11 @@ test('integration explicitly passes migration mode while standalone workflows re
   for (const name of ['pull-request', 'push-validation']) {
     const workflow = readFileSync(new URL(`../.github/workflows/${name}.yml`, import.meta.url), 'utf8');
     assert.match(workflow, /^env:\n[\s\S]*?  NATIVE_MIR_COST_MODE: mir-migration$/m);
-    const calls = [...workflow.matchAll(/    uses: \.\/\.github\/workflows\/(gate-zero|gate6n-linux-amd64|runtime-worker-memory)\.yml\n([^]*?)(?=\n  \w|$)/g)];
+    const calls = [...workflow.matchAll(/    uses: \.\/\.github\/workflows\/(native-validation|linux-amd64-targets|runtime-worker-memory)\.yml\n([^]*?)(?=\n  \w|$)/g)];
     assert.equal(calls.length, name === 'pull-request' ? 3 : 2);
     for (const call of calls) assert.match(call[2], /    with:\n      cost_mode: mir-migration/);
   }
-  for (const name of ['gate-zero', 'gate6n-linux-amd64', 'runtime-worker-memory']) {
+  for (const name of ['native-validation', 'linux-amd64-targets', 'runtime-worker-memory']) {
     const workflow = readFileSync(new URL(`../.github/workflows/${name}.yml`, import.meta.url), 'utf8');
     assert.match(workflow, /workflow_call:\n    inputs:\n      cost_mode:[\s\S]*?default: strict/);
     assert(workflow.includes("NATIVE_MIR_COST_MODE: ${{ inputs.cost_mode || 'strict' }}"));
@@ -73,7 +73,7 @@ test('integration explicitly passes migration mode while standalone workflows re
 });
 
 test('amd64 migration still verifies binary format and records identities after skipped measurements', () => {
-  const source = readFileSync(new URL('gate6n-linux-amd64.sh', import.meta.url), 'utf8');
+  const source = readFileSync(new URL('linux-amd64-targets.sh', import.meta.url), 'utf8');
   const tail = source.slice(source.lastIndexOf('\nverify_binary_format\n'));
   assert(tail.startsWith('\nverify_binary_format\n'));
   const directory = mkdtempSync(join(tmpdir(), 'native-cost-routing-'));
@@ -152,7 +152,7 @@ test('manual Boolean compactness loads its dependencies in a fresh step shell', 
 
 test('compatibility checks precede matrix fan-out and remain in standalone validation', () => {
   const workflow = readFileSync(new URL('../.github/workflows/pull-request.yml', import.meta.url), 'utf8');
-  const standalone = readFileSync(new URL('../.github/workflows/gate-zero.yml', import.meta.url), 'utf8');
+  const standalone = readFileSync(new URL('../.github/workflows/native-validation.yml', import.meta.url), 'utf8');
   const quick = workflow.match(/^  quick:\n([\s\S]*?)(?=^  documentation:)/m)?.[1];
   assert(quick, 'quick stage must exist');
   const build = quick.indexOf('go build -C .type-rb');
@@ -212,7 +212,7 @@ test('compiler, conformance and execution workflows retain the full authority', 
     'tools/compiler-project.sh',
     'compiler/gate4/src/storage.trb',
     'compiler/gate4/conformance/runtime-invalid/new.trb',
-    '.github/workflows/pull-request.yml', '.github/workflows/gate-zero.yml',
+    '.github/workflows/pull-request.yml', '.github/workflows/native-validation.yml',
     '.github/workflows/static-string-compactness.yml', 'tools/ci-run-suites.mjs',
     'tools/native-mir-transition-policy.sh']) {
     const plan = classify([path], false);
@@ -427,7 +427,7 @@ test('synthetic tooling tests have an executable authority without compiler rebu
     'tools/recovery-stage.py', 'tools/ci-run-suites.mjs', '.github/workflows/ci-tooling.yml']) {
     assert.equal(classify([file], false).code, true, file);
   }
-  const native = readFileSync(new URL('../.github/workflows/gate-zero.yml', import.meta.url), 'utf8');
+  const native = readFileSync(new URL('../.github/workflows/native-validation.yml', import.meta.url), 'utf8');
   assert(!native.includes('Verify bootstrap seed tooling'));
   const entry = readFileSync(new URL('../.github/workflows/pull-request.yml', import.meta.url), 'utf8');
   assert(entry.includes('needs: [plan, native, targets, memory, tooling, cli]'));
@@ -440,7 +440,7 @@ test('main uses the same complete path classifier and Pages PR checks are not du
   assert(main.includes('node tools/ci-plan.mjs "$BASE_SHA" "$HEAD_SHA" false push'));
   assert(main.includes('BASE_SHA: ${{ github.event.before }}'));
   for (const job of ['native', 'memory', 'tooling', 'documentation']) assert(main.includes(`  ${job}:`));
-  for (const name of ['gate-zero', 'runtime-worker-memory', 'documentation']) {
+  for (const name of ['native-validation', 'runtime-worker-memory', 'documentation']) {
     const source = readFileSync(new URL(`../.github/workflows/${name}.yml`, import.meta.url), 'utf8');
     assert(!source.includes('  push:'), `${name} must not independently rerun the same main validation`);
     assert(source.includes('  workflow_call:'));
@@ -565,7 +565,7 @@ test('controller-only test edits keep both Linux and macOS execution', () => {
   const pr = readFileSync(new URL('../.github/workflows/pull-request.yml', import.meta.url), 'utf8');
   const main = readFileSync(new URL('../.github/workflows/push-validation.yml', import.meta.url), 'utf8');
   const tooling = readFileSync(new URL('../.github/workflows/ci-tooling.yml', import.meta.url), 'utf8');
-  const native = readFileSync(new URL('../.github/workflows/gate-zero.yml', import.meta.url), 'utf8');
+  const native = readFileSync(new URL('../.github/workflows/native-validation.yml', import.meta.url), 'utf8');
   for (const file of ['tools/ci-run-suites-test.mjs', 'tools/recovery-workspace-test.mjs']) {
     assert(pr.split('\n  quick:\n')[0].includes(file));
     assert(main.split('  native:')[0].includes(file));

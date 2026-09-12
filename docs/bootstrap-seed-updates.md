@@ -204,6 +204,29 @@ verification passed. The verified checkout handoff below updates current
 consumers and the accepted-source Linux amd64 bridge. Compiler-source self-use
 is a subsequent verified source change.
 
+## Registered compiler-name retirement refresh
+
+Issue #412 registers `bootstrap-seed-2026-09-12-compiler-names` to complete the
+removal of stage-derived compiler names. Preparation must use the accepted main
+revision containing the role-named compiler and six predecessor-intrinsic bridges;
+record that exact accepted revision and closure before dispatch. Its predecessor
+is the verified Array-iteration release below. Registration alone does not mean
+that a new seed has been built, published, or accepted.
+
+The refresh retains adjacent-generation checks, repeated fixed points, complete
+conformance, process boundaries, signed provenance and fresh published-asset
+verification on Darwin arm64 and Linux arm64. It adds ordinary Range capability
+checks. This new tag follows the active MIR migration policy: exact compiler
+sizes remain authenticated observations, without an integration size ceiling.
+Every earlier tag retains its own unchanged strict size limits. No old failure
+or result is reclassified, and this handoff is not Pure Go performance qualification.
+
+After both published assets pass verification, a separate checkout handoff removes
+the six old intrinsic declarations and recognition paths. Linux amd64 also needs
+an exact accepted source bridge from the Array-iteration compiler to the renamed
+intrinsic compiler before those names can disappear from candidate source. Complete
+both transitions before resuming broader MIR work; keep issue #412 open until then.
+
 ## Current verified checkout seed
 
 Checkout builds pin [bootstrap-seed-2026-09-11-array-iteration](https://github.com/type-rb/type-rb-native/releases/tag/bootstrap-seed-2026-09-11-array-iteration),

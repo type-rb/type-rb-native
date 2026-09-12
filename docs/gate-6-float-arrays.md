@@ -11,7 +11,7 @@ representation and ownership model is defined by
 
 Gate 6J is complete at measured implementation revision
 `914f4f592f344111b7a790aac00aecbf0d411d11` with the TypeRB-authored
-[benchmark controller](../tools/gate6j-benchmark/README.md) at revision
+[benchmark controller](https://github.com/type-rb/type-rb-native/blob/d568d9e712452f66fc9c48d6025bf73b79659661/tools/gate6j-benchmark/README.md) at revision
 `328f93ea348fe569c56d7737206246c7df42eb9c`. Every registered correctness,
 performance, memory, size, fixed-point, regression, and pinned Linux arm64
 criterion passes. See the

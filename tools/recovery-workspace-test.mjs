@@ -11,14 +11,14 @@ import { cleanupWorkspace, ownerName, parseReceipt, readWorkspace } from './reco
 const receipt = root => `trbn-recovery-workspace-v1\n${root}\n`;
 
 test('workflow consumers validate the receipt and cleanup precedes evidence upload', () => {
-  const workflow = fs.readFileSync(new URL('../.github/workflows/gate-zero.yml', import.meta.url), 'utf8');
-  assert.equal(workflow.includes('/tmp/type-rb-native-gate4-bootstrap'), false);
+  const workflow = fs.readFileSync(new URL('../.github/workflows/native-validation.yml', import.meta.url), 'utf8');
+  assert.equal(workflow.includes('/tmp/type-rb-native-compiler-bootstrap'), false);
   assert.equal(workflow.match(/recovery_workspace=\$\(node tools\/recovery-workspace\.mjs read /g)?.length, 4);
   assert.equal(workflow.match(/"\$recovery_workspace\//g)?.length, 6);
   assert.match(workflow, /TYPE_RB_NATIVE_RECOVERY_RECEIPT: \$\{\{ runner.temp \}\}\/native-suite-evidence\/recovery-workspace.txt/);
   const cleanup = workflow.indexOf('- name: Clean only the invocation-owned recovery workspace');
   const upload = workflow.indexOf('- name: Upload joined suite logs, ownership receipt and cleanup outcome');
-  assert.ok(cleanup > workflow.indexOf('- name: Verify the Go-free Gate 4 bootstrap harness'));
+  assert.ok(cleanup > workflow.indexOf('- name: Verify the Go-free Native bootstrap harness'));
   assert.ok(upload > cleanup);
   assert.match(workflow.slice(cleanup, upload), /if: always\(\) && steps.native_suites.outcome != 'skipped'/);
   assert.match(workflow.slice(upload), /if: always\(\) && steps.native_suites.outcome != 'skipped'/);

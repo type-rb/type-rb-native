@@ -16,10 +16,10 @@ args = parser.parse_args()
 repo = Path(__file__).resolve().parent.parent
 source = args.source or repo / 'compiler/src/qbe_runtime.trb'
 decoded = '\n'.join(json.loads(s) for s in re.findall(r'"(?:[^"\\]|\\.)*"', source.read_text()))
-bodies = re.findall(r'^function l \$g4_string_index\(l %string, l %requested\) \{.*?^\}', decoded, re.M | re.S)
+bodies = re.findall(r'^function l \$trbn_string_index\(l %string, l %requested\) \{.*?^\}', decoded, re.M | re.S)
 assert len(bodies) == 1
-data = re.findall(r'^data \$(?:string_byte_values|g4_bounds_error) = [^\n]+', decoded, re.M)
-assert any(line.startswith('data $g4_bounds_error ') for line in data)
+data = re.findall(r'^data \$(?:string_byte_values|trbn_bounds_error) = [^\n]+', decoded, re.M)
+assert any(line.startswith('data $trbn_bounds_error ') for line in data)
 il = '\n'.join(data) + '\nexport ' + bodies[0] + '\n'
 # The observer supplies inputs and counts allocations; String indexing itself
 # is extracted from the repository-owned TypeRB runtime, including its checks.
@@ -32,10 +32,10 @@ observer = r'''
 #include <string.h>
 struct string { uint64_t descriptor; int64_t length; unsigned char bytes[]; };
 _Static_assert(sizeof(void *) == 8 && offsetof(struct string, bytes) == 16, "String ABI");
-extern struct string *g4_string_index(struct string *, int64_t);
+extern struct string *trbn_string_index(struct string *, int64_t);
 static unsigned allocations;
-void *g4_string_alloc(int64_t size) { ++allocations; return calloc(1, (size_t)size + 8); }
-void g4_fail(const void *message, int64_t size) {
+void *trbn_string_alloc(int64_t size) { ++allocations; return calloc(1, (size_t)size + 8); }
+void trbn_fail(const void *message, int64_t size) {
     fwrite(message, 1, (size_t)size, stderr);
     exit(70);
 }
@@ -46,14 +46,14 @@ int main(int argc, char **argv) {
     for (unsigned i = 0; i < 256; ++i) source->bytes[i] = (unsigned char)i;
     if (argc == 3) {
         source->length = strtoll(argv[1], NULL, 10);
-        g4_string_index(source, strtoll(argv[2], NULL, 10));
+        trbn_string_index(source, strtoll(argv[2], NULL, 10));
         return 1;
     }
     assert(argc == 1);
     struct string *retained[256];
     for (int i = 0; i < 256; ++i) {
-        retained[i] = g4_string_index(source, i);
-        struct string *negative = g4_string_index(source, i - 256);
+        retained[i] = trbn_string_index(source, i);
+        struct string *negative = trbn_string_index(source, i - 256);
         assert(retained[i]->length == 1 && negative->length == 1);
         assert(retained[i]->bytes[0] == i && negative->bytes[0] == i);
         assert(retained[i]->bytes[1] == 0 && negative->bytes[1] == 0);
@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
     for (int round = 0; round < 4; ++round) {
         for (int i = 255; i >= 0; --i) {
             next.bytes[0] = (unsigned char)i;
-            struct string *value = g4_string_index((struct string *)&next, 0);
+            struct string *value = trbn_string_index((struct string *)&next, 0);
             assert(value->length == 1 && value->bytes[0] == i && value->bytes[1] == 0);
         }
     }

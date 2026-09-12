@@ -15,7 +15,7 @@ byte-identical on Darwin and pinned Linux arm64. Darwin multi-file median time
 is 0.712012 seconds, 21.56% above the Gate 6C baseline and 0.37% faster than the
 temporary flat source; median RSS is 36,716,544 bytes, and both compilers strip
 to 199,992 bytes. The Gate 6E application retains exact bytes and behavior.
-See the [TypeRB-authored benchmark controller](../tools/gate6f-benchmark/README.md)
+See the [TypeRB-authored benchmark controller](https://github.com/type-rb/type-rb-native/blob/d568d9e712452f66fc9c48d6025bf73b79659661/tools/gate6f-benchmark/README.md)
 and [recorded result](https://github.com/type-rb/type-rb-native/blob/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results/2026-08-29-gate6f-multifile-compiler-darwin-linux-arm64/README.md).
 
 ## Compiler closure

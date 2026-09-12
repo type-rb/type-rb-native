@@ -1,9 +1,9 @@
 import { describe, expect, test } from trb/std/test
-import { gate4_check, gate4_emit_qbe, gate4_lex } from compiler
-import { gate4_parse_module } from parser
-import { gate4_resolve } from resolution
-import { gate4_compiler_new, gate4_has_diagnostic } from state
-import { gate4_load_integer, gate4_load_string, gate4_store_integer } from storage
+import { check, emit_qbe, lex } from compiler
+import { parse_module } from parser
+import { resolve } from resolution
+import { compiler_new, has_diagnostic } from state
+import { load_integer, load_string, store_integer } from storage
 import { MirLoopTransfer, mir_loop_transfer_valid } from mir
 
 describe("Checked loop transfers") do
@@ -23,36 +23,36 @@ describe("Checked loop transfers") do
 		source := "def main()\nwhile true\nwhile true\nbreak\nend\nbreak\nend\nend\n"
 		mut mode := 0
 		while mode < 6
-			mut state := gate4_compiler_new(source.size() + 1)
-			expect(gate4_lex(state, source)).to_be_true()
-			expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
-			expect(gate4_resolve(state)).to_be_true()
-			expect(gate4_check(state)).to_be_true()
+			mut state := compiler_new(source.size() + 1)
+			expect(lex(state, source)).to_be_true()
+			expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
+			expect(resolve(state)).to_be_true()
+			expect(check(state)).to_be_true()
 			mut origin := 0
 			mut outer := 0
-			while gate4_load_string(state.token_texts, origin) != "while"
+			while load_string(state.token_texts, origin) != "while"
 				origin += 1
 			end
 			outer = origin
-			while gate4_load_string(state.token_texts, origin) != "break"
+			while load_string(state.token_texts, origin) != "break"
 				origin += 1
 			end
 			if mode == 0
-				gate4_store_integer(state.loop_transfer_kinds, origin, 0)
+				store_integer(state.loop_transfer_kinds, origin, 0)
 			elsif mode == 1
-				gate4_store_integer(state.loop_transfer_kinds, origin, 2)
+				store_integer(state.loop_transfer_kinds, origin, 2)
 			elsif mode == 2
-				gate4_store_integer(state.loop_transfer_targets, origin, 0)
+				store_integer(state.loop_transfer_targets, origin, 0)
 			elsif mode == 3
-				gate4_store_integer(state.loop_transfer_targets, origin, outer + 1)
+				store_integer(state.loop_transfer_targets, origin, outer + 1)
 			elsif mode == 4
-				gate4_store_integer(state.loop_transfer_targets, origin, state.token_count[0] + 1)
+				store_integer(state.loop_transfer_targets, origin, state.token_count[0] + 1)
 			else
-				gate4_store_integer(state.loop_transfer_targets, origin, - 9007199254740991)
+				store_integer(state.loop_transfer_targets, origin, - 9007199254740991)
 			end
-			gate4_emit_qbe(state)
-			expect(gate4_has_diagnostic(state)).to_be_true()
-			expect(gate4_load_string(state.diagnostic_messages, 0)).to_equal("invalid checked loop transfer target")
+			emit_qbe(state)
+			expect(has_diagnostic(state)).to_be_true()
+			expect(load_string(state.diagnostic_messages, 0)).to_equal("invalid checked loop transfer target")
 			mode += 1
 		end
 	end
@@ -66,29 +66,29 @@ describe("Checked loop transfers") do
 		mut index := 0
 		while index < sources.size()
 			source := sources[index]
-			mut state := gate4_compiler_new(source.size() + 1)
-			expect(gate4_lex(state, source)).to_be_true()
-			expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
-			expect(gate4_resolve(state)).to_be_true()
-			expect(gate4_check(state)).to_be_false()
-			expect(gate4_load_string(state.diagnostic_messages, 0).include?("is only valid inside a loop")).to_be_true()
+			mut state := compiler_new(source.size() + 1)
+			expect(lex(state, source)).to_be_true()
+			expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
+			expect(resolve(state)).to_be_true()
+			expect(check(state)).to_be_false()
+			expect(load_string(state.diagnostic_messages, 0).include?("is only valid inside a loop")).to_be_true()
 			index += 1
 		end
 	end
 
 	test("invalidates induction facts when an update is skipped") do
 		source := "def main()\nmut values := [1]\nmut index := 0\nwhile index < values.size()\nputs(values[index])\nnext\nindex += 1\nend\nend\n"
-		mut state := gate4_compiler_new(source.size() + 1)
-		expect(gate4_lex(state, source)).to_be_true()
-		expect(gate4_parse_module(state, 0, state.entry_module[0])).to_be_true()
-		expect(gate4_resolve(state)).to_be_true()
-		expect(gate4_check(state)).to_be_true()
+		mut state := compiler_new(source.size() + 1)
+		expect(lex(state, source)).to_be_true()
+		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(resolve(state)).to_be_true()
+		expect(check(state)).to_be_true()
 		mut origin := 0
-		while gate4_load_string(state.token_texts, origin) != "while"
+		while load_string(state.token_texts, origin) != "while"
 			origin += 1
 		end
-		expect(gate4_load_integer(state.mir_nonnegative_facts, origin)).to_equal(0)
-		gate4_emit_qbe(state)
-		expect(gate4_has_diagnostic(state)).to_be_false()
+		expect(load_integer(state.mir_nonnegative_facts, origin)).to_equal(0)
+		emit_qbe(state)
+		expect(has_diagnostic(state)).to_be_false()
 	end
 end
