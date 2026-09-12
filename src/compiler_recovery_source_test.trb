@@ -1,15 +1,27 @@
-import { iteration_checked_source_import_prefix, hash_types_source_import_prefix, hash_mir_source_import_prefix, hash_checked_source_import_prefix, hash_runtime_source_import_prefix, checked_program_source_import_prefix, compiler_source_directory, compiler_source_has_import, compiler_source_import_prefix, compiler_source_path, flatten_compiler_recovery_source, mir_source_import_prefix, parser_source_import_prefix, project_config_source_import_prefix, qbe_output_source_import_prefix, qbe_runtime_source_import_prefix, read_required_compiler_source, resolution_source_import_prefix, state_source_import_prefix } from compiler_recovery_source
+import { compiler_recovery_layout } from compiler_recovery_layout
+import { RecoveryCompilerSources, compiler_source_directory, compiler_source_has_import, compiler_source_path, flatten_compiler_recovery_source, read_compiler_recovery_sources, read_required_compiler_source } from compiler_recovery_source
 import trb/std/result
 import trb/std/process
 import { describe, expect, test } from trb/std/test
 
+def synthetic_recovery_sources(): RecoveryCompilerSources
+	mut names: Array<String> := []
+	mut contents: Array<String> := []
+	compiler_recovery_layout().each do |module|
+		names.push(module.name)
+		contents.push(module.imports + "def " + module.name + "()\n\treturn\nend\n")
+	end
+	return RecoveryCompilerSources.new(names: names, contents: contents, flattened: "")
+end
+
 describe("Compiler recovery source closure") do
-	test("matches the canonical compiler entry imports before recovery") do
+	test("matches every canonical compiler module before recovery") do
 		root := Process.environment("TYPE_RB_NATIVE_ROOT")
 		if root != nil
-			case read_required_compiler_source(root + "/compiler/src/compiler.trb")
-			when Result::Ok(source)
-				expect(source.start_with?(compiler_source_import_prefix())).to_be_true()
+			case read_compiler_recovery_sources(root + "/compiler/src/compiler.trb")
+			when Result::Ok(sources)
+				expect(sources.names.size()).to_equal(compiler_recovery_layout().size())
+				expect(compiler_source_has_import(sources.flattened)).to_be_false()
 			when Result::Err(message)
 				puts(message)
 				expect(false).to_be_true()
@@ -41,151 +53,88 @@ describe("Compiler recovery source closure") do
 		expect(compiler_source_has_import("# import source\n\t# import other\n")).to_be_false()
 	end
 
-	test("derives one deterministic recovery source from the canonical modules") do
-		entry := compiler_source_import_prefix() + "def main()\n\treturn\nend\n"
-		case flatten_compiler_recovery_source(entry, "def storage()\n\treturn\nend\n", "def path()\n\treturn\nend\n", mir_source_import_prefix() + "def mir()\n\treturn\nend\n", "def literals()\n\treturn\nend\n", state_source_import_prefix() + "def state()\n\treturn\nend\n", parser_source_import_prefix() + "def parser()\n\treturn\nend\n", resolution_source_import_prefix() + "def resolution()\n\treturn\nend\n", checked_program_source_import_prefix() + "def checked_program()\n\treturn\nend\n", qbe_output_source_import_prefix() + "def qbe_output()\n\treturn\nend\n", qbe_runtime_source_import_prefix() + "def qbe_runtime()\n\treturn\nend\n", project_config_source_import_prefix() + "def project_config()\n\treturn\nend\n", hash_types_source_import_prefix() + "def hash_types()\n\treturn\nend\n", hash_mir_source_import_prefix() + "def hash_mir()\n\treturn\nend\n", hash_checked_source_import_prefix() + "def hash_checked()\n\treturn\nend\n", hash_runtime_source_import_prefix() + "def hash_runtime()\n\treturn\nend\n", "def iteration_mir()\n\treturn\nend\n", iteration_checked_source_import_prefix() + "def iteration_checked()\n\treturn\nend\n")
+	test("derives one deterministic source in exact dependency order") do
+		sources := synthetic_recovery_sources()
+		mut expected := ""
+		sources.names.each do |name|
+			if !expected.empty?()
+				expected += "\n"
+			end
+			expected += "def " + name + "()\n\treturn\nend\n"
+		end
+		case flatten_compiler_recovery_source(sources.names, sources.contents)
 		when Result::Ok(flattened)
-			expect(flattened).to_equal(
-				"def iteration_mir()\n\treturn\nend\n\ndef storage()\n\treturn\nend\n\ndef path()\n\treturn\nend\n\ndef literals()\n\treturn\nend\n\ndef mir()\n\treturn\nend\n\ndef state()\n\treturn\nend\n\ndef parser()\n\treturn\nend\n\ndef resolution()\n\treturn\nend\n\ndef iteration_checked()\n\treturn\nend\n\ndef checked_program()\n\treturn\nend\n\ndef qbe_output()\n\treturn\nend\n\ndef qbe_runtime()\n\treturn\nend\n\ndef project_config()\n\treturn\nend\n\ndef hash_types()\n\treturn\nend\n\ndef hash_mir()\n\treturn\nend\n\ndef hash_checked()\n\treturn\nend\n\ndef hash_runtime()\n\treturn\nend\n\ndef main()\n\treturn\nend\n",
-			)
+			expect(flattened).to_equal(expected)
 		when Result::Err(message)
 			puts(message)
 			expect(false).to_be_true()
 		end
 	end
 
-	test("rejects a changed compiler import boundary") do
-		case flatten_compiler_recovery_source("def main()\n\treturn\nend\n", "", "", "", "", "", "", resolution_source_import_prefix() + "resolution", checked_program_source_import_prefix() + "checked_program", qbe_output_source_import_prefix() + "qbe_output", qbe_runtime_source_import_prefix() + "qbe_runtime", project_config_source_import_prefix() + "project_config", hash_types_source_import_prefix() + "def hash_types()\n\treturn\nend\n", hash_mir_source_import_prefix() + "def hash_mir()\n\treturn\nend\n", hash_checked_source_import_prefix() + "def hash_checked()\n\treturn\nend\n", hash_runtime_source_import_prefix() + "def hash_runtime()\n\treturn\nend\n", "def iteration_mir()\n\treturn\nend\n", iteration_checked_source_import_prefix() + "def iteration_checked()\n\treturn\nend\n")
-		when Result::Ok(_flattened)
+	test("rejects missing, reordered, duplicated and extra module identities") do
+		mut sources := synthetic_recovery_sources()
+		case flatten_compiler_recovery_source([], sources.contents)
+		when Result::Ok(_value)
 			expect(false).to_be_true()
 		when Result::Err(message)
-			expect(message).to_equal("compiler entry import boundary differs")
+			expect(message).to_equal("compiler source inventory differs")
 		end
-	end
-
-	test("rejects a missing or changed MIR import boundary") do
-		entry := compiler_source_import_prefix() + "def main()\n\treturn\nend\n"
-		case flatten_compiler_recovery_source(entry, "storage", "path", "import unknown\n", "literals", "", "", resolution_source_import_prefix() + "resolution", checked_program_source_import_prefix() + "checked_program", qbe_output_source_import_prefix() + "qbe_output", qbe_runtime_source_import_prefix() + "qbe_runtime", project_config_source_import_prefix() + "project_config", hash_types_source_import_prefix() + "def hash_types()\n\treturn\nend\n", hash_mir_source_import_prefix() + "def hash_mir()\n\treturn\nend\n", hash_checked_source_import_prefix() + "def hash_checked()\n\treturn\nend\n", hash_runtime_source_import_prefix() + "def hash_runtime()\n\treturn\nend\n", "def iteration_mir()\n\treturn\nend\n", iteration_checked_source_import_prefix() + "def iteration_checked()\n\treturn\nend\n")
-		when Result::Ok(_flattened)
+		first := sources.names[0]
+		sources.names[0] = sources.names[1]
+		case flatten_compiler_recovery_source(sources.names, sources.contents)
+		when Result::Ok(_value)
 			expect(false).to_be_true()
 		when Result::Err(message)
-			expect(message).to_equal("MIR source import boundary differs")
+			expect(message).to_equal("compiler source identity differs at " + first)
+		end
+		sources.names[1] = first
+		case flatten_compiler_recovery_source(sources.names, sources.contents)
+		when Result::Ok(_value)
+			expect(false).to_be_true()
+		when Result::Err(message)
+			expect(message).to_equal("compiler source identity differs at " + first)
+		end
+		sources.names.push("extra")
+		case flatten_compiler_recovery_source(sources.names, sources.contents)
+		when Result::Ok(_value)
+			expect(false).to_be_true()
+		when Result::Err(message)
+			expect(message).to_equal("compiler source inventory differs")
 		end
 	end
 
-	test("rejects missing or changed state and parser import boundaries") do
-		entry := compiler_source_import_prefix() + "entry"
-		invalid := ["", "import unknown\n"]
-		mut index := 0
-		while index < invalid.size()
-			case flatten_compiler_recovery_source(entry, "storage", "path", mir_source_import_prefix() + "mir", "literals", invalid[index], parser_source_import_prefix() + "parser", resolution_source_import_prefix() + "resolution", checked_program_source_import_prefix() + "checked_program", qbe_output_source_import_prefix() + "qbe_output", qbe_runtime_source_import_prefix() + "qbe_runtime", project_config_source_import_prefix() + "project_config", hash_types_source_import_prefix() + "def hash_types()\n\treturn\nend\n", hash_mir_source_import_prefix() + "def hash_mir()\n\treturn\nend\n", hash_checked_source_import_prefix() + "def hash_checked()\n\treturn\nend\n", hash_runtime_source_import_prefix() + "def hash_runtime()\n\treturn\nend\n", "def iteration_mir()\n\treturn\nend\n", iteration_checked_source_import_prefix() + "def iteration_checked()\n\treturn\nend\n")
-			when Result::Ok(_flattened)
-				expect(false).to_be_true()
-			when Result::Err(message)
-				expect(message).to_equal("State source import boundary differs")
+	test("rejects changed import boundaries in every imported module") do
+		compiler_recovery_layout().each.with_index do |module, index|
+			if !module.imports.empty?()
+				mut sources := synthetic_recovery_sources()
+				sources.contents[index] = "import unknown\n"
+				case flatten_compiler_recovery_source(sources.names, sources.contents)
+				when Result::Ok(_value)
+					expect(false).to_be_true()
+				when Result::Err(message)
+					expect(message).to_equal(module.name + " source import boundary differs")
+				end
 			end
-			case flatten_compiler_recovery_source(entry, "storage", "path", mir_source_import_prefix() + "mir", "literals", state_source_import_prefix() + "state", invalid[index], resolution_source_import_prefix() + "resolution", checked_program_source_import_prefix() + "checked_program", qbe_output_source_import_prefix() + "qbe_output", qbe_runtime_source_import_prefix() + "qbe_runtime", project_config_source_import_prefix() + "project_config", hash_types_source_import_prefix() + "def hash_types()\n\treturn\nend\n", hash_mir_source_import_prefix() + "def hash_mir()\n\treturn\nend\n", hash_checked_source_import_prefix() + "def hash_checked()\n\treturn\nend\n", hash_runtime_source_import_prefix() + "def hash_runtime()\n\treturn\nend\n", "def iteration_mir()\n\treturn\nend\n", iteration_checked_source_import_prefix() + "def iteration_checked()\n\treturn\nend\n")
-			when Result::Ok(_flattened)
-				expect(false).to_be_true()
-			when Result::Err(message)
-				expect(message).to_equal("Parser source import boundary differs")
-			end
-			index += 1
-		end
-	end
-
-	test("rejects missing or changed semantic frontend import boundaries") do
-		entry := compiler_source_import_prefix() + "entry"
-		invalid := ["", "import unknown\n"]
-		mut index := 0
-		while index < invalid.size()
-			case flatten_compiler_recovery_source(entry, "storage", "path", mir_source_import_prefix() + "mir", "literals", state_source_import_prefix() + "state", parser_source_import_prefix() + "parser", invalid[index], checked_program_source_import_prefix() + "checked_program", qbe_output_source_import_prefix() + "qbe_output", qbe_runtime_source_import_prefix() + "qbe_runtime", project_config_source_import_prefix() + "project_config", hash_types_source_import_prefix() + "def hash_types()\n\treturn\nend\n", hash_mir_source_import_prefix() + "def hash_mir()\n\treturn\nend\n", hash_checked_source_import_prefix() + "def hash_checked()\n\treturn\nend\n", hash_runtime_source_import_prefix() + "def hash_runtime()\n\treturn\nend\n", "def iteration_mir()\n\treturn\nend\n", iteration_checked_source_import_prefix() + "def iteration_checked()\n\treturn\nend\n")
-			when Result::Ok(_flattened)
-				expect(false).to_be_true()
-			when Result::Err(message)
-				expect(message).to_equal("Resolution source import boundary differs")
-			end
-			case flatten_compiler_recovery_source(entry, "storage", "path", mir_source_import_prefix() + "mir", "literals", state_source_import_prefix() + "state", parser_source_import_prefix() + "parser", resolution_source_import_prefix() + "resolution", invalid[index], qbe_output_source_import_prefix() + "qbe_output", qbe_runtime_source_import_prefix() + "qbe_runtime", project_config_source_import_prefix() + "project_config", hash_types_source_import_prefix() + "def hash_types()\n\treturn\nend\n", hash_mir_source_import_prefix() + "def hash_mir()\n\treturn\nend\n", hash_checked_source_import_prefix() + "def hash_checked()\n\treturn\nend\n", hash_runtime_source_import_prefix() + "def hash_runtime()\n\treturn\nend\n", "def iteration_mir()\n\treturn\nend\n", iteration_checked_source_import_prefix() + "def iteration_checked()\n\treturn\nend\n")
-			when Result::Ok(_flattened)
-				expect(false).to_be_true()
-			when Result::Err(message)
-				expect(message).to_equal("Checked-program source import boundary differs")
-			end
-			index += 1
-		end
-	end
-
-	test("rejects missing or changed QBE output and runtime import boundaries") do
-		entry := compiler_source_import_prefix() + "entry"
-		invalid := ["", "import unknown\n"]
-		mut index := 0
-		while index < invalid.size()
-			case flatten_compiler_recovery_source(entry, "storage", "path", mir_source_import_prefix() + "mir", "literals", state_source_import_prefix() + "state", parser_source_import_prefix() + "parser", resolution_source_import_prefix() + "resolution", checked_program_source_import_prefix() + "checked_program", invalid[index], qbe_runtime_source_import_prefix() + "qbe_runtime", project_config_source_import_prefix() + "project_config", hash_types_source_import_prefix() + "def hash_types()\n\treturn\nend\n", hash_mir_source_import_prefix() + "def hash_mir()\n\treturn\nend\n", hash_checked_source_import_prefix() + "def hash_checked()\n\treturn\nend\n", hash_runtime_source_import_prefix() + "def hash_runtime()\n\treturn\nend\n", "def iteration_mir()\n\treturn\nend\n", iteration_checked_source_import_prefix() + "def iteration_checked()\n\treturn\nend\n")
-			when Result::Ok(_flattened)
-				expect(false).to_be_true()
-			when Result::Err(message)
-				expect(message).to_equal("QBE-output source import boundary differs")
-			end
-			case flatten_compiler_recovery_source(entry, "storage", "path", mir_source_import_prefix() + "mir", "literals", state_source_import_prefix() + "state", parser_source_import_prefix() + "parser", resolution_source_import_prefix() + "resolution", checked_program_source_import_prefix() + "checked_program", qbe_output_source_import_prefix() + "qbe_output", invalid[index], project_config_source_import_prefix() + "project_config", hash_types_source_import_prefix() + "def hash_types()\n\treturn\nend\n", hash_mir_source_import_prefix() + "def hash_mir()\n\treturn\nend\n", hash_checked_source_import_prefix() + "def hash_checked()\n\treturn\nend\n", hash_runtime_source_import_prefix() + "def hash_runtime()\n\treturn\nend\n", "def iteration_mir()\n\treturn\nend\n", iteration_checked_source_import_prefix() + "def iteration_checked()\n\treturn\nend\n")
-			when Result::Ok(_flattened)
-				expect(false).to_be_true()
-			when Result::Err(message)
-				expect(message).to_equal("QBE-runtime source import boundary differs")
-			end
-			index += 1
-		end
-	end
-
-	test("rejects a missing or changed project-configuration import boundary") do
-		invalid := ["", "import unknown\n"]
-		mut index := 0
-		while index < invalid.size()
-			case flatten_compiler_recovery_source(compiler_source_import_prefix() + "entry", "storage", "path", mir_source_import_prefix() + "mir", "literals", state_source_import_prefix() + "state", parser_source_import_prefix() + "parser", resolution_source_import_prefix() + "resolution", checked_program_source_import_prefix() + "checked_program", qbe_output_source_import_prefix() + "qbe_output", qbe_runtime_source_import_prefix() + "qbe_runtime", invalid[index], hash_types_source_import_prefix() + "def hash_types()\n\treturn\nend\n", hash_mir_source_import_prefix() + "def hash_mir()\n\treturn\nend\n", hash_checked_source_import_prefix() + "def hash_checked()\n\treturn\nend\n", hash_runtime_source_import_prefix() + "def hash_runtime()\n\treturn\nend\n", "def iteration_mir()\n\treturn\nend\n", iteration_checked_source_import_prefix() + "def iteration_checked()\n\treturn\nend\n")
-			when Result::Ok(_flattened)
-				expect(false).to_be_true()
-			when Result::Err(message)
-				expect(message).to_equal("Project-configuration source import boundary differs")
-			end
-			index += 1
-		end
-	end
-
-	test("rejects a missing or changed iteration proof import boundary") do
-		invalid := ["", "import unknown\n"]
-		mut index := 0
-		while index < invalid.size()
-			case flatten_compiler_recovery_source(compiler_source_import_prefix() + "entry", "storage", "path", mir_source_import_prefix() + "mir", "literals", state_source_import_prefix() + "state", parser_source_import_prefix() + "parser", resolution_source_import_prefix() + "resolution", checked_program_source_import_prefix() + "checked_program", qbe_output_source_import_prefix() + "qbe_output", qbe_runtime_source_import_prefix() + "qbe_runtime", project_config_source_import_prefix() + "project_config", hash_types_source_import_prefix() + "def hash_types()\n\treturn\nend\n", hash_mir_source_import_prefix() + "def hash_mir()\n\treturn\nend\n", hash_checked_source_import_prefix() + "def hash_checked()\n\treturn\nend\n", hash_runtime_source_import_prefix() + "def hash_runtime()\n\treturn\nend\n", "def iteration_mir()\n\treturn\nend\n", invalid[index])
-			when Result::Ok(_flattened)
-				expect(false).to_be_true()
-			when Result::Err(message)
-				expect(message).to_equal("iteration_checked source import boundary differs")
-			end
-			index += 1
 		end
 	end
 
 	test("rejects empty bodies and extra imports in every declaration source") do
 		invalid := ["", "import other\n", "\timport{value}from other\n", "\rimport\tother\n", "import# comment\nother\n"]
-		mut invalid_index := 0
-		while invalid_index < invalid.size()
-			mut slot := 0
-			while slot < 18
-				mut sources := ["def main()\n\treturn\nend\n", "storage", "path", "mir", "literals", "state", "parser", "resolution", "checked_program", "qbe_output", "qbe_runtime", "project_config", "hash_types", "hash_mir", "hash_checked", "hash_runtime", "iteration_mir", "iteration_checked"]
-				sources[slot] = invalid[invalid_index]
-				case flatten_compiler_recovery_source(compiler_source_import_prefix() + sources[0], sources[1], sources[2], mir_source_import_prefix() + sources[3], sources[4], state_source_import_prefix() + sources[5], parser_source_import_prefix() + sources[6], resolution_source_import_prefix() + sources[7], checked_program_source_import_prefix() + sources[8], qbe_output_source_import_prefix() + sources[9], qbe_runtime_source_import_prefix() + sources[10], project_config_source_import_prefix() + sources[11], hash_types_source_import_prefix() + sources[12], hash_mir_source_import_prefix() + sources[13], hash_checked_source_import_prefix() + sources[14], hash_runtime_source_import_prefix() + sources[15], sources[16], iteration_checked_source_import_prefix() + sources[17])
-				when Result::Ok(_flattened)
+		invalid.each.with_index do |body, invalid_index|
+			compiler_recovery_layout().each.with_index do |module, slot|
+				mut sources := synthetic_recovery_sources()
+				sources.contents[slot] = module.imports + body
+				case flatten_compiler_recovery_source(sources.names, sources.contents)
+				when Result::Ok(_value)
 					expect(false).to_be_true()
 				when Result::Err(message)
-					expected := if invalid_index == 0
-						"compiler declaration source is empty"
-					else
-						"compiler declaration source has an unexpected import"
+					mut expected := module.name + " declaration source has an unexpected import"
+					if invalid_index == 0
+						expected = module.name + " declaration source is empty"
 					end
 					expect(message).to_equal(expected)
 				end
-				slot += 1
 			end
-			invalid_index += 1
 		end
 	end
 end

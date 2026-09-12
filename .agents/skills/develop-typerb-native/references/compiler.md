@@ -28,7 +28,7 @@ being changed; unrelated documentation does not require an architecture review.
   Record the QBE/backend target, ABI, linker policy, external dependencies,
   executable format and imports, deterministic-output policy, and recovery
   provenance. Reject unknown profiles before source or tool access, and keep
-  all Native target and gate terminology out of the reference repository.
+  all Native target and experimental terminology out of the reference repository.
 - When the Native compiler owns external-tool orchestration, execute explicit
   tool paths directly rather than assembling a shell command. Preserve child
   diagnostics, decode child completion deterministically, publish output only
@@ -43,11 +43,11 @@ being changed; unrelated documentation does not require an architecture review.
   the resulting MIR. Do not add new non-trivial source-pattern analysis to the
   QBE emitter. An already registered narrow emitter experiment may be completed
   as migration evidence, but follow-on generalization belongs in MIR.
-- Migrate the current direct-QBE self-hosted path through bounded vertical
-  slices. Define the smallest useful MIR operation and fact subset, verify it,
-  lower it through the existing QBE ABI, and remove the superseded emitter
-  ownership before expanding the subset. Do not build a general optimizer or a
-  second production backend ahead of the measured workload.
+- Follow the active MIR consolidation milestone: complete coherent families of
+  typed operations and control flow, verify them, and move their semantic owners
+  above QBE adaptation. Remove superseded direct-emitter paths with their consumers.
+  Detailed performance qualification follows the coherent milestone; correctness,
+  ordinary fixed points, recovery and lifetime safety remain required throughout.
 - Treat the portable Integer range and its failure classes as correctness
   constraints. Backend optimization may inline or outline checks under a
   deterministic code-size policy, but it must not substitute machine-word
@@ -57,7 +57,7 @@ being changed; unrelated documentation does not require an architecture review.
   hatch to improve a benchmark.
 - Keep bootstrap snapshots, Native MIR, ABI profiles, and runtime interfaces
   internal and unstable until a decision explicitly promotes them.
-- Add only the feature set required by the active gate. Record a new decision
+- Add only the feature set required by the active checkpoint. Record a new decision
   before changing language semantics, ownership boundaries, self-hosting
   criteria, or backend selection policy.
 - Remove duplicate and superseded direct-emitter ownership as MIR slices migrate.

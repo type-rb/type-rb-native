@@ -12,7 +12,7 @@ at a deliberate stable development checkpoint. Check this boundary when adding
 compiler implementation syntax, not only after a fresh checkout fails.
 
 Use the latest **verified, accepted** source at that checkpoint. Do not publish
-an unaccepted optimization candidate as a shortcut around its acceptance gates.
+an unaccepted optimization candidate as a shortcut around its acceptance checks.
 Refreshing on every commit is unnecessary: documentation and compatible source
 changes do not inherently require a new seed. Expensive publication/verification
 jobs remain manually dispatched; ordinary checkout builds always use an exact

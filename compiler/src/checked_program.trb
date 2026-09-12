@@ -1,277 +1,17 @@
-import { MirIteration, MirRangeConstruction, mir_iteration_valid } from iteration_mir
-import { checked_iteration_require, checked_iteration_shape, checked_range_require, iteration_element_type } from iteration_checked
-import { hash_key_type, hash_type, hash_value_type } from hash_types
-import { mir_hash_operation } from hash_mir
+import { CheckedValue, array_region_operation, checked_assignment_operation, checked_mir_value, checked_value, mir_checked_value, scalar_leaf_inline_eligible, scalar_mir_binary, scalar_mir_convert_float, scalar_mir_disable, scalar_mir_instruction, scalar_mir_literal, scalar_mir_type, scalar_mir_unary, scalar_mir_value } from checked_values
 import { checked_hash_binding_target, checked_hash_method, checked_hash_plan, checked_hash_publish } from hash_checked
-import { load_integer, load_string, sparse_integer_at, store_integer, store_string } from storage
+import { mir_hash_operation } from hash_mir
+import { hash_key_type, hash_type, hash_value_type } from hash_types
+import { checked_iteration_require, checked_iteration_shape, checked_range_require, iteration_element_type } from iteration_checked
+import { MirIteration, MirRangeConstruction, mir_iteration_valid } from iteration_mir
 import { float_literal_in_range, integer_literal_in_range, number_is_float, small_nonnegative_integer_operand } from literals
-import { MirArrayOperation, MirBlock, MirFunction, MirInstruction, MirLoopTransfer, MirValue, mir_array_assignment_plan, mir_array_assignment_valid, mir_array_element_type, mir_function_index, mir_instruction_with_payload, mir_logical_plan, mir_loop_transfer_valid } from mir
-import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_add, local_find, terminal_token } from state
+import { MirLoopTransfer, mir_array_element_type, mir_logical_plan, mir_loop_transfer_valid } from mir
+import { mir_array_assignment_plan, mir_array_assignment_valid } from mir_analysis
+import { mir_control_allocate, mir_control_branch, mir_control_enter, mir_control_jump, mir_control_prepare, mir_control_return } from mir_control
 import { advance, binary_operator_id, declaration_start, expect, expect_identifier, finish_statement, parse_type, skip_newlines, syntax_block_end, syntax_conditional_tail, syntax_expression_precedence, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_statement_boundary, token_is } from parser
 import { array_element_type, array_type, common_array_element_type, find_field, find_record_type, find_visible_function, find_visible_record, record_type, resolve_type_name, standard_package_import, standard_package_root, type_display } from resolution
-
-record CheckedValue
-	type_name: String
-	category: Integer
-	# Exact token index; the portable Integer maximum represents no source value.
-	origin: Integer
-	mutable: Integer
-end
-
-def scalar_leaf_inline_eligible(state: CompilerState, function_index: Integer): Boolean
-	index := mir_function_index(state.scalar_mir, function_index)
-	if index < 0
-		return false
-	end
-	return state.scalar_mir.functions[index].block_count == 2
-end
-
-def checked_assignment_operation(mut locals: CheckedLocals, kind: Integer, operand: Integer, origin: Integer)
-	mut operations := locals.mir_assignment[0]
-	operations.push(MirArrayOperation.new(kind: kind, operand: operand, origin: origin))
-end
-
-def array_region_operation(
-		mut locals: CheckedLocals,
-		kind: Integer,
-		operand: Integer,
-		origin: Integer,
-	)
-	if kind == 6
-		checked_assignment_operation(locals, 6, 0, origin)
-	end
-	mut operations := locals.mir_array
-	operations.push(MirArrayOperation.new(kind: kind, operand: operand, origin: origin))
-end
-
-def checked_value(
-		type_name: String,
-		category: Integer,
-		origin: Integer,
-		mutable: Integer,
-	): CheckedValue
-	return CheckedValue.new(
-		type_name: type_name,
-		category: category,
-		origin: origin,
-		mutable: mutable,
-	)
-end
-
-def scalar_mir_type(type_name: String): Integer
-	if type_name == "Integer"
-		return 1
-	end
-	if type_name == "Boolean"
-		return 2
-	end
-	if type_name == "Float"
-		return 5
-	end
-	if type_name == "Array<Integer>"
-		return 3
-	end
-	if type_name == "Array<Float>"
-		return 6
-	end
-	if type_name == "Address"
-		return 4
-	end
-	return 0
-end
-
-def checked_mir_value(value: CheckedValue): Integer
-	if value.category < 0
-		return - value.category - 1
-	end
-	return - 1
-end
-
-def mir_checked_value(
-		type_name: String,
-		value_id: Integer,
-		origin: Integer,
-		mutable: Integer,
-	): CheckedValue
-	return checked_value(type_name, - value_id - 1, origin, mutable)
-end
-
-def scalar_mir_disable(mut locals: CheckedLocals)
-	locals.mir_state[0] = 0
-	return
-end
-
-def scalar_mir_value(
-		mut state: CompilerState,
-		mut locals: CheckedLocals,
-		type_id: Integer,
-		origin: Integer,
-	): Integer
-	if locals.mir_state[0] == 0
-		return - 1
-	end
-	if type_id == 0
-		scalar_mir_disable(locals)
-		return - 1
-	end
-	return mir_add_value(state, locals, type_id, load_integer(state.token_lines, origin))
-end
-
-def mir_add_value(
-		state: CompilerState,
-		mut locals: CheckedLocals,
-		type_id: Integer,
-		line: Integer,
-	): Integer
-	value_id := locals.mir_state[2]
-	locals.mir_state[2] = value_id + 1
-	locals.mir_value_rows.push(MirValue.new(
-			function_id: locals.mir_state[1],
-			id: value_id,
-			type_id: type_id,
-			source_id: state.active_module[0],
-			line: line,
-		))
-	return value_id
-end
-
-def scalar_mir_instruction(
-		state: CompilerState,
-		mut locals: CheckedLocals,
-		kind: Integer,
-		result: Integer,
-		first: Integer,
-		second: Integer,
-		operation: Integer,
-		failure: Integer,
-		line: Integer,
-	)
-	locals.mir_instructions.push(MirInstruction.new(
-			kind: kind,
-			result: result,
-			first: first,
-			second: second,
-			payload: operation,
-			failure: failure,
-			source_id: state.active_module[0],
-			line: line,
-		))
-end
-
-def scalar_mir_literal(
-		mut state: CompilerState,
-		mut locals: CheckedLocals,
-		type_name: String,
-		origin: Integer,
-		text: String,
-	): CheckedValue
-	value_id := scalar_mir_value(state, locals, scalar_mir_type(type_name), origin)
-	if value_id < 0
-		return checked_value(type_name, 0, origin, 0)
-	end
-	literal_index := locals.mir_literal_texts.size()
-	mut fact := 0
-	if type_name == "Integer"
-		if small_nonnegative_integer_operand(text)
-			fact = 1
-		end
-	end
-	locals.mir_literal_texts.push(text)
-	scalar_mir_instruction(
-		state, locals, 6, value_id, fact, - 1, literal_index, - 1, load_integer(state.token_lines, origin),
-	)
-	return mir_checked_value(type_name, value_id, origin, 0)
-end
-
-def scalar_mir_binary(
-		mut state: CompilerState,
-		mut locals: CheckedLocals,
-		operator: String,
-		left: CheckedValue,
-		right: CheckedValue,
-		result_type: String,
-		origin: Integer,
-	): CheckedValue
-	left_id := checked_mir_value(left)
-	right_id := checked_mir_value(right)
-	operator_id := binary_operator_id(operator)
-	if left_id < 0
-		scalar_mir_disable(locals)
-	end
-	if right_id < 0
-		scalar_mir_disable(locals)
-	end
-	if operator_id == 0
-		scalar_mir_disable(locals)
-	end
-	if locals.mir_state[0] == 0
-		return checked_value(result_type, 0, 9007199254740991, 0)
-	end
-	value_id := scalar_mir_value(state, locals, scalar_mir_type(result_type), origin)
-	mut failure :=- 1
-	if result_type == "Integer"
-		if operator_id <= 5
-			failure = locals.mir_state[3]
-		end
-	end
-	scalar_mir_instruction(
-		state, locals, 7, value_id, left_id, right_id, operator_id, failure, load_integer(state.token_lines, origin),
-	)
-	return mir_checked_value(result_type, value_id, 9007199254740991, 0)
-end
-
-def scalar_mir_unary(
-		mut state: CompilerState,
-		mut locals: CheckedLocals,
-		operator: String,
-		value: CheckedValue,
-		result_type: String,
-		origin: Integer,
-	): CheckedValue
-	operand := checked_mir_value(value)
-	mut operator_id := 0
-	if operator == "!"
-		operator_id = 1
-	end
-	if operator == "-"
-		operator_id = 2
-	end
-	if operator == "+"
-		operator_id = 3
-	end
-	if operand < 0
-		scalar_mir_disable(locals)
-	end
-	if operator_id == 0
-		scalar_mir_disable(locals)
-	end
-	if locals.mir_state[0] == 0
-		return checked_value(result_type, 0, 9007199254740991, 0)
-	end
-	result := scalar_mir_value(state, locals, scalar_mir_type(result_type), origin)
-	scalar_mir_instruction(
-		state, locals, 8, result, operand, - 1, operator_id, - 1, load_integer(state.token_lines, origin),
-	)
-	return mir_checked_value(result_type, result, 9007199254740991, 0)
-end
-
-def scalar_mir_convert_float(
-		mut state: CompilerState,
-		mut locals: CheckedLocals,
-		value: CheckedValue,
-		origin: Integer,
-	): CheckedValue
-	operand := checked_mir_value(value)
-	if operand < 0
-		scalar_mir_disable(locals)
-		return value
-	end
-	result := scalar_mir_value(state, locals, 5, origin)
-	scalar_mir_instruction(
-		state, locals, 9, result, operand, - 1, 0, - 1, load_integer(state.token_lines, origin),
-	)
-	return mir_checked_value("Float", result, 9007199254740991, 0)
-end
+import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_add, local_find, terminal_token } from state
+import { load_integer, load_string, sparse_integer_at, store_integer, store_string } from storage
 
 def type_diagnostic(
 		mut state: CompilerState,
@@ -1576,7 +1316,9 @@ def check_conditional(
 	): Boolean
 	saved_count := locals.count[0]
 	array_region_operation(locals, 7, saved_count, position[0])
-	scalar_mir_disable(locals)
+	mir_control_prepare(state, locals)
+	join := mir_control_allocate(locals)
+	mut incoming := 0
 	mut fact_index := 0
 	while fact_index < locals.count[0]
 		if load_integer(locals.mutable, fact_index) < 0
@@ -1589,9 +1331,12 @@ def check_conditional(
 	condition := check_expression(state, position, locals, 1, "Boolean")
 	check_expected(state, condition.type_name, "Boolean", line)
 	finish_statement(state, position)
+	mut alternate := mir_control_branch(state, locals, condition, line)
 	check_block(state, position, locals, result_type, loop_origin)
 	array_region_operation(locals, 3, saved_count, position[0])
 	locals.count[0] = saved_count
+	incoming += mir_control_jump(state, locals, join)
+	mir_control_enter(state, locals, alternate, line)
 	while token_is(state, position[0], "elsif")
 		array_region_operation(locals, 8, saved_count, position[0])
 		branch_line := load_integer(state.token_lines, position[0])
@@ -1599,9 +1344,12 @@ def check_conditional(
 		branch_condition := check_expression(state, position, locals, 1, "Boolean")
 		check_expected(state, branch_condition.type_name, "Boolean", branch_line)
 		finish_statement(state, position)
+		alternate = mir_control_branch(state, locals, branch_condition, branch_line)
 		check_block(state, position, locals, result_type, loop_origin)
 		array_region_operation(locals, 3, saved_count, position[0])
 		locals.count[0] = saved_count
+		incoming += mir_control_jump(state, locals, join)
+		mir_control_enter(state, locals, alternate, branch_line)
 		if has_diagnostic(state)
 			return false
 		end
@@ -1613,6 +1361,10 @@ def check_conditional(
 		check_block(state, position, locals, result_type, loop_origin)
 		array_region_operation(locals, 3, saved_count, position[0])
 		locals.count[0] = saved_count
+	end
+	incoming += mir_control_jump(state, locals, join)
+	if incoming > 0
+		mir_control_enter(state, locals, join, load_integer(state.token_lines, position[0]))
 	end
 	array_region_operation(locals, 10, saved_count, position[0])
 	expect(state, position, "end")
@@ -1850,12 +1602,12 @@ def check_block(
 	while true
 		if locals.mir_state[0] > 0
 			if locals.mir_state[4] >= 0
-				if !syntax_block_end(state, position[0])
+				if !syntax_block_end(state, position[0]) && !syntax_conditional_tail(state, position[0])
 					scalar_mir_disable(locals)
 				end
 			else
 				if locals.mir_state[4] == - 2
-					if !syntax_block_end(state, position[0])
+					if !syntax_block_end(state, position[0]) && !syntax_conditional_tail(state, position[0])
 						scalar_mir_disable(locals)
 					end
 				end
@@ -1922,6 +1674,7 @@ def check_block(
 						mir_value := checked_mir_value(return_value)
 						if mir_value >= 0
 							locals.mir_state[4] = mir_value
+							mir_control_return(state, locals, mir_value)
 						else
 							scalar_mir_disable(locals)
 						end
@@ -2004,304 +1757,6 @@ def mir_nonnegative_fact(state: CompilerState, origin: Integer): Integer
 		return mir_nonnegative_fact(state, - fact)
 	end
 	return fact
-end
-
-def scalar_mir_begin(
-		mut state: CompilerState,
-		function_index: Integer,
-		mut locals: CheckedLocals,
-	)
-	locals.mir_state[1] = function_index
-	result_type := load_string(state.function_result_types, function_index)
-	mut mode := 1
-	if scalar_mir_type(result_type) == 0
-		if result_type != "Void"
-			return
-		end
-		mode = 2
-	end
-	parameter_start := load_integer(state.function_parameter_starts, function_index)
-	parameter_finish := parameter_start + load_integer(state.function_parameter_counts, function_index)
-	if parameter_finish - parameter_start == 1
-		parameter_type := load_string(state.parameter_types, parameter_start)
-		if array_element_type(parameter_type) == result_type
-			mode = 3
-		end
-	end
-	if mode >= 2
-		if parameter_finish - parameter_start != 1
-			return
-		end
-		if array_element_type(load_string(state.parameter_types, parameter_start)) == ""
-			return
-		end
-	end
-	mut parameter_index := parameter_start
-	while parameter_index < parameter_finish
-		if load_integer(state.parameter_mutable, parameter_index) != 0
-			return
-		end
-		if scalar_mir_type(load_string(state.parameter_types, parameter_index)) == 0
-			return
-		end
-		parameter_index += 1
-	end
-	locals.mir_state[0] = mode
-	locals.mir_state[2] = 0
-	locals.mir_state[3] = function_index * 2 + 1
-	if mode >= 2
-		locals.mir_state[3] = function_index * 6 + 4
-		locals.mir_state[11] = function_index * 6 + 5
-	end
-	locals.mir_state[4] =- 1
-	return
-end
-
-def mir_add_parameter(
-		mut state: CompilerState,
-		mut locals: CheckedLocals,
-		parameter_index: Integer,
-	)
-	type_name := load_string(state.parameter_types, parameter_index)
-	mut tag := 0
-	if array_element_type(type_name) != ""
-		tag = 1 + load_integer(state.parameter_mutable, parameter_index)
-	end
-	array_region_operation(locals, 1, tag, parameter_index)
-	if locals.mir_state[0] == 0
-		return
-	end
-	value_id := mir_add_value(
-		state, locals, scalar_mir_type(type_name), load_integer(state.parameter_lines, parameter_index),
-	)
-	store_integer(locals.mir_values, locals.count[0] - 1, value_id + 1)
-	return
-end
-
-def mir_block(
-		block_id: Integer,
-		source: Integer,
-		line: Integer,
-		parameter_start: Integer,
-		parameter_count: Integer,
-		instruction_start: Integer,
-		instruction_count: Integer,
-		terminator: Integer,
-		condition: Integer,
-		first_target: Integer,
-		second_target: Integer,
-		first_argument_start: Integer,
-		first_argument_count: Integer,
-		second_argument_start: Integer,
-		second_argument_count: Integer,
-		return_value: Integer,
-	): MirBlock
-	return MirBlock.new(
-		id: block_id,
-		source_id: source,
-		line: line,
-		parameter_start: parameter_start,
-		parameter_count: parameter_count,
-		instruction_start: instruction_start,
-		instruction_count: instruction_count,
-		terminator: terminator,
-		condition: condition,
-		first_target: first_target,
-		second_target: second_target,
-		first_argument_start: first_argument_start,
-		first_argument_count: first_argument_count,
-		second_argument_start: second_argument_start,
-		second_argument_count: second_argument_count,
-		return_value: return_value,
-	)
-end
-
-def scalar_mir_commit(
-		mut state: CompilerState,
-		function_index: Integer,
-		mut locals: CheckedLocals,
-	): String
-	if locals.mir_state[0] == 0
-		return ""
-	end
-	mut native_module := state.scalar_mir
-	mode := locals.mir_state[0]
-	return_value := locals.mir_state[4]
-	if mode == 1
-		if return_value < 0
-			return "scalar MIR function has no return value"
-		end
-	else
-		if mode == 2
-			if return_value != - 2
-				return "control-flow MIR function is incomplete"
-			end
-		else
-			if return_value != locals.mir_state[16]
-				return "control-flow MIR reduction is incomplete"
-			end
-		end
-	end
-	source := state.active_module[0]
-	line := load_integer(state.function_lines, function_index)
-	parameter_count := load_integer(state.function_parameter_counts, function_index)
-	mut entry_block := function_index * 2
-	mut block_count := 2
-	if mode >= 2
-		entry_block = function_index * 6
-		block_count = 6
-	end
-	argument_base := native_module.arguments.size()
-	block_base := native_module.blocks.size()
-	instruction_base := native_module.instructions.size()
-	literal_base := native_module.literal_texts.size()
-	if native_module.functions.size() == 0
-		mut source_count := state.module_count[0]
-		if source_count == 0
-			source_count = 1
-		end
-		native_module.source_count[0] = source_count
-		native_module.entry_function[0] = function_index
-	end
-	native_module.functions.push(MirFunction.new(integer_guard: 0, id: function_index, entry_block: entry_block, source_id: source, line: line, parameter_start: argument_base, parameter_count: parameter_count, block_start: block_base, block_count: block_count))
-	mut index := 0
-	while index < parameter_count
-		native_module.arguments.push(index)
-		index += 1
-	end
-	index = 0
-	while index < locals.mir_value_rows.size()
-		native_module.values.push(locals.mir_value_rows[index])
-		index += 1
-	end
-	index = 0
-	while index < locals.mir_literal_texts.size()
-		native_module.literal_texts.push(locals.mir_literal_texts[index])
-		index += 1
-	end
-	instruction_count := locals.mir_instructions.size()
-	index = 0
-	while index < instruction_count
-		# Checking is complete: transfer the function-owned instruction.
-		# Relocate a literal payload without mutating the function-local record.
-		mut instruction := locals.mir_instructions[index]
-		if instruction.kind == 6
-			instruction = mir_instruction_with_payload(instruction, instruction.payload + literal_base)
-		end
-		native_module.instructions.push(instruction)
-		index += 1
-	end
-	if mode >= 2
-		header_block := entry_block + 1
-		body_block := entry_block + 2
-		exit_block := entry_block + 3
-		header_parameters := native_module.arguments.size()
-		native_module.arguments.push(locals.mir_state[12] - 1)
-		mut block_parameter_count := 1
-		if mode == 3
-			native_module.arguments.push(locals.mir_state[14])
-			block_parameter_count = 2
-		end
-		body_parameters := native_module.arguments.size()
-		native_module.arguments.push(locals.mir_state[12])
-		if mode == 3
-			native_module.arguments.push(locals.mir_state[15])
-		end
-		exit_parameters := native_module.arguments.size()
-		mut exit_parameter_count := 0
-		if mode == 3
-			native_module.arguments.push(locals.mir_state[16])
-			exit_parameter_count = 1
-		end
-		entry_argument := native_module.arguments.size()
-		native_module.arguments.push(locals.mir_instructions[0].result)
-		if mode == 3
-			native_module.arguments.push(locals.mir_instructions[1].result)
-		end
-		body_argument := native_module.arguments.size()
-		native_module.arguments.push(locals.mir_state[12] - 1)
-		if mode == 3
-			native_module.arguments.push(locals.mir_state[14])
-		end
-		exit_argument := native_module.arguments.size()
-		if mode == 3
-			native_module.arguments.push(locals.mir_state[14])
-		end
-		backedge_argument := native_module.arguments.size()
-		native_module.arguments.push(locals.mir_state[10])
-		if mode == 3
-			native_module.arguments.push(locals.mir_state[17])
-		end
-		native_module.blocks.push(mir_block(
-				entry_block, source, line, entry_argument, 0,
-				instruction_base, locals.mir_state[6],
-				1, - 1, header_block, - 1, entry_argument, block_parameter_count, 0, 0, - 1,
-			))
-		native_module.blocks.push(mir_block(
-				header_block, source, line, header_parameters, block_parameter_count,
-				instruction_base + locals.mir_state[6], locals.mir_state[8],
-				2, locals.mir_state[7], body_block, exit_block,
-				body_argument, block_parameter_count, exit_argument, exit_parameter_count, - 1,
-			))
-		native_module.blocks.push(mir_block(
-				body_block, source, line, body_parameters, block_parameter_count,
-				instruction_base + locals.mir_state[9], instruction_count - locals.mir_state[9],
-				1, - 1, header_block, - 1, backedge_argument, block_parameter_count, 0, 0, - 1,
-			))
-		native_module.blocks.push(mir_block(
-				exit_block, source, line, exit_parameters, exit_parameter_count,
-				instruction_base + instruction_count, 0,
-				3, - 1, - 1, - 1, 0, 0, 0, 0, return_value,
-			))
-		native_module.blocks.push(mir_block(
-				locals.mir_state[3], source, line, 0, 0,
-				instruction_base + instruction_count, 0,
-				4, - 1, - 1, - 1, 0, 0, 0, 0, - 1,
-			))
-		native_module.blocks.push(mir_block(
-				locals.mir_state[11], source, line, 0, 0,
-				instruction_base + instruction_count, 0,
-				4, - 1, - 1, - 1, 0, 0, 0, 0, - 1,
-			))
-		return ""
-	end
-	native_module.blocks.push(mir_block(
-			entry_block,
-			source,
-			line,
-			argument_base + parameter_count,
-			0,
-			instruction_base,
-			instruction_count,
-			3,
-			- 1,
-			- 1,
-			- 1,
-			0,
-			0,
-			0,
-			0,
-			return_value,
-		))
-	native_module.blocks.push(mir_block(
-			locals.mir_state[3],
-			source,
-			line,
-			argument_base + parameter_count,
-			0,
-			instruction_base + instruction_count,
-			0,
-			4,
-			- 1,
-			- 1,
-			- 1,
-			0,
-			0,
-			0,
-			0,
-			- 1,
-		))
-	return ""
 end
 
 def checked_array_assignment_store(state: CompilerState, index_origin: Integer): Integer

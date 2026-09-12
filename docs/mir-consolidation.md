@@ -49,8 +49,7 @@ unchecked category list has been completed.
   Backend adaptation consumes those decisions. The existing optimizations can
   be represented without rediscovering semantics from source/QBE text.
 - Superseded ordinary paths and duplicated semantic analysis are removed.
-  Retained implementation names describe responsibilities; active gate1–gate6
-  naming and oversized modules are resolved with their consumers. Independently
+  Retained implementation names describe responsibilities; oversized modules are resolved with their consumers. Independently
   required recovery/snapshot adapters and immutable historical evidence remain.
 - Differential behavior, diagnostics, GC safety, REPL execution, ordinary
   self-hosting/fixed points, recovery and supported-target correctness pass.

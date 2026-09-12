@@ -48,7 +48,7 @@ host, excluding the required platform linker and system libraries.
 records the existing size failures below. Worker and ordinary fixed-point
 outputs are separate artifacts; both must fit. Linux arm64 fixed-point B1-B4
 are 368,936 bytes; its worker is 368,928 bytes. The amd64 bootstrap
-has equal B2/B3/B4 binaries at 315,552 bytes before its size gate fails.
+has equal B2/B3/B4 binaries at 315,552 bytes before its size checkpoint fails.
 The recovery preflight also exposes missing Hash modules in its staged source;
 that correctness failure requires a separate implementation-PR repair. The
 remaining dependent authorities are unrun, not accepted measurements.

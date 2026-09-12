@@ -1,0 +1,150 @@
+import { integer_string } from literals
+import { QbeOutput, qbe_output_line } from qbe_output
+import { IntegerStorage, StringStorage, integer_storage, string_storage } from storage
+
+record QbeEmitContext
+	local_names: StringStorage
+	local_types: StringStorage
+	local_slots: StringStorage
+	local_inherited: IntegerStorage
+	local_direct: IntegerStorage
+	local_count: Array<Integer>
+	slot_count: Array<Integer>
+	managed_local_high_water: Array<Integer>
+	temporary_roots_used: Array<Integer>
+	temporary_count: Array<Integer>
+	label_count: Array<Integer>
+	loop_depth: Array<Integer>
+	inline_budget: Array<Integer>
+	scalar_inline_depth: Array<Integer>
+	scalar_inline_range_failure_used: Array<Boolean>
+	array_bounds_failure_used: Array<Boolean>
+	array_header_local_origins: Array<Integer>
+	array_headers: Array<Array<String>>
+	array_header_count: Array<Integer>
+	array_loop_headers: Array<Array<Integer>>
+	array_header_fallback: Array<Array<String>>
+end
+
+record QbeValue
+	operand: String
+	type_name: String
+	category: Integer
+	name: String
+	# Bindings and record fields use addresses; category 3 uses a validated
+	# Array position and owner. Plain element reads carry no pending target.
+	slot: String
+	owner: String
+end
+
+def emit_context_new(
+		capacity: Integer,
+		inline_budget: Array<Integer>,
+	): QbeEmitContext
+	return QbeEmitContext.new(
+		local_names: string_storage(capacity),
+		local_types: string_storage(capacity),
+		local_slots: string_storage(capacity),
+		local_inherited: integer_storage(capacity),
+		local_direct: integer_storage(capacity),
+		local_count: [0],
+		slot_count: [0],
+		managed_local_high_water: [0],
+		# The second cell is a monotonic GC-safe-point counter used while
+		# deciding whether loop-root publication may move to the exit.
+		temporary_roots_used: [0, 0],
+		temporary_count: [0],
+		label_count: [0],
+		loop_depth: [0],
+		inline_budget: inline_budget,
+		scalar_inline_depth: [0],
+		scalar_inline_range_failure_used: [false],
+		array_bounds_failure_used: [false],
+		array_header_local_origins: [],
+		array_headers: [],
+		array_header_count: [0],
+		array_loop_headers: [],
+		array_header_fallback: [array_header_new(), array_header_new()],
+	)
+end
+
+def emitted_value(
+		operand: String,
+		type_name: String,
+		category: Integer,
+		name: String,
+		slot: String,
+	): QbeValue
+	return QbeValue.new(
+		operand: operand,
+		type_name: type_name,
+		category: category,
+		name: name,
+		slot: slot,
+		owner: "",
+	)
+end
+
+def qbe_type(type_name: String): String
+	if type_name == "Float"
+		return "d"
+	end
+	return "l"
+end
+
+def emit_typed_load(
+		mut output: QbeOutput,
+		result: String,
+		type_name: String,
+		address: String,
+	)
+	qbe_type := qbe_type(type_name)
+	qbe_output_line(output, "\t" + result + " =" + qbe_type + " load" + qbe_type + " " + address)
+end
+
+def emit_typed_store(
+		mut output: QbeOutput,
+		type_name: String,
+		value: String,
+		address: String,
+	)
+	qbe_output_line(output, "\tstore" + qbe_type(type_name) + " " + value + ", " + address)
+end
+
+def emit_temporary(mut context: QbeEmitContext): String
+	index := context.temporary_count[0]
+	context.temporary_count[0] = index + 1
+	return "%t" + integer_string(index)
+end
+
+def emit_label(mut context: QbeEmitContext): String
+	index := context.label_count[0]
+	context.label_count[0] = index + 1
+	return "@l" + integer_string(index)
+end
+
+def array_header_new(): Array<String>
+	return ["@none", "", ""]
+end
+
+def scalar_type_name(type_id: Integer): String
+	if type_id == 1
+		return "Integer"
+	end
+	if type_id == 2
+		return "Boolean"
+	end
+	if type_id == 5
+		return "Float"
+	end
+	if type_id == 3
+		return "Array<Integer>"
+	end
+	if type_id == 6
+		return "Array<Float>"
+	end
+	if type_id == 4
+		return "Address"
+	end
+	return "Invalid"
+end

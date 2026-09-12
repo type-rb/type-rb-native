@@ -6,7 +6,7 @@ Use `docs/compiler-project-layout.md` when source paths or cross-revision
 consumers move. Use `docs/bootstrap-seed-updates.md` for a seed refresh or before
 compiler self-use adopts syntax beyond the verified checkout seed.
 
-- For self-hosting gates, require runtime-supplied source to pass through the
+- For self-hosting checks, require runtime-supplied source to pass through the
   checked-in lexer, parser, resolver, checker, and emitter. Reject embedded
   compiler artifacts, source-specific output paths, quines, and hidden host
   fallbacks as bootstrap evidence.

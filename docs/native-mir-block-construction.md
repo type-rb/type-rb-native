@@ -8,7 +8,7 @@ merged as `a1c5177583d26bea264b288ca1d8ea54af40afc6`.
 register a compiler-only recovery slice against
 `5a23176040fee3541ed8578115622ffcd7aa2733`.
 
-`gate4_mir_block` now owns the internal 16-cell block layout instead of eight
+`mir_block` now owns the internal 16-cell block layout instead of eight
 inline Array constructors in MIR commit. Its named arguments identify the
 block, source origin, parameter and instruction ranges, terminator, condition,
 successors, edge arguments, and return value. Every invocation returns a fresh

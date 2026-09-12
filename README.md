@@ -12,7 +12,7 @@ reference compiler's Go backend. Its long-term objective is a self-hosted
 compiler whose repository-owned implementation is written in TypeRB and whose
 ordinary release/bootstrap path does not require Go or another host language.
 The repository remains experimental while that implementation is incomplete;
-the gates are engineering checkpoints that keep correctness and whole-toolchain
+the checks are engineering checkpoints that keep correctness and whole-toolchain
 performance visible as the implementation grows.
 
 The [TypeRB repository](https://github.com/type-rb/type-rb) remains the source
@@ -53,7 +53,7 @@ commands, limitations, and manually dispatched CI binary artifacts.
   path as a backend control rather than the final execution-performance ceiling.
 - Preserve a credible path to a native implementation that is at least as
   practical as the Go backend, and use measured regressions to direct
-  optimization work rather than treating early gates as disposable demos.
+  optimization work rather than treating early checks as disposable demos.
 
 ## Current status
 
@@ -65,7 +65,7 @@ Experimental target profiles cover Darwin arm64, Linux arm64, and Linux amd64.
 The ordinary compiler is not a complete implementation of TypeRB. The earlier
 snapshot/recovery pipeline and the ordinary compiler have different coverage.
 See the [capability map](https://type-rb.github.io/type-rb-native/) for the
-measured boundary, not the highest completed gate number.
+current measured boundary.
 
 Current work expands ordinary language coverage and improves compiler-source
 readability, with the required semantic ownership and verification in Native
@@ -78,7 +78,7 @@ published baseline while retaining the spectral improvement. Application runtime
 and compilation measurements are separate in the
 [benchmark explorer](https://type-rb.github.io/type-rb-native/benchmarks/).
 See [MIR status](docs/native-mir-optimization-status.md) for the migration and
-[development history](docs/development-history.md) for dated checkpoints.
+[development history](https://github.com/type-rb/type-rb-native/blob/7726ff18e9230cd149e9f0c317577f6429f907fc/docs/development-history.md) for dated checkpoints.
 
 ## Intended boundary
 
@@ -100,10 +100,9 @@ See the [development and validation plan](docs/experiment-plan.md).
 
 ## Repository layout
 
-- `compiler/src/`: the current ordinary self-hosted compiler, not a
-  frozen Gate 4 implementation.
+- `compiler/src/`: the current ordinary self-hosted compiler.
 - `src/`: snapshot/MIR adapters, runtime generation, recovery/comparison
-  support, and tests; gate-numbered names do not mean unused code.
+  support, and tests; historical names do not mean unused code.
 - `tools/` and `corpus/`: verification and measurement drivers and inputs.
 - `docs/`: architecture, plans, current status, and historical decisions.
 - `results/`: registered active evidence with retirement and size limits;
@@ -111,8 +110,7 @@ See the [development and validation plan](docs/experiment-plan.md).
 
 The [organization plan](docs/repository-organization.md) schedules early
 documentation cleanup, dependency-led source organization, and incremental
-compiler decomposition. Gate names will remain in historical evidence, not
-serve as the permanent organization of active implementation code.
+compiler decomposition. Historical records retain the names from their exact revisions.
 
 ## Non-goals
 

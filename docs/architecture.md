@@ -58,12 +58,12 @@ The reference repository is consumer-neutral. A temporary producer there must
 be justified, named, documented, tested, and diagnosed solely as a
 reference-compiler capability; it must be understandable without knowing that
 TypeRB Native exists. Reference code, documentation, changelog entries, commit
-messages, and pull requests must not contain this repository's name, gate
-numbers, backend or runtime roadmap, consumer-specific aliases, integration
+messages, and pull requests must not contain this repository's name, experimental
+checkpoint names, backend or runtime roadmap, consumer-specific aliases, integration
 commands, revision pins, or bridge retirement policy.
 
 This repository owns the other side of that boundary: the exact producer
-command it invokes, the snapshot version used by each gate, the pinned merged
+command it invokes, the snapshot version used by each checkpoint, the pinned merged
 reference revision, compatibility coordination, and the condition for removing
 the bridge. An upstream change remains narrow, internal, versioned, data-only,
 and removable; downstream urgency does not turn it into a public TypeRB API.
@@ -103,15 +103,18 @@ vertical slices from remaining ownership.
 ### Current compiler source ownership
 
 The ordinary entry is [compiler/src/compiler.trb](../compiler/src/compiler.trb).
-Its explicit transitive import closure contains 18 canonical source modules:
+Its explicit transitive import closure contains 31 canonical implementation modules:
 
 | Modules in `compiler/src/` | Current responsibility |
 | --- | --- |
 | `storage.trb`, `path.trb`, `literals.trb` | Shared storage, path predicates, and numeric/ASCII predicates. |
 | `state.trb` | Compiler state, symbol indexes, shared locals, and diagnostics. |
 | `parser.trb`, `resolution.trb` | Syntax and token boundaries; declaration, import, and type resolution. |
-| `checked_program.trb` | Recursive expression/body checking and MIR construction. |
-| `mir.trb` | Core MIR model, verifier, and target-independent passes. |
+| `checked_program.trb`, `checked_values.trb` | Recursive expression/body checking and typed checked values. |
+| `mir.trb`, `mir_analysis.trb`, `mir_passes.trb`, `mir_verifier.trb` | MIR model and queries, reusable proofs, rewrites, and verification. |
+| `mir_construction.trb`, `mir_builder.trb`, `mir_control.trb` | Block construction and publication of scalar, induction and conditional control/value MIR. |
+| `qbe_context.trb`, `qbe_memory.trb`, `qbe_numeric.trb`, `qbe_constants.trb` | Backend context, memory operations, numeric lowering and static data. |
+| `qbe_mir.trb`, `qbe_control.trb` | Shared typed scalar adaptation, verified induction and conditional blocks. |
 | `hash_types.trb`, `hash_mir.trb`, `hash_checked.trb` | Hash types and value layout, operation plans, and their checked source bindings. |
 | `iteration_mir.trb`, `iteration_checked.trb` | Range construction and Array/Range iteration plans, structural validation, and checked source bindings. |
 | `qbe_output.trb`, `qbe_runtime.trb`, `hash_runtime.trb` | Ordered QBE output and runtime generation, including the Hash runtime. |
@@ -132,7 +135,7 @@ from the canonical modules using
 [strict closure validation](../src/compiler_recovery_source.trb); it does not
 replace file-root imports in ordinary self-hosting. The
 [organization schedule](repository-organization.md) tracks further extraction
-and retirement of remaining gate-derived implementation names.
+and removal of superseded implementation.
 
 The ordinary self-hosting sequence
 starts from a previous Native seed, records any setup-only transitions, and
@@ -179,7 +182,7 @@ experimental, producer and consumer revisions may be pinned exactly and the
 format may change without compatibility adapters.
 
 Hand-authored fixtures and the producer bridge established this boundary in
-the early gates. Their [contracts](gate-reference.md#gates) remain available;
+the early checks. Their [contracts](https://github.com/type-rb/type-rb-native/blob/7726ff18e9230cd149e9f0c317577f6429f907fc/docs/gate-reference.md#gates) remain available;
 they are not unfinished prerequisites for today's ordinary frontend.
 
 ## Native MIR
@@ -305,16 +308,16 @@ full-language target would require accepted solutions for:
 
 The initial runtime remains deliberately smaller: static data, scalar values,
 simple aggregate layout, observable output, and deterministic process failure.
-Gate 2 completes the heap-free aggregate layer before heap ownership and memory
+Snapshot aggregate recovery provides the heap-free aggregate layer before heap ownership and memory
 management are added. This separation keeps record and tagged-value semantics
 independent of the later allocation strategy.
 
-Gate 3 adds an exact-root, non-moving tracing collector for dynamic Strings,
-Arrays, closures, and recursively reference-containing aggregates. Heap-free
-Gate 2 aggregates remain unboxed. Managed roots use compiler-emitted
+Managed snapshot recovery uses an exact-root, non-moving tracing collector for dynamic Strings,
+Arrays, closures, and recursively reference-containing aggregates.
+Heap-free snapshot aggregates remain unboxed. Managed roots use compiler-emitted
 shadow-stack frames, and heap descriptors identify managed fields without
 placing target layouts in the bootstrap snapshot. See
-[Decision 0005](decisions/0005-managed-runtime-and-tracing-gc.md).
+[Decision 0005](https://github.com/type-rb/type-rb-native/blob/7726ff18e9230cd149e9f0c317577f6429f907fc/docs/decisions/0005-managed-runtime-and-tracing-gc.md).
 
 The first collector is single-threaded and stop-the-world. Concurrency,
 generational or moving collection, finalizers, and weak references are deferred
@@ -368,12 +371,12 @@ ownership and load only the supported closure. Internal indexes accelerate
 lookup without becoming public collections or package APIs. Portable process
 and math roots remain a bounded integration, not a general package manager.
 The [capability map](https://type-rb.github.io/type-rb-native/) records exact
-coverage; [historical architecture checkpoints](gate-reference.md#architecture-checkpoint-history)
-retain the original gate-to-decision mapping and seed provenance.
+coverage; [historical architecture checkpoints](https://github.com/type-rb/type-rb-native/blob/7726ff18e9230cd149e9f0c317577f6429f907fc/docs/gate-reference.md#architecture-checkpoint-history)
+retain the original experiment-to-decision mapping and seed provenance.
 
 ## Source organization
 
-Gate-derived implementation names reflect development history rather than
+Superseded implementation names reflect development history rather than
 architectural layers. The [organization schedule](repository-organization.md)
 separates ordinary compiler responsibilities from snapshot/recovery adapters,
 runtime generation, and verification support. It starts with documentation and
@@ -394,6 +397,6 @@ reproducible self-hosted compiler build whose ordinary path does not use Go.
 
 The bootstrap bridge remains recovery-only and removable when its retained
 consumers have replacements, not because removal is the default project outcome.
-Gates expose correctness, performance, and maintenance problems early enough to
+Checks expose correctness, performance, and maintenance problems early enough to
 improve the shared MIR, runtime, backend, or build pipeline before those choices
 become public contracts.

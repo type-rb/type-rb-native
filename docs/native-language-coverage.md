@@ -365,6 +365,6 @@ Compiler recovery metadata now uses a separate 40 MiB input bound (previously
 32 MiB). The first complete Array iteration compiler snapshot is 34,616,510
 bytes and exceeds the former bound by 1,062,078 bytes; this is verbose recovery
 JSON, not an application or shipped compiler binary. The ordinary 4 MiB
-snapshot entry, schema/type/instruction bounds and compiler cost gates remain
+snapshot entry, schema/type/instruction bounds and compiler cost checks remain
 unchanged. The failed 32 MiB recovery attempt remains part of the validation
 record; a larger decode budget alone does not establish successful recovery.

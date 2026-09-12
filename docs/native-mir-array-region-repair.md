@@ -126,7 +126,7 @@ The ordinary local B1/B2/B3 executable and QBE fixed points are exact. All 22
 valid, three mutation, and eleven runtime-invalid Native programs produce their
 expected output, status, and diagnostics, with byte-identical QBE to the
 two-entry repair. Root formatting and root/core type checks pass. The 89-test
-Gate 4 suite, including self-parsing and QBE-backed execution, passes. All 80
+ordinary compiler suite, including self-parsing and QBE-backed execution, passes. All 80
 root tests also pass with the pinned reference compiler and QBE environment
 explicitly enabled, including recovery, ordinary self-hosted generations, and
 the source differential corpus. An earlier run without that environment did

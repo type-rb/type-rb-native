@@ -1,0 +1,346 @@
+import { QbeEmitContext, QbeValue, emit_label, emit_temporary } from qbe_context
+import { emit_root_value } from qbe_memory
+import { QbeOutput, qbe_output_branch, qbe_output_line } from qbe_output
+
+def take_inline_budget(mut context: QbeEmitContext): Boolean
+	# Keep lexical-loop capacity independent from the bounded numeric-helper reserve.
+	mut budget_index := 0
+	if context.loop_depth[0] <= 0
+		budget_index = 1
+	end
+	if context.inline_budget[budget_index] <= 0
+		return false
+	end
+	context.inline_budget[budget_index] = context.inline_budget[budget_index] - 1
+	return true
+end
+
+def integer_range_failure_label(mut context: QbeEmitContext): String
+	if context.scalar_inline_depth[0] > 0
+		context.scalar_inline_range_failure_used[0] = true
+		return "@scalar_inline_integer_range_failure"
+	end
+	return emit_label(context)
+end
+
+def emit_integer_range_failure(mut output: QbeOutput, failure: String)
+	if failure == "@scalar_inline_integer_range_failure"
+		return
+	end
+	qbe_output_line(output, failure)
+	qbe_output_line(output, "\tcall $trbn_fail(l $trbn_integer_range_error, l 45)")
+	qbe_output_line(output, "\thlt")
+	return
+end
+
+def emit_checked_integer_operation(
+		mut context: QbeEmitContext,
+		mut output: QbeOutput,
+		result: String,
+		left: String,
+		right: String,
+		operation: String,
+		right_nonnegative: Boolean,
+	): String
+	too_high := emit_temporary(context)
+	failure := integer_range_failure_label(context)
+	complete := emit_label(context)
+	qbe_output_line(output, "\t" + result + " =l " + operation + " " + left + ", " + right)
+	qbe_output_line(output, "\t" + too_high + " =w csgtl " + result + ", 9007199254740991")
+	if right_nonnegative
+		qbe_output_branch(output, too_high, failure, complete)
+	else
+		too_low := emit_temporary(context)
+		check_low := emit_label(context)
+		qbe_output_branch(output, too_high, failure, check_low)
+		qbe_output_line(output, check_low)
+		qbe_output_line(output, "\t" + too_low + " =w csltl " + result + ", -9007199254740991")
+		qbe_output_branch(output, too_low, failure, complete)
+	end
+	emit_integer_range_failure(output, failure)
+	qbe_output_line(output, complete)
+	return complete
+end
+
+def emit_guarded_integer_operation(
+		mut context: QbeEmitContext,
+		mut output: QbeOutput,
+		result: String,
+		left: String,
+		right: String,
+		operation: String,
+		limit: String,
+		right_nonnegative: Boolean,
+		guarded: Integer,
+	)
+	if right_nonnegative
+		if take_inline_budget(context)
+			emit_checked_integer_operation(context, output, result, left, right, "mul", false)
+			return
+		end
+	end
+	if guarded == 0
+		emit_integer_call(output, result, operation, left, right)
+		return
+	end
+	combined := emit_temporary(context)
+	small := emit_temporary(context)
+	slow := emit_label(context)
+	fast := emit_label(context)
+	complete := emit_label(context)
+	if guarded == 13
+		qbe_output_line(output, "\t" + combined + " =l add " + left + ", " + right)
+	else
+		qbe_output_line(output, "\t" + combined + " =l or " + left + ", " + right)
+	end
+	qbe_output_line(output, "\t" + small + " =w cultl " + combined + ", " + limit)
+	qbe_output_branch(output, small, fast, slow)
+	qbe_output_line(output, slow)
+	emit_integer_call(output, result, operation, left, right)
+	qbe_output_line(output, "\tjmp " + complete)
+	qbe_output_line(output, fast)
+	if guarded == 13
+		qbe_output_line(output, "\t" + result + " =l copy " + combined)
+	else
+		qbe_output_line(output, "\t" + result + " =l " + operation + " " + left + ", " + right)
+	end
+	qbe_output_line(output, complete)
+	return
+end
+
+def emit_checked_integer_division(
+		mut context: QbeEmitContext,
+		mut output: QbeOutput,
+		result: String,
+		left: String,
+		right: String,
+		operation: String,
+	)
+	zero := emit_temporary(context)
+	failure := emit_label(context)
+	complete := emit_label(context)
+	qbe_output_line(output, "\t" + zero + " =w ceql " + right + ", 0")
+	qbe_output_branch(output, zero, failure, complete)
+	qbe_output_line(output, failure)
+	qbe_output_line(output, "\tcall $trbn_fail(l $trbn_division_error, l 24)")
+	qbe_output_line(output, "\thlt")
+	qbe_output_line(output, complete)
+	qbe_output_line(output, "\t" + result + " =l " + operation + " " + left + ", " + right)
+	return
+end
+
+def emit_integer_call(
+		mut output: QbeOutput,
+		result: String,
+		operation: String,
+		left: String,
+		right: String,
+	)
+	qbe_output_line(
+		output,
+		"\t" + result + " =l call $trbn_integer_" + operation + "(l " + left + ", l " + right + ")",
+	)
+	return
+end
+
+# The checked-program or verified-MIR caller owns result metadata. This
+# adapter returns only the backend operand, including for comparisons.
+def lower_binary_operand(
+		mut context: QbeEmitContext,
+		mut output: QbeOutput,
+		operator_id: Integer,
+		left: QbeValue,
+		right: QbeValue,
+		result_type: String,
+		left_nonnegative: Boolean,
+		right_nonnegative: Boolean,
+		guarded_operator: Integer,
+	): String
+	left_float := left.type_name == "Float"
+	right_float := right.type_name == "Float"
+	mut float_operands := left_float
+	if right_float
+		float_operands = true
+	end
+	result := emit_temporary(context)
+	mut left_operand := left.operand
+	mut right_operand := right.operand
+	if float_operands
+		if !left_float
+			converted_left := emit_temporary(context)
+			qbe_output_line(output, "\t" + converted_left + " =d sltof " + left_operand)
+			left_operand = converted_left
+		end
+		if !right_float
+			converted_right := emit_temporary(context)
+			qbe_output_line(output, "\t" + converted_right + " =d sltof " + right_operand)
+			right_operand = converted_right
+		end
+	end
+	if result_type == "Float"
+		mut operation := "add"
+		if operator_id == 2
+			operation = "sub"
+		end
+		if operator_id == 3
+			operation = "mul"
+		end
+		if operator_id == 4
+			operation = "div"
+		end
+		qbe_output_line(output, "\t" + result + " =d " + operation + " " + left_operand + ", " + right_operand)
+		return result
+	end
+	if operator_id == 1
+		if left.type_name == "String"
+			qbe_output_line(
+				output,
+				"\t" + result + " =l call $trbn_string_concat(l " + left.operand + ", l " + right.operand + ")",
+			)
+			emit_root_value(context, "String")
+		else
+			mut use_guarded_add := guarded_operator == 13
+			if left_nonnegative
+				use_guarded_add = false
+			end
+			if right_nonnegative
+				use_guarded_add = false
+			end
+			if use_guarded_add
+				emit_guarded_integer_operation(
+					context,
+					output,
+					result,
+					left_operand,
+					right_operand,
+					"add",
+					"9007199254740992",
+					false,
+					13,
+				)
+			else
+				if take_inline_budget(context)
+					mut known_nonnegative := right_nonnegative
+					if left_nonnegative
+						left_operand = right.operand
+						right_operand = left.operand
+						known_nonnegative = true
+					end
+					emit_checked_integer_operation(
+						context,
+						output,
+						result,
+						left_operand,
+						right_operand,
+						"add",
+						known_nonnegative,
+					)
+				else
+					emit_integer_call(output, result, "add", left.operand, right.operand)
+				end
+			end
+		end
+		return result
+	end
+	if operator_id == 2
+		if take_inline_budget(context)
+			emit_checked_integer_operation(
+				context,
+				output,
+				result,
+				left.operand,
+				right.operand,
+				"sub",
+				false,
+			)
+		else
+			emit_integer_call(output, result, "subtract", left.operand, right.operand)
+		end
+		return result
+	end
+	if operator_id == 3
+		emit_guarded_integer_operation(
+			context,
+			output,
+			result,
+			left.operand,
+			right.operand,
+			"mul",
+			"67108864",
+			right_nonnegative,
+			guarded_operator,
+		)
+		return result
+	end
+	if operator_id <= 5
+		mut operation := "div"
+		mut helper := "divide"
+		if operator_id == 5
+			operation = "rem"
+			helper = "remainder"
+		end
+		if take_inline_budget(context)
+			emit_checked_integer_division(
+				context,
+				output,
+				result,
+				left.operand,
+				right.operand,
+				operation,
+			)
+		else
+			emit_integer_call(output, result, helper, left.operand, right.operand)
+		end
+		return result
+	end
+	different := operator_id == 7
+	if left.type_name == "String"
+		mut compare_strings := operator_id == 6
+		if different
+			compare_strings = true
+		end
+		if compare_strings
+			mut equality := result
+			if different
+				equality = emit_temporary(context)
+			end
+			qbe_output_line(
+				output,
+				"\t" + equality + " =l call $trbn_string_equal(l " + left.operand + ", l " + right.operand + ")",
+			)
+			if different
+				qbe_output_line(output, "\t" + result + " =l ceql " + equality + ", 0")
+			end
+			return result
+		end
+	end
+	mut comparison := "eq"
+	if different
+		comparison = "ne"
+	end
+	if operator_id == 8
+		comparison = "lt"
+	end
+	if operator_id == 9
+		comparison = "le"
+	end
+	if operator_id == 10
+		comparison = "gt"
+	end
+	if operator_id == 11
+		comparison = "ge"
+	end
+	if float_operands
+		comparison = "c" + comparison + "d"
+	else
+		if operator_id >= 8
+			comparison = "s" + comparison
+		end
+		comparison = "c" + comparison + "l"
+	end
+	qbe_output_line(
+		output,
+		"\t" + result + " =l " + comparison + " " + left_operand + ", " + right_operand,
+	)
+	return result
+end

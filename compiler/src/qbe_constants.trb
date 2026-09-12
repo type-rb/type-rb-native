@@ -1,0 +1,282 @@
+import { native_managed_type } from hash_types
+import { ascii_code, integer_string } from literals
+import { QbeOutput, qbe_output_line } from qbe_output
+import { compiler_entry_function } from resolution
+import { CompilerState, diagnostic, has_diagnostic } from state
+import { load_integer, load_string, store_integer } from storage
+
+def static_string_bytes(value: String): Array<Integer>
+	mut bytes: Array<Integer> := []
+	mut index := 0
+	while index < value.size()
+		code := ascii_code(value[index])
+		if code < 0
+			return []
+		end
+		bytes.push(code)
+		index += 1
+	end
+	return bytes
+end
+
+def static_bytes_hash(bytes: Array<Integer>, index: Integer): Integer
+	return ((bytes[index] * 257 + bytes[index + 1]) * 257 + bytes[index + 2]) % 512
+end
+
+def encode_static_bytes(bytes: Array<Integer>): Array<Integer>
+	mut positions: Array<Integer> := []
+	while positions.size() < 512
+		positions.push(- 1)
+	end
+	mut encoded: Array<Integer> := []
+	mut index := 0
+	while index < bytes.size()
+		mut match_length := 0
+		mut match_distance := 0
+		if index + 2 < bytes.size()
+			hash := static_bytes_hash(bytes, index)
+			previous := positions[hash]
+			if previous >= 0
+				distance := index - previous
+				if distance <= 65535
+					mut limit := bytes.size() - index
+					if limit > 130
+						limit = 130
+					end
+					mut length := 0
+					mut matching := true
+					while matching
+						if length >= limit
+							matching = false
+						else
+							if bytes[previous + length] == bytes[index + length]
+								length += 1
+							else
+								matching = false
+							end
+						end
+					end
+					if length >= 4
+						match_length = length
+						match_distance = distance
+					end
+				end
+			end
+		end
+
+		mut consumed := 1
+		if match_length >= 4
+			encoded.push(128 + match_length - 3)
+			encoded.push(match_distance / 256)
+			encoded.push(match_distance % 256)
+			consumed = match_length
+		else
+			encoded.push(bytes[index])
+		end
+
+		mut update := index
+		while update < index + consumed
+			if update + 2 < bytes.size()
+				positions[static_bytes_hash(bytes, update)] = update
+			end
+			update += 1
+		end
+		index += consumed
+	end
+	return encoded
+end
+
+def encode_static_string(value: String): Array<Integer>
+	return encode_static_bytes(static_string_bytes(value))
+end
+
+def emit_static_byte_data(
+		mut output: QbeOutput,
+		symbol: String,
+		bytes: Array<Integer>,
+	)
+	qbe_output_line(output, "data $" + symbol + " = {")
+	mut line := "\tb"
+	mut line_bytes := 0
+	mut index := 0
+	while index < bytes.size()
+		line += " " + integer_string(bytes[index])
+		line_bytes += 1
+		if line_bytes == 16
+			qbe_output_line(output, line + ",")
+			line = "\tb"
+			line_bytes = 0
+		end
+		index += 1
+	end
+	if line_bytes > 0
+		qbe_output_line(output, line + ",")
+	end
+	qbe_output_line(output, "\tb 0 }")
+	return
+end
+
+def emit_static_string_decoder(
+		mut output: QbeOutput,
+		compressed_tokens: Array<Integer>,
+		compressed_sizes: Array<Integer>,
+		decoded_sizes: Array<Integer>,
+	)
+	qbe_output_line(
+		output,
+		"function $trbn_static_string_decode(l %target, l %encoded, l %encoded_length, l %decoded_length) {\n@start\n\tstorel 0, %target\n\t%length_address =l add %target, 8\n\tstorel %decoded_length, %length_address\n\t%output =l add %target, 16\n\tjmp @loop\n@loop\n\t%input_index =l phi @start 0, @literal %literal_next_input, @match_done %match_next_input\n\t%output_index =l phi @start 0, @literal %literal_next_output, @match_done %match_next_output\n\t%done =w cslel %encoded_length, %input_index\n\tjnz %done, @terminate, @read\n@read\n\t%encoded_address =l add %encoded, %input_index\n\t%header =w loadub %encoded_address\n\t%is_match =w csgtw %header, 127\n\tjnz %is_match, @match, @literal\n@literal\n\t%literal_address =l add %output, %output_index\n\tstoreb %header, %literal_address\n\t%literal_next_input =l add %input_index, 1\n\t%literal_next_output =l add %output_index, 1\n\tjmp @loop\n@match\n\t%high_address =l add %encoded_address, 1\n\t%low_address =l add %encoded_address, 2\n\t%high =w loadub %high_address\n\t%low =w loadub %low_address\n\t%high_long =l extuw %high\n\t%low_long =l extuw %low\n\t%high_shifted =l shl %high_long, 8\n\t%distance =l or %high_shifted, %low_long\n\t%match_length_word =w sub %header, 125\n\t%match_length =l extuw %match_length_word\n\tjmp @copy\n@copy\n\t%copy_index =l phi @match 0, @copy_byte %copy_next\n\t%copy_done =w cslel %match_length, %copy_index\n\tjnz %copy_done, @match_done, @copy_byte\n@copy_byte\n\t%source_base =l sub %output_index, %distance\n\t%source_index =l add %source_base, %copy_index\n\t%source_address =l add %output, %source_index\n\t%value =w loadub %source_address\n\t%destination_index =l add %output_index, %copy_index\n\t%destination_address =l add %output, %destination_index\n\tstoreb %value, %destination_address\n\t%copy_next =l add %copy_index, 1\n\tjmp @copy\n@match_done\n\t%match_next_input =l add %input_index, 3\n\t%match_next_output =l add %output_index, %match_length\n\tjmp @loop\n@terminate\n\t%terminator =l add %output, %decoded_length\n\tstoreb 0, %terminator\n\tret\n}",
+	)
+	qbe_output_line(output, "\nfunction $trbn_static_strings_initialize() {\n@start")
+	mut index := 0
+	while index < compressed_tokens.size()
+		token := integer_string(compressed_tokens[index])
+		qbe_output_line(
+			output,
+			"\tcall $trbn_static_string_decode(l $trbns" + token + ", l $trbnc" + token +
+			", l " + integer_string(compressed_sizes[index]) +
+			", l " + integer_string(decoded_sizes[index]) + ")",
+		)
+		index += 1
+	end
+	qbe_output_line(output, "\tret\n}")
+	return
+end
+
+def emit_static_strings(
+		mut state: CompilerState,
+		mut output: QbeOutput,
+	): Boolean
+	deduplicate := compiler_entry_function(state) >= 0
+	mut canonical_values: Array<String> := []
+	mut canonical_tokens: Array<Integer> := []
+	mut compressed_tokens: Array<Integer> := []
+	mut compressed_sizes: Array<Integer> := []
+	mut decoded_sizes: Array<Integer> := []
+	mut token_index := 0
+	while token_index < state.token_count[0]
+		if load_integer(state.token_kinds, token_index) == 3
+			value := load_string(state.token_texts, token_index)
+			mut canonical := token_index
+			mut value_index := 0
+			mut found := false
+			if deduplicate
+				while value_index < canonical_values.size()
+					if canonical_values[value_index] == value
+						canonical = canonical_tokens[value_index]
+						found = true
+						value_index = canonical_values.size()
+					else
+						value_index += 1
+					end
+				end
+			end
+			if !found
+				canonical_values.push(value)
+				canonical_tokens.push(token_index)
+				mut bytes: Array<Integer> := []
+				mut has_static_bytes := false
+				mut compressed: Array<Integer> := []
+				if value.size() >= 256
+					bytes = static_string_bytes(value)
+					if bytes.size() == value.size()
+						has_static_bytes = true
+						compressed = encode_static_bytes(bytes)
+					end
+				end
+				mut use_compressed := false
+				if compressed.size() > 0
+					if compressed.size() < value.size()
+						use_compressed = true
+					end
+				end
+				if use_compressed
+					qbe_output_line(
+						output,
+						"data $trbns" + integer_string(token_index) + " = align 8 { z " +
+						integer_string(value.size() + 17) + " }",
+					)
+					emit_static_byte_data(output, "trbnc" + integer_string(token_index), compressed)
+					compressed_tokens.push(token_index)
+					compressed_sizes.push(compressed.size())
+					decoded_sizes.push(value.size())
+					output.runtime_flags[2] = 1
+				else
+					qbe_output_line(
+						output,
+						"data $trbns" + integer_string(token_index) +
+						" = align 8 { l 0, l " + integer_string(value.size()) + ",",
+					)
+					mut line := "\tb"
+					mut line_bytes := 0
+					mut character_index := 0
+					while character_index < value.size()
+						mut code := 0
+						if has_static_bytes
+							code = bytes[character_index]
+						else
+							code = ascii_code(value[character_index])
+						end
+						if code < 0
+							diagnostic(
+								state,
+								"TRBN4005",
+								load_integer(state.token_lines, token_index),
+								"Native QBE emission supports ASCII String literals only",
+							)
+						else
+							line += " " + integer_string(code)
+							line_bytes += 1
+							if line_bytes == 16
+								qbe_output_line(output, line + ",")
+								line = "\tb"
+								line_bytes = 0
+							end
+						end
+						character_index += 1
+					end
+					if line_bytes > 0
+						qbe_output_line(output, line + ",")
+					end
+					qbe_output_line(output, "\tb 0 }")
+				end
+			end
+			store_integer(state.token_lines, token_index, canonical)
+		end
+		token_index += 1
+	end
+	if compressed_tokens.size() > 0
+		emit_static_string_decoder(output, compressed_tokens, compressed_sizes, decoded_sizes)
+	end
+	qbe_output_line(output, "")
+	return !has_diagnostic(state)
+end
+
+def emit_record_descriptors(state: CompilerState, mut output: QbeOutput)
+	if state.ranges.size() > 0
+		qbe_output_line(output, "data $trbn_desc_range = align 8 { l 1, l 0, l 24 }")
+	end
+	mut record_index := 0
+	while record_index < state.record_count[0]
+		field_start := load_integer(state.record_field_starts, record_index)
+		field_count := load_integer(state.record_field_counts, record_index)
+		mut managed_count := 0
+		mut entries := ""
+		mut field_offset := 0
+		while field_offset < field_count
+			if native_managed_type(load_string(state.field_types, field_start + field_offset))
+				entries += ", l " + integer_string(8 + field_offset * 8)
+				managed_count += 1
+			end
+			field_offset += 1
+		end
+		qbe_output_line(
+			output,
+			"data $trbn_desc_record" + integer_string(record_index) +
+			" = align 8 { l 1, l " + integer_string(managed_count) + ", l " +
+			integer_string(field_count * 8) + entries + " }",
+		)
+		record_index += 1
+	end
+	qbe_output_line(output, "")
+	return
+end

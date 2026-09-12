@@ -1,0 +1,268 @@
+import { small_nonnegative_integer_operand } from literals
+import { MirArrayOperation, MirInstruction, MirValue, mir_function_index } from mir
+import { binary_operator_id } from parser
+import { CheckedLocals, CompilerState } from state
+import { load_integer } from storage
+
+record CheckedValue
+	type_name: String
+	category: Integer
+	# Exact token index; the portable Integer maximum represents no source value.
+	origin: Integer
+	mutable: Integer
+end
+
+def scalar_leaf_inline_eligible(state: CompilerState, function_index: Integer): Boolean
+	index := mir_function_index(state.scalar_mir, function_index)
+	if index < 0
+		return false
+	end
+	return state.scalar_mir.functions[index].kind == 1
+end
+
+def checked_assignment_operation(mut locals: CheckedLocals, kind: Integer, operand: Integer, origin: Integer)
+	mut operations := locals.mir_assignment[0]
+	operations.push(MirArrayOperation.new(kind: kind, operand: operand, origin: origin))
+end
+
+def array_region_operation(
+		mut locals: CheckedLocals,
+		kind: Integer,
+		operand: Integer,
+		origin: Integer,
+	)
+	if kind == 6
+		checked_assignment_operation(locals, 6, 0, origin)
+	end
+	mut operations := locals.mir_array
+	operations.push(MirArrayOperation.new(kind: kind, operand: operand, origin: origin))
+end
+
+def checked_value(
+		type_name: String,
+		category: Integer,
+		origin: Integer,
+		mutable: Integer,
+	): CheckedValue
+	return CheckedValue.new(
+		type_name: type_name,
+		category: category,
+		origin: origin,
+		mutable: mutable,
+	)
+end
+
+def scalar_mir_type(type_name: String): Integer
+	if type_name == "Integer"
+		return 1
+	end
+	if type_name == "Boolean"
+		return 2
+	end
+	if type_name == "Float"
+		return 5
+	end
+	if type_name == "Array<Integer>"
+		return 3
+	end
+	if type_name == "Array<Float>"
+		return 6
+	end
+	if type_name == "Address"
+		return 4
+	end
+	return 0
+end
+
+def checked_mir_value(value: CheckedValue): Integer
+	if value.category < 0
+		return - value.category - 1
+	end
+	return - 1
+end
+
+def mir_checked_value(
+		type_name: String,
+		value_id: Integer,
+		origin: Integer,
+		mutable: Integer,
+	): CheckedValue
+	return checked_value(type_name, - value_id - 1, origin, mutable)
+end
+
+def scalar_mir_disable(mut locals: CheckedLocals)
+	locals.mir_state[0] = 0
+	return
+end
+
+def scalar_mir_value(
+		mut state: CompilerState,
+		mut locals: CheckedLocals,
+		type_id: Integer,
+		origin: Integer,
+	): Integer
+	if locals.mir_state[0] == 0
+		return - 1
+	end
+	if type_id == 0
+		scalar_mir_disable(locals)
+		return - 1
+	end
+	return mir_add_value(state, locals, type_id, load_integer(state.token_lines, origin))
+end
+
+def mir_add_value(
+		state: CompilerState,
+		mut locals: CheckedLocals,
+		type_id: Integer,
+		line: Integer,
+	): Integer
+	value_id := locals.mir_state[2]
+	locals.mir_state[2] = value_id + 1
+	locals.mir_value_rows.push(MirValue.new(
+			function_id: locals.mir_state[1],
+			id: value_id,
+			type_id: type_id,
+			source_id: state.active_module[0],
+			line: line,
+		))
+	return value_id
+end
+
+def scalar_mir_instruction(
+		state: CompilerState,
+		mut locals: CheckedLocals,
+		kind: Integer,
+		result: Integer,
+		first: Integer,
+		second: Integer,
+		operation: Integer,
+		failure: Integer,
+		line: Integer,
+	)
+	locals.mir_instructions.push(MirInstruction.new(
+			kind: kind,
+			result: result,
+			first: first,
+			second: second,
+			payload: operation,
+			failure: failure,
+			source_id: state.active_module[0],
+			line: line,
+		))
+end
+
+def scalar_mir_literal(
+		mut state: CompilerState,
+		mut locals: CheckedLocals,
+		type_name: String,
+		origin: Integer,
+		text: String,
+	): CheckedValue
+	value_id := scalar_mir_value(state, locals, scalar_mir_type(type_name), origin)
+	if value_id < 0
+		return checked_value(type_name, 0, origin, 0)
+	end
+	literal_index := locals.mir_literal_texts.size()
+	mut fact := 0
+	if type_name == "Integer"
+		if small_nonnegative_integer_operand(text)
+			fact = 1
+		end
+	end
+	locals.mir_literal_texts.push(text)
+	scalar_mir_instruction(
+		state, locals, 6, value_id, fact, - 1, literal_index, - 1, load_integer(state.token_lines, origin),
+	)
+	return mir_checked_value(type_name, value_id, origin, 0)
+end
+
+def scalar_mir_binary(
+		mut state: CompilerState,
+		mut locals: CheckedLocals,
+		operator: String,
+		left: CheckedValue,
+		right: CheckedValue,
+		result_type: String,
+		origin: Integer,
+	): CheckedValue
+	left_id := checked_mir_value(left)
+	right_id := checked_mir_value(right)
+	operator_id := binary_operator_id(operator)
+	if left_id < 0
+		scalar_mir_disable(locals)
+	end
+	if right_id < 0
+		scalar_mir_disable(locals)
+	end
+	if operator_id == 0
+		scalar_mir_disable(locals)
+	end
+	if locals.mir_state[0] == 0
+		return checked_value(result_type, 0, 9007199254740991, 0)
+	end
+	value_id := scalar_mir_value(state, locals, scalar_mir_type(result_type), origin)
+	mut failure :=- 1
+	if result_type == "Integer"
+		if operator_id <= 5
+			failure = locals.mir_state[3]
+		end
+	end
+	scalar_mir_instruction(
+		state, locals, 7, value_id, left_id, right_id, operator_id, failure, load_integer(state.token_lines, origin),
+	)
+	return mir_checked_value(result_type, value_id, 9007199254740991, 0)
+end
+
+def scalar_mir_unary(
+		mut state: CompilerState,
+		mut locals: CheckedLocals,
+		operator: String,
+		value: CheckedValue,
+		result_type: String,
+		origin: Integer,
+	): CheckedValue
+	operand := checked_mir_value(value)
+	mut operator_id := 0
+	if operator == "!"
+		operator_id = 1
+	end
+	if operator == "-"
+		operator_id = 2
+	end
+	if operator == "+"
+		operator_id = 3
+	end
+	if operand < 0
+		scalar_mir_disable(locals)
+	end
+	if operator_id == 0
+		scalar_mir_disable(locals)
+	end
+	if locals.mir_state[0] == 0
+		return checked_value(result_type, 0, 9007199254740991, 0)
+	end
+	result := scalar_mir_value(state, locals, scalar_mir_type(result_type), origin)
+	scalar_mir_instruction(
+		state, locals, 8, result, operand, - 1, operator_id, - 1, load_integer(state.token_lines, origin),
+	)
+	return mir_checked_value(result_type, result, 9007199254740991, 0)
+end
+
+def scalar_mir_convert_float(
+		mut state: CompilerState,
+		mut locals: CheckedLocals,
+		value: CheckedValue,
+		origin: Integer,
+	): CheckedValue
+	operand := checked_mir_value(value)
+	if operand < 0
+		scalar_mir_disable(locals)
+		return value
+	end
+	result := scalar_mir_value(state, locals, 5, origin)
+	scalar_mir_instruction(
+		state, locals, 9, result, operand, - 1, 0, - 1, load_integer(state.token_lines, origin),
+	)
+	return mir_checked_value("Float", result, 9007199254740991, 0)
+end

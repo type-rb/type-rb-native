@@ -8,7 +8,7 @@ Status: accepted on integration of the separately validated policy PR.
 `53c7b131ac504ee595a6452b79ee1dadbe7ce8a4`, replaces bespoke module/function
 indexes with ordinary Hash values. Parsing maintains function indexes without
 rebuilding them; import-cycle traversal owns separate temporary storage. It
-removes `Gate4SymbolIndex`, nine index helpers and a redundant project name
+removes the former custom symbol index, nine index helpers and a redundant project name
 vector. The verified seed and snapshot prerequisites were accepted in PR #405.
 
 The same-feature control is `fcb9e610eb6478d545b47950b027f05ff919e2c2`;

@@ -1,0 +1,747 @@
+import { float_literal_in_range, number_is_float, small_nonnegative_integer_operand } from literals
+import { MirBlock, MirFunction, MirModule, mir_array_element_type, mir_block_index, mir_definition_count, mir_failure_error, mir_function_index, mir_origin_valid, mir_table_span_valid, mir_value_available, mir_value_type } from mir
+import { mir_array_headers, mir_array_headers_equal, mir_array_loop_headers, mir_induction_address, mir_scalar_guard, mir_scalar_literal } from mir_analysis
+
+def mir_instruction_error(
+		native_module: MirModule,
+		function: MirFunction,
+		block: MirBlock,
+		instruction_index: Integer,
+	): String
+	instruction := native_module.instructions[instruction_index]
+	if !mir_origin_valid(instruction.source_id, instruction.line, native_module.source_count[0])
+		return "MIR instruction origin is invalid"
+	end
+	function_id := function.id
+	result_type := mir_value_type(native_module, function_id, instruction.result)
+	first_type := mir_value_type(native_module, function_id, instruction.first)
+	second_type := mir_value_type(native_module, function_id, instruction.second)
+	first_available := mir_value_available(
+		native_module,
+		function,
+		block,
+		instruction_index,
+		instruction.first,
+	)
+	second_available := mir_value_available(
+		native_module,
+		function,
+		block,
+		instruction_index,
+		instruction.second,
+	)
+	if instruction.kind == 1
+		if result_type != 1
+			return "MIR Integer constant result type differs"
+		end
+		if instruction.first == - 1
+			if instruction.second == - 1
+				if instruction.failure == - 1
+					return ""
+				end
+			end
+		end
+		return "MIR Integer constant shape differs"
+	end
+	if instruction.kind == 2
+		if instruction.payload != 0
+			return "MIR checked Integer add shape differs"
+		end
+		if result_type == 1
+			if first_available
+				if first_type == 1
+					if second_available
+						if second_type == 1
+							return mir_failure_error(native_module, function, instruction.failure)
+						end
+					end
+				end
+			end
+		end
+		return "MIR checked Integer add type differs"
+	end
+	if instruction.kind == 3
+		if instruction.payload == 0
+			if instruction.failure == - 1
+				if result_type == 2
+					if first_available
+						if first_type == 1
+							if second_available
+								if second_type == 1
+									return ""
+								end
+							end
+						end
+					end
+				end
+				return "MIR Integer comparison type differs"
+			end
+		end
+		return "MIR Integer comparison shape differs"
+	end
+	if instruction.kind == 4
+		if instruction.second == - 1
+			if instruction.payload == 0
+				if instruction.failure == - 1
+					if result_type == 1
+						if first_available
+							if mir_array_element_type(first_type) > 0
+								return ""
+							end
+						end
+					end
+					return "MIR Array length type differs"
+				end
+			end
+		end
+		return "MIR Array length shape differs"
+	end
+	if instruction.kind == 5
+		if instruction.payload < 0
+			return "MIR Array address shape differs"
+		end
+		if instruction.payload > 2
+			return "MIR Array address shape differs"
+		end
+		if result_type == first_type + 1
+			if first_available
+				if mir_array_element_type(first_type) > 0
+					if second_available
+						if second_type == 1
+							error := mir_failure_error(native_module, function, instruction.failure)
+							if error != ""
+								return error
+							end
+							if instruction.payload >= 1
+								if !mir_induction_address(native_module, function, block, instruction)
+									return "MIR Array induction proof differs"
+								end
+							end
+							return ""
+						end
+					end
+				end
+			end
+		end
+		return "MIR Array address type differs"
+	end
+	if instruction.kind == 6
+		if instruction.first < 0
+			return "MIR scalar literal shape differs"
+		end
+		if instruction.first > 1
+			return "MIR scalar literal shape differs"
+		end
+		if instruction.second != - 1
+			return "MIR scalar literal shape differs"
+		end
+		if instruction.failure != - 1
+			return "MIR scalar literal shape differs"
+		end
+		if instruction.payload < 0
+			return "MIR scalar literal index is invalid"
+		end
+		if instruction.payload >= native_module.literal_texts.size()
+			return "MIR scalar literal index is invalid"
+		end
+		literal := native_module.literal_texts[instruction.payload]
+		if result_type == 1
+			if !number_is_float(literal)
+				if mir_scalar_literal(literal) >= 0
+					mut expected_fact := 0
+					if small_nonnegative_integer_operand(literal)
+						expected_fact = 1
+					end
+					if instruction.first == expected_fact
+						return ""
+					end
+					return "MIR Integer literal fact differs"
+				end
+			end
+			return "MIR Integer literal is invalid"
+		end
+		if result_type == 2
+			if instruction.first != 0
+				return "MIR Boolean literal fact differs"
+			end
+			if literal == "true"
+				return ""
+			end
+			if literal == "false"
+				return ""
+			end
+			return "MIR Boolean literal is invalid"
+		end
+		if result_type == 5
+			if instruction.first != 0
+				return "MIR Float literal fact differs"
+			end
+			if number_is_float(literal)
+				if float_literal_in_range(literal)
+					return ""
+				end
+			end
+			return "MIR Float literal is invalid"
+		end
+		return "MIR scalar literal result type differs"
+	end
+	if instruction.kind == 7
+		if !first_available
+			return "MIR scalar binary operand is undefined"
+		end
+		if !second_available
+			return "MIR scalar binary operand is undefined"
+		end
+		mut operator := instruction.payload
+		if operator == 12
+			operator = 3
+		end
+		if operator == 13
+			operator = 1
+		end
+		mut numeric := false
+		if first_type == 1
+			if second_type == 1
+				numeric = true
+			end
+			if second_type == 5
+				numeric = true
+			end
+		end
+		if first_type == 5
+			if second_type == 1
+				numeric = true
+			end
+			if second_type == 5
+				numeric = true
+			end
+		end
+		mut valid := false
+		mut checked := false
+		if operator >= 1
+			if operator <= 4
+				if numeric
+					mut expected := 1
+					if first_type == 5
+						expected = 5
+					end
+					if second_type == 5
+						expected = 5
+					end
+					valid = result_type == expected
+					checked = expected == 1
+				end
+			else
+				if operator == 5
+					valid = first_type == 1
+					if valid
+						valid = second_type == 1
+					end
+					if valid
+						valid = result_type == 1
+					end
+					checked = valid
+				else
+					if operator <= 11
+						if result_type == 2
+							if operator <= 7
+								valid = numeric
+								if !valid
+									valid = first_type == second_type
+								end
+							else
+								valid = numeric
+							end
+						end
+					end
+				end
+			end
+		end
+		if !valid
+			return "MIR scalar binary type differs"
+		end
+		if checked
+			return mir_failure_error(native_module, function, instruction.failure)
+		end
+		if instruction.failure != - 1
+			return "MIR scalar binary failure shape differs"
+		end
+		return ""
+	end
+	if instruction.kind == 8
+		if instruction.second != - 1
+			return "MIR scalar unary shape differs"
+		end
+		if instruction.failure != - 1
+			return "MIR scalar unary shape differs"
+		end
+		if !first_available
+			return "MIR scalar unary operand is undefined"
+		end
+		if instruction.payload == 1
+			if first_type == 2
+				if result_type == 2
+					return ""
+				end
+			end
+		else
+			if instruction.payload == 2
+				if first_type == result_type
+					if result_type == 1
+						return ""
+					end
+					if result_type == 5
+						return ""
+					end
+				end
+			end
+			if instruction.payload == 3
+				if first_type == result_type
+					if result_type == 1
+						return ""
+					end
+					if result_type == 5
+						return ""
+					end
+				end
+			end
+		end
+		return "MIR scalar unary type differs"
+	end
+	if instruction.kind == 9
+		if instruction.second == - 1
+			if instruction.payload == 0
+				if instruction.failure == - 1
+					if first_available
+						if first_type == 1
+							if result_type == 5
+								return ""
+							end
+						end
+					end
+				end
+			end
+		end
+		return "MIR Integer-to-Float conversion type differs"
+	end
+	if instruction.kind == 10
+		if instruction.second == - 1
+			if instruction.payload == 0
+				if instruction.failure == - 1
+					if first_available
+						if result_type == mir_array_element_type(first_type - 1)
+							return ""
+						end
+					end
+				end
+			end
+		end
+		return "MIR Array load type differs"
+	end
+	return "MIR instruction kind is unsupported"
+end
+
+def mir_target_arguments_error(
+		native_module: MirModule,
+		function: MirFunction,
+		block: MirBlock,
+		target: Integer,
+		start: Integer,
+		count: Integer,
+	): String
+	target_index := mir_block_index(native_module, function, target)
+	if target_index < 0
+		return "MIR terminator target does not exist"
+	end
+	target_block := native_module.blocks[target_index]
+	if count != target_block.parameter_count
+		return "MIR block argument arity differs"
+	end
+	mut index := 0
+	while index < count
+		value_id := native_module.arguments[start + index]
+		if !mir_value_available(
+				native_module,
+				function,
+				block,
+				block.instruction_start + block.instruction_count,
+				value_id,
+			)
+			return "MIR block argument is undefined"
+		end
+		target_value := native_module.arguments[target_block.parameter_start + index]
+		actual_type := mir_value_type(native_module, function.id, value_id)
+		target_type := mir_value_type(native_module, function.id, target_value)
+		if actual_type != target_type
+			return "MIR block argument type differs"
+		end
+		index += 1
+	end
+	return ""
+end
+
+def mir_terminator_error(
+		native_module: MirModule,
+		function: MirFunction,
+		block: MirBlock,
+	): String
+	kind := block.terminator
+	if kind == 1
+		if block.condition == - 1
+			if block.second_target == - 1
+				if block.second_argument_count == 0
+					if block.return_value == - 1
+						return mir_target_arguments_error(
+							native_module,
+							function,
+							block,
+							block.first_target,
+							block.first_argument_start,
+							block.first_argument_count,
+						)
+					end
+				end
+			end
+		end
+		return "MIR jump shape differs"
+	end
+	if kind == 2
+		condition_type := mir_value_type(native_module, function.id, block.condition)
+		condition_available := mir_value_available(
+			native_module,
+			function,
+			block,
+			block.instruction_start + block.instruction_count,
+			block.condition,
+		)
+		if condition_available
+			if condition_type == 2
+				if block.return_value == - 1
+					first := mir_target_arguments_error(
+						native_module,
+						function,
+						block,
+						block.first_target,
+						block.first_argument_start,
+						block.first_argument_count,
+					)
+					if first != ""
+						return first
+					end
+					return mir_target_arguments_error(
+						native_module,
+						function,
+						block,
+						block.second_target,
+						block.second_argument_start,
+						block.second_argument_count,
+					)
+				end
+			end
+		end
+		return "MIR branch shape differs"
+	end
+	if kind == 3
+		if block.condition == - 1
+			if block.first_target == - 1
+				if block.second_target == - 1
+					if block.first_argument_count == 0
+						if block.second_argument_count == 0
+							if block.return_value >= 0
+								if !mir_value_available(
+										native_module,
+										function,
+										block,
+										block.instruction_start + block.instruction_count,
+										block.return_value,
+									)
+									return "MIR return value is undefined"
+								end
+							end
+							return ""
+						end
+					end
+				end
+			end
+		end
+		return "MIR return shape differs"
+	end
+	if kind == 4
+		if block.condition == - 1
+			if block.first_target == - 1
+				if block.second_target == - 1
+					if block.first_argument_start == 0
+						if block.first_argument_count == 0
+							if block.second_argument_start == 0
+								if block.second_argument_count == 0
+									if block.return_value == - 1
+										return ""
+									end
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+		return "MIR trap shape differs"
+	end
+	return "MIR terminator kind is unsupported"
+end
+
+# Validate storage before definition counting or cross-block semantic checks.
+# Range checks use subtraction so malformed large counts cannot overflow.
+def mir_function_structure_error(native_module: MirModule, function: MirFunction): String
+	if !mir_table_span_valid(function.parameter_start, function.parameter_count, native_module.arguments.size())
+		return "MIR function parameter range is invalid"
+	end
+	if !mir_table_span_valid(function.block_start, function.block_count, native_module.blocks.size())
+		return "MIR function block range is invalid"
+	end
+	mut block_index := function.block_start
+	block_finish := block_index + function.block_count
+	while block_index < block_finish
+		block := native_module.blocks[block_index]
+		if !mir_table_span_valid(block.parameter_start, block.parameter_count, native_module.arguments.size())
+			return "MIR block parameter range is invalid"
+		end
+		if !mir_table_span_valid(block.instruction_start, block.instruction_count, native_module.instructions.size())
+			return "MIR block instruction range is invalid"
+		end
+		if !mir_table_span_valid(block.first_argument_start, block.first_argument_count, native_module.arguments.size())
+			return "MIR terminator argument range is invalid"
+		end
+		if !mir_table_span_valid(block.second_argument_start, block.second_argument_count, native_module.arguments.size())
+			return "MIR alternate argument range is invalid"
+		end
+		block_index += 1
+	end
+	return ""
+end
+
+def mir_adapter_error(native_module: MirModule, function: MirFunction): String
+	if function.kind == 0
+		return ""
+	end
+	if function.kind == 2
+		if function.block_count == 6
+			body := native_module.blocks[function.block_start + 2]
+			if body.instruction_count > 0
+				if mir_induction_address(native_module, function, body, native_module.instructions[body.instruction_start])
+					return ""
+				end
+			end
+		end
+		return "MIR induction adapter shape differs"
+	end
+	if function.kind == 1
+		if function.block_count != 2
+			return "MIR scalar adapter shape differs"
+		end
+		entry := native_module.blocks[function.block_start]
+		if entry.id != function.entry_block || entry.terminator != 3 || entry.parameter_count != 0
+			return "MIR scalar adapter shape differs"
+		end
+	end
+	mut returned_type := 0
+	mut block_index := function.block_start
+	while block_index < function.block_start + function.block_count
+		block := native_module.blocks[block_index]
+		mut index := block.instruction_start
+		while index < block.instruction_start + block.instruction_count
+			kind := native_module.instructions[index].kind
+			if kind < 6 || kind > 9
+				return "MIR scalar control operation is unsupported"
+			end
+			index += 1
+		end
+		if block.terminator == 3
+			type_id := mir_value_type(native_module, function.id, block.return_value)
+			if function.kind == 3 && type_id != 1 && type_id != 2 && type_id != 5
+				return "MIR scalar return type differs"
+			end
+			if returned_type != 0 && returned_type != type_id
+				return "MIR scalar return type differs"
+			end
+			returned_type = type_id
+		elsif function.kind == 1 && block.terminator != 4
+			return "MIR scalar adapter shape differs"
+		end
+		block_index += 1
+	end
+	return ""
+end
+
+def mir_function_error(native_module: MirModule, function: MirFunction): String
+	if function.kind < 0 || function.kind > 3
+		return "MIR function adapter kind is invalid"
+	end
+	if mir_block_index(native_module, function, function.entry_block) < 0
+		return "MIR function entry block does not exist"
+	end
+	mut index := function.parameter_start
+	mut finish := index + function.parameter_count
+	while index < finish
+		if mir_value_type(native_module, function.id, native_module.arguments[index]) == 0
+			return "MIR function parameter is undefined"
+		end
+		index += 1
+	end
+	mut block_index := function.block_start
+	block_finish := block_index + function.block_count
+	while block_index < block_finish
+		block := native_module.blocks[block_index]
+		if !mir_origin_valid(block.source_id, block.line, native_module.source_count[0])
+			return "MIR block origin is invalid"
+		end
+		mut previous := function.block_start
+		while previous < block_index
+			if native_module.blocks[previous].id == block.id
+				return "MIR block identifier is duplicated"
+			end
+			previous += 1
+		end
+		index = block.parameter_start
+		finish = index + block.parameter_count
+		while index < finish
+			if mir_value_type(native_module, function.id, native_module.arguments[index]) == 0
+				return "MIR block parameter is undefined"
+			end
+			index += 1
+		end
+		index = block.instruction_start
+		finish = index + block.instruction_count
+		while index < finish
+			error := mir_instruction_error(native_module, function, block, index)
+			if error != ""
+				return error
+			end
+			index += 1
+		end
+		error := mir_terminator_error(native_module, function, block)
+		if error != ""
+			return error
+		end
+		block_index += 1
+	end
+	return mir_adapter_error(native_module, function)
+end
+
+def verify_mir(native_module: MirModule, optimized: Boolean): String
+	if native_module.source_count[0] <= 0
+		return "MIR module has no sources"
+	end
+	mut entry_found := false
+	mut index := 0
+	if optimized
+		if native_module.array_headers.size() != native_module.array_regions.size() || native_module.array_loop_headers.size() != native_module.array_regions.size()
+			return "MIR optimized Array-header fact is invalid"
+		end
+	else
+		if native_module.array_headers.size() != 0 || native_module.array_loop_headers.size() != 0
+			return "MIR input cannot supply optimization facts"
+		end
+	end
+	while index < native_module.array_regions.size()
+		header := mir_array_headers(native_module.array_regions[index])
+		if !header.valid
+			return "MIR Array region is invalid"
+		end
+		if optimized
+			mut loops: Array<Integer> := []
+			if header.declarations.size() == 0
+				loops = mir_array_loop_headers(native_module.array_regions[index])
+			end
+			if !mir_array_headers_equal(native_module.array_loop_headers[index], loops)
+				return "MIR optimized Array-header fact is invalid"
+			end
+			if !mir_array_headers_equal(native_module.array_headers[index], header.declarations)
+				return "MIR optimized Array-header fact is invalid"
+			end
+		end
+		index += 1
+	end
+	if native_module.functions.size() == 0
+		return ""
+	end
+	index = 0
+	while index < native_module.functions.size()
+		function := native_module.functions[index]
+		if function.id < 0
+			return "MIR function identifier is invalid"
+		end
+		if !mir_origin_valid(function.source_id, function.line, native_module.source_count[0])
+			return "MIR function origin is invalid"
+		end
+		mut previous := 0
+		while previous < index
+			if native_module.functions[previous].id == function.id
+				return "MIR function identifier is duplicated"
+			end
+			previous += 1
+		end
+		if function.id == native_module.entry_function[0]
+			entry_found = true
+		end
+		error := mir_function_structure_error(native_module, function)
+		if error != ""
+			return error
+		end
+		index += 1
+	end
+	if !entry_found
+		return "MIR entry function does not exist"
+	end
+	index = 0
+	while index < native_module.values.size()
+		value := native_module.values[index]
+		function_index := mir_function_index(native_module, value.function_id)
+		if function_index < 0
+			return "MIR value identity is invalid"
+		end
+		if value.id < 0
+			return "MIR value identity is invalid"
+		end
+		if value.type_id < 1
+			return "MIR value type is invalid"
+		end
+		if value.type_id > 7
+			return "MIR value type is invalid"
+		end
+		if !mir_origin_valid(value.source_id, value.line, native_module.source_count[0])
+			return "MIR value origin is invalid"
+		end
+		mut previous := 0
+		while previous < index
+			other := native_module.values[previous]
+			if other.function_id == value.function_id
+				if other.id == value.id
+					return "MIR value is defined more than once"
+				end
+			end
+			previous += 1
+		end
+		function := native_module.functions[function_index]
+		if mir_definition_count(native_module, function, value.id) != 1
+			return "MIR value definition count differs"
+		end
+		index += 1
+	end
+	index = 0
+	while index < native_module.functions.size()
+		error := mir_function_error(native_module, native_module.functions[index])
+		if error != ""
+			return error
+		end
+		function := native_module.functions[index]
+		mut expected_guard := 0
+		if optimized
+			expected_guard = mir_scalar_guard(native_module, function)
+		end
+		if function.integer_guard != expected_guard
+			return "MIR scalar Integer guard differs"
+		end
+		index += 1
+	end
+	return ""
+end
