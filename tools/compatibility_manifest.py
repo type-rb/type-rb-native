@@ -243,6 +243,14 @@ def validate_reference_checkouts(root: Path, revision: str) -> dict[str, str]:
         for identity in identities:
             if _command_count(source, identity) != count:
                 raise ValidationError(f"reference checkout {name}: post-checkout identity differs")
+        if mode in ("direct", "derived", "environment"):
+            prefix = ".native-target-candidate/" if name == "linux-amd64-targets.yml" else ""
+            command = f'python3 {prefix}tools/build-reference.py .type-rb "$RUNNER_TEMP/trb"'
+            if name in ("benchmarksgame-formal.yml", "benchmarksgame-build-formal.yml",
+                        "daily-performance.yml", "weekly-performance.yml"):
+                command += " --trimpath"
+            if _command_count(source, command) != 1:
+                raise ValidationError(f"reference checkout {name}: canonical versioned build differs")
     controller = root / "tools/linux-amd64-targets.sh"
     source = _without_comment_lines(_require_text(controller, [], "reference controller"))
     if re.findall(r"(?m)^TYPE_RB_REVISION=(\S+)$", source) != [revision]:
@@ -274,6 +282,13 @@ def validate_repository_values(
 
     workflows = validate_reference_checkouts(root, type_rb_revision)
     workflow = workflows["native-validation.yml"]
+    for name in ("linux-amd64-targets.yml", "runtime-worker-memory.yml"):
+        versions = re.findall(r"(?m)^ *TYPE_RB_VERSION: *(\S+) *$", workflows[name])
+        if versions != [manifest["typeRB"]["version"]]:
+            raise ValidationError(f"reference checkout {name}: environment version differs")
+    controller = (root / "tools/linux-amd64-targets.sh").read_text()
+    if re.findall(r"(?m)^TYPE_RB_VERSION=(\S+)$", controller) != [manifest["typeRB"]["version"]]:
+        raise ValidationError("reference checkout linux-amd64-targets.sh: controller version differs")
 
     if reference_trb is not None:
         try:

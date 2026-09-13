@@ -1,5 +1,22 @@
 # Current reference compatibility
 
+The current candidate selects the released TypeRB `0.4.7` source at
+`dc01dc490b86128ec7c29ad806f0047afaedeb84` in
+[PR #459](https://github.com/type-rb/type-rb-native/pull/459).
+The exact reference build embeds the declared stable version, independent of
+local tag metadata. The nested-generic parameter regression matches through
+check, build, execution and REPL in both implementations. The reference REPL's
+conditional-transfer expectation now matches its compiled output; Native's
+remaining rejection is an explicit coverage gap.
+
+The updated shared registry has 92 cases. Complete PR correctness, recovery,
+target and memory acceptance at this new pin is pending. Current integration
+uses the explicit MIR migration cost policy; it is not formal performance
+qualification. The retained compatibility cohorts and immutable seed/target
+evidence below keep their original source and workflow identities.
+
+## Previous Range compatibility prerequisite
+
 The Range implementation candidate selects TypeRB `0.4.7-dev` at
 `eb1f705e00235e608ea9283ffa90ea55cf9965f2`, including the Range element-argument
 assignability correction in [TypeRB PR #683](https://github.com/type-rb/type-rb/pull/683).

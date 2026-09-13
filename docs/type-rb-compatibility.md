@@ -2,9 +2,10 @@
 
 TypeRB Native currently follows exact reference revisions during development. The
 current source and semantic oracle is TypeRB
-`eb1f705e00235e608ea9283ffa90ea55cf9965f2` (`0.4.7-dev`), recorded in
-`TYPE_RB_REVISION`. This is an exact development pin, not a supported version
-range.
+`dc01dc490b86128ec7c29ad806f0047afaedeb84`, released as
+[TypeRB 0.4.7](https://github.com/type-rb/type-rb/releases/tag/v0.4.7) and recorded
+in `TYPE_RB_REVISION`. This declares one exact reference identity during Native
+development, without claiming a supported version range.
 
 The machine-readable
 [`compatibility/current.json`](../compatibility/current.json) records this
@@ -33,6 +34,41 @@ The earlier scoped-file successor is registered in
 [Darwin/Linux arm64 result](https://github.com/type-rb/type-rb-native/blob/5cf61c740aa600c34ed94f1b130ea2ffefd9e783/results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/README.md)
 passes the selected-reference, migration, exact-baseline, target-regression,
 fixed-point, process, resource, and size criteria.
+
+## TypeRB 0.4.7 reference update
+
+The release includes [TypeRB PR #686](https://github.com/type-rb/type-rb/pull/686),
+which preserves parameter boundaries after nested generic annotations, and
+[PR #687](https://github.com/type-rb/type-rb/pull/687), which completes REPL input
+containing conditional transfers. The shared language contract now includes a
+nested Hash parameter followed by an Integer parameter through check, build,
+execution and REPL. Its conditional-transfer reference REPL expectation changes
+from incomplete input to the same output as the compiled program. Native's
+unsupported conditional-transfer outcomes remain explicit coverage gaps.
+
+Current reference builds use `tools/build-reference.py`. It validates the
+compatibility manifest, exact clean checkout and source version, embeds the
+declared reference version, and verifies the executable's report. The release
+source retains `0.4.7-dev`; the explicit `0.4.7` build identity avoids depending
+on whether a shallow checkout has fetched the release tag. Historical experiment
+pins, immutable seeds and retained measurements keep their original identities.
+
+## Release integration
+
+Treat a new reference release as a compatibility update through a Native PR.
+After the public release workflow succeeds, resolve the stable tag to its exact
+merged commit. Update `TYPE_RB_REVISION`, the manifest, maintained current
+workflow/controller identities and generated coverage views together. Build
+through `tools/build-reference.py` and rerun the shared language cases against
+the exact reference AST. Review changed outcomes before editing expectations;
+reference fixes can expose Native gaps that must remain visible.
+
+Complete the PR's required correctness, recovery, target and memory authorities
+before merging. Preserve frozen experiment pins, immutable seed assets and
+historical evidence. A future release detector can prepare this PR, but must
+not update the default branch or rewrite conformance expectations automatically.
+This consumer-owned procedure requires no Native-specific reference API or
+release hook in the TypeRB repository.
 
 ## Range endpoint reference update
 

@@ -162,6 +162,14 @@ class ReferenceCheckoutTest(unittest.TestCase):
     def test_all_current_and_frozen_consumers_are_accepted(self) -> None:
         self.validate()
 
+    def test_current_builds_cannot_lose_explicit_version_identity(self) -> None:
+        for name, (mode, _) in REFERENCE_WORKFLOWS.items():
+            if mode not in ("direct", "derived", "environment"):
+                continue
+            path = self.root / ".github/workflows" / name
+            source = self.files[path]
+            self.reject(path, source.replace('tools/build-reference.py', 'tools/old-build-reference.py'))
+
     def test_each_checkout_ref_cannot_change_or_disappear(self) -> None:
         checked = 0
         for name, (_, count) in REFERENCE_WORKFLOWS.items():
