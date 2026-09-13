@@ -1,23 +1,21 @@
 # Contributing to TypeRB Native
 
-TypeRB Native is an evidence-driven experiment. Contributions should help
-answer a defined correctness, performance, portability, runtime, or tooling
-question without implying that a production native backend has been accepted.
+TypeRB Native targets a production-ready TypeRB-authored compiler and toolchain.
+Contributions advance complete language and package coverage, practical tooling,
+correctness, portability and measured performance. The
+[MIR consolidation roadmap](docs/mir-consolidation.md) defines the active milestone.
+Report implemented coverage and validation separately from the eventual goals.
 
 ## Proposing work
 
-Open an issue before a material experiment. Record durable architectural
-decisions under `docs/decisions/`; keep scoped implementation work and its
-acceptance checkpoint in the issue.
+Use an existing milestone issue or open one for material feature or architecture
+work. Record durable architectural decisions under `docs/decisions/`; keep scoped
+implementation work and its acceptance conditions in the issue.
 
-The proposal should record:
-
-- the hypothesis;
-- the supported TypeRB and Native MIR subset;
-- the reference compiler revision;
-- the baseline and candidate configurations;
-- the measurements and acceptance or removal checkpoint; and
-- the parts intentionally left unsupported.
+Record the behavior or ownership change, relevant reference revision, validation
+and remaining gaps. Performance or backend experiments also record the hypothesis,
+baseline and candidate configurations, measurements and acceptance or removal
+conditions. Feature coverage does not need an experimental hypothesis to be useful.
 
 Small fixes and documentation corrections do not need a separate experiment
 proposal. Current MIR work follows the larger

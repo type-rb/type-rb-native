@@ -1,8 +1,9 @@
-# Experimental Native target profiles
+# Native target profiles
 
 The compiler shares TypeRB semantics, MIR, runtime generation and target-neutral
-QBE across the registered profiles. These internal profiles are experimental;
-they do not imply a stable installation or product-support commitment.
+QBE across the registered profiles. These internal profiles are under development.
+Supported release targets are a [project goal](mir-consolidation.md); current
+profile verification does not yet establish stable installation or release support.
 
 | Profile | QBE target | Executable and toolchain |
 | --- | --- | --- |

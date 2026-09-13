@@ -12,7 +12,15 @@ output. Coverage includes the standard library and official packages as their
 platform prerequisites are implemented. The reference Go implementation already
 provides the three source backends; parity in the TypeRB-authored implementation
 is future work. Reference semantics remain independently owned and Native must
-not acquire its own dialect. This roadmap does not claim supported product status.
+not acquire its own dialect.
+
+Production use is the intended destination. This includes official application
+packages such as `trb/web`, `trb/orm` and `trb/jobs`, a stable user-facing CLI,
+documented ABI compatibility where exposed, supported release targets and a
+release/security maintenance policy. Incomplete coverage, internal unstable
+interfaces and exact development pins describe the current implementation;
+they do not exclude these goals. Support and compatibility claims require the
+corresponding implementation, validation and published policies.
 
 Native execution time, generated application size and end-to-end application
 build time should outperform equivalent Pure Go programs across representative

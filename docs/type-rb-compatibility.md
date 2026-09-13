@@ -1,6 +1,6 @@
 # TypeRB Compatibility
 
-TypeRB Native follows exact reference revisions while it is experimental. The
+TypeRB Native currently follows exact reference revisions during development. The
 current source and semantic oracle is TypeRB
 `eb1f705e00235e608ea9283ffa90ea55cf9965f2` (`0.4.7-dev`), recorded in
 `TYPE_RB_REVISION`. This is an exact development pin, not a supported version
@@ -11,8 +11,8 @@ The machine-readable
 exact mapping beside the independent Native `0.1.0-dev` implementation
 identity. Its strict schema and CI validation keep TypeRB, bootstrap, MIR,
 runtime ABI, backend, target, and evidence identities separate. The current
-target list contains the experimental Darwin arm64 and Linux arm64 seed
-profiles plus the independently recovered and verified experimental Linux
+target list contains the internal Darwin arm64 and Linux arm64 seed
+profiles plus the independently recovered and verified internal Linux
 amd64 profile. See
 [Native versioning and compatibility](versioning.md) for bump and release
 rules.
@@ -320,7 +320,8 @@ as target-chain evidence in compatibility schema version 2, while the
 immutable seed manifest remains unchanged. See the
 [Historical Linux amd64 result](../results/2026-08-31-gate6n-linux-amd64/README.md) and
 [Decision 0026](https://github.com/type-rb/type-rb-native/blob/7726ff18e9230cd149e9f0c317577f6429f907fc/docs/decisions/0026-recovered-target-chain-evidence.md).
-Native SemVer is now independently defined for experimental development, but
-TypeRB compatibility ranges, stable installation policy, and support promises
-remain deferred. The current schema can express only this exact verified
-TypeRB revision.
+Native SemVer is independently defined. TypeRB compatibility ranges, stable
+installation and release-support policies remain implementation work toward the
+[production-use goal](mir-consolidation.md). The current schema can express only
+this exact verified TypeRB revision; broader claims require evidence and an
+explicit schema/policy update.

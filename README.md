@@ -1,19 +1,20 @@
 # TypeRB Native
 
-> [!WARNING]
-> TypeRB Native is an experimental research prototype. It is not a supported
-> TypeRB backend, runtime, or release target. Everything in this repository may
-> change incompatibly or be removed without notice.
+> [!NOTE]
+> TypeRB Native is in active development toward production use. Language and
+> package coverage is incomplete, and current development builds do not yet
+> provide stable CLI, ABI, or release-support guarantees.
 
-TypeRB Native develops a TypeRB-specific native compiler and runtime intended
-to improve end-to-end build time, generated-program performance, and deployed
-binary size relative to an optimized release executable produced by the
-reference compiler's Go backend. Its long-term objective is a self-hosted
-compiler whose repository-owned implementation is written in TypeRB and whose
-ordinary release/bootstrap path does not require Go or another host language.
-The repository remains experimental while that implementation is incomplete;
-the checks are engineering checkpoints that keep correctness and whole-toolchain
-performance visible as the implementation grows.
+TypeRB Native develops a self-hosted TypeRB compiler and toolchain for practical
+application development. The goal is full TypeRB language, standard-library and
+official-package coverage, Go/Ruby/TypeScript emission and execution, and Native
+executables. Native runtime performance, application build time and executable
+size should outperform equivalent Pure Go programs on representative workloads.
+
+The repository-owned compiler and runtime are written in TypeRB. Ordinary Native
+self-hosting and application builds do not require Go or another host language.
+Correctness, reproducibility and complete-toolchain measurements guide progress
+toward the full implementation; current coverage is described separately below.
 
 The [TypeRB repository](https://github.com/type-rb/type-rb) remains the source
 of truth for the language specification, reference compiler, supported
@@ -33,44 +34,47 @@ needed and starts a REPL. `./trbn run` runs the example project, and
 `./trbn build --compile` creates an executable. The default mode is `trb`;
 other explicit modes are rejected. Go is not required for this bootstrap.
 
-See the [experimental CLI guide](docs/native-cli.md) for prerequisites,
+See the [CLI guide](docs/native-cli.md) for prerequisites,
 commands, limitations, and manually dispatched CI binary artifacts.
 
 ## Goals
 
-- Test a native AOT pipeline without requiring the Go toolchain to compile a
-  TypeRB application.
-- Reach reproducible self-hosting: a native TypeRB compiler builds the next
+- Cover the reference language, standard library and official packages, including
+  `trb/web`, `trb/orm` and `trb/jobs`, as their platform dependencies are implemented.
+- Emit and run Go, Ruby and TypeScript as well as Native executables from the
+  TypeRB-authored toolchain, preserving the same language semantics.
+- Deliver a practical Native backend with a stable CLI, documented ABI contracts
+  where exposed, supported release targets and a release/security maintenance policy.
+- Maintain reproducible self-hosting: a native TypeRB compiler builds the next
   equivalent native TypeRB compiler from TypeRB source.
-- Design a small Native MIR, target ABI profiles, data layout, and runtime.
-- Keep TypeRB semantic facts and reusable optimization decisions in Native MIR
-  rather than in a particular backend emitter.
-- Compare multiple machine-code strategies behind the same MIR and semantics.
+- Keep TypeRB semantic facts and reusable optimizations in verified MIR and
+  target-independent passes, with small modules organized by responsibility.
+- Outperform equivalent Pure Go programs in Native execution time, application
+  build time and executable size across representative workloads. Also compare
+  established statically typed implementations and the same-source TypeRB Go path.
 - Measure complete toolchains, including code generation, linking, runtime,
-  sidecars, and distribution size.
-- Match or exceed established statically typed language implementations on
-  representative portable runtime workloads, while keeping the same-source Go
-  path as a backend control rather than the final execution-performance ceiling.
-- Preserve a credible path to a native implementation that is at least as
-  practical as the Go backend, and use measured regressions to direct
-  optimization work rather than treating early checks as disposable demos.
+  sidecars, distribution size and compiler self-build costs.
+
+These are development targets. The [MIR consolidation roadmap](docs/mir-consolidation.md)
+sets the current milestone and the evidence needed to qualify progress.
 
 ## Current status
 
-The bounded TypeRB-authored compiler is self-hosted: ordinary Native-to-Native
+The current TypeRB-authored compiler is self-hosted: ordinary Native-to-Native
 builds reproduce compiler artifacts without Go. QBE, an assembler, a system
 toolchain driver/linker, and system libraries remain explicit dependencies.
-Experimental target profiles cover Darwin arm64, Linux arm64, and Linux amd64.
+Current internal target profiles cover Darwin arm64, Linux arm64, and Linux amd64.
 
 The ordinary compiler is not a complete implementation of TypeRB. The earlier
 snapshot/recovery pipeline and the ordinary compiler have different coverage.
 See the [capability map](https://type-rb.github.io/type-rb-native/) for the
 current measured boundary.
 
-Current work expands ordinary language coverage and improves compiler-source
-readability, with the required semantic ownership and verification in Native
-MIR. See the [basic language coverage plan](docs/native-language-coverage.md).
-Further benchmark tuning is secondary to these bounded language slices.
+Current work consolidates supported ordinary features into verified MIR,
+completes needed basic language coverage and splits large implementation files
+by responsibility. See the [MIR consolidation milestone](docs/mir-consolidation.md)
+and [basic language coverage plan](docs/native-language-coverage.md). Detailed
+performance qualification follows coherent architecture milestones.
 The current spectral-norm result exceeds Pure Go; broader runtime parity remains
 a goal. The later [numeric regression recovery](docs/native-numeric-regression-recovery.md)
 confirms that accepted main has restored n-body and fannkuch against the former
@@ -111,14 +115,6 @@ See the [development and validation plan](docs/experiment-plan.md).
 The [organization plan](docs/repository-organization.md) schedules early
 documentation cleanup, dependency-led source organization, and incremental
 compiler decomposition. Historical records retain the names from their exact revisions.
-
-## Non-goals
-
-This experiment does not promise full language or standard-library coverage,
-production Web/Job support, a stable CLI or ABI, or a supported release target.
-It does not replace external tools merely to claim self-hosting, introduce a
-Native-only language dialect, or port repository-owned implementation to
-another host language.
 
 ## Documentation
 

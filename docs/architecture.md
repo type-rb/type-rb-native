@@ -9,7 +9,7 @@ ordinary bootstrap and application-build path while matching or improving the
 practical tradeoff among build time, execution performance, and deployed binary
 size after all required tooling is counted.
 
-The experiment is not a port to a different host language. Native execution
+The implementation is written in TypeRB. Native execution
 and self-hosting are separate checkpoints, but both belong to the intended
 path. The Go reference compiler bootstraps early artifacts and remains a
 differential oracle. The completed compiler and runtime owned by this
@@ -35,15 +35,16 @@ The [reference TypeRB repository](https://github.com/type-rb/type-rb) owns:
 - the reference typed IR and supported Go, Ruby, and TypeScript backends; and
 - the canonical cross-backend conformance behavior.
 
-This repository owns only experimental native concerns:
+This repository owns the TypeRB-authored implementation and its development:
 
-- the independent TypeRB-authored frontend for the supported Native subset;
+- the independent TypeRB-authored frontend, growing toward full reference coverage;
+- Go/Ruby/TypeScript emission and execution in that implementation as future work;
 - bootstrap snapshot validation and lowering;
 - Native MIR and its verifier;
 - native data layout and target ABI profiles;
 - optimization and backend adapters;
 - object emission and linker integration;
-- the experimental runtime; and
+- the Native runtime and platform support for the standard library and packages; and
 - native correctness, portability, and performance measurements.
 
 The normal reference TypeRB build, test, and release paths must not depend on
@@ -293,8 +294,8 @@ compilation are therefore deferred.
 
 ## Runtime and ABI
 
-A machine-code backend does not provide TypeRB's runtime. A promoted
-full-language target would require accepted solutions for:
+A machine-code backend does not provide TypeRB's runtime. The full-language,
+production-use goal requires implemented and validated solutions for:
 
 - strings, bytes, arrays, hashes, records, enums, unions, and nullable values;
 - classes, interfaces, closures, and generic representation;
@@ -306,11 +307,12 @@ full-language target would require accepted solutions for:
 - native package integration, lifecycle, and error conversion through a
   separately accepted TypeRB design.
 
-The initial runtime remains deliberately smaller: static data, scalar values,
-simple aggregate layout, observable output, and deterministic process failure.
-Snapshot aggregate recovery provides the heap-free aggregate layer before heap ownership and memory
-management are added. This separation keeps record and tagged-value semantics
-independent of the later allocation strategy.
+The initial runtime covered static data, scalar values, simple aggregate layout,
+observable output and deterministic process failure. The current ordinary runtime
+also manages Strings, Arrays, records and Hash values; remaining coverage is
+tracked in the [ordinary language plan](native-language-coverage.md). Snapshot
+aggregate recovery retains a separate heap-free layer, keeping record and
+tagged-value semantics independent of allocation strategy.
 
 Managed snapshot recovery uses an exact-root, non-moving tracing collector for dynamic Strings,
 Arrays, closures, and recursively reference-containing aggregates.

@@ -112,7 +112,7 @@ export const catalog = {
       items: [
         capability('Darwin arm64 profile', 'verified', ['parity', 'production', 'ecosystem'], 'Retain self-hosting, application correctness, and measured toolchain evidence.', ['Recorded gates', 'README.md']),
         capability('Linux arm64 profile', 'verified', ['parity', 'production', 'ecosystem'], 'Close the registered Go-free replacement chain and application checks.', ['Linux arm64', 'docs/native-targets.md']),
-        capability('Linux amd64 experimental profile', 'verified', ['parity', 'production', 'ecosystem'], 'Verify target-neutral QBE and a Go-free fixed point without claiming support.', ['Linux amd64', 'docs/native-targets.md']),
+        capability('Linux amd64 target profile', 'verified', ['parity', 'production', 'ecosystem'], 'Verify target-neutral QBE and a Go-free fixed point; release support remains to be qualified.', ['Linux amd64', 'docs/native-targets.md']),
         capability('Immutable bootstrap seed', 'verified', ['parity', 'ecosystem'], 'Publish attested compiler assets, a strict manifest, checksums, and post-publication verification.', ['Verified seed', 'docs/bootstrap-seed-updates.md']),
         capability('Exact TypeRB compatibility manifest', 'verified', ['parity', 'production'], 'Pin the exact TypeRB version and revision backed by current evidence.', ['Compatibility mapping', 'docs/type-rb-compatibility.md']),
         capability('Windows target', 'open', ['production', 'ecosystem'], 'Define and verify ABI, linker, runtime, CI, and distribution behavior.'),

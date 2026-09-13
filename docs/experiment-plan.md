@@ -2,14 +2,20 @@
 
 ## Engineering objective
 
-Build a TypeRB-specific native AOT pipeline with these primary outcomes:
+Build a TypeRB-authored toolchain for production use, covering the reference
+language, standard library and official packages, Go/Ruby/TypeScript emission and
+execution, and Native AOT output. The [project roadmap](mir-consolidation.md)
+includes stable public interfaces and supported releases as coverage matures.
+Native performance targets are:
 
-1. End-to-end application build time that matches or improves the optimized Go
-   backend.
-2. Generated-program execution time that matches or improves established
-   statically typed language implementations across representative portable
-   workloads.
-3. Deployed executable size that matches or improves the optimized Go backend.
+1. End-to-end application build time that outperforms equivalent Pure Go builds.
+2. Generated-program execution time that outperforms equivalent Pure Go programs
+   and is competitive with established statically typed implementations across
+   representative portable workloads.
+3. Deployed executable size smaller than equivalent Pure Go executables.
+
+Use matched inputs, outputs, algorithms, concurrency and optimized toolchains.
+These are measured targets; current results do not establish universal wins.
 
 The compiler and runtime are implemented in TypeRB, reproduce themselves, and
 must retain competitive build time and generated-code behavior once the
@@ -64,14 +70,13 @@ benefit assessment, rather than polishing small overruns indefinitely.
 
 ## Current implementation focus
 
-Follow the [ordinary language coverage plan](native-language-coverage.md):
-separate check/build/execution/REPL coverage from recovery evidence, add basic
-control syntax, and use accepted features to improve compiler implementation
-clarity. Necessary MIR representation and verification ship with each feature.
-Complete MIR migration and Pure Go parity are not prerequisites for this work.
-The pending Array-loop candidate is explicitly deferred with a frozen identity
-and re-entry conditions; neither its merge nor further size-only refinement
-blocks language coverage. Existing performance goals and cost authorities remain.
+Complete the [MIR consolidation milestone](mir-consolidation.md) through cohesive
+families of typed operations, control flow, managed lifetimes and shared facts.
+Use the [ordinary language coverage plan](native-language-coverage.md) to add
+needed basic features and adopt them in the compiler while removing superseded
+semantic owners and splitting large modules. Separate check/build/execution/REPL
+coverage from recovery evidence. Detailed performance qualification follows the
+coherent milestone; correctness and reproducibility remain blocking throughout.
 
 ## Candidate sequence
 

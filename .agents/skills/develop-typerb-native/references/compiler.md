@@ -18,8 +18,9 @@ being changed; unrelated documentation does not require an architecture review.
   precedence between two loaded identities. Test named and bare aliases,
   declaration identity, the ASCII root-key rule, unrelated invalid siblings,
   diamonds, cycles, duplicate and unused bindings, missing exports, path
-  escape, optional suffixes, and paths containing spaces. Do not silently turn
-  this experimental boundary into package, namespace, or public CLI behavior.
+  escape, optional suffixes, and paths containing spaces. Package, namespace
+  and public CLI expansion must preserve the reference contracts; an internal
+  source-loading shortcut must not silently define those user-facing semantics.
 - Allow external code generators, assemblers, linkers, SDKs, and system
   libraries only behind explicit boundaries whose time and distribution cost
   can be measured.
@@ -57,9 +58,11 @@ being changed; unrelated documentation does not require an architecture review.
   hatch to improve a benchmark.
 - Keep bootstrap snapshots, Native MIR, ABI profiles, and runtime interfaces
   internal and unstable until a decision explicitly promotes them.
-- Add only the feature set required by the active checkpoint. Record a new decision
-  before changing language semantics, ownership boundaries, self-hosting
-  criteria, or backend selection policy.
+- Implement cohesive feature and ownership families within the active milestone,
+  including dependencies needed for full language and package coverage. Record a
+  decision for changes to language semantics, architecture, self-hosting criteria
+  or backend selection policy; implementing an already accepted goal does not
+  require reopening whether production use is in scope.
 - Remove duplicate and superseded direct-emitter ownership as MIR slices migrate.
   Useful verified optimization code need not be cost-free: propose its retained
   cost explicitly. Before another fact family, account for outstanding migration

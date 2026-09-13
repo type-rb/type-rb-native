@@ -1,8 +1,11 @@
 # TypeRB Native
 
 Use English for committed documentation, code comments, commit messages, and
-pull request text. This is an experimental research project, not a supported
-TypeRB backend or product commitment.
+pull request text. The project targets production use: full TypeRB language,
+standard-library and official-package coverage, Go/Ruby/TypeScript emission and
+execution, and Native output. Follow `docs/mir-consolidation.md` for the current
+milestone and measured Pure Go goals. Describe incomplete coverage and unstable
+interfaces as current gaps, not permanent exclusions from that objective.
 
 ## Scope and completion
 
@@ -50,9 +53,10 @@ outward-facing text before publication.
   Finish registered direct-QBE experiments as migration evidence and remove
   superseded emitter ownership before broadening the fact family.
 - Keep snapshots, MIR, ABI profiles, and runtime interfaces internal and unstable
-  until an explicit promotion decision. The long-term three-source-backend and
-  full-language goal is recorded in `docs/mir-consolidation.md`; implement its
-  dependencies without prematurely adding release/package machinery.
+  until an explicit promotion decision. Stable public CLI/ABI contracts and
+  supported releases are goals; establish their compatibility and security
+  policies as coverage and validation mature. Implement the dependencies in
+  `docs/mir-consolidation.md` without claiming unverified support.
 
 ## Conditional project guidance
 
