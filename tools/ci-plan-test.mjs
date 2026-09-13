@@ -155,7 +155,7 @@ test('compatibility checks precede matrix fan-out and remain in standalone valid
   const standalone = readFileSync(new URL('../.github/workflows/native-validation.yml', import.meta.url), 'utf8');
   const quick = workflow.match(/^  quick:\n([\s\S]*?)(?=^  documentation:)/m)?.[1];
   assert(quick, 'quick stage must exist');
-  const build = quick.indexOf('go build -C .type-rb');
+  const build = quick.indexOf('python3 tools/build-reference.py .type-rb');
   const formatting = quick.indexOf('Check formatting and core types');
   const checkout = quick.indexOf('repository: type-rb/type-rb');
   const preflight = quick.indexOf('Validate every reference checkout before toolchain setup');

@@ -1,0 +1,132 @@
+import { integer_string } from literals
+import { MirModule, MirValue, mir_table_span_valid } from mir
+import { mir_hash_kind } from mir_types
+import { CheckedLocals } from state
+
+def mir_hash_component(mut parents: Array<Integer>, value: Integer): Integer
+	mut at := value
+	while parents[at] != at
+		parents[at] = parents[parents[at]]
+		at = parents[at]
+	end
+	return at
+end
+
+def mir_hash_join_edge(locals: CheckedLocals, blocks: Hash<String, Integer>, mut parents: Array<Integer>, target: Integer, start: Integer, count: Integer): String
+	name := integer_string(target)
+	if !blocks.key?(name)
+		return "MIR Hash inference target is missing"
+	end
+	block := locals.mir_blocks[blocks[name]]
+	if count != block.parameter_count || !mir_table_span_valid(start, count, locals.mir_arguments.size()) || !mir_table_span_valid(block.parameter_start, count, locals.mir_arguments.size())
+		return "MIR Hash inference edge shape differs"
+	end
+	mut index := 0
+	while index < count
+		argument := locals.mir_arguments[start + index]
+		parameter := locals.mir_arguments[block.parameter_start + index]
+		if argument < 0 || argument >= parents.size() || parameter < 0 || parameter >= parents.size()
+			return "MIR Hash inference edge value is missing"
+		end
+		left := mir_hash_component(parents, argument)
+		right := mir_hash_component(parents, parameter)
+		if left < right
+			parents[right] = left
+		else
+			parents[left] = right
+		end
+		index += 1
+	end
+	return ""
+end
+
+# Finalize builder-local first-store constraints before publishing any MIR.
+# CFG argument/parameter pairs share a type. Source local names do not identify
+# values: distinct empty Hashes and replacement allocations stay independent.
+# The raw MIR verifier never calls this pass or repairs malformed input.
+def mir_finalize_hash_types(native_module: MirModule, mut locals: CheckedLocals): String
+	mut pending := locals.mir_hash_refinements.size() > 0
+	# Checking an unreachable store can refine the lexical type even though
+	# no store instruction is emitted. Its live exit parameters still constrain
+	# the earlier empty allocation, so inspect CFG types without a store witness.
+	if !pending
+		locals.mir_value_rows.each do |value|
+			if mir_hash_kind(native_module, value.type_id) == 5
+				pending = true
+			end
+		end
+	end
+	if !pending
+		return ""
+	end
+	if locals.mir_hash_refinements.size() % 2 != 0
+		return "MIR Hash inference constraint shape differs"
+	end
+	mut parents: Array<Integer> := []
+	mut types: Array<Integer> := []
+	locals.mir_value_rows.each do |value|
+		if value.id != parents.size()
+			return "MIR Hash inference value identity differs"
+		end
+		parents.push(value.id)
+		types.push(0)
+	end
+	mut blocks: Hash<String, Integer> := {}
+	mut index := 0
+	while index < locals.mir_blocks.size()
+		blocks[integer_string(locals.mir_blocks[index].id)] = index
+		index += 1
+	end
+	locals.mir_blocks.each do |block|
+		if block.terminator == 1 || block.terminator == 2
+			error := mir_hash_join_edge(locals, blocks, parents, block.first_target, block.first_argument_start, block.first_argument_count)
+			if error != ""
+				return error
+			end
+		end
+		if block.terminator == 2
+			error := mir_hash_join_edge(locals, blocks, parents, block.second_target, block.second_argument_start, block.second_argument_count)
+			if error != ""
+				return error
+			end
+		end
+	end
+	locals.mir_value_rows.each do |value|
+		if mir_hash_kind(native_module, value.type_id) != 5
+			root := mir_hash_component(parents, value.id)
+			if types[root] != 0 && types[root] != value.type_id
+				return "MIR Hash inference edge types conflict"
+			end
+			types[root] = value.type_id
+		end
+	end
+	index = 0
+	while index < locals.mir_hash_refinements.size()
+		value := locals.mir_hash_refinements[index]
+		type_id := locals.mir_hash_refinements[index + 1]
+		if value < 0 || value >= parents.size() || mir_hash_kind(native_module, type_id) != 3
+			return "MIR Hash inference constraint type differs"
+		end
+		root := mir_hash_component(parents, value)
+		if types[root] != 0 && types[root] != type_id
+			return "MIR Hash inference types conflict"
+		end
+		types[root] = type_id
+		index += 2
+	end
+	index = 0
+	while index < locals.mir_value_rows.size()
+		value := locals.mir_value_rows[index]
+		if mir_hash_kind(native_module, value.type_id) == 5
+			type_id := types[mir_hash_component(parents, value.id)]
+			if type_id != 0
+				if mir_hash_kind(native_module, type_id) != 3
+					return "MIR Hash inference resolved a non-Hash type"
+				end
+				locals.mir_value_rows[index] = MirValue.new(function_id: value.function_id, id: value.id, type_id: type_id, source_id: value.source_id, line: value.line)
+			end
+		end
+		index += 1
+	end
+	return ""
+end

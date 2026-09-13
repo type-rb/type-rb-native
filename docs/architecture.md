@@ -104,7 +104,7 @@ vertical slices from remaining ownership.
 ### Current compiler source ownership
 
 The ordinary entry is [compiler/src/compiler.trb](../compiler/src/compiler.trb).
-Its explicit transitive import closure contains 46 canonical implementation modules:
+Its explicit transitive import closure contains 52 canonical implementation modules:
 
 | Modules in `compiler/src/` | Current responsibility |
 | --- | --- |
@@ -113,9 +113,9 @@ Its explicit transitive import closure contains 46 canonical implementation modu
 | `parser.trb`, `resolution.trb` | Syntax and token boundaries; declaration, import, and type resolution. |
 | `checked_program.trb`, `checked_values.trb`, `checked_types.trb` | Recursive expression/body checking, typed checked values and shared type/operator rules. |
 | `mir.trb`, `mir_types.trb`, `mir_analysis.trb`, `mir_flow.trb`, `mir_identities.trb`, `mir_roots.trb`, `mir_passes.trb`, `mir_verifier.trb`, `mir_instructions.trb` | MIR model, semantic composite types and queries, reusable proofs, CFG/dominance, operation effects/liveness/root plans, rewrites, structural verification and instruction contracts. |
-| `mir_construction.trb`, `mir_builder.trb`, `mir_control.trb`, `mir_calls.trb`, `mir_logical.trb`, `mir_strings.trb`, `mir_arrays.trb`, `mir_records.trb` | Declaration/call contracts, block construction and publication of scalar, induction, mutable scalar/managed control/value, Array and nominal record operations, conversion/I/O and short-circuit MIR. |
+| `mir_construction.trb`, `mir_builder.trb`, `mir_control.trb`, `mir_calls.trb`, `mir_logical.trb`, `mir_strings.trb`, `mir_arrays.trb`, `mir_records.trb`, `mir_hashes.trb`, `mir_hash_inference.trb`, `mir_ranges.trb`, `mir_iteration_control.trb` | Declaration/call contracts, block construction and publication of scalar, induction, mutable scalar/managed control/value, Array, nominal record, Hash and Range operations, checked empty-Hash type constraints, live Array/streaming Range loops, conversion/I/O and short-circuit MIR. |
 | `qbe_context.trb`, `qbe_memory.trb`, `qbe_numeric.trb`, `qbe_constants.trb` | Backend context, memory operations, numeric lowering and static data. |
-| `qbe_mir.trb`, `qbe_control.trb`, `qbe_strings.trb`, `qbe_arrays.trb`, `qbe_records.trb`, `qbe_roots.trb` | Shared typed scalar/call adaptation, verified induction, general scalar/managed blocks and MIR-selected root publication. |
+| `qbe_mir.trb`, `qbe_control.trb`, `qbe_strings.trb`, `qbe_arrays.trb`, `qbe_records.trb`, `qbe_hashes.trb`, `qbe_ranges.trb`, `qbe_roots.trb` | Shared typed scalar/call adaptation, verified induction, general scalar/managed blocks and MIR-selected root publication. |
 | `hash_types.trb`, `hash_mir.trb`, `hash_checked.trb` | Hash types and value layout, operation plans, and their checked source bindings. |
 | `iteration_mir.trb`, `iteration_checked.trb` | Range construction and Array/Range iteration plans, structural validation, and checked source bindings. |
 | `qbe_output.trb`, `qbe_runtime.trb`, `hash_runtime.trb` | Ordered QBE output and runtime generation, including the Hash runtime. |
@@ -128,7 +128,10 @@ checker or emitter. Recursive body checking stays in `checked_program.trb`.
 The current iteration plans cover Array and `Range<Integer>` statement `each`
 and `each.with_index`. Checked Range construction retains the two Integer endpoint
 regions and exclusivity; the same source-proof module validates construction
-before ordinary lowering and REPL evaluation. See [Range coverage](native-range.md).
+before MIR construction and REPL evaluation. Admitted functions lower Hash values,
+Range values and iteration entirely from verified MIR; the backend does not
+read their source proofs. Direct lowering still serves functions with remaining
+unsupported intrinsic/result boundaries. See [Range coverage](native-range.md).
 
 The CLI/REPL under `compiler/cli/` consumes these modules but is outside this
 ordinary core closure. Snapshot recovery derives a temporary flattened source

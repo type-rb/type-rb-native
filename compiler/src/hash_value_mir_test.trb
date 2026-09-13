@@ -1,0 +1,193 @@
+import trb/std/process
+import trb/std/result
+import { check, emit_qbe } from compiler
+import { compiler_test_instruction_with_cell } from compiler_test
+import { control_test_output } from control_mir_test
+import { array_mir_test_read } from array_mir_test
+import { mir_hash_operation } from hash_mir
+import { logical_checked_source, logical_run_qbe } from logical_test
+import { MirRootPlan } from mir
+import { mir_instruction_effects } from mir_roots
+import { verify_mir } from mir_verifier
+import { string_starts_with } from path
+import { CompilerState } from state
+import { load_integer, load_string, store_integer, store_string } from storage
+import { describe, expect, test } from trb/std/test
+
+def hash_value_mir_state(): CompilerState
+	mut state := logical_checked_source("def main()\nmut table := {\"key\" => \"value\"}\ntable[\"key\"] = \"updated\"\nmerged := table.merge({\"next\" => \"other\"})\nputs(merged[\"next\"])\nend\n")
+	expect(check(state)).to_be_true()
+	expect(state.scalar_mir.functions.size()).to_equal(1)
+	return state
+end
+
+describe("Hash value MIR") do
+	test("resolves independent empty types across conditional and loop edges") do
+		mut state := logical_checked_source("def main()\nmut integers := {}\nmut words := {}\nmut i := 0\nwhile i < 2\nintegers[i] = i\ni += 1\nend\nif true\nwords[\"key\"] = \"value\"\nend\nputs(integers[1])\nputs(words[\"key\"])\nend\n")
+		expect(check(state)).to_be_true()
+		expect(state.scalar_mir.functions.size()).to_equal(1)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		mut integers := 0
+		mut words := 0
+		state.scalar_mir.values.each do |value|
+			if value.type_id >= 9
+				row := state.scalar_mir.types[value.type_id - 9]
+				expect(row.kind == 5).to_be_false()
+				if row.name == "Hash<Integer,Integer>"
+					integers += 1
+				elsif row.name == "Hash<String,String>"
+					words += 1
+				end
+			end
+		end
+		expect(integers > 3).to_be_true()
+		expect(words > 3).to_be_true()
+	end
+
+	test("resolves a checked unreachable first store through the live exit edge") do
+		mut state := logical_checked_source("def main()\nmut table := {}\n[1].each do |_value|\nbreak\ntable[1] = 2\nend\nputs(table.size())\nend\n")
+		expect(check(state)).to_be_true()
+		expect(state.scalar_mir.functions.size()).to_equal(1)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		mut allocations := 0
+		mut stores := 0
+		state.scalar_mir.instructions.each do |instruction|
+			if instruction.kind == 27
+				allocations += 1
+			elsif instruction.kind == 29
+				stores += 1
+			end
+		end
+		expect(allocations).to_equal(1)
+		expect(stores).to_equal(0)
+	end
+
+	test("rejects malformed capacity, owner, key, stored value and method identity") do
+		mut mutation := 0
+		while mutation < 5
+			mut state := hash_value_mir_state()
+			mut kind := 29
+			if mutation == 0
+				kind = 27
+			elsif mutation == 4
+				kind = 30
+			end
+			mut index := 0
+			while state.scalar_mir.instructions[index].kind != kind
+				index += 1
+			end
+			instruction := state.scalar_mir.instructions[index]
+			mut field := 4
+			mut value := 999999
+			if mutation == 0
+				value = 3
+			elsif mutation == 1
+				field = 2
+			elsif mutation == 2
+				field = 3
+			elsif mutation == 4
+				value = 8
+			end
+			state.scalar_mir.instructions[index] = compiler_test_instruction_with_cell(instruction, field, value)
+			expect(verify_mir(state.scalar_mir, true).empty?()).to_be_false()
+			mutation += 1
+		end
+	end
+
+	test("roots the copied Hash and source across merge update") do
+		mut state := hash_value_mir_state()
+		plan := state.scalar_mir.root_plans[0]
+		mut point := 0
+		while state.scalar_mir.instructions[plan.instructions[point]].kind != 30 || state.scalar_mir.instructions[plan.instructions[point]].payload != 9
+			point += 1
+		end
+		expect(mir_instruction_effects(state.scalar_mir, state.scalar_mir.instructions[plan.instructions[point]])).to_equal(11)
+		expect(plan.roots[point].size()).to_equal(2)
+		mut roots := plan.roots
+		roots[point] = []
+		state.scalar_mir.root_plans[0] = MirRootPlan.new(function_id: plan.function_id, instructions: plan.instructions, roots: roots, capacity: plan.capacity)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR live root plan differs")
+	end
+
+	test("executes erased Hash MIR with captured stores, Float values and forced collection") do
+		managed_mir_test_fixture("managed-hash-mir", 21)
+	end
+end
+
+# Verify ownership without source plans, arbitrary block storage and collection
+# before every allocating operation; shared by managed Hash and iteration cases.
+def managed_mir_test_fixture(name: String, minimum_hooks: Integer)
+	root := Process.environment("TYPE_RB_NATIVE_ROOT")
+	qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+	if root != nil
+		if qbe != nil
+			fixture := root + "/compiler/conformance/valid/" + name
+			mut state := logical_checked_source(array_mir_test_read(fixture + ".trb"))
+			checked := check(state)
+			if !checked
+				puts(name + ": " + load_string(state.diagnostic_messages, 0))
+			end
+			expect(checked).to_be_true()
+			expect(state.scalar_mir.functions.size()).to_equal(state.function_count[0])
+			before := control_test_output(emit_qbe(state))
+			state.scalar_mir.functions.each do |function|
+				mut token := load_integer(state.function_body_starts, function.id)
+				while token < load_integer(state.function_body_ends, function.id)
+					store_string(state.token_texts, token, "unavailable")
+					token += 1
+				end
+			end
+			mut index := 0
+			while index < state.hash_operations.size()
+				state.hash_operations[index] = mir_hash_operation(0, - 1, - 1, - 1, "", false, 0)
+				index += 1
+			end
+			state.iterations.each do |plan|
+				store_integer(state.iteration_origins, plan.origin, 0)
+				store_integer(state.iteration_origins, plan.body_finish, 0)
+			end
+			state.ranges.each do |plan|
+				store_integer(state.range_origins, plan.operator_origin, 0)
+			end
+			expect(control_test_output(emit_qbe(state))).to_equal(before)
+			state.scalar_mir.functions.each do |function|
+				mut left := function.block_start
+				mut right := left + function.block_count - 1
+				while left < right
+					saved := state.scalar_mir.blocks[left]
+					state.scalar_mir.blocks[left] = state.scalar_mir.blocks[right]
+					state.scalar_mir.blocks[right] = saved
+					left += 1
+					right -= 1
+				end
+			end
+			expect(verify_mir(state.scalar_mir, true)).to_equal("")
+			reordered := control_test_output(emit_qbe(state))
+			mut forced := ""
+			mut ordinary := false
+			mut hooks := 0
+			reordered.split("\n").each do |line|
+				if string_starts_with(line, "function ")
+					ordinary = line.include?("$trbnf")
+				end
+				if line == "}"
+					ordinary = false
+				end
+				allocates := line.include?("call $trbn_hash_new(") || line.include?("call $trbn_hash_set(") || line.include?("call $trbn_hash_copy(") || line.include?("call $trbn_hash_update(") || line.include?("call $trbn_hash_delete(") || line.include?("call $trbn_hash_entries(") || line.include?("call $trbn_gc_alloc(") || line.include?("call $trbn_array_new(") || line.include?("call $trbn_array_push_") || line.include?("call $trbn_string_concat(") || line.include?("call $trbn_integer_to_string(") || line.include?("call $trbnf")
+				if ordinary && allocates
+					forced += "\tcall $trbn_gc_collect(w 0)\n"
+					hooks += 1
+				end
+				forced += line + "\n"
+			end
+			expect(hooks >= minimum_hooks).to_be_true()
+			case logical_run_qbe(qbe, forced)
+			when Result::Ok(actual)
+				expect(actual).to_equal(array_mir_test_read(fixture + ".out"))
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+end

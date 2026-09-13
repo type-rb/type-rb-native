@@ -33,8 +33,17 @@ Array iteration continues to observe its live header before each element.
 origin, Integer endpoint types and exclusivity. `MirIteration` carries a checked
 source kind in addition to receiver/element identity and lexical body/parent
 ownership. Both retrieval and transfer consumers reject stale, missing or
-malformed plans. The QBE adapter consumes these facts; it does not infer range
-semantics from emitted instructions.
+malformed plans before MIR construction or REPL evaluation. `mir_ranges.trb`
+publishes typed construction and immutable component reads. `mir_iteration_control.trb`
+builds Array and Range traversal from ordinary blocks, arguments, comparisons and
+lexical transfers. Array headers are read on each iteration; Range bounds belong
+to the captured receiver. A separate continuation block advances the cursor for
+`next`, and Range termination avoids an extra increment at portable MAX.
+
+For admitted functions, QBE consumes only verified block/value MIR and shared root
+plans. Source regions and iteration plans are unnecessary at emission time.
+Functions with remaining intrinsic/result boundaries retain the checked direct
+adapter until their enclosing functions migrate.
 
 The first representation is a managed object with three scalar payload words:
 start, finish and exclusion bit. A precise descriptor marks no child pointers;

@@ -35,7 +35,7 @@
 | Default arguments refer to earlier arguments | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Value-producing if | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Conditional expression evaluates one branch | rejects valid input | rejects valid input | not reached | rejects valid input |
-| Postfix return and loop transfers | rejects valid input | rejects valid input | not reached | rejects as reference |
+| Postfix return and loop transfers | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Scalar case and case expression | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Record defaults and reordered explicit fields | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Reject unsupported record equality | rejects as reference | rejects as reference | not reached | rejects as reference |
@@ -46,6 +46,7 @@
 | Raw-value enum | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Transparent type alias | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Nominal newtype construction and projection | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Parameters following nested generic annotations | accepts | accepts | matches reference | matches reference |
 | Generic function application | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Generic record | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Literal-field union narrowing | rejects valid input | rejects valid input | not reached | rejects valid input |

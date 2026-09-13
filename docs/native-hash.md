@@ -35,10 +35,20 @@ String representation; additional Unicode APIs remain separate coverage work.
 classification. `hash_mir.trb` owns the named `MirHashOperation` carrier,
 mutation requirements and literal capacity planning. The checked frontend
 publishes one plan per operation; `hash_checked.trb` verifies source boundaries,
-operation kinds, key/value metadata and mutation permissions before lowering.
-The QBE adapter consumes these plans. Hash effects conservatively stop existing
-Array-header proofs where calls, allocation or mutation can intervene. This is
-a checked operation region, not complete block/value MIR admission.
+operation kinds, key/value metadata and mutation permissions before MIR construction
+or REPL evaluation. `mir_hashes.trb` publishes typed allocation, lookup, store and
+method instructions. `mir_hash_inference.trb` finalizes checked first-store types
+across CFG arguments and parameters before publication; raw MIR verification
+never infers or repairs malformed types. Independent empty bindings retain
+independent constraints.
+
+Admitted functions use `qbe_hashes.trb` without reading source operation plans.
+Stores retain the evaluated Hash and key across RHS effects. `merge` becomes an
+explicit copy followed by update, so the copied table is an SSA value with a
+verified live root at the allocating update. Shared MIR effects and liveness own
+managed roots for lookup results, updates, deletion and returned Arrays. Direct
+functions with remaining intrinsic/result boundaries still consume checked source
+plans; those paths remain until their enclosing functions migrate.
 
 The runtime uses open addressing with linear probing, a power-of-two capacity
 and a maximum occupied load of three quarters. A compact Hash header references

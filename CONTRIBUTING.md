@@ -56,6 +56,17 @@ Use the pinned reference compiler revision recorded in `TYPE_RB_REVISION` for
 checkpoint verification. A revision update is a reviewed compatibility change, not
 an incidental tool upgrade.
 
+Build a clean checkout of that revision with the declared executable version:
+
+```sh
+python3 tools/build-reference.py /path/to/type-rb /path/to/trb
+```
+
+This verifies the source identity and embeds the exact version in
+`compatibility/current.json`, including for shallow release-source checkouts.
+See the [release integration procedure](docs/type-rb-compatibility.md#release-integration)
+when advancing the reference after a TypeRB release.
+
 ## Cross-repository changes
 
 Keep the reference TypeRB repository independent of this project. When a

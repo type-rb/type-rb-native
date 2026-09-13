@@ -1,0 +1,68 @@
+import { CheckedValue, checked_mir_value, checked_value, mir_checked_value, scalar_mir_disable, scalar_mir_instruction, scalar_mir_value } from checked_values
+import { MirBlock, MirFunction, MirInstruction, MirModule } from mir
+import { mir_control_active, mir_control_prepare } from mir_control
+import { MirFlow, mir_flow_type, mir_value_available } from mir_flow
+import { mir_semantic_type_id, mir_semantic_type_name } from mir_types
+import { CheckedLocals, CompilerState } from state
+import { load_integer } from storage
+
+# 31 captures both endpoints and exclusivity; 32 reads an immutable component.
+# Iteration uses ordinary verified blocks and scalar comparisons, not source spans.
+def mir_checked_range_new(mut state: CompilerState, mut locals: CheckedLocals, first: CheckedValue, last: CheckedValue, exclusive: Integer, origin: Integer): CheckedValue
+	mir_control_prepare(state, locals)
+	left := checked_mir_value(first)
+	right := checked_mir_value(last)
+	if left < 0 || right < 0
+		scalar_mir_disable(locals)
+	end
+	if !mir_control_active(locals)
+		return checked_value("Range<Integer>", 0, origin, 0)
+	end
+	type_id := mir_semantic_type_id(state.scalar_mir, "Range<Integer>")
+	result := scalar_mir_value(state, locals, type_id, origin)
+	scalar_mir_instruction(state, locals, 31, result, left, right, exclusive, - 1, load_integer(state.token_lines, origin))
+	return mir_checked_value("Range<Integer>", result, origin, 0)
+end
+
+def mir_checked_range_field(mut state: CompilerState, mut locals: CheckedLocals, owner: Integer, field: Integer, origin: Integer): CheckedValue
+	mut type_name := "Integer"
+	mut type_id := 1
+	if field == 2
+		type_name = "Boolean"
+		type_id = 2
+	end
+	if owner < 0
+		scalar_mir_disable(locals)
+	end
+	if !mir_control_active(locals)
+		return checked_value(type_name, 0, origin, 0)
+	end
+	result := scalar_mir_value(state, locals, type_id, origin)
+	scalar_mir_instruction(state, locals, 32, result, owner, - 1, field, - 1, load_integer(state.token_lines, origin))
+	return mir_checked_value(type_name, result, origin, 0)
+end
+
+def mir_range_instruction_error(flow: MirFlow, native_module: MirModule, function: MirFunction, block: MirBlock, index: Integer, instruction: MirInstruction): String
+	result := mir_flow_type(flow, instruction.result)
+	first := mir_flow_type(flow, instruction.first)
+	if instruction.failure != - 1 || !mir_value_available(flow, block, index, instruction.first)
+		return "MIR Range owner or endpoint is undefined"
+	end
+	if instruction.kind == 31
+		if first != 1 || mir_flow_type(flow, instruction.second) != 1 || !mir_value_available(flow, block, index, instruction.second) || instruction.payload < 0 || instruction.payload > 1 || mir_semantic_type_name(native_module, result) != "Range<Integer>"
+			return "MIR Range construction type or shape differs"
+		end
+		return ""
+	end
+	if mir_semantic_type_name(native_module, first) != "Range<Integer>" || instruction.second != - 1 || instruction.payload < 0 || instruction.payload > 2
+		return "MIR Range component shape differs"
+	end
+	mut expected := 1
+	if instruction.payload == 2
+		expected = 2
+	end
+	if result != expected
+		return "MIR Range component type differs"
+	end
+	return ""
+end

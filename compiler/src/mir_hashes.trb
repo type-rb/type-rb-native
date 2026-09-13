@@ -1,0 +1,175 @@
+import { CheckedValue, checked_bound_value, checked_mir_value, checked_value, mir_checked_value, scalar_mir_convert_float, scalar_mir_disable, scalar_mir_instruction, scalar_mir_value } from checked_values
+import { mir_hash_capacity } from hash_mir
+import { MirBlock, MirFunction, MirIndexedTarget, MirInstruction, MirModule } from mir
+import { mir_control_active, mir_control_prepare } from mir_control
+import { MirFlow, mir_flow_type, mir_value_available } from mir_flow
+import { mir_element_type, mir_hash_key_type, mir_hash_kind, mir_hash_value_type, mir_semantic_type_id } from mir_types
+import { CheckedLocals, CompilerState } from state
+import { load_integer } from storage
+
+# 27 allocates a Hash with a verified capacity hint; 28 is required lookup;
+# 29 stores payload into owner[key]; 30 carries the existing method identity.
+# A store captures the owner and key before checking its RHS, never a slot address.
+def mir_checked_hash_operation(mut state: CompilerState, mut locals: CheckedLocals, kind: Integer, first: Integer, second: Integer, payload: Integer, type_name: String, origin: Integer): CheckedValue
+	mir_control_prepare(state, locals)
+	type_id := mir_semantic_type_id(state.scalar_mir, type_name)
+	if (type_id == 0 && type_name != "Void") || (kind != 27 && first < 0) || ((kind == 28 || kind == 29) && second < 0) || (kind == 29 && payload < 0)
+		scalar_mir_disable(locals)
+	end
+	mut mutable := 0
+	if kind == 27
+		mutable = 1
+	end
+	if !mir_control_active(locals)
+		return checked_value(type_name, 0, origin, mutable)
+	end
+	mut result :=- 1
+	if type_name != "Void"
+		result = scalar_mir_value(state, locals, type_id, origin)
+	end
+	scalar_mir_instruction(state, locals, kind, result, first, second, payload, - 1, load_integer(state.token_lines, origin))
+	return mir_checked_value(type_name, result, origin, mutable)
+end
+
+def mir_checked_hash_literal(mut state: CompilerState, mut locals: CheckedLocals, type_name: String, value_type: String, origin: Integer, keys: Array<Integer>, values: Array<CheckedValue>): CheckedValue
+	mut operands: Array<Integer> := []
+	values.each do |value|
+		mut operand := value
+		if value_type == "Float" && value.type_name == "Integer"
+			operand = scalar_mir_convert_float(state, locals, value, origin)
+		end
+		operands.push(checked_mir_value(operand))
+	end
+	table := mir_checked_hash_operation(state, locals, 27, - 1, - 1, mir_hash_capacity(keys.size()), type_name, origin)
+	mut index := 0
+	while index < keys.size()
+		mir_checked_hash_operation(state, locals, 29, checked_mir_value(table), keys[index], operands[index], "Void", origin)
+		index += 1
+	end
+	return table
+end
+
+def mir_checked_hash_index(mut state: CompilerState, mut locals: CheckedLocals, receiver: CheckedValue, key: CheckedValue, type_name: String, origin: Integer, assignment: Boolean): CheckedValue
+	owner := checked_mir_value(receiver)
+	index := checked_mir_value(key)
+	if assignment
+		locals.mir_targets.push(MirIndexedTarget.new(origin: origin, owner: owner, index: index))
+		return checked_bound_value(type_name, 0, origin, receiver.mutable, receiver.binding)
+	end
+	value := mir_checked_hash_operation(state, locals, 28, owner, index, 0, type_name, origin)
+	return checked_bound_value(type_name, value.category, origin, receiver.mutable, receiver.binding)
+end
+
+def mir_checked_hash_store(mut state: CompilerState, mut locals: CheckedLocals, target: CheckedValue, value: CheckedValue, type_name: String)
+	mut index := locals.mir_targets.size() - 1
+	while index >= 0
+		row := locals.mir_targets[index]
+		if row.origin == target.origin
+			if mir_control_active(locals) && row.owner >= 0 && mir_hash_kind(state.scalar_mir, locals.mir_value_rows[row.owner].type_id) == 5
+				locals.mir_hash_refinements.push(row.owner)
+				locals.mir_hash_refinements.push(mir_semantic_type_id(state.scalar_mir, type_name))
+			end
+			mir_checked_hash_operation(state, locals, 29, row.owner, row.index, checked_mir_value(value), "Void", target.origin)
+			return
+		end
+		index -= 1
+	end
+	scalar_mir_disable(locals)
+end
+
+def mir_checked_hash_method(mut state: CompilerState, mut locals: CheckedLocals, receiver: CheckedValue, argument: Integer, method: Integer, result_type: String, origin: Integer): CheckedValue
+	if (method == 5 || method == 6 || method == 8 || method == 9 || method == 13) && argument < 0
+		scalar_mir_disable(locals)
+	end
+	owner := checked_mir_value(receiver)
+	if method == 8
+		# The copied table is an explicit SSA value, rooted across update's
+		# allocations. Both authored operands have already been evaluated.
+		copy := mir_checked_hash_operation(state, locals, 30, owner, - 1, 7, result_type, origin)
+		mir_checked_hash_operation(state, locals, 30, checked_mir_value(copy), argument, 9, "Void", origin)
+		return copy
+	end
+	return mir_checked_hash_operation(state, locals, 30, owner, argument, method, result_type, origin)
+end
+
+def mir_hash_instruction_error(flow: MirFlow, native_module: MirModule, function: MirFunction, block: MirBlock, index: Integer, instruction: MirInstruction): String
+	kind := instruction.kind
+	result := mir_flow_type(flow, instruction.result)
+	if instruction.failure != - 1
+		return "MIR Hash failure shape differs"
+	end
+	if kind == 27
+		capacity := instruction.payload
+		if mir_hash_kind(native_module, result) == 0 || instruction.first != - 1 || instruction.second != - 1 || capacity < 0 || capacity > 9007199254740991
+			return "MIR Hash construction shape differs"
+		end
+		if mir_hash_kind(native_module, result) == 5 && capacity != 0
+			return "MIR empty Hash capacity differs"
+		end
+		mut reduced := capacity
+		while reduced > 8 && reduced % 2 == 0
+			reduced /= 2
+		end
+		if reduced != 0 && reduced != 8
+			return "MIR Hash capacity is invalid"
+		end
+		return ""
+	end
+	if !mir_value_available(flow, block, index, instruction.first)
+		return "MIR Hash owner is undefined"
+	end
+	owner := mir_flow_type(flow, instruction.first)
+	if mir_hash_kind(native_module, owner) == 0
+		return "MIR Hash owner type differs"
+	end
+	method := instruction.payload
+	if kind == 30 && (method == 4 || method == 12)
+		mut expected := 1
+		if method == 12
+			expected = 2
+		end
+		if instruction.second == - 1 && result == expected
+			return ""
+		end
+		return "MIR Hash size result differs"
+	end
+	key := mir_hash_key_type(native_module, owner)
+	value := mir_hash_value_type(native_module, owner)
+	if key == 0 || value == 0
+		return "MIR Hash operation needs concrete key and value types"
+	end
+	if kind == 28 || kind == 29 || (kind == 30 && (method == 5 || method == 6 || method == 9 || method == 13))
+		if !mir_value_available(flow, block, index, instruction.second)
+			return "MIR Hash operand is undefined"
+		end
+		mut expected := key
+		if kind == 30 && method == 9
+			expected = owner
+		end
+		if mir_flow_type(flow, instruction.second) != expected
+			return "MIR Hash operand type differs"
+		end
+	elsif instruction.second != - 1
+		return "MIR Hash unused operand differs"
+	end
+	if kind == 28
+		if method == 0 && result == value
+			return ""
+		end
+	elsif kind == 29
+		if !mir_value_available(flow, block, index, instruction.payload)
+			return "MIR Hash stored value is undefined"
+		end
+		if instruction.result == - 1 && mir_flow_type(flow, instruction.payload) == value
+			return ""
+		end
+	elsif kind == 30
+		if (method == 5 && result == 2) || ((method == 6 || method == 13) && result == value) || (method == 7 && result == owner) || (method == 9 && instruction.result == - 1)
+			return ""
+		end
+		if (method == 10 && mir_element_type(native_module, result) == key) || (method == 11 && mir_element_type(native_module, result) == value)
+			return ""
+		end
+	end
+	return "MIR Hash method or result differs"
+end
