@@ -326,8 +326,12 @@ implementation choices rather than new language promises.
 The ordinary self-hosted emitter reuses that collector for its supported
 dynamic Strings, Arrays, and reference-containing records. Its current root
 representation is one exact managed-reference stack with per-function
-watermarks, loop compaction, alias roots, and managed-return preservation. It
-does not conservatively scan the machine stack. Fixed descriptors,
+watermarks, loop compaction, alias roots, and managed-return preservation.
+Managed values loaded from containers retain independent roots across later
+allocation: replacing an element may remove the owner's last reference to a
+still-used alias. The retained direct path omits those publications only when
+its function has no following collection point; general MIR supplies explicit
+live-before sets. The collector does not conservatively scan the machine stack. Fixed descriptors,
 Array-backing reclamation, and deterministic pacing are therefore shared by
 compiler-generated applications rather than being confined to the earlier
 snapshot adapter. Versioned statistics remain an internal

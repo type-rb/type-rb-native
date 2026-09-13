@@ -121,15 +121,21 @@ def emit_root_value(
 	return
 end
 
-def note_managed_alias(
+def emit_managed_alias_root(
 		mut context: QbeEmitContext,
+		mut output: QbeOutput,
 		type_name: String,
+		operand: String,
 	)
 	if native_managed_type(type_name)
-		# The owner remains reachable through its caller, allocation, or managed
-		# local root until the alias is consumed. Loop compaction transfers an
-		# alias retained as a local, so a duplicate temporary root is unnecessary.
+		# A later mutation can remove the owner's last reference to this value.
+		# Retain loaded aliases until loop compaction transfers live locals.
+		# Functions without a later safe point omit this publication with the
+		# other temporary-root operations in their epilogue assembly.
 		note_gc_state(context, false)
+		qbe_output_line(output, "{")
+		qbe_output_line(output, "\tcall $trbn_gc_temp_push(l " + operand + ")")
+		qbe_output_line(output, "}")
 	end
 	return
 end
