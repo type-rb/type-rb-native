@@ -1,6 +1,6 @@
 import { mir_semantic_type_id, mir_semantic_value_type } from mir_types
 import { CheckedValue, checked_mir_value, mir_add_value, scalar_mir_disable } from checked_values
-import { MirCall, MirControlLoop, MirFunction, mir_instruction_with_payload } from mir
+import { MirCall, MirControlLoop, MirFunction, MirInstruction, mir_instruction_with_payload } from mir
 import { mir_block } from mir_construction
 import { CheckedLocals, CompilerState, local_find } from state
 import { load_integer, load_string, store_integer } from storage
@@ -258,16 +258,18 @@ def mir_control_commit(mut state: CompilerState, function_index: Integer, locals
 	locals.mir_literal_texts.each do |value|
 		native_module.literal_texts.push(value)
 	end
+	local_arguments := argument_base + parameter_count
 	locals.mir_instructions.each do |instruction|
 		if instruction.kind == 6 || instruction.kind == 12
 			native_module.instructions.push(mir_instruction_with_payload(instruction, instruction.payload + literal_base))
+		elsif instruction.kind == 25
+			native_module.instructions.push(MirInstruction.new(kind: 25, result: instruction.result, first: instruction.first + local_arguments, second: instruction.second, payload: instruction.payload, failure: instruction.failure, source_id: instruction.source_id, line: instruction.line))
 		elsif instruction.kind == 11
 			native_module.instructions.push(mir_instruction_with_payload(instruction, instruction.payload + call_base))
 		else
 			native_module.instructions.push(instruction)
 		end
 	end
-	local_arguments := argument_base + parameter_count
 	locals.mir_calls.each do |call|
 		native_module.calls.push(MirCall.new(callee: call.callee, argument_start: call.argument_start + local_arguments, argument_count: call.argument_count, effects: call.effects))
 	end

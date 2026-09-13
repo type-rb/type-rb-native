@@ -1,3 +1,4 @@
+import { emit_mir_record_instruction } from qbe_records
 import { emit_mir_array_instruction } from qbe_arrays
 import { mir_semantic_type_name } from mir_types
 import { integer_string } from literals
@@ -37,15 +38,18 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 	roots := state.scalar_mir.root_plans[mir_function_index(state.scalar_mir, function_index)]
 	mut operands: Array<String> := []
 	mut types: Array<String> := []
+	mut value_types: Array<Integer> := []
 	mut facts: Array<Integer> := []
 	state.scalar_mir.values.each do |value|
 		if value.function_id == function_index
 			while operands.size() <= value.id
 				operands.push("")
 				types.push("")
+				value_types.push(0)
 				facts.push(0)
 			end
 			operands[value.id] = "%mir_value" + integer_string(value.id)
+			value_types[value.id] = value.type_id
 			types[value.id] = mir_semantic_type_name(state.scalar_mir, value.type_id)
 		end
 	end
@@ -71,10 +75,12 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 				point += 1
 			end
 			mut value := emitted_value("", "Void", 0, "", "")
-			if instruction.kind >= 19 && instruction.kind <= 24
-				value = emit_mir_array_instruction(state, function_index, instruction, operands, context, output)
+			if instruction.kind == 25 || instruction.kind == 26
+				value = emit_mir_record_instruction(state, value_types, instruction, operands, context, output)
+			elsif instruction.kind >= 19 && instruction.kind <= 24
+				value = emit_mir_array_instruction(state, value_types, instruction, operands, context, output)
 			elsif instruction.kind >= 12 && instruction.kind <= 18
-				value = emit_mir_string_instruction(state, function_index, instruction, operands, symbols, context, output)
+				value = emit_mir_string_instruction(state, value_types, instruction, operands, symbols, context, output)
 			else
 				value = emit_mir_scalar_instruction(state, function_index, instruction, operands, types, facts, context, output, false, false)
 			end

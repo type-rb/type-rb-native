@@ -1,7 +1,11 @@
+import { hash_key_type, hash_type, hash_value_type } from hash_types
+import { integer_string } from literals
 import { string_starts_with } from path
-import { MirModule, MirType, mir_array_element_type, mir_control_value_type, mir_type_id, mir_type_name } from mir
+import { MirField, MirModule, MirRecord, MirType, mir_array_element_type, mir_control_value_type, mir_origin_valid, mir_table_span_valid, mir_type_id, mir_type_name } from mir
+import { CompilerState } from state
+import { load_integer, load_string } from storage
 
-# Identity lookup never collapses a managed value to an address/word type.
+# Semantic identity is independent of pointer layout and authored import aliases.
 def mir_semantic_type_name(native_module: MirModule, type_id: Integer): String
 	if type_id < 9
 		return mir_type_name(type_id)
@@ -39,7 +43,22 @@ def mir_element_type(native_module: MirModule, type_id: Integer): Integer
 	if type_id - 9 >= native_module.types.size()
 		return 0
 	end
-	return native_module.types[type_id - 9].element
+	row := native_module.types[type_id - 9]
+	if row.kind != 1
+		return 0
+	end
+	return row.element
+end
+
+def mir_record_id(native_module: MirModule, type_id: Integer): Integer
+	if type_id < 9 || type_id - 9 >= native_module.types.size()
+		return - 1
+	end
+	row := native_module.types[type_id - 9]
+	if row.kind != 2
+		return - 1
+	end
+	return row.declaration
 end
 
 def mir_semantic_type_id(mut native_module: MirModule, name: String): Integer
@@ -54,34 +73,153 @@ def mir_semantic_type_id(mut native_module: MirModule, name: String): Integer
 		end
 		index += 1
 	end
-	if !string_starts_with(name, "Array<") || name.size() < 8 || name[name.size() - 1] != ">"
+	mut kind := 1
+	mut element := 0
+	mut key := 0
+	if name == "Range<Integer>"
+		kind = 4
+	elsif name == "Hash"
+		kind = 5
+	elsif hash_key_type(name) != ""
+		kind = 3
+		key = mir_type_id(hash_key_type(name))
+		element = mir_semantic_type_id(native_module, hash_value_type(name))
+	elsif string_starts_with(name, "Array<") && name.size() >= 8 && name[name.size() - 1] == ">"
+		mut inner := ""
+		index = 6
+		while index < name.size() - 1
+			inner += name[index]
+			index += 1
+		end
+		element = mir_semantic_type_id(native_module, inner)
+	else
 		return 0
 	end
-	mut inner := ""
-	index = 6
-	while index < name.size() - 1
-		inner += name[index]
-		index += 1
-	end
-	element := mir_semantic_type_id(native_module, inner)
-	if !mir_semantic_value_type(native_module, element)
+	if kind <= 3 && !mir_semantic_value_type(native_module, element)
 		return 0
 	end
 	id := native_module.types.size() + 9
-	native_module.types.push(MirType.new(name: name, element: element))
+	native_module.types.push(MirType.new(kind: kind, name: name, element: element, key: key, declaration: - 1))
 	return id
 end
 
-# Element references point backwards: invalid or cyclic graphs are rejected
-# before any consumer reads a type row. Names must encode that exact identity.
+# Predeclare every nominal shell before resolving fields. Container edges point
+# backwards, while fields may close a recursive graph through those shells.
+def mir_declare_types(mut state: CompilerState)
+	mut native_module := state.scalar_mir
+	mut count := state.module_count[0]
+	if count == 0
+		count = 1
+	end
+	native_module.source_count[0] = count
+	mut declaration := 0
+	while declaration < state.record_count[0]
+		id := native_module.types.size() + 9
+		native_module.types.push(MirType.new(kind: 2, name: "Record#" + integer_string(declaration), element: 0, key: 0, declaration: declaration))
+		native_module.records.push(MirRecord.new(declaration: declaration, type_id: id, name: load_string(state.record_names, declaration), source_id: load_integer(state.record_modules, declaration), line: load_integer(state.record_lines, declaration), field_start: load_integer(state.record_field_starts, declaration), field_count: load_integer(state.record_field_counts, declaration)))
+		declaration += 1
+	end
+	declaration = 0
+	while declaration < native_module.records.size()
+		definition := native_module.records[declaration]
+		mut field := definition.field_start
+		while field < definition.field_start + definition.field_count
+			type_id := mir_semantic_type_id(native_module, load_string(state.field_types, field))
+			native_module.fields.push(MirField.new(owner: declaration, name: load_string(state.field_names, field), type_id: type_id, source_id: definition.source_id, line: load_integer(state.field_lines, field)))
+			field += 1
+		end
+		declaration += 1
+	end
+end
+
+def mir_record_types_error(native_module: MirModule): String
+	mut declaration := 0
+	mut field := 0
+	while declaration < native_module.records.size()
+		definition := native_module.records[declaration]
+		if definition.declaration != declaration || mir_record_id(native_module, definition.type_id) != declaration || definition.name == ""
+			return "MIR nominal declaration identity differs"
+		end
+		if !mir_origin_valid(definition.source_id, definition.line, native_module.source_count[0])
+			return "MIR nominal declaration origin is invalid"
+		end
+		if definition.field_start != field || !mir_table_span_valid(definition.field_start, definition.field_count, native_module.fields.size())
+			return "MIR nominal field span differs"
+		end
+		mut previous := 0
+		while previous < declaration
+			other := native_module.records[previous]
+			if other.source_id == definition.source_id && other.name == definition.name
+				return "MIR nominal declaration is duplicated"
+			end
+			previous += 1
+		end
+		while field < definition.field_start + definition.field_count
+			row := native_module.fields[field]
+			if row.owner != declaration || row.name == "" || !mir_semantic_value_type(native_module, row.type_id)
+				return "MIR nominal field identity or type differs"
+			end
+			if row.source_id != definition.source_id || !mir_origin_valid(row.source_id, row.line, native_module.source_count[0])
+				return "MIR nominal field origin is invalid"
+			end
+			previous = definition.field_start
+			while previous < field
+				if native_module.fields[previous].name == row.name
+					return "MIR nominal field is duplicated"
+				end
+				previous += 1
+			end
+			field += 1
+		end
+		declaration += 1
+	end
+	if field != native_module.fields.size()
+		return "MIR nominal field is unowned"
+	end
+	return ""
+end
+
+# Reject forged identities before operations, GC descriptors or roots consume
+# the table. Only nominal field references permit recursive type graphs.
 def mir_types_error(native_module: MirModule): String
 	mut index := 0
 	while index < native_module.types.size()
 		row := native_module.types[index]
-		if row.element >= index + 9 || !mir_semantic_value_type(native_module, row.element)
-			return "MIR composite element type is invalid"
+		if row.kind < 1 || row.kind > 5
+			return "MIR composite kind is invalid"
 		end
-		if row.name != "Array<" + mir_semantic_type_name(native_module, row.element) + ">" || mir_type_id(row.name) != 0
+		if row.kind == 1 || row.kind == 3
+			if row.element >= index + 9 || !mir_semantic_value_type(native_module, row.element)
+				return "MIR composite element type is invalid"
+			end
+		elsif row.element != 0
+			return "MIR composite element shape differs"
+		end
+		mut expected := ""
+		if row.kind == 1
+			expected = "Array<" + mir_semantic_type_name(native_module, row.element) + ">"
+		elsif row.kind == 2
+			if row.declaration < 0 || row.declaration >= native_module.records.size()
+				return "MIR nominal declaration is missing"
+			end
+			if native_module.records[row.declaration].type_id != index + 9
+				return "MIR nominal type identity differs"
+			end
+			expected = "Record#" + integer_string(row.declaration)
+		elsif row.kind == 3
+			if row.key != 1 && row.key != 8
+				return "MIR Hash key type differs"
+			end
+			expected = hash_type(mir_semantic_type_name(native_module, row.key), mir_semantic_type_name(native_module, row.element))
+		elsif row.kind == 4
+			expected = "Range<Integer>"
+		else
+			expected = "Hash"
+		end
+		if (row.kind != 2 && row.declaration != - 1) || (row.kind != 3 && row.key != 0)
+			return "MIR composite identity shape differs"
+		end
+		if row.name != expected || mir_type_id(row.name) != 0
 			return "MIR composite type identity differs"
 		end
 		mut previous := 0
@@ -93,5 +231,13 @@ def mir_types_error(native_module: MirModule): String
 		end
 		index += 1
 	end
-	return ""
+	return mir_record_types_error(native_module)
+end
+
+# A backend's function-local operand table comes from verified value identities.
+def mir_operand_type(types: Array<Integer>, value: Integer): Integer
+	if value < 0 || value >= types.size()
+		return 0
+	end
+	return types[value]
 end

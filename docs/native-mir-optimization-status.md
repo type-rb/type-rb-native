@@ -13,9 +13,10 @@ measurements provide intermediate feedback.
 | Typed scalar values | Integer, Boolean and Float literals, unary/binary operations and numeric conversion have explicit operands, result types, origins and failure edges. Straight-line leaves retain bounded inlining and verified Integer range guards. |
 | Scalar control | Mutable scalar locals and parameters, nested `if`/`elsif`/`else`, `while`, `break`/`next`, early returns and continuing joins publish typed blocks and live-value arguments. Loop transfers carry only the enclosing environment; branch/body locals remain lexical. QBE consumes admitted bodies without rereading their source. |
 | Short-circuit expressions | Scalar `&&` and `||` publish conditional RHS blocks and Boolean result joins, including nested call arguments and loop predicates. Dominance preserves earlier expression temporaries; skipped RHS calls and traps stay unexecuted. |
-| Calls and declarations | Declaration identities, parameter types/mutability and return types are captured before body checking. Ordinary calls with scalar/String/Array arguments and scalar/String/Array/Void results retain explicit arguments and conservative allocation, mutation, I/O and failure effects, including forward, recursive and direct-path callees. |
+| Calls and declarations | Declaration identities, parameter types/mutability and return types are captured before body checking. Ordinary calls with supported scalar and managed arguments/results, including nominal records and Hash/Range carriers, retain explicit arguments and conservative allocation, mutation, I/O and failure effects, including forward, recursive and direct-path callees. |
 | Managed Strings and roots | String literals, concatenation, equality, size, indexing, Integer/String/Float conversions and String/Boolean output use typed operations. Integer output explicitly converts first. Managed parameters, rebinding, returns and control joins use the same value/block path. MIR derives live-before roots at allocating operations and ordinary calls; verification recomputes the complete plan. |
-| Managed Arrays | Scalar/String element Arrays and their supported nesting retain semantic element identity. Literals, live size, checked indexing, assignment, compound assignment and push use typed operations with allocation/mutation/failure effects. Admitted parameters, returns, rebinding and loop/branch values share managed liveness. Assignment captures its checked logical position before RHS evaluation, then reloads storage for the final store. |
+| Managed Arrays | Supported scalar and managed element Arrays, including nominal records and their nesting, retain semantic element identity. Literals, live size, checked indexing, assignment, compound assignment and push use typed operations with allocation/mutation/failure effects. Admitted parameters, returns, rebinding and loop/branch values share managed liveness. Assignment captures its checked logical position before RHS evaluation, then reloads storage for the final store. |
+| Nominal records | Declaration identity, authored names/origins and ordered field types live in MIR. Construction consumes an ordered operand span with allocating/failing effects; projections verify nominal owner and result type. Recursive records through containers retain their shells and field references. GC descriptors consume this verified table. |
 | Numeric Array induction | Selected zero-based traversal and Integer/Float reductions retain verified induction, address and accumulator relationships. The adapter consumes the established plan. |
 | Array effects and headers | Ordered regions retain bindings, aliases, accesses, scope boundaries and conservative effect barriers. Verified function/loop plans select stable headers; element checks remain unless a separate induction proof permits removal. |
 | Hash | Checked typed operation plans retain key/value layout, operands' source bindings and effects. They are still a projection alongside general control/value MIR. |
@@ -23,14 +24,14 @@ measurements provide intermediate feedback.
 | Assignment and Boolean operations | Checked plans own assignment evaluation order and binary/logical result semantics; remaining direct adaptation still consumes some source-indexed plans. |
 
 Function adapter kinds explicitly distinguish scalar leaves, verified induction
-and general scalar/String/Array control. Verification checks their operation and shape
+and general scalar and managed-value control. Verification checks their operation and shape
 contracts as well as table bounds, value definitions, types, argument availability,
 control targets, declaration/call/return types, conservative call effects and source origins. Block arguments are parallel assignments;
 QBE adaptation captures edge values before overwriting destinations. Instruction
 results retain stable MIR operand names even when block storage is reordered.
 
 `mir_flow.trb` derives reachability, reverse postorder, immediate dominators and
-value definition sites after structural/identity validation. Function parameters
+value definition sites and a function-local Hash type index after structural/identity validation. Type indexes are rebuilt from current rows, so later raw-MIR edits cannot reuse stale types. Function parameters
 are available everywhere; reachable blocks may use dominating definitions, while
 unreachable blocks may only use function parameters and their own earlier
 values. Same-block instruction uses must follow their definitions. Sparse
@@ -81,10 +82,12 @@ functions. Malformed element graphs, Array operations and omitted roots reject.
   checks typed instruction contracts.
 - `checked_values.trb`, `mir_construction.trb`, `mir_builder.trb`, `mir_control.trb`:
   checked value projection, block construction and function publication.
+- `mir_identities.trb`: fresh sparse function/value identities and definition counts, avoiding whole-module pairwise comparisons.
 - `mir_types.trb`: canonical composite type identities and shared managed/element
-  classification, with acyclic, unique, structurally verified Array types.
+  classification, with unique container identities and predeclared nominal shells for recursive record fields.
 - `mir_arrays.trb`: typed Array construction, selection, load/store and push
   contracts; no backend address is retained across a right-hand side.
+- `mir_records.trb`, `qbe_records.trb`: nominal construction/projection contracts and their ABI adaptation. Readonly field bindings remain distinct from SSA IDs and mutable projected values.
 - `qbe_arrays.trb`: ABI adaptation of verified Array operations.
 - `mir_calls.trb`: declaration capture, checked calls and their verification.
 - `mir_strings.trb`: String, conversion and output construction/contracts.
@@ -104,14 +107,34 @@ The [architecture map](architecture.md) records the complete ordinary closure.
 Recovery uses an exact module/import inventory and the same source bodies; no
 extracted implementation is copied or kept behind an old-name wrapper.
 
+## Nominal record validation
+
+`record_mir_test.trb` rejects forged nominal identities, field owners/types and
+origins, wrong constructor arguments and missing initializer roots. Same-shaped
+records remain distinct. Grouping must retain readonly field bindings while
+projected mutable Array values remain usable. The `managed-record-mir` fixture
+covers recursive and cyclic record Arrays, ordered initializer calls, Float
+conversion, branches, retained aliases and allocation pressure. Its test erases
+admitted source bodies and the old checked field metadata, requires identical
+QBE, reorders blocks, then runs with collection before allocating operations.
+
+Constructors evaluate authored fields once in declaration order and publish a
+fully initialized object from explicit MIR operands. Managed initializers remain
+live across later initializers and the allocation itself; no partially initialized
+record escapes the operation. The backend's function-local operand types and the
+verifier's Hash index avoid repeating whole-module type searches as admission
+grows. These are derived lookup structures, not unverified optimization facts.
+
 ## Remaining work
 
-Hash and nominal record arguments/results and values, Arrays containing those
-values, and Array/Range iteration still need the unified control/value route.
+Hash construction and receiver operations, empty-Hash inference publication,
+and Array/Range iteration still need the unified control/value route. Nominal
+record operations and typed managed carriers now use it; a function with an
+unmigrated operation may still require direct emission.
 The retained single-parameter numeric induction attempt is still separate;
 functions outside its narrow accepted shape may remain direct. Array header/range
 optimizations and bounded scalar-call inlining must move to the shared general
-passes before those old owners can retire. Scalar/String/Array managed liveness
+passes before those old owners can retire. Managed-value liveness
 establishes the root path for that work. Runtime/host intrinsics retain their
 existing adapters. Ordinary call effects remain conservative barriers; no interprocedural
 no-allocation property is inferred. Managed liveness is intraprocedural. Their current checked operations and conservative GC protections remain

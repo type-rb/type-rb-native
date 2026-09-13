@@ -1,3 +1,4 @@
+import { compiler_recovery_mutations } from compiler_recovery_mutations
 import { compiler_recovery_layout } from compiler_recovery_layout
 import { RecoveryCompilerSources, compiler_source_directory, compiler_source_has_import, compiler_source_path, flatten_compiler_recovery_source, read_compiler_recovery_sources, read_required_compiler_source } from compiler_recovery_source
 import trb/std/result
@@ -22,6 +23,24 @@ describe("Compiler recovery source closure") do
 			when Result::Ok(sources)
 				expect(sources.names.size()).to_equal(compiler_recovery_layout().size())
 				expect(compiler_source_has_import(sources.flattened)).to_be_false()
+				# Catch stale mutation inventories before the expensive generation chain.
+				mutations := compiler_recovery_mutations()
+				expect(mutations.size()).to_equal(sources.names.size() - 1)
+				sources.names.each.with_index do |name, index|
+					if name != "compiler"
+						mut matches := 0
+						mutations.each do |mutation|
+							if mutation[0] == name
+								expect(mutation.size()).to_equal(3)
+								expect(mutation[1].empty?()).to_be_false()
+								expect(mutation[1] == mutation[2]).to_be_false()
+								expect(sources.contents[index].split(mutation[1]).size()).to_equal(2)
+								matches += 1
+							end
+						end
+						expect(matches).to_equal(1)
+					end
+				end
 			when Result::Err(message)
 				puts(message)
 				expect(false).to_be_true()

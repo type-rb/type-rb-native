@@ -1364,7 +1364,7 @@ describe("Native TypeRB frontend") do
 			expect(true).to_be_true()
 		else
 			base := root + "/compiler/src/"
-			names := ["compiler", "lexer", "literals", "mir", "iteration_mir", "path", "hash_types", "hash_mir", "storage", "state", "parser", "checked_values", "resolution", "hash_checked", "iteration_checked", "mir_analysis", "mir_construction", "mir_control", "mir_calls", "mir_flow", "mir_logical", "mir_instructions", "mir_strings", "mir_roots", "mir_types", "mir_arrays", "qbe_arrays", "qbe_roots", "qbe_strings", "checked_types", "checked_program", "qbe_output", "hash_runtime", "mir_builder", "mir_passes", "mir_verifier", "project_config", "qbe_constants", "qbe_context", "qbe_memory", "qbe_numeric", "qbe_mir", "qbe_control", "qbe_runtime"]
+			names := ["compiler", "lexer", "literals", "mir", "iteration_mir", "path", "hash_types", "hash_mir", "storage", "state", "parser", "checked_values", "resolution", "hash_checked", "iteration_checked", "mir_analysis", "mir_construction", "mir_control", "mir_calls", "mir_flow", "mir_identities", "mir_logical", "mir_instructions", "mir_strings", "mir_roots", "mir_types", "mir_arrays", "mir_records", "qbe_arrays", "qbe_roots", "qbe_strings", "qbe_records", "checked_types", "checked_program", "qbe_output", "hash_runtime", "mir_builder", "mir_passes", "mir_verifier", "project_config", "qbe_constants", "qbe_context", "qbe_memory", "qbe_numeric", "qbe_mir", "qbe_control", "qbe_runtime"]
 			mut sources: Array<String> := []
 			names.each do |name|
 				sources.push(required_test_source(base + name + ".trb"))
@@ -2378,8 +2378,21 @@ describe("Native TypeRB frontend") do
 		expect(qbe.include?("\t%temporary_roots =l loadl $trbn_gc_temp_count")).to_be_true()
 		expect(qbe.include?("\tstorel %temporary_roots, $trbn_gc_temp_count")).to_be_true()
 		expect(qbe.include?("\tcall $trbn_gc_temp_reset(l %temporary_roots)")).to_be_false()
-		# Loaded container values need roots across a later allocation.
-		expect(qbe.include?("\tcall $trbn_gc_temp_push(l %t")).to_be_true()
+		# The replacement's two fields survive allocation; the old owner and
+		# overwritten current binding are dead and need no roots of their own.
+		plan := state.scalar_mir.root_plans[mir_function_index(state.scalar_mir, 0)]
+		mut point := 0
+		mut constructions := 0
+		while point < plan.instructions.size()
+			instruction := state.scalar_mir.instructions[plan.instructions[point]]
+			if instruction.kind == 25
+				expect(plan.roots[point]).to_equal([state.scalar_mir.arguments[instruction.first], state.scalar_mir.arguments[instruction.first + 1]])
+				constructions += 1
+			end
+			point += 1
+		end
+		expect(constructions).to_equal(1)
+		expect(qbe.include?("\tcall $trbn_gc_temp_push(l %t")).to_be_false()
 		expect(
 			qbe.include?(
 				"\tstorel %temporary_roots, $trbn_gc_temp_count\n\t%return_result =l loadl %return_value\n\tcall $trbn_gc_temp_push(l %return_result)\n\tret %return_result\n",
