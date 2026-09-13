@@ -39,8 +39,8 @@ for each helper extraction. Required correctness and reproducibility remain bloc
 ## Current source and historical consumers
 
 The [compiler-name seed handoff](bootstrap-seed-updates.md) removed the predecessor
-intrinsic declarations, wrappers and dual recognition. MIR admission, intrinsic calls and ordinary body omission share declaration-bound
-identity. Extracted helpers and imported aliases resolve to the same owner; unrelated
+intrinsic declarations, wrappers and dual recognition. MIR admission, intrinsic
+calls and ordinary body omission share declaration-bound identity. Extracted helpers and imported aliases resolve to the same owner; unrelated
 same-named functions retain ordinary calls. CLI adapters follow the imported core
 compiler for that ownership. The source-name
 check covers current paths, implementation names, comments and visible Markdown; immutable history links and result records remain reproduction evidence.
