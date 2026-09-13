@@ -61,8 +61,10 @@ outward-facing text before publication.
 ## Conditional project guidance
 
 - For language coverage, follow `docs/native-language-coverage.md`: pair basic
-  syntax with MIR checks and verified compiler self-use. Deferred optimizer
-  acceptance does not block language work.
+  syntax with MIR checks and verified compiler self-use. Extend the shared
+  reference/Native case contract and regenerate the Capabilities detail view
+  when ordinary behavior changes. Deferred optimizer acceptance does not block
+  language work.
 - For source organization, follow `docs/repository-organization.md`, including
   root recovery files and symbols. At accepted optimization checkpoints,
   advance a bounded cleanup or record its concrete blocker within the task's

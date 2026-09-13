@@ -37,6 +37,10 @@ being changed; unrelated documentation does not require an architecture review.
   failure. Test paths containing spaces, existing-output replacement, each
   phase failure, and that compiler diagnostics launch no external tool.
 - Preserve source origins and exact TypeRB semantics through every lowering.
+- Use the reference-derived language contract in `docs/native-language-coverage.md`
+  to expose accepted, rejected and untested behavior across check/build/run/REPL.
+  Keep its generated Capabilities view synchronized; snapshot support alone
+  does not complete an ordinary language feature.
 - Keep semantic analysis above backend emission. Represent proven Integer
   ranges, index properties, loop structure, call effects, Array-header
   stability, and GC safety as verified Native MIR facts or analysis results;

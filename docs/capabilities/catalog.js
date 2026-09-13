@@ -12,20 +12,21 @@ const capability = (title, status, scopes, description, evidence) => ({
 
 export const catalog = {
   schemaVersion: 1,
-  updatedAt: '2026-09-08',
+  updatedAt: '2026-09-13',
   areas: [
     {
       id: 'language',
       title: 'Language and type system',
       description: 'Portable TypeRB semantics expressed through the Native frontend and runtime.',
       items: [
-        capability('Functions, branches, and loops', 'verified', ['parity'], 'Execute the bounded control-flow and direct-call surface with deterministic failures.', ['Control flow', 'docs/native-language-coverage.md']),
+        capability('Core direct calls and statement control', 'verified', ['parity'], 'Execute the bounded control-flow and direct-call surface with deterministic failures.', ['Control flow', 'docs/native-language-coverage.md']),
         capability('Checked Integer and binary64 Float', 'verified', ['parity', 'ecosystem'], 'Preserve portable Integer bounds and the selected Float behavior.', ['Numeric semantics', 'docs/native-language-coverage.md']),
         capability('Snapshot records, enums, Result, and try', 'verified', ['parity', 'production'], 'The snapshot/recovery path lowers aggregates, tagged values and Result propagation. This evidence does not establish ordinary trbn enum or Result support.', ['Aggregate recovery', 'docs/snapshot-recovery.md']),
         capability('Snapshot managed String, Array, and closures', 'verified', ['parity', 'production', 'ecosystem'], 'The snapshot/recovery path executes managed UTF-8 strings, arrays and closures. Ordinary trbn has a narrower String and collection boundary; this is not ordinary UTF-8 literal or closure support.', ['Managed recovery', 'docs/snapshot-recovery.md']),
-        capability('Complete TypeRB syntax and diagnostics', 'partial', ['parity', 'production', 'ecosystem'], 'The ordinary compiler and REPL support checked short-circuit Boolean OR/AND, precedence and conditional effects. The frontend remains bounded, not the complete reference surface.', ['Boolean expressions', 'docs/native-logical-expressions.md']),
-        capability('Generics', 'unassessed', ['parity', 'production', 'ecosystem'], 'Inventory generic declarations, specialization, inference, and diagnostics against the reference compiler.'),
-        capability('Classes, interfaces, and dispatch', 'unassessed', ['parity', 'production', 'ecosystem'], 'Define and verify the abstraction and dispatch surface needed by representative packages.'),
+        capability('Ordinary UTF-8 String literals and operations', 'open', ['parity', 'production', 'ecosystem'], 'Ordinary check accepts a UTF-8 literal, but build and REPL reject it. Code-point size, indexing, escaping and text input must share a correct String foundation; snapshot UTF-8 evidence does not supply this support.'),
+        capability('Complete TypeRB syntax and diagnostics', 'partial', ['parity', 'production', 'ecosystem'], 'The reference-derived ordinary-path inventory covers valid, rejected and boundary cases across basic syntax families. Known differences and untested contracts remain; a green regression is not complete language parity.', ['Ordinary language matrix', 'docs/native-language-coverage-matrix.md']),
+        capability('Generics', 'open', ['parity', 'production', 'ecosystem'], 'Ordinary generic function and record probes are rejected. Specialization, inference and the remaining generic contracts still require implementation.'),
+        capability('Classes, interfaces, and dispatch', 'open', ['parity', 'production', 'ecosystem'], 'Ordinary class and explicit interface probes are rejected. Field, initialization, conformance and dispatch support remains to be implemented.'),
         capability('Concurrency semantics', 'open', ['parity', 'production', 'ecosystem'], 'Implement portable tasks, cancellation, synchronization, and failure behavior.'),
       ],
     },
@@ -35,7 +36,7 @@ export const catalog = {
       description: 'Self-hosting, project builds, diagnostics, and fast development iteration.',
       items: [
         capability('TypeRB-authored self-hosted compiler', 'verified', ['parity', 'production'], 'The lexer, parser, resolver, checker, emitter, and driver reach a reproducible fixed point.', ['Self-hosting', 'docs/bootstrap-seed-updates.md']),
-        capability('Verified self-hosted Native MIR foundation', 'partial', ['parity', 'production'], 'Ordinary checking publishes typed scalar leaves and conditional blocks with explicit live-value arguments, selected Integer/Float Array induction plans, guarded Integer arithmetic and conservative Array-header facts. The conditional adapter does not reparse admitted function bodies. General calls, mutable control, managed values, allocation and root-safety ownership remain incomplete. MIR construction, analysis, rewrites, verification and QBE adaptation now have separate modules; the remaining direct path still needs retirement', ['Current MIR transition status', 'docs/native-mir-optimization-status.md']),
+        capability('Verified self-hosted Native MIR foundation', 'partial', ['parity', 'production'], 'Verified control/value MIR now carries ordinary scalar and managed String/Array values, calls, mutable control and live-before roots. Nominal records, Hashes and iteration still need shared operations and portable facts; the remaining direct path needs retirement. Runtime String behavior remains subject to the ordinary UTF-8 boundary.', ['Current MIR transition status', 'docs/native-mir-optimization-status.md']),
         capability('File-oriented check and build', 'verified', ['parity', 'production'], 'Read source files and own the QBE and C-toolchain process boundary.', ['Native builds', 'docs/native-cli.md']),
         capability('Multi-file module graph', 'verified', ['parity', 'production'], 'Load explicit imports and deterministic transitive module closures.', ['Module loading', 'docs/compiler-project-layout.md']),
         capability('Configured project build', 'verified', ['parity', 'production'], 'Load a bounded trbconfig.jsonc source set and build its unique main entry.', ['Project configuration', 'docs/native-cli.md']),
@@ -65,8 +66,8 @@ export const catalog = {
       description: 'General-purpose APIs expected by portable programs and application packages.',
       items: [
         capability('Arguments, numeric conversion, and Math.sqrt', 'verified', ['parity', 'ecosystem'], 'Provide the portable entry primitives used by the registered language benchmarks.', ['Portable entry', 'docs/native-language-coverage.md']),
-        capability('String and Array APIs', 'partial', ['parity', 'production', 'ecosystem'], 'The native path has a measured core, but not the complete standard API surface.'),
-        capability('Hash, Set, and Queue', 'open', ['parity', 'production', 'ecosystem'], 'Provide common collections, iteration, equality, hashing, and failure behavior.'),
+        capability('String and Array APIs', 'partial', ['parity', 'production', 'ecosystem'], 'Ordinary Array values, aliases and statement iteration have tested support. String operations retain an ASCII runtime boundary, while Unicode and the remaining String/Array receiver APIs are incomplete.'),
+        capability('Hash, Set, and Queue', 'partial', ['parity', 'production', 'ecosystem'], 'Ordinary Hash construction, inference, lookup, updates and selected receiver operations are covered. Hash iteration and the general Set/Queue surface remain incomplete.'),
         capability('JSON, CSV, and encodings', 'open', ['production', 'ecosystem'], 'Parse, generate, validate, and stream common structured-data formats.'),
         capability('Date, time, and time zones', 'open', ['production', 'ecosystem'], 'Provide clocks, durations, calendars, parsing, formatting, and time-zone data.'),
         capability('Regular expressions and Unicode', 'unassessed', ['parity', 'production', 'ecosystem'], 'Define Unicode-aware text processing and regular-expression coverage.'),

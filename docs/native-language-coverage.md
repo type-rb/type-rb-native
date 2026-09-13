@@ -1,44 +1,41 @@
 # Ordinary Native language coverage
 
-Status: a 19-case ordinary-path inventory and regression contract are
-available. Statement `elsif` and bare `break` / `next` in `while` are covered by ordinary
-compiler and REPL regressions. The ordinary Boolean-array case is also covered.
-Hash literals and required lookup now have an ordinary-path inventory case;
-[Hash implementation details](native-hash.md) enumerate the wider tested boundary.
-Array `each` / `each.with_index` have an ordinary iteration case and compiler/REPL regressions for live growth, retained receivers, nested transfers and managed elements.
-Direct `Range<Integer>` values and statement `each` / `each.with_index` are covered
-by ordinary compiler and REPL regressions; see [the supported boundary](native-range.md).
-The captured-endpoint inventory case also requires function literals, which
-Native currently rejects before reaching the Range expression.
-The inventory remains a bounded set of examples, not complete language support.
-Track the first bounded delivery in [issue #326](https://github.com/type-rb/type-rb-native/issues/326).
+Status: the shared contract contains 88 ordinary-path probes and 32 feature
+families derived from the pinned reference AST and public language/standard-library
+documentation. This is a test inventory with explicit gaps, not complete language
+support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
+basic-language completion; [the generated family inventory](native-language-feature-inventory.md)
+records semantic contracts that still need tests. The earlier 19-case inventory
+was an initial sample, not a complete list of missing features.
 
 ## Current development priority
 
-The ordinary compiler is self-hosted but implements a bounded TypeRB subset.
-Prioritize existing language features that make ordinary programs and the
-compiler implementation clearer, without waiting for complete MIR migration
-or Pure Go runtime parity. TypeRB at `TYPE_RB_REVISION` remains the semantic
-authority; this work does not define a Native-only dialect.
+Complete useful language families together with their MIR dependencies, instead
+of waiting for individual unsupported programs to be reported. TypeRB at
+`TYPE_RB_REVISION` remains the semantic authority; no Native-only dialect is
+introduced. Fix wrong acceptance, wrong results and unsafe behavior as soon as
+the shared probes reveal them.
 
-The near-term order is:
+Start with ordinary String behavior: UTF-8 literals, code-point length/indexing,
+concatenation, interpolation, escapes, allocation/lifetime and source/REPL
+handling. Native currently stores byte lengths and indexes bytes, so removing
+the ASCII diagnostic alone would admit incorrect String semantics. Keep raw
+byte operations explicit where source decoding or terminal editing needs them.
+This foundation does not require every Unicode library API to ship at once.
 
-1. Wrong results, crashes, unsafe optimization and reference-semantic mismatches.
-2. Ordinary-path coverage probes and the basic control syntax: `elsif`, then
-   `break` and `next`, with necessary MIR validation in the same feature slice.
-3. Needed collection and value representations, selected from concrete compiler
-   or application uses. Evaluate Boolean arrays and named typed data before
-   extending positional Integer rows merely to work around a missing type.
-4. Arguments, nullable values, enums and Result according to actual use and
-   prerequisites, not a requirement to finish every feature in one category.
-   Evaluate UTF-8 literal output separately from a complete Unicode API.
+Then coordinate the record/Hash/iteration MIR family, arguments and function
+values, expression control flow, nullable/enum/Result behavior, and the remaining
+basic declaration/type families according to their dependencies. The inventory
+keeps wider source interop and package syntax visible as later phases, with
+reasons; a retired reference AST node is identified explicitly. Do not count
+these phase labels as implemented support.
 
-The [MIR consolidation milestone](mir-consolidation.md) now coordinates this
-coverage with the larger ownership migration. Correctness, memory safety, process
-and reproducibility checks remain required. Temporary performance/size regressions
-are observed during integration; detailed qualification occurs at coherent
-milestones. A feature need not manufacture a runtime speedup or a separate size
-budget revision to justify its existence. Final performance goals remain unchanged.
+The [MIR consolidation milestone](mir-consolidation.md) coordinates the shared
+ownership work. Correctness, memory safety, process and reproducibility checks
+remain required. Temporary performance/size regressions are observed during
+integration; detailed qualification occurs at coherent milestones. A feature
+need not manufacture a runtime speedup or a separate size budget revision to
+justify its existence. Final performance goals remain unchanged.
 
 ## Readonly record field correction
 
@@ -60,65 +57,91 @@ the recovery, seed handoff and subsequent MIR self-use are tracked in
 
 ## Coverage is path-specific
 
-The [generated case matrix](native-language-coverage-matrix.md) comes from
+The [generated case matrix](native-language-coverage-matrix.md), generated family
+inventory and the [Capabilities detail view](capabilities/README.md) use
 [`tools/native-language-cases.json`](../tools/native-language-cases.json).
-Each row describes one bounded example, not complete support for that feature
-or a percentage of the TypeRB language. The exact reference revision is pinned
-in `TYPE_RB_REVISION` and recorded alongside executable and registry hashes in
-each observation report.
+Each row describes one bounded example, not full support for a feature or a
+percentage of the TypeRB language. The exact reference revision, executable
+hashes and registry hash are recorded with observations.
 
-The `while` case currently returns the same final value but differs in its
-REPL value display (`[mut]` is absent after the loop). This remains an explicit
-output difference. A rejected REPL submission can still leave the interactive
-session with exit status zero; output and diagnostics, not just exit status,
-determine the row. UTF-8 String literals pass `check` but fail ordinary build
-and REPL emission. Historical snapshot support does not close that gap.
+The registry maps every concrete statement/expression node in the pinned
+reference AST to a family. The oracle job checks the AST hash and scans all
+non-test Go files in its directory for unclassified syntax nodes. This detects
+syntax-inventory drift; it does not prove that every grammar combination,
+method, type rule or boundary case has been tested. Families therefore also
+record uncovered semantic contracts. Review those against public reference
+language and standard-library documentation when expanding or changing the pin.
 
-Maintain one small executable case registry and derive its ordinary coverage
-table from checked expectations. Each row needs a feature, authored source,
-reference revision, expected output/diagnostic, and separate observations for:
+Both compilers execute the same authored sources, including project/import
+fixtures. Each implementation has separate reviewed expectations for ordinary
+check, build, execution and REPL. Positive cases, static rejection cases and
+runtime failures are all intentional. Native acceptance of reference-invalid
+record, Array or Hash equality is a bug, not extra support. Some reference REPL
+submissions also fail despite successful ordinary execution; those limitations
+are visible separately and must not be attributed only to Native.
 
-- ordinary `check`;
-- ordinary build and execution (a successful build alone is not execution);
-- the ordinary REPL, including declaration and expression behavior where relevant.
+A rejected REPL submission may leave the interactive session at exit status
+zero. Output and diagnostics determine the result, not exit status alone.
+UTF-8 literals currently pass check but fail ordinary build and REPL emission.
+The while probe produces the same final value but lacks the reference's `[mut]`
+REPL display. These remain explicit differences. Snapshot/recovery coverage
+cannot establish ordinary check/build/run/REPL support.
 
-Report verified, rejected, inconsistent or not yet tested for the exact case,
-not for an entire language category. Capture exit status and stdout/stderr;
-fail the regression when an observation changes unexpectedly. A known rejection
-is a tracked gap, not a passing conformance claim. Unsupported reference input
-cannot establish a Native language gap. Check the reference before registering
-a fixture as valid.
+The regression command checks each implementation against its reviewed outcomes.
+It can pass with known gaps; its `parityGaps` field summarizes differences between
+those reviewed expectations, and `uncoveredContracts` identifies untested basic
+contracts. `--require-parity` additionally rejects both known differences and
+untested basic contracts. It requires both compilers, the reference AST and the
+complete registry, and is intentionally failing until basic parity is achieved.
+Neither mode infers full language coverage from the number of passing examples.
 
-Keep snapshot/recovery coverage separate. Earlier aggregate/UTF-8/closure
-evidence does not establish ordinary `trbn` support. A `check` success followed
-by a build rejection must be visible rather than collapsed to "supported".
-The first inventory covers scalar/control successes and the reported gaps:
-`elsif`, `break`, `next`, default arguments, Boolean arrays, nullable Strings,
-ordinary enums and UTF-8 String literals. It is not an exhaustive specification.
+Frontend diagnostic wording is checked exactly for each implementation but need
+not match between compilers. Matching rejection does not establish diagnostic
+parity. [Issue #455](https://github.com/type-rb/type-rb-native/issues/455) tracks
+message detail, real source columns and terminal presentation separately.
+The String repetition case preserves the current second-line REPL origin;
+dedicated diagnostic tests cover both compact and spaced input.
+Runtime-failure fixtures may check the exact first
+stderr line, status and stdout, omitting unstable reference panic stack frames.
+Invalid UTF-8 output retains normalized raw bytes alongside an escaped display;
+it cannot silently compare equal to valid text. Process timeouts always fail.
 
 ### Reproducing and maintaining the inventory
 
 ```sh
 python3 tools/native-language-coverage-test.py
-python3 tools/native-language-coverage.py --native /absolute/path/to/trbn
-python3 tools/native-language-coverage.py --reference /absolute/path/to/trb
-python3 tools/native-language-coverage.py --check-table docs/native-language-coverage-matrix.md
+python3 tools/native-language-coverage.py --native /absolute/path/to/trbn --jobs 2
+python3 tools/native-language-coverage.py --reference /absolute/path/to/trb \
+  --reference-ast /path/to/pinned-reference/internal/ast/ast.go --jobs 2
+python3 tools/native-language-coverage.py --native /absolute/path/to/trbn \
+  --reference /absolute/path/to/trb \
+  --reference-ast /path/to/pinned-reference/internal/ast/ast.go --require-parity
 ```
 
-The reference executable must be built from `TYPE_RB_REVISION`. CI validates
-every fixture with that compiler in the quick oracle job. Ordinary Native CLI
-jobs independently exercise the same cases without invoking a reference
-compiler. Reports are short-lived CI artifacts; do not add raw observations
-to `results/`. Changing this registry routes to the quick and CLI checks, not
-an unchanged compiler's performance matrices.
+Build the reference executable from `TYPE_RB_REVISION`. CI verifies every
+reviewed reference outcome in the quick oracle job. Native CLI jobs exercise
+the same cases without invoking a reference compiler. Reports are short-lived
+CI artifacts; do not add raw observations to `results/`. The suite is a
+correctness contract, not a performance benchmark. Each subprocess has a
+30-second timeout with owned-process-group cleanup; `--jobs` bounds concurrent
+isolated cases and leaves reporting order deterministic.
 
-Use `--case ID` for a bounded probe and `--observe` to inspect changed Native
-behavior before reviewing expectations. Observation mode still rejects an
-invalid reference fixture and never rewrites expectations. Update a case only
-after reviewing all four paths, then regenerate the table with `--table`.
-Documentation-only CI checks that the table matches the registry without
-building or executing a compiler. Each subprocess has a 30-second safety
-timeout with owned-process-group cleanup; these are not performance tests.
+Use `--case ID` for a focused probe and `--observe` to inspect changed Native
+behavior. Observation still checks reference expectations and process failures;
+it never rewrites expectations. Review all four paths before accepting a change.
+Then regenerate all public views from that same reviewed registry:
+
+```sh
+python3 tools/native-language-coverage.py --table > docs/native-language-coverage-matrix.md
+python3 tools/native-language-coverage.py --feature-table > docs/native-language-feature-inventory.md
+python3 tools/native-language-coverage.py --pages-data > docs/capabilities/ordinary-language.js
+```
+
+CI checks exact generated contents with `--check-table`, `--check-feature-table`
+and `--check-pages-data`. Review the related broad `capabilities/catalog.js`
+entries when behavior changes, preserving their stated scope and separating
+snapshot evidence from ordinary support. A Pages capability update needs no
+formal benchmark rerun when runtime benchmark evidence has not changed.
 
 ## Feature delivery contract
 

@@ -11,13 +11,82 @@
 | elsif | accepts | accepts | matches reference | matches reference |
 | break | accepts | accepts | matches reference | matches reference |
 | next | accepts | accepts | matches reference | matches reference |
-| Default argument | rejects | rejects | not reached | rejects |
+| Default argument | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Array&lt;Boolean&gt; | accepts | accepts | matches reference | matches reference |
-| Nullable String | rejects | rejects | not reached | rejects |
-| Ordinary enum | rejects | rejects | not reached | rejects |
-| UTF-8 String literal | accepts | rejects | not reached | rejects |
+| Nullable String | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Ordinary enum | rejects valid input | rejects valid input | not reached | rejects valid input |
+| UTF-8 String literal | accepts | rejects valid input | not reached | rejects valid input |
 | Array of named records | accepts | accepts | matches reference | matches reference |
 | Hash literal and required lookup | accepts | accepts | matches reference | matches reference |
 | Array each with live growth and index | accepts | accepts | matches reference | matches reference |
 | Range each (inclusive / exclusive / reversed) | accepts | accepts | matches reference | matches reference |
-| Range with captured endpoint effects (requires fn) | rejects | rejects | not reached | rejects |
+| Range with captured endpoint effects (requires fn) | rejects valid input | rejects valid input | not reached | rejects valid input |
+| UTF-8 length, indexing, concatenation and interpolation | accepts | rejects valid input | not reached | rejects valid input |
+| Unicode local identifier | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Unicode scalar escapes | rejects valid input | rejects valid input | not reached | rejects valid input |
+| String search and code-point APIs | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Empty String and ASCII indexing | accepts | accepts | matches reference | matches reference |
+| Mixed numeric arithmetic and conversion | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Portable Integer endpoints | accepts | accepts | matches reference | matches reference |
+| Semicolon and comment separators | accepts | accepts | matches reference | matches reference |
+| Recursive calls and all-path returns | accepts | accepts | matches reference | matches reference |
+| Mutable parameter rebinding is local | accepts | accepts | matches reference | matches reference |
+| Named-only arguments and reordering | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Default arguments refer to earlier arguments | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Value-producing if | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Conditional expression evaluates one branch | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Postfix return and loop transfers | rejects valid input | rejects valid input | not reached | rejects as reference |
+| Scalar case and case expression | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Record defaults and reordered explicit fields | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Reject unsupported record equality | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Nullable narrowing and early return | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Nullable short-circuit and safe member | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Nil equality | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Payload enum and exhaustive case | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Raw-value enum | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Transparent type alias | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Nominal newtype construction and projection | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Generic function application | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Generic record | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Literal-field union narrowing | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Typed function value and lexical capture | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Function value mutates captured binding | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Array alias and parameter rebinding | accepts | accepts | matches reference | matches reference |
+| Array index captured before growing RHS | accepts | accepts | matches reference | matches reference |
+| Nested managed Array values | accepts | accepts | matches reference | matches reference |
+| Array value-producing iteration | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Hash key/value iteration | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Empty Hash inference and update | accepts | accepts | matches reference | matches reference |
+| Hash deletion, membership and size | accepts | accepts | matches reference | matches reference |
+| Stored Range bounds and conversion | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Inclusive Range maximum endpoint | accepts | accepts | matches reference | matches reference |
+| Result storage and exhaustive case | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Result try propagation | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Result catch recovery | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Class fields, initializer and method | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Explicit interface conformance | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Module declaration and constant | rejects valid input | rejects valid input | not reached | rejects as reference |
+| Top-level constant | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Symbol literal equality | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Named import alias and reachable file | accepts | accepts | matches reference | rejects valid input |
+| Reject unused local binding | incorrectly accepts | incorrectly accepts | differs | output differs |
+| Reject immutable binding assignment | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject record field rebinding | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject non-Boolean condition | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject incorrect call argument type | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject missing value-bearing return | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject break outside a loop | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject escaping branch-local binding | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject unchecked nullable member access | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject out-of-range Integer literal | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject general postfix if | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject implicit interpolation conversion | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array bounds failure | accepts | accepts | differs | rejects as reference |
+| String bounds failure | accepts | accepts | differs | rejects as reference |
+| Portable Integer runtime overflow | accepts | accepts | matches reference | rejects as reference |
+| Reject unsupported Hash compound assignment | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject unsupported brace Unicode escape | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Embedded zero and supplementary scalar escapes | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Reject unsupported array equality | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject unsupported hash equality | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Unsupported String repetition and REPL diagnostic origin | rejects as reference | rejects as reference | not reached | rejects as reference |
