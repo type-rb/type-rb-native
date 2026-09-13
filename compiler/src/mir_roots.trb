@@ -1,3 +1,4 @@
+import { mir_managed_type } from mir_types
 import { integer_string } from literals
 import { MirBlock, MirFunction, MirInstruction, MirModule, MirRootPlan } from mir
 import { mir_flow_blocks } from mir_flow
@@ -5,6 +6,18 @@ import { mir_flow_blocks } from mir_flow
 # Effects are allocation, mutation, I/O and failure bits. Runtime-internal
 # terminal failures stay with their operation; they never resume a MIR edge.
 def mir_instruction_effects(native_module: MirModule, instruction: MirInstruction): Integer
+	if instruction.kind == 19
+		return 9
+	end
+	if instruction.kind == 24
+		return 11
+	end
+	if instruction.kind == 21 || instruction.kind == 22
+		return 8
+	end
+	if instruction.kind == 23
+		return 10
+	end
 	if instruction.kind == 11
 		return native_module.calls[instruction.payload].effects
 	end
@@ -75,11 +88,14 @@ def mir_live_before(native_module: MirModule, managed: Hash<String, Integer>, in
 			mir_live_operand(managed, live, native_module.arguments[index])
 			index += 1
 		end
-	elsif kind != 6 && kind != 12
+	elsif kind != 6 && kind != 12 && kind != 19
 		mir_live_operand(managed, live, instruction.first)
-		if kind == 7 || kind == 13 || kind == 14 || kind == 16
+		if kind == 7 || kind == 13 || kind == 14 || kind == 16 || kind >= 21
 			mir_live_operand(managed, live, instruction.second)
 		end
+	end
+	if kind == 23
+		mir_live_operand(managed, live, instruction.payload)
 	end
 	return live
 end
@@ -128,7 +144,7 @@ def mir_function_roots(native_module: MirModule, function: MirFunction): MirRoot
 	mut managed: Hash<String, Integer> := {}
 	mut managed_count := 0
 	native_module.values.each do |value|
-		if value.function_id == function.id && value.type_id == 8
+		if value.function_id == function.id && mir_managed_type(native_module, value.type_id)
 			managed[integer_string(value.id)] = 1
 			managed_count += 1
 		end

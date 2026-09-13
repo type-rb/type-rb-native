@@ -1,0 +1,156 @@
+import trb/std/process
+import trb/std/result
+import { check, emit_qbe } from compiler
+import { compiler_test_instruction_with_cell } from compiler_test
+import { control_test_output } from control_mir_test
+import { logical_checked_source, logical_run_qbe } from logical_test
+import { MirRootPlan, MirType } from mir
+import { mir_instruction_effects } from mir_roots
+import { mir_element_type, mir_managed_type, mir_semantic_type_id, mir_semantic_type_name } from mir_types
+import { verify_mir } from mir_verifier
+import { native_read_text } from native_file_system
+import { string_starts_with } from path
+import { CompilerState } from state
+import { load_integer, store_string } from storage
+import { describe, expect, test } from trb/std/test
+
+def array_mir_test_state(): CompilerState
+	mut state := logical_checked_source("def main()\nmut values := [(1).to_s()]\nvalues.push((2).to_s())\nvalues[-1] = (3).to_s()\nputs(values[0])\nputs(values.size())\nend\n")
+	expect(check(state)).to_be_true()
+	expect(state.scalar_mir.functions.size()).to_equal(1)
+	return state
+end
+
+def array_mir_test_read(path: String): String
+	return case native_read_text(path)
+	when Result::Ok(text)
+		text
+	when Result::Err(error)
+		puts(error.message)
+		""
+	end
+end
+
+describe("Managed Array MIR") do
+	test("keeps computed method results immutable while retaining writable elements") do
+		["values.size() = 1", "values.size() += 1", "values.push(1) = values.push(2)"].each do |statement|
+			mut state := logical_checked_source("def main()\nmut values := [1]\n" + statement + "\nend\n")
+			expect(check(state)).to_be_false()
+		end
+		mut state := logical_checked_source("def main()\nmut values := [1]\nvalues[0] += 1\nvalues[0] = 3\nend\n")
+		expect(check(state)).to_be_true()
+		expect(state.scalar_mir.functions.size()).to_equal(1)
+	end
+
+	test("retains nested element identity and rejects forged composite graphs") do
+		mut state := array_mir_test_state()
+		mut native_module := state.scalar_mir
+		strings := mir_semantic_type_id(native_module, "Array<String>")
+		nested := mir_semantic_type_id(native_module, "Array<Array<String>>")
+		expect(mir_semantic_type_id(native_module, "Array<Array<String>>")).to_equal(nested)
+		expect(mir_semantic_type_name(native_module, nested)).to_equal("Array<Array<String>>")
+		expect(mir_element_type(native_module, nested)).to_equal(strings)
+		expect(mir_managed_type(native_module, nested)).to_be_true()
+		expect(mir_managed_type(native_module, 4)).to_be_false()
+		expect(verify_mir(native_module, true)).to_equal("")
+		native_module.types[nested - 9] = MirType.new(name: "Array<Array<String>>", element: nested)
+		expect(verify_mir(native_module, true)).to_equal("MIR composite element type is invalid")
+		native_module.types[nested - 9] = MirType.new(name: "Array<Array<Integer>>", element: strings)
+		expect(verify_mir(native_module, true)).to_equal("MIR composite type identity differs")
+		native_module.types[nested - 9] = MirType.new(name: "Array<String>", element: 8)
+		expect(verify_mir(native_module, true)).to_equal("MIR composite type is duplicated")
+	end
+
+	test("verifies all Array operation operands, stored values and effects") do
+		mut kind := 19
+		while kind <= 24
+			mut state := array_mir_test_state()
+			mut index := 0
+			while state.scalar_mir.instructions[index].kind != kind
+				index += 1
+			end
+			instruction := state.scalar_mir.instructions[index]
+			expected := [9, 0, 8, 8, 10, 11]
+			expect(mir_instruction_effects(state.scalar_mir, instruction)).to_equal(expected[kind - 19])
+			mut cell := 2
+			if kind == 23
+				cell = 4
+			end
+			state.scalar_mir.instructions[index] = compiler_test_instruction_with_cell(instruction, cell, 99999999999)
+			expect(verify_mir(state.scalar_mir, true).empty?()).to_be_false()
+			kind += 1
+		end
+	end
+
+	test("rejects a missing live Array owner at an allocation safe point") do
+		mut state := array_mir_test_state()
+		plan := state.scalar_mir.root_plans[0]
+		mut roots := plan.roots
+		mut index := 0
+		while roots[index].size() == 0
+			index += 1
+		end
+		roots[index] = []
+		state.scalar_mir.root_plans[0] = MirRootPlan.new(function_id: plan.function_id, instructions: plan.instructions, roots: roots, capacity: plan.capacity)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR live root plan differs")
+	end
+
+	test("executes erased reordered Array MIR with collection at every allocating operation") do
+		root := Process.environment("TYPE_RB_NATIVE_ROOT")
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if root != nil
+			if qbe != nil
+				fixture := root + "/compiler/conformance/valid/managed-array-mir"
+				mut state := logical_checked_source(array_mir_test_read(fixture + ".trb"))
+				expect(check(state)).to_be_true()
+				expect(state.scalar_mir.functions.size()).to_equal(state.function_count[0])
+				before := control_test_output(emit_qbe(state))
+				state.scalar_mir.functions.each do |function|
+					mut token := load_integer(state.function_body_starts, function.id)
+					while token < load_integer(state.function_body_ends, function.id)
+						store_string(state.token_texts, token, "unavailable")
+						token += 1
+					end
+				end
+				expect(control_test_output(emit_qbe(state))).to_equal(before)
+				state.scalar_mir.functions.each do |function|
+					mut left := function.block_start
+					mut right := left + function.block_count - 1
+					while left < right
+						saved := state.scalar_mir.blocks[left]
+						state.scalar_mir.blocks[left] = state.scalar_mir.blocks[right]
+						state.scalar_mir.blocks[right] = saved
+						left += 1
+						right -= 1
+					end
+				end
+				expect(verify_mir(state.scalar_mir, true)).to_equal("")
+				output := control_test_output(emit_qbe(state))
+				mut forced := ""
+				mut ordinary := false
+				mut hooks := 0
+				output.split("\n").each do |line|
+					if string_starts_with(line, "function ")
+						ordinary = line.include?("$trbnf")
+					end
+					if line == "}"
+						ordinary = false
+					end
+					if ordinary && (line.include?("call $trbn_array_new(") || line.include?("call $trbn_array_push_") || line.include?("call $trbn_string_concat(") || line.include?("call $trbn_integer_to_string(") || line.include?("call $trbnf"))
+						forced += "\tcall $trbn_gc_collect(w 0)\n"
+						hooks += 1
+					end
+					forced += line + "\n"
+				end
+				expect(hooks > 20).to_be_true()
+				case logical_run_qbe(qbe, forced)
+				when Result::Ok(actual)
+					expect(actual).to_equal(array_mir_test_read(fixture + ".out"))
+				when Result::Err(error)
+					puts(error)
+					expect(false).to_be_true()
+				end
+			end
+		end
+	end
+end

@@ -1,6 +1,7 @@
+import { mir_semantic_type_name, mir_semantic_value_type, mir_types_error } from mir_types
 import { mir_function_roots, mir_root_plan_equal } from mir_roots
 import { MirFlow, mir_build_flow, mir_flow_blocks, mir_flow_graph_error, mir_value_available } from mir_flow
-import { MirBlock, MirFunction, MirModule, mir_block_index, mir_control_value_type, mir_definition_count, mir_function_index, mir_origin_valid, mir_table_span_valid, mir_type_name, mir_value_type } from mir
+import { MirBlock, MirFunction, MirModule, mir_block_index, mir_definition_count, mir_function_index, mir_origin_valid, mir_table_span_valid, mir_value_type } from mir
 import { mir_array_headers, mir_array_headers_equal, mir_array_loop_headers, mir_induction_address, mir_scalar_guard } from mir_analysis
 import { mir_function_signature_error, mir_signatures_error } from mir_calls
 import { mir_instruction_error } from mir_instructions
@@ -129,7 +130,7 @@ def mir_terminator_error(
 							end
 							mut type_name := "Void"
 							if block.return_value >= 0
-								type_name = mir_type_name(mir_value_type(native_module, function.id, block.return_value))
+								type_name = mir_semantic_type_name(native_module, mir_value_type(native_module, function.id, block.return_value))
 							end
 							if type_name != function.result_type
 								return "MIR return type differs from declaration"
@@ -226,14 +227,14 @@ def mir_adapter_error(native_module: MirModule, function: MirFunction): String
 		mut index := block.instruction_start
 		while index < block.instruction_start + block.instruction_count
 			kind := native_module.instructions[index].kind
-			if (kind < 6 || kind > 9) && (function.kind != 3 || kind < 11 || kind > 18)
+			if (kind < 6 || kind > 9) && (function.kind != 3 || kind < 11 || kind > 24)
 				return "MIR scalar control operation is unsupported"
 			end
 			index += 1
 		end
 		if block.terminator == 3
 			type_id := mir_value_type(native_module, function.id, block.return_value)
-			if function.kind == 3 && type_id != 0 && !mir_control_value_type(type_id)
+			if function.kind == 3 && type_id != 0 && !mir_semantic_value_type(native_module, type_id)
 				return "MIR scalar return type differs"
 			end
 			if returned_type != 0 && returned_type != type_id
@@ -255,7 +256,7 @@ def mir_function_error(native_module: MirModule, function: MirFunction): String
 	if function.kind == 3
 		native_module.values.each do |value|
 			if value.function_id == function.id
-				if !mir_control_value_type(value.type_id)
+				if !mir_semantic_value_type(native_module, value.type_id)
 					return "MIR scalar control value type differs"
 				end
 			end
@@ -318,6 +319,10 @@ end
 def verify_mir(native_module: MirModule, optimized: Boolean): String
 	if native_module.source_count[0] <= 0
 		return "MIR module has no sources"
+	end
+	type_error := mir_types_error(native_module)
+	if type_error != ""
+		return type_error
 	end
 	signature_error := mir_signatures_error(native_module)
 	if signature_error != ""
@@ -397,7 +402,7 @@ def verify_mir(native_module: MirModule, optimized: Boolean): String
 		if value.type_id < 1
 			return "MIR value type is invalid"
 		end
-		if value.type_id > 8
+		if value.type_id > 8 && !mir_semantic_value_type(native_module, value.type_id)
 			return "MIR value type is invalid"
 		end
 		if !mir_origin_valid(value.source_id, value.line, native_module.source_count[0])
