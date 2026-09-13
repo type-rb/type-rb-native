@@ -379,6 +379,10 @@ done
 for runtime_invalid in "$corpus_root"/runtime-invalid/*.trb; do
 	runtime_case=$(basename -- "$runtime_invalid" .trb)
 	runtime_expected=${runtime_invalid%.trb}.stderr
+	runtime_expected_stdout=${runtime_invalid%.trb}.stdout
+	if test ! -f "$runtime_expected_stdout"; then
+		runtime_expected_stdout=$empty_file
+	fi
 	test -f "$runtime_expected" || fail "runtime failure expectation is missing: $runtime_case"
 	for compiler_pair in "b2:$b2" "b3:$b3" "b4:$b4"; do
 		compiler_label=$(printf '%s\n' "$compiler_pair" | cut -d: -f1)
@@ -391,7 +395,7 @@ for runtime_invalid in "$corpus_root"/runtime-invalid/*.trb; do
 		runtime_status=$?
 		set -e
 		test "$runtime_status" -eq 2 || fail "runtime failure status differs: $runtime_case"
-		require_empty_file "$case_directory/stdout" "runtime failure stdout differs: $runtime_case"
+		cmp "$runtime_expected_stdout" "$case_directory/stdout" >/dev/null || fail "runtime failure stdout differs: $runtime_case"
 		cmp "$runtime_expected" "$case_directory/stderr" >/dev/null || fail "runtime failure stderr differs: $runtime_case"
 		require_no_intermediates "$case_directory"
 	done
