@@ -95,3 +95,42 @@ ln -s missing "$test_root/pre-foundation/compiler/gate4/native-mir-foundation-v1
 test "$(native_mir_transition_mode "$current" "$test_root/pre-foundation")" = ordinary
 test "$(native_mir_build_ratio_limit "$current" "$test_root/pre-foundation")" = 1.05
 printf '%s\n' 'compiler project layout and mixed-baseline policy tests passed'
+
+make_fixture() {
+	mkdir -p "$1/configured-project"
+	printf '{}\n' > "$1/configured-project/trbconfig.jsonc"
+}
+
+make_fixture "$current/corpus/configured-project"
+make_fixture "$historical/corpus/gate6k"
+make_fixture "$spaced/corpus/configured-project"
+test "$(native_configured_fixture_directory "$current")" = "$current/corpus/configured-project/configured-project"
+test "$(native_configured_fixture_directory "$historical")" = "$historical/corpus/gate6k/configured-project"
+test "$(native_configured_fixture_directory "$spaced")" = "$spaced/corpus/configured-project/configured-project"
+test "$(cd "$test_root" && native_configured_fixture_directory historical)" = historical/corpus/gate6k/configured-project
+
+reject_fixture() {
+	if native_configured_fixture_directory "$1" > "$test_root/output" 2> "$test_root/error"; then
+		printf '%s\n' 'accepted an invalid configured fixture layout' >&2
+		exit 1
+	fi
+	test ! -s "$test_root/output"
+	test -s "$test_root/error"
+}
+
+reject_fixture "$test_root/missing"
+reject_fixture "$test_root/empty"
+make_fixture "$test_root/missing-fixture-config/corpus/configured-project"
+rm "$test_root/missing-fixture-config/corpus/configured-project/configured-project/trbconfig.jsonc"
+reject_fixture "$test_root/missing-fixture-config"
+make_fixture "$test_root/duplicate-fixture/corpus/configured-project"
+make_fixture "$test_root/duplicate-fixture/corpus/gate6k"
+reject_fixture "$test_root/duplicate-fixture"
+mkdir -p "$test_root/broken-current-fixture/corpus"
+ln -s missing "$test_root/broken-current-fixture/corpus/configured-project"
+make_fixture "$test_root/broken-current-fixture/corpus/gate6k"
+reject_fixture "$test_root/broken-current-fixture"
+make_fixture "$test_root/broken-historical-fixture/corpus/configured-project"
+ln -s missing "$test_root/broken-historical-fixture/corpus/gate6k"
+reject_fixture "$test_root/broken-historical-fixture"
+printf '%s\n' 'configured fixture layout tests passed'
