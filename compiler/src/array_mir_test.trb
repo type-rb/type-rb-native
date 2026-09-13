@@ -32,6 +32,16 @@ def array_mir_test_read(path: String): String
 end
 
 describe("Managed Array MIR") do
+	test("keeps computed method results immutable while retaining writable elements") do
+		["values.size() = 1", "values.size() += 1", "values.push(1) = values.push(2)"].each do |statement|
+			mut state := logical_checked_source("def main()\nmut values := [1]\n" + statement + "\nend\n")
+			expect(check(state)).to_be_false()
+		end
+		mut state := logical_checked_source("def main()\nmut values := [1]\nvalues[0] += 1\nvalues[0] = 3\nend\n")
+		expect(check(state)).to_be_true()
+		expect(state.scalar_mir.functions.size()).to_equal(1)
+	end
+
 	test("retains nested element identity and rejects forged composite graphs") do
 		mut state := array_mir_test_state()
 		mut native_module := state.scalar_mir
