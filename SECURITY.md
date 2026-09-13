@@ -1,8 +1,10 @@
 # Security Policy
 
-TypeRB Native is an experimental prototype with no supported releases. Do not
-use it to compile or execute untrusted input, and do not rely on its generated
-artifacts for production workloads.
+TypeRB Native is under development toward production use. It currently has no
+supported releases or security maintenance window. Current development builds
+are not yet qualified to compile or execute untrusted input or serve production
+workloads. Supported releases require a documented security maintenance policy;
+production use is a project goal, not a guarantee for today's artifacts.
 
 Please report a suspected vulnerability privately through GitHub's security
 advisory interface for this repository. Do not open a public issue containing

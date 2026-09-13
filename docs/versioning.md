@@ -2,8 +2,10 @@
 
 TypeRB Native has an independent implementation version and a separate exact
 TypeRB compatibility declaration. The initial development identity is
-`0.1.0-dev`. It remains an experimental `0.x` version and does not make this
-repository a supported TypeRB backend or release channel.
+`0.1.0-dev`. The current `0.x` development version does not yet carry a stable
+support policy. Supported releases and stable public interfaces are goals in the
+[project roadmap](mir-consolidation.md); this document separates that destination
+from the guarantees established for each published version.
 
 The canonical inputs are:
 
@@ -29,10 +31,10 @@ cannot express recovered target-chain evidence.
 
 ## Independent identities
 
-The Native version identifies the compiler implementation, experimental CLI,
+The Native version identifies the compiler implementation, CLI,
 runtime, target profiles, and distribution as one releasable implementation.
 It does not identify a TypeRB language edition. TypeRB remains the same
-language contract implemented by the reference compiler and this experiment.
+language contract implemented by the reference compiler and this implementation.
 
 The manifest keeps these compatibility axes separate:
 
@@ -48,7 +50,8 @@ The manifest keeps these compatibility axes separate:
 `null` protocol, MIR, and runtime ABI versions are intentional. Those surfaces
 are currently unstable, so assigning a reusable compatibility number would be
 a stronger promise than the evidence supports. Target profile suffixes remain
-experimental and do not imply production support.
+internal development identities and do not by themselves establish production
+support.
 
 ## Bump rules
 
@@ -59,7 +62,7 @@ Native and TypeRB changes are reviewed independently.
   number into `NATIVE_VERSION`.
 - A Native implementation release receives its own SemVer bump when compiler,
   CLI, runtime, target, or distribution behavior changes. While Native remains
-  in `0.x`, a minor bump may include intentional incompatible experimental
+  in `0.x`, a minor bump may include intentional incompatible development
   changes; patch bumps are reserved for compatible fixes and evidence or
   metadata corrections included in a release.
 - Documentation, tests, and unpublished experiment results do not require a

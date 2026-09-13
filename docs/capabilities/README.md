@@ -1,8 +1,8 @@
 # TypeRB Native capability map
 
 This directory contains a dependency-free static capability map for the
-experimental TypeRB Native project. It deliberately catalogs capabilities
-before they become scheduled implementation work.
+TypeRB Native toolchain under development toward production use. It catalogs
+capabilities before they become scheduled implementation work.
 
 The same GitHub Pages artifact also contains a
 [benchmark explorer](benchmarks/README.md). Its committed data is generated
@@ -16,8 +16,10 @@ The four evidence states have narrow meanings:
 - `unassessed`: the capability is cataloged, but its exact gap has not been
   inventoried.
 
-These states do not create a support promise, compatibility guarantee, or
-product commitment. Public evidence links point only to this repository.
+These states report current implementation evidence. They do not establish
+release support or compatibility guarantees; production readiness and full
+coverage remain [project goals](../mir-consolidation.md). Public evidence links
+point only to this repository.
 The stated execution path is part of the scope: snapshot/recovery verification
 must not be presented as ordinary `trbn` check, execution or REPL support.
 See the [ordinary coverage plan](../native-language-coverage.md) for that separate

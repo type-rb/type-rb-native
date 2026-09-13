@@ -1,6 +1,6 @@
-# Experimental native CLI
+# Native CLI and REPL
 
-`trbn` is the Native experiment's command-line executable. Its default mode is
+`trbn` is TypeRB Native's command-line executable. Its default mode is
 `trb`, including a standalone file, a configuration without `mode`, and the
 REPL. An explicit configuration mode is authoritative. `go`, `ruby`, and
 `typescript` report an unsupported-mode error; they never silently run as
@@ -142,7 +142,8 @@ Project history is `.trb/repl_history`; standalone
 history is `~/.cache/trbn/repl_history_trb`. `TRBN_HISTORY` overrides that file.
 History uses the reference REPL's JSON string-array format.
 
-This is a bounded experimental implementation, not complete `trb` parity.
+The CLI currently implements part of `trb`. Full command and backend parity,
+stable CLI contracts and supported distribution are [project goals](mir-consolidation.md).
 See the [ordinary coverage plan](native-language-coverage.md) for path-specific
 tracking; snapshot/recovery capabilities do not establish ordinary CLI support.
 The ordinary compiler's language and package restrictions still apply,
@@ -155,8 +156,8 @@ or full Unicode grapheme-cluster segmentation (for example joined emoji).
 Completion follows the executable Native subset; editing Unicode does not lift
 the compiler's ASCII String-literal restriction. Submissions are bounded to
 64 KiB, including paste; overflow is rejected without evaluating a prefix.
-The evaluator has a 256-call depth bound and
-retains reachable session values; it is not a sandbox or a production runtime.
+The evaluator has a 256-call depth bound and retains reachable session values.
+It is not a sandbox and is not yet qualified for production use.
 
 ## CI artifacts and validation
 
@@ -165,7 +166,7 @@ the desired revision. The same checkout launcher builds Darwin arm64 and
 Linux arm64, verifies fixed points, runs CLI and real-terminal tests, and
 uploads `trbn-<platform>` artifacts containing a tarball and checksum. Each
 archive includes `trbn`, QBE, build metadata, this guide, and the project
-license. Artifacts are experimental CI outputs, not supported releases.
+license. Artifacts are development CI outputs, not supported releases.
 
 Run the same integration tests locally after building:
 
@@ -210,7 +211,7 @@ that line count. REPL runtime failures use `error: message` at the invoking
 statement, including division by zero.
 
 This follows the pinned reference CLI's location/severity/code presentation.
-The experimental frontend currently retains line origins, so it omits columns
+The current frontend retains line origins, so it omits columns
 instead of estimating them. Its `TRBN` diagnostic codes and detailed messages
 remain distinct where its supported subset and diagnosis differ from the
 reference frontend. It reports the first error rather than accumulating the

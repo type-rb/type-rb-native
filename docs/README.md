@@ -9,7 +9,7 @@ Start with the [repository overview](../README.md), [architecture](architecture.
 - [Root source ownership](root-source-inventory.md)
 - [Compiler project layout](compiler-project-layout.md)
 - [Ordinary language coverage](native-language-coverage.md)
-- [Experimental native CLI and REPL](native-cli.md)
+- [Native CLI and REPL](native-cli.md)
 - [Snapshot recovery](snapshot-recovery.md)
 - [Native target profiles](native-targets.md)
 - [Bootstrap seed updates](bootstrap-seed-updates.md)

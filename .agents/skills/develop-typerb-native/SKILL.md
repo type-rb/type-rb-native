@@ -8,9 +8,14 @@ description: Implement or review TypeRB Native compiler, runtime, recovery, and 
 Complete the requested Native change with evidence appropriate to its affected
 surface. Work within the task's stated endpoint and budget. A review-only request
 stays read-only; a PR-only request includes the requested implementation and
-verification, then stops before merge or a next experiment.
+verification, then stops before merge or further development.
 For documentation edits, use this skill only when its Native-specific boundaries
 or validation guidance are needed.
+
+The project targets practical production use and complete TypeRB toolchain
+coverage. Use `docs/mir-consolidation.md` for the goal, current scope and performance
+qualification. Current unsupported features and unstable interfaces are gaps to
+close; do not treat the project's former experimental scope as a feature ceiling.
 
 ## Choose the relevant guidance
 

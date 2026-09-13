@@ -26,7 +26,7 @@ compiler self-use adopts syntax beyond the verified checkout seed.
   provenance separately, compare same-basename output bytes across repeated
   generations, and never count recovery seed creation as part of the ordinary
   Go-free chain.
-- When distributing an experimental bootstrap seed, keep compiler binaries out
+- When distributing a development bootstrap seed, keep compiler binaries out
   of Git history. Record one-time root provenance separately, publish raw
   target compilers with a strict versioned SHA-256 manifest and artifact
   attestations, make the completed release immutable, and verify the actual
@@ -34,7 +34,8 @@ compiler self-use adopts syntax beyond the verified checkout seed.
   durable. Later ordinary chains start only from a previous Native compiler;
   they must not quietly recreate recovery through Go or the reference
   compiler. Do not infer stable version, compatibility, installation, signing,
-  or support promises from an experimental bootstrap tag.
+  or support promises from a bootstrap seed tag alone. Supported release
+  distribution is a separate goal with explicit compatibility and security policies.
 
 ## Required compiler-source verification
 
