@@ -18,6 +18,12 @@ controller checkout and resolve each source root independently. The helper accep
 the current or authenticated historical project layout, rejects ambiguous/missing
 projects, and runs before timing. It is not a compiler subprocess.
 
+The same helper resolves the configured-project corpus fixture independently
+of the compiler layout. Bootstrap validation and its path-with-spaces copy use
+that one directory from the source checkout. Current controllers therefore
+retain frozen baseline fixtures after a corpus rename, rejecting missing,
+incomplete or ambiguous layouts before generation and measurement.
+
 Source that helper before `tools/native-mir-transition-policy.sh`. Moved markers
 retain their identity and cannot grant a historical transition allowance again.
 Frozen baseline paths, negative layout/rename tests and immutable records remain

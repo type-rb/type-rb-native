@@ -248,7 +248,8 @@ if test -f "$transition_policy" && test -f "$control_flow_marker"; then
 	fi
 fi
 compiler_entry=$compiler_project/src/compiler.trb
-configured_project=$repository_root/corpus/configured-project/configured-project/trbconfig.jsonc
+configured_directory=$(native_configured_fixture_directory "$repository_root") || fail "invalid configured-project fixture"
+configured_project=$configured_directory/trbconfig.jsonc
 
 test -f "$compiler_entry" || fail "compiler entry is missing"
 test -f "$configured_project" || fail "configured-project fixture is missing"
@@ -461,7 +462,7 @@ require_no_intermediates "$failure_directory"
 
 space_directory=$workspace/path-with-spaces/'configured project'
 mkdir -p "$space_directory"
-cp -R "$repository_root/corpus/configured-project/configured-project/." "$space_directory/"
+cp -R "$configured_directory/." "$space_directory/"
 "$b4" build "$space_directory/trbconfig.jsonc" \
 	--output "$space_directory/program with spaces" \
 	--qbe "$qbe" --cc "$cc" --target "$profile"
