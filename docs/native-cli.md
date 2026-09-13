@@ -161,7 +161,7 @@ It is not a sandbox and is not yet qualified for production use.
 
 ## CI artifacts and validation
 
-Run the **Experimental native CLI** workflow with `workflow_dispatch`, selecting
+Run the **Native CLI validation** workflow with `workflow_dispatch`, selecting
 the desired revision. The same checkout launcher builds Darwin arm64 and
 Linux arm64, verifies fixed points, runs CLI and real-terminal tests, and
 uploads `trbn-<platform>` artifacts containing a tarball and checksum. Each
