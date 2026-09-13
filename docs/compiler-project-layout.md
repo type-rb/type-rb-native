@@ -5,6 +5,8 @@
 `compiler/trbconfig.jsonc` is the reference-side project configuration.
 The [architecture](architecture.md) records current module responsibilities.
 There is one implementation tree, with no old-path copy, symlink or forwarding layer.
+`lexer.trb` owns tokenization, String interpolation scanning and source slicing;
+the compiler and CLI import those declarations directly.
 
 Ordinary builds start at the canonical entry and follow explicit imports.
 Snapshot recovery validates that closure and derives a temporary flattened input;
@@ -29,3 +31,9 @@ retain their identity and cannot grant a historical transition allowance again.
 Frozen baseline paths, negative layout/rename tests and immutable records remain
 reproduction inputs. Their original layouts are available through the
 [historical record](history.md); current source has no compatibility aliases.
+
+The immutable compiler-name seed still skips the first five entry declarations
+when creating its first compiler generation. The canonical entry therefore groups
+its five remaining runtime fallback declarations first. Current compiler emission
+uses declaration identity; this source order only preserves the published seed
+transition and does not add an ordinal rule or wrapper to the current compiler.
