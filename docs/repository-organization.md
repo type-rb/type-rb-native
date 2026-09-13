@@ -9,7 +9,7 @@ agree. Completed naming and extraction history is available in the
 
 | Current area | Responsibility |
 | --- | --- |
-| `compiler/src/` | Ordinary compiler: `CompilerState`, `CheckedLocals`, `CheckedValue`, `QbeEmitContext`, and `QbeValue` use role names. MIR records, construction, analysis, rewrites, verification and QBE adaptation have separate modules; see the [architecture map](architecture.md). |
+| `compiler/src/` | Ordinary compiler: `CompilerState`, `CheckedLocals`, `CheckedValue`, `QbeEmitContext`, and `QbeValue` use role names. Lexing and source slicing live in `lexer.trb`; MIR records, construction, analysis, rewrites, verification and QBE adaptation have separate modules; see the [architecture map](architecture.md). |
 | `src/snapshot_validation.trb` and shared snapshot/diagnostic/MIR modules | Snapshot boundary validation and shared support. |
 | `src/recovery_scalar_*`, `recovery_aggregate_*`, `recovery_managed_*` | Retained scalar, aggregate and managed snapshot recovery, including layout, QBE, runtime and differential tests. These paths cover distinct supported capabilities. |
 | `src/recovery_driver.trb`, `recovery_generation.trb`, `matched_go_driver.trb`, `compiler_recovery_source.trb`, `compiler_recovery_layout.trb` | Recovery orchestration, comparison and strict derivation from the canonical compiler modules. Ordinary builds keep their file-root closure. |
@@ -39,8 +39,10 @@ for each helper extraction. Required correctness and reproducibility remain bloc
 ## Current source and historical consumers
 
 The [compiler-name seed handoff](bootstrap-seed-updates.md) removed the predecessor
-intrinsic declarations, wrappers and dual recognition. Intrinsic emission uses
-actual declaration identity, independent of declaration order. The source-name
+intrinsic declarations, wrappers and dual recognition. MIR admission, intrinsic
+calls and ordinary body omission share declaration-bound identity. Extracted helpers and imported aliases resolve to the same owner; unrelated
+same-named functions retain ordinary calls. CLI adapters follow the imported core
+compiler for that ownership. The source-name
 check covers current paths, implementation names, comments and visible Markdown; immutable history links and result records remain reproduction evidence.
 
 Cross-revision measurement tools retain a historical project-layout resolver and

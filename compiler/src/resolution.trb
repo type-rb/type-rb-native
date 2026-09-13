@@ -993,8 +993,7 @@ def resolve(mut state: CompilerState): Boolean
 	return !has_diagnostic(state)
 end
 
-def compiler_entry_function(state: CompilerState): Integer
-	index := find_function_in_module(state, state.entry_module[0], "compiler_main")
+def compiler_main_signature(state: CompilerState, index: Integer): Integer
 	if index < 0
 		return - 1
 	end
@@ -1017,9 +1016,49 @@ def compiler_entry_function(state: CompilerState): Integer
 	return index
 end
 
-def compiler_runtime_intrinsic(name: String): Boolean
+def compiler_entry_function(state: CompilerState): Integer
+	return compiler_main_signature(state, find_function_in_module(state, state.entry_module[0], "compiler_main"))
+end
+
+# CLI entry adapters import the ordinary compiler under core_main. Follow that
+# declaration to its own visible bindings, including extracted intrinsic owners.
+def compiler_runtime_owner(state: CompilerState): Integer
+	if compiler_entry_function(state) < 0
+		return - 1
+	end
+	if find_function_in_module(state, state.entry_module[0], "native_cli_main") >= 0
+		core := find_visible_function(state, state.entry_module[0], "core_main")
+		if compiler_main_signature(state, core) < 0
+			return - 1
+		end
+		if load_string(state.function_names, core) != "compiler_main"
+			return - 1
+		end
+		return load_integer(state.function_modules, core)
+	end
+	return state.entry_module[0]
+end
+
+def compiler_runtime_intrinsic(state: CompilerState, function_index: Integer): Boolean
+	if function_index < 0 || function_index >= state.function_count[0]
+		return false
+	end
+	name := load_string(state.function_names, function_index)
 	if name == "compiler_reset_temporary_storage" || name == "compiler_file_exists" || name == "compiler_read_source" || name == "compiler_source_slice" || name == "compiler_collect_project_sources" || name == "compiler_eputs"
-		return true
+		owner := compiler_runtime_owner(state)
+		if owner >= 0
+			return find_visible_function(state, owner, name) == function_index
+		end
 	end
 	return false
+end
+
+def compiler_host_intrinsic(state: CompilerState, function_index: Integer): Boolean
+	if function_index < 0 || function_index >= state.function_count[0]
+		return false
+	end
+	if compiler_entry_function(state) < 0 || find_function_in_module(state, state.entry_module[0], "native_cli_main") < 0
+		return false
+	end
+	return load_string(state.module_names, load_integer(state.function_modules, function_index)) == "host"
 end
