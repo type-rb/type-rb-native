@@ -16,12 +16,12 @@ of waiting for individual unsupported programs to be reported. TypeRB at
 introduced. Fix wrong acceptance, wrong results and unsafe behavior as soon as
 the shared probes reveal them.
 
-Start with ordinary String behavior: UTF-8 literals, code-point length/indexing,
-concatenation, interpolation, escapes, allocation/lifetime and source/REPL
-handling. Native currently stores byte lengths and indexes bytes, so removing
-the ASCII diagnostic alone would admit incorrect String semantics. Keep raw
-byte operations explicit where source decoding or terminal editing needs them.
-This foundation does not require every Unicode library API to ship at once.
+The ordinary String foundation now supports UTF-8 literals, code-point
+length/indexing, concatenation, interpolation, allocation/lifetime and source/REPL
+handling. Continue with the remaining escapes and String APIs recorded in the
+shared inventory. Keep raw byte operations explicit where source decoding or
+terminal editing needs them; character indexing and terminal cell widths remain
+separate contracts.
 
 Then coordinate the record/Hash/iteration MIR family, arguments and function
 values, expression control flow, nullable/enum/Result behavior, and the remaining
