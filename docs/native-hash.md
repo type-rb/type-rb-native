@@ -26,9 +26,8 @@ Those boundaries report unsupported input rather than substitute semantics.
 An unresolved empty Hash can survive a REPL submission and answer `size` and
 `empty?`; subsequent indexed insertion establishes its key/value type. Ordinary
 compiled code needs a concrete type by the end of checking. Aliases of an
-untyped binding require an explicit annotation. UTF-8 literals retain the
-existing ordinary Native String limitation; Hash does not establish Unicode
-API coverage.
+untyped binding require an explicit annotation. Hash keys use the shared UTF-8
+String representation; additional Unicode APIs remain separate coverage work.
 
 ## Representation and ownership
 
