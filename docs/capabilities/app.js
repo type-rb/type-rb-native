@@ -1,4 +1,5 @@
 import { catalog } from './catalog.js';
+import { ordinaryLanguage } from './ordinary-language.js';
 
 const statuses = {
   verified: { label: 'Verified', help: 'Reproducible evidence exists for the stated scope.' },
@@ -29,6 +30,58 @@ const button = (label, active, onClick, className = 'filter-button') => {
   node.setAttribute('aria-pressed', String(active));
   node.addEventListener('click', onClick);
   return node;
+};
+
+const renderOrdinaryLanguage = () => {
+  const features = ordinaryLanguage.features.filter((feature) => feature.scope === 'basic');
+  const basicIds = new Set(features.flatMap((feature) => feature.cases));
+  const basicCases = ordinaryLanguage.cases.filter((item) => basicIds.has(item.id));
+  const family = document.querySelector('#ordinary-family');
+  const all = element('option', '', 'All basic families');
+  all.value = 'all';
+  family.replaceChildren(all, ...features.map((feature) => {
+    const option = element('option', '', feature.title);
+    option.value = feature.id;
+    return option;
+  }));
+  const gaps = basicCases.filter((item) => item.gaps.length);
+  document.querySelector('#ordinary-count').textContent = `${gaps.length} / ${basicCases.length} probes have differences`;
+  const utf8 = ordinaryLanguage.cases.find((item) => item.id === 'utf8-string');
+  document.querySelector('#ordinary-highlight').textContent =
+    `UTF-8 String literal · Check: ${utf8.states.check} · Build: ${utf8.states.build} · REPL: ${utf8.states.repl}`;
+  const uncovered = features.filter((feature) => feature.pending.length);
+  document.querySelector('#ordinary-uncovered-count').textContent =
+    `Uncovered contracts remain in ${uncovered.length} families`;
+  document.querySelector('#ordinary-uncovered').replaceChildren(...uncovered.map((feature) => {
+    const item = element('li');
+    item.append(element('strong', '', `${feature.title}: `), document.createTextNode(feature.pending.join('; ')));
+    return item;
+  }));
+  document.querySelector('#ordinary-reference').textContent =
+    `Reference revision: ${ordinaryLanguage.referenceRevision.slice(0, 12)}. Generated from the same reviewed registry used by CI.`;
+  const renderRows = () => {
+    const selected = features.find((feature) => feature.id === family.value);
+    const onlyGaps = document.querySelector('#ordinary-only-gaps').checked;
+    const cases = basicCases.filter((item) =>
+      (!selected || selected.cases.includes(item.id)) && (!onlyGaps || item.gaps.length));
+    document.querySelector('#ordinary-visible').textContent = `${cases.length} cases shown`;
+    document.querySelector('#ordinary-cases').replaceChildren(...cases.map((item) => {
+      const row = element('tr');
+      const heading = element('th', '', item.title);
+      heading.scope = 'row';
+      if (item.referenceReplRejects) {
+        heading.append(element('small', 'ordinary-reference-note', 'Reference REPL also reports a diagnostic'));
+      }
+      row.append(heading);
+      ['check', 'build', 'execute', 'repl'].forEach((path) => {
+        row.append(element('td', item.gaps.includes(path) ? 'ordinary-gap' : 'ordinary-match', item.states[path]));
+      });
+      return row;
+    }));
+  };
+  family.addEventListener('change', renderRows);
+  document.querySelector('#ordinary-only-gaps').addEventListener('change', renderRows);
+  renderRows();
 };
 
 const renderSummary = () => {
@@ -169,6 +222,7 @@ const render = () => {
 };
 
 document.querySelector('#snapshot-date').textContent = `Catalog snapshot · ${catalog.updatedAt}`;
+renderOrdinaryLanguage();
 document.querySelector('#search').addEventListener('input', (event) => {
   state.query = event.target.value;
   renderAreas();

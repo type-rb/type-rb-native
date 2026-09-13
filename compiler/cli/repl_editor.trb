@@ -133,11 +133,11 @@ def repl_editor_render(mut editor: ReplEditor)
 			row += 1
 			column = 5
 		else
-			mut text := compiler_source_slice(editor.text[0], index, index + glyph.bytes)
+			mut text := compiler_source_slice(editor.text[0], index, index + glyph.characters)
 			mut width := glyph.width
-			mut condition_35 := native_cli_byte(editor.text[0], index) < 32
+			mut condition_35 := native_cli_byte(editor.text[0][index], 0) < 32
 			if !condition_35
-				condition_35 = native_cli_byte(editor.text[0], index) == 127
+				condition_35 = native_cli_byte(editor.text[0][index], 0) == 127
 			end
 			if condition_35
 				text = "?"
@@ -146,7 +146,7 @@ def repl_editor_render(mut editor: ReplEditor)
 			rows[row] += repl_editor_paint(text, repl_editor_kind(editor, spans.words[span], spans.kinds[span]), editor.color)
 			column += width
 		end
-		index += glyph.bytes
+		index += glyph.characters
 	end
 	if editor.cursor[0] == editor.text[0].size()
 		cursor_row = row
@@ -255,7 +255,7 @@ def repl_editor_vertical(mut editor: ReplEditor, direction: Integer): Boolean
 	while index < editor.cursor[0]
 		glyph := repl_glyph(editor.text[0], index)
 		column += glyph.width
-		index += glyph.bytes
+		index += glyph.characters
 	end
 	mut width := 0
 	mut cursor := target
@@ -274,7 +274,7 @@ def repl_editor_vertical(mut editor: ReplEditor, direction: Integer): Boolean
 				column = width
 			else
 				width += glyph.width
-				cursor += glyph.bytes
+				cursor += glyph.characters
 			end
 		else
 			loop_41 = false
@@ -298,6 +298,9 @@ def repl_editor_key(): String
 	end
 	if condition_42
 		return "interrupt"
+	end
+	if key >= 128
+		return repl_editor_utf8_key(key)
 	end
 	if key != 27
 		return native_cli_character(key)
@@ -369,7 +372,7 @@ def repl_editor_message(text: String, columns: Integer): String
 			if width + glyph.width >= columns
 				return output
 			end
-			byte := native_cli_byte(text, index)
+			byte := native_cli_byte(text[index], 0)
 			mut condition_49 := byte < 32
 			if !condition_49
 				condition_49 = byte == 127
@@ -378,10 +381,10 @@ def repl_editor_message(text: String, columns: Integer): String
 				output += " "
 				width += 1
 			else
-				output += compiler_source_slice(text, index, index + glyph.bytes)
+				output += compiler_source_slice(text, index, index + glyph.characters)
 				width += glyph.width
 			end
-			index += glyph.bytes
+			index += glyph.characters
 		else
 			loop_48 = false
 		end
@@ -965,4 +968,42 @@ def repl_editor_kind(editor: ReplEditor, word: String, lexical: Integer): Intege
 		index += 1
 	end
 	return lexical
+end
+
+# Assemble terminal bytes before constructing a String. Partial UTF-8 byte
+# sequences must not enter the editor's code-point coordinate space.
+def repl_editor_utf8_key(first: Integer): String
+	mut length := 0
+	mut point := 0
+	if first >= 194 && first <= 223
+		length = 2
+		point = first - 192
+	elsif first >= 224 && first <= 239
+		length = 3
+		point = first - 224
+	elsif first >= 240 && first <= 244
+		length = 4
+		point = first - 240
+	else
+		return native_cli_character(65533)
+	end
+	mut index := 1
+	while index < length
+		byte := native_cli_key(40)
+		if byte == - 3 || byte == 3
+			return "interrupt"
+		elsif byte == - 1
+			return "eof"
+		elsif byte == - 2
+			return native_cli_character(65533)
+		elsif byte < 128 || byte > 191
+			return native_cli_character(byte)
+		end
+		point = point * 64 + byte - 128
+		index += 1
+	end
+	if (length == 3 && point < 2048) || (length == 4 && point < 65536)
+		return native_cli_character(65533)
+	end
+	return native_cli_character(point)
 end

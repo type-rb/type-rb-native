@@ -3,9 +3,25 @@ import { array_region_operation, checked_mir_value, checked_value, mir_checked_v
 import { MirArrayOperation, MirBlock, mir_type_id } from mir
 import { mir_block } from mir_construction
 import { locals_new } from state
+import { logical_checked_source } from logical_test
+import { check } from compiler
+import { has_diagnostic } from state
+import { load_string } from storage
 import { describe, expect, test } from trb/std/test
 
 describe("Checked program and MIR construction") do
+	test("rejects unsupported aggregate equality before either execution path") do
+		["==", "!="].each do |operator|
+			["Entry.new(value: 1)", "[1]", "{one: 1}"].each do |value|
+				source := "record Entry\nvalue: Integer\nend\ndef main()\nputs(" + value + " " + operator + " " + value + ")\nend\n"
+				mut state := logical_checked_source(source)
+				expect(check(state)).to_be_false()
+				expect(has_diagnostic(state)).to_be_true()
+				expect(load_string(state.diagnostic_codes, 0)).to_equal("TRBN4004")
+			end
+		end
+	end
+
 	test("constructs named MIR blocks with exact fields and origins") do
 		mut branch := mir_block(31, 1, 71, 2, 3, 4, 5, 2, 6, 32, 33, 7, 8, 9, 10, - 1)
 		other := mir_block(31, 1, 71, 2, 3, 4, 5, 2, 6, 32, 33, 7, 8, 9, 10, - 1)

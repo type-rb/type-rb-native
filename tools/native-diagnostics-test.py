@@ -69,6 +69,8 @@ with tempfile.TemporaryDirectory(prefix='native-diagnostics-') as temporary:
     cases = [
         ('missing\n', [1]),
         ('1 + true\n', [1]),
+        ('s:= "hello"\ns*2\n', [2]),
+        ('s := "hello"\ns * 2\n', [2]),
         ('mut x := 1\nmissing\nmissing\n', [2, 2]),
         ('1\nmissing\n', [2]),
         ('def answer(): Integer\n  return true\nend\n', [2]),

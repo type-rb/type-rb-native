@@ -129,7 +129,28 @@ describe("Managed String MIR") do
 		end
 	end
 
-	test("retains opaque calls and allocation effects while keeping nonallocating String reads distinct") do
+	test("requires live receiver roots at potentially allocating String indices") do
+		mut state := logical_checked_source("def point(text: String): String\nreturn text[-1]\nend\ndef main()\nputs(point(\"ab\"))\nend\n")
+		expect(check(state)).to_be_true()
+		mut found := false
+		state.scalar_mir.root_plans.each do |plan|
+			mut at := 0
+			while at < plan.instructions.size()
+				instruction := state.scalar_mir.instructions[plan.instructions[at]]
+				if instruction.kind == 16
+					found = true
+					expect(mir_instruction_effects(state.scalar_mir, instruction)).to_equal(9)
+					expect(plan.roots[at]).to_equal([instruction.first])
+					plan.roots[at] = []
+				end
+				at += 1
+			end
+		end
+		expect(found).to_be_true()
+		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR live root plan differs")
+	end
+
+	test("retains opaque calls and String allocation effects") do
 		state := managed_test_state()
 		state.scalar_mir.instructions.each do |instruction|
 			if instruction.kind == 11

@@ -35,10 +35,10 @@ helper = r'''
 #include <string.h>
 #include <sys/uio.h>
 #include <unistd.h>
-struct native_string { uint64_t descriptor; int64_t length; unsigned char bytes[]; };
+struct native_string { uint64_t descriptor; int64_t length; int64_t points; unsigned char bytes[]; };
 _Static_assert(sizeof(void *) == 8 && sizeof(size_t) == 8, "LP64 boundary");
 _Static_assert(sizeof(struct iovec) == 16 && offsetof(struct iovec, iov_len) == 8, "iovec layout");
-_Static_assert(offsetof(struct native_string, bytes) == 16, "String payload layout");
+_Static_assert(offsetof(struct native_string, bytes) == 24, "String payload layout");
 extern void trbn_puts(struct native_string *);
 static const char *mode;
 static size_t limit;
@@ -63,8 +63,8 @@ int main(int argc, char **argv) {
     assert(fseek(input, 0, SEEK_END) == 0);
     long length = ftell(input); assert(length >= 0);
     rewind(input);
-    struct native_string *value = malloc(17 + (size_t)length); assert(value);
-    value->descriptor = 0; value->length = length;
+    struct native_string *value = malloc(25 + (size_t)length); assert(value);
+    value->descriptor = 0; value->length = length; value->points = 0;
     assert(fread(value->bytes, 1, (size_t)length, input) == (size_t)length);
     value->bytes[length] = 0; fclose(input);
     trbn_puts(value);
@@ -80,7 +80,7 @@ with tempfile.TemporaryDirectory(prefix='native puts boundary ') as directory:
     (root / 'observer.c').write_text(helper)
     subprocess.run([str(args.qbe.resolve()), '-o', str(root / 'puts.s'), str(root / 'puts.ssa')], check=True, capture_output=True, timeout=30)
     subprocess.run(['/usr/bin/cc', '-O2', str(root / 'puts.s'), str(root / 'observer.c'), '-o', str(root / 'probe')], check=True, capture_output=True, timeout=30)
-    for name, payload in [('empty', b''), ('text', b'abcdef'), ('newlines', b'a\nb\n'), ('nul', b'a\0b'), ('large', b'x' * 16384)]:
+    for name, payload in [('empty', b''), ('text', b'abcdef'), ('utf8', 'こんにちは😀'.encode()), ('newlines', b'a\nb\n'), ('nul', b'a\0b'), ('large', b'x' * 16384)]:
         (root / 'input').write_bytes(payload)
         complete = payload + b'\n'
         for mode, limit in [('normal', 32768), ('partial-one', 1), ('partial-seven', 7), ('boundary', max(1, len(payload))), ('zero', 3), ('error', 3), ('prefix-zero', 3), ('prefix-error', 3)]:

@@ -3,7 +3,7 @@ import { compiler_new, has_diagnostic } from state
 import { load_string } from storage
 import { token_is } from parser
 import { character_in, compiler_source_slice, lex, interpolation_end, interpolation_quote_end } from lexer
-import { native_cli_byte, native_cli_character, native_cli_cell_width } from host
+import { native_cli_scalar, native_cli_character, native_cli_cell_width } from host
 
 # Display spans preserve whitespace, comments and unfinished input. They do not
 # replace the compiler lexer or decide whether an expression may execute.
@@ -390,67 +390,20 @@ def repl_indent(source: String): String
 	return output
 end
 
-# Decode only for terminal geometry. This does not broaden String semantics.
+# Editor positions use the same code-point coordinates as String indexing.
+# Terminal cells are a separate quantity; combining code points can have width 0.
 record ReplGlyph
-	bytes: Integer
+	characters: Integer
 	width: Integer
 end
 
 def repl_glyph(text: String, start: Integer): ReplGlyph
-	first := native_cli_byte(text, start)
-	mut length := 1
-	mut codepoint := first
-	mut condition_26 := first >= 194
-	if condition_26
-		condition_26 = first <= 223
-	end
-	if condition_26
-		length = 2
-		codepoint = first - 192
-	else
-		mut condition_27 := first >= 224
-		if condition_27
-			condition_27 = first <= 239
-		end
-		if condition_27
-			length = 3
-			codepoint = first - 224
-		else
-			mut condition_28 := first >= 240
-			if condition_28
-				condition_28 = first <= 244
-			end
-			if condition_28
-				length = 4
-				codepoint = first - 240
-			else
-				if first >= 128
-					return ReplGlyph.new(bytes: 1, width: 1)
-				end
-			end
-		end
-	end
-	mut index := 1
-	while index < length
-		if start + index >= text.size()
-			return ReplGlyph.new(bytes: 1, width: 1)
-		end
-		byte := native_cli_byte(text, start + index)
-		mut condition_29 := byte < 128
-		if !condition_29
-			condition_29 = byte > 191
-		end
-		if condition_29
-			return ReplGlyph.new(bytes: 1, width: 1)
-		end
-		codepoint = codepoint * 64 + byte - 128
-		index += 1
-	end
+	codepoint := native_cli_scalar(text[start])
 	mut width := native_cli_cell_width(codepoint)
 	if width < 0
 		width = 1
 	end
-	return ReplGlyph.new(bytes: length, width: width)
+	return ReplGlyph.new(characters: 1, width: width)
 end
 
 def repl_previous(text: String, cursor: Integer): Integer
@@ -461,7 +414,7 @@ def repl_previous(text: String, cursor: Integer): Integer
 		if glyph.width != 0
 			previous = index
 		end
-		index += glyph.bytes
+		index += glyph.characters
 	end
 	return previous
 end
@@ -470,7 +423,7 @@ def repl_next(text: String, cursor: Integer): Integer
 	if cursor >= text.size()
 		return text.size()
 	end
-	mut index := cursor + repl_glyph(text, cursor).bytes
+	mut index := cursor + repl_glyph(text, cursor).characters
 	mut loop_31 := true
 	while loop_31
 		mut condition_30 := index < text.size()
@@ -478,7 +431,7 @@ def repl_next(text: String, cursor: Integer): Integer
 			condition_30 = repl_glyph(text, index).width == 0
 		end
 		if condition_30
-			index += repl_glyph(text, index).bytes
+			index += repl_glyph(text, index).characters
 		else
 			loop_31 = false
 		end

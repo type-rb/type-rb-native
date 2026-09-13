@@ -33,19 +33,22 @@ external tools in distribution costs.
 
 Current work covers basic ordinary language features, Native output, verified
 MIR, source organization and the optimizations already needed by those programs.
-The first consolidation inventory is the current supported ordinary subset plus
-Range: scalar expressions, calls, records, Strings, Arrays, Hash, conditionals,
-loops and lexical transfers. Unsupported language forms remain explicit gaps.
-Add prerequisites needed by the compiler's actual implementation, while tracking
-other language/library expansion separately. A completed MIR milestone is not
-100% TypeRB language coverage.
+The first consolidation inventory includes scalar expressions, calls, records,
+Strings, Arrays, Hash, Range, conditionals, loops and lexical transfers.
+[The basic-language contract](native-language-coverage.md), tracked in
+[issue #454](https://github.com/type-rb/type-rb-native/issues/454), broadens that
+inventory from pinned reference syntax and semantic probes. Complete useful
+families together with their MIR dependencies, beginning with ordinary UTF-8
+String behavior; do not wait for all existing MIR migration before closing
+basic language gaps. The shared tests also generate the public Capabilities
+detail view. A completed MIR milestone is not 100% TypeRB language coverage.
 
 Keep checked-program type, origin and high-level semantic information available
 for the later source backends. Native-specific layout, ABI and root lowering
-belong after that shared semantic boundary. Three-language backend parity,
-remaining basic syntax, standard-library and official-package coverage proceed
-by their dependencies after the core consolidation, not by a claim that one
-unchecked category list has been completed.
+belong after that shared semantic boundary. Basic syntax proceeds with MIR
+consolidation. Three-language backend parity, wider standard-library and
+official-package coverage follow their dependencies; completing one category
+list does not establish those capabilities.
 
 ## Completion conditions
 
