@@ -13,6 +13,12 @@ def compiler_source_slice(source: String, start: Integer, finish: Integer): Stri
 	return value
 end
 
+# The reference frontend validates source encoding before recovery. Ordinary
+# compilers adapt this identity to byte validation before decoding any token.
+def compiler_source_is_utf8(_source: String): Boolean
+	return true
+end
+
 def character_in(character: String, characters: String): Boolean
 	mut index := 0
 	while index < characters.size()
@@ -476,6 +482,11 @@ def skip_comment(source: String, mut position: Array<Integer>)
 end
 
 def lex_source(mut state: CompilerState, source: String, terminal_kind: Integer): Boolean
+	if !compiler_source_is_utf8(source)
+		diagnostic(state, "TRBN4001", 1, "source is not valid UTF-8")
+		push_token(state, terminal_kind, "", 1)
+		return false
+	end
 	mut position := [0]
 	mut line := 1
 	mut character := ""

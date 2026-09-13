@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 88 ordinary-path probes and 32 feature
+Status: the shared contract contains 91 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -36,6 +36,38 @@ remain required. Temporary performance/size regressions are observed during
 integration; detailed qualification occurs at coherent milestones. A feature
 need not manufacture a runtime speedup or a separate size budget revision to
 justify its existence. Final performance goals remain unchanged.
+
+## Ordinary UTF-8 String foundation
+
+The shared cases cover Japanese text, two- through four-byte characters,
+combining code points, negative indices, concatenation, interpolation, equality,
+Hash keys, record/Array storage, embedded NUL and long literals. The additional
+`tools/native-utf8-test.py` exercises Unicode paths and argv, rejects malformed
+source bytes before token decoding, and forces collection before every String
+allocation while indexed values and their owners remain live. Terminal tests
+exercise evaluation as well as wide-character and combining-mark editing.
+
+String headers retain UTF-8 byte length and code-point count separately. Size is
+constant time; ASCII indexing keeps its bounded static cache and allocates
+nothing. Non-ASCII indexing scans code points and creates a managed one-character
+String. MIR therefore treats String indexing as potentially allocating and
+failing, and verifies the receiver's live root. Positions count code points;
+grapheme clusters are not language indices. Terminal cell widths remain a
+separate presentation concern. Further non-ASCII indexing optimization can use
+this semantic boundary without changing the language contract.
+
+The ordinary compiler serializes literal bytes through the declaration-bound
+`compiler_string_bytes` runtime adapter and validates raw source with
+`compiler_source_is_utf8`. These are typed compiler internals, like source input
+and slicing, not public String APIs. Their source bodies preserve the preceding
+ASCII bootstrap boundary. Go-hosted canonical recovery emission remains narrower
+than the final ordinary compiler and must not be counted as ordinary UTF-8
+evidence. No seed, pin or Go fallback is added to the ordinary chain; acceptance
+requires the published seed's full replacement generations and fixed points.
+
+Unicode identifiers, Unicode escapes and the remaining String receiver APIs are
+still tracked separately. This foundation does not mark the entire String family,
+standard library or basic-language milestone complete.
 
 ## Readonly record field correction
 
@@ -82,7 +114,9 @@ are visible separately and must not be attributed only to Native.
 
 A rejected REPL submission may leave the interactive session at exit status
 zero. Output and diagnostics determine the result, not exit status alone.
-UTF-8 literals currently pass check but fail ordinary build and REPL emission.
+UTF-8 literals, code-point size/index, concatenation/interpolation and managed
+collection storage now pass ordinary build, execution and REPL checks. Unicode
+escapes and additional String APIs remain explicit gaps.
 The while probe produces the same final value but lacks the reference's `[mut]`
 REPL display. These remain explicit differences. Snapshot/recovery coverage
 cannot establish ordinary check/build/run/REPL support.

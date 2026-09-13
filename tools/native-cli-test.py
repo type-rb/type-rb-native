@@ -153,8 +153,8 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
     hello.write_text('def main()\nputs(1 + true)\nend\n')
     run('build', hello, '--compile', '--outfile', executable, success=False)
     assert executable.read_bytes() == before, 'failed build replaced an existing executable'
-    hello.write_text('def main()\nputs("unsupported: é")\nend\n')
-    assert 'TRBN' in run('build', hello, '--compile', success=False)
+    hello.write_text('def main()\nputs("UTF-8: é")\nend\n')
+    assert run('run', hello) == 'UTF-8: é\n'
     hello.write_text('def main()\nputs("program ready")\nwhile true\nend\nend\n')
     child = subprocess.Popen([str(binary), 'run', str(hello)], cwd=root, env=env,
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -210,7 +210,7 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
     assert 'not implemented' in run('run', cwd=project, success=False)
     assert '42 : Integer' in run('repl', '--mode=trb', text='answer()\n:quit\n', cwd=project)
     run('run', 'missing.trb', cwd=project, success=False)
-    assert 'ASCII String literals only' in run('repl', text='"é"\n:quit\n')
+    assert '"é" : String' in run('repl', text='"é"\n:quit\n')
     logical = run('repl', text='''def mark(value: Boolean): Boolean
 puts("visited")
 return value

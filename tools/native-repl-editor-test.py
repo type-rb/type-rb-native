@@ -198,6 +198,8 @@ def native_scenarios(binary):
             terminal.wait(lambda: 'draft' in terminal.display, 'search cancellation restores draft')
             terminal.send('\x03')
 
+            terminal.evaluate('puts("こんにちは😀")', 'こんにちは😀')
+            terminal.evaluate('"Aあ😀"[1]', '"あ" : String')
             terminal.send('# 日本e\u0301')
             terminal.wait(lambda: '# 日本é' in terminal.display or '# 日本é' in terminal.display,
                           'Unicode display')

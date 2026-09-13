@@ -310,7 +310,11 @@ production-use goal requires implemented and validated solutions for:
 The initial runtime covered static data, scalar values, simple aggregate layout,
 observable output and deterministic process failure. The current ordinary runtime
 also manages Strings, Arrays, records and Hash values; remaining coverage is
-tracked in the [ordinary language plan](native-language-coverage.md). Snapshot
+tracked in the [ordinary language plan](native-language-coverage.md). Ordinary
+Strings store byte length and code-point count separately, with UTF-8 data after
+the managed header. I/O and Hash equality use bytes; language size/index use code
+points. Non-ASCII indexing can allocate, with its lifetime effects owned by MIR.
+Snapshot
 aggregate recovery retains a separate heap-free layer, keeping record and
 tagged-value semantics independent of allocation strategy.
 

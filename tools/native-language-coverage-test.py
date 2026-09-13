@@ -27,10 +27,10 @@ class LanguageCoverageTests(unittest.TestCase):
         utf8 = next(case for case in cases if case["id"] == "utf8-string")
         expected = coverage.expected_native(utf8)
         self.assertEqual(expected["check"]["code"], 0)
-        self.assertEqual(expected["build"]["code"], 1)
-        self.assertIsNone(expected["execute"])
+        self.assertEqual(expected["build"]["code"], 0)
+        self.assertEqual(expected["execute"]["stdout"], "日本語\n")
         self.assertEqual(expected["repl"]["code"], 0)
-        self.assertNotEqual(expected["repl"]["stderr"], "")
+        self.assertEqual(expected["repl"]["stderr"], "")
 
     def test_empty_duplicate_unknown_or_unreviewed_registry_is_rejected(self):
         mutations = [lambda d: d.update(schemaVersion=True), lambda d: d.update(extra=1),
@@ -53,7 +53,7 @@ class LanguageCoverageTests(unittest.TestCase):
 
     def test_table_does_not_count_session_exit_zero_as_feature_support(self):
         table = coverage.coverage_table(coverage.validate(self.document))
-        self.assertIn("| UTF-8 String literal | accepts | rejects valid input | not reached | rejects valid input |", table)
+        self.assertIn("| UTF-8 String literal | accepts | accepts | matches reference | matches reference |", table)
         self.assertIn("| while | accepts | accepts | matches reference | output differs |", table)
         self.assertIn("| elsif | accepts | accepts | matches reference | matches reference |", table)
         self.assertIn("Array&lt;Boolean&gt;", table)

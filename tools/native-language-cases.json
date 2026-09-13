@@ -39,14 +39,16 @@
         "string-runtime-bounds",
         "brace-unicode-escape",
         "string-zero-escape",
-        "string-repeat-rejection"
+        "string-repeat-rejection",
+        "utf8-storage",
+        "utf8-nul",
+        "utf8-long"
       ],
       "pending": [
-        "UTF-8 across file input, arguments, Hash keys and managed collection lifetimes",
-        "Terminal editing, cursor widths, escapes and malformed input",
-        "Remaining String receiver APIs and embedded-expression boundaries"
+        "Unicode escapes and remaining String receiver APIs",
+        "Embedded-expression boundaries beyond the reviewed interpolation probes"
       ],
-      "note": ""
+      "note": "Ordinary UTF-8 literals, code-point size/index, collections and NUL/long data are covered. Additional CLI tests cover argv, invalid source, forced GC and terminal editing."
     },
     {
       "id": "operators",
@@ -1249,15 +1251,19 @@
           "stderr": ""
         },
         "build": {
-          "code": 1,
-          "stdout": "",
-          "stderr": "<case>/main.trb:3: error[TRBN4005]: Native QBE emission supports ASCII String literals only\n"
-        },
-        "execute": null,
-        "repl": {
           "code": 0,
           "stdout": "",
-          "stderr": "(trb):1: error[TRBN4005]: Native REPL currently supports ASCII String literals only\n"
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "日本語\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "日本語\n",
+          "stderr": ""
         }
       }
     },
@@ -1547,15 +1553,19 @@
           "stderr": ""
         },
         "build": {
-          "code": 1,
-          "stdout": "",
-          "stderr": "<case>/main.trb:3: error[TRBN4005]: Native QBE emission supports ASCII String literals only\n"
-        },
-        "execute": null,
-        "repl": {
           "code": 0,
           "stdout": "",
-          "stderr": "(trb):2: error[TRBN4005]: Native REPL currently supports ASCII String literals only\n(trb):1: error[TRBN4003]: unresolved function probe\n"
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "9\nこ\n😀\ń\n挨拶: Aこんにちは😀é\ntrue\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "9\nこ\n😀\ń\n挨拶: Aこんにちは😀é\ntrue\n",
+          "stderr": ""
         }
       }
     },
@@ -1591,27 +1601,18 @@
         "check": {
           "code": 1,
           "stdout": "",
-          "stderr": "<case>/main.trb:3: error[TRBN4001]: unsupported source character \\xe6\n",
-          "invalidUtf8": {
-            "stderr": "3c636173653e2f6d61696e2e7472623a333a206572726f725b5452424e343030315d3a20756e737570706f7274656420736f757263652063686172616374657220e60a"
-          }
+          "stderr": "<case>/main.trb:3: error[TRBN4001]: unsupported source character 挨\n"
         },
         "build": {
           "code": 1,
           "stdout": "",
-          "stderr": "<case>/main.trb:3: error[TRBN4001]: unsupported source character \\xe6\n",
-          "invalidUtf8": {
-            "stderr": "3c636173653e2f6d61696e2e7472623a333a206572726f725b5452424e343030315d3a20756e737570706f7274656420736f757263652063686172616374657220e60a"
-          }
+          "stderr": "<case>/main.trb:3: error[TRBN4001]: unsupported source character 挨\n"
         },
         "execute": null,
         "repl": {
           "code": 0,
           "stdout": "",
-          "stderr": "(trb):2: error[TRBN4001]: unsupported source character \\xe6\n(trb):1: error[TRBN4001]: unsupported source character \\xe6\n(trb):2: error[TRBN4002]: unsupported top-level declaration return\n(trb):1: error[TRBN4003]: unresolved function probe\n",
-          "invalidUtf8": {
-            "stderr": "28747262293a323a206572726f725b5452424e343030315d3a20756e737570706f7274656420736f757263652063686172616374657220e60a28747262293a313a206572726f725b5452424e343030315d3a20756e737570706f7274656420736f757263652063686172616374657220e60a28747262293a323a206572726f725b5452424e343030325d3a20756e737570706f7274656420746f702d6c6576656c206465636c61726174696f6e2072657475726e0a28747262293a313a206572726f725b5452424e343030335d3a20756e7265736f6c7665642066756e6374696f6e2070726f62650a"
-          }
+          "stderr": "(trb):2: error[TRBN4001]: unsupported source character 挨\n(trb):1: error[TRBN4001]: unsupported source character 挨\n(trb):2: error[TRBN4002]: unsupported top-level declaration return\n(trb):1: error[TRBN4003]: unresolved function probe\n"
         }
       }
     },
@@ -4755,6 +4756,159 @@
           "code": 0,
           "stdout": "\"hello\" : String\n",
           "stderr": "(trb):2: error[TRBN4004]: binary operands have different types\n"
+        }
+      }
+    },
+    {
+      "id": "utf8-storage",
+      "title": "UTF-8 collection storage and aliases",
+      "declarations": "record Label\ntext: String\nend\ndef probe()\nmut values := [\"あ\" + \"😀\"]\nkept := values[0][0]\nvalues[0] = \"replacement\"\nmut labels := {\"日本\" => Label.new(text: kept)}\nlabels[\"日本語\"] = Label.new(text: \"こんにちは\")\nputs(labels[\"日\" + \"本\"].text)\nputs(labels[\"日本語\"].text[-1])\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "あ\nは\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "あ\nは\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "あ\nは\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "あ\nは\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "utf8-nul",
+      "title": "UTF-8 and NUL literal byte boundaries",
+      "declarations": "def probe()\ntext := \"あ\u0000😀\"\nputs(text)\nputs(text.size())\nputs(text[1])\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "あ\u0000😀\n3\n\u0000\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "あ\u0000😀\n3\n\u0000\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "あ\u0000😀\n3\n\u0000\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "あ\u0000😀\n3\n\u0000\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "utf8-long",
+      "title": "Long UTF-8 literals",
+      "declarations": "def probe()\ntext := \"日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀日本語😀\"\nputs(text.size())\nputs(text[-1])\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "360\n😀\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "360\n😀\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "360\n😀\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "360\n😀\n",
+          "stderr": ""
         }
       }
     }

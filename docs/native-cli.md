@@ -147,7 +147,9 @@ stable CLI contracts and supported distribution are [project goals](mir-consolid
 See the [ordinary coverage plan](native-language-coverage.md) for path-specific
 tracking; snapshot/recovery capabilities do not establish ordinary CLI support.
 The ordinary compiler's language and package restrictions still apply,
-including its current ASCII String-literal boundary.
+including the remaining Unicode-escape and String API gaps. Ordinary UTF-8
+literals, code-point size/indexing and concatenation work in compiled programs
+and the REPL; invalid source encoding is rejected before token decoding.
 Formatting, tests, language-server and package-management commands are not
 implemented by `trbn`.
 The editor does not yet provide the reference formatter's full canonical

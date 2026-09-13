@@ -15,13 +15,13 @@
 | Array&lt;Boolean&gt; | accepts | accepts | matches reference | matches reference |
 | Nullable String | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Ordinary enum | rejects valid input | rejects valid input | not reached | rejects valid input |
-| UTF-8 String literal | accepts | rejects valid input | not reached | rejects valid input |
+| UTF-8 String literal | accepts | accepts | matches reference | matches reference |
 | Array of named records | accepts | accepts | matches reference | matches reference |
 | Hash literal and required lookup | accepts | accepts | matches reference | matches reference |
 | Array each with live growth and index | accepts | accepts | matches reference | matches reference |
 | Range each (inclusive / exclusive / reversed) | accepts | accepts | matches reference | matches reference |
 | Range with captured endpoint effects (requires fn) | rejects valid input | rejects valid input | not reached | rejects valid input |
-| UTF-8 length, indexing, concatenation and interpolation | accepts | rejects valid input | not reached | rejects valid input |
+| UTF-8 length, indexing, concatenation and interpolation | accepts | accepts | matches reference | matches reference |
 | Unicode local identifier | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Unicode scalar escapes | rejects valid input | rejects valid input | not reached | rejects valid input |
 | String search and code-point APIs | rejects valid input | rejects valid input | not reached | rejects valid input |
@@ -90,3 +90,6 @@
 | Reject unsupported array equality | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Reject unsupported hash equality | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Unsupported String repetition and REPL diagnostic origin | rejects as reference | rejects as reference | not reached | rejects as reference |
+| UTF-8 collection storage and aliases | accepts | accepts | matches reference | matches reference |
+| UTF-8 and NUL literal byte boundaries | accepts | accepts | matches reference | matches reference |
+| Long UTF-8 literals | accepts | accepts | matches reference | matches reference |
