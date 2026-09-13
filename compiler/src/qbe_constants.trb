@@ -152,97 +152,139 @@ def emit_static_strings(
 	mut compressed_tokens: Array<Integer> := []
 	mut compressed_sizes: Array<Integer> := []
 	mut decoded_sizes: Array<Integer> := []
-	mut token_index := 0
-	while token_index < state.token_count[0]
-		if load_integer(state.token_kinds, token_index) == 3
-			value := load_string(state.token_texts, token_index)
-			mut canonical := token_index
-			mut value_index := 0
-			mut found := false
-			if deduplicate
-				while value_index < canonical_values.size()
-					if canonical_values[value_index] == value
-						canonical = canonical_tokens[value_index]
-						found = true
-						value_index = canonical_values.size()
-					else
-						value_index += 1
-					end
-				end
+	mut values: Array<String> := []
+	mut tokens: Array<Integer> := []
+	mut literals: Array<Integer> := []
+	mut origins: Array<Integer> := []
+	mut skipped: Hash<String, Integer> := {}
+	state.scalar_mir.functions.each do |function|
+		if function.kind == 3
+			start := load_integer(state.function_body_starts, function.id)
+			finish := load_integer(state.function_body_ends, function.id)
+			if finish > start
+				skipped[integer_string(start)] = finish
 			end
-			if !found
-				canonical_values.push(value)
-				canonical_tokens.push(token_index)
-				mut bytes: Array<Integer> := []
-				mut has_static_bytes := false
-				mut compressed: Array<Integer> := []
-				if value.size() >= 256
-					bytes = static_string_bytes(value)
-					if bytes.size() == value.size()
-						has_static_bytes = true
-						compressed = encode_static_bytes(bytes)
-					end
-				end
-				mut use_compressed := false
-				if compressed.size() > 0
-					if compressed.size() < value.size()
-						use_compressed = true
-					end
-				end
-				if use_compressed
-					qbe_output_line(
-						output,
-						"data $trbns" + integer_string(token_index) + " = align 8 { z " +
-						integer_string(value.size() + 17) + " }",
-					)
-					emit_static_byte_data(output, "trbnc" + integer_string(token_index), compressed)
-					compressed_tokens.push(token_index)
-					compressed_sizes.push(compressed.size())
-					decoded_sizes.push(value.size())
-					output.runtime_flags[2] = 1
+		end
+	end
+	mut token := 0
+	while token < state.token_count[0]
+		if skipped.key?(integer_string(token))
+			token = skipped[integer_string(token)]
+		else
+			if load_integer(state.token_kinds, token) == 3
+				values.push(load_string(state.token_texts, token))
+				tokens.push(token)
+				literals.push(- 1)
+				origins.push(load_integer(state.token_lines, token))
+			end
+			token += 1
+		end
+	end
+	state.scalar_mir.literal_texts.each do |_text|
+		output.mir_literal_symbols.push("")
+	end
+	state.scalar_mir.instructions.each do |instruction|
+		if instruction.kind == 12
+			values.push(state.scalar_mir.literal_texts[instruction.payload])
+			tokens.push(state.token_count[0] + instruction.payload)
+			literals.push(instruction.payload)
+			origins.push(instruction.line)
+		end
+	end
+	mut string_index := 0
+	while string_index < values.size()
+		token_index := tokens[string_index]
+		value := values[string_index]
+		mut canonical := token_index
+		mut value_index := 0
+		mut found := false
+		if deduplicate || literals[string_index] >= 0
+			while value_index < canonical_values.size()
+				if canonical_values[value_index] == value
+					canonical = canonical_tokens[value_index]
+					found = true
+					value_index = canonical_values.size()
 				else
-					qbe_output_line(
-						output,
-						"data $trbns" + integer_string(token_index) +
-						" = align 8 { l 0, l " + integer_string(value.size()) + ",",
-					)
-					mut line := "\tb"
-					mut line_bytes := 0
-					mut character_index := 0
-					while character_index < value.size()
-						mut code := 0
-						if has_static_bytes
-							code = bytes[character_index]
-						else
-							code = ascii_code(value[character_index])
-						end
-						if code < 0
-							diagnostic(
-								state,
-								"TRBN4005",
-								load_integer(state.token_lines, token_index),
-								"Native QBE emission supports ASCII String literals only",
-							)
-						else
-							line += " " + integer_string(code)
-							line_bytes += 1
-							if line_bytes == 16
-								qbe_output_line(output, line + ",")
-								line = "\tb"
-								line_bytes = 0
-							end
-						end
-						character_index += 1
-					end
-					if line_bytes > 0
-						qbe_output_line(output, line + ",")
-					end
-					qbe_output_line(output, "\tb 0 }")
+					value_index += 1
 				end
 			end
+		end
+		if !found
+			canonical_values.push(value)
+			canonical_tokens.push(token_index)
+			mut bytes: Array<Integer> := []
+			mut has_static_bytes := false
+			mut compressed: Array<Integer> := []
+			if value.size() >= 256
+				bytes = static_string_bytes(value)
+				if bytes.size() == value.size()
+					has_static_bytes = true
+					compressed = encode_static_bytes(bytes)
+				end
+			end
+			mut use_compressed := false
+			if compressed.size() > 0
+				if compressed.size() < value.size()
+					use_compressed = true
+				end
+			end
+			if use_compressed
+				qbe_output_line(
+					output,
+					"data $trbns" + integer_string(token_index) + " = align 8 { z " +
+					integer_string(value.size() + 17) + " }",
+				)
+				emit_static_byte_data(output, "trbnc" + integer_string(token_index), compressed)
+				compressed_tokens.push(token_index)
+				compressed_sizes.push(compressed.size())
+				decoded_sizes.push(value.size())
+				output.runtime_flags[2] = 1
+			else
+				qbe_output_line(
+					output,
+					"data $trbns" + integer_string(token_index) +
+					" = align 8 { l 0, l " + integer_string(value.size()) + ",",
+				)
+				mut line := "\tb"
+				mut line_bytes := 0
+				mut character_index := 0
+				while character_index < value.size()
+					mut code := 0
+					if has_static_bytes
+						code = bytes[character_index]
+					else
+						code = ascii_code(value[character_index])
+					end
+					if code < 0
+						diagnostic(
+							state,
+							"TRBN4005",
+							origins[string_index],
+							"Native QBE emission supports ASCII String literals only",
+						)
+					else
+						line += " " + integer_string(code)
+						line_bytes += 1
+						if line_bytes == 16
+							qbe_output_line(output, line + ",")
+							line = "\tb"
+							line_bytes = 0
+						end
+					end
+					character_index += 1
+				end
+				if line_bytes > 0
+					qbe_output_line(output, line + ",")
+				end
+				qbe_output_line(output, "\tb 0 }")
+			end
+		end
+		if literals[string_index] >= 0
+			output.mir_literal_symbols[literals[string_index]] = "$trbns" + integer_string(canonical)
+		else
 			store_integer(state.token_lines, token_index, canonical)
 		end
-		token_index += 1
+		string_index += 1
 	end
 	if compressed_tokens.size() > 0
 		emit_static_string_decoder(output, compressed_tokens, compressed_sizes, decoded_sizes)

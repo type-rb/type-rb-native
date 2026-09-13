@@ -13,7 +13,8 @@ measurements provide intermediate feedback.
 | Typed scalar values | Integer, Boolean and Float literals, unary/binary operations and numeric conversion have explicit operands, result types, origins and failure edges. Straight-line leaves retain bounded inlining and verified Integer range guards. |
 | Scalar control | Mutable scalar locals and parameters, nested `if`/`elsif`/`else`, `while`, `break`/`next`, early returns and continuing joins publish typed blocks and live-value arguments. Loop transfers carry only the enclosing environment; branch/body locals remain lexical. QBE consumes admitted bodies without rereading their source. |
 | Short-circuit expressions | Scalar `&&` and `||` publish conditional RHS blocks and Boolean result joins, including nested call arguments and loop predicates. Dominance preserves earlier expression temporaries; skipped RHS calls and traps stay unexecuted. |
-| Calls and declarations | Declaration identities, parameter types/mutability and return types are captured before body checking. Ordinary calls with scalar arguments and scalar/Void results retain explicit arguments and conservative allocation, mutation, I/O and failure effects, including forward, recursive and direct-path callees. |
+| Calls and declarations | Declaration identities, parameter types/mutability and return types are captured before body checking. Ordinary calls with scalar/String arguments and scalar/String/Void results retain explicit arguments and conservative allocation, mutation, I/O and failure effects, including forward, recursive and direct-path callees. |
+| Managed Strings and roots | String literals, concatenation, equality, size, indexing, Integer/String/Float conversions and String/Boolean output use typed operations. Integer output explicitly converts first. Managed parameters, rebinding, returns and control joins use the same value/block path. MIR derives live-before roots at allocating operations and ordinary calls; verification recomputes the complete plan. |
 | Numeric Array induction | Selected zero-based traversal and Integer/Float reductions retain verified induction, address and accumulator relationships. The adapter consumes the established plan. |
 | Array effects and headers | Ordered regions retain bindings, aliases, accesses, scope boundaries and conservative effect barriers. Verified function/loop plans select stable headers; element checks remain unless a separate induction proof permits removal. |
 | Hash | Checked typed operation plans retain key/value layout, operands' source bindings and effects. They are still a projection alongside general control/value MIR. |
@@ -21,7 +22,7 @@ measurements provide intermediate feedback.
 | Assignment and Boolean operations | Checked plans own assignment evaluation order and binary/logical result semantics; remaining direct adaptation still consumes some source-indexed plans. |
 
 Function adapter kinds explicitly distinguish scalar leaves, verified induction
-and general scalar control. Verification checks their operation and shape
+and general scalar/String control. Verification checks their operation and shape
 contracts as well as table bounds, value definitions, types, argument availability,
 control targets, declaration/call/return types, conservative call effects and source origins. Block arguments are parallel assignments;
 QBE adaptation captures edge values before overwriting destinations. Instruction
@@ -51,8 +52,14 @@ predicates. `logical_test.trb` also executes it with reversed MIR block storage
 and erased admitted source bodies. `flow_mir_test.trb` compares dominance with an
 independent node-removal reachability oracle over all 343 three-block graphs
 with at most two successors, and rejects unavailable return/edge operands.
-Existing induction, managed-lifetime and
-target controls remain. Direct managed callers retain bounded scalar inlining;
+The `managed-string-mir` fixture adds managed calls/returns, loop rebinding,
+short-circuit String operations, negative indexing, conversion and nested calls
+that grow the root buffer. `managed_mir_test.trb` erases all admitted bodies,
+reverses block storage and executes the result with a test-only collection before
+every String allocation. Independent expectations require the first call argument
+to survive later argument allocation and discard undemanded branch bindings.
+Tampered roots, capacity, instruction identities and String operations reject.
+Existing induction, managed-lifetime and target controls remain. Direct managed callers retain bounded scalar inlining;
 general scalar MIR calls currently remain explicit until the existing policy
 has a verified interprocedural owner. No performance improvement is inferred.
 
@@ -67,6 +74,11 @@ has a verified interprocedural owner. No performance improvement is inferred.
 - `checked_values.trb`, `mir_construction.trb`, `mir_builder.trb`, `mir_control.trb`:
   checked value projection, block construction and function publication.
 - `mir_calls.trb`: declaration capture, checked calls and their verification.
+- `mir_strings.trb`: String, conversion and output construction/contracts.
+- `mir_roots.trb`: operation effects, backward managed-value liveness and exact
+  safe-point root plans. Block parameters transfer only demanded values.
+- `qbe_strings.trb`, `qbe_roots.trb`: runtime adaptation of those operations and
+  publication of the verified root lists, without backend lifetime analysis.
 - `mir_logical.trb`: conditional RHS and expression-result join construction.
 - `checked_types.trb`: assignability, operator result types and diagnostics.
 - `checked_program.trb`: recursive source checking; it invokes these owners.
@@ -81,14 +93,23 @@ extracted implementation is copied or kept behind an old-name wrapper.
 
 ## Remaining work
 
-Managed arguments/results and values, their short-circuit expressions,
-Array/Range iteration and complete allocation/mutation/root-safety ownership
-still need the unified control/value route. Runtime/host intrinsics retain their
-existing adapters. The new call effects are conservative barriers, not precise
-interprocedural no-allocation or liveness summaries. Their current checked operations and conservative GC protections remain
+Array, Hash and record arguments/results and values, Array/Range iteration and
+their allocation/mutation/root-safety ownership still need the unified control/value
+route. String coverage establishes the managed-value root path for that work. Runtime/host intrinsics retain their
+existing adapters. Ordinary call effects remain conservative barriers; no interprocedural
+no-allocation property is inferred. String liveness is intraprocedural. Their current checked operations and conservative GC protections remain
 in force. The direct body emitter remains for those functions and must retire as
-its consumers migrate. QBE memory adaptation still contains lifetime decisions
-that belong above the backend; moving those helpers into a file does not complete
+its consumers migrate. For general scalar/String MIR, root publication replaces the direct emitter's
+lexical root inference: each allocating operation rewrites the frame segment to
+its sorted live-before list, with capacity reserved in the prologue. The root
+buffer address is reloaded after any intervening call. Roots no longer needed are
+dropped at the next safe point; loop iterations do not accumulate old Strings.
+Calls/allocations retain their existing failure order and managed-return ABI.
+Static literal encoding/deduplication consumes MIR literal values independently
+of admitted source bodies.
+
+QBE memory adaptation for the remaining direct functions still contains lifetime
+decisions that belong above the backend; moving those helpers into a file does not complete
 that ownership change.
 
 The entry and recursive checker remain substantial modules. Further decomposition

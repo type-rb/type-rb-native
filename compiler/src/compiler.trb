@@ -1585,7 +1585,7 @@ def emit_function(
 		general_mir_function = state.scalar_mir.functions[mir_index].kind == 3
 	end
 	if general_mir_function
-		emit_control_mir(state, function_index, result_type, context, body)
+		emit_control_mir(state, function_index, result_type, output.mir_literal_symbols, context, body)
 		terminated = 1
 	elsif control_mir_function
 		emit_induction_mir(state, function_index, result_type, context, body)
@@ -1644,8 +1644,13 @@ def emit_function(
 	qbe_output_line(output, "@start")
 	# State 2 combines a managed temporary with a following collection safe
 	# point. Either condition alone does not require publishing the frame.
-	uses_temporary_roots := context.temporary_roots_used[0] == 2
-	managed_local_count := context.managed_local_high_water[0]
+	mut uses_temporary_roots := context.temporary_roots_used[0] == 2
+	mut managed_local_count := context.managed_local_high_water[0]
+	if general_mir_function
+		plan := state.scalar_mir.root_plans[mir_index]
+		uses_temporary_roots = plan.instructions.size() > 0
+		managed_local_count = plan.capacity
+	end
 	if uses_temporary_roots
 		qbe_output_line(output, "\t%temporary_roots =l loadl $trbn_gc_temp_count")
 	end
@@ -3235,8 +3240,15 @@ def check_function(
 		end
 		parameter_index += 1
 	end
+	parameter_index = parameter_start
+	while parameter_index < parameter_finish
+		if load_string(state.parameter_types, parameter_index) == "String"
+			mir_control_prepare(state, locals)
+		end
+		parameter_index += 1
+	end
 	result_type := load_string(state.function_result_types, function_index)
-	if result_type == "Void" && locals.mir_state[0] == 1
+	if (result_type == "Void" || result_type == "String") && locals.mir_state[0] == 1
 		mir_control_prepare(state, locals)
 	end
 	# The second cursor cell carries one adjacent declaration fact into a loop.

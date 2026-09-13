@@ -1,0 +1,113 @@
+import { CheckedValue, checked_mir_value, checked_value, mir_checked_value, scalar_mir_disable, scalar_mir_instruction, scalar_mir_value } from checked_values
+import { MirBlock, MirFunction, MirInstruction, MirModule, mir_type_id, mir_value_type } from mir
+import { mir_control_active, mir_control_prepare } from mir_control
+import { MirFlow, mir_value_available } from mir_flow
+import { CheckedLocals, CompilerState } from state
+import { load_integer, load_string } from storage
+
+# These operations own portable String semantics. Runtime layout and symbols
+# are deliberately absent; conversions and I/O are explicit operations too.
+def mir_checked_string_operation(mut state: CompilerState, mut locals: CheckedLocals, kind: Integer, first: Integer, second: Integer, payload: Integer, result_type: String, origin: Integer): CheckedValue
+	mir_control_prepare(state, locals)
+	if (kind != 12 && first < 0) || ((kind == 13 || kind == 14 || kind == 16) && second < 0)
+		scalar_mir_disable(locals)
+	end
+	if !mir_control_active(locals)
+		return checked_value(result_type, 0, 9007199254740991, 0)
+	end
+	mut result :=- 1
+	if result_type != "Void"
+		result = scalar_mir_value(state, locals, mir_type_id(result_type), origin)
+	end
+	scalar_mir_instruction(state, locals, kind, result, first, second, payload, - 1, load_integer(state.token_lines, origin))
+	return mir_checked_value(result_type, result, 9007199254740991, 0)
+end
+
+def mir_checked_string_literal(mut state: CompilerState, mut locals: CheckedLocals, origin: Integer): CheckedValue
+	literal := locals.mir_literal_texts.size()
+	locals.mir_literal_texts.push(load_string(state.token_texts, origin))
+	return mir_checked_string_operation(state, locals, 12, - 1, - 1, literal, "String", origin)
+end
+
+def mir_checked_string_binary(mut state: CompilerState, mut locals: CheckedLocals, left: CheckedValue, right: CheckedValue, operator: String, origin: Integer): CheckedValue
+	mut kind := 14
+	mut result_type := "Boolean"
+	mut payload := 0
+	if operator == "+"
+		kind = 13
+		result_type = "String"
+	elsif operator == "!="
+		payload = 1
+	end
+	return mir_checked_string_operation(state, locals, kind, checked_mir_value(left), checked_mir_value(right), payload, result_type, origin)
+end
+
+def mir_checked_puts(mut state: CompilerState, mut locals: CheckedLocals, arguments: Array<Integer>, origin: Integer): CheckedValue
+	if arguments.size() != 1 || arguments[0] < 0
+		scalar_mir_disable(locals)
+		return checked_value("Void", 0, 9007199254740991, 0)
+	end
+	mut value := arguments[0]
+	if locals.mir_value_rows[value].type_id == 1
+		converted := mir_checked_string_operation(state, locals, 17, value, - 1, 1, "String", origin)
+		value = checked_mir_value(converted)
+	end
+	return mir_checked_string_operation(state, locals, 18, value, - 1, 0, "Void", origin)
+end
+
+def mir_string_instruction_error(flow: MirFlow, native_module: MirModule, function: MirFunction, block: MirBlock, index: Integer, instruction: MirInstruction): String
+	if instruction.failure != - 1
+		return "MIR String operation failure shape differs"
+	end
+	result := mir_value_type(native_module, function.id, instruction.result)
+	first := mir_value_type(native_module, function.id, instruction.first)
+	second := mir_value_type(native_module, function.id, instruction.second)
+	kind := instruction.kind
+	if kind == 12
+		if result != 8 || instruction.first != - 1 || instruction.second != - 1
+			return "MIR String literal shape differs"
+		end
+		if instruction.payload < 0 || instruction.payload >= native_module.literal_texts.size()
+			return "MIR String literal index is invalid"
+		end
+		return ""
+	end
+	if !mir_value_available(flow, block, index, instruction.first)
+		return "MIR String operand is undefined"
+	end
+	if kind == 13 || kind == 14 || kind == 16
+		if !mir_value_available(flow, block, index, instruction.second)
+			return "MIR String operand is undefined"
+		end
+		if first != 8
+			return "MIR String operand type differs"
+		end
+		if kind == 14 && second == 8 && result == 2 && (instruction.payload == 0 || instruction.payload == 1)
+			return ""
+		end
+		if instruction.payload == 0 && result == 8
+			if (kind == 13 && second == 8) || (kind == 16 && second == 1)
+				return ""
+			end
+		end
+	else
+		if instruction.second != - 1
+			return "MIR String unary shape differs"
+		end
+		if kind == 15 && instruction.payload == 0 && first == 8 && result == 1
+			return ""
+		end
+		if kind == 17
+			if instruction.payload == 1 && first == 1 && result == 8
+				return ""
+			end
+			if result == 1 && ((instruction.payload == 2 && first == 8) || (instruction.payload == 3 && first == 5))
+				return ""
+			end
+		end
+		if kind == 18 && instruction.payload == 0 && instruction.result == - 1 && (first == 8 || first == 2)
+			return ""
+		end
+	end
+	return "MIR String operation type or payload differs"
+end

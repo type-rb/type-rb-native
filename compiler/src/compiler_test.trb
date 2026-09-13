@@ -151,7 +151,7 @@ describe("Native TypeRB frontend") do
 		expect(resolve(state)).to_be_true()
 		expect(check(state)).to_be_true()
 		expect(verify_mir(state.scalar_mir, true)).to_equal("")
-		expect(mir_function_index(state.scalar_mir, 0)).to_equal(- 1)
+		expect(mir_function_index(state.scalar_mir, 0) >= 0).to_be_true()
 		expect(output_source(emit_qbe(state)).include?("export function w $main")).to_be_true()
 	end
 
@@ -176,9 +176,9 @@ describe("Native TypeRB frontend") do
 		expect(check(state)).to_be_true()
 		expect(verify_mir(state.scalar_mir, true)).to_equal("")
 		expect(mir_function_index(state.scalar_mir, 0) >= 0).to_be_true()
-		expect(mir_function_index(state.scalar_mir, 1)).to_equal(- 1)
+		expect(mir_function_index(state.scalar_mir, 1) >= 0).to_be_true()
 		expect(mir_function_index(state.scalar_mir, 2) >= 0).to_be_true()
-		expect(state.scalar_mir.literal_texts.size()).to_equal(3)
+		expect(state.scalar_mir.literal_texts.size()).to_equal(5)
 		mut literal_index := 0
 		while state.scalar_mir.instructions[literal_index].kind != 6
 			literal_index += 1
@@ -206,7 +206,7 @@ describe("Native TypeRB frontend") do
 	end
 
 	test("selects a verified guarded Integer multiply for scalar MIR in a managed loop") do
-		source := "def product(left: Integer, right: Integer): Integer\n\treturn left * right\nend\n\ndef main()\n\tmarker := \"managed caller\"\n\tmut index := 0\n\twhile index < 1\n\t\tvalue := product(index, index - 1)\n\t\tindex += value + 1\n\tend\n\treturn\nend\n"
+		source := "def product(left: Integer, right: Integer): Integer\n\treturn left * right\nend\n\ndef main()\n\tmarker := [1]\n\tmut index := 0\n\twhile index < 1\n\t\tvalue := product(index, index - 1)\n\t\tindex += value + 1\n\tend\n\treturn\nend\n"
 		mut state := compiler_new(source.size() + 1)
 		expect(lex(state, source)).to_be_true()
 		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
@@ -1359,7 +1359,7 @@ describe("Native TypeRB frontend") do
 			expect(true).to_be_true()
 		else
 			base := root + "/compiler/src/"
-			names := ["compiler", "literals", "mir", "iteration_mir", "path", "hash_types", "hash_mir", "storage", "state", "parser", "checked_values", "resolution", "hash_checked", "iteration_checked", "mir_analysis", "mir_construction", "mir_control", "mir_calls", "mir_flow", "mir_logical", "mir_instructions", "checked_types", "checked_program", "qbe_output", "hash_runtime", "mir_builder", "mir_passes", "mir_verifier", "project_config", "qbe_constants", "qbe_context", "qbe_memory", "qbe_numeric", "qbe_mir", "qbe_control", "qbe_runtime"]
+			names := ["compiler", "literals", "mir", "iteration_mir", "path", "hash_types", "hash_mir", "storage", "state", "parser", "checked_values", "resolution", "hash_checked", "iteration_checked", "mir_analysis", "mir_construction", "mir_control", "mir_calls", "mir_flow", "mir_logical", "mir_instructions", "mir_strings", "mir_roots", "qbe_roots", "qbe_strings", "checked_types", "checked_program", "qbe_output", "hash_runtime", "mir_builder", "mir_passes", "mir_verifier", "project_config", "qbe_constants", "qbe_context", "qbe_memory", "qbe_numeric", "qbe_mir", "qbe_control", "qbe_runtime"]
 			mut sources: Array<String> := []
 			names.each do |name|
 				sources.push(required_test_source(base + name + ".trb"))
@@ -2062,7 +2062,7 @@ describe("Native TypeRB frontend") do
 	end
 
 	test("inlines only eligible scalar leaf calls in managed caller loops") do
-		eligible_source := "def scalar(left: Integer, right: Integer): Integer\n\tsum := left + right\n\treturn sum * 2\nend\n\ndef main()\n\tmarker := \"managed caller\"\n\tmut index := 0\n\twhile index < 1\n\t\tvalue := scalar(index, 1)\n\t\tindex += value\n\tend\n\treturn\nend\n"
+		eligible_source := "def scalar(left: Integer, right: Integer): Integer\n\tsum := left + right\n\treturn sum * 2\nend\n\ndef main()\n\tmarker := [1]\n\tmut index := 0\n\twhile index < 1\n\t\tvalue := scalar(index, 1)\n\t\tindex += value\n\tend\n\treturn\nend\n"
 		mut eligible := compiler_new(eligible_source.size() + 1)
 		expect(lex(eligible, eligible_source)).to_be_true()
 		expect(parse_module(eligible, 0, eligible.entry_module[0])).to_be_true()
@@ -2089,7 +2089,7 @@ describe("Native TypeRB frontend") do
 		expect(non_loop_qbe.include?("# native retained scalar call ")).to_be_false()
 		expect(non_loop_qbe.include?("@scalar_inline_integer_range_failure")).to_be_false()
 
-		ineligible_source := "def choose(value: Integer): Integer\n\tif value > 0\n\t\treturn value\n\telse\n\t\treturn 0\n\tend\nend\n\ndef main()\n\tmarker := \"managed caller\"\n\tmut index := 0\n\twhile index < 1\n\t\tvalue := choose(index)\n\t\tindex += value + 1\n\tend\n\treturn\nend\n"
+		ineligible_source := "def choose(value: Integer): Integer\n\tif value > 0\n\t\treturn value\n\telse\n\t\treturn 0\n\tend\nend\n\ndef main()\n\tmarker := [1]\n\tmut index := 0\n\twhile index < 1\n\t\tvalue := choose(index)\n\t\tindex += value + 1\n\tend\n\treturn\nend\n"
 		mut ineligible := compiler_new(ineligible_source.size() + 1)
 		expect(lex(ineligible, ineligible_source)).to_be_true()
 		expect(parse_module(ineligible, 0, ineligible.entry_module[0])).to_be_true()
@@ -2097,7 +2097,7 @@ describe("Native TypeRB frontend") do
 		expect(check(ineligible)).to_be_true()
 		expect(output_source(emit_qbe(ineligible)).include?("call $trbnf0")).to_be_true()
 
-		delegating_source := "def increment(value: Integer): Integer\n\treturn value + 1\nend\n\ndef delegating(value: Integer): Integer\n\treturn increment(value)\nend\n\ndef main()\n\tmarker := \"managed caller\"\n\tmut index := 0\n\twhile index < 1\n\t\tindex = delegating(index)\n\tend\n\treturn\nend\n"
+		delegating_source := "def increment(value: Integer): Integer\n\treturn value + 1\nend\n\ndef delegating(value: Integer): Integer\n\treturn increment(value)\nend\n\ndef main()\n\tmarker := [1]\n\tmut index := 0\n\twhile index < 1\n\t\tindex = delegating(index)\n\tend\n\treturn\nend\n"
 		mut delegating := compiler_new(delegating_source.size() + 1)
 		expect(lex(delegating, delegating_source)).to_be_true()
 		expect(parse_module(delegating, 0, delegating.entry_module[0])).to_be_true()
@@ -2107,7 +2107,7 @@ describe("Native TypeRB frontend") do
 	end
 
 	test("rejects missing invalid and mismatched checked binary plans") do
-		source := "def main()\n\tmut value := 7\n\tvalue += 1\n\tputs(value.to_s())\n\treturn\nend\n"
+		source := "def main()\n\towner := [1]\n\tmut value := 7\n\tvalue += 1\n\tputs(value.to_s())\n\treturn\nend\n"
 		invalid := [0, 22, 18]
 		mut index := 0
 		while index < invalid.size()
@@ -2156,7 +2156,7 @@ describe("Native TypeRB frontend") do
 	end
 
 	test("retains caller lower-bound checks after the literal-return inline budget") do
-		source := "def one(): Integer\n\treturn 1\nend\n\ndef main()\n\tmut value := 7\n\tmut index := 0\n\twhile index < 1\n\t\tvalue += one()\n\t\tvalue += one()\n\t\tvalue += one()\n\t\tindex += 1\n\tend\n\tputs(value.to_s())\n\treturn\nend\n"
+		source := "def one(): Integer\n\treturn 1\nend\n\ndef main()\n\towner := [1]\n\tmut value := 7\n\tmut index := 0\n\twhile index < 1\n\t\tvalue += one()\n\t\tvalue += one()\n\t\tvalue += one()\n\t\tindex += 1\n\tend\n\tputs(value.to_s())\n\treturn\nend\n"
 		mut state := compiler_new(source.size() + 1)
 		expect(lex(state, source)).to_be_true()
 		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
@@ -2174,7 +2174,7 @@ describe("Native TypeRB frontend") do
 	test("branches on canonical Boolean values without repeated materialization") do
 		# The loop precedes the retained call: an ordinary eligible call closes
 		# the shared inline budget for every later call, even in a loop.
-		source := "def invert(value: Boolean): Boolean\n\treturn !value\nend\n\ndef main()\n\tmut index := 0\n\twhile index < 1\n\t\tif invert(false)\n\t\t\tputs(\"ok\")\n\t\tend\n\t\tindex += 1\n\tend\n\tif invert(true)\n\t\tputs(\"bad\")\n\tend\nend\n"
+		source := "def invert(value: Boolean): Boolean\n\treturn !value\nend\n\ndef main()\n\towner := [1]\n\tmut index := 0\n\twhile index < 1\n\t\tif invert(false)\n\t\t\tputs(\"ok\")\n\t\tend\n\t\tindex += 1\n\tend\n\tif invert(true)\n\t\tputs(\"bad\")\n\tend\nend\n"
 		mut state := compiler_new(source.size() + 1)
 		expect(lex(state, source)).to_be_true()
 		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
@@ -2207,7 +2207,7 @@ describe("Native TypeRB frontend") do
 	end
 
 	test("limits managed caller scalar inlining to two call sites per small program") do
-		source := "def scalar(value: Integer): Integer\n\treturn value + 1\nend\n\ndef main()\n\tmarker := \"managed caller\"\n\tmut index := 0\n\twhile index < 1\n\t\tfirst := scalar(index)\n\t\tsecond := scalar(index)\n\t\tthird := scalar(index)\n\t\tindex += first + second + third\n\tend\n\treturn\nend\n"
+		source := "def scalar(value: Integer): Integer\n\treturn value + 1\nend\n\ndef main()\n\tmarker := [1]\n\tmut index := 0\n\twhile index < 1\n\t\tfirst := scalar(index)\n\t\tsecond := scalar(index)\n\t\tthird := scalar(index)\n\t\tindex += first + second + third\n\tend\n\treturn\nend\n"
 		mut state := compiler_new(source.size() + 1)
 		expect(lex(state, source)).to_be_true()
 		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()

@@ -41,11 +41,14 @@ def mir_declare_signatures(mut state: CompilerState)
 	end
 end
 
-def mir_call_scalar_type(type_name: String): Boolean
+def mir_call_value_type(type_name: String): Boolean
 	if type_name == "Integer" || type_name == "Boolean"
 		return true
 	end
-	return type_name == "Float"
+	if type_name == "Float"
+		return true
+	end
+	return type_name == "String"
 end
 
 def mir_checked_call(mut state: CompilerState, mut locals: CheckedLocals, callee: Integer, arguments: Array<Integer>, result_type: String, origin: Integer): CheckedValue
@@ -54,11 +57,11 @@ def mir_checked_call(mut state: CompilerState, mut locals: CheckedLocals, callee
 		return checked_value(result_type, 0, 9007199254740991, 0)
 	end
 	signature := state.scalar_mir.signatures[callee]
-	if signature.kind != 0 || (result_type != "Void" && !mir_call_scalar_type(result_type))
+	if signature.kind != 0 || (result_type != "Void" && !mir_call_value_type(result_type))
 		scalar_mir_disable(locals)
 	end
 	signature.parameter_types.each do |type_name|
-		if !mir_call_scalar_type(type_name)
+		if !mir_call_value_type(type_name)
 			scalar_mir_disable(locals)
 		end
 	end
@@ -167,7 +170,7 @@ def mir_call_error(flow: MirFlow, native_module: MirModule, function: MirFunctio
 			return "MIR call argument is undefined"
 		end
 		type_name := signature.parameter_types[index]
-		if !mir_call_scalar_type(type_name) || mir_type_name(mir_value_type(native_module, function.id, value)) != type_name
+		if !mir_call_value_type(type_name) || mir_type_name(mir_value_type(native_module, function.id, value)) != type_name
 			return "MIR call argument type differs"
 		end
 		index += 1
@@ -176,7 +179,7 @@ def mir_call_error(flow: MirFlow, native_module: MirModule, function: MirFunctio
 		if instruction.result != - 1
 			return "MIR Void call cannot define a value"
 		end
-	elsif !mir_call_scalar_type(signature.result_type) || mir_type_name(mir_value_type(native_module, function.id, instruction.result)) != signature.result_type
+	elsif !mir_call_value_type(signature.result_type) || mir_type_name(mir_value_type(native_module, function.id, instruction.result)) != signature.result_type
 		return "MIR call result type differs"
 	end
 	return ""

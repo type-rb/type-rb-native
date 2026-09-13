@@ -1,0 +1,53 @@
+import { MirInstruction, mir_type_name, mir_value_type } from mir
+import { QbeEmitContext, QbeValue, emit_temporary, emitted_value } from qbe_context
+import { QbeOutput, qbe_output_line } from qbe_output
+import { CompilerState } from state
+
+# Runtime calls implement the verified operation, with no source inspection or
+# root/effect inference here. The control adapter publishes the MIR root plan.
+def emit_mir_string_instruction(state: CompilerState, function_id: Integer, instruction: MirInstruction, operands: Array<String>, symbols: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
+	kind := instruction.kind
+	result_type := mir_type_name(mir_value_type(state.scalar_mir, function_id, instruction.result))
+	if kind == 12
+		return emitted_value(symbols[instruction.payload], "String", 0, "", "")
+	end
+	first := operands[instruction.first]
+	if kind == 18
+		mut runtime := "$trbn_puts"
+		if mir_value_type(state.scalar_mir, function_id, instruction.first) == 2
+			runtime = "$trbn_puts_boolean"
+			output.runtime_flags[4] = 1
+		end
+		qbe_output_line(output, "\tcall " + runtime + "(l " + first + ")")
+		return emitted_value("", "Void", 0, "", "")
+	end
+	result := emit_temporary(context)
+	if kind == 15
+		address := emit_temporary(context)
+		qbe_output_line(output, "\t" + address + " =l add " + first + ", 8")
+		qbe_output_line(output, "\t" + result + " =l loadl " + address)
+	elsif kind == 17
+		output.runtime_flags[1] = 1
+		mut conversion := "$trbn_integer_to_string(l "
+		if instruction.payload == 2
+			conversion = "$trbn_string_to_integer(l "
+		elsif instruction.payload == 3
+			conversion = "$trbn_float_to_integer(d "
+		end
+		qbe_output_line(output, "\t" + result + " =l call " + conversion + first + ")")
+	else
+		mut runtime := "$trbn_string_concat"
+		if kind == 14
+			runtime = "$trbn_string_equal"
+		elsif kind == 16
+			runtime = "$trbn_string_index"
+		end
+		qbe_output_line(output, "\t" + result + " =l call " + runtime + "(l " + first + ", l " + operands[instruction.second] + ")")
+		if kind == 14 && instruction.payload == 1
+			inverted := emit_temporary(context)
+			qbe_output_line(output, "\t" + inverted + " =l ceql " + result + ", 0")
+			return emitted_value(inverted, result_type, 0, "", "")
+		end
+	end
+	return emitted_value(result, result_type, 0, "", "")
+end

@@ -1,0 +1,33 @@
+import { integer_string } from literals
+import { QbeEmitContext, emit_temporary } from qbe_context
+import { QbeOutput, qbe_output_line } from qbe_output
+
+# MIR supplies the exact live-before set. Rebuild this frame's segment before
+# each allocating operation, dropping dead temporaries/undemanded loop bindings.
+# The global root buffer may move in any call: never cache its address across one.
+# gc_temp_reserve may fail, but cannot collect TypeRB objects.
+def emit_mir_roots(roots: Array<Integer>, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput)
+	if roots.size() == 0
+		qbe_output_line(output, "\tstorel %temporary_roots, $trbn_gc_temp_count")
+		return
+	end
+	data := emit_temporary(context)
+	offset := emit_temporary(context)
+	base := emit_temporary(context)
+	qbe_output_line(output, "\t" + data + " =l loadl $trbn_gc_temp_data")
+	qbe_output_line(output, "\t" + offset + " =l mul %temporary_roots, 8")
+	qbe_output_line(output, "\t" + base + " =l add " + data + ", " + offset)
+	mut index := 0
+	while index < roots.size()
+		mut address := base
+		if index > 0
+			address = emit_temporary(context)
+			qbe_output_line(output, "\t" + address + " =l add " + base + ", " + integer_string(index * 8))
+		end
+		qbe_output_line(output, "\tstorel " + operands[roots[index]] + ", " + address)
+		index += 1
+	end
+	count := emit_temporary(context)
+	qbe_output_line(output, "\t" + count + " =l add %temporary_roots, " + integer_string(roots.size()))
+	qbe_output_line(output, "\tstorel " + count + ", $trbn_gc_temp_count")
+end
