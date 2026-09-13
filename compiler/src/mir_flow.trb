@@ -1,0 +1,213 @@
+import { integer_string } from literals
+import { MirBlock, MirFunction, MirModule } from mir
+
+# Derived from checked storage, never accepted as input optimization facts.
+# Sparse value/declaration IDs use Hash; CFG storage grows with actual blocks
+# and edges. Decimal keys preserve sparse IDs within the recovery subset.
+# Immediate dominators avoid a quadratic dominance matrix.
+record MirFlow
+	blocks: Hash<String, Integer>
+	entry: Integer
+	ranks: Array<Integer>
+	dominators: Array<Integer>
+	definitions: Hash<String, Integer>
+	positions: Hash<String, Integer>
+end
+
+def mir_flow_blocks(native_module: MirModule, function: MirFunction): Hash<String, Integer>
+	mut blocks: Hash<String, Integer> := {}
+	mut index := 0
+	while index < function.block_count
+		blocks[integer_string(native_module.blocks[function.block_start + index].id)] = index
+		index += 1
+	end
+	return blocks
+end
+
+def mir_flow_graph_error(native_module: MirModule, function: MirFunction, blocks: Hash<String, Integer>): String
+	if !blocks.key?(integer_string(function.entry_block))
+		return "MIR function entry block does not exist"
+	end
+	mut index := 0
+	while index < function.block_count
+		block := native_module.blocks[function.block_start + index]
+		if blocks[integer_string(block.id)] != index
+			return "MIR block identifier is duplicated"
+		end
+		if block.terminator == 1 || block.terminator == 2
+			if !blocks.key?(integer_string(block.first_target))
+				return "MIR terminator target does not exist"
+			end
+		end
+		if block.terminator == 2 && !blocks.key?(integer_string(block.second_target))
+			return "MIR terminator target does not exist"
+		end
+		index += 1
+	end
+	return ""
+end
+
+def mir_flow_order(entry: Integer, successors: Array<Array<Integer>>): Array<Integer>
+	mut seen: Array<Integer> := []
+	mut cursors: Array<Integer> := []
+	successors.each do |_edges|
+		seen.push(0)
+		cursors.push(0)
+	end
+	mut stack := [entry]
+	mut depth := 1
+	seen[entry] = 1
+	mut finished: Array<Integer> := []
+	while depth > 0
+		block := stack[depth - 1]
+		if cursors[block] < successors[block].size()
+			next_block := successors[block][cursors[block]]
+			cursors[block] += 1
+			if seen[next_block] == 0
+				seen[next_block] = 1
+				if depth == stack.size()
+					stack.push(next_block)
+				else
+					stack[depth] = next_block
+				end
+				depth += 1
+			end
+		else
+			finished.push(block)
+			depth -= 1
+		end
+	end
+	mut order: Array<Integer> := []
+	mut index := finished.size()
+	while index > 0
+		index -= 1
+		order.push(finished[index])
+	end
+	return order
+end
+
+def mir_flow_intersect(dominators: Array<Integer>, ranks: Array<Integer>, mut first: Integer, mut second: Integer): Integer
+	while first != second
+		if ranks[first] > ranks[second]
+			first = dominators[first]
+		else
+			second = dominators[second]
+		end
+	end
+	return first
+end
+
+def mir_build_flow(native_module: MirModule, function: MirFunction, blocks: Hash<String, Integer>): MirFlow
+	mut successors: Array<Array<Integer>> := []
+	mut predecessors: Array<Array<Integer>> := []
+	mut ranks: Array<Integer> := []
+	mut dominators: Array<Integer> := []
+	mut definitions: Hash<String, Integer> := {}
+	mut positions: Hash<String, Integer> := {}
+	mut index := 0
+	while index < function.block_count
+		successors.push([])
+		predecessors.push([])
+		ranks.push(- 1)
+		dominators.push(- 1)
+		index += 1
+	end
+	index = 0
+	while index < function.parameter_count
+		value := native_module.arguments[function.parameter_start + index]
+		definitions[integer_string(value)] =- 1
+		positions[integer_string(value)] =- 1
+		index += 1
+	end
+	index = 0
+	while index < function.block_count
+		block := native_module.blocks[function.block_start + index]
+		mut edges := successors[index]
+		if block.terminator == 1 || block.terminator == 2
+			edges.push(blocks[integer_string(block.first_target)])
+		end
+		if block.terminator == 2
+			edges.push(blocks[integer_string(block.second_target)])
+		end
+		edges.each do |target|
+			mut incoming := predecessors[target]
+			incoming.push(index)
+		end
+		mut parameter := 0
+		while parameter < block.parameter_count
+			value := native_module.arguments[block.parameter_start + parameter]
+			definitions[integer_string(value)] = index
+			positions[integer_string(value)] =- 1
+			parameter += 1
+		end
+		mut instruction := block.instruction_start
+		while instruction < block.instruction_start + block.instruction_count
+			value := native_module.instructions[instruction].result
+			if value >= 0
+				definitions[integer_string(value)] = index
+				positions[integer_string(value)] = instruction
+			end
+			instruction += 1
+		end
+		index += 1
+	end
+	# Instruction failures terminate in empty trap blocks. They expose no values
+	# or continuations, so they are not ordinary CFG successors.
+	entry := blocks[integer_string(function.entry_block)]
+	order := mir_flow_order(entry, successors)
+	index = 0
+	while index < order.size()
+		ranks[order[index]] = index
+		index += 1
+	end
+	dominators[entry] = entry
+	mut changed := true
+	while changed
+		changed = false
+		index = 1
+		while index < order.size()
+			block := order[index]
+			mut parent :=- 1
+			predecessors[block].each do |previous|
+				if dominators[previous] >= 0
+					if parent < 0
+						parent = previous
+					else
+						parent = mir_flow_intersect(dominators, ranks, parent, previous)
+					end
+				end
+			end
+			if dominators[block] != parent
+				dominators[block] = parent
+				changed = true
+			end
+			index += 1
+		end
+	end
+	return MirFlow.new(blocks: blocks, entry: entry, ranks: ranks, dominators: dominators, definitions: definitions, positions: positions)
+end
+
+def mir_value_available(flow: MirFlow, block: MirBlock, instruction_finish: Integer, value: Integer): Boolean
+	key := integer_string(value)
+	if !flow.definitions.key?(key)
+		return false
+	end
+	owner := flow.definitions[key]
+	if owner < 0
+		return true
+	end
+	mut current := flow.blocks[integer_string(block.id)]
+	if owner == current
+		return flow.positions[key] < instruction_finish
+	end
+	if flow.ranks[current] < 0
+		return false
+	end
+	while current != flow.entry
+		current = flow.dominators[current]
+		if current == owner
+			return true
+		end
+	end
+	return false
+end

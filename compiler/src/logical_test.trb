@@ -1,9 +1,14 @@
+import { native_read_text, native_write_text } from native_file_system
+import trb/std/process
+import trb/std/result
 import { check, emit_qbe, lex } from compiler
-import { mir_logical_plan, mir_logical_short_value } from mir
+import { mir_function_index, mir_logical_plan, mir_logical_short_value } from mir
+import { control_test_output } from control_mir_test
+import { verify_mir } from mir_verifier
 import { parse_module, syntax_expression_precedence } from parser
 import { resolve } from resolution
 import { CompilerState, compiler_new } from state
-import { load_integer, load_string, store_integer } from storage
+import { load_integer, load_string, store_integer, store_string } from storage
 import { describe, expect, test } from trb/std/test
 
 def logical_checked_source(source: String): CompilerState
@@ -12,6 +17,65 @@ def logical_checked_source(source: String): CompilerState
 	expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
 	expect(resolve(state)).to_be_true()
 	return state
+end
+
+# Use a fresh workspace so concurrent correctness runs cannot share artifacts.
+def logical_run_qbe(qbe_path: String, source: String): Result<String, String>
+	allocated := case Process.run("/usr/bin/mktemp", ["-d", "/tmp/type-rb-native-logical-layout.XXXXXX"])
+	when Result::Ok(result)
+		result
+	when Result::Err(error)
+		return Result<String, String>::Err(error.message)
+	end
+	if !allocated.success
+		return Result<String, String>::Err(allocated.stderr)
+	end
+	workspace := allocated.stdout.strip()
+	case native_write_text(workspace + "/module.ssa", source)
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		return Result<String, String>::Err(error.message)
+	end
+	assembled := case Process.run(qbe_path, ["-t", "arm64_apple", workspace + "/module.ssa"])
+	when Result::Ok(result)
+		result
+	when Result::Err(error)
+		return Result<String, String>::Err(error.message)
+	end
+	if !assembled.success
+		return Result<String, String>::Err(assembled.stderr)
+	end
+	case native_write_text(workspace + "/module.s", assembled.stdout)
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		return Result<String, String>::Err(error.message)
+	end
+	linked := case Process.run("/usr/bin/cc", [workspace + "/module.s", "-lm", "-o", workspace + "/program"])
+	when Result::Ok(result)
+		result
+	when Result::Err(error)
+		return Result<String, String>::Err(error.message)
+	end
+	if !linked.success
+		return Result<String, String>::Err(linked.stderr)
+	end
+	case Process.run(workspace + "/program", [])
+	when Result::Ok(result)
+		if !result.success || !result.stderr.empty?()
+			return Result<String, String>::Err(result.stderr)
+		end
+		case Process.run("/bin/rm", ["-r", workspace])
+		when Result::Ok(cleanup)
+			if !cleanup.success
+				return Result<String, String>::Err(cleanup.stderr)
+			end
+		when Result::Err(error)
+			return Result<String, String>::Err(error.message)
+		end
+		return Result<String, String>::Ok(result.stdout)
+	when Result::Err(error)
+		return Result<String, String>::Err(error.message)
+	end
 end
 
 describe("Short-circuit Boolean expressions") do
@@ -102,13 +166,74 @@ describe("Short-circuit Boolean expressions") do
 		expect(state.diagnostic_count[0] > 0).to_be_true()
 	end
 
-	test("never records conditional operands as eager scalar MIR") do
+	test("publishes conditional RHS blocks and emits after source bodies are erased") do
 		source := "def choose(a: Boolean, b: Boolean, c: Boolean): Boolean\n\treturn !a && (b || c)\nend\ndef main()\n\tputs(choose(false, false, true))\n\treturn\nend\n"
 		mut state := logical_checked_source(source)
 		expect(check(state)).to_be_true()
-		expect(state.scalar_mir.functions.size()).to_equal(0)
-		emit_qbe(state)
+		index := mir_function_index(state.scalar_mir, 0)
+		expect(index >= 0).to_be_true()
+		expect(state.scalar_mir.functions[index].kind).to_equal(3)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		before := control_test_output(emit_qbe(state))
+		mut token := load_integer(state.function_body_starts, 0)
+		while token < load_integer(state.function_body_ends, 0)
+			store_string(state.token_texts, token, "unavailable")
+			token += 1
+		end
+		expect(control_test_output(emit_qbe(state))).to_equal(before)
 		expect(state.diagnostic_count[0]).to_equal(0)
+	end
+
+	test("executes nested logical calls and loops with reversed MIR block storage") do
+		root := Process.environment("TYPE_RB_NATIVE_ROOT")
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if root != nil
+			if qbe != nil
+				fixture := root + "/compiler/conformance/valid/scalar-short-circuit"
+				source := case native_read_text(fixture + ".trb")
+				when Result::Ok(text)
+					text
+				when Result::Err(error)
+					puts(error.message)
+					""
+				end
+				mut state := logical_checked_source(source)
+				expect(check(state)).to_be_true()
+				state.scalar_mir.functions.each do |function|
+					if function.kind == 3
+						mut left := function.block_start
+						mut right := left + function.block_count - 1
+						while left < right
+							saved := state.scalar_mir.blocks[left]
+							state.scalar_mir.blocks[left] = state.scalar_mir.blocks[right]
+							state.scalar_mir.blocks[right] = saved
+							left += 1
+							right -= 1
+						end
+						mut token := load_integer(state.function_body_starts, function.id)
+						while token < load_integer(state.function_body_ends, function.id)
+							store_string(state.token_texts, token, "unavailable")
+							token += 1
+						end
+					end
+				end
+				expect(verify_mir(state.scalar_mir, true)).to_equal("")
+				expected := case native_read_text(fixture + ".out")
+				when Result::Ok(text)
+					text
+				when Result::Err(error)
+					puts(error.message)
+					""
+				end
+				case logical_run_qbe(qbe, control_test_output(emit_qbe(state)))
+				when Result::Ok(output)
+					expect(output).to_equal(expected)
+				when Result::Err(error)
+					puts(error)
+					expect(false).to_be_true()
+				end
+			end
+		end
 	end
 
 	test("rejects missing malformed and opposite checked-origin plans") do

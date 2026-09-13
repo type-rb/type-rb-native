@@ -12,6 +12,7 @@ measurements provide intermediate feedback.
 | --- | --- |
 | Typed scalar values | Integer, Boolean and Float literals, unary/binary operations and numeric conversion have explicit operands, result types, origins and failure edges. Straight-line leaves retain bounded inlining and verified Integer range guards. |
 | Scalar control | Mutable scalar locals and parameters, nested `if`/`elsif`/`else`, `while`, `break`/`next`, early returns and continuing joins publish typed blocks and live-value arguments. Loop transfers carry only the enclosing environment; branch/body locals remain lexical. QBE consumes admitted bodies without rereading their source. |
+| Short-circuit expressions | Scalar `&&` and `||` publish conditional RHS blocks and Boolean result joins, including nested call arguments and loop predicates. Dominance preserves earlier expression temporaries; skipped RHS calls and traps stay unexecuted. |
 | Calls and declarations | Declaration identities, parameter types/mutability and return types are captured before body checking. Ordinary calls with scalar arguments and scalar/Void results retain explicit arguments and conservative allocation, mutation, I/O and failure effects, including forward, recursive and direct-path callees. |
 | Numeric Array induction | Selected zero-based traversal and Integer/Float reductions retain verified induction, address and accumulator relationships. The adapter consumes the established plan. |
 | Array effects and headers | Ordered regions retain bindings, aliases, accesses, scope boundaries and conservative effect barriers. Verified function/loop plans select stable headers; element checks remain unless a separate induction proof permits removal. |
@@ -23,7 +24,18 @@ Function adapter kinds explicitly distinguish scalar leaves, verified induction
 and general scalar control. Verification checks their operation and shape
 contracts as well as table bounds, value definitions, types, argument availability,
 control targets, declaration/call/return types, conservative call effects and source origins. Block arguments are parallel assignments;
-QBE adaptation captures edge values before overwriting destinations.
+QBE adaptation captures edge values before overwriting destinations. Instruction
+results retain stable MIR operand names even when block storage is reordered.
+
+`mir_flow.trb` derives reachability, reverse postorder, immediate dominators and
+value definition sites after structural/identity validation. Function parameters
+are available everywhere; reachable blocks may use dominating definitions, while
+unreachable blocks may only use function parameters and their own earlier
+values. Same-block instruction uses must follow their definitions. Sparse
+identity indexes and block/edge arrays avoid storage proportional to the largest
+value ID or a quadratic dominance matrix. Instruction failure edges must end in
+empty traps; they cannot carry a value into an ordinary continuation. This is
+verifier analysis, not caller-supplied optimization metadata.
 
 `control_mir_test.trb` checks mutable branches, loops, lexical transfers, malformed
 edges and adapter selection. `call_mir_test.trb` checks recursive/forward/Void calls,
@@ -33,7 +45,13 @@ branches and an unexecuted division-by-zero path across compiler generations.
 The `scalar-loop-calls` differential fixture adds loop-carried parallel copies,
 nested transfers, early returns, mutable parameters, Float arithmetic, ordered
 nested call arguments, recursion and Void calls. Call overflow/division fixtures
-retain the portable failure classes. Existing induction, managed-lifetime and
+retain the portable failure classes. The `scalar-short-circuit` fixture covers
+ordered effects, earlier call/binary operands, skipped division, and loop
+predicates. `logical_test.trb` also executes it with reversed MIR block storage
+and erased admitted source bodies. `flow_mir_test.trb` compares dominance with an
+independent node-removal reachability oracle over all 343 three-block graphs
+with at most two successors, and rejects unavailable return/edge operands.
+Existing induction, managed-lifetime and
 target controls remain. Direct managed callers retain bounded scalar inlining;
 general scalar MIR calls currently remain explicit until the existing policy
 has a verified interprocedural owner. No performance improvement is inferred.
@@ -43,11 +61,13 @@ has a verified interprocedural owner. No performance improvement is inferred.
 - `mir.trb`: typed module, function, block, instruction and value records, with
   shared scalar encodings and identity/range queries, plus portable declarations
   and conservative call records.
-- `mir_analysis.trb`, `mir_passes.trb`, `mir_verifier.trb`: proofs, rewrites and
-  validation respectively.
+- `mir_analysis.trb`, `mir_flow.trb`, `mir_passes.trb`: portable proofs, CFG/dominance
+  and rewrites. `mir_verifier.trb` checks structure/edges; `mir_instructions.trb`
+  checks typed instruction contracts.
 - `checked_values.trb`, `mir_construction.trb`, `mir_builder.trb`, `mir_control.trb`:
   checked value projection, block construction and function publication.
 - `mir_calls.trb`: declaration capture, checked calls and their verification.
+- `mir_logical.trb`: conditional RHS and expression-result join construction.
 - `checked_types.trb`: assignability, operator result types and diagnostics.
 - `checked_program.trb`: recursive source checking; it invokes these owners.
 - `qbe_context.trb`, `qbe_memory.trb`, `qbe_numeric.trb`, `qbe_constants.trb`:
@@ -61,7 +81,7 @@ extracted implementation is copied or kept behind an old-name wrapper.
 
 ## Remaining work
 
-Managed arguments/results and values, structured short-circuit expressions,
+Managed arguments/results and values, their short-circuit expressions,
 Array/Range iteration and complete allocation/mutation/root-safety ownership
 still need the unified control/value route. Runtime/host intrinsics retain their
 existing adapters. The new call effects are conservative barriers, not precise
