@@ -1,5 +1,6 @@
+import { mir_function_roots, mir_root_plan_equal } from mir_roots
 import { MirFlow, mir_build_flow, mir_flow_blocks, mir_flow_graph_error, mir_value_available } from mir_flow
-import { MirBlock, MirFunction, MirModule, mir_block_index, mir_definition_count, mir_function_index, mir_origin_valid, mir_table_span_valid, mir_type_name, mir_value_type } from mir
+import { MirBlock, MirFunction, MirModule, mir_block_index, mir_control_value_type, mir_definition_count, mir_function_index, mir_origin_valid, mir_table_span_valid, mir_type_name, mir_value_type } from mir
 import { mir_array_headers, mir_array_headers_equal, mir_array_loop_headers, mir_induction_address, mir_scalar_guard } from mir_analysis
 import { mir_function_signature_error, mir_signatures_error } from mir_calls
 import { mir_instruction_error } from mir_instructions
@@ -225,14 +226,14 @@ def mir_adapter_error(native_module: MirModule, function: MirFunction): String
 		mut index := block.instruction_start
 		while index < block.instruction_start + block.instruction_count
 			kind := native_module.instructions[index].kind
-			if (kind < 6 || kind > 9) && (function.kind != 3 || kind != 11)
+			if (kind < 6 || kind > 9) && (function.kind != 3 || kind < 11 || kind > 18)
 				return "MIR scalar control operation is unsupported"
 			end
 			index += 1
 		end
 		if block.terminator == 3
 			type_id := mir_value_type(native_module, function.id, block.return_value)
-			if function.kind == 3 && type_id != 0 && type_id != 1 && type_id != 2 && type_id != 5
+			if function.kind == 3 && type_id != 0 && !mir_control_value_type(type_id)
 				return "MIR scalar return type differs"
 			end
 			if returned_type != 0 && returned_type != type_id
@@ -254,7 +255,7 @@ def mir_function_error(native_module: MirModule, function: MirFunction): String
 	if function.kind == 3
 		native_module.values.each do |value|
 			if value.function_id == function.id
-				if value.type_id != 1 && value.type_id != 2 && value.type_id != 5
+				if !mir_control_value_type(value.type_id)
 					return "MIR scalar control value type differs"
 				end
 			end
@@ -396,7 +397,7 @@ def verify_mir(native_module: MirModule, optimized: Boolean): String
 		if value.type_id < 1
 			return "MIR value type is invalid"
 		end
-		if value.type_id > 7
+		if value.type_id > 8
 			return "MIR value type is invalid"
 		end
 		if !mir_origin_valid(value.source_id, value.line, native_module.source_count[0])
@@ -433,6 +434,22 @@ def verify_mir(native_module: MirModule, optimized: Boolean): String
 			return "MIR scalar Integer guard differs"
 		end
 		index += 1
+	end
+	if optimized
+		if native_module.root_plans.size() != native_module.functions.size()
+			return "MIR root plan count differs"
+		end
+	elsif native_module.root_plans.size() != 0
+		return "MIR input cannot supply root plans"
+	end
+	if optimized
+		index = 0
+		while index < native_module.functions.size()
+			if !mir_root_plan_equal(native_module.root_plans[index], mir_function_roots(native_module, native_module.functions[index]))
+				return "MIR live root plan differs"
+			end
+			index += 1
+		end
 	end
 	return ""
 end

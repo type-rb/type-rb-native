@@ -103,7 +103,7 @@ vertical slices from remaining ownership.
 ### Current compiler source ownership
 
 The ordinary entry is [compiler/src/compiler.trb](../compiler/src/compiler.trb).
-Its explicit transitive import closure contains 36 canonical implementation modules:
+Its explicit transitive import closure contains 40 canonical implementation modules:
 
 | Modules in `compiler/src/` | Current responsibility |
 | --- | --- |
@@ -111,10 +111,10 @@ Its explicit transitive import closure contains 36 canonical implementation modu
 | `state.trb` | Compiler state, symbol indexes, shared locals, and diagnostics. |
 | `parser.trb`, `resolution.trb` | Syntax and token boundaries; declaration, import, and type resolution. |
 | `checked_program.trb`, `checked_values.trb`, `checked_types.trb` | Recursive expression/body checking, typed checked values and shared type/operator rules. |
-| `mir.trb`, `mir_analysis.trb`, `mir_flow.trb`, `mir_passes.trb`, `mir_verifier.trb`, `mir_instructions.trb` | MIR model and queries, reusable proofs, CFG/dominance, rewrites, structural verification and instruction contracts. |
-| `mir_construction.trb`, `mir_builder.trb`, `mir_control.trb`, `mir_calls.trb`, `mir_logical.trb` | Declaration/call contracts, block construction and publication of scalar, induction, mutable control/value and short-circuit MIR. |
+| `mir.trb`, `mir_analysis.trb`, `mir_flow.trb`, `mir_roots.trb`, `mir_passes.trb`, `mir_verifier.trb`, `mir_instructions.trb` | MIR model and queries, reusable proofs, CFG/dominance, operation effects/liveness/root plans, rewrites, structural verification and instruction contracts. |
+| `mir_construction.trb`, `mir_builder.trb`, `mir_control.trb`, `mir_calls.trb`, `mir_logical.trb`, `mir_strings.trb` | Declaration/call contracts, block construction and publication of scalar, induction, mutable scalar/String control/value, conversion/I/O and short-circuit MIR. |
 | `qbe_context.trb`, `qbe_memory.trb`, `qbe_numeric.trb`, `qbe_constants.trb` | Backend context, memory operations, numeric lowering and static data. |
-| `qbe_mir.trb`, `qbe_control.trb` | Shared typed scalar/call adaptation, verified induction and general scalar blocks. |
+| `qbe_mir.trb`, `qbe_control.trb`, `qbe_strings.trb`, `qbe_roots.trb` | Shared typed scalar/call adaptation, verified induction, general scalar/String blocks and MIR-selected root publication. |
 | `hash_types.trb`, `hash_mir.trb`, `hash_checked.trb` | Hash types and value layout, operation plans, and their checked source bindings. |
 | `iteration_mir.trb`, `iteration_checked.trb` | Range construction and Array/Range iteration plans, structural validation, and checked source bindings. |
 | `qbe_output.trb`, `qbe_runtime.trb`, `hash_runtime.trb` | Ordered QBE output and runtime generation, including the Hash runtime. |
@@ -326,8 +326,12 @@ implementation choices rather than new language promises.
 The ordinary self-hosted emitter reuses that collector for its supported
 dynamic Strings, Arrays, and reference-containing records. Its current root
 representation is one exact managed-reference stack with per-function
-watermarks, loop compaction, alias roots, and managed-return preservation. It
-does not conservatively scan the machine stack. Fixed descriptors,
+watermarks, loop compaction, alias roots, and managed-return preservation.
+Managed values loaded from containers retain independent roots across later
+allocation: replacing an element may remove the owner's last reference to a
+still-used alias. The retained direct path omits those publications only when
+its function has no following collection point; general MIR supplies explicit
+live-before sets. The collector does not conservatively scan the machine stack. Fixed descriptors,
 Array-backing reclamation, and deterministic pacing are therefore shared by
 compiler-generated applications rather than being confined to the earlier
 snapshot adapter. Versioned statistics remain an internal

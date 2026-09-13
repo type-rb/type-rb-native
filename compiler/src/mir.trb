@@ -88,7 +88,7 @@ end
 
 record MirFunction
 	# 0: independent MIR fixture; 1: scalar leaf; 2: verified induction;
-	# 3: general scalar control flow. Adapter selection is explicit.
+	# 3: general scalar/String control flow. Adapter selection is explicit.
 	kind: Integer
 	result_type: String
 	integer_guard: Integer
@@ -108,6 +108,15 @@ record MirValue
 	type_id: Integer
 	source_id: Integer
 	line: Integer
+end
+
+# Derived safe-point plans contain only values demanded by future operations.
+# Each row corresponds to one instruction index; roots are sorted value IDs.
+record MirRootPlan
+	function_id: Integer
+	instructions: Array<Integer>
+	roots: Array<Array<Integer>>
+	capacity: Integer
 end
 
 # Instructions name their opcode, result, operands, opcode-specific payload,
@@ -137,6 +146,7 @@ record MirCall
 end
 
 record MirModule
+	root_plans: Array<MirRootPlan>
 	signatures: Array<MirSignature>
 	calls: Array<MirCall>
 	source_count: Array<Integer>
@@ -340,6 +350,9 @@ def mir_failure_error(
 end
 
 def mir_type_id(type_name: String): Integer
+	if type_name == "String"
+		return 8
+	end
 	if type_name == "Integer"
 		return 1
 	end
@@ -362,6 +375,9 @@ def mir_type_id(type_name: String): Integer
 end
 
 def mir_type_name(type_id: Integer): String
+	if type_id == 8
+		return "String"
+	end
 	if type_id == 0
 		return "Void"
 	end
@@ -384,4 +400,13 @@ def mir_type_name(type_id: Integer): String
 		return "Address"
 	end
 	return "Invalid"
+end
+
+# Portable value kinds admitted by the general control adapter. String retains
+# its language identity; pointer width/layout is chosen only by backend lowering.
+def mir_control_value_type(type_id: Integer): Boolean
+	if type_id == 1 || type_id == 2 || type_id == 5
+		return true
+	end
+	return type_id == 8
 end

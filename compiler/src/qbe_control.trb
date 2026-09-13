@@ -1,9 +1,11 @@
 import { integer_string } from literals
 import { MirFunction, mir_block_index, mir_function_index, mir_type_name } from mir
 import { mir_scalar_result_fact } from mir_analysis
-import { QbeEmitContext, emit_label, emit_temporary, emit_typed_store, qbe_type } from qbe_context
+import { QbeEmitContext, emit_label, emit_temporary, emit_typed_store, emitted_value, qbe_type } from qbe_context
 import { emit_mir_scalar_instruction } from qbe_mir
 import { QbeOutput, qbe_output_branch, qbe_output_line } from qbe_output
+import { emit_mir_roots } from qbe_roots
+import { emit_mir_string_instruction } from qbe_strings
 import { CompilerState } from state
 
 # The adapter consumes block parameters and typed operands. Edge copies are
@@ -28,8 +30,9 @@ def emit_control_mir_edge(state: CompilerState, function: MirFunction, target: I
 	qbe_output_line(output, "\tjmp @mir_" + integer_string(target))
 end
 
-def emit_control_mir(state: CompilerState, function_index: Integer, result_type: String, mut context: QbeEmitContext, mut output: QbeOutput)
+def emit_control_mir(state: CompilerState, function_index: Integer, result_type: String, symbols: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput)
 	function := state.scalar_mir.functions[mir_function_index(state.scalar_mir, function_index)]
+	roots := state.scalar_mir.root_plans[mir_function_index(state.scalar_mir, function_index)]
 	mut operands: Array<String> := []
 	mut types: Array<String> := []
 	mut facts: Array<Integer> := []
@@ -58,7 +61,19 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 		index = block.instruction_start
 		while index < block.instruction_start + block.instruction_count
 			instruction := state.scalar_mir.instructions[index]
-			value := emit_mir_scalar_instruction(state, function_index, instruction, operands, types, facts, context, output, false, false)
+			mut point := 0
+			while point < roots.instructions.size()
+				if roots.instructions[point] == index
+					emit_mir_roots(roots.roots[point], operands, context, output)
+				end
+				point += 1
+			end
+			mut value := emitted_value("", "Void", 0, "", "")
+			if instruction.kind >= 12 && instruction.kind <= 18
+				value = emit_mir_string_instruction(state, function_index, instruction, operands, symbols, context, output)
+			else
+				value = emit_mir_scalar_instruction(state, function_index, instruction, operands, types, facts, context, output, false, false)
+			end
 			if instruction.result >= 0
 				# Stable MIR names allow a dominating definition in any storage order.
 				qbe_output_line(output, "\t" + operands[instruction.result] + " =" + qbe_type(types[instruction.result]) + " copy " + value.operand)

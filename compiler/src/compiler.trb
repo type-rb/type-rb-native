@@ -19,7 +19,7 @@ import { parse_project_config } from project_config
 import { emit_record_descriptors, emit_static_strings } from qbe_constants
 import { QbeEmitContext, QbeValue, emit_context_new, emit_label, emit_temporary, emit_typed_load, emit_typed_store, emitted_value, qbe_type } from qbe_context
 import { emit_control_mir } from qbe_control
-import { emit_add_local, emit_address, emit_array_address, emit_array_header, emit_array_push, emit_hash_root, emit_hash_set, emit_hash_value, emit_loaded_local, emit_loop_array_headers, emit_loop_root_compaction, emit_root_value, header_binding_selected, install_stable_array_header, invalidate_array_header_cache, note_gc_state, note_managed_alias } from qbe_memory
+import { emit_add_local, emit_address, emit_array_address, emit_array_header, emit_array_push, emit_hash_root, emit_hash_set, emit_hash_value, emit_loaded_local, emit_loop_array_headers, emit_loop_root_compaction, emit_managed_alias_root, emit_root_value, header_binding_selected, install_stable_array_header, invalidate_array_header_cache, note_gc_state } from qbe_memory
 import { emit_induction_mir, emit_scalar_mir } from qbe_mir
 import { emit_integer_call, lower_binary_operand, take_inline_budget } from qbe_numeric
 import { QbeOutput, qbe_output_append, qbe_output_branch, qbe_output_chunk, qbe_output_line, qbe_output_new } from qbe_output
@@ -669,7 +669,7 @@ def emit_postfix(
 					operand := emit_temporary(context)
 					field_type := load_string(state.field_types, field_index)
 					emit_typed_load(output, operand, field_type, address)
-					note_managed_alias(context, field_type)
+					emit_managed_alias_root(context, output, field_type, operand)
 					value = emitted_value(
 						operand,
 						field_type,
@@ -740,7 +740,7 @@ def emit_postfix(
 						element_type := array_element_type(value.type_name)
 						operand := emit_temporary(context)
 						emit_typed_load(output, operand, element_type, address)
-						note_managed_alias(context, element_type)
+						emit_managed_alias_root(context, output, element_type, operand)
 						mut owner := ""
 						mut retained_position := ""
 						if store_origin >= 0
@@ -1585,7 +1585,7 @@ def emit_function(
 		general_mir_function = state.scalar_mir.functions[mir_index].kind == 3
 	end
 	if general_mir_function
-		emit_control_mir(state, function_index, result_type, context, body)
+		emit_control_mir(state, function_index, result_type, output.mir_literal_symbols, context, body)
 		terminated = 1
 	elsif control_mir_function
 		emit_induction_mir(state, function_index, result_type, context, body)
@@ -1644,8 +1644,13 @@ def emit_function(
 	qbe_output_line(output, "@start")
 	# State 2 combines a managed temporary with a following collection safe
 	# point. Either condition alone does not require publishing the frame.
-	uses_temporary_roots := context.temporary_roots_used[0] == 2
-	managed_local_count := context.managed_local_high_water[0]
+	mut uses_temporary_roots := context.temporary_roots_used[0] == 2
+	mut managed_local_count := context.managed_local_high_water[0]
+	if general_mir_function
+		plan := state.scalar_mir.root_plans[mir_index]
+		uses_temporary_roots = plan.instructions.size() > 0
+		managed_local_count = plan.capacity
+	end
 	if uses_temporary_roots
 		qbe_output_line(output, "\t%temporary_roots =l loadl $trbn_gc_temp_count")
 	end
@@ -3235,8 +3240,15 @@ def check_function(
 		end
 		parameter_index += 1
 	end
+	parameter_index = parameter_start
+	while parameter_index < parameter_finish
+		if load_string(state.parameter_types, parameter_index) == "String"
+			mir_control_prepare(state, locals)
+		end
+		parameter_index += 1
+	end
 	result_type := load_string(state.function_result_types, function_index)
-	if result_type == "Void" && locals.mir_state[0] == 1
+	if (result_type == "Void" || result_type == "String") && locals.mir_state[0] == 1
 		mir_control_prepare(state, locals)
 	end
 	# The second cursor cell carries one adjacent declaration fact into a loop.
