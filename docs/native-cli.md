@@ -155,8 +155,8 @@ implemented by `trbn`.
 The editor does not yet provide the reference formatter's full canonical
 spacing, every readline/vi binding, import-repair and argument-aware completion,
 or full Unicode grapheme-cluster segmentation (for example joined emoji).
-Completion follows the executable Native subset; editing Unicode does not lift
-the compiler's ASCII String-literal restriction. Submissions are bounded to
+Completion follows the executable Native subset; Unicode identifiers and
+Unicode escapes remain unsupported. Submissions are bounded to
 64 KiB, including paste; overflow is rejected without evaluating a prefix.
 The evaluator has a 256-call depth bound and retains reachable session values.
 It is not a sandbox and is not yet qualified for production use.
@@ -233,8 +233,8 @@ frontend in both compiled programs and the REPL. Expressions must return
 String; use an explicit supported conversion such as `value.to_s()` for an
 Integer. Multiple expressions run once each, from left to right. Grouping
 preserves expression precedence and postfix operations on the resulting String.
-Nested quoted Strings and nested interpolation are supported within the
-existing expression and ASCII String subset.
+Nested quoted Strings and nested interpolation support UTF-8 literal text
+within the existing expression subset.
 
 Use `\#` to suppress interpolation: `"\#{name}"` produces the literal text
 `#{name}`. With two backslashes, `"\\#{name}"` produces one backslash followed
