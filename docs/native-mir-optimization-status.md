@@ -82,6 +82,7 @@ functions. Malformed element graphs, Array operations and omitted roots reject.
   checks typed instruction contracts.
 - `checked_values.trb`, `mir_construction.trb`, `mir_builder.trb`, `mir_control.trb`:
   checked value projection, block construction and function publication.
+- `mir_identities.trb`: fresh sparse function/value identities and definition counts, avoiding whole-module pairwise comparisons.
 - `mir_types.trb`: canonical composite type identities and shared managed/element
   classification, with unique container identities and predeclared nominal shells for recursive record fields.
 - `mir_arrays.trb`: typed Array construction, selection, load/store and push

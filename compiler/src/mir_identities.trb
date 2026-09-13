@@ -1,0 +1,48 @@
+import { integer_string } from literals
+import { MirModule } from mir
+
+# Function-local value IDs may be sparse and reused by other functions.
+def mir_identity_key(function_id: Integer, value_id: Integer): String
+	return integer_string(function_id) + ":" + integer_string(value_id)
+end
+
+def mir_count_definition(mut definitions: Hash<String, Integer>, function_id: Integer, value_id: Integer)
+	if value_id < 0
+		return
+	end
+	key := mir_identity_key(function_id, value_id)
+	mut count := 0
+	if definitions.key?(key)
+		count = definitions[key]
+	end
+	definitions[key] = count + 1
+end
+
+# Called after every function's storage spans are checked. Rebuild counts from
+# the current module so raw edits cannot reuse stale identity/definition facts.
+def mir_definition_index(native_module: MirModule): Hash<String, Integer>
+	mut definitions: Hash<String, Integer> := {}
+	native_module.functions.each do |function|
+		mut index := function.parameter_start
+		while index < function.parameter_start + function.parameter_count
+			mir_count_definition(definitions, function.id, native_module.arguments[index])
+			index += 1
+		end
+		mut block_index := function.block_start
+		while block_index < function.block_start + function.block_count
+			block := native_module.blocks[block_index]
+			index = block.parameter_start
+			while index < block.parameter_start + block.parameter_count
+				mir_count_definition(definitions, function.id, native_module.arguments[index])
+				index += 1
+			end
+			index = block.instruction_start
+			while index < block.instruction_start + block.instruction_count
+				mir_count_definition(definitions, function.id, native_module.instructions[index].result)
+				index += 1
+			end
+			block_index += 1
+		end
+	end
+	return definitions
+end

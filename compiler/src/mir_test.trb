@@ -1,3 +1,4 @@
+import { mir_definition_index } from mir_identities
 import { MirArrayOperation, MirBlock, MirFunction, MirInstruction, MirModule, MirValue } from mir
 import { optimize_verified_mir } from mir_passes
 import { verify_mir } from mir_verifier
@@ -500,5 +501,31 @@ describe("Native MIR instruction replacement") do
 		optimize_verified_mir(native_module)
 		expect(native_module.instructions[5]).to_equal(rewritten)
 		expect(verify_mir(native_module, true)).to_equal("")
+	end
+end
+
+describe("MIR definition index") do
+	test("separates function-local IDs and retains sparse and repeated definitions") do
+		mut native_module := mir_test_module(false, false)
+		function := native_module.functions[0]
+		native_module.functions.push(MirFunction.new(kind: function.kind, result_type: function.result_type, integer_guard: function.integer_guard, id: 12, entry_block: function.entry_block, source_id: function.source_id, line: function.line, parameter_start: function.parameter_start, parameter_count: function.parameter_count, block_start: function.block_start, block_count: function.block_count))
+		native_module.instructions[0] = mir_test_instruction_with_cell(native_module.instructions[0], 1, 23)
+		index := mir_definition_index(native_module)
+		# Decimal IDs must have a boundary: 1:23 and 12:3 are distinct.
+		expect(index["1:23"]).to_equal(1)
+		expect(index["12:3"]).to_equal(1)
+		expect(index["1:0"]).to_equal(1)
+		expect(index["12:0"]).to_equal(1)
+		expect(index.key?("1:99")).to_be_false()
+		native_module.instructions[0] = mir_test_instruction_with_cell(native_module.instructions[0], 1, 0)
+		repeated := mir_definition_index(native_module)
+		expect(repeated["1:0"]).to_equal(2)
+		expect(repeated.key?("1:23")).to_be_false()
+		native_module.instructions[0] = mir_test_instruction_with_cell(native_module.instructions[0], 1, 9007199254740991)
+		sparse := mir_definition_index(native_module)
+		expect(sparse["1:9007199254740991"]).to_equal(1)
+		expect(sparse["12:9007199254740991"]).to_equal(1)
+		expect(sparse["1:0"]).to_equal(1)
+		expect(sparse.size()).to_equal(index.size())
 	end
 end

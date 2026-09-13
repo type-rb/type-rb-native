@@ -1,7 +1,9 @@
+import { integer_string } from literals
+import { mir_definition_index, mir_identity_key } from mir_identities
 import { mir_semantic_type_name, mir_semantic_value_type, mir_types_error } from mir_types
 import { mir_function_roots, mir_root_plan_equal } from mir_roots
 import { MirFlow, mir_build_flow, mir_flow_blocks, mir_flow_graph_error, mir_flow_type, mir_value_available } from mir_flow
-import { MirBlock, MirFunction, MirModule, mir_block_index, mir_definition_count, mir_function_index, mir_origin_valid, mir_table_span_valid } from mir
+import { MirBlock, MirFunction, MirModule, mir_block_index, mir_origin_valid, mir_table_span_valid } from mir
 import { mir_array_headers, mir_array_headers_equal, mir_array_loop_headers, mir_induction_address, mir_scalar_guard } from mir_analysis
 import { mir_function_signature_error, mir_signatures_error } from mir_calls
 import { mir_instruction_error } from mir_instructions
@@ -361,6 +363,7 @@ def verify_mir(native_module: MirModule, optimized: Boolean): String
 	if native_module.functions.size() == 0
 		return ""
 	end
+	mut functions: Hash<String, Integer> := {}
 	index = 0
 	while index < native_module.functions.size()
 		function := native_module.functions[index]
@@ -370,13 +373,11 @@ def verify_mir(native_module: MirModule, optimized: Boolean): String
 		if !mir_origin_valid(function.source_id, function.line, native_module.source_count[0])
 			return "MIR function origin is invalid"
 		end
-		mut previous := 0
-		while previous < index
-			if native_module.functions[previous].id == function.id
-				return "MIR function identifier is duplicated"
-			end
-			previous += 1
+		function_key := integer_string(function.id)
+		if functions.key?(function_key)
+			return "MIR function identifier is duplicated"
 		end
+		functions[function_key] = index
 		if function.id == native_module.entry_function[0]
 			entry_found = true
 		end
@@ -389,11 +390,12 @@ def verify_mir(native_module: MirModule, optimized: Boolean): String
 	if !entry_found
 		return "MIR entry function does not exist"
 	end
+	definitions := mir_definition_index(native_module)
+	mut values: Hash<String, Integer> := {}
 	index = 0
 	while index < native_module.values.size()
 		value := native_module.values[index]
-		function_index := mir_function_index(native_module, value.function_id)
-		if function_index < 0
+		if !functions.key?(integer_string(value.function_id))
 			return "MIR value identity is invalid"
 		end
 		if value.id < 0
@@ -408,18 +410,12 @@ def verify_mir(native_module: MirModule, optimized: Boolean): String
 		if !mir_origin_valid(value.source_id, value.line, native_module.source_count[0])
 			return "MIR value origin is invalid"
 		end
-		mut previous := 0
-		while previous < index
-			other := native_module.values[previous]
-			if other.function_id == value.function_id
-				if other.id == value.id
-					return "MIR value is defined more than once"
-				end
-			end
-			previous += 1
+		key := mir_identity_key(value.function_id, value.id)
+		if values.key?(key)
+			return "MIR value is defined more than once"
 		end
-		function := native_module.functions[function_index]
-		if mir_definition_count(native_module, function, value.id) != 1
+		values[key] = 1
+		if !definitions.key?(key) || definitions[key] != 1
 			return "MIR value definition count differs"
 		end
 		index += 1

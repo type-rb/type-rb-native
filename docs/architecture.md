@@ -104,7 +104,7 @@ vertical slices from remaining ownership.
 ### Current compiler source ownership
 
 The ordinary entry is [compiler/src/compiler.trb](../compiler/src/compiler.trb).
-Its explicit transitive import closure contains 45 canonical implementation modules:
+Its explicit transitive import closure contains 46 canonical implementation modules:
 
 | Modules in `compiler/src/` | Current responsibility |
 | --- | --- |
@@ -112,7 +112,7 @@ Its explicit transitive import closure contains 45 canonical implementation modu
 | `state.trb` | Compiler state, symbol indexes, shared locals, and diagnostics. |
 | `parser.trb`, `resolution.trb` | Syntax and token boundaries; declaration, import, and type resolution. |
 | `checked_program.trb`, `checked_values.trb`, `checked_types.trb` | Recursive expression/body checking, typed checked values and shared type/operator rules. |
-| `mir.trb`, `mir_types.trb`, `mir_analysis.trb`, `mir_flow.trb`, `mir_roots.trb`, `mir_passes.trb`, `mir_verifier.trb`, `mir_instructions.trb` | MIR model, semantic composite types and queries, reusable proofs, CFG/dominance, operation effects/liveness/root plans, rewrites, structural verification and instruction contracts. |
+| `mir.trb`, `mir_types.trb`, `mir_analysis.trb`, `mir_flow.trb`, `mir_identities.trb`, `mir_roots.trb`, `mir_passes.trb`, `mir_verifier.trb`, `mir_instructions.trb` | MIR model, semantic composite types and queries, reusable proofs, CFG/dominance, operation effects/liveness/root plans, rewrites, structural verification and instruction contracts. |
 | `mir_construction.trb`, `mir_builder.trb`, `mir_control.trb`, `mir_calls.trb`, `mir_logical.trb`, `mir_strings.trb`, `mir_arrays.trb`, `mir_records.trb` | Declaration/call contracts, block construction and publication of scalar, induction, mutable scalar/managed control/value, Array and nominal record operations, conversion/I/O and short-circuit MIR. |
 | `qbe_context.trb`, `qbe_memory.trb`, `qbe_numeric.trb`, `qbe_constants.trb` | Backend context, memory operations, numeric lowering and static data. |
 | `qbe_mir.trb`, `qbe_control.trb`, `qbe_strings.trb`, `qbe_arrays.trb`, `qbe_records.trb`, `qbe_roots.trb` | Shared typed scalar/call adaptation, verified induction, general scalar/managed blocks and MIR-selected root publication. |
