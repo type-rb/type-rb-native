@@ -1,6 +1,6 @@
 import { mir_checked_array_index, mir_checked_array_literal, mir_checked_array_operation, mir_checked_array_store } from mir_arrays
 import { binary_result_type, check_expected, numeric_type, type_diagnostic } from checked_types
-import { CheckedValue, array_region_operation, checked_assignment_operation, checked_mir_value, checked_value, mir_checked_value, scalar_leaf_inline_eligible, scalar_mir_binary, scalar_mir_convert_float, scalar_mir_disable, scalar_mir_instruction, scalar_mir_literal, scalar_mir_unary, scalar_mir_value } from checked_values
+import { CheckedValue, array_region_operation, checked_assignment_operation, checked_bound_value, checked_mir_value, checked_value, mir_checked_value, scalar_leaf_inline_eligible, scalar_mir_binary, scalar_mir_convert_float, scalar_mir_disable, scalar_mir_instruction, scalar_mir_literal, scalar_mir_unary, scalar_mir_value } from checked_values
 import { checked_hash_binding_target, checked_hash_method, checked_hash_plan, checked_hash_publish } from hash_checked
 import { mir_hash_operation } from hash_mir
 import { hash_key_type, hash_type, hash_value_type } from hash_types
@@ -91,7 +91,7 @@ def checked_hash_index(mut state: CompilerState, mut position: Array<Integer>, m
 	checked_hash_publish(state, mir_hash_operation(kind, origin, finish, receiver.origin, type_name, receiver.mutable != 0, 0))
 	scalar_mir_disable(locals)
 	array_region_operation(locals, 6, 0, origin)
-	return checked_value(hash_value_type(type_name), 0, origin, receiver.mutable)
+	return checked_bound_value(hash_value_type(type_name), 0, origin, receiver.mutable, receiver.binding)
 end
 
 def checked_hash_refine(mut state: CompilerState, mut locals: CheckedLocals, origin: Integer, value_type: String)
@@ -127,7 +127,7 @@ def checked_hash_call(mut state: CompilerState, mut position: Array<Integer>, mu
 		return type_diagnostic(state, line, "Hash method requires a concrete Hash<K, V> type")
 	end
 	if kind == 6 || kind == 9
-		if receiver.mutable == 0 || !checked_hash_binding_target(state, receiver.origin)
+		if receiver.mutable == 0 || !receiver.binding || !checked_hash_binding_target(state, receiver.origin)
 			return type_diagnostic(state, line, "Hash mutation requires a mutable binding")
 		end
 	end
@@ -314,20 +314,22 @@ def check_primary(
 			mir_value := load_integer(locals.mir_values, local_index)
 			if locals.mir_state[0] > 0
 				if mir_value > 0
-					return mir_checked_value(
+					return checked_bound_value(
 						load_string(locals.types, local_index),
-						mir_value - 1,
+						- mir_value,
 						origin,
 						load_integer(locals.mutable, local_index),
+						true,
 					)
 				end
 				scalar_mir_disable(locals)
 			end
-			return checked_value(
+			return checked_bound_value(
 				load_string(locals.types, local_index),
 				0,
 				origin,
 				load_integer(locals.mutable, local_index),
+				true,
 			)
 		end
 		standard_package := standard_package_import(state, state.active_module[0], name)
@@ -545,6 +547,8 @@ def check_method_call(
 		end
 		if receiver.mutable == 0
 			diagnostic(state, "TRBN4004", line, "push receiver is immutable")
+		elsif !receiver.binding
+			diagnostic(state, "TRBN4004", line, "push requires a mutable binding")
 		end
 		value := check_expression(state, position, locals, 1, element_type)
 		skip_newlines(state, position)
@@ -576,7 +580,7 @@ def check_postfix(
 		mut locals: CheckedLocals,
 		initial: CheckedValue,
 	): CheckedValue
-	mut value := checked_value(initial.type_name, initial.category, initial.origin, initial.mutable)
+	mut value := checked_bound_value(initial.type_name, initial.category, initial.origin, initial.mutable, initial.binding)
 	mut scanning := true
 	while scanning
 		if token_is(state, position[0], "[")
@@ -692,11 +696,12 @@ def check_postfix(
 						else
 							# Category 3 marks a readonly field binding; mutable retains
 							# the value capability for subsequent indexing or methods.
-							value = checked_value(
+							value = checked_bound_value(
 								load_string(state.field_types, field_index),
 								3,
 								9007199254740991,
 								value.mutable,
+								value.binding,
 							)
 						end
 					end
@@ -761,7 +766,7 @@ def check_postfix(
 									scalar_mir_instruction(
 										state, locals, 10, loaded, address, - 1, 0, - 1, line,
 									)
-									value = mir_checked_value(element_type, loaded, index_origin, value.mutable)
+									value = checked_bound_value(element_type, - loaded - 1, index_origin, value.mutable, value.binding)
 									lowered = true
 								end
 							end
@@ -786,7 +791,7 @@ def check_postfix(
 								)
 								scanning = false
 							else
-								value = checked_value(element_type, 0, index_origin, value.mutable)
+								value = checked_bound_value(element_type, 0, index_origin, value.mutable, value.binding)
 							end
 						end
 					end
@@ -1069,6 +1074,8 @@ def check_simple_statement(
 	if assignment
 		if left.category == 3
 			diagnostic(state, "TRBN4004", line, "record field is readonly")
+		elsif left.mutable != 0 && !left.binding
+			diagnostic(state, "TRBN4004", line, "assignment requires a mutable binding")
 		end
 	end
 	if operator == "="

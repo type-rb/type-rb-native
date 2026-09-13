@@ -42,6 +42,18 @@ describe("Managed Array MIR") do
 		expect(state.scalar_mir.functions.size()).to_equal(1)
 	end
 
+	test("requires binding roots for mutation but permits fresh Array arguments") do
+		["", "marker := {1 => 1}\n"].each do |prefix|
+			["[1] = [2]", "([1])[0] = 2", "[[1]][0].push(2)", "[1].push(2)", "([1]).push(2)", "[[1]][0][0] += 2"].each do |statement|
+				mut state := logical_checked_source("def main()\n" + prefix + statement + "\nend\n")
+				expect(check(state)).to_be_false()
+			end
+			mut state := logical_checked_source("def grow(mut values: Array<Integer>)\nvalues.push(2)\nend\ndef main()\n" + prefix + "grow([1])\nmut rows := [[1]]\n((rows))[0][0] += 2\nrows[0].push(4)\nend\n")
+			expect(check(state)).to_be_true()
+			expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		end
+	end
+
 	test("retains nested element identity and rejects forged composite graphs") do
 		mut state := array_mir_test_state()
 		mut native_module := state.scalar_mir
