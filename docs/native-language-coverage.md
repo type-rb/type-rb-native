@@ -47,6 +47,9 @@ including parenthesized and nested targets, must be rejected even through a
 `mut` record binding. Whole-record rebinding remains valid, and Array values
 held in fields retain the normal capability rules for indexing, method calls
 and mutable arguments. Field immutability does not recursively freeze values.
+Mutation syntax follows a binding through field/index projections; fresh Array
+values may be passed to mutable parameters but cannot be assigned to or pushed
+to directly. Grouping preserves the same binding requirement.
 
 [Issue #350](https://github.com/type-rb/type-rb-native/issues/350) tracks the
 checked-frontend correction and its ordinary file/REPL and recovery regressions.
