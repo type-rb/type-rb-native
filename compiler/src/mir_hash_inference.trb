@@ -45,7 +45,18 @@ end
 # values: distinct empty Hashes and replacement allocations stay independent.
 # The raw MIR verifier never calls this pass or repairs malformed input.
 def mir_finalize_hash_types(native_module: MirModule, mut locals: CheckedLocals): String
-	if locals.mir_hash_refinements.size() == 0
+	mut pending := locals.mir_hash_refinements.size() > 0
+	# Checking an unreachable store can refine the lexical type even though
+	# no store instruction is emitted. Its live exit parameters still constrain
+	# the earlier empty allocation, so inspect CFG types without a store witness.
+	if !pending
+		locals.mir_value_rows.each do |value|
+			if mir_hash_kind(native_module, value.type_id) == 5
+				pending = true
+			end
+		end
+	end
+	if !pending
 		return ""
 	end
 	if locals.mir_hash_refinements.size() % 2 != 0

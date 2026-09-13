@@ -44,6 +44,24 @@ describe("Hash value MIR") do
 		expect(words > 3).to_be_true()
 	end
 
+	test("resolves a checked unreachable first store through the live exit edge") do
+		mut state := logical_checked_source("def main()\nmut table := {}\n[1].each do |_value|\nbreak\ntable[1] = 2\nend\nputs(table.size())\nend\n")
+		expect(check(state)).to_be_true()
+		expect(state.scalar_mir.functions.size()).to_equal(1)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		mut allocations := 0
+		mut stores := 0
+		state.scalar_mir.instructions.each do |instruction|
+			if instruction.kind == 27
+				allocations += 1
+			elsif instruction.kind == 29
+				stores += 1
+			end
+		end
+		expect(allocations).to_equal(1)
+		expect(stores).to_equal(0)
+	end
+
 	test("rejects malformed capacity, owner, key, stored value and method identity") do
 		mut mutation := 0
 		while mutation < 5
