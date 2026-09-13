@@ -1,5 +1,6 @@
+import { mir_semantic_type_id, mir_semantic_value_type } from mir_types
 import { CheckedValue, checked_mir_value, mir_add_value, scalar_mir_disable } from checked_values
-import { MirCall, MirControlLoop, MirFunction, mir_control_value_type, mir_instruction_with_payload, mir_type_id } from mir
+import { MirCall, MirControlLoop, MirFunction, mir_instruction_with_payload } from mir
 import { mir_block } from mir_construction
 import { CheckedLocals, CompilerState, local_find } from state
 import { load_integer, load_string, store_integer } from storage
@@ -7,7 +8,7 @@ import { load_integer, load_string, store_integer } from storage
 # Function-local construction of typed scalar blocks. Every live binding
 # crosses a control edge as an explicit value argument, including branch-local
 # aliases used after a nested conditional. No source span is an executable op.
-def mir_control_prepare(state: CompilerState, mut locals: CheckedLocals)
+def mir_control_prepare(mut state: CompilerState, mut locals: CheckedLocals)
 	if locals.mir_state[0] != 1
 		scalar_mir_disable(locals)
 		return
@@ -17,8 +18,8 @@ def mir_control_prepare(state: CompilerState, mut locals: CheckedLocals)
 	end
 	mut index := 0
 	while index < locals.count[0]
-		type_id := mir_type_id(load_string(locals.types, index))
-		if !mir_control_value_type(type_id)
+		type_id := mir_semantic_type_id(state.scalar_mir, load_string(locals.types, index))
+		if !mir_semantic_value_type(state.scalar_mir, type_id)
 			scalar_mir_disable(locals)
 			return
 		end
@@ -70,7 +71,7 @@ def mir_control_finish(state: CompilerState, mut locals: CheckedLocals, terminat
 	locals.mir_control[6] = 1
 end
 
-def mir_control_enter(state: CompilerState, mut locals: CheckedLocals, block: Integer, line: Integer)
+def mir_control_enter(mut state: CompilerState, mut locals: CheckedLocals, block: Integer, line: Integer)
 	if !mir_control_active(locals)
 		return
 	end
@@ -83,7 +84,7 @@ def mir_control_enter(state: CompilerState, mut locals: CheckedLocals, block: In
 	locals.mir_state[4] =- 1
 	mut index := 0
 	while index < locals.count[0]
-		type_id := mir_type_id(load_string(locals.types, index))
+		type_id := mir_semantic_type_id(state.scalar_mir, load_string(locals.types, index))
 		value := mir_add_value(state, locals, type_id, line)
 		locals.mir_arguments.push(value)
 		store_integer(locals.mir_values, index, value + 1)
@@ -91,7 +92,7 @@ def mir_control_enter(state: CompilerState, mut locals: CheckedLocals, block: In
 	end
 end
 
-def mir_control_branch(state: CompilerState, mut locals: CheckedLocals, condition: CheckedValue, line: Integer): Integer
+def mir_control_branch(mut state: CompilerState, mut locals: CheckedLocals, condition: CheckedValue, line: Integer): Integer
 	if !mir_control_active(locals)
 		return - 1
 	end
@@ -149,7 +150,7 @@ def mir_control_assign(state: CompilerState, mut locals: CheckedLocals, target: 
 	store_integer(locals.mir_values, index, operand + 1)
 end
 
-def mir_control_loop_begin(state: CompilerState, mut locals: CheckedLocals, origin: Integer, line: Integer): Integer
+def mir_control_loop_begin(mut state: CompilerState, mut locals: CheckedLocals, origin: Integer, line: Integer): Integer
 	mir_control_prepare(state, locals)
 	if !mir_control_active(locals)
 		return - 1
@@ -169,7 +170,7 @@ def mir_control_loop_begin(state: CompilerState, mut locals: CheckedLocals, orig
 	return exit
 end
 
-def mir_control_loop_branch(state: CompilerState, mut locals: CheckedLocals, condition: CheckedValue, exit: Integer, line: Integer)
+def mir_control_loop_branch(mut state: CompilerState, mut locals: CheckedLocals, condition: CheckedValue, exit: Integer, line: Integer)
 	if !mir_control_active(locals)
 		return
 	end
@@ -206,7 +207,7 @@ def mir_control_transfer(state: CompilerState, mut locals: CheckedLocals, origin
 	mir_control_jump(state, locals, target, frame.binding_count)
 end
 
-def mir_control_loop_end(state: CompilerState, mut locals: CheckedLocals, line: Integer)
+def mir_control_loop_end(mut state: CompilerState, mut locals: CheckedLocals, line: Integer)
 	if !mir_control_active(locals)
 		return
 	end

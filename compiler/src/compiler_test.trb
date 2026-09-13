@@ -206,7 +206,7 @@ describe("Native TypeRB frontend") do
 	end
 
 	test("selects a verified guarded Integer multiply for scalar MIR in a managed loop") do
-		source := "def product(left: Integer, right: Integer): Integer\n\treturn left * right\nend\n\ndef main()\n\tmarker := [1]\n\tmut index := 0\n\twhile index < 1\n\t\tvalue := product(index, index - 1)\n\t\tindex += value + 1\n\tend\n\treturn\nend\n"
+		source := "def product(left: Integer, right: Integer): Integer\n\treturn left * right\nend\n\ndef main()\n\tmarker := {1 => 1}\n\tmut index := 0\n\twhile index < 1\n\t\tvalue := product(index, index - 1)\n\t\tindex += value + 1\n\tend\n\treturn\nend\n"
 		mut state := compiler_new(source.size() + 1)
 		expect(lex(state, source)).to_be_true()
 		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
@@ -235,7 +235,7 @@ describe("Native TypeRB frontend") do
 	end
 
 	test("selects a verified guarded Integer add for loop-local scalar MIR") do
-		source := "def sum(left: Integer, right: Integer): Integer\n\treturn left + right\nend\n\ndef main()\n\tlefts := [1]\n\trights := [2]\n\tmut index := 0\n\twhile index < 1\n\t\tvalue := sum(lefts[index], rights[index])\n\t\tindex += value\n\tend\n\treturn\nend\n"
+		source := "def sum(left: Integer, right: Integer): Integer\n\treturn left + right\nend\n\ndef main()\n\tmarker := {1 => 1}\n\tlefts := [1]\n\trights := [2]\n\tmut index := 0\n\twhile index < 1\n\t\tvalue := sum(lefts[index], rights[index])\n\t\tindex += value\n\tend\n\treturn\nend\n"
 		mut state := compiler_new(source.size() + 1)
 		expect(lex(state, source)).to_be_true()
 		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
@@ -448,19 +448,20 @@ describe("Native TypeRB frontend") do
 		expect(verify_mir(state.scalar_mir, true)).to_equal("")
 	end
 
-	test("publishes a stable Array-header plan without a scalar MIR function") do
+	test("retains stable Array-header analysis when typed Array control moves through MIR") do
 		source := "def copy(input: Array<Float>, mut output: Array<Float>)\n\tmut index := 0\n\twhile index < input.size()\n\t\toutput[index] = input[index]\n\t\tindex += 1\n\tend\n\treturn\nend\n\ndef main()\n\treturn\nend\n"
 		mut state := compiler_new(source.size() + 1)
 		expect(lex(state, source)).to_be_true()
 		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(resolve(state)).to_be_true()
 		expect(check(state)).to_be_true()
-		expect(mir_function_index(state.scalar_mir, 0)).to_equal(- 1)
+		expect(state.scalar_mir.functions[mir_function_index(state.scalar_mir, 0)].kind).to_equal(3)
 		expect(state.scalar_mir.array_headers.size()).to_equal(2)
 		expect(state.scalar_mir.array_headers[0].size() > 0).to_be_true()
 		expect(state.scalar_mir.array_headers[1]).to_equal([])
 		qbe := output_source(emit_qbe(state))
-		expect(occurrence_count(qbe, " =w cultl ")).to_equal(2)
+		expect(qbe.include?("@mir_")).to_be_true()
+		expect(qbe.include?("call $trbn_array_address")).to_be_true()
 	end
 
 	test("retains immutable local Array headers across nested loops") do
@@ -582,7 +583,8 @@ describe("Native TypeRB frontend") do
 		expect(check(state)).to_be_true()
 		expect(state.scalar_mir.array_headers[0].size() > 0).to_be_true()
 		qbe := output_source(emit_qbe(state))
-		expect(qbe.include?(", @array_bounds_failure")).to_be_true()
+		expect(state.scalar_mir.functions[mir_function_index(state.scalar_mir, 0)].kind).to_equal(3)
+		expect(qbe.include?("call $trbn_array_address")).to_be_true()
 	end
 
 	test("retains bounds checks when the loop condition extends the Array length") do
@@ -594,7 +596,8 @@ describe("Native TypeRB frontend") do
 		expect(check(state)).to_be_true()
 		expect(state.scalar_mir.array_headers[0].size() > 0).to_be_true()
 		qbe := output_source(emit_qbe(state))
-		expect(qbe.include?(", @array_bounds_failure")).to_be_true()
+		expect(state.scalar_mir.functions[mir_function_index(state.scalar_mir, 0)].kind).to_equal(3)
+		expect(qbe.include?("call $trbn_array_address")).to_be_true()
 	end
 
 	test("retains bounds checks when a later update invalidates the induction proof") do
@@ -606,7 +609,8 @@ describe("Native TypeRB frontend") do
 		expect(check(state)).to_be_true()
 		expect(state.scalar_mir.array_headers[0].size() > 0).to_be_true()
 		qbe := output_source(emit_qbe(state))
-		expect(qbe.include?(", @array_bounds_failure")).to_be_true()
+		expect(state.scalar_mir.functions[mir_function_index(state.scalar_mir, 0)].kind).to_equal(3)
+		expect(qbe.include?("call $trbn_array_address")).to_be_true()
 	end
 
 	test("keeps unsupported Array Integer reductions on the direct path") do
@@ -1359,7 +1363,7 @@ describe("Native TypeRB frontend") do
 			expect(true).to_be_true()
 		else
 			base := root + "/compiler/src/"
-			names := ["compiler", "literals", "mir", "iteration_mir", "path", "hash_types", "hash_mir", "storage", "state", "parser", "checked_values", "resolution", "hash_checked", "iteration_checked", "mir_analysis", "mir_construction", "mir_control", "mir_calls", "mir_flow", "mir_logical", "mir_instructions", "mir_strings", "mir_roots", "qbe_roots", "qbe_strings", "checked_types", "checked_program", "qbe_output", "hash_runtime", "mir_builder", "mir_passes", "mir_verifier", "project_config", "qbe_constants", "qbe_context", "qbe_memory", "qbe_numeric", "qbe_mir", "qbe_control", "qbe_runtime"]
+			names := ["compiler", "literals", "mir", "iteration_mir", "path", "hash_types", "hash_mir", "storage", "state", "parser", "checked_values", "resolution", "hash_checked", "iteration_checked", "mir_analysis", "mir_construction", "mir_control", "mir_calls", "mir_flow", "mir_logical", "mir_instructions", "mir_strings", "mir_roots", "mir_types", "mir_arrays", "qbe_arrays", "qbe_roots", "qbe_strings", "checked_types", "checked_program", "qbe_output", "hash_runtime", "mir_builder", "mir_passes", "mir_verifier", "project_config", "qbe_constants", "qbe_context", "qbe_memory", "qbe_numeric", "qbe_mir", "qbe_control", "qbe_runtime"]
 			mut sources: Array<String> := []
 			names.each do |name|
 				sources.push(required_test_source(base + name + ".trb"))
@@ -1742,7 +1746,8 @@ describe("Native TypeRB frontend") do
 	end
 
 	test("inlines bounded scalar helpers outside lexical loops") do
-		source := "def scalar(value: Integer): Integer\n\tsum := value + 1\n\tproduct := sum * 2\n\treturn product / 2\nend\n\ndef main()\n\tmut values: Array<Integer> := [0]\n\tmut index := 0\n\twhile index < 1\n\t\tvalues[0] = scalar(index)\n\t\tindex += 1\n\tend\n\treturn\nend\n"
+		# Hash ownership keeps this retained direct-adapter control explicit.
+		source := "def scalar(value: Integer): Integer\n\tsum := value + 1\n\tproduct := sum * 2\n\treturn product / 2\nend\n\ndef main()\n\tretained := {1 => 1}\n\tmut values: Array<Integer> := [0]\n\tmut index := 0\n\twhile index < 1\n\t\tvalues[0] = scalar(index)\n\t\tindex += 1\n\tend\n\treturn\nend\n"
 		mut state := compiler_new(source.size() + 1)
 		expect(lex(state, source)).to_be_true()
 		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
@@ -1814,7 +1819,8 @@ describe("Native TypeRB frontend") do
 	end
 
 	test("keeps the loop reserve independent when the non-loop reserve is exhausted") do
-		source := "def scalar(value: Integer, label: String): Integer\n\tmut result := value\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\treturn result\nend\n\ndef main()\n\tmut values: Array<Integer> := [0]\n\tmut index := 0\n\twhile index < 1\n\t\tvalues[0] = scalar(index, \"managed caller\")\n\t\tindex += 1\n\tend\n\treturn\nend\n"
+		# Hash ownership keeps this retained direct-adapter control explicit.
+		source := "def scalar(value: Integer, label: String): Integer\n\tmut result := value\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\treturn result\nend\n\ndef main()\n\tretained := {1 => 1}\n\tmut values: Array<Integer> := [0]\n\tmut index := 0\n\twhile index < 1\n\t\tvalues[0] = scalar(index, \"managed caller\")\n\t\tindex += 1\n\tend\n\treturn\nend\n"
 		mut state := compiler_new(source.size() + 1)
 		expect(lex(state, source)).to_be_true()
 		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
@@ -1827,7 +1833,8 @@ describe("Native TypeRB frontend") do
 	end
 
 	test("spends the loop inline budget on dynamic Array reads and mutation") do
-		source := "def main()\n\tmut values: Array<Integer> := [10, 20]\n\tindices := [1, - 2]\n\tmut position := 0\n\twhile position < indices.size()\n\t\tindex := indices[position]\n\t\tvalues[index] = values[index] + 1\n\t\tposition += 1\n\tend\n\treturn\nend\n"
+		# Hash ownership keeps this retained direct-adapter control explicit.
+		source := "def main()\n\tretained := {1 => 1}\n\tmut values: Array<Integer> := [10, 20]\n\tindices := [1, - 2]\n\tmut position := 0\n\twhile position < indices.size()\n\t\tindex := indices[position]\n\t\tvalues[index] = values[index] + 1\n\t\tposition += 1\n\tend\n\treturn\nend\n"
 		mut state := compiler_new(source.size() + 1)
 		expect(lex(state, source)).to_be_true()
 		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
@@ -1841,7 +1848,7 @@ describe("Native TypeRB frontend") do
 	end
 
 	test("omits negative Array-index normalization only for proven induction locals") do
-		proven_source := "def main()\n\tmut values: Array<Integer> := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tvalues[index] = values[index] + 1\n\t\tindex += 1\n\tend\n\treturn\nend\n"
+		proven_source := "def main()\n\tretained := {1 => 1}\n\tmut values: Array<Integer> := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tvalues[index] = values[index] + 1\n\t\tindex += 1\n\tend\n\treturn\nend\n"
 		mut proven := compiler_new(proven_source.size() + 1)
 		expect(lex(proven, proven_source)).to_be_true()
 		expect(parse_module(proven, 0, proven.entry_module[0])).to_be_true()
@@ -1851,7 +1858,7 @@ describe("Native TypeRB frontend") do
 		expect(occurrence_count(proven_qbe, " =l sar ")).to_equal(0)
 		expect(occurrence_count(proven_qbe, " =w cultl ")).to_equal(2)
 
-		direct_derived_source := "def main()\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < 1\n\t\tvalue := values[index + 1]\n\t\tindex += 1\n\tend\n\treturn\nend\n"
+		direct_derived_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < 1\n\t\tvalue := values[index + 1]\n\t\tindex += 1\n\tend\n\treturn\nend\n"
 		mut direct_derived := compiler_new(direct_derived_source.size() + 1)
 		expect(lex(direct_derived, direct_derived_source)).to_be_true()
 		expect(parse_module(direct_derived, 0, direct_derived.entry_module[0])).to_be_true()
@@ -1877,7 +1884,7 @@ describe("Native TypeRB frontend") do
 		direct_derived_qbe := output_source(emit_qbe(direct_derived))
 		expect(occurrence_count(direct_derived_qbe, " =l sar ")).to_equal(0)
 
-		reassigned_source := "def main()\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tvalue := values[index]\n\t\tindex =- 1\n\tend\n\treturn\nend\n"
+		reassigned_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tvalue := values[index]\n\t\tindex =- 1\n\tend\n\treturn\nend\n"
 		mut reassigned := compiler_new(reassigned_source.size() + 1)
 		expect(lex(reassigned, reassigned_source)).to_be_true()
 		expect(parse_module(reassigned, 0, reassigned.entry_module[0])).to_be_true()
@@ -1886,7 +1893,7 @@ describe("Native TypeRB frontend") do
 		reassigned_qbe := output_source(emit_qbe(reassigned))
 		expect(occurrence_count(reassigned_qbe, " =l sar ")).to_equal(1)
 
-		non_unit_source := "def main()\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tvalue := values[index]\n\t\tindex += 2\n\tend\n\treturn\nend\n"
+		non_unit_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tvalue := values[index]\n\t\tindex += 2\n\tend\n\treturn\nend\n"
 		mut non_unit := compiler_new(non_unit_source.size() + 1)
 		expect(lex(non_unit, non_unit_source)).to_be_true()
 		expect(parse_module(non_unit, 0, non_unit.entry_module[0])).to_be_true()
@@ -1895,7 +1902,7 @@ describe("Native TypeRB frontend") do
 		non_unit_qbe := output_source(emit_qbe(non_unit))
 		expect(occurrence_count(non_unit_qbe, " =l sar ")).to_equal(1)
 
-		nested_source := "def main()\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tif index == 0\n\t\t\tvalue := values[index]\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
+		nested_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tif index == 0\n\t\t\tvalue := values[index]\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
 		mut nested := compiler_new(nested_source.size() + 1)
 		expect(lex(nested, nested_source)).to_be_true()
 		expect(parse_module(nested, 0, nested.entry_module[0])).to_be_true()
@@ -1904,7 +1911,7 @@ describe("Native TypeRB frontend") do
 		nested_qbe := output_source(emit_qbe(nested))
 		expect(occurrence_count(nested_qbe, " =l sar ")).to_equal(1)
 
-		safe_nested_source := "def main()\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tmut pass := 0\n\t\twhile pass < 1\n\t\t\tvalue := values[index]\n\t\t\tpass += 1\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
+		safe_nested_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tmut pass := 0\n\t\twhile pass < 1\n\t\t\tvalue := values[index]\n\t\t\tpass += 1\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
 		mut safe_nested := compiler_new(safe_nested_source.size() + 1)
 		expect(lex(safe_nested, safe_nested_source)).to_be_true()
 		expect(parse_module(safe_nested, 0, safe_nested.entry_module[0])).to_be_true()
@@ -1913,7 +1920,7 @@ describe("Native TypeRB frontend") do
 		safe_nested_qbe := output_source(emit_qbe(safe_nested))
 		expect(occurrence_count(safe_nested_qbe, " =l sar ")).to_equal(0)
 
-		derived_source := "def main()\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tmut other := index + 1\n\t\twhile other < values.size()\n\t\t\tvalue := values[other]\n\t\t\tother += 1\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
+		derived_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tmut other := index + 1\n\t\twhile other < values.size()\n\t\t\tvalue := values[other]\n\t\t\tother += 1\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
 		mut derived := compiler_new(derived_source.size() + 1)
 		expect(lex(derived, derived_source)).to_be_true()
 		expect(parse_module(derived, 0, derived.entry_module[0])).to_be_true()
@@ -1922,7 +1929,7 @@ describe("Native TypeRB frontend") do
 		derived_qbe := output_source(emit_qbe(derived))
 		expect(occurrence_count(derived_qbe, " =l sar ")).to_equal(0)
 
-		derived_reassigned_source := "def main()\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tmut other := index + 1\n\t\tother =- 1\n\t\twhile other < values.size()\n\t\t\tvalue := values[other]\n\t\t\tother += 1\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
+		derived_reassigned_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tmut other := index + 1\n\t\tother =- 1\n\t\twhile other < values.size()\n\t\t\tvalue := values[other]\n\t\t\tother += 1\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
 		mut derived_reassigned := compiler_new(derived_reassigned_source.size() + 1)
 		expect(lex(derived_reassigned, derived_reassigned_source)).to_be_true()
 		expect(parse_module(derived_reassigned, 0, derived_reassigned.entry_module[0])).to_be_true()
@@ -1931,7 +1938,7 @@ describe("Native TypeRB frontend") do
 		derived_reassigned_qbe := output_source(emit_qbe(derived_reassigned))
 		expect(occurrence_count(derived_reassigned_qbe, " =l sar ")).to_equal(1)
 
-		derived_non_unit_source := "def main()\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tmut other := index + 1\n\t\twhile other < values.size()\n\t\t\tvalue := values[other]\n\t\t\tother += 2\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
+		derived_non_unit_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tmut other := index + 1\n\t\twhile other < values.size()\n\t\t\tvalue := values[other]\n\t\t\tother += 2\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
 		mut derived_non_unit := compiler_new(derived_non_unit_source.size() + 1)
 		expect(lex(derived_non_unit, derived_non_unit_source)).to_be_true()
 		expect(parse_module(derived_non_unit, 0, derived_non_unit.entry_module[0])).to_be_true()
@@ -1940,7 +1947,7 @@ describe("Native TypeRB frontend") do
 		derived_non_unit_qbe := output_source(emit_qbe(derived_non_unit))
 		expect(occurrence_count(derived_non_unit_qbe, " =l sar ")).to_equal(1)
 
-		derived_invalidated_outer_source := "def main()\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tmut other := index + 1\n\t\twhile other < values.size()\n\t\t\tvalue := values[other]\n\t\t\tother += 1\n\t\tend\n\t\tindex =- 2\n\tend\n\treturn\nend\n"
+		derived_invalidated_outer_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tmut other := index + 1\n\t\twhile other < values.size()\n\t\t\tvalue := values[other]\n\t\t\tother += 1\n\t\tend\n\t\tindex =- 2\n\tend\n\treturn\nend\n"
 		mut derived_invalidated_outer := compiler_new(derived_invalidated_outer_source.size() + 1)
 		expect(lex(derived_invalidated_outer, derived_invalidated_outer_source)).to_be_true()
 		expect(parse_module(derived_invalidated_outer, 0, derived_invalidated_outer.entry_module[0])).to_be_true()
@@ -1949,7 +1956,7 @@ describe("Native TypeRB frontend") do
 		derived_invalidated_outer_qbe := output_source(emit_qbe(derived_invalidated_outer))
 		expect(occurrence_count(derived_invalidated_outer_qbe, " =l sar ")).to_equal(1)
 
-		derived_dynamic_source := "def main()\n\tvalues := [10, 20]\n\tmut index := 0\n\tmut step := 1\n\twhile index < values.size()\n\t\tmut other := index + step\n\t\twhile other < values.size()\n\t\t\tvalue := values[other]\n\t\t\tother += 1\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
+		derived_dynamic_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := 0\n\tmut step := 1\n\twhile index < values.size()\n\t\tmut other := index + step\n\t\twhile other < values.size()\n\t\t\tvalue := values[other]\n\t\t\tother += 1\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
 		mut derived_dynamic := compiler_new(derived_dynamic_source.size() + 1)
 		expect(lex(derived_dynamic, derived_dynamic_source)).to_be_true()
 		expect(parse_module(derived_dynamic, 0, derived_dynamic.entry_module[0])).to_be_true()
@@ -1958,7 +1965,7 @@ describe("Native TypeRB frontend") do
 		derived_dynamic_qbe := output_source(emit_qbe(derived_dynamic))
 		expect(occurrence_count(derived_dynamic_qbe, " =l sar ")).to_equal(1)
 
-		derived_negative_source := "def main()\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tmut other := index + (- 1)\n\t\twhile other < values.size()\n\t\t\tvalue := values[other]\n\t\t\tother += 1\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
+		derived_negative_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tmut other := index + (- 1)\n\t\twhile other < values.size()\n\t\t\tvalue := values[other]\n\t\t\tother += 1\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
 		mut derived_negative := compiler_new(derived_negative_source.size() + 1)
 		expect(lex(derived_negative, derived_negative_source)).to_be_true()
 		expect(parse_module(derived_negative, 0, derived_negative.entry_module[0])).to_be_true()
@@ -1967,7 +1974,7 @@ describe("Native TypeRB frontend") do
 		derived_negative_qbe := output_source(emit_qbe(derived_negative))
 		expect(occurrence_count(derived_negative_qbe, " =l sar ")).to_equal(1)
 
-		derived_nonadjacent_source := "def main()\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tmut other := index + 1\n\t\tmarker := 0\n\t\twhile other < values.size()\n\t\t\tvalue := values[other]\n\t\t\tother += 1\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
+		derived_nonadjacent_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tmut other := index + 1\n\t\tmarker := 0\n\t\twhile other < values.size()\n\t\t\tvalue := values[other]\n\t\t\tother += 1\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
 		mut derived_nonadjacent := compiler_new(derived_nonadjacent_source.size() + 1)
 		expect(lex(derived_nonadjacent, derived_nonadjacent_source)).to_be_true()
 		expect(parse_module(derived_nonadjacent, 0, derived_nonadjacent.entry_module[0])).to_be_true()
@@ -1976,7 +1983,7 @@ describe("Native TypeRB frontend") do
 		derived_nonadjacent_qbe := output_source(emit_qbe(derived_nonadjacent))
 		expect(occurrence_count(derived_nonadjacent_qbe, " =l sar ")).to_equal(1)
 
-		mutable_negative_source := "def main()\n\tvalues := [10, 20]\n\tmut index := -2\n\tmut round := 0\n\twhile round < 1\n\t\tvalue := values[index + 1]\n\t\tround += 1\n\tend\n\treturn\nend\n"
+		mutable_negative_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := -2\n\tmut round := 0\n\twhile round < 1\n\t\tvalue := values[index + 1]\n\t\tround += 1\n\tend\n\treturn\nend\n"
 		mut mutable_negative := compiler_new(mutable_negative_source.size() + 1)
 		expect(lex(mutable_negative, mutable_negative_source)).to_be_true()
 		expect(parse_module(mutable_negative, 0, mutable_negative.entry_module[0])).to_be_true()
@@ -1985,7 +1992,7 @@ describe("Native TypeRB frontend") do
 		mutable_negative_qbe := output_source(emit_qbe(mutable_negative))
 		expect(occurrence_count(mutable_negative_qbe, " =l sar ")).to_equal(1)
 
-		later_reset_source := "def main()\n\tvalues := [10, 20]\n\tmut value := 0\n\tmut index := 0\n\twhile index < values.size()\n\t\tvalue = values[index]\n\t\tindex += 1\n\tend\n\tindex = 0\n\twhile index < values.size()\n\t\tvalue = values[index]\n\t\tindex += 1\n\tend\n\treturn\nend\n"
+		later_reset_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut value := 0\n\tmut index := 0\n\twhile index < values.size()\n\t\tvalue = values[index]\n\t\tindex += 1\n\tend\n\tindex = 0\n\twhile index < values.size()\n\t\tvalue = values[index]\n\t\tindex += 1\n\tend\n\treturn\nend\n"
 		mut later_reset := compiler_new(later_reset_source.size() + 1)
 		expect(lex(later_reset, later_reset_source)).to_be_true()
 		expect(parse_module(later_reset, 0, later_reset.entry_module[0])).to_be_true()
@@ -1994,7 +2001,7 @@ describe("Native TypeRB frontend") do
 		later_reset_qbe := output_source(emit_qbe(later_reset))
 		expect(occurrence_count(later_reset_qbe, " =l sar ")).to_equal(1)
 
-		nested_reassigned_source := "def main()\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tif true\n\t\t\tvalue := values[index]\n\t\t\tindex = 0\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
+		nested_reassigned_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tif true\n\t\t\tvalue := values[index]\n\t\t\tindex = 0\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
 		mut nested_reassigned := compiler_new(nested_reassigned_source.size() + 1)
 		expect(lex(nested_reassigned, nested_reassigned_source)).to_be_true()
 		expect(parse_module(nested_reassigned, 0, nested_reassigned.entry_module[0])).to_be_true()
@@ -2003,7 +2010,7 @@ describe("Native TypeRB frontend") do
 		nested_reassigned_qbe := output_source(emit_qbe(nested_reassigned))
 		expect(occurrence_count(nested_reassigned_qbe, " =l sar ")).to_equal(1)
 
-		nested_non_unit_source := "def main()\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tmut pass := 0\n\t\twhile pass < 1\n\t\t\tvalue := values[index]\n\t\t\tindex += 2\n\t\t\tpass += 1\n\t\tend\n\tend\n\treturn\nend\n"
+		nested_non_unit_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tmut pass := 0\n\t\twhile pass < 1\n\t\t\tvalue := values[index]\n\t\t\tindex += 2\n\t\t\tpass += 1\n\t\tend\n\tend\n\treturn\nend\n"
 		mut nested_non_unit := compiler_new(nested_non_unit_source.size() + 1)
 		expect(lex(nested_non_unit, nested_non_unit_source)).to_be_true()
 		expect(parse_module(nested_non_unit, 0, nested_non_unit.entry_module[0])).to_be_true()
@@ -2012,7 +2019,7 @@ describe("Native TypeRB frontend") do
 		nested_non_unit_qbe := output_source(emit_qbe(nested_non_unit))
 		expect(occurrence_count(nested_non_unit_qbe, " =l sar ")).to_equal(1)
 
-		shadowed_source := "def main()\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tif true\n\t\t\tmut index := 0\n\t\t\tvalue := values[index]\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
+		shadowed_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tif true\n\t\t\tmut index := 0\n\t\t\tvalue := values[index]\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
 		mut shadowed := compiler_new(shadowed_source.size() + 1)
 		expect(lex(shadowed, shadowed_source)).to_be_true()
 		expect(parse_module(shadowed, 0, shadowed.entry_module[0])).to_be_true()
@@ -2021,7 +2028,7 @@ describe("Native TypeRB frontend") do
 		expect(load_string(shadowed.diagnostic_codes, 0)).to_equal("TRBN4003")
 		expect(load_string(shadowed.diagnostic_messages, 0)).to_equal("duplicate local declaration index")
 
-		function_scoped_source := "def first(values: Array<Integer>)\n\tmut index := 0\n\twhile index < values.size()\n\t\tvalue := values[index]\n\t\tindex += 1\n\tend\n\treturn\nend\n\ndef unrelated()\n\tmut index := 0\n\tindex =- 1\n\treturn\nend\n\ndef main()\n\tfirst([10, 20])\n\treturn\nend\n"
+		function_scoped_source := "def first(values: Array<Integer>)\n\tmut index := 0\n\twhile index < values.size()\n\t\tvalue := values[index]\n\t\tindex += 1\n\tend\n\treturn\nend\n\ndef unrelated()\n\tmut index := 0\n\tindex =- 1\n\treturn\nend\n\ndef main()\n\tretained := {1 => 1}\n\tfirst([10, 20])\n\treturn\nend\n"
 		mut function_scoped := compiler_new(function_scoped_source.size() + 1)
 		expect(lex(function_scoped, function_scoped_source)).to_be_true()
 		expect(parse_module(function_scoped, 0, function_scoped.entry_module[0])).to_be_true()
@@ -2032,7 +2039,7 @@ describe("Native TypeRB frontend") do
 	end
 
 	test("falls back to shared Array addressing after the loop budget") do
-		mut source := "def main()\n\tvalues := [1]\n\tmut index := 0\n\tmut value := 0\n\twhile index < 1\n"
+		mut source := "def main()\n\tretained := {1 => 1}\n\tvalues := [1]\n\tmut index := 0\n\tmut value := 0\n\twhile index < 1\n"
 		mut access_count := 0
 		while access_count < 65
 			source += "\t\tvalue = values[index]\n"
@@ -2062,7 +2069,7 @@ describe("Native TypeRB frontend") do
 	end
 
 	test("inlines only eligible scalar leaf calls in managed caller loops") do
-		eligible_source := "def scalar(left: Integer, right: Integer): Integer\n\tsum := left + right\n\treturn sum * 2\nend\n\ndef main()\n\tmarker := [1]\n\tmut index := 0\n\twhile index < 1\n\t\tvalue := scalar(index, 1)\n\t\tindex += value\n\tend\n\treturn\nend\n"
+		eligible_source := "def scalar(left: Integer, right: Integer): Integer\n\tsum := left + right\n\treturn sum * 2\nend\n\ndef main()\n\tmarker := {1 => 1}\n\tmut index := 0\n\twhile index < 1\n\t\tvalue := scalar(index, 1)\n\t\tindex += value\n\tend\n\treturn\nend\n"
 		mut eligible := compiler_new(eligible_source.size() + 1)
 		expect(lex(eligible, eligible_source)).to_be_true()
 		expect(parse_module(eligible, 0, eligible.entry_module[0])).to_be_true()
@@ -2089,7 +2096,7 @@ describe("Native TypeRB frontend") do
 		expect(non_loop_qbe.include?("# native retained scalar call ")).to_be_false()
 		expect(non_loop_qbe.include?("@scalar_inline_integer_range_failure")).to_be_false()
 
-		ineligible_source := "def choose(value: Integer): Integer\n\tif value > 0\n\t\treturn value\n\telse\n\t\treturn 0\n\tend\nend\n\ndef main()\n\tmarker := [1]\n\tmut index := 0\n\twhile index < 1\n\t\tvalue := choose(index)\n\t\tindex += value + 1\n\tend\n\treturn\nend\n"
+		ineligible_source := "def choose(value: Integer): Integer\n\tif value > 0\n\t\treturn value\n\telse\n\t\treturn 0\n\tend\nend\n\ndef main()\n\tmarker := {1 => 1}\n\tmut index := 0\n\twhile index < 1\n\t\tvalue := choose(index)\n\t\tindex += value + 1\n\tend\n\treturn\nend\n"
 		mut ineligible := compiler_new(ineligible_source.size() + 1)
 		expect(lex(ineligible, ineligible_source)).to_be_true()
 		expect(parse_module(ineligible, 0, ineligible.entry_module[0])).to_be_true()
@@ -2097,7 +2104,7 @@ describe("Native TypeRB frontend") do
 		expect(check(ineligible)).to_be_true()
 		expect(output_source(emit_qbe(ineligible)).include?("call $trbnf0")).to_be_true()
 
-		delegating_source := "def increment(value: Integer): Integer\n\treturn value + 1\nend\n\ndef delegating(value: Integer): Integer\n\treturn increment(value)\nend\n\ndef main()\n\tmarker := [1]\n\tmut index := 0\n\twhile index < 1\n\t\tindex = delegating(index)\n\tend\n\treturn\nend\n"
+		delegating_source := "def increment(value: Integer): Integer\n\treturn value + 1\nend\n\ndef delegating(value: Integer): Integer\n\treturn increment(value)\nend\n\ndef main()\n\tmarker := {1 => 1}\n\tmut index := 0\n\twhile index < 1\n\t\tindex = delegating(index)\n\tend\n\treturn\nend\n"
 		mut delegating := compiler_new(delegating_source.size() + 1)
 		expect(lex(delegating, delegating_source)).to_be_true()
 		expect(parse_module(delegating, 0, delegating.entry_module[0])).to_be_true()
@@ -2107,7 +2114,8 @@ describe("Native TypeRB frontend") do
 	end
 
 	test("rejects missing invalid and mismatched checked binary plans") do
-		source := "def main()\n\towner := [1]\n\tmut value := 7\n\tvalue += 1\n\tputs(value.to_s())\n\treturn\nend\n"
+		# Hash ownership keeps this retained direct-adapter control explicit.
+		source := "def main()\n\tretained := {1 => 1}\n\towner := [1]\n\tmut value := 7\n\tvalue += 1\n\tputs(value.to_s())\n\treturn\nend\n"
 		invalid := [0, 22, 18]
 		mut index := 0
 		while index < invalid.size()
@@ -2156,7 +2164,8 @@ describe("Native TypeRB frontend") do
 	end
 
 	test("retains caller lower-bound checks after the literal-return inline budget") do
-		source := "def one(): Integer\n\treturn 1\nend\n\ndef main()\n\towner := [1]\n\tmut value := 7\n\tmut index := 0\n\twhile index < 1\n\t\tvalue += one()\n\t\tvalue += one()\n\t\tvalue += one()\n\t\tindex += 1\n\tend\n\tputs(value.to_s())\n\treturn\nend\n"
+		# Hash ownership keeps this retained direct-adapter control explicit.
+		source := "def one(): Integer\n\treturn 1\nend\n\ndef main()\n\tretained := {1 => 1}\n\towner := [1]\n\tmut value := 7\n\tmut index := 0\n\twhile index < 1\n\t\tvalue += one()\n\t\tvalue += one()\n\t\tvalue += one()\n\t\tindex += 1\n\tend\n\tputs(value.to_s())\n\treturn\nend\n"
 		mut state := compiler_new(source.size() + 1)
 		expect(lex(state, source)).to_be_true()
 		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
@@ -2174,7 +2183,8 @@ describe("Native TypeRB frontend") do
 	test("branches on canonical Boolean values without repeated materialization") do
 		# The loop precedes the retained call: an ordinary eligible call closes
 		# the shared inline budget for every later call, even in a loop.
-		source := "def invert(value: Boolean): Boolean\n\treturn !value\nend\n\ndef main()\n\towner := [1]\n\tmut index := 0\n\twhile index < 1\n\t\tif invert(false)\n\t\t\tputs(\"ok\")\n\t\tend\n\t\tindex += 1\n\tend\n\tif invert(true)\n\t\tputs(\"bad\")\n\tend\nend\n"
+		# Hash ownership keeps this retained direct-adapter control explicit.
+		source := "def invert(value: Boolean): Boolean\n\treturn !value\nend\n\ndef main()\n\tretained := {1 => 1}\n\towner := [1]\n\tmut index := 0\n\twhile index < 1\n\t\tif invert(false)\n\t\t\tputs(\"ok\")\n\t\tend\n\t\tindex += 1\n\tend\n\tif invert(true)\n\t\tputs(\"bad\")\n\tend\nend\n"
 		mut state := compiler_new(source.size() + 1)
 		expect(lex(state, source)).to_be_true()
 		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
@@ -2207,7 +2217,7 @@ describe("Native TypeRB frontend") do
 	end
 
 	test("limits managed caller scalar inlining to two call sites per small program") do
-		source := "def scalar(value: Integer): Integer\n\treturn value + 1\nend\n\ndef main()\n\tmarker := [1]\n\tmut index := 0\n\twhile index < 1\n\t\tfirst := scalar(index)\n\t\tsecond := scalar(index)\n\t\tthird := scalar(index)\n\t\tindex += first + second + third\n\tend\n\treturn\nend\n"
+		source := "def scalar(value: Integer): Integer\n\treturn value + 1\nend\n\ndef main()\n\tmarker := {1 => 1}\n\tmut index := 0\n\twhile index < 1\n\t\tfirst := scalar(index)\n\t\tsecond := scalar(index)\n\t\tthird := scalar(index)\n\t\tindex += first + second + third\n\tend\n\treturn\nend\n"
 		mut state := compiler_new(source.size() + 1)
 		expect(lex(state, source)).to_be_true()
 		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
@@ -2340,7 +2350,7 @@ describe("Native TypeRB frontend") do
 		end
 	end
 
-	test("reserves the managed-local high-water mark and bulk-rewrites loop roots") do
+	test("reserves the exact peak of live nested Array and String operands") do
 		source := "def nested(limit: Integer): String\n\tmut outer: Array<String> := []\n\tmut index := 0\n\twhile index < limit\n\t\tmut inner: Array<String> := []\n\t\twhile inner.size() < 1\n\t\t\tinner.push(\"ok\")\n\t\tend\n\t\touter.push(inner[0])\n\t\tindex += 1\n\tend\n\treturn outer[0]\nend\n\ndef main()\n\tvalue := nested(1)\n\tputs(value)\n\treturn\nend\n"
 		mut state := compiler_new(source.size() + 1)
 		expect(lex(state, source)).to_be_true()
@@ -2349,7 +2359,7 @@ describe("Native TypeRB frontend") do
 		expect(check(state)).to_be_true()
 		qbe := output_source(emit_qbe(state))
 		expect(qbe.include?("function $trbn_gc_temp_reserve(l %required)")).to_be_true()
-		expect(qbe.include?("\t%root_capacity =l add %temporary_roots, 2")).to_be_true()
+		expect(qbe.include?("\t%root_capacity =l add %temporary_roots, 3")).to_be_true()
 		expect(qbe.include?("\tcall $trbn_gc_temp_reserve(l %root_capacity)")).to_be_true()
 		expect(qbe.include?("=l loadl $trbn_gc_temp_data")).to_be_true()
 		expect(qbe.include?("=l mul %temporary_roots, 8")).to_be_true()
@@ -2426,66 +2436,57 @@ describe("Native TypeRB frontend") do
 		expect(call_qbe.include?("%root_capacity =l add %temporary_roots, 1")).to_be_true()
 	end
 
-	test("defers managed root publication until a safe-point-free loop exits") do
+	test("publishes Array roots only at operations that can collect") do
 		source := "def observe(value: Array<String>)\n\treturn\nend\n\ndef carry(limit: Integer): String\n\tmut values: Array<String> := []\n\tvalues.push(\"kept\")\n\tmut index := 0\n\twhile index < limit\n\t\tindex += 1\n\tend\n\tvalues.push(\"after\")\n\treturn values[0]\nend\n\ndef call_in_loop(limit: Integer): String\n\tmut values: Array<String> := [\"kept\"]\n\tmut index := 0\n\twhile index < limit\n\t\tobserve(values)\n\t\tindex += 1\n\tend\n\treturn values[0]\nend\n\ndef main()\n\treturn\nend\n"
 		mut state := compiler_new(source.size() + 1)
 		expect(lex(state, source)).to_be_true()
 		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(resolve(state)).to_be_true()
 		expect(check(state)).to_be_true()
+		# No safe point is invented at the scalar-only loop header/backedge.
+		carry := state.scalar_mir.root_plans[mir_function_index(state.scalar_mir, 1)]
+		expect(carry.instructions.size()).to_equal(3)
+		carry.instructions.each do |point|
+			kind := state.scalar_mir.instructions[point].kind
+			expect(kind == 19 || kind == 24).to_be_true()
+		end
+		called := state.scalar_mir.root_plans[mir_function_index(state.scalar_mir, 2)]
+		expect(called.instructions.size()).to_equal(3)
+		call := state.scalar_mir.instructions[called.instructions[2]]
+		expect(call.kind).to_equal(11)
+		expect(called.roots[2].size()).to_equal(1)
 		qbe := output_source(emit_qbe(state))
-		expect(qbe.include?("function l $trbnf1(l %p0) {\n@start")).to_be_true()
-		expect(qbe.include?("%root_capacity =l add %temporary_roots, 1")).to_be_true()
-		expect(
-			qbe.include?(
-				"@l0\n\t%t2 =l loadl %v2\n\t%t3 =l loadl %v0",
-			),
-		).to_be_true()
-		expect(
-			qbe.include?(
-				"@l2\n\t%t8 =l loadl $trbn_gc_temp_data" +
-				"\n\t%t9 =l mul %temporary_roots, 8" +
-				"\n\t%t10 =l add %t8, %t9" +
-				"\n\t%t11 =l loadl %v1" +
-				"\n\tstorel %t11, %t10" +
-				"\n\t%t12 =l add %temporary_roots, 1" +
-				"\n\tstorel %t12, $trbn_gc_temp_count" +
-				"\n\t%t13 =l loadl %v1" +
-				"\n\tcall $trbn_array_push_paced(l %t13, l $trbns64)",
-			),
-		).to_be_true()
-		expect(
-			qbe.include?(
-				"@l0\n\t%t8 =l loadl $trbn_gc_temp_data" +
-				"\n\t%t9 =l mul %temporary_roots, 8" +
-				"\n\t%t10 =l add %t8, %t9" +
-				"\n\t%t11 =l loadl %v1" +
-				"\n\tstorel %t11, %t10" +
-				"\n\t%t12 =l add %temporary_roots, 1" +
-				"\n\tstorel %t12, $trbn_gc_temp_count" +
-				"\n\t%t1 =l loadl %v2",
-			),
-		).to_be_true()
+		expect(qbe.include?("%root_capacity =l add %temporary_roots, 2")).to_be_true()
 	end
 
-	test("keeps managed root publication at every GC-safe loop header") do
+	test("retains Array loop values across allocating calls") do
 		source := "def observe_loop_value(value: Array<String>)\n\treturn\nend\n\ndef make_loop_values(): Array<String>\n\treturn [\"made\"]\nend\n\ndef grow_in_loop(limit: Integer): String\n\tmut values: Array<String> := [\"kept\"]\n\tmut index := 0\n\twhile index < limit\n\t\tvalues.push(\"grown\")\n\t\tindex += 1\n\tend\n\treturn values[0]\nend\n\ndef allocate_in_loop(limit: Integer): String\n\tmut values: Array<String> := [\"kept\"]\n\tmut index := 0\n\twhile index < limit\n\t\tmade: Array<String> := []\n\t\tif made.size() > 0\n\t\t\tputs(\"unexpected\")\n\t\tend\n\t\tindex += 1\n\tend\n\treturn values[0]\nend\n\ndef managed_result_in_loop(limit: Integer): String\n\tmut values: Array<String> := [\"kept\"]\n\tmut index := 0\n\twhile index < limit\n\t\tmade := make_loop_values()\n\t\tif made.size() == 0\n\t\t\tputs(\"unexpected\")\n\t\tend\n\t\tindex += 1\n\tend\n\treturn values[0]\nend\n\ndef opaque_call_in_loop(limit: Integer): String\n\tmut values: Array<String> := [\"kept\"]\n\tmut index := 0\n\twhile index < limit\n\t\tobserve_loop_value(values)\n\t\tindex += 1\n\tend\n\treturn values[0]\nend\n\ndef main()\n\treturn\nend\n"
 		mut state := compiler_new(source.size() + 1)
 		expect(lex(state, source)).to_be_true()
 		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(resolve(state)).to_be_true()
 		expect(check(state)).to_be_true()
+		mut function_id := 2
+		while function_id < 6
+			plan := state.scalar_mir.root_plans[mir_function_index(state.scalar_mir, function_id)]
+			mut expected_kind := 11
+			if function_id == 2
+				expected_kind = 24
+			elsif function_id == 3
+				expected_kind = 19
+			end
+			mut selected :=- 1
+			plan.instructions.each.with_index do |point, index|
+				if state.scalar_mir.instructions[point].kind == expected_kind
+					selected = index
+				end
+			end
+			expect(selected >= 0).to_be_true()
+			expect(plan.roots[selected].size() > 0).to_be_true()
+			function_id += 1
+		end
 		qbe := output_source(emit_qbe(state))
-		expect(
-			occurrence_count(qbe, "@l0\n\t%t8 =l loadl $trbn_gc_temp_data"),
-		).to_equal(2)
-		expect(
-			occurrence_count(qbe, "@l0\n\t%t12 =l loadl $trbn_gc_temp_data"),
-		).to_equal(2)
-		expect(qbe.include?("@l1\n\t%t4 =l loadl %v1\n\tcall $trbn_array_push_paced")).to_be_true()
-		expect(qbe.include?("@l1\n\t%t4 =l call $trbn_array_new")).to_be_true()
-		expect(qbe.include?("@l1\n\t%t4 =l call $trbnf1()")).to_be_true()
-		expect(qbe.include?("@l1\n\t%t4 =l loadl %v1\n\tcall $trbnf0(l %t4)")).to_be_true()
+		expect(qbe.include?("=l loadl $trbn_gc_temp_data")).to_be_true()
 	end
 
 	test("preserves a verified stable Array header across fallback invalidations") do

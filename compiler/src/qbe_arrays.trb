@@ -1,0 +1,59 @@
+import { MirInstruction, mir_value_type } from mir
+import { mir_element_type, mir_managed_type, mir_semantic_type_name } from mir_types
+import { QbeEmitContext, QbeValue, emit_temporary, emit_typed_load, emit_typed_store, emitted_value } from qbe_context
+import { QbeOutput, qbe_output_line } from qbe_output
+import { CompilerState } from state
+
+# No source analysis or implicit roots: each allocation/push has its own MIR
+# safe point. ABI addresses exist only inside one non-allocating operation.
+def emit_mir_array_instruction(state: CompilerState, function_id: Integer, instruction: MirInstruction, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
+	kind := instruction.kind
+	type_id := mir_value_type(state.scalar_mir, function_id, instruction.result)
+	type_name := mir_semantic_type_name(state.scalar_mir, type_id)
+	result := emit_temporary(context)
+	if kind == 19
+		mut descriptor := "$trbn_desc_array_scalar"
+		if mir_managed_type(state.scalar_mir, mir_element_type(state.scalar_mir, type_id))
+			descriptor = "$trbn_desc_array_managed"
+		end
+		qbe_output_line(output, "\t" + result + " =l call $trbn_array_new(l " + descriptor + ")")
+		return emitted_value(result, type_name, 0, "", "")
+	end
+	owner := operands[instruction.first]
+	if kind == 20
+		address := emit_temporary(context)
+		qbe_output_line(output, "\t" + address + " =l add " + owner + ", 8")
+		qbe_output_line(output, "\t" + result + " =l loadl " + address)
+		return emitted_value(result, "Integer", 0, "", "")
+	end
+	second := operands[instruction.second]
+	if kind == 24
+		element := mir_element_type(state.scalar_mir, mir_value_type(state.scalar_mir, function_id, instruction.first))
+		if element == 5
+			output.runtime_flags[0] = 1
+			qbe_output_line(output, "\tcall $trbn_array_push_d(l " + owner + ", d " + second + ")")
+		else
+			qbe_output_line(output, "\tcall $trbn_array_push_paced(l " + owner + ", l " + second + ")")
+		end
+		return emitted_value("", "Void", 0, "", "")
+	end
+	output.runtime_flags[3] = 1
+	address := emit_temporary(context)
+	qbe_output_line(output, "\t" + address + " =l call $trbn_array_address(l " + owner + ", l " + second + ")")
+	if kind == 21
+		data_slot := emit_temporary(context)
+		data := emit_temporary(context)
+		offset := emit_temporary(context)
+		qbe_output_line(output, "\t" + data_slot + " =l add " + owner + ", 24")
+		qbe_output_line(output, "\t" + data + " =l loadl " + data_slot)
+		qbe_output_line(output, "\t" + offset + " =l sub " + address + ", " + data)
+		qbe_output_line(output, "\t" + result + " =l shr " + offset + ", 3")
+	elsif kind == 22
+		emit_typed_load(output, result, type_name, address)
+	else
+		element := mir_element_type(state.scalar_mir, mir_value_type(state.scalar_mir, function_id, instruction.first))
+		emit_typed_store(output, mir_semantic_type_name(state.scalar_mir, element), operands[instruction.payload], address)
+		return emitted_value("", "Void", 0, "", "")
+	end
+	return emitted_value(result, type_name, 0, "", "")
+end

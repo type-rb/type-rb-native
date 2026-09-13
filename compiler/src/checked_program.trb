@@ -1,3 +1,4 @@
+import { mir_checked_array_index, mir_checked_array_literal, mir_checked_array_operation, mir_checked_array_store } from mir_arrays
 import { binary_result_type, check_expected, numeric_type, type_diagnostic } from checked_types
 import { CheckedValue, array_region_operation, checked_assignment_operation, checked_mir_value, checked_value, mir_checked_value, scalar_leaf_inline_eligible, scalar_mir_binary, scalar_mir_convert_float, scalar_mir_disable, scalar_mir_instruction, scalar_mir_literal, scalar_mir_unary, scalar_mir_value } from checked_values
 import { checked_hash_binding_target, checked_hash_method, checked_hash_plan, checked_hash_publish } from hash_checked
@@ -170,7 +171,9 @@ def check_array_literal(
 		mut locals: CheckedLocals,
 		expected: String,
 	): CheckedValue
-	line := load_integer(state.token_lines, position[0])
+	origin := position[0]
+	mut values: Array<CheckedValue> := []
+	line := load_integer(state.token_lines, origin)
 	advance(position)
 	skip_newlines(state, position)
 	contextual_element_type := array_element_type(expected)
@@ -181,6 +184,7 @@ def check_array_literal(
 			finished = true
 		else
 			value := check_expression(state, position, locals, 1, contextual_element_type)
+			values.push(value)
 			if contextual_element_type == ""
 				common_type := common_array_element_type(element_type, value.type_name)
 				if common_type == ""
@@ -212,7 +216,7 @@ def check_array_literal(
 	if result_type == ""
 		return type_diagnostic(state, line, "unsupported Array element type " + element_type)
 	end
-	return checked_value(result_type, 0, 9007199254740991, 1)
+	return mir_checked_array_literal(state, locals, result_type, element_type, origin, values)
 end
 
 def check_primary(
@@ -249,7 +253,6 @@ def check_primary(
 	end
 	if token_is(state, position[0], "[")
 		array_region_operation(locals, 6, 0, origin)
-		scalar_mir_disable(locals)
 		return check_array_literal(state, position, locals, expected)
 	end
 	if token_is(state, position[0], "(")
@@ -530,8 +533,7 @@ def check_method_call(
 					return mir_checked_value("Integer", result, receiver.origin, 0)
 				end
 			end
-			scalar_mir_disable(locals)
-			return checked_value("Integer", 0, 9007199254740991, 0)
+			return mir_checked_array_operation(state, locals, 20, checked_mir_value(receiver), - 1, 0, "Integer", position[0] - 1)
 		end
 		return type_diagnostic(state, line, "size is unavailable on " + type_display(state, receiver.type_name))
 	end
@@ -544,10 +546,10 @@ def check_method_call(
 		if receiver.mutable == 0
 			diagnostic(state, "TRBN4004", line, "push receiver is immutable")
 		end
-		check_expression(state, position, locals, 1, element_type)
+		value := check_expression(state, position, locals, 1, element_type)
 		skip_newlines(state, position)
 		expect(state, position, ")")
-		return checked_value("Void", 0, 9007199254740991, 0)
+		return mir_checked_array_operation(state, locals, 24, checked_mir_value(receiver), checked_mir_value(value), 0, "Void", position[0] - 1)
 	end
 	if method == "to_i"
 		expect(state, position, ")")
@@ -632,7 +634,7 @@ def check_postfix(
 					break
 				end
 				if token_is(state, position[0], "(")
-					if member != "size" && member != "to_i" && member != "to_s"
+					if member != "size" && member != "to_i" && member != "to_s" && member != "push"
 						scalar_mir_disable(locals)
 					end
 					if value.category >= 4
@@ -722,7 +724,15 @@ def check_postfix(
 						end
 					end
 					mut lowered := false
-					if value.type_name == "String"
+					if locals.mir_state[0] == 1 && array_element_type(value.type_name) != ""
+						mut assignment := token_is(state, position[0] + 1, "=")
+						if binary_operator_id(load_string(state.token_texts, position[0] + 1)) >= 17
+							assignment = true
+						end
+						value = mir_checked_array_index(state, locals, value, index, array_element_type(value.type_name), index_origin, assignment)
+						lowered = true
+					end
+					if !lowered && value.type_name == "String"
 						array_region_operation(locals, 6, 0, index_origin)
 						value = mir_checked_string_operation(state, locals, 16, receiver_id, index_id, 0, "String", index_origin)
 						lowered = true
@@ -1068,7 +1078,9 @@ def check_simple_statement(
 		advance(position)
 		right := check_expression(state, position, locals, 1, left.type_name)
 		checked_hash_refine(state, locals, left.origin, right.type_name)
-		mir_control_assign(state, locals, left, right)
+		if !mir_checked_array_store(state, locals, left, right)
+			mir_control_assign(state, locals, left, right)
+		end
 		if locals.mir_state[0] >= 2
 			scalar_mir_disable(locals)
 		end
@@ -1091,7 +1103,9 @@ def check_simple_statement(
 				else
 					value = scalar_mir_binary(state, locals, compound, left, right, result_type, operator_origin)
 				end
-				mir_control_assign(state, locals, left, value)
+				if !mir_checked_array_store(state, locals, left, value)
+					mir_control_assign(state, locals, left, value)
+				end
 			end
 			if locals.mir_state[0] >= 2
 				local_index := local_find(locals, load_string(state.token_texts, left.origin))
