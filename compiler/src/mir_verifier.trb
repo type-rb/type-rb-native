@@ -1,7 +1,7 @@
 import { mir_semantic_type_name, mir_semantic_value_type, mir_types_error } from mir_types
 import { mir_function_roots, mir_root_plan_equal } from mir_roots
-import { MirFlow, mir_build_flow, mir_flow_blocks, mir_flow_graph_error, mir_value_available } from mir_flow
-import { MirBlock, MirFunction, MirModule, mir_block_index, mir_definition_count, mir_function_index, mir_origin_valid, mir_table_span_valid, mir_value_type } from mir
+import { MirFlow, mir_build_flow, mir_flow_blocks, mir_flow_graph_error, mir_flow_type, mir_value_available } from mir_flow
+import { MirBlock, MirFunction, MirModule, mir_block_index, mir_definition_count, mir_function_index, mir_origin_valid, mir_table_span_valid } from mir
 import { mir_array_headers, mir_array_headers_equal, mir_array_loop_headers, mir_induction_address, mir_scalar_guard } from mir_analysis
 import { mir_function_signature_error, mir_signatures_error } from mir_calls
 import { mir_instruction_error } from mir_instructions
@@ -35,8 +35,8 @@ def mir_target_arguments_error(
 			return "MIR block argument is undefined"
 		end
 		target_value := native_module.arguments[target_block.parameter_start + index]
-		actual_type := mir_value_type(native_module, function.id, value_id)
-		target_type := mir_value_type(native_module, function.id, target_value)
+		actual_type := mir_flow_type(flow, value_id)
+		target_type := mir_flow_type(flow, target_value)
 		if actual_type != target_type
 			return "MIR block argument type differs"
 		end
@@ -73,7 +73,7 @@ def mir_terminator_error(
 		return "MIR jump shape differs"
 	end
 	if kind == 2
-		condition_type := mir_value_type(native_module, function.id, block.condition)
+		condition_type := mir_flow_type(flow, block.condition)
 		condition_available := mir_value_available(
 			flow,
 			block,
@@ -130,7 +130,7 @@ def mir_terminator_error(
 							end
 							mut type_name := "Void"
 							if block.return_value >= 0
-								type_name = mir_semantic_type_name(native_module, mir_value_type(native_module, function.id, block.return_value))
+								type_name = mir_semantic_type_name(native_module, mir_flow_type(flow, block.return_value))
 							end
 							if type_name != function.result_type
 								return "MIR return type differs from declaration"
@@ -196,7 +196,7 @@ def mir_function_structure_error(native_module: MirModule, function: MirFunction
 	return ""
 end
 
-def mir_adapter_error(native_module: MirModule, function: MirFunction): String
+def mir_adapter_error(flow: MirFlow, native_module: MirModule, function: MirFunction): String
 	if function.kind == 0
 		return ""
 	end
@@ -227,13 +227,13 @@ def mir_adapter_error(native_module: MirModule, function: MirFunction): String
 		mut index := block.instruction_start
 		while index < block.instruction_start + block.instruction_count
 			kind := native_module.instructions[index].kind
-			if (kind < 6 || kind > 9) && (function.kind != 3 || kind < 11 || kind > 24)
+			if (kind < 6 || kind > 9) && (function.kind != 3 || kind < 11 || kind > 26)
 				return "MIR scalar control operation is unsupported"
 			end
 			index += 1
 		end
 		if block.terminator == 3
-			type_id := mir_value_type(native_module, function.id, block.return_value)
+			type_id := mir_flow_type(flow, block.return_value)
 			if function.kind == 3 && type_id != 0 && !mir_semantic_value_type(native_module, type_id)
 				return "MIR scalar return type differs"
 			end
@@ -278,7 +278,7 @@ def mir_function_error(native_module: MirModule, function: MirFunction): String
 	mut index := function.parameter_start
 	mut finish := index + function.parameter_count
 	while index < finish
-		if mir_value_type(native_module, function.id, native_module.arguments[index]) == 0
+		if mir_flow_type(flow, native_module.arguments[index]) == 0
 			return "MIR function parameter is undefined"
 		end
 		index += 1
@@ -293,7 +293,7 @@ def mir_function_error(native_module: MirModule, function: MirFunction): String
 		index = block.parameter_start
 		finish = index + block.parameter_count
 		while index < finish
-			if mir_value_type(native_module, function.id, native_module.arguments[index]) == 0
+			if mir_flow_type(flow, native_module.arguments[index]) == 0
 				return "MIR block parameter is undefined"
 			end
 			index += 1
@@ -313,7 +313,7 @@ def mir_function_error(native_module: MirModule, function: MirFunction): String
 		end
 		block_index += 1
 	end
-	return mir_adapter_error(native_module, function)
+	return mir_adapter_error(flow, native_module, function)
 end
 
 def verify_mir(native_module: MirModule, optimized: Boolean): String

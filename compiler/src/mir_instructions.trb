@@ -1,7 +1,8 @@
+import { mir_record_instruction_error } from mir_records
 import { mir_array_instruction_error } from mir_arrays
-import { MirFlow, mir_value_available } from mir_flow
+import { MirFlow, mir_flow_type, mir_value_available } from mir_flow
 import { float_literal_in_range, number_is_float, small_nonnegative_integer_operand } from literals
-import { MirBlock, MirFunction, MirModule, mir_array_element_type, mir_failure_error, mir_origin_valid, mir_value_type } from mir
+import { MirBlock, MirFunction, MirModule, mir_array_element_type, mir_failure_error, mir_origin_valid } from mir
 import { mir_induction_address, mir_scalar_literal } from mir_analysis
 import { mir_call_error } from mir_calls
 import { mir_string_instruction_error } from mir_strings
@@ -17,10 +18,9 @@ def mir_instruction_error(
 	if !mir_origin_valid(instruction.source_id, instruction.line, native_module.source_count[0])
 		return "MIR instruction origin is invalid"
 	end
-	function_id := function.id
-	result_type := mir_value_type(native_module, function_id, instruction.result)
-	first_type := mir_value_type(native_module, function_id, instruction.first)
-	second_type := mir_value_type(native_module, function_id, instruction.second)
+	result_type := mir_flow_type(flow, instruction.result)
+	first_type := mir_flow_type(flow, instruction.first)
+	second_type := mir_flow_type(flow, instruction.second)
 	first_available := mir_value_available(
 		flow,
 		block,
@@ -33,6 +33,9 @@ def mir_instruction_error(
 		instruction_index,
 		instruction.second,
 	)
+	if instruction.kind == 25 || instruction.kind == 26
+		return mir_record_instruction_error(flow, native_module, function, block, instruction_index, instruction)
+	end
 	if instruction.kind >= 19 && instruction.kind <= 24
 		return mir_array_instruction_error(flow, native_module, function, block, instruction_index, instruction)
 	end

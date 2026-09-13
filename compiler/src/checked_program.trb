@@ -1,3 +1,4 @@
+import { mir_checked_record_field, mir_checked_record_new } from mir_records
 import { mir_checked_array_index, mir_checked_array_literal, mir_checked_array_operation, mir_checked_array_store } from mir_arrays
 import { binary_result_type, check_expected, numeric_type, type_diagnostic } from checked_types
 import { CheckedValue, array_region_operation, checked_assignment_operation, checked_bound_value, checked_mir_value, checked_value, mir_checked_value, scalar_leaf_inline_eligible, scalar_mir_binary, scalar_mir_convert_float, scalar_mir_disable, scalar_mir_instruction, scalar_mir_literal, scalar_mir_unary, scalar_mir_value } from checked_values
@@ -14,7 +15,7 @@ import { mir_logical_begin, mir_logical_join } from mir_logical
 import { mir_checked_puts, mir_checked_string_binary, mir_checked_string_literal, mir_checked_string_operation } from mir_strings
 import { mir_control_active, mir_control_allocate, mir_control_assign, mir_control_branch, mir_control_enter, mir_control_jump, mir_control_loop_begin, mir_control_loop_branch, mir_control_loop_end, mir_control_prepare, mir_control_return, mir_control_transfer } from mir_control
 import { advance, binary_operator_id, declaration_start, expect, expect_identifier, finish_statement, parse_type, skip_newlines, syntax_block_end, syntax_conditional_tail, syntax_expression_precedence, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_statement_boundary, token_is } from parser
-import { array_element_type, array_type, common_array_element_type, find_field, find_record_type, find_visible_function, find_visible_record, record_type, resolve_type_name, standard_package_import, standard_package_root, type_display } from resolution
+import { array_element_type, array_type, common_array_element_type, find_field, find_record_type, find_visible_function, find_visible_record, resolve_type_name, standard_package_import, standard_package_root, type_display } from resolution
 import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_add, local_find, terminal_token } from state
 import { load_integer, load_string, sparse_integer_at, store_integer, store_string } from storage
 
@@ -463,6 +464,8 @@ def check_record_new(
 		record_name: String,
 	): CheckedValue
 	record_index := find_visible_record(state, state.active_module[0], record_name)
+	origin := position[0]
+	mut arguments: Array<Integer> := []
 	array_region_operation(locals, 6, 0, position[0])
 	line := load_integer(state.token_lines, position[0])
 	advance(position)
@@ -489,7 +492,8 @@ def check_record_new(
 					)
 				end
 			end
-			check_expression(state, position, locals, 1, expected)
+			value := check_expression(state, position, locals, 1, expected)
+			arguments.push(checked_mir_value(value))
 			argument_index += 1
 			if token_is(state, position[0], ",")
 				advance(position)
@@ -503,7 +507,7 @@ def check_record_new(
 	if argument_index != field_count
 		diagnostic(state, "TRBN4004", line, "record field count does not match " + record_name)
 	end
-	return checked_value(record_type(record_index), 0, 9007199254740991, 1)
+	return mir_checked_record_new(state, locals, record_index, arguments, origin)
 end
 
 def check_method_call(
@@ -580,7 +584,7 @@ def check_postfix(
 		mut locals: CheckedLocals,
 		initial: CheckedValue,
 	): CheckedValue
-	mut value := checked_bound_value(initial.type_name, initial.category, initial.origin, initial.mutable, initial.binding)
+	mut value := CheckedValue.new(type_name: initial.type_name, category: initial.category, origin: initial.origin, mutable: initial.mutable, binding: initial.binding, readonly: initial.readonly)
 	mut scanning := true
 	while scanning
 		if token_is(state, position[0], "[")
@@ -638,7 +642,7 @@ def check_postfix(
 					break
 				end
 				if token_is(state, position[0], "(")
-					if member != "size" && member != "to_i" && member != "to_s" && member != "push"
+					if member != "size" && member != "to_i" && member != "to_s" && member != "push" && member != "new"
 						scalar_mir_disable(locals)
 					end
 					if value.category >= 4
@@ -694,15 +698,7 @@ def check_postfix(
 							)
 							scanning = false
 						else
-							# Category 3 marks a readonly field binding; mutable retains
-							# the value capability for subsequent indexing or methods.
-							value = checked_bound_value(
-								load_string(state.field_types, field_index),
-								3,
-								9007199254740991,
-								value.mutable,
-								value.binding,
-							)
+							value = mir_checked_record_field(state, locals, value, field_index, position[0] - 1)
 						end
 					end
 				end
@@ -1072,7 +1068,7 @@ def check_simple_statement(
 		assignment = true
 	end
 	if assignment
-		if left.category == 3
+		if left.readonly
 			diagnostic(state, "TRBN4004", line, "record field is readonly")
 		elsif left.mutable != 0 && !left.binding
 			diagnostic(state, "TRBN4004", line, "assignment requires a mutable binding")

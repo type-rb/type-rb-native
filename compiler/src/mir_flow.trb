@@ -12,6 +12,7 @@ record MirFlow
 	dominators: Array<Integer>
 	definitions: Hash<String, Integer>
 	positions: Hash<String, Integer>
+	types: Hash<String, Integer>
 end
 
 def mir_flow_blocks(native_module: MirModule, function: MirFunction): Hash<String, Integer>
@@ -104,6 +105,12 @@ def mir_build_flow(native_module: MirModule, function: MirFunction, blocks: Hash
 	mut dominators: Array<Integer> := []
 	mut definitions: Hash<String, Integer> := {}
 	mut positions: Hash<String, Integer> := {}
+	mut types: Hash<String, Integer> := {}
+	native_module.values.each do |value|
+		if value.function_id == function.id
+			types[integer_string(value.id)] = value.type_id
+		end
+	end
 	mut index := 0
 	while index < function.block_count
 		successors.push([])
@@ -184,7 +191,7 @@ def mir_build_flow(native_module: MirModule, function: MirFunction, blocks: Hash
 			index += 1
 		end
 	end
-	return MirFlow.new(blocks: blocks, entry: entry, ranks: ranks, dominators: dominators, definitions: definitions, positions: positions)
+	return MirFlow.new(blocks: blocks, entry: entry, ranks: ranks, dominators: dominators, definitions: definitions, positions: positions, types: types)
 end
 
 def mir_value_available(flow: MirFlow, block: MirBlock, instruction_finish: Integer, value: Integer): Boolean
@@ -210,4 +217,14 @@ def mir_value_available(flow: MirFlow, block: MirBlock, instruction_finish: Inte
 		end
 	end
 	return false
+end
+
+# Rebuilt from the checked value table for each verification. A raw MIR edit
+# cannot retain a stale cached type, and sparse IDs do not allocate dense arrays.
+def mir_flow_type(flow: MirFlow, value: Integer): Integer
+	key := integer_string(value)
+	if flow.types.key?(key)
+		return flow.types[key]
+	end
+	return 0
 end

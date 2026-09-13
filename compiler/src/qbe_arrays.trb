@@ -1,14 +1,14 @@
-import { MirInstruction, mir_value_type } from mir
-import { mir_element_type, mir_managed_type, mir_semantic_type_name } from mir_types
+import { MirInstruction } from mir
+import { mir_element_type, mir_managed_type, mir_operand_type, mir_semantic_type_name } from mir_types
 import { QbeEmitContext, QbeValue, emit_temporary, emit_typed_load, emit_typed_store, emitted_value } from qbe_context
 import { QbeOutput, qbe_output_line } from qbe_output
 import { CompilerState } from state
 
 # No source analysis or implicit roots: each allocation/push has its own MIR
 # safe point. ABI addresses exist only inside one non-allocating operation.
-def emit_mir_array_instruction(state: CompilerState, function_id: Integer, instruction: MirInstruction, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
+def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>, instruction: MirInstruction, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
 	kind := instruction.kind
-	type_id := mir_value_type(state.scalar_mir, function_id, instruction.result)
+	type_id := mir_operand_type(value_types, instruction.result)
 	type_name := mir_semantic_type_name(state.scalar_mir, type_id)
 	result := emit_temporary(context)
 	if kind == 19
@@ -28,7 +28,7 @@ def emit_mir_array_instruction(state: CompilerState, function_id: Integer, instr
 	end
 	second := operands[instruction.second]
 	if kind == 24
-		element := mir_element_type(state.scalar_mir, mir_value_type(state.scalar_mir, function_id, instruction.first))
+		element := mir_element_type(state.scalar_mir, mir_operand_type(value_types, instruction.first))
 		if element == 5
 			output.runtime_flags[0] = 1
 			qbe_output_line(output, "\tcall $trbn_array_push_d(l " + owner + ", d " + second + ")")
@@ -51,7 +51,7 @@ def emit_mir_array_instruction(state: CompilerState, function_id: Integer, instr
 	elsif kind == 22
 		emit_typed_load(output, result, type_name, address)
 	else
-		element := mir_element_type(state.scalar_mir, mir_value_type(state.scalar_mir, function_id, instruction.first))
+		element := mir_element_type(state.scalar_mir, mir_operand_type(value_types, instruction.first))
 		emit_typed_store(output, mir_semantic_type_name(state.scalar_mir, element), operands[instruction.payload], address)
 		return emitted_value("", "Void", 0, "", "")
 	end

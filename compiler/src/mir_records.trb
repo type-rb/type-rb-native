@@ -1,0 +1,87 @@
+import { CheckedValue, checked_mir_value, checked_value, mir_checked_value, scalar_mir_disable, scalar_mir_instruction, scalar_mir_value } from checked_values
+import { MirBlock, MirFunction, MirInstruction, MirModule, mir_table_span_valid } from mir
+import { mir_control_active, mir_control_prepare } from mir_control
+import { MirFlow, mir_flow_type, mir_value_available } from mir_flow
+import { mir_record_id, mir_semantic_type_name } from mir_types
+import { CheckedLocals, CompilerState } from state
+import { load_integer } from storage
+
+# 25 constructs a fully initialized record from an ordered argument span.
+# Authored initializers execute once before allocation; all managed arguments
+# participate in the constructor's live-before root set. 26 reads a field.
+def mir_checked_record_new(mut state: CompilerState, mut locals: CheckedLocals, declaration: Integer, arguments: Array<Integer>, origin: Integer): CheckedValue
+	mir_control_prepare(state, locals)
+	definition := state.scalar_mir.records[declaration]
+	type_name := mir_semantic_type_name(state.scalar_mir, definition.type_id)
+	arguments.each do |value|
+		if value < 0
+			scalar_mir_disable(locals)
+		end
+	end
+	if !mir_control_active(locals)
+		return checked_value(type_name, 0, 9007199254740991, 1)
+	end
+	start := locals.mir_arguments.size()
+	arguments.each do |value|
+		locals.mir_arguments.push(value)
+	end
+	result := scalar_mir_value(state, locals, definition.type_id, origin)
+	scalar_mir_instruction(state, locals, 25, result, start, arguments.size(), declaration, - 1, load_integer(state.token_lines, origin))
+	return mir_checked_value(type_name, result, 9007199254740991, 1)
+end
+
+def mir_checked_record_field(mut state: CompilerState, mut locals: CheckedLocals, receiver: CheckedValue, field: Integer, origin: Integer): CheckedValue
+	mir_control_prepare(state, locals)
+	row := state.scalar_mir.fields[field]
+	type_name := mir_semantic_type_name(state.scalar_mir, row.type_id)
+	owner := checked_mir_value(receiver)
+	if owner < 0
+		scalar_mir_disable(locals)
+	end
+	if !mir_control_active(locals)
+		return CheckedValue.new(type_name: type_name, category: 3, origin: 9007199254740991, mutable: receiver.mutable, binding: receiver.binding, readonly: true)
+	end
+	result := scalar_mir_value(state, locals, row.type_id, origin)
+	scalar_mir_instruction(state, locals, 26, result, owner, - 1, field, - 1, load_integer(state.token_lines, origin))
+	return CheckedValue.new(type_name: type_name, category: - result - 1, origin: 9007199254740991, mutable: receiver.mutable, binding: receiver.binding, readonly: true)
+end
+
+def mir_record_instruction_error(flow: MirFlow, native_module: MirModule, function: MirFunction, block: MirBlock, index: Integer, instruction: MirInstruction): String
+	result := mir_flow_type(flow, instruction.result)
+	if instruction.failure != - 1
+		return "MIR record failure shape differs"
+	end
+	if instruction.kind == 25
+		declaration := mir_record_id(native_module, result)
+		if declaration < 0 || instruction.payload != declaration
+			return "MIR record construction identity differs"
+		end
+		definition := native_module.records[declaration]
+		if instruction.second != definition.field_count || !mir_table_span_valid(instruction.first, instruction.second, native_module.arguments.size())
+			return "MIR record construction arguments differ"
+		end
+		mut field := 0
+		while field < definition.field_count
+			value := native_module.arguments[instruction.first + field]
+			if !mir_value_available(flow, block, index, value)
+				return "MIR record initializer is undefined"
+			end
+			if mir_flow_type(flow, value) != native_module.fields[definition.field_start + field].type_id
+				return "MIR record initializer type differs"
+			end
+			field += 1
+		end
+		return ""
+	end
+	if instruction.second != - 1 || instruction.payload < 0 || instruction.payload >= native_module.fields.size()
+		return "MIR record field shape differs"
+	end
+	if !mir_value_available(flow, block, index, instruction.first)
+		return "MIR record owner is undefined"
+	end
+	field := native_module.fields[instruction.payload]
+	if mir_record_id(native_module, mir_flow_type(flow, instruction.first)) != field.owner || result != field.type_id
+		return "MIR record field owner or type differs"
+	end
+	return ""
+end
