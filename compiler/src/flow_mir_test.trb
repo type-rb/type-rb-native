@@ -1,0 +1,153 @@
+import { MirBlock, MirFunction, MirInstruction, MirModule, MirValue, mir_failure_error } from mir
+import { mir_build_flow, mir_flow_blocks, mir_flow_graph_error, mir_value_available } from mir_flow
+import { mir_test_block_with_cell, mir_test_module } from mir_test
+import { verify_mir } from mir_verifier
+import { describe, expect, test } from trb/std/test
+
+def flow_test_module(edges: Array<Array<Integer>>): MirModule
+	mut blocks: Array<MirBlock> := []
+	mut instructions: Array<MirInstruction> := []
+	mut values := [MirValue.new(function_id: 7, id: 0, type_id: 2, source_id: 0, line: 1)]
+	mut index := 0
+	while index < edges.size()
+		mut kind := 3
+		mut first :=- 1
+		mut second :=- 1
+		mut condition :=- 1
+		if edges[index].size() > 0
+			kind = 1
+			first = 100 + edges[index][0]
+		end
+		if edges[index].size() == 2
+			kind = 2
+			second = 100 + edges[index][1]
+			condition = 0
+		end
+		blocks.push(MirBlock.new(id: 100 + index, source_id: 0, line: 1, parameter_start: 0, parameter_count: 0, instruction_start: index, instruction_count: 1, terminator: kind, condition: condition, first_target: first, second_target: second, first_argument_start: 0, first_argument_count: 0, second_argument_start: 0, second_argument_count: 0, return_value: - 1))
+		values.push(MirValue.new(function_id: 7, id: 9007199254740980 + index, type_id: 1, source_id: 0, line: 1))
+		instructions.push(MirInstruction.new(kind: 1, result: 9007199254740980 + index, first: - 1, second: - 1, payload: index, failure: - 1, source_id: 0, line: 1))
+		index += 1
+	end
+	return MirModule.new(signatures: [], calls: [], source_count: [1], entry_function: [7], functions: [MirFunction.new(kind: 0, result_type: "Void", integer_guard: 0, id: 7, entry_block: 100, source_id: 0, line: 1, parameter_start: 0, parameter_count: 1, block_start: 0, block_count: edges.size())], blocks: blocks, values: values, instructions: instructions, arguments: [0], array_regions: [], array_headers: [], array_loop_headers: [], literal_texts: [])
+end
+
+# Independent oracle: a block dominates a reachable consumer iff deleting that
+# block makes the consumer unreachable. This does not use immediate dominators.
+def flow_test_reachable(excluded: Integer, edges: Array<Array<Integer>>): Array<Integer>
+	mut seen: Array<Integer> := []
+	edges.each do |_edge|
+		seen.push(0)
+	end
+	if excluded == 0
+		return seen
+	end
+	mut pending := [0]
+	seen[0] = 1
+	mut index := 0
+	while index < pending.size()
+		edges[pending[index]].each do |target|
+			if target != excluded && seen[target] == 0
+				seen[target] = 1
+				pending.push(target)
+			end
+		end
+		index += 1
+	end
+	return seen
+end
+
+describe("MIR control-flow dominance") do
+	test("matches node-removal reachability on all three-block graphs with at most two successors") do
+		mut mask := 0
+		mut checked := 0
+		while mask < 512
+			mut bits := mask
+			mut edges: Array<Array<Integer>> := []
+			mut valid := true
+			mut row := 0
+			while row < 3
+				mut targets: Array<Integer> := []
+				mut column := 0
+				while column < 3
+					if bits % 2 == 1
+						targets.push(column)
+					end
+					bits /= 2
+					column += 1
+				end
+				if targets.size() > 2
+					valid = false
+				end
+				edges.push(targets)
+				row += 1
+			end
+			if valid
+				checked += 1
+				native_module := flow_test_module(edges)
+				expect(verify_mir(native_module, false)).to_equal("")
+				function := native_module.functions[0]
+				blocks := mir_flow_blocks(native_module, function)
+				expect(mir_flow_graph_error(native_module, function, blocks)).to_equal("")
+				flow := mir_build_flow(native_module, function, blocks)
+				reachable := flow_test_reachable(- 1, edges)
+				mut owner := 0
+				while owner < 3
+					without := flow_test_reachable(owner, edges)
+					mut consumer := 0
+					while consumer < 3
+						mut expected := owner == consumer
+						if reachable[consumer] == 1 && without[consumer] == 0
+							expected = true
+						end
+						expect(mir_value_available(flow, native_module.blocks[consumer], consumer + 1, 9007199254740980 + owner)).to_equal(expected)
+						consumer += 1
+					end
+					owner += 1
+				end
+			end
+			mask += 1
+		end
+		expect(checked).to_equal(343)
+	end
+
+	test("rejects use before definition, unknown values and unreachable cross-block uses") do
+		native_module := flow_test_module([[1], [], [2]])
+		function := native_module.functions[0]
+		flow := mir_build_flow(native_module, function, mir_flow_blocks(native_module, function))
+		expect(mir_value_available(flow, native_module.blocks[0], 0, 9007199254740980)).to_be_false()
+		expect(mir_value_available(flow, native_module.blocks[1], 2, 9007199254740991)).to_be_false()
+		expect(mir_value_available(flow, native_module.blocks[2], 3, 9007199254740980)).to_be_false()
+		expect(mir_value_available(flow, native_module.blocks[2], 3, 0)).to_be_true()
+	end
+
+	test("validates graph identities before constructing dominance") do
+		mut native_module := flow_test_module([[1], [], [2]])
+		native_module.blocks[0] = mir_test_block_with_cell(native_module.blocks[0], 9, 9007199254740991)
+		expect(verify_mir(native_module, false)).to_equal("MIR terminator target does not exist")
+		native_module.blocks[0] = mir_test_block_with_cell(native_module.blocks[0], 0, 101)
+		expect(verify_mir(native_module, false)).to_equal("MIR function entry block does not exist")
+	end
+
+	test("rejects branch-only values in return and edge operands") do
+		mut returned := flow_test_module([[1, 2], [3], [3], []])
+		returned.blocks[3] = mir_test_block_with_cell(returned.blocks[3], 15, 9007199254740981)
+		expect(verify_mir(returned, false)).to_equal("MIR return value is undefined")
+		mut edged := flow_test_module([[1, 2], [3], [3], []])
+		edged.values.push(MirValue.new(function_id: 7, id: 4, type_id: 1, source_id: 0, line: 1))
+		edged.arguments.push(4)
+		edged.arguments.push(9007199254740981)
+		edged.blocks[3] = mir_test_block_with_cell(edged.blocks[3], 3, 1)
+		edged.blocks[3] = mir_test_block_with_cell(edged.blocks[3], 4, 1)
+		[1, 2].each do |index|
+			edged.blocks[index] = mir_test_block_with_cell(edged.blocks[index], 11, 2)
+			edged.blocks[index] = mir_test_block_with_cell(edged.blocks[index], 12, 1)
+		end
+		expect(verify_mir(edged, false)).to_equal("MIR block argument is undefined")
+	end
+
+	test("keeps instruction failure edges terminal and free of value uses") do
+		mut native_module := mir_test_module(false, false)
+		native_module.blocks[3] = mir_test_block_with_cell(native_module.blocks[3], 6, 1)
+		expect(mir_failure_error(native_module, native_module.functions[0], 13)).to_equal("MIR failure target must be an empty trap")
+	end
+end

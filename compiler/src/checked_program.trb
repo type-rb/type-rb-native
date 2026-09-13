@@ -9,6 +9,7 @@ import { float_literal_in_range, integer_literal_in_range, number_is_float, smal
 import { MirLoopTransfer, mir_array_element_type, mir_loop_transfer_valid, mir_type_id } from mir
 import { mir_array_assignment_plan, mir_array_assignment_valid } from mir_analysis
 import { mir_checked_call } from mir_calls
+import { mir_logical_begin, mir_logical_join } from mir_logical
 import { mir_control_active, mir_control_allocate, mir_control_assign, mir_control_branch, mir_control_enter, mir_control_jump, mir_control_loop_begin, mir_control_loop_branch, mir_control_loop_end, mir_control_prepare, mir_control_return, mir_control_transfer } from mir_control
 import { advance, binary_operator_id, declaration_start, expect, expect_identifier, finish_statement, parse_type, skip_newlines, syntax_block_end, syntax_conditional_tail, syntax_expression_precedence, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_statement_boundary, token_is } from parser
 import { array_element_type, array_type, common_array_element_type, find_field, find_record_type, find_visible_function, find_visible_record, record_type, resolve_type_name, standard_package_import, standard_package_root, type_display } from resolution
@@ -804,10 +805,13 @@ def check_expression_value(
 		if precedence < minimum_precedence
 			scanning = false
 		else
+			mut short :=- 1
 			if precedence <= 2
-				# The flat scalar/Array projections cannot represent a conditional
-				# RHS. Keep the structured logical plan and never hoist RHS work.
-				scalar_mir_disable(locals)
+				mut short_value := 0
+				if operator == "||"
+					short_value = 1
+				end
+				short = mir_logical_begin(state, locals, value, short_value, operator_origin)
 				array_region_operation(locals, 6, 0, operator_origin)
 			end
 			advance(position)
@@ -849,7 +853,7 @@ def check_expression_value(
 				end
 			end
 			if precedence <= 2
-				value = checked_value(result_type, 0, 9007199254740991, 0)
+				value = mir_logical_join(state, locals, value, right, short, operator_origin)
 			else
 				value = scalar_mir_binary(
 					state,

@@ -103,7 +103,7 @@ vertical slices from remaining ownership.
 ### Current compiler source ownership
 
 The ordinary entry is [compiler/src/compiler.trb](../compiler/src/compiler.trb).
-Its explicit transitive import closure contains 33 canonical implementation modules:
+Its explicit transitive import closure contains 36 canonical implementation modules:
 
 | Modules in `compiler/src/` | Current responsibility |
 | --- | --- |
@@ -111,8 +111,8 @@ Its explicit transitive import closure contains 33 canonical implementation modu
 | `state.trb` | Compiler state, symbol indexes, shared locals, and diagnostics. |
 | `parser.trb`, `resolution.trb` | Syntax and token boundaries; declaration, import, and type resolution. |
 | `checked_program.trb`, `checked_values.trb`, `checked_types.trb` | Recursive expression/body checking, typed checked values and shared type/operator rules. |
-| `mir.trb`, `mir_analysis.trb`, `mir_passes.trb`, `mir_verifier.trb` | MIR model and queries, reusable proofs, rewrites, and verification. |
-| `mir_construction.trb`, `mir_builder.trb`, `mir_control.trb`, `mir_calls.trb` | Declaration/call contracts, block construction and publication of scalar, induction and mutable control/value MIR. |
+| `mir.trb`, `mir_analysis.trb`, `mir_flow.trb`, `mir_passes.trb`, `mir_verifier.trb`, `mir_instructions.trb` | MIR model and queries, reusable proofs, CFG/dominance, rewrites, structural verification and instruction contracts. |
+| `mir_construction.trb`, `mir_builder.trb`, `mir_control.trb`, `mir_calls.trb`, `mir_logical.trb` | Declaration/call contracts, block construction and publication of scalar, induction, mutable control/value and short-circuit MIR. |
 | `qbe_context.trb`, `qbe_memory.trb`, `qbe_numeric.trb`, `qbe_constants.trb` | Backend context, memory operations, numeric lowering and static data. |
 | `qbe_mir.trb`, `qbe_control.trb` | Shared typed scalar/call adaptation, verified induction and general scalar blocks. |
 | `hash_types.trb`, `hash_mir.trb`, `hash_checked.trb` | Hash types and value layout, operation plans, and their checked source bindings. |
