@@ -1,10 +1,11 @@
+import { argument_binding_slot, function_argument_bindings } from argument_binding
 import { hash_key_type, hash_value_type } from hash_types
 import { checked_hash_plan } from hash_checked
 import { repl_hash_new, repl_hash_set, repl_hash_get, repl_hash_slot, repl_hash_delete, repl_hash_update } from repl_hash
 import trb/std/math
 import { CompilerState } from state
 import { sparse_integer_at, load_integer, load_string } from storage
-import { syntax_statement_boundary, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_block_end, syntax_conditional_tail, token_is, binary_operator_id, syntax_expression_precedence, parse_expression_syntax, parse_type, skip_newlines, declaration_start } from parser
+import { parse_argument_label, syntax_statement_boundary, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_block_end, syntax_conditional_tail, token_is, binary_operator_id, syntax_expression_precedence, parse_expression_syntax, parse_type, skip_newlines, declaration_start } from parser
 import { mir_logical_short_value } from mir
 import { checked_loop_transfer_kind } from checked_program
 import { checked_iteration_require, checked_range_require } from iteration_checked
@@ -326,17 +327,23 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 	end
 	if token_is(state, position[0], "(")
 		function := find_visible_function(state, state.active_module[0], text)
-		mut arguments: Array<Integer> := []
+		mut bindings := function_argument_bindings(state, function)
 		position[0] += 1
 		skip_newlines(state, position)
 		while !token_is(state, position[0], ")")
+			label := parse_argument_label(state, position)
+			slot := argument_binding_slot(bindings, label)
+			if slot < 0
+				store.error[0] = bindings.error[0]
+				return repl_reference(0)
+			end
 			mut parameter_type := "String"
 			if function >= 0
 				start := load_integer(state.function_parameter_starts, function)
-				parameter_type = load_string(state.parameter_types, start + arguments.size())
+				parameter_type = load_string(state.parameter_types, start + slot)
 			end
 			value := repl_expression(state, position, store, environment, 1, parameter_type)
-			arguments.push(repl_coerce(store, value.value, parameter_type))
+			bindings.values[slot] = repl_coerce(store, value.value, parameter_type)
 			if token_is(state, position[0], ",")
 				position[0] += 1
 			end
@@ -346,6 +353,7 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 			end
 		end
 		position[0] += 1
+		arguments := bindings.values
 		if text == "puts"
 			if store.types[arguments[0]] == "String"
 				puts(store.texts[arguments[0]])

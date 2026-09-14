@@ -86,6 +86,17 @@ this integration is not final Pure Go qualification. See the
 [current ownership status](native-mir-optimization-status.md) for retained policy
 bounds and remaining optimization/coverage work.
 
+## Current basic-language integration: named argument binding
+
+Required named-only function parameters and reordered record fields share one
+source-order binding mechanism. Checking retains declaration metadata and emits
+typed MIR operands in parameter/field order; the REPL uses the same slot rules.
+Acceptance includes reference/Native ordinary contracts, wrong-label/order/type
+controls, managed values under forced collection and source-erased/reordered MIR,
+ordinary core/CLI fixed points and the synchronized 59-module recovery closure.
+Defaults and other callable forms remain tracked by the basic-language contract.
+No seed, pin, baseline or performance qualification changes are implied.
+
 ## Development loop
 
 Use cohesive changes that remove an ownership boundary or complete a useful
