@@ -72,6 +72,20 @@ The previous rough 60% estimate was architecture coverage, not a remaining-effor
 estimate. Track the conditions above and explicit coverage gaps instead of
 counting small PRs or treating a renamed data structure as full MIR migration.
 
+## Current integration: sole MIR emission
+
+The current ownership change requires a MIR body for every accepted ordinary
+function, moves numeric/call expansion selection to verified CFG/SSA plans and
+removes the direct body emitter with its token-bound Array/header/assignment
+analyses. Function ABI and root-frame emission has its own target module.
+Acceptance requires ordinary core/CLI fixed points, snapshot-v4 and full hosted
+recovery, portable output/failure order, malformed-plan controls and managed
+lifetime tests with erased/reordered MIR. No baseline, language expectation,
+seed, pin or timeout is relaxed. Cost observations use the migration policy below;
+this integration is not final Pure Go qualification. See the
+[current ownership status](native-mir-optimization-status.md) for retained policy
+bounds and remaining optimization/coverage work.
+
 ## Development loop
 
 Use cohesive changes that remove an ownership boundary or complete a useful

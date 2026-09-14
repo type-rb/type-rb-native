@@ -10,8 +10,7 @@ import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_add, lo
 import { load_integer, load_string } from storage
 
 # Parameter binding and body checking are separate semantic stages. Production
-# always starts MIR here; retained adapter controls can exercise the body stage
-# with an explicit test-only disabled builder, without a source-language marker.
+# always starts MIR here and requires an owned body before finalization.
 def checked_function_locals(mut state: CompilerState, function_index: Integer): CheckedLocals
 	state.active_module[0] = load_integer(state.function_modules, function_index)
 	mut locals := locals_new(state.token_count[0] + 1)
@@ -50,8 +49,7 @@ def check_function_body(mut state: CompilerState, function_index: Integer, mut l
 	if (result_type == "Void" || mir_managed_type(state.scalar_mir, mir_semantic_type_id(state.scalar_mir, result_type))) && locals.mir_state[0] == 1
 		mir_control_prepare(state, locals)
 	end
-	# The second cursor cell carries one adjacent declaration fact into a loop.
-	mut position := [load_integer(state.function_body_starts, function_index), 0]
+	mut position := [load_integer(state.function_body_starts, function_index)]
 	check_block(state, position, locals, load_string(state.function_result_types, function_index), - 1)
 	if position[0] != load_integer(state.function_body_ends, function_index)
 		diagnostic(
@@ -74,13 +72,6 @@ def check_function_body(mut state: CompilerState, function_index: Integer, mut l
 				mir_error,
 			)
 		end
-	end
-	# Only the retained direct adapter consumes token-bound Array regions.
-	# Decide after the complete body, when MIR admission can no longer change.
-	if locals.mir_state[0] == 0
-		state.scalar_mir.array_regions.push(locals.mir_array)
-	else
-		state.scalar_mir.array_regions.push([])
 	end
 	return !has_diagnostic(state)
 end

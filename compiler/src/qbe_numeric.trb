@@ -1,19 +1,5 @@
 import { QbeEmitContext, QbeValue, emit_label, emit_temporary } from qbe_context
-import { emit_root_value } from qbe_memory
 import { QbeOutput, qbe_output_branch, qbe_output_line } from qbe_output
-
-def take_inline_budget(mut context: QbeEmitContext): Boolean
-	# Keep lexical-loop capacity independent from the bounded numeric-helper reserve.
-	mut budget_index := 0
-	if context.loop_depth[0] <= 0
-		budget_index = 1
-	end
-	if context.inline_budget[budget_index] <= 0
-		return false
-	end
-	context.inline_budget[budget_index] = context.inline_budget[budget_index] - 1
-	return true
-end
 
 def integer_range_failure_label(mut context: QbeEmitContext): String
 	if context.scalar_inline_depth[0] > 0
@@ -70,19 +56,8 @@ def emit_guarded_integer_operation(
 		right: String,
 		operation: String,
 		limit: String,
-		right_nonnegative: Boolean,
 		guarded: Integer,
 	)
-	if right_nonnegative
-		if take_inline_budget(context)
-			emit_checked_integer_operation(context, output, result, left, right, "mul", false)
-			return
-		end
-	end
-	if guarded == 0
-		emit_integer_call(output, result, operation, left, right)
-		return
-	end
 	combined := emit_temporary(context)
 	small := emit_temporary(context)
 	slow := emit_label(context)
@@ -143,8 +118,8 @@ def emit_integer_call(
 	return
 end
 
-# The checked-program or verified-MIR caller owns result metadata. This
-# adapter returns only the backend operand, including for comparisons.
+# Verified MIR selects expansion and bounds. The target adapter only spells
+# the selected checked operation; mode 0 uses the shared runtime helper.
 def lower_binary_operand(
 		mut context: QbeEmitContext,
 		mut output: QbeOutput,
@@ -152,9 +127,7 @@ def lower_binary_operand(
 		left: QbeValue,
 		right: QbeValue,
 		result_type: String,
-		left_nonnegative: Boolean,
-		right_nonnegative: Boolean,
-		guarded_operator: Integer,
+		mode: Integer,
 	): String
 	left_float := left.type_name == "Float"
 	right_float := right.type_name == "Float"
@@ -192,84 +165,39 @@ def lower_binary_operand(
 		return result
 	end
 	if operator_id == 1
-		if left.type_name == "String"
-			qbe_output_line(
-				output,
-				"\t" + result + " =l call $trbn_string_concat(l " + left.operand + ", l " + right.operand + ")",
-			)
-			emit_root_value(context, "String")
+		if mode == 4
+			emit_guarded_integer_operation(context, output, result, left_operand, right_operand, "add", "9007199254740992", 13)
+		elsif mode > 0
+			if mode == 3
+				left_operand = right.operand
+				right_operand = left.operand
+			end
+			mut nonnegative := mode == 2
+			if mode == 3
+				nonnegative = true
+			end
+			emit_checked_integer_operation(context, output, result, left_operand, right_operand, "add", nonnegative)
 		else
-			mut use_guarded_add := guarded_operator == 13
-			if left_nonnegative
-				use_guarded_add = false
-			end
-			if right_nonnegative
-				use_guarded_add = false
-			end
-			if use_guarded_add
-				emit_guarded_integer_operation(
-					context,
-					output,
-					result,
-					left_operand,
-					right_operand,
-					"add",
-					"9007199254740992",
-					false,
-					13,
-				)
-			else
-				if take_inline_budget(context)
-					mut known_nonnegative := right_nonnegative
-					if left_nonnegative
-						left_operand = right.operand
-						right_operand = left.operand
-						known_nonnegative = true
-					end
-					emit_checked_integer_operation(
-						context,
-						output,
-						result,
-						left_operand,
-						right_operand,
-						"add",
-						known_nonnegative,
-					)
-				else
-					emit_integer_call(output, result, "add", left.operand, right.operand)
-				end
-			end
+			emit_integer_call(output, result, "add", left_operand, right_operand)
 		end
 		return result
 	end
 	if operator_id == 2
-		if take_inline_budget(context)
-			emit_checked_integer_operation(
-				context,
-				output,
-				result,
-				left.operand,
-				right.operand,
-				"sub",
-				false,
-			)
+		if mode == 1
+			emit_checked_integer_operation(context, output, result, left_operand, right_operand, "sub", false)
 		else
-			emit_integer_call(output, result, "subtract", left.operand, right.operand)
+			emit_integer_call(output, result, "subtract", left_operand, right_operand)
 		end
 		return result
 	end
 	if operator_id == 3
-		emit_guarded_integer_operation(
-			context,
-			output,
-			result,
-			left.operand,
-			right.operand,
-			"mul",
-			"67108864",
-			right_nonnegative,
-			guarded_operator,
-		)
+		if mode == 1
+			emit_checked_integer_operation(context, output, result, left_operand, right_operand, "mul", false)
+		elsif mode == 5
+			emit_guarded_integer_operation(context, output, result, left_operand, right_operand, "mul", "67108864", 12)
+		else
+			emit_integer_call(output, result, "mul", left_operand, right_operand)
+		end
 		return result
 	end
 	if operator_id <= 5
@@ -279,41 +207,14 @@ def lower_binary_operand(
 			operation = "rem"
 			helper = "remainder"
 		end
-		if take_inline_budget(context)
-			emit_checked_integer_division(
-				context,
-				output,
-				result,
-				left.operand,
-				right.operand,
-				operation,
-			)
+		if mode == 1
+			emit_checked_integer_division(context, output, result, left_operand, right_operand, operation)
 		else
-			emit_integer_call(output, result, helper, left.operand, right.operand)
+			emit_integer_call(output, result, helper, left_operand, right_operand)
 		end
 		return result
 	end
 	different := operator_id == 7
-	if left.type_name == "String"
-		mut compare_strings := operator_id == 6
-		if different
-			compare_strings = true
-		end
-		if compare_strings
-			mut equality := result
-			if different
-				equality = emit_temporary(context)
-			end
-			qbe_output_line(
-				output,
-				"\t" + equality + " =l call $trbn_string_equal(l " + left.operand + ", l " + right.operand + ")",
-			)
-			if different
-				qbe_output_line(output, "\t" + result + " =l ceql " + equality + ", 0")
-			end
-			return result
-		end
-	end
 	mut comparison := "eq"
 	if different
 		comparison = "ne"

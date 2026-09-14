@@ -10,21 +10,22 @@ measurements provide intermediate feedback.
 
 | Area | Current boundary |
 | --- | --- |
-| Typed scalar values | Integer, Boolean and Float literals, unary/binary operations and numeric conversion have explicit operands, result types, origins and failure edges. Straight-line leaves retain bounded inlining and verified Integer range guards. |
+| Typed scalar values | Integer, Boolean and Float literals, unary/binary operations and numeric conversion have explicit operands, result types, origins and failure edges. Verified numeric plans select bounded operation/call expansion from CFG/SSA facts; straight-line leaves retain verified Integer range guards. |
 | Scalar control | Mutable scalar locals and parameters, nested `if`/`elsif`/`else`, `while`, `break`/`next`, early returns and continuing joins publish typed blocks and live-value arguments. Loop transfers carry only the enclosing environment; branch/body locals remain lexical. QBE consumes admitted bodies without rereading their source. |
 | Short-circuit expressions | Scalar `&&` and `||` publish conditional RHS blocks and Boolean result joins, including nested call arguments and loop predicates. Dominance preserves earlier expression temporaries; skipped RHS calls and traps stay unexecuted. |
-| Calls and declarations | Declaration identities, parameter types/mutability and return types are captured before body checking. Ordinary calls with supported scalar and managed arguments/results, including nominal records and Hash/Range carriers, retain explicit arguments and conservative allocation, mutation, I/O and failure effects, including forward, recursive and direct-path callees. |
+| Calls and declarations | Declaration identities, parameter types/mutability and return types are captured before body checking. Ordinary calls with supported scalar and managed arguments/results, including nominal records and Hash/Range carriers, retain explicit arguments and conservative allocation, mutation, I/O and failure effects, including forward and recursive callees. |
 | Managed Strings and roots | String literals, concatenation, equality, size, indexing, Integer/String/Float conversions and String/Boolean output use typed operations. Integer output explicitly converts first. Managed parameters, rebinding, returns and control joins use the same value/block path. MIR derives live-before roots at allocating operations and ordinary calls; verification recomputes the complete plan. |
 | Managed Arrays | Supported scalar and managed element Arrays, including nominal records and their nesting, retain semantic element identity. Literals, live size, checked indexing, assignment, compound assignment and push use typed operations with allocation/mutation/failure effects. Admitted parameters, returns, rebinding and loop/branch values share managed liveness. Assignment captures its checked logical position before RHS evaluation, then reloads storage for the final store. |
 | Nominal records | Declaration identity, authored names/origins and ordered field types live in MIR. Construction consumes an ordered operand span with allocating/failing effects; projections verify nominal owner and result type. Recursive records through containers retain their shells and field references. GC descriptors consume this verified table. |
 | Numeric Array induction | Selected zero-based traversal and Integer/Float reductions retain verified induction, address and accumulator relationships. The adapter consumes the established plan. |
-| Array effects and headers | Ordered regions retain bindings, aliases, accesses, scope boundaries and conservative effect barriers. Verified function/loop plans select stable headers; element checks remain unless a separate induction proof permits removal. |
-| Hash | Checked typed operation plans retain key/value layout, operands' source bindings and effects. They are still a projection alongside general control/value MIR. |
-| Range and iteration | Checked construction and Array/Range traversal plans retain captured bounds/receiver, live Array length, lexical transfers and source bindings. Their execution is not yet unified with the general value/block path. |
-| Assignment and Boolean operations | Checked plans own assignment evaluation order and binary/logical result semantics; remaining direct adaptation still consumes some source-indexed plans. |
+| Array effects and headers | CFG dominance, induction identities and conservative operation effects select stable headers. The retired token regions and direct-adapter header caches are removed; checks remain unless the typed plan proves them redundant. |
+| Hash | Typed operations cover construction, lookup, update, deletion, copies and collection projections, including empty-Hash inference and managed carriers. Source-bound plans remain for checking and the REPL; QBE consumes only value/block MIR. |
+| Range and iteration | Construction, captured bounds/receiver, live Array length, lexical transfers and Array/Range carriers use the general value/block route. Source-bound shapes are shared by checking and the REPL. |
+| Assignment and Boolean operations | Typed operations own captured assignment targets, evaluation order and binary/logical result semantics. The retained `checked_operator_plans` projection serves the REPL, not QBE. |
 
-Function adapter kinds explicitly distinguish scalar leaves, verified induction
-and general scalar and managed-value control. Verification checks their operation and shape
+Function adapter kinds distinguish scalar leaves and general scalar/managed
+control; independent verifier fixtures retain their separate model kind. The
+ordinary checker requires a MIR body for every accepted function. Verification checks their operation and shape
 contracts as well as table bounds, value definitions, types, argument availability,
 control targets, declaration/call/return types, conservative call effects and source origins. Block arguments are parallel assignments;
 QBE adaptation captures edge values before overwriting destinations. Instruction
@@ -61,9 +62,10 @@ reverses block storage and executes the result with a test-only collection befor
 every String allocation. Independent expectations require the first call argument
 to survive later argument allocation and discard undemanded branch bindings.
 Tampered roots, capacity, instruction identities and String operations reject.
-Existing induction, managed-lifetime and target controls remain. Direct managed callers retain bounded scalar inlining;
-general scalar MIR calls currently remain explicit until the existing policy
-has a verified interprocedural owner. No performance improvement is inferred.
+Existing induction, managed-lifetime and target controls remain. All ordinary
+function bodies now use MIR. `numeric_mir_test.trb` rejects missing or forged
+numeric/call plans and retains decisions after source erasure, physical block
+reordering and repeated optimization. No performance improvement is inferred.
 
 The `managed-array-mir` fixture adds nested managed Arrays, owner replacement
 during compound assignment, growth across a retained negative-index target,
@@ -77,7 +79,7 @@ functions. Malformed element graphs, Array operations and omitted roots reject.
 - `mir.trb`: typed module, function, block, instruction and value records, with
   shared scalar encodings and identity/range queries, plus portable declarations
   and conservative call records.
-- `mir_analysis.trb`, `mir_flow.trb`, `mir_passes.trb`: portable proofs, CFG/dominance
+- `mir_analysis.trb`, `mir_numeric.trb`, `mir_flow.trb`, `mir_passes.trb`: portable numeric proofs, expansion selection, CFG/dominance
   and rewrites. `mir_verifier.trb` checks structure/edges; `mir_instructions.trb`
   checks typed instruction contracts.
 - `checked_values.trb`, `mir_construction.trb`, `mir_builder.trb`, `mir_control.trb`:
@@ -98,8 +100,9 @@ functions. Malformed element graphs, Array operations and omitted roots reject.
 - `mir_logical.trb`: conditional RHS and expression-result join construction.
 - `checked_types.trb`: assignability, operator result types and diagnostics.
 - `checked_program.trb`: recursive source checking; it invokes these owners.
-- `qbe_context.trb`, `qbe_memory.trb`, `qbe_numeric.trb`, `qbe_constants.trb`:
-  backend context, memory adaptation, numeric lowering and static data.
+- `qbe_context.trb`, `qbe_functions.trb`, `qbe_numeric.trb`, `qbe_constants.trb`:
+  target operands/labels, function ABI and MIR-selected root-frame prologues,
+  selected numeric spelling and static data. No lexical local/header/root analysis.
 - `qbe_mir.trb`, `qbe_control.trb`: existing optimized MIR, explicit calls and scalar-block
   adaptation, sharing one scalar operation adapter.
 
@@ -125,37 +128,50 @@ record escapes the operation. The backend's function-local operand types and the
 verifier's Hash index avoid repeating whole-module type searches as admission
 grows. These are derived lookup structures, not unverified optimization facts.
 
+## Sole MIR emission and numeric selection
+
+The checker rejects an accepted function without a MIR body. QBE uses the verified
+signature for parameter/result ABI and the MIR root plan for frame capacity.
+The direct expression/body emitter, token Array regions and assignment-effect
+analyses, backend numeric budgets, lexical local slots, header caches and textual
+root-publication filtering are removed. `qbe_functions.trb` owns function emission;
+`compiler.trb` retains orchestration and declaration-bound runtime hooks. Output
+storage grows with emitted lines instead of imposing a source-token size guess.
+
+`mir_numeric.trb` derives natural-loop membership through dominance and selects
+expansion in function/block identity order. Modules with at most 32 bodies have
+64 loop operations, six outside operations and two leaf-call expansions; modules
+with at most 96 bodies have 32 loop and three outside operations. Larger modules
+use shared numeric helpers. This retains a bounded policy while removing the
+old backend's lexical-loop and deferred-function budget state. Every ordinary
+function definition is emitted; call expansion no longer decides definition
+omission implicitly. A future use-graph pass can select dead bodies explicitly.
+
+Small-operand facts mean Integer values in `[0, 1024]`, not arbitrary nonnegative
+values. This bound permits a checked multiply without overflowing the machine
+intermediate. Selected additions keep the required upper/lower checks; other
+operations retain shared helpers, explicit zero checks or guarded fallback.
+Inline leaf copies can use verified caller argument bounds. Their emitted literal
+operands do not silently become new caller proofs. Optimized-module verification
+recomputes the entire plan, including owners, sites, operations and modes, only
+after validating MIR structure, types and operands. Input MIR cannot supply plans.
+
 ## Remaining work
 
-Hash construction and receiver operations, empty-Hash inference publication,
-and Array/Range iteration still need the unified control/value route. Nominal
-record operations and typed managed carriers now use it; a function with an
-unmigrated operation may still require direct emission.
-The retained single-parameter numeric induction attempt is still separate;
-functions outside its narrow accepted shape may remain direct. Array header/range
-optimizations and bounded scalar-call inlining must move to the shared general
-passes before those old owners can retire. Managed-value liveness
-establishes the root path for that work. Runtime/host intrinsics retain their
-existing adapters. Ordinary call effects remain conservative barriers; no interprocedural
-no-allocation property is inferred. Managed liveness is intraprocedural. Their current checked operations and conservative GC protections remain
-in force. The direct body emitter remains for those functions and must retire as
-its consumers migrate. For general scalar/String/Array MIR, root publication replaces the direct emitter's
-lexical root inference: each allocating operation rewrites the frame segment to
-its sorted live-before list, with capacity reserved in the prologue. The root
-buffer address is reloaded after any intervening call. Roots no longer needed are
-dropped at the next safe point; loop iterations do not accumulate old Strings.
-Calls/allocations retain their existing failure order and managed-return ABI.
-Static literal encoding/deduplication consumes MIR literal values independently
-of admitted source bodies.
+The ordinary emission route is unified; this does not establish full TypeRB
+language, standard-library or source-backend coverage. Those gaps remain in the
+[language coverage contract](native-language-coverage.md) and Capabilities.
+General constant/range propagation, call-effect summaries, broader inlining and
+explicit dead-body elimination still need shared MIR passes. Ordinary call
+effects remain conservative allocation/mutation barriers; managed liveness is
+intraprocedural. Root publication rewrites the frame segment from its live-before
+plan, reloads root-buffer addresses across calls and preserves managed-return ABI.
 
-QBE memory adaptation for the remaining direct functions still contains lifetime
-decisions that belong above the backend; moving those helpers into a file does not complete
-that ownership change.
-
-The entry and recursive checker remain substantial modules. Further decomposition
-should follow the remaining semantic ownership moves, preserving source origins,
-recovery and ordinary fixed points. This status is not a percentage of full
-TypeRB language or source-backend coverage.
+The recursive checker and compiler driver still need responsibility-based
+splitting. Preserve source origins, recovery and ordinary fixed points during
+that work. Full milestone acceptance also requires measurement and improvement
+against the fixed Native/Pure Go baselines; structural completion alone does not
+establish runtime, build-time or binary-size parity.
 
 ## Measurements and history
 

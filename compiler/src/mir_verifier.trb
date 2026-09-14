@@ -1,3 +1,4 @@
+import { mir_numeric_plans, mir_numeric_plans_equal } from mir_numeric
 import { mir_array_loops_equal, mir_function_array_loops } from mir_array_loops
 import { integer_string } from literals
 import { mir_definition_index, mir_identity_key } from mir_identities
@@ -5,7 +6,7 @@ import { mir_semantic_type_name, mir_semantic_value_type, mir_types_error } from
 import { mir_function_roots, mir_root_plan_equal } from mir_roots
 import { MirFlow, mir_build_flow, mir_flow_blocks, mir_flow_graph_error, mir_flow_type, mir_value_available } from mir_flow
 import { MirBlock, MirFunction, MirModule, mir_block_index, mir_origin_valid, mir_table_span_valid } from mir
-import { mir_array_headers, mir_array_headers_equal, mir_array_loop_headers, mir_scalar_guard } from mir_analysis
+import { mir_scalar_guard } from mir_analysis
 import { mir_function_signature_error, mir_signatures_error } from mir_calls
 import { mir_instruction_error } from mir_instructions
 
@@ -309,6 +310,12 @@ def mir_function_error(native_module: MirModule, function: MirFunction): String
 end
 
 def verify_mir(native_module: MirModule, optimized: Boolean): String
+	if native_module.numeric_plans.size() != 1
+		return "MIR numeric plan container differs"
+	end
+	if !optimized && native_module.numeric_plans[0].size() != 0
+		return "MIR input cannot supply numeric plans"
+	end
 	if native_module.source_count[0] <= 0
 		return "MIR module has no sources"
 	end
@@ -322,35 +329,10 @@ def verify_mir(native_module: MirModule, optimized: Boolean): String
 	end
 	mut entry_found := false
 	mut index := 0
-	if optimized
-		if native_module.array_headers.size() != native_module.array_regions.size() || native_module.array_loop_headers.size() != native_module.array_regions.size()
-			return "MIR optimized Array-header fact is invalid"
-		end
-	else
-		if native_module.array_headers.size() != 0 || native_module.array_loop_headers.size() != 0
-			return "MIR input cannot supply optimization facts"
-		end
-	end
-	while index < native_module.array_regions.size()
-		header := mir_array_headers(native_module.array_regions[index])
-		if !header.valid
-			return "MIR Array region is invalid"
-		end
-		if optimized
-			mut loops: Array<Integer> := []
-			if header.declarations.size() == 0
-				loops = mir_array_loop_headers(native_module.array_regions[index])
-			end
-			if !mir_array_headers_equal(native_module.array_loop_headers[index], loops)
-				return "MIR optimized Array-header fact is invalid"
-			end
-			if !mir_array_headers_equal(native_module.array_headers[index], header.declarations)
-				return "MIR optimized Array-header fact is invalid"
-			end
-		end
-		index += 1
-	end
 	if native_module.functions.size() == 0
+		if native_module.numeric_plans[0].size() != 0
+			return "MIR numeric plan differs"
+		end
 		if native_module.array_loops.size() != 0
 			return "MIR Array-loop plan count differs"
 		end
@@ -453,6 +435,9 @@ def verify_mir(native_module: MirModule, optimized: Boolean): String
 			end
 			index += 1
 		end
+	end
+	if optimized && !mir_numeric_plans_equal(native_module.numeric_plans[0], mir_numeric_plans(native_module))
+		return "MIR numeric plan differs"
 	end
 	return ""
 end

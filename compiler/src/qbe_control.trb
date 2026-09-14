@@ -5,9 +5,9 @@ import { emit_mir_array_headers, emit_mir_array_instruction } from qbe_arrays
 import { mir_semantic_type_name } from mir_types
 import { integer_string } from literals
 import { MirFunction, mir_block_index, mir_function_index } from mir
-import { mir_scalar_result_fact } from mir_analysis
+import { mir_numeric_find, mir_numeric_operation } from mir_numeric
 import { QbeEmitContext, emit_label, emit_temporary, emit_typed_store, emitted_value, qbe_type } from qbe_context
-import { emit_mir_scalar_instruction } from qbe_mir
+import { emit_mir_scalar_instruction, emit_scalar_mir } from qbe_mir
 import { QbeOutput, qbe_output_branch, qbe_output_line } from qbe_output
 import { emit_mir_roots, qbe_root_plan_start } from qbe_roots
 import { emit_mir_string_instruction } from qbe_strings
@@ -38,18 +38,17 @@ end
 def emit_control_mir(state: CompilerState, function_index: Integer, result_type: String, symbols: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput)
 	function := state.scalar_mir.functions[mir_function_index(state.scalar_mir, function_index)]
 	roots := state.scalar_mir.root_plans[mir_function_index(state.scalar_mir, function_index)]
+	numeric := mir_numeric_find(state.scalar_mir.numeric_plans[0], function_index, - 1, - 1)
 	array_loops := state.scalar_mir.array_loops[mir_function_index(state.scalar_mir, function_index)]
 	mut operands: Array<String> := []
 	mut types: Array<String> := []
 	mut value_types: Array<Integer> := []
-	mut facts: Array<Integer> := []
 	state.scalar_mir.values.each do |value|
 		if value.function_id == function_index
 			while operands.size() <= value.id
 				operands.push("")
 				types.push("")
 				value_types.push(0)
-				facts.push(0)
 			end
 			operands[value.id] = "%mir_value" + integer_string(value.id)
 			value_types[value.id] = value.type_id
@@ -78,7 +77,7 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 				emit_mir_roots(roots.roots[point], operands, context, output)
 				point += 1
 			end
-			mut value := emitted_value("", "Void", 0, "", "")
+			mut value := emitted_value("", "Void")
 			if instruction.kind == 31 || instruction.kind == 32
 				value = emit_mir_range_instruction(state, value_types, instruction, operands, context, output)
 			elsif instruction.kind >= 27 && instruction.kind <= 30
@@ -89,13 +88,29 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 				value = emit_mir_array_instruction(state, value_types, instruction, index, array_loops, operands, context, output)
 			elsif instruction.kind >= 12 && instruction.kind <= 18
 				value = emit_mir_string_instruction(state, value_types, instruction, operands, symbols, context, output)
+			elsif instruction.kind == 11
+				call_plan := mir_numeric_find(state.scalar_mir.numeric_plans[0], - 1, function.id, index)
+				if call_plan.function_id >= 0
+					call := state.scalar_mir.calls[instruction.payload]
+					mut arguments: Array<String> := []
+					mut argument_types: Array<String> := []
+					mut argument := 0
+					while argument < call.argument_count
+						id := state.scalar_mir.arguments[call.argument_start + argument]
+						arguments.push(operands[id])
+						argument_types.push(types[id])
+						argument += 1
+					end
+					value = emit_scalar_mir(state, call_plan.function_id, arguments, argument_types, call_plan, context, output, true)
+				else
+					value = emit_mir_scalar_instruction(state, function_index, instruction, operands, types, mir_numeric_operation(numeric, index), context, output, false)
+				end
 			else
-				value = emit_mir_scalar_instruction(state, function_index, instruction, operands, types, facts, context, output, false, false)
+				value = emit_mir_scalar_instruction(state, function_index, instruction, operands, types, mir_numeric_operation(numeric, index), context, output, false)
 			end
 			if instruction.result >= 0
 				# Stable MIR names allow a dominating definition in any storage order.
 				qbe_output_line(output, "\t" + operands[instruction.result] + " =" + qbe_type(types[instruction.result]) + " copy " + value.operand)
-				facts[instruction.result] = mir_scalar_result_fact(instruction, facts)
 			end
 			index += 1
 		end

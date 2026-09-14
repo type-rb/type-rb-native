@@ -1,0 +1,88 @@
+import { mir_numeric_find } from mir_numeric
+import { native_managed_type } from hash_types
+import { integer_string } from literals
+import { mir_function_index } from mir
+import { emit_context_new, emit_typed_load, emit_typed_store, qbe_type } from qbe_context
+import { emit_control_mir } from qbe_control
+import { emit_scalar_mir } from qbe_mir
+import { QbeOutput, qbe_output_line, qbe_output_new } from qbe_output
+import { CompilerState, diagnostic } from state
+import { load_string } from storage
+
+def emit_function(mut state: CompilerState, function_index: Integer, mut output: QbeOutput)
+	mir_index := mir_function_index(state.scalar_mir, function_index)
+	if mir_index < 0
+		diagnostic(state, "TRBN4004", 1, "checked function has no MIR body")
+		return
+	end
+	function := state.scalar_mir.functions[mir_index]
+	signature := state.scalar_mir.signatures[function_index]
+	result_type := signature.result_type
+	mut context := emit_context_new()
+	mut body := qbe_output_new(1024, output.runtime_flags)
+	mut parameters := ""
+	mut argument_operands: Array<String> := []
+	mut argument_types: Array<String> := []
+	mut index := 0
+	while index < signature.parameter_types.size()
+		type_name := signature.parameter_types[index]
+		if index > 0
+			parameters += ", "
+		end
+		operand := "%p" + integer_string(index)
+		parameters += qbe_type(type_name) + " " + operand
+		argument_operands.push(operand)
+		argument_types.push(type_name)
+		index += 1
+	end
+	if function.kind == 3
+		emit_control_mir(state, function_index, result_type, output.mir_literal_symbols, context, body)
+	else
+		plan := mir_numeric_find(state.scalar_mir.numeric_plans[0], function_index, - 1, - 1)
+		value := emit_scalar_mir(state, function_index, argument_operands, argument_types, plan, context, body, false)
+		emit_typed_store(body, result_type, value.operand, "%return_value")
+		qbe_output_line(body, "\tjmp @return")
+	end
+	mut result_prefix := ""
+	if result_type != "Void"
+		result_prefix = qbe_type(result_type) + " "
+	end
+	qbe_output_line(output, "function " + result_prefix + "$trbnf" + integer_string(function_index) + "(" + parameters + ") {")
+	qbe_output_line(output, "@start")
+	roots := state.scalar_mir.root_plans[mir_index]
+	uses_roots := roots.instructions.size() > 0
+	if uses_roots
+		qbe_output_line(output, "\t%temporary_roots =l loadl $trbn_gc_temp_count")
+	end
+	if result_type != "Void"
+		qbe_output_line(output, "\t%return_value =l alloc8 8")
+	end
+	if uses_roots && roots.capacity > 0
+		qbe_output_line(output, "\t%root_capacity =l add %temporary_roots, " + integer_string(roots.capacity))
+		qbe_output_line(output, "\tcall $trbn_gc_temp_reserve(l %root_capacity)")
+	end
+	index = 0
+	while index < body.count[0]
+		qbe_output_line(output, load_string(body.lines, index))
+		index += 1
+	end
+	if context.scalar_inline_range_failure_used[0]
+		qbe_output_line(output, "@scalar_inline_integer_range_failure")
+		qbe_output_line(output, "\tcall $trbn_fail(l $trbn_integer_range_error, l 45)")
+		qbe_output_line(output, "\thlt")
+	end
+	qbe_output_line(output, "@return")
+	if uses_roots
+		qbe_output_line(output, "\tstorel %temporary_roots, $trbn_gc_temp_count")
+	end
+	if result_type == "Void"
+		qbe_output_line(output, "\tret")
+	else
+		emit_typed_load(output, "%return_result", result_type, "%return_value")
+		if native_managed_type(result_type)
+			qbe_output_line(output, "\tcall $trbn_gc_temp_push(l %return_result)")
+		end
+		qbe_output_line(output, "\tret %return_result")
+	end
+	qbe_output_line(output, "}\n")
+end

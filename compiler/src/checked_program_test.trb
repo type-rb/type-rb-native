@@ -1,8 +1,7 @@
 import { checked_binary_plan_type } from checked_types
-import { array_region_operation, checked_mir_value, checked_value, mir_checked_value } from checked_values
-import { MirArrayOperation, MirBlock, mir_type_id } from mir
+import { checked_mir_value, checked_value, mir_checked_value } from checked_values
+import { MirBlock, mir_type_id } from mir
 import { mir_block } from mir_construction
-import { locals_new } from state
 import { logical_checked_source } from logical_test
 import { check } from compiler
 import { has_diagnostic } from state
@@ -72,35 +71,5 @@ describe("Checked program and MIR construction") do
 			expect(mir_type_id(names[index])).to_equal(types[index])
 			index += 1
 		end
-	end
-end
-
-describe("Checked Array region construction") do
-	test("retains ordered effects without discarding later operations") do
-		mut locals := locals_new(32)
-		operations := [
-			MirArrayOperation.new(kind: 1, operand: 1, origin: 10),
-			MirArrayOperation.new(kind: 1, operand: 2, origin: 11),
-			MirArrayOperation.new(kind: 4, operand: 0, origin: 12),
-			MirArrayOperation.new(kind: 6, operand: 0, origin: 13),
-			MirArrayOperation.new(kind: 4, operand: 0, origin: 14),
-			MirArrayOperation.new(kind: 6, operand: 0, origin: 15),
-		]
-		mut index := 0
-		while index < operations.size()
-			operation := operations[index]
-			array_region_operation(locals, operation.kind, operation.operand, operation.origin)
-			index += 1
-		end
-		expect(locals.mir_array).to_equal(operations)
-		expect(locals.mir_assignment[0]).to_equal([operations[3], operations[5]])
-	end
-
-	test("retains initialization before later declarations and accesses") do
-		mut locals := locals_new(32)
-		array_region_operation(locals, 6, 0, 3)
-		array_region_operation(locals, 2, 0, 4)
-		array_region_operation(locals, 5, 0, 5)
-		expect(locals.mir_array).to_equal([MirArrayOperation.new(kind: 6, operand: 0, origin: 3), MirArrayOperation.new(kind: 2, operand: 0, origin: 4), MirArrayOperation.new(kind: 5, operand: 0, origin: 5)])
 	end
 end

@@ -25,9 +25,10 @@ roles. No stable public protocol or snapshot version is changed by this rename.
 ## Remaining consolidation
 
 The [MIR milestone](mir-consolidation.md) owns the remaining structural work.
-Route supported ordinary functions through verified typed values, operations and
-control flow. Move semantic effects, Array-header validity and root-safety decisions
-above the backend; remove the superseded direct path as its consumers migrate.
+Accepted ordinary functions now require verified typed values, operations and
+control flow. The direct emitter and its token Array/header/assignment analyses
+are removed. Numeric expansion, Array-header validity and root plans are selected
+and verified above QBE; function ABI emission lives in `qbe_functions.trb`.
 Split the large checker, MIR and emitter modules by those responsibilities, with
 explicit dependencies rather than copied helpers or forwarding aliases.
 
