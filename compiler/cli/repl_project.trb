@@ -1,0 +1,187 @@
+import { hash_key_type, hash_value_type } from hash_types
+import { compiler_collect_project_sources, compiler_read_source, project_module_name } from compiler
+import { compiler_source_slice, lex } from lexer
+import { native_cli_cwd } from host
+import { parse_module } from parser
+import { path_directory, path_join } from path
+import { parse_project_config } from project_config
+import { array_element_type, find_record_type, standard_package_root, standard_package_target } from resolution
+import { CompilerState, compiler_new, has_diagnostic } from state
+import { load_integer, load_string } from storage
+
+record ReplProject
+	imports: String
+	root: String
+	error: String
+end
+
+def repl_project(config: String): ReplProject
+	if config == ""
+		return ReplProject.new(imports: "import trb/std/math\nimport trb/std/process\n", root: native_cli_cwd(), error: "")
+	end
+	project := parse_project_config(compiler_read_source(config))
+	if project.error != ""
+		return ReplProject.new(imports: "", root: "", error: project.error)
+	end
+	root := path_join(path_directory(config), project.source_dir)
+	bundle := compiler_collect_project_sources(root, path_join(path_directory(config), project.out_dir))
+	if bundle.error != ""
+		return ReplProject.new(imports: "", root: root, error: bundle.error)
+	end
+	mut names: Array<String> := []
+	mut modules: Array<String> := []
+	mut index := 0
+	while index < bundle.paths.size()
+		mut state := compiler_new(bundle.sources[index].size() * 3 + 16)
+		lex(state, bundle.sources[index])
+		if !has_diagnostic(state)
+			parse_module(state, 0, 0)
+		end
+		if has_diagnostic(state)
+			return ReplProject.new(imports: "", root: root, error: "cannot parse project module " + bundle.paths[index])
+		end
+		module_name := project_module_name(state, root, bundle.paths[index])
+		mut item := 0
+		while item < state.function_count[0]
+			name := load_string(state.function_names, item)
+			if name != "main"
+				names.push(name)
+				modules.push(module_name)
+			end
+			item += 1
+		end
+		item = 0
+		while item < state.record_count[0]
+			names.push(load_string(state.record_names, item))
+			modules.push(module_name)
+			item += 1
+		end
+		index += 1
+	end
+	mut imports := "import trb/std/math\nimport trb/std/process\n"
+	index = 0
+	while index < names.size()
+		mut count := 0
+		mut peer := 0
+		while peer < names.size()
+			if names[index] == names[peer]
+				count += 1
+			end
+			peer += 1
+		end
+		if count == 1
+			imports += "import { " + names[index] + " } from " + modules[index] + "\n"
+		end
+		index += 1
+	end
+	return ReplProject.new(imports: imports, root: root, error: "")
+end
+
+# Filter generated imports using parsed declarations, never tokens in comments
+# or literals. Blank lines preserve submission and diagnostic source positions.
+def repl_project_source(source: String, prelude: String): String
+	authored := compiler_source_slice(source, prelude.size(), source.size())
+	mut session := compiler_new(authored.size() * 3 + 16)
+	lex(session, authored)
+	if !has_diagnostic(session)
+		parse_module(session, 0, 0)
+	end
+	if has_diagnostic(session)
+		return source
+	end
+	mut explicit: Hash<String, Integer> := {}
+	mut paths: Hash<String, Integer> := {}
+	mut index := 0
+	while index < session.function_count[0]
+		explicit[load_string(session.function_names, index)] = 1
+		index += 1
+	end
+	index = 0
+	while index < session.record_count[0]
+		explicit[load_string(session.record_names, index)] = 1
+		index += 1
+	end
+	index = 0
+	while index < session.import_count[0]
+		if load_integer(session.import_kinds, index) == 0
+			# Match the original declaration, including when it has an alias.
+			explicit[load_string(session.import_declarations, index)] = 1
+		elsif load_string(session.import_symbols, index) == ""
+			paths[load_string(session.import_paths, index)] = 1
+		end
+		index += 1
+	end
+	mut generated := compiler_new(prelude.size() * 3 + 16)
+	lex(generated, prelude)
+	parse_module(generated, 0, 0)
+	if has_diagnostic(generated)
+		return source
+	end
+	mut lines: Array<String> := []
+	mut start := 0
+	index = 0
+	while index < prelude.size()
+		if prelude[index] == "\n"
+			lines.push(compiler_source_slice(prelude, start, index))
+			start = index + 1
+		end
+		index += 1
+	end
+	mut hidden: Array<Boolean> := []
+	lines.each do |_line|
+		hidden.push(false)
+	end
+	index = 0
+	while index < generated.import_count[0]
+		path := load_string(generated.import_paths, index)
+		mut name := load_string(generated.import_declarations, index)
+		if load_integer(generated.import_kinds, index) == 1
+			name = standard_package_root(standard_package_target(path))
+		end
+		if explicit.key?(name) || paths.key?(path)
+			hidden[load_integer(generated.import_lines, index) - 1] = true
+		end
+		index += 1
+	end
+	mut filtered := ""
+	index = 0
+	while index < lines.size()
+		if !hidden[index]
+			filtered += lines[index]
+		end
+		filtered += "\n"
+		index += 1
+	end
+	return filtered + authored
+end
+
+# Reconstructed bindings need the visible alias, while values retain their
+# canonical record identity and render with the original declaration name.
+def repl_type_name(state: CompilerState, type_name: String): String
+	if hash_key_type(type_name) != ""
+		return "Hash<" + hash_key_type(type_name) + ", " + repl_type_name(state, hash_value_type(type_name)) + ">"
+	end
+	element := array_element_type(type_name)
+	if element != ""
+		return "Array<" + repl_type_name(state, element) + ">"
+	end
+	record_index := find_record_type(state, type_name)
+	if record_index < 0
+		return type_name
+	end
+	name := load_string(state.record_names, record_index)
+	owner := load_integer(state.record_modules, record_index)
+	if owner == state.entry_module[0]
+		return name
+	end
+	start := load_integer(state.module_import_starts, state.entry_module[0])
+	finish := start + load_integer(state.module_import_counts, state.entry_module[0])
+	mut index := start
+	while index < finish
+		if load_integer(state.import_targets, index) == owner && load_string(state.import_declarations, index) == name
+			return load_string(state.import_symbols, index)
+		end
+		index += 1
+	end
+	return name
+end

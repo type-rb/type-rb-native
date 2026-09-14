@@ -80,6 +80,7 @@ export const cliInputs = new Set([
   'compiler/cli/host.trb',
   'compiler/cli/main.trb',
   'compiler/cli/repl.trb',
+  'compiler/cli/repl_project.trb',
   'compiler/cli/repl_editor.trb',
   'compiler/cli/repl_eval.trb',
   'compiler/cli/repl_history.trb',

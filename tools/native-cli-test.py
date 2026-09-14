@@ -193,6 +193,63 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
     assert records.count('Box(value: 3) : Box') == 2, records
     assert 'Box\n3 : Integer' in records, records
 
+    # Generated project imports yield to authored declarations and imports.
+    imports_project = root / 'repl-imports'
+    (imports_project / 'src').mkdir(parents=True)
+    (imports_project / 'trbconfig.jsonc').write_text('{"name":"imports","sourceDir":"src"}')
+    (imports_project / 'src/helper.trb').write_text(
+        'def value(): String\nreturn "project"\nend\n'
+        'record Entry\nname: String\nend\n')
+    assert run('repl', cwd=imports_project, text=(
+        'import { value as label } from helper\nputs(label())\n'
+        ':type label()\n:reload\nputs(label())\n:quit\n'
+    )) == 'project\nString\nproject\nreloaded\nproject\n'
+    assert run('repl', cwd=imports_project, text=(
+        'import { value } from helper\nputs(value())\n:quit\n'
+    )) == 'project\n'
+    assert run('repl', cwd=imports_project, text=(
+        'def value(): String\nreturn "local"\nend\nputs(value())\n:quit\n'
+    )) == 'local\n'
+    assert run('repl', cwd=imports_project, text=(
+        'import {\n Entry as Item,\n value as label,\n} from helper\n'
+        'def show()\nentry := Item.new(name: label())\nputs(entry.name)\nend\n'
+        'show()\n:reload\nshow()\n:quit\n'
+    )) == 'project\nproject\nreloaded\nproject\n'
+    assert run('repl', cwd=imports_project, text=(
+        'puts("import { value as label } from helper")\n'
+        '# import { value as label } from helper\nputs(value())\n:quit\n'
+    )) == 'import { value as label } from helper\nproject\n'
+    duplicate = run('repl', cwd=imports_project, text=(
+        'import { value as first } from helper\n'
+        'import { value as second } from helper\nputs(first())\n:quit\n'))
+    assert duplicate == ('project\n(trb):2: error[TRBN4003]: '
+                         'declaration value from helper is already imported as first\n'), duplicate
+    rejected_alias = run('repl', cwd=imports_project, text=(
+        'import { missing as value } from helper\nputs(value())\n:quit\n'))
+    assert rejected_alias == ('project\n(trb):1: error[TRBN4003]: '
+                              'duplicate import binding value\n'), rejected_alias
+    prior_use = run('repl', cwd=imports_project, text=(
+        'puts(value())\nimport { value as label } from helper\n'
+        'puts(value())\n:quit\n'))
+    assert prior_use == ('project\nproject\n(trb):1: error[TRBN4003]: '
+                         'unresolved function value\n'), prior_use
+    for standard_import, expression in (
+            ('import trb/std/math', 'Math.sqrt(9.0).to_i()'),
+            ('import trb/std/math as Numbers', 'Numbers.sqrt(9.0).to_i()'),
+            ('import trb/std/process as Command', 'Command.argv().size()')):
+        expected = '0\n' if 'process' in standard_import else '3\n'
+        assert run('repl', cwd=imports_project, text=(
+            standard_import + '\nputs(' + expression + ')\n:quit\n')) == expected
+
+    record_alias = run('repl', cwd=imports_project, text=(
+        'import { Entry as Item } from helper\n'
+        'entry := Item.new(name: "retained")\nentry.name\n:type entry\n'
+        'entries := [entry]\nentries[0].name\n:reload\nentries[0].name\n:quit\n'))
+    assert 'Entry(name: "retained") : Item\n' in record_alias, record_alias
+    assert 'Array<Item>\n' in record_alias and 'Item\n' in record_alias, record_alias
+    assert record_alias.count('"retained" : String\n') == 3, record_alias
+    assert 'error' not in record_alias, record_alias
+
     # Imported record aliases retain declaration identity inside Array types.
     record_project = root / 'record-arrays'
     record_project.mkdir()

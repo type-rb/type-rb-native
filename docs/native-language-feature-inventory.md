@@ -13,7 +13,7 @@ Each count describes registered probes, not language coverage percentages.
 | Conditions and value-producing branches | basic | 2 / 7 | Nested branches, safe common types and transfer branches; scope and diagnostic boundaries | IfStatement |
 | Loop control and transfers | basic | 2 / 5 | Nested next/break/return targets, conditional transfer effects and lexical cleanup | WhileStatement, BreakStatement, NextStatement |
 | Case statements and expressions | basic | 3 / 3 | Exhaustiveness, repeated/unreachable branches and pattern-binding diagnostics | CaseStatement |
-| Records and field bindings | basic | 1 / 5 | Record default allocation/evaluation order, repeated construction and nominal cycles | RecordStatement, RecordFieldStatement |
+| Records and field bindings | basic | 1 / 6 | Record default allocation/evaluation order, repeated construction and nominal cycles | RecordStatement, RecordFieldStatement |
 | Member access and projections | basic | 1 / 4 | Safe member access, chained field narrowing and receiver replacement | MemberExpression |
 | Nullable values and narrowing | basic | 4 / 5 | Field/loop/callback narrowing, invalidation after mutation and safe member access |  |
 | Enums and tagged values | basic | 3 / 3 | Named payloads, raw conversion failures, enum methods and nested managed payloads | EnumStatement, EnumMemberStatement |
@@ -31,7 +31,7 @@ Each count describes registered probes, not language coverage percentages.
 | Explicit interface conformance | basic | 1 / 1 | Generic conformance, variance, inherited contracts and rejection controls | InterfaceStatement |
 | Modules and constant lookup | basic | 1 / 1 | Cross-module constants, member visibility and runtime initialization order | ModuleStatement |
 | Symbol values | basic | 1 / 1 | Symbol typing, equality and public receiver operations | SymbolLiteral |
-| Project imports and declaration identity | basic | 1 / 1 | Bare/named aliases, graph conflicts, missing/unused imports and file/project/REPL identity | ImportStatement |
+| Project imports and declaration identity | basic | 0 / 4 | Bare/named aliases, graph conflicts, missing/unused imports and file/project/REPL identity | ImportStatement |
 | Target source interop | toolchain | 0 / 0 | Go/Ruby/TypeScript source emission and platform interop | NativeStatement, NativeBlock, NativeExpression |
 | JSX and web bindings | packages | 0 / 0 | Typed JSX and official web-package boundaries | JSXElement |
 | Package capability activation | packages | 0 / 0 | Package-owned activation and resolution | ActivateStatement |

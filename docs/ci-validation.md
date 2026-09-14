@@ -64,6 +64,9 @@ points, tests the CLI/REPL and packages Darwin/Linux artifacts. CLI-only changes
 still run reference formatting/type checks and quick tests. Changing core
 source alongside an adapter restores core and comparative checks. Documentation
 under `compiler/` no longer accidentally triggers a separate CLI matrix.
+The extracted `compiler/cli/repl_project.trb` is an explicit CLI input: the
+builder stages every CLI module, and both target CLI authorities execute the
+project/import, retained-record, replay and shared-language controls that use it.
 
 The documentation authority checks evidence retention, skill metadata, public
 path hygiene, the capability catalog and benchmark explorer. Pages does not
