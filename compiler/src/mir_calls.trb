@@ -3,6 +3,7 @@ import { MirFlow, mir_flow_type, mir_value_available } from mir_flow
 import { CheckedValue, checked_value, mir_checked_value, scalar_mir_disable, scalar_mir_instruction, scalar_mir_value } from checked_values
 import { MirBlock, MirCall, MirFunction, MirInstruction, MirModule, MirSignature, mir_origin_valid, mir_table_span_valid, mir_type_id, mir_value_type } from mir
 import { mir_control_active, mir_control_prepare } from mir_control
+import { mir_intrinsic_signature_error, mir_runtime_adapter } from mir_intrinsics
 import { compiler_host_intrinsic, compiler_runtime_intrinsic } from resolution
 import { CheckedLocals, CompilerState } from state
 import { load_integer, load_string } from storage
@@ -31,14 +32,18 @@ def mir_declare_signatures(mut state: CompilerState)
 		end
 		source := load_integer(state.function_modules, index)
 		mut kind := 0
+		mut adapter := 0
+		name := load_string(state.function_names, index)
 		if compiler_runtime_intrinsic(state, index)
 			kind = 1
+			adapter = mir_runtime_adapter(name)
 		end
 		if compiler_host_intrinsic(state, index)
-			kind = 1
+			kind = 2
+			adapter = 9
 		end
 		mir_semantic_type_id(state.scalar_mir, load_string(state.function_result_types, index))
-		state.scalar_mir.signatures.push(MirSignature.new(id: index, kind: kind, source_id: source, line: load_integer(state.function_lines, index), parameter_types: types, parameter_mutable: mutable, result_type: load_string(state.function_result_types, index)))
+		state.scalar_mir.signatures.push(MirSignature.new(id: index, kind: kind, name: name, adapter: adapter, source_id: source, line: load_integer(state.function_lines, index), parameter_types: types, parameter_mutable: mutable, result_type: load_string(state.function_result_types, index)))
 		index += 1
 	end
 end
@@ -64,7 +69,7 @@ def mir_checked_call(mut state: CompilerState, mut locals: CheckedLocals, callee
 		return checked_value(result_type, 0, 9007199254740991, 0)
 	end
 	signature := state.scalar_mir.signatures[callee]
-	if signature.kind != 0 || (result_type != "Void" && !mir_call_value_type(state.scalar_mir, result_type))
+	if result_type != "Void" && !mir_call_value_type(state.scalar_mir, result_type)
 		scalar_mir_disable(locals)
 	end
 	signature.parameter_types.each do |type_name|
@@ -102,7 +107,7 @@ def mir_signatures_error(native_module: MirModule): String
 	mut index := 0
 	while index < native_module.signatures.size()
 		signature := native_module.signatures[index]
-		if signature.id != index || signature.kind < 0 || signature.kind > 1
+		if signature.id != index || signature.kind < 0 || signature.kind > 2
 			return "MIR declaration identity is invalid"
 		end
 		if !mir_origin_valid(signature.source_id, signature.line, native_module.source_count[0])
@@ -121,6 +126,10 @@ def mir_signatures_error(native_module: MirModule): String
 				return "MIR declaration parameter mutability is invalid"
 			end
 			parameter += 1
+		end
+		external_error := mir_intrinsic_signature_error(native_module, signature)
+		if external_error != ""
+			return external_error
 		end
 		index += 1
 	end
@@ -161,7 +170,7 @@ def mir_call_error(flow: MirFlow, native_module: MirModule, function: MirFunctio
 		return "MIR call declaration is missing"
 	end
 	signature := native_module.signatures[call.callee]
-	if signature.kind != 0 || call.effects != 15
+	if call.effects != 15
 		return "MIR call effects or adapter differ"
 	end
 	if !mir_table_span_valid(call.argument_start, call.argument_count, native_module.arguments.size())

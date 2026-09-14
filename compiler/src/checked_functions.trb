@@ -1,0 +1,100 @@
+import { check_block } from checked_program
+import { checked_hash_verify } from hash_checked
+import { mir_add_parameter, scalar_mir_begin, scalar_mir_commit } from mir_builder
+import { mir_control_active, mir_control_prepare, mir_control_return } from mir_control
+import { optimize_verified_mir } from mir_passes
+import { mir_managed_type, mir_semantic_type_id } from mir_types
+import { verify_mir } from mir_verifier
+import { validate_import_usage } from resolution
+import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_add, locals_new } from state
+import { load_integer, load_string } from storage
+
+# Parameter binding and body checking are separate semantic stages. Production
+# always starts MIR here; retained adapter controls can exercise the body stage
+# with an explicit test-only disabled builder, without a source-language marker.
+def checked_function_locals(mut state: CompilerState, function_index: Integer): CheckedLocals
+	state.active_module[0] = load_integer(state.function_modules, function_index)
+	mut locals := locals_new(state.token_count[0] + 1)
+	scalar_mir_begin(state, function_index, locals)
+	parameter_start := load_integer(state.function_parameter_starts, function_index)
+	parameter_finish := parameter_start + load_integer(state.function_parameter_counts, function_index)
+	mut parameter_index := parameter_start
+	while parameter_index < parameter_finish
+		added := local_add(
+			state,
+			locals,
+			load_string(state.parameter_names, parameter_index),
+			load_string(state.parameter_types, parameter_index),
+			load_integer(state.parameter_mutable, parameter_index),
+			load_integer(state.parameter_lines, parameter_index),
+		)
+		if added
+			mir_add_parameter(state, locals, parameter_index)
+		end
+		parameter_index += 1
+	end
+	return locals
+end
+
+def check_function_body(mut state: CompilerState, function_index: Integer, mut locals: CheckedLocals): Boolean
+	parameter_start := load_integer(state.function_parameter_starts, function_index)
+	parameter_finish := parameter_start + load_integer(state.function_parameter_counts, function_index)
+	mut parameter_index := parameter_start
+	while parameter_index < parameter_finish
+		if locals.mir_state[0] == 1 && mir_managed_type(state.scalar_mir, mir_semantic_type_id(state.scalar_mir, load_string(state.parameter_types, parameter_index)))
+			mir_control_prepare(state, locals)
+		end
+		parameter_index += 1
+	end
+	result_type := load_string(state.function_result_types, function_index)
+	if (result_type == "Void" || mir_managed_type(state.scalar_mir, mir_semantic_type_id(state.scalar_mir, result_type))) && locals.mir_state[0] == 1
+		mir_control_prepare(state, locals)
+	end
+	# The second cursor cell carries one adjacent declaration fact into a loop.
+	mut position := [load_integer(state.function_body_starts, function_index), 0]
+	check_block(state, position, locals, load_string(state.function_result_types, function_index), - 1)
+	if position[0] != load_integer(state.function_body_ends, function_index)
+		diagnostic(
+			state,
+			"TRBN4004",
+			load_integer(state.function_lines, function_index),
+			"checker did not consume the complete function body",
+		)
+	end
+	if result_type == "Void" && mir_control_active(locals) && locals.mir_control[6] == 0
+		mir_control_return(state, locals, - 1)
+	end
+	state.scalar_mir.array_regions.push(locals.mir_array)
+	if !has_diagnostic(state)
+		mir_error := scalar_mir_commit(state, function_index, locals)
+		if mir_error != ""
+			diagnostic(
+				state,
+				"TRBN4004",
+				load_integer(state.function_lines, function_index),
+				mir_error,
+			)
+		end
+	end
+	return !has_diagnostic(state)
+end
+
+def finalize_checked_module(mut state: CompilerState): Boolean
+	if !has_diagnostic(state)
+		mut mir_error := verify_mir(state.scalar_mir, false)
+		if mir_error == ""
+			optimize_verified_mir(state.scalar_mir)
+			mir_error = verify_mir(state.scalar_mir, true)
+		end
+		if mir_error != ""
+			diagnostic(state, "TRBN4004", 1, mir_error)
+		end
+	end
+	if !has_diagnostic(state)
+		checked_hash_verify(state)
+	end
+	if !has_diagnostic(state)
+		validate_import_usage(state)
+	end
+	return !has_diagnostic(state)
+end

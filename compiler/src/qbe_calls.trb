@@ -1,0 +1,41 @@
+import { MirInstruction, MirSignature, mir_function_index } from mir
+import { mir_call_symbol } from mir_intrinsics
+import { QbeEmitContext, QbeValue, emit_temporary, emitted_value, qbe_type } from qbe_context
+import { QbeOutput, qbe_output_line } from qbe_output
+import { CompilerState } from state
+
+# ABI adaptation consumes the checked declaration; it cannot select a different
+# symbol from mutable source tokens, aliases or the frontend's lookup tables.
+def emit_declared_call(signature: MirSignature, arguments: String, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
+	text := "call $" + mir_call_symbol(signature) + "(" + arguments + ")"
+	if signature.result_type == "Void"
+		qbe_output_line(output, "\t" + text)
+		return emitted_value("", "Void", 0, "", "")
+	end
+	result := emit_temporary(context)
+	qbe_output_line(output, "\t" + result + " =" + qbe_type(signature.result_type) + " " + text)
+	return emitted_value(result, signature.result_type, 0, "", "")
+end
+
+def emit_mir_call(state: CompilerState, instruction: MirInstruction, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
+	call := state.scalar_mir.calls[instruction.payload]
+	signature := state.scalar_mir.signatures[call.callee]
+	mut arguments := ""
+	mut index := 0
+	while index < call.argument_count
+		if index > 0
+			arguments += ", "
+		end
+		arguments += qbe_type(signature.parameter_types[index]) + " " + operands[state.scalar_mir.arguments[call.argument_start + index]]
+		index += 1
+	end
+	# All calls retain allocation/mutation/I/O/failure effects until a verified
+	# interprocedural summary refines them. MIR owns live-before root publication.
+	if signature.kind == 0
+		callee_index := mir_function_index(state.scalar_mir, call.callee)
+		if callee_index >= 0 && state.scalar_mir.functions[callee_index].kind == 1
+			context.inline_budget[2] =- 1
+		end
+	end
+	return emit_declared_call(signature, arguments, context, output)
+end
