@@ -250,6 +250,18 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
     assert record_alias.count('"retained" : String\n') == 3, record_alias
     assert 'error' not in record_alias, record_alias
 
+    # A later local record can reorder compiler IDs without changing retained
+    # imported values, including aliases held by Arrays and Hashes.
+    relocated = run('repl', cwd=imports_project, text=(
+        'import { Entry as Item } from helper\n'
+        'entry := Item.new(name: "retained")\nentries := [entry]\n'
+        'table: Hash<String, Item> := {"saved" => entry}\n'
+        'record Entry\ncount: Integer\nend\n'
+        'puts(entry.name)\nputs(entries[0].name)\n'
+        'puts(table["saved"].name)\n:quit\n'))
+    assert relocated.endswith('retained\nretained\nretained\n'), relocated
+    assert 'error' not in relocated, relocated
+
     # Imported record aliases retain declaration identity inside Array types.
     record_project = root / 'record-arrays'
     record_project.mkdir()
