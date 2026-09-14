@@ -263,16 +263,22 @@ def mir_function_array_loops(native_module: MirModule, function: MirFunction): A
 	if function.kind != 3
 		return plans
 	end
-	flow := mir_build_flow(native_module, function, mir_flow_blocks(native_module, function))
 	# Sort by block identity so physical block reordering preserves the plan.
+	# Most functions have no candidate. Inspect local guard shapes before
+	# constructing dominance and forwarding information for the whole function.
 	mut headers: Array<Integer> := []
 	mut index := 0
 	while index < function.block_count
-		if native_module.blocks[function.block_start + index].terminator == 2
-			mir_live_add(headers, native_module.blocks[function.block_start + index].id)
+		block := native_module.blocks[function.block_start + index]
+		if mir_array_loop_candidate(native_module, block)
+			mir_live_add(headers, block.id)
 		end
 		index += 1
 	end
+	if headers.size() == 0
+		return plans
+	end
+	flow := mir_build_flow(native_module, function, mir_flow_blocks(native_module, function))
 	headers.each do |id|
 		plan := mir_array_loop(native_module, function, flow, flow.blocks[integer_string(id)])
 		if plan.header >= 0
@@ -280,6 +286,33 @@ def mir_function_array_loops(native_module: MirModule, function: MirFunction): A
 		end
 	end
 	return plans
+end
+
+def mir_array_loop_candidate(native_module: MirModule, block: MirBlock): Boolean
+	if block.terminator != 2
+		return false
+	end
+	mut length :=- 1
+	mut index := block.instruction_start
+	while index < block.instruction_start + block.instruction_count
+		instruction := native_module.instructions[index]
+		if instruction.result == block.condition && instruction.kind == 7 && instruction.payload == 8
+			length = instruction.second
+		end
+		index += 1
+	end
+	if length < 0
+		return false
+	end
+	index = block.instruction_start
+	while index < block.instruction_start + block.instruction_count
+		instruction := native_module.instructions[index]
+		if instruction.result == length && instruction.kind == 20
+			return true
+		end
+		index += 1
+	end
+	return false
 end
 
 def mir_array_loops_equal(left: Array<MirArrayLoop>, right: Array<MirArrayLoop>): Boolean
