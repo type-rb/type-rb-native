@@ -94,6 +94,12 @@
 | UTF-8 collection storage and aliases | accepts | accepts | matches reference | matches reference |
 | UTF-8 and NUL literal byte boundaries | accepts | accepts | matches reference | matches reference |
 | Long UTF-8 literals | accepts | accepts | matches reference | matches reference |
+| Required named-only arguments preserve authored evaluation order | accepts | accepts | matches reference | matches reference |
+| Record labels may be reordered with contextual field types | accepts | accepts | matches reference | matches reference |
+| Duplicate named arguments are rejected | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Positional-only parameters cannot be supplied by name | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Positional arguments cannot follow named arguments | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Named-only arguments retain imported declaration identity | accepts | accepts | matches reference | matches reference |
 | Imported record aliases survive retained bindings | accepts | accepts | matches reference | matches reference |
 | Standard package aliases preserve checked receiver identity | accepts | accepts | matches reference | matches reference |
 | Session declarations supersede automatic project imports | accepts | accepts | matches reference | matches reference |

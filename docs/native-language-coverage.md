@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 95 ordinary-path probes and 32 feature
+Status: the shared contract contains 101 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -36,6 +36,32 @@ remain required. Temporary performance/size regressions are observed during
 integration; detailed qualification occurs at coherent milestones. A feature
 need not manufacture a runtime speedup or a separate size budget revision to
 justify its existence. Final performance goals remain unchanged.
+
+## Required named arguments and record field order
+
+Ordinary functions support required positional parameters followed by `*` and
+required named-only parameters. Explicit arguments run in authored order, then
+MIR call operands are arranged in declaration order. Named labels resolve through
+the selected declaration, including imported aliases. A label cannot supply a
+positional-only parameter; duplicate/unknown labels, positional arguments after
+named arguments, missing required values and wrong types are rejected.
+
+Record construction remains keyword-only and now accepts reordered fields. Each
+initializer uses its selected field's expected type, preserving contextual Float
+conversion and managed values across later initializer evaluation. The shared
+binding module also serves the REPL. Tests erase source and label metadata,
+reverse MIR blocks and force collection before allocation/calls. QBE consumes
+only normalized typed operands; it performs no label lookup or evaluation-order
+analysis.
+
+Configured REPL imports suppress the corresponding generated project imports.
+Authored function and record aliases retain declaration identity across calls,
+retained bindings and replay; see the [REPL contracts](native-cli.md#repl).
+
+Default arguments and record default initializers remain explicit gaps. This
+change does not claim defaults, method/function-value calls or payload-enum
+argument coverage. Their declaration-scope and omitted-value semantics require
+further checked/MIR work.
 
 ## Ordinary UTF-8 String foundation
 
