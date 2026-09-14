@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 98 ordinary-path probes and 32 feature
+Status: the shared contract contains 101 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -54,9 +54,9 @@ reverse MIR blocks and force collection before allocation/calls. QBE consumes
 only normalized typed operands; it performs no label lookup or evaluation-order
 analysis.
 
-The configured REPL still has the existing automatic-import collision when an
-authored alias names a declaration already exposed by its project environment.
-The import-alias probes retain that separate gap; ordinary aliased calls pass.
+Configured REPL imports suppress the corresponding generated project imports.
+Authored function and record aliases retain declaration identity across calls,
+retained bindings and replay; see the [REPL contracts](native-cli.md#repl).
 
 Default arguments and record default initializers remain explicit gaps. This
 change does not claim defaults, method/function-value calls or payload-enum

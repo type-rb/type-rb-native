@@ -69,7 +69,7 @@
 | Module declaration and constant | rejects valid input | rejects valid input | not reached | rejects as reference |
 | Top-level constant | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Symbol literal equality | rejects valid input | rejects valid input | not reached | rejects valid input |
-| Named import alias and reachable file | accepts | accepts | matches reference | rejects valid input |
+| Named import alias and reachable file | accepts | accepts | matches reference | matches reference |
 | Reject unused local binding | incorrectly accepts | incorrectly accepts | differs | output differs |
 | Reject immutable binding assignment | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Reject record field rebinding | rejects as reference | rejects as reference | not reached | rejects as reference |
@@ -99,4 +99,7 @@
 | Duplicate named arguments are rejected | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Positional-only parameters cannot be supplied by name | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Positional arguments cannot follow named arguments | rejects as reference | rejects as reference | not reached | rejects as reference |
-| Named-only arguments retain imported declaration identity | accepts | accepts | matches reference | rejects valid input |
+| Named-only arguments retain imported declaration identity | accepts | accepts | matches reference | matches reference |
+| Imported record aliases survive retained bindings | accepts | accepts | matches reference | matches reference |
+| Standard package aliases preserve checked receiver identity | accepts | accepts | matches reference | matches reference |
+| Session declarations supersede automatic project imports | accepts | accepts | matches reference | matches reference |

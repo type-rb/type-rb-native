@@ -41,7 +41,7 @@ both systems; it has no libedit or Wasm dependency.
 Checkout bootstrap currently supports Darwin arm64 and Linux arm64, even
 though the internal compiler also has a Linux amd64 target profile.
 
-The script pins the `bootstrap-seed-2026-09-09-record-arrays` release assets and their SHA-256
+The script pins the `bootstrap-seed-2026-09-12-compiler-names` release assets and their SHA-256
 digests, and the QBE 1.3 archive digest. Cache files live in `.trb/bootstrap`;
 downloaded seeds live under their release tag there. Updating the pin selects
 a new cache entry without overwriting an older seed. The changed build script
@@ -103,6 +103,20 @@ A TypeRB-authored evaluator retains bindings and aggregate identities between
 submissions. It executes only the new input, so earlier I/O is not replayed.
 Functions, records, imports, multiline control flow, scalar values and the
 ordinary compiler's supported arrays can be explored interactively.
+
+Unique project exports are available automatically. Authored named imports
+(including aliases), unaliased bare imports and local declarations suppress the
+corresponding generated imports. The ordinary resolver still rejects duplicate
+authored bindings. A declaration that invalidates earlier session input is
+rejected before evaluation and leaves the session usable. Only explicit load or
+reload replays earlier effects.
+
+Project/prelude construction is isolated in `compiler/cli/repl_project.trb`.
+The filter uses parsed declarations and preserves hidden prelude line counts;
+comments and strings do not become imports. Reconstructed bindings and type
+labels use visible record aliases, including nested Array/Hash values, while
+stored values retain their canonical record identity. Supported standard-package
+aliases resolve through the checked import binding in the evaluator.
 
 ```text
 mut values := [1, 2]
