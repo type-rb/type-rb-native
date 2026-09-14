@@ -38,6 +38,20 @@ def compiler_test_check_direct(mut state: CompilerState): Boolean
 	return finalize_checked_module(state)
 end
 
+# Explicit legacy region controls; production never selects this builder.
+def compiler_test_check_all_direct(mut state: CompilerState): Boolean
+	mir_declare_types(state)
+	mir_declare_signatures(state)
+	mut index := 0
+	while index < state.function_count[0]
+		mut locals := checked_function_locals(state, index)
+		scalar_mir_disable(locals)
+		check_function_body(state, index, locals)
+		index += 1
+	end
+	return finalize_checked_module(state)
+end
+
 def compiler_test_instruction_with_cell(instruction: MirInstruction, field: Integer, value: Integer): MirInstruction
 	mut row := [instruction.kind, instruction.result, instruction.first, instruction.second, instruction.payload, instruction.failure, instruction.source_id, instruction.line]
 	row[field] = value
@@ -330,14 +344,14 @@ describe("Native TypeRB frontend") do
 		expect(lex(state, source)).to_be_true()
 		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(resolve(state)).to_be_true()
-		expect(check(state)).to_be_true()
+		expect(compiler_test_check_all_direct(state)).to_be_true()
 		# A different loop bound does not invalidate header reuse. Access
 		# checks still test the indexed Array's own length at runtime.
 		expect(state.scalar_mir.array_headers).to_equal([[], [0, 1], [], [], [], [], [1], [1, 0], []])
 		expect(verify_mir(state.scalar_mir, true)).to_equal("")
 	end
 
-	test("retains stable Array-header analysis when typed Array control moves through MIR") do
+	test("drops token-bound Array plans when typed control moves through MIR") do
 		source := "def copy(input: Array<Float>, mut output: Array<Float>)\n\tmut index := 0\n\twhile index < input.size()\n\t\toutput[index] = input[index]\n\t\tindex += 1\n\tend\n\treturn\nend\n\ndef main()\n\treturn\nend\n"
 		mut state := compiler_new(source.size() + 1)
 		expect(lex(state, source)).to_be_true()
@@ -346,7 +360,8 @@ describe("Native TypeRB frontend") do
 		expect(check(state)).to_be_true()
 		expect(state.scalar_mir.functions[mir_function_index(state.scalar_mir, 0)].kind).to_equal(3)
 		expect(state.scalar_mir.array_headers.size()).to_equal(2)
-		expect(state.scalar_mir.array_headers[0].size() > 0).to_be_true()
+		expect(state.scalar_mir.array_regions).to_equal([[], []])
+		expect(state.scalar_mir.array_headers[0]).to_equal([])
 		expect(state.scalar_mir.array_headers[1]).to_equal([])
 		qbe := output_source(emit_qbe(state))
 		expect(qbe.include?("@mir_")).to_be_true()
@@ -359,7 +374,7 @@ describe("Native TypeRB frontend") do
 		expect(lex(state, source)).to_be_true()
 		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(resolve(state)).to_be_true()
-		expect(check(state)).to_be_true()
+		expect(compiler_test_check_all_direct(state)).to_be_true()
 		expect(state.scalar_mir.array_headers).to_equal([[1, 2], []])
 		qbe := output_source(emit_qbe(state))
 		expect(occurrence_count(qbe, " =w cultl ")).to_equal(2)
@@ -379,7 +394,7 @@ describe("Native TypeRB frontend") do
 			expect(lex(state, source)).to_be_true()
 			expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
 			expect(resolve(state)).to_be_true()
-			expect(check(state)).to_be_true()
+			expect(compiler_test_check_all_direct(state)).to_be_true()
 			expect(state.scalar_mir.array_headers).to_equal([[], []])
 			emit_qbe(state)
 			expect(has_diagnostic(state)).to_be_false()
@@ -396,7 +411,7 @@ describe("Native TypeRB frontend") do
 			expect(lex(state, source)).to_be_true()
 			expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
 			expect(resolve(state)).to_be_true()
-			expect(check(state)).to_be_true()
+			expect(compiler_test_check_all_direct(state)).to_be_true()
 			expect(state.scalar_mir.array_headers[0].size() > 0).to_be_true()
 			expect(verify_mir(state.scalar_mir, true)).to_equal("")
 			emit_qbe(state)
@@ -423,7 +438,7 @@ describe("Native TypeRB frontend") do
 			expect(lex(state, source)).to_be_true()
 			expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
 			expect(resolve(state)).to_be_true()
-			expect(check(state)).to_be_true()
+			expect(compiler_test_check_all_direct(state)).to_be_true()
 			expect(state.scalar_mir.array_headers).to_equal([[], []])
 			expect(verify_mir(state.scalar_mir, true)).to_equal("")
 			emit_qbe(state)
@@ -452,7 +467,7 @@ describe("Native TypeRB frontend") do
 			expect(lex(state, source)).to_be_true()
 			expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
 			expect(resolve(state)).to_be_true()
-			checked := check(state)
+			checked := compiler_test_check_all_direct(state)
 			if !checked
 				expect(load_string(state.diagnostic_messages, 0)).to_equal("")
 			end
@@ -470,7 +485,7 @@ describe("Native TypeRB frontend") do
 		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(resolve(state)).to_be_true()
 		expect(check(state)).to_be_true()
-		expect(state.scalar_mir.array_headers[0].size() > 0).to_be_true()
+		expect(state.scalar_mir.array_headers[0]).to_equal([])
 		qbe := output_source(emit_qbe(state))
 		expect(state.scalar_mir.functions[mir_function_index(state.scalar_mir, 0)].kind).to_equal(3)
 		expect(qbe.include?("call $trbn_array_address")).to_be_true()
@@ -483,7 +498,7 @@ describe("Native TypeRB frontend") do
 		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(resolve(state)).to_be_true()
 		expect(check(state)).to_be_true()
-		expect(state.scalar_mir.array_headers[0].size() > 0).to_be_true()
+		expect(state.scalar_mir.array_headers[0]).to_equal([])
 		qbe := output_source(emit_qbe(state))
 		expect(state.scalar_mir.functions[mir_function_index(state.scalar_mir, 0)].kind).to_equal(3)
 		expect(qbe.include?("call $trbn_array_address")).to_be_true()
@@ -496,7 +511,7 @@ describe("Native TypeRB frontend") do
 		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(resolve(state)).to_be_true()
 		expect(check(state)).to_be_true()
-		expect(state.scalar_mir.array_headers[0].size() > 0).to_be_true()
+		expect(state.scalar_mir.array_headers[0]).to_equal([])
 		qbe := output_source(emit_qbe(state))
 		expect(state.scalar_mir.functions[mir_function_index(state.scalar_mir, 0)].kind).to_equal(3)
 		expect(qbe.include?("call $trbn_array_address")).to_be_true()
@@ -524,10 +539,10 @@ describe("Native TypeRB frontend") do
 		expect(state.scalar_mir.functions[mir_function_index(state.scalar_mir, 0)].kind).to_equal(3)
 		expect(state.scalar_mir.functions[mir_function_index(state.scalar_mir, 1)].kind).to_equal(3)
 		expect(state.scalar_mir.functions[mir_function_index(state.scalar_mir, 2)].kind).to_equal(3)
-		# Legacy direct-header controls remain separate from general CFG plans.
-		expect(state.scalar_mir.array_headers[0].size() > 0).to_be_true()
-		expect(state.scalar_mir.array_headers[1].size() > 0).to_be_true()
-		expect(state.scalar_mir.array_headers[2].size() > 0).to_be_true()
+		# General CFG plans no longer retain the unused direct-header projection.
+		expect(state.scalar_mir.array_headers[0]).to_equal([])
+		expect(state.scalar_mir.array_headers[1]).to_equal([])
+		expect(state.scalar_mir.array_headers[2]).to_equal([])
 		expect(state.scalar_mir.array_loops[0].size()).to_equal(0)
 		expect(state.scalar_mir.array_loops[1].size()).to_equal(1)
 		expect(state.scalar_mir.array_loops[2].size()).to_equal(1)

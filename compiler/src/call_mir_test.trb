@@ -1,3 +1,7 @@
+import { intrinsic_mir_erase } from intrinsic_mir_test
+import { logical_checked_source, logical_run_qbe_arguments } from logical_test
+import trb/std/process
+import trb/std/result
 import { check, emit_qbe } from compiler
 import { lex } from lexer
 import { control_test_output } from control_mir_test
@@ -104,4 +108,128 @@ describe("MIR declaration-bound calls") do
 		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR function parameter type differs")
 	end
 
+end
+
+# Standard package identities are separate from same-spelled user declarations.
+def standard_call_test_state(): CompilerState
+	source := "import trb/std/process as Args\nimport trb/std/math as Numeric\ndef main()\nmut first := Args.argv()\nfirst.push(\"local\")\nsecond := Args.argv()\nroot := Numeric.sqrt(second[0].to_i())\nputs(root.to_i())\nputs(first.size())\nputs(first[1])\nputs(second.size())\nputs(sqrt(5))\nputs(argv())\nputs(leaf())\nnan := Numeric.sqrt(- 1)\nputs(nan != nan)\nreturn\nputs(\"unreachable main\")\nend\ndef sqrt(value: Integer): Integer\nreturn value + 1\nend\ndef argv(): Integer\nreturn 7\nend\ndef leaf(): Integer\nreturn 42\nputs(\"unreachable leaf\")\nreturn 99\nend\n"
+	mut state := logical_checked_source(source)
+	expect(check(state)).to_be_true()
+	return state
+end
+
+describe("MIR standard package calls") do
+	test("binds aliases and widening with managed results without capturing user names") do
+		state := standard_call_test_state()
+		expect(state.scalar_mir.functions.size()).to_equal(state.function_count[0])
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		expect(state.scalar_mir.signatures.size()).to_equal(6)
+		expect(state.scalar_mir.signatures[1].kind).to_equal(0)
+		expect(state.scalar_mir.signatures[2].kind).to_equal(0)
+		expect(state.scalar_mir.signatures[4].adapter).to_equal(10)
+		expect(state.scalar_mir.signatures[5].adapter).to_equal(11)
+		expect(state.scalar_mir.functions[mir_function_index(state.scalar_mir, 3)].kind).to_equal(1)
+		expect(state.scalar_mir.root_plans[0].capacity >= 2).to_be_true()
+		state.scalar_mir.array_regions.each do |region|
+			expect(region.size()).to_equal(0)
+		end
+	end
+
+	test("executes erased reordered standard calls and retains live argv results at collection") do
+		mut state := standard_call_test_state()
+		before := control_test_output(emit_qbe(state))
+		intrinsic_mir_erase(state)
+		expect(control_test_output(emit_qbe(state))).to_equal(before)
+		state.scalar_mir.functions.each do |function|
+			if function.kind != 3
+				next
+			end
+			mut left := function.block_start
+			mut right := left + function.block_count - 1
+			while left < right
+				saved := state.scalar_mir.blocks[left]
+				state.scalar_mir.blocks[left] = state.scalar_mir.blocks[right]
+				state.scalar_mir.blocks[right] = saved
+				left += 1
+				right -= 1
+			end
+		end
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		mut forced := ""
+		mut caller := false
+		mut hooks := 0
+		control_test_output(emit_qbe(state)).split("\n").each do |line|
+			if line.start_with?("function ")
+				caller = line.include?("$trbnf0(")
+			end
+			if line == "}"
+				caller = false
+			end
+			if caller && (line.include?("call $trbn_process_argv(") || line.include?("call $sqrt("))
+				forced += "\tcall $trbn_gc_collect(w 0)\n"
+				hooks += 1
+			end
+			forced += line + "\n"
+		end
+		expect(hooks).to_equal(4)
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe_arguments(qbe, forced, ["81"])
+			when Result::Ok(actual)
+				expect(actual).to_equal("9\n2\nlocal\n1\n6\n7\n42\ntrue\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+
+	test("rejects forged standard names signatures and compiler privileges") do
+		mut mode := 0
+		while mode < 8
+			mut state := standard_call_test_state()
+			old := state.scalar_mir.signatures[5]
+			mut kind := old.kind
+			mut adapter := old.adapter
+			mut name := old.name
+			mut parameters := old.parameter_types
+			mut mutable := old.parameter_mutable
+			mut result := old.result_type
+			if mode == 0
+				adapter = 99
+			elsif mode == 1
+				name = "sqrt"
+			elsif mode == 2
+				parameters = ["Integer"]
+			elsif mode == 3
+				mutable = [1]
+			elsif mode == 4
+				result = "Array<String>"
+			elsif mode == 5
+				kind = 1
+			elsif mode == 6
+				kind = 2
+				adapter = 9
+			else
+				parameters = []
+				mutable = []
+			end
+			state.scalar_mir.signatures[5] = MirSignature.new(id: old.id, kind: kind, name: name, adapter: adapter, source_id: old.source_id, line: old.line, parameter_types: parameters, parameter_mutable: mutable, result_type: result)
+			expect(verify_mir(state.scalar_mir, true).empty?()).to_be_false()
+			mode += 1
+		end
+	end
+
+	test("preserves package and unreachable-tail diagnostics") do
+		sources := ["import trb/std/math\ndef main()\nMath.sqrt()\nend\n", "import trb/std/process\ndef main()\nProcess.argv(1)\nend\n", "import trb/std/math\ndef main()\nMath.sqrt(true)\nend\n", "import trb/std/math\ndef main()\nMath.argv()\nend\n", "def leaf(): Integer\nreturn 42\nreturn true\nend\ndef main()\nputs(leaf())\nend\n", "def leaf(): Integer\nreturn 42\nputs(missing)\nend\ndef main()\nputs(leaf())\nend\n"]
+		sources.each do |source|
+			mut state := compiler_new(source.size() + 1)
+			expect(lex(state, source)).to_be_true()
+			expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
+			if resolve(state)
+				expect(check(state)).to_be_false()
+			end
+			expect(state.diagnostic_count[0] > 0).to_be_true()
+		end
+	end
 end
