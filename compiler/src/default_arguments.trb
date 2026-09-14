@@ -1,12 +1,12 @@
 import { integer_string } from literals
 import { CompilerState } from state
-import { load_integer, load_string, store_integer, store_string } from storage
+import { integer_storage, load_integer, load_string, sparse_integer_at, store_integer, store_string } from storage
 
 # Initializers have private function identities, normal typed signatures and
 # normal verified MIR bodies. Their only locals are preceding declaration slots.
 # They never enter the authored name index or require a backend default ABI.
 def declare_default_functions(mut state: CompilerState)
-	mut record_parameters: Hash<Integer, Integer> := {}
+	mut record_parameters := integer_storage(state.record_count[0])
 	mut index := 0
 	while index < state.default_initializers.size()
 		initializer := state.default_initializers[index]
@@ -23,8 +23,8 @@ def declare_default_functions(mut state: CompilerState)
 			field_start := load_integer(state.record_field_starts, initializer.owner)
 			count = initializer.slot - field_start
 			result_type = load_string(state.field_types, initializer.slot)
-			if !record_parameters.key?(initializer.owner)
-				record_parameters[initializer.owner] = state.parameter_count[0]
+			if sparse_integer_at(record_parameters, initializer.owner) == 0
+				store_integer(record_parameters, initializer.owner, state.parameter_count[0] + 1)
 				mut field := field_start
 				finish := field_start + load_integer(state.record_field_counts, initializer.owner)
 				while field < finish
@@ -37,7 +37,7 @@ def declare_default_functions(mut state: CompilerState)
 					field += 1
 				end
 			end
-			start = record_parameters[initializer.owner]
+			start = sparse_integer_at(record_parameters, initializer.owner) - 1
 		else
 			module_index = load_integer(state.function_modules, initializer.owner)
 			start = load_integer(state.function_parameter_starts, initializer.owner)
