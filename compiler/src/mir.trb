@@ -89,8 +89,8 @@ record MirControlLoop
 end
 
 record MirFunction
-	# 0: independent MIR fixture; 1: scalar leaf; 2: verified induction;
-	# 3: general scalar/String/Array control flow. Adapter selection is explicit.
+	# 0: independent MIR fixture; 1: scalar leaf; 3: general typed control flow.
+	# The retired positional induction adapter (2) is invalid.
 	kind: Integer
 	result_type: String
 	integer_guard: Integer
@@ -112,6 +112,15 @@ record MirValue
 	line: Integer
 end
 
+# Header reuse and checked-index elimination for one verified natural loop.
+record MirArrayLoop
+	header: Integer
+	preheader: Integer
+	owner: Integer
+	length: Integer
+	loads: Array<Integer>
+end
+
 # Derived safe-point plans contain only values demanded by future operations.
 # Each row corresponds to one instruction index; roots are sorted value IDs.
 record MirRootPlan
@@ -125,9 +134,8 @@ end
 # failure target and origin. Verified rewrites replace whole readonly records.
 # Array regions retain parameter, access, and effect operations.
 # The verifier derives their plans; input facts remain empty.
-# A verified pass may mark the complete Array induction plan as optimized
-# (kind 5, mode 2). The verifier re-derives the loop proof before a backend may
-# consume its invariant header and redundant-check decisions.
+# Array loop plans are derived from CFG edges and SSA value identities.
+# Verification re-derives them before header reuse or check elimination.
 record MirSignature
 	id: Integer
 	# 0: ordinary declaration; 1: compiler runtime; 2: typed host symbol.
@@ -151,7 +159,7 @@ record MirCall
 end
 
 # Composite values retain semantic element identity independently of ABI layout.
-# Primitive/legacy induction types keep IDs 1..8; these rows start at ID 9.
+# Primitive and low-level Array/address types keep IDs 1..8; these rows start at ID 9.
 record MirType
 	# 1 Array, 2 nominal record, 3 Hash, 4 Integer Range, 5 empty Hash.
 	kind: Integer
@@ -190,6 +198,7 @@ record MirModule
 	records: Array<MirRecord>
 	fields: Array<MirField>
 	root_plans: Array<MirRootPlan>
+	array_loops: Array<Array<MirArrayLoop>>
 	signatures: Array<MirSignature>
 	calls: Array<MirCall>
 	source_count: Array<Integer>

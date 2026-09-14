@@ -1,0 +1,156 @@
+import { check, emit_qbe } from compiler
+import { compiler_test_instruction_with_cell } from compiler_test
+import { control_test_output } from control_mir_test
+import { intrinsic_mir_erase } from intrinsic_mir_test
+import { logical_checked_source, logical_run_qbe } from logical_test
+import { MirArrayLoop, mir_function_index } from mir
+import { optimize_verified_mir } from mir_passes
+import { verify_mir } from mir_verifier
+import { CompilerState } from state
+import { load_string } from storage
+import trb/std/process
+import trb/std/result
+import { describe, expect, test } from trb/std/test
+
+def array_loop_mir_source(body: String): String
+	return "def touch(_values: Array<Integer>)\nend\ndef scan(mut values: Array<Integer>, other: Array<Integer>): Integer\nmut index := 0\nmut total := 0\n" + body + "\nreturn total\nend\ndef main()\nend\n"
+end
+
+def array_loop_mir_check(source: String): CompilerState
+	mut state := logical_checked_source(source)
+	if !check(state)
+		puts(load_string(state.diagnostic_messages, 0))
+		expect(false).to_be_true()
+	end
+	expect(state.scalar_mir.functions.size()).to_equal(state.function_count[0])
+	expect(verify_mir(state.scalar_mir, true)).to_equal("")
+	return state
+end
+
+describe("Array loop CFG MIR") do
+	test("derives loop bounds from identities across nested branches and transfers") do
+		bodies := [
+			"while index < values.size()\ntotal += values[index]\nindex += 1\nend",
+			"while index < values.size()\nif index == 1\nindex += 1\nnext\nend\ntotal += values[index]\nif total > 10\nbreak\nend\nindex += 1\nend",
+			"while index < values.size()\nif index == 1\ntotal += values[index]\nelse\ntotal -= values[index]\nend\nindex += 1\nend",
+		]
+		bodies.each do |body|
+			state := array_loop_mir_check(array_loop_mir_source(body))
+			index := mir_function_index(state.scalar_mir, 1)
+			expect(state.scalar_mir.functions[index].kind).to_equal(3)
+			expect(state.scalar_mir.array_loops[index].size()).to_equal(1)
+			expect(state.scalar_mir.array_loops[index][0].loads.size() > 0).to_be_true()
+		end
+	end
+
+	test("retains checks for different arrays changed indexes and header effects") do
+		bodies := [
+			"while index < values.size()\ntotal += other[index]\nindex += 1\nend",
+			"while index < values.size()\nindex += 1\ntotal += values[index]\nend",
+			"while index < values.size()\ntotal += values[index]\nindex -= 1\nend",
+			"while index < values.size()\ntotal += values[index]\nindex += 2\nend",
+			"while index < values.size()\ntouch(values)\ntotal += values[index]\nindex += 1\nend",
+			"while index < values.size()\nvalues.push(1)\ntotal += values[index]\nindex += 1\nend",
+			"while index < values.size()\nvalues = [1]\ntotal += values[index]\nindex += 1\nend",
+			"index = -1\nwhile index < values.size()\ntotal += values[index]\nindex += 1\nend",
+		]
+		bodies.each do |body|
+			state := array_loop_mir_check(array_loop_mir_source(body))
+			index := mir_function_index(state.scalar_mir, 1)
+			expect(state.scalar_mir.functions[index].kind).to_equal(3)
+			expect(state.scalar_mir.array_loops[index].size()).to_equal(0)
+			expect(control_test_output(emit_qbe(state)).include?("call $trbn_array_address(")).to_be_true()
+		end
+	end
+
+	test("rejects forged and stale plans without depending on source text") do
+		mut mode := 0
+		while mode < 9
+			mut state := array_loop_mir_check(array_loop_mir_source("while index < values.size()\ntotal += values[index]\nindex += 1\nend"))
+			index := mir_function_index(state.scalar_mir, 1)
+			old := state.scalar_mir.array_loops[index][0]
+			mut header := old.header
+			mut preheader := old.preheader
+			mut owner := old.owner
+			mut length := old.length
+			mut loads := old.loads
+			if mode == 0
+				header += 1
+			elsif mode == 1
+				preheader = old.header
+			elsif mode == 2
+				owner = 99999
+			elsif mode == 3
+				length = old.loads[0]
+			elsif mode == 4
+				loads = []
+			elsif mode == 5
+				load := state.scalar_mir.instructions[old.loads[0]]
+				state.scalar_mir.instructions[old.loads[0]] = compiler_test_instruction_with_cell(load, 3, load.result)
+			elsif mode == 6
+				# A stale induction fact must not survive a changed update.
+				state.scalar_mir.instructions.each do |instruction|
+					if instruction.kind == 6 && state.scalar_mir.literal_texts[instruction.payload] == "1"
+						state.scalar_mir.literal_texts[instruction.payload] = "-1"
+					end
+				end
+			elsif mode == 7
+				function := state.scalar_mir.functions[index]
+				mut block_index := function.block_start
+				while block_index < function.block_start + function.block_count
+					block := state.scalar_mir.blocks[block_index]
+					if block.id == old.header
+						mut position := block.instruction_start
+						while position < block.instruction_start + block.instruction_count
+							instruction := state.scalar_mir.instructions[position]
+							if instruction.result == block.condition
+								state.scalar_mir.instructions[position] = compiler_test_instruction_with_cell(instruction, 4, 9)
+							end
+							position += 1
+						end
+					end
+					block_index += 1
+				end
+			else
+				state.scalar_mir.array_loops.push([])
+			end
+			state.scalar_mir.array_loops[index][0] = MirArrayLoop.new(header: header, preheader: preheader, owner: owner, length: length, loads: loads)
+			expect(verify_mir(state.scalar_mir, true).empty?()).to_be_false()
+			mode += 1
+		end
+	end
+
+	test("executes Integer and Float reductions after source erasure and block reordering") do
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			source := "def sum(values: Array<Integer>): Integer\nmut index := 0\nmut total := 0\nwhile index < values.size()\ntotal += values[index]\nindex += 1\nend\nreturn total\nend\ndef float_sum(values: Array<Float>): Float\nmut index := 0\nmut total := 0.5\nwhile index < values.size()\ntotal += values[index]\nindex += 1\nend\nreturn total\nend\ndef main()\nempty: Array<Integer> := []\nputs(sum(empty))\nputs(sum([9]))\nputs(sum([1, 2, 3]))\nempty_f: Array<Float> := []\nputs(float_sum(empty_f) == 0.5)\nputs(float_sum([1.0, 2.0]) == 3.5)\nend\n"
+			mut state := array_loop_mir_check(source)
+			expect(state.scalar_mir.array_loops[0].size()).to_equal(1)
+			expect(state.scalar_mir.array_loops[1].size()).to_equal(1)
+			before := control_test_output(emit_qbe(state))
+			intrinsic_mir_erase(state)
+			expect(control_test_output(emit_qbe(state))).to_equal(before)
+			state.scalar_mir.functions.each do |function|
+				mut left := function.block_start
+				mut right := left + function.block_count - 1
+				while left < right
+					saved := state.scalar_mir.blocks[left]
+					state.scalar_mir.blocks[left] = state.scalar_mir.blocks[right]
+					state.scalar_mir.blocks[right] = saved
+					left += 1
+					right -= 1
+				end
+			end
+			expect(verify_mir(state.scalar_mir, true)).to_equal("")
+			optimize_verified_mir(state.scalar_mir)
+			expect(verify_mir(state.scalar_mir, true)).to_equal("")
+			case logical_run_qbe(qbe, control_test_output(emit_qbe(state)))
+			when Result::Ok(actual)
+				expect(actual).to_equal("0\n9\n6\ntrue\ntrue\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+end

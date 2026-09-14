@@ -3,12 +3,10 @@ import { mir_semantic_type_name } from mir_types
 import { integer_string, number_without_underscores } from literals
 import { MirInstruction, mir_block_index, mir_function_index } from mir
 import { mir_scalar_result_fact } from mir_analysis
-import { QbeEmitContext, QbeValue, emit_label, emit_temporary, emit_typed_load, emit_typed_store, emitted_value } from qbe_context
-import { emit_array_data_address, emit_array_header } from qbe_memory
-import { emit_checked_integer_operation, lower_binary_operand } from qbe_numeric
+import { QbeEmitContext, QbeValue, emit_label, emit_temporary, emitted_value } from qbe_context
+import { lower_binary_operand } from qbe_numeric
 import { QbeOutput, qbe_output_branch, qbe_output_line } from qbe_output
 import { CompilerState } from state
-import { store_string } from storage
 
 def emit_mir_scalar_instruction(
 		state: CompilerState,
@@ -201,91 +199,4 @@ def emit_scalar_mir(
 	qbe_output_line(output, "\t" + result + " =" + width + " copy " + unchecked.operand)
 	qbe_output_line(output, complete)
 	return emitted_value(result, checked.type_name, 0, "", "")
-end
-
-def emit_induction_mir(
-		state: CompilerState,
-		function_index: Integer,
-		element_type: String,
-		mut context: QbeEmitContext,
-		mut output: QbeOutput,
-	)
-	function := state.scalar_mir.functions[mir_function_index(state.scalar_mir, function_index)]
-	header := state.scalar_mir.blocks[function.block_start + 1]
-	body := state.scalar_mir.blocks[function.block_start + 2]
-	address_instruction := state.scalar_mir.instructions[body.instruction_start]
-	if address_instruction.payload != 2
-		return
-	end
-	float_elements := element_type == "Float"
-	reduction := header.parameter_count == 2
-	header_label := emit_label(context)
-	body_label := emit_label(context)
-	exit_label := emit_label(context)
-	index := emit_temporary(context)
-	advanced := emit_temporary(context)
-	mut accumulator := ""
-	mut accumulated := ""
-	if reduction
-		accumulator = emit_temporary(context)
-		accumulated = emit_temporary(context)
-	end
-	length := emit_array_header(context, output, "%p0", "", 1, "8")
-	data := emit_array_header(context, output, "%p0", "", 2, "24")
-	qbe_output_line(output, "\tjmp " + header_label)
-	qbe_output_line(output, header_label)
-	phi_line := output.count[0]
-	qbe_output_line(output, "")
-	mut accumulator_phi_line :=- 1
-	if reduction
-		accumulator_phi_line = output.count[0]
-		qbe_output_line(output, "")
-	end
-	condition := emit_temporary(context)
-	qbe_output_line(output, "\t" + condition + " =w csltl " + index + ", " + length)
-	qbe_output_branch(output, condition, body_label, exit_label)
-	qbe_output_line(output, body_label)
-	address := emit_array_data_address(context, output, data, index)
-	loaded := emit_temporary(context)
-	emit_typed_load(output, loaded, element_type, address)
-	mut increment_predecessor := body_label
-	if reduction
-		if float_elements
-			qbe_output_line(output, "\t" + accumulated + " =d add " + accumulator + ", " + loaded)
-		else
-			increment_predecessor = emit_checked_integer_operation(
-				context,
-				output,
-				accumulated,
-				accumulator,
-				loaded,
-				"add",
-				false,
-			)
-		end
-	end
-	qbe_output_line(output, "\t" + advanced + " =l add " + index + ", 1")
-	store_string(
-		output.lines,
-		phi_line,
-		"\t" + index + " =l phi @start 0, " + increment_predecessor + " " + advanced,
-	)
-	if reduction
-		mut phi_operation := " =l phi @start 0, "
-		if float_elements
-			phi_operation = " =d phi @start d_0.0, "
-		end
-		store_string(
-			output.lines,
-			accumulator_phi_line,
-			"\t" + accumulator + phi_operation +
-			increment_predecessor + " " + accumulated,
-		)
-	end
-	qbe_output_line(output, "\tjmp " + header_label)
-	qbe_output_line(output, exit_label)
-	if reduction
-		emit_typed_store(output, element_type, accumulator, "%return_value")
-	end
-	qbe_output_line(output, "\tjmp @return")
 end

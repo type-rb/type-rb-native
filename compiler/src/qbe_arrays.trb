@@ -1,12 +1,14 @@
-import { MirInstruction } from mir
+import { integer_string } from literals
+import { MirArrayLoop, MirInstruction } from mir
 import { mir_element_type, mir_managed_type, mir_operand_type, mir_semantic_type_name } from mir_types
 import { QbeEmitContext, QbeValue, emit_temporary, emit_typed_load, emit_typed_store, emitted_value } from qbe_context
 import { QbeOutput, qbe_output_line } from qbe_output
 import { CompilerState } from state
 
 # No source analysis or implicit roots: each allocation/push has its own MIR
-# safe point. ABI addresses exist only inside one non-allocating operation.
-def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>, instruction: MirInstruction, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
+# safe point. Only verified non-allocating loop plans retain storage addresses
+# across operations; other accesses obtain an address for that operation.
+def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>, instruction: MirInstruction, instruction_index: Integer, plans: Array<MirArrayLoop>, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
 	kind := instruction.kind
 	type_id := mir_operand_type(value_types, instruction.result)
 	type_name := mir_semantic_type_name(state.scalar_mir, type_id)
@@ -20,6 +22,20 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 		return emitted_value(result, type_name, 0, "", "")
 	end
 	owner := operands[instruction.first]
+	mut selected :=- 1
+	plans.each do |plan|
+		if kind == 20 && plan.length == instruction_index
+			selected = plan.header
+		end
+		plan.loads.each do |load|
+			if kind == 22 && load == instruction_index
+				selected = plan.header
+			end
+		end
+	end
+	if kind == 20 && selected >= 0
+		return emitted_value("%mir_array_length" + integer_string(selected), "Integer", 0, "", "")
+	end
 	if kind == 20
 		address := emit_temporary(context)
 		qbe_output_line(output, "\t" + address + " =l add " + owner + ", 8")
@@ -36,6 +52,14 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 			qbe_output_line(output, "\tcall $trbn_array_push_paced(l " + owner + ", l " + second + ")")
 		end
 		return emitted_value("", "Void", 0, "", "")
+	end
+	if kind == 22 && selected >= 0
+		offset := emit_temporary(context)
+		address := emit_temporary(context)
+		qbe_output_line(output, "\t" + offset + " =l mul " + second + ", 8")
+		qbe_output_line(output, "\t" + address + " =l add %mir_array_data" + integer_string(selected) + ", " + offset)
+		emit_typed_load(output, result, type_name, address)
+		return emitted_value(result, type_name, 0, "", "")
 	end
 	output.runtime_flags[3] = 1
 	address := emit_temporary(context)
@@ -56,4 +80,18 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 		return emitted_value("", "Void", 0, "", "")
 	end
 	return emitted_value(result, type_name, 0, "", "")
+end
+
+def emit_mir_array_headers(plans: Array<MirArrayLoop>, block: Integer, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput)
+	plans.each do |plan|
+		if plan.preheader == block
+			owner := operands[plan.owner]
+			length := emit_temporary(context)
+			data := emit_temporary(context)
+			qbe_output_line(output, "\t" + length + " =l add " + owner + ", 8")
+			qbe_output_line(output, "\t%mir_array_length" + integer_string(plan.header) + " =l loadl " + length)
+			qbe_output_line(output, "\t" + data + " =l add " + owner + ", 24")
+			qbe_output_line(output, "\t%mir_array_data" + integer_string(plan.header) + " =l loadl " + data)
+		end
+	end
 end

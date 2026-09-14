@@ -1,10 +1,11 @@
+import { mir_array_loops_equal, mir_function_array_loops } from mir_array_loops
 import { integer_string } from literals
 import { mir_definition_index, mir_identity_key } from mir_identities
 import { mir_semantic_type_name, mir_semantic_value_type, mir_types_error } from mir_types
 import { mir_function_roots, mir_root_plan_equal } from mir_roots
 import { MirFlow, mir_build_flow, mir_flow_blocks, mir_flow_graph_error, mir_flow_type, mir_value_available } from mir_flow
 import { MirBlock, MirFunction, MirModule, mir_block_index, mir_origin_valid, mir_table_span_valid } from mir
-import { mir_array_headers, mir_array_headers_equal, mir_array_loop_headers, mir_induction_address, mir_scalar_guard } from mir_analysis
+import { mir_array_headers, mir_array_headers_equal, mir_array_loop_headers, mir_scalar_guard } from mir_analysis
 import { mir_function_signature_error, mir_signatures_error } from mir_calls
 import { mir_instruction_error } from mir_instructions
 
@@ -112,7 +113,7 @@ def mir_terminator_error(
 		return "MIR branch shape differs"
 	end
 	if kind == 3
-		if block.return_value < - 1 && (function.kind != 2 || block.return_value != - 2)
+		if block.return_value < - 1
 			return "MIR return shape differs"
 		end
 		if block.condition == - 1
@@ -202,17 +203,6 @@ def mir_adapter_error(flow: MirFlow, native_module: MirModule, function: MirFunc
 	if function.kind == 0
 		return ""
 	end
-	if function.kind == 2
-		if function.block_count == 6
-			body := native_module.blocks[function.block_start + 2]
-			if body.instruction_count > 0
-				if mir_induction_address(native_module, function, body, native_module.instructions[body.instruction_start])
-					return ""
-				end
-			end
-		end
-		return "MIR induction adapter shape differs"
-	end
 	if function.kind == 1
 		if function.block_count != 2
 			return "MIR scalar adapter shape differs"
@@ -252,7 +242,7 @@ def mir_adapter_error(flow: MirFlow, native_module: MirModule, function: MirFunc
 end
 
 def mir_function_error(native_module: MirModule, function: MirFunction): String
-	if function.kind < 0 || function.kind > 3
+	if function.kind < 0 || function.kind > 3 || function.kind == 2
 		return "MIR function adapter kind is invalid"
 	end
 	if function.kind == 3
@@ -361,6 +351,9 @@ def verify_mir(native_module: MirModule, optimized: Boolean): String
 		index += 1
 	end
 	if native_module.functions.size() == 0
+		if native_module.array_loops.size() != 0
+			return "MIR Array-loop plan count differs"
+		end
 		return ""
 	end
 	mut functions: Hash<String, Integer> := {}
@@ -436,6 +429,12 @@ def verify_mir(native_module: MirModule, optimized: Boolean): String
 		end
 		index += 1
 	end
+	if !optimized && native_module.array_loops.size() != 0
+		return "MIR input cannot supply Array-loop plans"
+	end
+	if optimized && native_module.array_loops.size() != native_module.functions.size()
+		return "MIR Array-loop plan count differs"
+	end
 	if optimized
 		if native_module.root_plans.size() != native_module.functions.size()
 			return "MIR root plan count differs"
@@ -446,6 +445,9 @@ def verify_mir(native_module: MirModule, optimized: Boolean): String
 	if optimized
 		index = 0
 		while index < native_module.functions.size()
+			if !mir_array_loops_equal(native_module.array_loops[index], mir_function_array_loops(native_module, native_module.functions[index]))
+				return "MIR Array-loop plan differs"
+			end
 			if !mir_root_plan_equal(native_module.root_plans[index], mir_function_roots(native_module, native_module.functions[index]))
 				return "MIR live root plan differs"
 			end
