@@ -1,7 +1,7 @@
 import { emit_mir_range_instruction } from qbe_ranges
 import { emit_mir_hash_instruction } from qbe_hashes
 import { emit_mir_record_instruction } from qbe_records
-import { emit_mir_array_instruction } from qbe_arrays
+import { emit_mir_array_headers, emit_mir_array_instruction } from qbe_arrays
 import { mir_semantic_type_name } from mir_types
 import { integer_string } from literals
 import { MirFunction, mir_block_index, mir_function_index } from mir
@@ -38,6 +38,7 @@ end
 def emit_control_mir(state: CompilerState, function_index: Integer, result_type: String, symbols: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput)
 	function := state.scalar_mir.functions[mir_function_index(state.scalar_mir, function_index)]
 	roots := state.scalar_mir.root_plans[mir_function_index(state.scalar_mir, function_index)]
+	array_loops := state.scalar_mir.array_loops[mir_function_index(state.scalar_mir, function_index)]
 	mut operands: Array<String> := []
 	mut types: Array<String> := []
 	mut value_types: Array<Integer> := []
@@ -84,7 +85,7 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 			elsif instruction.kind == 25 || instruction.kind == 26
 				value = emit_mir_record_instruction(state, value_types, instruction, operands, context, output)
 			elsif instruction.kind >= 19 && instruction.kind <= 24
-				value = emit_mir_array_instruction(state, value_types, instruction, operands, context, output)
+				value = emit_mir_array_instruction(state, value_types, instruction, index, array_loops, operands, context, output)
 			elsif instruction.kind >= 12 && instruction.kind <= 18
 				value = emit_mir_string_instruction(state, value_types, instruction, operands, symbols, context, output)
 			else
@@ -97,6 +98,7 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 			end
 			index += 1
 		end
+		emit_mir_array_headers(array_loops, block.id, operands, context, output)
 		if block.terminator == 1
 			emit_control_mir_edge(state, function, block.first_target, block.first_argument_start, block.first_argument_count, operands, types, context, output)
 		elsif block.terminator == 2

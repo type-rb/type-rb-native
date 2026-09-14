@@ -4,14 +4,14 @@ import { mir_checked_hash_index, mir_checked_hash_literal, mir_checked_hash_meth
 import { mir_checked_record_field, mir_checked_record_new } from mir_records
 import { mir_checked_array_index, mir_checked_array_literal, mir_checked_array_operation, mir_checked_array_store } from mir_arrays
 import { binary_result_type, check_expected, numeric_type, type_diagnostic } from checked_types
-import { CheckedValue, array_region_operation, checked_assignment_operation, checked_bound_value, checked_mir_value, checked_value, mir_checked_value, scalar_leaf_inline_eligible, scalar_mir_binary, scalar_mir_convert_float, scalar_mir_disable, scalar_mir_instruction, scalar_mir_literal, scalar_mir_unary, scalar_mir_value } from checked_values
+import { CheckedValue, array_region_operation, checked_assignment_operation, checked_bound_value, checked_mir_value, checked_value, scalar_leaf_inline_eligible, scalar_mir_binary, scalar_mir_convert_float, scalar_mir_disable, scalar_mir_literal, scalar_mir_unary } from checked_values
 import { checked_hash_binding_target, checked_hash_method, checked_hash_plan, checked_hash_publish } from hash_checked
 import { mir_hash_operation } from hash_mir
 import { hash_key_type, hash_type, hash_value_type } from hash_types
 import { checked_iteration_require, checked_iteration_shape, checked_range_require, iteration_element_type } from iteration_checked
 import { MirIteration, MirRangeConstruction, mir_iteration_valid } from iteration_mir
 import { float_literal_in_range, integer_literal_in_range, number_is_float, small_nonnegative_integer_operand } from literals
-import { MirLoopTransfer, mir_array_element_type, mir_loop_transfer_valid, mir_type_id } from mir
+import { MirLoopTransfer, mir_loop_transfer_valid } from mir
 import { mir_array_assignment_plan, mir_array_assignment_valid } from mir_analysis
 import { mir_checked_call } from mir_calls
 import { mir_logical_begin, mir_logical_join } from mir_logical
@@ -535,16 +535,6 @@ def check_method_call(
 			return mir_checked_string_operation(state, locals, 15, checked_mir_value(receiver), - 1, 0, "Integer", position[0] - 1)
 		end
 		if array_element_type(receiver.type_name) != ""
-			if locals.mir_state[0] >= 2
-				receiver_id := checked_mir_value(receiver)
-				if receiver_id >= 0
-					result := scalar_mir_value(state, locals, 1, receiver.origin)
-					scalar_mir_instruction(
-						state, locals, 4, result, receiver_id, - 1, 0, - 1, line,
-					)
-					return mir_checked_value("Integer", result, receiver.origin, 0)
-				end
-			end
 			return mir_checked_array_operation(state, locals, 20, checked_mir_value(receiver), - 1, 0, "Integer", position[0] - 1)
 		end
 		return type_diagnostic(state, line, "size is unavailable on " + type_display(state, receiver.type_name))
@@ -743,36 +733,6 @@ def check_postfix(
 						array_region_operation(locals, 6, 0, index_origin)
 						value = mir_checked_string_operation(state, locals, 16, receiver_id, index_id, 0, "String", index_origin)
 						lowered = true
-					end
-					if locals.mir_state[0] >= 2
-						element_type := array_element_type(value.type_name)
-						if element_type != ""
-							if receiver_id >= 0
-								if index_id >= 0
-									array_type := mir_type_id(value.type_name)
-									address := scalar_mir_value(
-										state,
-										locals,
-										array_type + 1,
-										value.origin,
-									)
-									scalar_mir_instruction(
-										state, locals, 5, address, receiver_id, index_id, 1, locals.mir_state[11], line,
-									)
-									loaded := scalar_mir_value(
-										state,
-										locals,
-										mir_array_element_type(array_type),
-										value.origin,
-									)
-									scalar_mir_instruction(
-										state, locals, 10, loaded, address, - 1, 0, - 1, line,
-									)
-									value = checked_bound_value(element_type, - loaded - 1, index_origin, value.mutable, value.binding)
-									lowered = true
-								end
-							end
-						end
 					end
 					if !lowered
 						scalar_mir_disable(locals)
@@ -1018,42 +978,10 @@ def check_declaration(
 		end
 	end
 	finished := finish_statement(state, position)
-	if locals.mir_state[0] >= 2
-		if mutable == 1
-			if fact == 0
-				scalar_mir_disable(locals)
-			end
-		end
-	end
-	if fact != 0
-		if locals.mir_state[0] >= 2
-			if fact == 2
-				if locals.count[0] == 2
-					locals.mir_state[5] = locals.count[0] - 1
-					if locals.mir_state[0] == 2
-						locals.mir_state[6] = locals.mir_instructions.size()
-					end
-				else
-					if locals.mir_state[0] == 3
-						if locals.count[0] == 3
-							locals.mir_state[13] = locals.count[0] - 1
-							locals.mir_state[6] = locals.mir_instructions.size()
-						else
-							scalar_mir_disable(locals)
-						end
-					else
-						scalar_mir_disable(locals)
-					end
-				end
-			else
-				scalar_mir_disable(locals)
-			end
-		elsif locals.mir_state[0] == 0
-			# The direct fallback retains its existing adjacent-loop marker until
-			# the remaining Array-owning functions move through MIR.
-			store_integer(locals.mutable, locals.count[0] - 1, position[0] + 3)
-			position[1] = fact
-		end
+	if fact != 0 && locals.mir_state[0] == 0
+		# Retained direct controls still use their adjacent-loop marker.
+		store_integer(locals.mutable, locals.count[0] - 1, position[0] + 3)
+		position[1] = fact
 	end
 	return finished
 end
@@ -1092,9 +1020,6 @@ def check_simple_statement(
 		elsif !mir_checked_array_store(state, locals, left, right)
 			mir_control_assign(state, locals, left, right)
 		end
-		if locals.mir_state[0] >= 2
-			scalar_mir_disable(locals)
-		end
 	else
 		if binary_operator_id(operator) >= 17
 			compound := operator[0]
@@ -1116,63 +1041,6 @@ def check_simple_statement(
 				end
 				if !mir_checked_array_store(state, locals, left, value)
 					mir_control_assign(state, locals, left, value)
-				end
-			end
-			if locals.mir_state[0] >= 2
-				local_index := local_find(locals, load_string(state.token_texts, left.origin))
-				mut accumulator := false
-				if locals.mir_state[0] == 3
-					if locals.mir_state[18] == 0
-						if local_index == locals.mir_state[13]
-							accumulator = compound == "+"
-						end
-					end
-				end
-				mut unit_step := compound == "+"
-				if unit_step
-					unit_step = local_index == locals.mir_state[5]
-				end
-				if unit_step
-					unit_step = locals.mir_state[18] == locals.mir_state[0] - 2
-				end
-				if unit_step
-					unit_step = right.origin != 9007199254740991
-				end
-				if unit_step
-					unit_step = load_string(state.token_texts, right.origin) == "1"
-				end
-				if accumulator
-					result := scalar_mir_binary(
-						state,
-						locals,
-						compound,
-						left,
-						right,
-						result_type,
-						left.origin,
-					)
-					result_id := checked_mir_value(result)
-					store_integer(locals.mir_values, local_index, result_id + 1)
-					locals.mir_state[17] = result_id
-					locals.mir_state[18] = 1
-				else
-					if unit_step
-						result := scalar_mir_binary(
-							state,
-							locals,
-							compound,
-							left,
-							right,
-							result_type,
-							left.origin,
-						)
-						result_id := checked_mir_value(result)
-						store_integer(locals.mir_values, local_index, result_id + 1)
-						locals.mir_state[10] = result_id
-						locals.mir_state[18] = locals.mir_state[18] + 1
-					else
-						scalar_mir_disable(locals)
-					end
 				end
 			end
 		end
@@ -1377,144 +1245,36 @@ def checked_while(
 	end
 	loop_start := position[0]
 	array_region_operation(locals, 11, locals.count[0], loop_start)
-	mut candidate := locals.count[0] - 1
+	candidate := locals.count[0] - 1
 	mut active := false
-	mut line := 0
-	if locals.mir_state[0] >= 2
-		candidate = locals.mir_state[5]
-		active = candidate >= 0
-		if active
-			active = locals.count[0] == locals.mir_state[0]
-		end
-		if active
-			header_value := scalar_mir_value(
-				state, locals, 1, loop_start,
-			)
-			body_value := scalar_mir_value(
-				state, locals, 1, loop_start,
-			)
-			locals.mir_state[12] = body_value
-			store_integer(locals.mir_values, candidate, header_value + 1)
-			if locals.mir_state[0] == 3
-				accumulator_type := mir_type_id(result_type)
-				accumulator_header := scalar_mir_value(
-					state, locals, accumulator_type, loop_start,
-				)
-				accumulator_body := scalar_mir_value(
-					state, locals, accumulator_type, loop_start,
-				)
-				accumulator_exit := scalar_mir_value(
-					state, locals, accumulator_type, loop_start,
-				)
-				locals.mir_state[14] = accumulator_header
-				locals.mir_state[15] = accumulator_body
-				locals.mir_state[16] = accumulator_exit
-				store_integer(
-					locals.mir_values,
-					locals.mir_state[13],
-					accumulator_header + 1,
-				)
-			end
-		else
-			scalar_mir_disable(locals)
-		end
-	else
-		scalar_mir_disable(locals)
-		if candidate >= 0
-			active = load_integer(locals.mutable, candidate) == loop_start + 3
-		end
-		if active
-			# The direct fallback retains its enclosing-loop dependency
-			# until the broader Array-owning slice moves through MIR.
-			line = position[1]
-			store_integer(locals.mutable, candidate, - loop_start)
-		end
-		store_integer(state.mir_nonnegative_facts, loop_start, line)
+	mut fact := 0
+	if candidate >= 0
+		active = load_integer(locals.mutable, candidate) == loop_start + 3
 	end
-	line = load_integer(state.token_lines, position[0])
+	if active
+		# Retained direct controls keep their enclosing-loop dependency.
+		fact = position[1]
+		store_integer(locals.mutable, candidate, - loop_start)
+	end
+	store_integer(state.mir_nonnegative_facts, loop_start, fact)
+	line := load_integer(state.token_lines, position[0])
 	advance(position)
 	condition := check_expression(state, position, locals, 1, "Boolean")
 	check_expected(state, condition.type_name, "Boolean", line)
 	finish_statement(state, position)
-	if locals.mir_state[0] >= 2
-		condition_id := checked_mir_value(condition)
-		if condition_id < 0
-			scalar_mir_disable(locals)
-		else
-			locals.mir_state[7] = condition_id
-			locals.mir_state[8] = locals.mir_instructions.size() - locals.mir_state[6]
-			locals.mir_state[9] = locals.mir_instructions.size()
-			if locals.mir_state[8] != 2
-				scalar_mir_disable(locals)
-			else
-				first := locals.mir_instructions[locals.mir_state[6]]
-				second := locals.mir_instructions[locals.mir_state[6] + 1]
-				if first.kind != 4
-					scalar_mir_disable(locals)
-				end
-				if second.kind != 7
-					scalar_mir_disable(locals)
-				else
-					if second.payload != 8
-						scalar_mir_disable(locals)
-					end
-				end
-			end
-			if locals.mir_state[0] >= 2
-				store_integer(locals.mir_values, candidate, locals.mir_state[12] + 1)
-				if locals.mir_state[0] == 3
-					store_integer(
-						locals.mir_values,
-						locals.mir_state[13],
-						locals.mir_state[15] + 1,
-					)
-				end
-			end
-		end
-	end
 	saved_count := locals.count[0]
 	check_block(state, position, locals, result_type, loop_start)
-	if locals.mir_state[0] >= 2
-		if locals.mir_state[10] < 0
-			scalar_mir_disable(locals)
+	if active
+		if load_integer(locals.mutable, candidate) >= 0
+			store_integer(state.mir_nonnegative_facts, loop_start, 0)
 		end
-		if locals.count[0] != saved_count + 3 - locals.mir_state[0]
-			scalar_mir_disable(locals)
-		end
-		if locals.mir_instructions.size() - locals.mir_state[9] != locals.mir_state[0] + 2
-			scalar_mir_disable(locals)
-		end
-		if locals.mir_state[18] != locals.mir_state[0] - 1
-			scalar_mir_disable(locals)
-		end
-		if locals.mir_state[0] == 3
-			if locals.mir_state[17] < 0
-				scalar_mir_disable(locals)
-			end
-		end
-	else
-		if active
-			if load_integer(locals.mutable, candidate) >= 0
-				store_integer(state.mir_nonnegative_facts, loop_start, 0)
-			end
-			store_integer(locals.mutable, candidate, 1)
-		end
+		store_integer(locals.mutable, candidate, 1)
 	end
 	array_region_operation(locals, 3, saved_count, position[0])
 	array_region_operation(locals, 12, saved_count, position[0])
 	locals.count[0] = saved_count
 	expect(state, position, "end")
 	finish_statement(state, position)
-	if locals.mir_state[0] >= 2
-		if locals.mir_state[0] == 3
-			store_integer(
-				locals.mir_values,
-				locals.mir_state[13],
-				locals.mir_state[16] + 1,
-			)
-		end
-		locals.mir_state[5] =- 2
-	end
 	return !has_diagnostic(state)
 end
 
@@ -1597,13 +1357,6 @@ def check_block(
 					if mir_control_active(locals)
 						mir_control_return(state, locals, - 1)
 						locals.mir_state[4] =- 2
-					end
-					if locals.mir_state[0] == 2
-						if locals.mir_state[5] == - 2
-							locals.mir_state[4] =- 2
-						else
-							scalar_mir_disable(locals)
-						end
 					end
 				end
 			else

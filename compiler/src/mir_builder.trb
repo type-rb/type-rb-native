@@ -14,7 +14,6 @@ def scalar_mir_begin(
 	)
 	locals.mir_state[1] = function_index
 	result_type := load_string(state.function_result_types, function_index)
-	mut mode := 1
 	if mir_semantic_type_id(state.scalar_mir, result_type) == 0
 		if result_type != "Void"
 			return
@@ -22,34 +21,6 @@ def scalar_mir_begin(
 	end
 	parameter_start := load_integer(state.function_parameter_starts, function_index)
 	parameter_finish := parameter_start + load_integer(state.function_parameter_counts, function_index)
-	if parameter_finish - parameter_start == 1 && load_integer(state.parameter_mutable, parameter_start) == 0 && (load_string(state.parameter_types, parameter_start) == "Array<Integer>" || load_string(state.parameter_types, parameter_start) == "Array<Float>")
-		parameter_type := load_string(state.parameter_types, parameter_start)
-		if result_type == "Void" && array_element_type(parameter_type) != ""
-			mode = 2
-		end
-		if array_element_type(parameter_type) == result_type
-			mode = 3
-		end
-	end
-	# Explicit iteration syntax uses the general CFG, including its latch and
-	# lexical exits, rather than the older single-Array induction adapter.
-	if mode >= 2
-		start := load_integer(state.function_body_starts, function_index)
-		finish := load_integer(state.function_body_ends, function_index)
-		state.iterations.each do |iteration|
-			if iteration.origin >= start && iteration.finish <= finish
-				mode = 1
-			end
-		end
-	end
-	if mode >= 2
-		if parameter_finish - parameter_start != 1
-			return
-		end
-		if array_element_type(load_string(state.parameter_types, parameter_start)) == ""
-			return
-		end
-	end
 	mut parameter_index := parameter_start
 	while parameter_index < parameter_finish
 		if load_integer(state.parameter_mutable, parameter_index) != 0
@@ -63,13 +34,9 @@ def scalar_mir_begin(
 		end
 		parameter_index += 1
 	end
-	locals.mir_state[0] = mode
+	locals.mir_state[0] = 1
 	locals.mir_state[2] = 0
 	locals.mir_state[3] = function_index * 2 + 1
-	if mode >= 2
-		locals.mir_state[3] = function_index * 6 + 4
-		locals.mir_state[11] = function_index * 6 + 5
-	end
 	locals.mir_state[4] =- 1
 	return
 end
@@ -107,32 +74,14 @@ def scalar_mir_commit(
 		return mir_control_commit(state, function_index, locals)
 	end
 	mut native_module := state.scalar_mir
-	mode := locals.mir_state[0]
 	return_value := locals.mir_state[4]
-	if mode == 1
-		if return_value < 0
-			return "scalar MIR function has no return value"
-		end
-	else
-		if mode == 2
-			if return_value != - 2
-				return "control-flow MIR function is incomplete"
-			end
-		else
-			if return_value != locals.mir_state[16]
-				return "control-flow MIR reduction is incomplete"
-			end
-		end
+	if return_value < 0
+		return "scalar MIR function has no return value"
 	end
 	source := state.active_module[0]
 	line := load_integer(state.function_lines, function_index)
 	parameter_count := load_integer(state.function_parameter_counts, function_index)
-	mut entry_block := function_index * 2
-	mut block_count := 2
-	if mode >= 2
-		entry_block = function_index * 6
-		block_count = 6
-	end
+	entry_block := function_index * 2
 	argument_base := native_module.arguments.size()
 	block_base := native_module.blocks.size()
 	instruction_base := native_module.instructions.size()
@@ -145,11 +94,7 @@ def scalar_mir_commit(
 		native_module.source_count[0] = source_count
 		native_module.entry_function[0] = function_index
 	end
-	mut kind := 1
-	if mode >= 2
-		kind = 2
-	end
-	native_module.functions.push(MirFunction.new(kind: kind, result_type: load_string(state.function_result_types, function_index), integer_guard: 0, id: function_index, entry_block: entry_block, source_id: source, line: line, parameter_start: argument_base, parameter_count: parameter_count, block_start: block_base, block_count: block_count))
+	native_module.functions.push(MirFunction.new(kind: 1, result_type: load_string(state.function_result_types, function_index), integer_guard: 0, id: function_index, entry_block: entry_block, source_id: source, line: line, parameter_start: argument_base, parameter_count: parameter_count, block_start: block_base, block_count: 2))
 	mut index := 0
 	while index < parameter_count
 		native_module.arguments.push(index)
@@ -176,80 +121,6 @@ def scalar_mir_commit(
 		end
 		native_module.instructions.push(instruction)
 		index += 1
-	end
-	if mode >= 2
-		header_block := entry_block + 1
-		body_block := entry_block + 2
-		exit_block := entry_block + 3
-		header_parameters := native_module.arguments.size()
-		native_module.arguments.push(locals.mir_state[12] - 1)
-		mut block_parameter_count := 1
-		if mode == 3
-			native_module.arguments.push(locals.mir_state[14])
-			block_parameter_count = 2
-		end
-		body_parameters := native_module.arguments.size()
-		native_module.arguments.push(locals.mir_state[12])
-		if mode == 3
-			native_module.arguments.push(locals.mir_state[15])
-		end
-		exit_parameters := native_module.arguments.size()
-		mut exit_parameter_count := 0
-		if mode == 3
-			native_module.arguments.push(locals.mir_state[16])
-			exit_parameter_count = 1
-		end
-		entry_argument := native_module.arguments.size()
-		native_module.arguments.push(locals.mir_instructions[0].result)
-		if mode == 3
-			native_module.arguments.push(locals.mir_instructions[1].result)
-		end
-		body_argument := native_module.arguments.size()
-		native_module.arguments.push(locals.mir_state[12] - 1)
-		if mode == 3
-			native_module.arguments.push(locals.mir_state[14])
-		end
-		exit_argument := native_module.arguments.size()
-		if mode == 3
-			native_module.arguments.push(locals.mir_state[14])
-		end
-		backedge_argument := native_module.arguments.size()
-		native_module.arguments.push(locals.mir_state[10])
-		if mode == 3
-			native_module.arguments.push(locals.mir_state[17])
-		end
-		native_module.blocks.push(mir_block(
-				entry_block, source, line, entry_argument, 0,
-				instruction_base, locals.mir_state[6],
-				1, - 1, header_block, - 1, entry_argument, block_parameter_count, 0, 0, - 1,
-			))
-		native_module.blocks.push(mir_block(
-				header_block, source, line, header_parameters, block_parameter_count,
-				instruction_base + locals.mir_state[6], locals.mir_state[8],
-				2, locals.mir_state[7], body_block, exit_block,
-				body_argument, block_parameter_count, exit_argument, exit_parameter_count, - 1,
-			))
-		native_module.blocks.push(mir_block(
-				body_block, source, line, body_parameters, block_parameter_count,
-				instruction_base + locals.mir_state[9], instruction_count - locals.mir_state[9],
-				1, - 1, header_block, - 1, backedge_argument, block_parameter_count, 0, 0, - 1,
-			))
-		native_module.blocks.push(mir_block(
-				exit_block, source, line, exit_parameters, exit_parameter_count,
-				instruction_base + instruction_count, 0,
-				3, - 1, - 1, - 1, 0, 0, 0, 0, return_value,
-			))
-		native_module.blocks.push(mir_block(
-				locals.mir_state[3], source, line, 0, 0,
-				instruction_base + instruction_count, 0,
-				4, - 1, - 1, - 1, 0, 0, 0, 0, - 1,
-			))
-		native_module.blocks.push(mir_block(
-				locals.mir_state[11], source, line, 0, 0,
-				instruction_base + instruction_count, 0,
-				4, - 1, - 1, - 1, 0, 0, 0, 0, - 1,
-			))
-		return ""
 	end
 	native_module.blocks.push(mir_block(
 			entry_block,
