@@ -12,14 +12,14 @@ const capability = (title, status, scopes, description, evidence) => ({
 
 export const catalog = {
   schemaVersion: 1,
-  updatedAt: '2026-09-13',
+  updatedAt: '2026-09-14',
   areas: [
     {
       id: 'language',
       title: 'Language and type system',
       description: 'Portable TypeRB semantics expressed through the Native frontend and runtime.',
       items: [
-        capability('Core direct calls and statement control', 'verified', ['parity'], 'Execute the bounded control-flow and direct-call surface with deterministic failures.', ['Control flow', 'docs/native-language-coverage.md']),
+        capability('Core direct calls and statement control', 'verified', ['parity'], 'Execute the bounded control-flow and direct-call surface, including required named-only arguments and reordered record labels with authored evaluation order. Defaults remain incomplete.', ['Control flow', 'docs/native-language-coverage.md']),
         capability('Checked Integer and binary64 Float', 'verified', ['parity', 'ecosystem'], 'Preserve portable Integer bounds and the selected Float behavior.', ['Numeric semantics', 'docs/native-language-coverage.md']),
         capability('Snapshot records, enums, Result, and try', 'verified', ['parity', 'production'], 'The snapshot/recovery path lowers aggregates, tagged values and Result propagation. This evidence does not establish ordinary trbn enum or Result support.', ['Aggregate recovery', 'docs/snapshot-recovery.md']),
         capability('Snapshot managed String, Array, and closures', 'verified', ['parity', 'production', 'ecosystem'], 'The snapshot/recovery path executes managed UTF-8 strings, arrays and closures. Ordinary coverage is verified separately; snapshot closure support does not establish ordinary closure support.', ['Managed recovery', 'docs/snapshot-recovery.md']),
@@ -36,7 +36,7 @@ export const catalog = {
       description: 'Self-hosting, project builds, diagnostics, and fast development iteration.',
       items: [
         capability('TypeRB-authored self-hosted compiler', 'verified', ['parity', 'production'], 'The lexer, parser, resolver, checker, emitter, and driver reach a reproducible fixed point.', ['Self-hosting', 'docs/bootstrap-seed-updates.md']),
-        capability('Verified self-hosted Native MIR foundation', 'partial', ['parity', 'production'], 'Verified control/value MIR carries scalar and managed values, nominal record construction/projection, typed calls, mutable control and live-before roots. Recursive record fields and GC descriptors share verified nominal identity. Hash operations and iteration still need shared operations and portable facts; the remaining direct path needs retirement. UTF-8 String indices retain verified receiver roots.', ['Current MIR transition status', 'docs/native-mir-optimization-status.md']),
+        capability('Verified self-hosted Native MIR foundation', 'partial', ['parity', 'production'], 'Verified control/value MIR carries scalar and managed values, nominal record construction/projection, typed calls, mutable control and live-before roots. Recursive record fields and GC descriptors share verified nominal identity. All supported ordinary bodies now use verified MIR, including Hash, Range and iteration. The direct body emitter is retired. Broader propagation, call summaries and performance qualification remain. UTF-8 String indices retain verified receiver roots.', ['Current MIR transition status', 'docs/native-mir-optimization-status.md']),
         capability('File-oriented check and build', 'verified', ['parity', 'production'], 'Read source files and own the QBE and C-toolchain process boundary.', ['Native builds', 'docs/native-cli.md']),
         capability('Multi-file module graph', 'verified', ['parity', 'production'], 'Load explicit imports and deterministic transitive module closures.', ['Module loading', 'docs/compiler-project-layout.md']),
         capability('Configured project build', 'verified', ['parity', 'production'], 'Load a bounded trbconfig.jsonc source set and build its unique main entry.', ['Project configuration', 'docs/native-cli.md']),

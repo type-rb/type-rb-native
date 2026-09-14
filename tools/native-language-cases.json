@@ -120,13 +120,18 @@
       "cases": [
         "default-argument",
         "default-evaluation",
-        "named-arguments"
+        "named-arguments",
+        "required-named-arguments",
+        "named-duplicate-rejection",
+        "named-positional-rejection",
+        "named-order-rejection",
+        "named-import-alias"
       ],
       "pending": [
-        "Default side effects, named-only required/reordered arguments and invalid mixtures",
+        "Default side effects, omitted versus explicit values, and positional/default boundaries",
         "Method, function-value and payload-enum argument parity"
       ],
-      "note": ""
+      "note": "Required positional/named-only function calls and reordered explicit arguments share checked/MIR and REPL binding. Defaults remain unsupported."
     },
     {
       "id": "conditions",
@@ -200,7 +205,8 @@
         "record-array",
         "record-defaults",
         "record-equality",
-        "record-field-assignment"
+        "record-field-assignment",
+        "record-field-order"
       ],
       "pending": [
         "Record default allocation/evaluation order, repeated construction and nominal cycles"
@@ -505,7 +511,8 @@
         "ImportStatement"
       ],
       "cases": [
-        "import-alias"
+        "import-alias",
+        "named-import-alias"
       ],
       "pending": [
         "Bare/named aliases, graph conflicts, missing/unused imports and file/project/REPL identity"
@@ -2045,18 +2052,18 @@
         "check": {
           "code": 1,
           "stdout": "",
-          "stderr": "<case>/main.trb:1: error[TRBN4002]: expected an identifier\n"
+          "stderr": "<case>/main.trb:1: error[TRBN4002]: expected ), found =\n"
         },
         "build": {
           "code": 1,
           "stdout": "",
-          "stderr": "<case>/main.trb:1: error[TRBN4002]: expected an identifier\n"
+          "stderr": "<case>/main.trb:1: error[TRBN4002]: expected ), found =\n"
         },
         "execute": null,
         "repl": {
           "code": 0,
           "stdout": "",
-          "stderr": "(trb):1: error[TRBN4002]: expected an identifier\n(trb):2: error[TRBN4003]: unresolved function combine\n(trb):1: error[TRBN4003]: unresolved function probe\n"
+          "stderr": "(trb):1: error[TRBN4002]: expected ), found =\n(trb):2: error[TRBN4003]: unresolved function combine\n(trb):1: error[TRBN4003]: unresolved function probe\n"
         }
       }
     },
@@ -4961,6 +4968,290 @@
           "code": 0,
           "stdout": "360\n😀\n",
           "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "required-named-arguments",
+      "title": "Required named-only arguments preserve authored evaluation order",
+      "declarations": "record Pair\n\tleft: String\n\tright: String\nend\n\ndef mark(label: String, value: Integer): String\n\tputs(label)\n\treturn value.to_s()\nend\n\ndef combine(prefix: String, *, left: String, right: String): String\n\treturn prefix + left + \":\" + right\nend\n\ndef mutate(*, mut values: Array<Integer>, value: Integer): Integer\n\tvalues.push(value)\n\treturn values.size()\nend\n\n",
+      "body": "\tputs(combine(\"call:\", right: mark(\"right\", 20), left: mark(\"left\", 10)))\n\tpair := Pair.new(right: mark(\"record-right\", 40), left: mark(\"record-left\", 30))\n\tputs(pair.left + \":\" + pair.right)\n\tmut values := [1]\n\tputs(mutate(value: 2, values: values))\n\tputs(values[1])\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "right\nleft\ncall:10:20\nrecord-right\nrecord-left\n30:40\n2\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "right\nleft\ncall:10:20\nrecord-right\nrecord-left\nPair(left: \"30\", right: \"40\") : Pair\n30:40\n[1] : Array<Integer> [mut]\n2\n2\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "right\nleft\ncall:10:20\nrecord-right\nrecord-left\n30:40\n2\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "right\nleft\ncall:10:20\nrecord-right\nrecord-left\nPair(left: \"30\", right: \"40\") : Pair\n30:40\n[1] : Array<Integer> [mut]\n2\n2\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "record-field-order",
+      "title": "Record labels may be reordered with contextual field types",
+      "declarations": "record Pair\nnumber: Float\nlabel: String\nend\n",
+      "body": "value := Pair.new(label: \"ready\", number: 7)\nputs(value.label)\nputs(value.number.to_i())",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "ready\n7\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "Pair(number: 7, label: \"ready\") : Pair\nready\n7\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "ready\n7\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "Pair(number: 7, label: \"ready\") : Pair\nready\n7\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "named-duplicate-rejection",
+      "title": "Duplicate named arguments are rejected",
+      "declarations": "def select(*, value: Integer): Integer\nreturn value\nend\n",
+      "body": "puts(select(value: 1, value: 2))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:6:30: error[TRB3000]: select() receives argument value more than once\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:6:30: error[TRB3000]: select() receives argument value more than once\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):4:30: error[TRB3000]: select() receives argument value more than once\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:6: error[TRBN4004]: argument value is supplied more than once\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:6: error[TRBN4004]: argument value is supplied more than once\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):4: error[TRBN4004]: argument value is supplied more than once\n"
+        }
+      }
+    },
+    {
+      "id": "named-positional-rejection",
+      "title": "Positional-only parameters cannot be supplied by name",
+      "declarations": "def select(value: Integer): Integer\nreturn value\nend\n",
+      "body": "puts(select(value: 1))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:6:20: error[TRB3000]: value is a positional-only parameter of select()\n<case>/main.trb:6:6: error[TRB3000]: select() is missing required argument 1\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:6:20: error[TRB3000]: value is a positional-only parameter of select()\n<case>/main.trb:6:6: error[TRB3000]: select() is missing required argument 1\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):4:20: error[TRB3000]: value is a positional-only parameter of select()\n(trb):4:6: error[TRB3000]: select() is missing required argument 1\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:6: error[TRBN4004]: argument value is positional-only\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:6: error[TRBN4004]: argument value is positional-only\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):4: error[TRBN4004]: argument value is positional-only\n"
+        }
+      }
+    },
+    {
+      "id": "named-order-rejection",
+      "title": "Positional arguments cannot follow named arguments",
+      "declarations": "def select(first: Integer, *, last: Integer): Integer\nreturn first + last\nend\n",
+      "body": "puts(select(last: 1, 2))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:6:22: error[TRB3000]: positional argument cannot follow a named argument\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:6:22: error[TRB3000]: positional argument cannot follow a named argument\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):4:22: error[TRB3000]: positional argument cannot follow a named argument\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:6: error[TRBN4004]: positional argument cannot follow a named argument\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:6: error[TRBN4004]: positional argument cannot follow a named argument\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):4: error[TRBN4004]: positional argument cannot follow a named argument\n"
+        }
+      }
+    },
+    {
+      "id": "named-import-alias",
+      "title": "Named-only arguments retain imported declaration identity",
+      "declarations": "import { combine as choose } from helper\n",
+      "body": "puts(choose(right: 2, left: 1))",
+      "files": {
+        "helper.trb": "def combine(*, left: Integer, right: Integer): Integer\nreturn left * 10 + right\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 2 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "12\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "12\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "12\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1: error[TRBN4003]: declaration combine from helper is already imported as combine\n(trb):1: error[TRBN4003]: unresolved function choose\n"
         }
       }
     }

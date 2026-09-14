@@ -99,6 +99,7 @@ functions. Malformed element graphs, Array operations and omitted roots reject.
   publication of the verified root lists, without backend lifetime analysis.
 - `mir_logical.trb`: conditional RHS and expression-result join construction.
 - `checked_types.trb`: assignability, operator result types and diagnostics.
+- `argument_binding.trb`: shared required positional/named slots and record labels; authored evaluation precedes operand reordering.
 - `checked_program.trb`: recursive source checking; it invokes these owners.
 - `qbe_context.trb`, `qbe_functions.trb`, `qbe_numeric.trb`, `qbe_constants.trb`:
   target operands/labels, function ABI and MIR-selected root-frame prologues,
@@ -121,7 +122,8 @@ conversion, branches, retained aliases and allocation pressure. Its test erases
 admitted source bodies and the old checked field metadata, requires identical
 QBE, reorders blocks, then runs with collection before allocating operations.
 
-Constructors evaluate authored fields once in declaration order and publish a
+Constructors evaluate authored fields once in source order, store their operands
+by declaration slot and publish a
 fully initialized object from explicit MIR operands. Managed initializers remain
 live across later initializers and the allocation itself; no partially initialized
 record escapes the operation. The backend's function-local operand types and the

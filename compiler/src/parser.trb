@@ -132,6 +132,15 @@ def syntax_expression_precedence(operator: String): Integer
 	return 0
 end
 
+def parse_argument_label(state: CompilerState, mut position: Array<Integer>): String
+	if load_integer(state.token_kinds, position[0]) == 1 && token_is(state, position[0] + 1, ":")
+		label := load_string(state.token_texts, position[0])
+		position[0] += 2
+		return label
+	end
+	return ""
+end
+
 def parse_arguments_syntax(mut state: CompilerState, mut position: Array<Integer>): Boolean
 	skip_newlines(state, position)
 	if token_is(state, position[0], ")")
@@ -660,12 +669,24 @@ def parse_function(mut state: CompilerState, mut position: Array<Integer>): Bool
 	skip_newlines(state, position)
 	parameter_start := state.parameter_count[0]
 	mut parameter_count := 0
+	mut named_only := 0
+	mut named_count := 0
 	if !token_is(state, position[0], ")")
 		mut finished := false
 		while !finished
 			skip_newlines(state, position)
 			if token_is(state, position[0], ")")
 				finished = true
+			elsif token_is(state, position[0], "*")
+				if named_only == 1
+					diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), "parameter list has more than one named-only boundary")
+					return false
+				end
+				named_only = 1
+				advance(position)
+				if !expect(state, position, ",")
+					return false
+				end
 			else
 				mut mutable := 0
 				if token_is(state, position[0], "mut")
@@ -682,6 +703,8 @@ def parse_function(mut state: CompilerState, mut position: Array<Integer>): Bool
 				store_string(state.parameter_names, parameter_index, parameter_name)
 				store_string(state.parameter_types, parameter_index, parameter_type)
 				store_integer(state.parameter_mutable, parameter_index, mutable)
+				store_integer(state.parameter_named_only, parameter_index, named_only)
+				named_count += named_only
 				store_integer(state.parameter_lines, parameter_index, parameter_line)
 				state.parameter_count[0] = parameter_index + 1
 				parameter_count += 1
@@ -693,6 +716,10 @@ def parse_function(mut state: CompilerState, mut position: Array<Integer>): Bool
 				end
 			end
 		end
+	end
+	if named_only == 1 && named_count == 0
+		diagnostic(state, "TRBN4002", line, "named-only boundary requires a parameter")
+		return false
 	end
 	skip_newlines(state, position)
 	if !expect(state, position, ")")
