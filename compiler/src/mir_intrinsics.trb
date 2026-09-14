@@ -17,6 +17,12 @@ def mir_runtime_adapter(name: String): Integer
 end
 
 def mir_call_symbol(signature: MirSignature): String
+	if signature.kind == 3
+		if signature.adapter == 10
+			return "trbn_process_argv"
+		end
+		return "sqrt"
+	end
 	if signature.kind == 0
 		return "trbnf" + integer_string(signature.id)
 	end
@@ -75,6 +81,29 @@ def mir_project_sources_result(native_module: MirModule, name: String): Boolean
 end
 
 def mir_intrinsic_signature_error(native_module: MirModule, signature: MirSignature): String
+	if signature.kind == 3
+		mut name := "trb/std/process.argv"
+		mut parameters: Array<String> := []
+		mut result := "Array<String>"
+		if signature.adapter == 11
+			name = "trb/std/math.sqrt"
+			parameters = ["Float"]
+			result = "Float"
+		elsif signature.adapter != 10
+			return "MIR standard package adapter is invalid"
+		end
+		if signature.name != name || signature.result_type != result || signature.parameter_types.size() != parameters.size()
+			return "MIR standard package signature differs"
+		end
+		mut index := 0
+		while index < parameters.size()
+			if signature.parameter_types[index] != parameters[index] || signature.parameter_mutable[index] != 0
+				return "MIR standard package parameter differs"
+			end
+			index += 1
+		end
+		return ""
+	end
 	if signature.kind == 0
 		if signature.adapter != 0
 			return "MIR ordinary declaration has an external adapter"

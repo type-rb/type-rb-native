@@ -136,6 +136,17 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
     assert 'Usage:' in run('-h')
     for arguments in [('fmt',), ('--mode=',), ('--config',), ('build', '--compile', '--stdout')]:
         run(*arguments, success=False)
+    standard_fixture = repository / 'compiler/conformance/valid/standard-package-calls.trb'
+    standard_expected = standard_fixture.with_suffix('.out').read_text()
+    standard = root / 'standard-package-calls.trb'
+    standard.write_text(standard_fixture.read_text())
+    assert run('check', standard) == 'ok\n'
+    assert run('run', standard) == standard_expected
+    assert run('run', standard, '--', 'one', 'two') == standard_expected
+    standard_binary = root / 'standard-calls'
+    run('build', '--compile', '--outfile', standard_binary, standard)
+    assert subprocess.check_output([standard_binary, 'extra'], text=True) == standard_expected
+
     hello = root / 'hello world.trb'
     hello.write_text('import trb/std/process\ndef main()\nputs(Process.argv()[0])\nend\n')
     assert run(hello, '--', 'spaces; $literal') == 'spaces; $literal\n'

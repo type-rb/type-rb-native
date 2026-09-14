@@ -13,7 +13,7 @@ import { MirIteration, MirRangeConstruction, mir_iteration_valid } from iteratio
 import { float_literal_in_range, integer_literal_in_range, number_is_float, small_nonnegative_integer_operand } from literals
 import { MirLoopTransfer, mir_loop_transfer_valid } from mir
 import { mir_array_assignment_plan, mir_array_assignment_valid } from mir_analysis
-import { mir_checked_call } from mir_calls
+import { mir_checked_call, mir_checked_standard_call } from mir_calls
 import { mir_logical_begin, mir_logical_join } from mir_logical
 import { mir_checked_puts, mir_checked_string_binary, mir_checked_string_literal, mir_checked_string_operation } from mir_strings
 import { mir_control_active, mir_control_allocate, mir_control_assign, mir_control_branch, mir_control_enter, mir_control_jump, mir_control_loop_begin, mir_control_loop_branch, mir_control_loop_end, mir_control_prepare, mir_control_return, mir_control_transfer } from mir_control
@@ -460,6 +460,9 @@ def check_call(
 	if callee_name == "puts"
 		return mir_checked_puts(state, locals, mir_arguments, origin)
 	end
+	if callee_category == 4 || callee_category == 5
+		return mir_checked_standard_call(state, locals, callee_category, mir_arguments, result_type, origin)
+	end
 	return mir_checked_call(state, locals, function_index, mir_arguments, result_type, origin)
 end
 
@@ -638,7 +641,7 @@ def check_postfix(
 					break
 				end
 				if token_is(state, position[0], "(")
-					if member != "size" && member != "to_i" && member != "to_s" && member != "push" && member != "new" && !((value.type_name == "Hash" || hash_key_type(value.type_name) != "") && checked_hash_method(member) != 0)
+					if value.category < 4 && member != "size" && member != "to_i" && member != "to_s" && member != "push" && member != "new" && !((value.type_name == "Hash" || hash_key_type(value.type_name) != "") && checked_hash_method(member) != 0)
 						scalar_mir_disable(locals)
 					end
 					if value.category >= 4
@@ -1287,27 +1290,21 @@ def check_block(
 	): Boolean
 	skip_newlines(state, position)
 	while true
+		mut terminated := locals.mir_state[4] >= 0
+		if locals.mir_state[4] == - 2
+			terminated = true
+		end
 		if mir_control_active(locals) && locals.mir_control[6] == 1
+			terminated = true
+		end
+		if locals.mir_state[0] == 1 && terminated
 			if !syntax_block_end(state, position[0]) && !syntax_conditional_tail(state, position[0])
-				# Keep checking the unreachable tail for language diagnostics,
-				# without emitting values or reopening its terminated MIR block.
+				# Diagnose the entire unreachable tail without replacing the
+				# scalar return or reopening a terminated control-flow block.
 				scalar_mir_disable(locals)
 				checked := check_block(state, position, locals, result_type, loop_origin)
 				locals.mir_state[0] = 1
 				return checked
-			end
-		end
-		if locals.mir_state[0] > 0
-			if locals.mir_state[4] >= 0
-				if !syntax_block_end(state, position[0]) && !syntax_conditional_tail(state, position[0])
-					scalar_mir_disable(locals)
-				end
-			else
-				if locals.mir_state[4] == - 2
-					if !syntax_block_end(state, position[0]) && !syntax_conditional_tail(state, position[0])
-						scalar_mir_disable(locals)
-					end
-				end
 			end
 		end
 		if terminal_token(state, position[0])

@@ -63,6 +63,35 @@ def mir_call_value_type(native_module: MirModule, name: String): Boolean
 	return false
 end
 
+# The resolver has already bound the package identity, including import aliases.
+# Standard APIs have their own signature kind, separate from compiler privileges.
+def mir_checked_standard_call(mut state: CompilerState, mut locals: CheckedLocals, category: Integer, arguments: Array<Integer>, result_type: String, origin: Integer): CheckedValue
+	if locals.mir_state[0] == 0
+		return checked_value(result_type, 0, 9007199254740991, 0)
+	end
+	adapter := category + 6
+	mut callee := state.function_count[0]
+	while callee < state.scalar_mir.signatures.size()
+		if state.scalar_mir.signatures[callee].kind == 3 && state.scalar_mir.signatures[callee].adapter == adapter
+			break
+		end
+		callee += 1
+	end
+	if callee == state.scalar_mir.signatures.size()
+		mut name := "trb/std/process.argv"
+		mut parameters: Array<String> := []
+		mut mutable: Array<Integer> := []
+		if category == 5
+			name = "trb/std/math.sqrt"
+			parameters = ["Float"]
+			mutable = [0]
+		end
+		mir_semantic_type_id(state.scalar_mir, result_type)
+		state.scalar_mir.signatures.push(MirSignature.new(id: callee, kind: 3, name: name, adapter: adapter, source_id: state.active_module[0], line: load_integer(state.token_lines, origin), parameter_types: parameters, parameter_mutable: mutable, result_type: result_type))
+	end
+	return mir_checked_call(state, locals, callee, arguments, result_type, origin)
+end
+
 def mir_checked_call(mut state: CompilerState, mut locals: CheckedLocals, callee: Integer, arguments: Array<Integer>, result_type: String, origin: Integer): CheckedValue
 	if callee < 0 || callee >= state.scalar_mir.signatures.size()
 		scalar_mir_disable(locals)
@@ -107,7 +136,7 @@ def mir_signatures_error(native_module: MirModule): String
 	mut index := 0
 	while index < native_module.signatures.size()
 		signature := native_module.signatures[index]
-		if signature.id != index || signature.kind < 0 || signature.kind > 2
+		if signature.id != index || signature.kind < 0 || signature.kind > 3
 			return "MIR declaration identity is invalid"
 		end
 		if !mir_origin_valid(signature.source_id, signature.line, native_module.source_count[0])
@@ -144,6 +173,9 @@ def mir_function_signature_error(native_module: MirModule, function: MirFunction
 		return "MIR function declaration is missing"
 	end
 	signature := native_module.signatures[function.id]
+	if signature.kind == 3
+		return "MIR standard package call cannot have a function body"
+	end
 	if function.source_id != signature.source_id || function.line != signature.line || function.result_type != signature.result_type || function.parameter_count != signature.parameter_types.size()
 		return "MIR function declaration differs"
 	end

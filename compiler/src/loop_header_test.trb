@@ -2,8 +2,16 @@ import { MirArrayOperation } from mir
 import { optimize_verified_mir } from mir_passes
 import { verify_mir } from mir_verifier
 import { describe, expect, test } from trb/std/test
-import { assignment_effect_state } from array_assignment_test
+import { compiler_test_check_all_direct } from compiler_test
+import { logical_checked_source } from logical_test
+import { CompilerState } from state
 import { mir_test_module } from mir_test
+
+def loop_header_source(source: String): CompilerState
+	mut state := logical_checked_source(source)
+	expect(compiler_test_check_all_direct(state)).to_be_true()
+	return state
+end
 
 # A barrier before a loop must not become a barrier inside that loop.
 def loop_header_region(): Array<MirArrayOperation>
@@ -59,18 +67,18 @@ describe("MIR loop-local Array headers") do
 	end
 
 	test("keeps initialized Arrays stable in an effect-free computation loop") do
-		state := assignment_effect_state("def main()\nmut values := [1, 2]\nvalues.push(3)\nmut i := 0\nwhile i < values.size()\nvalues[i] += 1\ni += 1\nend\nvalues.push(4)\nend\n")
+		state := loop_header_source("def main()\nmut values := [1, 2]\nvalues.push(3)\nmut i := 0\nwhile i < values.size()\nvalues[i] += 1\ni += 1\nend\nvalues.push(4)\nend\n")
 		expect(state.scalar_mir.array_headers[0]).to_equal([])
 		expect(state.scalar_mir.array_loop_headers[0].size()).to_equal(3)
 	end
 
 	test("keeps nested clean loops available inside an effectful outer loop") do
-		state := assignment_effect_state("def main()\nmut values := [1, 2]\nmut outer := 0\nwhile outer < 2\nvalues.push(3)\nmut i := 0\nwhile i < values.size()\nvalues[i] += 1\ni += 1\nend\nouter += 1\nend\nend\n")
+		state := loop_header_source("def main()\nmut values := [1, 2]\nmut outer := 0\nwhile outer < 2\nvalues.push(3)\nmut i := 0\nwhile i < values.size()\nvalues[i] += 1\ni += 1\nend\nouter += 1\nend\nend\n")
 		expect(state.scalar_mir.array_loop_headers[0].size()).to_equal(3)
 	end
 
 	test("prefers one enclosing clean lifetime over duplicate nested headers") do
-		state := assignment_effect_state("def main()\nmut values := [1, 2]\nmut outer := 0\nwhile outer < 2\nmut i := 0\nwhile i < values.size()\nvalues[i] += 1\ni += 1\nend\nouter += 1\nend\nend\n")
+		state := loop_header_source("def main()\nmut values := [1, 2]\nmut outer := 0\nwhile outer < 2\nmut i := 0\nwhile i < values.size()\nvalues[i] += 1\ni += 1\nend\nouter += 1\nend\nend\n")
 		expect(state.scalar_mir.array_loop_headers[0].size()).to_equal(3)
 	end
 
@@ -78,14 +86,14 @@ describe("MIR loop-local Array headers") do
 		bodies := ["alias.push(3)", "if i == 0\nalias.push(3)\nend", "values = [4, 5]", "next", "break"]
 		mut index := 0
 		while index < bodies.size()
-			state := assignment_effect_state("def main()\nmut values := [1, 2]\nmut alias := values\nmut i := 0\nwhile i < values.size()\nvalues[i] += 1\ni += 1\n" + bodies[index] + "\nend\nend\n")
+			state := loop_header_source("def main()\nmut values := [1, 2]\nmut alias := values\nmut i := 0\nwhile i < values.size()\nvalues[i] += 1\ni += 1\n" + bodies[index] + "\nend\nend\n")
 			expect(state.scalar_mir.array_loop_headers[0]).to_equal([])
 			index += 1
 		end
 	end
 
 	test("does not hoist loop-local declarations before their initialization") do
-		state := assignment_effect_state("def run(values: Array<Integer>)\nmut i := 0\nwhile i < values.size()\nlocal := values\ni += local[0]\nend\nend\ndef main()\nrun([1])\nend\n")
+		state := loop_header_source("def run(values: Array<Integer>)\nmut i := 0\nwhile i < values.size()\nlocal := values\ni += local[0]\nend\nend\ndef main()\nrun([1])\nend\n")
 		expect(state.scalar_mir.array_loop_headers[0]).to_equal([])
 	end
 end
