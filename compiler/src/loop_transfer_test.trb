@@ -1,4 +1,4 @@
-import { compiler_test_check_direct } from compiler_test
+import { checked_loop_transfer_kind } from checked_program
 import { check, emit_qbe } from compiler
 import { lex } from lexer
 import { MirLoopTransfer, mir_loop_transfer_valid } from mir
@@ -21,7 +21,7 @@ describe("Checked loop transfers") do
 		expect(mir_loop_transfer_valid(MirLoopTransfer.new(kind: 2, origin: 8, target: 8), 8, 2, 8, 20)).to_be_false()
 	end
 
-	test("rejects malformed source transfer plans in managed direct callers") do
+	test("validates malformed source transfer plans for the REPL consumer") do
 		source := "def main()\nowner := {1 => 1}\nmarker := \"managed caller\"\nwhile true\nwhile true\nbreak\nend\nbreak\nend\nend\n"
 		mut mode := 0
 		while mode < 6
@@ -29,14 +29,18 @@ describe("Checked loop transfers") do
 			expect(lex(state, source)).to_be_true()
 			expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
 			expect(resolve(state)).to_be_true()
-			expect(compiler_test_check_direct(state)).to_be_true()
+			expect(check(state)).to_be_true()
 			mut origin := 0
 			mut outer := 0
 			while load_string(state.token_texts, origin) != "while"
 				origin += 1
 			end
 			outer = origin
+			mut inner := origin
 			while load_string(state.token_texts, origin) != "break"
+				if load_string(state.token_texts, origin) == "while"
+					inner = origin
+				end
 				origin += 1
 			end
 			if mode == 0
@@ -52,7 +56,7 @@ describe("Checked loop transfers") do
 			else
 				store_integer(state.loop_transfer_targets, origin, - 9007199254740991)
 			end
-			emit_qbe(state)
+			expect(checked_loop_transfer_kind(state, origin, inner)).to_equal(0)
 			expect(has_diagnostic(state)).to_be_true()
 			expect(load_string(state.diagnostic_messages, 0)).to_equal("invalid checked loop transfer target")
 			mode += 1
@@ -89,7 +93,7 @@ describe("Checked loop transfers") do
 		while load_string(state.token_texts, origin) != "while"
 			origin += 1
 		end
-		expect(load_integer(state.mir_nonnegative_facts, origin)).to_equal(0)
+		expect(load_integer(state.checked_operator_plans, origin)).to_equal(0)
 		emit_qbe(state)
 		expect(has_diagnostic(state)).to_be_false()
 	end

@@ -1,9 +1,8 @@
 import { mir_semantic_type_id, mir_semantic_value_type } from mir_types
-import { array_region_operation, mir_add_value } from checked_values
+import { mir_add_value } from checked_values
 import { MirFunction, mir_instruction_with_payload } from mir
 import { mir_block } from mir_construction
 import { mir_control_active, mir_control_commit } from mir_control
-import { array_element_type } from resolution
 import { CheckedLocals, CompilerState } from state
 import { load_integer, load_string, store_integer } from storage
 
@@ -46,17 +45,11 @@ def mir_add_parameter(
 		mut locals: CheckedLocals,
 		parameter_index: Integer,
 	)
-	type_name := load_string(state.parameter_types, parameter_index)
-	mut tag := 0
-	if array_element_type(type_name) != ""
-		tag = 1 + load_integer(state.parameter_mutable, parameter_index)
-	end
-	array_region_operation(locals, 1, tag, parameter_index)
 	if locals.mir_state[0] == 0
 		return
 	end
 	value_id := mir_add_value(
-		state, locals, mir_semantic_type_id(state.scalar_mir, type_name), load_integer(state.parameter_lines, parameter_index),
+		state, locals, mir_semantic_type_id(state.scalar_mir, load_string(state.parameter_types, parameter_index)), load_integer(state.parameter_lines, parameter_index),
 	)
 	store_integer(locals.mir_values, locals.count[0] - 1, value_id + 1)
 	return
@@ -68,7 +61,7 @@ def scalar_mir_commit(
 		mut locals: CheckedLocals,
 	): String
 	if locals.mir_state[0] == 0
-		return ""
+		return "checked function has no MIR body"
 	end
 	if mir_control_active(locals)
 		return mir_control_commit(state, function_index, locals)

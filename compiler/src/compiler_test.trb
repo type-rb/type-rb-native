@@ -1,17 +1,11 @@
-import { check_function_body, checked_function_locals, finalize_checked_module } from checked_functions
-import { scalar_mir_disable } from checked_values
-import { mir_declare_signatures } from mir_calls
-import { mir_declare_types } from mir_types
-import { check_expression, check_primary, mir_nonnegative_fact } from checked_program
-import { CompilerProjectSources, check, emit_qbe, function_reassigns_parameter, load_file_root, load_project_sources, lower_checked_binary, string_starts_at } from compiler
+import { check_expression, check_primary } from checked_program
+import { CompilerProjectSources, check, emit_qbe, load_file_root, load_project_sources, string_starts_at } from compiler
 import { character_in, lex, lex_module } from lexer
 import { MirInstruction, mir_function_index } from mir
 import { verify_mir } from mir_verifier
 import { parse_module } from parser
 import { encode_static_string } from qbe_constants
-import { emit_context_new, emitted_value } from qbe_context
-import { emit_array_header, invalidate_array_header_cache } from qbe_memory
-import { QbeOutput, qbe_output_new } from qbe_output
+import qbe_output
 import { find_field, find_function_in_module, find_import_binding, find_record_in_module, find_record_type, resolve } from resolution
 import { CompilerState, add_module, compiler_new, find_module, function_index_key, has_diagnostic, local_add, local_find, locals_new } from state
 import { integer_storage, load_integer, load_string, store_integer, store_string, string_storage } from storage
@@ -20,37 +14,6 @@ import trb/std/process
 import trb/std/result
 import trb/std/string_builder
 import { describe, expect, test } from trb/std/test
-
-# Retained direct-adapter controls use the same parameter/body/finalization stages
-# as production, disabling only their main function's builder before body checking.
-def compiler_test_check_direct(mut state: CompilerState): Boolean
-	mir_declare_types(state)
-	mir_declare_signatures(state)
-	mut index := 0
-	while index < state.function_count[0]
-		mut locals := checked_function_locals(state, index)
-		if load_string(state.function_names, index) == "main" && load_integer(state.function_modules, index) == state.entry_module[0]
-			scalar_mir_disable(locals)
-		end
-		check_function_body(state, index, locals)
-		index += 1
-	end
-	return finalize_checked_module(state)
-end
-
-# Explicit legacy region controls; production never selects this builder.
-def compiler_test_check_all_direct(mut state: CompilerState): Boolean
-	mir_declare_types(state)
-	mir_declare_signatures(state)
-	mut index := 0
-	while index < state.function_count[0]
-		mut locals := checked_function_locals(state, index)
-		scalar_mir_disable(locals)
-		check_function_body(state, index, locals)
-		index += 1
-	end
-	return finalize_checked_module(state)
-end
 
 def compiler_test_instruction_with_cell(instruction: MirInstruction, field: Integer, value: Integer): MirInstruction
 	mut row := [instruction.kind, instruction.result, instruction.first, instruction.second, instruction.payload, instruction.failure, instruction.source_id, instruction.line]
@@ -222,7 +185,7 @@ describe("Native TypeRB frontend") do
 		expect(lex(state, source)).to_be_true()
 		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(resolve(state)).to_be_true()
-		expect(compiler_test_check_direct(state)).to_be_true()
+		expect(check(state)).to_be_true()
 		expect(verify_mir(state.scalar_mir, true)).to_equal("")
 		function_index := mir_function_index(state.scalar_mir, 0)
 		expect(function_index >= 0).to_be_true()
@@ -234,7 +197,7 @@ describe("Native TypeRB frontend") do
 		qbe := output_source(emit_qbe(state))
 		expect(occurrence_count(qbe, " =w cultl ")).to_equal(1)
 		expect(qbe.include?(", 67108864")).to_be_true()
-		expect(occurrence_count(qbe, "call $trbn_integer_mul")).to_equal(1)
+		expect(occurrence_count(qbe, "call $trbn_integer_mul")).to_equal(2)
 
 		state.scalar_mir.instructions[instruction_index] = compiler_test_instruction_with_cell(state.scalar_mir.instructions[instruction_index], 4, 14)
 		expect(verify_mir(state.scalar_mir, true)).to_equal(
@@ -251,7 +214,7 @@ describe("Native TypeRB frontend") do
 		expect(lex(state, source)).to_be_true()
 		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(resolve(state)).to_be_true()
-		expect(compiler_test_check_direct(state)).to_be_true()
+		expect(check(state)).to_be_true()
 		expect(verify_mir(state.scalar_mir, true)).to_equal("")
 		function_index := mir_function_index(state.scalar_mir, 0)
 		expect(function_index >= 0).to_be_true()
@@ -338,146 +301,6 @@ describe("Native TypeRB frontend") do
 		expect(state.scalar_mir.functions[mir_function_index(state.scalar_mir, 1)].kind).to_equal(3)
 	end
 
-	test("selects stable Array headers only across checked header-stable scopes") do
-		source := "def scalar(index: Integer): Float\n\treturn index + 1\nend\n\ndef stable(input: Array<Float>, mut output: Array<Float>)\n\tmut outer := 0\n\twhile outer < input.size()\n\t\tmut total := 0.0\n\t\tmut inner := 0\n\t\twhile inner < input.size()\n\t\t\ttotal += input[inner]\n\t\t\tinner += 1\n\t\tend\n\t\toutput[outer] = total\n\t\touter += 1\n\tend\n\treturn\nend\n\ndef opaque(values: Array<Float>)\n\treturn\nend\n\ndef called(input: Array<Float>): Float\n\tmut index := 0\n\tmut total := 0.0\n\twhile index < input.size()\n\t\topaque(input)\n\t\ttotal += input[index]\n\t\tindex += 1\n\tend\n\treturn total\nend\n\ndef allocated(input: Array<Float>): Float\n\tunused: Array<Float> := []\n\tmut index := 0\n\tmut total: Float := unused.size()\n\twhile index < input.size()\n\t\ttotal += input[index]\n\t\tindex += 1\n\tend\n\treturn total\nend\n\ndef grown(mut input: Array<Float>): Float\n\tinput.push(1.0)\n\treturn input[0]\nend\n\ndef different(left: Array<Float>, right: Array<Float>): Float\n\tmut index := 0\n\tmut total := 0.0\n\twhile index < left.size()\n\t\ttotal += right[index]\n\t\tindex += 1\n\tend\n\treturn total\nend\n\ndef alias_safe(input: Array<Float>, mut output: Array<Float>)\n\tmut index := 0\n\twhile index < input.size()\n\t\toutput[index] = input[index]\n\t\tindex += 1\n\tend\n\treturn\nend\n\ndef main()\n\treturn\nend\n"
-		mut state := compiler_new(source.size() + 1)
-		expect(lex(state, source)).to_be_true()
-		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
-		expect(resolve(state)).to_be_true()
-		expect(compiler_test_check_all_direct(state)).to_be_true()
-		# A different loop bound does not invalidate header reuse. Access
-		# checks still test the indexed Array's own length at runtime.
-		expect(state.scalar_mir.array_headers).to_equal([[], [0, 1], [], [], [], [], [1], [1, 0], []])
-		expect(verify_mir(state.scalar_mir, true)).to_equal("")
-	end
-
-	test("drops token-bound Array plans when typed control moves through MIR") do
-		source := "def copy(input: Array<Float>, mut output: Array<Float>)\n\tmut index := 0\n\twhile index < input.size()\n\t\toutput[index] = input[index]\n\t\tindex += 1\n\tend\n\treturn\nend\n\ndef main()\n\treturn\nend\n"
-		mut state := compiler_new(source.size() + 1)
-		expect(lex(state, source)).to_be_true()
-		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
-		expect(resolve(state)).to_be_true()
-		expect(check(state)).to_be_true()
-		expect(state.scalar_mir.functions[mir_function_index(state.scalar_mir, 0)].kind).to_equal(3)
-		expect(state.scalar_mir.array_headers.size()).to_equal(2)
-		expect(state.scalar_mir.array_regions).to_equal([[], []])
-		expect(state.scalar_mir.array_headers[0]).to_equal([])
-		expect(state.scalar_mir.array_headers[1]).to_equal([])
-		qbe := output_source(emit_qbe(state))
-		expect(qbe.include?("@mir_")).to_be_true()
-		expect(qbe.include?("call $trbn_array_address")).to_be_true()
-	end
-
-	test("retains immutable local Array headers across nested loops") do
-		source := "import trb/std/math\n\ndef local_header(input: Array<Float>, mut output: Array<Float>)\n\tvalues := input\n\tmut index := 0\n\twhile index < values.size()\n\t\tmut other := index\n\t\twhile other < values.size()\n\t\t\toutput[index] = Math.sqrt(values[other])\n\t\t\tother += 1\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n\ndef main()\n\treturn\nend\n"
-		mut state := compiler_new(source.size() + 1)
-		expect(lex(state, source)).to_be_true()
-		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
-		expect(resolve(state)).to_be_true()
-		expect(compiler_test_check_all_direct(state)).to_be_true()
-		expect(state.scalar_mir.array_headers).to_equal([[1, 2], []])
-		qbe := output_source(emit_qbe(state))
-		expect(occurrence_count(qbe, " =w cultl ")).to_equal(2)
-	end
-
-	test("keeps local Array headers conservative for alias growth and conditional scopes") do
-		bodies := [
-			"values := input\n\tmut index := 0\n\twhile index < values.size()\n\t\toutput[index] = values[index]\n\t\tinput.push(2.0)\n\t\tindex += 1\n\tend",
-			"mut values := input\n\toutput[0] = values[0]\n\tvalues = output",
-			"if input.size() > 0\n\t\tvalues := input\n\t\toutput[0] = values[0]\n\tend",
-			"mut index := 0\n\twhile index < input.size()\n\t\tvalues := input\n\t\toutput[index] = values[index]\n\t\tindex += 1\n\tend\n\tvalues := output\n\tinput[0] = values[0]",
-		]
-		mut index := 0
-		while index < bodies.size()
-			source := "def update(mut input: Array<Float>, mut output: Array<Float>)\n\t" + bodies[index] + "\n\treturn\nend\n\ndef main()\n\treturn\nend\n"
-			mut state := compiler_new(source.size() + 1)
-			expect(lex(state, source)).to_be_true()
-			expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
-			expect(resolve(state)).to_be_true()
-			expect(compiler_test_check_all_direct(state)).to_be_true()
-			expect(state.scalar_mir.array_headers).to_equal([[], []])
-			emit_qbe(state)
-			expect(has_diagnostic(state)).to_be_false()
-			index += 1
-		end
-	end
-
-	test("retains stable Array headers through checked conditional structure") do
-		sources := ["def update(mut input: Array<Float>, mut output: Array<Float>)\n\tvalues := input\n\tmut index := 0\n\twhile index < input.size()\n\t\tif index == 0\n\t\t\tif values.size() > 0\n\t\t\t\toutput[index] = values[index]\n\t\t\tend\n\t\telsif index == 1\n\t\t\toutput[index] = input[index]\n\t\telse\n\t\t\toutput[index] = values[index]\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n\ndef main()\n\treturn\nend\n", "def update(mut input: Array<Float>, mut output: Array<Float>)\n\tif input.size() == 0\n\t\treturn\n\tend\n\toutput[0] = input[0]\n\treturn\nend\n\ndef main()\n\treturn\nend\n"]
-		mut index := 0
-		while index < sources.size()
-			source := sources[index]
-			mut state := compiler_new(source.size() + 1)
-			expect(lex(state, source)).to_be_true()
-			expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
-			expect(resolve(state)).to_be_true()
-			expect(compiler_test_check_all_direct(state)).to_be_true()
-			expect(state.scalar_mir.array_headers[0].size() > 0).to_be_true()
-			expect(verify_mir(state.scalar_mir, true)).to_equal("")
-			emit_qbe(state)
-			expect(has_diagnostic(state)).to_be_false()
-			index += 1
-		end
-	end
-
-	test("blocks every stable Array header on local or parameter rebinding") do
-		bodies := [
-			"mut values := input\n\tvalues = output\n\tinput[0] = values[0]",
-			"if input.size() > 0\n\t\tinput.push(2.0)\n\tend\n\toutput[0] = input[0]",
-			"if input.size() > 0\n\t\tinput = output\n\tend\n\toutput[0] = input[0]",
-			"if input.size() > 0\n\t\tunused: Array<Float> := []\n\tend\n\toutput[0] = input[0]",
-
-			"input[0] = output[0]\n\tinput = output\n\tinput[0] = 8.0",
-			"input = output\n\tinput[0] = output[0]",
-			"mut values := input\n\tinput[0] = values[0]\n\tvalues = output\n\tinput[0] = values[- 1]",
-		]
-		mut index := 0
-		while index < bodies.size()
-			source := "def update(mut input: Array<Float>, mut output: Array<Float>)\n\t" + bodies[index] + "\n\treturn\nend\n\ndef main()\n\treturn\nend\n"
-			mut state := compiler_new(source.size() + 1)
-			expect(lex(state, source)).to_be_true()
-			expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
-			expect(resolve(state)).to_be_true()
-			expect(compiler_test_check_all_direct(state)).to_be_true()
-			expect(state.scalar_mir.array_headers).to_equal([[], []])
-			expect(verify_mir(state.scalar_mir, true)).to_equal("")
-			emit_qbe(state)
-			expect(has_diagnostic(state)).to_be_false()
-			index += 1
-		end
-	end
-
-	test("blocks stable Array-header plans across allocating primitives") do
-		effects := [
-			"unused := Process.argv()",
-			"unused := Box.new(value: 1)",
-			"unused := index.to_s()",
-			"unused := text + \"x\"",
-			"unused := text[0]",
-			"mut unused := text\n\t\tunused += \"x\"",
-		]
-		mut effect := 0
-		while effect < effects.size()
-			mut prefix := ""
-			if effect == 0
-				prefix = "import trb/std/process\n\n"
-			end
-			source := prefix + "record Box\n\tvalue: Integer\nend\n\ndef allocated(input: Array<Float>, text: String): Float\n\tmut total := 0.0\n\tmut index := 0\n\twhile index < input.size()\n\t\ttotal += input[index]\n\t\t" + effects[effect] + "\n\t\tindex += 1\n\tend\n\treturn total\nend\n\ndef main()\n\treturn\nend\n"
-			mut state := compiler_new(source.size() + 1)
-			expect(lex(state, source)).to_be_true()
-			expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
-			expect(resolve(state)).to_be_true()
-			checked := compiler_test_check_all_direct(state)
-			if !checked
-				expect(load_string(state.diagnostic_messages, 0)).to_equal("")
-			end
-			expect(checked).to_be_true()
-			expect(state.scalar_mir.array_headers[0]).to_equal([])
-			expect(verify_mir(state.scalar_mir, true)).to_equal("")
-			effect += 1
-		end
-	end
-
 	test("retains bounds checks after a loop index changes before its access") do
 		source := "def reordered(input: Array<Integer>, unused: Integer): Integer\n\tmut total := 0\n\tmut index := 0\n\twhile index < input.size()\n\t\tindex += 1\n\t\ttotal += input[index]\n\tend\n\treturn total\nend\n\ndef main()\n\treturn\nend\n"
 		mut state := compiler_new(source.size() + 1)
@@ -485,7 +308,7 @@ describe("Native TypeRB frontend") do
 		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(resolve(state)).to_be_true()
 		expect(check(state)).to_be_true()
-		expect(state.scalar_mir.array_headers[0]).to_equal([])
+
 		qbe := output_source(emit_qbe(state))
 		expect(state.scalar_mir.functions[mir_function_index(state.scalar_mir, 0)].kind).to_equal(3)
 		expect(qbe.include?("call $trbn_array_address")).to_be_true()
@@ -498,7 +321,7 @@ describe("Native TypeRB frontend") do
 		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(resolve(state)).to_be_true()
 		expect(check(state)).to_be_true()
-		expect(state.scalar_mir.array_headers[0]).to_equal([])
+
 		qbe := output_source(emit_qbe(state))
 		expect(state.scalar_mir.functions[mir_function_index(state.scalar_mir, 0)].kind).to_equal(3)
 		expect(qbe.include?("call $trbn_array_address")).to_be_true()
@@ -511,7 +334,7 @@ describe("Native TypeRB frontend") do
 		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(resolve(state)).to_be_true()
 		expect(check(state)).to_be_true()
-		expect(state.scalar_mir.array_headers[0]).to_equal([])
+
 		qbe := output_source(emit_qbe(state))
 		expect(state.scalar_mir.functions[mir_function_index(state.scalar_mir, 0)].kind).to_equal(3)
 		expect(qbe.include?("call $trbn_array_address")).to_be_true()
@@ -540,9 +363,7 @@ describe("Native TypeRB frontend") do
 		expect(state.scalar_mir.functions[mir_function_index(state.scalar_mir, 1)].kind).to_equal(3)
 		expect(state.scalar_mir.functions[mir_function_index(state.scalar_mir, 2)].kind).to_equal(3)
 		# General CFG plans no longer retain the unused direct-header projection.
-		expect(state.scalar_mir.array_headers[0]).to_equal([])
-		expect(state.scalar_mir.array_headers[1]).to_equal([])
-		expect(state.scalar_mir.array_headers[2]).to_equal([])
+
 		expect(state.scalar_mir.array_loops[0].size()).to_equal(0)
 		expect(state.scalar_mir.array_loops[1].size()).to_equal(1)
 		expect(state.scalar_mir.array_loops[2].size()).to_equal(1)
@@ -1268,7 +1089,7 @@ describe("Native TypeRB frontend") do
 			expect(true).to_be_true()
 		else
 			base := root + "/compiler/src/"
-			names := ["compiler", "mir_array_loops", "lexer", "literals", "mir", "iteration_mir", "path", "hash_types", "hash_mir", "storage", "state", "parser", "checked_values", "resolution", "hash_checked", "iteration_checked", "mir_analysis", "mir_construction", "mir_control", "mir_calls", "mir_intrinsics", "qbe_calls", "checked_functions", "mir_flow", "mir_identities", "mir_logical", "mir_instructions", "mir_strings", "mir_roots", "mir_types", "mir_arrays", "mir_records", "qbe_arrays", "qbe_roots", "qbe_strings", "qbe_records", "checked_types", "checked_program", "qbe_output", "hash_runtime", "mir_builder", "mir_passes", "mir_verifier", "project_config", "qbe_constants", "qbe_context", "qbe_memory", "qbe_numeric", "qbe_mir", "qbe_control", "qbe_runtime", "mir_hashes", "mir_hash_inference", "qbe_hashes", "mir_ranges", "qbe_ranges", "mir_iteration_control"]
+			names := ["compiler", "mir_array_loops", "checked_functions", "literals", "mir", "mir_flow", "mir_roots", "iteration_mir", "path", "hash_types", "hash_mir", "storage", "state", "parser", "checked_values", "resolution", "hash_checked", "iteration_checked", "mir_analysis", "mir_construction", "mir_control", "mir_logical", "mir_calls", "mir_intrinsics", "mir_strings", "mir_instructions", "checked_types", "checked_program", "qbe_output", "hash_runtime", "mir_builder", "mir_passes", "mir_verifier", "project_config", "qbe_constants", "qbe_context", "qbe_roots", "qbe_strings", "qbe_numeric", "qbe_calls", "qbe_mir", "qbe_control", "qbe_runtime", "mir_types", "mir_arrays", "qbe_arrays", "lexer", "mir_records", "qbe_records", "mir_identities", "mir_hashes", "mir_hash_inference", "qbe_hashes", "mir_ranges", "qbe_ranges", "mir_iteration_control", "mir_numeric", "qbe_functions"]
 			mut sources: Array<String> := []
 			names.each do |name|
 				sources.push(required_test_source(base + name + ".trb"))
@@ -1662,19 +1483,19 @@ describe("Native TypeRB frontend") do
 	end
 
 	test("inlines bounded scalar helpers outside lexical loops") do
-		# Explicitly exercise the retained direct-adapter control.
+		# Exercise the ordinary MIR path.
 		source := "def scalar(value: Integer): Integer\n\tsum := value + 1\n\tproduct := sum * 2\n\treturn product / 2\nend\n\ndef main()\n\tretained := {1 => 1}\n\tmut values: Array<Integer> := [0]\n\tmut index := 0\n\twhile index < 1\n\t\tvalues[0] = scalar(index)\n\t\tindex += 1\n\tend\n\treturn\nend\n"
 		mut state := compiler_new(source.size() + 1)
 		expect(lex(state, source)).to_be_true()
 		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(resolve(state)).to_be_true()
-		expect(compiler_test_check_direct(state)).to_be_true()
+		expect(check(state)).to_be_true()
 		qbe := output_source(emit_qbe(state))
 		expect(qbe.include?("call $trbn_integer_add")).to_be_false()
 		expect(qbe.include?("call $trbn_integer_mul")).to_be_false()
 		expect(qbe.include?("call $trbn_integer_divide")).to_be_false()
-		# The verified scalar call cannot invalidate the initially checked address.
-		expect(occurrence_count(qbe, "call $trbn_array_address")).to_equal(0)
+		# Capture, read and final store keep their independent checks in typed MIR.
+		expect(occurrence_count(qbe, "call $trbn_array_address")).to_equal(3)
 	end
 
 	test("routes dynamic Integer multiplication through the bounded checked entry") do
@@ -1735,252 +1556,17 @@ describe("Native TypeRB frontend") do
 	end
 
 	test("keeps the loop reserve independent when the non-loop reserve is exhausted") do
-		# Explicitly exercise the retained direct-adapter control.
+		# Exercise the ordinary MIR path.
 		source := "def scalar(value: Integer, label: String): Integer\n\tmut result := value\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\tresult += 1\n\treturn result\nend\n\ndef main()\n\tretained := {1 => 1}\n\tmut values: Array<Integer> := [0]\n\tmut index := 0\n\twhile index < 1\n\t\tvalues[0] = scalar(index, \"managed caller\")\n\t\tindex += 1\n\tend\n\treturn\nend\n"
-		mut state := compiler_new(source.size() + 1)
-		expect(lex(state, source)).to_be_true()
-		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
-		expect(resolve(state)).to_be_true()
-		expect(compiler_test_check_direct(state)).to_be_true()
-		qbe := output_source(emit_qbe(state))
-		expect(qbe.include?("call $trbn_integer_add")).to_be_true()
-		# The final assignment store independently checks current storage.
-		expect(occurrence_count(qbe, "call $trbn_array_address")).to_equal(1)
-	end
-
-	test("spends the loop inline budget on dynamic Array reads and mutation") do
-		# Explicitly exercise the retained direct-adapter control.
-		source := "def main()\n\tretained := {1 => 1}\n\tmut values: Array<Integer> := [10, 20]\n\tindices := [1, - 2]\n\tmut position := 0\n\twhile position < indices.size()\n\t\tindex := indices[position]\n\t\tvalues[index] = values[index] + 1\n\t\tposition += 1\n\tend\n\treturn\nend\n"
-		mut state := compiler_new(source.size() + 1)
-		expect(lex(state, source)).to_be_true()
-		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
-		expect(resolve(state)).to_be_true()
-		expect(compiler_test_check_direct(state)).to_be_true()
-		qbe := output_source(emit_qbe(state))
-		# Initial accesses retain their checks; the effect-free store reuses its address.
-		expect(occurrence_count(qbe, "call $trbn_array_address")).to_equal(0)
-		expect(occurrence_count(qbe, "function l $trbn_array_address")).to_equal(0)
-		expect(occurrence_count(qbe, "call $trbn_fail(l $trbn_bounds_error")).to_equal(2)
-	end
-
-	test("omits negative Array-index normalization only for proven induction locals") do
-		proven_source := "def main()\n\tretained := {1 => 1}\n\tmut values: Array<Integer> := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tvalues[index] = values[index] + 1\n\t\tindex += 1\n\tend\n\treturn\nend\n"
-		mut proven := compiler_new(proven_source.size() + 1)
-		expect(lex(proven, proven_source)).to_be_true()
-		expect(parse_module(proven, 0, proven.entry_module[0])).to_be_true()
-		expect(resolve(proven)).to_be_true()
-		expect(compiler_test_check_direct(proven)).to_be_true()
-		proven_qbe := output_source(emit_qbe(proven))
-		expect(occurrence_count(proven_qbe, " =l sar ")).to_equal(0)
-		expect(occurrence_count(proven_qbe, " =w cultl ")).to_equal(2)
-
-		direct_derived_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < 1\n\t\tvalue := values[index + 1]\n\t\tindex += 1\n\tend\n\treturn\nend\n"
-		mut direct_derived := compiler_new(direct_derived_source.size() + 1)
-		expect(lex(direct_derived, direct_derived_source)).to_be_true()
-		expect(parse_module(direct_derived, 0, direct_derived.entry_module[0])).to_be_true()
-		expect(resolve(direct_derived)).to_be_true()
-		expect(compiler_test_check_direct(direct_derived)).to_be_true()
-		mut verified_index_facts := 0
-		mut unresolved_index_facts := 0
-		mut fact_index := 0
-		while fact_index < direct_derived.token_count[0]
-			if load_string(direct_derived.token_texts, fact_index) == "]"
-				fact := mir_nonnegative_fact(direct_derived, fact_index)
-				if fact == 2
-					verified_index_facts += 1
-				end
-				if fact < 0
-					unresolved_index_facts += 1
-				end
-			end
-			fact_index += 1
-		end
-		expect(verified_index_facts).to_equal(1)
-		expect(unresolved_index_facts).to_equal(0)
-		direct_derived_qbe := output_source(emit_qbe(direct_derived))
-		expect(occurrence_count(direct_derived_qbe, " =l sar ")).to_equal(0)
-
-		reassigned_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tvalue := values[index]\n\t\tindex =- 1\n\tend\n\treturn\nend\n"
-		mut reassigned := compiler_new(reassigned_source.size() + 1)
-		expect(lex(reassigned, reassigned_source)).to_be_true()
-		expect(parse_module(reassigned, 0, reassigned.entry_module[0])).to_be_true()
-		expect(resolve(reassigned)).to_be_true()
-		expect(compiler_test_check_direct(reassigned)).to_be_true()
-		reassigned_qbe := output_source(emit_qbe(reassigned))
-		expect(occurrence_count(reassigned_qbe, " =l sar ")).to_equal(1)
-
-		non_unit_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tvalue := values[index]\n\t\tindex += 2\n\tend\n\treturn\nend\n"
-		mut non_unit := compiler_new(non_unit_source.size() + 1)
-		expect(lex(non_unit, non_unit_source)).to_be_true()
-		expect(parse_module(non_unit, 0, non_unit.entry_module[0])).to_be_true()
-		expect(resolve(non_unit)).to_be_true()
-		expect(compiler_test_check_direct(non_unit)).to_be_true()
-		non_unit_qbe := output_source(emit_qbe(non_unit))
-		expect(occurrence_count(non_unit_qbe, " =l sar ")).to_equal(1)
-
-		nested_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tif index == 0\n\t\t\tvalue := values[index]\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
-		mut nested := compiler_new(nested_source.size() + 1)
-		expect(lex(nested, nested_source)).to_be_true()
-		expect(parse_module(nested, 0, nested.entry_module[0])).to_be_true()
-		expect(resolve(nested)).to_be_true()
-		expect(compiler_test_check_direct(nested)).to_be_true()
-		nested_qbe := output_source(emit_qbe(nested))
-		expect(occurrence_count(nested_qbe, " =l sar ")).to_equal(1)
-
-		safe_nested_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tmut pass := 0\n\t\twhile pass < 1\n\t\t\tvalue := values[index]\n\t\t\tpass += 1\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
-		mut safe_nested := compiler_new(safe_nested_source.size() + 1)
-		expect(lex(safe_nested, safe_nested_source)).to_be_true()
-		expect(parse_module(safe_nested, 0, safe_nested.entry_module[0])).to_be_true()
-		expect(resolve(safe_nested)).to_be_true()
-		expect(compiler_test_check_direct(safe_nested)).to_be_true()
-		safe_nested_qbe := output_source(emit_qbe(safe_nested))
-		expect(occurrence_count(safe_nested_qbe, " =l sar ")).to_equal(0)
-
-		derived_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tmut other := index + 1\n\t\twhile other < values.size()\n\t\t\tvalue := values[other]\n\t\t\tother += 1\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
-		mut derived := compiler_new(derived_source.size() + 1)
-		expect(lex(derived, derived_source)).to_be_true()
-		expect(parse_module(derived, 0, derived.entry_module[0])).to_be_true()
-		expect(resolve(derived)).to_be_true()
-		expect(compiler_test_check_direct(derived)).to_be_true()
-		derived_qbe := output_source(emit_qbe(derived))
-		expect(occurrence_count(derived_qbe, " =l sar ")).to_equal(0)
-
-		derived_reassigned_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tmut other := index + 1\n\t\tother =- 1\n\t\twhile other < values.size()\n\t\t\tvalue := values[other]\n\t\t\tother += 1\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
-		mut derived_reassigned := compiler_new(derived_reassigned_source.size() + 1)
-		expect(lex(derived_reassigned, derived_reassigned_source)).to_be_true()
-		expect(parse_module(derived_reassigned, 0, derived_reassigned.entry_module[0])).to_be_true()
-		expect(resolve(derived_reassigned)).to_be_true()
-		expect(compiler_test_check_direct(derived_reassigned)).to_be_true()
-		derived_reassigned_qbe := output_source(emit_qbe(derived_reassigned))
-		expect(occurrence_count(derived_reassigned_qbe, " =l sar ")).to_equal(1)
-
-		derived_non_unit_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tmut other := index + 1\n\t\twhile other < values.size()\n\t\t\tvalue := values[other]\n\t\t\tother += 2\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
-		mut derived_non_unit := compiler_new(derived_non_unit_source.size() + 1)
-		expect(lex(derived_non_unit, derived_non_unit_source)).to_be_true()
-		expect(parse_module(derived_non_unit, 0, derived_non_unit.entry_module[0])).to_be_true()
-		expect(resolve(derived_non_unit)).to_be_true()
-		expect(compiler_test_check_direct(derived_non_unit)).to_be_true()
-		derived_non_unit_qbe := output_source(emit_qbe(derived_non_unit))
-		expect(occurrence_count(derived_non_unit_qbe, " =l sar ")).to_equal(1)
-
-		derived_invalidated_outer_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tmut other := index + 1\n\t\twhile other < values.size()\n\t\t\tvalue := values[other]\n\t\t\tother += 1\n\t\tend\n\t\tindex =- 2\n\tend\n\treturn\nend\n"
-		mut derived_invalidated_outer := compiler_new(derived_invalidated_outer_source.size() + 1)
-		expect(lex(derived_invalidated_outer, derived_invalidated_outer_source)).to_be_true()
-		expect(parse_module(derived_invalidated_outer, 0, derived_invalidated_outer.entry_module[0])).to_be_true()
-		expect(resolve(derived_invalidated_outer)).to_be_true()
-		expect(compiler_test_check_direct(derived_invalidated_outer)).to_be_true()
-		derived_invalidated_outer_qbe := output_source(emit_qbe(derived_invalidated_outer))
-		expect(occurrence_count(derived_invalidated_outer_qbe, " =l sar ")).to_equal(1)
-
-		derived_dynamic_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := 0\n\tmut step := 1\n\twhile index < values.size()\n\t\tmut other := index + step\n\t\twhile other < values.size()\n\t\t\tvalue := values[other]\n\t\t\tother += 1\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
-		mut derived_dynamic := compiler_new(derived_dynamic_source.size() + 1)
-		expect(lex(derived_dynamic, derived_dynamic_source)).to_be_true()
-		expect(parse_module(derived_dynamic, 0, derived_dynamic.entry_module[0])).to_be_true()
-		expect(resolve(derived_dynamic)).to_be_true()
-		expect(compiler_test_check_direct(derived_dynamic)).to_be_true()
-		derived_dynamic_qbe := output_source(emit_qbe(derived_dynamic))
-		expect(occurrence_count(derived_dynamic_qbe, " =l sar ")).to_equal(1)
-
-		derived_negative_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tmut other := index + (- 1)\n\t\twhile other < values.size()\n\t\t\tvalue := values[other]\n\t\t\tother += 1\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
-		mut derived_negative := compiler_new(derived_negative_source.size() + 1)
-		expect(lex(derived_negative, derived_negative_source)).to_be_true()
-		expect(parse_module(derived_negative, 0, derived_negative.entry_module[0])).to_be_true()
-		expect(resolve(derived_negative)).to_be_true()
-		expect(compiler_test_check_direct(derived_negative)).to_be_true()
-		derived_negative_qbe := output_source(emit_qbe(derived_negative))
-		expect(occurrence_count(derived_negative_qbe, " =l sar ")).to_equal(1)
-
-		derived_nonadjacent_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tmut other := index + 1\n\t\tmarker := 0\n\t\twhile other < values.size()\n\t\t\tvalue := values[other]\n\t\t\tother += 1\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
-		mut derived_nonadjacent := compiler_new(derived_nonadjacent_source.size() + 1)
-		expect(lex(derived_nonadjacent, derived_nonadjacent_source)).to_be_true()
-		expect(parse_module(derived_nonadjacent, 0, derived_nonadjacent.entry_module[0])).to_be_true()
-		expect(resolve(derived_nonadjacent)).to_be_true()
-		expect(compiler_test_check_direct(derived_nonadjacent)).to_be_true()
-		derived_nonadjacent_qbe := output_source(emit_qbe(derived_nonadjacent))
-		expect(occurrence_count(derived_nonadjacent_qbe, " =l sar ")).to_equal(1)
-
-		mutable_negative_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := -2\n\tmut round := 0\n\twhile round < 1\n\t\tvalue := values[index + 1]\n\t\tround += 1\n\tend\n\treturn\nend\n"
-		mut mutable_negative := compiler_new(mutable_negative_source.size() + 1)
-		expect(lex(mutable_negative, mutable_negative_source)).to_be_true()
-		expect(parse_module(mutable_negative, 0, mutable_negative.entry_module[0])).to_be_true()
-		expect(resolve(mutable_negative)).to_be_true()
-		expect(compiler_test_check_direct(mutable_negative)).to_be_true()
-		mutable_negative_qbe := output_source(emit_qbe(mutable_negative))
-		expect(occurrence_count(mutable_negative_qbe, " =l sar ")).to_equal(1)
-
-		later_reset_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut value := 0\n\tmut index := 0\n\twhile index < values.size()\n\t\tvalue = values[index]\n\t\tindex += 1\n\tend\n\tindex = 0\n\twhile index < values.size()\n\t\tvalue = values[index]\n\t\tindex += 1\n\tend\n\treturn\nend\n"
-		mut later_reset := compiler_new(later_reset_source.size() + 1)
-		expect(lex(later_reset, later_reset_source)).to_be_true()
-		expect(parse_module(later_reset, 0, later_reset.entry_module[0])).to_be_true()
-		expect(resolve(later_reset)).to_be_true()
-		expect(compiler_test_check_direct(later_reset)).to_be_true()
-		later_reset_qbe := output_source(emit_qbe(later_reset))
-		expect(occurrence_count(later_reset_qbe, " =l sar ")).to_equal(1)
-
-		nested_reassigned_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tif true\n\t\t\tvalue := values[index]\n\t\t\tindex = 0\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
-		mut nested_reassigned := compiler_new(nested_reassigned_source.size() + 1)
-		expect(lex(nested_reassigned, nested_reassigned_source)).to_be_true()
-		expect(parse_module(nested_reassigned, 0, nested_reassigned.entry_module[0])).to_be_true()
-		expect(resolve(nested_reassigned)).to_be_true()
-		expect(compiler_test_check_direct(nested_reassigned)).to_be_true()
-		nested_reassigned_qbe := output_source(emit_qbe(nested_reassigned))
-		expect(occurrence_count(nested_reassigned_qbe, " =l sar ")).to_equal(1)
-
-		nested_non_unit_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tmut pass := 0\n\t\twhile pass < 1\n\t\t\tvalue := values[index]\n\t\t\tindex += 2\n\t\t\tpass += 1\n\t\tend\n\tend\n\treturn\nend\n"
-		mut nested_non_unit := compiler_new(nested_non_unit_source.size() + 1)
-		expect(lex(nested_non_unit, nested_non_unit_source)).to_be_true()
-		expect(parse_module(nested_non_unit, 0, nested_non_unit.entry_module[0])).to_be_true()
-		expect(resolve(nested_non_unit)).to_be_true()
-		expect(compiler_test_check_direct(nested_non_unit)).to_be_true()
-		nested_non_unit_qbe := output_source(emit_qbe(nested_non_unit))
-		expect(occurrence_count(nested_non_unit_qbe, " =l sar ")).to_equal(1)
-
-		shadowed_source := "def main()\n\tretained := {1 => 1}\n\tvalues := [10, 20]\n\tmut index := 0\n\twhile index < values.size()\n\t\tif true\n\t\t\tmut index := 0\n\t\t\tvalue := values[index]\n\t\tend\n\t\tindex += 1\n\tend\n\treturn\nend\n"
-		mut shadowed := compiler_new(shadowed_source.size() + 1)
-		expect(lex(shadowed, shadowed_source)).to_be_true()
-		expect(parse_module(shadowed, 0, shadowed.entry_module[0])).to_be_true()
-		expect(resolve(shadowed)).to_be_true()
-		expect(compiler_test_check_direct(shadowed)).to_be_false()
-		expect(load_string(shadowed.diagnostic_codes, 0)).to_equal("TRBN4003")
-		expect(load_string(shadowed.diagnostic_messages, 0)).to_equal("duplicate local declaration index")
-
-		function_scoped_source := "def first(values: Array<Integer>)\n\tmut index := 0\n\twhile index < values.size()\n\t\tvalue := values[index]\n\t\tindex += 1\n\tend\n\treturn\nend\n\ndef unrelated()\n\tmut index := 0\n\tindex =- 1\n\treturn\nend\n\ndef main()\n\tretained := {1 => 1}\n\tfirst([10, 20])\n\treturn\nend\n"
-		mut function_scoped := compiler_new(function_scoped_source.size() + 1)
-		expect(lex(function_scoped, function_scoped_source)).to_be_true()
-		expect(parse_module(function_scoped, 0, function_scoped.entry_module[0])).to_be_true()
-		expect(resolve(function_scoped)).to_be_true()
-		expect(compiler_test_check_direct(function_scoped)).to_be_true()
-		function_scoped_qbe := output_source(emit_qbe(function_scoped))
-		expect(occurrence_count(function_scoped_qbe, " =l sar ")).to_equal(0)
-	end
-
-	test("falls back to shared Array addressing after the loop budget") do
-		mut source := "def main()\n\tretained := {1 => 1}\n\tvalues := [1]\n\tmut index := 0\n\tmut value := 0\n\twhile index < 1\n"
-		mut access_count := 0
-		while access_count < 65
-			source += "\t\tvalue = values[index]\n"
-			access_count += 1
-		end
-		source += "\t\tindex += 1\n\tend\n\treturn\nend\n"
-		mut state := compiler_new(source.size() + 1)
-		expect(lex(state, source)).to_be_true()
-		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
-		expect(resolve(state)).to_be_true()
-		expect(compiler_test_check_direct(state)).to_be_true()
-		qbe := output_source(emit_qbe(state))
-		expect(occurrence_count(qbe, "call $trbn_array_address")).to_equal(1)
-		expect(occurrence_count(qbe, "function l $trbn_array_address")).to_equal(1)
-		expect(occurrence_count(qbe, "call $trbn_fail(l $trbn_bounds_error")).to_equal(3)
-	end
-	test("keeps dynamic Array addressing outside loops shared") do
-		source := "def index(): Integer\n\treturn 0\nend\n\ndef main()\n\tvalues := [1]\n\tvalue := values[index()]\n\treturn\nend\n"
 		mut state := compiler_new(source.size() + 1)
 		expect(lex(state, source)).to_be_true()
 		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(resolve(state)).to_be_true()
 		expect(check(state)).to_be_true()
 		qbe := output_source(emit_qbe(state))
-		expect(qbe.include?("call $trbn_array_address")).to_be_true()
+		expect(qbe.include?("call $trbn_integer_add")).to_be_true()
+		# Capture, read and final store independently check current storage.
+		expect(occurrence_count(qbe, "call $trbn_array_address")).to_equal(3)
 	end
 
 	test("inlines only eligible scalar leaf calls in managed caller loops") do
@@ -1989,10 +1575,10 @@ describe("Native TypeRB frontend") do
 		expect(lex(eligible, eligible_source)).to_be_true()
 		expect(parse_module(eligible, 0, eligible.entry_module[0])).to_be_true()
 		expect(resolve(eligible)).to_be_true()
-		expect(compiler_test_check_direct(eligible)).to_be_true()
+		expect(check(eligible)).to_be_true()
 		eligible_qbe := output_source(emit_qbe(eligible))
 		expect(eligible_qbe.include?("call $trbnf0")).to_be_false()
-		expect(eligible_qbe.include?("function l $trbnf0(")).to_be_false()
+		expect(eligible_qbe.include?("function l $trbnf0(")).to_be_true()
 		expect(eligible_qbe.include?("# native retained scalar call ")).to_be_false()
 		expect(eligible_qbe.include?("@scalar_inline_integer_range_failure")).to_be_true()
 		expect(
@@ -2004,7 +1590,7 @@ describe("Native TypeRB frontend") do
 		expect(lex(non_loop, non_loop_source)).to_be_true()
 		expect(parse_module(non_loop, 0, non_loop.entry_module[0])).to_be_true()
 		expect(resolve(non_loop)).to_be_true()
-		expect(compiler_test_check_direct(non_loop)).to_be_true()
+		expect(check(non_loop)).to_be_true()
 		non_loop_qbe := output_source(emit_qbe(non_loop))
 		expect(non_loop_qbe.include?("call $trbnf0")).to_be_true()
 		expect(non_loop_qbe.include?("function l $trbnf0(")).to_be_true()
@@ -2016,7 +1602,7 @@ describe("Native TypeRB frontend") do
 		expect(lex(ineligible, ineligible_source)).to_be_true()
 		expect(parse_module(ineligible, 0, ineligible.entry_module[0])).to_be_true()
 		expect(resolve(ineligible)).to_be_true()
-		expect(compiler_test_check_direct(ineligible)).to_be_true()
+		expect(check(ineligible)).to_be_true()
 		expect(output_source(emit_qbe(ineligible)).include?("call $trbnf0")).to_be_true()
 
 		delegating_source := "def increment(value: Integer): Integer\n\treturn value + 1\nend\n\ndef delegating(value: Integer): Integer\n\treturn increment(value)\nend\n\ndef main()\n\tmarker := {1 => 1}\n\tmut index := 0\n\twhile index < 1\n\t\tindex = delegating(index)\n\tend\n\treturn\nend\n"
@@ -2024,87 +1610,34 @@ describe("Native TypeRB frontend") do
 		expect(lex(delegating, delegating_source)).to_be_true()
 		expect(parse_module(delegating, 0, delegating.entry_module[0])).to_be_true()
 		expect(resolve(delegating)).to_be_true()
-		expect(compiler_test_check_direct(delegating)).to_be_true()
+		expect(check(delegating)).to_be_true()
 		expect(output_source(emit_qbe(delegating)).include?("call $trbnf1")).to_be_true()
 	end
 
-	test("rejects missing invalid and mismatched checked binary plans") do
-		# Explicitly exercise the retained direct-adapter control.
-		source := "def main()\n\tretained := {1 => 1}\n\towner := [1]\n\tmut value := 7\n\tvalue += 1\n\tputs(value.to_s())\n\treturn\nend\n"
-		invalid := [0, 22, 18]
-		mut index := 0
-		while index < invalid.size()
-			mut state := compiler_new(source.size() + 1)
-			expect(lex(state, source)).to_be_true()
-			expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
-			expect(resolve(state)).to_be_true()
-			expect(compiler_test_check_direct(state)).to_be_true()
-			mut origin := 0
-			while load_string(state.token_texts, origin) != "+="
-				origin += 1
-			end
-			expect(load_integer(state.mir_nonnegative_facts, origin)).to_equal(17)
-			store_integer(state.mir_nonnegative_facts, origin, invalid[index])
-			emit_qbe(state)
-			expect(load_string(state.diagnostic_codes, 0)).to_equal("TRBN4004")
-			expect(load_string(state.diagnostic_messages, 0)).to_equal("invalid checked binary plan")
-			index += 1
-		end
-	end
-
-	test("constructs binary result metadata once from the checked result type") do
-		operators := ["+", "-", "*", "/", "%", "+", "<", "+", "==", "!="]
-		plans := [17, 18, 19, 20, 21, 33, 56, 65, 54, 55]
-		operand_types := ["Integer", "Integer", "Integer", "Integer", "Integer", "Float", "Float", "String", "String", "String"]
-		operands := ["7", "7", "7", "7", "7", "d_7.0", "d_7.0", "%string", "%string", "%string"]
-		result_types := ["Integer", "Integer", "Integer", "Integer", "Integer", "Float", "Boolean", "String", "Boolean", "Boolean"]
-		mut index := 0
-		while index < plans.size()
-			mut state := compiler_new(8)
-			expect(lex(state, operators[index])).to_be_true()
-			store_integer(state.mir_nonnegative_facts, 0, plans[index])
-			mut context := emit_context_new(8, [64, 6, 2])
-			mut output := qbe_output_new(256, [0, 0, 0, 0])
-			value := emitted_value(operands[index], operand_types[index], 0, "", "")
-			result := lower_checked_binary(state, context, output, 0, value, value)
-			expect(result.type_name).to_equal(result_types[index])
-			expect(result.category).to_equal(0)
-			expect(result.name).to_equal("")
-			expect(result.owner).to_equal("")
-			expect(result.slot).to_equal("")
-			expect(result.operand).to_equal("%t0")
-			expect(state.diagnostic_count[0]).to_equal(0)
-			index += 1
-		end
-	end
-
 	test("retains caller lower-bound checks after the literal-return inline budget") do
-		# Explicitly exercise the retained direct-adapter control.
+		# Exercise the ordinary MIR path.
 		source := "def one(): Integer\n\treturn 1\nend\n\ndef main()\n\tretained := {1 => 1}\n\towner := [1]\n\tmut value := 7\n\tmut index := 0\n\twhile index < 1\n\t\tvalue += one()\n\t\tvalue += one()\n\t\tvalue += one()\n\t\tindex += 1\n\tend\n\tputs(value.to_s())\n\treturn\nend\n"
 		mut state := compiler_new(source.size() + 1)
 		expect(lex(state, source)).to_be_true()
 		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(resolve(state)).to_be_true()
-		expect(compiler_test_check_direct(state)).to_be_true()
+		expect(check(state)).to_be_true()
 		qbe := output_source(emit_qbe(state))
 		expect(occurrence_count(qbe, "call $trbnf0()")).to_equal(1)
-		# The Boolean loop comparison and the retained call's lower-bound
-		# check keep distinct result widths. The safety check is not omitted.
-		# Neither of the two inlined literal returns needs that lower check.
-		expect(occurrence_count(qbe, " =l csltl %t")).to_equal(1)
-		expect(occurrence_count(qbe, " =w csltl %t")).to_equal(1)
+		# Inlining does not invent caller range facts from the emitted operand.
+		# All three call results retain lower-bound checks until MIR proves them.
+		expect(occurrence_count(qbe, " =w csltl %t")).to_equal(3)
+
 	end
 
 	test("branches on canonical Boolean values without repeated materialization") do
-		# The loop precedes the retained call: an ordinary eligible call closes
-		# the shared inline budget for every later call, even in a loop.
-		# Explicitly exercise the retained direct-adapter control.
+		# Exercise the ordinary MIR path.
 		source := "def invert(value: Boolean): Boolean\n\treturn !value\nend\n\ndef main()\n\tretained := {1 => 1}\n\towner := [1]\n\tmut index := 0\n\twhile index < 1\n\t\tif invert(false)\n\t\t\tputs(\"ok\")\n\t\tend\n\t\tindex += 1\n\tend\n\tif invert(true)\n\t\tputs(\"bad\")\n\tend\nend\n"
 		mut state := compiler_new(source.size() + 1)
 		expect(lex(state, source)).to_be_true()
 		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(resolve(state)).to_be_true()
-		expect(compiler_test_check_direct(state)).to_be_true()
+		expect(check(state)).to_be_true()
 		qbe := output_source(emit_qbe(state))
 		scalar_body := qbe.split("function l $trbnf0(")[1].split("\n}\n")[0]
 		# Inner temporary-root scopes also contain closing braces.
@@ -2137,7 +1670,7 @@ describe("Native TypeRB frontend") do
 		expect(lex(state, source)).to_be_true()
 		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
 		expect(resolve(state)).to_be_true()
-		expect(compiler_test_check_direct(state)).to_be_true()
+		expect(check(state)).to_be_true()
 		qbe := output_source(emit_qbe(state))
 		expect(occurrence_count(qbe, "call $trbnf0")).to_equal(1)
 		expect(qbe.include?("function l $trbnf0(")).to_be_true()
@@ -2148,7 +1681,7 @@ describe("Native TypeRB frontend") do
 		expect(lex(large, large_source)).to_be_true()
 		expect(parse_module(large, 0, large.entry_module[0])).to_be_true()
 		expect(resolve(large)).to_be_true()
-		expect(compiler_test_check_direct(large)).to_be_true()
+		expect(check(large)).to_be_true()
 		large_qbe := output_source(emit_qbe(large))
 		expect(large_qbe.include?("call $trbnf0")).to_be_true()
 		expect(large_qbe.include?("function l $trbnf0(")).to_be_true()
@@ -2257,10 +1790,7 @@ describe("Native TypeRB frontend") do
 			expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
 			expect(resolve(state)).to_be_true()
 			expect(check(state)).to_be_true()
-			expect(function_reassigns_parameter(state, 0, "values")).to_be_true()
-			expect(function_reassigns_parameter(state, 1, "values")).to_be_false()
-			expect(function_reassigns_parameter(state, 2, "values")).to_be_true()
-			expect(function_reassigns_parameter(state, 3, "value")).to_be_true()
+
 			index += 1
 		end
 	end
@@ -2415,59 +1945,6 @@ describe("Native TypeRB frontend") do
 		end
 		qbe := output_source(emit_qbe(state))
 		expect(qbe.include?("=l loadl $trbn_gc_temp_data")).to_be_true()
-	end
-
-	test("preserves a verified stable Array header across fallback invalidations") do
-		mut context := emit_context_new(16, [64, 16, 2])
-		mut output := qbe_output_new(16, [0, 0, 0, 0])
-		context.array_headers.push(["%v0", "%length", "%data"])
-		context.array_header_count[0] = 1
-		length := emit_array_header(context, output, "%first", "%v0", 1, "8")
-		emit_array_header(context, output, "%second", "%v1", 1, "8")
-		emit_array_header(context, output, "%third", "%v2", 2, "24")
-		invalidate_array_header_cache(context)
-		expect(emit_array_header(context, output, "%first", "%v0", 1, "8")).to_equal(length)
-		expect(emit_array_header(context, output, "%first", "%v0", 2, "24")).to_equal("%data")
-		expect(output.count[0]).to_equal(4)
-	end
-
-	test("reuses both recent Array headers and invalidates both together") do
-		mut context := emit_context_new(16, [64, 16, 2])
-		mut output := qbe_output_new(16, [0, 0, 0, 0])
-		first_length := emit_array_header(context, output, "%first", "%v0", 1, "8")
-		second_length := emit_array_header(context, output, "%second", "%v1", 1, "8")
-		first_data := emit_array_header(context, output, "%first", "%v0", 2, "24")
-		second_data := emit_array_header(context, output, "%second", "%v1", 2, "24")
-		expect(emit_array_header(context, output, "%first", "%v0", 1, "8")).to_equal(first_length)
-		expect(emit_array_header(context, output, "%second", "%v1", 1, "8")).to_equal(second_length)
-		expect(emit_array_header(context, output, "%first", "%v0", 2, "24")).to_equal(first_data)
-		expect(emit_array_header(context, output, "%second", "%v1", 2, "24")).to_equal(second_data)
-		expect(output.count[0]).to_equal(8)
-		invalidate_array_header_cache(context)
-		expect(emit_array_header(context, output, "%first", "%v0", 1, "8") == first_length).to_be_false()
-		expect(emit_array_header(context, output, "%second", "%v1", 2, "24") == second_data).to_be_false()
-		expect(output.count[0]).to_equal(12)
-	end
-
-	test("evicts only the least recently used fallback Array header") do
-		mut context := emit_context_new(16, [64, 16, 2])
-		mut output := qbe_output_new(16, [0, 0, 0, 0])
-		first_length := emit_array_header(context, output, "%first", "%v0", 1, "8")
-		second_length := emit_array_header(context, output, "%second", "%v1", 1, "8")
-		expect(emit_array_header(context, output, "%first", "%v0", 1, "8")).to_equal(first_length)
-		emit_array_header(context, output, "%third", "%v2", 1, "8")
-		expect(emit_array_header(context, output, "%first", "%v0", 1, "8")).to_equal(first_length)
-		expect(emit_array_header(context, output, "%second", "%v1", 1, "8") == second_length).to_be_false()
-		expect(output.count[0]).to_equal(8)
-	end
-
-	test("keeps Array header loads local outside owned-managed loops") do
-		mut context := emit_context_new(16, [64, 16, 2])
-		mut output := qbe_output_new(16, [0, 0, 0, 0])
-		first_length := emit_array_header(context, output, "%first", "", 1, "8")
-		second_length := emit_array_header(context, output, "%second", "", 1, "8")
-		expect(second_length == first_length).to_be_false()
-		expect(output.count[0]).to_equal(4)
 	end
 
 	test("emits an opt-in sampled managed-runtime trace without changing stats v1") do

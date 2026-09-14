@@ -1,8 +1,8 @@
 import { emit_mir_call } from qbe_calls
 import { mir_semantic_type_name } from mir_types
 import { integer_string, number_without_underscores } from literals
-import { MirInstruction, mir_block_index, mir_function_index } from mir
-import { mir_scalar_result_fact } from mir_analysis
+import { MirInstruction, MirNumericPlan, mir_block_index, mir_function_index } from mir
+import { mir_numeric_operation } from mir_numeric
 import { QbeEmitContext, QbeValue, emit_label, emit_temporary, emitted_value } from qbe_context
 import { lower_binary_operand } from qbe_numeric
 import { QbeOutput, qbe_output_branch, qbe_output_line } from qbe_output
@@ -14,17 +14,16 @@ def emit_mir_scalar_instruction(
 		instruction: MirInstruction,
 		operands: Array<String>,
 		types: Array<String>,
-		facts: Array<Integer>,
+		mode: Integer,
 		mut context: QbeEmitContext,
 		mut output: QbeOutput,
-		inline: Boolean,
 		safe: Boolean,
 	): QbeValue
 	if instruction.kind == 11
 		return emit_mir_call(state, instruction, operands, context, output)
 	end
 	result_type := types[instruction.result]
-	mut result := emitted_value("", result_type, 0, "", "")
+	mut result := emitted_value("", result_type)
 	if instruction.kind == 6
 		literal := number_without_underscores(state.scalar_mir.literal_texts[instruction.payload])
 		mut operand := literal
@@ -37,21 +36,17 @@ def emit_mir_scalar_instruction(
 		if result_type == "Float"
 			operand = "d_" + literal
 		end
-		result = emitted_value(operand, result_type, 0, "", "")
+		result = emitted_value(operand, result_type)
 	else
 		if instruction.kind == 7
 			left_id := instruction.first
 			right_id := instruction.second
 			mut operator_id := instruction.payload
-			mut guarded_operator := instruction.payload
 			if operator_id == 12
 				operator_id = 3
 			end
 			if operator_id == 13
 				operator_id = 1
-			end
-			if !inline
-				guarded_operator = 0
 			end
 			mut operand := ""
 			if safe && result_type == "Integer"
@@ -68,22 +63,20 @@ def emit_mir_scalar_instruction(
 					context,
 					output,
 					operator_id,
-					emitted_value(operands[left_id], types[left_id], 0, "", ""),
-					emitted_value(operands[right_id], types[right_id], 0, "", ""),
+					emitted_value(operands[left_id], types[left_id]),
+					emitted_value(operands[right_id], types[right_id]),
 					result_type,
-					facts[left_id] == 1,
-					facts[right_id] == 1,
-					guarded_operator,
+					mode,
 				)
 			end
-			result = emitted_value(operand, result_type, 0, "", "")
+			result = emitted_value(operand, result_type)
 		else
 			if instruction.kind == 8
 				value_id := instruction.first
 				if instruction.payload == 1
 					operand := emit_temporary(context)
 					qbe_output_line(output, "\t" + operand + " =l ceql " + operands[value_id] + ", 0")
-					result = emitted_value(operand, "Boolean", 0, "", "")
+					result = emitted_value(operand, "Boolean")
 				else
 					if instruction.payload == 2
 						operand := emit_temporary(context)
@@ -92,16 +85,16 @@ def emit_mir_scalar_instruction(
 						else
 							qbe_output_line(output, "\t" + operand + " =l call $trbn_integer_subtract(l 0, l " + operands[value_id] + ")")
 						end
-						result = emitted_value(operand, result_type, 0, "", "")
+						result = emitted_value(operand, result_type)
 					else
-						result = emitted_value(operands[value_id], result_type, 0, "", "")
+						result = emitted_value(operands[value_id], result_type)
 					end
 				end
 			else
 				value_id := instruction.first
 				operand := emit_temporary(context)
 				qbe_output_line(output, "\t" + operand + " =d sltof " + operands[value_id])
-				result = emitted_value(operand, "Float", 0, "", "")
+				result = emitted_value(operand, "Float")
 			end
 		end
 	end
@@ -113,7 +106,7 @@ def emit_scalar_mir_body(
 		function_index: Integer,
 		argument_operands: Array<String>,
 		argument_types: Array<String>,
-		argument_facts: Array<Integer>,
+		plan: MirNumericPlan,
 		mut context: QbeEmitContext,
 		mut output: QbeOutput,
 		inline: Boolean,
@@ -125,12 +118,10 @@ def emit_scalar_mir_body(
 	end
 	mut operands: Array<String> := []
 	mut types: Array<String> := []
-	mut facts: Array<Integer> := []
 	mut index := 0
 	while index < argument_operands.size()
 		operands.push(argument_operands[index])
 		types.push(argument_types[index])
-		facts.push(argument_facts[index])
 		index += 1
 	end
 	state.scalar_mir.values.each do |value|
@@ -147,14 +138,12 @@ def emit_scalar_mir_body(
 	finish := index + block.instruction_count
 	while index < finish
 		instruction := state.scalar_mir.instructions[index]
-		result := emit_mir_scalar_instruction(state, function_index, instruction, operands, types, facts, context, output, inline, safe)
-		result_fact := mir_scalar_result_fact(instruction, facts)
+		result := emit_mir_scalar_instruction(state, function_index, instruction, operands, types, mir_numeric_operation(plan, index), context, output, safe)
 		operands.push(result.operand)
-		facts.push(result_fact)
 		index += 1
 	end
 	context.scalar_inline_depth[0] = saved_inline_depth
-	return emitted_value(operands[block.return_value], types[block.return_value], 0, "", "")
+	return emitted_value(operands[block.return_value], types[block.return_value])
 end
 
 def emit_scalar_mir(
@@ -162,14 +151,14 @@ def emit_scalar_mir(
 		function_index: Integer,
 		argument_operands: Array<String>,
 		argument_types: Array<String>,
-		argument_facts: Array<Integer>,
+		plan: MirNumericPlan,
 		mut context: QbeEmitContext,
 		mut output: QbeOutput,
 		inline: Boolean,
 	): QbeValue
 	function := state.scalar_mir.functions[mir_function_index(state.scalar_mir, function_index)]
 	if !inline || function.integer_guard == 0
-		return emit_scalar_mir_body(state, function_index, argument_operands, argument_types, argument_facts, context, output, inline, false)
+		return emit_scalar_mir_body(state, function_index, argument_operands, argument_types, plan, context, output, inline, false)
 	end
 	mut combined := argument_operands[0]
 	mut index := 1
@@ -187,7 +176,7 @@ def emit_scalar_mir(
 	qbe_output_line(output, "\t" + valid + " =w cultl " + combined + ", " + integer_string(function.integer_guard))
 	qbe_output_branch(output, valid, fast, slow)
 	qbe_output_line(output, slow)
-	checked := emit_scalar_mir_body(state, function_index, argument_operands, argument_types, argument_facts, context, output, inline, false)
+	checked := emit_scalar_mir_body(state, function_index, argument_operands, argument_types, plan, context, output, inline, false)
 	mut width := "l"
 	if checked.type_name == "Float"
 		width = "d"
@@ -195,8 +184,8 @@ def emit_scalar_mir(
 	qbe_output_line(output, "\t" + result + " =" + width + " copy " + checked.operand)
 	qbe_output_line(output, "\tjmp " + complete)
 	qbe_output_line(output, fast)
-	unchecked := emit_scalar_mir_body(state, function_index, argument_operands, argument_types, argument_facts, context, output, inline, true)
+	unchecked := emit_scalar_mir_body(state, function_index, argument_operands, argument_types, plan, context, output, inline, true)
 	qbe_output_line(output, "\t" + result + " =" + width + " copy " + unchecked.operand)
 	qbe_output_line(output, complete)
-	return emitted_value(result, checked.type_name, 0, "", "")
+	return emitted_value(result, checked.type_name)
 end
