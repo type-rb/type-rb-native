@@ -1,5 +1,5 @@
 import { MirIteration } from iteration_mir
-import { CompilerState, diagnostic, function_index_key, has_diagnostic, terminal_token } from state
+import { CompilerState, DefaultInitializer, diagnostic, function_index_key, has_diagnostic, terminal_token } from state
 import { load_integer, load_string, sparse_integer_at, store_integer, store_string } from storage
 
 def token_is(state: CompilerState, index: Integer, text: String): Boolean
@@ -619,6 +619,22 @@ def parse_statement_block(mut state: CompilerState, mut position: Array<Integer>
 	return !has_diagnostic(state)
 end
 
+def parse_default_initializer(mut state: CompilerState, mut position: Array<Integer>, kind: Integer, owner: Integer, slot: Integer): Boolean
+	advance(position)
+	start := position[0]
+	if !parse_expression_syntax(state, position, 1)
+		return false
+	end
+	state.default_initializers.push(DefaultInitializer.new(kind: kind, owner: owner, slot: slot, start: start, finish: position[0]))
+	state.default_functions.push(- 1)
+	if kind == 0
+		store_integer(state.parameter_defaults, slot, state.default_initializers.size())
+	else
+		store_integer(state.field_defaults, slot, state.default_initializers.size())
+	end
+	return true
+end
+
 def parse_record(mut state: CompilerState, mut position: Array<Integer>): Boolean
 	line := load_integer(state.token_lines, position[0])
 	advance(position)
@@ -632,6 +648,7 @@ def parse_record(mut state: CompilerState, mut position: Array<Integer>): Boolea
 	store_integer(state.record_field_starts, record_index, state.field_count[0])
 	store_integer(state.record_lines, record_index, line)
 	mut count := 0
+	mut default_seen := false
 	while !token_is(state, position[0], "end")
 		if terminal_token(state, position[0])
 			diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), "expected end for record " + name)
@@ -643,6 +660,15 @@ def parse_record(mut state: CompilerState, mut position: Array<Integer>): Boolea
 			return false
 		end
 		field_type := parse_type(state, position)
+		if token_is(state, position[0], "=")
+			if !parse_default_initializer(state, position, 1, record_index, state.field_count[0])
+				return false
+			end
+			default_seen = true
+		elsif default_seen
+			diagnostic(state, "TRBN4002", field_line, "required record field cannot follow a default field")
+			return false
+		end
 		if !finish_statement(state, position)
 			return false
 		end
@@ -671,6 +697,7 @@ def parse_function(mut state: CompilerState, mut position: Array<Integer>): Bool
 	mut parameter_count := 0
 	mut named_only := 0
 	mut named_count := 0
+	mut default_seen := false
 	if !token_is(state, position[0], ")")
 		mut finished := false
 		while !finished
@@ -683,6 +710,7 @@ def parse_function(mut state: CompilerState, mut position: Array<Integer>): Bool
 					return false
 				end
 				named_only = 1
+				default_seen = false
 				advance(position)
 				if !expect(state, position, ",")
 					return false
@@ -700,6 +728,15 @@ def parse_function(mut state: CompilerState, mut position: Array<Integer>): Bool
 				end
 				parameter_type := parse_type(state, position)
 				parameter_index := state.parameter_count[0]
+				if token_is(state, position[0], "=")
+					if !parse_default_initializer(state, position, 0, state.function_count[0], parameter_index)
+						return false
+					end
+					default_seen = true
+				elsif default_seen
+					diagnostic(state, "TRBN4002", parameter_line, "required parameter cannot follow a default parameter in the same parameter group")
+					return false
+				end
 				store_string(state.parameter_names, parameter_index, parameter_name)
 				store_string(state.parameter_types, parameter_index, parameter_type)
 				store_integer(state.parameter_mutable, parameter_index, mutable)

@@ -11,7 +11,7 @@
 | elsif | accepts | accepts | matches reference | matches reference |
 | break | accepts | accepts | matches reference | matches reference |
 | next | accepts | accepts | matches reference | matches reference |
-| Default argument | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Default argument | accepts | accepts | matches reference | matches reference |
 | Array&lt;Boolean&gt; | accepts | accepts | matches reference | matches reference |
 | Nullable String | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Ordinary enum | rejects valid input | rejects valid input | not reached | rejects valid input |
@@ -31,13 +31,13 @@
 | Semicolon and comment separators | accepts | accepts | matches reference | matches reference |
 | Recursive calls and all-path returns | accepts | accepts | matches reference | matches reference |
 | Mutable parameter rebinding is local | accepts | accepts | matches reference | matches reference |
-| Named-only arguments and reordering | rejects valid input | rejects valid input | not reached | rejects valid input |
-| Default arguments refer to earlier arguments | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Named-only arguments and reordering | accepts | accepts | matches reference | matches reference |
+| Default arguments refer to earlier arguments | accepts | accepts | matches reference | matches reference |
 | Value-producing if | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Conditional expression evaluates one branch | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Postfix return and loop transfers | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Scalar case and case expression | rejects valid input | rejects valid input | not reached | rejects valid input |
-| Record defaults and reordered explicit fields | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Record defaults and reordered explicit fields | accepts | accepts | matches reference | matches reference |
 | Reject unsupported record equality | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Nullable narrowing and early return | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Nullable short-circuit and safe member | rejects valid input | rejects valid input | not reached | rejects valid input |
@@ -103,3 +103,10 @@
 | Imported record aliases survive retained bindings | accepts | accepts | matches reference | matches reference |
 | Standard package aliases preserve checked receiver identity | accepts | accepts | matches reference | matches reference |
 | Session declarations supersede automatic project imports | accepts | accepts | matches reference | matches reference |
+| Defaults read preceding parameters | accepts | accepts | matches reference | matches reference |
+| Fresh managed defaults, explicit order and skipped traps | accepts | accepts | matches reference | matches reference |
+| Required named parameter after positional defaults | accepts | accepts | matches reference | matches reference |
+| Imported function and record defaults retain declaration scope | accepts | accepts | matches reference | matches reference |
+| Reject a default referencing a later parameter | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Check a default even when the caller supplies a value | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject a default referencing a later record field | rejects as reference | rejects as reference | not reached | rejects as reference |

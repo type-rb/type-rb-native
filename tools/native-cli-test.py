@@ -43,7 +43,7 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
                       'logical-loop-stack',
                       'range-values', 'range-carriers', 'range-extrema', 'range-effects',
                       'range-precedence', 'range-managed', 'range-streaming',
-                      'string-index-lifetime'):
+                      'string-index-lifetime', 'default-arguments-mir'):
         fixture = repository / 'compiler/conformance/valid' / (case_name + '.trb')
         expected = fixture.with_suffix('.out').read_text()
         case_source = root / (case_name + '.trb')

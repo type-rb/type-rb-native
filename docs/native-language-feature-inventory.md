@@ -9,11 +9,11 @@ Each count describes registered probes, not language coverage percentages.
 | Numeric and Boolean operations | basic | 1 / 6 | All operators and assignment forms; mixed widening and every portable failure boundary; Short-circuit side effects and invalid RHS diagnostics across nested control | UnaryExpression, BinaryExpression |
 | Bindings, constants and mutation | basic | 3 / 5 | Shadowing, duplicate declarations, unused/discard bindings and mutation through projections | VariableStatement, AssignmentStatement |
 | Function declarations and calls | basic | 0 / 3 | Every all-path return, evaluation-order and mutable-argument boundary | MethodStatement, ReturnStatement, CallExpression, ExpressionStatement |
-| Defaults and named arguments | basic | 3 / 8 | Default side effects, omitted versus explicit values, and positional/default boundaries; Method, function-value and payload-enum argument parity |  |
+| Defaults and named arguments | basic | 0 / 13 | Omitted versus explicit nullable values after nullable types are implemented; Method, function-value and payload-enum argument parity |  |
 | Conditions and value-producing branches | basic | 2 / 7 | Nested branches, safe common types and transfer branches; scope and diagnostic boundaries | IfStatement |
 | Loop control and transfers | basic | 2 / 5 | Nested next/break/return targets, conditional transfer effects and lexical cleanup | WhileStatement, BreakStatement, NextStatement |
 | Case statements and expressions | basic | 3 / 3 | Exhaustiveness, repeated/unreachable branches and pattern-binding diagnostics | CaseStatement |
-| Records and field bindings | basic | 1 / 7 | Record default allocation/evaluation order, repeated construction and nominal cycles | RecordStatement, RecordFieldStatement |
+| Records and field bindings | basic | 0 / 9 | Nominal cycles and defaults involving remaining unsupported value types | RecordStatement, RecordFieldStatement |
 | Member access and projections | basic | 1 / 4 | Safe member access, chained field narrowing and receiver replacement | MemberExpression |
 | Nullable values and narrowing | basic | 4 / 5 | Field/loop/callback narrowing, invalidation after mutation and safe member access |  |
 | Enums and tagged values | basic | 3 / 3 | Named payloads, raw conversion failures, enum methods and nested managed payloads | EnumStatement, EnumMemberStatement |
@@ -31,7 +31,7 @@ Each count describes registered probes, not language coverage percentages.
 | Explicit interface conformance | basic | 1 / 1 | Generic conformance, variance, inherited contracts and rejection controls | InterfaceStatement |
 | Modules and constant lookup | basic | 1 / 1 | Cross-module constants, member visibility and runtime initialization order | ModuleStatement |
 | Symbol values | basic | 1 / 1 | Symbol typing, equality and public receiver operations | SymbolLiteral |
-| Project imports and declaration identity | basic | 0 / 5 | Bare/named aliases, graph conflicts, missing/unused imports and file/project/REPL identity | ImportStatement |
+| Project imports and declaration identity | basic | 0 / 6 | Bare/named aliases, graph conflicts, missing/unused imports and file/project/REPL identity | ImportStatement |
 | Target source interop | toolchain | 0 / 0 | Go/Ruby/TypeScript source emission and platform interop | NativeStatement, NativeBlock, NativeExpression |
 | JSX and web bindings | packages | 0 / 0 | Typed JSX and official web-package boundaries | JSXElement |
 | Package capability activation | packages | 0 / 0 | Package-owned activation and resolution | ActivateStatement |

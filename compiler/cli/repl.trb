@@ -5,7 +5,7 @@ import { ReplCandidates, repl_editor_read, repl_editor_paint } from repl_editor
 import { repl_incomplete, repl_escape } from repl_syntax
 import { repl_history_load, repl_history_save } from repl_history
 import { CompilerState, compiler_new, has_diagnostic, locals_new, local_add, find_module } from state
-import { load_integer, load_string, store_integer } from storage
+import { sparse_integer_at, load_integer, load_string, store_integer } from storage
 import { token_is, skip_newlines } from parser
 import { resolve, find_function_in_module, find_record_type, find_record_in_module, record_type, array_inner_name } from resolution
 import { check, load_file_root, compiler_read_source, compiler_file_exists } from compiler
@@ -484,7 +484,7 @@ def repl_complete(session: ReplSession): ReplCandidates
 	while index < state.function_count[0]
 		if load_integer(state.function_modules, index) == state.entry_module[0]
 			name := load_string(state.function_names, index)
-			if name != "main"
+			if name != "main" && sparse_integer_at(state.function_defaults, index) == 0
 				repl_candidate(candidates, name, repl_function_insertion(state, index, name), repl_function_detail(state, index), 6)
 			end
 		end
@@ -712,6 +712,9 @@ def repl_function_detail(state: CompilerState, index: Integer): String
 			named = true
 		end
 		detail += load_string(state.parameter_names, start + parameter) + ": " + repl_type_name(state, load_string(state.parameter_types, start + parameter))
+		if sparse_integer_at(state.parameter_defaults, start + parameter) > 0
+			detail += " = ..."
+		end
 		parameter += 1
 	end
 	return detail + "): " + repl_type_name(state, load_string(state.function_result_types, index))

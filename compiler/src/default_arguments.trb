@@ -1,0 +1,80 @@
+import { integer_string } from literals
+import { CompilerState } from state
+import { load_integer, load_string, store_integer, store_string } from storage
+
+# Initializers have private function identities, normal typed signatures and
+# normal verified MIR bodies. Their only locals are preceding declaration slots.
+# They never enter the authored name index or require a backend default ABI.
+def declare_default_functions(mut state: CompilerState)
+	mut record_parameters: Hash<Integer, Integer> := {}
+	mut index := 0
+	while index < state.default_initializers.size()
+		initializer := state.default_initializers[index]
+		if state.default_functions[index] >= 0
+			index += 1
+			next
+		end
+		mut module_index := 0
+		mut start := 0
+		mut count := 0
+		mut result_type := ""
+		if initializer.kind == 1
+			module_index = load_integer(state.record_modules, initializer.owner)
+			field_start := load_integer(state.record_field_starts, initializer.owner)
+			count = initializer.slot - field_start
+			result_type = load_string(state.field_types, initializer.slot)
+			if !record_parameters.key?(initializer.owner)
+				record_parameters[initializer.owner] = state.parameter_count[0]
+				mut field := field_start
+				finish := field_start + load_integer(state.record_field_counts, initializer.owner)
+				while field < finish
+					parameter := state.parameter_count[0]
+					store_string(state.parameter_names, parameter, load_string(state.field_names, field))
+					store_string(state.parameter_types, parameter, load_string(state.field_types, field))
+					store_integer(state.parameter_lines, parameter, load_integer(state.field_lines, field))
+					store_integer(state.parameter_mutable, parameter, 0)
+					state.parameter_count[0] += 1
+					field += 1
+				end
+			end
+			start = record_parameters[initializer.owner]
+		else
+			module_index = load_integer(state.function_modules, initializer.owner)
+			start = load_integer(state.function_parameter_starts, initializer.owner)
+			count = initializer.slot - start
+			result_type = load_string(state.parameter_types, initializer.slot)
+		end
+		function := state.function_count[0]
+		store_string(state.function_names, function, "$default" + integer_string(index))
+		store_integer(state.function_modules, function, module_index)
+		store_integer(state.function_parameter_starts, function, start)
+		store_integer(state.function_parameter_counts, function, count)
+		store_string(state.function_result_types, function, result_type)
+		store_integer(state.function_body_starts, function, initializer.start)
+		store_integer(state.function_body_ends, function, initializer.finish)
+		store_integer(state.function_lines, function, load_integer(state.token_lines, initializer.start))
+		store_integer(state.function_defaults, function, index + 1)
+		state.default_functions[index] = function
+		state.function_count[0] += 1
+		index += 1
+	end
+end
+
+def default_function(state: CompilerState, initializer: Integer): Integer
+	if initializer <= 0 || initializer > state.default_functions.size()
+		return - 1
+	end
+	return state.default_functions[initializer - 1]
+end
+
+# Used after all explicit expressions have been evaluated and earlier omitted
+# slots filled. Missing is represented by binding presence, never a value sentinel.
+def default_arguments(values: Array<Integer>, count: Integer): Array<Integer>
+	mut arguments: Array<Integer> := []
+	mut index := 0
+	while index < count
+		arguments.push(values[index])
+		index += 1
+	end
+	return arguments
+end

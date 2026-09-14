@@ -1,4 +1,5 @@
-import { check_block } from checked_program
+import { check_block, check_expression } from checked_program
+import { checked_mir_value, scalar_mir_disable } from checked_values
 import { checked_hash_verify } from hash_checked
 import { mir_add_parameter, scalar_mir_begin, scalar_mir_commit } from mir_builder
 import { mir_control_active, mir_control_prepare, mir_control_return } from mir_control
@@ -7,7 +8,7 @@ import { mir_managed_type, mir_semantic_type_id } from mir_types
 import { verify_mir } from mir_verifier
 import { validate_import_usage } from resolution
 import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_add, locals_new } from state
-import { load_integer, load_string } from storage
+import { load_integer, load_string, sparse_integer_at } from storage
 
 # Parameter binding and body checking are separate semantic stages. Production
 # always starts MIR here and requires an owned body before finalization.
@@ -50,7 +51,18 @@ def check_function_body(mut state: CompilerState, function_index: Integer, mut l
 		mir_control_prepare(state, locals)
 	end
 	mut position := [load_integer(state.function_body_starts, function_index)]
-	check_block(state, position, locals, load_string(state.function_result_types, function_index), - 1)
+	if sparse_integer_at(state.function_defaults, function_index) > 0
+		value := check_expression(state, position, locals, 1, result_type)
+		returned := checked_mir_value(value)
+		if returned >= 0
+			locals.mir_state[4] = returned
+			mir_control_return(state, locals, returned)
+		else
+			scalar_mir_disable(locals)
+		end
+	else
+		check_block(state, position, locals, result_type, - 1)
+	end
 	if position[0] != load_integer(state.function_body_ends, function_index)
 		diagnostic(
 			state,

@@ -10,6 +10,7 @@ agree. Completed naming and extraction history is available in the
 | Current area | Responsibility |
 | --- | --- |
 | `compiler/src/` | Ordinary compiler: `CompilerState`, `CheckedLocals`, `CheckedValue`, `QbeEmitContext`, and `QbeValue` use role names. Lexing and source slicing live in `lexer.trb`; MIR records, construction, analysis, rewrites, verification and QBE adaptation have separate modules; see the [architecture map](architecture.md). |
+| `compiler/src/default_arguments.trb` | Private initializer declaration identities and preceding typed slots; ordinary checked functions and MIR own their bodies and calls. |
 | `compiler/cli/repl_project.trb` | REPL project discovery, generated-import filtering and visible nominal type names. Session checking/evaluation remains in the REPL adapters. |
 | `src/snapshot_validation.trb` and shared snapshot/diagnostic/MIR modules | Snapshot boundary validation and shared support. |
 | `src/recovery_scalar_*`, `recovery_aggregate_*`, `recovery_managed_*` | Retained scalar, aggregate and managed snapshot recovery, including layout, QBE, runtime and differential tests. These paths cover distinct supported capabilities. |

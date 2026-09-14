@@ -13,7 +13,7 @@ import { checked_iteration_require, checked_iteration_shape, checked_range_requi
 import { MirIteration, MirRangeConstruction, mir_iteration_valid } from iteration_mir
 import { float_literal_in_range, integer_literal_in_range, number_is_float } from literals
 import { MirLoopTransfer, mir_loop_transfer_valid } from mir
-import { mir_checked_call, mir_checked_standard_call } from mir_calls
+import { mir_checked_call, mir_checked_standard_call, mir_complete_arguments } from mir_calls
 import { mir_logical_begin, mir_logical_join } from mir_logical
 import { mir_checked_puts, mir_checked_string_binary, mir_checked_string_literal, mir_checked_string_operation } from mir_strings
 import { mir_control_active, mir_control_allocate, mir_control_assign, mir_control_branch, mir_control_enter, mir_control_jump, mir_control_loop_begin, mir_control_loop_branch, mir_control_loop_end, mir_control_prepare, mir_control_return, mir_control_transfer } from mir_control
@@ -374,7 +374,6 @@ def check_call(mut state: CompilerState, mut position: Array<Integer>, mut local
 	elsif callee_category == 5
 		result_type = "Float"
 	end
-	mut count := 0
 	mut finished := false
 	while !finished
 		if token_is(state, position[0], ")")
@@ -405,7 +404,6 @@ def check_call(mut state: CompilerState, mut position: Array<Integer>, mut local
 			if callee_name == "puts" && argument.type_name != "String" && argument.type_name != "Integer" && argument.type_name != "Boolean"
 				diagnostic(state, "TRBN4004", line, "puts does not yet support " + type_display(state, argument.type_name))
 			end
-			count += 1
 			if token_is(state, position[0], ",")
 				advance(position)
 				skip_newlines(state, position)
@@ -415,7 +413,7 @@ def check_call(mut state: CompilerState, mut position: Array<Integer>, mut local
 		end
 	end
 	expect(state, position, ")")
-	if count != bindings.values.size()
+	if !mir_complete_arguments(state, locals, bindings, origin)
 		diagnostic(state, "TRBN4004", line, "call argument count does not match " + callee_name)
 	end
 	if callee_name == "puts"
@@ -435,7 +433,6 @@ def check_record_new(mut state: CompilerState, mut position: Array<Integer>, mut
 	skip_newlines(state, position)
 	start := load_integer(state.record_field_starts, record_index)
 	mut bindings := record_argument_bindings(state, record_index)
-	mut count := 0
 	mut finished := false
 	while !finished
 		if token_is(state, position[0], ")")
@@ -449,7 +446,6 @@ def check_record_new(mut state: CompilerState, mut position: Array<Integer>, mut
 			end
 			value := check_expression(state, position, locals, 1, load_string(state.field_types, start + slot))
 			bindings.values[slot] = checked_mir_value(value)
-			count += 1
 			if token_is(state, position[0], ",")
 				advance(position)
 				skip_newlines(state, position)
@@ -459,7 +455,7 @@ def check_record_new(mut state: CompilerState, mut position: Array<Integer>, mut
 		end
 	end
 	expect(state, position, ")")
-	if count != bindings.values.size()
+	if !mir_complete_arguments(state, locals, bindings, origin)
 		diagnostic(state, "TRBN4004", line, "record field count does not match " + record_name)
 	end
 	return mir_checked_record_new(state, locals, record_index, bindings.values, origin)
