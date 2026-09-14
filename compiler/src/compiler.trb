@@ -1,20 +1,18 @@
-import { mir_declare_types, mir_managed_type, mir_semantic_type_id } from mir_types
+import { check_function_body, checked_function_locals, finalize_checked_module } from checked_functions
+import { emit_declared_call } from qbe_calls
+import { mir_declare_types } from mir_types
 import { compiler_source_slice, lex, lex_module } from lexer
 import { checked_binary_plan_type } from checked_types
-import { check_block, checked_array_assignment_plan, checked_array_assignment_reads_old, checked_array_assignment_store, checked_array_assignment_target, checked_loop_transfer_kind, mir_nonnegative_fact } from checked_program
+import { checked_array_assignment_plan, checked_array_assignment_reads_old, checked_array_assignment_store, checked_array_assignment_target, checked_loop_transfer_kind, mir_nonnegative_fact } from checked_program
 import { scalar_leaf_inline_eligible } from checked_values
-import { checked_hash_plan, checked_hash_require, checked_hash_valid, checked_hash_verify } from hash_checked
+import { checked_hash_plan, checked_hash_require, checked_hash_valid } from hash_checked
 import { mir_hash_key_managed, mir_hash_value_managed } from hash_mir
 import { emit_hash_runtime } from hash_runtime
 import { hash_key_type, native_managed_type } from hash_types
 import { checked_iteration_require, checked_range_require } from iteration_checked
 import { integer_string, number_is_float, number_without_underscores, small_nonnegative_integer_operand } from literals
 import { mir_function_index, mir_logical_short_value } from mir
-import { mir_add_parameter, scalar_mir_begin, scalar_mir_commit } from mir_builder
 import { mir_declare_signatures } from mir_calls
-import { mir_control_active, mir_control_prepare, mir_control_return } from mir_control
-import { optimize_verified_mir } from mir_passes
-import { verify_mir } from mir_verifier
 import { advance, binary_operator_id, declaration_start, expect, expect_identifier, finish_statement, parse_module, parse_statement_block, parse_type, skip_newlines, syntax_block_end, syntax_conditional_tail, syntax_expression_precedence, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_statement_boundary, token_is } from parser
 import { path_basename, path_directory, path_join, string_ends_with, string_starts_with, string_without_suffix } from path
 import { parse_project_config } from project_config
@@ -26,8 +24,8 @@ import { emit_induction_mir, emit_scalar_mir } from qbe_mir
 import { emit_integer_call, lower_binary_operand, take_inline_budget } from qbe_numeric
 import { QbeOutput, qbe_output_append, qbe_output_branch, qbe_output_chunk, qbe_output_line, qbe_output_new } from qbe_output
 import { emit_boolean_puts_runtime, emit_float_array_runtime, emit_float_to_integer_runtime, emit_integer_to_string_runtime, emit_process_runtime, emit_qbe_runtime, emit_string_to_integer_runtime } from qbe_runtime
-import { array_element_type, array_type, common_array_element_type, compiler_entry_function, compiler_host_intrinsic, compiler_runtime_intrinsic, find_field, find_function_in_module, find_record_type, find_visible_function, find_visible_record, import_path_value, normalize_import_path, record_type, resolve, resolve_type_name, standard_package_import, standard_package_root, standard_package_target, validate_import_usage } from resolution
-import { CompilerState, add_module, compiler_new, diagnostic, find_module, find_name_index, has_diagnostic, local_add, locals_new } from state
+import { array_element_type, array_type, common_array_element_type, compiler_entry_function, find_field, find_function_in_module, find_record_type, find_visible_function, find_visible_record, import_path_value, normalize_import_path, record_type, resolve, resolve_type_name, standard_package_import, standard_package_root, standard_package_target } from resolution
+import { CompilerState, add_module, compiler_new, diagnostic, find_module, find_name_index, has_diagnostic } from state
 import { load_integer, load_string, sparse_integer_at, store_integer } from storage
 
 record CompilerProjectSources
@@ -423,64 +421,16 @@ def emit_direct_call(
 		emit_root_value(context, result_type)
 		return emitted_value(result, result_type, 0, "", "")
 	end
-	if compiler_host_intrinsic(state, function_index)
-		result := emit_temporary(context)
-		qbe_output_line(output, "\t" + result + " =" + qbe_type(result_type) + " call $" + load_string(state.function_names, function_index) + "(" + arguments + ")")
-		emit_root_value(context, result_type)
-		return emitted_value(result, result_type, 0, "", "")
-	end
-	intrinsic := compiler_runtime_intrinsic(state, function_index)
-	mut intrinsic_name := ""
-	if intrinsic
-		intrinsic_name = load_string(state.function_names, function_index)
-	end
-	if intrinsic
-		if intrinsic_name == "compiler_file_exists"
-			result := emit_temporary(context)
-			qbe_output_line(output, "\t" + result + " =l call $trbn_file_exists(" + arguments + ")")
-			return emitted_value(result, "Boolean", 0, "", "")
-		end
-		if intrinsic_name == "compiler_read_source"
-			result := emit_temporary(context)
-			qbe_output_line(output, "\t" + result + " =l call $trbn_read_source(" + arguments + ")")
-			emit_root_value(context, "String")
-			return emitted_value(result, "String", 0, "", "")
-		end
-		if intrinsic_name == "compiler_source_is_utf8"
-			result := emit_temporary(context)
-			qbe_output_line(output, "\t" + result + " =l call $trbn_string_is_utf8(" + arguments + ")")
-			return emitted_value(result, "Boolean", 0, "", "")
-		end
-		if intrinsic_name == "compiler_string_bytes"
-			result := emit_temporary(context)
-			qbe_output_line(output, "\t" + result + " =l call $trbn_string_bytes(" + arguments + ")")
-			emit_root_value(context, "Array<Integer>")
-			return emitted_value(result, "Array<Integer>", 0, "", "")
-		end
-		if intrinsic_name == "compiler_source_slice"
-			result := emit_temporary(context)
-			qbe_output_line(output, "\t" + result + " =l call $trbn_source_slice(" + arguments + ")")
-			emit_root_value(context, "String")
-			return emitted_value(result, "String", 0, "", "")
-		end
-		if intrinsic_name == "compiler_collect_project_sources"
-			result := emit_temporary(context)
-			qbe_output_line(output, "\t" + result + " =l call $trbn_collect_project_sources(" + arguments + ")")
-			emit_root_value(context, result_type)
-			return emitted_value(result, result_type, 0, "", "")
-		end
-	end
 	if callee.name == "puts"
 		qbe_output_line(output, "\tcall " + puts_runtime + "(" + arguments + ")")
 		return emitted_value("", "Void", 0, "", "")
 	end
-	if intrinsic && intrinsic_name == "compiler_eputs"
-		qbe_output_line(output, "\tcall $trbn_eputs(" + arguments + ")")
-		return emitted_value("", "Void", 0, "", "")
-	end
-	if intrinsic && intrinsic_name == "compiler_reset_temporary_storage"
-		qbe_output_line(output, "\tcall $trbn_temp_reset()")
-		return emitted_value("", "Void", 0, "", "")
+	signature := state.scalar_mir.signatures[function_index]
+	if signature.kind != 0
+		note_gc_state(context, true)
+		result := emit_declared_call(signature, arguments, context, output)
+		emit_root_value(context, result_type)
+		return result
 	end
 	if context.inline_budget[2] >= 0
 		if scalar_leaf_inline_eligible(state, function_index)
@@ -490,21 +440,9 @@ def emit_direct_call(
 	# Until interprocedural no-allocation summaries exist, every ordinary
 	# TypeRB call remains a conservative GC safe point.
 	note_gc_state(context, true)
-	if result_type == "Void"
-		qbe_output_line(
-			output,
-			"\tcall $trbnf" + integer_string(function_index) + "(" + arguments + ")",
-		)
-		return emitted_value("", "Void", 0, "", "")
-	end
-	result := emit_temporary(context)
-	qbe_output_line(
-		output,
-		"\t" + result + " =" + qbe_type(result_type) + " call $trbnf" +
-		integer_string(function_index) + "(" + arguments + ")",
-	)
+	result := emit_declared_call(signature, arguments, context, output)
 	emit_root_value(context, result_type)
-	return emitted_value(result, result_type, 0, "", "")
+	return result
 end
 
 def emit_record_new(
@@ -1971,7 +1909,8 @@ def emit_qbe(mut state: CompilerState): QbeOutput
 		end
 		mut intrinsic := false
 		if omit_intrinsics
-			intrinsic = compiler_runtime_intrinsic(state, function_index)
+			signature := state.scalar_mir.signatures[function_index]
+			intrinsic = signature.kind == 1
 		end
 		if !deferred && !intrinsic
 			emit_function(state, function_index, output, inline_budget)
@@ -2692,76 +2631,12 @@ def load_file_root(entry_source: String, entry_path: String): CompilerState
 	return state
 end
 
-# Parameter declarations and expressions attach different source tables to the
-# same MIR value layout. Keep identifier allocation and row construction shared.
-# Keep the checked instruction layout and source attachment in one builder.
-# Callers still choose the operation, operands, and explicit failure edge.
-# Binary plans use the existing operator-origin cell: result tag * 16 + op.
-# Tags 1/2/3/4 denote Integer/Float/Boolean/String. Literal, argument, index,
-# and loop origins remain distinct; their existing markers are unchanged.
-def check_function(
-		mut state: CompilerState,
-		function_index: Integer,
-	): Boolean
-	state.active_module[0] = load_integer(state.function_modules, function_index)
-	mut locals := locals_new(state.token_count[0] + 1)
-	scalar_mir_begin(state, function_index, locals)
-	parameter_start := load_integer(state.function_parameter_starts, function_index)
-	parameter_finish := parameter_start + load_integer(state.function_parameter_counts, function_index)
-	mut parameter_index := parameter_start
-	while parameter_index < parameter_finish
-		added := local_add(
-			state,
-			locals,
-			load_string(state.parameter_names, parameter_index),
-			load_string(state.parameter_types, parameter_index),
-			load_integer(state.parameter_mutable, parameter_index),
-			load_integer(state.parameter_lines, parameter_index),
-		)
-		if added
-			mir_add_parameter(state, locals, parameter_index)
-		end
-		parameter_index += 1
-	end
-	parameter_index = parameter_start
-	while parameter_index < parameter_finish
-		if locals.mir_state[0] == 1 && mir_managed_type(state.scalar_mir, mir_semantic_type_id(state.scalar_mir, load_string(state.parameter_types, parameter_index)))
-			mir_control_prepare(state, locals)
-		end
-		parameter_index += 1
-	end
-	result_type := load_string(state.function_result_types, function_index)
-	if (result_type == "Void" || mir_managed_type(state.scalar_mir, mir_semantic_type_id(state.scalar_mir, result_type))) && locals.mir_state[0] == 1
-		mir_control_prepare(state, locals)
-	end
-	# The second cursor cell carries one adjacent declaration fact into a loop.
-	mut position := [load_integer(state.function_body_starts, function_index), 0]
-	check_block(state, position, locals, load_string(state.function_result_types, function_index), - 1)
-	if position[0] != load_integer(state.function_body_ends, function_index)
-		diagnostic(
-			state,
-			"TRBN4004",
-			load_integer(state.function_lines, function_index),
-			"checker did not consume the complete function body",
-		)
-	end
-	if result_type == "Void" && mir_control_active(locals) && locals.mir_control[6] == 0
-		mir_control_return(state, locals, - 1)
-	end
-	state.scalar_mir.array_regions.push(locals.mir_array)
-	if !has_diagnostic(state)
-		mir_error := scalar_mir_commit(state, function_index, locals)
-		if mir_error != ""
-			diagnostic(
-				state,
-				"TRBN4004",
-				load_integer(state.function_lines, function_index),
-				mir_error,
-			)
-		end
-	end
+# The driver owns the runtime lifetime boundary after each shared body check.
+def check_function(mut state: CompilerState, function_index: Integer): Boolean
+	mut locals := checked_function_locals(state, function_index)
+	checked := check_function_body(state, function_index, locals)
 	compiler_reset_temporary_storage()
-	return !has_diagnostic(state)
+	return checked
 end
 
 def check(mut state: CompilerState): Boolean
@@ -2772,23 +2647,7 @@ def check(mut state: CompilerState): Boolean
 		check_function(state, function_index)
 		function_index += 1
 	end
-	if !has_diagnostic(state)
-		mut mir_error := verify_mir(state.scalar_mir, false)
-		if mir_error == ""
-			optimize_verified_mir(state.scalar_mir)
-			mir_error = verify_mir(state.scalar_mir, true)
-		end
-		if mir_error != ""
-			diagnostic(state, "TRBN4004", 1, mir_error)
-		end
-	end
-	if !has_diagnostic(state)
-		checked_hash_verify(state)
-	end
-	if !has_diagnostic(state)
-		validate_import_usage(state)
-	end
-	return !has_diagnostic(state)
+	return finalize_checked_module(state)
 end
 
 def main()

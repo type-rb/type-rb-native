@@ -1,4 +1,4 @@
-import { compiler_test_direct_source } from compiler_test
+import { compiler_test_check_direct } from compiler_test
 import { checked_array_assignment_plan, checked_array_assignment_store } from checked_program
 import { check, emit_qbe } from compiler
 import { lex } from lexer
@@ -20,14 +20,14 @@ describe("Checked Array assignment targets") do
 	end
 
 	test("rejects missing and malformed direct plans without lowering a stale store") do
-		source := compiler_test_direct_source("def main()\nmarker := {1 => 1}\nmut values := [1, 2]\nvalues[-1] = 9\nend\n")
+		source := "def main()\nmarker := {1 => 1}\nmut values := [1, 2]\nvalues[-1] = 9\nend\n"
 		mut mode := 0
 		while mode < 4
 			mut state := compiler_new(source.size() + 1)
 			expect(lex(state, source)).to_be_true()
 			expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
 			expect(resolve(state)).to_be_true()
-			expect(check(state)).to_be_true()
+			expect(compiler_test_check_direct(state)).to_be_true()
 			mut store_origin := 0
 			while load_string(state.token_texts, store_origin) != "="
 				store_origin += 1
@@ -128,7 +128,12 @@ describe("MIR Array assignment effects") do
 	end
 
 	test("revalidates a changed direct region before lowering") do
-		mut state := assignment_effect_state(compiler_test_direct_source("def main()\nmarker := {1 => 1}\nmut values := [1, 2]\nvalues[0] = 3\nend\n"))
+		source := "def main()\nmarker := {1 => 1}\nmut values := [1, 2]\nvalues[0] = 3\nend\n"
+		mut state := compiler_new(source.size() + 1)
+		expect(lex(state, source)).to_be_true()
+		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(resolve(state)).to_be_true()
+		expect(compiler_test_check_direct(state)).to_be_true()
 		mut region := state.array_assignment_regions[0]
 		region[0] = MirArrayOperation.new(kind: 99, operand: 0, origin: region[0].origin)
 		emit_qbe(state)

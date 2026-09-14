@@ -1,0 +1,179 @@
+import { CompilerProjectSources, check, emit_qbe, load_project_sources } from compiler
+import { control_test_output } from control_mir_test
+import { logical_checked_source, logical_run_qbe_arguments } from logical_test
+import { MirCall, MirSignature, mir_function_index } from mir
+import { verify_mir } from mir_verifier
+import { find_function_in_module, resolve } from resolution
+import { CompilerState, find_module } from state
+import { load_integer, load_string, store_string } from storage
+import trb/std/process
+import trb/std/result
+import { describe, expect, test } from trb/std/test
+
+def intrinsic_mir_state(): CompilerState
+	source := "record CompilerProjectSources\npaths: Array<String>\nsources: Array<String>\nerror: String\nend\ndef compiler_main(source: String, mode: String, _file_mode: Boolean): Integer\nretained := source + \"-tail\"\nkey := compiler_source_slice(retained, 0, source.size())\nmut values := {\"saved\" => retained}\nbytes := compiler_string_bytes(key)\ncompiler_reset_temporary_storage()\nputs(values[\"saved\"])\nputs(bytes[0])\nputs(compiler_source_is_utf8(key))\nif mode == \"files\"\nif compiler_file_exists(source)\nputs(compiler_read_source(source))\nend\nproject := compiler_collect_project_sources(source, \"out\")\ncompiler_eputs(project.error)\nend\nreturn 0\nend\ndef compiler_file_exists(_path: String): Boolean\nreturn false\nend\ndef compiler_read_source(_path: String): String\nreturn \"\"\nend\ndef compiler_source_is_utf8(_text: String): Boolean\nreturn true\nend\ndef compiler_string_bytes(_text: String): Array<Integer>\nreturn []\nend\ndef emit_static_strings(text: String)\ncompiler_string_bytes(text)\nend\ndef compiler_source_slice(text: String, _start: Integer, _finish: Integer): String\nreturn text\nend\ndef compiler_collect_project_sources(_root: String, _out: String): CompilerProjectSources\nreturn CompilerProjectSources.new(paths: [], sources: [], error: \"\")\nend\ndef compiler_eputs(_text: String)\nend\ndef compiler_reset_temporary_storage()\nend\ndef compiler_file_main(_source: String, _path: String, _mode: String, _file: Boolean): Integer\nreturn 0\nend\ndef main()\nend\n"
+	mut state := logical_checked_source(source)
+	expect(check(state)).to_be_true()
+	return state
+end
+
+def intrinsic_mir_erase(mut state: CompilerState)
+	state.scalar_mir.functions.each do |function|
+		# CLI runtime templates are compile-time backend data, not call operands.
+		if load_string(state.function_names, function.id) == "native_cli_runtime_qbe"
+			next
+		end
+		mut token := load_integer(state.function_body_starts, function.id)
+		while token < load_integer(state.function_body_ends, function.id)
+			store_string(state.token_texts, token, "unavailable")
+			token += 1
+		end
+	end
+end
+
+describe("MIR runtime and host calls") do
+	test("admits every runtime operation with exact declaration types and live roots") do
+		state := intrinsic_mir_state()
+		expect(state.scalar_mir.functions.size()).to_equal(state.function_count[0])
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		mut adapters: Array<Integer> := []
+		state.scalar_mir.calls.each do |call|
+			signature := state.scalar_mir.signatures[call.callee]
+			if signature.kind == 1
+				adapters.push(signature.adapter)
+				expect(call.effects).to_equal(15)
+			end
+		end
+		(1..8).each do |adapter|
+			expect(adapters.include?(adapter)).to_be_true()
+		end
+		caller := state.scalar_mir.functions[mir_function_index(state.scalar_mir, 0)]
+		expect(caller.kind).to_equal(3)
+		expect(state.scalar_mir.root_plans[0].capacity >= 3).to_be_true()
+	end
+
+	test("rejects forged runtime names adapters signatures and effect summaries") do
+		mut mode := 0
+		while mode < 11
+			mut state := intrinsic_mir_state()
+			mut id := find_function_in_module(state, state.entry_module[0], "compiler_source_slice")
+			if mode == 8
+				id = find_function_in_module(state, state.entry_module[0], "compiler_collect_project_sources")
+			end
+			old := state.scalar_mir.signatures[id]
+			mut name := old.name
+			mut adapter := old.adapter
+			mut kind := old.kind
+			mut types := old.parameter_types
+			mut mutable := old.parameter_mutable
+			mut result := old.result_type
+			if mode == 0
+				adapter = 99
+			elsif mode == 1
+				name = "compiler_read_source"
+			elsif mode == 2
+				kind = 0
+			elsif mode == 3
+				types = ["String", "Float", "Integer"]
+			elsif mode == 4
+				mutable = [1, 0, 0]
+			elsif mode == 5
+				result = "Float"
+			elsif mode == 6
+				adapter = 9
+			elsif mode == 8
+				result = "String"
+			elsif mode == 9
+				kind = 2
+				adapter = 9
+				name = "invalid-symbol"
+			elsif mode == 10
+				kind = 2
+				adapter = 8
+			else
+				call := state.scalar_mir.calls[0]
+				state.scalar_mir.calls[0] = MirCall.new(callee: call.callee, argument_start: call.argument_start, argument_count: call.argument_count, effects: 0)
+			end
+			state.scalar_mir.signatures[id] = MirSignature.new(id: old.id, kind: kind, name: name, adapter: adapter, source_id: old.source_id, line: old.line, parameter_types: types, parameter_mutable: mutable, result_type: result)
+			expect(verify_mir(state.scalar_mir, true).empty?()).to_be_false()
+			mode += 1
+		end
+	end
+
+	test("executes erased reordered runtime calls with forced collection") do
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			mut state := intrinsic_mir_state()
+			before := control_test_output(emit_qbe(state))
+			intrinsic_mir_erase(state)
+			expect(control_test_output(emit_qbe(state))).to_equal(before)
+			state.scalar_mir.functions.each do |function|
+				mut left := function.block_start
+				mut right := left + function.block_count - 1
+				while left < right
+					saved := state.scalar_mir.blocks[left]
+					state.scalar_mir.blocks[left] = state.scalar_mir.blocks[right]
+					state.scalar_mir.blocks[right] = saved
+					left += 1
+					right -= 1
+				end
+			end
+			expect(verify_mir(state.scalar_mir, true)).to_equal("")
+			mut forced := ""
+			mut caller := false
+			mut hooks := 0
+			control_test_output(emit_qbe(state)).split("\n").each do |line|
+				if line.start_with?("function ")
+					caller = line.include?("$trbnf0(")
+				end
+				if line == "}"
+					caller = false
+				end
+				if caller && (line.include?("call $trbn_source_slice(") || line.include?("call $trbn_string_bytes(") || line.include?("call $trbn_string_is_utf8(") || line.include?("call $trbn_temp_reset(") || line.include?("call $trbn_file_exists(") || line.include?("call $trbn_read_source(") || line.include?("call $trbn_collect_project_sources(") || line.include?("call $trbn_eputs("))
+					forced += "\tcall $trbn_gc_collect(w 0)\n"
+					hooks += 1
+				end
+				forced += line + "\n"
+			end
+			expect(hooks).to_equal(8)
+			case logical_run_qbe_arguments(qbe, forced, ["--source-content", "probe", "abc"])
+			when Result::Ok(actual)
+				expect(actual).to_equal("abc-tail\n97\ntrue\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+
+	test("keeps host Float and Void ABI independent of source lookup tables") do
+		mut state := load_project_sources("/project/trbconfig.jsonc", "/project/src",
+			CompilerProjectSources.new(paths: ["/project/src/main.trb", "/project/src/host.trb"],
+				sources: ["import { external_float, external_void } from host\ndef compiler_main(_source: String, _mode: String, _file: Boolean): Integer\nreturn 0\nend\ndef compiler_file_main(source: String, _path: String, mode: String, file: Boolean): Integer\nreturn compiler_main(source, mode, file)\nend\ndef native_cli_main(): Integer\nexternal_void()\nputs(external_float(2.5) == 2.5)\nreturn 0\nend\ndef main()\nend\n", "def external_float(_value: Float): Float\nreturn 0.0\nend\ndef external_void()\nend\ndef native_cli_runtime_qbe(): String\nreturn \"\\nfunction d $external_float(d %value) {\\n@entry\\nret %value\\n}\\nfunction $external_void() {\\n@entry\\nret\\n}\\n\"\nend\n"], error: ""))
+		expect(resolve(state)).to_be_true()
+		checked := check(state)
+		if !checked
+			puts(load_string(state.diagnostic_messages, 0))
+		end
+		expect(checked).to_be_true()
+		expect(state.scalar_mir.functions.size()).to_equal(state.function_count[0])
+		before := control_test_output(emit_qbe(state))
+		expect(before.include?("call $external_float(d ")).to_be_true()
+		expect(before.include?("\tcall $external_void()")).to_be_true()
+		expect(before.include?("=l call $external_void")).to_be_false()
+		intrinsic_mir_erase(state)
+		id := find_function_in_module(state, find_module(state, "host"), "external_float")
+		store_string(state.function_names, id, "unavailable")
+		expect(control_test_output(emit_qbe(state))).to_equal(before)
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe_arguments(qbe, before, [])
+			when Result::Ok(actual)
+				expect(actual).to_equal("true\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+end

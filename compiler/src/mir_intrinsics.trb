@@ -1,0 +1,131 @@
+import { ascii_code, integer_string } from literals
+import { MirModule, MirSignature } from mir
+import { mir_semantic_type_name } from mir_types
+
+# The checked declaration owns the adapter. Source aliases and call-site spelling
+# never select a runtime operation, and the backend never resolves them again.
+def mir_runtime_adapter(name: String): Integer
+	names := ["compiler_file_exists", "compiler_read_source", "compiler_source_is_utf8", "compiler_string_bytes", "compiler_source_slice", "compiler_collect_project_sources", "compiler_eputs", "compiler_reset_temporary_storage"]
+	mut index := 0
+	while index < names.size()
+		if names[index] == name
+			return index + 1
+		end
+		index += 1
+	end
+	return 0
+end
+
+def mir_call_symbol(signature: MirSignature): String
+	if signature.kind == 0
+		return "trbnf" + integer_string(signature.id)
+	end
+	if signature.kind == 2
+		return signature.name
+	end
+	symbols := ["trbn_file_exists", "trbn_read_source", "trbn_string_is_utf8", "trbn_string_bytes", "trbn_source_slice", "trbn_collect_project_sources", "trbn_eputs", "trbn_temp_reset"]
+	return symbols[signature.adapter - 1]
+end
+
+def mir_host_symbol_valid(name: String): Boolean
+	if name.size() == 0
+		return false
+	end
+	mut index := 0
+	while index < name.size()
+		code := ascii_code(name[index])
+		mut valid := code == 95
+		if code >= 65 && code <= 90
+			valid = true
+		end
+		if code >= 97 && code <= 122
+			valid = true
+		end
+		if index > 0 && code >= 48 && code <= 57
+			valid = true
+		end
+		if !valid
+			return false
+		end
+		index += 1
+	end
+	return true
+end
+
+def mir_project_sources_result(native_module: MirModule, name: String): Boolean
+	native_module.records.each do |definition|
+		if mir_semantic_type_name(native_module, definition.type_id) == name
+			if definition.name != "CompilerProjectSources" || definition.field_count != 3
+				return false
+			end
+			names := ["paths", "sources", "error"]
+			types := ["Array<String>", "Array<String>", "String"]
+			mut index := 0
+			while index < 3
+				field := native_module.fields[definition.field_start + index]
+				if field.name != names[index] || mir_semantic_type_name(native_module, field.type_id) != types[index]
+					return false
+				end
+				index += 1
+			end
+			return true
+		end
+	end
+	return false
+end
+
+def mir_intrinsic_signature_error(native_module: MirModule, signature: MirSignature): String
+	if signature.kind == 0
+		if signature.adapter != 0
+			return "MIR ordinary declaration has an external adapter"
+		end
+		return ""
+	end
+	adapter := signature.adapter
+	if signature.kind == 2
+		if adapter != 9
+			return "MIR host adapter differs"
+		end
+		if !mir_host_symbol_valid(signature.name)
+			return "MIR host symbol is invalid"
+		end
+		return ""
+	end
+	if signature.kind != 1 || adapter < 1 || adapter > 8
+		return "MIR external adapter is invalid"
+	end
+	if mir_runtime_adapter(signature.name) != adapter
+		return "MIR runtime declaration identity differs"
+	end
+	mut parameters := ["String"]
+	mut result := "String"
+	if adapter == 1 || adapter == 3
+		result = "Boolean"
+	elsif adapter == 4
+		result = "Array<Integer>"
+	elsif adapter == 5
+		parameters = ["String", "Integer", "Integer"]
+	elsif adapter == 6
+		parameters = ["String", "String"]
+		result = signature.result_type
+		if !mir_project_sources_result(native_module, result)
+			return "MIR project source result layout differs"
+		end
+	elsif adapter == 7
+		result = "Void"
+	elsif adapter == 8
+		parameters = []
+		result = "Void"
+	end
+	if signature.parameter_types.size() != parameters.size() || signature.result_type != result
+		return "MIR runtime signature differs"
+	end
+	mut index := 0
+	while index < parameters.size()
+		if signature.parameter_types[index] != parameters[index] || signature.parameter_mutable[index] != 0
+			return "MIR runtime parameter differs"
+		end
+		index += 1
+	end
+	return ""
+end
