@@ -86,16 +86,23 @@ this integration is not final Pure Go qualification. See the
 [current ownership status](native-mir-optimization-status.md) for retained policy
 bounds and remaining optimization/coverage work.
 
-## Current basic-language integration: named argument binding
+## Current basic-language integration: default initialization
 
-Required named-only function parameters and reordered record fields share one
-source-order binding mechanism. Checking retains declaration metadata and emits
-typed MIR operands in parameter/field order; the REPL uses the same slot rules.
-Acceptance includes reference/Native ordinary contracts, wrong-label/order/type
-controls, managed values under forced collection and source-erased/reordered MIR,
-ordinary core/CLI fixed points and the synchronized 59-module recovery closure.
-Defaults and other callable forms remain tracked by the basic-language contract.
-No seed, pin, baseline or performance qualification changes are implied.
+Required and default positional/named-only function parameters and record fields
+share source-order binding. Each default gets a private, declaration-scoped
+initializer with a normal typed MIR signature and body. Call checking evaluates
+explicit expressions first, fills omitted slots in declaration order and emits
+full-arity calls. The REPL consumes the same private declaration identities.
+The [lowering decision](decisions/0040-default-initializer-mir.md) records ownership
+and future callable boundaries.
+
+Acceptance includes 108 reference/Native ordinary contracts, wrong-label/order/type
+and invalid-scope controls, fresh managed values under forced collection and
+source-erased/reordered MIR, ordinary core/CLI fixed points and the synchronized
+60-module recovery closure. Compiler self-use of authored defaults waits for an
+accepted seed refresh: the current pinned seed cannot parse that syntax. The
+implementation itself remains compatible with that seed. No seed, pin, baseline
+or performance qualification changes are implied.
 
 ## Development loop
 

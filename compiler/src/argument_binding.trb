@@ -1,5 +1,6 @@
 import { CompilerState } from state
-import { load_integer, load_string } from storage
+import { load_integer, load_string, sparse_integer_at } from storage
+import { default_function } from default_arguments
 
 # Bind labels without evaluating or moving authored expressions. Consumers
 # evaluate each expression once, then put its value in the declaration slot.
@@ -8,6 +9,7 @@ record ArgumentBindings
 	named_only: Array<Boolean>
 	provided: Array<Boolean>
 	values: Array<Integer>
+	defaults: Array<Integer>
 	position: Array<Integer>
 	named_seen: Array<Boolean>
 	error: Array<String>
@@ -16,11 +18,13 @@ end
 def argument_bindings(names: Array<String>, named_only: Array<Boolean>): ArgumentBindings
 	mut provided: Array<Boolean> := []
 	mut values: Array<Integer> := []
+	mut defaults: Array<Integer> := []
 	names.each do |_name|
 		provided.push(false)
 		values.push(- 1)
+		defaults.push(- 1)
 	end
-	return ArgumentBindings.new(names: names, named_only: named_only, provided: provided, values: values, position: [0], named_seen: [false], error: [""])
+	return ArgumentBindings.new(names: names, named_only: named_only, provided: provided, values: values, defaults: defaults, position: [0], named_seen: [false], error: [""])
 end
 
 def function_argument_bindings(state: CompilerState, function: Integer): ArgumentBindings
@@ -39,7 +43,16 @@ def function_argument_bindings(state: CompilerState, function: Integer): Argumen
 			index += 1
 		end
 	end
-	return argument_bindings(names, named)
+	mut bindings := argument_bindings(names, named)
+	if function >= 0
+		start := load_integer(state.function_parameter_starts, function)
+		mut index := 0
+		while index < names.size()
+			bindings.defaults[index] = default_function(state, sparse_integer_at(state.parameter_defaults, start + index))
+			index += 1
+		end
+	end
+	return bindings
 end
 
 def record_argument_bindings(state: CompilerState, record_index: Integer): ArgumentBindings
@@ -53,7 +66,13 @@ def record_argument_bindings(state: CompilerState, record_index: Integer): Argum
 		named.push(true)
 		index += 1
 	end
-	return argument_bindings(names, named)
+	mut bindings := argument_bindings(names, named)
+	index = 0
+	while index < names.size()
+		bindings.defaults[index] = default_function(state, sparse_integer_at(state.field_defaults, start + index))
+		index += 1
+	end
+	return bindings
 end
 
 def argument_binding_slot(mut bindings: ArgumentBindings, label: String): Integer

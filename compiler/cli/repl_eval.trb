@@ -1,5 +1,6 @@
 import { standard_package_import } from resolution
-import { argument_binding_slot, function_argument_bindings } from argument_binding
+import { ArgumentBindings, argument_binding_slot, function_argument_bindings, record_argument_bindings } from argument_binding
+import { default_arguments } from default_arguments
 import { hash_key_type, hash_value_type } from hash_types
 import { checked_hash_plan } from hash_checked
 import { repl_hash_new, repl_hash_set, repl_hash_get, repl_hash_slot, repl_hash_delete, repl_hash_update } from repl_hash
@@ -228,10 +229,35 @@ def repl_call(mut state: CompilerState, function: Integer, arguments: Array<Inte
 	mut flow := [0]
 	module_name := state.active_module[0]
 	state.active_module[0] = load_integer(state.function_modules, function)
-	result := repl_block(state, position, store, environment, flow, - 1)
+	mut result := 0
+	if sparse_integer_at(state.function_defaults, function) > 0
+		value := repl_expression(state, position, store, environment, 1, load_string(state.function_result_types, function))
+		result = value.value
+	else
+		result = repl_block(state, position, store, environment, flow, - 1)
+	end
 	state.active_module[0] = module_name
 	store.depth[0] -= 1
 	return repl_coerce(store, result, load_string(state.function_result_types, function))
+end
+
+def repl_complete_arguments(mut state: CompilerState, mut bindings: ArgumentBindings, mut store: ReplStore)
+	mut index := 0
+	while index < bindings.values.size()
+		if !bindings.provided[index]
+			if bindings.defaults[index] < 0
+				store.error[0] = "missing checked argument " + bindings.names[index]
+				return
+			end
+			arguments := default_arguments(bindings.values, index)
+			bindings.values[index] = repl_call(state, bindings.defaults[index], arguments, store)
+			if store.error[0] != ""
+				return
+			end
+			bindings.provided[index] = true
+		end
+		index += 1
+	end
 end
 
 def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, expected: String): ReplReference
@@ -354,6 +380,10 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 			end
 		end
 		position[0] += 1
+		repl_complete_arguments(state, bindings, store)
+		if store.error[0] != ""
+			return repl_reference(0)
+		end
 		arguments := bindings.values
 		if text == "puts"
 			if store.types[arguments[0]] == "String"
@@ -385,28 +415,30 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		if record_index >= 0
 			if member == "new"
 				start := load_integer(state.record_field_starts, record_index)
-				count := load_integer(state.record_field_counts, record_index)
-				mut children: Array<Integer> := []
-				mut index := 0
-				while index < count
-					children.push(0)
-					index += 1
-				end
+				mut bindings := record_argument_bindings(state, record_index)
 				skip_newlines(state, position)
 				while !token_is(state, position[0], ")")
-					name := load_string(state.token_texts, position[0])
-					position[0] += 2
-					field := find_field(state, record_index, name)
+					name := parse_argument_label(state, position)
+					slot := argument_binding_slot(bindings, name)
+					if slot < 0
+						store.error[0] = bindings.error[0]
+						return repl_reference(0)
+					end
+					field := start + slot
 					type_name := load_string(state.field_types, field)
 					value := repl_expression(state, position, store, environment, 1, type_name)
-					children[field - start] = repl_coerce(store, value.value, type_name)
+					bindings.values[slot] = repl_coerce(store, value.value, type_name)
 					if token_is(state, position[0], ",")
 						position[0] += 1
 					end
 					skip_newlines(state, position)
 				end
 				position[0] += 1
-				return repl_reference(repl_value(store, record_type(record_index), 0, 0.0, "", children))
+				repl_complete_arguments(state, bindings, store)
+				if store.error[0] != ""
+					return repl_reference(0)
+				end
+				return repl_reference(repl_value(store, record_type(record_index), 0, 0.0, "", bindings.values))
 			end
 		end
 	end

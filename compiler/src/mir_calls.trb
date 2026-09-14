@@ -1,16 +1,18 @@
 import { mir_semantic_type_id, mir_semantic_type_name, mir_semantic_value_type } from mir_types
 import { MirFlow, mir_flow_type, mir_value_available } from mir_flow
-import { CheckedValue, checked_value, mir_checked_value, scalar_mir_disable, scalar_mir_instruction, scalar_mir_value } from checked_values
+import { CheckedValue, checked_mir_value, checked_value, mir_checked_value, scalar_mir_disable, scalar_mir_instruction, scalar_mir_value } from checked_values
 import { MirBlock, MirCall, MirFunction, MirInstruction, MirModule, MirSignature, mir_origin_valid, mir_table_span_valid, mir_type_id, mir_value_type } from mir
 import { mir_control_active, mir_control_prepare } from mir_control
 import { mir_intrinsic_signature_error, mir_runtime_adapter } from mir_intrinsics
 import { compiler_host_intrinsic, compiler_runtime_intrinsic } from resolution
 import { CheckedLocals, CompilerState } from state
 import { load_integer, load_string } from storage
+import { ArgumentBindings } from argument_binding
+import { default_arguments } from default_arguments
 
 # Capture declaration identity and portable types before checking any body.
-# A callee can remain on the checked direct route while its scalar caller uses
-# MIR. Recursive and forward calls therefore need no body/order inference.
+# Every ordinary callee, including a private default initializer, owns verified
+# MIR. Recursive and forward calls need no body/order inference here.
 def mir_declare_signatures(mut state: CompilerState)
 	mut source_count := state.module_count[0]
 	if source_count == 0
@@ -130,6 +132,31 @@ def mir_checked_call(mut state: CompilerState, mut locals: CheckedLocals, callee
 		return checked_value(result_type, 0, 9007199254740991, 0)
 	end
 	return mir_checked_value(result_type, result, 9007199254740991, 0)
+end
+
+# Explicit expressions already occupy declaration slots. Finish omitted slots
+# in declaration order using ordinary calls; no absent operand reaches MIR.
+def mir_complete_arguments(mut state: CompilerState, mut locals: CheckedLocals, mut bindings: ArgumentBindings, origin: Integer): Boolean
+	mut index := 0
+	while index < bindings.values.size()
+		if !bindings.provided[index] && bindings.defaults[index] < 0
+			return false
+		end
+		index += 1
+	end
+	index = 0
+	while index < bindings.values.size()
+		if !bindings.provided[index]
+			callee := bindings.defaults[index]
+			arguments := default_arguments(bindings.values, index)
+			result_type := state.scalar_mir.signatures[callee].result_type
+			value := mir_checked_call(state, locals, callee, arguments, result_type, origin)
+			bindings.values[index] = checked_mir_value(value)
+			bindings.provided[index] = true
+		end
+		index += 1
+	end
+	return true
 end
 
 def mir_signatures_error(native_module: MirModule): String

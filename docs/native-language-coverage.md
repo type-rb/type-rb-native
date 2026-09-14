@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 101 ordinary-path probes and 32 feature
+Status: the shared contract contains 108 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -37,10 +37,11 @@ integration; detailed qualification occurs at coherent milestones. A feature
 need not manufacture a runtime speedup or a separate size budget revision to
 justify its existence. Final performance goals remain unchanged.
 
-## Required named arguments and record field order
+## Named/default arguments and record field order
 
-Ordinary functions support required positional parameters followed by `*` and
-required named-only parameters. Explicit arguments run in authored order, then
+Ordinary functions support positional parameters followed by `*` and named-only
+parameters, with optional defaults in either group. Required parameters cannot
+follow defaults within a group; the named-only group starts a new boundary. Explicit arguments run in authored order, then
 MIR call operands are arranged in declaration order. Named labels resolve through
 the selected declaration, including imported aliases. A label cannot supply a
 positional-only parameter; duplicate/unknown labels, positional arguments after
@@ -58,10 +59,20 @@ Configured REPL imports suppress the corresponding generated project imports.
 Authored function and record aliases retain declaration identity across calls,
 retained bindings and replay; see the [REPL contracts](native-cli.md#repl).
 
-Default arguments and record default initializers remain explicit gaps. This
-change does not claim defaults, method/function-value calls or payload-enum
-argument coverage. Their declaration-scope and omitted-value semantics require
-further checked/MIR work.
+Default arguments and record initializers run in declaration scope, after all
+explicit expressions, in parameter/field order. Only preceding declaration slots
+are available; caller locals and later parameters/fields are not. Every default
+is resolved and checked even if all callers supply that argument. Each omitted
+managed default allocates a fresh value; explicitly passed aliases retain their
+normal sharing. Record fields must place required fields before defaults.
+
+Private typed initializer functions share ordinary MIR calls, verification and
+root planning; see [the lowering decision](decisions/0040-default-initializer-mir.md).
+No absent operand or null placeholder enters the final MIR call. Tests cover
+source erasure, reversed block storage, forced collection, imported aliases,
+short-circuit defaults and independent REPL evaluation. Nullable defaults and
+method/function-value/payload-enum argument handling remain gaps until their
+underlying value and callable families are supported.
 
 ## Ordinary UTF-8 String foundation
 

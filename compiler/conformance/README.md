@@ -190,3 +190,9 @@ Hash keys while heap-allocated receivers are replaced and automatic collection
 occurs. It checks both index signs and byte contents. The separate runtime ABI
 observer exercises all 256 byte payloads, NUL termination and required bounds
 failures; that internal byte coverage does not claim ordinary Unicode support.
+
+`valid/default-arguments-mir.trb` covers declaration-order defaults after explicit
+arguments, preceding parameter/field bindings, fresh managed defaults, contextual
+Float conversion and skipped short-circuit traps. The ordinary CLI and REPL run
+the same fixture. MIR tests erase source/default binding metadata, reorder blocks
+and force collection before allocating operations and user/initializer calls.
