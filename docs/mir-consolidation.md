@@ -104,7 +104,7 @@ accepted seed refresh: the current pinned seed cannot parse that syntax. The
 implementation itself remains compatible with that seed. No seed, pin, baseline
 or performance qualification changes are implied.
 
-## Current basic-language integration: value control
+## Value-control checkpoint
 
 Value-producing conditionals and scalar case now use typed block arguments,
 including Integer/Float joins, managed results and lexical transfer branches.
@@ -114,10 +114,25 @@ adaptation; source erasure, reordered storage and forced-collection checks cover
 that boundary. See [the decision](decisions/0041-value-control-mir.md) and the
 shared language inventory for the exact subset and remaining gaps.
 
-The ordinary compiler closure contains 61 modules, including the new value-join
-builder. Implementation syntax stays within the existing seed and recovery
-boundary. The older default-initialization acceptance above remains historical
-evidence; current integration requires its own complete correctness authorities.
+That checkpoint contained 61 ordinary compiler modules, including the new
+value-join builder. Its acceptance remains historical evidence; each subsequent
+integration requires its own complete correctness authorities.
+
+## Current basic-language integration: nullable values
+
+Optional values, nil guards, safe navigation and optional numeric widening now
+have typed MIR operations and control edges. Dedicated type, flow-fact and MIR
+builders own the semantics; QBE consumes verified operations. Calls, returns,
+defaults and managed collections retain optional payloads through shared root
+planning. See [decision 0042](decisions/0042-nullable-mir.md) for the private layout
+and conservative fact invalidation across assignments and loop backedges.
+
+The ordinary compiler closure contains 65 modules. Implementation syntax stays
+within the existing immutable seed and snapshot-v4 boundary; compiler self-use
+of the new syntax still depends on an accepted seed refresh. The shared language
+contract contains 134 cases with explicit remaining differences. Retained REPL
+assignment flow, wider pattern/union families and final performance qualification
+remain open. This checkpoint does not imply complete basic-language coverage.
 
 ## Development loop
 

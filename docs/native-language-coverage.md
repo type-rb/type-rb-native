@@ -93,9 +93,11 @@ Private typed initializer functions share ordinary MIR calls, verification and
 root planning; see [the lowering decision](decisions/0040-default-initializer-mir.md).
 No absent operand or null placeholder enters the final MIR call. Tests cover
 source erasure, reversed block storage, forced collection, imported aliases,
-short-circuit defaults and independent REPL evaluation. Nullable defaults and
-method/function-value/payload-enum argument handling remain gaps until their
-underlying value and callable families are supported.
+short-circuit defaults and independent REPL evaluation. Nullable defaults preserve
+the distinction between an omitted argument and an explicit `nil`; the shared
+`nullable-default-presence` case covers both paths. Method/function-value/payload-enum
+argument handling remains a gap until the underlying value and callable families
+are supported.
 
 ## Ordinary UTF-8 String foundation
 
