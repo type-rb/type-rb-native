@@ -1,4 +1,4 @@
-import { decode_recovery_managed_snapshot } from recovery_managed_snapshot
+import { decode_bootstrap_snapshot, decode_recovery_managed_snapshot } from recovery_managed_snapshot
 import { native_read_text } from native_file_system
 import trb/std/process
 import trb/std/result
@@ -30,7 +30,44 @@ def _recovery_managed_managed_snapshot_fixture(): String
 	end
 end
 
+def _recovery_function_count_snapshot(count: Integer): String
+	mut functions := ""
+	mut index := 0
+	while index < count
+		if index > 0
+			functions += ","
+		end
+		functions += "{\"id\":\"example#main\",\"name\":\"main\",\"captures\":[],\"parameters\":[],\"result\":\"Void\",\"entry\":\"b0\",\"origin\":{\"source\":\"main\",\"startLine\":1,\"startColumn\":1,\"endLine\":1,\"endColumn\":1},\"blocks\":[{\"id\":\"b0\",\"parameters\":[],\"origin\":{\"source\":\"main\",\"startLine\":1,\"startColumn\":1,\"endLine\":1,\"endColumn\":1},\"instructions\":[],\"terminator\":{\"op\":\"return\",\"value\":null,\"origin\":{\"source\":\"main\",\"startLine\":1,\"startColumn\":1,\"endLine\":1,\"endColumn\":1}}}]}".replace_all("example#main", "example#f" + index.to_s())
+		index += 1
+	end
+	return "{\"format\":\"type-rb-bootstrap-snapshot\",\"version\":4,\"module\":\"example\",\"entryFunction\":\"example#f0\",\"sources\":[{\"id\":\"main\",\"path\":\"main.trb\"}],\"types\":[],\"functions\":[" + functions + "]}"
+end
+
 describe("Managed recovery snapshot v4") do
+	test("bounds compiler recovery functions separately from ordinary snapshots") do
+		[512, 513, 1024, 1025].each do |count|
+			source := _recovery_function_count_snapshot(count)
+			case decode_recovery_managed_snapshot(source)
+			when Result::Ok(native_module)
+				expect(count).to_equal(512)
+				expect(native_module.functions.size()).to_equal(count)
+			when Result::Err(diagnostic)
+				expect(count > 512).to_be_true()
+				expect(diagnostic.code).to_equal("TRBN0005")
+				expect(diagnostic.path).to_equal("/functions")
+			end
+			case decode_bootstrap_snapshot(source)
+			when Result::Ok(native_module)
+				expect(count <= 1024).to_be_true()
+				expect(native_module.functions.size()).to_equal(count)
+			when Result::Err(diagnostic)
+				expect(count).to_equal(1025)
+				expect(diagnostic.code).to_equal("TRBN0005")
+				expect(diagnostic.path).to_equal("/functions")
+			end
+		end
+	end
+
 	test("strictly decodes aggregate type and instruction definitions") do
 		case decode_recovery_managed_snapshot(_recovery_managed_snapshot_fixture())
 		when Result::Ok(native_module)

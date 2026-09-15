@@ -1,3 +1,7 @@
+import { advance, expect, expect_identifier, finish_statement, parse_type, skip_newlines, token_is } from syntax_tokens
+import { check_enum_bindings, check_enum_patterns } from enum_checked
+import { mir_enum_construct, mir_enum_operation } from enum_mir
+import { enum_argument_bindings, find_enum_type, find_enum_variant } from enum_types
 import { checked_submission_boundary, checked_submission_result } from checked_submission
 import { nullable_apply, nullable_finish, nullable_loop_writes, nullable_nil_condition, nullable_read, nullable_replace } from nullable_flow
 import { nullable_common, nullable_element, nullable_type } from nullable_types
@@ -22,8 +26,8 @@ import { mir_checked_call, mir_checked_standard_call, mir_complete_arguments } f
 import { mir_logical_begin, mir_logical_join } from mir_logical
 import { mir_checked_puts, mir_checked_string_binary, mir_checked_string_literal, mir_checked_string_operation } from mir_strings
 import { mir_control_active, mir_control_assign, mir_control_branch, mir_control_enter, mir_control_jump, mir_control_loop_begin, mir_control_loop_branch, mir_control_loop_end, mir_control_prepare, mir_control_return, mir_control_transfer } from mir_control
-import { advance, binary_operator_id, declaration_start, expect, expect_identifier, finish_statement, parse_argument_label, parse_type, skip_newlines, syntax_block_end, syntax_conditional_tail, syntax_expression_precedence, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_statement_boundary, token_is } from parser
-import { array_element_type, array_type, common_array_element_type, find_field, find_record_type, find_visible_function, find_visible_record, resolve_type_name, standard_package_import, standard_package_root, type_display } from resolution
+import { binary_operator_id, declaration_start, parse_argument_label, syntax_block_end, syntax_conditional_tail, syntax_expression_precedence, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_statement_boundary } from parser
+import { array_element_type, array_type, common_array_element_type, find_field, find_record_type, find_visible_enum, find_visible_function, find_visible_record, resolve_type_name, standard_package_import, standard_package_root, type_display } from resolution
 import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_add, local_find, terminal_token } from state
 import { load_integer, load_string, sparse_integer_at, store_integer, store_string } from storage
 
@@ -362,6 +366,9 @@ def check_primary(
 		return scalar_mir_unary(state, locals, "+", value, value.type_name, origin)
 	end
 	if kind == 1
+		if token_is(state, origin + 1, "::")
+			return check_enum_constructor(state, position, locals)
+		end
 		name := load_string(state.token_texts, origin)
 		advance(position)
 		if name == "true"
@@ -895,6 +902,8 @@ def check_expression_value(
 			result_type := binary_result_type(state, operator, value.type_name, right.type_name, line, operator_origin)
 			if precedence <= 2
 				value = mir_logical_join(state, locals, value, right, short, operator_origin)
+			elsif find_enum_type(state, value.type_name) >= 0
+				value = mir_enum_operation(state, locals, 40, value, checked_mir_value(right), binary_operator_id(operator), "Boolean", operator_origin)
 			elsif value.type_name == "String"
 				value = mir_checked_string_binary(state, locals, value, right, operator, operator_origin)
 			else
@@ -1323,11 +1332,16 @@ def check_control_value(mut state: CompilerState, mut position: Array<Integer>, 
 	mir_control_prepare(state, locals)
 	mut join := mir_value_join(locals, line)
 	mut selector := checked_value(predicate.type_name, predicate.category, predicate.origin, predicate.mutable)
+	mut enum_owner :=- 1
 	if control.kind == 2
 		position[0] = control.selector
 		selector = check_expression(state, position, locals, 1, "")
-		if selector.type_name != "Never" && selector.type_name != "Integer" && selector.type_name != "String"
-			return type_diagnostic(state, line, "case selector requires Integer or String")
+		enum_owner = find_enum_type(state, selector.type_name)
+		if enum_owner >= 0 && !check_enum_patterns(state, control, enum_owner)
+			return checked_value("Invalid", 0, origin, 0)
+		end
+		if enum_owner < 0 && selector.type_name != "Never" && selector.type_name != "Integer" && selector.type_name != "String"
+			return type_diagnostic(state, line, "case selector requires Integer, String or enum")
 		end
 	elsif control.kind == 3
 		check_expected(state, predicate.type_name, "Boolean", line)
@@ -1350,7 +1364,12 @@ def check_control_value(mut state: CompilerState, mut position: Array<Integer>, 
 			mut condition := checked_view(predicate, predicate.type_name, predicate.category)
 			if control.kind == 2
 				position[0] = branch.condition
-				condition = check_case_condition(state, position, locals, selector, branch.condition_finish)
+				if enum_owner >= 0
+					pattern := state.enum_patterns[sparse_integer_at(state.enum_pattern_origins, branch.condition) - 1]
+					condition = mir_enum_operation(state, locals, 38, selector, - 1, pattern.variant, "Boolean", branch.condition)
+				else
+					condition = check_case_condition(state, position, locals, selector, branch.condition_finish)
+				end
 			elsif control.kind == 1
 				position[0] = branch.condition
 				condition = check_expression(state, position, locals, 1, "Boolean")
@@ -1362,9 +1381,16 @@ def check_control_value(mut state: CompilerState, mut position: Array<Integer>, 
 			alternate_flow = locals.nullable_state[0]
 			false_facts = condition.falsity
 			nullable_apply(locals, condition.truth)
-			alternate = mir_control_branch(state, locals, condition, line)
+			if enum_owner >= 0 && branch_index == control.branches.size() - 1
+				otherwise = true
+			else
+				alternate = mir_control_branch(state, locals, condition, line)
+			end
 		else
 			otherwise = true
+		end
+		if enum_owner >= 0 && branch.condition >= 0
+			check_enum_bindings(state, locals, selector, branch.condition)
 		end
 		position[0] = branch.body
 		mut value := checked_value("Void", 0, 9007199254740991, 0)
@@ -1624,4 +1650,65 @@ def check_safe_member(mut state: CompilerState, mut position: Array<Integer>, mu
 	store_integer(state.safe_finishes, origin, position[0])
 	store_string(state.safe_types, origin, result_type)
 	return result
+end
+
+def check_enum_constructor(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals): CheckedValue
+	origin := position[0]
+	line := load_integer(state.token_lines, origin)
+	owner := find_visible_enum(state, state.active_module[0], expect_identifier(state, position))
+	if !expect(state, position, "::")
+		return checked_value("Invalid", 0, origin, 0)
+	end
+	variant := find_enum_variant(state, owner, expect_identifier(state, position))
+	if variant < 0
+		return type_diagnostic(state, line, "unknown enum variant")
+	end
+	row := state.enum_variants[variant]
+	mut bindings := enum_argument_bindings(state, variant)
+	if row.field_count == 0
+		if token_is(state, position[0], "(")
+			return type_diagnostic(state, line, "payloadless enum variant is not callable")
+		end
+		return mir_enum_construct(state, locals, variant, [], origin)
+	end
+	if !expect(state, position, "(")
+		return checked_value("Invalid", 0, origin, 0)
+	end
+	saved := locals.mir_state[0]
+	mut diverged := false
+	skip_newlines(state, position)
+	while !token_is(state, position[0], ")") && !has_diagnostic(state)
+		label := parse_argument_label(state, position)
+		slot := argument_binding_slot(bindings, label)
+		if slot < 0
+			return type_diagnostic(state, line, bindings.error[0])
+		end
+		value := check_expression(state, position, locals, 1, state.enum_fields[row.field_start + slot].type_name)
+		if value.type_name == "Never"
+			diverged = true
+			scalar_mir_disable(locals)
+		end
+		bindings.values[slot] = checked_mir_value(value)
+		skip_newlines(state, position)
+		if !token_is(state, position[0], ",")
+			break
+		end
+		advance(position)
+		skip_newlines(state, position)
+	end
+	if !expect(state, position, ")")
+		return checked_value("Invalid", 0, origin, 0)
+	end
+	mut slot := 0
+	while slot < row.field_count
+		if !bindings.provided[slot]
+			return type_diagnostic(state, line, "missing enum payload argument " + bindings.names[slot])
+		end
+		slot += 1
+	end
+	if diverged
+		locals.mir_state[0] = saved
+		return checked_value("Never", 0, origin, 0)
+	end
+	return mir_enum_construct(state, locals, variant, bindings.values, origin)
 end

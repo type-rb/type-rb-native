@@ -1,0 +1,105 @@
+import { find_enum_type } from enum_types
+import { nullable_element } from nullable_types
+import { hash_key_type } from hash_types
+import { string_starts_with } from path
+import { find_record_type } from resolution
+import { repl_type_name } from repl_project
+import { CompilerState } from state
+import { load_integer, load_string } from storage
+
+# Source witnesses are checked but never evaluated. Recursive declarations must
+# find a finite constructor path; optional/container fields already terminate.
+def repl_default(state: CompilerState, type_name: String): String
+	return repl_default_seen(state, type_name, [])
+end
+
+def repl_default_seen(state: CompilerState, type_name: String, seen: Array<String>): String
+	if nullable_element(type_name) != ""
+		return "nil"
+	end
+	if type_name == "Hash" || hash_key_type(type_name) != ""
+		return "{}"
+	end
+	if type_name == "Integer"
+		return "0"
+	end
+	if type_name == "Float"
+		return "0.0"
+	end
+	if type_name == "Boolean"
+		return "false"
+	end
+	if type_name == "String"
+		return "\"\""
+	end
+	if string_starts_with(type_name, "Array<")
+		return "[]"
+	end
+	mut path: Array<String> := []
+	mut cursor := 0
+	while cursor < seen.size()
+		if seen[cursor] == type_name
+			return ""
+		end
+		path.push(seen[cursor])
+		cursor += 1
+	end
+	path.push(type_name)
+	enum_index := find_enum_type(state, type_name)
+	if enum_index >= 0
+		definition := state.enums[enum_index]
+		mut variant := definition.variant_start
+		while variant < definition.variant_start + definition.variant_count
+			row := state.enum_variants[variant]
+			mut text := repl_type_name(state, type_name) + "::" + row.name
+			mut possible := true
+			mut slot := 0
+			if row.field_count > 0
+				text += "("
+			end
+			while slot < row.field_count && possible
+				field := state.enum_fields[row.field_start + slot]
+				value := repl_default_seen(state, field.type_name, path)
+				if value == ""
+					possible = false
+				end
+				if slot > 0
+					text += ", "
+				end
+				if field.named_only
+					text += field.name + ": "
+				end
+				text += value
+				slot += 1
+			end
+			if row.field_count > 0
+				text += ")"
+			end
+			if possible
+				return text
+			end
+			variant += 1
+		end
+		return ""
+	end
+	record_index := find_record_type(state, type_name)
+	if record_index < 0
+		return ""
+	end
+	start := load_integer(state.record_field_starts, record_index)
+	count := load_integer(state.record_field_counts, record_index)
+	mut text := repl_type_name(state, type_name) + ".new("
+	mut index := 0
+	while index < count
+		if index > 0
+			text += ", "
+		end
+		value := repl_default_seen(state, load_string(state.field_types, start + index), path)
+		if value == ""
+			return ""
+		end
+		text += load_string(state.field_names, start + index) + ": " + value
+		index += 1
+	end
+	return text + ")"
+end

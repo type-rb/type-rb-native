@@ -1,6 +1,8 @@
+import { token_is, parse_type, skip_newlines } from syntax_tokens
 import { nullable_common } from nullable_types
 import { repl_absent, repl_none, repl_payload, repl_nullable_read } from repl_nullable
 import { standard_package_import } from resolution
+import { enum_argument_bindings, enum_type, find_enum_type, find_enum_variant } from enum_types
 import { ArgumentBindings, argument_binding_slot, function_argument_bindings, record_argument_bindings } from argument_binding
 import { default_arguments } from default_arguments
 import { hash_key_type, hash_value_type } from hash_types
@@ -9,11 +11,11 @@ import { repl_hash_new, repl_hash_set, repl_hash_get, repl_hash_slot, repl_hash_
 import trb/std/math
 import { CompilerState } from state
 import { sparse_integer_at, load_integer, load_string } from storage
-import { parse_argument_label, syntax_statement_boundary, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_block_end, syntax_conditional_tail, token_is, binary_operator_id, syntax_expression_precedence, parse_expression_syntax, parse_type, skip_newlines, declaration_start } from parser
+import { parse_argument_label, syntax_statement_boundary, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_block_end, syntax_conditional_tail, binary_operator_id, syntax_expression_precedence, parse_expression_syntax, declaration_start } from parser
 import { mir_logical_short_value } from mir
 import { checked_loop_transfer_kind } from checked_program
 import { checked_iteration_require, checked_range_require } from iteration_checked
-import { find_visible_function, find_visible_record, find_record_type, find_field, record_type, array_element_type } from resolution
+import { find_visible_enum, find_visible_function, find_visible_record, find_record_type, find_field, record_type, array_element_type } from resolution
 import { number_is_float, number_without_underscores, integer_string } from literals
 import { native_cli_float, native_cli_interrupt } from host
 import { repl_get, ReplStore, ReplEnvironment, ReplReference, repl_value, repl_integer, repl_float, repl_boolean, repl_string, repl_reference, repl_environment } from repl_model
@@ -439,6 +441,37 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		if function >= 0
 			return repl_reference(repl_call(state, function, arguments, store))
 		end
+	end
+	if token_is(state, position[0], "::")
+		owner := find_visible_enum(state, state.active_module[0], text)
+		variant := find_enum_variant(state, owner, load_string(state.token_texts, position[0] + 1))
+		position[0] += 2
+		row := state.enum_variants[variant]
+		mut bindings := enum_argument_bindings(state, variant)
+		if row.field_count > 0
+			position[0] += 1
+			skip_newlines(state, position)
+			while !token_is(state, position[0], ")") && store.error[0] == ""
+				label := parse_argument_label(state, position)
+				slot := argument_binding_slot(bindings, label)
+				if slot < 0
+					store.error[0] = bindings.error[0]
+					return repl_reference(0)
+				end
+				type_name := state.enum_fields[row.field_start + slot].type_name
+				value := repl_expression(state, position, store, environment, 1, type_name)
+				if environment.flow[0] != 0
+					return repl_reference(environment.flow[1])
+				end
+				bindings.values[slot] = repl_coerce(store, value.value, type_name)
+				if token_is(state, position[0], ",")
+					position[0] += 1
+				end
+				skip_newlines(state, position)
+			end
+			position[0] += 1
+		end
+		return repl_reference(repl_value(store, enum_type(owner), variant, 0.0, row.name, bindings.values))
 	end
 	if token_is(state, position[0], ".")
 		position[0] += 1
@@ -1118,6 +1151,16 @@ def repl_control(mut state: CompilerState, mut position: Array<Integer>, mut sto
 			position[0] = branch.condition
 			condition := repl_expression(state, position, store, environment, 1, "Boolean")
 			selected = store.integers[condition.value] != 0
+		elsif control.kind == 2 && branch.condition >= 0 && find_enum_type(state, store.types[selector]) >= 0
+			pattern := state.enum_patterns[sparse_integer_at(state.enum_pattern_origins, branch.condition) - 1]
+			selected = store.integers[selector] == pattern.variant
+			if selected
+				mut slot := 0
+				while slot < pattern.bindings.size()
+					repl_bind(environment, load_string(state.token_texts, pattern.bindings[slot]), store.children[selector][slot], 0)
+					slot += 1
+				end
+			end
 		elsif control.kind == 2 && branch.condition >= 0
 			position[0] = branch.condition
 			while position[0] < branch.condition_finish && !selected

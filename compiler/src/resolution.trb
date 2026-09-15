@@ -1,7 +1,10 @@
+import { EnumField } from enum_model
+import { token_is } from syntax_tokens
+import { enum_type, find_enum_in_module, find_enum_type, find_enum_variant } from enum_types
 import { nullable_common, nullable_element, nullable_type } from nullable_types
 import { hash_key_type, hash_type, hash_value_type, native_value_layout } from hash_types
 import { ascii_code, integer_string } from literals
-import { syntax_loop_transfer_kind, token_is } from parser
+import { syntax_loop_transfer_kind } from parser
 import { path_basename, path_directory, string_starts_with, string_without_suffix } from path
 import { CheckedLocals, CompilerState, diagnostic, find_name_index, function_index_key, has_diagnostic, local_find, locals_new, terminal_token } from state
 import { load_integer, load_string, store_integer, store_string } from storage
@@ -250,6 +253,10 @@ def type_display(state: CompilerState, type_name: String): String
 	if hash_key_type(type_name) != ""
 		return "Hash<" + hash_key_type(type_name) + ", " + type_display(state, hash_value_type(type_name)) + ">"
 	end
+	enum_index := find_enum_type(state, type_name)
+	if enum_index >= 0
+		return state.enums[enum_index].name
+	end
 	record_index := find_record_type(state, type_name)
 	if record_index >= 0
 		return load_string(state.record_names, record_index)
@@ -315,6 +322,10 @@ def resolve_type_name(
 	end
 	if builtin_type_exists(type_name, allow_void)
 		return type_name
+	end
+	enum_index := find_visible_enum(state, module_index, type_name)
+	if enum_index >= 0
+		return enum_type(enum_index)
 	end
 	record_index := find_visible_record(state, module_index, type_name)
 	if record_index >= 0
@@ -548,6 +559,16 @@ def resolve_bare_imports(mut state: CompilerState): Boolean
 					end
 					record_index += 1
 				end
+				state.enums.each do |definition|
+					if definition.source_id == target && ascii_fold(definition.name) == wanted
+						if candidates != ""
+							candidates += ", "
+						end
+						candidates += definition.name
+						declaration = definition.name
+						matches += 1
+					end
+				end
 				raw_path := load_string(state.import_paths, import_index)
 				if matches == 0
 					mut matching_function := false
@@ -630,7 +651,7 @@ def validate_import_bindings(mut state: CompilerState): Boolean
 			end
 			other += 1
 		end
-		if find_record_in_module(state, module_index, name) >= 0
+		if find_record_in_module(state, module_index, name) >= 0 || find_enum_in_module(state, module_index, name) >= 0
 			diagnostic(state, "TRBN4003", line, "import binding conflicts with local declaration " + name)
 		end
 		if find_function_in_module(state, module_index, name) >= 0
@@ -638,7 +659,7 @@ def validate_import_bindings(mut state: CompilerState): Boolean
 		end
 		mut exported := target < - 1
 		if target >= 0
-			if find_record_in_module(state, target, declaration) >= 0
+			if find_record_in_module(state, target, declaration) >= 0 || find_enum_in_module(state, target, declaration) >= 0
 				exported = true
 			end
 			if find_function_in_module(state, target, declaration) >= 0
@@ -672,6 +693,9 @@ end
 
 def resolve_declarations(mut state: CompilerState): Boolean
 	if !validate_import_bindings(state)
+		return false
+	end
+	if !resolve_enum_declarations(state)
 		return false
 	end
 	mut record_index := 0
@@ -830,6 +854,21 @@ def resolve_function_body(
 		end
 		iteration_index += 1
 	end
+	state.controls.each do |control|
+		if control.kind == 2 && control.origin >= load_integer(state.function_body_starts, function_index) && control.finish <= load_integer(state.function_body_ends, function_index)
+			control.branches.each do |branch|
+				if branch.condition >= 0 && token_is(state, branch.condition + 1, "::")
+					mut token := branch.condition + 4
+					while token < branch.condition_finish
+						if load_integer(state.token_kinds, token) == 1 && !token_is(state, token + 1, ":")
+							resolution_local_add(locals, load_string(state.token_texts, token), "", 0)
+						end
+						token += 1
+					end
+				end
+			end
+		end
+	end
 	mut index := load_integer(state.function_body_starts, function_index)
 	finish := load_integer(state.function_body_ends, function_index)
 	mut skipping_type := false
@@ -861,7 +900,11 @@ def resolve_function_body(
 					if index > load_integer(state.function_body_starts, function_index)
 						previous = load_string(state.token_texts, index - 1)
 					end
-					if previous == "." || previous == "&."
+					if previous == "." || previous == "&." || previous == "::"
+					elsif token_is(state, index + 1, "::")
+						if find_visible_enum(state, module_index, text) < 0
+							diagnostic(state, "TRBN4003", load_integer(state.token_lines, index), "unresolved enum " + text)
+						end
 					else
 						if token_is(state, index + 1, ":=")
 							resolution_local_add(locals, text, "", 0)
@@ -1027,4 +1070,59 @@ def compiler_host_intrinsic(state: CompilerState, function_index: Integer): Bool
 		return false
 	end
 	return load_string(state.module_names, load_integer(state.function_modules, function_index)) == "host"
+end
+
+def find_visible_enum(mut state: CompilerState, source: Integer, name: String): Integer
+	local := find_enum_in_module(state, source, name)
+	if local >= 0
+		return local
+	end
+	binding := find_import_binding(state, source, name)
+	if binding < 0
+		return - 1
+	end
+	target := load_integer(state.import_targets, binding)
+	resolved := find_enum_in_module(state, target, load_string(state.import_declarations, binding))
+	if resolved >= 0
+		store_integer(state.import_used, binding, 1)
+	end
+	return resolved
+end
+
+def resolve_enum_declarations(mut state: CompilerState): Boolean
+	mut owner := 0
+	while owner < state.enums.size()
+		definition := state.enums[owner]
+		state.active_module[0] = definition.source_id
+		if find_enum_in_module(state, definition.source_id, definition.name) != owner || find_record_in_module(state, definition.source_id, definition.name) >= 0 || find_function_in_module(state, definition.source_id, definition.name) >= 0
+			diagnostic(state, "TRBN4003", definition.line, "duplicate declaration " + definition.name)
+		end
+		mut variant := definition.variant_start
+		while variant < definition.variant_start + definition.variant_count
+			row := state.enum_variants[variant]
+			if find_enum_variant(state, owner, row.name) != variant
+				diagnostic(state, "TRBN4003", row.line, "duplicate enum variant " + row.name)
+			end
+			mut field := row.field_start
+			while field < row.field_start + row.field_count
+				item := state.enum_fields[field]
+				mut previous := row.field_start
+				while previous < field
+					if state.enum_fields[previous].name == item.name
+						diagnostic(state, "TRBN4003", item.line, "duplicate enum payload field " + item.name)
+					end
+					previous += 1
+				end
+				type_name := resolve_type_name(state, definition.source_id, item.type_name, false)
+				if type_name == ""
+					diagnostic(state, "TRBN4003", item.line, "unknown enum payload type " + item.type_name)
+				end
+				state.enum_fields[field] = EnumField.new(name: item.name, type_name: type_name, line: item.line, named_only: item.named_only)
+				field += 1
+			end
+			variant += 1
+		end
+		owner += 1
+	end
+	return !has_diagnostic(state)
 end

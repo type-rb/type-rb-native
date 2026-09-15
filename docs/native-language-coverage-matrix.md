@@ -14,7 +14,7 @@
 | Default argument | accepts | accepts | matches reference | matches reference |
 | Array&lt;Boolean&gt; | accepts | accepts | matches reference | matches reference |
 | Nullable String | accepts | accepts | matches reference | matches reference |
-| Ordinary enum | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Ordinary enum | accepts | accepts | matches reference | matches reference |
 | UTF-8 String literal | accepts | accepts | matches reference | matches reference |
 | Array of named records | accepts | accepts | matches reference | matches reference |
 | Hash literal and required lookup | accepts | accepts | matches reference | matches reference |
@@ -42,7 +42,7 @@
 | Nullable narrowing and early return | accepts | accepts | matches reference | matches reference |
 | Nullable short-circuit and safe member | accepts | accepts | matches reference | matches reference |
 | Nil equality | accepts | accepts | matches reference | matches reference |
-| Payload enum and exhaustive case | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Payload enum and exhaustive case | accepts | accepts | matches reference | matches reference |
 | Raw-value enum | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Transparent type alias | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Nominal newtype construction and projection | rejects valid input | rejects valid input | not reached | rejects valid input |
@@ -142,3 +142,14 @@
 | Partial failure discards stale REPL narrowing | incorrectly accepts | incorrectly accepts | differs | diagnostic/output differs |
 | Retained optional values use lazy safe navigation | accepts | accepts | matches reference | matches reference |
 | REPL rejects authored return outside a function | accepts | accepts | matches reference | rejects as reference |
+| Enum named payload order and patterns | accepts | accepts | matches reference | matches reference |
+| Recursive enum values stored in Hash | accepts | incorrectly accepts | differs | matches reference |
+| Enum payload shadows an outer binding | accepts | accepts | matches reference | matches reference |
+| Nullable enum and record payloads | accepts | accepts | matches reference | matches reference |
+| Enum selector order and lexical loop transfers | accepts | accepts | matches reference | matches reference |
+| Enum managed payload retains an Array alias | accepts | accepts | matches reference | matches reference |
+| Recursive record and enum fields | accepts | incorrectly accepts | differs | rejects as reference |
+| Imported enum alias preserves nominal identity | accepts | accepts | matches reference | matches reference |
+| Reject an incomplete enum case | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject assignment to enum payload binding | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject equality across enum declarations | rejects as reference | rejects as reference | not reached | rejects as reference |
