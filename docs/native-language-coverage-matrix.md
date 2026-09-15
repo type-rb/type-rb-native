@@ -33,10 +33,10 @@
 | Mutable parameter rebinding is local | accepts | accepts | matches reference | matches reference |
 | Named-only arguments and reordering | accepts | accepts | matches reference | matches reference |
 | Default arguments refer to earlier arguments | accepts | accepts | matches reference | matches reference |
-| Value-producing if | rejects valid input | rejects valid input | not reached | rejects valid input |
-| Conditional expression evaluates one branch | rejects valid input | rejects valid input | not reached | rejects valid input |
-| Postfix return and loop transfers | rejects valid input | rejects valid input | not reached | rejects valid input |
-| Scalar case and case expression | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Value-producing if | accepts | accepts | matches reference | matches reference |
+| Conditional expression evaluates one branch | accepts | accepts | matches reference | matches reference |
+| Postfix return and loop transfers | accepts | accepts | matches reference | matches reference |
+| Scalar case and case expression | accepts | accepts | matches reference | matches reference |
 | Record defaults and reordered explicit fields | accepts | accepts | matches reference | matches reference |
 | Reject unsupported record equality | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Nullable narrowing and early return | rejects valid input | rejects valid input | not reached | rejects valid input |
@@ -110,3 +110,18 @@
 | Reject a default referencing a later parameter | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Check a default even when the caller supplies a value | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Reject a default referencing a later record field | rejects as reference | rejects as reference | not reached | rejects as reference |
+| If effects | accepts | accepts | matches reference | matches reference |
+| If managed | accepts | accepts | matches reference | matches reference |
+| If widening | accepts | accepts | matches reference | matches reference |
+| If transfer | accepts | accepts | matches reference | matches reference |
+| If elsif | accepts | accepts | matches reference | matches reference |
+| Case effects | accepts | accepts | matches reference | matches reference |
+| Case string | accepts | accepts | matches reference | matches reference |
+| Guard void | accepts | accepts | matches reference | matches reference |
+| Assignment transfer | accepts | accepts | matches reference | matches reference |
+| Guard loop | accepts | accepts | matches reference | matches reference |
+| Guard each | accepts | accepts | matches reference | matches reference |
+| Logical transfer | accepts | accepts | matches reference | matches reference |
+| Guard return | accepts | accepts | matches reference | matches reference |
+| Logical operators inside ternary branches | accepts | accepts | matches reference | matches reference |
+| Immutable Array capability survives a value branch | rejects as reference | rejects as reference | not reached | rejects as reference |

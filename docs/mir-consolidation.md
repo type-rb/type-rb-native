@@ -86,7 +86,7 @@ this integration is not final Pure Go qualification. See the
 [current ownership status](native-mir-optimization-status.md) for retained policy
 bounds and remaining optimization/coverage work.
 
-## Current basic-language integration: default initialization
+## Default initialization checkpoint
 
 Required and default positional/named-only function parameters and record fields
 share source-order binding. Each default gets a private, declaration-scoped
@@ -103,6 +103,21 @@ source-erased/reordered MIR, ordinary core/CLI fixed points and the synchronized
 accepted seed refresh: the current pinned seed cannot parse that syntax. The
 implementation itself remains compatible with that seed. No seed, pin, baseline
 or performance qualification changes are implied.
+
+## Current basic-language integration: value control
+
+Value-producing conditionals and scalar case now use typed block arguments,
+including Integer/Float joins, managed results and lexical transfer branches.
+Conditional transfers share parsed regions with the REPL. The independent
+`mir_value_control.trb` builder leaves QBE responsible only for verified MIR
+adaptation; source erasure, reordered storage and forced-collection checks cover
+that boundary. See [the decision](decisions/0041-value-control-mir.md) and the
+shared language inventory for the exact subset and remaining gaps.
+
+The ordinary compiler closure contains 61 modules, including the new value-join
+builder. Implementation syntax stays within the existing seed and recovery
+boundary. The older default-initialization acceptance above remains historical
+evidence; current integration requires its own complete correctness authorities.
 
 ## Development loop
 

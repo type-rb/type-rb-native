@@ -43,7 +43,8 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
                       'logical-loop-stack',
                       'range-values', 'range-carriers', 'range-extrema', 'range-effects',
                       'range-precedence', 'range-managed', 'range-streaming',
-                      'string-index-lifetime', 'default-arguments-mir'):
+                      'string-index-lifetime', 'default-arguments-mir',
+                      'value-control-mir', 'value-transfer-mir'):
         fixture = repository / 'compiler/conformance/valid' / (case_name + '.trb')
         expected = fixture.with_suffix('.out').read_text()
         case_source = root / (case_name + '.trb')
@@ -63,6 +64,17 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
             assert len(automatic) == 1 and int(automatic[0]) > 0, collected.stderr
         submission = fixture.read_text().replace('def main()', 'def exercise_control_case()')
         assert run('repl', text=submission + '\nexercise_control_case()\n:quit\n') == expected
+    # Corrected reference parser forms are separate from the exact pinned parity registry.
+    transfer = repository / 'compiler/conformance/reference-parser-fixed/value-transfer-operands.source'
+    transfer_source = root / 'value-transfer-operands.trb'
+    transfer_source.write_text(transfer.read_text())
+    expected_transfer = transfer.with_suffix('.out').read_text()
+    assert run('check', transfer_source) == 'ok\n'
+    transfer_binary = root / 'value-transfer-operands'
+    run('build', '--compile', '--outfile', transfer_binary, transfer_source)
+    assert subprocess.check_output([transfer_binary], text=True, timeout=30) == expected_transfer
+    submission = transfer.read_text().replace('def main()', 'def exercise_transfers()')
+    assert run('repl', text=submission + '\nexercise_transfers()\n:quit\n') == expected_transfer
     failure = repository / 'compiler/conformance/runtime-invalid/array-assignment-initial.trb'
     submission = failure.read_text().replace('def main()', 'def invalid_assignment_case()')
     failure_output = run('repl', text=submission + '\ninvalid_assignment_case()\n:quit\n')
@@ -121,10 +133,7 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
         assert 'TRBN' in run('build', '--compile', case_source, success=False)
         submission = fixture.read_text().replace('def main()', 'def invalid_control_case()')
         rejection = run('repl', text=submission + '\n:quit\n')
-        if case_name == 'loop-transfer-break-condition':
-            assert 'incomplete input at end of session' in rejection
-        else:
-            assert 'TRBN' in rejection
+        assert 'TRBN' in rejection
 
     failed_condition = run('repl', text='def visited(): Boolean\nputs("unexpected effect")\nreturn true\nend\nif false\nputs("wrong")\nelsif 1 / 0 == 0\nputs("wrong")\nelsif visited()\nputs("wrong")\nend\n:quit\n')
     assert 'division by zero' in failed_condition
