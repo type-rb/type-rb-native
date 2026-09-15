@@ -136,3 +136,9 @@
 | Safe navigation preserves nullable field results | accepts | accepts | matches reference | matches reference |
 | Reject nonnullable use after assignment of nil | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Reject stale nullable field narrowing after receiver assignment | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Retained nullable assignments preserve checked flow and display | accepts | accepts | matches reference | matches reference |
+| Rejected REPL assignment preserves the preceding fact | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Conditional REPL replacement invalidates the preceding fact | incorrectly accepts | incorrectly accepts | differs | output differs |
+| Partial failure discards stale REPL narrowing | incorrectly accepts | incorrectly accepts | differs | diagnostic/output differs |
+| Retained optional values use lazy safe navigation | accepts | accepts | matches reference | matches reference |
+| REPL rejects authored return outside a function | accepts | accepts | matches reference | rejects as reference |

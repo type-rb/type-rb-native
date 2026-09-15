@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 134 ordinary-path probes and 32 feature
+Status: the shared contract contains 140 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -57,8 +57,18 @@ for the supported subset, verification and remaining pattern/type boundaries.
 narrowing lower to verified MIR operations. Safe navigation evaluates its receiver
 once and skips member arguments on the absent edge. Optional values retain their
 payload identity in calls, defaults, returns, records, Arrays and Hashes, including
-zero and false payloads. The private traced layout and remaining flow/REPL gaps
+zero and false payloads. The private traced layout and remaining flow gaps
 are recorded in [decision 0042](decisions/0042-nullable-mir.md).
+
+Retained REPL assignments now preserve checked narrowing and assignment display
+types across inputs. Static rejection preserves facts; partial runtime failure
+and interruption discard them. Explicit replay retains checking boundaries while
+rebuilding accepted runtime effects. [Decision 0043](decisions/0043-checked-repl-submissions.md)
+records ownership, import/record identity and independent CLI controls. The new
+conditional/failure probes expose known reference defects: successful branch
+replacement is tracked in [TypeRB #699](https://github.com/type-rb/type-rb/issues/699),
+and [TypeRB PR #698](https://github.com/type-rb/type-rb/pull/698) fixes partial
+failure. The exact reference pin and its reviewed expectations remain unchanged.
 
 ## Named/default arguments and record field order
 

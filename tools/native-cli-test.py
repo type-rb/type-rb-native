@@ -9,6 +9,7 @@ import pty
 import select
 import signal
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -17,6 +18,7 @@ parser.add_argument('binary', type=Path)
 args = parser.parse_args()
 binary = args.binary.resolve()
 repository = Path(__file__).resolve().parent.parent
+subprocess.run([sys.executable, str(repository / "tools/native-repl-flow-test.py"), str(binary)], check=True)
 
 with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
     root = Path(temporary)

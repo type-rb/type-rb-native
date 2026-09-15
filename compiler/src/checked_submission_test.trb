@@ -1,0 +1,93 @@
+import { check, emit_qbe } from compiler
+import { intrinsic_mir_erase } from intrinsic_mir_test
+import { logical_run_qbe } from logical_test
+import { control_test_output } from control_mir_test
+import { lex } from lexer
+import { parse_module } from parser
+import { resolve } from resolution
+import { CheckedFlowFact, CheckedSubmission, CompilerState, compiler_new, has_diagnostic } from state
+import { integer_storage, load_integer, sparse_string_at, string_storage } from storage
+import { describe, expect, test } from trb/std/test
+import trb/std/process
+import trb/std/result
+
+def submission_test_state(source: String, start_line: Integer, finish_line: Integer, facts: Array<CheckedFlowFact>, reset_line: Integer =- 1): CompilerState
+	mut state := compiler_new(source.size() + 1)
+	lex(state, source)
+	parse_module(state, 0, state.entry_module[0])
+	resolve(state)
+	mut start := 0
+	while load_integer(state.token_lines, start) < start_line
+		start += 1
+	end
+	mut finish := start
+	while load_integer(state.token_lines, finish) < finish_line
+		finish += 1
+	end
+	mut resets: Array<Integer> := []
+	if reset_line >= 0
+		mut reset := 0
+		while load_integer(state.token_lines, reset) < reset_line
+			reset += 1
+		end
+		resets.push(reset)
+	end
+	state.submissions.push(CheckedSubmission.new(start: start, finish: finish, before: facts, after: [], types: string_storage(source.size() + 1), mutable: integer_storage(source.size() + 1), resets: resets))
+	check(state)
+	return state
+end
+
+describe("Checked interactive submissions") do
+	test("keeps explicit failure boundaries when checking accepted history") do
+		source := "def main()\nmut value: String? := nil\nvalue = \"kept\"\nputs(value == nil)\nvalue = \"again\"\nputs(value.size())\nreturn\nend\n"
+		state := submission_test_state(source, 2, 7, [], 4)
+		expect(has_diagnostic(state)).to_be_false()
+		expect(state.submissions[0].after.size()).to_equal(1)
+		expect(state.submissions[0].after[0].presence).to_equal(2)
+		invalid := submission_test_state("def main()\nmut value: String? := nil\nvalue = \"kept\"\nvalue.size()\nreturn\nend\n", 2, 5, [], 4)
+		expect(has_diagnostic(invalid)).to_be_true()
+	end
+
+	test("retains checked presence and exports replacement facts independently of QBE") do
+		mut state := submission_test_state("def main()\nmut value: String? := \"kept\"\nputs(value.size())\nvalue = nil\nreturn\nend\n", 3, 5, [CheckedFlowFact.new(name: "value", field: "", presence: 2)])
+		expect(has_diagnostic(state)).to_be_false()
+		expect(state.submissions[0].after.size()).to_equal(1)
+		expect(state.submissions[0].after[0].presence).to_equal(1)
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			before := control_test_output(emit_qbe(state))
+			intrinsic_mir_erase(state)
+			state.nullable_reads.used[0] = 0
+			state.submissions[0] = CheckedSubmission.new(start: - 1, finish: - 1, before: [], after: [], types: string_storage(1), mutable: integer_storage(1), resets: [])
+			expect(control_test_output(emit_qbe(state))).to_equal(before)
+			case logical_run_qbe(qbe, control_test_output(emit_qbe(state)))
+			when Result::Ok(output)
+				expect(output).to_equal("4\n")
+			when Result::Err(message)
+				puts(message)
+				expect(false).to_be_true()
+			end
+		end
+	end
+
+	test("reads the checked expression type and invalidates repeated writes") do
+		facts := [CheckedFlowFact.new(name: "value", field: "", presence: 2)]
+		state := submission_test_state("def main()\nmut value: String? := \"kept\"\nvalue.size() + 2\nreturn\nend\n", 3, 4, facts)
+		expect(has_diagnostic(state)).to_be_false()
+		expect(sparse_string_at(state.submissions[0].types, state.submissions[0].start)).to_equal("Integer")
+		invalid := submission_test_state("def main()\nmut value: String? := \"kept\"\nwhile true\nputs(value.size())\nvalue = nil\nend\nreturn\nend\n", 3, 7, facts)
+		expect(has_diagnostic(invalid)).to_be_true()
+	end
+
+	test("resolves stable field identities and rejects invalid session facts") do
+		source := "record Cell\nvalue: String?\nend\ndef main()\nmut cell: Cell := Cell.new(value: \"kept\")\nputs(cell.value.size())\nreturn\nend\n"
+		valid := submission_test_state(source, 6, 7, [CheckedFlowFact.new(name: "cell", field: "value", presence: 2)])
+		expect(has_diagnostic(valid)).to_be_false()
+		expect(valid.submissions[0].after[0].field).to_equal("value")
+		facts := [CheckedFlowFact.new(name: "missing", field: "value", presence: 2), CheckedFlowFact.new(name: "cell", field: "missing", presence: 2), CheckedFlowFact.new(name: "cell", field: "value", presence: 0)]
+		facts.each do |fact|
+			invalid := submission_test_state(source, 6, 7, [fact])
+			expect(has_diagnostic(invalid)).to_be_true()
+		end
+	end
+end

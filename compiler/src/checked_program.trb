@@ -1,3 +1,4 @@
+import { checked_submission_boundary, checked_submission_result } from checked_submission
 import { nullable_apply, nullable_finish, nullable_loop_writes, nullable_nil_condition, nullable_read, nullable_replace } from nullable_flow
 import { nullable_common, nullable_element, nullable_type } from nullable_types
 import { mir_checked_nullable, mir_nullable_coerce } from nullable_mir
@@ -928,6 +929,13 @@ def check_expression(
 	mut value := check_expression_value(state, position, locals, minimum_precedence, expected)
 	check_expected(state, value.type_name, expected, line)
 	value = mir_nullable_coerce(state, locals, value, expected, expression_origin)
+	mut displayed_mutable := 0
+	# Mutation capability also belongs to projections; display marks only a
+	# direct lexical binding, whose identity survives grouping and narrowing.
+	if value.nullable_binding >= 0 && value.nullable_field == - 1 && value.mutable > 0
+		displayed_mutable = 1
+	end
+	checked_submission_result(state, expression_origin, value.type_name, displayed_mutable)
 	return value
 end
 
@@ -965,6 +973,7 @@ def check_declaration(
 		mut position: Array<Integer>,
 		mut locals: CheckedLocals,
 	): CheckedValue
+	origin := position[0]
 	mut mutable := 0
 	if token_is(state, position[0], "mut")
 		mutable = 1
@@ -1022,6 +1031,7 @@ def check_declaration(
 			end
 		end
 	end
+	checked_submission_result(state, origin, local_type, mutable)
 	finish_statement(state, position)
 	if value.type_name == "Never"
 		return value
@@ -1034,8 +1044,13 @@ def check_simple_statement(
 		mut position: Array<Integer>,
 		mut locals: CheckedLocals,
 	): CheckedValue
+	origin := position[0]
 	line := load_integer(state.token_lines, position[0])
 	left := check_expression(state, position, locals, 1, "")
+	mut display_mutable := 0
+	if left.nullable_binding >= 0 && left.nullable_field == - 1
+		display_mutable = left.mutable
+	end
 	operator_origin := position[0]
 	operator := load_string(state.token_texts, position[0])
 	mut assignment := operator == "="
@@ -1066,6 +1081,11 @@ def check_simple_statement(
 		if left.nullable_binding >= 0 && left.nullable_field == - 1
 			nullable_replace(locals, left.nullable_binding, right.flow_type)
 		end
+		mut display_type := expected
+		if right.flow_type == "Nil"
+			display_type = "Nil"
+		end
+		checked_submission_result(state, origin, display_type, display_mutable)
 		checked_hash_refine(state, locals, left.origin, right.type_name)
 		hash := checked_hash_plan(state, left.origin)
 		if hash.kind == 3
@@ -1086,6 +1106,7 @@ def check_simple_statement(
 				return right
 			end
 			result_type := binary_result_type(state, compound, left.type_name, right.type_name, line, operator_origin)
+			checked_submission_result(state, origin, result_type, display_mutable)
 			if locals.mir_state[0] == 1
 				mut value := checked_value(result_type, 0, 9007199254740991, 0)
 				if result_type == "String"
@@ -1215,6 +1236,7 @@ def check_block_value(mut state: CompilerState, mut position: Array<Integer>, mu
 			diagnostic(state, "TRBN4004", load_integer(state.token_lines, position[0]), "unexpected end of input")
 			break
 		end
+		checked_submission_boundary(state, locals, position[0])
 		if diverged
 			# Continue checking unreachable syntax and types without creating
 			# instructions after a terminator or manufacturing a Never operand.
