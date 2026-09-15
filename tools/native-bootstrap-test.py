@@ -3,8 +3,10 @@
 import os
 from pathlib import Path
 import shutil
+import signal
 import subprocess
 import tempfile
+import time
 
 repository = Path(__file__).resolve().parent.parent
 
@@ -18,12 +20,44 @@ with tempfile.TemporaryDirectory(prefix='native bootstrap ') as temporary:
     env = {key: value for key, value in os.environ.items()
            if key not in ['TRBN_CC', 'TRBN_QBE', 'TRBN_BOOTSTRAP_SEED']}
 
-    def run(*command):
-        return subprocess.run(command, cwd=root, env=env, text=True,
-                              capture_output=True, check=True, timeout=120)
+    def communicate(child, timeout):
+        try:
+            return child.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            # The launcher waits for a shell builder and compiler descendants.
+            # Terminating just the launcher would leave them in the test copy.
+            try:
+                os.killpg(child.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            try:
+                stdout, stderr = child.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(child.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                stdout, stderr = child.communicate()
+            print(stdout, stderr, flush=True)
+            raise
+
+    def run(*command, timeout=120, check=True, environment=env):
+        child = subprocess.Popen(command, cwd=root, env=environment, text=True,
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                 start_new_session=True)
+        stdout, stderr = communicate(child, timeout)
+        result = subprocess.CompletedProcess(command, child.returncode, stdout, stderr)
+        if check:
+            result.check_returncode()
+        return result
 
     def build():
-        return run('./trbn', '--version').stderr
+        start = time.monotonic()
+        # This watchdog bounds a complete core/CLI fixed-point rebuild, not a
+        # performance acceptance measurement. Retain the elapsed observation.
+        result = run('./trbn', '--version', timeout=300).stderr
+        print(f'Native cache build: {time.monotonic() - start:.2f}s', flush=True)
+        return result
 
     def snapshot():
         return tuple((root / file).stat().st_mtime_ns for file in
@@ -44,9 +78,8 @@ with tempfile.TemporaryDirectory(prefix='native bootstrap ') as temporary:
 
     build()
     baseline = snapshot()
-    invalid_seed = subprocess.run(['./trbn', '--version'], cwd=root,
-                                  env={**env, 'TRBN_BOOTSTRAP_SEED': str(legacy_seed)},
-                                  text=True, capture_output=True, timeout=120)
+    invalid_seed = run('./trbn', '--version', check=False,
+                       environment={**env, 'TRBN_BOOTSTRAP_SEED': str(legacy_seed)})
     assert invalid_seed.returncode != 0 and 'checksum mismatch' in invalid_seed.stderr
     assert snapshot() == baseline
     assert not (root / '.trb/bootstrap/build.lock').exists()
@@ -94,8 +127,7 @@ with tempfile.TemporaryDirectory(prefix='native bootstrap ') as temporary:
     cli = root / 'compiler/cli/main.trb'
     valid = cli.read_text()
     cli.write_text(valid + '\ndef broken(\n')
-    failure = subprocess.run(['./trbn', '--version'], cwd=root, env=env,
-                             text=True, capture_output=True, timeout=120)
+    failure = run('./trbn', '--version', check=False)
     assert failure.returncode != 0 and snapshot() == baseline, failure
     assert not (root / '.trb/bootstrap/build.lock').exists()
     assert not list((root / '.trb/bootstrap').glob('build.*'))
@@ -106,8 +138,18 @@ with tempfile.TemporaryDirectory(prefix='native bootstrap ') as temporary:
     edit('compiler/cli/main.trb', '\n# Concurrent edit\n')
     children = [subprocess.Popen(['./trbn', '--version'], cwd=root, env=env,
                                  text=True, stdout=subprocess.PIPE,
-                                 stderr=subprocess.PIPE) for _ in range(2)]
-    outputs = [child.communicate(timeout=120) for child in children]
+                                 stderr=subprocess.PIPE, start_new_session=True)
+                for _ in range(2)]
+    try:
+        outputs = [communicate(child, 120) for child in children]
+    finally:
+        for child in children:
+            if child.poll() is None:
+                try:
+                    os.killpg(child.pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+                communicate(child, 5)
     assert all(child.returncode == 0 for child in children), outputs
     assert outputs[0][0] == outputs[1][0], outputs
     assert sum('bootstrapping' in stderr for _, stderr in outputs) == 1, outputs
