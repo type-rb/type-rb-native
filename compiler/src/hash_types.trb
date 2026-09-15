@@ -1,3 +1,4 @@
+import { nullable_element } from nullable_types
 import { ascii_code } from literals
 import { string_starts_with } from path
 
@@ -34,6 +35,9 @@ def hash_type(key: String, value: String): String
 end
 
 def native_managed_type(type_name: String): Boolean
+	if nullable_element(type_name) != ""
+		return true
+	end
 	if type_name == "String" || type_name == "Range<Integer>" || string_starts_with(type_name, "Array<") || string_starts_with(type_name, "Record#") || hash_key_type(type_name) != "" || type_name == "Hash"
 		return true
 	end
@@ -42,6 +46,10 @@ end
 
 # Validate the word-sized scalar/managed layouts admitted by Hash MIR.
 def native_value_layout(type_name: String): Boolean
+	optional := nullable_element(type_name)
+	if optional != ""
+		return native_value_layout(optional)
+	end
 	if type_name == "Integer" || type_name == "Float" || type_name == "Boolean" || type_name == "String" || type_name == "Range<Integer>"
 		return true
 	end
@@ -58,6 +66,9 @@ def native_value_layout(type_name: String): Boolean
 		return native_value_layout(element)
 	end
 	if !string_starts_with(type_name, "Record#") || type_name.size() == 7
+		return false
+	end
+	if type_name.size() > 8 && type_name[7] == "0"
 		return false
 	end
 	mut index := 7

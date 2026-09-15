@@ -86,7 +86,7 @@ def expect_identifier(mut state: CompilerState, mut position: Array<Integer>): S
 end
 
 def parse_type(mut state: CompilerState, mut position: Array<Integer>): String
-	name := expect_identifier(state, position)
+	mut name := expect_identifier(state, position)
 	if has_diagnostic(state)
 		return ""
 	end
@@ -100,7 +100,11 @@ def parse_type(mut state: CompilerState, mut position: Array<Integer>): String
 		if !expect(state, position, ">")
 			return ""
 		end
-		return name + "<" + argument + ">"
+		name += "<" + argument + ">"
+	end
+	if token_is(state, position[0], "?")
+		advance(position)
+		name += "?"
 	end
 	return name
 end
@@ -377,7 +381,7 @@ def parse_primary_syntax(mut state: CompilerState, mut position: Array<Integer>)
 				return false
 			end
 		else
-			if token_is(state, position[0], ".")
+			if token_is(state, position[0], ".") || token_is(state, position[0], "&.")
 				advance(position)
 				member := expect_identifier(state, position)
 				if member == "each" && syntax_iteration_suffix(state, position[0] - 2) >= 0
@@ -588,11 +592,13 @@ def parse_statement_block(mut state: CompilerState, mut position: Array<Integer>
 			parse_control_syntax(state, position)
 			finish_statement(state, position)
 		elsif token_is(state, position[0], "while")
+			origin := position[0]
 			advance(position)
 			if parse_expression_syntax(state, position, 1)
 				if finish_statement(state, position)
 					parse_statement_block(state, position)
 					if expect(state, position, "end")
+						store_integer(state.loop_finishes, origin, position[0])
 						finish_statement(state, position)
 					end
 				end

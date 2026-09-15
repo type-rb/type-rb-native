@@ -1,4 +1,5 @@
-import { hash_key_type, hash_type, hash_value_type } from hash_types
+import { nullable_common, nullable_element, nullable_type } from nullable_types
+import { hash_key_type, hash_type, hash_value_type, native_value_layout } from hash_types
 import { ascii_code, integer_string } from literals
 import { syntax_loop_transfer_kind, token_is } from parser
 import { path_basename, path_directory, string_starts_with, string_without_suffix } from path
@@ -242,6 +243,10 @@ def find_record_type(state: CompilerState, type_name: String): Integer
 end
 
 def type_display(state: CompilerState, type_name: String): String
+	optional := nullable_element(type_name)
+	if optional != ""
+		return type_display(state, optional) + "?"
+	end
 	if hash_key_type(type_name) != ""
 		return "Hash<" + hash_key_type(type_name) + ", " + type_display(state, hash_value_type(type_name)) + ">"
 	end
@@ -296,6 +301,10 @@ def resolve_type_name(
 		type_name: String,
 		allow_void: Boolean,
 	): String
+	optional := nullable_element(type_name)
+	if optional != ""
+		return nullable_type(resolve_type_name(state, module_index, optional, false))
+	end
 	key := hash_key_type(type_name)
 	if key != ""
 		value := resolve_type_name(state, module_index, hash_value_type(type_name), false)
@@ -311,25 +320,11 @@ def resolve_type_name(
 	if record_index >= 0
 		return record_type(record_index)
 	end
-	mut element := array_inner_name(type_name)
+	element := array_inner_name(type_name)
 	if element != ""
-		mut depth := 1
-		while depth < 3
-			nested := array_inner_name(element)
-			if nested == ""
-				break
-			end
-			element = nested
-			depth += 1
-		end
-		leaf := find_visible_record(state, module_index, element)
-		if leaf >= 0
-			mut resolved := record_type(leaf)
-			while depth > 0
-				resolved = "Array<" + resolved + ">"
-				depth -= 1
-			end
-			return resolved
+		resolved := resolve_type_name(state, module_index, element, false)
+		if resolved != ""
+			return "Array<" + resolved + ">"
 		end
 	end
 	return ""
@@ -398,46 +393,11 @@ def record_array_element(type_name: String): String
 end
 
 def array_element_type(type_name: String): String
-	if type_name == "Array<Range<Integer>>" || type_name == "Array<Array<Range<Integer>>>" || type_name == "Array<Array<Array<Range<Integer>>>>"
-		return array_inner_name(type_name)
+	element := array_inner_name(type_name)
+	if element != "" && native_value_layout(element)
+		return element
 	end
-	if type_name == "Array<Integer>"
-		return "Integer"
-	end
-	if type_name == "Array<String>"
-		return "String"
-	end
-	if type_name == "Array<Float>"
-		return "Float"
-	end
-	if type_name == "Array<Array<Integer>>"
-		return "Array<Integer>"
-	end
-	if type_name == "Array<Array<String>>"
-		return "Array<String>"
-	end
-	if type_name == "Array<Array<Float>>"
-		return "Array<Float>"
-	end
-	if type_name == "Array<Array<Array<Integer>>>"
-		return "Array<Array<Integer>>"
-	end
-	if type_name == "Array<Array<Array<String>>>"
-		return "Array<Array<String>>"
-	end
-	if type_name == "Array<Array<Array<Float>>>"
-		return "Array<Array<Float>>"
-	end
-	if type_name == "Array<Boolean>"
-		return "Boolean"
-	end
-	if type_name == "Array<Array<Boolean>>"
-		return "Array<Boolean>"
-	end
-	if type_name == "Array<Array<Array<Boolean>>>"
-		return "Array<Array<Boolean>>"
-	end
-	return record_array_element(type_name)
+	return ""
 end
 
 def array_type(element_type: String): String
@@ -452,20 +412,7 @@ def common_array_element_type(left: String, right: String): String
 	if left == ""
 		return right
 	end
-	if left == right
-		return left
-	end
-	if left == "Integer"
-		if right == "Float"
-			return "Float"
-		end
-	end
-	if left == "Float"
-		if right == "Integer"
-			return "Float"
-		end
-	end
-	return ""
+	return nullable_common(left, right)
 end
 
 def resolution_local_add(
@@ -486,7 +433,7 @@ def resolution_local_add(
 end
 
 def resolution_keyword(name: String): Boolean
-	if name == "case" || name == "when"
+	if name == "nil" || name == "case" || name == "when"
 		return true
 	end
 	if name == "do"
@@ -914,7 +861,7 @@ def resolve_function_body(
 					if index > load_integer(state.function_body_starts, function_index)
 						previous = load_string(state.token_texts, index - 1)
 					end
-					if previous == "."
+					if previous == "." || previous == "&."
 					else
 						if token_is(state, index + 1, ":=")
 							resolution_local_add(locals, text, "", 0)

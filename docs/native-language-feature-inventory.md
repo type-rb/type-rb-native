@@ -9,13 +9,13 @@ Each count describes registered probes, not language coverage percentages.
 | Numeric and Boolean operations | basic | 1 / 6 | All operators and assignment forms; mixed widening and every portable failure boundary; Short-circuit side effects and invalid RHS diagnostics across nested control | UnaryExpression, BinaryExpression |
 | Bindings, constants and mutation | basic | 3 / 5 | Shadowing, duplicate declarations, unused/discard bindings and mutation through projections | VariableStatement, AssignmentStatement |
 | Function declarations and calls | basic | 0 / 3 | Every all-path return, evaluation-order and mutable-argument boundary | MethodStatement, ReturnStatement, CallExpression, ExpressionStatement |
-| Defaults and named arguments | basic | 0 / 13 | Omitted versus explicit nullable values after nullable types are implemented; Method, function-value and payload-enum argument parity |  |
+| Defaults and named arguments | basic | 0 / 13 | Method, function-value and payload-enum argument parity |  |
 | Conditions and value-producing branches | basic | 0 / 16 | Nullable/union common result types and broader expression nesting boundaries | IfStatement |
 | Loop control and transfers | basic | 1 / 9 | Additional nested transfer and diagnostic-origin differential probes | WhileStatement, BreakStatement, NextStatement |
 | Case statements and expressions | basic | 2 / 5 | Exhaustiveness, repeated/unreachable branches and pattern-binding diagnostics | CaseStatement |
 | Records and field bindings | basic | 0 / 9 | Nominal cycles and defaults involving remaining unsupported value types | RecordStatement, RecordFieldStatement |
 | Member access and projections | basic | 1 / 4 | Safe member access, chained field narrowing and receiver replacement | MemberExpression |
-| Nullable values and narrowing | basic | 4 / 5 | Field/loop/callback narrowing, invalidation after mutation and safe member access |  |
+| Nullable values and narrowing | basic | 2 / 16 | Class/callback and general pattern narrowing; collection/union optional conversions; Nullable standard-library methods beyond the currently implemented Native APIs; REPL retained assignment flow types and assignment-result display parity |  |
 | Enums and tagged values | basic | 3 / 3 | Named payloads, raw conversion failures, enum methods and nested managed payloads | EnumStatement, EnumMemberStatement |
 | Transparent aliases | basic | 2 / 2 | Generic aliases, cycles and cross-module identity | TypeAliasStatement |
 | Nominal newtypes | basic | 1 / 1 | Closed/private constructors, methods, immutable representation and boundary diagnostics | NewtypeStatement |

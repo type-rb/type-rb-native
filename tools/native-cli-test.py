@@ -44,7 +44,8 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
                       'range-values', 'range-carriers', 'range-extrema', 'range-effects',
                       'range-precedence', 'range-managed', 'range-streaming',
                       'string-index-lifetime', 'default-arguments-mir',
-                      'value-control-mir', 'value-transfer-mir'):
+                      'value-control-mir', 'value-transfer-mir', 'nullable-values-mir',
+                      'boolean-array-depth', 'record-array-depth'):
         fixture = repository / 'compiler/conformance/valid' / (case_name + '.trb')
         expected = fixture.with_suffix('.out').read_text()
         case_source = root / (case_name + '.trb')
@@ -64,6 +65,22 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
             assert len(automatic) == 1 and int(automatic[0]) > 0, collected.stderr
         submission = fixture.read_text().replace('def main()', 'def exercise_control_case()')
         assert run('repl', text=submission + '\nexercise_control_case()\n:quit\n') == expected
+    # Keep optional identities across distinct submissions and record-ID remapping.
+    retained = run('repl', text=(
+        'record Cell\nvalue: String?\nend\n'
+        'empty: Cell? := nil\n'
+        'present: Cell? := Cell.new(value: "hello")\n'
+        'record Other\nnumber: Integer\nend\n'
+        'missing := empty&.value\n'
+        'puts(missing == nil)\n'
+        'value := present&.value\n'
+        'if value != nil\nputs(value)\nend\n'
+        'zero: Integer? := 0\nputs(zero == nil)\n'
+        'false_value: Boolean? := false\nputs(false_value == nil)\n'
+        ':quit\n'))
+    assert retained == ('nil : Cell?\nCell(value: "hello") : Cell?\n'
+                        'nil : String?\ntrue\n"hello" : String?\nhello\n'
+                        '0 : Integer?\nfalse\nfalse : Boolean?\nfalse\n'), retained
     # Corrected reference parser forms are separate from the exact pinned parity registry.
     transfer = repository / 'compiler/conformance/reference-parser-fixed/value-transfer-operands.source'
     transfer_source = root / 'value-transfer-operands.trb'
@@ -75,6 +92,16 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
     assert subprocess.check_output([transfer_binary], text=True, timeout=30) == expected_transfer
     submission = transfer.read_text().replace('def main()', 'def exercise_transfers()')
     assert run('repl', text=submission + '\nexercise_transfers()\n:quit\n') == expected_transfer
+    numeric = repository / 'compiler/conformance/reference-compiler-fixed/nullable-numeric-widening.source'
+    numeric_source = root / 'nullable-numeric-widening.trb'
+    numeric_source.write_text(numeric.read_text())
+    numeric_expected = numeric.with_suffix('.out').read_text()
+    assert run('check', numeric_source) == 'ok\n'
+    numeric_binary = root / 'nullable-numeric-widening'
+    run('build', '--compile', '--outfile', numeric_binary, numeric_source)
+    assert subprocess.check_output([numeric_binary], text=True, timeout=30) == numeric_expected
+    submission = numeric.read_text().replace('def main()', 'def exercise_numeric_conversion()')
+    assert run('repl', text=submission + '\nexercise_numeric_conversion()\n:quit\n') == numeric_expected
     failure = repository / 'compiler/conformance/runtime-invalid/array-assignment-initial.trb'
     submission = failure.read_text().replace('def main()', 'def invalid_assignment_case()')
     failure_output = run('repl', text=submission + '\ninvalid_assignment_case()\n:quit\n')
@@ -114,13 +141,13 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
                       'loop-transfer-break-value', 'loop-transfer-next-value',
                       'loop-transfer-break-condition', 'boolean-array-element', 'boolean-array-write',
                       'boolean-array-push', 'boolean-array-index', 'boolean-array-constant-mutation',
-                      'boolean-array-depth', 'boolean-array-parameter', 'boolean-array-readonly',
+                      'boolean-array-parameter', 'boolean-array-readonly',
                       'boolean-array-invariance', 'record-field-write', 'record-field-compound',
                       'record-field-parenthesized', 'record-field-array-replace', 'record-field-call',
                       'record-field-array-immutable', 'record-field-nested', 'record-field-return',
                       'record-array-element', 'record-array-write', 'record-array-push',
                       'record-array-index', 'record-array-constant-mutation', 'record-array-readonly',
-                      'record-array-invariance', 'record-array-field-mutation', 'record-array-depth',
+                      'record-array-invariance', 'record-array-field-mutation',
                       'record-array-unknown', 'array-iteration-arity', 'array-iteration-duplicate',
                       'array-iteration-escaping', 'array-iteration-receiver',
                       'array-iteration-constant-mutation', 'array-iteration-multiline-brace',

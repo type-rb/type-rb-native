@@ -1,3 +1,5 @@
+import { nullable_element } from nullable_types
+import { repl_absent, repl_none, repl_payload } from repl_nullable
 import { ReplStore, ReplEnvironment, repl_store, repl_value, repl_float, repl_get } from repl_model
 import { repl_hash_new, repl_hash_set } from repl_hash
 import { hash_key_type } from hash_types
@@ -35,6 +37,17 @@ def repl_bind(mut environment: ReplEnvironment, name: String, value: Integer, mu
 end
 
 def repl_coerce(mut store: ReplStore, id: Integer, expected: String): Integer
+	if expected == "" || store.types[id] == expected
+		return id
+	end
+	element := nullable_element(expected)
+	if element != ""
+		if repl_absent(store, id)
+			return repl_none(store, expected)
+		end
+		payload := repl_coerce(store, repl_payload(store, id), element)
+		return repl_value(store, expected, 0, 0.0, "", [payload])
+	end
 	if expected == "Float"
 		if store.types[id] == "Integer"
 			return repl_float(store, store.integers[id])
@@ -44,6 +57,12 @@ def repl_coerce(mut store: ReplStore, id: Integer, expected: String): Integer
 end
 
 def repl_render(state: CompilerState, store: ReplStore, id: Integer, depth: Integer): String
+	if repl_absent(store, id)
+		return "nil"
+	end
+	if nullable_element(store.types[id]) != ""
+		return repl_render(state, store, store.children[id][0], depth)
+	end
 	value := repl_get(store, id)
 	if value.type_name == "Integer"
 		return integer_string(value.integer)

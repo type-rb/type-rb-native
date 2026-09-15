@@ -34,7 +34,8 @@ are removed. Numeric expansion, Array-header validity and root plans are selecte
 and verified above QBE; function ABI emission lives in `qbe_functions.trb`.
 Split the large checker, MIR and emitter modules by those responsibilities, with
 explicit dependencies rather than copied helpers or forwarding aliases.
-The value-join builder has been extracted. Expression/body checking remains
+The value-join builder and nullable type, flow-fact, MIR, QBE and REPL helpers
+have been extracted. Expression/body checking remains
 mutually recursive; separating it into modules requires removing that dependency
 cycle because ordinary Native module imports must be acyclic.
 

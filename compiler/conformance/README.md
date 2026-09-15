@@ -169,7 +169,7 @@ exercise Boolean element typing, required mutability, negative indexes, shared
 and nested aliases, typed empty arrays, left-to-right effects, growth and nested
 arrays across automatic collection. Their invalid and runtime-invalid controls
 retain element/index type rejection, readonly capabilities, the existing
-three-level nesting bound and required out-of-bounds failures. This ordinary
+recursive element-type validation and required out-of-bounds failures. This ordinary
 coverage does not establish snapshot support or numeric-reduction MIR support.
 
 `valid/local-array-header-mir.trb` covers immutable local and record-field
