@@ -1,0 +1,55 @@
+import { ReplProject, repl_project_source } from repl_project
+import { CheckedFlowFact, CheckedSubmission, CompilerState, has_diagnostic } from state
+import { resolve, find_function_in_module } from resolution
+import { check, load_file_root } from compiler
+import { skip_newlines } from parser
+import { path_join } from path
+import { load_integer, store_integer, string_storage, integer_storage } from storage
+
+# Checking remains shared with ordinary compilation. The projection is attached
+# only to the synthetic entry body at explicit source boundaries.
+def repl_checked(source: String, project: ReplProject): CompilerState
+	return repl_checked_input(source, project, - 1, - 1, [], [])
+end
+
+def repl_checked_input(source: String, project: ReplProject, start_line: Integer, finish_line: Integer, facts: Array<CheckedFlowFact>, reset_lines: Array<Integer>): CompilerState
+	mut state := load_file_root(repl_project_source(source, project.imports), path_join(project.root, "__repl__.trb"))
+	state.hash_repl[0] = true
+	if !has_diagnostic(state)
+		resolve(state)
+	end
+	# A REPL import is an intentional session declaration; it need not be used
+	# by the same submission that introduced it.
+	mut index := 0
+	while index < state.import_count[0]
+		store_integer(state.import_used, index, 1)
+		index += 1
+	end
+	if !has_diagnostic(state) && start_line >= 0
+		main := find_function_in_module(state, state.entry_module[0], "main")
+		mut start := [load_integer(state.function_body_starts, main)]
+		while load_integer(state.token_lines, start[0]) < start_line
+			start[0] += 1
+		end
+		skip_newlines(state, start)
+		mut finish := start[0]
+		while load_integer(state.token_lines, finish) < finish_line
+			finish += 1
+		end
+		mut resets: Array<Integer> := []
+		reset_lines.each do |line|
+			mut position := [load_integer(state.function_body_starts, main)]
+			while load_integer(state.token_lines, position[0]) < line
+				position[0] += 1
+			end
+			skip_newlines(state, position)
+			resets.push(position[0])
+		end
+		state.submissions.push(CheckedSubmission.new(start: start[0], finish: finish, before: facts, after: [], types: string_storage(state.token_count[0] + 1), mutable: integer_storage(state.token_count[0] + 1), resets: resets))
+	end
+	if !has_diagnostic(state)
+		check(state)
+	end
+
+	return state
+end

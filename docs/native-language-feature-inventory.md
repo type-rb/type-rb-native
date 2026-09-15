@@ -11,11 +11,11 @@ Each count describes registered probes, not language coverage percentages.
 | Function declarations and calls | basic | 0 / 3 | Every all-path return, evaluation-order and mutable-argument boundary | MethodStatement, ReturnStatement, CallExpression, ExpressionStatement |
 | Defaults and named arguments | basic | 0 / 13 | Method, function-value and payload-enum argument parity |  |
 | Conditions and value-producing branches | basic | 0 / 16 | Nullable/union common result types and broader expression nesting boundaries | IfStatement |
-| Loop control and transfers | basic | 1 / 9 | Additional nested transfer and diagnostic-origin differential probes | WhileStatement, BreakStatement, NextStatement |
+| Loop control and transfers | basic | 1 / 10 | Additional nested transfer and diagnostic-origin differential probes | WhileStatement, BreakStatement, NextStatement |
 | Case statements and expressions | basic | 2 / 5 | Exhaustiveness, repeated/unreachable branches and pattern-binding diagnostics | CaseStatement |
 | Records and field bindings | basic | 0 / 9 | Nominal cycles and defaults involving remaining unsupported value types | RecordStatement, RecordFieldStatement |
 | Member access and projections | basic | 1 / 4 | Safe member access, chained field narrowing and receiver replacement | MemberExpression |
-| Nullable values and narrowing | basic | 2 / 16 | Class/callback and general pattern narrowing; collection/union optional conversions; Nullable standard-library methods beyond the currently implemented Native APIs; REPL retained assignment flow types and assignment-result display parity |  |
+| Nullable values and narrowing | basic | 4 / 21 | Class/callback and general pattern narrowing; collection/union optional conversions; Nullable standard-library methods beyond the currently implemented Native APIs |  |
 | Enums and tagged values | basic | 3 / 3 | Named payloads, raw conversion failures, enum methods and nested managed payloads | EnumStatement, EnumMemberStatement |
 | Transparent aliases | basic | 2 / 2 | Generic aliases, cycles and cross-module identity | TypeAliasStatement |
 | Nominal newtypes | basic | 1 / 1 | Closed/private constructors, methods, immutable representation and boundary diagnostics | NewtypeStatement |

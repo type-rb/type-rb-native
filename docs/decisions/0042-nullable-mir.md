@@ -49,10 +49,10 @@ collection before allocation/calls. Negative cases exercise stale binding and
 field facts, malformed operations, unannotated Nil, unchecked member access and
 immutable aliases. The ordinary CLI fixture and shared case registry also
 exercise the REPL and retained values. Capabilities is generated from that
-registry and keeps remaining gaps visible. [REPL retained assignment flow types](https://github.com/type-rb/type-rb-native/issues/469)
-and assignment-result display still differ from the reference; Hash display
-also retains its existing arrow separator. These remain explicit shared-case
-gaps, rather than being normalized away.
+registry and keeps remaining gaps visible. The subsequent
+[checked submission decision](0043-checked-repl-submissions.md) covers retained
+REPL assignment flow and direct assignment display. Statement-control result
+display and Hash separators still differ and remain explicit shared-case gaps.
 
 The pinned Go reference accepts nullable numeric widening but omits a necessary
 conversion in its typed IR. [TypeRB PR 692](https://github.com/type-rb/type-rb/pull/692)

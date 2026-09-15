@@ -185,7 +185,8 @@
         "mir-guard-void",
         "mir-guard-loop",
         "mir-guard-each",
-        "mir-guard-return"
+        "mir-guard-return",
+        "repl-top-level-return"
       ],
       "pending": [
         "Additional nested transfer and diagnostic-origin differential probes"
@@ -274,14 +275,18 @@
         "nullable-loop-replacement",
         "safe-navigation-record-field",
         "nullable-invalidation",
-        "nullable-field-invalidation"
+        "nullable-field-invalidation",
+        "nullable-repl-assignment",
+        "nullable-repl-rejected-assignment",
+        "nullable-repl-conditional-assignment",
+        "nullable-repl-partial-failure",
+        "nullable-repl-safe-navigation"
       ],
       "pending": [
         "Class/callback and general pattern narrowing; collection/union optional conversions",
-        "Nullable standard-library methods beyond the currently implemented Native APIs",
-        "REPL retained assignment flow types and assignment-result display parity"
+        "Nullable standard-library methods beyond the currently implemented Native APIs"
       ],
-      "note": "Native uses explicit typed none/present/test/extraction MIR with traced payload storage and checked extraction. Direct lexical/stable record-field guards, returning guards, short-circuit RHS and safe navigation are covered; chained predicates do not export extra narrowing facts."
+      "note": "Native uses explicit typed none/present/test/extraction MIR with traced payload storage and checked extraction. Direct lexical/stable record-field guards, returning guards, short-circuit RHS and safe navigation are covered; chained predicates do not export extra narrowing facts. Retained REPL assignments use checked exit facts; partial failure and interruption clear earlier narrowing. Conditional/failure probes expose known bugs in the fixed reference revision, and statement-control result display remains different."
     },
     {
       "id": "enums",
@@ -7133,6 +7138,296 @@
           "code": 0,
           "stdout": "",
           "stderr": "(trb):9: error[TRBN4004]: expected String, found String?\n(trb):4: error[TRBN4003]: unresolved function label\n"
+        }
+      }
+    },
+    {
+      "id": "nullable-repl-assignment",
+      "title": "Retained nullable assignments preserve checked flow and display",
+      "body": "mut value: String? := nil\nvalue = \"hello\"\nputs(value.size())\nvalue = nil",
+      "declarations": "",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "5\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "nil : String? [mut]\n\"hello\" : String? [mut]\n5\nnil : Nil [mut]\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "5\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "nil : String? [mut]\n\"hello\" : String? [mut]\n5\nnil : Nil [mut]\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "nullable-repl-rejected-assignment",
+      "title": "Rejected REPL assignment preserves the preceding fact",
+      "body": "mut value: String? := nil\nvalue = \"kept\"\nvalue = 1\nputs(value.size())",
+      "declarations": "",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:5:9: error[TRB3000]: cannot assign Integer to String?\n<case>/main.trb:6:6: error[TRB3000]: type String? has no member size\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:5:9: error[TRB3000]: cannot assign Integer to String?\n<case>/main.trb:6:6: error[TRB3000]: type String? has no member size\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "nil : String? [mut]\n\"kept\" : String? [mut]\n4\n",
+          "stderr": "(trb):3:9: error[TRB3000]: cannot assign Integer to String?\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:5: error[TRBN4004]: expected String?, found Integer\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:5: error[TRBN4004]: expected String?, found Integer\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "nil : String? [mut]\n\"kept\" : String? [mut]\n4\n",
+          "stderr": "(trb):3: error[TRBN4004]: expected String?, found Integer\n"
+        }
+      }
+    },
+    {
+      "id": "nullable-repl-conditional-assignment",
+      "title": "Conditional REPL replacement invalidates the preceding fact",
+      "body": "mut value: String? := nil\nvalue = \"kept\"\nif true\nvalue = nil\nend\nputs(value == nil)",
+      "declarations": "",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:8:6: error[TRB3000]: operator == does not support String and Nil\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:8:6: error[TRB3000]: operator == does not support String and Nil\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "nil : String? [mut]\n\"kept\" : String? [mut]\nnil : Nil [mut]\n",
+          "stderr": "(trb):6:6: error[TRB3000]: operator == does not support String and Nil\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "nil : String? [mut]\n\"kept\" : String? [mut]\nnil : String?\ntrue\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "nullable-repl-partial-failure",
+      "title": "Partial failure discards stale REPL narrowing",
+      "body": "mut value: String? := nil\nvalue = \"kept\"\nif true\nvalue = nil\nputs(1 / 0)\nend\nputs(value == nil)\nvalue = \"again\"\nputs(value.size())",
+      "declarations": "",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:9:6: error[TRB3000]: operator == does not support String and Nil\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:9:6: error[TRB3000]: operator == does not support String and Nil\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "nil : String? [mut]\n\"kept\" : String? [mut]\n\"again\" : String? [mut]\n5\n",
+          "stderr": "(trb):5:6: error: division by zero\n(trb):3:6: error[TRB3000]: operator == does not support String and Nil\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderr": "panic: division by zero\n"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "nil : String? [mut]\n\"kept\" : String? [mut]\ntrue\n\"again\" : String? [mut]\n5\n",
+          "stderr": "(trb):3: error: division by zero\n"
+        }
+      }
+    },
+    {
+      "id": "nullable-repl-safe-navigation",
+      "title": "Retained optional values use lazy safe navigation",
+      "body": "mut values: Array<Integer>? := nil\nmut events := [0]\nvalues&.push(tick(events))\nvalues = [1]\nvalues&.push(tick(events))\nputs(values&.size())\nputs(events[0])",
+      "declarations": "def tick(mut events: Array<Integer>): Integer\nevents[0] += 1\nreturn 0\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "2\n1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "nil : Array<Integer>? [mut]\n[0] : Array<Integer> [mut]\n[1] : Array<Integer>? [mut]\n2\n1\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "2\n1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "nil : Array<Integer>? [mut]\n[0] : Array<Integer> [mut]\n[1] : Array<Integer>? [mut]\n2\n1\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "repl-top-level-return",
+      "title": "REPL rejects authored return outside a function",
+      "body": "return",
+      "declarations": "",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1:1: error[TRB3000]: return is only valid inside a function or method\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1: error[TRBN4004]: return is only valid inside a function or method\n"
         }
       }
     }

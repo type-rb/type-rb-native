@@ -127,12 +127,15 @@ defaults and managed collections retain optional payloads through shared root
 planning. See [decision 0042](decisions/0042-nullable-mir.md) for the private layout
 and conservative fact invalidation across assignments and loop backedges.
 
-The ordinary compiler closure contains 65 modules. Implementation syntax stays
+The ordinary compiler closure contains 66 modules. Implementation syntax stays
 within the existing immutable seed and snapshot-v4 boundary; compiler self-use
 of the new syntax still depends on an accepted seed refresh. The shared language
-contract contains 134 cases with explicit remaining differences. Retained REPL
-assignment flow, wider pattern/union families and final performance qualification
-remain open. This checkpoint does not imply complete basic-language coverage.
+contract contains 140 cases with explicit remaining differences. Retained REPL
+assignment flow now uses an ordinary checker projection, with conservative
+failure/interruption invalidation and explicit replay boundaries; see
+[decision 0043](decisions/0043-checked-repl-submissions.md). Wider pattern/union
+families, full REPL display parity and final performance qualification remain
+open. This checkpoint does not imply complete basic-language coverage.
 
 ## Development loop
 

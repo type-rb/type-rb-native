@@ -13,6 +13,7 @@ agree. Completed naming and extraction history is available in the
 | `compiler/src/mir_value_control.trb` | Typed branch exits, common result blocks and numeric join conversions; recursive source checking and REPL evaluation consume shared frontend regions. |
 | `compiler/src/default_arguments.trb` | Private initializer declaration identities and preceding typed slots; ordinary checked functions and MIR own their bodies and calls. |
 | `compiler/cli/repl_project.trb` | REPL project discovery, generated-import filtering and visible nominal type names. Session checking/evaluation remains in the REPL adapters. |
+| `compiler/src/checked_submission.trb`, `compiler/cli/repl_check.trb` | Ordinary checked entry/exit facts and result types, plus REPL source loading and boundary mapping. Session completion and replay own fact persistence; QBE consumes only verified MIR. |
 | `src/snapshot_validation.trb` and shared snapshot/diagnostic/MIR modules | Snapshot boundary validation and shared support. |
 | `src/recovery_scalar_*`, `recovery_aggregate_*`, `recovery_managed_*` | Retained scalar, aggregate and managed snapshot recovery, including layout, QBE, runtime and differential tests. These paths cover distinct supported capabilities. |
 | `src/recovery_driver.trb`, `recovery_generation.trb`, `matched_go_driver.trb`, `compiler_recovery_source.trb`, `compiler_recovery_layout.trb` | Recovery orchestration, comparison and strict derivation from the canonical compiler modules. Ordinary builds keep their file-root closure. |

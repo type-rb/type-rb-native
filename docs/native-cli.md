@@ -104,6 +104,18 @@ submissions. It executes only the new input, so earlier I/O is not replayed.
 Functions, records, imports, multiline control flow, scalar values and the
 ordinary compiler's supported arrays can be explored interactively.
 
+Successful nullable assignments retain the ordinary checker's flow facts across
+inputs. `:type` uses those facts without evaluation; direct assignments display
+their declared type and mutable marker, with Nil for a nil assignment. Static
+rejection preserves existing facts. Runtime failure or interruption discards
+earlier narrowing because completed writes may have changed retained values.
+A fresh guard or successful assignment can establish narrowing again.
+
+Explicit replay rebuilds accepted inputs with their recorded checking boundaries;
+it does not replay failed inputs or their partial effects. See the
+[checked submission decision](decisions/0043-checked-repl-submissions.md).
+As in the reference REPL, authored `return` requires a function or method.
+
 Unique project exports are available automatically. Authored named imports
 (including aliases), unaliased bare imports and local declarations suppress the
 corresponding generated imports. The ordinary resolver still rejects duplicate
