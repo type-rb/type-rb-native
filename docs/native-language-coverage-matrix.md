@@ -153,3 +153,4 @@
 | Reject an incomplete enum case | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Reject assignment to enum payload binding | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Reject equality across enum declarations | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Retained Range binding preserves bounds without replay | accepts | accepts | matches reference | matches reference |
