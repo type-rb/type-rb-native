@@ -61,8 +61,9 @@ corrects the generated targets and REPL. The isolated
 correction without replacing the exact reference pin or changing existing
 shared expectations. The separate
 [loop-backedge bug](https://github.com/type-rb/type-rb/issues/693) in the reference
-checker is tracked with a minimal reproduction; Native conservatively invalidates
-pre-loop facts for replaced bindings.
+checker was fixed by [TypeRB PR 695](https://github.com/type-rb/type-rb/pull/695).
+Native conservatively invalidates pre-loop facts for replaced bindings. These
+reference fixes do not change the exact reference pin used by this integration.
 
 The implementation remains readable by the immutable seed and snapshot v4.
 New syntax is not yet used in compiler implementation sources. The ordinary
