@@ -1,3 +1,6 @@
+import { nullable_apply, nullable_finish, nullable_loop_writes, nullable_nil_condition, nullable_read, nullable_replace } from nullable_flow
+import { nullable_common, nullable_element, nullable_type } from nullable_types
+import { mir_checked_nullable, mir_nullable_coerce } from nullable_mir
 import { mir_value_complete, mir_value_exit, mir_value_join } from mir_value_control
 import { argument_binding_slot, argument_bindings, function_argument_bindings, record_argument_bindings } from argument_binding
 import { mir_checked_iteration_begin, mir_checked_iteration_end } from mir_iteration_control
@@ -6,7 +9,7 @@ import { mir_checked_hash_index, mir_checked_hash_literal, mir_checked_hash_meth
 import { mir_checked_record_field, mir_checked_record_new } from mir_records
 import { mir_checked_array_index, mir_checked_array_literal, mir_checked_array_operation, mir_checked_array_store } from mir_arrays
 import { binary_result_type, check_expected, numeric_type, type_diagnostic } from checked_types
-import { CheckedValue, checked_bound_value, checked_mir_value, checked_value, scalar_mir_binary, scalar_mir_convert_float, scalar_mir_disable, scalar_mir_literal, scalar_mir_unary } from checked_values
+import { CheckedValue, checked_bound_value, checked_mir_value, checked_value, checked_view, scalar_mir_binary, scalar_mir_disable, scalar_mir_literal, scalar_mir_unary } from checked_values
 import { checked_hash_binding_target, checked_hash_method, checked_hash_plan, checked_hash_publish } from hash_checked
 import { mir_hash_operation } from hash_mir
 import { hash_key_type, hash_type, hash_value_type } from hash_types
@@ -275,6 +278,10 @@ def check_primary(
 	origin := position[0]
 	line := load_integer(state.token_lines, origin)
 	kind := load_integer(state.token_kinds, origin)
+	if token_is(state, origin, "nil")
+		advance(position)
+		return mir_checked_nullable(state, locals, 33, checked_value("Nil", 0, origin, 0), "Nil", 0, origin)
+	end
 	if kind == 2
 		literal := load_string(state.token_texts, origin)
 		advance(position)
@@ -365,25 +372,14 @@ def check_primary(
 		local_index := local_find(locals, name)
 		if local_index >= 0
 			mir_value := load_integer(locals.mir_values, local_index)
-			if locals.mir_state[0] > 0
-				if mir_value > 0
-					return checked_bound_value(
-						load_string(locals.types, local_index),
-						- mir_value,
-						origin,
-						load_integer(locals.mutable, local_index),
-						true,
-					)
-				end
+			mut category := 0
+			if locals.mir_state[0] > 0 && mir_value > 0
+				category =- mir_value
+			else
 				scalar_mir_disable(locals)
 			end
-			return checked_bound_value(
-				load_string(locals.types, local_index),
-				0,
-				origin,
-				load_integer(locals.mutable, local_index),
-				true,
-			)
+			value := checked_bound_value(load_string(locals.types, local_index), category, origin, load_integer(locals.mutable, local_index), true)
+			return nullable_read(state, locals, value, local_index, - 1, origin)
 		end
 		standard_package := standard_package_import(state, state.active_module[0], name)
 		if standard_package < - 1
@@ -633,17 +629,91 @@ def check_never_postfix(mut state: CompilerState, mut position: Array<Integer>, 
 	return value
 end
 
+def check_member(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue, member: String): CheckedValue
+	mut value := checked_view(receiver, receiver.type_name, receiver.category)
+	if token_is(state, position[0], "(")
+		if value.category < 4 && member != "size" && member != "to_i" && member != "to_s" && member != "push" && member != "new" && !((value.type_name == "Hash" || hash_key_type(value.type_name) != "") && checked_hash_method(member) != 0)
+			scalar_mir_disable(locals)
+		end
+		if value.category >= 4
+			mut expected_member := "sqrt"
+			if value.category == 4
+				expected_member = "argv"
+			end
+			if member != expected_member
+				value = type_diagnostic(
+					state,
+					load_integer(state.token_lines, position[0]),
+					"unsupported standard package member",
+				)
+			end
+		else
+			if value.category == 2
+				if member == "new"
+					value = check_record_new(
+						state,
+						position,
+						locals,
+						load_string(state.token_texts, value.origin),
+					)
+				else
+					value = type_diagnostic(
+						state,
+						load_integer(state.token_lines, position[0]),
+						"unsupported record constructor member " + member,
+					)
+				end
+			else
+				value = check_method_call(state, position, locals, value, member)
+			end
+		end
+	else
+		record_index := find_record_type(state, value.type_name)
+		if record_index < 0
+			value = type_diagnostic(
+				state,
+				load_integer(state.token_lines, position[0]),
+				"field access requires a record value",
+			)
+		else
+			field_index := find_field(state, record_index, member)
+			if field_index < 0
+				value = type_diagnostic(
+					state,
+					load_integer(state.token_lines, position[0]),
+					"unknown field " + member + " on " + type_display(state, value.type_name),
+				)
+			else
+				mut binding :=- 1
+				if value.nullable_field == - 1
+					binding = value.nullable_binding
+				end
+				value = mir_checked_record_field(state, locals, value, field_index, position[0] - 1)
+				value = nullable_read(state, locals, value, binding, field_index, position[0] - 1)
+			end
+		end
+	end
+	return value
+end
+
 def check_postfix(
 		mut state: CompilerState,
 		mut position: Array<Integer>,
 		mut locals: CheckedLocals,
 		initial: CheckedValue,
 	): CheckedValue
-	mut value := CheckedValue.new(type_name: initial.type_name, category: initial.category, origin: initial.origin, mutable: initial.mutable, binding: initial.binding, readonly: initial.readonly, immutable_reference: initial.immutable_reference)
+	mut value := CheckedValue.new(type_name: initial.type_name, category: initial.category, origin: initial.origin, mutable: initial.mutable, binding: initial.binding, readonly: initial.readonly, immutable_reference: initial.immutable_reference, nullable_binding: initial.nullable_binding, nullable_field: initial.nullable_field, truth: initial.truth, falsity: initial.falsity, flow_type: initial.flow_type)
 	mut scanning := true
 	while scanning
 		if value.type_name == "Never"
 			return check_never_postfix(state, position, locals, value)
+		end
+		if token_is(state, position[0], "&.")
+			value = check_safe_member(state, position, locals, value)
+			if has_diagnostic(state)
+				return value
+			end
+			next
 		end
 		if token_is(state, position[0], "[")
 			if hash_key_type(value.type_name) != "" || value.type_name == "Hash"
@@ -685,67 +755,7 @@ def check_postfix(
 					position[0] -= 2
 					break
 				end
-				if token_is(state, position[0], "(")
-					if value.category < 4 && member != "size" && member != "to_i" && member != "to_s" && member != "push" && member != "new" && !((value.type_name == "Hash" || hash_key_type(value.type_name) != "") && checked_hash_method(member) != 0)
-						scalar_mir_disable(locals)
-					end
-					if value.category >= 4
-						mut expected_member := "sqrt"
-						if value.category == 4
-							expected_member = "argv"
-						end
-						if member != expected_member
-							value = type_diagnostic(
-								state,
-								load_integer(state.token_lines, position[0]),
-								"unsupported standard package member",
-							)
-							scanning = false
-						end
-					else
-						if value.category == 2
-							if member == "new"
-								value = check_record_new(
-									state,
-									position,
-									locals,
-									load_string(state.token_texts, value.origin),
-								)
-							else
-								value = type_diagnostic(
-									state,
-									load_integer(state.token_lines, position[0]),
-									"unsupported record constructor member " + member,
-								)
-								scanning = false
-							end
-						else
-							value = check_method_call(state, position, locals, value, member)
-						end
-					end
-				else
-					record_index := find_record_type(state, value.type_name)
-					if record_index < 0
-						value = type_diagnostic(
-							state,
-							load_integer(state.token_lines, position[0]),
-							"field access requires a record value",
-						)
-						scanning = false
-					else
-						field_index := find_field(state, record_index, member)
-						if field_index < 0
-							value = type_diagnostic(
-								state,
-								load_integer(state.token_lines, position[0]),
-								"unknown field " + member + " on " + type_display(state, value.type_name),
-							)
-							scanning = false
-						else
-							value = mir_checked_record_field(state, locals, value, field_index, position[0] - 1)
-						end
-					end
-				end
+				value = check_member(state, position, locals, value, member)
 			else
 				if token_is(state, position[0], "[")
 					index_origin := position[0]
@@ -829,6 +839,8 @@ def check_expression_value(
 			if value.type_name == "Never"
 				scalar_mir_disable(locals)
 			end
+			flow_parent := locals.nullable_state[0]
+			flow_first := locals.nullable_facts.size()
 			mut short :=- 1
 			if precedence <= 2 && value.type_name != "Never"
 				mut short_value := 0
@@ -836,11 +848,19 @@ def check_expression_value(
 					short_value = 1
 				end
 				short = mir_logical_begin(state, locals, value, short_value, operator_origin)
+				if short_value == 0
+					nullable_apply(locals, value.truth)
+				else
+					nullable_apply(locals, value.falsity)
+				end
 			end
 			advance(position)
 			skip_newlines(state, position)
 			end_origin := position[0]
 			right := check_expression(state, position, locals, precedence + 1, "")
+			if precedence <= 2
+				nullable_finish(locals, flow_parent, flow_first, locals.count[0])
+			end
 			if value.type_name == "Never" || (right.type_name == "Never" && precedence > 2)
 				locals.mir_state[0] = saved_mir
 				value = checked_value("Never", 0, 9007199254740991, 0)
@@ -858,6 +878,17 @@ def check_expression_value(
 				store_integer(state.range_origins, operator_origin, state.ranges.size())
 				checked_range_require(state, expression_origin, operator_origin, end_origin, position[0])
 				value = mir_checked_range_new(state, locals, value, right, exclusive, expression_origin)
+				next
+			end
+			if value.type_name == "Nil" || right.type_name == "Nil"
+				mut subject := value
+				if value.type_name == "Nil"
+					subject = right
+				end
+				if (operator != "==" && operator != "!=") || (nullable_element(subject.type_name) == "" && subject.type_name != "Nil")
+					return type_diagnostic(state, line, "nil comparison requires a nullable operand and == or !=")
+				end
+				value = nullable_nil_condition(state, locals, subject, operator == "!=", operator_origin)
 				next
 			end
 			result_type := binary_result_type(state, operator, value.type_name, right.type_name, line, operator_origin)
@@ -896,11 +927,7 @@ def check_expression(
 	line := load_integer(state.token_lines, expression_origin)
 	mut value := check_expression_value(state, position, locals, minimum_precedence, expected)
 	check_expected(state, value.type_name, expected, line)
-	if expected == "Float"
-		if value.type_name == "Integer"
-			value = scalar_mir_convert_float(state, locals, value, expression_origin)
-		end
-	end
+	value = mir_nullable_coerce(state, locals, value, expected, expression_origin)
 	return value
 end
 
@@ -921,8 +948,12 @@ def checked_readonly_reference_binding(
 	if value.origin >= state.token_count[0]
 		return false
 	end
-	if array_element_type(value.type_name) == "" && hash_key_type(value.type_name) == "" && value.type_name != "Hash"
-		if find_record_type(state, value.type_name) < 0
+	mut reference_type := value.type_name
+	if nullable_element(reference_type) != ""
+		reference_type = nullable_element(reference_type)
+	end
+	if array_element_type(reference_type) == "" && hash_key_type(reference_type) == "" && reference_type != "Hash"
+		if find_record_type(state, reference_type) < 0
 			return false
 		end
 	end
@@ -964,10 +995,16 @@ def check_declaration(
 	if local_type == ""
 		local_type = value_type
 	end
+	if local_type == "Nil"
+		diagnostic(state, "TRBN4004", line, "cannot infer a binding from nil alone; add a nullable annotation")
+	end
 	if local_type == "Void"
 		diagnostic(state, "TRBN4004", line, "local binding cannot have type Void")
 	end
 	added := local_add(state, locals, name, local_type, mutable, line)
+	if added
+		nullable_replace(locals, locals.count[0] - 1, local_type)
+	end
 	if added && local_type == "Hash"
 		if checked_hash_plan(state, value.origin).kind != 1
 			diagnostic(state, "TRBN4004", line, "untyped Hash aliases require a Hash<K, V> annotation")
@@ -1017,10 +1054,17 @@ def check_simple_statement(
 			diagnostic(state, "TRBN4004", line, "assignment target is immutable")
 		end
 		advance(position)
-		right := check_expression(state, position, locals, 1, left.type_name)
+		mut expected := left.type_name
+		if left.nullable_binding >= 0 && left.nullable_field == - 1
+			expected = load_string(locals.types, left.nullable_binding)
+		end
+		right := check_expression(state, position, locals, 1, expected)
 		if right.type_name == "Never"
 			finish_statement(state, position)
 			return right
+		end
+		if left.nullable_binding >= 0 && left.nullable_field == - 1
+			nullable_replace(locals, left.nullable_binding, right.flow_type)
 		end
 		checked_hash_refine(state, locals, left.origin, right.type_name)
 		hash := checked_hash_plan(state, left.origin)
@@ -1072,6 +1116,8 @@ def checked_iteration_binding(mut locals: CheckedLocals, name: String, type_name
 end
 
 def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, result_type: String, parent_loop: Integer): Boolean
+	flow_parent := locals.nullable_state[0]
+	flow_first := locals.nullable_facts.size()
 	origin := position[0]
 	encoded := sparse_integer_at(state.iteration_origins, origin)
 	if encoded < 1 || encoded > state.iterations.size()
@@ -1118,12 +1164,14 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 		store_integer(locals.mir_values, locals.count[0] - 1, load_integer(locals.mir_values, index_slot))
 	end
 	position[0] = plan.body_start
+	nullable_loop_writes(state, locals, plan.body_start, plan.body_finish)
 	check_block(state, position, locals, result_type, origin)
 	if position[0] != plan.body_finish
 		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "invalid iteration body boundary")
 	end
 	mir_checked_iteration_end(state, locals, plan, saved)
 	locals.count[0] = saved
+	nullable_finish(locals, flow_parent, flow_first, saved)
 	position[0] = plan.finish
 	return finish_statement(state, position)
 end
@@ -1132,15 +1180,20 @@ def checked_while(mut state: CompilerState, mut position: Array<Integer>, mut lo
 	origin := position[0]
 	line := load_integer(state.token_lines, origin)
 	count := locals.count[0]
+	flow_parent := locals.nullable_state[0]
+	flow_first := locals.nullable_facts.size()
+	nullable_loop_writes(state, locals, origin, sparse_integer_at(state.loop_finishes, origin))
 	exit := mir_control_loop_begin(state, locals, origin, line)
 	advance(position)
 	condition := check_expression(state, position, locals, 1, "Boolean")
 	check_expected(state, condition.type_name, "Boolean", line)
 	finish_statement(state, position)
 	mir_control_loop_branch(state, locals, condition, exit, line)
+	nullable_apply(locals, condition.truth)
 	check_block(state, position, locals, result_type, origin)
 	locals.count[0] = count
 	mir_control_loop_end(state, locals, load_integer(state.token_lines, position[0]))
+	nullable_finish(locals, flow_parent, flow_first, count)
 	expect(state, position, "end")
 	return finish_statement(state, position)
 end
@@ -1180,10 +1233,14 @@ def check_block_value(mut state: CompilerState, mut position: Array<Integer>, mu
 				if condition.type_name == "Never"
 					scalar_mir_disable(locals)
 				end
+				guard_flow := locals.nullable_state[0]
+				nullable_apply(locals, condition.truth)
 				alternate := mir_control_branch(state, locals, condition, line)
 				position[0] = control.origin
 				check_transfer_value(state, position, locals, result_type, loop_origin, control.branches[0].finish)
 				mir_control_enter(state, locals, alternate, line)
+				locals.nullable_state[0] = guard_flow
+				nullable_apply(locals, condition.falsity)
 				if condition.type_name == "Never"
 					locals.mir_state[0] = guard_mir
 					result = condition
@@ -1236,6 +1293,8 @@ def check_control_value(mut state: CompilerState, mut position: Array<Integer>, 
 	origin := position[0]
 	line := load_integer(state.token_lines, origin)
 	control := state.controls[sparse_integer_at(state.control_origins, origin) - 1]
+	saved_flow := locals.nullable_state[0]
+	flow_first := locals.nullable_facts.size()
 	saved_count := locals.count[0]
 	saved_mir := locals.mir_state[0]
 	mut reachable := true
@@ -1262,9 +1321,11 @@ def check_control_value(mut state: CompilerState, mut position: Array<Integer>, 
 	mut branch_index := 0
 	while branch_index < control.branches.size()
 		branch := control.branches[branch_index]
+		mut alternate_flow := locals.nullable_state[0]
+		mut false_facts :=- 1
 		mut alternate :=- 1
 		if branch.condition >= 0 || (control.kind == 3 && branch_index == 0)
-			mut condition := checked_value(predicate.type_name, predicate.category, predicate.origin, predicate.mutable)
+			mut condition := checked_view(predicate, predicate.type_name, predicate.category)
 			if control.kind == 2
 				position[0] = branch.condition
 				condition = check_case_condition(state, position, locals, selector, branch.condition_finish)
@@ -1276,6 +1337,9 @@ def check_control_value(mut state: CompilerState, mut position: Array<Integer>, 
 				reachable = false
 				scalar_mir_disable(locals)
 			end
+			alternate_flow = locals.nullable_state[0]
+			false_facts = condition.falsity
+			nullable_apply(locals, condition.truth)
 			alternate = mir_control_branch(state, locals, condition, line)
 		else
 			otherwise = true
@@ -1304,9 +1368,8 @@ def check_control_value(mut state: CompilerState, mut position: Array<Integer>, 
 				if common == "Never"
 					common = value.type_name
 				elsif common != value.type_name
-					if numeric_type(common) && numeric_type(value.type_name)
-						common = "Float"
-					else
+					common = nullable_common(common, value.type_name)
+					if common == ""
 						return type_diagnostic(state, line, "control expression branches have incompatible types")
 					end
 				end
@@ -1318,11 +1381,18 @@ def check_control_value(mut state: CompilerState, mut position: Array<Integer>, 
 		if alternate >= 0
 			mir_control_enter(state, locals, alternate, line)
 		end
+		locals.nullable_state[0] = alternate_flow
+		nullable_apply(locals, false_facts)
 		branch_index += 1
 		if has_diagnostic(state)
 			return checked_value("Invalid", 0, 9007199254740991, 0)
 		end
 	end
+	mut promoted_flow := saved_flow
+	if !otherwise && completing == 0
+		promoted_flow = locals.nullable_state[0]
+	end
+	nullable_finish(locals, promoted_flow, flow_first, saved_count)
 	if !otherwise
 		if wants_value
 			return type_diagnostic(state, line, "control expression requires an else branch")
@@ -1339,7 +1409,7 @@ def check_control_value(mut state: CompilerState, mut position: Array<Integer>, 
 	if wants_value
 		store_string(state.control_types, origin, common)
 		value := mir_value_complete(state, locals, join, common, origin)
-		return CheckedValue.new(type_name: value.type_name, category: value.category, origin: value.origin, mutable: value.mutable, binding: false, readonly: false, immutable_reference: immutable_reference)
+		return CheckedValue.new(type_name: value.type_name, category: value.category, origin: value.origin, mutable: value.mutable, binding: false, readonly: false, immutable_reference: immutable_reference, nullable_binding: value.nullable_binding, nullable_field: value.nullable_field, truth: value.truth, falsity: value.falsity, flow_type: value.flow_type)
 	end
 	store_string(state.control_types, origin, "Void")
 	if completing == 0
@@ -1479,4 +1549,57 @@ def check_transfer_value(mut state: CompilerState, mut position: Array<Integer>,
 		diagnostic(state, "TRBN4004", line, "invalid conditional transfer body")
 	end
 	return checked_value("Never", 0, 9007199254740991, 0)
+end
+
+# The receiver dominates both edges. Only the present edge evaluates authored
+# arguments; the absent edge contributes none, or no result for a Void call.
+def check_safe_member(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue): CheckedValue
+	origin := position[0]
+	line := load_integer(state.token_lines, origin)
+	advance(position)
+	member := expect_identifier(state, position)
+	element := nullable_element(receiver.type_name)
+	if element == ""
+		value := check_member(state, position, locals, receiver, member)
+		store_integer(state.safe_finishes, origin, position[0])
+		store_string(state.safe_types, origin, value.type_name)
+		return value
+	end
+	flow_parent := locals.nullable_state[0]
+	flow_first := locals.nullable_facts.size()
+	condition := nullable_nil_condition(state, locals, receiver, true, origin)
+	alternate := mir_control_branch(state, locals, condition, line)
+	nullable_apply(locals, condition.truth)
+	payload := mir_checked_nullable(state, locals, 36, receiver, element, 0, origin)
+	value := check_member(state, position, locals, checked_view(receiver, element, payload.category), member)
+	nullable_finish(locals, flow_parent, flow_first, locals.count[0])
+	mut result_type := nullable_type(value.type_name)
+	if value.type_name == "Void"
+		result_type = "Void"
+	end
+	if value.type_name == "Never"
+		result_type = "Nil"
+	end
+	if has_diagnostic(state) || result_type == ""
+		return type_diagnostic(state, line, "safe navigation result is unavailable")
+	end
+	mut join := mir_value_join(locals, line)
+	if value.type_name == "Void"
+		mir_control_jump(state, locals, join.target, locals.count[0])
+	elsif value.type_name != "Never"
+		mir_value_exit(state, locals, join, value)
+	end
+	mir_control_enter(state, locals, alternate, line)
+	mut result := checked_value("Void", 0, 9007199254740991, 0)
+	if result_type == "Void"
+		mir_control_jump(state, locals, join.target, locals.count[0])
+		mir_control_enter(state, locals, join.target, line)
+	else
+		none := mir_checked_nullable(state, locals, 33, receiver, result_type, 0, origin)
+		mir_value_exit(state, locals, join, none)
+		result = mir_value_complete(state, locals, join, result_type, origin)
+	end
+	store_integer(state.safe_finishes, origin, position[0])
+	store_string(state.safe_types, origin, result_type)
+	return result
 end

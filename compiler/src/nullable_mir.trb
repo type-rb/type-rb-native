@@ -1,0 +1,121 @@
+import { mir_control_active, mir_control_allocate, mir_control_arguments, mir_control_branch, mir_control_enter, mir_control_jump_arguments, mir_control_prepare } from mir_control
+import { CheckedValue, checked_flow, checked_mir_value, checked_value, checked_view, mir_add_value, mir_checked_value, scalar_mir_convert_float, scalar_mir_instruction, scalar_mir_value } from checked_values
+import { MirBlock, MirFunction, MirInstruction, MirModule } from mir
+import { MirFlow, mir_flow_type, mir_value_available } from mir_flow
+import { mir_nullable_element, mir_semantic_type_id, mir_semantic_type_name } from mir_types
+import { nullable_assignable, nullable_element } from nullable_types
+import { CheckedLocals, CompilerState } from state
+import { load_integer } from storage
+
+# Explicit operations retain semantics before optional representation lowering:
+# 33 none, 34 present, 35 nil test, 36 checked payload extraction.
+def mir_checked_nullable(mut state: CompilerState, mut locals: CheckedLocals, kind: Integer, value: CheckedValue, type_name: String, payload: Integer, origin: Integer): CheckedValue
+	result := scalar_mir_value(state, locals, mir_semantic_type_id(state.scalar_mir, type_name), origin)
+	if result < 0
+		return checked_value(type_name, 0, origin, value.mutable)
+	end
+	mut first := checked_mir_value(value)
+	if kind == 33
+		first =- 1
+	end
+	scalar_mir_instruction(state, locals, kind, result, first, - 1, payload, - 1, load_integer(state.token_lines, origin))
+	return mir_checked_value(type_name, result, origin, value.mutable)
+end
+
+def mir_nullable_coerce(mut state: CompilerState, mut locals: CheckedLocals, value: CheckedValue, expected: String, origin: Integer): CheckedValue
+	if value.type_name == expected || expected == "" || value.type_name == "Never"
+		return value
+	end
+	if expected == "Float" && value.type_name == "Integer"
+		return scalar_mir_convert_float(state, locals, value, origin)
+	end
+	if nullable_element(expected) == "" || !nullable_assignable(value.type_name, expected)
+		return value
+	end
+	if value.type_name == "Integer?" && expected == "Float?"
+		return mir_nullable_widen(state, locals, value, origin)
+	end
+	if value.type_name == "Nil"
+		result := mir_checked_nullable(state, locals, 33, value, expected, 0, origin)
+		return checked_flow(checked_view(value, expected, result.category), "Nil")
+	end
+	mut present := checked_view(value, value.type_name, value.category)
+	if nullable_element(expected) == "Float" && value.type_name == "Integer"
+		present = scalar_mir_convert_float(state, locals, value, origin)
+	end
+	result := mir_checked_nullable(state, locals, 34, present, expected, 0, origin)
+	return checked_flow(checked_view(value, expected, result.category), present.type_name)
+end
+
+def mir_nullable_instruction_error(flow: MirFlow, native_module: MirModule, function: MirFunction, block: MirBlock, index: Integer, instruction: MirInstruction): String
+	result := mir_flow_type(flow, instruction.result)
+	first := mir_flow_type(flow, instruction.first)
+	if instruction.second != - 1 || instruction.failure != - 1
+		return "MIR nullable instruction shape differs"
+	end
+	if instruction.kind == 33
+		if instruction.first != - 1 || instruction.payload != 0
+			return "MIR none instruction shape differs"
+		end
+		if mir_nullable_element(native_module, result) == 0 && mir_semantic_type_name(native_module, result) != "Nil"
+			return "MIR none result type differs"
+		end
+		return ""
+	end
+	if !mir_value_available(flow, block, index, instruction.first)
+		return "MIR nullable operand is unavailable"
+	end
+	if instruction.kind == 35
+		if result != 2 || instruction.payload < 0 || instruction.payload > 1
+			return "MIR nil test result or mode differs"
+		end
+		if mir_nullable_element(native_module, first) == 0 && mir_semantic_type_name(native_module, first) != "Nil"
+			return "MIR nil test operand type differs"
+		end
+		return ""
+	end
+	if instruction.payload != 0
+		return "MIR nullable payload mode differs"
+	end
+	if instruction.kind == 34
+		if mir_nullable_element(native_module, result) != first || first == 0
+			return "MIR nullable injection payload type differs"
+		end
+	elsif instruction.kind == 36
+		if mir_nullable_element(native_module, first) != result || result == 0
+			return "MIR nullable extraction payload type differs"
+		end
+	else
+		return "MIR nullable operation is invalid"
+	end
+	return ""
+end
+
+# Widening maps the present payload through ordinary typed CFG edges. Absence
+# does not run a conversion or allocate a box.
+def mir_nullable_widen(mut state: CompilerState, mut locals: CheckedLocals, value: CheckedValue, origin: Integer): CheckedValue
+	mir_control_prepare(state, locals)
+	if !mir_control_active(locals)
+		return checked_view(value, "Float?", 0)
+	end
+	line := load_integer(state.token_lines, origin)
+	condition := mir_checked_nullable(state, locals, 35, value, "Boolean", 1, origin)
+	alternate := mir_control_branch(state, locals, condition, line)
+	payload := mir_checked_nullable(state, locals, 36, value, "Integer", 0, origin)
+	converted := scalar_mir_convert_float(state, locals, payload, origin)
+	present := mir_checked_nullable(state, locals, 34, converted, "Float?", 0, origin)
+	join := mir_control_allocate(locals)
+	arguments := mir_control_arguments(locals, locals.count[0])
+	locals.mir_arguments.push(checked_mir_value(present))
+	mir_control_jump_arguments(state, locals, join, arguments, locals.count[0] + 1)
+	mir_control_enter(state, locals, alternate, line)
+	absent := mir_checked_nullable(state, locals, 33, value, "Float?", 0, origin)
+	none_arguments := mir_control_arguments(locals, locals.count[0])
+	locals.mir_arguments.push(checked_mir_value(absent))
+	mir_control_jump_arguments(state, locals, join, none_arguments, locals.count[0] + 1)
+	mir_control_enter(state, locals, join, line)
+	result := mir_add_value(state, locals, mir_semantic_type_id(state.scalar_mir, "Float?"), line)
+	locals.mir_arguments.push(result)
+	locals.mir_control[5] += 1
+	return checked_view(value, "Float?", - result - 1)
+end

@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 108 ordinary-path probes and 32 feature
+Status: the shared contract contains 134 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -50,6 +50,15 @@ value or transfer. A branch that transfers contributes no join operand. Enclosin
 expressions preserve evaluation order and skip subsequent work after an
 unconditional transfer. See [the ownership decision](decisions/0041-value-control-mir.md)
 for the supported subset, verification and remaining pattern/type boundaries.
+
+## Nullable values and safe navigation
+
+`T?`, explicit `nil`, direct nil guards, returning guards and short-circuit RHS
+narrowing lower to verified MIR operations. Safe navigation evaluates its receiver
+once and skips member arguments on the absent edge. Optional values retain their
+payload identity in calls, defaults, returns, records, Arrays and Hashes, including
+zero and false payloads. The private traced layout and remaining flow/REPL gaps
+are recorded in [decision 0042](decisions/0042-nullable-mir.md).
 
 ## Named/default arguments and record field order
 
@@ -264,7 +273,8 @@ chains, scope errors, required traps, and invalidated loop bounds as controls.
 This extends the existing checked conditional path. Functions outside the
 current complete MIR subset retain direct lowering and their runtime checks;
 conditional edges do not introduce new loop-induction or header-stability
-proofs. This does not add conditional expressions or nullable narrowing.
+proofs. Subsequent [value controls](decisions/0041-value-control-mir.md) and
+[nullable MIR](decisions/0042-nullable-mir.md) extend the ordinary expression family.
 Compiler implementation source now uses `elsif` in the statement-dispatch chain of `parse_statement_block`, replacing six nested
 `else` / `if` wrappers.
 This adoption follows the verified Sep8 seed handoff and matching snapshot

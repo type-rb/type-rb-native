@@ -1,3 +1,5 @@
+import { nullable_common } from nullable_types
+import { repl_absent, repl_none, repl_payload, repl_nullable_read } from repl_nullable
 import { standard_package_import } from resolution
 import { ArgumentBindings, argument_binding_slot, function_argument_bindings, record_argument_bindings } from argument_binding
 import { default_arguments } from default_arguments
@@ -79,6 +81,13 @@ def repl_string_integer(mut store: ReplStore, text: String): Integer
 end
 
 def repl_numeric(mut store: ReplStore, left: Integer, operator: String, right: Integer): Integer
+	if store.types[left] == "Nil" || store.types[right] == "Nil"
+		mut same := repl_absent(store, left) == repl_absent(store, right)
+		if operator == "!="
+			same =!same
+		end
+		return repl_boolean(store, same)
+	end
 	a := repl_get(store, left)
 	b := repl_get(store, right)
 	if a.type_name == "String"
@@ -276,6 +285,9 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 	if kind == 3
 		return repl_reference(repl_string(store, text))
 	end
+	if text == "nil"
+		return repl_reference(repl_none(store, "Nil"))
+	end
 	if text == "true"
 		return repl_reference(repl_boolean(store, true))
 	end
@@ -356,10 +368,8 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 			if element == ""
 				element = store.types[value.value]
 			end
-			if element == "Integer"
-				if store.types[value.value] == "Float"
-					element = "Float"
-				end
+			if array_element_type(expected) == ""
+				element = nullable_common(element, store.types[value.value])
 			end
 			children.push(value.value)
 			if token_is(state, position[0], ",")
@@ -380,7 +390,7 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 	end
 	binding := repl_find(environment, text)
 	if binding >= 0
-		return ReplReference.new(value: environment.values[binding], binding: binding, container: - 1, slot: - 1)
+		return ReplReference.new(value: repl_nullable_read(state, store, environment.values[binding], position[0] - 1), binding: binding, container: - 1, slot: - 1)
 	end
 	if token_is(state, position[0], "(")
 		function := find_visible_function(state, state.active_module[0], text)
@@ -495,6 +505,16 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		if store.error[0] != ""
 			return repl_reference(0)
 		end
+		mut safe_origin :=- 1
+		if token_is(state, position[0], "&.")
+			safe_origin = position[0]
+			if repl_absent(store, result.value)
+				position[0] = sparse_integer_at(state.safe_finishes, safe_origin)
+				result = repl_reference(repl_none(store, load_string(state.safe_types, safe_origin)))
+				next
+			end
+			result = ReplReference.new(value: repl_payload(store, result.value), binding: result.binding, container: result.container, slot: result.slot)
+		end
 		value := repl_get(store, result.value)
 		if token_is(state, position[0], "[")
 			if value.type_name == "Hash" || hash_key_type(value.type_name) != ""
@@ -541,7 +561,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 				result = ReplReference.new(value: value.children[index], binding: - 1, container: result.value, slot: index)
 			end
 		else
-			if token_is(state, position[0], ".")
+			if token_is(state, position[0], ".") || safe_origin >= 0
 				position[0] += 1
 				member := load_string(state.token_texts, position[0])
 				position[0] += 1
@@ -552,6 +572,9 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 				if token_is(state, position[0], "(")
 					if value.type_name == "Hash" || hash_key_type(value.type_name) != ""
 						result = repl_reference(repl_hash_method(state, position, store, environment, result.value))
+						if safe_origin >= 0 && environment.flow[0] == 0
+							result = repl_reference(repl_coerce(store, result.value, load_string(state.safe_types, safe_origin)))
+						end
 						next
 					end
 					position[0] += 1
@@ -600,11 +623,14 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 					record_index := find_record_type(state, value.type_name)
 					field := find_field(state, record_index, member)
 					start := load_integer(state.record_field_starts, record_index)
-					result = ReplReference.new(value: value.children[field - start], binding: - 1, container: result.value, slot: field - start)
+					result = ReplReference.new(value: repl_nullable_read(state, store, value.children[field - start], position[0] - 1), binding: - 1, container: result.value, slot: field - start)
 				end
 			else
 				complete = true
 			end
+		end
+		if safe_origin >= 0 && environment.flow[0] == 0
+			result = repl_reference(repl_coerce(store, result.value, load_string(state.safe_types, safe_origin)))
 		end
 	end
 	return result
@@ -911,6 +937,9 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 	if assignment
 		position[0] += 1
 		mut expected := store.types[left.value]
+		if left.binding >= 0
+			expected = store.types[environment.values[left.binding]]
+		end
 		mut hash_assignment := false
 		if left.container >= 0
 			if hash_key_type(store.types[left.container]) != ""

@@ -68,6 +68,15 @@ The extracted `compiler/cli/repl_project.trb` is an explicit CLI input: the
 builder stages every CLI module, and both target CLI authorities execute the
 project/import, retained-record, replay and shared-language controls that use it.
 
+The CLI cache test gives each complete core/CLI fixed-point rebuild a bounded
+300-second watchdog and records its elapsed time; the whole CLI job allows
+30 minutes for the repeated invalidation controls. A 120-second rebuild watchdog
+expired during nullable integration after the ordinary build and functional
+controls had passed. These are execution deadlines, separate from the performance
+acceptance contracts. Timeout remains a failure and terminates the owned builder
+process group. Cache reuse, failure atomicity and concurrent-caller assertions
+remain required.
+
 The documentation authority checks evidence retention, skill metadata, public
 path hygiene, the capability catalog and benchmark explorer. Pages does not
 repeat those checks in a separate PR workflow. Its main-push deployment and

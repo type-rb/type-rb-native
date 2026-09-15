@@ -1,3 +1,4 @@
+import { nullable_element } from nullable_types
 import { hash_key_type, hash_type, hash_value_type } from hash_types
 import { integer_string } from literals
 import { string_starts_with } from path
@@ -30,8 +31,8 @@ def mir_managed_type(native_module: MirModule, type_id: Integer): Boolean
 	if type_id == 8 || type_id == 3 || type_id == 6
 		return true
 	end
-	if type_id >= 9
-		return type_id - 9 < native_module.types.size()
+	if type_id >= 9 && type_id - 9 < native_module.types.size()
+		return native_module.types[type_id - 9].kind != 7
 	end
 	return false
 end
@@ -100,7 +101,15 @@ def mir_semantic_type_id(mut native_module: MirModule, name: String): Integer
 	mut kind := 1
 	mut element := 0
 	mut key := 0
-	if name == "Range<Integer>"
+	if name == "Nil"
+		kind = 7
+	elsif nullable_element(name) != ""
+		kind = 6
+		element = mir_semantic_type_id(native_module, nullable_element(name))
+		if !mir_semantic_value_type(native_module, element)
+			return 0
+		end
+	elsif name == "Range<Integer>"
 		kind = 4
 	elsif name == "Hash"
 		kind = 5
@@ -209,10 +218,10 @@ def mir_types_error(native_module: MirModule): String
 	mut index := 0
 	while index < native_module.types.size()
 		row := native_module.types[index]
-		if row.kind < 1 || row.kind > 5
+		if row.kind < 1 || row.kind > 7
 			return "MIR composite kind is invalid"
 		end
-		if row.kind == 1 || row.kind == 3
+		if row.kind == 1 || row.kind == 3 || row.kind == 6
 			if row.element >= index + 9 || !mir_semantic_value_type(native_module, row.element)
 				return "MIR composite element type is invalid"
 			end
@@ -235,6 +244,13 @@ def mir_types_error(native_module: MirModule): String
 				return "MIR Hash key type differs"
 			end
 			expected = hash_type(mir_semantic_type_name(native_module, row.key), mir_semantic_type_name(native_module, row.element))
+		elsif row.kind == 6
+			expected = mir_semantic_type_name(native_module, row.element) + "?"
+			if nullable_element(mir_semantic_type_name(native_module, row.element)) != "" || mir_semantic_type_name(native_module, row.element) == "Nil"
+				return "MIR nullable payload type differs"
+			end
+		elsif row.kind == 7
+			expected = "Nil"
 		elsif row.kind == 4
 			expected = "Range<Integer>"
 		else
@@ -264,4 +280,15 @@ def mir_operand_type(types: Array<Integer>, value: Integer): Integer
 		return 0
 	end
 	return types[value]
+end
+
+# Only verified optional types own a payload type; Nil owns no payload.
+def mir_nullable_element(native_module: MirModule, type_id: Integer): Integer
+	if type_id >= 9 && type_id - 9 < native_module.types.size()
+		row := native_module.types[type_id - 9]
+		if row.kind == 6
+			return row.element
+		end
+	end
+	return 0
 end

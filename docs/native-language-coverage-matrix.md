@@ -13,7 +13,7 @@
 | next | accepts | accepts | matches reference | matches reference |
 | Default argument | accepts | accepts | matches reference | matches reference |
 | Array&lt;Boolean&gt; | accepts | accepts | matches reference | matches reference |
-| Nullable String | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Nullable String | accepts | accepts | matches reference | matches reference |
 | Ordinary enum | rejects valid input | rejects valid input | not reached | rejects valid input |
 | UTF-8 String literal | accepts | accepts | matches reference | matches reference |
 | Array of named records | accepts | accepts | matches reference | matches reference |
@@ -39,9 +39,9 @@
 | Scalar case and case expression | accepts | accepts | matches reference | matches reference |
 | Record defaults and reordered explicit fields | accepts | accepts | matches reference | matches reference |
 | Reject unsupported record equality | rejects as reference | rejects as reference | not reached | rejects as reference |
-| Nullable narrowing and early return | rejects valid input | rejects valid input | not reached | rejects valid input |
-| Nullable short-circuit and safe member | rejects valid input | rejects valid input | not reached | rejects valid input |
-| Nil equality | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Nullable narrowing and early return | accepts | accepts | matches reference | matches reference |
+| Nullable short-circuit and safe member | accepts | accepts | matches reference | matches reference |
+| Nil equality | accepts | accepts | matches reference | matches reference |
 | Payload enum and exhaustive case | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Raw-value enum | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Transparent type alias | rejects valid input | rejects valid input | not reached | rejects valid input |
@@ -125,3 +125,14 @@
 | Guard return | accepts | accepts | matches reference | matches reference |
 | Logical operators inside ternary branches | accepts | accepts | matches reference | matches reference |
 | Immutable Array capability survives a value branch | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Nullable scalars preserve zero and false | accepts | accepts | matches reference | matches reference |
+| Nullable assignment retains its precise flow type | accepts | accepts | matches reference | matches reference |
+| Omitted default differs from explicit nil | accepts | accepts | matches reference | matches reference |
+| Nullable Array elements and stable record fields | accepts | accepts | matches reference | matches reference |
+| Safe navigation evaluates the receiver once | accepts | accepts | matches reference | matches reference |
+| Safe navigation skips argument side effects | accepts | accepts | matches reference | matches reference |
+| Nullable Hash and Array storage | accepts | accepts | matches reference | output differs |
+| Loop guards recheck replaced nullable values | accepts | accepts | matches reference | output differs |
+| Safe navigation preserves nullable field results | accepts | accepts | matches reference | matches reference |
+| Reject nonnullable use after assignment of nil | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject stale nullable field narrowing after receiver assignment | rejects as reference | rejects as reference | not reached | rejects as reference |

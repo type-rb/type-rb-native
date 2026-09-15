@@ -1,0 +1,84 @@
+# Canonical optional types retain their payload identity independently of layout.
+def nullable_element(name: String): String
+	if name.size() < 2
+		return ""
+	end
+	if name[name.size() - 1] != "?"
+		return ""
+	end
+	mut result := ""
+	mut index := 0
+	while index < name.size() - 1
+		result += name[index]
+		index += 1
+	end
+	return result
+end
+
+def nullable_type(name: String): String
+	if nullable_element(name) != ""
+		return name
+	end
+	if name == "" || name == "Nil" || name == "Void" || name == "Never" || name == "Invalid"
+		return ""
+	end
+	return name + "?"
+end
+
+def nullable_assignable(actual: String, expected: String): Boolean
+	if actual == expected
+		return true
+	end
+	if actual == "Integer" && expected == "Float"
+		return true
+	end
+	element := nullable_element(expected)
+	if element == ""
+		return false
+	end
+	if actual == "Nil"
+		return true
+	end
+	# Numeric widening also maps an optional payload without losing absence.
+	if actual == "Integer?" && expected == "Float?"
+		return true
+	end
+	if actual == element
+		return true
+	end
+	if actual == "Integer" && element == "Float"
+		return true
+	end
+	return false
+end
+
+def nullable_common(left: String, right: String): String
+	if left == right
+		return left
+	end
+	if left == "Never"
+		return right
+	end
+	if right == "Never"
+		return left
+	end
+	if left == "Nil"
+		if nullable_element(right) != ""
+			return right
+		end
+		return ""
+	end
+	if right == "Nil"
+		if nullable_element(left) != ""
+			return left
+		end
+		return ""
+	end
+	if nullable_assignable(left, right)
+		return right
+	end
+	if nullable_assignable(right, left)
+		return left
+	end
+	return ""
+end

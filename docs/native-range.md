@@ -7,7 +7,7 @@ Arithmetic and comparisons bind more tightly than construction; logical
 operators bind less tightly. Non-Integer endpoints are rejected.
 
 Values can be retained in locals, parameters, results, named record fields,
-supported nested Arrays (up to three Array levels) and String/Integer-keyed Hash
+recursively typed Arrays and String/Integer-keyed Hash
 values. A Range is an immutable value with captured endpoints: reassigning its
 original binding or replacing an aggregate entry does not retarget an active
 iteration. The REPL displays `start..finish` or `start...finish`.
@@ -42,8 +42,8 @@ to the captured receiver. A separate continuation block advances the cursor for
 
 For admitted functions, QBE consumes only verified block/value MIR and shared root
 plans. Source regions and iteration plans are unnecessary at emission time.
-Functions with remaining intrinsic/result boundaries retain the checked direct
-adapter until their enclosing functions migrate.
+Ordinary functions require verified MIR before emission; unsupported enclosing
+operations are rejected.
 
 The first representation is a managed object with three scalar payload words:
 start, finish and exclusion bit. A precise descriptor marks no child pointers;

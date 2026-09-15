@@ -33,6 +33,10 @@ record ControlSyntax
 end
 
 record CompilerState
+	nullable_reads: StringStorage
+	safe_finishes: IntegerStorage
+	safe_types: StringStorage
+	loop_finishes: IntegerStorage
 	controls: Array<ControlSyntax>
 	# Positive rows identify parsed controls; -1 marks a non-completing Hash literal.
 	control_origins: IntegerStorage
@@ -109,6 +113,9 @@ end
 
 def compiler_new(capacity: Integer): CompilerState
 	return CompilerState.new(
+		nullable_reads: string_storage(capacity),
+		safe_finishes: integer_storage(capacity), safe_types: string_storage(capacity),
+		loop_finishes: integer_storage(capacity),
 		controls: [], control_origins: integer_storage(capacity), control_types: string_storage(capacity),
 		default_initializers: [], default_functions: [],
 		parameter_defaults: integer_storage(capacity),
@@ -235,7 +242,19 @@ def diagnostic(mut state: CompilerState, code: String, line: Integer, message: S
 	return
 end
 
+# Persistent path facts make branch rollback constant time. Field -2 is a
+# binding replacement barrier; field -1 denotes the binding itself.
+record NullableFact
+	binding: Integer
+	field: Integer
+	type_name: String
+	version: Integer
+	previous: Integer
+end
+
 record CheckedLocals
+	nullable_facts: Array<NullableFact>
+	nullable_state: Array<Integer>
 	lexical_loop: Array<Integer>
 	hash_literal_origins: IntegerStorage
 	names: StringStorage
@@ -258,6 +277,8 @@ end
 
 def locals_new(capacity: Integer): CheckedLocals
 	return CheckedLocals.new(
+		nullable_facts: [],
+		nullable_state: [- 1, 0],
 		lexical_loop: [- 1],
 		hash_literal_origins: integer_storage(capacity),
 		names: string_storage(capacity),
