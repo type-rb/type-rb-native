@@ -37,6 +37,11 @@ with tempfile.TemporaryDirectory(prefix='native-repl-flow-') as temporary:
         'nil : String? [mut]\n"kept" : String? [mut]\nString\n4 : Integer\n',
         ('expected String?, found Integer',))
 
+    run('mut values := [1]\nvalues[0] = 2\nvalues[0] += 1\nvalues[0]\n(values[0])\n'
+        'mut count := 1\ncount += 1\n(count)\ncount + 1',
+        '[1] : Array<Integer> [mut]\n2 : Integer\n3 : Integer\n3 : Integer\n3 : Integer\n'
+        '1 : Integer [mut]\n2 : Integer [mut]\n2 : Integer [mut]\n3 : Integer\n')
+
     for body in ('if true\nvalue = nil\nputs(1 / 0)\nend',
                  'value = if true\nvalue = nil\nputs(1 / 0)\n"other"\nelse\n"unused"\nend'):
         run('mut value: String? := nil\nvalue = "kept"\n' + body +
