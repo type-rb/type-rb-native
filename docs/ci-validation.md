@@ -64,9 +64,10 @@ points, tests the CLI/REPL and packages Darwin/Linux artifacts. CLI-only changes
 still run reference formatting/type checks and quick tests. Changing core
 source alongside an adapter restores core and comparative checks. Documentation
 under `compiler/` no longer accidentally triggers a separate CLI matrix.
-The extracted `compiler/cli/repl_project.trb` is an explicit CLI input: the
+The extracted `compiler/cli/repl_project.trb`, `repl_check.trb` and
+`repl_defaults.trb` are explicit CLI inputs: the
 builder stages every CLI module, and both target CLI authorities execute the
-project/import, retained-record, replay and shared-language controls that use it.
+project/import, retained-record, replay and shared-language controls that use them.
 
 The CLI cache test gives each complete core/CLI fixed-point rebuild a bounded
 300-second watchdog and records its elapsed time; the whole CLI job allows

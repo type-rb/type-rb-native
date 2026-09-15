@@ -25,7 +25,7 @@ Each count describes registered probes, not language coverage percentages.
 | Arrays and checked indexes | basic | 1 / 8 | Removal during assignments/iteration and retained managed receivers; Remaining Array receiver APIs and invalid element/mutation combinations | ArrayLiteral, IndexExpression |
 | Hash values and operations | basic | 0 / 5 | All key/value representations, empty inference, managed lifetimes and missing-key failures | HashLiteral |
 | Structured and value-producing iteration | basic | 2 / 4 | Map/filter/reduce/chains, nested transfers, receiver replacement and live growth | IterationExpression, BlockExpression |
-| Range values and boundaries | basic | 2 / 4 | Endpoint effects, empty/reversed ranges and next at both portable limits | RangeExpression |
+| Range values and boundaries | basic | 2 / 5 | Endpoint effects, empty/reversed ranges and next at both portable limits | RangeExpression |
 | Result and typed propagation | basic | 3 / 3 | Err identity, nested boundaries, catch transfers and rejected unused Result values | TryExpression, CatchExpression |
 | Classes, fields and methods | basic | 1 / 1 | Initialization, inheritance, dispatch, privacy and readonly fields | ClassStatement, FieldStatement |
 | Explicit interface conformance | basic | 1 / 1 | Generic conformance, variance, inherited contracts and rejection controls | InterfaceStatement |

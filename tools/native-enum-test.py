@@ -23,6 +23,20 @@ with tempfile.TemporaryDirectory(prefix='native enum ') as temporary:
         for message in errors:
             assert message in result.stderr, (message, result.stderr)
 
+    repl('r := (2...5)\nr\n:type r\n'
+         'r.each do |value|\nputs(value)\nend\n'
+         'enum Extra\nOnly\nend\nr\n:reload\nr',
+         '2...5 : Range<Integer>\n2...5 : Range<Integer>\nRange<Integer>\n'
+         '2\n3\n4\n2...5 : Range<Integer>\n2\n3\n4\nreloaded\n2...5 : Range<Integer>\n')
+    repl('record Window\nbounds: Range<Integer>\nend\n'
+         'window := Window.new(bounds: (3..4))\nwindow\n'
+         'window.bounds.each do |value|\nputs(value)\nend',
+         'Window(bounds: 3..4) : Window\nWindow(bounds: 3..4) : Window\n3\n4\n')
+    repl('enum Span\nBounds(range: Range<Integer>)\nend\n'
+         'span := Span::Bounds((4..5))\nspan\n:reload\nspan',
+         'Span::Bounds(range: 4..5) : Span\nSpan::Bounds(range: 4..5) : Span\n'
+         'reloaded\nSpan::Bounds(range: 4..5) : Span\n')
+
     declaration = 'enum Token\nText(value: String)\nEOF\nend\n'
     held = 'Token::Text(value: "held") : Token\n'
     repl(declaration + 'value := Token::Text("held")\n:type value\n'
