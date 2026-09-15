@@ -1,3 +1,5 @@
+import { repl_default } from repl_defaults
+import { token_is, skip_newlines } from syntax_tokens
 import { repl_checked, repl_checked_input } from repl_check
 import { nullable_element } from nullable_types
 import { ReplProject, repl_project, repl_type_name } from repl_project
@@ -8,7 +10,7 @@ import { repl_incomplete, repl_escape } from repl_syntax
 import { repl_history_load, repl_history_save } from repl_history
 import { CheckedFlowFact, CompilerState, compiler_new, has_diagnostic, find_module } from state
 import { sparse_integer_at, sparse_string_at, load_integer, load_string } from storage
-import { token_is, skip_newlines } from parser
+import { enum_type, find_enum_in_module, find_enum_type, find_enum_variant } from enum_types
 import { find_function_in_module, find_record_type, find_record_in_module, record_type, array_inner_name } from resolution
 import { compiler_read_source, compiler_file_exists } from compiler
 import { lex, compiler_source_slice } from lexer
@@ -215,7 +217,7 @@ def repl_submit(mut session: ReplSession, input: String, type_only: Boolean, dis
 	end
 	if declarations
 		previous := repl_checked(session.text[0] + "def main()\n" + session.text[1] + "return\nend\n", session.project)
-		repl_remap_records(previous, state, session.store)
+		repl_remap_nominals(previous, state, session.store)
 		session.text[1] = repl_bindings(state, session)
 		session.text[0] += input + "\n"
 		session.facts[0] = state.submissions[0].after
@@ -361,43 +363,6 @@ def repl_run(config: String): Integer
 	return 0
 end
 
-def repl_default(state: CompilerState, type_name: String): String
-	if nullable_element(type_name) != ""
-		return "nil"
-	end
-	if type_name == "Hash" || hash_key_type(type_name) != ""
-		return "{}"
-	end
-	if type_name == "Integer"
-		return "0"
-	end
-	if type_name == "Float"
-		return "0.0"
-	end
-	if type_name == "Boolean"
-		return "false"
-	end
-	if type_name == "String"
-		return "\"\""
-	end
-	if string_starts_with(type_name, "Array<")
-		return "[]"
-	end
-	record_index := find_record_type(state, type_name)
-	start := load_integer(state.record_field_starts, record_index)
-	count := load_integer(state.record_field_counts, record_index)
-	mut text := repl_type_name(state, type_name) + ".new("
-	mut index := 0
-	while index < count
-		if index > 0
-			text += ", "
-		end
-		text += load_string(state.field_names, start + index) + ": " + repl_default(state, load_string(state.field_types, start + index))
-		index += 1
-	end
-	return text + ")"
-end
-
 def repl_bindings(state: CompilerState, session: ReplSession): String
 	mut source := ""
 	mut index := 0
@@ -509,12 +474,16 @@ def repl_complete(session: ReplSession): ReplCandidates
 	return candidates
 end
 
-# Record indexes are compiler-state-local. Preserve nominal identities when a
-# new session declaration changes the ordering of imported record types.
-def repl_remap_records(previous: CompilerState, current: CompilerState, mut store: ReplStore)
+# Nominal indexes are compiler-state-local. Preserve declaration and variant
+# identities when new session declarations reorder imported types.
+def repl_remap_nominals(previous: CompilerState, current: CompilerState, mut store: ReplStore)
 	mut index := 0
 	while index < store.types.size()
 		store.types[index] = repl_remap_type(previous, current, store.types[index])
+		owner := find_enum_type(current, store.types[index])
+		if owner >= 0
+			store.integers[index] = find_enum_variant(current, owner, store.texts[index])
+		end
 		index += 1
 	end
 	return
@@ -663,7 +632,7 @@ def repl_is_declaration(input: String): Boolean
 	mut first := [0]
 	skip_newlines(probe, first)
 	mut declarations := token_is(probe, first[0], "def")
-	if token_is(probe, first[0], "record")
+	if token_is(probe, first[0], "record") || token_is(probe, first[0], "enum")
 		declarations = true
 	end
 	if token_is(probe, first[0], "import")
@@ -771,6 +740,12 @@ def repl_remap_type(previous: CompilerState, current: CompilerState, type_name: 
 	element := array_inner_name(type_name)
 	if element != ""
 		return "Array<" + repl_remap_type(previous, current, element) + ">"
+	end
+	enum_index := find_enum_type(previous, type_name)
+	if enum_index >= 0
+		definition := previous.enums[enum_index]
+		module_name := load_string(previous.module_names, definition.source_id)
+		return enum_type(find_enum_in_module(current, find_module(current, module_name), definition.name))
 	end
 	record_index := find_record_type(previous, type_name)
 	if record_index >= 0

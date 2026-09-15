@@ -1,0 +1,89 @@
+import { CompilerState, diagnostic, has_diagnostic, terminal_token } from state
+import { load_integer, load_string } from storage
+
+def token_is(state: CompilerState, index: Integer, text: String): Boolean
+	kind := load_integer(state.token_kinds, index)
+	if kind != 1
+		if kind != 5
+			return false
+		end
+	end
+	return load_string(state.token_texts, index) == text
+end
+
+def advance(mut position: Array<Integer>)
+	position[0] = position[0] + 1
+	return
+end
+
+def skip_newlines(state: CompilerState, mut position: Array<Integer>)
+	while load_integer(state.token_kinds, position[0]) == 4
+		position[0] = position[0] + 1
+	end
+	return
+end
+
+def expect(mut state: CompilerState, mut position: Array<Integer>, text: String): Boolean
+	if token_is(state, position[0], text)
+		position[0] = position[0] + 1
+		return true
+	end
+	diagnostic(
+		state,
+		"TRBN4002",
+		load_integer(state.token_lines, position[0]),
+		"expected " + text + ", found " + load_string(state.token_texts, position[0]),
+	)
+	return false
+end
+
+def expect_identifier(mut state: CompilerState, mut position: Array<Integer>): String
+	if load_integer(state.token_kinds, position[0]) == 1
+		value := load_string(state.token_texts, position[0])
+		position[0] = position[0] + 1
+		return value
+	end
+	diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), "expected an identifier")
+	return ""
+end
+
+def parse_type(mut state: CompilerState, mut position: Array<Integer>): String
+	mut name := expect_identifier(state, position)
+	if has_diagnostic(state)
+		return ""
+	end
+	if token_is(state, position[0], "<")
+		advance(position)
+		mut argument := parse_type(state, position)
+		while token_is(state, position[0], ",")
+			advance(position)
+			argument += "," + parse_type(state, position)
+		end
+		if !expect(state, position, ">")
+			return ""
+		end
+		name += "<" + argument + ">"
+	end
+	if token_is(state, position[0], "?")
+		advance(position)
+		name += "?"
+	end
+	return name
+end
+
+def finish_statement(mut state: CompilerState, mut position: Array<Integer>): Boolean
+	if load_integer(state.token_kinds, position[0]) == 4
+		skip_newlines(state, position)
+		return true
+	end
+	if terminal_token(state, position[0]) || token_is(state, position[0], "}")
+		return true
+	end
+	diagnostic(
+		state,
+		"TRBN4002",
+		load_integer(state.token_lines, position[0]),
+		"unexpected token " + load_string(state.token_texts, position[0]) + " after statement",
+	)
+	return false
+end

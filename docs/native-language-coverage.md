@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 140 ordinary-path probes and 32 feature
+Status: the shared contract contains 151 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -43,7 +43,8 @@ Full `if`/`elsif`/`else`, Integer/String literal `case`, and ternary expressions
 produce checked values through ordinary typed MIR joins. Branches execute lazily;
 case evaluates its selector once. Numeric branches widen to Float where needed,
 branch-local bindings stay scoped, and managed aliases retain their reference
-capabilities. Value-producing full controls currently require an `else`.
+capabilities. Scalar value-producing full controls currently require an `else`; enum cases
+may instead cover every variant.
 
 Conditional `return`, `break` and `next` evaluate their guard before the guarded
 value or transfer. A branch that transfers contributes no join operand. Enclosing
@@ -69,6 +70,25 @@ conditional/failure probes expose known reference defects: successful branch
 replacement is tracked in [TypeRB #699](https://github.com/type-rb/type-rb/issues/699),
 and [TypeRB PR #698](https://github.com/type-rb/type-rb/pull/698) fixes partial
 failure. The exact reference pin and its reviewed expectations remain unchanged.
+
+## Enum payloads and exhaustive case
+
+Ordinary nominal enums support payloadless and required positional/named payload
+variants, exhaustive case statements and expressions, immutable lexical bindings,
+import aliases and recursive fields. Optional values, Arrays, Hashes and records
+retain managed enum payloads. The REPL uses the same checked bindings and preserves
+nominal identity through declarations and reload. Payloadless equality requires
+the same enum type. [Decision 0044](decisions/0044-enum-mir.md) records the verified
+operations, traced layout and source-independent backend boundary.
+
+Raw values/conversions, generic enums and Result, enum methods, attributes and
+nested module declarations remain explicit gaps. Supporting this family does not
+complete all pattern, enum or basic-language contracts.
+The shared recursive cases also expose a pinned Go-output defect: inline
+recursive payloads pass checking but fail generated Go compilation.
+[TypeRB #701](https://github.com/type-rb/type-rb/issues/701) tracks that correction.
+Mutually recursive REPL declarations still require a project/import boundary;
+separate interactive declarations cannot refer to a not-yet-declared type.
 
 ## Named/default arguments and record field order
 
@@ -105,9 +125,9 @@ No absent operand or null placeholder enters the final MIR call. Tests cover
 source erasure, reversed block storage, forced collection, imported aliases,
 short-circuit defaults and independent REPL evaluation. Nullable defaults preserve
 the distinction between an omitted argument and an explicit `nil`; the shared
-`nullable-default-presence` case covers both paths. Method/function-value/payload-enum
-argument handling remains a gap until the underlying value and callable families
-are supported.
+`nullable-default-presence` case covers both paths. Method/function-value argument handling remains a gap until the underlying
+callable families are supported. Required payload-enum arguments use the same
+source-order binding rules.
 
 ## Ordinary UTF-8 String foundation
 
@@ -499,6 +519,8 @@ Array MIR compiler produces approximately 43.1 MB of recovery JSON, exceeding
 the previous 40 MiB boundary. The earlier complete Array iteration snapshot was
 34,616,510 bytes and required increasing the original 32 MiB bound to 40 MiB.
 These are verbose recovery inputs, not application or shipped compiler binaries.
-The ordinary 4 MiB snapshot entry and schema/type/instruction bounds remain
-unchanged. Failed smaller-bound recovery attempts remain validation evidence;
+Enum integration contains 515 compiler functions, so the compiler-only function
+bound is now 1,024, with boundary tests; ordinary snapshots retain their
+512-function limit. The ordinary 4 MiB snapshot entry and remaining schema/type/
+instruction bounds remain unchanged. Failed smaller-bound recovery attempts remain validation evidence;
 a larger decode budget alone does not establish successful recovery.

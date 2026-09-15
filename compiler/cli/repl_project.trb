@@ -6,6 +6,7 @@ import { native_cli_cwd } from host
 import { parse_module } from parser
 import { path_directory, path_join } from path
 import { parse_project_config } from project_config
+import { find_enum_type } from enum_types
 import { array_element_type, find_record_type, standard_package_root, standard_package_target } from resolution
 import { CompilerState, compiler_new, has_diagnostic } from state
 import { load_integer, load_string } from storage
@@ -57,6 +58,10 @@ def repl_project(config: String): ReplProject
 			modules.push(module_name)
 			item += 1
 		end
+		state.enums.each do |definition|
+			names.push(definition.name)
+			modules.push(module_name)
+		end
 		index += 1
 	end
 	mut imports := "import trb/std/math\nimport trb/std/process\n"
@@ -101,6 +106,9 @@ def repl_project_source(source: String, prelude: String): String
 	while index < session.record_count[0]
 		explicit[load_string(session.record_names, index)] = 1
 		index += 1
+	end
+	session.enums.each do |definition|
+		explicit[definition.name] = 1
 	end
 	index = 0
 	while index < session.import_count[0]
@@ -169,12 +177,20 @@ def repl_type_name(state: CompilerState, type_name: String): String
 	if element != ""
 		return "Array<" + repl_type_name(state, element) + ">"
 	end
-	record_index := find_record_type(state, type_name)
-	if record_index < 0
-		return type_name
+	mut name := ""
+	mut owner :=- 1
+	enum_index := find_enum_type(state, type_name)
+	if enum_index >= 0
+		name = state.enums[enum_index].name
+		owner = state.enums[enum_index].source_id
+	else
+		record_index := find_record_type(state, type_name)
+		if record_index < 0
+			return type_name
+		end
+		name = load_string(state.record_names, record_index)
+		owner = load_integer(state.record_modules, record_index)
 	end
-	name := load_string(state.record_names, record_index)
-	owner := load_integer(state.record_modules, record_index)
 	if owner == state.entry_module[0]
 		return name
 	end
