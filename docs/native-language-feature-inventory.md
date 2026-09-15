@@ -10,9 +10,9 @@ Each count describes registered probes, not language coverage percentages.
 | Bindings, constants and mutation | basic | 3 / 5 | Shadowing, duplicate declarations, unused/discard bindings and mutation through projections | VariableStatement, AssignmentStatement |
 | Function declarations and calls | basic | 0 / 3 | Every all-path return, evaluation-order and mutable-argument boundary | MethodStatement, ReturnStatement, CallExpression, ExpressionStatement |
 | Defaults and named arguments | basic | 0 / 13 | Omitted versus explicit nullable values after nullable types are implemented; Method, function-value and payload-enum argument parity |  |
-| Conditions and value-producing branches | basic | 2 / 7 | Nested branches, safe common types and transfer branches; scope and diagnostic boundaries | IfStatement |
-| Loop control and transfers | basic | 2 / 5 | Nested next/break/return targets, conditional transfer effects and lexical cleanup | WhileStatement, BreakStatement, NextStatement |
-| Case statements and expressions | basic | 3 / 3 | Exhaustiveness, repeated/unreachable branches and pattern-binding diagnostics | CaseStatement |
+| Conditions and value-producing branches | basic | 0 / 16 | Nullable/union common result types and broader expression nesting boundaries | IfStatement |
+| Loop control and transfers | basic | 1 / 9 | Additional nested transfer and diagnostic-origin differential probes | WhileStatement, BreakStatement, NextStatement |
+| Case statements and expressions | basic | 2 / 5 | Exhaustiveness, repeated/unreachable branches and pattern-binding diagnostics | CaseStatement |
 | Records and field bindings | basic | 0 / 9 | Nominal cycles and defaults involving remaining unsupported value types | RecordStatement, RecordFieldStatement |
 | Member access and projections | basic | 1 / 4 | Safe member access, chained field narrowing and receiver replacement | MemberExpression |
 | Nullable values and narrowing | basic | 4 / 5 | Field/loop/callback narrowing, invalidation after mutation and safe member access |  |

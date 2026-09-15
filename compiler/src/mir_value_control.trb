@@ -1,0 +1,56 @@
+import { CheckedValue, checked_mir_value, checked_value, mir_add_value, mir_checked_value, scalar_mir_convert_float } from checked_values
+import { mir_control_active, mir_control_allocate, mir_control_arguments, mir_control_enter, mir_control_jump_arguments } from mir_control
+import { mir_semantic_type_id } from mir_types
+import { CheckedLocals, CompilerState } from state
+
+# Exit bridges let type checking discover a common result type without editing
+# previously emitted instructions or making source layout part of the backend.
+record MirValueJoin
+	blocks: Array<Integer>
+	values: Array<CheckedValue>
+	binding_count: Integer
+	target: Integer
+	line: Integer
+end
+
+def mir_value_join(mut locals: CheckedLocals, line: Integer): MirValueJoin
+	return MirValueJoin.new(blocks: [], values: [], binding_count: locals.count[0], target: mir_control_allocate(locals), line: line)
+end
+
+def mir_value_exit(state: CompilerState, mut locals: CheckedLocals, mut join: MirValueJoin, value: CheckedValue)
+	if !mir_control_active(locals) || locals.mir_control[6] == 1
+		return
+	end
+	bridge := mir_control_allocate(locals)
+	arguments := mir_control_arguments(locals, join.binding_count)
+	locals.mir_arguments.push(checked_mir_value(value))
+	mir_control_jump_arguments(state, locals, bridge, arguments, join.binding_count + 1)
+	join.blocks.push(bridge)
+	join.values.push(value)
+end
+
+def mir_value_enter(mut state: CompilerState, mut locals: CheckedLocals, block: Integer, type_name: String, line: Integer): CheckedValue
+	mir_control_enter(state, locals, block, line)
+	value := mir_add_value(state, locals, mir_semantic_type_id(state.scalar_mir, type_name), line)
+	locals.mir_arguments.push(value)
+	locals.mir_control[5] += 1
+	return mir_checked_value(type_name, value, 9007199254740991, 0)
+end
+
+def mir_value_complete(mut state: CompilerState, mut locals: CheckedLocals, join: MirValueJoin, type_name: String, origin: Integer): CheckedValue
+	if !mir_control_active(locals) || type_name == "Never"
+		return checked_value(type_name, 0, 9007199254740991, 0)
+	end
+	mut index := 0
+	while index < join.blocks.size()
+		mut value := mir_value_enter(state, locals, join.blocks[index], join.values[index].type_name, join.line)
+		if type_name == "Float" && value.type_name == "Integer"
+			value = scalar_mir_convert_float(state, locals, value, origin)
+		end
+		arguments := mir_control_arguments(locals, join.binding_count)
+		locals.mir_arguments.push(checked_mir_value(value))
+		mir_control_jump_arguments(state, locals, join.target, arguments, join.binding_count + 1)
+		index += 1
+	end
+	return mir_value_enter(state, locals, join.target, type_name, join.line)
+end

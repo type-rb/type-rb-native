@@ -27,7 +27,7 @@ def mir_logical_begin(state: CompilerState, mut locals: CheckedLocals, left: Che
 end
 
 def mir_logical_join(state: CompilerState, mut locals: CheckedLocals, left: CheckedValue, right: CheckedValue, short: Integer, origin: Integer): CheckedValue
-	if checked_mir_value(right) < 0 || right.type_name != "Boolean"
+	if right.type_name != "Never" && (checked_mir_value(right) < 0 || right.type_name != "Boolean")
 		scalar_mir_disable(locals)
 	end
 	if !mir_control_active(locals)
@@ -35,9 +35,11 @@ def mir_logical_join(state: CompilerState, mut locals: CheckedLocals, left: Chec
 	end
 	join := mir_control_allocate(locals)
 	line := load_integer(state.token_lines, origin)
-	arguments := mir_control_arguments(locals, locals.count[0])
-	locals.mir_arguments.push(checked_mir_value(right))
-	mir_control_jump_arguments(state, locals, join, arguments, locals.count[0] + 1)
+	if right.type_name != "Never"
+		arguments := mir_control_arguments(locals, locals.count[0])
+		locals.mir_arguments.push(checked_mir_value(right))
+		mir_control_jump_arguments(state, locals, join, arguments, locals.count[0] + 1)
+	end
 	mir_control_enter(state, locals, short, line)
 	short_arguments := mir_control_arguments(locals, locals.count[0])
 	# The tested LHS already is the short-path result and dominates that edge.

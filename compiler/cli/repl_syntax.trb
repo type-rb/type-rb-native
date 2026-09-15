@@ -1,6 +1,6 @@
 import { string_starts_with } from path
 import { compiler_new, has_diagnostic } from state
-import { load_string } from storage
+import { load_integer, load_string } from storage
 import { token_is } from parser
 import { character_in, compiler_source_slice, lex, interpolation_end, interpolation_quote_end } from lexer
 import { native_cli_scalar, native_cli_character, native_cli_cell_width } from host
@@ -448,6 +448,8 @@ def repl_incomplete(text: String): Boolean
 	end
 	mut depth := 0
 	mut delimiters := 0
+	mut transfer_depth :=- 1
+	mut transfer_delimiters :=- 1
 	mut index := 0
 	while index < state.token_count[0]
 		if token_is(state, index, "def")
@@ -456,7 +458,29 @@ def repl_incomplete(text: String): Boolean
 		if token_is(state, index, "record")
 			depth += 1
 		end
+		if token_is(state, index, "return") || token_is(state, index, "break") || token_is(state, index, "next")
+			transfer_depth = depth
+			transfer_delimiters = delimiters
+		end
+		if load_integer(state.token_kinds, index) == 4 || token_is(state, index, ";")
+			if delimiters == 0
+				transfer_depth =- 1
+			end
+		end
 		if token_is(state, index, "if")
+			mut modifier := false
+			if index > 0 && transfer_depth == depth && transfer_delimiters == delimiters
+				previous := load_integer(state.token_kinds, index - 1)
+				modifier = previous == 1 || previous == 2 || previous == 3 || token_is(state, index - 1, ")") || token_is(state, index - 1, "]") || token_is(state, index - 1, "}")
+				if token_is(state, index - 1, "if") || token_is(state, index - 1, "else") || token_is(state, index - 1, "when")
+					modifier = false
+				end
+			end
+			if !modifier
+				depth += 1
+			end
+		end
+		if token_is(state, index, "case")
 			depth += 1
 		end
 		if token_is(state, index, "while") || token_is(state, index, "do")

@@ -37,6 +37,20 @@ integration; detailed qualification occurs at coherent milestones. A feature
 need not manufacture a runtime speedup or a separate size budget revision to
 justify its existence. Final performance goals remain unchanged.
 
+## Value-producing control and lexical transfers
+
+Full `if`/`elsif`/`else`, Integer/String literal `case`, and ternary expressions
+produce checked values through ordinary typed MIR joins. Branches execute lazily;
+case evaluates its selector once. Numeric branches widen to Float where needed,
+branch-local bindings stay scoped, and managed aliases retain their reference
+capabilities. Value-producing full controls currently require an `else`.
+
+Conditional `return`, `break` and `next` evaluate their guard before the guarded
+value or transfer. A branch that transfers contributes no join operand. Enclosing
+expressions preserve evaluation order and skip subsequent work after an
+unconditional transfer. See [the ownership decision](decisions/0041-value-control-mir.md)
+for the supported subset, verification and remaining pattern/type boundaries.
+
 ## Named/default arguments and record field order
 
 Ordinary functions support positional parameters followed by `*` and named-only

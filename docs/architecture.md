@@ -114,7 +114,7 @@ Its explicit transitive import closure contains 59 canonical implementation modu
 | `argument_binding.trb`, `default_arguments.trb` | Shared argument slots, duplicate/order rejection, private declaration-scoped default identities and typed prefix bindings for checking and the REPL; see [default lowering](decisions/0040-default-initializer-mir.md). |
 | `checked_program.trb`, `checked_values.trb`, `checked_types.trb` | Recursive expression/body checking, typed checked values and shared type/operator rules. |
 | `mir.trb`, `mir_types.trb`, `mir_analysis.trb`, `mir_numeric.trb`, `mir_array_loops.trb`, `mir_flow.trb`, `mir_identities.trb`, `mir_roots.trb`, `mir_passes.trb`, `mir_verifier.trb`, `mir_instructions.trb` | MIR model, semantic composite types and queries, reusable proofs, CFG/dominance, operation effects/liveness/root plans, rewrites, structural verification and instruction contracts. |
-| `mir_construction.trb`, `mir_builder.trb`, `mir_control.trb`, `mir_calls.trb`, `mir_intrinsics.trb`, `mir_logical.trb`, `mir_strings.trb`, `mir_arrays.trb`, `mir_records.trb`, `mir_hashes.trb`, `mir_hash_inference.trb`, `mir_ranges.trb`, `mir_iteration_control.trb` | Declaration-bound ordinary/runtime/host and standard-package call contracts, checked ABI shapes, block construction and publication of scalar and mutable scalar/managed control/value, Array, nominal record, Hash and Range operations, checked empty-Hash type constraints, live Array/streaming Range loops, conversion/I/O and short-circuit MIR. |
+| `mir_construction.trb`, `mir_builder.trb`, `mir_control.trb`, `mir_value_control.trb`, `mir_calls.trb`, `mir_intrinsics.trb`, `mir_logical.trb`, `mir_strings.trb`, `mir_arrays.trb`, `mir_records.trb`, `mir_hashes.trb`, `mir_hash_inference.trb`, `mir_ranges.trb`, `mir_iteration_control.trb` | Declaration-bound ordinary/runtime/host and standard-package call contracts, checked ABI shapes, block construction and publication of scalar and mutable scalar/managed control/value, Array, nominal record, Hash and Range operations, checked empty-Hash type constraints, live Array/streaming Range loops, conversion/I/O and short-circuit MIR. |
 | `qbe_context.trb`, `qbe_functions.trb`, `qbe_numeric.trb`, `qbe_constants.trb` | Target context, function ABI/root-frame emission, MIR-selected numeric lowering and static data. |
 | `qbe_calls.trb`, `qbe_mir.trb`, `qbe_control.trb`, `qbe_strings.trb`, `qbe_arrays.trb`, `qbe_records.trb`, `qbe_hashes.trb`, `qbe_ranges.trb`, `qbe_roots.trb` | Shared typed scalar/call adaptation, verified Array loop plans, general scalar/managed blocks and MIR-selected root publication. |
 | `hash_types.trb`, `hash_mir.trb`, `hash_checked.trb` | Hash types and value layout, operation plans, and their checked source bindings. |
@@ -126,7 +126,8 @@ Its explicit transitive import closure contains 59 canonical implementation modu
 
 The [shared iteration proof module](../compiler/src/iteration_checked.trb)
 serves the checker, compiler entry, and REPL without importing the recursive
-checker or emitter. Recursive body checking stays in `checked_program.trb`.
+checker or emitter. Recursive expression/body checking stays in `checked_program.trb`; the independent
+[value-join builder](decisions/0041-value-control-mir.md) owns typed result edges.
 The current iteration plans cover Array and `Range<Integer>` statement `each`
 and `each.with_index`. Checked Range construction retains the two Integer endpoint
 regions and exclusivity; the same source-proof module validates construction

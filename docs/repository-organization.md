@@ -10,6 +10,7 @@ agree. Completed naming and extraction history is available in the
 | Current area | Responsibility |
 | --- | --- |
 | `compiler/src/` | Ordinary compiler: `CompilerState`, `CheckedLocals`, `CheckedValue`, `QbeEmitContext`, and `QbeValue` use role names. Lexing and source slicing live in `lexer.trb`; MIR records, construction, analysis, rewrites, verification and QBE adaptation have separate modules; see the [architecture map](architecture.md). |
+| `compiler/src/mir_value_control.trb` | Typed branch exits, common result blocks and numeric join conversions; recursive source checking and REPL evaluation consume shared frontend regions. |
 | `compiler/src/default_arguments.trb` | Private initializer declaration identities and preceding typed slots; ordinary checked functions and MIR own their bodies and calls. |
 | `compiler/cli/repl_project.trb` | REPL project discovery, generated-import filtering and visible nominal type names. Session checking/evaluation remains in the REPL adapters. |
 | `src/snapshot_validation.trb` and shared snapshot/diagnostic/MIR modules | Snapshot boundary validation and shared support. |
@@ -33,6 +34,9 @@ are removed. Numeric expansion, Array-header validity and root plans are selecte
 and verified above QBE; function ABI emission lives in `qbe_functions.trb`.
 Split the large checker, MIR and emitter modules by those responsibilities, with
 explicit dependencies rather than copied helpers or forwarding aliases.
+The value-join builder has been extracted. Expression/body checking remains
+mutually recursive; separating it into modules requires removing that dependency
+cycle because ordinary Native module imports must be acyclic.
 
 Keep source moves and their recovery derivation, imports, tests and operational
 consumers together. Useful shared code remains one implementation. Complete

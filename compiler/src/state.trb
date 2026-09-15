@@ -14,7 +14,29 @@ record DefaultInitializer
 	finish: Integer
 end
 
+# Parsed branch regions retained for checking and the checked REPL projection.
+# Native execution uses only the resulting typed MIR blocks and edges.
+record ControlBranch
+	condition: Integer
+	condition_finish: Integer
+	body: Integer
+	finish: Integer
+end
+
+record ControlSyntax
+	kind: Integer
+	origin: Integer
+	finish: Integer
+	selector: Integer
+	selector_finish: Integer
+	branches: Array<ControlBranch>
+end
+
 record CompilerState
+	controls: Array<ControlSyntax>
+	# Positive rows identify parsed controls; -1 marks a non-completing Hash literal.
+	control_origins: IntegerStorage
+	control_types: StringStorage
 	default_initializers: Array<DefaultInitializer>
 	default_functions: Array<Integer>
 	parameter_defaults: IntegerStorage
@@ -87,6 +109,7 @@ end
 
 def compiler_new(capacity: Integer): CompilerState
 	return CompilerState.new(
+		controls: [], control_origins: integer_storage(capacity), control_types: string_storage(capacity),
 		default_initializers: [], default_functions: [],
 		parameter_defaults: integer_storage(capacity),
 		field_defaults: integer_storage(capacity),
@@ -213,6 +236,7 @@ def diagnostic(mut state: CompilerState, code: String, line: Integer, message: S
 end
 
 record CheckedLocals
+	lexical_loop: Array<Integer>
 	hash_literal_origins: IntegerStorage
 	names: StringStorage
 	types: StringStorage
@@ -234,6 +258,7 @@ end
 
 def locals_new(capacity: Integer): CheckedLocals
 	return CheckedLocals.new(
+		lexical_loop: [- 1],
 		hash_literal_origins: integer_storage(capacity),
 		names: string_storage(capacity),
 		types: string_storage(capacity),
