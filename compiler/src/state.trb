@@ -1,3 +1,4 @@
+import { CatchSyntax, ResultOperation } from result_model
 import { GenericDefinition, GenericInstance } from generic_model
 import { EnumDefinition, EnumField, EnumPattern, EnumVariant } from enum_model
 import { MirHashOperation } from hash_mir
@@ -53,6 +54,10 @@ record CheckedSubmission
 end
 
 record CompilerState
+	catch_syntax: Array<CatchSyntax>
+	catch_origins: IntegerStorage
+	result_operations: Array<ResultOperation>
+	standard_modules: IntegerStorage
 	generic_definitions: Array<GenericDefinition>
 	generic_instances: Array<GenericInstance>
 	generic_instance_lookup: Hash<String, Integer>
@@ -145,6 +150,8 @@ end
 
 def compiler_new(capacity: Integer): CompilerState
 	return CompilerState.new(
+		catch_syntax: [], catch_origins: integer_storage(capacity), result_operations: [],
+		standard_modules: integer_storage(capacity),
 		generic_definitions: [], generic_instances: [], generic_instance_lookup: {}, generic_depth: [0],
 		generic_application_types: string_storage(capacity), generic_application_finishes: integer_storage(capacity),
 		enums: [], enum_variants: [], enum_fields: [], enum_patterns: [], enum_pattern_origins: integer_storage(capacity),
@@ -289,6 +296,8 @@ record NullableFact
 end
 
 record CheckedLocals
+	result_pending: IntegerStorage
+	result_uses: IntegerStorage
 	nullable_facts: Array<NullableFact>
 	nullable_state: Array<Integer>
 	lexical_loop: Array<Integer>
@@ -313,6 +322,7 @@ end
 
 def locals_new(capacity: Integer): CheckedLocals
 	return CheckedLocals.new(
+		result_pending: integer_storage(capacity), result_uses: integer_storage(capacity),
 		nullable_facts: [],
 		nullable_state: [- 1, 0],
 		lexical_loop: [- 1],
@@ -363,6 +373,8 @@ def local_add(
 		return false
 	end
 	index := locals.count[0]
+	store_integer(locals.result_pending, index, 0)
+	store_integer(locals.result_uses, index, 0)
 	store_string(locals.names, index, name)
 	store_string(locals.types, index, type_name)
 	store_integer(locals.mutable, index, mutable)

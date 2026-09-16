@@ -1,3 +1,4 @@
+import { checked_result_try, result_interactive_entry, result_operation, result_scope_check, standard_result_instance } from result_checked
 import { advance, expect, expect_identifier, finish_statement, parse_type, skip_newlines, token_is } from syntax_tokens
 import { check_enum_bindings, check_enum_patterns } from enum_checked
 import { mir_enum_construct, mir_enum_operation } from enum_mir
@@ -282,6 +283,17 @@ def check_primary(
 	if token_is(state, position[0], "if") || token_is(state, position[0], "case")
 		return check_control_value(state, position, locals, true, expected, checked_value("Invalid", 0, 9007199254740991, 0))
 	end
+	if token_is(state, position[0], "try")
+		try_origin := position[0]
+		advance(position)
+		value := check_postfix(state, position, locals, check_primary(state, position, locals, ""))
+		if value.type_name == "Never"
+			return value
+		end
+		boundary := load_string(state.function_result_types, locals.mir_state[1])
+		operation := result_operation(state, try_origin, position[0], value.type_name, boundary)
+		return checked_result_try(state, locals, value, operation)
+	end
 	origin := position[0]
 	line := load_integer(state.token_lines, origin)
 	kind := load_integer(state.token_kinds, origin)
@@ -392,6 +404,7 @@ def check_primary(
 		end
 		local_index := local_find(locals, name)
 		if local_index >= 0
+			store_integer(locals.result_uses, local_index, sparse_integer_at(locals.result_uses, local_index) + 1)
 			mir_value := load_integer(locals.mir_values, local_index)
 			mut category := 0
 			if locals.mir_state[0] > 0 && mir_value > 0
@@ -1019,7 +1032,7 @@ def check_declaration(
 		end
 	end
 	expect(state, position, ":=")
-	value := check_expression(state, position, locals, 1, declared_type)
+	value := check_statement_value(state, position, locals, declared_type)
 	value_type := value.type_name
 	if mutable == 1
 		if checked_readonly_reference_binding(state, locals, value)
@@ -1037,6 +1050,9 @@ def check_declaration(
 		diagnostic(state, "TRBN4004", line, "local binding cannot have type Void")
 	end
 	added := local_add(state, locals, name, local_type, mutable, line)
+	if added && standard_result_instance(state, local_type) >= 0 && !result_interactive_entry(state, locals)
+		store_integer(locals.result_pending, locals.count[0] - 1, origin + 1)
+	end
 	if added
 		nullable_replace(locals, locals.count[0] - 1, local_type)
 	end
@@ -1072,7 +1088,7 @@ def check_simple_statement(
 	): CheckedValue
 	origin := position[0]
 	line := load_integer(state.token_lines, position[0])
-	left := check_expression(state, position, locals, 1, "")
+	left := check_statement_value(state, position, locals, "")
 	mut display_mutable := 0
 	if left.nullable_binding >= 0 && left.nullable_field == - 1
 		display_mutable = left.mutable
@@ -1099,7 +1115,7 @@ def check_simple_statement(
 		if left.nullable_binding >= 0 && left.nullable_field == - 1
 			expected = load_string(locals.types, left.nullable_binding)
 		end
-		right := check_expression(state, position, locals, 1, expected)
+		right := check_statement_value(state, position, locals, expected)
 		if right.type_name == "Never"
 			finish_statement(state, position)
 			return right
@@ -1126,7 +1142,7 @@ def check_simple_statement(
 				diagnostic(state, "TRBN4004", line, "assignment target is immutable")
 			end
 			advance(position)
-			right := check_expression(state, position, locals, 1, left.type_name)
+			right := check_statement_value(state, position, locals, left.type_name)
 			if right.type_name == "Never"
 				finish_statement(state, position)
 				return right
@@ -1155,6 +1171,8 @@ end
 
 def checked_iteration_binding(mut locals: CheckedLocals, name: String, type_name: String)
 	index := locals.count[0]
+	store_integer(locals.result_pending, index, 0)
+	store_integer(locals.result_uses, index, 0)
 	store_string(locals.names, index, name)
 	store_string(locals.types, index, type_name)
 	store_integer(locals.mutable, index, 1)
@@ -1216,6 +1234,7 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 	if position[0] != plan.body_finish
 		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "invalid iteration body boundary")
 	end
+	result_scope_check(state, locals, saved)
 	mir_checked_iteration_end(state, locals, plan, saved)
 	locals.count[0] = saved
 	nullable_finish(locals, flow_parent, flow_first, saved)
@@ -1238,6 +1257,7 @@ def checked_while(mut state: CompilerState, mut position: Array<Integer>, mut lo
 	mir_control_loop_branch(state, locals, condition, exit, line)
 	nullable_apply(locals, condition.truth)
 	check_block(state, position, locals, result_type, origin)
+	result_scope_check(state, locals, count)
 	locals.count[0] = count
 	mir_control_loop_end(state, locals, load_integer(state.token_lines, position[0]))
 	nullable_finish(locals, flow_parent, flow_first, count)
@@ -1262,6 +1282,7 @@ def check_block_value(mut state: CompilerState, mut position: Array<Integer>, mu
 			diagnostic(state, "TRBN4004", load_integer(state.token_lines, position[0]), "unexpected end of input")
 			break
 		end
+		statement_origin := position[0]
 		checked_submission_boundary(state, locals, position[0])
 		if diverged
 			# Continue checking unreachable syntax and types without creating
@@ -1319,6 +1340,17 @@ def check_block_value(mut state: CompilerState, mut position: Array<Integer>, mu
 			result = check_declaration(state, position, locals)
 		else
 			result = check_simple_statement(state, position, locals)
+		end
+		if standard_result_instance(state, result.type_name) >= 0 && !result_interactive_entry(state, locals)
+			mut after := [position[0]]
+			skip_newlines(state, after)
+			mut last := syntax_block_end(state, after[0])
+			if !last
+				last = syntax_conditional_tail(state, after[0])
+			end
+			if !wants_value || !last
+				diagnostic(state, "TRBN4004", load_integer(state.token_lines, statement_origin), "Result value must be used; handle, return, pass or store it")
+			end
 		end
 		if result.type_name == "Never"
 			diverged = true
@@ -1423,6 +1455,7 @@ def check_control_value(mut state: CompilerState, mut position: Array<Integer>, 
 		if reachable && value.type_name != "Never" && checked_readonly_reference_binding(state, locals, value)
 			immutable_reference = true
 		end
+		result_scope_check(state, locals, saved_count)
 		locals.count[0] = saved_count
 		if value.type_name != "Never" && reachable
 			completing += 1
@@ -1595,7 +1628,7 @@ def check_transfer_value(mut state: CompilerState, mut position: Array<Integer>,
 			locals.mir_state[4] =- 2
 		end
 	else
-		value := check_expression(state, position, locals, 1, result_type)
+		value := check_statement_value(state, position, locals, result_type)
 		if result_type == "Void" && value.type_name != "Never"
 			diagnostic(state, "TRBN4004", line, "Void function cannot return a value")
 		elsif value.type_name != "Never" && locals.mir_state[0] > 0
@@ -1736,4 +1769,48 @@ def check_enum_constructor(mut state: CompilerState, mut position: Array<Integer
 		return checked_value("Never", 0, origin, 0)
 	end
 	return mir_enum_construct(state, locals, variant, bindings.values, origin)
+end
+
+# Check one Result and lower both outcomes with the existing enum/CFG machinery.
+def check_statement_value(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, expected: String): CheckedValue
+	origin := position[0]
+	encoded := sparse_integer_at(state.catch_origins, origin)
+	if encoded == 0
+		return check_expression(state, position, locals, 1, expected)
+	end
+	handler := state.catch_syntax[encoded - 1]
+	value := check_expression(state, position, locals, 1, "")
+	operation := result_operation(state, origin, handler.finish, value.type_name, "")
+	if has_diagnostic(state)
+		return checked_value("Invalid", 0, origin, 0)
+	end
+	line := load_integer(state.token_lines, origin)
+	saved_count := locals.count[0]
+	saved_flow := locals.nullable_state[0]
+	flow_first := locals.nullable_facts.size()
+	mut join := mir_value_join(locals, line)
+	condition := mir_enum_operation(state, locals, 38, value, - 1, operation.ok_variant, "Boolean", origin)
+	failure := mir_control_branch(state, locals, condition, line)
+	payload := mir_enum_operation(state, locals, 39, value, - 1, state.enum_variants[operation.ok_variant].field_start, operation.success_type, origin)
+	mir_value_exit(state, locals, join, payload)
+	mir_control_enter(state, locals, failure, line)
+	error := mir_enum_operation(state, locals, 39, value, - 1, state.enum_variants[operation.err_variant].field_start, operation.error_type, origin)
+	checked_iteration_binding(locals, load_string(state.token_texts, handler.binding), operation.error_type)
+	store_integer(locals.mutable, locals.count[0] - 1, 0)
+	store_integer(locals.mir_values, locals.count[0] - 1, checked_mir_value(error) + 1)
+	position[0] = handler.body
+	boundary := load_string(state.function_result_types, locals.mir_state[1])
+	recovered := check_block_value(state, position, locals, boundary, locals.lexical_loop[0], true)
+	result_scope_check(state, locals, saved_count)
+	locals.count[0] = saved_count
+	if recovered.type_name != "Never"
+		check_expected(state, recovered.type_name, operation.success_type, line)
+		converted := mir_nullable_coerce(state, locals, recovered, operation.success_type, origin)
+		mir_value_exit(state, locals, join, converted)
+	end
+	nullable_finish(locals, saved_flow, flow_first, saved_count)
+	position[0] = handler.finish
+	result := mir_value_complete(state, locals, join, operation.success_type, origin)
+	check_expected(state, result.type_name, expected, line)
+	return mir_nullable_coerce(state, locals, result, expected, origin)
 end
