@@ -4,7 +4,7 @@ import { GenericInstance } from generic_model
 import { generic_application, generic_arguments, generic_base, generic_substitute } from generic_arguments
 import { enum_type, find_enum_type } from enum_types
 import { nullable_common, nullable_element, nullable_type } from nullable_types
-import { hash_key_type, hash_type, hash_value_type, native_value_layout } from hash_types
+import { hash_key_type, hash_type, hash_value_type, semantic_value_type } from hash_types
 import { ascii_code, integer_string } from literals
 import { string_starts_with } from path
 import { CompilerState, diagnostic, has_diagnostic } from state
@@ -103,6 +103,31 @@ def resolve_type_name(
 		type_name: String,
 		allow_void: Boolean,
 	): String
+	encoded := state.checked[0].generic_instance[0]
+	if encoded > 0
+		instance := state.generic_function_instances[encoded - 1]
+		definition := state.generic_functions[instance.definition]
+		if module_index == definition.source_id
+			bound := generic_substitute(type_name, definition.type_parameters, instance.arguments)
+			if bound != type_name
+				return resolve_type_name(state, module_index, bound, allow_void)
+			end
+		end
+	end
+	if state.generic_template_mode[0] && string_starts_with(type_name, "TypeParameter#")
+		mut definition := 0
+		while definition < state.generic_functions.size()
+			mut parameter := 0
+			while parameter < state.generic_functions[definition].type_parameters.size()
+				if type_name == "TypeParameter#" + integer_string(definition) + "#" + integer_string(parameter)
+					return type_name
+				end
+				parameter += 1
+			end
+			definition += 1
+		end
+		return ""
+	end
 	if string_starts_with(type_name, "Record#") || string_starts_with(type_name, "Enum#")
 		if find_record_type(state, type_name) >= 0 || find_enum_type(state, type_name) >= 0
 			return type_name
@@ -191,6 +216,8 @@ def instantiate_generic_nominal(mut state: CompilerState, definition: Integer, a
 	previous_module := state.active_module[0]
 	state.active_module[0] = declaration.source_id
 	state.generic_depth[0] += 1
+	saved_binding := state.checked[0].generic_instance[0]
+	state.checked[0].generic_instance[0] = 0
 	name := generic_application(declaration.name, arguments)
 	mut type_name := ""
 	mut owner := 0
@@ -254,6 +281,7 @@ def instantiate_generic_nominal(mut state: CompilerState, definition: Integer, a
 		end
 	end
 	state.generic_depth[0] -= 1
+	state.checked[0].generic_instance[0] = saved_binding
 	state.active_module[0] = previous_module
 	return type_name
 end
@@ -323,7 +351,7 @@ end
 
 def array_element_type(type_name: String): String
 	element := array_inner_name(type_name)
-	if element != "" && native_value_layout(element)
+	if element != "" && semantic_value_type(element)
 		return element
 	end
 	return ""

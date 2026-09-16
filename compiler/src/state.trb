@@ -1,6 +1,6 @@
 import { CheckedBody, checked_body_new } from checked_body
 import { CatchSyntax } from result_model
-import { GenericDefinition, GenericInstance } from generic_model
+import { GenericDefinition, GenericFunction, GenericFunctionInstance, GenericInstance } from generic_model
 import { EnumDefinition, EnumField, EnumVariant } from enum_model
 import { MirIteration } from iteration_mir
 import { integer_string } from literals
@@ -64,6 +64,11 @@ record CompilerState
 	generic_instances: Array<GenericInstance>
 	generic_instance_lookup: Hash<String, Integer>
 	generic_depth: Array<Integer>
+	generic_functions: Array<GenericFunction>
+	generic_function_instances: Array<GenericFunctionInstance>
+	generic_function_lookup: Hash<String, Integer>
+	function_generic_instances: IntegerStorage
+	generic_template_mode: Array<Boolean>
 	enums: Array<EnumDefinition>
 	enum_variants: Array<EnumVariant>
 	enum_fields: Array<EnumField>
@@ -77,6 +82,7 @@ record CompilerState
 	parameter_defaults: IntegerStorage
 	field_defaults: IntegerStorage
 	function_defaults: IntegerStorage
+	record_default_parameters: IntegerStorage
 	iterations: Array<MirIteration>
 	iteration_origins: IntegerStorage
 	hash_repl: Array<Boolean>
@@ -141,6 +147,8 @@ def compiler_new(capacity: Integer): CompilerState
 		catch_syntax: [], catch_origins: integer_storage(capacity),
 		standard_modules: integer_storage(capacity),
 		generic_definitions: [], generic_instances: [], generic_instance_lookup: {}, generic_depth: [0],
+		generic_functions: [], generic_function_instances: [], generic_function_lookup: {},
+		function_generic_instances: integer_storage(capacity), generic_template_mode: [false],
 		enums: [], enum_variants: [], enum_fields: [],
 		submissions: [],
 		loop_finishes: integer_storage(capacity),
@@ -149,6 +157,7 @@ def compiler_new(capacity: Integer): CompilerState
 		parameter_defaults: integer_storage(capacity),
 		field_defaults: integer_storage(capacity),
 		function_defaults: integer_storage(capacity),
+		record_default_parameters: integer_storage(capacity),
 		iterations: [], iteration_origins: integer_storage(capacity),
 		hash_repl: [false],
 		token_kinds: integer_storage(capacity),
@@ -379,5 +388,6 @@ def select_checked_body(mut state: CompilerState, function: Integer): CheckedBod
 		store_integer(state.checked_body_indices, function, encoded)
 	end
 	state.checked[0] = state.checked_bodies[encoded - 1]
+	state.checked[0].generic_instance[0] = sparse_integer_at(state.function_generic_instances, function)
 	return previous
 end

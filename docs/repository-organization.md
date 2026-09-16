@@ -47,6 +47,12 @@ facts at identical source origins, caller restoration in the REPL, unchanged
 emission after projection erasure, and complete ordinary/recovery checks.
 See [decision 0047](decisions/0047-checked-body-ownership.md).
 
+Generic function orchestration is split into instance declaration, an isolated
+semantic program fork, and template checking. Shared syntax stays immutable;
+concrete body facts and MIR remain function-owned. These modules extend the same
+source-erasure and ordinary/recovery checks without a second backend path; see
+[decision 0048](decisions/0048-generic-function-mir.md).
+
 Keep source moves and their recovery derivation, imports, tests and operational
 consumers together. Useful shared code remains one implementation. Complete
 cohesive ownership changes without requiring another performance qualification

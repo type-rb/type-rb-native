@@ -1,5 +1,5 @@
 import { result_scope_check } from result_checked
-import { check_block, check_expression } from checked_program
+import { check_block, check_block_value, check_expression } from checked_program
 import { checked_mir_value, scalar_mir_disable } from checked_values
 import { checked_hash_verify } from hash_checked
 import { mir_add_parameter, scalar_mir_begin, scalar_mir_commit } from mir_builder
@@ -9,7 +9,7 @@ import { mir_managed_type, mir_semantic_type_id } from mir_types
 import { verify_mir } from mir_verifier
 import { validate_import_usage } from resolution
 import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_add, locals_new, select_checked_body } from state
-import { load_integer, load_string, sparse_integer_at } from storage
+import { load_integer, load_string, sparse_integer_at, store_integer } from storage
 
 # Parameter binding and body checking are separate semantic stages. Production
 # always starts MIR here and requires an owned body before finalization.
@@ -17,7 +17,11 @@ def checked_function_locals(mut state: CompilerState, function_index: Integer): 
 	select_checked_body(state, function_index)
 	state.active_module[0] = load_integer(state.function_modules, function_index)
 	mut locals := locals_new(state.token_count[0] + 1)
-	scalar_mir_begin(state, function_index, locals)
+	if state.generic_template_mode[0]
+		locals.mir_state[1] = function_index
+	else
+		scalar_mir_begin(state, function_index, locals)
+	end
 	parameter_start := load_integer(state.function_parameter_starts, function_index)
 	parameter_finish := parameter_start + load_integer(state.function_parameter_counts, function_index)
 	mut parameter_index := parameter_start
@@ -31,6 +35,7 @@ def checked_function_locals(mut state: CompilerState, function_index: Integer): 
 			load_integer(state.parameter_lines, parameter_index),
 		)
 		if added
+			store_integer(locals.mir_values, locals.count[0] - 1, 0)
 			mir_add_parameter(state, locals, parameter_index)
 		end
 		parameter_index += 1
@@ -64,7 +69,14 @@ def check_function_body(mut state: CompilerState, function_index: Integer, mut l
 			scalar_mir_disable(locals)
 		end
 	else
-		check_block(state, position, locals, result_type, - 1)
+		if state.generic_template_mode[0]
+			completion := check_block_value(state, position, locals, result_type, - 1, false)
+			if result_type != "Void" && completion.type_name != "Never"
+				diagnostic(state, "TRBN4004", load_integer(state.function_lines, function_index), "generic function must return on every completing path")
+			end
+		else
+			check_block(state, position, locals, result_type, - 1)
+		end
 	end
 	result_scope_check(state, locals, 0)
 	if position[0] != load_integer(state.function_body_ends, function_index)
@@ -78,7 +90,7 @@ def check_function_body(mut state: CompilerState, function_index: Integer, mut l
 	if result_type == "Void" && mir_control_active(locals) && locals.mir_control[6] == 0
 		mir_control_return(state, locals, - 1)
 	end
-	if !has_diagnostic(state)
+	if !has_diagnostic(state) && !state.generic_template_mode[0]
 		mir_error := scalar_mir_commit(state, function_index, locals)
 		if mir_error != ""
 			diagnostic(
