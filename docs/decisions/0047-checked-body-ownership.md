@@ -19,6 +19,11 @@ select the same body; REPL calls select and restore it explicitly, including
 failure and early-return paths. Private default initializer functions use the
 same mechanism.
 
+Body storage translates authored coordinates relative to its source span. Empty
+prefixes from earlier declarations therefore do not accumulate once per function.
+Read/write bounds and diagnostics retain absolute source coordinates, while
+unwritten chunks remain unallocated.
+
 Parsed controls and iteration regions remain shared immutable source structure.
 Checking publishes typed iteration plans separately and stores non-completing
 Hash expression facts in the checked body rather than modifying parsed control

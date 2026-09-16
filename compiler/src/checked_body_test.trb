@@ -9,12 +9,32 @@ import { lex } from lexer
 import { parse_module } from parser
 import { resolve } from resolution
 import { compiler_new, select_checked_body } from state
-import { load_integer, load_string, store_integer } from storage
+import { load_integer, load_string, sparse_integer_at, sparse_string_at, store_integer, store_string } from storage
 import trb/std/process
 import trb/std/result
 import { describe, expect, test } from trb/std/test
 
 describe("Checked function body ownership") do
+	test("stores large absolute origins in bounded body-local chunks") do
+		mut body := checked_body_new(0, 1000001, 1000514)
+		expect(store_integer(body.safe_finishes, 1000000, 3)).to_be_false()
+		expect(store_integer(body.safe_finishes, 1000514, 3)).to_be_false()
+		expect(sparse_integer_at(body.safe_finishes, 1000001)).to_equal(0)
+		expect(store_integer(body.safe_finishes, 1000001, 7)).to_be_true()
+		expect(store_integer(body.safe_finishes, 1000513, 9)).to_be_true()
+		expect(load_integer(body.safe_finishes, 1000001)).to_equal(7)
+		expect(load_integer(body.safe_finishes, 1000513)).to_equal(9)
+		expect(sparse_integer_at(body.safe_finishes, 1000257)).to_equal(0)
+		expect(body.safe_finishes.chunks[0].size()).to_equal(3)
+		expect(body.safe_finishes.chunks[0][1].size()).to_equal(0)
+		expect(store_string(body.safe_types, 1000513, "String?")).to_be_true()
+		expect(load_string(body.safe_types, 1000513)).to_equal("String?")
+		expect(sparse_string_at(body.safe_types, 1000001)).to_equal("")
+		expect(sparse_string_at(body.safe_types, 1000000)).to_equal("")
+		expect(store_string(body.safe_types, 1000514, "outside")).to_be_false()
+		expect(body.safe_types.chunks[0].size()).to_equal(3)
+	end
+
 	test("keeps distinct typed projections for shared authored source origins") do
 		body := "if input != nil\nvalues := [input]\ntable := {1 => values[0]}\nfound := table[1]\nputs(found)\nend\n"
 		source := "def first(input: Integer?)\n" + body + "end\ndef second(input: String?)\n" + body + "end\ndef main()\nfirst(7)\nsecond(\"held\")\nend\n"
@@ -74,10 +94,10 @@ describe("Checked function body ownership") do
 		intrinsic_mir_erase(state)
 		mut index := 0
 		while index < state.checked_bodies.size()
-			state.checked_bodies[index] = checked_body_new(state.checked_bodies[index].function, 0)
+			state.checked_bodies[index] = checked_body_new(state.checked_bodies[index].function, 0, 0)
 			index += 1
 		end
-		state.checked[0] = checked_body_new(- 1, 0)
+		state.checked[0] = checked_body_new(- 1, 0, 0)
 		state.checked_body_indices.used[0] = 0
 		expect(control_test_output(emit_qbe(state))).to_equal(before)
 		expect(before.include?("data $trbn_desc_range")).to_be_true()
