@@ -44,7 +44,7 @@
 | Nil equality | accepts | accepts | matches reference | matches reference |
 | Payload enum and exhaustive case | accepts | accepts | matches reference | matches reference |
 | Raw-value enum | rejects valid input | rejects valid input | not reached | rejects valid input |
-| Transparent type alias | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Transparent type alias | accepts | accepts | matches reference | matches reference |
 | Nominal newtype construction and projection | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Parameters following nested generic annotations | accepts | accepts | matches reference | matches reference |
 | Generic function application | accepts | accepts | matches reference | matches reference |
@@ -232,3 +232,31 @@
 | Explicit fields do not hide invalid generic defaults | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Generic defaults cannot capture caller locals | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Generic defaults retain prior fields through full if and enum case expressions | accepts; reference rejects | accepts; reference rejects | differs | output differs |
+| Scalar aliases in signatures | accepts | accepts | matches reference | matches reference |
+| Aliases in Array and Hash arguments | accepts | accepts | matches reference | output differs |
+| Nullable generic alias | accepts | accepts | matches reference | matches reference |
+| Identity alias in generic function signatures | accepts | accepts; reference rejects | differs | matches reference |
+| Record constructor through an alias | accepts | accepts; reference rejects | differs | output differs |
+| Generic record alias and field defaults | accepts | accepts; reference rejects | differs | output differs |
+| Enum variants through an alias | accepts | accepts | matches reference | output differs |
+| Generic enum alias and pattern inference | accepts | accepts | matches reference | output differs |
+| Reordered generic alias pattern arguments | accepts | accepts | matches reference | output differs |
+| Nested generic alias pattern arguments | accepts | accepts | matches reference | output differs |
+| Result alias propagation and recovery | accepts | accepts | matches reference | matches reference |
+| Generic record defaults with aliased field types | accepts | accepts | matches reference | matches reference |
+| Reject Void as an alias target | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Imported aliases and record construction | accepts; reference rejects | accepts; reference rejects | differs | output differs |
+| Alias target resolves in its defining module | accepts | accepts; reference rejects | differs | matches reference |
+| Bare import of a type alias | accepts | accepts | matches reference | matches reference |
+| Recursive nominal alias | accepts | accepts; reference rejects | differs | rejects as reference |
+| Reject a direct alias cycle | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject a growing generic alias cycle | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject an unused unresolved alias | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject an unused alias with wrong arity | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject duplicate alias declarations | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject an alias with a nominal declaration name | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject incompatible generic alias arguments | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject inconsistent repeated alias pattern parameters | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject mismatched concrete alias pattern arguments | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Imported recursive alias in ordinary execution and REPL | accepts; reference rejects | accepts; reference rejects | differs | output differs |
+| Independent aliases in nested generic arguments | accepts | accepts | matches reference | matches reference |

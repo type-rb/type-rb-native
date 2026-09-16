@@ -2,12 +2,12 @@ import { next_generic_depth } from generic_bindings
 import { instantiate_generic_function, validate_generic_functions } from generic_functions
 import { generic_arguments, generic_base } from generic_arguments
 import { load_standard_source, standard_source_kind } from standard_library
-import { find_function_in_module, find_generic_function_in_module, find_generic_in_module, find_import_binding, find_record_in_module, find_visible_enum, find_visible_function, find_visible_generic, find_visible_generic_function, find_visible_record } from declaration_lookup
+import { find_alias_in_module, find_function_in_module, find_generic_function_in_module, find_generic_in_module, find_import_binding, find_record_in_module, find_visible_alias, find_visible_enum, find_visible_function, find_visible_generic, find_visible_generic_function, find_visible_record } from declaration_lookup
 import { resolve_type_name } from type_resolution
 import { EnumField } from enum_model
 import { parse_type, token_is } from syntax_tokens
 import { nominal_application_end } from generic_syntax
-import { validate_generic_declarations } from generic_validation
+import { validate_alias_declarations, validate_generic_declarations } from generic_validation
 import { find_enum_in_module, find_enum_variant } from enum_types
 import { syntax_loop_transfer_kind } from parser
 import { path_basename, path_directory, string_without_suffix } from path
@@ -313,6 +313,16 @@ def resolve_bare_imports(mut state: CompilerState): Boolean
 						matches += 1
 					end
 				end
+				state.type_aliases.each do |definition|
+					if definition.source_id == target && ascii_fold(definition.name) == wanted
+						if candidates != ""
+							candidates += ", "
+						end
+						candidates += definition.name
+						declaration = definition.name
+						matches += 1
+					end
+				end
 				raw_path := load_string(state.import_paths, import_index)
 				if matches == 0
 					mut matching_function := false
@@ -400,7 +410,7 @@ def validate_import_bindings(mut state: CompilerState): Boolean
 			end
 			other += 1
 		end
-		if find_record_in_module(state, module_index, name) >= 0 || find_enum_in_module(state, module_index, name) >= 0 || find_generic_in_module(state, module_index, name) >= 0
+		if find_record_in_module(state, module_index, name) >= 0 || find_enum_in_module(state, module_index, name) >= 0 || find_generic_in_module(state, module_index, name) >= 0 || find_alias_in_module(state, module_index, name) >= 0
 			diagnostic(state, "TRBN4003", line, "import binding conflicts with local declaration " + name)
 		end
 		if find_function_in_module(state, module_index, name) >= 0 || find_generic_function_in_module(state, module_index, name) >= 0
@@ -408,7 +418,7 @@ def validate_import_bindings(mut state: CompilerState): Boolean
 		end
 		mut exported := target < - 1
 		if target >= 0
-			if find_record_in_module(state, target, declaration) >= 0 || find_enum_in_module(state, target, declaration) >= 0 || find_generic_in_module(state, target, declaration) >= 0
+			if find_record_in_module(state, target, declaration) >= 0 || find_enum_in_module(state, target, declaration) >= 0 || find_generic_in_module(state, target, declaration) >= 0 || find_alias_in_module(state, target, declaration) >= 0
 				exported = true
 			end
 			if find_function_in_module(state, target, declaration) >= 0 || find_generic_function_in_module(state, target, declaration) >= 0
@@ -442,6 +452,9 @@ end
 
 def resolve_declarations(mut state: CompilerState): Boolean
 	if !validate_import_bindings(state)
+		return false
+	end
+	if !validate_alias_declarations(state)
 		return false
 	end
 	if !validate_generic_functions(state)
@@ -673,6 +686,14 @@ def resolve_function_body(
 					index = application_finish
 					next
 				end
+				if local_find(locals, text) < 0 && (token_is(state, index + 1, "::") || (token_is(state, index + 1, ".") && token_is(state, index + 2, "new")))
+					alias_index := find_visible_alias(state, module_index, text)
+					if alias_index >= 0 && state.type_aliases[alias_index].parameters.size() == 0
+						resolved := resolve_type_name(state, module_index, text, false)
+						store_string(state.checked[0].generic_application_types, index, resolved)
+						store_integer(state.checked[0].generic_application_finishes, index, index + 1)
+					end
+				end
 				mut keyword := resolution_keyword(text)
 				if syntax_loop_transfer_kind(state, index) > 0
 					mut leading := index == load_integer(state.function_body_starts, function_index)
@@ -694,7 +715,7 @@ def resolve_function_body(
 					end
 					if previous == "." || previous == "&." || previous == "::"
 					elsif token_is(state, index + 1, "::")
-						if find_visible_enum(state, module_index, text) < 0 && find_visible_generic(state, module_index, text) < 0
+						if find_visible_enum(state, module_index, text) < 0 && find_visible_generic(state, module_index, text) < 0 && find_visible_alias(state, module_index, text) < 0
 							diagnostic(state, "TRBN4003", load_integer(state.token_lines, index), "unresolved enum " + text)
 						end
 					else
@@ -726,7 +747,7 @@ def resolve_function_body(
 								else
 									if token_is(state, index + 1, ".")
 										if token_is(state, index + 2, "new")
-											if find_visible_record(state, module_index, text) < 0
+											if find_visible_record(state, module_index, text) < 0 && find_visible_alias(state, module_index, text) < 0
 												diagnostic(
 													state,
 													"TRBN4003",

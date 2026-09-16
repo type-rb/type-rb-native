@@ -1,5 +1,6 @@
+import { TypeAliasInstance } from alias_model
 import { abstract_generic_type_valid, add_generic_binding, next_generic_depth } from generic_bindings
-import { find_visible_enum, find_visible_generic, find_visible_record } from declaration_lookup
+import { find_visible_alias, find_visible_enum, find_visible_generic, find_visible_record } from declaration_lookup
 import { EnumDefinition, EnumField, EnumVariant } from enum_model
 import { GenericInstance } from generic_model
 import { generic_application, generic_arguments, generic_base, generic_substitute } from generic_arguments
@@ -127,13 +128,28 @@ def resolve_type_name(
 	if optional != ""
 		return nullable_type(resolve_type_name(state, module_index, optional, false))
 	end
-	key := hash_key_type(type_name)
-	if key != ""
-		value := resolve_type_name(state, module_index, hash_value_type(type_name), false)
-		if value == ""
+	parts := generic_arguments(type_name)
+	alias_index := find_visible_alias(state, module_index, generic_base(type_name))
+	if alias_index >= 0
+		mut arguments: Array<String> := []
+		parts.each do |part|
+			arguments.push(resolve_type_name(state, module_index, part, false))
+		end
+		return resolve_alias_type(state, alias_index, arguments)
+	end
+	if generic_base(type_name) == "Hash" && parts.size() == 2
+		key := resolve_type_name(state, module_index, parts[0], false)
+		value := resolve_type_name(state, module_index, parts[1], false)
+		if (key != "String" && key != "Integer") || value == ""
 			return ""
 		end
 		return hash_type(key, value)
+	end
+	if generic_base(type_name) == "Range" && parts.size() == 1
+		if resolve_type_name(state, module_index, parts[0], false) == "Integer"
+			return "Range<Integer>"
+		end
+		return ""
 	end
 	if builtin_type_exists(type_name, allow_void)
 		return type_name
@@ -204,6 +220,14 @@ def instantiate_generic_nominal(mut state: CompilerState, definition: Integer, a
 		return ""
 	end
 	previous_module := state.active_module[0]
+	saved_alias_depth := state.alias_expansion_depth[0]
+	mut saved_alias_path: Array<Integer> := []
+	mut alias_step := 0
+	while alias_step < saved_alias_depth
+		saved_alias_path.push(load_integer(state.alias_expansion_path, alias_step))
+		alias_step += 1
+	end
+	state.alias_expansion_depth[0] = 0
 	state.active_module[0] = declaration.source_id
 	state.generic_depth[0] += 1
 	saved_binding := state.checked[0].generic_binding[0]
@@ -276,6 +300,12 @@ def instantiate_generic_nominal(mut state: CompilerState, definition: Integer, a
 			variant += 1
 		end
 	end
+	alias_step = 0
+	saved_alias_path.each do |entry|
+		store_integer(state.alias_expansion_path, alias_step, entry)
+		alias_step += 1
+	end
+	state.alias_expansion_depth[0] = saved_alias_depth
 	state.generic_depth[0] -= 1
 	state.checked[0].generic_binding[0] = saved_binding
 	state.active_module[0] = previous_module
@@ -366,4 +396,52 @@ def common_array_element_type(left: String, right: String): String
 		return right
 	end
 	return nullable_common(left, right)
+end
+
+def resolve_alias_type(mut state: CompilerState, index: Integer, arguments: Array<String>): String
+	row := state.type_aliases[index]
+	if row.parameters.size() != arguments.size()
+		return ""
+	end
+	mut valid := true
+	arguments.each do |argument|
+		if argument == ""
+			valid = false
+		end
+	end
+	if !valid
+		return ""
+	end
+	key := generic_application(integer_string(index), arguments)
+	if state.alias_instance_lookup.key?(key)
+		return state.alias_instances[state.alias_instance_lookup[key]].type_name
+	end
+	depth := state.alias_expansion_depth[0]
+	mut item := 0
+	while item < depth
+		if load_integer(state.alias_expansion_path, item) == index
+			state.active_module[0] = row.source_id
+			diagnostic(state, "TRBN4003", row.line, "type alias cycle involving " + row.name)
+			return ""
+		end
+		item += 1
+	end
+	if depth >= 128
+		state.active_module[0] = row.source_id
+		diagnostic(state, "TRBN4003", row.line, "type alias expansion exceeds the compiler nesting limit")
+		return ""
+	end
+	store_integer(state.alias_expansion_path, depth, index)
+	state.alias_expansion_depth[0] = depth + 1
+	saved_binding := state.checked[0].generic_binding[0]
+	state.checked[0].generic_binding[0] = 0
+	target := generic_substitute(row.target, row.parameters, arguments)
+	resolved := resolve_type_name(state, row.source_id, target, false)
+	state.checked[0].generic_binding[0] = saved_binding
+	state.alias_expansion_depth[0] = depth
+	if resolved != "" && !has_diagnostic(state) && !state.alias_instance_lookup.key?(key)
+		state.alias_instance_lookup[key] = state.alias_instances.size()
+		state.alias_instances.push(TypeAliasInstance.new(definition: index, arguments: arguments, type_name: resolved))
+	end
+	return resolved
 end

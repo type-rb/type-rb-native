@@ -127,10 +127,10 @@ defaults and managed collections retain optional payloads through shared root
 planning. See [decision 0042](decisions/0042-nullable-mir.md) for the private layout
 and conservative fact invalidation across assignments and loop backedges.
 
-The ordinary compiler closure contains 87 modules. Implementation syntax stays
+The ordinary compiler closure contains 90 modules. Implementation syntax stays
 within the existing immutable seed and snapshot-v4 boundary; compiler self-use
 of the new syntax still depends on an accepted seed refresh. The shared language
-contract contains 230 cases with explicit remaining differences. Retained REPL
+contract contains 258 cases with explicit remaining differences. Retained REPL
 assignment flow now uses an ordinary checker projection, with conservative
 failure/interruption invalidation and explicit replay boundaries; see
 [decision 0043](decisions/0043-checked-repl-submissions.md). Ordinary enum payloads and exhaustive cases now have independently verified
@@ -145,7 +145,7 @@ operations and ordinary control-flow joins; see
 Function-owned checked projections now isolate concrete body facts while preserving
 authored origins; [decision 0047](decisions/0047-checked-body-ownership.md) records
 the prerequisite for generic body specialization.
-Generic methods/aliases/classes, structured package propagation boundaries,
+Generic methods/classes, structured package propagation boundaries,
 raw conversions, wider patterns/unions, full REPL display parity and final
 performance qualification remain open. This checkpoint does not imply complete
 basic-language coverage.
@@ -158,7 +158,10 @@ semantic fork and backend boundary. Generic record defaults now reuse ordinary
 record parsing and private typed initializer calls. Shared declaration-owned
 bindings keep function and nominal parameters independent; unused defaults are
 checked before concrete MIR publication. [Decision 0049](decisions/0049-generic-record-default-mir.md)
-records the shared ownership and verification. Other declaration families and
+records the shared ownership and verification. Transparent and generic aliases
+now expand to existing canonical types before MIR;
+[decision 0050](decisions/0050-transparent-alias-mir.md) records abstract validation,
+recursive nominal identity and REPL projections. Other declaration families and
 final performance qualification remain open.
 
 ## Development loop

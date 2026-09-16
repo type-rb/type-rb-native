@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 230 ordinary-path probes and 32 feature
+Status: the shared contract contains 258 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -101,11 +101,30 @@ resolves complete concrete catalogs before MIR construction; backend output does
 not consult generic templates or source spellings. See
 [decision 0045](decisions/0045-generic-nominal-mir.md).
 
-Generic methods, aliases and classes/interfaces remain separate gaps. The shared
+Generic methods and classes/interfaces remain separate gaps. The shared
 imported-generic-enum
 case records a pinned reference defect as a difference, not a successful parity
 claim. [TypeRB PR #704](https://github.com/type-rb/type-rb/pull/704) addresses
 its checker identity and Ruby constructor failures. Compiler self-use of generic syntax awaits a seed that supports it.
+
+## Transparent type aliases
+
+Ordinary top-level aliases and explicit generic aliases expand in their defining
+module to canonical scalar, container, nullable, record, enum and Result types.
+Constructors, defaults, nested/reordered enum pattern arguments and recursive
+nominal targets reuse the existing checked and verified MIR operations. Cyclic
+aliases and invalid unused declarations are rejected before MIR publication.
+REPL binding projections preserve canonical types; replay reconstructs visible
+aliases when their underlying declarations are hidden.
+
+[Decision 0050](decisions/0050-transparent-alias-mir.md) records ownership and
+verification. Literal/union, callable, class/interface targets and nested module
+aliases remain gaps. REPL display currently uses the underlying type rather than
+always retaining the authored alias. The fixed reference has alias-record
+construction ([TypeRB PR #709](https://github.com/type-rb/type-rb/pull/709)),
+[generic identity-alias Go output](https://github.com/type-rb/type-rb/issues/707) and
+[same-package nominal-name collision](https://github.com/type-rb/type-rb/issues/708)
+defects; shared expectations retain those failures explicitly.
 
 ## Generic functions and parameter defaults
 

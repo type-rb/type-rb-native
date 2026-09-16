@@ -1,17 +1,21 @@
+import { alias_pattern_type } from alias_patterns
 import { generic_program_fork } from generic_program
 import { instantiate_generic_function } from generic_functions
 import { check_function_body, checked_function_locals } from checked_functions
 import { declare_default_functions } from default_arguments
 import { resolve_function_body } from resolution
 import { abstract_generic_arguments, generic_record_defaults } from generic_bindings
-import { instantiate_generic_nominal } from type_resolution
+import { instantiate_generic_nominal, resolve_alias_type } from type_resolution
 import { CompilerState, diagnostic, has_diagnostic, locals_new } from state
-import { load_integer, load_string, store_integer } from storage
+import { load_integer, load_string, store_integer, store_string } from storage
 
 # Unused declarations receive exactly the same abstract validation as used ones.
 # Concrete arguments cannot make an invalid unconstrained template legal.
 def check_generic_templates(mut state: CompilerState): Boolean
 	mut needed := state.generic_functions.size() > 0
+	if state.type_aliases.size() > 0
+		needed = true
+	end
 	mut nominal := 0
 	while nominal < state.generic_definitions.size()
 		if generic_record_defaults(state, nominal)
@@ -23,7 +27,20 @@ def check_generic_templates(mut state: CompilerState): Boolean
 		return true
 	end
 	mut program := generic_program_fork(state)
-	mut function := program.function_count[0]
+	mut alias_index := 0
+	while alias_index < program.type_aliases.size() && !has_diagnostic(program)
+		row := program.type_aliases[alias_index]
+		arguments := abstract_generic_arguments("alias", alias_index, row.parameters)
+		target := resolve_alias_type(program, alias_index, arguments)
+		if target == ""
+			program.active_module[0] = row.source_id
+			diagnostic(program, "TRBN4003", row.line, "invalid type alias target " + row.target)
+		else
+			store_string(program.alias_patterns, alias_index, alias_pattern_type(program, target))
+		end
+		alias_index += 1
+	end
+	mut function := state.function_count[0]
 	mut definition := 0
 	while definition < program.generic_functions.size()
 		arguments := abstract_generic_arguments("function", definition, program.generic_functions[definition].type_parameters)
@@ -49,6 +66,11 @@ def check_generic_templates(mut state: CompilerState): Boolean
 			check_function_body(program, function, locals)
 		end
 		function += 1
+	end
+	alias_index = 0
+	while alias_index < state.type_aliases.size() && !has_diagnostic(program)
+		store_string(state.alias_patterns, alias_index, load_string(program.alias_patterns, alias_index))
+		alias_index += 1
 	end
 	mut binding := 0
 	while binding < state.import_count[0]

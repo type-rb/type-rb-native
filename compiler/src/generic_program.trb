@@ -1,3 +1,4 @@
+import { TypeAliasInstance } from alias_model
 import { generic_application } from generic_arguments
 import { integer_string } from literals
 import { GenericBinding, GenericFunctionInstance, GenericInstance } from generic_model
@@ -10,6 +11,14 @@ import { integer_storage_copy, load_integer, load_string, string_storage_copy } 
 # No synthetic source, token substitution, runtime layout or fallback is involved.
 def generic_program_fork(state: CompilerState): CompilerState
 	fresh := compiler_new(state.token_kinds.limit[0])
+	mut alias_instances: Array<TypeAliasInstance> := []
+	mut alias_lookup: Hash<String, Integer> := {}
+	mut alias_index := 0
+	state.alias_instances.each do |instance|
+		alias_instances.push(instance)
+		alias_lookup[generic_application(integer_string(instance.definition), instance.arguments)] = alias_index
+		alias_index += 1
+	end
 	mut generic_bindings: Array<GenericBinding> := []
 	state.generic_bindings.each do |binding|
 		generic_bindings.push(binding)
@@ -96,6 +105,12 @@ def generic_program_fork(state: CompilerState): CompilerState
 		catch_syntax: state.catch_syntax,
 		catch_origins: state.catch_origins,
 		standard_modules: state.standard_modules,
+		type_aliases: state.type_aliases,
+		alias_instances: alias_instances,
+		alias_instance_lookup: alias_lookup,
+		alias_patterns: string_storage_copy(state.alias_patterns),
+		alias_expansion_path: fresh.alias_expansion_path,
+		alias_expansion_depth: [0],
 		generic_definitions: state.generic_definitions,
 		generic_instances: generic_instances,
 		generic_instance_lookup: generic_instance_lookup,
