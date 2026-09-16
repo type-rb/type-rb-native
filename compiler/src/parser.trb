@@ -1,6 +1,6 @@
-import { GenericFunction, GenericParameter } from generic_model
+import { GenericDefinition, GenericField, GenericFunction, GenericParameter, GenericVariant } from generic_model
 import { CatchSyntax } from result_model
-import { nominal_application_end, parse_generic_nominal, parse_generic_parameters } from generic_syntax
+import { nominal_application_end, parse_generic_parameters } from generic_syntax
 import { advance, expect, expect_identifier, finish_statement, parse_type, skip_newlines, token_is } from syntax_tokens
 import { parse_enum } from enum_syntax
 import { MirIteration } from iteration_mir
@@ -564,17 +564,21 @@ def parse_record(mut state: CompilerState, mut position: Array<Integer>): Boolea
 	line := load_integer(state.token_lines, position[0])
 	advance(position)
 	name := expect_identifier(state, position)
+	mut parameters: Array<String> := []
+	mut fields: Array<GenericField> := []
 	if token_is(state, position[0], "<")
-		return parse_generic_nominal(state, position, 1, name, line)
+		parameters = parse_generic_parameters(state, position, line)
 	end
 	if !finish_statement(state, position)
 		return false
 	end
 	record_index := state.record_count[0]
-	store_string(state.record_names, record_index, name)
-	store_integer(state.record_modules, record_index, state.active_module[0])
-	store_integer(state.record_field_starts, record_index, state.field_count[0])
-	store_integer(state.record_lines, record_index, line)
+	if parameters.size() == 0
+		store_string(state.record_names, record_index, name)
+		store_integer(state.record_modules, record_index, state.active_module[0])
+		store_integer(state.record_field_starts, record_index, state.field_count[0])
+		store_integer(state.record_lines, record_index, line)
+	end
 	mut count := 0
 	mut default_seen := false
 	while !token_is(state, position[0], "end")
@@ -588,8 +592,17 @@ def parse_record(mut state: CompilerState, mut position: Array<Integer>): Boolea
 			return false
 		end
 		field_type := parse_type(state, position)
+		mut default_start :=- 1
+		mut default_finish :=- 1
 		if token_is(state, position[0], "=")
-			if !parse_default_initializer(state, position, 1, record_index, state.field_count[0])
+			if parameters.size() > 0
+				advance(position)
+				default_start = position[0]
+				if !parse_expression_syntax(state, position, 1)
+					return false
+				end
+				default_finish = position[0]
+			elsif !parse_default_initializer(state, position, 1, record_index, state.field_count[0])
 				return false
 			end
 			default_seen = true
@@ -600,16 +613,25 @@ def parse_record(mut state: CompilerState, mut position: Array<Integer>): Boolea
 		if !finish_statement(state, position)
 			return false
 		end
-		field_index := state.field_count[0]
-		store_string(state.field_names, field_index, field_name)
-		store_string(state.field_types, field_index, field_type)
-		store_integer(state.field_lines, field_index, field_line)
-		state.field_count[0] = field_index + 1
+		if parameters.size() > 0
+			fields.push(GenericField.new(name: field_name, type_name: field_type, line: field_line, named_only: true, default_start: default_start, default_finish: default_finish))
+		else
+			field_index := state.field_count[0]
+			store_string(state.field_names, field_index, field_name)
+			store_string(state.field_types, field_index, field_type)
+			store_integer(state.field_lines, field_index, field_line)
+			state.field_count[0] = field_index + 1
+		end
 		count += 1
 	end
 	advance(position)
-	store_integer(state.record_field_counts, record_index, count)
-	state.record_count[0] = record_index + 1
+	if parameters.size() > 0
+		variant := GenericVariant.new(name: name, line: line, fields: fields)
+		state.generic_definitions.push(GenericDefinition.new(kind: 1, name: name, source_id: state.active_module[0], line: line, parameters: parameters, variants: [variant]))
+	else
+		store_integer(state.record_field_counts, record_index, count)
+		state.record_count[0] = record_index + 1
+	end
 	return finish_statement(state, position)
 end
 

@@ -51,7 +51,11 @@ Generic function orchestration is split into instance declaration, an isolated
 semantic program fork, and template checking. Shared syntax stays immutable;
 concrete body facts and MIR remain function-owned. These modules extend the same
 source-erasure and ordinary/recovery checks without a second backend path; see
-[decision 0048](decisions/0048-generic-function-mir.md).
+[decision 0048](decisions/0048-generic-function-mir.md). Generic record defaults
+reuse the ordinary record parser and private initializer path. The shared
+`generic_bindings.trb` owns declaration-scoped substitutions for functions and
+record defaults; separate function/nominal abstract identities prevent accidental
+capture. See [decision 0049](decisions/0049-generic-record-default-mir.md).
 
 Keep source moves and their recovery derivation, imports, tests and operational
 consumers together. Useful shared code remains one implementation. Complete

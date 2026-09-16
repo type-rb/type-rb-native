@@ -19,8 +19,9 @@ permission or a concrete return type merely because all current callers pass
 Integer. Local values shadow generic function names. Imported aliases retain the
 original declaration and type identities.
 
-Generic record field defaults, methods, aliases, classes/interfaces, constraints
-and implicit type-argument inference remain outside this slice. Compiler self-use
+Generic record field defaults are implemented in [decision 0049](0049-generic-record-default-mir.md).
+Methods, aliases, classes/interfaces, constraints and implicit type-argument
+inference remain outside this slice. Compiler self-use
 of generic syntax still requires a separately accepted bootstrap seed.
 
 ## Ownership
