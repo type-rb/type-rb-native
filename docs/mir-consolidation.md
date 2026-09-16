@@ -127,16 +127,19 @@ defaults and managed collections retain optional payloads through shared root
 planning. See [decision 0042](decisions/0042-nullable-mir.md) for the private layout
 and conservative fact invalidation across assignments and loop backedges.
 
-The ordinary compiler closure contains 73 modules. Implementation syntax stays
+The ordinary compiler closure contains 79 modules. Implementation syntax stays
 within the existing immutable seed and snapshot-v4 boundary; compiler self-use
 of the new syntax still depends on an accepted seed refresh. The shared language
-contract contains 152 cases with explicit remaining differences. Retained REPL
+contract contains 164 cases with explicit remaining differences. Retained REPL
 assignment flow now uses an ordinary checker projection, with conservative
 failure/interruption invalidation and explicit replay boundaries; see
 [decision 0043](decisions/0043-checked-repl-submissions.md). Ordinary enum payloads and exhaustive cases now have independently verified
 nominal catalogs, typed operations and managed roots, including recursive
 record/enum fields. [Decision 0044](decisions/0044-enum-mir.md) records the boundary.
-Raw conversions, generic enums/Result, wider patterns/unions, full REPL display
+Explicit generic records/enums now resolve concrete nominal catalogs before MIR;
+[decision 0045](decisions/0045-generic-nominal-mir.md) records recursive identity,
+REPL remapping and source erasure. Generic defaults/functions/aliases, standard
+Result/try/catch/must-use, raw conversions, wider patterns/unions, full REPL display
 parity and final performance qualification remain open. This checkpoint does not imply complete basic-language coverage.
 
 ## Development loop

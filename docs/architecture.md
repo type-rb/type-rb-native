@@ -104,13 +104,16 @@ vertical slices from remaining ownership.
 ### Current compiler source ownership
 
 The ordinary entry is [compiler/src/compiler.trb](../compiler/src/compiler.trb).
-Its explicit transitive import closure contains 65 canonical implementation modules:
+Its explicit transitive import closure contains 79 canonical implementation modules:
 
 | Modules in `compiler/src/` | Current responsibility |
 | --- | --- |
 | `storage.trb`, `path.trb`, `literals.trb` | Shared storage, path predicates, and numeric/ASCII predicates. |
 | `state.trb` | Compiler state, symbol indexes, shared locals, and diagnostics. |
-| `parser.trb`, `resolution.trb` | Syntax and token boundaries; declaration, import, and type resolution. |
+| `parser.trb`, `syntax_tokens.trb`, `resolution.trb` | Syntax/token boundaries, import/declaration orchestration and body name resolution. |
+| `declaration_lookup.trb`, `type_resolution.trb` | Visible declaration identity, semantic type resolution and concrete nominal instantiation. |
+| `generic_model.trb`, `generic_arguments.trb`, `generic_syntax.trb`, `generic_validation.trb` | Authored generic templates, recursive type substitution, explicit applications and template validation; see [generic nominal MIR](decisions/0045-generic-nominal-mir.md). |
+| `enum_model.trb`, `enum_types.trb`, `enum_syntax.trb`, `enum_checked.trb`, `enum_mir.trb`, `qbe_enums.trb` | Nominal variants/payloads, patterns, verified operations and layout adaptation. |
 | `argument_binding.trb`, `default_arguments.trb` | Shared argument slots, duplicate/order rejection, private declaration-scoped default identities and typed prefix bindings for checking and the REPL; see [default lowering](decisions/0040-default-initializer-mir.md). |
 | `checked_program.trb`, `checked_values.trb`, `checked_types.trb` | Recursive expression/body checking, typed checked values and shared type/operator rules. |
 | `nullable_types.trb`, `nullable_flow.trb`, `nullable_mir.trb`, `qbe_nullable.trb` | Optional type identity, lexical and stable-field facts, typed storage/test/extraction and numeric conversion blocks, and representation adaptation; see [nullable MIR](decisions/0042-nullable-mir.md). |

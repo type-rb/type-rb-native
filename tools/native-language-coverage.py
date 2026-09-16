@@ -171,7 +171,7 @@ def coverage_states(case):
     def acceptance(path):
         accepts = expected[path]["code"] == 0
         if accepts:
-            return "accepts" if reference[path]["code"] == 0 else "incorrectly accepts"
+            return "accepts" if reference[path]["code"] == 0 else "accepts; reference rejects"
         return "rejects valid input" if reference[path]["code"] == 0 else "rejects as reference"
     execution = ("not reached" if expected["execute"] is None else
                  "matches reference" if expected["execute"] == reference["execute"] else "differs")

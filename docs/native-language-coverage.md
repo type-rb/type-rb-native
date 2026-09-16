@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 152 ordinary-path probes and 32 feature
+Status: the shared contract contains 164 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -81,7 +81,7 @@ nominal identity through declarations and reload. Payloadless equality requires
 the same enum type. [Decision 0044](decisions/0044-enum-mir.md) records the verified
 operations, traced layout and source-independent backend boundary.
 
-Raw values/conversions, generic enums and Result, enum methods, attributes and
+Raw values/conversions, standard Result/try/catch/must-use, enum methods, attributes and
 nested module declarations remain explicit gaps. Supporting this family does not
 complete all pattern, enum or basic-language contracts.
 The shared recursive cases also expose a pinned Go-output defect: inline
@@ -89,6 +89,23 @@ recursive payloads pass checking but fail generated Go compilation.
 [TypeRB #701](https://github.com/type-rb/type-rb/issues/701) tracks that correction.
 Mutually recursive REPL declarations still require a project/import boundary;
 separate interactive declarations cannot refer to a not-yet-declared type.
+
+## Concrete generic nominal types
+
+Explicit required-field record and enum applications share one canonical
+instantiation path: `Box<String>.new(value: "held")` and
+`Item<Integer>::Value(7)`. Nested and recursive type arguments, imported templates
+and type arguments, invariance and selector-derived enum pattern arguments are
+covered through checking, MIR, execution and retained REPL values. The compiler
+resolves complete concrete catalogs before MIR construction; backend output does
+not consult generic templates or source spellings. See
+[decision 0045](decisions/0045-generic-nominal-mir.md).
+
+Generic record defaults, functions, methods, aliases, classes/interfaces and the
+standard Result behavior remain separate gaps. The shared imported-generic-enum
+case records a pinned reference defect as a difference, not a successful parity
+claim. [TypeRB PR #704](https://github.com/type-rb/type-rb/pull/704) addresses
+its checker identity and Ruby constructor failures. Compiler self-use of generic syntax awaits a seed that supports it.
 
 ## Named/default arguments and record field order
 
@@ -514,7 +531,7 @@ and the remaining Array APIs stay tracked in issue #410. The current Array API
 has no removal operation; the live-header implementation does not establish
 conformance for a future shrinking operation.
 
-Compiler recovery metadata uses a separate 48 MiB input bound. The managed
+Compiler recovery metadata uses a separate 64 MiB input bound. The managed
 Array MIR compiler produces approximately 43.1 MB of recovery JSON, exceeding
 the previous 40 MiB boundary. The earlier complete Array iteration snapshot was
 34,616,510 bytes and required increasing the original 32 MiB bound to 40 MiB.

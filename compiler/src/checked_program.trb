@@ -27,9 +27,11 @@ import { mir_logical_begin, mir_logical_join } from mir_logical
 import { mir_checked_puts, mir_checked_string_binary, mir_checked_string_literal, mir_checked_string_operation } from mir_strings
 import { mir_control_active, mir_control_assign, mir_control_branch, mir_control_enter, mir_control_jump, mir_control_loop_begin, mir_control_loop_branch, mir_control_loop_end, mir_control_prepare, mir_control_return, mir_control_transfer } from mir_control
 import { binary_operator_id, declaration_start, parse_argument_label, syntax_block_end, syntax_conditional_tail, syntax_expression_precedence, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_statement_boundary } from parser
-import { array_element_type, array_type, common_array_element_type, find_field, find_record_type, find_visible_enum, find_visible_function, find_visible_record, resolve_type_name, standard_package_import, standard_package_root, type_display } from resolution
+import { standard_package_import, standard_package_root } from resolution
+import { find_visible_enum, find_visible_function, find_visible_record } from declaration_lookup
+import { array_element_type, array_type, common_array_element_type, find_field, find_record_type, resolve_type_name, type_display } from type_resolution
 import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_add, local_find, terminal_token } from state
-import { load_integer, load_string, sparse_integer_at, store_integer, store_string } from storage
+import { load_integer, load_string, sparse_integer_at, sparse_string_at, store_integer, store_string } from storage
 
 def checked_hash_literal(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, expected: String): CheckedValue
 	origin := position[0]
@@ -366,6 +368,17 @@ def check_primary(
 		return scalar_mir_unary(state, locals, "+", value, value.type_name, origin)
 	end
 	if kind == 1
+		application_finish := sparse_integer_at(state.generic_application_finishes, origin)
+		if application_finish > origin
+			if find_enum_type(state, sparse_string_at(state.generic_application_types, origin)) >= 0
+				return check_enum_constructor(state, position, locals)
+			end
+			if find_record_type(state, sparse_string_at(state.generic_application_types, origin)) < 0
+				return type_diagnostic(state, line, "constructor requires a nominal type")
+			end
+			position[0] = application_finish
+			return checked_value("", 2, origin, 0)
+		end
 		if token_is(state, origin + 1, "::")
 			return check_enum_constructor(state, position, locals)
 		end
@@ -491,8 +504,12 @@ def check_call(mut state: CompilerState, mut position: Array<Integer>, mut local
 	return mir_checked_call(state, locals, function, bindings.values, result_type, origin)
 end
 
-def check_record_new(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, record_name: String): CheckedValue
-	record_index := find_visible_record(state, state.active_module[0], record_name)
+def check_record_new(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, record_origin: Integer): CheckedValue
+	record_name := load_string(state.token_texts, record_origin)
+	mut record_index := find_record_type(state, sparse_string_at(state.generic_application_types, record_origin))
+	if record_index < 0
+		record_index = find_visible_record(state, state.active_module[0], record_name)
+	end
 	origin := position[0]
 	line := load_integer(state.token_lines, origin)
 	advance(position)
@@ -662,7 +679,7 @@ def check_member(mut state: CompilerState, mut position: Array<Integer>, mut loc
 						state,
 						position,
 						locals,
-						load_string(state.token_texts, value.origin),
+						value.origin,
 					)
 				else
 					value = type_diagnostic(
@@ -1655,7 +1672,15 @@ end
 def check_enum_constructor(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals): CheckedValue
 	origin := position[0]
 	line := load_integer(state.token_lines, origin)
-	owner := find_visible_enum(state, state.active_module[0], expect_identifier(state, position))
+	mut owner := find_enum_type(state, sparse_string_at(state.generic_application_types, origin))
+	if owner >= 0
+		position[0] = sparse_integer_at(state.generic_application_finishes, origin)
+	else
+		owner = find_visible_enum(state, state.active_module[0], expect_identifier(state, position))
+	end
+	if owner < 0
+		return type_diagnostic(state, line, "enum constructor requires explicit type arguments")
+	end
 	if !expect(state, position, "::")
 		return checked_value("Invalid", 0, origin, 0)
 	end

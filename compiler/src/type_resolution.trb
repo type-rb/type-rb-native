@@ -1,0 +1,345 @@
+import { find_visible_enum, find_visible_generic, find_visible_record } from declaration_lookup
+import { EnumDefinition, EnumField, EnumVariant } from enum_model
+import { GenericInstance } from generic_model
+import { generic_application, generic_arguments, generic_base, generic_substitute } from generic_arguments
+import { enum_type, find_enum_type } from enum_types
+import { nullable_common, nullable_element, nullable_type } from nullable_types
+import { hash_key_type, hash_type, hash_value_type, native_value_layout } from hash_types
+import { ascii_code, integer_string } from literals
+import { string_starts_with } from path
+import { CompilerState, diagnostic, has_diagnostic } from state
+import { load_integer, load_string, store_integer, store_string } from storage
+
+def record_type(record_index: Integer): String
+	return "Record#" + integer_string(record_index)
+end
+
+def find_record_type(state: CompilerState, type_name: String): Integer
+	mut found :=- 1
+	mut index := 0
+	while index < state.record_count[0]
+		if record_type(index) == type_name
+			found = index
+		end
+		index += 1
+	end
+	return found
+end
+
+def type_display(state: CompilerState, type_name: String): String
+	instance := generic_instance_for_type(state, type_name)
+	if instance >= 0
+		row := state.generic_instances[instance]
+		mut display := state.generic_definitions[row.definition].name + "<"
+		mut index := 0
+		row.arguments.each do |argument|
+			if index > 0
+				display += ", "
+			end
+			display += type_display(state, argument)
+			index += 1
+		end
+		return display + ">"
+	end
+	optional := nullable_element(type_name)
+	if optional != ""
+		return type_display(state, optional) + "?"
+	end
+	if hash_key_type(type_name) != ""
+		return "Hash<" + hash_key_type(type_name) + ", " + type_display(state, hash_value_type(type_name)) + ">"
+	end
+	enum_index := find_enum_type(state, type_name)
+	if enum_index >= 0
+		return state.enums[enum_index].name
+	end
+	record_index := find_record_type(state, type_name)
+	if record_index >= 0
+		return load_string(state.record_names, record_index)
+	end
+	element := array_element_type(type_name)
+	if element != ""
+		return "Array<" + type_display(state, element) + ">"
+	end
+	return type_name
+end
+
+def find_field(state: CompilerState, record_index: Integer, name: String): Integer
+	start := load_integer(state.record_field_starts, record_index)
+	mut index := start + load_integer(state.record_field_counts, record_index) - 1
+	while index >= start
+		if load_string(state.field_names, index) == name
+			return index
+		end
+		index -= 1
+	end
+	return - 1
+end
+
+def builtin_type_exists(type_name: String, allow_void: Boolean): Boolean
+	if type_name == "Integer" || type_name == "Range<Integer>"
+		return true
+	end
+	if type_name == "Float"
+		return true
+	end
+	if type_name == "Boolean"
+		return true
+	end
+	if type_name == "String"
+		return true
+	end
+	if type_name == "Void"
+		return allow_void
+	end
+	if array_element_type(type_name) != ""
+		return true
+	end
+	return false
+end
+
+def resolve_type_name(
+		mut state: CompilerState,
+		module_index: Integer,
+		type_name: String,
+		allow_void: Boolean,
+	): String
+	if string_starts_with(type_name, "Record#") || string_starts_with(type_name, "Enum#")
+		if find_record_type(state, type_name) >= 0 || find_enum_type(state, type_name) >= 0
+			return type_name
+		end
+		return ""
+	end
+	optional := nullable_element(type_name)
+	if optional != ""
+		return nullable_type(resolve_type_name(state, module_index, optional, false))
+	end
+	key := hash_key_type(type_name)
+	if key != ""
+		value := resolve_type_name(state, module_index, hash_value_type(type_name), false)
+		if value == ""
+			return ""
+		end
+		return hash_type(key, value)
+	end
+	if builtin_type_exists(type_name, allow_void)
+		return type_name
+	end
+	arguments := generic_arguments(type_name)
+	if arguments.size() > 0
+		definition := find_visible_generic(state, module_index, generic_base(type_name))
+		if definition >= 0
+			mut resolved: Array<String> := []
+			arguments.each do |argument|
+				resolved.push(resolve_type_name(state, module_index, argument, false))
+			end
+			return instantiate_generic_nominal(state, definition, resolved)
+		end
+	end
+	enum_index := find_visible_enum(state, module_index, type_name)
+	if enum_index >= 0
+		return enum_type(enum_index)
+	end
+	record_index := find_visible_record(state, module_index, type_name)
+	if record_index >= 0
+		return record_type(record_index)
+	end
+	element := array_inner_name(type_name)
+	if element != ""
+		resolved := resolve_type_name(state, module_index, element, false)
+		if resolved != ""
+			return "Array<" + resolved + ">"
+		end
+	end
+	return ""
+end
+
+def generic_instance_for_type(state: CompilerState, type_name: String): Integer
+	mut index := 0
+	while index < state.generic_instances.size()
+		if state.generic_instances[index].type_name == type_name
+			return index
+		end
+		index += 1
+	end
+	return - 1
+end
+
+# Publish the complete shell before resolving fields. Recursion reuses its
+# nominal identity; nested instances cannot interleave this instance's spans.
+def instantiate_generic_nominal(mut state: CompilerState, definition: Integer, arguments: Array<String>): String
+	declaration := state.generic_definitions[definition]
+	if arguments.size() != declaration.parameters.size()
+		return ""
+	end
+	mut valid := true
+	arguments.each do |argument|
+		if argument == ""
+			valid = false
+		end
+	end
+	if !valid
+		return ""
+	end
+	key := generic_application(integer_string(definition), arguments)
+	if state.generic_instance_lookup.key?(key)
+		return state.generic_instances[state.generic_instance_lookup[key]].type_name
+	end
+	if state.generic_depth[0] >= 128
+		diagnostic(state, "TRBN4003", declaration.line, "generic type expansion exceeds the compiler nesting limit")
+		return ""
+	end
+	previous_module := state.active_module[0]
+	state.active_module[0] = declaration.source_id
+	state.generic_depth[0] += 1
+	name := generic_application(declaration.name, arguments)
+	mut type_name := ""
+	mut owner := 0
+	if declaration.kind == 1
+		owner = state.record_count[0]
+		type_name = record_type(owner)
+		store_string(state.record_names, owner, name)
+		store_integer(state.record_modules, owner, declaration.source_id)
+		store_integer(state.record_lines, owner, declaration.line)
+		store_integer(state.record_field_starts, owner, state.field_count[0])
+		store_integer(state.record_field_counts, owner, declaration.variants[0].fields.size())
+		state.record_count[0] += 1
+		declaration.variants[0].fields.each do |field|
+			slot := state.field_count[0]
+			store_string(state.field_names, slot, field.name)
+			store_string(state.field_types, slot, generic_substitute(field.type_name, declaration.parameters, arguments))
+			store_integer(state.field_lines, slot, field.line)
+			state.field_count[0] += 1
+		end
+	else
+		owner = state.enums.size()
+		type_name = enum_type(owner)
+		state.enums.push(EnumDefinition.new(name: name, source_id: declaration.source_id, line: declaration.line, variant_start: state.enum_variants.size(), variant_count: declaration.variants.size()))
+		declaration.variants.each do |variant|
+			state.enum_variants.push(EnumVariant.new(owner: owner, name: variant.name, line: variant.line, field_start: state.enum_fields.size(), field_count: variant.fields.size()))
+			variant.fields.each do |field|
+				state.enum_fields.push(EnumField.new(name: field.name, type_name: generic_substitute(field.type_name, declaration.parameters, arguments), line: field.line, named_only: field.named_only))
+			end
+		end
+	end
+	state.generic_instance_lookup[key] = state.generic_instances.size()
+	state.generic_instances.push(GenericInstance.new(definition: definition, arguments: arguments, type_name: type_name))
+	if declaration.kind == 1
+		mut field := load_integer(state.record_field_starts, owner)
+		finish := field + load_integer(state.record_field_counts, owner)
+		while field < finish && !has_diagnostic(state)
+			raw := load_string(state.field_types, field)
+			resolved := resolve_type_name(state, declaration.source_id, raw, false)
+			if resolved == ""
+				diagnostic(state, "TRBN4003", load_integer(state.field_lines, field), "invalid instantiated field type " + raw)
+			end
+			store_string(state.field_types, field, resolved)
+			field += 1
+		end
+	else
+		mut variant := state.enums[owner].variant_start
+		finish := variant + state.enums[owner].variant_count
+		while variant < finish && !has_diagnostic(state)
+			mut field := state.enum_variants[variant].field_start
+			field_finish := field + state.enum_variants[variant].field_count
+			while field < field_finish && !has_diagnostic(state)
+				item := state.enum_fields[field]
+				resolved := resolve_type_name(state, declaration.source_id, item.type_name, false)
+				if resolved == ""
+					diagnostic(state, "TRBN4003", item.line, "invalid instantiated payload type " + item.type_name)
+				end
+				state.enum_fields[field] = EnumField.new(name: item.name, type_name: resolved, line: item.line, named_only: item.named_only)
+				field += 1
+			end
+			variant += 1
+		end
+	end
+	state.generic_depth[0] -= 1
+	state.active_module[0] = previous_module
+	return type_name
+end
+
+# Extract syntax only; declaration resolution or canonical element validation
+# must establish the type before this spelling reaches checked lowering.
+
+def array_inner_name(type_name: String): String
+	if type_name.size() < 8
+		return ""
+	end
+	if !string_starts_with(type_name, "Array<")
+		return ""
+	end
+	finish := type_name.size() - 1
+	if type_name[finish] != ">"
+		return ""
+	end
+	mut element := ""
+	mut index := 6
+	while index < finish
+		element += type_name[index]
+		index += 1
+	end
+	return element
+end
+
+def record_array_element(type_name: String): String
+	if type_name.size() < 15
+		return ""
+	end
+	element := array_inner_name(type_name)
+	mut leaf := element
+	mut depth := 1
+	while depth < 3
+		nested := array_inner_name(leaf)
+		if nested == ""
+			break
+		end
+		leaf = nested
+		depth += 1
+	end
+	if !string_starts_with(leaf, "Record#")
+		return ""
+	end
+	if leaf.size() < 8
+		return ""
+	end
+	if leaf.size() > 8
+		if leaf[7] == "0"
+			return ""
+		end
+	end
+	mut digit := 7
+	while digit < leaf.size()
+		code := ascii_code(leaf[digit])
+		if code < 48
+			return ""
+		end
+		if code > 57
+			return ""
+		end
+		digit += 1
+	end
+	return element
+end
+
+def array_element_type(type_name: String): String
+	element := array_inner_name(type_name)
+	if element != "" && native_value_layout(element)
+		return element
+	end
+	return ""
+end
+
+def array_type(element_type: String): String
+	result := "Array<" + element_type + ">"
+	if builtin_type_exists(result, false)
+		return result
+	end
+	return ""
+end
+
+def common_array_element_type(left: String, right: String): String
+	if left == ""
+		return right
+	end
+	return nullable_common(left, right)
+end

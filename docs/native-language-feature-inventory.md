@@ -16,10 +16,10 @@ Each count describes registered probes, not language coverage percentages.
 | Records and field bindings | basic | 0 / 9 | Nominal cycles and defaults involving remaining unsupported value types | RecordStatement, RecordFieldStatement |
 | Member access and projections | basic | 1 / 4 | Safe member access, chained field narrowing and receiver replacement | MemberExpression |
 | Nullable values and narrowing | basic | 4 / 21 | Class/callback and general pattern narrowing; collection/union optional conversions; Nullable standard-library methods beyond the currently implemented Native APIs |  |
-| Enums and tagged values | basic | 3 / 14 | Raw values and conversion failures, generic enums/Result, enum methods and attributes; Nested module declarations and wider pattern forms | EnumStatement, EnumMemberStatement |
+| Enums and tagged values | basic | 4 / 19 | Raw values and conversion failures, standard Result/try/catch/must-use, enum methods and attributes; Nested module declarations and wider pattern forms | EnumStatement, EnumMemberStatement |
 | Transparent aliases | basic | 2 / 2 | Generic aliases, cycles and cross-module identity | TypeAliasStatement |
 | Nominal newtypes | basic | 1 / 1 | Closed/private constructors, methods, immutable representation and boundary diagnostics | NewtypeStatement |
-| Generic declarations and applications | basic | 2 / 3 | Inference, invariance, recursive types, interfaces and invalid type-argument shapes | GenericExpression |
+| Generic declarations and applications | basic | 3 / 15 | Generic functions, methods, aliases, classes and interfaces; Generic record defaults and wider constraints/type applications | GenericExpression |
 | Literal types and discriminated unions | basic | 1 / 1 | Shared discriminants, branch narrowing and invalid mutation/common-type boundaries |  |
 | Function values and lexical capture | basic | 3 / 3 | Callable parameters/returns, escape/cycles, captured aliases and independent return boundaries | LambdaExpression |
 | Arrays and checked indexes | basic | 1 / 8 | Removal during assignments/iteration and retained managed receivers; Remaining Array receiver APIs and invalid element/mutation combinations | ArrayLiteral, IndexExpression |

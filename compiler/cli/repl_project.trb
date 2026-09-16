@@ -7,7 +7,8 @@ import { parse_module } from parser
 import { path_directory, path_join } from path
 import { parse_project_config } from project_config
 import { find_enum_type } from enum_types
-import { array_element_type, find_record_type, standard_package_root, standard_package_target } from resolution
+import { standard_package_root, standard_package_target } from resolution
+import { array_element_type, find_record_type, generic_instance_for_type } from type_resolution
 import { CompilerState, compiler_new, has_diagnostic } from state
 import { load_integer, load_string } from storage
 
@@ -58,6 +59,10 @@ def repl_project(config: String): ReplProject
 			modules.push(module_name)
 			item += 1
 		end
+		state.generic_definitions.each do |definition|
+			names.push(definition.name)
+			modules.push(module_name)
+		end
 		state.enums.each do |definition|
 			names.push(definition.name)
 			modules.push(module_name)
@@ -106,6 +111,9 @@ def repl_project_source(source: String, prelude: String): String
 	while index < session.record_count[0]
 		explicit[load_string(session.record_names, index)] = 1
 		index += 1
+	end
+	session.generic_definitions.each do |definition|
+		explicit[definition.name] = 1
 	end
 	session.enums.each do |definition|
 		explicit[definition.name] = 1
@@ -177,6 +185,21 @@ def repl_type_name(state: CompilerState, type_name: String): String
 	if element != ""
 		return "Array<" + repl_type_name(state, element) + ">"
 	end
+	instance := generic_instance_for_type(state, type_name)
+	if instance >= 0
+		row := state.generic_instances[instance]
+		definition := state.generic_definitions[row.definition]
+		mut application_name := repl_visible_type_name(state, definition.source_id, definition.name) + "<"
+		mut argument_index := 0
+		row.arguments.each do |argument|
+			if argument_index > 0
+				application_name += ", "
+			end
+			application_name += repl_type_name(state, argument)
+			argument_index += 1
+		end
+		return application_name + ">"
+	end
 	mut name := ""
 	mut owner :=- 1
 	enum_index := find_enum_type(state, type_name)
@@ -191,6 +214,10 @@ def repl_type_name(state: CompilerState, type_name: String): String
 		name = load_string(state.record_names, record_index)
 		owner = load_integer(state.record_modules, record_index)
 	end
+	return repl_visible_type_name(state, owner, name)
+end
+
+def repl_visible_type_name(state: CompilerState, owner: Integer, name: String): String
 	if owner == state.entry_module[0]
 		return name
 	end

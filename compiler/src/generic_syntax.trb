@@ -1,0 +1,140 @@
+import { enum_uppercase } from enum_types
+import { GenericDefinition, GenericField, GenericVariant } from generic_model
+import { CompilerState, diagnostic, has_diagnostic, terminal_token } from state
+import { load_integer } from storage
+import { advance, expect, expect_identifier, finish_statement, parse_type, skip_newlines, token_is } from syntax_tokens
+
+def parse_generic_nominal(mut state: CompilerState, mut position: Array<Integer>, kind: Integer, name: String, line: Integer): Boolean
+	advance(position)
+	mut parameters: Array<String> := []
+	skip_newlines(state, position)
+	while !token_is(state, position[0], ">") && !has_diagnostic(state)
+		parameter := expect_identifier(state, position)
+		parameters.each do |previous|
+			if previous == parameter
+				diagnostic(state, "TRBN4003", line, "duplicate type parameter " + parameter)
+			end
+		end
+		parameters.push(parameter)
+		skip_newlines(state, position)
+		if !token_is(state, position[0], ",")
+			break
+		end
+		advance(position)
+		skip_newlines(state, position)
+	end
+	if parameters.size() == 0 || !expect(state, position, ">")
+		diagnostic(state, "TRBN4002", line, "generic declaration requires type parameters")
+		return false
+	end
+	if !finish_statement(state, position)
+		return false
+	end
+	mut variants: Array<GenericVariant> := []
+	mut record_fields: Array<GenericField> := []
+	while !token_is(state, position[0], "end") && !has_diagnostic(state)
+		if terminal_token(state, position[0])
+			diagnostic(state, "TRBN4002", line, "expected end for generic declaration " + name)
+			return false
+		end
+		member_line := load_integer(state.token_lines, position[0])
+		member := expect_identifier(state, position)
+		if kind == 1
+			if !expect(state, position, ":")
+				return false
+			end
+			type_name := parse_type(state, position)
+			if token_is(state, position[0], "=")
+				diagnostic(state, "TRBN4002", member_line, "generic record defaults are not yet supported")
+				return false
+			end
+			record_fields.push(GenericField.new(name: member, type_name: type_name, line: member_line, named_only: true))
+		else
+			if !enum_uppercase(member)
+				diagnostic(state, "TRBN4002", member_line, "enum variant must start with an uppercase letter")
+				return false
+			end
+			if !expect(state, position, "(")
+				diagnostic(state, "TRBN4002", member_line, "generic enum variants require payload fields")
+				return false
+			end
+			mut fields: Array<GenericField> := []
+			mut named := false
+			mut named_count := 0
+			skip_newlines(state, position)
+			while !token_is(state, position[0], ")") && !has_diagnostic(state)
+				if token_is(state, position[0], "*")
+					if named
+						diagnostic(state, "TRBN4002", member_line, "payload has duplicate named-only boundary")
+						return false
+					end
+					named = true
+					advance(position)
+					if !expect(state, position, ",")
+						return false
+					end
+				else
+					field_line := load_integer(state.token_lines, position[0])
+					field := expect_identifier(state, position)
+					if !expect(state, position, ":")
+						return false
+					end
+					type_name := parse_type(state, position)
+					fields.push(GenericField.new(name: field, type_name: type_name, line: field_line, named_only: named))
+					if named
+						named_count += 1
+					end
+					skip_newlines(state, position)
+					if !token_is(state, position[0], ",")
+						break
+					end
+					advance(position)
+				end
+				skip_newlines(state, position)
+			end
+			if fields.size() == 0 || (named && named_count == 0) || !expect(state, position, ")")
+				diagnostic(state, "TRBN4002", member_line, "generic enum variants require payload fields")
+				return false
+			end
+			variants.push(GenericVariant.new(name: member, line: member_line, fields: fields))
+		end
+		if !finish_statement(state, position)
+			return false
+		end
+	end
+	if kind == 1
+		variants.push(GenericVariant.new(name: name, line: line, fields: record_fields))
+	elsif variants.size() == 0
+		diagnostic(state, "TRBN4002", line, "enum requires at least one variant")
+		return false
+	end
+	if !expect(state, position, "end")
+		return false
+	end
+	state.generic_definitions.push(GenericDefinition.new(kind: kind, name: name, source_id: state.active_module[0], line: line, parameters: parameters, variants: variants))
+	return finish_statement(state, position)
+end
+
+# Syntactic type applications are unambiguous only with a constructor suffix.
+# Comparison operators never consume a speculative type argument list.
+def nominal_application_end(state: CompilerState, origin: Integer): Integer
+	if !token_is(state, origin + 1, "<")
+		return - 1
+	end
+	mut depth := 1
+	mut token := origin + 2
+	while token < state.token_count[0] && depth > 0
+		if token_is(state, token, "<")
+			depth += 1
+		elsif token_is(state, token, ">")
+			depth -= 1
+		elsif load_integer(state.token_kinds, token) != 1 && load_integer(state.token_kinds, token) != 4 && !token_is(state, token, ",") && !token_is(state, token, "?")
+			return - 1
+		end
+		token += 1
+	end
+	if depth == 0 && (token_is(state, token, "::") || (token_is(state, token, ".") && token_is(state, token + 1, "new")))
+		return token
+	end
+	return - 1
+end

@@ -1,3 +1,4 @@
+import { nominal_application_end, parse_generic_nominal } from generic_syntax
 import { advance, expect, expect_identifier, finish_statement, parse_type, skip_newlines, token_is } from syntax_tokens
 import { parse_enum } from enum_syntax
 import { MirIteration } from iteration_mir
@@ -241,7 +242,12 @@ def parse_primary_syntax(mut state: CompilerState, mut position: Array<Integer>)
 	kind := load_integer(state.token_kinds, position[0])
 	if hash_literal || control
 	elsif kind == 1
-		advance(position)
+		application_end := nominal_application_end(state, position[0])
+		if application_end >= 0
+			parse_type(state, position)
+		else
+			advance(position)
+		end
 	else
 		if kind == 2
 			advance(position)
@@ -552,6 +558,9 @@ def parse_record(mut state: CompilerState, mut position: Array<Integer>): Boolea
 	line := load_integer(state.token_lines, position[0])
 	advance(position)
 	name := expect_identifier(state, position)
+	if token_is(state, position[0], "<")
+		return parse_generic_nominal(state, position, 1, name, line)
+	end
 	if !finish_statement(state, position)
 		return false
 	end
