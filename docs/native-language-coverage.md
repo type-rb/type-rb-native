@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 164 ordinary-path probes and 32 feature
+Status: the shared contract contains 188 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -81,7 +81,7 @@ nominal identity through declarations and reload. Payloadless equality requires
 the same enum type. [Decision 0044](decisions/0044-enum-mir.md) records the verified
 operations, traced layout and source-independent backend boundary.
 
-Raw values/conversions, standard Result/try/catch/must-use, enum methods, attributes and
+Raw values/conversions, enum methods, attributes and
 nested module declarations remain explicit gaps. Supporting this family does not
 complete all pattern, enum or basic-language contracts.
 The shared recursive cases also expose a pinned Go-output defect: inline
@@ -101,11 +101,34 @@ resolves complete concrete catalogs before MIR construction; backend output does
 not consult generic templates or source spellings. See
 [decision 0045](decisions/0045-generic-nominal-mir.md).
 
-Generic record defaults, functions, methods, aliases, classes/interfaces and the
-standard Result behavior remain separate gaps. The shared imported-generic-enum
+Generic record defaults, functions, methods, aliases and classes/interfaces
+remain separate gaps. The shared imported-generic-enum
 case records a pinned reference defect as a difference, not a successful parity
 claim. [TypeRB PR #704](https://github.com/type-rb/type-rb/pull/704) addresses
 its checker identity and Ruby constructor failures. Compiler self-use of generic syntax awaits a seed that supports it.
+
+## Standard Result and typed control flow
+
+`trb/std/result` and `trb/std/unit` load ordinary compiler-owned declarations.
+Explicit Result construction, exhaustive cases, prefix `try`, statement-value
+`catch` and required-use checks share concrete generic enum MIR. Error
+propagation preserves ordinary numeric/optional conversions; catch handlers
+produce a success value or use their lexical return/break/next owner. Both
+paths evaluate the Result once, and ordinary each remains transparent to try.
+User enums with the same name retain ordinary enum behavior.
+
+Native emission uses existing verified enum operations and control-flow joins;
+the REPL consumes checked Result projections and retained nominal identities.
+Managed and nested payloads, scope-specific required-use checks, invalid
+boundaries and unsupported catch composition have executable controls. See
+[decision 0046](decisions/0046-result-control-mir.md). Transparent aliases,
+general unions and compiler-declared structured package boundaries remain
+separate dependencies, not newly supported forms.
+
+The fixed reference compiler cannot build or evaluate optional Integer-to-Float
+error propagation correctly. The current reference repository handles both nil
+and present errors correctly; the shared case retains the pinned difference
+rather than changing the pin or hiding Native's accepted behavior.
 
 ## Named/default arguments and record field order
 

@@ -1,3 +1,4 @@
+import { standard_source_kind } from standard_library
 import { nullable_element } from nullable_types
 import { hash_key_type, hash_value_type } from hash_types
 import { compiler_collect_project_sources, compiler_read_source, project_module_name } from compiler
@@ -20,7 +21,7 @@ end
 
 def repl_project(config: String): ReplProject
 	if config == ""
-		return ReplProject.new(imports: "import trb/std/math\nimport trb/std/process\n", root: native_cli_cwd(), error: "")
+		return ReplProject.new(imports: repl_standard_imports([]), root: native_cli_cwd(), error: "")
 	end
 	project := parse_project_config(compiler_read_source(config))
 	if project.error != ""
@@ -69,7 +70,7 @@ def repl_project(config: String): ReplProject
 		end
 		index += 1
 	end
-	mut imports := "import trb/std/math\nimport trb/std/process\n"
+	mut imports := repl_standard_imports(names)
 	index = 0
 	while index < names.size()
 		mut count := 0
@@ -153,7 +154,14 @@ def repl_project_source(source: String, prelude: String): String
 		path := load_string(generated.import_paths, index)
 		mut name := load_string(generated.import_declarations, index)
 		if load_integer(generated.import_kinds, index) == 1
-			name = standard_package_root(standard_package_target(path))
+			kind := standard_source_kind(path)
+			if kind == 1
+				name = "Result"
+			elsif kind == 2
+				name = "Unit"
+			else
+				name = standard_package_root(standard_package_target(path))
+			end
 		end
 		if explicit.key?(name) || paths.key?(path)
 			hidden[load_integer(generated.import_lines, index) - 1] = true
@@ -231,4 +239,27 @@ def repl_visible_type_name(state: CompilerState, owner: Integer, name: String): 
 		index += 1
 	end
 	return name
+end
+
+# The reference REPL makes these portable declaration roots available by
+# default. A project declaration with the same root retains its own identity.
+def repl_standard_imports(names: Array<String>): String
+	mut result := "import trb/std/math\nimport trb/std/process\n"
+	mut result_root := true
+	mut unit_root := true
+	names.each do |name|
+		if name == "Result"
+			result_root = false
+		end
+		if name == "Unit"
+			unit_root = false
+		end
+	end
+	if result_root
+		result += "import trb/std/result\n"
+	end
+	if unit_root
+		result += "import trb/std/unit\n"
+	end
+	return result
 end

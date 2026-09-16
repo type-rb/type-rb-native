@@ -1,3 +1,4 @@
+import { CatchSyntax } from result_model
 import { nominal_application_end, parse_generic_nominal } from generic_syntax
 import { advance, expect, expect_identifier, finish_statement, parse_type, skip_newlines, token_is } from syntax_tokens
 import { parse_enum } from enum_syntax
@@ -203,6 +204,10 @@ def parse_iteration_statement(mut state: CompilerState, mut position: Array<Inte
 end
 
 def parse_primary_syntax(mut state: CompilerState, mut position: Array<Integer>): Boolean
+	if token_is(state, position[0], "try")
+		advance(position)
+		return parse_primary_syntax(state, position)
+	end
 	mut control := token_is(state, position[0], "if")
 	if !control
 		control = token_is(state, position[0], "case")
@@ -458,7 +463,7 @@ def parse_declaration_statement(mut state: CompilerState, mut position: Array<In
 	if !expect(state, position, ":=")
 		return false
 	end
-	if !parse_expression_syntax(state, position, 1)
+	if !parse_statement_value_syntax(state, position)
 		return false
 	end
 	return finish_statement(state, position)
@@ -466,7 +471,7 @@ end
 
 def parse_simple_statement(mut state: CompilerState, mut position: Array<Integer>): Boolean
 	origin := position[0]
-	if !parse_expression_syntax(state, position, 1)
+	if !parse_statement_value_syntax(state, position)
 		return false
 	end
 	operator := load_string(state.token_texts, position[0])
@@ -475,13 +480,13 @@ def parse_simple_statement(mut state: CompilerState, mut position: Array<Integer
 	end
 	if operator == "="
 		advance(position)
-		if !parse_expression_syntax(state, position, 1)
+		if !parse_statement_value_syntax(state, position)
 			return false
 		end
 	else
 		if binary_operator_id(operator) >= 17
 			advance(position)
-			if !parse_expression_syntax(state, position, 1)
+			if !parse_statement_value_syntax(state, position)
 				return false
 			end
 		end
@@ -1045,7 +1050,7 @@ def parse_transfer_syntax(mut state: CompilerState, mut position: Array<Integer>
 	returns := token_is(state, origin, "return")
 	advance(position)
 	if returns && !syntax_statement_boundary(state, position[0]) && !token_is(state, position[0], "if")
-		if !parse_expression_syntax(state, position, 1)
+		if !parse_statement_value_syntax(state, position)
 			return false
 		end
 	end
@@ -1062,4 +1067,34 @@ def parse_transfer_syntax(mut state: CompilerState, mut position: Array<Integer>
 		return false
 	end
 	return finish_statement(state, position)
+end
+
+# Catch attaches only to a whole statement value. Nested argument/element
+# expressions continue through parse_expression_syntax and cannot consume it.
+def parse_statement_value_syntax(mut state: CompilerState, mut position: Array<Integer>): Boolean
+	origin := position[0]
+	if !parse_expression_syntax(state, position, 1)
+		return false
+	end
+	if !token_is(state, position[0], "catch")
+		return true
+	end
+	operand_finish := position[0]
+	advance(position)
+	if !expect(state, position, "|")
+		return false
+	end
+	binding := position[0]
+	expect_identifier(state, position)
+	if !expect(state, position, "|") || !finish_statement(state, position)
+		return false
+	end
+	skip_newlines(state, position)
+	body := position[0]
+	if !parse_statement_block(state, position) || !expect(state, position, "end")
+		return false
+	end
+	state.catch_syntax.push(CatchSyntax.new(origin: origin, operand_finish: operand_finish, binding: binding, body: body, finish: position[0]))
+	store_integer(state.catch_origins, origin, state.catch_syntax.size())
+	return true
 end

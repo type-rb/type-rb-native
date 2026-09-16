@@ -16,7 +16,7 @@ Each count describes registered probes, not language coverage percentages.
 | Records and field bindings | basic | 0 / 9 | Nominal cycles and defaults involving remaining unsupported value types | RecordStatement, RecordFieldStatement |
 | Member access and projections | basic | 1 / 4 | Safe member access, chained field narrowing and receiver replacement | MemberExpression |
 | Nullable values and narrowing | basic | 4 / 21 | Class/callback and general pattern narrowing; collection/union optional conversions; Nullable standard-library methods beyond the currently implemented Native APIs |  |
-| Enums and tagged values | basic | 4 / 19 | Raw values and conversion failures, standard Result/try/catch/must-use, enum methods and attributes; Nested module declarations and wider pattern forms | EnumStatement, EnumMemberStatement |
+| Enums and tagged values | basic | 4 / 19 | Raw values and conversion failures, enum methods and attributes; Nested module declarations and wider pattern forms | EnumStatement, EnumMemberStatement |
 | Transparent aliases | basic | 2 / 2 | Generic aliases, cycles and cross-module identity | TypeAliasStatement |
 | Nominal newtypes | basic | 1 / 1 | Closed/private constructors, methods, immutable representation and boundary diagnostics | NewtypeStatement |
 | Generic declarations and applications | basic | 3 / 15 | Generic functions, methods, aliases, classes and interfaces; Generic record defaults and wider constraints/type applications | GenericExpression |
@@ -26,7 +26,7 @@ Each count describes registered probes, not language coverage percentages.
 | Hash values and operations | basic | 0 / 5 | All key/value representations, empty inference, managed lifetimes and missing-key failures | HashLiteral |
 | Structured and value-producing iteration | basic | 2 / 4 | Map/filter/reduce/chains, nested transfers, receiver replacement and live growth | IterationExpression, BlockExpression |
 | Range values and boundaries | basic | 2 / 5 | Endpoint effects, empty/reversed ranges and next at both portable limits | RangeExpression |
-| Result and typed propagation | basic | 3 / 3 | Err identity, nested boundaries, catch transfers and rejected unused Result values | TryExpression, CatchExpression |
+| Result and typed propagation | basic | 1 / 27 | Transparent aliases, general union errors and compiler-declared structured package boundaries | TryExpression, CatchExpression |
 | Classes, fields and methods | basic | 1 / 1 | Initialization, inheritance, dispatch, privacy and readonly fields | ClassStatement, FieldStatement |
 | Explicit interface conformance | basic | 1 / 1 | Generic conformance, variance, inherited contracts and rejection controls | InterfaceStatement |
 | Modules and constant lookup | basic | 1 / 1 | Cross-module constants, member visibility and runtime initialization order | ModuleStatement |
