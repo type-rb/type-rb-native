@@ -1,0 +1,125 @@
+import { find_enum_in_module } from enum_types
+import { CompilerState, find_name_index, function_index_key } from state
+import { load_integer, load_string, store_integer } from storage
+
+def find_generic_in_module(state: CompilerState, source: Integer, name: String): Integer
+	mut index := state.generic_definitions.size() - 1
+	while index >= 0
+		row := state.generic_definitions[index]
+		if row.source_id == source && row.name == name
+			return index
+		end
+		index -= 1
+	end
+	return - 1
+end
+
+def find_visible_generic(mut state: CompilerState, source: Integer, name: String): Integer
+	local := find_generic_in_module(state, source, name)
+	if local >= 0
+		return local
+	end
+	binding := find_import_binding(state, source, name)
+	if binding < 0
+		return - 1
+	end
+	resolved := find_generic_in_module(state, load_integer(state.import_targets, binding), load_string(state.import_declarations, binding))
+	if resolved >= 0
+		store_integer(state.import_used, binding, 1)
+	end
+	return resolved
+end
+
+def find_record_in_module(state: CompilerState, module_index: Integer, name: String): Integer
+	mut index := state.record_count[0] - 1
+	while index >= 0
+		if load_integer(state.record_modules, index) == module_index
+			if load_string(state.record_names, index) == name
+				return index
+			end
+		end
+		index -= 1
+	end
+	return - 1
+end
+
+def find_function_in_module(state: CompilerState, module_index: Integer, name: String): Integer
+	return find_name_index(state.function_lookup, function_index_key(module_index, name))
+end
+
+def find_import_binding(state: CompilerState, module_index: Integer, name: String): Integer
+	start := load_integer(state.module_import_starts, module_index)
+	mut index := start + load_integer(state.module_import_counts, module_index) - 1
+	while index >= start
+		if load_string(state.import_symbols, index) == name
+			return index
+		end
+		index -= 1
+	end
+	return - 1
+end
+
+def find_visible_record(mut state: CompilerState, module_index: Integer, name: String): Integer
+	local := find_record_in_module(state, module_index, name)
+	if local >= 0
+		return local
+	end
+	import_index := find_import_binding(state, module_index, name)
+	if import_index < 0
+		return - 1
+	end
+	target := load_integer(state.import_targets, import_index)
+	if target < 0
+		return - 1
+	end
+	resolved := find_record_in_module(
+		state,
+		target,
+		load_string(state.import_declarations, import_index),
+	)
+	if resolved >= 0
+		store_integer(state.import_used, import_index, 1)
+	end
+	return resolved
+end
+
+def find_visible_function(mut state: CompilerState, module_index: Integer, name: String): Integer
+	local := find_function_in_module(state, module_index, name)
+	if local >= 0
+		return local
+	end
+	import_index := find_import_binding(state, module_index, name)
+	if import_index < 0
+		return - 1
+	end
+	target := load_integer(state.import_targets, import_index)
+	if target < 0
+		return - 1
+	end
+	resolved := find_function_in_module(
+		state,
+		target,
+		load_string(state.import_declarations, import_index),
+	)
+	if resolved >= 0
+		store_integer(state.import_used, import_index, 1)
+	end
+	return resolved
+end
+
+def find_visible_enum(mut state: CompilerState, source: Integer, name: String): Integer
+	local := find_enum_in_module(state, source, name)
+	if local >= 0
+		return local
+	end
+	binding := find_import_binding(state, source, name)
+	if binding < 0
+		return - 1
+	end
+	target := load_integer(state.import_targets, binding)
+	resolved := find_enum_in_module(state, target, load_string(state.import_declarations, binding))
+	if resolved >= 0
+		store_integer(state.import_used, binding, 1)
+	end
+	return resolved
+end

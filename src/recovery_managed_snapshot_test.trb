@@ -44,6 +44,31 @@ def _recovery_function_count_snapshot(count: Integer): String
 end
 
 describe("Managed recovery snapshot v4") do
+	test("bounds compiler recovery bytes separately from ordinary snapshots") do
+		base := _recovery_function_count_snapshot(1)
+		mut padding := " "
+		while padding.size() < 67108865
+			padding += padding
+		end
+		[4194304, 4194305, 67108864, 67108865].each do |size|
+			source := base + padding.slice(0...(size - base.size()))
+			case decode_recovery_managed_snapshot(source)
+			when Result::Ok(_module)
+				expect(size).to_equal(4194304)
+			when Result::Err(diagnostic)
+				expect(size > 4194304).to_be_true()
+				expect(diagnostic.message).to_equal("snapshot exceeds the Managed recovery 4 MiB input limit")
+			end
+			case decode_bootstrap_snapshot(source)
+			when Result::Ok(_module)
+				expect(size <= 67108864).to_be_true()
+			when Result::Err(diagnostic)
+				expect(size).to_equal(67108865)
+				expect(diagnostic.message).to_equal("snapshot exceeds the Native bootstrap 64 MiB input limit")
+			end
+		end
+	end
+
 	test("bounds compiler recovery functions separately from ordinary snapshots") do
 		[512, 513, 1024, 1025].each do |count|
 			source := _recovery_function_count_snapshot(count)

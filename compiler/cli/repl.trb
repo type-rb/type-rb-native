@@ -1,3 +1,4 @@
+import { generic_application } from generic_arguments
 import { repl_default } from repl_defaults
 import { token_is, skip_newlines } from syntax_tokens
 import { repl_checked, repl_checked_input } from repl_check
@@ -11,7 +12,8 @@ import { repl_history_load, repl_history_save } from repl_history
 import { CheckedFlowFact, CompilerState, compiler_new, has_diagnostic, find_module } from state
 import { sparse_integer_at, sparse_string_at, load_integer, load_string } from storage
 import { enum_type, find_enum_in_module, find_enum_type, find_enum_variant } from enum_types
-import { find_function_in_module, find_record_type, find_record_in_module, record_type, array_inner_name } from resolution
+import { find_function_in_module, find_record_in_module, find_generic_in_module } from declaration_lookup
+import { find_record_type, record_type, array_inner_name, generic_instance_for_type } from type_resolution
 import { compiler_read_source, compiler_file_exists } from compiler
 import { lex, compiler_source_slice } from lexer
 import { path_directory, path_join, string_starts_with } from path
@@ -730,6 +732,22 @@ def repl_function_insertion(state: CompilerState, index: Integer, name: String):
 end
 
 def repl_remap_type(previous: CompilerState, current: CompilerState, type_name: String): String
+	instance := generic_instance_for_type(previous, type_name)
+	if instance >= 0
+		row := previous.generic_instances[instance]
+		definition := previous.generic_definitions[row.definition]
+		source := find_module(current, load_string(previous.module_names, definition.source_id))
+		next_definition := find_generic_in_module(current, source, definition.name)
+		mut arguments: Array<String> := []
+		row.arguments.each do |argument|
+			arguments.push(repl_remap_type(previous, current, argument))
+		end
+		key := generic_application(integer_string(next_definition), arguments)
+		if current.generic_instance_lookup.key?(key)
+			return current.generic_instances[current.generic_instance_lookup[key]].type_name
+		end
+		return "Invalid"
+	end
 	if nullable_element(type_name) != ""
 		return repl_remap_type(previous, current, nullable_element(type_name)) + "?"
 	end

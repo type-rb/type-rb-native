@@ -48,7 +48,7 @@
 | Nominal newtype construction and projection | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Parameters following nested generic annotations | accepts | accepts | matches reference | matches reference |
 | Generic function application | rejects valid input | rejects valid input | not reached | rejects valid input |
-| Generic record | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Generic record | accepts | accepts | matches reference | matches reference |
 | Literal-field union narrowing | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Typed function value and lexical capture | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Function value mutates captured binding | rejects valid input | rejects valid input | not reached | rejects valid input |
@@ -70,7 +70,7 @@
 | Top-level constant | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Symbol literal equality | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Named import alias and reachable file | accepts | accepts | matches reference | matches reference |
-| Reject unused local binding | incorrectly accepts | incorrectly accepts | differs | output differs |
+| Reject unused local binding | accepts; reference rejects | accepts; reference rejects | differs | output differs |
 | Reject immutable binding assignment | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Reject record field rebinding | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Reject non-Boolean condition | rejects as reference | rejects as reference | not reached | rejects as reference |
@@ -138,19 +138,31 @@
 | Reject stale nullable field narrowing after receiver assignment | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Retained nullable assignments preserve checked flow and display | accepts | accepts | matches reference | matches reference |
 | Rejected REPL assignment preserves the preceding fact | rejects as reference | rejects as reference | not reached | rejects as reference |
-| Conditional REPL replacement invalidates the preceding fact | incorrectly accepts | incorrectly accepts | differs | output differs |
-| Partial failure discards stale REPL narrowing | incorrectly accepts | incorrectly accepts | differs | diagnostic/output differs |
+| Conditional REPL replacement invalidates the preceding fact | accepts; reference rejects | accepts; reference rejects | differs | output differs |
+| Partial failure discards stale REPL narrowing | accepts; reference rejects | accepts; reference rejects | differs | diagnostic/output differs |
 | Retained optional values use lazy safe navigation | accepts | accepts | matches reference | matches reference |
 | REPL rejects authored return outside a function | accepts | accepts | matches reference | rejects as reference |
 | Enum named payload order and patterns | accepts | accepts | matches reference | matches reference |
-| Recursive enum values stored in Hash | accepts | incorrectly accepts | differs | matches reference |
+| Recursive enum values stored in Hash | accepts | accepts; reference rejects | differs | matches reference |
 | Enum payload shadows an outer binding | accepts | accepts | matches reference | matches reference |
 | Nullable enum and record payloads | accepts | accepts | matches reference | matches reference |
 | Enum selector order and lexical loop transfers | accepts | accepts | matches reference | matches reference |
 | Enum managed payload retains an Array alias | accepts | accepts | matches reference | matches reference |
-| Recursive record and enum fields | accepts | incorrectly accepts | differs | rejects as reference |
+| Recursive record and enum fields | accepts | accepts; reference rejects | differs | rejects as reference |
 | Imported enum alias preserves nominal identity | accepts | accepts | matches reference | matches reference |
 | Reject an incomplete enum case | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Reject assignment to enum payload binding | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Reject equality across enum declarations | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Retained Range binding preserves bounds without replay | accepts | accepts | matches reference | matches reference |
+| Distinct concrete record instances | accepts | accepts | matches reference | matches reference |
+| Nested nominal type arguments | accepts | accepts | matches reference | matches reference |
+| Generic enum constructors and exhaustive patterns | accepts | accepts | matches reference | matches reference |
+| Recursive generic record with optional tail | accepts | accepts | matches reference | matches reference |
+| Recursive generic enum with managed containers | accepts | accepts | matches reference | matches reference |
+| Nested generic arguments and named payload evaluation order | accepts | accepts | matches reference | matches reference |
+| Generic templates and arguments retain import identity | accepts; reference rejects | accepts; reference rejects | differs | output differs |
+| Generic record arguments are invariant | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Generic enum arguments are invariant | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Generic records with concrete default fields | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Explicit nominal type argument count | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Unused generic fields require valid types | rejects as reference | rejects as reference | not reached | rejects as reference |

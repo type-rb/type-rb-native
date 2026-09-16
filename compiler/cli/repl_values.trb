@@ -5,7 +5,7 @@ import { ReplStore, ReplEnvironment, repl_store, repl_value, repl_float, repl_ge
 import { repl_hash_new, repl_hash_set } from repl_hash
 import { hash_key_type } from hash_types
 import { CompilerState } from state
-import { type_display, find_record_type } from resolution
+import { type_display, find_record_type, generic_instance_for_type } from type_resolution
 import { load_integer, load_string } from storage
 import { integer_string } from literals
 import { string_starts_with } from path
@@ -129,9 +129,14 @@ def repl_render(state: CompilerState, store: ReplStore, id: Integer, depth: Inte
 		end
 		return rendered + "}"
 	end
+	mut nominal_name := type_display(state, value.type_name)
+	instance := generic_instance_for_type(state, value.type_name)
+	if instance >= 0
+		nominal_name = state.generic_definitions[state.generic_instances[instance].definition].name
+	end
 	enum_index := find_enum_type(state, value.type_name)
 	if enum_index >= 0
-		mut text := state.enums[enum_index].name + "::" + value.text
+		mut text := nominal_name + "::" + value.text
 		row := state.enum_variants[value.integer]
 		if row.field_count > 0
 			text += "("
@@ -147,7 +152,7 @@ def repl_render(state: CompilerState, store: ReplStore, id: Integer, depth: Inte
 		end
 		return text
 	end
-	mut result := type_display(state, value.type_name) + "("
+	mut result := nominal_name + "("
 	mut closing := ")"
 	if string_starts_with(value.type_name, "Array<")
 		result = "["
