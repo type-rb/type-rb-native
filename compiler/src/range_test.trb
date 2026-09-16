@@ -24,9 +24,10 @@ describe("checked Range construction") do
 		expect(binary_operator_id("..")).to_equal(0)
 		expect(binary_operator_id("...")).to_equal(0)
 		mut state := range_test_state("def main()\n(1 + 1...2 * 2).each.with_index { |value, index| puts(value + index) }\nend\n")
-		expect(state.ranges.size()).to_equal(1)
-		expect(state.ranges[0].exclusive).to_equal(1)
-		expect(state.iterations[0].source_kind).to_equal(2)
+		expect(state.checked[0].ranges.size()).to_equal(1)
+		expect(state.checked[0].ranges[0].exclusive).to_equal(1)
+		expect(state.checked[0].iterations[0].source_kind).to_equal(2)
+		expect(state.iterations[0].type_name).to_equal("")
 		emit_qbe(state)
 		expect(has_diagnostic(state)).to_be_false()
 	end
@@ -35,7 +36,7 @@ describe("checked Range construction") do
 		mut mode := 0
 		while mode < 13
 			mut state := range_test_state("def main()\nspan := 1..\n3\nspan.each { |value| puts(value) }\nend\n")
-			plan := state.ranges[0]
+			plan := state.checked[0].ranges[0]
 			mut origin := plan.origin
 			mut operator_origin := plan.operator_origin
 			mut end_origin := plan.end_origin
@@ -44,9 +45,9 @@ describe("checked Range construction") do
 			mut start_type := plan.start_type
 			mut end_type := plan.end_type
 			if mode == 0
-				store_integer(state.range_origins, operator_origin, 0)
+				store_integer(state.checked[0].range_origins, operator_origin, 0)
 			elsif mode == 1
-				store_integer(state.range_origins, operator_origin, 99)
+				store_integer(state.checked[0].range_origins, operator_origin, 99)
 			elsif mode == 2
 				origin += 1
 			elsif mode == 3
@@ -70,7 +71,7 @@ describe("checked Range construction") do
 			else
 				finish = state.token_count[0]
 			end
-			state.ranges[0] = MirRangeConstruction.new(origin: origin, operator_origin: operator_origin, end_origin: end_origin, finish: finish, exclusive: exclusive, start_type: start_type, end_type: end_type)
+			state.checked[0].ranges[0] = MirRangeConstruction.new(origin: origin, operator_origin: operator_origin, end_origin: end_origin, finish: finish, exclusive: exclusive, start_type: start_type, end_type: end_type)
 			checked_range_require(state, plan.origin, plan.operator_origin, plan.end_origin, plan.finish)
 			expect(has_diagnostic(state)).to_be_true()
 			mode += 1
@@ -80,7 +81,7 @@ describe("checked Range construction") do
 	test("MIR emission no longer depends on constructor source proofs") do
 		mut state := range_test_state("def main()\n(1..2).each { |value| puts(value) }\nend\n")
 		expect(state.scalar_mir.functions.size()).to_equal(1)
-		store_integer(state.range_origins, state.ranges[0].operator_origin, 0)
+		store_integer(state.checked[0].range_origins, state.checked[0].ranges[0].operator_origin, 0)
 		emit_qbe(state)
 		expect(has_diagnostic(state)).to_be_false()
 	end
@@ -89,7 +90,7 @@ describe("checked Range construction") do
 		mut mode := 0
 		while mode < 2
 			mut state := range_test_state("def main()\nspan := 1..2\nend\n")
-			plan := state.ranges[0]
+			plan := state.checked[0].ranges[0]
 			mut origin :=- 1
 			if mode == 1
 				origin = state.token_count[0]

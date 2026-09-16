@@ -1,11 +1,11 @@
-import { CatchSyntax, ResultOperation } from result_model
+import { CheckedBody, checked_body_new } from checked_body
+import { CatchSyntax } from result_model
 import { GenericDefinition, GenericInstance } from generic_model
-import { EnumDefinition, EnumField, EnumPattern, EnumVariant } from enum_model
-import { MirHashOperation } from hash_mir
-import { MirIteration, MirRangeConstruction } from iteration_mir
+import { EnumDefinition, EnumField, EnumVariant } from enum_model
+import { MirIteration } from iteration_mir
 import { integer_string } from literals
 import { MirBlock, MirCall, MirControlLoop, MirIndexedTarget, MirInstruction, MirModule, MirValue } from mir
-import { IntegerStorage, StringStorage, integer_storage, load_integer, load_string, store_integer, store_string, string_storage } from storage
+import { IntegerStorage, StringStorage, integer_storage, load_integer, load_string, sparse_integer_at, store_integer, store_string, string_storage } from storage
 
 # Parsed declaration-scope expression. Function identities are assigned only
 # after all authored declarations and their types have been resolved.
@@ -54,49 +54,36 @@ record CheckedSubmission
 end
 
 record CompilerState
+	checked: Array<CheckedBody>
+	checked_bodies: Array<CheckedBody>
+	checked_body_indices: IntegerStorage
 	catch_syntax: Array<CatchSyntax>
 	catch_origins: IntegerStorage
-	result_operations: Array<ResultOperation>
 	standard_modules: IntegerStorage
 	generic_definitions: Array<GenericDefinition>
 	generic_instances: Array<GenericInstance>
 	generic_instance_lookup: Hash<String, Integer>
 	generic_depth: Array<Integer>
-	generic_application_types: StringStorage
-	generic_application_finishes: IntegerStorage
 	enums: Array<EnumDefinition>
 	enum_variants: Array<EnumVariant>
 	enum_fields: Array<EnumField>
-	enum_patterns: Array<EnumPattern>
-	enum_pattern_origins: IntegerStorage
 	submissions: Array<CheckedSubmission>
-	nullable_reads: StringStorage
-	safe_finishes: IntegerStorage
-	safe_types: StringStorage
 	loop_finishes: IntegerStorage
 	controls: Array<ControlSyntax>
-	# Positive rows identify parsed controls; -1 marks a non-completing Hash literal.
+	# Positive rows identify immutable parsed controls; typed facts live in CheckedBody.
 	control_origins: IntegerStorage
-	control_types: StringStorage
 	default_initializers: Array<DefaultInitializer>
 	default_functions: Array<Integer>
 	parameter_defaults: IntegerStorage
 	field_defaults: IntegerStorage
 	function_defaults: IntegerStorage
-	ranges: Array<MirRangeConstruction>
-	range_origins: IntegerStorage
 	iterations: Array<MirIteration>
 	iteration_origins: IntegerStorage
-	hash_operations: Array<MirHashOperation>
-	hash_origins: IntegerStorage
 	hash_repl: Array<Boolean>
 	token_kinds: IntegerStorage
 	token_texts: StringStorage
 	token_lines: IntegerStorage
 	token_count: Array<Integer>
-	checked_operator_plans: IntegerStorage
-	loop_transfer_kinds: IntegerStorage
-	loop_transfer_targets: IntegerStorage
 	scalar_mir: MirModule
 	module_names: StringStorage
 	module_files: StringStorage
@@ -150,30 +137,24 @@ end
 
 def compiler_new(capacity: Integer): CompilerState
 	return CompilerState.new(
-		catch_syntax: [], catch_origins: integer_storage(capacity), result_operations: [],
+		checked: [checked_body_new(- 1, capacity)], checked_bodies: [], checked_body_indices: integer_storage(capacity),
+		catch_syntax: [], catch_origins: integer_storage(capacity),
 		standard_modules: integer_storage(capacity),
 		generic_definitions: [], generic_instances: [], generic_instance_lookup: {}, generic_depth: [0],
-		generic_application_types: string_storage(capacity), generic_application_finishes: integer_storage(capacity),
-		enums: [], enum_variants: [], enum_fields: [], enum_patterns: [], enum_pattern_origins: integer_storage(capacity),
+		enums: [], enum_variants: [], enum_fields: [],
 		submissions: [],
-		nullable_reads: string_storage(capacity),
-		safe_finishes: integer_storage(capacity), safe_types: string_storage(capacity),
 		loop_finishes: integer_storage(capacity),
-		controls: [], control_origins: integer_storage(capacity), control_types: string_storage(capacity),
+		controls: [], control_origins: integer_storage(capacity),
 		default_initializers: [], default_functions: [],
 		parameter_defaults: integer_storage(capacity),
 		field_defaults: integer_storage(capacity),
 		function_defaults: integer_storage(capacity),
-		ranges: [], range_origins: integer_storage(capacity),
 		iterations: [], iteration_origins: integer_storage(capacity),
-		hash_operations: [], hash_origins: integer_storage(capacity), hash_repl: [false],
+		hash_repl: [false],
 		token_kinds: integer_storage(capacity),
 		token_texts: string_storage(capacity),
 		token_lines: integer_storage(capacity),
 		token_count: [0],
-		checked_operator_plans: integer_storage(capacity),
-		loop_transfer_kinds: integer_storage(capacity),
-		loop_transfer_targets: integer_storage(capacity),
 		scalar_mir: MirModule.new(enums: [], enum_variants: [], enum_fields: [], numeric_plans: [[]], types: [], records: [], fields: [], root_plans: [], array_loops: [],
 			signatures: [], calls: [],
 			source_count: [1],
@@ -381,4 +362,22 @@ def local_add(
 	store_integer(locals.mir_values, index, 0)
 	locals.count[0] = index + 1
 	return true
+end
+
+# Select by semantic function identity, preserving an explicit caller context.
+# Source token origins remain authored coordinates within each independent body.
+def select_checked_body(mut state: CompilerState, function: Integer): CheckedBody
+	previous := state.checked[0]
+	if function < 0 || function >= state.function_count[0]
+		diagnostic(state, "TRBN4004", 1, "checked body requires a declared function")
+		return previous
+	end
+	mut encoded := sparse_integer_at(state.checked_body_indices, function)
+	if encoded == 0
+		state.checked_bodies.push(checked_body_new(function, state.token_kinds.limit[0]))
+		encoded = state.checked_bodies.size()
+		store_integer(state.checked_body_indices, function, encoded)
+	end
+	state.checked[0] = state.checked_bodies[encoded - 1]
+	return previous
 end

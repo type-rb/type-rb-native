@@ -8,12 +8,13 @@ import { optimize_verified_mir } from mir_passes
 import { mir_managed_type, mir_semantic_type_id } from mir_types
 import { verify_mir } from mir_verifier
 import { validate_import_usage } from resolution
-import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_add, locals_new } from state
+import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_add, locals_new, select_checked_body } from state
 import { load_integer, load_string, sparse_integer_at } from storage
 
 # Parameter binding and body checking are separate semantic stages. Production
 # always starts MIR here and requires an owned body before finalization.
 def checked_function_locals(mut state: CompilerState, function_index: Integer): CheckedLocals
+	select_checked_body(state, function_index)
 	state.active_module[0] = load_integer(state.function_modules, function_index)
 	mut locals := locals_new(state.token_count[0] + 1)
 	scalar_mir_begin(state, function_index, locals)
@@ -38,6 +39,7 @@ def checked_function_locals(mut state: CompilerState, function_index: Integer): 
 end
 
 def check_function_body(mut state: CompilerState, function_index: Integer, mut locals: CheckedLocals): Boolean
+	previous_body := select_checked_body(state, function_index)
 	parameter_start := load_integer(state.function_parameter_starts, function_index)
 	parameter_finish := parameter_start + load_integer(state.function_parameter_counts, function_index)
 	mut parameter_index := parameter_start
@@ -87,6 +89,7 @@ def check_function_body(mut state: CompilerState, function_index: Integer, mut l
 			)
 		end
 	end
+	state.checked[0] = previous_body
 	return !has_diagnostic(state)
 end
 
