@@ -2,17 +2,15 @@ import { CheckedValue, checked_mir_value, checked_value, mir_checked_value, scal
 import { MirBlock, MirFunction, MirInstruction, MirModule, mir_table_span_valid } from mir
 import { mir_control_active, mir_control_prepare } from mir_control
 import { MirFlow, mir_flow_type, mir_value_available } from mir_flow
-import { mir_record_id, mir_semantic_type_name } from mir_types
+import { mir_record_id } from mir_types
 import { CheckedLocals, CompilerState } from state
 import { load_integer } from storage
 
 # 25 constructs a fully initialized record from an ordered argument span.
 # Authored initializers execute once before allocation; all managed arguments
 # participate in the constructor's live-before root set. 26 reads a field.
-def mir_checked_record_new(mut state: CompilerState, mut locals: CheckedLocals, declaration: Integer, arguments: Array<Integer>, origin: Integer): CheckedValue
+def mir_checked_record_new(mut state: CompilerState, mut locals: CheckedLocals, declaration: Integer, type_name: String, arguments: Array<Integer>, origin: Integer): CheckedValue
 	mir_control_prepare(state, locals)
-	definition := state.scalar_mir.records[declaration]
-	type_name := mir_semantic_type_name(state.scalar_mir, definition.type_id)
 	arguments.each do |value|
 		if value < 0
 			scalar_mir_disable(locals)
@@ -21,6 +19,7 @@ def mir_checked_record_new(mut state: CompilerState, mut locals: CheckedLocals, 
 	if !mir_control_active(locals)
 		return checked_value(type_name, 0, 9007199254740991, 1)
 	end
+	definition := state.scalar_mir.records[declaration]
 	start := locals.mir_arguments.size()
 	arguments.each do |value|
 		locals.mir_arguments.push(value)
@@ -30,10 +29,8 @@ def mir_checked_record_new(mut state: CompilerState, mut locals: CheckedLocals, 
 	return mir_checked_value(type_name, result, 9007199254740991, 1)
 end
 
-def mir_checked_record_field(mut state: CompilerState, mut locals: CheckedLocals, receiver: CheckedValue, field: Integer, origin: Integer): CheckedValue
+def mir_checked_record_field(mut state: CompilerState, mut locals: CheckedLocals, receiver: CheckedValue, field: Integer, type_name: String, origin: Integer): CheckedValue
 	mir_control_prepare(state, locals)
-	row := state.scalar_mir.fields[field]
-	type_name := mir_semantic_type_name(state.scalar_mir, row.type_id)
 	owner := checked_mir_value(receiver)
 	if owner < 0
 		scalar_mir_disable(locals)
@@ -41,6 +38,7 @@ def mir_checked_record_field(mut state: CompilerState, mut locals: CheckedLocals
 	if !mir_control_active(locals)
 		return CheckedValue.new(type_name: type_name, category: 3, origin: 9007199254740991, mutable: receiver.mutable, binding: receiver.binding, readonly: true, immutable_reference: false, nullable_binding: - 1, nullable_field: - 1, truth: - 1, falsity: - 1, flow_type: type_name)
 	end
+	row := state.scalar_mir.fields[field]
 	result := scalar_mir_value(state, locals, row.type_id, origin)
 	scalar_mir_instruction(state, locals, 26, result, owner, - 1, field, - 1, load_integer(state.token_lines, origin))
 	return CheckedValue.new(type_name: type_name, category: - result - 1, origin: 9007199254740991, mutable: receiver.mutable, binding: receiver.binding, readonly: true, immutable_reference: false, nullable_binding: - 1, nullable_field: - 1, truth: - 1, falsity: - 1, flow_type: type_name)

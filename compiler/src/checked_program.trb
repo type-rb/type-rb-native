@@ -30,7 +30,8 @@ import { mir_control_active, mir_control_assign, mir_control_branch, mir_control
 import { binary_operator_id, declaration_start, parse_argument_label, syntax_block_end, syntax_conditional_tail, syntax_expression_precedence, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_statement_boundary } from parser
 import { standard_package_import, standard_package_root } from resolution
 import { find_visible_enum, find_visible_function, find_visible_record } from declaration_lookup
-import { array_element_type, array_type, common_array_element_type, find_field, find_record_type, resolve_type_name, type_display } from type_resolution
+import { string_starts_with } from path
+import { array_element_type, array_type, common_array_element_type, find_field, find_record_type, record_type, resolve_type_name, type_display } from type_resolution
 import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_add, local_find, terminal_token } from state
 import { load_integer, load_string, sparse_integer_at, sparse_string_at, store_integer, store_string } from storage
 
@@ -382,6 +383,13 @@ def check_primary(
 	if kind == 1
 		application_finish := sparse_integer_at(state.checked[0].generic_application_finishes, origin)
 		if application_finish > origin
+			if sparse_integer_at(state.checked[0].generic_calls, application_finish) > 0
+				if local_find(locals, load_string(state.token_texts, origin)) >= 0
+					return type_diagnostic(state, line, "local value does not accept type arguments")
+				end
+				position[0] = application_finish
+				return checked_value("", 1, origin, 0)
+			end
 			if find_enum_type(state, sparse_string_at(state.checked[0].generic_application_types, origin)) >= 0
 				return check_enum_constructor(state, position, locals)
 			end
@@ -439,9 +447,13 @@ def check_call(mut state: CompilerState, mut position: Array<Integer>, mut local
 	advance(position)
 	skip_newlines(state, position)
 	mut function := find_visible_function(state, state.active_module[0], callee_name)
+	encoded := sparse_integer_at(state.checked[0].generic_calls, origin)
+	if encoded > 0
+		function = encoded - 1
+	end
 	mut parameter_start := 0
 	mut result_type := "Void"
-	if callee_name == "puts" || callee_category == 4 || callee_category == 5
+	if (callee_name == "puts" && encoded == 0) || callee_category == 4 || callee_category == 5
 		function =- 1
 	elsif function >= 0
 		parameter_start = load_integer(state.function_parameter_starts, function)
@@ -489,7 +501,7 @@ def check_call(mut state: CompilerState, mut position: Array<Integer>, mut local
 					diagnostic(state, "TRBN4004", argument_line, "mutable Hash argument requires a mutable binding or fresh value")
 				end
 			end
-			if callee_name == "puts" && argument.type_name != "Never" && argument.type_name != "String" && argument.type_name != "Integer" && argument.type_name != "Boolean"
+			if (callee_name == "puts" && encoded == 0) && argument.type_name != "Never" && argument.type_name != "String" && argument.type_name != "Integer" && argument.type_name != "Boolean"
 				diagnostic(state, "TRBN4004", line, "puts does not yet support " + type_display(state, argument.type_name))
 			end
 			if token_is(state, position[0], ",")
@@ -508,7 +520,7 @@ def check_call(mut state: CompilerState, mut position: Array<Integer>, mut local
 		locals.mir_state[0] = saved_mir
 		return checked_value("Never", 0, 9007199254740991, 0)
 	end
-	if callee_name == "puts"
+	if (callee_name == "puts" && encoded == 0)
 		return mir_checked_puts(state, locals, bindings.values, origin)
 	end
 	if callee_category == 4 || callee_category == 5
@@ -564,7 +576,7 @@ def check_record_new(mut state: CompilerState, mut position: Array<Integer>, mut
 		locals.mir_state[0] = saved_mir
 		return checked_value("Never", 0, 9007199254740991, 0)
 	end
-	return mir_checked_record_new(state, locals, record_index, bindings.values, origin)
+	return mir_checked_record_new(state, locals, record_index, record_type(record_index), bindings.values, origin)
 end
 
 def check_method_call(
@@ -726,7 +738,7 @@ def check_member(mut state: CompilerState, mut position: Array<Integer>, mut loc
 				if value.nullable_field == - 1
 					binding = value.nullable_binding
 				end
-				value = mir_checked_record_field(state, locals, value, field_index, position[0] - 1)
+				value = mir_checked_record_field(state, locals, value, field_index, load_string(state.field_types, field_index), position[0] - 1)
 				value = nullable_read(state, locals, value, binding, field_index, position[0] - 1)
 			end
 		end
@@ -1000,7 +1012,7 @@ def checked_readonly_reference_binding(
 		reference_type = nullable_element(reference_type)
 	end
 	if array_element_type(reference_type) == "" && hash_key_type(reference_type) == "" && reference_type != "Hash"
-		if find_record_type(state, reference_type) < 0
+		if find_record_type(state, reference_type) < 0 && !(state.generic_template_mode[0] && string_starts_with(reference_type, "TypeParameter#"))
 			return false
 		end
 	end

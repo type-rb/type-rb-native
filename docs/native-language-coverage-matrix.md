@@ -47,7 +47,7 @@
 | Transparent type alias | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Nominal newtype construction and projection | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Parameters following nested generic annotations | accepts | accepts | matches reference | matches reference |
-| Generic function application | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Generic function application | accepts | accepts | matches reference | matches reference |
 | Generic record | accepts | accepts | matches reference | matches reference |
 | Literal-field union narrowing | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Typed function value and lexical capture | rejects valid input | rejects valid input | not reached | rejects valid input |
@@ -190,3 +190,25 @@
 | Result: catch empty handler | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Result: catch nested composition | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Result: user homonym required use | accepts | accepts | matches reference | matches reference |
+| Generic function identity | accepts | accepts | matches reference | matches reference |
+| Generic function generic default | accepts | accepts | matches reference | matches reference |
+| Generic function recursive | accepts | accepts | matches reference | matches reference |
+| Generic function generic nested | accepts | accepts | matches reference | matches reference |
+| Generic function generic nil | accepts | accepts | matches reference | matches reference |
+| Generic function generic result | accepts | accepts | matches reference | matches reference |
+| Generic container values and abstract element access | accepts | accepts | matches reference | matches reference |
+| Generic function aliases and nominal argument identity | accepts | accepts | matches reference | matches reference |
+| Reject mutable aliases of unconstrained immutable type parameters | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Generic iteration reads typed elements without introducing mutation | accepts | accepts | matches reference | matches reference |
+| Explicit and omitted generic defaults execute in declaration order | accepts | accepts | matches reference | matches reference |
+| Nominal field types use declaration scope rather than caller type parameters | accepts | accepts | matches reference | matches reference |
+| Reject generic unused unresolved | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject generic unused arithmetic | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject generic used arithmetic | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject generic unused invalid return | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Generic functions require explicit type arguments | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Generic function type argument counts are exact | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Generic function arguments retain explicit type identity | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Local values shadow generic functions | rejects valid input | rejects as reference | not reached | rejects as reference |
+| Unused generic parameter defaults are checked abstractly | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Unused generic functions require complete return flow | rejects as reference | rejects as reference | not reached | rejects as reference |

@@ -5,26 +5,8 @@ import { load_integer } from storage
 import { advance, expect, expect_identifier, finish_statement, parse_type, skip_newlines, token_is } from syntax_tokens
 
 def parse_generic_nominal(mut state: CompilerState, mut position: Array<Integer>, kind: Integer, name: String, line: Integer): Boolean
-	advance(position)
-	mut parameters: Array<String> := []
-	skip_newlines(state, position)
-	while !token_is(state, position[0], ">") && !has_diagnostic(state)
-		parameter := expect_identifier(state, position)
-		parameters.each do |previous|
-			if previous == parameter
-				diagnostic(state, "TRBN4003", line, "duplicate type parameter " + parameter)
-			end
-		end
-		parameters.push(parameter)
-		skip_newlines(state, position)
-		if !token_is(state, position[0], ",")
-			break
-		end
-		advance(position)
-		skip_newlines(state, position)
-	end
-	if parameters.size() == 0 || !expect(state, position, ">")
-		diagnostic(state, "TRBN4002", line, "generic declaration requires type parameters")
+	parameters := parse_generic_parameters(state, position, line)
+	if has_diagnostic(state)
 		return false
 	end
 	if !finish_statement(state, position)
@@ -115,7 +97,7 @@ def parse_generic_nominal(mut state: CompilerState, mut position: Array<Integer>
 	return finish_statement(state, position)
 end
 
-# Syntactic type applications are unambiguous only with a constructor suffix.
+# Syntactic type applications require a call or constructor suffix.
 # Comparison operators never consume a speculative type argument list.
 def nominal_application_end(state: CompilerState, origin: Integer): Integer
 	if !token_is(state, origin + 1, "<")
@@ -133,8 +115,34 @@ def nominal_application_end(state: CompilerState, origin: Integer): Integer
 		end
 		token += 1
 	end
-	if depth == 0 && (token_is(state, token, "::") || (token_is(state, token, ".") && token_is(state, token + 1, "new")))
+	if depth == 0 && (token_is(state, token, "(") || token_is(state, token, "::") || (token_is(state, token, ".") && token_is(state, token + 1, "new")))
 		return token
 	end
 	return - 1
+end
+
+def parse_generic_parameters(mut state: CompilerState, mut position: Array<Integer>, line: Integer): Array<String>
+	advance(position)
+	mut parameters: Array<String> := []
+	skip_newlines(state, position)
+	while !token_is(state, position[0], ">") && !has_diagnostic(state)
+		parameter := expect_identifier(state, position)
+		parameters.each do |previous|
+			if previous == parameter
+				diagnostic(state, "TRBN4003", line, "duplicate type parameter " + parameter)
+			end
+		end
+		parameters.push(parameter)
+		skip_newlines(state, position)
+		if !token_is(state, position[0], ",")
+			break
+		end
+		advance(position)
+		skip_newlines(state, position)
+	end
+	if parameters.size() == 0 || !expect(state, position, ">")
+		diagnostic(state, "TRBN4002", line, "generic declaration requires type parameters")
+		return []
+	end
+	return parameters
 end

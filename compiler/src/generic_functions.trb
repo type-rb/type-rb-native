@@ -1,0 +1,100 @@
+import { find_function_in_module, find_generic_function_in_module, find_generic_in_module, find_record_in_module } from declaration_lookup
+import { find_enum_in_module } from enum_types
+import { generic_application, generic_substitute } from generic_arguments
+import { GenericFunctionInstance } from generic_model
+import { generic_field_type_valid } from generic_validation
+import { resolve_type_name } from type_resolution
+import { integer_string } from literals
+import { CompilerState, DefaultInitializer, diagnostic, has_diagnostic } from state
+import { store_integer, store_string } from storage
+
+def validate_generic_functions(mut state: CompilerState): Boolean
+	mut index := 0
+	while index < state.generic_functions.size() && !has_diagnostic(state)
+		row := state.generic_functions[index]
+		state.active_module[0] = row.source_id
+		if find_generic_function_in_module(state, row.source_id, row.name) != index || find_function_in_module(state, row.source_id, row.name) >= 0 || find_generic_in_module(state, row.source_id, row.name) >= 0 || find_record_in_module(state, row.source_id, row.name) >= 0 || find_enum_in_module(state, row.source_id, row.name) >= 0
+			diagnostic(state, "TRBN4003", row.line, "duplicate function declaration " + row.name)
+		end
+		if row.name == "main" && row.source_id == state.entry_module[0]
+			diagnostic(state, "TRBN4003", row.line, "main cannot have type parameters")
+		end
+		mut names: Hash<String, Integer> := {}
+		row.parameters.each do |parameter|
+			if names.key?(parameter.name)
+				diagnostic(state, "TRBN4003", parameter.line, "duplicate parameter declaration " + parameter.name)
+			end
+			names[parameter.name] = 1
+			if !generic_field_type_valid(state, row.source_id, parameter.type_name, row.type_parameters)
+				diagnostic(state, "TRBN4003", parameter.line, "invalid generic parameter type " + parameter.type_name)
+			end
+		end
+		if row.result_type != "Void" && !generic_field_type_valid(state, row.source_id, row.result_type, row.type_parameters)
+			diagnostic(state, "TRBN4003", row.line, "invalid generic result type " + row.result_type)
+		end
+		index += 1
+	end
+	return !has_diagnostic(state)
+end
+
+# Concrete instances share authored body origins, but own signatures and facts.
+# Publish the identity before visiting its body so recursion reuses the instance.
+def instantiate_generic_function(mut state: CompilerState, definition: Integer, arguments: Array<String>, depth: Integer): Integer
+	row := state.generic_functions[definition]
+	if arguments.size() != row.type_parameters.size()
+		diagnostic(state, "TRBN4003", row.line, "generic function type argument count differs")
+		return - 1
+	end
+	mut valid := true
+	arguments.each do |argument|
+		if argument == ""
+			valid = false
+		end
+	end
+	if !valid
+		diagnostic(state, "TRBN4003", row.line, "invalid generic function type argument")
+		return - 1
+	end
+	key := generic_application(integer_string(definition), arguments)
+	if state.generic_function_lookup.key?(key)
+		return state.generic_function_instances[state.generic_function_lookup[key]].function
+	end
+	if depth >= 128
+		diagnostic(state, "TRBN4003", row.line, "generic function expansion exceeds the compiler nesting limit")
+		return - 1
+	end
+	function := state.function_count[0]
+	parameter_start := state.parameter_count[0]
+	store_string(state.function_names, function, "$generic" + integer_string(definition) + ":" + generic_application(row.name, arguments))
+	store_integer(state.function_modules, function, row.source_id)
+	store_integer(state.function_parameter_starts, function, parameter_start)
+	store_integer(state.function_parameter_counts, function, row.parameters.size())
+	store_integer(state.function_body_starts, function, row.body_start)
+	store_integer(state.function_body_ends, function, row.body_finish)
+	store_integer(state.function_lines, function, row.line)
+	state.function_count[0] += 1
+	instance := state.generic_function_instances.size()
+	state.generic_function_instances.push(GenericFunctionInstance.new(definition: definition, arguments: arguments, function: function, depth: depth))
+	state.generic_function_lookup[key] = instance
+	store_integer(state.function_generic_instances, function, instance + 1)
+	saved_binding := state.checked[0].generic_instance[0]
+	state.checked[0].generic_instance[0] = 0
+	row.parameters.each do |parameter|
+		index := state.parameter_count[0]
+		type_name := resolve_type_name(state, row.source_id, generic_substitute(parameter.type_name, row.type_parameters, arguments), false)
+		store_string(state.parameter_names, index, parameter.name)
+		store_string(state.parameter_types, index, type_name)
+		store_integer(state.parameter_lines, index, parameter.line)
+		store_integer(state.parameter_mutable, index, parameter.mutable)
+		store_integer(state.parameter_named_only, index, parameter.named_only)
+		if parameter.default_start >= 0
+			state.default_initializers.push(DefaultInitializer.new(kind: 0, owner: function, slot: index, start: parameter.default_start, finish: parameter.default_finish))
+			state.default_functions.push(- 1)
+			store_integer(state.parameter_defaults, index, state.default_initializers.size())
+		end
+		state.parameter_count[0] += 1
+	end
+	store_string(state.function_result_types, function, resolve_type_name(state, row.source_id, generic_substitute(row.result_type, row.type_parameters, arguments), true))
+	state.checked[0].generic_instance[0] = saved_binding
+	return function
+end

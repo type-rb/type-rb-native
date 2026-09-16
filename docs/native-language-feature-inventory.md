@@ -19,7 +19,7 @@ Each count describes registered probes, not language coverage percentages.
 | Enums and tagged values | basic | 4 / 19 | Raw values and conversion failures, enum methods and attributes; Nested module declarations and wider pattern forms | EnumStatement, EnumMemberStatement |
 | Transparent aliases | basic | 2 / 2 | Generic aliases, cycles and cross-module identity | TypeAliasStatement |
 | Nominal newtypes | basic | 1 / 1 | Closed/private constructors, methods, immutable representation and boundary diagnostics | NewtypeStatement |
-| Generic declarations and applications | basic | 3 / 15 | Generic functions, methods, aliases, classes and interfaces; Generic record defaults and wider constraints/type applications | GenericExpression |
+| Generic declarations and applications | basic | 3 / 37 | Generic methods, aliases, classes and interfaces; Generic record defaults and wider constraints/type applications | GenericExpression |
 | Literal types and discriminated unions | basic | 1 / 1 | Shared discriminants, branch narrowing and invalid mutation/common-type boundaries |  |
 | Function values and lexical capture | basic | 3 / 3 | Callable parameters/returns, escape/cycles, captured aliases and independent return boundaries | LambdaExpression |
 | Arrays and checked indexes | basic | 1 / 8 | Removal during assignments/iteration and retained managed receivers; Remaining Array receiver APIs and invalid element/mutation combinations | ArrayLiteral, IndexExpression |

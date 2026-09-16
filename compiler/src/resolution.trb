@@ -1,5 +1,7 @@
+import { instantiate_generic_function, validate_generic_functions } from generic_functions
+import { generic_arguments, generic_base } from generic_arguments
 import { load_standard_source, standard_source_kind } from standard_library
-import { find_function_in_module, find_generic_in_module, find_import_binding, find_record_in_module, find_visible_enum, find_visible_function, find_visible_generic, find_visible_record } from declaration_lookup
+import { find_function_in_module, find_generic_function_in_module, find_generic_in_module, find_import_binding, find_record_in_module, find_visible_enum, find_visible_function, find_visible_generic, find_visible_generic_function, find_visible_record } from declaration_lookup
 import { resolve_type_name } from type_resolution
 import { EnumField } from enum_model
 import { parse_type, token_is } from syntax_tokens
@@ -323,6 +325,11 @@ def resolve_bare_imports(mut state: CompilerState): Boolean
 						end
 						function_index += 1
 					end
+					state.generic_functions.each do |definition|
+						if definition.source_id == target && ascii_fold(definition.name) == wanted
+							matching_function = true
+						end
+					end
 					if matching_function
 						diagnostic(
 							state,
@@ -395,7 +402,7 @@ def validate_import_bindings(mut state: CompilerState): Boolean
 		if find_record_in_module(state, module_index, name) >= 0 || find_enum_in_module(state, module_index, name) >= 0 || find_generic_in_module(state, module_index, name) >= 0
 			diagnostic(state, "TRBN4003", line, "import binding conflicts with local declaration " + name)
 		end
-		if find_function_in_module(state, module_index, name) >= 0
+		if find_function_in_module(state, module_index, name) >= 0 || find_generic_function_in_module(state, module_index, name) >= 0
 			diagnostic(state, "TRBN4003", line, "import binding conflicts with local declaration " + name)
 		end
 		mut exported := target < - 1
@@ -403,7 +410,7 @@ def validate_import_bindings(mut state: CompilerState): Boolean
 			if find_record_in_module(state, target, declaration) >= 0 || find_enum_in_module(state, target, declaration) >= 0 || find_generic_in_module(state, target, declaration) >= 0
 				exported = true
 			end
-			if find_function_in_module(state, target, declaration) >= 0
+			if find_function_in_module(state, target, declaration) >= 0 || find_generic_function_in_module(state, target, declaration) >= 0
 				exported = true
 			end
 		end
@@ -434,6 +441,9 @@ end
 
 def resolve_declarations(mut state: CompilerState): Boolean
 	if !validate_import_bindings(state)
+		return false
+	end
+	if !validate_generic_functions(state)
 		return false
 	end
 	if !validate_generic_declarations(state)
@@ -635,6 +645,27 @@ def resolve_function_body(
 				if application_finish > index
 					mut application_position := [index]
 					raw := parse_type(state, application_position)
+					if token_is(state, application_finish, "(")
+						definition := find_visible_generic_function(state, module_index, generic_base(raw))
+						if definition < 0
+							diagnostic(state, "TRBN4003", load_integer(state.token_lines, index), "unresolved generic function " + generic_base(raw))
+							return false
+						end
+						mut arguments: Array<String> := []
+						generic_arguments(raw).each do |argument|
+							arguments.push(resolve_type_name(state, module_index, argument, false))
+						end
+						mut depth := 0
+						instance := state.checked[0].generic_instance[0]
+						if instance > 0
+							depth = state.generic_function_instances[instance - 1].depth + 1
+						end
+						function := instantiate_generic_function(state, definition, arguments, depth)
+						store_integer(state.checked[0].generic_calls, application_finish, function + 1)
+						store_integer(state.checked[0].generic_application_finishes, index, application_finish)
+						index = application_finish
+						next
+					end
 					resolved := resolve_type_name(state, module_index, raw, false)
 					if resolved == ""
 						diagnostic(state, "TRBN4003", load_integer(state.token_lines, index), "invalid nominal type application " + raw)
@@ -760,7 +791,11 @@ def resolve(mut state: CompilerState): Boolean
 	while function_index < state.function_count[0]
 		mut locals := locals_new(state.token_count[0] + 1)
 		resolve_function_body(state, function_index, locals)
+		declare_default_functions(state)
 		function_index += 1
+		if has_diagnostic(state)
+			return false
+		end
 	end
 	return !has_diagnostic(state)
 end

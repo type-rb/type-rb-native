@@ -1,0 +1,53 @@
+import { generic_program_fork } from generic_program
+import { instantiate_generic_function } from generic_functions
+import { check_function_body, checked_function_locals } from checked_functions
+import { declare_default_functions } from default_arguments
+import { resolve_function_body } from resolution
+import { integer_string } from literals
+import { CompilerState, diagnostic, has_diagnostic, locals_new } from state
+import { load_integer, load_string, store_integer } from storage
+
+# Unused declarations receive exactly the same abstract validation as used ones.
+# Concrete arguments cannot make an invalid unconstrained template legal.
+def check_generic_templates(mut state: CompilerState): Boolean
+	if state.generic_functions.size() == 0
+		return true
+	end
+	mut program := generic_program_fork(state)
+	mut function := program.function_count[0]
+	mut definition := 0
+	while definition < program.generic_functions.size()
+		mut arguments: Array<String> := []
+		mut parameter := 0
+		while parameter < program.generic_functions[definition].type_parameters.size()
+			arguments.push("TypeParameter#" + integer_string(definition) + "#" + integer_string(parameter))
+			parameter += 1
+		end
+		instantiate_generic_function(program, definition, arguments, 0)
+		definition += 1
+	end
+	declare_default_functions(program)
+	finish := program.function_count[0]
+	while function < finish && !has_diagnostic(program)
+		mut names := locals_new(program.token_count[0] + 1)
+		resolve_function_body(program, function, names)
+		declare_default_functions(program)
+		if !has_diagnostic(program)
+			mut locals := checked_function_locals(program, function)
+			check_function_body(program, function, locals)
+		end
+		function += 1
+	end
+	mut binding := 0
+	while binding < state.import_count[0]
+		if load_integer(program.import_used, binding) > 0
+			store_integer(state.import_used, binding, 1)
+		end
+		binding += 1
+	end
+	if has_diagnostic(program)
+		state.active_module[0] = load_integer(program.diagnostic_modules, 0)
+		diagnostic(state, load_string(program.diagnostic_codes, 0), load_integer(program.diagnostic_lines, 0), load_string(program.diagnostic_messages, 0))
+	end
+	return !has_diagnostic(state)
+end

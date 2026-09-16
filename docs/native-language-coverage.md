@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 188 ordinary-path probes and 32 feature
+Status: the shared contract contains 210 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -101,11 +101,26 @@ resolves complete concrete catalogs before MIR construction; backend output does
 not consult generic templates or source spellings. See
 [decision 0045](decisions/0045-generic-nominal-mir.md).
 
-Generic record defaults, functions, methods, aliases and classes/interfaces
+Generic record defaults, methods, aliases and classes/interfaces
 remain separate gaps. The shared imported-generic-enum
 case records a pinned reference defect as a difference, not a successful parity
 claim. [TypeRB PR #704](https://github.com/type-rb/type-rb/pull/704) addresses
 its checker identity and Ruby constructor failures. Compiler self-use of generic syntax awaits a seed that supports it.
+
+## Generic functions and parameter defaults
+
+Explicit top-level function applications now instantiate ordinary concrete MIR
+signatures and independent checked bodies. Scalar and managed instances,
+recursion, nested nominal/container types, nullable/Result values, import aliases,
+iteration and declaration-scoped defaults use the same checking and call path.
+Unused templates and defaults are checked with abstract parameter identities;
+concrete call sites cannot legalize operations on unconstrained `T`.
+
+Source/template erasure preserves verified QBE, and forced collection covers
+managed generic calls. See [decision 0048](decisions/0048-generic-function-mir.md)
+for ownership and remaining boundaries. Generic record defaults and other generic
+declaration families remain gaps. The pinned reference's local-shadowing case is
+an explicit diagnostic difference, not a parity claim; [TypeRB PR #705](https://github.com/type-rb/type-rb/pull/705) fixes the reference checker.
 
 ## Standard Result and typed control flow
 

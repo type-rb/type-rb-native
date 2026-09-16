@@ -1,5 +1,6 @@
+import { GenericFunction, GenericParameter } from generic_model
 import { CatchSyntax } from result_model
-import { nominal_application_end, parse_generic_nominal } from generic_syntax
+import { nominal_application_end, parse_generic_nominal, parse_generic_parameters } from generic_syntax
 import { advance, expect, expect_identifier, finish_statement, parse_type, skip_newlines, token_is } from syntax_tokens
 import { parse_enum } from enum_syntax
 import { MirIteration } from iteration_mir
@@ -616,6 +617,11 @@ def parse_function(mut state: CompilerState, mut position: Array<Integer>): Bool
 	line := load_integer(state.token_lines, position[0])
 	advance(position)
 	name := expect_identifier(state, position)
+	mut type_parameters: Array<String> := []
+	mut generic_parameters: Array<GenericParameter> := []
+	if token_is(state, position[0], "<")
+		type_parameters = parse_generic_parameters(state, position, line)
+	end
 	if !expect(state, position, "(")
 		return false
 	end
@@ -655,8 +661,17 @@ def parse_function(mut state: CompilerState, mut position: Array<Integer>): Bool
 				end
 				parameter_type := parse_type(state, position)
 				parameter_index := state.parameter_count[0]
+				mut default_start :=- 1
+				mut default_finish :=- 1
 				if token_is(state, position[0], "=")
-					if !parse_default_initializer(state, position, 0, state.function_count[0], parameter_index)
+					if type_parameters.size() > 0
+						advance(position)
+						default_start = position[0]
+						if !parse_expression_syntax(state, position, 1)
+							return false
+						end
+						default_finish = position[0]
+					elsif !parse_default_initializer(state, position, 0, state.function_count[0], parameter_index)
 						return false
 					end
 					default_seen = true
@@ -664,13 +679,17 @@ def parse_function(mut state: CompilerState, mut position: Array<Integer>): Bool
 					diagnostic(state, "TRBN4002", parameter_line, "required parameter cannot follow a default parameter in the same parameter group")
 					return false
 				end
-				store_string(state.parameter_names, parameter_index, parameter_name)
-				store_string(state.parameter_types, parameter_index, parameter_type)
-				store_integer(state.parameter_mutable, parameter_index, mutable)
-				store_integer(state.parameter_named_only, parameter_index, named_only)
+				if type_parameters.size() > 0
+					generic_parameters.push(GenericParameter.new(name: parameter_name, type_name: parameter_type, line: parameter_line, mutable: mutable, named_only: named_only, default_start: default_start, default_finish: default_finish))
+				else
+					store_string(state.parameter_names, parameter_index, parameter_name)
+					store_string(state.parameter_types, parameter_index, parameter_type)
+					store_integer(state.parameter_mutable, parameter_index, mutable)
+					store_integer(state.parameter_named_only, parameter_index, named_only)
+					store_integer(state.parameter_lines, parameter_index, parameter_line)
+					state.parameter_count[0] = parameter_index + 1
+				end
 				named_count += named_only
-				store_integer(state.parameter_lines, parameter_index, parameter_line)
-				state.parameter_count[0] = parameter_index + 1
 				parameter_count += 1
 				if token_is(state, position[0], ",")
 					advance(position)
@@ -707,6 +726,10 @@ def parse_function(mut state: CompilerState, mut position: Array<Integer>): Bool
 	end
 	if !finish_statement(state, position)
 		return false
+	end
+	if type_parameters.size() > 0
+		state.generic_functions.push(GenericFunction.new(name: name, source_id: state.active_module[0], line: line, type_parameters: type_parameters, parameters: generic_parameters, result_type: result_type, body_start: body_start, body_finish: body_end))
+		return true
 	end
 	function_index := state.function_count[0]
 	store_string(state.function_names, function_index, name)
