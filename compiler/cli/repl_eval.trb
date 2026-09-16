@@ -1,3 +1,4 @@
+import { select_checked_body } from state
 import { result_projection } from result_checked
 import { token_is, parse_type, skip_newlines } from syntax_tokens
 import { nullable_common } from nullable_types
@@ -228,6 +229,7 @@ def repl_call(mut state: CompilerState, function: Integer, arguments: Array<Inte
 		store.error[0] = "REPL call depth limit exceeded"
 		return 0
 	end
+	previous_body := select_checked_body(state, function)
 	store.depth[0] += 1
 	mut environment := repl_environment()
 	start := load_integer(state.function_parameter_starts, function)
@@ -250,6 +252,7 @@ def repl_call(mut state: CompilerState, function: Integer, arguments: Array<Inte
 		result = repl_block(state, position, store, environment, flow, - 1)
 	end
 	state.active_module[0] = module_name
+	state.checked[0] = previous_body
 	store.depth[0] -= 1
 	if load_string(state.function_result_types, function) == "Void"
 		return 0
@@ -351,7 +354,7 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 	end
 	if text == "{"
 		plan := checked_hash_plan(state, position[0] - 1)
-		diverging := sparse_integer_at(state.control_origins, position[0] - 1) < 0
+		diverging := sparse_integer_at(state.checked[0].diverging_hashes, position[0] - 1) > 0
 		mut id := 0
 		if !diverging
 			id = repl_hash_new(store, plan.type_name, plan.capacity)
@@ -418,8 +421,8 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		return repl_reference(repl_value(store, "Array<" + element + ">", 0, 0.0, "", children))
 	end
 	origin := position[0] - 1
-	application_type := sparse_string_at(state.generic_application_types, origin)
-	application_finish := sparse_integer_at(state.generic_application_finishes, origin)
+	application_type := sparse_string_at(state.checked[0].generic_application_types, origin)
+	application_finish := sparse_integer_at(state.checked[0].generic_application_finishes, origin)
 	if application_finish > origin
 		position[0] = application_finish
 	end
@@ -581,8 +584,8 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		if token_is(state, position[0], "&.")
 			safe_origin = position[0]
 			if repl_absent(store, result.value)
-				position[0] = sparse_integer_at(state.safe_finishes, safe_origin)
-				result = repl_reference(repl_none(store, load_string(state.safe_types, safe_origin)))
+				position[0] = sparse_integer_at(state.checked[0].safe_finishes, safe_origin)
+				result = repl_reference(repl_none(store, load_string(state.checked[0].safe_types, safe_origin)))
 				next
 			end
 			result = ReplReference.new(value: repl_payload(store, result.value), binding: result.binding, container: result.container, slot: result.slot)
@@ -645,7 +648,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 					if value.type_name == "Hash" || hash_key_type(value.type_name) != ""
 						result = repl_reference(repl_hash_method(state, position, store, environment, result.value))
 						if safe_origin >= 0 && environment.flow[0] == 0
-							result = repl_reference(repl_coerce(store, result.value, load_string(state.safe_types, safe_origin)))
+							result = repl_reference(repl_coerce(store, result.value, load_string(state.checked[0].safe_types, safe_origin)))
 						end
 						next
 					end
@@ -702,7 +705,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 			end
 		end
 		if safe_origin >= 0 && environment.flow[0] == 0
-			result = repl_reference(repl_coerce(store, result.value, load_string(state.safe_types, safe_origin)))
+			result = repl_reference(repl_coerce(store, result.value, load_string(state.checked[0].safe_types, safe_origin)))
 		end
 	end
 	return result
@@ -728,7 +731,7 @@ def repl_expression(mut state: CompilerState, mut position: Array<Integer>, mut 
 			origin := position[0] - 1
 			skip_newlines(state, position)
 			if precedence <= 2
-				plan := load_integer(state.checked_operator_plans, origin)
+				plan := load_integer(state.checked[0].checked_operator_plans, origin)
 				short_value := mir_logical_short_value(plan)
 				if short_value < 0 || plan - 64 != binary_operator_id(operator)
 					store.error[0] = "invalid checked logical plan"
@@ -1196,7 +1199,7 @@ def repl_control(mut state: CompilerState, mut position: Array<Integer>, mut sto
 			condition := repl_expression(state, position, store, environment, 1, "Boolean")
 			selected = store.integers[condition.value] != 0
 		elsif control.kind == 2 && branch.condition >= 0 && find_enum_type(state, store.types[selector]) >= 0
-			pattern := state.enum_patterns[sparse_integer_at(state.enum_pattern_origins, branch.condition) - 1]
+			pattern := state.checked[0].enum_patterns[sparse_integer_at(state.checked[0].enum_pattern_origins, branch.condition) - 1]
 			selected = store.integers[selector] == pattern.variant
 			if selected
 				mut slot := 0
@@ -1235,7 +1238,7 @@ def repl_control(mut state: CompilerState, mut position: Array<Integer>, mut sto
 	if environment.flow[0] != 0
 		return environment.flow[1]
 	end
-	return repl_coerce(store, result, load_string(state.control_types, origin))
+	return repl_coerce(store, result, load_string(state.checked[0].control_types, origin))
 end
 
 def repl_statement_expression(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, expected: String): ReplReference

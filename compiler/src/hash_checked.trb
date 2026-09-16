@@ -8,28 +8,28 @@ import { CompilerState, diagnostic } from state
 import { load_integer, load_string, sparse_integer_at, store_integer } from storage
 
 def checked_hash_index_at(state: CompilerState, origin: Integer): Integer
-	return sparse_integer_at(state.hash_origins, origin) - 1
+	return sparse_integer_at(state.checked[0].hash_origins, origin) - 1
 end
 
 # Publish a single named plan per source operation; the origin table is only an
 # index into verified MIR, never an independent collection semantics store.
 def checked_hash_publish(mut state: CompilerState, plan: MirHashOperation)
-	mut operations := state.hash_operations
+	mut operations := state.checked[0].hash_operations
 	index := checked_hash_index_at(state, plan.origin)
 	if index >= 0
 		operations[index] = plan
 	else
 		operations.push(plan)
-		store_integer(state.hash_origins, plan.origin, operations.size())
+		store_integer(state.checked[0].hash_origins, plan.origin, operations.size())
 	end
-	store_integer(state.hash_origins, plan.finish, load_integer(state.hash_origins, plan.origin))
+	store_integer(state.checked[0].hash_origins, plan.finish, load_integer(state.checked[0].hash_origins, plan.origin))
 end
 
 def checked_hash_plan(state: CompilerState, origin: Integer): MirHashOperation
 	if origin >= 0 && origin < state.token_count[0]
 		index := checked_hash_index_at(state, origin)
-		if index >= 0 && index < state.hash_operations.size()
-			return state.hash_operations[index]
+		if index >= 0 && index < state.checked[0].hash_operations.size()
+			return state.checked[0].hash_operations[index]
 		end
 	end
 	return mir_hash_operation(0, - 1, - 1, - 1, "", false, 0)
@@ -101,8 +101,8 @@ def checked_hash_require(mut state: CompilerState, origin: Integer, type_name: S
 	return plan
 end
 
-def checked_hash_verify(mut state: CompilerState): Boolean
-	state.hash_operations.each do |plan|
+def checked_hash_verify_body(mut state: CompilerState): Boolean
+	state.checked[0].hash_operations.each do |plan|
 		if !checked_hash_valid(state, plan, state.hash_repl[0])
 			diagnostic(state, "TRBN4004", load_integer(state.token_lines, plan.origin), "unresolved or invalid Hash operation; annotate Hash<K, V>")
 			return false
@@ -148,4 +148,18 @@ def checked_hash_value_layout(state: CompilerState, type_name: String): Boolean
 		return true
 	end
 	return find_record_type(state, type_name) >= 0
+end
+
+def checked_hash_verify(mut state: CompilerState): Boolean
+	previous := state.checked[0]
+	mut valid := true
+	state.checked_bodies.each do |body|
+		state.checked[0] = body
+		if !checked_hash_verify_body(state)
+			valid = false
+			break
+		end
+	end
+	state.checked[0] = previous
+	return valid
 end

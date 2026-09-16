@@ -127,7 +127,7 @@ defaults and managed collections retain optional payloads through shared root
 planning. See [decision 0042](decisions/0042-nullable-mir.md) for the private layout
 and conservative fact invalidation across assignments and loop backedges.
 
-The ordinary compiler closure contains 82 modules. Implementation syntax stays
+The ordinary compiler closure contains 83 modules. Implementation syntax stays
 within the existing immutable seed and snapshot-v4 boundary; compiler self-use
 of the new syntax still depends on an accepted seed refresh. The shared language
 contract contains 188 cases with explicit remaining differences. Retained REPL
@@ -142,6 +142,9 @@ REPL remapping and source erasure. Standard Result construction, prefix try,
 statement-value catch and required-use checks now share these concrete enum
 operations and ordinary control-flow joins; see
 [decision 0046](decisions/0046-result-control-mir.md).
+Function-owned checked projections now isolate concrete body facts while preserving
+authored origins; [decision 0047](decisions/0047-checked-body-ownership.md) records
+the prerequisite for generic body specialization.
 Generic defaults/functions/aliases, structured package propagation boundaries,
 raw conversions, wider patterns/unions, full REPL display parity and final
 performance qualification remain open. This checkpoint does not imply complete

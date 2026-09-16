@@ -10,6 +10,7 @@ agree. Completed naming and extraction history is available in the
 | Current area | Responsibility |
 | --- | --- |
 | `compiler/src/` | Ordinary compiler: `CompilerState`, `CheckedLocals`, `CheckedValue`, `QbeEmitContext`, and `QbeValue` use role names. Lexing and source slicing live in `lexer.trb`; MIR records, construction, analysis, rewrites, verification and QBE adaptation have separate modules; see the [architecture map](architecture.md). |
+| `compiler/src/checked_body.trb` | Concrete function-owned checked projections; shared parsed syntax stays in the program, and backend emission needs only verified MIR. |
 | `compiler/src/mir_value_control.trb` | Typed branch exits, common result blocks and numeric join conversions; recursive source checking and REPL evaluation consume shared frontend regions. |
 | `compiler/src/default_arguments.trb` | Private initializer declaration identities and preceding typed slots; ordinary checked functions and MIR own their bodies and calls. |
 | `compiler/cli/repl_project.trb` | REPL project discovery, generated-import filtering and visible nominal type names. Session checking/evaluation remains in the REPL adapters. |
@@ -39,6 +40,12 @@ The value-join builder and nullable type, flow-fact, MIR, QBE and REPL helpers
 have been extracted. Expression/body checking remains
 mutually recursive; separating it into modules requires removing that dependency
 cycle because ordinary Native module imports must be acyclic.
+
+The checked-body ownership change moves type applications, nullable, enum, Result,
+Hash, Range and control projections together. Its exit criteria are independent
+facts at identical source origins, caller restoration in the REPL, unchanged
+emission after projection erasure, and complete ordinary/recovery checks.
+See [decision 0047](decisions/0047-checked-body-ownership.md).
 
 Keep source moves and their recovery derivation, imports, tests and operational
 consumers together. Useful shared code remains one implementation. Complete
