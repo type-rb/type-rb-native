@@ -1,3 +1,4 @@
+import { result_projection } from result_checked
 import { token_is, parse_type, skip_newlines } from syntax_tokens
 import { nullable_common } from nullable_types
 import { repl_absent, repl_none, repl_payload, repl_nullable_read } from repl_nullable
@@ -250,6 +251,9 @@ def repl_call(mut state: CompilerState, function: Integer, arguments: Array<Inte
 	end
 	state.active_module[0] = module_name
 	store.depth[0] -= 1
+	if load_string(state.function_result_types, function) == "Void"
+		return 0
+	end
 	return repl_coerce(store, result, load_string(state.function_result_types, function))
 end
 
@@ -273,6 +277,28 @@ def repl_complete_arguments(mut state: CompilerState, mut bindings: ArgumentBind
 end
 
 def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, expected: String): ReplReference
+	if token_is(state, position[0], "try")
+		origin := position[0]
+		position[0] += 1
+		operand := repl_postfix(state, position, store, environment, "")
+		if store.error[0] != "" || environment.flow[0] != 0
+			return operand
+		end
+		operation := result_projection(state, origin, false)
+		if operation.origin < 0 || store.types[operand.value] != operation.result_type
+			store.error[0] = "Result operand disagrees with its checked operation"
+			return repl_reference(0)
+		end
+		payload := store.children[operand.value][0]
+		if store.integers[operand.value] == operation.ok_variant
+			return repl_reference(payload)
+		end
+		converted := repl_coerce(store, payload, operation.boundary_error)
+		returned := repl_value(store, operation.boundary_type, operation.boundary_variant, 0.0, "Err", [converted])
+		environment.flow[0] = 1
+		environment.flow[1] = returned
+		return repl_reference(returned)
+	end
 	if token_is(state, position[0], "if") || token_is(state, position[0], "case")
 		return repl_reference(repl_control(state, position, store, environment, 0))
 	end
@@ -753,6 +779,11 @@ def repl_block_end(state: CompilerState, start: Integer, stop_else: Boolean): In
 	mut position := start
 	mut depth := 0
 	while position < state.token_count[0]
+		caught := sparse_integer_at(state.catch_origins, position)
+		if caught > 0
+			position = state.catch_syntax[caught - 1].finish
+			next
+		end
 		control := sparse_integer_at(state.control_origins, position)
 		if control > 0
 			position = state.controls[control - 1].finish
@@ -925,7 +956,7 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 			flow[0] = 1
 			return 0
 		end
-		value := repl_expression(state, position, store, environment, 1, "")
+		value := repl_statement_expression(state, position, store, environment, "")
 		if environment.flow[0] != 0
 			return environment.flow[1]
 		end
@@ -946,7 +977,7 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 			expected = parse_type(state, position)
 		end
 		position[0] += 1
-		value := repl_expression(state, position, store, environment, 1, expected)
+		value := repl_statement_expression(state, position, store, environment, expected)
 		if environment.flow[0] != 0
 			return environment.flow[1]
 		end
@@ -956,7 +987,7 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 		end
 		return result
 	end
-	left := repl_expression(state, position, store, environment, 1, "")
+	left := repl_statement_expression(state, position, store, environment, "")
 	if environment.flow[0] != 0
 		return environment.flow[1]
 	end
@@ -993,7 +1024,7 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 				expected = hash_value_type(store.types[left.container])
 			end
 		end
-		right := repl_expression(state, position, store, environment, 1, expected)
+		right := repl_statement_expression(state, position, store, environment, expected)
 		if environment.flow[0] != 0
 			return environment.flow[1]
 		end
@@ -1205,4 +1236,35 @@ def repl_control(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		return environment.flow[1]
 	end
 	return repl_coerce(store, result, load_string(state.control_types, origin))
+end
+
+def repl_statement_expression(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, expected: String): ReplReference
+	origin := position[0]
+	encoded := sparse_integer_at(state.catch_origins, origin)
+	if encoded == 0
+		return repl_expression(state, position, store, environment, 1, expected)
+	end
+	handler := state.catch_syntax[encoded - 1]
+	operand := repl_expression(state, position, store, environment, 1, "")
+	if store.error[0] != "" || environment.flow[0] != 0
+		return operand
+	end
+	operation := result_projection(state, origin, true)
+	if operation.origin < 0 || store.types[operand.value] != operation.result_type
+		store.error[0] = "Result operand disagrees with its checked operation"
+		return repl_reference(0)
+	end
+	mut value := store.children[operand.value][0]
+	if store.integers[operand.value] == operation.err_variant
+		saved := environment.count[0]
+		repl_bind(environment, load_string(state.token_texts, handler.binding), value, 0)
+		position[0] = handler.body
+		value = repl_block(state, position, store, environment, environment.flow, environment.flow[2])
+		environment.count[0] = saved
+	end
+	position[0] = handler.finish
+	if environment.flow[0] != 0
+		return repl_reference(environment.flow[1])
+	end
+	return repl_reference(repl_coerce(store, repl_coerce(store, value, operation.success_type), expected))
 end

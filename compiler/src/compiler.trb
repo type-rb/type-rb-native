@@ -1,3 +1,4 @@
+import { load_standard_source, standard_source_kind } from standard_library
 import { emit_function } from qbe_functions
 import { check_function_body, checked_function_locals, finalize_checked_module } from checked_functions
 import { mir_declare_types } from mir_types
@@ -14,7 +15,7 @@ import { emit_boolean_puts_runtime, emit_float_array_runtime, emit_float_to_inte
 import { compiler_entry_function, import_path_value, normalize_import_path, resolve, standard_package_target } from resolution
 import { find_function_in_module } from declaration_lookup
 import { CompilerState, add_module, compiler_new, diagnostic, find_module, find_name_index, has_diagnostic } from state
-import { load_integer, load_string, store_integer } from storage
+import { load_integer, load_string, sparse_integer_at, store_integer } from storage
 
 record CompilerProjectSources
 	paths: Array<String>
@@ -729,7 +730,10 @@ def resolve_project_imports(mut state: CompilerState): Boolean
 				return false
 			end
 			mut target := standard_package_target(normalized)
-			if target < - 1
+			owned_kind := standard_source_kind(normalized)
+			if owned_kind > 0
+				target = load_standard_source(state, owned_kind)
+			elsif target < - 1
 				if load_integer(state.import_kinds, import_index) != 1
 					diagnostic(state, "TRBN4003", line, "supported standard packages require a bare import")
 					return false
@@ -887,6 +891,10 @@ def load_file_root(entry_source: String, entry_path: String): CompilerState
 	mut sources := [entry_source]
 	mut module_index := 0
 	while module_index < state.module_count[0]
+		if sparse_integer_at(state.standard_modules, module_index) > 0
+			module_index += 1
+			next
+		end
 		state.active_module[0] = module_index
 		start := state.token_count[0]
 		lex_module(state, sources[module_index], module_index)
@@ -907,8 +915,16 @@ def load_file_root(entry_source: String, entry_path: String): CompilerState
 				return state
 			end
 			mut target := standard_package_target(normalized)
+			owned_kind := standard_source_kind(normalized)
 			mut target_added := false
-			if target < - 1
+			if owned_kind > 0
+				before := state.module_count[0]
+				target = load_standard_source(state, owned_kind)
+				if state.module_count[0] > before
+					sources.push("")
+					target_added = true
+				end
+			elsif target < - 1
 				if load_integer(state.import_kinds, import_index) != 1
 					diagnostic(state, "TRBN4003", line, "supported standard packages require a bare import")
 					return state

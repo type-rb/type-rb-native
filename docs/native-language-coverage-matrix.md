@@ -61,9 +61,9 @@
 | Hash deletion, membership and size | accepts | accepts | matches reference | matches reference |
 | Stored Range bounds and conversion | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Inclusive Range maximum endpoint | accepts | accepts | matches reference | matches reference |
-| Result storage and exhaustive case | rejects valid input | rejects valid input | not reached | rejects valid input |
-| Result try propagation | rejects valid input | rejects valid input | not reached | rejects valid input |
-| Result catch recovery | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Result storage and exhaustive case | accepts | accepts | matches reference | matches reference |
+| Result try propagation | accepts | accepts | matches reference | matches reference |
+| Result catch recovery | accepts | accepts | matches reference | matches reference |
 | Class fields, initializer and method | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Explicit interface conformance | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Module declaration and constant | rejects valid input | rejects valid input | not reached | rejects as reference |
@@ -166,3 +166,27 @@
 | Generic records with concrete default fields | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Explicit nominal type argument count | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Unused generic fields require valid types | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Result: unit | accepts | accepts | matches reference | matches reference |
+| Result: try each | accepts | accepts | matches reference | matches reference |
+| Result: try precedence | accepts | accepts | matches reference | matches reference |
+| Result: try error conversion | accepts | accepts | matches reference | matches reference |
+| Result: catch lazy once | accepts | accepts | matches reference | matches reference |
+| Result: catch transfers | accepts | accepts | matches reference | matches reference |
+| Result: catch conversion | accepts | accepts | matches reference | matches reference |
+| Result: required use | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Result: required use binding | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Result: required use transfer | accepts | accepts | matches reference | matches reference |
+| Result: try homonym | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Result: try incompatible error | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Result: try non result function | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Result: catch immutable error | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Result: catch argument rejected | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Result: managed payloads | accepts | accepts | matches reference | matches reference |
+| Result: nested payload | accepts | accepts | matches reference | matches reference |
+| Result: nullable error | accepts | accepts; reference rejects | differs | output differs |
+| Result: unused loop local | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Result: unused branch local | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Result: explicit reassignment | accepts | accepts | matches reference | matches reference |
+| Result: catch empty handler | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Result: catch nested composition | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Result: user homonym required use | accepts | accepts | matches reference | matches reference |

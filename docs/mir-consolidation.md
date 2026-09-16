@@ -118,7 +118,7 @@ That checkpoint contained 61 ordinary compiler modules, including the new
 value-join builder. Its acceptance remains historical evidence; each subsequent
 integration requires its own complete correctness authorities.
 
-## Current basic-language integration: nullable and enum values
+## Current basic-language integration: nominal values and Result control flow
 
 Optional values, nil guards, safe navigation and optional numeric widening now
 have typed MIR operations and control edges. Dedicated type, flow-fact and MIR
@@ -127,10 +127,10 @@ defaults and managed collections retain optional payloads through shared root
 planning. See [decision 0042](decisions/0042-nullable-mir.md) for the private layout
 and conservative fact invalidation across assignments and loop backedges.
 
-The ordinary compiler closure contains 79 modules. Implementation syntax stays
+The ordinary compiler closure contains 82 modules. Implementation syntax stays
 within the existing immutable seed and snapshot-v4 boundary; compiler self-use
 of the new syntax still depends on an accepted seed refresh. The shared language
-contract contains 164 cases with explicit remaining differences. Retained REPL
+contract contains 188 cases with explicit remaining differences. Retained REPL
 assignment flow now uses an ordinary checker projection, with conservative
 failure/interruption invalidation and explicit replay boundaries; see
 [decision 0043](decisions/0043-checked-repl-submissions.md). Ordinary enum payloads and exhaustive cases now have independently verified
@@ -138,9 +138,14 @@ nominal catalogs, typed operations and managed roots, including recursive
 record/enum fields. [Decision 0044](decisions/0044-enum-mir.md) records the boundary.
 Explicit generic records/enums now resolve concrete nominal catalogs before MIR;
 [decision 0045](decisions/0045-generic-nominal-mir.md) records recursive identity,
-REPL remapping and source erasure. Generic defaults/functions/aliases, standard
-Result/try/catch/must-use, raw conversions, wider patterns/unions, full REPL display
-parity and final performance qualification remain open. This checkpoint does not imply complete basic-language coverage.
+REPL remapping and source erasure. Standard Result construction, prefix try,
+statement-value catch and required-use checks now share these concrete enum
+operations and ordinary control-flow joins; see
+[decision 0046](decisions/0046-result-control-mir.md).
+Generic defaults/functions/aliases, structured package propagation boundaries,
+raw conversions, wider patterns/unions, full REPL display parity and final
+performance qualification remain open. This checkpoint does not imply complete
+basic-language coverage.
 
 ## Development loop
 

@@ -1,3 +1,4 @@
+import { load_standard_source, standard_source_kind } from standard_library
 import { find_function_in_module, find_generic_in_module, find_import_binding, find_record_in_module, find_visible_enum, find_visible_function, find_visible_generic, find_visible_record } from declaration_lookup
 import { resolve_type_name } from type_resolution
 import { EnumField } from enum_model
@@ -171,6 +172,9 @@ def resolution_local_add(
 end
 
 def resolution_keyword(name: String): Boolean
+	if name == "try" || name == "catch"
+		return true
+	end
 	if name == "nil" || name == "case" || name == "when"
 		return true
 	end
@@ -594,6 +598,11 @@ def resolve_function_body(
 		end
 		iteration_index += 1
 	end
+	state.catch_syntax.each do |handler|
+		if handler.origin >= load_integer(state.function_body_starts, function_index) && handler.finish <= load_integer(state.function_body_ends, function_index)
+			resolution_local_add(locals, load_string(state.token_texts, handler.binding), "", 0)
+		end
+	end
 	state.controls.each do |control|
 		if control.kind == 2 && control.origin >= load_integer(state.function_body_starts, function_index) && control.finish <= load_integer(state.function_body_ends, function_index)
 			control.branches.each do |branch|
@@ -731,6 +740,14 @@ def resolve_function_body(
 end
 
 def resolve(mut state: CompilerState): Boolean
+	mut import_index := 0
+	while import_index < state.import_count[0]
+		kind := standard_source_kind(import_path_value(load_string(state.import_paths, import_index)))
+		if kind > 0
+			store_integer(state.import_targets, import_index, load_standard_source(state, kind))
+		end
+		import_index += 1
+	end
 	if !resolve_bare_imports(state)
 		return false
 	end
