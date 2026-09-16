@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 210 ordinary-path probes and 32 feature
+Status: the shared contract contains 230 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -101,8 +101,8 @@ resolves complete concrete catalogs before MIR construction; backend output does
 not consult generic templates or source spellings. See
 [decision 0045](decisions/0045-generic-nominal-mir.md).
 
-Generic record defaults, methods, aliases and classes/interfaces
-remain separate gaps. The shared imported-generic-enum
+Generic methods, aliases and classes/interfaces remain separate gaps. The shared
+imported-generic-enum
 case records a pinned reference defect as a difference, not a successful parity
 claim. [TypeRB PR #704](https://github.com/type-rb/type-rb/pull/704) addresses
 its checker identity and Ruby constructor failures. Compiler self-use of generic syntax awaits a seed that supports it.
@@ -118,9 +118,31 @@ concrete call sites cannot legalize operations on unconstrained `T`.
 
 Source/template erasure preserves verified QBE, and forced collection covers
 managed generic calls. See [decision 0048](decisions/0048-generic-function-mir.md)
-for ownership and remaining boundaries. Generic record defaults and other generic
-declaration families remain gaps. The pinned reference's local-shadowing case is
+for ownership and remaining boundaries. Other generic declaration families remain
+gaps. The pinned reference's local-shadowing case is
 an explicit diagnostic difference, not a parity claim; [TypeRB PR #705](https://github.com/type-rb/type-rb/pull/705) fixes the reference checker.
+
+## Generic record field defaults
+
+Generic record defaults now share ordinary record parsing and private typed
+initializer functions. Substitution covers preceding fields, nested nominal
+values, Array/Hash, nullable and Result values, generic calls and value-producing
+controls. Explicit fields run first in authored order, followed by omitted
+defaults in declaration order. Omitted managed defaults allocate independently.
+
+Every default is checked even on unused declarations or explicitly supplied
+fields. Caller locals, current/later fields and unsupported operations on an
+unconstrained type parameter remain errors. Function and record declarations own
+distinct abstract parameter identities; concrete MIR, roots and QBE do not need
+those bindings or source templates. See
+[decision 0049](decisions/0049-generic-record-default-mir.md).
+
+The fixed reference pin rejects full control expressions in record defaults and
+fails Go emission for ternaries that reference preceding fields. The shared
+contract records those failures and the existing Hash REPL display difference
+explicitly; successful Native paths are not called full reference parity.
+[TypeRB PR #706](https://github.com/type-rb/type-rb/pull/706) fixes the control-expression
+parser and Go emission, with cross-backend execution and REPL verification.
 
 ## Standard Result and typed control flow
 

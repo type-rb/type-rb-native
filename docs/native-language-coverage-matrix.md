@@ -163,7 +163,7 @@
 | Generic templates and arguments retain import identity | accepts; reference rejects | accepts; reference rejects | differs | output differs |
 | Generic record arguments are invariant | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Generic enum arguments are invariant | rejects as reference | rejects as reference | not reached | rejects as reference |
-| Generic records with concrete default fields | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Generic records with concrete default fields | accepts | accepts | matches reference | matches reference |
 | Explicit nominal type argument count | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Unused generic fields require valid types | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Result: unit | accepts | accepts | matches reference | matches reference |
@@ -212,3 +212,23 @@
 | Local values shadow generic functions | rejects valid input | rejects as reference | not reached | rejects as reference |
 | Unused generic parameter defaults are checked abstractly | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Unused generic functions require complete return flow | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Generic record defaults use preceding fields | accepts | accepts | matches reference | matches reference |
+| Generic record defaults construct typed containers | accepts | accepts | matches reference | output differs |
+| Omitted generic managed defaults allocate independently | accepts | accepts | matches reference | matches reference |
+| Generic defaults retain nested nominal values | accepts | accepts | matches reference | matches reference |
+| Generic defaults call generic functions with distinct type owners | accepts | accepts | matches reference | matches reference |
+| Generic defaults preserve nil and explicit values | accepts | accepts | matches reference | matches reference |
+| Generic defaults construct standard Result payloads | accepts | accepts | matches reference | matches reference |
+| Generic explicit fields precede defaults in declaration order | accepts | accepts | matches reference | matches reference |
+| Imported generic defaults retain declaration scope and aliases | accepts | accepts | matches reference | matches reference |
+| Generic defaults use lazy typed control expressions | accepts | accepts; reference rejects | differs | matches reference |
+| Unused generic defaults accept valid abstract values | accepts | accepts | matches reference | matches reference |
+| Reject concrete values as unconstrained generic defaults even when unused | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject unresolved names in unused generic defaults | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject references to later fields in generic defaults | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject self-references in generic field defaults | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject required fields after generic record defaults | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject arithmetic on unconstrained generic default values | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Explicit fields do not hide invalid generic defaults | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Generic defaults cannot capture caller locals | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Generic defaults retain prior fields through full if and enum case expressions | accepts; reference rejects | accepts; reference rejects | differs | output differs |

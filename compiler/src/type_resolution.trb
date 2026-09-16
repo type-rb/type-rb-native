@@ -1,3 +1,4 @@
+import { abstract_generic_type_valid, add_generic_binding, next_generic_depth } from generic_bindings
 import { find_visible_enum, find_visible_generic, find_visible_record } from declaration_lookup
 import { EnumDefinition, EnumField, EnumVariant } from enum_model
 import { GenericInstance } from generic_model
@@ -7,7 +8,7 @@ import { nullable_common, nullable_element, nullable_type } from nullable_types
 import { hash_key_type, hash_type, hash_value_type, semantic_value_type } from hash_types
 import { ascii_code, integer_string } from literals
 import { string_starts_with } from path
-import { CompilerState, diagnostic, has_diagnostic } from state
+import { CompilerState, DefaultInitializer, diagnostic, has_diagnostic } from state
 import { load_integer, load_string, store_integer, store_string } from storage
 
 def record_type(record_index: Integer): String
@@ -103,30 +104,18 @@ def resolve_type_name(
 		type_name: String,
 		allow_void: Boolean,
 	): String
-	encoded := state.checked[0].generic_instance[0]
+	encoded := state.checked[0].generic_binding[0]
 	if encoded > 0
-		instance := state.generic_function_instances[encoded - 1]
-		definition := state.generic_functions[instance.definition]
-		if module_index == definition.source_id
-			bound := generic_substitute(type_name, definition.type_parameters, instance.arguments)
+		binding := state.generic_bindings[encoded - 1]
+		if module_index == binding.source_id
+			bound := generic_substitute(type_name, binding.parameters, binding.arguments)
 			if bound != type_name
 				return resolve_type_name(state, module_index, bound, allow_void)
 			end
 		end
 	end
-	if state.generic_template_mode[0] && string_starts_with(type_name, "TypeParameter#")
-		mut definition := 0
-		while definition < state.generic_functions.size()
-			mut parameter := 0
-			while parameter < state.generic_functions[definition].type_parameters.size()
-				if type_name == "TypeParameter#" + integer_string(definition) + "#" + integer_string(parameter)
-					return type_name
-				end
-				parameter += 1
-			end
-			definition += 1
-		end
-		return ""
+	if state.generic_template_mode[0] && abstract_generic_type_valid(state, type_name)
+		return type_name
 	end
 	if string_starts_with(type_name, "Record#") || string_starts_with(type_name, "Enum#")
 		if find_record_type(state, type_name) >= 0 || find_enum_type(state, type_name) >= 0
@@ -209,15 +198,16 @@ def instantiate_generic_nominal(mut state: CompilerState, definition: Integer, a
 	if state.generic_instance_lookup.key?(key)
 		return state.generic_instances[state.generic_instance_lookup[key]].type_name
 	end
-	if state.generic_depth[0] >= 128
+	depth := state.generic_depth[0] + next_generic_depth(state)
+	if depth >= 128
 		diagnostic(state, "TRBN4003", declaration.line, "generic type expansion exceeds the compiler nesting limit")
 		return ""
 	end
 	previous_module := state.active_module[0]
 	state.active_module[0] = declaration.source_id
 	state.generic_depth[0] += 1
-	saved_binding := state.checked[0].generic_instance[0]
-	state.checked[0].generic_instance[0] = 0
+	saved_binding := state.checked[0].generic_binding[0]
+	state.checked[0].generic_binding[0] = 0
 	name := generic_application(declaration.name, arguments)
 	mut type_name := ""
 	mut owner := 0
@@ -230,11 +220,17 @@ def instantiate_generic_nominal(mut state: CompilerState, definition: Integer, a
 		store_integer(state.record_field_starts, owner, state.field_count[0])
 		store_integer(state.record_field_counts, owner, declaration.variants[0].fields.size())
 		state.record_count[0] += 1
+		store_integer(state.record_generic_bindings, owner, add_generic_binding(state, declaration.source_id, declaration.parameters, arguments, depth))
 		declaration.variants[0].fields.each do |field|
 			slot := state.field_count[0]
 			store_string(state.field_names, slot, field.name)
 			store_string(state.field_types, slot, generic_substitute(field.type_name, declaration.parameters, arguments))
 			store_integer(state.field_lines, slot, field.line)
+			if field.default_start >= 0
+				state.default_initializers.push(DefaultInitializer.new(kind: 1, owner: owner, slot: slot, start: field.default_start, finish: field.default_finish))
+				state.default_functions.push(- 1)
+				store_integer(state.field_defaults, slot, state.default_initializers.size())
+			end
 			state.field_count[0] += 1
 		end
 	else
@@ -281,7 +277,7 @@ def instantiate_generic_nominal(mut state: CompilerState, definition: Integer, a
 		end
 	end
 	state.generic_depth[0] -= 1
-	state.checked[0].generic_instance[0] = saved_binding
+	state.checked[0].generic_binding[0] = saved_binding
 	state.active_module[0] = previous_module
 	return type_name
 end

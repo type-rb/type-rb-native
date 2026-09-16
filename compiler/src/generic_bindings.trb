@@ -1,0 +1,66 @@
+import { GenericBinding } from generic_model
+import { integer_string } from literals
+import { CompilerState } from state
+
+def add_generic_binding(mut state: CompilerState, source: Integer, parameters: Array<String>, arguments: Array<String>, depth: Integer): Integer
+	state.generic_bindings.push(GenericBinding.new(source_id: source, parameters: parameters, arguments: arguments, depth: depth))
+	return state.generic_bindings.size()
+end
+
+def next_generic_depth(state: CompilerState): Integer
+	encoded := state.checked[0].generic_binding[0]
+	if encoded > 0
+		return state.generic_bindings[encoded - 1].depth + 1
+	end
+	return 0
+end
+
+def abstract_generic_arguments(owner: String, definition: Integer, parameters: Array<String>): Array<String>
+	mut arguments: Array<String> := []
+	mut index := 0
+	parameters.each do |_parameter|
+		arguments.push("TypeParameter#" + owner + "#" + integer_string(definition) + "#" + integer_string(index))
+		index += 1
+	end
+	return arguments
+end
+
+def abstract_generic_type_valid(state: CompilerState, type_name: String): Boolean
+	mut definition := 0
+	while definition < state.generic_functions.size()
+		mut parameter := 0
+		while parameter < state.generic_functions[definition].type_parameters.size()
+			if type_name == "TypeParameter#function#" + integer_string(definition) + "#" + integer_string(parameter)
+				return true
+			end
+			parameter += 1
+		end
+		definition += 1
+	end
+	definition = 0
+	while definition < state.generic_definitions.size()
+		mut parameter := 0
+		while parameter < state.generic_definitions[definition].parameters.size()
+			if type_name == "TypeParameter#nominal#" + integer_string(definition) + "#" + integer_string(parameter)
+				return true
+			end
+			parameter += 1
+		end
+		definition += 1
+	end
+	return false
+end
+
+def generic_record_defaults(state: CompilerState, definition: Integer): Boolean
+	row := state.generic_definitions[definition]
+	if row.kind != 1
+		return false
+	end
+	mut found := false
+	row.variants[0].fields.each do |field|
+		if field.default_start >= 0
+			found = true
+		end
+	end
+	return found
+end
