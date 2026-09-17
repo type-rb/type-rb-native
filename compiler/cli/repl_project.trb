@@ -1,3 +1,4 @@
+import { generic_application } from generic_arguments
 import { standard_source_kind } from standard_library
 import { nullable_element } from nullable_types
 import { hash_key_type, hash_value_type } from hash_types
@@ -68,6 +69,10 @@ def repl_project(config: String): ReplProject
 			names.push(definition.name)
 			modules.push(module_name)
 		end
+		state.type_aliases.each do |definition|
+			names.push(definition.name)
+			modules.push(module_name)
+		end
 		state.enums.each do |definition|
 			names.push(definition.name)
 			modules.push(module_name)
@@ -121,6 +126,9 @@ def repl_project_source(source: String, prelude: String): String
 		explicit[definition.name] = 1
 	end
 	session.generic_definitions.each do |definition|
+		explicit[definition.name] = 1
+	end
+	session.type_aliases.each do |definition|
 		explicit[definition.name] = 1
 	end
 	session.enums.each do |definition|
@@ -269,4 +277,66 @@ def repl_standard_imports(names: Array<String>): String
 		result += "import trb/std/unit\n"
 	end
 	return result
+end
+
+# Reconstruction chooses a visible checked alias when its target contains a
+# declaration hidden by another local name. Display remains a separate contract.
+def repl_witness_type_name(state: CompilerState, type_name: String): String
+	return repl_witness_type_name_at(state, type_name, [])
+end
+
+def repl_witness_type_name_at(state: CompilerState, type_name: String, blocked: Array<Integer>): String
+	mut index := 0
+	while index < state.alias_instances.size()
+		instance := state.alias_instances[index]
+		mut available := true
+		blocked.each do |used|
+			if used == index
+				available = false
+			end
+		end
+		if instance.type_name == type_name && available
+			definition := state.type_aliases[instance.definition]
+			mut visible := ""
+			if definition.source_id == state.entry_module[0]
+				visible = definition.name
+			else
+				mut binding := load_integer(state.module_import_starts, state.entry_module[0])
+				finish := binding + load_integer(state.module_import_counts, state.entry_module[0])
+				while binding < finish
+					if load_integer(state.import_targets, binding) == definition.source_id && load_string(state.import_declarations, binding) == definition.name
+						visible = load_string(state.import_symbols, binding)
+					end
+					binding += 1
+				end
+			end
+			if visible != ""
+				if instance.arguments.size() == 0
+					return visible
+				end
+				mut names: Array<String> := []
+				mut nested: Array<Integer> := []
+				blocked.each do |used|
+					nested.push(used)
+				end
+				nested.push(index)
+				instance.arguments.each do |argument|
+					names.push(repl_witness_type_name_at(state, argument, nested))
+				end
+				return generic_application(visible, names)
+			end
+		end
+		index += 1
+	end
+	if nullable_element(type_name) != ""
+		return repl_witness_type_name_at(state, nullable_element(type_name), blocked) + "?"
+	end
+	element := array_element_type(type_name)
+	if element != ""
+		return "Array<" + repl_witness_type_name_at(state, element, blocked) + ">"
+	end
+	if hash_key_type(type_name) != ""
+		return "Hash<" + hash_key_type(type_name) + "," + repl_witness_type_name_at(state, hash_value_type(type_name), blocked) + ">"
+	end
+	return repl_type_name(state, type_name)
 end

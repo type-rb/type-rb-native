@@ -17,21 +17,21 @@ Each count describes registered probes, not language coverage percentages.
 | Member access and projections | basic | 1 / 4 | Safe member access, chained field narrowing and receiver replacement | MemberExpression |
 | Nullable values and narrowing | basic | 4 / 21 | Class/callback and general pattern narrowing; collection/union optional conversions; Nullable standard-library methods beyond the currently implemented Native APIs |  |
 | Enums and tagged values | basic | 4 / 19 | Raw values and conversion failures, enum methods and attributes; Nested module declarations and wider pattern forms | EnumStatement, EnumMemberStatement |
-| Transparent aliases | basic | 2 / 2 | Generic aliases, cycles and cross-module identity | TypeAliasStatement |
+| Transparent aliases | basic | 13 / 30 | Literal/union, callable and class/interface alias targets; nested module declarations; Authored alias spelling in REPL display and diagnostics | TypeAliasStatement |
 | Nominal newtypes | basic | 1 / 1 | Closed/private constructors, methods, immutable representation and boundary diagnostics | NewtypeStatement |
-| Generic declarations and applications | basic | 5 / 57 | Generic methods, aliases, classes and interfaces; Wider constraints and type applications | GenericExpression |
+| Generic declarations and applications | basic | 11 / 67 | Generic methods, classes and interfaces; Wider constraints and type applications | GenericExpression |
 | Literal types and discriminated unions | basic | 1 / 1 | Shared discriminants, branch narrowing and invalid mutation/common-type boundaries |  |
 | Function values and lexical capture | basic | 3 / 3 | Callable parameters/returns, escape/cycles, captured aliases and independent return boundaries | LambdaExpression |
 | Arrays and checked indexes | basic | 1 / 8 | Removal during assignments/iteration and retained managed receivers; Remaining Array receiver APIs and invalid element/mutation combinations | ArrayLiteral, IndexExpression |
 | Hash values and operations | basic | 0 / 5 | All key/value representations, empty inference, managed lifetimes and missing-key failures | HashLiteral |
 | Structured and value-producing iteration | basic | 2 / 4 | Map/filter/reduce/chains, nested transfers, receiver replacement and live growth | IterationExpression, BlockExpression |
 | Range values and boundaries | basic | 2 / 5 | Endpoint effects, empty/reversed ranges and next at both portable limits | RangeExpression |
-| Result and typed propagation | basic | 1 / 27 | Transparent aliases, general union errors and compiler-declared structured package boundaries | TryExpression, CatchExpression |
+| Result and typed propagation | basic | 1 / 28 | General union errors and compiler-declared structured package boundaries | TryExpression, CatchExpression |
 | Classes, fields and methods | basic | 1 / 1 | Initialization, inheritance, dispatch, privacy and readonly fields | ClassStatement, FieldStatement |
 | Explicit interface conformance | basic | 1 / 1 | Generic conformance, variance, inherited contracts and rejection controls | InterfaceStatement |
 | Modules and constant lookup | basic | 1 / 1 | Cross-module constants, member visibility and runtime initialization order | ModuleStatement |
 | Symbol values | basic | 1 / 1 | Symbol typing, equality and public receiver operations | SymbolLiteral |
-| Project imports and declaration identity | basic | 0 / 6 | Bare/named aliases, graph conflicts, missing/unused imports and file/project/REPL identity | ImportStatement |
+| Project imports and declaration identity | basic | 3 / 10 | Bare/named aliases, graph conflicts, missing/unused imports and file/project/REPL identity | ImportStatement |
 | Target source interop | toolchain | 0 / 0 | Go/Ruby/TypeScript source emission and platform interop | NativeStatement, NativeBlock, NativeExpression |
 | JSX and web bindings | packages | 0 / 0 | Typed JSX and official web-package boundaries | JSXElement |
 | Package capability activation | packages | 0 / 0 | Package-owned activation and resolution | ActivateStatement |
