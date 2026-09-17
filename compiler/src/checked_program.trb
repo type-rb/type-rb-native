@@ -1,3 +1,5 @@
+import { callable_parts } from callable_types
+import { mir_checked_callable_call } from mir_callables
 import { checked_result_try, result_interactive_entry, result_operation, result_scope_check, standard_result_instance } from result_checked
 import { advance, expect, expect_identifier, finish_statement, parse_type, skip_newlines, token_is } from syntax_tokens
 import { check_enum_bindings, check_enum_patterns } from enum_checked
@@ -681,6 +683,13 @@ end
 
 def check_member(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue, member: String): CheckedValue
 	mut value := checked_view(receiver, receiver.type_name, receiver.category)
+	owner := find_record_type(state, value.type_name)
+	if owner >= 0
+		field := find_field(state, owner, member)
+		if field >= 0 && callable_parts(load_string(state.field_types, field)).size() > 0
+			return mir_checked_record_field(state, locals, value, field, load_string(state.field_types, field), position[0] - 1)
+		end
+	end
 	if token_is(state, position[0], "(")
 		if value.category < 4 && member != "size" && member != "to_i" && member != "to_s" && member != "push" && member != "new" && !((value.type_name == "Hash" || hash_key_type(value.type_name) != "") && checked_hash_method(member) != 0)
 			scalar_mir_disable(locals)
@@ -775,6 +784,13 @@ def check_postfix(
 			end
 		end
 		if token_is(state, position[0], "(")
+			if callable_parts(value.type_name).size() > 0
+				value = check_callable_call(state, position, locals, value)
+				if has_diagnostic(state)
+					return value
+				end
+				next
+			end
 			if value.category < 0
 				value = checked_value(value.type_name, 0, value.origin, value.mutable)
 			end
@@ -1827,4 +1843,43 @@ def check_statement_value(mut state: CompilerState, mut position: Array<Integer>
 	result := mir_value_complete(state, locals, join, operation.success_type, origin)
 	check_expected(state, result.type_name, expected, line)
 	return mir_nullable_coerce(state, locals, result, expected, origin)
+end
+
+def check_callable_call(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, callee: CheckedValue): CheckedValue
+	origin := position[0]
+	line := load_integer(state.token_lines, origin)
+	parts := callable_parts(callee.type_name)
+	advance(position)
+	skip_newlines(state, position)
+	mut arguments: Array<Integer> := []
+	mut diverged := false
+	saved := locals.mir_state[0]
+	while !token_is(state, position[0], ")") && !has_diagnostic(state)
+		if arguments.size() + 1 >= parts.size()
+			return type_diagnostic(state, line, "callable argument count differs")
+		end
+		if parse_argument_label(state, position) != ""
+			return type_diagnostic(state, line, "function values require positional arguments")
+		end
+		value := check_expression(state, position, locals, 1, parts[arguments.size() + 1])
+		if value.type_name == "Never"
+			diverged = true
+			scalar_mir_disable(locals)
+		end
+		arguments.push(checked_mir_value(value))
+		if !token_is(state, position[0], ",")
+			break
+		end
+		advance(position)
+		skip_newlines(state, position)
+	end
+	expect(state, position, ")")
+	if arguments.size() + 1 != parts.size()
+		return type_diagnostic(state, line, "callable argument count differs")
+	end
+	if diverged
+		locals.mir_state[0] = saved
+		return checked_value("Never", 0, 9007199254740991, 0)
+	end
+	return mir_checked_callable_call(state, locals, callee, arguments, parts[0], origin)
 end

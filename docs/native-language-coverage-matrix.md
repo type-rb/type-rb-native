@@ -260,3 +260,9 @@
 | Reject mismatched concrete alias pattern arguments | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Imported recursive alias in ordinary execution and REPL | accepts; reference rejects | accepts; reference rejects | differs | output differs |
 | Independent aliases in nested generic arguments | accepts | accepts | matches reference | matches reference |
+| Unused typed callback body is checked, without constructing a function value | accepts | accepts | matches reference | matches reference |
+| Generic aliases compose callback parameter and return types | accepts | accepts | matches reference | matches reference |
+| Unused callback call rejects wrong arity | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Unused callback call rejects a wrong argument type | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Unused callback call rejects a wrong return type | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Callback type rejects Void as a parameter | rejects as reference | rejects as reference | not reached | rejects as reference |

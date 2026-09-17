@@ -48,8 +48,10 @@ recovery closure, snapshot recovery, target and lifetime suites. No seed, refere
 pin, runtime layout or snapshot format changes. Compiler source does not yet
 adopt alias syntax because the immutable seed does not accept it.
 
-Literal/union, callable and class/interface alias targets, nested module aliases,
-complete authored display spelling and final Pure Go performance remain open.
+Literal/union and class/interface alias targets, nested module aliases, complete
+authored display spelling and final Pure Go performance remain open. Callable
+alias signatures now have a [MIR foundation](0051-callable-mir-foundation.md);
+authored function values and lexical captures still require their own lowering.
 The fixed reference's alias record construction and generic identity-alias Go
 output failures remain explicit differences. Its ordinary Go package output also
 collides when different files in the same package define the same nominal name.

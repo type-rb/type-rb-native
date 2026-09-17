@@ -3,7 +3,7 @@ import { instantiate_generic_function, validate_generic_functions } from generic
 import { generic_arguments, generic_base } from generic_arguments
 import { load_standard_source, standard_source_kind } from standard_library
 import { find_alias_in_module, find_function_in_module, find_generic_function_in_module, find_generic_in_module, find_import_binding, find_record_in_module, find_visible_alias, find_visible_enum, find_visible_function, find_visible_generic, find_visible_generic_function, find_visible_record } from declaration_lookup
-import { resolve_type_name } from type_resolution
+import { resolve_type_name, type_display } from type_resolution
 import { EnumField } from enum_model
 import { parse_type, token_is } from syntax_tokens
 import { nominal_application_end } from generic_syntax
@@ -216,6 +216,7 @@ def resolution_keyword(name: String): Boolean
 end
 
 def is_typed_local_declaration(state: CompilerState, index: Integer): Boolean
+	mut parentheses := 0
 	mut depth := 0
 	mut cursor := index + 2
 	while !terminal_token(state, cursor)
@@ -223,13 +224,21 @@ def is_typed_local_declaration(state: CompilerState, index: Integer): Boolean
 			return false
 		end
 		if token_is(state, cursor, ":=")
-			return depth == 0
+			if depth != 0
+				return false
+			end
+			return parentheses == 0
 		end
-		if token_is(state, cursor, ",") && depth == 0
+		if token_is(state, cursor, ",") && depth == 0 && parentheses == 0
 			return false
 		end
-		if token_is(state, cursor, ")")
-			return false
+		if token_is(state, cursor, "(")
+			parentheses += 1
+		elsif token_is(state, cursor, ")")
+			if parentheses == 0
+				return false
+			end
+			parentheses -= 1
 		end
 		if token_is(state, cursor, "<")
 			depth += 1
@@ -505,7 +514,7 @@ def resolve_declarations(mut state: CompilerState): Boolean
 			raw_type := load_string(state.field_types, field_index)
 			resolved_type := resolve_type_name(state, module_index, raw_type, false)
 			if resolved_type == ""
-				diagnostic(state, "TRBN4003", load_integer(state.field_lines, field_index), "unknown field type " + raw_type)
+				diagnostic(state, "TRBN4003", load_integer(state.field_lines, field_index), "unknown field type " + type_display(state, raw_type))
 			else
 				store_string(state.field_types, field_index, resolved_type)
 			end
@@ -570,7 +579,7 @@ def resolve_declarations(mut state: CompilerState): Boolean
 			raw_type := load_string(state.parameter_types, parameter_index)
 			resolved_type := resolve_type_name(state, module_index, raw_type, false)
 			if resolved_type == ""
-				diagnostic(state, "TRBN4003", load_integer(state.parameter_lines, parameter_index), "unknown parameter type " + raw_type)
+				diagnostic(state, "TRBN4003", load_integer(state.parameter_lines, parameter_index), "unknown parameter type " + type_display(state, raw_type))
 			else
 				store_string(state.parameter_types, parameter_index, resolved_type)
 			end
@@ -579,7 +588,7 @@ def resolve_declarations(mut state: CompilerState): Boolean
 		raw_result := load_string(state.function_result_types, function_index)
 		resolved_result := resolve_type_name(state, module_index, raw_result, true)
 		if resolved_result == ""
-			diagnostic(state, "TRBN4003", load_integer(state.function_lines, function_index), "unknown result type " + raw_result)
+			diagnostic(state, "TRBN4003", load_integer(state.function_lines, function_index), "unknown result type " + type_display(state, raw_result))
 		else
 			store_string(state.function_result_types, function_index, resolved_result)
 		end
@@ -735,7 +744,7 @@ def resolve_function_body(
 							else
 								if token_is(state, index + 1, "(")
 									if text != "puts"
-										if find_visible_function(state, module_index, text) < 0
+										if find_visible_function(state, module_index, text) < 0 && local_find(locals, text) < 0
 											diagnostic(
 												state,
 												"TRBN4003",

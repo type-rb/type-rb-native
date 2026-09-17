@@ -186,3 +186,16 @@ claim follows from this structural change.
 Earlier extraction narratives, rejected variants and measurement links remain in
 [the immutable prior status](https://github.com/type-rb/type-rb-native/blob/7726ff18e9230cd149e9f0c317577f6429f907fc/docs/native-mir-optimization-status.md).
 Original evidence and the fixed migration/cumulative baselines are unchanged.
+
+## Callable MIR foundation
+
+Structural callback signatures, internal static code references and indirect calls
+now share verified MIR type, effect and root ownership. The backend consumes exact
+parameter/result types, including Float and Void. Internal fixtures cover callable
+parameters/returns and Array/Hash/record storage under frontend erasure and forced
+collection; malformed type and operand controls reject unsafe input. See
+[decision 0051](decisions/0051-callable-mir-foundation.md).
+
+This is a prerequisite for ordinary `fn`/capture support, which remains open in
+the shared language inventory. Captured environments and retained REPL identities
+must be represented and verified before those cases become accepted.
