@@ -9,10 +9,10 @@ import { declared_callable_type, mir_checked_callable_call, mir_checked_closure 
 import { scalar_mir_commit } from mir_builder
 import { mir_control_return } from mir_control
 import { mir_declare_types } from mir_types
-import { parse_module } from parser
+import { parse_lambda_syntax, parse_module } from parser
 import { resolve } from resolution
-import { CompilerState, compiler_new } from state
-import { load_integer, load_string, store_string } from storage
+import { CompilerState, compiler_new, select_checked_body } from state
+import { load_integer, load_string, sparse_integer_at, store_string } from storage
 import { control_test_output } from control_mir_test
 import { logical_run_qbe } from logical_test
 import { intrinsic_mir_erase } from intrinsic_mir_test
@@ -70,6 +70,88 @@ def callable_mir_state(): CompilerState
 	end
 	expect(finished).to_be_true()
 	return state
+end
+
+describe("Anonymous function syntax ownership") do
+	test("parses multiline headers and immediate calls without consuming the containing expression") do
+		source := "def main()\nvalue := (fn(\nmut input: Integer\n): Integer\nreturn input\nend)(7) + 1\nend\n"
+		mut state := compiler_new(source.size() * 4 + 64)
+		expect(lex(state, source) && parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(state.lambdas.size()).to_equal(1)
+		expect(state.lambdas[0].parameters.size()).to_equal(1)
+		expect(load_string(state.token_texts, state.lambdas[0].finish)).to_equal(")")
+		expect(state.parameter_count[0]).to_equal(0)
+		expect(resolve(state)).to_be_true()
+	end
+	test("keeps nested fn parameters and defaults separate from surrounding declarations") do
+		source := "alias Callback = (Integer) -> Integer\nrecord Holder\ncallback: Callback = fn(input: Integer): Integer; return input; end\nend\ndef consume(callback: Callback = fn(mut first: Integer): Integer\nnested := fn(second: Integer): Integer; return second; end\nreturn nested(first)\nend, tail: Integer = 7): Integer\nreturn callback(tail)\nend\ndef main()\nend\n"
+		mut state := compiler_new(source.size() * 4 + 64)
+		expect(lex(state, source) && parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(state.function_count[0]).to_equal(2)
+		expect(state.parameter_count[0]).to_equal(2)
+		expect(load_string(state.parameter_names, 0)).to_equal("callback")
+		expect(load_string(state.parameter_names, 1)).to_equal("tail")
+		expect(state.lambdas.size()).to_equal(3)
+		expect(state.default_initializers.size()).to_equal(3)
+		expect(state.default_initializers[1].owner).to_equal(0)
+		expect(state.default_initializers[1].slot).to_equal(0)
+		expect(state.default_initializers[2].slot).to_equal(1)
+		outer := state.lambdas[2]
+		expect(outer.parameters[0].mutable).to_equal(1)
+		expect(outer.body_start < state.lambdas[1].origin).to_be_true()
+		expect(outer.body_finish > state.lambdas[1].finish).to_be_true()
+		mut position := [outer.origin]
+		expect(parse_lambda_syntax(state, position)).to_be_true()
+		expect(position[0]).to_equal(outer.finish)
+		expect(state.lambdas.size()).to_equal(3)
+		expect(state.parameter_count[0]).to_equal(2)
+		expect(resolve(state)).to_be_true()
+		expect(check(state)).to_be_false()
+		expect(load_string(state.diagnostic_messages, 0)).to_equal("fn values require lexical capture lowering, which is not yet supported")
+	end
+	test("resolves shared fn syntax separately for each generic body") do
+		source := "def probe<T>()\ncallback := fn(value: T): T; return value; end\nend\ndef main()\nprobe<Integer>()\nprobe<String>()\nend\n"
+		mut state := compiler_new(source.size() * 4 + 64)
+		expect(lex(state, source) && parse_module(state, 0, state.entry_module[0]) && resolve(state)).to_be_true()
+		expect(state.lambdas.size()).to_equal(1)
+		origin := state.lambdas[0].origin
+		first := state.generic_function_instances[0].function
+		second := state.generic_function_instances[1].function
+		select_checked_body(state, first)
+		expect(load_string(state.checked[0].lambda_types, origin)).to_equal("$Callable<Integer,Integer>")
+		select_checked_body(state, second)
+		expect(load_string(state.checked[0].lambda_types, origin)).to_equal("$Callable<String,String>")
+		expect(state.lambdas[0].parameters[0].type_name).to_equal("T")
+		expect(state.lambdas[0].result_type).to_equal("T")
+		expect(sparse_integer_at(state.lambda_origins, origin)).to_equal(1)
+	end
+	test("does not leak fn parameters locals or iteration names into the enclosing resolver") do
+		bodies := ["callback := fn(hidden: Integer)\nend\n", "callback := fn()\nhidden := 1\nend\n", "callback := fn()\n[1].each do |hidden|\nputs(hidden)\nend\nend\n"]
+		bodies.each do |body|
+			source := "def main()\n" + body + "puts(hidden)\nend\n"
+			mut state := compiler_new(source.size() * 4 + 64)
+			expect(lex(state, source) && parse_module(state, 0, state.entry_module[0])).to_be_true()
+			expect(resolve(state)).to_be_false()
+			expect(load_string(state.diagnostic_messages, 0)).to_equal("unresolved local hidden")
+		end
+	end
+	test("rejects invalid fn headers including unused generic nested annotations") do
+		headers := ["fn(value)", "fn(value: Integer = 1)", "fn(*, value: Integer)", "fn(*values: Integer)", "fn<T>(value: T)", "fn(): Void", "fn(value: Integer, value: Integer)"]
+		headers.each do |header|
+			source := "def main()\ncallback := " + header + "\nend\nend\n"
+			mut state := compiler_new(source.size() * 4 + 64)
+			expect(lex(state, source)).to_be_true()
+			expect(parse_module(state, 0, state.entry_module[0])).to_be_false()
+		end
+		annotations := ["fn(value: Missing)", "fn(value: Void)", "fn(): Missing"]
+		annotations.each do |header|
+			source := "def unused<T>()\nouter := fn()\ninner := " + header + "\nend\nend\nend\ndef main()\nend\n"
+			mut state := compiler_new(source.size() * 4 + 64)
+			expect(lex(state, source) && parse_module(state, 0, state.entry_module[0]) && resolve(state)).to_be_true()
+			expect(check(state)).to_be_false()
+			expect(load_string(state.diagnostic_codes, 0)).to_equal("TRBN4003")
+		end
+	end
 end
 
 # Factories bind captured parameter prefixes explicitly; consumers use ordinary
