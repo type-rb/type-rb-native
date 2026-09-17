@@ -11,6 +11,7 @@ agree. Completed naming and extraction history is available in the
 | --- | --- |
 | `compiler/src/` | Ordinary compiler: `CompilerState`, `CheckedLocals`, `CheckedValue`, `QbeEmitContext`, and `QbeValue` use role names. Lexing and source slicing live in `lexer.trb`; MIR records, construction, analysis, rewrites, verification and QBE adaptation have separate modules; see the [architecture map](architecture.md). |
 | `compiler/src/checked_body.trb` | Concrete function-owned checked projections; shared parsed syntax stays in the program, and backend emission needs only verified MIR. |
+| `compiler/src/lambda_syntax.trb`, `compiler/src/lambda_resolution.trb` | Anonymous parameter grammar and per-body resolved signatures; recursive body parsing stays in the parser, while executable lexical capture lowering remains pending. |
 | `compiler/src/mir_value_control.trb` | Typed branch exits, common result blocks and numeric join conversions; recursive source checking and REPL evaluation consume shared frontend regions. |
 | `compiler/src/default_arguments.trb` | Private initializer declaration identities and preceding typed slots; ordinary checked functions and MIR own their bodies and calls. |
 | `compiler/cli/repl_project.trb` | REPL project discovery, generated-import filtering and visible nominal type names. Session checking/evaluation remains in the REPL adapters. |

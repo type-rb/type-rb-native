@@ -5,6 +5,29 @@ Authored `fn` values and lexical captures remain unsupported. This checkpoint
 adds the typed call boundary needed by closure lowering, not complete ordinary
 function-value support.
 
+## Parsed anonymous bodies
+
+The frontend now recognizes `fn` as an expression with its own typed positional
+parameters, optional result annotation and body terminator. Nested expressions
+and declaration defaults retain immutable `LambdaSyntax` regions; their parameter
+rows never enter the surrounding named function's parameter/default catalog.
+Reparsing unreachable syntax reuses the original region instead of replacing it.
+The restricted header grammar rejects defaults, named-only/rest parameters and
+generic lambda parameters, following the reference contract.
+
+Resolved signatures live in the concrete `CheckedBody`, so generic instances
+sharing the same source region do not share substituted types. Abstract template
+validation visits nested header annotations too. The containing name resolver
+skips anonymous bodies and excludes their iteration, catch and pattern bindings;
+it cannot accidentally expose nested names outside their lexical boundary.
+Body capture selection and checking remain part of the pending closure lowering.
+
+The REPL collects a complete anonymous body, including nested `fn` and compact
+statement separators. Ordinary checking still rejects construction explicitly
+until lexical capture lowering and retained REPL environments are implemented.
+The rejected ordinary probes remain coverage gaps, with updated diagnostic
+evidence. This parser checkpoint does not make function values executable.
+
 ## Ownership and representation
 
 Function annotations use the reference spelling `(A, B) -> R`, including `Void`
@@ -88,7 +111,7 @@ from constructing and executing a function value. Its existing `fn`/capture
 cases remain rejected and visible as gaps in Capabilities. Internal fixture
 execution does not mark those ordinary cases as supported.
 
-The canonical compiler closure remains 93 modules. Integration requires
+The canonical compiler closure contains 95 modules. Integration requires
 unchanged-seed ordinary core/CLI fixed points, exact recovery-source validation,
 snapshot-v4 compatibility, complete hosted recovery, target and lifetime checks.
 Compiler implementation does not use the new function syntax. No seed, reference
