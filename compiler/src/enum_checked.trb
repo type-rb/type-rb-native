@@ -10,8 +10,8 @@ import { enum_type } from enum_types
 import { find_visible_alias, find_visible_enum, find_visible_generic } from declaration_lookup
 import { nullable_replace } from nullable_flow
 import { parse_argument_label } from parser
-import { CheckedLocals, CompilerState, ControlSyntax, diagnostic, has_diagnostic } from state
-import { load_integer, load_string, sparse_integer_at, store_integer, store_string } from storage
+import { CheckedLocals, CompilerState, ControlSyntax, diagnostic, has_diagnostic, local_bind } from state
+import { load_integer, load_string, sparse_integer_at, store_integer } from storage
 
 # Check the complete closed family before choosing the exhaustive final edge.
 def check_enum_patterns(mut state: CompilerState, control: ControlSyntax, owner: Integer): Boolean
@@ -126,14 +126,8 @@ def check_enum_bindings(mut state: CompilerState, mut locals: CheckedLocals, sel
 		binding := pattern.bindings[slot]
 		type_name := state.enum_fields[row.field_start + slot].type_name
 		value := mir_enum_operation(state, locals, 39, selector, - 1, row.field_start + slot, type_name, binding)
-		index := locals.count[0]
-		store_integer(locals.result_pending, index, 0)
-		store_integer(locals.result_uses, index, 0)
-		store_string(locals.names, index, load_string(state.token_texts, binding))
-		store_string(locals.types, index, type_name)
-		store_integer(locals.mutable, index, 0)
+		index := local_bind(locals, load_string(state.token_texts, binding), type_name, 0)
 		store_integer(locals.mir_values, index, checked_mir_value(value) + 1)
-		locals.count[0] += 1
 		nullable_replace(locals, index, type_name)
 		slot += 1
 	end
