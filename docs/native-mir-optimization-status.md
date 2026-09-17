@@ -32,7 +32,13 @@ QBE adaptation captures edge values before overwriting destinations. Instruction
 results retain stable MIR operand names even when block storage is reordered.
 
 `mir_flow.trb` derives reachability, reverse postorder, immediate dominators and
-value definition sites and a function-local Hash type index after structural/identity validation. Type indexes are rebuilt from current rows, so later raw-MIR edits cannot reuse stale types. Function parameters
+value definition sites and a function-local Hash type index after structural/identity validation.
+Its predecessor and incoming-argument indexes retain both arms when a branch
+targets the same block. Array-loop alias propagation and natural-loop traversal
+reuse these derived edges instead of rescanning every block for every parameter.
+The verifier rebuilds this information from current MIR; it is not a persistent
+cache or an input optimization fact. Type indexes are rebuilt from current rows,
+so later raw-MIR edits cannot reuse stale types. Function parameters
 are available everywhere; reachable blocks may use dominating definitions, while
 unreachable blocks may only use function parameters and their own earlier
 values. Same-block instruction uses must follow their definitions. Sparse
