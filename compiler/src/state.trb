@@ -288,7 +288,7 @@ end
 # Persistent path facts make branch rollback constant time. Field -2 is a
 # binding replacement barrier; field -1 denotes the binding itself.
 record NullableFact
-	binding: Integer
+	identity: Integer
 	field: Integer
 	type_name: String
 	version: Integer
@@ -296,6 +296,9 @@ record NullableFact
 end
 
 record CheckedLocals
+	# Active slots can be reused after scope exit; declaration identities cannot.
+	binding_ids: IntegerStorage
+	binding_slots: Array<Integer>
 	result_pending: IntegerStorage
 	result_uses: IntegerStorage
 	nullable_facts: Array<NullableFact>
@@ -322,6 +325,7 @@ end
 
 def locals_new(capacity: Integer): CheckedLocals
 	return CheckedLocals.new(
+		binding_ids: integer_storage(capacity), binding_slots: [],
 		result_pending: integer_storage(capacity), result_uses: integer_storage(capacity),
 		nullable_facts: [],
 		nullable_state: [- 1, 0],
@@ -372,15 +376,43 @@ def local_add(
 		diagnostic(state, "TRBN4003", line, "duplicate local declaration " + name)
 		return false
 	end
+	local_bind(locals, name, type_name, mutable)
+	return true
+end
+
+# Register one lexical binding, including deliberate block-parameter shadowing.
+# Each concrete body owns its identities independently of reusable active slots.
+def local_bind(mut locals: CheckedLocals, name: String, type_name: String, mutable: Integer): Integer
 	index := locals.count[0]
+	store_integer(locals.binding_ids, index, locals.binding_slots.size())
+	locals.binding_slots.push(index)
 	store_integer(locals.result_pending, index, 0)
 	store_integer(locals.result_uses, index, 0)
+	store_integer(locals.hash_literal_origins, index, 0)
 	store_string(locals.names, index, name)
 	store_string(locals.types, index, type_name)
 	store_integer(locals.mutable, index, mutable)
 	store_integer(locals.mir_values, index, 0)
 	locals.count[0] = index + 1
-	return true
+	return index
+end
+
+def local_identity(locals: CheckedLocals, slot: Integer): Integer
+	if slot < 0 || slot >= locals.count[0]
+		return - 1
+	end
+	return load_integer(locals.binding_ids, slot)
+end
+
+def local_slot(locals: CheckedLocals, identity: Integer): Integer
+	if identity < 0 || identity >= locals.binding_slots.size()
+		return - 1
+	end
+	slot := locals.binding_slots[identity]
+	if slot < 0 || slot >= locals.count[0] || load_integer(locals.binding_ids, slot) != identity
+		return - 1
+	end
+	return slot
 end
 
 # Select by semantic function identity, preserving an explicit caller context.

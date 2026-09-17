@@ -7,12 +7,12 @@ import { mir_semantic_type_id, mir_semantic_type_name } from mir_types
 import { CheckedLocals, CompilerState } from state
 import { load_integer, load_string } from storage
 
-# Internal code references have no captured environment. Future closure lowering
-# must model environment ownership explicitly before exposing captured functions.
-def declared_callable_type(state: CompilerState, function: Integer): String
+# The environment binds a prefix of an ordinary checked function's parameters.
+# The remaining parameters and result are the closure's public call signature.
+def declared_callable_type(state: CompilerState, function: Integer, captures: Integer): String
 	mut parameters: Array<String> := []
 	start := load_integer(state.function_parameter_starts, function)
-	mut index := 0
+	mut index := captures
 	while index < load_integer(state.function_parameter_counts, function)
 		parameters.push(load_string(state.parameter_types, start + index))
 		index += 1
@@ -31,14 +31,23 @@ def mir_callable_id(native_module: MirModule, type_id: Integer): Integer
 	return row.declaration
 end
 
-def mir_checked_function_value(mut state: CompilerState, mut locals: CheckedLocals, function: Integer, origin: Integer): CheckedValue
-	type_name := declared_callable_type(state, function)
+def mir_checked_closure(mut state: CompilerState, mut locals: CheckedLocals, function: Integer, captures: Array<Integer>, origin: Integer): CheckedValue
+	type_name := declared_callable_type(state, function, captures.size())
 	mir_control_prepare(state, locals)
+	captures.each do |capture|
+		if capture < 0
+			scalar_mir_disable(locals)
+		end
+	end
 	if !mir_control_active(locals)
 		return checked_value(type_name, 0, 9007199254740991, 0)
 	end
 	result := scalar_mir_value(state, locals, mir_semantic_type_id(state.scalar_mir, type_name), origin)
-	scalar_mir_instruction(state, locals, 41, result, - 1, - 1, function, - 1, load_integer(state.token_lines, origin))
+	start := locals.mir_arguments.size()
+	captures.each do |capture|
+		locals.mir_arguments.push(capture)
+	end
+	scalar_mir_instruction(state, locals, 41, result, start, captures.size(), function, - 1, load_integer(state.token_lines, origin))
 	return mir_checked_value(type_name, result, 9007199254740991, 0)
 end
 
@@ -76,7 +85,7 @@ def mir_callable_instruction_error(flow: MirFlow, native_module: MirModule, func
 		return "MIR callable failure shape differs"
 	end
 	if instruction.kind == 41
-		if instruction.first != - 1 || instruction.second != - 1 || instruction.payload < 0 || instruction.payload >= native_module.signatures.size()
+		if instruction.payload < 0 || instruction.payload >= native_module.signatures.size()
 			return "MIR function value declaration is missing"
 		end
 		signature := native_module.signatures[instruction.payload]
@@ -90,7 +99,26 @@ def mir_callable_instruction_error(flow: MirFlow, native_module: MirModule, func
 		if native_module.functions[body].kind == 0
 			return "MIR function value requires a checked body"
 		end
-		expected := callable_type(signature.parameter_types, signature.result_type)
+		if instruction.second < 0 || instruction.second > signature.parameter_types.size() || !mir_table_span_valid(instruction.first, instruction.second, native_module.arguments.size())
+			return "MIR closure capture span differs"
+		end
+		mut parameter := 0
+		while parameter < instruction.second
+			value := native_module.arguments[instruction.first + parameter]
+			if !mir_value_available(flow, block, index, value)
+				return "MIR closure capture is undefined"
+			end
+			if mir_semantic_type_name(native_module, mir_flow_type(flow, value)) != signature.parameter_types[parameter]
+				return "MIR closure capture type differs"
+			end
+			parameter += 1
+		end
+		mut parameters: Array<String> := []
+		while parameter < signature.parameter_types.size()
+			parameters.push(signature.parameter_types[parameter])
+			parameter += 1
+		end
+		expected := callable_type(parameters, signature.result_type)
 		if mir_semantic_type_name(native_module, mir_flow_type(flow, instruction.result)) != expected
 			return "MIR function value signature differs"
 		end
