@@ -71,9 +71,17 @@ current Native, the previously measured Native revision, a frozen Native
 baseline, and the exact compatible TypeRB Go revision in `TYPE_RB_REVISION`.
 These four roles compile the same TypeRB source bytes. Each Native chain is closed through
 the existing bootstrap verifier from an exact published seed. Identical role
-revisions share a compiler preparation inside one run. If no compatible previous
-snapshot exists, that role uses current Native and the page shows no previous
-comparison. The frozen baseline is not automatically advanced.
+revisions share a compiler preparation inside one run. Preparation explicitly selects
+`bootstrap-seed.sh --measurement-policy diagnostic`: the Native generations,
+fixed-point/QBE identity checks, valid and invalid corpus, process/tool boundaries,
+cleanup controls and size observations still run. It omits the separate legacy
+compiler timing series (four warmups and fourteen retained self-builds for a
+transition input). Application build/runtime observations below are unchanged.
+The evidence marks these compiler medians as excluded, records total preparation
+time per revision, and includes `diagnosticOnly` metadata that release packaging
+rejects. Standalone seed validation keeps its default measurement policy. If no
+compatible previous snapshot exists, that role uses current Native and the page
+shows no previous comparison. The frozen baseline is not automatically advanced.
 
 Pure Go additionally runs fannkuch-redux (10), n-body (1,000,000) and
 spectral-norm (5,500), using exactly the registered upstream sources in

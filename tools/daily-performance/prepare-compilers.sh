@@ -16,6 +16,8 @@ for revision in "$current" "$previous" "$baseline"; do
   # Reuse identical revisions inside this run, never a floating compiler binary.
   test ! -f "$workspace/$revision/compiler" || continue
   git merge-base --is-ancestor "$revision" HEAD
+  preparation_started=$(date +%s)
+  printf 'Preparing compiler %s\n' "$revision"
   directory="$workspace/$revision"
   mkdir -p "$directory/first" "$directory/transition"
   git worktree add --detach "$directory/source" "$revision"
@@ -32,11 +34,16 @@ for revision in "$current" "$previous" "$baseline"; do
   done
   /bin/sh "$root/tools/bootstrap-seed.sh" \
     --mode previous --input "$directory/transition/compiler" --input-role transition \
+    --measurement-policy diagnostic \
     --repository-root "$directory/source" --qbe "$qbe" --cc /usr/bin/cc \
     --profile linux-arm64-v0 --runner-image ubuntu-24.04-arm \
     --workspace "$directory/bootstrap" --output "$directory/compiler" \
     --evidence "$directory/evidence" --metadata "$directory/metadata.json" \
     --asset-name daily-performance-linux-arm64
+  preparation_elapsed=$(($(date +%s) - preparation_started))
+  printf 'revision=%s\nelapsed_seconds=%s\nscope=transition-and-correctness-preparation\n' \
+    "$revision" "$preparation_elapsed" > "$directory/evidence/preparation.txt"
+  printf 'Prepared compiler %s in %s seconds\n' "$revision" "$preparation_elapsed"
 done
 
 python3 - "$workspace" "$current" "$previous" "$baseline" "$RUNNER_TEMP/trb" <<'PY'
