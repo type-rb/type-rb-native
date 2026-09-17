@@ -34,7 +34,7 @@ import { standard_package_import, standard_package_root } from resolution
 import { find_visible_enum, find_visible_function, find_visible_record } from declaration_lookup
 import { string_starts_with } from path
 import { array_element_type, array_type, common_array_element_type, find_field, find_record_type, record_type, resolve_type_name, type_display } from type_resolution
-import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_add, local_find, terminal_token } from state
+import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_add, local_bind, local_find, terminal_token } from state
 import { load_integer, load_string, sparse_integer_at, sparse_string_at, store_integer, store_string } from storage
 
 def checked_hash_literal(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, expected: String): CheckedValue
@@ -1198,17 +1198,6 @@ def check_simple_statement(
 	return left
 end
 
-def checked_iteration_binding(mut locals: CheckedLocals, name: String, type_name: String)
-	index := locals.count[0]
-	store_integer(locals.result_pending, index, 0)
-	store_integer(locals.result_uses, index, 0)
-	store_string(locals.names, index, name)
-	store_string(locals.types, index, type_name)
-	store_integer(locals.mutable, index, 1)
-	store_integer(locals.mir_values, index, 0)
-	locals.count[0] = index + 1
-end
-
 def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, result_type: String, parent_loop: Integer): Boolean
 	flow_parent := locals.nullable_state[0]
 	flow_first := locals.nullable_facts.size()
@@ -1238,20 +1227,20 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 	checked_iteration_require(state, origin, parent_loop)
 	saved := locals.count[0]
 	# Hidden receiver/cursor bindings provide the loop-carried MIR values.
-	checked_iteration_binding(locals, "$iteration.receiver", receiver.type_name)
-	checked_iteration_binding(locals, "$iteration.cursor", "Integer")
+	local_bind(locals, "$iteration.receiver", receiver.type_name, 1)
+	local_bind(locals, "$iteration.cursor", "Integer", 1)
 	if source_kind == 2 && plan.index_origin >= 0
-		checked_iteration_binding(locals, "$iteration.ordinal", "Integer")
+		local_bind(locals, "$iteration.ordinal", "Integer", 1)
 	end
 	element := mir_checked_iteration_begin(state, locals, plan, receiver, saved)
-	checked_iteration_binding(locals, load_string(state.token_texts, plan.element_origin), element_type)
+	local_bind(locals, load_string(state.token_texts, plan.element_origin), element_type, 1)
 	store_integer(locals.mir_values, locals.count[0] - 1, checked_mir_value(element) + 1)
 	if plan.index_origin >= 0
 		if load_string(state.token_texts, plan.element_origin) == load_string(state.token_texts, plan.index_origin)
 			diagnostic(state, "TRBN4004", load_integer(state.token_lines, plan.index_origin), "iteration block parameter is duplicated")
 			return false
 		end
-		checked_iteration_binding(locals, load_string(state.token_texts, plan.index_origin), "Integer")
+		local_bind(locals, load_string(state.token_texts, plan.index_origin), "Integer", 1)
 		mut index_slot := saved + 1
 		if source_kind == 2
 			index_slot = saved + 2
@@ -1825,8 +1814,7 @@ def check_statement_value(mut state: CompilerState, mut position: Array<Integer>
 	mir_value_exit(state, locals, join, payload)
 	mir_control_enter(state, locals, failure, line)
 	error := mir_enum_operation(state, locals, 39, value, - 1, state.enum_variants[operation.err_variant].field_start, operation.error_type, origin)
-	checked_iteration_binding(locals, load_string(state.token_texts, handler.binding), operation.error_type)
-	store_integer(locals.mutable, locals.count[0] - 1, 0)
+	local_bind(locals, load_string(state.token_texts, handler.binding), operation.error_type, 0)
 	store_integer(locals.mir_values, locals.count[0] - 1, checked_mir_value(error) + 1)
 	position[0] = handler.body
 	boundary := load_string(state.function_result_types, locals.mir_state[1])

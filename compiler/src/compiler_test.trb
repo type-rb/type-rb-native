@@ -1,3 +1,4 @@
+import { nullable_apply, nullable_fact, nullable_lookup, nullable_replace, nullable_version } from nullable_flow
 import { check_expression, check_primary } from checked_program
 import { CompilerProjectSources, check, emit_qbe, load_file_root, load_project_sources, string_starts_at } from compiler
 import { character_in, lex, lex_module } from lexer
@@ -9,7 +10,7 @@ import qbe_output
 import { resolve } from resolution
 import { find_function_in_module, find_import_binding, find_record_in_module } from declaration_lookup
 import { find_field, find_record_type } from type_resolution
-import { CompilerState, add_module, compiler_new, find_module, function_index_key, has_diagnostic, local_add, local_find, locals_new } from state
+import { CompilerState, add_module, compiler_new, find_module, function_index_key, has_diagnostic, local_add, local_bind, local_find, local_identity, local_slot, locals_new } from state
 import { integer_storage, load_integer, load_string, store_integer, store_string, string_storage } from storage
 import { native_create_directory, native_read_text, native_write_text } from native_file_system
 import trb/std/process
@@ -871,6 +872,46 @@ describe("Native TypeRB frontend") do
 		expect(local_find(locals, "item")).to_equal(2)
 		expect(local_find(locals, "missing")).to_equal(- 1)
 
+	end
+
+	test("keeps lexical identities and flow facts separate across shadowing and reused slots") do
+		mut locals := locals_new(2)
+		outer := local_bind(locals, "value", "Integer?", 1)
+		identity := local_identity(locals, outer)
+		nullable_replace(locals, outer, "Integer")
+		mut iteration := 0
+		while iteration < 8
+			inner := local_bind(locals, "value", "String?", 1)
+			inner_id := local_identity(locals, inner)
+			expect(inner_id > identity).to_be_true()
+			expect(local_find(locals, "value")).to_equal(inner)
+			expect(nullable_version(locals, inner)).to_equal(0)
+			expect(nullable_lookup(locals, inner, - 1, "String?")).to_equal("String?")
+			fact := nullable_fact(locals, inner, - 1, "String", - 1)
+			nullable_apply(locals, fact)
+			expect(nullable_lookup(locals, inner, - 1, "String?")).to_equal("String")
+			store_integer(locals.result_pending, inner, 1)
+			store_integer(locals.result_uses, inner, 1)
+			store_integer(locals.hash_literal_origins, inner, 123)
+			locals.count[0] = 1
+			expect(local_slot(locals, inner_id)).to_equal(- 1)
+			expect(local_slot(locals, identity)).to_equal(outer)
+			expect(local_find(locals, "value")).to_equal(outer)
+			replacement := local_bind(locals, "value", "String?", 1)
+			expect(replacement).to_equal(inner)
+			expect(local_identity(locals, replacement) > inner_id).to_be_true()
+			expect(local_slot(locals, inner_id)).to_equal(- 1)
+			nullable_apply(locals, fact)
+			expect(nullable_lookup(locals, replacement, - 1, "String?")).to_equal("String?")
+			expect(load_integer(locals.result_pending, replacement)).to_equal(0)
+			expect(load_integer(locals.result_uses, replacement)).to_equal(0)
+			expect(load_integer(locals.hash_literal_origins, replacement)).to_equal(0)
+			expect(nullable_lookup(locals, outer, - 1, "Integer?")).to_equal("Integer")
+			locals.count[0] = 1
+			iteration += 1
+		end
+		expect(local_slot(locals, - 1)).to_equal(- 1)
+		expect(local_slot(locals, 9007199254740991)).to_equal(- 1)
 	end
 
 	test("preserves ASCII identifier and digit classification after hot-path ordering") do

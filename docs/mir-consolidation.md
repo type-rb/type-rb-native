@@ -166,13 +166,16 @@ final performance qualification remain open.
 
 ## Callable foundation
 
-Callback signatures and indirect calls now have verified MIR owners, conservative
-call effects and live-root planning. Internal fixtures execute higher-order calls
-and container-stored code references after frontend erasure and forced collection.
+Callback signatures, captured environments and indirect calls now have verified
+MIR owners, conservative effects and live-root planning. Internal fixtures execute
+escaped/nested closures, shared captured Array storage and cyclic container
+references after frontend erasure and forced collection. Lexical binding identities
+survive active-slot reuse and own nullable facts.
 [Decision 0051](decisions/0051-callable-mir-foundation.md) separates this foundation
-from ordinary language acceptance: `fn` creation, lexical captures, managed
-environments and retained REPL closure identity remain the next dependency.
-Unused signature probes do not establish executable closure support.
+from ordinary acceptance: authored `fn` lowering, capture selection/shared mutable
+cells, lexical transfer scopes and retained REPL closure identity remain open.
+Unused signature probes and internal factories do not establish ordinary closure
+support.
 
 ## Development loop
 

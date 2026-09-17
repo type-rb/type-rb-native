@@ -3,14 +3,15 @@ import { binary_operator_id } from parser
 import { CheckedValue, checked_condition_value, checked_nullable_target, checked_view } from checked_values
 import { mir_checked_nullable } from nullable_mir
 import { nullable_element } from nullable_types
-import { CheckedLocals, CompilerState, NullableFact, local_find } from state
+import { CheckedLocals, CompilerState, NullableFact, local_find, local_identity, local_slot } from state
 import { load_string, store_string } from storage
 
 def nullable_version(locals: CheckedLocals, binding: Integer): Integer
+	identity := local_identity(locals, binding)
 	mut cursor := locals.nullable_state[0]
 	while cursor >= 0
 		fact := locals.nullable_facts[cursor]
-		if fact.binding == binding && fact.field == - 2
+		if fact.identity == identity && fact.field == - 2
 			return fact.version
 		end
 		cursor = fact.previous
@@ -20,7 +21,7 @@ end
 
 def nullable_fact(mut locals: CheckedLocals, binding: Integer, field: Integer, type_name: String, previous: Integer): Integer
 	id := locals.nullable_facts.size()
-	locals.nullable_facts.push(NullableFact.new(binding: binding, field: field, type_name: type_name, version: nullable_version(locals, binding), previous: previous))
+	locals.nullable_facts.push(NullableFact.new(identity: local_identity(locals, binding), field: field, type_name: type_name, version: nullable_version(locals, binding), previous: previous))
 	return id
 end
 
@@ -28,8 +29,9 @@ def nullable_apply(mut locals: CheckedLocals, facts: Integer)
 	mut cursor := facts
 	while cursor >= 0
 		fact := locals.nullable_facts[cursor]
-		if fact.version == nullable_version(locals, fact.binding)
-			locals.nullable_state[0] = nullable_fact(locals, fact.binding, fact.field, fact.type_name, locals.nullable_state[0])
+		binding := local_slot(locals, fact.identity)
+		if binding >= 0 && fact.version == nullable_version(locals, binding)
+			locals.nullable_state[0] = nullable_fact(locals, binding, fact.field, fact.type_name, locals.nullable_state[0])
 		end
 		cursor = fact.previous
 	end
@@ -38,7 +40,7 @@ end
 def nullable_replace(mut locals: CheckedLocals, binding: Integer, flow_type: String)
 	locals.nullable_state[1] += 1
 	id := locals.nullable_facts.size()
-	locals.nullable_facts.push(NullableFact.new(binding: binding, field: - 2, type_name: "", version: locals.nullable_state[1], previous: locals.nullable_state[0]))
+	locals.nullable_facts.push(NullableFact.new(identity: local_identity(locals, binding), field: - 2, type_name: "", version: locals.nullable_state[1], previous: locals.nullable_state[0]))
 	locals.nullable_state[0] = id
 	if nullable_element(load_string(locals.types, binding)) != ""
 		locals.nullable_state[0] = nullable_fact(locals, binding, - 1, flow_type, locals.nullable_state[0])
@@ -46,10 +48,11 @@ def nullable_replace(mut locals: CheckedLocals, binding: Integer, flow_type: Str
 end
 
 def nullable_lookup(locals: CheckedLocals, binding: Integer, field: Integer, declared: String): String
+	identity := local_identity(locals, binding)
 	mut cursor := locals.nullable_state[0]
 	while cursor >= 0
 		fact := locals.nullable_facts[cursor]
-		if fact.binding == binding
+		if fact.identity == identity
 			if fact.field == - 2
 				return declared
 			end
@@ -109,8 +112,9 @@ def nullable_finish(mut locals: CheckedLocals, parent: Integer, first: Integer, 
 	mut cursor := first
 	while cursor < finish
 		fact := locals.nullable_facts[cursor]
-		if fact.field == - 2 && fact.binding < count
-			nullable_replace(locals, fact.binding, load_string(locals.types, fact.binding))
+		binding := local_slot(locals, fact.identity)
+		if fact.field == - 2 && binding >= 0 && binding < count
+			nullable_replace(locals, binding, load_string(locals.types, binding))
 		end
 		cursor += 1
 	end
