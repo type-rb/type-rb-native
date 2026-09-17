@@ -71,6 +71,23 @@ require_argument_acceptance darwin-initial-ordinary \
 require_argument_acceptance linux-arm64-initial-ordinary \
 	--profile linux-arm64-v0 --mode initial --input-role ordinary
 
+require_argument_acceptance diagnostic-previous-transition \
+	--profile linux-arm64-v0 --mode previous --input-role transition --measurement-policy diagnostic
+require_argument_acceptance explicit-bootstrap \
+	--profile darwin-arm64-v0 --mode initial --measurement-policy bootstrap
+require_usage_rejection unknown-measurement-policy \
+	--profile linux-arm64-v0 --mode previous --input-role transition --measurement-policy unknown
+require_usage_rejection empty-measurement-policy \
+	--profile linux-arm64-v0 --mode previous --input-role transition --measurement-policy ''
+require_usage_rejection duplicate-measurement-policy \
+	--profile linux-arm64-v0 --mode previous --input-role transition --measurement-policy bootstrap --measurement-policy diagnostic
+require_usage_rejection diagnostic-initial \
+	--profile linux-arm64-v0 --mode initial --measurement-policy diagnostic
+require_usage_rejection diagnostic-ordinary \
+	--profile linux-arm64-v0 --mode previous --input-role ordinary --measurement-policy diagnostic
+require_usage_rejection diagnostic-default-role \
+	--profile linux-arm64-v0 --mode previous --measurement-policy diagnostic
+
 grep -F 'linux-amd64-v0 requires --mode previous --input-role transition' \
 	"$test_root/amd64-previous-default.stderr" >/dev/null ||
 	fail "amd64 usage did not describe its transition-only contract"

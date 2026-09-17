@@ -13,6 +13,7 @@ usage: bootstrap-seed.sh --mode initial|previous --input PATH --qbe PATH --cc PA
        --workspace PATH --output PATH --evidence PATH --metadata PATH
        --asset-name NAME [--repository-root PATH]
        [--input-role ordinary|transition]
+       [--measurement-policy bootstrap|diagnostic]
 
        linux-amd64-v0 requires --mode previous --input-role transition
 EOF
@@ -78,6 +79,8 @@ metadata=
 asset_name=
 repository_root_override=
 input_role=ordinary
+measurement_policy=bootstrap
+measurement_policy_set=false
 
 while test "$#" -gt 0; do
 	case "$1" in
@@ -153,6 +156,13 @@ while test "$#" -gt 0; do
 		repository_root_override=$2
 		shift 2
 		;;
+	--measurement-policy)
+		test "$measurement_policy_set" = false || usage
+		test "$#" -ge 2 || usage
+		measurement_policy=$2
+		measurement_policy_set=true
+		shift 2
+		;;
 	--input-role)
 		test "$input_role" = ordinary || usage
 		test "$#" -ge 2 || usage
@@ -165,6 +175,11 @@ done
 
 test "$mode" = initial || test "$mode" = previous || usage
 test "$input_role" = ordinary || test "$input_role" = transition || usage
+test "$measurement_policy" = bootstrap || test "$measurement_policy" = diagnostic || usage
+if test "$measurement_policy" = diagnostic; then
+	# Daily/weekly setup closes a previous Native chain, never a release seed.
+	test "$mode" = previous && test "$input_role" = transition || usage
+fi
 if test "$input_role" = transition; then
 	test "$mode" = previous || usage
 fi
@@ -554,7 +569,17 @@ warmup_build() {
 	done
 }
 
-if test "$profile" = linux-amd64-v0; then
+if test "$measurement_policy" = diagnostic; then
+	cat > "$evidence/measurement-policy.txt" <<'EOF'
+policy=diagnostic-compiler-preparation
+legacy-bootstrap-observations=excluded
+EOF
+	cat > "$evidence/medians.txt" <<'EOF'
+b1-b2 excluded=setup-only-transition
+b2-b3 excluded=diagnostic-compiler-preparation
+b3-b4 excluded=diagnostic-compiler-preparation
+EOF
+elif test "$profile" = linux-amd64-v0; then
 	cat > "$evidence/measurement-policy.txt" <<'EOF'
 policy=external-native-target-controller
 legacy-bootstrap-observations=excluded
@@ -770,6 +795,7 @@ jq -n -S \
 	--arg ccBoundary system-cc \
 	--arg asset "$asset_name" \
 	--arg mode 0755 \
+	--arg measurementPolicy "$measurement_policy" \
 	--arg sha256 "$compiler_sha256" \
 	--arg attestationSubjectSha256 "$compiler_sha256" \
 	--arg qbeBinarySha256 "$qbe_sha256" \
@@ -789,7 +815,11 @@ jq -n -S \
 		attestationSubjectSha256: $attestationSubjectSha256,
 		qbeBinarySize: $qbeBinarySize,
 		qbeBinarySha256: $qbeBinarySha256
-	}' > "$metadata"
+	} + (if $measurementPolicy == "diagnostic" then {diagnosticOnly: true} else {} end)' > "$metadata"
 
 require_no_intermediates "$workspace"
-printf 'bootstrap-seed: %s %s passed\n' "$mode" "$profile"
+if test "$measurement_policy" = diagnostic; then
+	printf 'bootstrap-seed: %s %s correctness passed (diagnostic preparation)\n' "$mode" "$profile"
+else
+	printf 'bootstrap-seed: %s %s passed\n' "$mode" "$profile"
+fi

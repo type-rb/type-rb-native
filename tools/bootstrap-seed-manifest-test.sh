@@ -84,6 +84,19 @@ output=$test_root/release
 	"$test_root/darwin.json" "$test_root/linux.json" \
 	"$output"
 
+# Diagnostic preparation is deliberately ineligible for release packaging.
+jq '.diagnosticOnly = true' "$test_root/darwin.json" > "$test_root/diagnostic.json"
+set +e
+/bin/sh "$manifest_tool" create \
+	"$release_tag" "$revision" "$darwin" "$linux" \
+	"$test_root/diagnostic.json" "$test_root/linux.json" "$test_root/diagnostic-release" \
+	> "$test_root/diagnostic.stdout" 2> "$test_root/diagnostic.stderr"
+diagnostic_status=$?
+set -e
+test "$diagnostic_status" -ne 0 || fail "diagnostic metadata was accepted for release"
+grep -F 'target metadata shape is invalid' "$test_root/diagnostic.stderr" > /dev/null ||
+	fail "diagnostic metadata did not fail closed"
+
 manifest=$output/type-rb-native-bootstrap-manifest-v1.json
 checksums=$output/SHA256SUMS
 manifest_sha=$(sha256 "$manifest")
