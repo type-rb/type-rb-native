@@ -104,7 +104,7 @@ vertical slices from remaining ownership.
 ### Current compiler source ownership
 
 The ordinary entry is [compiler/src/compiler.trb](../compiler/src/compiler.trb).
-Its explicit transitive import closure contains 87 canonical implementation modules:
+Its explicit transitive import closure contains 93 canonical implementation modules:
 
 | Modules in `compiler/src/` | Current responsibility |
 | --- | --- |
@@ -114,6 +114,8 @@ Its explicit transitive import closure contains 87 canonical implementation modu
 | `declaration_lookup.trb`, `type_resolution.trb` | Visible declaration identity, semantic type resolution and concrete nominal instantiation. |
 | `generic_model.trb`, `generic_arguments.trb`, `generic_syntax.trb`, `generic_validation.trb` | Authored generic templates, recursive type substitution, explicit applications and template validation; see [generic nominal MIR](decisions/0045-generic-nominal-mir.md). |
 | `generic_functions.trb`, `generic_bindings.trb`, `generic_program.trb`, `generic_check.trb` | Concrete function instances, shared function/record initializer bindings, isolated abstract template checking and declaration-owned parameter identities; see [generic record defaults](decisions/0049-generic-record-default-mir.md). |
+| `alias_model.trb`, `alias_syntax.trb`, `alias_patterns.trb` | Transparent/generic aliases, declaration-owned expansion and structural pattern identity. |
+| `callable_types.trb`, `mir_callables.trb`, `qbe_callables.trb` | Structural callback types, verified code references/indirect calls and ABI adaptation; the [callable foundation](decisions/0051-callable-mir-foundation.md) precedes authored closures. |
 | `checked_body.trb` | Function-owned concrete checking and REPL projections; [checked body ownership](decisions/0047-checked-body-ownership.md) separates shared syntax from instantiated semantic facts. |
 | `standard_library.trb`, `result_model.trb`, `result_checked.trb` | Compiler-owned portable declarations, checked Result operations, propagation and required-use boundaries; see [Result control MIR](decisions/0046-result-control-mir.md). |
 | `enum_model.trb`, `enum_types.trb`, `enum_syntax.trb`, `enum_checked.trb`, `enum_mir.trb`, `qbe_enums.trb` | Nominal variants/payloads, patterns, verified operations and layout adaptation. |

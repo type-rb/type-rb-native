@@ -1,3 +1,4 @@
+import { callable_parts } from callable_types
 import { nullable_element } from nullable_types
 import { ascii_code } from literals
 import { string_starts_with } from path
@@ -46,6 +47,19 @@ end
 
 # Validate the word-sized scalar/managed layouts admitted by Hash MIR.
 def native_value_layout(type_name: String): Boolean
+	parts := callable_parts(type_name)
+	if parts.size() > 0
+		mut index := 0
+		while index < parts.size()
+			if !(index == 0 && parts[index] == "Void")
+				if !native_value_layout(parts[index])
+					return false
+				end
+			end
+			index += 1
+		end
+		return true
+	end
 	optional := nullable_element(type_name)
 	if optional != ""
 		return native_value_layout(optional)
@@ -91,6 +105,19 @@ end
 # Checked generic bodies can carry abstract values without assigning a layout.
 # Only fully concrete types are admitted later by MIR/runtime layout checks.
 def semantic_value_type(type_name: String): Boolean
+	parts := callable_parts(type_name)
+	if parts.size() > 0
+		mut index := 0
+		while index < parts.size()
+			if !(index == 0 && parts[index] == "Void")
+				if !semantic_value_type(parts[index])
+					return false
+				end
+			end
+			index += 1
+		end
+		return true
+	end
 	if native_value_layout(type_name) || string_starts_with(type_name, "TypeParameter#")
 		return true
 	end

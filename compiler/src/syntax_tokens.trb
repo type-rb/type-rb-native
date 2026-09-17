@@ -1,3 +1,4 @@
+import { callable_type } from callable_types
 import { CompilerState, diagnostic, has_diagnostic, terminal_token } from state
 import { load_integer, load_string } from storage
 
@@ -52,6 +53,25 @@ def expect_identifier(mut state: CompilerState, mut position: Array<Integer>): S
 end
 
 def parse_type(mut state: CompilerState, mut position: Array<Integer>): String
+	if token_is(state, position[0], "(")
+		advance(position)
+		skip_newlines(state, position)
+		mut parameters: Array<String> := []
+		while !token_is(state, position[0], ")") && !has_diagnostic(state)
+			parameters.push(parse_type(state, position))
+			skip_newlines(state, position)
+			if !token_is(state, position[0], ",")
+				break
+			end
+			advance(position)
+			skip_newlines(state, position)
+		end
+		if !expect(state, position, ")") || !expect(state, position, "->")
+			return ""
+		end
+		skip_newlines(state, position)
+		return callable_type(parameters, parse_type(state, position))
+	end
 	mut name := expect_identifier(state, position)
 	if has_diagnostic(state)
 		return ""

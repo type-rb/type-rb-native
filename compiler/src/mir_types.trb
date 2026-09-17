@@ -1,9 +1,10 @@
+import { callable_parts, callable_type } from callable_types
 import { enum_type } from enum_types
 import { nullable_element } from nullable_types
 import { hash_key_type, hash_type, hash_value_type } from hash_types
 import { integer_string } from literals
 import { string_starts_with } from path
-import { MirField, MirModule, MirRecord, MirType, mir_array_element_type, mir_control_value_type, mir_origin_valid, mir_table_span_valid, mir_type_id, mir_type_name } from mir
+import { MirCallable, MirField, MirModule, MirRecord, MirType, mir_array_element_type, mir_control_value_type, mir_origin_valid, mir_table_span_valid, mir_type_id, mir_type_name } from mir
 import { CompilerState } from state
 import { load_integer, load_string } from storage
 
@@ -33,7 +34,10 @@ def mir_managed_type(native_module: MirModule, type_id: Integer): Boolean
 		return true
 	end
 	if type_id >= 9 && type_id - 9 < native_module.types.size()
-		return native_module.types[type_id - 9].kind != 7
+		if native_module.types[type_id - 9].kind == 7
+			return false
+		end
+		return native_module.types[type_id - 9].kind != 9
 	end
 	return false
 end
@@ -98,6 +102,30 @@ def mir_semantic_type_id(mut native_module: MirModule, name: String): Integer
 			return index + 9
 		end
 		index += 1
+	end
+	callable := callable_parts(name)
+	if callable.size() > 0
+		mut parameters: Array<Integer> := []
+		mut result := 0
+		if callable[0] != "Void"
+			result = mir_semantic_type_id(native_module, callable[0])
+			if !mir_semantic_value_type(native_module, result)
+				return 0
+			end
+		end
+		index = 1
+		while index < callable.size()
+			parameter := mir_semantic_type_id(native_module, callable[index])
+			if !mir_semantic_value_type(native_module, parameter)
+				return 0
+			end
+			parameters.push(parameter)
+			index += 1
+		end
+		id := native_module.types.size() + 9
+		native_module.types.push(MirType.new(kind: 9, name: name, element: 0, key: 0, declaration: native_module.callables.size()))
+		native_module.callables.push(MirCallable.new(type_id: id, parameters: parameters, result: result))
+		return id
 	end
 	mut kind := 1
 	mut element := 0
@@ -220,7 +248,7 @@ def mir_types_error(native_module: MirModule): String
 	mut index := 0
 	while index < native_module.types.size()
 		row := native_module.types[index]
-		if row.kind < 1 || row.kind > 8
+		if row.kind < 1 || row.kind > 9
 			return "MIR composite kind is invalid"
 		end
 		if row.kind == 1 || row.kind == 3 || row.kind == 6
@@ -241,6 +269,33 @@ def mir_types_error(native_module: MirModule): String
 				return "MIR nominal type identity differs"
 			end
 			expected = "Record#" + integer_string(row.declaration)
+		elsif row.kind == 9
+			if row.declaration < 0 || row.declaration >= native_module.callables.size()
+				return "MIR callable signature is missing"
+			end
+			callable := native_module.callables[row.declaration]
+			if callable.type_id != index + 9
+				return "MIR callable type identity differs"
+			end
+			mut parameters: Array<String> := []
+			mut valid := true
+			callable.parameters.each do |parameter|
+				if parameter >= index + 9 || !mir_semantic_value_type(native_module, parameter)
+					valid = false
+				end
+				parameters.push(mir_semantic_type_name(native_module, parameter))
+			end
+			mut result := "Void"
+			if callable.result != 0
+				if callable.result >= index + 9 || !mir_semantic_value_type(native_module, callable.result)
+					valid = false
+				end
+				result = mir_semantic_type_name(native_module, callable.result)
+			end
+			if !valid
+				return "MIR callable signature type differs"
+			end
+			expected = callable_type(parameters, result)
 		elsif row.kind == 8
 			if row.declaration < 0 || row.declaration >= native_module.enums.size()
 				return "MIR enum declaration is missing"
@@ -263,7 +318,7 @@ def mir_types_error(native_module: MirModule): String
 		else
 			expected = "Hash"
 		end
-		if (row.kind != 2 && row.kind != 8 && row.declaration != - 1) || (row.kind != 3 && row.key != 0)
+		if (row.kind != 2 && row.kind != 8 && row.kind != 9 && row.declaration != - 1) || (row.kind != 3 && row.key != 0)
 			return "MIR composite identity shape differs"
 		end
 		if row.name != expected || mir_type_id(row.name) != 0
@@ -275,6 +330,17 @@ def mir_types_error(native_module: MirModule): String
 				return "MIR composite type is duplicated"
 			end
 			previous += 1
+		end
+		index += 1
+	end
+	index = 0
+	while index < native_module.callables.size()
+		id := native_module.callables[index].type_id
+		if id < 9 || id - 9 >= native_module.types.size()
+			return "MIR callable type is missing"
+		end
+		if native_module.types[id - 9].kind != 9 || native_module.types[id - 9].declaration != index
+			return "MIR callable signature ownership differs"
 		end
 		index += 1
 	end

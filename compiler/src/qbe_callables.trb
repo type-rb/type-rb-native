@@ -1,0 +1,34 @@
+import { MirInstruction } from mir
+import { mir_callable_id } from mir_callables
+import { mir_call_symbol } from mir_intrinsics
+import { mir_semantic_type_name } from mir_types
+import { QbeEmitContext, QbeValue, emit_temporary, emitted_value, qbe_type } from qbe_context
+import { QbeOutput, qbe_output_line } from qbe_output
+import { CompilerState } from state
+
+# The verifier binds both the address and the indirect-call ABI. Emission never
+# reads authored names, alias declarations or the frontend function catalog.
+def emit_mir_callable(state: CompilerState, types: Array<Integer>, instruction: MirInstruction, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
+	if instruction.kind == 41
+		return emitted_value("$" + mir_call_symbol(state.scalar_mir.signatures[instruction.payload]), mir_semantic_type_name(state.scalar_mir, types[instruction.result]))
+	end
+	signature := state.scalar_mir.callables[mir_callable_id(state.scalar_mir, types[instruction.first])]
+	mut arguments := ""
+	mut index := 0
+	while index < instruction.second
+		if index > 0
+			arguments += ", "
+		end
+		arguments += qbe_type(mir_semantic_type_name(state.scalar_mir, signature.parameters[index])) + " " + operands[state.scalar_mir.arguments[instruction.payload + index]]
+		index += 1
+	end
+	text := "call " + operands[instruction.first] + "(" + arguments + ")"
+	if signature.result == 0
+		qbe_output_line(output, "\t" + text)
+		return emitted_value("", "Void")
+	end
+	result_type := mir_semantic_type_name(state.scalar_mir, signature.result)
+	result := emit_temporary(context)
+	qbe_output_line(output, "\t" + result + " =" + qbe_type(result_type) + " " + text)
+	return emitted_value(result, result_type)
+end

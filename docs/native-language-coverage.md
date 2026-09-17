@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 258 ordinary-path probes and 32 feature
+Status: the shared contract contains 264 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -36,6 +36,19 @@ remain required. Temporary performance/size regressions are observed during
 integration; detailed qualification occurs at coherent milestones. A feature
 need not manufacture a runtime speedup or a separate size budget revision to
 justify its existence. Final performance goals remain unchanged.
+
+## Callable signatures and MIR foundation
+
+Function type annotations, including nested signatures and generic aliases, now
+reach verified MIR. Unused callback bodies check required positional arity,
+argument types, return types and Void restrictions. Six shared probes cover this
+boundary without constructing a function value.
+
+[The callable MIR foundation](decisions/0051-callable-mir-foundation.md) independently
+verifies internal code references, indirect calls and their root/ABI contracts.
+Authored `fn` creation, lexical capture and retained REPL closure identity remain
+unsupported. Internal fixture execution must not mark ordinary closure cases as
+accepted in the generated Capabilities view.
 
 ## Value-producing control and lexical transfers
 

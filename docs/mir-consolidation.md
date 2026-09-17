@@ -127,10 +127,10 @@ defaults and managed collections retain optional payloads through shared root
 planning. See [decision 0042](decisions/0042-nullable-mir.md) for the private layout
 and conservative fact invalidation across assignments and loop backedges.
 
-The ordinary compiler closure contains 90 modules. Implementation syntax stays
+The ordinary compiler closure contains 93 modules. Implementation syntax stays
 within the existing immutable seed and snapshot-v4 boundary; compiler self-use
 of the new syntax still depends on an accepted seed refresh. The shared language
-contract contains 258 cases with explicit remaining differences. Retained REPL
+contract contains 264 cases with explicit remaining differences. Retained REPL
 assignment flow now uses an ordinary checker projection, with conservative
 failure/interruption invalidation and explicit replay boundaries; see
 [decision 0043](decisions/0043-checked-repl-submissions.md). Ordinary enum payloads and exhaustive cases now have independently verified
@@ -163,6 +163,16 @@ now expand to existing canonical types before MIR;
 [decision 0050](decisions/0050-transparent-alias-mir.md) records abstract validation,
 recursive nominal identity and REPL projections. Other declaration families and
 final performance qualification remain open.
+
+## Callable foundation
+
+Callback signatures and indirect calls now have verified MIR owners, conservative
+call effects and live-root planning. Internal fixtures execute higher-order calls
+and container-stored code references after frontend erasure and forced collection.
+[Decision 0051](decisions/0051-callable-mir-foundation.md) separates this foundation
+from ordinary language acceptance: `fn` creation, lexical captures, managed
+environments and retained REPL closure identity remain the next dependency.
+Unused signature probes do not establish executable closure support.
 
 ## Development loop
 
