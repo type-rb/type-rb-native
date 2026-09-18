@@ -316,6 +316,9 @@ record CheckedLocals
 	names: StringStorage
 	types: StringStorage
 	mutable: IntegerStorage
+	# Binding semantics remain in types; cells have independent MIR storage types.
+	mir_cell_plans: IntegerStorage
+	mir_cell_types: StringStorage
 	mir_values: IntegerStorage
 	mir_value_rows: Array<MirValue>
 	mir_instructions: Array<MirInstruction>
@@ -343,6 +346,7 @@ def locals_new(capacity: Integer): CheckedLocals
 		names: string_storage(capacity),
 		types: string_storage(capacity),
 		mutable: integer_storage(capacity),
+		mir_cell_plans: integer_storage(capacity), mir_cell_types: string_storage(capacity),
 		mir_values: integer_storage(capacity),
 		mir_value_rows: [],
 		mir_instructions: [],
@@ -402,8 +406,17 @@ def local_bind(mut locals: CheckedLocals, name: String, type_name: String, mutab
 	store_string(locals.types, index, type_name)
 	store_integer(locals.mutable, index, mutable)
 	store_integer(locals.mir_values, index, 0)
+	store_string(locals.mir_cell_types, index, "")
 	locals.count[0] = index + 1
 	return index
+end
+
+def local_storage_type(locals: CheckedLocals, slot: Integer): String
+	cell := load_string(locals.mir_cell_types, slot)
+	if cell != ""
+		return cell
+	end
+	return load_string(locals.types, slot)
 end
 
 def local_identity(locals: CheckedLocals, slot: Integer): Integer

@@ -1,4 +1,5 @@
 import { result_scope_check } from result_checked
+import { mir_binding_initialize, mir_binding_read } from mir_bindings
 import { check_block, check_block_value, check_expression } from checked_program
 import { checked_mir_value, scalar_mir_disable } from checked_values
 import { checked_hash_verify } from hash_checked
@@ -22,6 +23,9 @@ def checked_function_locals(mut state: CompilerState, function_index: Integer): 
 	else
 		scalar_mir_begin(state, function_index, locals)
 	end
+	state.checked[0].shared_bindings.each do |identity|
+		store_integer(locals.mir_cell_plans, identity, 1)
+	end
 	parameter_start := load_integer(state.function_parameter_starts, function_index)
 	parameter_finish := parameter_start + load_integer(state.function_parameter_counts, function_index)
 	mut parameter_index := parameter_start
@@ -39,6 +43,16 @@ def checked_function_locals(mut state: CompilerState, function_index: Integer): 
 			mir_add_parameter(state, locals, parameter_index)
 		end
 		parameter_index += 1
+	end
+	# ABI parameter values occupy the first N SSA identities before allocation.
+	mut slot := 0
+	while slot < locals.count[0]
+		if sparse_integer_at(locals.mir_cell_plans, slot) > 0
+			origin := load_integer(state.function_body_starts, function_index)
+			value := mir_binding_read(state, locals, slot, origin)
+			mir_binding_initialize(state, locals, slot, value, origin)
+		end
+		slot += 1
 	end
 	return locals
 end

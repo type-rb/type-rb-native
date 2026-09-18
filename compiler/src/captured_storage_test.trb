@@ -1,0 +1,151 @@
+import { checked_body_new } from checked_body
+import { LambdaCapture } from callable_types
+import { callable_forced_collection } from callable_mir_test
+import { checked_function_locals, finalize_checked_module } from checked_functions
+import { checked_mir_value } from checked_values
+import { check_function, emit_qbe } from compiler
+import { control_test_output } from control_mir_test
+import { find_function_in_module } from declaration_lookup
+import { intrinsic_mir_erase } from intrinsic_mir_test
+import { logical_checked_source, logical_run_qbe } from logical_test
+import { mir_checked_array_literal } from mir_arrays
+import { mir_binding_capture } from mir_bindings
+import { scalar_mir_commit } from mir_builder
+import { mir_declare_signatures } from mir_calls
+import { mir_checked_closure } from mir_callables
+import { mir_control_return } from mir_control
+import { mir_declare_types } from mir_types
+import { verify_mir } from mir_verifier
+import { CompilerState, local_bind, local_identity, local_storage_type, select_checked_body } from state
+import { load_integer, load_string } from storage
+import trb/std/process
+import trb/std/result
+import { describe, expect, test } from trb/std/test
+
+def captured_storage_run(mut state: CompilerState, expected: String)
+	finished := finalize_checked_module(state)
+	if !finished
+		puts(load_string(state.diagnostic_messages, 0))
+	end
+	expect(finished).to_be_true()
+	if !finished
+		return
+	end
+	before := control_test_output(emit_qbe(state))
+	intrinsic_mir_erase(state)
+	mut body := 0
+	while body < state.checked_bodies.size()
+		state.checked_bodies[body] = checked_body_new(- 1, 0, 0)
+		body += 1
+	end
+	state.checked[0] = checked_body_new(- 1, 0, 0)
+	expect(verify_mir(state.scalar_mir, true)).to_equal("")
+	expect(control_test_output(emit_qbe(state))).to_equal(before)
+	qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+	if qbe != nil
+		case logical_run_qbe(qbe, callable_forced_collection(before))
+		when Result::Ok(actual)
+			expect(actual).to_equal(expected)
+		when Result::Err(error)
+			puts(error)
+			expect(false).to_be_true()
+		end
+	end
+end
+
+# An explicit analyzed plan drives ordinary declaration, read, write and edge
+# lowering. Authored fn materialization and retained REPL code are still pending.
+def captured_storage_source(source: String, name: String, identities: Array<Integer>): CompilerState
+	mut state := logical_checked_source(source)
+	function := find_function_in_module(state, state.entry_module[0], name)
+	select_checked_body(state, function)
+	identities.each do |identity|
+		state.checked[0].shared_bindings.push(identity)
+	end
+	mir_declare_types(state)
+	mir_declare_signatures(state)
+	mut index := 0
+	while index < state.function_count[0]
+		valid := check_function(state, index)
+		if !valid
+			puts(load_string(state.diagnostic_messages, 0))
+		end
+		expect(valid).to_be_true()
+		index += 1
+	end
+	return state
+end
+
+describe("Captured binding storage") do
+	test("carries cells through branches and loops while preserving parameter ABI and semantic types") do
+		source := "def calculate(mut value: Integer, step: Integer): Integer\nmut total := 0\nwhile total < 3\nif total == 1\nvalue = value + step\nelse\nvalue += 1\nend\ntotal += 1\nend\nreturn value\nend\ndef main()\nputs(calculate(10, 5))\nend\n"
+		mut state := captured_storage_source(source, "calculate", [0, 2])
+		captured_storage_run(state, "17\n")
+	end
+	test("initializes iteration cells inside each body and clears storage when lexical slots are reused") do
+		source := "def scan(): Integer\nmut sum := 0\n[2, 3].each.with_index do |item, ordinal|\nitem += ordinal\nif item > 0\nsum += item\nend\nend\nmut tail := 8\ntail += 1\nreturn sum + tail\nend\ndef main()\nputs(scan())\nend\n"
+		# sum=0, hidden receiver/cursor=1/2, item=3, ordinal=4, tail=5.
+		mut state := captured_storage_source(source, "scan", [0, 3, 4])
+		captured_storage_run(state, "15\n")
+	end
+	test("retains managed nullable payloads when assignments replace their values") do
+		source := "def replace(): String\nmut value: String? := \"first\" + \"!\"\nmut count := 0\nwhile count < 3\nvalue = nil\nvalue = \"next\" + \"!\"\ncount += 1\nend\nif value != nil\nreturn value\nend\nreturn \"missing\"\nend\ndef main()\nputs(replace())\nend\n"
+		mut state := captured_storage_source(source, "replace", [0])
+		captured_storage_run(state, "next!\n")
+	end
+	test("shares escaped mutable captures and keeps independent factory invocations separate") do
+		source := "alias Callback = () -> String\ndef step(mut cell: Array<String>, suffix: String): String\ncell[0] += suffix\nreturn cell[0]\nend\ndef make(mut seed: String, suffix: String): Array<Callback>\nend\ndef main()\ncallbacks := make(\"a\" + \"b\", \"!\" + \"?\")\nputs(callbacks[0]())\nputs(callbacks[1]())\nother := make(\"x\" + \"y\", \"+\" + \"-\")\nputs(other[0]())\nputs(callbacks[0]())\nend\n"
+		mut state := logical_checked_source(source)
+		factory := find_function_in_module(state, state.entry_module[0], "make")
+		select_checked_body(state, factory)
+		state.checked[0].shared_bindings.push(0)
+		mir_declare_types(state)
+		mir_declare_signatures(state)
+		mut function := 0
+		while function < state.function_count[0]
+			if function == factory
+				mut locals := checked_function_locals(state, function)
+				origin := load_integer(state.function_body_starts, function)
+				expect(local_storage_type(locals, 0)).to_equal("Array<String>")
+				expect(load_string(locals.types, 0)).to_equal("String")
+				expect(local_storage_type(locals, 1)).to_equal("String")
+				expect(load_integer(locals.mir_values, 1)).to_equal(2)
+				capture := LambdaCapture.new(identity: local_identity(locals, 0), name: "seed", type_name: "String", mutable: 1)
+				cell := mir_binding_capture(state, locals, capture, origin)
+				target := find_function_in_module(state, state.entry_module[0], "step")
+				first := mir_checked_closure(state, locals, target, [cell, 1], origin)
+				second := mir_checked_closure(state, locals, target, [mir_binding_capture(state, locals, capture, origin), 1], origin)
+				pair := mir_checked_array_literal(state, locals, "Array<" + first.type_name + ">", first.type_name, origin, [first, second])
+				mir_control_return(state, locals, checked_mir_value(pair))
+				expect(scalar_mir_commit(state, function, locals)).to_equal("")
+			else
+				expect(check_function(state, function)).to_be_true()
+			end
+			function += 1
+		end
+		captured_storage_run(state, "ab!?\nab!?!?\nxy+-\nab!?!?!?\n")
+	end
+	test("rejects late boxing and stale captured identities after a slot is reused") do
+		mut mode := 0
+		while mode < 2
+			mut state := logical_checked_source("def probe(mut seed: Integer)\nend\ndef main()\nend\n")
+			function := find_function_in_module(state, state.entry_module[0], "probe")
+			select_checked_body(state, function)
+			if mode == 1
+				state.checked[0].shared_bindings.push(0)
+			end
+			mir_declare_types(state)
+			mir_declare_signatures(state)
+			mut locals := checked_function_locals(state, function)
+			capture := LambdaCapture.new(identity: local_identity(locals, 0), name: "seed", type_name: "Integer", mutable: 1)
+			if mode == 1
+				locals.count[0] = 0
+				local_bind(locals, "seed", "Integer", 1)
+				expect(local_storage_type(locals, 0)).to_equal("Integer")
+			end
+			expect(mir_binding_capture(state, locals, capture, load_integer(state.function_body_starts, function))).to_equal(- 1)
+			expect(load_string(state.diagnostic_messages, 0)).to_equal("capture requires its analyzed lexical binding storage")
+			mode += 1
+		end
+	end
+end
