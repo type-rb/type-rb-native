@@ -1,4 +1,6 @@
 import { parse_type_alias } from alias_syntax
+import { LambdaSyntax } from callable_types
+import { parse_lambda_parameters } from lambda_syntax
 import { GenericDefinition, GenericField, GenericFunction, GenericParameter, GenericVariant } from generic_model
 import { CatchSyntax } from result_model
 import { nominal_application_end, parse_generic_parameters } from generic_syntax
@@ -217,6 +219,10 @@ def parse_primary_syntax(mut state: CompilerState, mut position: Array<Integer>)
 	if control && !parse_control_syntax(state, position)
 		return false
 	end
+	lambda := token_is(state, position[0], "fn")
+	if lambda && !parse_lambda_syntax(state, position)
+		return false
+	end
 	hash_literal := token_is(state, position[0], "{")
 	if hash_literal
 		advance(position)
@@ -247,7 +253,7 @@ def parse_primary_syntax(mut state: CompilerState, mut position: Array<Integer>)
 		end
 	end
 	kind := load_integer(state.token_kinds, position[0])
-	if hash_literal || control
+	if hash_literal || control || lambda
 	elsif kind == 1
 		application_end := nominal_application_end(state, position[0])
 		if application_end >= 0
@@ -360,6 +366,42 @@ def parse_primary_syntax(mut state: CompilerState, mut position: Array<Integer>)
 		end
 	end
 	return true
+end
+
+def parse_lambda_syntax(mut state: CompilerState, mut position: Array<Integer>): Boolean
+	origin := position[0]
+	advance(position)
+	parameters := parse_lambda_parameters(state, position)
+	if has_diagnostic(state)
+		return false
+	end
+	mut result_type := "Void"
+	if token_is(state, position[0], ":")
+		advance(position)
+		result_type = parse_type(state, position)
+		if result_type == "Void"
+			diagnostic(state, "TRBN4002", load_integer(state.token_lines, origin), "fn without a result must omit the return annotation")
+			return false
+		end
+	end
+	if !finish_statement(state, position)
+		return false
+	end
+	body_start := position[0]
+	if !parse_statement_block(state, position)
+		return false
+	end
+	body_finish := position[0]
+	if !expect(state, position, "end")
+		return false
+	end
+	# Unreachable syntax may be parsed again after resolution. Never replace
+	# immutable syntax or register a lambda in the ordinary function catalog.
+	if sparse_integer_at(state.lambda_origins, origin) == 0
+		state.lambdas.push(LambdaSyntax.new(origin: origin, parameters: parameters, result_type: result_type, body_start: body_start, body_finish: body_finish, finish: position[0]))
+		store_integer(state.lambda_origins, origin, state.lambdas.size())
+	end
+	return !has_diagnostic(state)
 end
 
 def parse_binary_syntax(

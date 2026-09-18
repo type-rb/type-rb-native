@@ -47,6 +47,9 @@ boundary without constructing a function value.
 [The callable MIR foundation](decisions/0051-callable-mir-foundation.md) independently
 verifies internal captured environments, indirect calls and their root/ABI contracts.
 Its fixtures cover escaped/nested closures and cyclic container storage.
+The parser retains independent anonymous-body regions and concrete generic
+header signatures; the REPL collects their complete nested input. Construction
+still reports an explicit unsupported-lowering diagnostic.
 Authored `fn` creation, lexical capture and retained REPL closure identity remain
 unsupported. Internal fixture execution must not mark ordinary closure cases as
 accepted in the generated Capabilities view.

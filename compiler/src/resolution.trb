@@ -1,4 +1,6 @@
 import { next_generic_depth } from generic_bindings
+import { resolve_lambda_headers } from lambda_resolution
+import { lambda_contains_origin } from lambda_syntax
 import { instantiate_generic_function, validate_generic_functions } from generic_functions
 import { generic_arguments, generic_base } from generic_arguments
 import { load_standard_source, standard_source_kind } from standard_library
@@ -12,7 +14,7 @@ import { find_enum_in_module, find_enum_variant } from enum_types
 import { syntax_loop_transfer_kind } from parser
 import { path_basename, path_directory, string_without_suffix } from path
 import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_bind, local_find, locals_new, select_checked_body, terminal_token } from state
-import { load_integer, load_string, store_integer, store_string } from storage
+import { load_integer, load_string, sparse_integer_at, store_integer, store_string } from storage
 import { declare_default_functions } from default_arguments
 
 def import_path_value(raw: String): String
@@ -604,6 +606,11 @@ def resolve_function_body(
 	select_checked_body(state, function_index)
 	module_index := load_integer(state.function_modules, function_index)
 	state.active_module[0] = module_index
+	body_start := load_integer(state.function_body_starts, function_index)
+	body_finish := load_integer(state.function_body_ends, function_index)
+	if !resolve_lambda_headers(state, body_start, body_finish)
+		return false
+	end
 	parameter_start := load_integer(state.function_parameter_starts, function_index)
 	parameter_finish := parameter_start + load_integer(state.function_parameter_counts, function_index)
 	mut parameter_index := parameter_start
@@ -619,7 +626,7 @@ def resolve_function_body(
 	mut iteration_index := 0
 	while iteration_index < state.iterations.size()
 		iteration := state.iterations[iteration_index]
-		if iteration.origin >= load_integer(state.function_body_starts, function_index) && iteration.finish <= load_integer(state.function_body_ends, function_index)
+		if iteration.origin >= body_start && iteration.finish <= body_finish && !lambda_contains_origin(state, body_start, body_finish, iteration.origin)
 			resolution_local_add(locals, load_string(state.token_texts, iteration.element_origin), "", 1)
 			if iteration.index_origin >= 0
 				resolution_local_add(locals, load_string(state.token_texts, iteration.index_origin), "", 1)
@@ -628,12 +635,12 @@ def resolve_function_body(
 		iteration_index += 1
 	end
 	state.catch_syntax.each do |handler|
-		if handler.origin >= load_integer(state.function_body_starts, function_index) && handler.finish <= load_integer(state.function_body_ends, function_index)
+		if handler.origin >= body_start && handler.finish <= body_finish && !lambda_contains_origin(state, body_start, body_finish, handler.origin)
 			resolution_local_add(locals, load_string(state.token_texts, handler.binding), "", 0)
 		end
 	end
 	state.controls.each do |control|
-		if control.kind == 2 && control.origin >= load_integer(state.function_body_starts, function_index) && control.finish <= load_integer(state.function_body_ends, function_index)
+		if control.kind == 2 && control.origin >= body_start && control.finish <= body_finish && !lambda_contains_origin(state, body_start, body_finish, control.origin)
 			control.branches.each do |branch|
 				if branch.condition >= 0 && token_is(state, branch.condition + 1, "::")
 					mut token := branch.condition + 4
@@ -651,6 +658,11 @@ def resolve_function_body(
 	finish := load_integer(state.function_body_ends, function_index)
 	mut skipping_type := false
 	while index < finish
+		lambda := sparse_integer_at(state.lambda_origins, index)
+		if lambda > 0
+			index = state.lambdas[lambda - 1].finish
+			next
+		end
 		kind := load_integer(state.token_kinds, index)
 		text := load_string(state.token_texts, index)
 		if skipping_type

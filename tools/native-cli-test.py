@@ -36,6 +36,22 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
             raise AssertionError((arguments, result.returncode, result.stdout, result.stderr))
         return result.stdout + result.stderr
 
+    # A nested fn is one submission. Unsupported lowering rejects it atomically;
+    # no inner statements execute or escape into later interactive submissions.
+    for declaration in (
+        'callback := fn(value: Integer): Integer\n'
+        'puts("unexpected body")\nreturn value\nend\n',
+        'def outer()\ncallback := fn()\n'
+        'nested := fn()\nputs("unexpected body")\nend\n'
+        'nested()\nend\ncallback()\nend\n',
+        'callback := fn(value: Integer): Integer; return value; end\n',
+    ):
+        rejected = run('repl', text=declaration + 'puts("after fn")\n:quit\n')
+        assert rejected.startswith('after fn\n'), rejected
+        assert rejected.count('error[') == 1, rejected
+        assert 'fn values require lexical capture lowering' in rejected, rejected
+        assert 'unexpected body' not in rejected, rejected
+
     # These sources exercise the checked compiler and the independent REPL evaluator.
     for case_name in ('elsif-control', 'elsif-managed', 'loop-transfer-control',
                       'loop-transfer-effects', 'loop-transfer-managed', 'array-assignment-targets',
