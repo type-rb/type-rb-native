@@ -1,24 +1,20 @@
-import { generic_application } from generic_arguments
 import { repl_default } from repl_defaults
 import { token_is, skip_newlines } from syntax_tokens
 import { repl_checked, repl_checked_input } from repl_check
-import { nullable_element } from nullable_types
 import { ReplProject, repl_project, repl_type_name, repl_witness_type_name } from repl_project
-import { hash_key_type, hash_value_type, hash_type } from hash_types
 import { cli_diagnostic } from diagnostics
 import { ReplCandidates, repl_editor_read, repl_editor_paint } from repl_editor
 import { repl_incomplete, repl_escape } from repl_syntax
 import { repl_history_load, repl_history_save } from repl_history
-import { CheckedFlowFact, CompilerState, compiler_new, has_diagnostic, find_module } from state
+import { CheckedFlowFact, CompilerState, compiler_new, has_diagnostic } from state
 import { sparse_integer_at, sparse_string_at, load_integer, load_string } from storage
-import { enum_type, find_enum_in_module, find_enum_type, find_enum_variant } from enum_types
-import { find_function_in_module, find_record_in_module, find_generic_in_module } from declaration_lookup
-import { find_record_type, record_type, array_inner_name, generic_instance_for_type } from type_resolution
+import { find_function_in_module } from declaration_lookup
+import { find_record_type } from type_resolution
 import { compiler_read_source, compiler_file_exists } from compiler
 import { lex, compiler_source_slice } from lexer
 import { path_directory, path_join, string_starts_with } from path
 import { native_cli_line, native_cli_eof, native_cli_tty, native_cli_write, native_cli_interrupt, native_cli_env, native_cli_mkdir } from host
-import { ReplStore, ReplEnvironment, repl_store, repl_environment } from repl_model
+import { ReplStore, ReplEnvironment, repl_store, repl_environment, repl_type, repl_type_in, repl_activate } from repl_model
 import { repl_binding_value, repl_render, repl_compact } from repl_values
 import { repl_statement } from repl_eval
 import { integer_string } from literals
@@ -112,6 +108,7 @@ def repl_show(mut state: CompilerState, mut session: ReplSession, input: String,
 		puts(repl_editor_paint(repl_type_name(state, type_name), 5, repl_use_color()))
 		return true
 	end
+	repl_activate(session.store, state)
 	session.store.error[0] = ""
 	previous_count := session.environment.count[0]
 	mut flow := [0]
@@ -162,9 +159,9 @@ def repl_show(mut state: CompilerState, mut session: ReplSession, input: String,
 	if !display
 		return true
 	end
-	if session.store.types[value] != "Void"
+	if repl_type(session.store, value) != "Void"
 		if display_type == ""
-			display_type = session.store.types[value]
+			display_type = repl_type(session.store, value)
 		end
 		mut rendered := repl_editor_paint(repl_render(state, session.store, value, 0), 2, repl_use_color()) + repl_editor_paint(" : ", 4, repl_use_color()) + repl_editor_paint(repl_type_name(state, display_type), 5, repl_use_color())
 		if display_mutable
@@ -208,7 +205,15 @@ def repl_submit(mut session: ReplSession, input: String, type_only: Boolean, dis
 		start_line = repl_lines(session.text[0] + input + "\ndef main()\n" + session.text[1]) + 1
 		finish_line = start_line
 	end
-	mut state := repl_checked_input(source, session.project, start_line, finish_line, session.facts[0], [])
+	mut captured: Array<String> := []
+	mut binding := 0
+	while binding < session.environment.count[0]
+		if session.environment.cells[binding] > 0 && session.environment.mutable[binding] > 0
+			captured.push(session.environment.names[binding])
+		end
+		binding += 1
+	end
+	mut state := repl_checked_input(source, session.project, start_line, finish_line, session.facts[0], [], captured)
 	if has_diagnostic(state)
 		mut offset := repl_lines(prefix)
 		if declarations
@@ -218,8 +223,7 @@ def repl_submit(mut session: ReplSession, input: String, type_only: Boolean, dis
 		return false
 	end
 	if declarations
-		previous := repl_checked(session.text[0] + "def main()\n" + session.text[1] + "return\nend\n", session.project)
-		repl_remap_nominals(previous, state, session.store)
+		repl_activate(session.store, state)
 		session.text[1] = repl_bindings(state, session)
 		session.text[0] += input + "\n"
 		session.facts[0] = state.submissions[0].after
@@ -373,7 +377,7 @@ def repl_bindings(state: CompilerState, session: ReplSession): String
 			source += "mut "
 		end
 		id := repl_binding_value(session.store, session.environment, index)
-		type_name := session.store.types[id]
+		type_name := repl_type(session.store, id)
 		source += session.environment.names[index]
 		if type_name != "Hash"
 			source += ": " + repl_witness_type_name(state, type_name)
@@ -413,7 +417,7 @@ def repl_complete(session: ReplSession): ReplCandidates
 	mut index := 0
 	while index < session.environment.count[0]
 		name := session.environment.names[index]
-		type_name := session.store.types[repl_binding_value(session.store, session.environment, index)]
+		type_name := repl_type_in(state, session.store, repl_binding_value(session.store, session.environment, index))
 		repl_candidate(candidates, name, name, repl_type_name(state, type_name), 0)
 		if string_starts_with(type_name, "Array<")
 			repl_candidate(candidates, name + ".size", name + ".size()", "size(): Integer", 6)
@@ -445,7 +449,7 @@ def repl_complete(session: ReplSession): ReplCandidates
 	while index < state.function_count[0]
 		if load_integer(state.function_modules, index) == state.entry_module[0]
 			name := load_string(state.function_names, index)
-			if name != "main" && sparse_integer_at(state.function_defaults, index) == 0
+			if name != "main" && sparse_integer_at(state.function_defaults, index) == 0 && sparse_integer_at(state.function_lambdas, index) == 0
 				repl_candidate(candidates, name, repl_function_insertion(state, index, name), repl_function_detail(state, index), 6)
 			end
 		end
@@ -474,21 +478,6 @@ def repl_complete(session: ReplSession): ReplCandidates
 		index += 1
 	end
 	return candidates
-end
-
-# Nominal indexes are compiler-state-local. Preserve declaration and variant
-# identities when new session declarations reorder imported types.
-def repl_remap_nominals(previous: CompilerState, current: CompilerState, mut store: ReplStore)
-	mut index := 0
-	while index < store.types.size()
-		store.types[index] = repl_remap_type(previous, current, store.types[index])
-		owner := find_enum_type(current, store.types[index])
-		if owner >= 0
-			store.integers[index] = find_enum_variant(current, owner, store.texts[index])
-		end
-		index += 1
-	end
-	return
 end
 
 # Check retained authored uses before accepting a declaration that may hide an
@@ -729,52 +718,6 @@ def repl_function_insertion(state: CompilerState, index: Integer, name: String):
 		return name + "()"
 	end
 	return name + "("
-end
-
-def repl_remap_type(previous: CompilerState, current: CompilerState, type_name: String): String
-	instance := generic_instance_for_type(previous, type_name)
-	if instance >= 0
-		row := previous.generic_instances[instance]
-		definition := previous.generic_definitions[row.definition]
-		source := find_module(current, load_string(previous.module_names, definition.source_id))
-		next_definition := find_generic_in_module(current, source, definition.name)
-		mut arguments: Array<String> := []
-		row.arguments.each do |argument|
-			arguments.push(repl_remap_type(previous, current, argument))
-		end
-		key := generic_application(integer_string(next_definition), arguments)
-		if current.generic_instance_lookup.key?(key)
-			return current.generic_instances[current.generic_instance_lookup[key]].type_name
-		end
-		return "Invalid"
-	end
-	if nullable_element(type_name) != ""
-		return repl_remap_type(previous, current, nullable_element(type_name)) + "?"
-	end
-	key := hash_key_type(type_name)
-	if key != ""
-		return hash_type(key, repl_remap_type(previous, current, hash_value_type(type_name)))
-	end
-	element := array_inner_name(type_name)
-	if element != ""
-		return "Array<" + repl_remap_type(previous, current, element) + ">"
-	end
-	enum_index := find_enum_type(previous, type_name)
-	if enum_index >= 0
-		definition := previous.enums[enum_index]
-		module_name := load_string(previous.module_names, definition.source_id)
-		return enum_type(find_enum_in_module(current, find_module(current, module_name), definition.name))
-	end
-	record_index := find_record_type(previous, type_name)
-	if record_index >= 0
-		module_index := load_integer(previous.record_modules, record_index)
-		module_name := load_string(previous.module_names, module_index)
-		name := load_string(previous.record_names, record_index)
-		next_module := find_module(current, module_name)
-		next_record := find_record_in_module(current, next_module, name)
-		return record_type(next_record)
-	end
-	return type_name
 end
 
 # Failure boundaries survive explicit replay, without replaying the failure.

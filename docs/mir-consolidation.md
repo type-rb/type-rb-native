@@ -172,10 +172,12 @@ escaped/nested closures, shared captured Array storage and cyclic container
 references after frontend erasure and forced collection. Lexical binding identities
 survive active-slot reuse and own nullable facts.
 [Decision 0051](decisions/0051-callable-mir-foundation.md) separates this foundation
-from ordinary acceptance: authored `fn` lowering, capture selection/shared mutable
-cells, lexical transfer scopes and retained REPL closure identity remain open.
-Unused signature probes and internal factories do not establish ordinary closure
-support.
+from ordinary acceptance. Authored `fn` bodies now use analyzed captures, shared
+mutable cells and concrete MIR declarations, with ordinary file check/build/run
+and retained REPL coverage. REPL code/type contexts survive later submissions and
+are collected with their reachable values. Named declarations as values and the
+remaining signature/capability boundaries are still open. Internal factories remain
+independent lifetime controls, alongside the shared ordinary cases.
 
 ## Development loop
 

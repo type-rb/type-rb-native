@@ -24,6 +24,7 @@ subprocess.run([sys.executable, str(repository / "tools/native-enum-test.py"), s
 subprocess.run([sys.executable, str(repository / "tools/native-generic-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-result-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-alias-test.py"), str(binary)], check=True)
+subprocess.run([sys.executable, str(repository / "tools/native-callable-test.py"), str(binary)], check=True)
 
 with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
     root = Path(temporary)
@@ -46,7 +47,9 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
             if not module.name.endswith('_test.trb'):
                 shutil.copyfile(module, cell_source / module.name)
     probe = cell_source / 'binding_probe.trb'
-    probe.write_text('''import { repl_store, repl_environment, repl_integer, repl_string, repl_value } from repl_model
+    probe.write_text('''import { compiler_new } from state
+import { callable_type } from callable_types
+import { repl_store, repl_environment, repl_integer, repl_string, repl_value, repl_activate } from repl_model
 import { repl_bind, repl_capture_binding, repl_binding_value, repl_assign_binding, repl_compact } from repl_values
 
 def probe(): Boolean
@@ -122,29 +125,38 @@ end
 return true
 end
 
+def program_probe(): Boolean
+mut store := repl_store()
+mut environment := repl_environment()
+repl_activate(store, compiler_new(2))
+closure := repl_value(store, callable_type([], "Integer"), 0, 0.0, "", [])
+repl_bind(environment, "kept", closure, 0)
+mut index := 0
+while index < 12
+repl_activate(store, compiler_new(2))
+repl_value(store, callable_type([], "Integer"), 0, 0.0, "", [])
+store = repl_compact(store, environment)
+if store.programs.size() != 2 || store.types.size() != 2
+return false
+end
+if store.value_programs[repl_binding_value(store, environment, 0)] == store.active_program[0]
+return false
+end
+index += 1
+end
+environment.count[0] = 0
+store = repl_compact(store, environment)
+return store.programs.size() == 1 && store.types.size() == 1
+end
+
 def main()
 puts(probe())
+puts(program_probe())
 end
 ''')
     cell_binary = root / 'binding-probe'
     run('build', '--compile', '--outfile', cell_binary, probe)
-    assert subprocess.check_output([cell_binary], text=True, timeout=30) == 'true\n'
-
-    # A nested fn is one submission. Unsupported lowering rejects it atomically;
-    # no inner statements execute or escape into later interactive submissions.
-    for declaration in (
-        'callback := fn(value: Integer): Integer\n'
-        'puts("unexpected body")\nreturn value\nend\n',
-        'def outer()\ncallback := fn()\n'
-        'nested := fn()\nputs("unexpected body")\nend\n'
-        'nested()\nend\ncallback()\nend\n',
-        'callback := fn(value: Integer): Integer; return value; end\n',
-    ):
-        rejected = run('repl', text=declaration + 'puts("after fn")\n:quit\n')
-        assert rejected.startswith('after fn\n'), rejected
-        assert rejected.count('error[') == 1, rejected
-        assert 'fn values require lexical capture lowering' in rejected, rejected
-        assert 'unexpected body' not in rejected, rejected
+    assert subprocess.check_output([cell_binary], text=True, timeout=30) == 'true\ntrue\n'
 
     # These sources exercise the checked compiler and the independent REPL evaluator.
     for case_name in ('elsif-control', 'elsif-managed', 'loop-transfer-control',

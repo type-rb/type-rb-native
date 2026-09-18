@@ -521,13 +521,14 @@
         "closure-iteration-cells",
         "closure-generic-defaults",
         "closure-nullable-captures",
-        "closure-managed-captures"
+        "closure-managed-captures",
+        "closure-retained-calls",
+        "closure-retained-cycles"
       ],
       "pending": [
-        "Retained REPL code and environments across submissions; nominal remapping, collection and replay",
         "Named declarations as values, callable equality, nullable signatures and remaining parameter-capability boundaries"
       ],
-      "note": "Ordinary file checking, building and execution materialize authored fn bodies through MIR, including nested/escaping closures, shared mutable bindings, iteration cells and concrete generic/default signatures. Retained REPL function construction remains a measured gap; internal forced-GC and frontend-erasure controls supplement these ordinary probes."
+      "note": "Ordinary files and retained REPL submissions construct authored fn values using analyzed captures and concrete checked bodies. Shared cases cover escaping/shared/iteration cells, generic/default signatures and cyclic containers; CLI controls additionally cover code/type ownership across new declarations, callbacks, failures, collection and replay. Named declarations used as values and the remaining listed boundaries are still open."
     },
     {
       "id": "arrays",
@@ -1756,8 +1757,8 @@
         },
         "repl": {
           "code": 0,
-          "stdout": "",
-          "stderr": "(trb):4: error[TRBN4004]: fn values require lexical capture lowering, which is not yet supported\n(trb):1: error[TRBN4003]: unresolved function range_endpoint_retention\n"
+          "stdout": "0\n1\n2\n9\n1\n9\n3\n",
+          "stderr": ""
         }
       }
     },
@@ -3250,8 +3251,8 @@
         },
         "repl": {
           "code": 0,
-          "stdout": "",
-          "stderr": "(trb):3: error[TRBN4004]: fn values require lexical capture lowering, which is not yet supported\n(trb):1: error[TRBN4003]: unresolved function probe\n"
+          "stdout": "item 3\n",
+          "stderr": ""
         }
       }
     },
@@ -3301,8 +3302,8 @@
         },
         "repl": {
           "code": 0,
-          "stdout": "",
-          "stderr": "(trb):3: error[TRBN4004]: fn values require lexical capture lowering, which is not yet supported\n(trb):1: error[TRBN4003]: unresolved function probe\n"
+          "stdout": "3\n",
+          "stderr": ""
         }
       }
     },
@@ -4452,7 +4453,7 @@
         "repl": {
           "code": 0,
           "stdout": "",
-          "stderr": "(trb):1: error[TRBN4004]: control-flow MIR function has an unterminated path\n(trb):2: error[TRBN4003]: unresolved function value\n(trb):1: error[TRBN4003]: unresolved function probe\n"
+          "stderr": "(trb):1: error[TRBN4004]: function must return on every completing path\n(trb):2: error[TRBN4003]: unresolved function value\n(trb):1: error[TRBN4003]: unresolved function probe\n"
         }
       }
     },
@@ -13581,8 +13582,8 @@
         },
         "repl": {
           "code": 0,
-          "stdout": "",
-          "stderr": "(trb):6: error[TRBN4004]: fn values require lexical capture lowering, which is not yet supported\n(trb):5: error[TRBN4003]: unresolved function probe\n"
+          "stdout": "42\n",
+          "stderr": ""
         }
       }
     },
@@ -13632,8 +13633,8 @@
         },
         "repl": {
           "code": 0,
-          "stdout": "",
-          "stderr": "(trb):5: error[TRBN4004]: fn values require lexical capture lowering, which is not yet supported\n(trb):3: error[TRBN4003]: unresolved function factory\n(trb):2: error[TRBN4003]: unresolved function probe\n"
+          "stdout": "counter\ncounter\ncounter\n12\n15\n17\n102\n",
+          "stderr": ""
         }
       }
     },
@@ -13683,8 +13684,8 @@
         },
         "repl": {
           "code": 0,
-          "stdout": "",
-          "stderr": "(trb):6: error[TRBN4004]: fn values require lexical capture lowering, which is not yet supported\n(trb):2: error[TRBN4003]: unresolved function probe\n"
+          "stdout": "1!\n2!\n1!!\n3!\n",
+          "stderr": ""
         }
       }
     },
@@ -13730,8 +13731,8 @@
         },
         "repl": {
           "code": 0,
-          "stdout": "",
-          "stderr": "(trb):3: error[TRBN4004]: fn values require lexical capture lowering, which is not yet supported\n(trb):10: error[TRBN4003]: unresolved function apply\n(trb):5: error[TRBN4003]: unresolved function probe\n"
+          "stdout": "42\ntext\n7\n",
+          "stderr": ""
         }
       }
     },
@@ -13781,8 +13782,8 @@
         },
         "repl": {
           "code": 0,
-          "stdout": "",
-          "stderr": "(trb):3: error[TRBN4004]: fn values require lexical capture lowering, which is not yet supported\n(trb):2: error[TRBN4003]: unresolved function factory\n(trb):1: error[TRBN4003]: unresolved function probe\n"
+          "stdout": "2\nhello!\n",
+          "stderr": ""
         }
       }
     },
@@ -13832,8 +13833,110 @@
         },
         "repl": {
           "code": 0,
+          "stdout": "one!two?ok\none!!two??ok\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "closure-retained-calls",
+      "title": "Retained shared closures run each initializer once",
+      "declarations": "def make(): () -> Integer\nputs(\"make\")\nmut value := 10\nreturn fn(): Integer; value += 1; return value; end\nend\n",
+      "body": "f := make()\ng := f\nputs(f())\nputs(g())\nputs(f())",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "make\n11\n12\n13\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "make\n#<fn> : () -> Integer\n#<fn> : () -> Integer\n11\n12\n13\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
           "stdout": "",
-          "stderr": "(trb):11: error[TRBN4004]: fn values require lexical capture lowering, which is not yet supported\n(trb):7: error[TRBN4003]: unresolved function factory\n(trb):6: error[TRBN4003]: unresolved function probe\n"
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "make\n11\n12\n13\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "make\n#<fn> : () -> Integer\n#<fn> : () -> Integer\n11\n12\n13\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "closure-retained-cycles",
+      "title": "Closure and mutable Array cycles survive submission collection",
+      "declarations": "alias Counter = () -> Integer\n",
+      "body": "mut callbacks: Array<Counter> := []\ncallback := fn(): Integer; return callbacks.size(); end\ncallbacks.push(callback)\nputs(callbacks[0]())\nputs(callback())",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "1\n1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "[] : Array<() -> Integer> [mut]\n#<fn> : () -> Integer\n1\n1\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "1\n1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "[] : Array<() -> Integer> [mut]\n#<fn> : () -> Integer\n1\n1\n",
+          "stderr": ""
         }
       }
     }

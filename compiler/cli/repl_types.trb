@@ -1,0 +1,68 @@
+import { callable_parts, callable_type } from callable_types
+import { generic_application } from generic_arguments
+import { nullable_element } from nullable_types
+import { hash_key_type, hash_value_type, hash_type } from hash_types
+import { CompilerState, find_module } from state
+import { load_integer, load_string } from storage
+import { enum_type, find_enum_in_module, find_enum_type } from enum_types
+import { find_record_in_module, find_generic_in_module } from declaration_lookup
+import { find_record_type, record_type, array_inner_name, generic_instance_for_type } from type_resolution
+import { integer_string } from literals
+
+# Pool payloads retain their originating checked program. Translate identities
+# at the execution boundary, never rewrite a suspended closure's type catalog.
+def repl_remap_type(previous: CompilerState, current: CompilerState, type_name: String): String
+	parts := callable_parts(type_name)
+	if parts.size() > 0 && nullable_element(type_name) == ""
+		mut parameters: Array<String> := []
+		mut index := 1
+		while index < parts.size()
+			parameters.push(repl_remap_type(previous, current, parts[index]))
+			index += 1
+		end
+		return callable_type(parameters, repl_remap_type(previous, current, parts[0]))
+	end
+	instance := generic_instance_for_type(previous, type_name)
+	if instance >= 0
+		row := previous.generic_instances[instance]
+		definition := previous.generic_definitions[row.definition]
+		source := find_module(current, load_string(previous.module_names, definition.source_id))
+		next_definition := find_generic_in_module(current, source, definition.name)
+		mut arguments: Array<String> := []
+		row.arguments.each do |argument|
+			arguments.push(repl_remap_type(previous, current, argument))
+		end
+		key := generic_application(integer_string(next_definition), arguments)
+		if current.generic_instance_lookup.key?(key)
+			return current.generic_instances[current.generic_instance_lookup[key]].type_name
+		end
+		return "Invalid"
+	end
+	if nullable_element(type_name) != ""
+		return repl_remap_type(previous, current, nullable_element(type_name)) + "?"
+	end
+	key := hash_key_type(type_name)
+	if key != ""
+		return hash_type(key, repl_remap_type(previous, current, hash_value_type(type_name)))
+	end
+	element := array_inner_name(type_name)
+	if element != ""
+		return "Array<" + repl_remap_type(previous, current, element) + ">"
+	end
+	enum_index := find_enum_type(previous, type_name)
+	if enum_index >= 0
+		definition := previous.enums[enum_index]
+		module_name := load_string(previous.module_names, definition.source_id)
+		return enum_type(find_enum_in_module(current, find_module(current, module_name), definition.name))
+	end
+	record_index := find_record_type(previous, type_name)
+	if record_index >= 0
+		module_index := load_integer(previous.record_modules, record_index)
+		module_name := load_string(previous.module_names, module_index)
+		name := load_string(previous.record_names, record_index)
+		next_module := find_module(current, module_name)
+		next_record := find_record_in_module(current, next_module, name)
+		return record_type(next_record)
+	end
+	return type_name
+end

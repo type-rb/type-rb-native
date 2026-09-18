@@ -1,7 +1,8 @@
+import { callable_parts } from callable_types
 import { find_enum_type } from enum_types
 import { nullable_element } from nullable_types
 import { repl_absent, repl_none, repl_payload } from repl_nullable
-import { ReplStore, ReplEnvironment, repl_store, repl_value, repl_float, repl_get } from repl_model
+import { ReplStore, ReplEnvironment, repl_store, repl_value, repl_float, repl_get, repl_type, ReplValue } from repl_model
 import { repl_hash_new, repl_hash_set } from repl_hash
 import { hash_key_type } from hash_types
 import { CompilerState } from state
@@ -65,7 +66,7 @@ def repl_assign_binding(mut store: ReplStore, mut environment: ReplEnvironment, 
 end
 
 def repl_coerce(mut store: ReplStore, id: Integer, expected: String): Integer
-	if expected == "" || store.types[id] == expected
+	if expected == "" || repl_type(store, id) == expected
 		return id
 	end
 	element := nullable_element(expected)
@@ -77,7 +78,7 @@ def repl_coerce(mut store: ReplStore, id: Integer, expected: String): Integer
 		return repl_value(store, expected, 0, 0.0, "", [payload])
 	end
 	if expected == "Float"
-		if store.types[id] == "Integer"
+		if repl_type(store, id) == "Integer"
 			return repl_float(store, store.integers[id])
 		end
 	end
@@ -88,7 +89,7 @@ def repl_render(state: CompilerState, store: ReplStore, id: Integer, depth: Inte
 	if repl_absent(store, id)
 		return "nil"
 	end
-	if nullable_element(store.types[id]) != ""
+	if nullable_element(repl_type(store, id)) != ""
 		return repl_render(state, store, store.children[id][0], depth)
 	end
 	value := repl_get(store, id)
@@ -132,6 +133,9 @@ def repl_render(state: CompilerState, store: ReplStore, id: Integer, depth: Inte
 			operator = "..."
 		end
 		return integer_string(store.integers[value.children[0]]) + operator + integer_string(store.integers[value.children[1]])
+	end
+	if callable_parts(value.type_name).size() > 0
+		return "#<fn>"
 	end
 	if value.type_name == "Void"
 		return ""
@@ -201,20 +205,24 @@ def repl_render(state: CompilerState, store: ReplStore, id: Integer, depth: Inte
 	return result + closing
 end
 
-def repl_copy_value(source: ReplStore, mut target: ReplStore, id: Integer, mut mapping: Array<Integer>): Integer
+def repl_copy_value(source: ReplStore, mut target: ReplStore, id: Integer, mut mapping: Array<Integer>, mut programs: Array<Integer>): Integer
 	if mapping[id] >= 0
 		return mapping[id]
 	end
-	value := repl_get(source, id)
+	# Copy raw identities together with their owner; contextual reads would corrupt
+	# closures created by an older catalog when a newer declaration shifts IDs.
+	value := ReplValue.new(type_name: source.types[id], integer: source.integers[id], floating: source.floats[id], text: source.texts[id], children: source.children[id])
+	owner := repl_copy_program(source, target, source.value_programs[id], programs)
 	if value.type_name == "Hash" || hash_key_type(value.type_name) != ""
 		table := source.hashes[value.integer]
 		copied := repl_hash_new(target, value.type_name, table.keys.size())
 		mapping[id] = copied
+		target.value_programs[copied] = owner
 		mut slot := 0
 		while slot < table.keys.size()
 			if table.keys[slot] > 0
-				key := repl_copy_value(source, target, table.keys[slot], mapping)
-				item := repl_copy_value(source, target, table.values[slot], mapping)
+				key := repl_copy_value(source, target, table.keys[slot], mapping, programs)
+				item := repl_copy_value(source, target, table.values[slot], mapping, programs)
 				repl_hash_set(target, copied, key, item)
 			end
 			slot += 1
@@ -224,13 +232,15 @@ def repl_copy_value(source: ReplStore, mut target: ReplStore, id: Integer, mut m
 	if value.type_name == "Integer" || value.type_name == "Float" || value.type_name == "Boolean" || value.type_name == "String"
 		copied := repl_value(target, value.type_name, value.integer, value.floating, value.text, target.children[0])
 		mapping[id] = copied
+		target.value_programs[copied] = owner
 		return copied
 	end
 	copied := repl_value(target, value.type_name, value.integer, value.floating, value.text, [])
 	mapping[id] = copied
+	target.value_programs[copied] = owner
 	mut index := 0
 	while index < value.children.size()
-		target.children[copied].push(repl_copy_value(source, target, value.children[index], mapping))
+		target.children[copied].push(repl_copy_value(source, target, value.children[index], mapping, programs))
 		index += 1
 	end
 	return copied
@@ -240,6 +250,12 @@ end
 # every reachable aggregate's identity, including multiple aliases.
 def repl_compact(source: ReplStore, mut environment: ReplEnvironment): ReplStore
 	mut target := repl_store()
+	mut programs: Array<Integer> := []
+	while programs.size() < source.programs.size()
+		programs.push(- 1)
+	end
+	# Preserve the latest display/witness context and only reachable older owners.
+	target.active_program[0] = repl_copy_program(source, target, source.active_program[0], programs)
 	mut mapping: Array<Integer> := []
 	while mapping.size() < source.types.size()
 		mapping.push(- 1)
@@ -248,11 +264,22 @@ def repl_compact(source: ReplStore, mut environment: ReplEnvironment): ReplStore
 	mut index := 0
 	while index < environment.count[0]
 		if environment.cells[index] > 0
-			environment.cells[index] = repl_copy_value(source, target, environment.cells[index], mapping)
+			environment.cells[index] = repl_copy_value(source, target, environment.cells[index], mapping, programs)
 		else
-			environment.values[index] = repl_copy_value(source, target, environment.values[index], mapping)
+			environment.values[index] = repl_copy_value(source, target, environment.values[index], mapping, programs)
 		end
 		index += 1
 	end
 	return target
+end
+
+def repl_copy_program(source: ReplStore, mut target: ReplStore, owner: Integer, mut programs: Array<Integer>): Integer
+	if owner < 0
+		return - 1
+	end
+	if programs[owner] < 0
+		programs[owner] = target.programs.size()
+		target.programs.push(source.programs[owner])
+	end
+	return programs[owner]
 end

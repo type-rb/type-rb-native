@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 270 ordinary-path probes and 32 feature
+Status: the shared contract contains 272 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -53,11 +53,15 @@ control flow. Shared probes cover higher-order calls, nested factories, iteratio
 cells, generics/defaults, nullable proofs and managed captures. Unknown calls
 invalidate nullable proofs for mutable captured bindings.
 
-The REPL collects complete anonymous bodies but still rejects construction: code
-and environment retention across later submissions is pending. Named declarations
-used as values also remain unsupported. Capabilities distinguishes these gaps from
-successful ordinary check/build/execution; forced-GC internal fixtures supplement
-rather than replace those ordinary observations. The pinned reference still rejects
+The REPL now retains checked code and selected captures across submissions,
+including shared cells, nested callbacks and cyclic containers. Nominal values keep
+their originating type catalog when later declarations change local IDs. Typed
+witnesses never execute initializers or anonymous bodies; recursive callable results
+need no eager constructor. CLI controls cover declaration changes, failures, replay
+and collection of unreachable code contexts. Named declarations used as values and
+the remaining callable boundaries in the inventory are still gaps. Capabilities
+records each ordinary path separately; forced-GC internal fixtures supplement
+rather than replace those observations. The pinned reference still rejects
 `closure-generic-defaults`; the Go implementation at `279cd4980a32` passes its
 check/build/execution/REPL paths. The registry retains the pinned rejection as a
 visible reference-version difference until the normal reference update.

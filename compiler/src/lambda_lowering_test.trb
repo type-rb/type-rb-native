@@ -5,6 +5,18 @@ import { load_string } from storage
 import { describe, expect, test } from trb/std/test
 
 describe("Authored anonymous MIR bodies") do
+	test("rechecks a diverging Hash initializer without an allocation type") do
+		source := "def early(): Integer\nvalue := {\"key\" => if true; return 7; else; return 8; end}\nreturn value.size()\nend\ndef main()\ncallback := fn(): Integer; return early(); end\nputs(callback())\nend\n"
+		mut state := logical_checked_source(source)
+		valid := check(state)
+		if !valid
+			puts(load_string(state.diagnostic_messages, 0))
+		end
+		expect(valid).to_be_true()
+		if valid
+			captured_storage_execute(state, "7\n")
+		end
+	end
 	test("executes positional and higher order calls") do
 		source := "alias Callback = (Integer) -> Integer\ndef apply(callback: Callback, value: Integer): Integer\nreturn callback(value)\nend\ndef main()\ncallback := fn(value: Integer): Integer; return value + 2; end\nputs(apply(callback, 40))\nend\n"
 		mut state := logical_checked_source(source)

@@ -1,8 +1,9 @@
 # Verified callable signatures and indirect calls
 
-Status: authored `fn` checking, building and execution use verified MIR.
-Retained REPL function values and named declarations used as values remain gaps;
-this is not complete function-value coverage or a public callable ABI.
+Status: authored `fn` checking, building and execution use verified MIR; the REPL
+retains checked function values across submissions. Named declarations used as
+values and remaining signature/capability boundaries remain gaps. This is not
+complete function-value coverage or a public callable ABI.
 
 ## Parsed anonymous bodies
 
@@ -22,10 +23,9 @@ it cannot accidentally expose nested names outside their lexical boundary.
 Body checking and capture selection now use the independent frames below.
 
 The REPL collects a complete anonymous body, including nested `fn` and compact
-statement separators, but rejects construction until checked code and environments
-can be retained across submissions. Ordinary files materialize these bodies through
-the analysis and lowering phases below. The shared inventory records each path
-separately, keeping the interactive gap visible.
+statement separators, and retains the analyzed body with its selected environment.
+Ordinary files materialize these bodies through the analysis and lowering phases
+below. The shared inventory records the file and interactive paths separately.
 
 ## Anonymous lexical checking
 
@@ -61,14 +61,19 @@ emitting instructions. Anonymous analysis discovers nested captures, generic cal
 and default initializers through a worklist. Each closure receives a private
 function identity with captured parameters first and authored parameters after
 that prefix. All declarations are complete before MIR types/signatures or runtime
-adapters are emitted. Programs without `fn` keep their existing single pass.
+adapters are emitted. File programs without `fn` keep their existing single pass.
+Interactive checking
+also analyzes retained shared bindings before lowering, even when no new `fn`
+appears. Semantic widening retains its Float type without requiring MIR emission.
 
 `lambda_lowering.trb` owns catalog materialization, inherited frame binding and
 environment construction. Each concrete body retains resolved type applications,
 anonymous identities and selected shared-binding plans. Lowering rechecks into
 fresh operation tables, avoiding duplicate expression facts from analysis. Empty
 Hash literals retain their analyzed concrete initializer types before being placed
-in shared cells; later inference cannot change the cell's storage type.
+in shared cells; later inference cannot change the cell's storage type. Diverging
+Hash literals have no allocation type and are rechecked without requiring an
+initialized type-table entry.
 
 Only actual captures occupy runtime parameters. Sparse child declaration IDs
 preserve the analyzed lexical identities even when unreferenced inherited names
@@ -130,8 +135,8 @@ mutable declaration identities requiring shared storage in each concrete body.
 
 This is not a public callable ABI or completed function-value coverage. Ordinary
 files materialize selected captures and checked bodies while preserving readonly
-and mutable capabilities. Retained REPL code/environment identity and named
-declarations used as values still need implementation.
+and mutable capabilities. Named declarations used as values remain a separate
+implementation boundary.
 
 The REPL pool now separates reusable name-lookup slots from capturable binding
 identity. Ordinary bindings retain direct value IDs. On first capture, a binding
@@ -142,10 +147,38 @@ map, preserving sharing, cycles and managed rebinding while dropping unreachable
 temporaries. An ordinary Native-built internal fixture covers those properties
 and fresh iteration cells across repeated compactions.
 
-This is retained-variable infrastructure only. No authored function currently
-requests a REPL capture. Checked anonymous-body retention, captured capabilities
-and nominal identity across later submissions still need implementation before
-ordinary closure cases can be accepted.
+### Retained interactive code and types
+
+`repl_callables.trb` constructs environments from the checked capture rows. Mutable
+captures adopt pool cells; immutable captures retain values. Invocation binds the
+semantic captures separately from authored parameters and evaluates the concrete
+checked body. Code is never reconstructed from a bare function ID or by replaying
+its original initializer.
+
+Each callable owns its originating checked program. Nominal values, including
+nested structural types, also retain the catalog that gives their raw type and
+variant IDs meaning. `repl_types.trb` translates visible identities into the active
+program by declaration identity and concrete generic arguments, including nested
+callable signatures. Payloads are not globally rewritten. Calls save and restore
+the active program, body and module, so an older closure can invoke a newer callback
+and resume correctly, including after runtime failures.
+
+Pool compaction copies raw identities with their owning programs, preserving
+sharing and cycles. It retains the latest display/witness context and only older
+contexts reachable from live values. Primitive-only values do not retain code.
+The retained unit is currently a complete checked program, which trades memory
+for explicit code/type ownership; it is not a compact bytecode serialization.
+An independent Native-built fixture repeatedly checks that unreachable programs
+are reclaimed and surviving closures keep a distinct owner.
+
+Retained source bindings use typed witnesses that are checked and never evaluated.
+A callable witness returns a projection from an empty typed Array, so even a
+recursive result requires no eager constructor and cannot replay user effects.
+Void bodies omit the return annotation as required by TypeRB syntax. Actual calls
+always use the stored authored body. Retained shared binding names feed the same
+capture plan before lowering; unknown calls invalidate their nullable proofs across
+submissions. Analysis does not duplicate exported submission facts. Explicit
+`:reload`/`:load` replay remains the existing separate operation.
 
 ## Shared binding storage
 
@@ -187,7 +220,9 @@ The shared ordinary inventory distinguishes signature checking, file execution
 and retained REPL support. It includes higher-order calls, nested shared cells,
 independent factories, iteration cells, generic/default closures, nullable and
 managed captures. Ordinary check/build/execute observations update Capabilities;
-REPL construction remains explicitly rejected. Additional compiler tests erase
+retained REPL observations additionally cover initializer-once behavior and cyclic
+containers. CLI controls cover cross-program callbacks, nominal ID changes,
+recursive result witnesses, failures and replay. Additional compiler tests erase
 frontend facts and force collection, and reject stale proofs after calls and at
 loop entry. Compiler implementation does not self-use the new function syntax.
 

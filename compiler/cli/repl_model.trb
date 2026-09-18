@@ -1,3 +1,8 @@
+import { CompilerState } from state
+import { callable_parts } from callable_types
+import { find_enum_type, find_enum_variant } from enum_types
+import { repl_remap_type } from repl_types
+
 # Values have a checked language type and a finite storage representation.
 # Aggregate identities are pool indexes, so aliases survive across submissions.
 record ReplValue
@@ -23,6 +28,10 @@ record ReplStore
 	error: Array<String>
 	hashes: Array<ReplHashTable>
 	depth: Array<Integer>
+	# Reachable closures and nominal values own their checked code/type catalog.
+	programs: Array<CompilerState>
+	active_program: Array<Integer>
+	value_programs: Array<Integer>
 end
 
 record ReplEnvironment
@@ -44,7 +53,7 @@ record ReplReference
 end
 
 def repl_store(): ReplStore
-	return ReplStore.new(types: ["Void"], integers: [0], floats: [0.0], texts: [""], children: [[]], error: [""], hashes: [], depth: [0])
+	return ReplStore.new(types: ["Void"], integers: [0], floats: [0.0], texts: [""], children: [[]], error: [""], hashes: [], depth: [0], programs: [], active_program: [- 1], value_programs: [- 1])
 end
 
 def repl_environment(): ReplEnvironment
@@ -54,6 +63,7 @@ end
 def repl_value(mut store: ReplStore, type_name: String, integer: Integer, floating: Float, text: String, children: Array<Integer>): Integer
 	id := store.types.size()
 	store.types.push(type_name)
+	store.value_programs.push(repl_type_owner(store, type_name))
 	store.integers.push(integer)
 	store.floats.push(floating)
 	store.texts.push(text)
@@ -88,5 +98,65 @@ def repl_reference(value: Integer): ReplReference
 end
 
 def repl_get(store: ReplStore, id: Integer): ReplValue
-	return ReplValue.new(type_name: store.types[id], integer: store.integers[id], floating: store.floats[id], text: store.texts[id], children: store.children[id])
+	return ReplValue.new(type_name: repl_type(store, id), integer: repl_variant(store, id), floating: store.floats[id], text: store.texts[id], children: store.children[id])
+end
+
+# Only nominal type spellings and callable code depend on a checked program.
+# Plain scalar/container values must not retain an entire input's compiler state.
+def repl_type_owner(store: ReplStore, type_name: String): Integer
+	if callable_parts(type_name).size() > 0 || repl_nominal_type(type_name)
+		return store.active_program[0]
+	end
+	return - 1
+end
+
+def repl_activate(mut store: ReplStore, state: CompilerState)
+	store.active_program[0] = store.programs.size()
+	store.programs.push(state)
+end
+
+def repl_type(store: ReplStore, id: Integer): String
+	owner := store.value_programs[id]
+	current := store.active_program[0]
+	if owner < 0 || current < 0 || owner == current
+		return store.types[id]
+	end
+	return repl_remap_type(store.programs[owner], store.programs[current], store.types[id])
+end
+
+def repl_variant(store: ReplStore, id: Integer): Integer
+	owner := store.value_programs[id]
+	current := store.active_program[0]
+	if owner >= 0 && current >= 0 && owner != current
+		enum_index := find_enum_type(store.programs[current], repl_type(store, id))
+		if enum_index >= 0
+			return find_enum_variant(store.programs[current], enum_index, store.texts[id])
+		end
+	end
+	return store.integers[id]
+end
+
+def repl_set_type(mut store: ReplStore, id: Integer, type_name: String)
+	store.types[id] = type_name
+	store.value_programs[id] = repl_type_owner(store, type_name)
+end
+
+def repl_nominal_type(type_name: String): Boolean
+	mut index := 0
+	while index < type_name.size()
+		if type_name[index] == "#"
+			return true
+		end
+		index += 1
+	end
+	return false
+end
+
+# Completion checks a temporary program without replacing the session context.
+def repl_type_in(state: CompilerState, store: ReplStore, id: Integer): String
+	owner := store.value_programs[id]
+	if owner < 0
+		return store.types[id]
+	end
+	return repl_remap_type(store.programs[owner], state, store.types[id])
 end

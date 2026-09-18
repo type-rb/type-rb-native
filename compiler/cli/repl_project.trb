@@ -1,3 +1,4 @@
+import { callable_parts } from callable_types
 import { generic_application } from generic_arguments
 import { standard_source_kind } from standard_library
 import { nullable_element } from nullable_types
@@ -198,8 +199,25 @@ end
 # Reconstructed bindings need the visible alias, while values retain their
 # canonical record identity and render with the original declaration name.
 def repl_type_name(state: CompilerState, type_name: String): String
+	parts := callable_parts(type_name)
+	if parts.size() > 0 && nullable_element(type_name) == ""
+		mut text := "("
+		mut parameter := 1
+		while parameter < parts.size()
+			if parameter > 1
+				text += ", "
+			end
+			text += repl_type_name(state, parts[parameter])
+			parameter += 1
+		end
+		return text + ") -> " + repl_type_name(state, parts[0])
+	end
 	if nullable_element(type_name) != ""
-		return repl_type_name(state, nullable_element(type_name)) + "?"
+		element := nullable_element(type_name)
+		if callable_parts(element).size() > 0
+			return "(" + repl_type_name(state, element) + ")?"
+		end
+		return repl_type_name(state, element) + "?"
 	end
 	if hash_key_type(type_name) != ""
 		return "Hash<" + hash_key_type(type_name) + ", " + repl_type_name(state, hash_value_type(type_name)) + ">"
@@ -328,8 +346,26 @@ def repl_witness_type_name_at(state: CompilerState, type_name: String, blocked: 
 		end
 		index += 1
 	end
+	parts := callable_parts(type_name)
+	if parts.size() > 0 && nullable_element(type_name) == ""
+		mut text := "("
+		mut parameter := 1
+		while parameter < parts.size()
+			if parameter > 1
+				text += ", "
+			end
+			text += repl_witness_type_name_at(state, parts[parameter], blocked)
+			parameter += 1
+		end
+		return text + ") -> " + repl_witness_type_name_at(state, parts[0], blocked)
+	end
 	if nullable_element(type_name) != ""
-		return repl_witness_type_name_at(state, nullable_element(type_name), blocked) + "?"
+		element := nullable_element(type_name)
+		name := repl_witness_type_name_at(state, element, blocked)
+		if callable_parts(element).size() > 0 && name.size() > 0 && name[0] == "("
+			return "(" + name + ")?"
+		end
+		return name + "?"
 	end
 	element := array_element_type(type_name)
 	if element != ""
