@@ -20,13 +20,45 @@ sharing the same source region do not share substituted types. Abstract template
 validation visits nested header annotations too. The containing name resolver
 skips anonymous bodies and excludes their iteration, catch and pattern bindings;
 it cannot accidentally expose nested names outside their lexical boundary.
-Body capture selection and checking remain part of the pending closure lowering.
+Body checking and capture selection now use the independent frames below.
 
 The REPL collects a complete anonymous body, including nested `fn` and compact
 statement separators. Ordinary checking still rejects construction explicitly
 until lexical capture lowering and retained REPL environments are implemented.
 The rejected ordinary probes remain coverage gaps, with updated diagnostic
 evidence. This parser checkpoint does not make function values executable.
+
+## Anonymous lexical checking
+
+Each anonymous body has an independent checked projection, inherited generic
+binding and return/transfer scope. Named and anonymous bodies share name
+resolution and expression/statement checking. Resolution's permissive name
+inventory is separate from the typed environment advanced in source order, so
+later declarations cannot become captures or make forward references valid.
+
+The anonymous frame contains a visible inherited prefix followed by its own
+parameters and declarations. The checker records actual uses of inherited
+bindings, retaining only their stable parent identities, declared types and
+mutable capabilities. Nested uses propagate through intermediate closures.
+Parameters and declarations can shadow inherited names; ended iteration slots
+cannot donate identities, and hidden receiver/cursor bindings are excluded.
+Unreferenced inherited values do not become retained captures.
+
+The frame inherits no SSA values, mutable/field nullable proofs, pending Result
+obligations, loop targets or interactive submission state. Immutable binding
+proofs are copied with the new lexical identity; captured storage keeps its
+declared type. Return, try/catch and must-use
+checks belong to that body, including unused nested bodies and every completing
+return path. Generic instances sharing source tokens retain distinct resolved
+projections. Anonymous parameters stay outside the named declaration catalog;
+nested expression facts stay in their own body tables, and the parent's path
+facts remain unchanged.
+
+This is semantic preparation for executable closure lowering. Ordinary fn
+construction still reports the explicit unsupported diagnostic after valid body
+analysis; invalid bodies report their actual checking error first. The ordinary
+coverage gaps remain. Shared mutable MIR cells, callable body materialization
+and retained REPL execution are required before claiming function-value support.
 
 ## Ownership and representation
 
@@ -74,10 +106,9 @@ Each checked body owns these identities. This prepares capture selection; it
 does not yet lower authored mutable variables to shared cells.
 
 This is not a public callable ABI or completed function-value syntax. Before
-accepting authored closures, lowering must select lexical captures, preserve
-readonly/mutable capabilities, share mutable capture cells, enforce independent
-return/transfer scopes, and retain closure bodies/environments across REPL
-submissions. Named declarations used as values also remain unsupported.
+accepting authored closures, lowering must materialize the selected captures and checked bodies, preserve
+readonly/mutable capabilities in shared mutable cells, and retain closure
+bodies/environments across REPL submissions. Named declarations used as values also remain unsupported.
 
 ## Validation and completion boundary
 
@@ -97,7 +128,7 @@ from constructing and executing a function value. Its existing `fn`/capture
 cases remain rejected and visible as gaps in Capabilities. Internal fixture
 execution does not mark those ordinary cases as supported.
 
-The canonical compiler closure contains 95 modules. Integration requires
+The canonical compiler closure contains 96 modules. Integration requires
 unchanged-seed ordinary core/CLI fixed points, exact recovery-source validation,
 snapshot-v4 compatibility, complete hosted recovery, target and lifetime checks.
 Compiler implementation does not use the new function syntax. No seed, reference

@@ -1,4 +1,6 @@
-import { callable_parts } from callable_types
+import { CheckedLambda, callable_parts } from callable_types
+import { checked_body_new } from checked_body
+import { checked_return_type, lambda_captures, lambda_locals, lambda_names, lambda_use_binding } from lambda_checking
 import { mir_checked_callable_call } from mir_callables
 import { checked_result_try, result_interactive_entry, result_operation, result_scope_check, standard_result_instance } from result_checked
 import { advance, expect, expect_identifier, finish_statement, parse_type, skip_newlines, token_is } from syntax_tokens
@@ -30,7 +32,7 @@ import { mir_logical_begin, mir_logical_join } from mir_logical
 import { mir_checked_puts, mir_checked_string_binary, mir_checked_string_literal, mir_checked_string_operation } from mir_strings
 import { mir_control_active, mir_control_assign, mir_control_branch, mir_control_enter, mir_control_jump, mir_control_loop_begin, mir_control_loop_branch, mir_control_loop_end, mir_control_prepare, mir_control_return, mir_control_transfer } from mir_control
 import { binary_operator_id, declaration_start, parse_argument_label, syntax_block_end, syntax_conditional_tail, syntax_expression_precedence, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_statement_boundary } from parser
-import { standard_package_import, standard_package_root } from resolution
+import { resolve_body_names, standard_package_import, standard_package_root } from resolution
 import { find_visible_enum, find_visible_function, find_visible_record } from declaration_lookup
 import { string_starts_with } from path
 import { array_element_type, array_type, common_array_element_type, find_field, find_record_type, record_type, resolve_type_name, type_display } from type_resolution
@@ -293,7 +295,7 @@ def check_primary(
 		if value.type_name == "Never"
 			return value
 		end
-		boundary := load_string(state.function_result_types, locals.mir_state[1])
+		boundary := checked_return_type(state, locals)
 		operation := result_operation(state, try_origin, position[0], value.type_name, boundary)
 		return checked_result_try(state, locals, value, operation)
 	end
@@ -301,7 +303,11 @@ def check_primary(
 	line := load_integer(state.token_lines, origin)
 	kind := load_integer(state.token_kinds, origin)
 	if token_is(state, origin, "fn")
-		return type_diagnostic(state, line, "fn values require lexical capture lowering, which is not yet supported")
+		value := check_lambda_value(state, position, locals)
+		if locals.lambda_result.size() == 0 && !has_diagnostic(state)
+			return type_diagnostic(state, line, "fn values require lexical capture lowering, which is not yet supported")
+		end
+		return value
 	end
 	if token_is(state, origin, "nil")
 		advance(position)
@@ -417,6 +423,7 @@ def check_primary(
 		end
 		local_index := local_find(locals, name)
 		if local_index >= 0
+			lambda_use_binding(locals, local_index)
 			store_integer(locals.result_uses, local_index, sparse_integer_at(locals.result_uses, local_index) + 1)
 			mir_value := load_integer(locals.mir_values, local_index)
 			mut category := 0
@@ -1469,8 +1476,8 @@ def check_control_value(mut state: CompilerState, mut position: Array<Integer>, 
 			value = check_expression(state, position, locals, 1, expected)
 		else
 			mut result_type := "Void"
-			if locals.mir_state[1] >= 0
-				result_type = load_string(state.function_result_types, locals.mir_state[1])
+			if locals.mir_state[1] >= 0 || locals.lambda_result.size() > 0
+				result_type = checked_return_type(state, locals)
 			end
 			value = check_block_value(state, position, locals, result_type, locals.lexical_loop[0], wants_value)
 		end
@@ -1628,7 +1635,7 @@ end
 
 def check_transfer_value(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, result_type: String, loop_origin: Integer, finish: Integer): CheckedValue
 	origin := position[0]
-	if token_is(state, origin, "return") && sparse_integer_at(state.function_defaults, locals.mir_state[1]) > 0
+	if token_is(state, origin, "return") && locals.lambda_result.size() == 0 && sparse_integer_at(state.function_defaults, locals.mir_state[1]) > 0
 		return type_diagnostic(state, load_integer(state.token_lines, origin), "return is unavailable inside a default initializer")
 	end
 	line := load_integer(state.token_lines, origin)
@@ -1820,7 +1827,7 @@ def check_statement_value(mut state: CompilerState, mut position: Array<Integer>
 	local_bind(locals, load_string(state.token_texts, handler.binding), operation.error_type, 0)
 	store_integer(locals.mir_values, locals.count[0] - 1, checked_mir_value(error) + 1)
 	position[0] = handler.body
-	boundary := load_string(state.function_result_types, locals.mir_state[1])
+	boundary := checked_return_type(state, locals)
 	recovered := check_block_value(state, position, locals, boundary, locals.lexical_loop[0], true)
 	result_scope_check(state, locals, saved_count)
 	locals.count[0] = saved_count
@@ -1873,4 +1880,49 @@ def check_callable_call(mut state: CompilerState, mut position: Array<Integer>, 
 		return checked_value("Never", 0, 9007199254740991, 0)
 	end
 	return mir_checked_callable_call(state, locals, callee, arguments, parts[0], origin)
+end
+
+# Each fn is checked in its own projection and transfer scope. The statement
+# checker selects captures through actual bound references, including nested fn.
+# Construction remains rejected until these checked bodies have MIR storage.
+def check_lambda_value(mut state: CompilerState, mut position: Array<Integer>, mut parent: CheckedLocals): CheckedValue
+	origin := position[0]
+	line := load_integer(state.token_lines, origin)
+	encoded := sparse_integer_at(state.lambda_origins, origin)
+	if encoded <= 0 || encoded > state.lambdas.size()
+		return type_diagnostic(state, line, "fn requires an owned syntax region")
+	end
+	syntax := state.lambdas[encoded - 1]
+	previous := state.checked[0]
+	type_name := load_string(previous.lambda_types, origin)
+	mut locals := lambda_locals(state, parent, syntax, type_name)
+	if has_diagnostic(state)
+		return checked_value("Invalid", 0, origin, 0)
+	end
+	body := state.checked_bodies.size()
+	state.checked_bodies.push(checked_body_new(- 1, syntax.body_start, syntax.body_finish + 1))
+	state.checked[0] = state.checked_bodies[body]
+	state.checked[0].generic_binding[0] = previous.generic_binding[0]
+	mut names := lambda_names(locals, state.token_count[0] + 1)
+	if resolve_body_names(state, syntax.body_start, syntax.body_finish, names)
+		mut inner := [syntax.body_start]
+		result_type := checked_return_type(state, locals)
+		completion := check_block_value(state, inner, locals, result_type, - 1, false)
+		result_scope_check(state, locals, locals.capture_parents.size())
+		if !has_diagnostic(state)
+			if inner[0] != syntax.body_finish
+				diagnostic(state, "TRBN4004", line, "checker did not consume the complete fn body")
+			elsif result_type != "Void" && completion.type_name != "Never"
+				diagnostic(state, "TRBN4004", line, "fn must return on every completing path")
+			end
+		end
+	end
+	state.checked[0] = previous
+	position[0] = syntax.finish
+	if has_diagnostic(state)
+		return checked_value("Invalid", 0, origin, 0)
+	end
+	captures := lambda_captures(state, parent, locals, origin)
+	state.checked[0].lambdas.push(CheckedLambda.new(origin: origin, type_name: type_name, body: body, captures: captures))
+	return checked_value(type_name, 0, origin, 0)
 end

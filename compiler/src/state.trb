@@ -303,6 +303,10 @@ record CheckedLocals
 	# Active slots can be reused after scope exit; declaration identities cannot.
 	binding_ids: IntegerStorage
 	binding_slots: Array<Integer>
+	# Anonymous checking has an inherited prefix followed by its own bindings.
+	capture_parents: Array<Integer>
+	capture_uses: Array<Integer>
+	lambda_result: Array<String>
 	result_pending: IntegerStorage
 	result_uses: IntegerStorage
 	nullable_facts: Array<NullableFact>
@@ -330,6 +334,7 @@ end
 def locals_new(capacity: Integer): CheckedLocals
 	return CheckedLocals.new(
 		binding_ids: integer_storage(capacity), binding_slots: [],
+		capture_parents: [], capture_uses: [], lambda_result: [],
 		result_pending: integer_storage(capacity), result_uses: integer_storage(capacity),
 		nullable_facts: [],
 		nullable_state: [- 1, 0],
@@ -376,7 +381,7 @@ def local_add(
 		mutable: Integer,
 		line: Integer,
 	): Boolean
-	if local_find(locals, name) >= 0
+	if local_find(locals, name) >= locals.capture_parents.size()
 		diagnostic(state, "TRBN4003", line, "duplicate local declaration " + name)
 		return false
 	end

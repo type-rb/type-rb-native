@@ -1,0 +1,88 @@
+import { LambdaCapture, LambdaSyntax, callable_parts } from callable_types
+import { nullable_fact, nullable_lookup } from nullable_flow
+import { CheckedLocals, CompilerState, diagnostic, local_add, local_bind, local_find, local_identity, local_slot, locals_new } from state
+import { load_integer, load_string, sparse_integer_at, store_integer } from storage
+
+# Clone visible declarations as an inherited prefix, without their SSA values,
+# mutable/field proofs, Result obligations, loops or reusable slot identities.
+def lambda_locals(mut state: CompilerState, parent: CheckedLocals, syntax: LambdaSyntax, type_name: String): CheckedLocals
+	mut locals := locals_new(state.token_count[0] + 1)
+	mut slot := 0
+	while slot < parent.count[0]
+		name := load_string(parent.names, slot)
+		if name.size() > 0 && name[0] != "$" && local_find(parent, name) == slot
+			declared := load_string(parent.types, slot)
+			mutable := load_integer(parent.mutable, slot)
+			inherited := local_bind(locals, name, declared, mutable)
+			if mutable == 0
+				flow := nullable_lookup(parent, slot, - 1, declared)
+				if flow != declared
+					locals.nullable_state[0] = nullable_fact(locals, inherited, - 1, flow, locals.nullable_state[0])
+				end
+			end
+			locals.capture_parents.push(local_identity(parent, slot))
+			locals.capture_uses.push(0)
+		end
+		slot += 1
+	end
+	parts := callable_parts(type_name)
+	if parts.size() != syntax.parameters.size() + 1
+		diagnostic(state, "TRBN4004", load_integer(state.token_lines, syntax.origin), "fn requires a resolved signature")
+		return locals
+	end
+	locals.lambda_result.push(parts[0])
+	mut parameter := 0
+	while parameter < syntax.parameters.size()
+		row := syntax.parameters[parameter]
+		local_add(state, locals, row.name, parts[parameter + 1], row.mutable, load_integer(state.token_lines, row.origin))
+		parameter += 1
+	end
+	return locals
+end
+
+# Name discovery may register future declarations. It must not alter the typed
+# lexical environment that the statement checker advances in source order.
+def lambda_names(locals: CheckedLocals, capacity: Integer): CheckedLocals
+	mut names := locals_new(capacity)
+	mut slot := 0
+	while slot < locals.count[0]
+		local_bind(names, load_string(locals.names, slot), load_string(locals.types, slot), load_integer(locals.mutable, slot))
+		slot += 1
+	end
+	return names
+end
+
+def lambda_use_binding(mut locals: CheckedLocals, slot: Integer)
+	if slot >= 0 && slot < locals.capture_uses.size()
+		locals.capture_uses[slot] = 1
+	end
+end
+
+# A nested closure's use also makes that declaration a use of its containing
+# closure. Unreferenced inherited values never become retained captures.
+def lambda_captures(mut state: CompilerState, mut parent: CheckedLocals, locals: CheckedLocals, origin: Integer): Array<LambdaCapture>
+	mut captures: Array<LambdaCapture> := []
+	mut index := 0
+	while index < locals.capture_parents.size()
+		if locals.capture_uses[index] > 0
+			identity := locals.capture_parents[index]
+			slot := local_slot(parent, identity)
+			if slot < 0
+				diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "fn capture is outside its lexical parent")
+				return captures
+			end
+			captures.push(LambdaCapture.new(identity: identity, name: load_string(parent.names, slot), type_name: load_string(parent.types, slot), mutable: load_integer(parent.mutable, slot)))
+			lambda_use_binding(parent, slot)
+			store_integer(parent.result_uses, slot, sparse_integer_at(parent.result_uses, slot) + 1)
+		end
+		index += 1
+	end
+	return captures
+end
+
+def checked_return_type(state: CompilerState, locals: CheckedLocals): String
+	if locals.lambda_result.size() > 0
+		return locals.lambda_result[0]
+	end
+	return load_string(state.function_result_types, locals.mir_state[1])
+end
