@@ -27,14 +27,41 @@ def repl_bind(mut environment: ReplEnvironment, name: String, value: Integer, mu
 	if index == environment.names.size()
 		environment.names.push(name)
 		environment.values.push(value)
+		environment.cells.push(0)
 		environment.mutable.push(mutable)
 	else
 		environment.names[index] = name
 		environment.values[index] = value
+		environment.cells[index] = 0
 		environment.mutable[index] = mutable
 	end
 	environment.count[0] += 1
 	return
+end
+
+# Captures share a traced pool node. Allocate only when a binding is captured;
+# ordinary calls and iteration bindings keep the direct-value representation.
+def repl_capture_binding(mut store: ReplStore, mut environment: ReplEnvironment, binding: Integer): Integer
+	if environment.cells[binding] == 0
+		environment.cells[binding] = repl_value(store, "$Binding", 0, 0.0, "", [environment.values[binding]])
+		environment.values[binding] = 0
+	end
+	return environment.cells[binding]
+end
+
+def repl_binding_value(store: ReplStore, environment: ReplEnvironment, binding: Integer): Integer
+	if environment.cells[binding] > 0
+		return store.children[environment.cells[binding]][0]
+	end
+	return environment.values[binding]
+end
+
+def repl_assign_binding(mut store: ReplStore, mut environment: ReplEnvironment, binding: Integer, value: Integer)
+	if environment.cells[binding] > 0
+		store.children[environment.cells[binding]][0] = value
+	else
+		environment.values[binding] = value
+	end
 end
 
 def repl_coerce(mut store: ReplStore, id: Integer, expected: String): Integer
@@ -220,7 +247,11 @@ def repl_compact(source: ReplStore, mut environment: ReplEnvironment): ReplStore
 	mapping[0] = 0
 	mut index := 0
 	while index < environment.count[0]
-		environment.values[index] = repl_copy_value(source, target, environment.values[index], mapping)
+		if environment.cells[index] > 0
+			environment.cells[index] = repl_copy_value(source, target, environment.cells[index], mapping)
+		else
+			environment.values[index] = repl_copy_value(source, target, environment.values[index], mapping)
+		end
 		index += 1
 	end
 	return target

@@ -22,7 +22,7 @@ import { find_record_type, find_field, record_type, array_element_type } from ty
 import { number_is_float, number_without_underscores, integer_string } from literals
 import { native_cli_float, native_cli_interrupt } from host
 import { repl_get, ReplStore, ReplEnvironment, ReplReference, repl_value, repl_integer, repl_float, repl_boolean, repl_string, repl_reference, repl_environment } from repl_model
-import { repl_render, repl_find, repl_bind, repl_coerce } from repl_values
+import { repl_binding_value, repl_assign_binding, repl_render, repl_find, repl_bind, repl_coerce } from repl_values
 
 # Evaluation follows the already checked token stream. Parser, resolution and
 # type checking remain owned by the ordinary compiler; no source is replayed.
@@ -428,7 +428,7 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 	end
 	binding := repl_find(environment, text)
 	if binding >= 0
-		return ReplReference.new(value: repl_nullable_read(state, store, environment.values[binding], position[0] - 1), binding: binding, container: - 1, slot: - 1)
+		return ReplReference.new(value: repl_nullable_read(state, store, repl_binding_value(store, environment, binding), position[0] - 1), binding: binding, container: - 1, slot: - 1)
 	end
 	if token_is(state, position[0], "(")
 		mut function := find_visible_function(state, state.active_module[0], text)
@@ -1024,7 +1024,7 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 		position[0] += 1
 		mut expected := store.types[left.value]
 		if left.binding >= 0
-			expected = store.types[environment.values[left.binding]]
+			expected = store.types[repl_binding_value(store, environment, left.binding)]
 		end
 		mut hash_assignment := false
 		if left.container >= 0
@@ -1047,7 +1047,7 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 				return result
 			end
 			if left.binding >= 0
-				environment.values[left.binding] = result
+				repl_assign_binding(store, environment, left.binding, result)
 			else
 				if left.slot >= store.children[left.container].size()
 					store.error[0] = "panic: index is out of bounds"

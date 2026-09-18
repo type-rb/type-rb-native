@@ -8,6 +8,7 @@ from pathlib import Path
 import pty
 import select
 import signal
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -35,6 +36,99 @@ with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
         if (result.returncode == 0) != success:
             raise AssertionError((arguments, result.returncode, result.stdout, result.stderr))
         return result.stdout + result.stderr
+
+    # Exercise internal pool cells through an ordinary Native-built consumer.
+    # This is a lifetime fixture, not authored fn/REPL closure acceptance.
+    cell_source = root / 'binding-source'
+    cell_source.mkdir()
+    for directory in (repository / 'compiler/src', repository / 'compiler/cli'):
+        for module in directory.glob('*.trb'):
+            if not module.name.endswith('_test.trb'):
+                shutil.copyfile(module, cell_source / module.name)
+    probe = cell_source / 'binding_probe.trb'
+    probe.write_text('''import { repl_store, repl_environment, repl_integer, repl_string, repl_value } from repl_model
+import { repl_bind, repl_capture_binding, repl_binding_value, repl_assign_binding, repl_compact } from repl_values
+
+def probe(): Boolean
+mut store := repl_store()
+mut environment := repl_environment()
+first := repl_integer(store, 1)
+before := store.types.size()
+repl_bind(environment, "value", first, 1)
+if store.types.size() != before || environment.cells[0] != 0
+return false
+end
+cell := repl_capture_binding(store, environment, 0)
+if repl_capture_binding(store, environment, 0) != cell
+return false
+end
+repl_assign_binding(store, environment, 0, repl_integer(store, 2))
+if store.integers[repl_binding_value(store, environment, 0)] != 2 || store.integers[store.children[cell][0]] != 2
+return false
+end
+managed := repl_value(store, "Array<String>", 0, 0.0, "", [repl_string(store, "kept")])
+repl_assign_binding(store, environment, 0, managed)
+carrier := repl_value(store, "$Capture", 0, 0.0, "", [cell, cell])
+environment.count[0] = 0
+repl_bind(environment, "replacement", repl_integer(store, 100), 1)
+if environment.cells[0] != 0 || repl_capture_binding(store, environment, 0) == cell
+return false
+end
+repl_bind(environment, "escaped", carrier, 0)
+cycle := repl_value(store, "$Cycle", 0, 0.0, "", [])
+store.children[cycle].push(cycle)
+store.children[cycle].push(carrier)
+repl_bind(environment, "cycle", cycle, 0)
+mut iteration := repl_environment()
+mut captured: Array<Integer> := []
+mut index := 0
+while index < 3
+iteration.count[0] = 0
+repl_bind(iteration, "item", repl_integer(store, index), 1)
+captured.push(repl_capture_binding(store, iteration, 0))
+index += 1
+end
+repl_bind(environment, "iterations", repl_value(store, "$Capture", 0, 0.0, "", captured), 0)
+index = 0
+while index < 25
+repl_string(store, "unreachable temporary")
+repl_assign_binding(store, environment, 0, repl_integer(store, index))
+store = repl_compact(store, environment)
+if store.integers[repl_binding_value(store, environment, 0)] != index || store.types.size() > 16
+return false
+end
+saved := repl_binding_value(store, environment, 1)
+if store.children[saved][0] != store.children[saved][1]
+return false
+end
+retained := store.children[store.children[saved][0]][0]
+if store.texts[store.children[retained][0]] != "kept"
+return false
+end
+retained_cycle := repl_binding_value(store, environment, 2)
+if store.children[retained_cycle][0] != retained_cycle || store.children[retained_cycle][1] != saved
+return false
+end
+items := store.children[repl_binding_value(store, environment, 3)]
+mut item := 0
+while item < 3
+if store.integers[store.children[items[item]][0]] != item
+return false
+end
+item += 1
+end
+index += 1
+end
+return true
+end
+
+def main()
+puts(probe())
+end
+''')
+    cell_binary = root / 'binding-probe'
+    run('build', '--compile', '--outfile', cell_binary, probe)
+    assert subprocess.check_output([cell_binary], text=True, timeout=30) == 'true\n'
 
     # A nested fn is one submission. Unsupported lowering rejects it atomically;
     # no inner statements execute or escape into later interactive submissions.
