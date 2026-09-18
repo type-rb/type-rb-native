@@ -608,9 +608,6 @@ def resolve_function_body(
 	state.active_module[0] = module_index
 	body_start := load_integer(state.function_body_starts, function_index)
 	body_finish := load_integer(state.function_body_ends, function_index)
-	if !resolve_lambda_headers(state, body_start, body_finish)
-		return false
-	end
 	parameter_start := load_integer(state.function_parameter_starts, function_index)
 	parameter_finish := parameter_start + load_integer(state.function_parameter_counts, function_index)
 	mut parameter_index := parameter_start
@@ -622,6 +619,15 @@ def resolve_function_body(
 			load_integer(state.parameter_mutable, parameter_index),
 		)
 		parameter_index += 1
+	end
+	return resolve_body_names(state, body_start, body_finish, locals)
+end
+
+# Resolve one owned lexical region, shared by named and anonymous bodies.
+def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finish: Integer, mut locals: CheckedLocals): Boolean
+	module_index := state.active_module[0]
+	if !resolve_lambda_headers(state, body_start, body_finish)
+		return false
 	end
 	mut iteration_index := 0
 	while iteration_index < state.iterations.size()
@@ -654,8 +660,8 @@ def resolve_function_body(
 			end
 		end
 	end
-	mut index := load_integer(state.function_body_starts, function_index)
-	finish := load_integer(state.function_body_ends, function_index)
+	mut index := body_start
+	finish := body_finish
 	mut skipping_type := false
 	while index < finish
 		lambda := sparse_integer_at(state.lambda_origins, index)
@@ -712,7 +718,7 @@ def resolve_function_body(
 				end
 				mut keyword := resolution_keyword(text)
 				if syntax_loop_transfer_kind(state, index) > 0
-					mut leading := index == load_integer(state.function_body_starts, function_index)
+					mut leading := index == body_start
 					if !leading
 						leading = load_integer(state.token_kinds, index - 1) == 4
 						if !leading
@@ -726,7 +732,7 @@ def resolve_function_body(
 				if keyword
 				else
 					mut previous := ""
-					if index > load_integer(state.function_body_starts, function_index)
+					if index > body_start
 						previous = load_string(state.token_texts, index - 1)
 					end
 					if previous == "." || previous == "&." || previous == "::"

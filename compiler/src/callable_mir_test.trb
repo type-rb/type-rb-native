@@ -1,3 +1,4 @@
+import { check_lambda_value } from checked_program
 import { checked_mir_value } from checked_values
 import { checked_function_locals, finalize_checked_module } from checked_functions
 import { check, check_function, emit_qbe } from compiler
@@ -11,7 +12,7 @@ import { mir_control_return } from mir_control
 import { mir_declare_types } from mir_types
 import { parse_lambda_syntax, parse_module } from parser
 import { resolve } from resolution
-import { CompilerState, compiler_new, select_checked_body } from state
+import { CompilerState, compiler_new, local_bind, locals_new, select_checked_body } from state
 import { load_integer, load_string, sparse_integer_at, store_string } from storage
 import { control_test_output } from control_mir_test
 import { logical_run_qbe } from logical_test
@@ -451,6 +452,155 @@ describe("MIR callable foundation") do
 			end
 			expect(valid).to_be_false()
 		end
+	end
+
+end
+
+# Exercise the production fn checker while keeping construction explicitly
+# unsupported. The retained projection is evidence of analysis, not execution.
+def lambda_analysis_state(source: String): CompilerState
+	mut state := compiler_new(source.size() * 4 + 64)
+	expect(lex(state, source) && parse_module(state, 0, state.entry_module[0]) && resolve(state)).to_be_true()
+	expect(check(state)).to_be_false()
+	return state
+end
+
+describe("Anonymous lexical body checking") do
+	test("captures only referenced parent identities with their declared capabilities") do
+		source := "def factory(mut counter: Integer, label: String, other: String)\nputs(other)\ncallback := fn(delta: Integer): Integer\nputs(label)\ncounter += delta\nreturn counter\nend\nend\ndef main()\nfactory(1, \"label\", \"other\")\nend\n"
+		mut state := lambda_analysis_state(source)
+		expect(load_string(state.diagnostic_messages, 0)).to_equal("fn values require lexical capture lowering, which is not yet supported")
+		select_checked_body(state, 0)
+		parent := state.checked[0]
+		expect(parent.lambdas.size()).to_equal(1)
+		lambda := parent.lambdas[0]
+		expect(lambda.captures.size()).to_equal(2)
+		expect(lambda.captures[0].name).to_equal("counter")
+		expect(lambda.captures[0].identity).to_equal(0)
+		expect(lambda.captures[0].type_name).to_equal("Integer")
+		expect(lambda.captures[0].mutable).to_equal(1)
+		expect(lambda.captures[1].name).to_equal("label")
+		expect(lambda.captures[1].mutable).to_equal(0)
+		expect(state.checked_bodies[lambda.body].function).to_equal(- 1)
+		expect(state.function_count[0]).to_equal(2)
+		expect(state.parameter_count[0]).to_equal(3)
+	end
+
+	test("lets fn parameters and local declarations shadow parent bindings") do
+		source := "def factory(value: Integer, text: Integer, kept: String)\nputs(value + text)\ncallback := fn(value: String): String\ntext := value + kept\nreturn text\nend\nend\ndef main()\nend\n"
+		mut state := lambda_analysis_state(source)
+		expect(load_string(state.diagnostic_messages, 0)).to_equal("fn values require lexical capture lowering, which is not yet supported")
+		select_checked_body(state, 0)
+		captures := state.checked[0].lambdas[0].captures
+		expect(captures.size()).to_equal(1)
+		expect(captures[0].name).to_equal("kept")
+		expect(captures[0].identity).to_equal(2)
+	end
+
+	test("propagates transitive captures while keeping nested parameters local") do
+		source := "def factory(mut counter: Integer, unused: String)\nputs(unused)\nouter := fn(seed: Integer): () -> Integer\nreturn fn(): Integer\ncounter += seed\nreturn counter\nend\nend\nend\ndef main()\nend\n"
+		mut state := lambda_analysis_state(source)
+		expect(load_string(state.diagnostic_messages, 0)).to_equal("fn values require lexical capture lowering, which is not yet supported")
+		select_checked_body(state, 0)
+		outer := state.checked[0].lambdas[0]
+		expect(outer.captures.size()).to_equal(1)
+		expect(outer.captures[0].name).to_equal("counter")
+		inner := state.checked_bodies[outer.body].lambdas[0]
+		expect(inner.captures.size()).to_equal(2)
+		expect(inner.captures[0].name).to_equal("counter")
+		expect(inner.captures[1].name).to_equal("seed")
+		expect(inner.body != outer.body).to_be_true()
+	end
+
+	test("distinguishes reused iteration slots and excludes hidden iteration state") do
+		source := "def factory(mut counter: Integer)\nouter := fn()\n[1].each do |item|\ncallback := fn(): Integer; return item + counter; end\nputs(callback())\nend\n[2].each do |item|\ncallback := fn(): Integer; return item + counter; end\nputs(callback())\nend\nend\nend\ndef main()\nend\n"
+		mut state := lambda_analysis_state(source)
+		expect(load_string(state.diagnostic_messages, 0)).to_equal("fn values require lexical capture lowering, which is not yet supported")
+		select_checked_body(state, 0)
+		outer := state.checked[0].lambdas[0]
+		body := state.checked_bodies[outer.body]
+		expect(body.lambdas.size()).to_equal(2)
+		expect(body.lambdas[0].captures.size()).to_equal(2)
+		expect(body.lambdas[1].captures.size()).to_equal(2)
+		expect(body.lambdas[0].captures[1].name).to_equal("item")
+		expect(body.lambdas[1].captures[1].name).to_equal("item")
+		expect(body.lambdas[0].captures[1].identity != body.lambdas[1].captures[1].identity).to_be_true()
+		expect(outer.captures.size()).to_equal(1)
+		expect(outer.captures[0].name).to_equal("counter")
+	end
+
+	test("checks independent return types paths and immutable captures") do
+		bodies := ["fn(): Integer; return \"wrong\"; end", "fn(); return 1; end", "fn(flag: Boolean): Integer; if flag; return 1; end; end", "fn(); value = 2; end", "fn(); value += 2; end", "fn(); puts(missing); end", "fn(); puts(later); later := 1; end"]
+		errors := ["expected Integer, found String", "expected Void, found Integer", "fn must return on every completing path", "assignment target is immutable", "assignment target is immutable", "unresolved local missing", "unresolved local later"]
+		mut index := 0
+		while index < bodies.size()
+			source := "def factory(value: Integer)\ncallback := " + bodies[index] + "\nend\ndef main()\nend\n"
+			state := lambda_analysis_state(source)
+			expect(load_string(state.diagnostic_messages, 0)).to_equal(errors[index])
+			index += 1
+		end
+	end
+
+	test("keeps loop transfers and conditional returns inside the fn boundary") do
+		state := lambda_analysis_state("def main()\nwhile true\ncallback := fn(); break; end\nbreak\nend\nend\n")
+		expect(load_string(state.diagnostic_messages, 0)).to_equal("break is only valid inside a loop")
+		valid := lambda_analysis_state("def main()\ncallback := fn(flag: Boolean): Integer\nif flag\nreturn 1\nelse\nreturn 2\nend\nend\nend\n")
+		expect(load_string(valid.diagnostic_messages, 0)).to_equal("fn values require lexical capture lowering, which is not yet supported")
+	end
+
+	test("checks unused nested bodies and their Result obligations") do
+		invalid := lambda_analysis_state("def main()\nouter := fn()\ninner := fn(): Integer; return \"wrong\"; end\nend\nend\n")
+		expect(load_string(invalid.diagnostic_messages, 0)).to_equal("expected Integer, found String")
+		source := "import trb/std/result\ndef operation(): Result<Integer, String>\nreturn Result<Integer, String>::Ok(1)\nend\ndef main()\ncallback := fn()\nunused := operation()\nend\nend\n"
+		result := lambda_analysis_state(source)
+		expect(load_string(result.diagnostic_messages, 0)).to_equal("Result binding unused must be used")
+	end
+
+	test("resolves generic applications inside an owned anonymous body") do
+		source := "def identity<T>(value: T): T; return value; end\ndef main()\ncallback := fn(value: Integer): Integer\nreturn identity<Integer>(value)\nend\nend\n"
+		mut state := lambda_analysis_state(source)
+		expect(load_string(state.diagnostic_messages, 0)).to_equal("fn values require lexical capture lowering, which is not yet supported")
+		select_checked_body(state, 0)
+		lambda := state.checked[0].lambdas[0]
+		body := state.checked_bodies[lambda.body]
+		mut origin := state.lambdas[0].body_start
+		while load_string(state.token_texts, origin) != "identity"
+			origin += 1
+		end
+		call := sparse_integer_at(body.generic_application_finishes, origin)
+		expect(call > origin).to_be_true()
+		expect(sparse_integer_at(body.generic_calls, call) > 0).to_be_true()
+		expect(sparse_integer_at(state.checked[0].generic_calls, call)).to_equal(0)
+	end
+
+	test("owns different typed anonymous bodies for shared generic syntax") do
+		source := "def probe<T>(value: T)\ncallback := fn(): T; return value; end\nend\ndef main()\nprobe<Integer>(1)\nprobe<String>(\"text\")\nend\n"
+		mut state := compiler_new(source.size() * 4 + 64)
+		expect(lex(state, source) && parse_module(state, 0, state.entry_module[0]) && resolve(state)).to_be_true()
+		mut body_ids: Array<Integer> := []
+		mut index := 0
+		while index < 2
+			function := state.generic_function_instances[index].function
+			select_checked_body(state, function)
+			mut parent := locals_new(state.token_count[0] + 1)
+			type_name := load_string(state.parameter_types, load_integer(state.function_parameter_starts, function))
+			local_bind(parent, "value", type_name, 0)
+			mut position := [state.lambdas[0].origin]
+			value := check_lambda_value(state, position, parent)
+			expect(value.type_name).to_equal("$Callable<" + type_name + ">")
+			expect(state.diagnostic_count[0]).to_equal(0)
+			lambda := state.checked[0].lambdas[0]
+			expect(lambda.captures[0].type_name).to_equal(type_name)
+			body_ids.push(lambda.body)
+			index += 1
+		end
+		expect(body_ids[0] != body_ids[1]).to_be_true()
+	end
+	test("retains immutable nullable binding proofs without narrowing mutable captures") do
+		accepted := lambda_analysis_state("def factory(value: Integer?)\nif value != nil\ncallback := fn(): Integer; return value; end\nend\nend\ndef main()\nend\n")
+		expect(load_string(accepted.diagnostic_messages, 0)).to_equal("fn values require lexical capture lowering, which is not yet supported")
+		rejected := lambda_analysis_state("def factory(mut value: Integer?)\nif value != nil\ncallback := fn(): Integer; return value; end\nend\nend\ndef main()\nend\n")
+		expect(load_string(rejected.diagnostic_messages, 0)).to_equal("expected Integer, found Integer?")
 	end
 
 end
