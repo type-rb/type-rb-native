@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 264 ordinary-path probes and 32 feature
+Status: the shared contract contains 270 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -46,13 +46,21 @@ boundary without constructing a function value.
 
 [The callable MIR foundation](decisions/0051-callable-mir-foundation.md) independently
 verifies internal captured environments, indirect calls and their root/ABI contracts.
-Its fixtures cover escaped/nested closures and cyclic container storage.
-The parser retains independent anonymous-body regions and concrete generic
-header signatures; the REPL collects their complete nested input. Construction
-still reports an explicit unsupported-lowering diagnostic.
-Authored `fn` creation, lexical capture and retained REPL closure identity remain
-unsupported. Internal fixture execution must not mark ordinary closure cases as
-accepted in the generated Capabilities view.
+Its fixtures cover escaped/nested closures and cyclic container storage. Ordinary
+files now analyze captures before generating MIR, materialize concrete anonymous
+bodies and signatures, and preserve shared mutable bindings across calls and
+control flow. Shared probes cover higher-order calls, nested factories, iteration
+cells, generics/defaults, nullable proofs and managed captures. Unknown calls
+invalidate nullable proofs for mutable captured bindings.
+
+The REPL collects complete anonymous bodies but still rejects construction: code
+and environment retention across later submissions is pending. Named declarations
+used as values also remain unsupported. Capabilities distinguishes these gaps from
+successful ordinary check/build/execution; forced-GC internal fixtures supplement
+rather than replace those ordinary observations. The pinned reference still rejects
+`closure-generic-defaults`; the Go implementation at `279cd4980a32` passes its
+check/build/execution/REPL paths. The registry retains the pinned rejection as a
+visible reference-version difference until the normal reference update.
 
 ## Value-producing control and lexical transfers
 

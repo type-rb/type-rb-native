@@ -1,4 +1,7 @@
 import { result_scope_check } from result_checked
+import { checked_body_lowering } from checked_body
+import { declare_default_functions } from default_arguments
+import { lambda_bind_captures } from lambda_lowering
 import { mir_binding_initialize, mir_binding_read } from mir_bindings
 import { check_block, check_block_value, check_expression } from checked_program
 import { checked_mir_value, scalar_mir_disable } from checked_values
@@ -8,8 +11,8 @@ import { mir_control_active, mir_control_prepare, mir_control_return } from mir_
 import { optimize_verified_mir } from mir_passes
 import { mir_managed_type, mir_semantic_type_id } from mir_types
 import { verify_mir } from mir_verifier
-import { validate_import_usage } from resolution
-import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_add, locals_new, select_checked_body } from state
+import { resolve_function_body, validate_import_usage } from resolution
+import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_add, local_identity, locals_new, select_checked_body } from state
 import { load_integer, load_string, sparse_integer_at, store_integer } from storage
 
 # Parameter binding and body checking are separate semantic stages. All
@@ -18,7 +21,7 @@ def checked_function_locals(mut state: CompilerState, function_index: Integer): 
 	select_checked_body(state, function_index)
 	state.active_module[0] = load_integer(state.function_modules, function_index)
 	mut locals := locals_new(state.token_count[0] + 1)
-	if state.generic_template_mode[0]
+	if state.generic_template_mode[0] || state.lambda_phase[0] == 1
 		locals.mir_state[1] = function_index
 	else
 		scalar_mir_begin(state, function_index, locals)
@@ -28,7 +31,8 @@ def checked_function_locals(mut state: CompilerState, function_index: Integer): 
 	end
 	parameter_start := load_integer(state.function_parameter_starts, function_index)
 	parameter_finish := parameter_start + load_integer(state.function_parameter_counts, function_index)
-	mut parameter_index := parameter_start
+	captures := lambda_bind_captures(state, locals, function_index)
+	mut parameter_index := parameter_start + captures
 	while parameter_index < parameter_finish
 		added := local_add(
 			state,
@@ -45,9 +49,9 @@ def checked_function_locals(mut state: CompilerState, function_index: Integer): 
 		parameter_index += 1
 	end
 	# ABI parameter values occupy the first N SSA identities before allocation.
-	mut slot := 0
+	mut slot := captures
 	while slot < locals.count[0]
-		if sparse_integer_at(locals.mir_cell_plans, slot) > 0
+		if sparse_integer_at(locals.mir_cell_plans, local_identity(locals, slot)) > 0
 			origin := load_integer(state.function_body_starts, function_index)
 			value := mir_binding_read(state, locals, slot, origin)
 			mir_binding_initialize(state, locals, slot, value, origin)
@@ -83,7 +87,7 @@ def check_function_body(mut state: CompilerState, function_index: Integer, mut l
 			scalar_mir_disable(locals)
 		end
 	else
-		if state.generic_template_mode[0]
+		if state.generic_template_mode[0] || state.lambda_phase[0] == 1
 			completion := check_block_value(state, position, locals, result_type, - 1, false)
 			if result_type != "Void" && completion.type_name != "Never"
 				diagnostic(state, "TRBN4004", load_integer(state.function_lines, function_index), "generic function must return on every completing path")
@@ -104,7 +108,7 @@ def check_function_body(mut state: CompilerState, function_index: Integer, mut l
 	if result_type == "Void" && mir_control_active(locals) && locals.mir_control[6] == 0
 		mir_control_return(state, locals, - 1)
 	end
-	if !has_diagnostic(state) && !state.generic_template_mode[0]
+	if !has_diagnostic(state) && !state.generic_template_mode[0] && state.lambda_phase[0] != 1
 		mir_error := scalar_mir_commit(state, function_index, locals)
 		if mir_error != ""
 			diagnostic(
@@ -117,6 +121,46 @@ def check_function_body(mut state: CompilerState, function_index: Integer, mut l
 	end
 	state.checked[0] = previous_body
 	return !has_diagnostic(state)
+end
+
+# Finish closure/generic/default discovery before freezing the MIR catalog.
+# Programs without fn retain the existing single checking pass.
+def analyze_callable_bodies(mut state: CompilerState): Boolean
+	if state.lambdas.size() == 0 || state.hash_repl[0]
+		return true
+	end
+	state.lambda_phase[0] = 1
+	resolved := state.function_count[0]
+	mut function := 0
+	while function < state.function_count[0] && !has_diagnostic(state)
+		if sparse_integer_at(state.function_lambdas, function) == 0
+			if function >= resolved
+				mut names := locals_new(state.token_count[0] + 1)
+				resolve_function_body(state, function, names)
+				declare_default_functions(state)
+			end
+			if !has_diagnostic(state)
+				mut locals := checked_function_locals(state, function)
+				check_function_body(state, function, locals)
+				declare_default_functions(state)
+			end
+		end
+		function += 1
+	end
+	if has_diagnostic(state)
+		return false
+	end
+	function = 0
+	while function < state.function_count[0]
+		encoded := sparse_integer_at(state.checked_body_indices, function)
+		if encoded > 0
+			previous := state.checked_bodies[encoded - 1]
+			state.checked_bodies[encoded - 1] = checked_body_lowering(previous, function, load_integer(state.function_body_starts, function), load_integer(state.function_body_ends, function) + 1)
+		end
+		function += 1
+	end
+	state.lambda_phase[0] = 2
+	return true
 end
 
 def finalize_checked_module(mut state: CompilerState): Boolean

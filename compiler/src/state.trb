@@ -1,5 +1,5 @@
 import { TypeAlias, TypeAliasInstance } from alias_model
-import { LambdaSyntax } from callable_types
+import { CheckedLambda, LambdaSyntax } from callable_types
 import { CheckedBody, checked_body_new } from checked_body
 import { CatchSyntax } from result_model
 import { GenericBinding, GenericDefinition, GenericFunction, GenericFunctionInstance, GenericInstance } from generic_model
@@ -58,6 +58,10 @@ end
 record CompilerState
 	lambdas: Array<LambdaSyntax>
 	lambda_origins: IntegerStorage
+	# Analysis discovers the complete callable catalog before MIR signatures freeze.
+	lambda_phase: Array<Integer>
+	checked_lambdas: Array<CheckedLambda>
+	function_lambdas: IntegerStorage
 	checked: Array<CheckedBody>
 	checked_bodies: Array<CheckedBody>
 	checked_body_indices: IntegerStorage
@@ -156,6 +160,7 @@ end
 def compiler_new(capacity: Integer): CompilerState
 	return CompilerState.new(
 		lambdas: [], lambda_origins: integer_storage(capacity),
+		lambda_phase: [0], checked_lambdas: [], function_lambdas: integer_storage(capacity),
 		checked: [checked_body_new(- 1, 0, capacity)], checked_bodies: [], checked_body_indices: integer_storage(capacity),
 		catch_syntax: [], catch_origins: integer_storage(capacity),
 		standard_modules: integer_storage(capacity),
@@ -396,9 +401,18 @@ end
 # Register one lexical binding, including deliberate block-parameter shadowing.
 # Each concrete body owns its identities independently of reusable active slots.
 def local_bind(mut locals: CheckedLocals, name: String, type_name: String, mutable: Integer): Integer
+	return local_bind_identity(locals, name, type_name, mutable, locals.binding_slots.size())
+end
+
+# Materialized closures retain analyzed declaration IDs even when unused
+# inherited declarations have no runtime parameter or active lookup slot.
+def local_bind_identity(mut locals: CheckedLocals, name: String, type_name: String, mutable: Integer, identity: Integer): Integer
 	index := locals.count[0]
-	store_integer(locals.binding_ids, index, locals.binding_slots.size())
-	locals.binding_slots.push(index)
+	while locals.binding_slots.size() <= identity
+		locals.binding_slots.push(- 1)
+	end
+	store_integer(locals.binding_ids, index, identity)
+	locals.binding_slots[identity] = index
 	store_integer(locals.result_pending, index, 0)
 	store_integer(locals.result_uses, index, 0)
 	store_integer(locals.hash_literal_origins, index, 0)

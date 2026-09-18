@@ -22,6 +22,9 @@ def lambda_locals(mut state: CompilerState, parent: CheckedLocals, syntax: Lambd
 			end
 			locals.capture_parents.push(local_identity(parent, slot))
 			locals.capture_uses.push(0)
+			if mutable > 0
+				store_integer(locals.mir_cell_plans, local_identity(locals, inherited), 1)
+			end
 		end
 		slot += 1
 	end
@@ -81,8 +84,14 @@ def lambda_captures(mut state: CompilerState, mut parent: CheckedLocals, locals:
 				if !planned
 					state.checked[0].shared_bindings.push(identity)
 				end
+				store_integer(parent.mir_cell_plans, identity, 1)
 			end
-			captures.push(LambdaCapture.new(identity: identity, name: load_string(parent.names, slot), type_name: load_string(parent.types, slot), mutable: load_integer(parent.mutable, slot)))
+			declared := load_string(parent.types, slot)
+			mut flow := declared
+			if load_integer(parent.mutable, slot) == 0
+				flow = nullable_lookup(parent, slot, - 1, declared)
+			end
+			captures.push(LambdaCapture.new(identity: identity, child_identity: index, name: load_string(parent.names, slot), type_name: declared, flow_type: flow, mutable: load_integer(parent.mutable, slot)))
 			lambda_use_binding(parent, slot)
 			store_integer(parent.result_uses, slot, sparse_integer_at(parent.result_uses, slot) + 1)
 		end
