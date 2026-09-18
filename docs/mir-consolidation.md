@@ -130,7 +130,7 @@ and conservative fact invalidation across assignments and loop backedges.
 The ordinary compiler closure contains 98 modules. Implementation syntax stays
 within the existing immutable seed and snapshot-v4 boundary; compiler self-use
 of the new syntax still depends on an accepted seed refresh. The shared language
-contract contains 270 cases with explicit remaining differences. Retained REPL
+contract contains 272 cases with explicit remaining differences. Retained REPL
 assignment flow now uses an ordinary checker projection, with conservative
 failure/interruption invalidation and explicit replay boundaries; see
 [decision 0043](decisions/0043-checked-repl-submissions.md). Ordinary enum payloads and exhaustive cases now have independently verified
