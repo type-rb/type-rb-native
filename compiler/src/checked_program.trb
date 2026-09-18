@@ -2,6 +2,7 @@ import { CheckedLambda, callable_parts } from callable_types
 import { checked_body_new } from checked_body
 import { checked_return_type, lambda_captures, lambda_locals, lambda_names, lambda_use_binding } from lambda_checking
 import { mir_checked_callable_call } from mir_callables
+import { mir_binding_assign, mir_binding_initialize, mir_binding_read } from mir_bindings
 import { checked_result_try, result_interactive_entry, result_operation, result_scope_check, standard_result_instance } from result_checked
 import { advance, expect, expect_identifier, finish_statement, parse_type, skip_newlines, token_is } from syntax_tokens
 import { check_enum_bindings, check_enum_patterns } from enum_checked
@@ -30,7 +31,7 @@ import { MirLoopTransfer, mir_loop_transfer_valid } from mir
 import { mir_checked_call, mir_checked_standard_call, mir_complete_arguments } from mir_calls
 import { mir_logical_begin, mir_logical_join } from mir_logical
 import { mir_checked_puts, mir_checked_string_binary, mir_checked_string_literal, mir_checked_string_operation } from mir_strings
-import { mir_control_active, mir_control_assign, mir_control_branch, mir_control_enter, mir_control_jump, mir_control_loop_begin, mir_control_loop_branch, mir_control_loop_end, mir_control_prepare, mir_control_return, mir_control_transfer } from mir_control
+import { mir_control_active, mir_control_branch, mir_control_enter, mir_control_jump, mir_control_loop_begin, mir_control_loop_branch, mir_control_loop_end, mir_control_prepare, mir_control_return, mir_control_transfer } from mir_control
 import { binary_operator_id, declaration_start, parse_argument_label, syntax_block_end, syntax_conditional_tail, syntax_expression_precedence, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_statement_boundary } from parser
 import { resolve_body_names, standard_package_import, standard_package_root } from resolution
 import { find_visible_enum, find_visible_function, find_visible_record } from declaration_lookup
@@ -425,14 +426,7 @@ def check_primary(
 		if local_index >= 0
 			lambda_use_binding(locals, local_index)
 			store_integer(locals.result_uses, local_index, sparse_integer_at(locals.result_uses, local_index) + 1)
-			mir_value := load_integer(locals.mir_values, local_index)
-			mut category := 0
-			if locals.mir_state[0] > 0 && mir_value > 0
-				category =- mir_value
-			else
-				scalar_mir_disable(locals)
-			end
-			value := checked_bound_value(load_string(locals.types, local_index), category, origin, load_integer(locals.mutable, local_index), true)
+			value := mir_binding_read(state, locals, local_index, origin)
 			return nullable_read(state, locals, value, local_index, - 1, origin)
 		end
 		standard_package := standard_package_import(state, state.active_module[0], name)
@@ -1102,14 +1096,7 @@ def check_declaration(
 		store_integer(locals.hash_literal_origins, locals.count[0] - 1, value.origin + 1)
 	end
 	if added && value.type_name != "Never"
-		mir_value := checked_mir_value(value)
-		if locals.mir_state[0] > 0
-			if mir_value >= 0
-				store_integer(locals.mir_values, locals.count[0] - 1, mir_value + 1)
-			else
-				scalar_mir_disable(locals)
-			end
-		end
+		mir_binding_initialize(state, locals, locals.count[0] - 1, value, origin)
 	end
 	store_string(state.checked[0].local_types, origin, local_type)
 	checked_submission_result(state, origin, local_type, mutable)
@@ -1172,7 +1159,7 @@ def check_simple_statement(
 		if hash.kind == 3
 			mir_checked_hash_store(state, locals, left, right, hash.type_name)
 		elsif !mir_checked_array_store(state, locals, left, right)
-			mir_control_assign(state, locals, left, right)
+			mir_binding_assign(state, locals, left, right)
 		end
 	else
 		if binary_operator_id(operator) >= 17
@@ -1196,7 +1183,7 @@ def check_simple_statement(
 					value = scalar_mir_binary(state, locals, compound, left, right, result_type, operator_origin)
 				end
 				if !mir_checked_array_store(state, locals, left, value)
-					mir_control_assign(state, locals, left, value)
+					mir_binding_assign(state, locals, left, value)
 				end
 			end
 		end
@@ -1244,7 +1231,7 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 	end
 	element := mir_checked_iteration_begin(state, locals, plan, receiver, saved)
 	local_bind(locals, load_string(state.token_texts, plan.element_origin), element_type, 1)
-	store_integer(locals.mir_values, locals.count[0] - 1, checked_mir_value(element) + 1)
+	mir_binding_initialize(state, locals, locals.count[0] - 1, element, plan.element_origin)
 	if plan.index_origin >= 0
 		if load_string(state.token_texts, plan.element_origin) == load_string(state.token_texts, plan.index_origin)
 			diagnostic(state, "TRBN4004", load_integer(state.token_lines, plan.index_origin), "iteration block parameter is duplicated")
@@ -1255,7 +1242,8 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 		if source_kind == 2
 			index_slot = saved + 2
 		end
-		store_integer(locals.mir_values, locals.count[0] - 1, load_integer(locals.mir_values, index_slot))
+		ordinal := mir_binding_read(state, locals, index_slot, plan.index_origin)
+		mir_binding_initialize(state, locals, locals.count[0] - 1, ordinal, plan.index_origin)
 	end
 	position[0] = plan.body_start
 	nullable_loop_writes(state, locals, plan.body_start, plan.body_finish)

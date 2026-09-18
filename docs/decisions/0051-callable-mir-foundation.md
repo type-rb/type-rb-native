@@ -57,8 +57,9 @@ facts remain unchanged.
 This is semantic preparation for executable closure lowering. Ordinary fn
 construction still reports the explicit unsupported diagnostic after valid body
 analysis; invalid bodies report their actual checking error first. The ordinary
-coverage gaps remain. Shared mutable MIR cells, callable body materialization
-and retained REPL execution are required before claiming function-value support.
+coverage gaps remain. The shared-storage path below still needs coordinated
+body materialization and retained REPL execution before function-value support
+can be claimed.
 
 ## Ownership and representation
 
@@ -102,8 +103,8 @@ Lexical registration now assigns identities separately from reusable active
 slots, through one binding helper for declarations, parameters and synthetic
 iteration/catch bindings. Nullable facts carry that identity, so ended or
 shadowed bindings cannot donate flow facts to a later occupant of the same slot.
-Each checked body owns these identities. This prepares capture selection; it
-does not yet lower authored mutable variables to shared cells.
+Each checked body owns these identities. Capture analysis records the unique
+mutable declaration identities requiring shared storage in each concrete body.
 
 This is not a public callable ABI or completed function-value syntax. Before
 accepting authored closures, lowering must materialize the selected captures and checked bodies, preserve
@@ -124,6 +125,31 @@ requests a REPL capture. Checked anonymous-body retention, captured capabilities
 and nominal identity across later submissions still need implementation before
 ordinary closure cases can be accepted.
 
+## Shared binding storage
+
+`mir_bindings.trb` owns declaration initialization, semantic reads, assignments
+and capture operands. A checked body records selected mutable declaration IDs;
+its lowering frame loads that plan before binding parameters or entering the
+body. Selected bindings use private single-element `Array<T>` cells and existing
+verified allocation/load/store operations. Unselected bindings keep direct SSA
+values. The semantic type remains `T`; block and loop arguments use the storage
+type `Array<T>` and carry the same cell through every edge. Backend adapters and
+GC use ordinary verified MIR types without reading the capture plan.
+
+Parameter SSA IDs are reserved before any cell allocation. Declarations initialize
+cells where the binding is introduced, including inside each iteration body.
+Reused lexical slots clear their old storage type, while capture operands resolve
+stable declaration identities. Mutable captures require an already initialized
+cell; late capture-site boxing and stale identities are rejected. Multiple closure
+environments retain the same cell, and separate factory calls allocate distinct
+cells. Managed payload replacement uses existing Array tracing and root plans.
+
+This storage path is exercised through explicit analyzed plans and internal
+closure factories. Ordinary `fn` remains rejected until the checker orchestrates
+analysis before lowering, materializes concrete anonymous bodies and retains
+REPL code with the environment. Unknown calls must also invalidate mutable
+capture flow proofs before authored mutable closures are accepted.
+
 ## Validation and completion boundary
 
 Internal MIR fixtures explicitly construct entry calls and closure factories,
@@ -142,7 +168,7 @@ from constructing and executing a function value. Its existing `fn`/capture
 cases remain rejected and visible as gaps in Capabilities. Internal fixture
 execution does not mark those ordinary cases as supported.
 
-The canonical compiler closure contains 96 modules. Integration requires
+The canonical compiler closure contains 97 modules. Integration requires
 unchanged-seed ordinary core/CLI fixed points, exact recovery-source validation,
 snapshot-v4 compatibility, complete hosted recovery, target and lifetime checks.
 Compiler implementation does not use the new function syntax. No seed, reference
