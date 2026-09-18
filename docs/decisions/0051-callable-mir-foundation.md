@@ -79,6 +79,20 @@ readonly/mutable capabilities, share mutable capture cells, enforce independent
 return/transfer scopes, and retain closure bodies/environments across REPL
 submissions. Named declarations used as values also remain unsupported.
 
+The REPL pool now separates reusable name-lookup slots from capturable binding
+identity. Ordinary bindings retain direct value IDs. On first capture, a binding
+moves into one internal pool cell; later captures reuse it, and assignment updates
+its child value. Reusing a scope slot creates a fresh binding without changing an
+escaped cell. Pool compaction follows these cells through the existing identity
+map, preserving sharing, cycles and managed rebinding while dropping unreachable
+temporaries. An ordinary Native-built internal fixture covers those properties
+and fresh iteration cells across repeated compactions.
+
+This is retained-variable infrastructure only. No authored function currently
+requests a REPL capture. Checked anonymous-body retention, captured capabilities
+and nominal identity across later submissions still need implementation before
+ordinary closure cases can be accepted.
+
 ## Validation and completion boundary
 
 Internal MIR fixtures explicitly construct entry calls and closure factories,
