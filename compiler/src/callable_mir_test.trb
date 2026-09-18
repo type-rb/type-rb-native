@@ -12,7 +12,7 @@ import { mir_control_return } from mir_control
 import { mir_declare_types } from mir_types
 import { parse_lambda_syntax, parse_module } from parser
 import { resolve } from resolution
-import { CompilerState, compiler_new, local_bind, locals_new, select_checked_body } from state
+import { CompilerState, compiler_new, has_diagnostic, local_bind, locals_new, select_checked_body } from state
 import { load_integer, load_string, sparse_integer_at, store_string } from storage
 import { control_test_output } from control_mir_test
 import { logical_run_qbe } from logical_test
@@ -108,8 +108,7 @@ describe("Anonymous function syntax ownership") do
 		expect(state.parameter_count[0]).to_equal(2)
 		expect(resolve(state)).to_be_true()
 		state.hash_repl[0] = true
-		expect(check(state)).to_be_false()
-		expect(load_string(state.diagnostic_messages, 0)).to_equal("fn values require lexical capture lowering, which is not yet supported")
+		expect(check(state)).to_be_true()
 	end
 	test("resolves shared fn syntax separately for each generic body") do
 		source := "def probe<T>()\ncallback := fn(value: T): T; return value; end\nend\ndef main()\nprobe<Integer>()\nprobe<String>()\nend\n"
@@ -457,13 +456,13 @@ describe("MIR callable foundation") do
 
 end
 
-# Exercise the production fn checker while keeping construction explicitly
-# unsupported. The retained projection is evidence of analysis, not execution.
+# Inspect lexical projections produced by the complete interactive checking path.
+# Negative cases inspect their diagnostics; positive cases also materialize bodies.
 def lambda_analysis_state(source: String): CompilerState
 	mut state := compiler_new(source.size() * 4 + 64)
 	expect(lex(state, source) && parse_module(state, 0, state.entry_module[0]) && resolve(state)).to_be_true()
 	state.hash_repl[0] = true
-	expect(check(state)).to_be_false()
+	check(state)
 	return state
 end
 
@@ -471,7 +470,7 @@ describe("Anonymous lexical body checking") do
 	test("captures only referenced parent identities with their declared capabilities") do
 		source := "def factory(mut counter: Integer, label: String, other: String)\nputs(other)\ncallback := fn(delta: Integer): Integer\nputs(label)\ncounter += delta\nreturn counter\nend\nend\ndef main()\nfactory(1, \"label\", \"other\")\nend\n"
 		mut state := lambda_analysis_state(source)
-		expect(load_string(state.diagnostic_messages, 0)).to_equal("fn values require lexical capture lowering, which is not yet supported")
+		expect(has_diagnostic(state)).to_be_false()
 		select_checked_body(state, 0)
 		parent := state.checked[0]
 		expect(parent.shared_bindings).to_equal([0])
@@ -484,15 +483,15 @@ describe("Anonymous lexical body checking") do
 		expect(lambda.captures[0].mutable).to_equal(1)
 		expect(lambda.captures[1].name).to_equal("label")
 		expect(lambda.captures[1].mutable).to_equal(0)
-		expect(state.checked_bodies[lambda.body].function).to_equal(- 1)
-		expect(state.function_count[0]).to_equal(2)
-		expect(state.parameter_count[0]).to_equal(3)
+		expect(state.checked_bodies[lambda.body].function).to_equal(lambda.function[0])
+		expect(state.function_count[0]).to_equal(3)
+		expect(state.parameter_count[0]).to_equal(6)
 	end
 
 	test("lets fn parameters and local declarations shadow parent bindings") do
 		source := "def factory(value: Integer, text: Integer, kept: String)\nputs(value + text)\ncallback := fn(value: String): String\ntext := value + kept\nreturn text\nend\nend\ndef main()\nend\n"
 		mut state := lambda_analysis_state(source)
-		expect(load_string(state.diagnostic_messages, 0)).to_equal("fn values require lexical capture lowering, which is not yet supported")
+		expect(has_diagnostic(state)).to_be_false()
 		select_checked_body(state, 0)
 		captures := state.checked[0].lambdas[0].captures
 		expect(captures.size()).to_equal(1)
@@ -503,7 +502,7 @@ describe("Anonymous lexical body checking") do
 	test("propagates transitive captures while keeping nested parameters local") do
 		source := "def factory(mut counter: Integer, unused: String)\nputs(unused)\nouter := fn(seed: Integer): () -> Integer\nreturn fn(): Integer\ncounter += seed\nreturn counter\nend\nend\nend\ndef main()\nend\n"
 		mut state := lambda_analysis_state(source)
-		expect(load_string(state.diagnostic_messages, 0)).to_equal("fn values require lexical capture lowering, which is not yet supported")
+		expect(has_diagnostic(state)).to_be_false()
 		select_checked_body(state, 0)
 		outer := state.checked[0].lambdas[0]
 		expect(outer.captures.size()).to_equal(1)
@@ -520,7 +519,7 @@ describe("Anonymous lexical body checking") do
 	test("distinguishes reused iteration slots and excludes hidden iteration state") do
 		source := "def factory(mut counter: Integer)\nouter := fn()\n[1].each do |item|\ncallback := fn(): Integer; return item + counter; end\nputs(callback())\nend\n[2].each do |item|\ncallback := fn(): Integer; return item + counter; end\nputs(callback())\nend\nend\nend\ndef main()\nend\n"
 		mut state := lambda_analysis_state(source)
-		expect(load_string(state.diagnostic_messages, 0)).to_equal("fn values require lexical capture lowering, which is not yet supported")
+		expect(has_diagnostic(state)).to_be_false()
 		select_checked_body(state, 0)
 		outer := state.checked[0].lambdas[0]
 		body := state.checked_bodies[outer.body]
@@ -554,7 +553,7 @@ describe("Anonymous lexical body checking") do
 		state := lambda_analysis_state("def main()\nwhile true\ncallback := fn(); break; end\nbreak\nend\nend\n")
 		expect(load_string(state.diagnostic_messages, 0)).to_equal("break is only valid inside a loop")
 		valid := lambda_analysis_state("def main()\ncallback := fn(flag: Boolean): Integer\nif flag\nreturn 1\nelse\nreturn 2\nend\nend\nend\n")
-		expect(load_string(valid.diagnostic_messages, 0)).to_equal("fn values require lexical capture lowering, which is not yet supported")
+		expect(has_diagnostic(valid)).to_be_false()
 	end
 
 	test("checks unused nested bodies and their Result obligations") do
@@ -568,7 +567,7 @@ describe("Anonymous lexical body checking") do
 	test("resolves generic applications inside an owned anonymous body") do
 		source := "def identity<T>(value: T): T; return value; end\ndef main()\ncallback := fn(value: Integer): Integer\nreturn identity<Integer>(value)\nend\nend\n"
 		mut state := lambda_analysis_state(source)
-		expect(load_string(state.diagnostic_messages, 0)).to_equal("fn values require lexical capture lowering, which is not yet supported")
+		expect(has_diagnostic(state)).to_be_false()
 		select_checked_body(state, 0)
 		lambda := state.checked[0].lambdas[0]
 		body := state.checked_bodies[lambda.body]
@@ -607,7 +606,7 @@ describe("Anonymous lexical body checking") do
 	end
 	test("retains immutable nullable binding proofs without narrowing mutable captures") do
 		accepted := lambda_analysis_state("def factory(value: Integer?)\nif value != nil\ncallback := fn(): Integer; return value; end\nend\nend\ndef main()\nend\n")
-		expect(load_string(accepted.diagnostic_messages, 0)).to_equal("fn values require lexical capture lowering, which is not yet supported")
+		expect(has_diagnostic(accepted)).to_be_false()
 		rejected := lambda_analysis_state("def factory(mut value: Integer?)\nif value != nil\ncallback := fn(): Integer; return value; end\nend\nend\ndef main()\nend\n")
 		expect(load_string(rejected.diagnostic_messages, 0)).to_equal("expected Integer, found Integer?")
 	end

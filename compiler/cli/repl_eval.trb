@@ -1,3 +1,5 @@
+import { callable_parts } from callable_types
+import { repl_closure, repl_closure_environment } from repl_callables
 import { select_checked_body } from state
 import { result_projection } from result_checked
 import { token_is, parse_type, skip_newlines } from syntax_tokens
@@ -21,7 +23,7 @@ import { find_visible_enum, find_visible_function, find_visible_record } from de
 import { find_record_type, find_field, record_type, array_element_type } from type_resolution
 import { number_is_float, number_without_underscores, integer_string } from literals
 import { native_cli_float, native_cli_interrupt } from host
-import { repl_get, ReplStore, ReplEnvironment, ReplReference, repl_value, repl_integer, repl_float, repl_boolean, repl_string, repl_reference, repl_environment } from repl_model
+import { repl_type, repl_set_type, repl_variant, repl_get, ReplStore, ReplEnvironment, ReplReference, repl_value, repl_integer, repl_float, repl_boolean, repl_string, repl_reference, repl_environment } from repl_model
 import { repl_binding_value, repl_assign_binding, repl_render, repl_find, repl_bind, repl_coerce } from repl_values
 
 # Evaluation follows the already checked token stream. Parser, resolution and
@@ -86,7 +88,7 @@ def repl_string_integer(mut store: ReplStore, text: String): Integer
 end
 
 def repl_numeric(mut store: ReplStore, left: Integer, operator: String, right: Integer): Integer
-	if store.types[left] == "Nil" || store.types[right] == "Nil"
+	if repl_type(store, left) == "Nil" || repl_type(store, right) == "Nil"
 		mut same := repl_absent(store, left) == repl_absent(store, right)
 		if operator == "!="
 			same =!same
@@ -279,7 +281,50 @@ def repl_complete_arguments(mut state: CompilerState, mut bindings: ArgumentBind
 	end
 end
 
+# A call switches to its retained checked program for exactly the body lifetime.
+# Nested callbacks may switch back; saved body/module/context are always restored.
+def repl_indirect_call(mut store: ReplStore, id: Integer, arguments: Array<Integer>): Integer
+	if store.depth[0] > 256
+		store.error[0] = "REPL call depth limit exceeded"
+		return 0
+	end
+	owner := store.value_programs[id]
+	if owner < 0
+		store.error[0] = "fn has no retained checked program"
+		return 0
+	end
+	previous_program := store.active_program[0]
+	store.active_program[0] = owner
+	mut state := store.programs[owner]
+	function := store.integers[id]
+	previous_body := select_checked_body(state, function)
+	previous_module := state.active_module[0]
+	state.active_module[0] = load_integer(state.function_modules, function)
+	store.depth[0] += 1
+	mut environment := repl_closure_environment(state, store, id, arguments)
+	mut position := [load_integer(state.function_body_starts, function)]
+	mut flow := [0]
+	mut result := repl_block(state, position, store, environment, flow, - 1)
+	result_type := load_string(state.function_result_types, function)
+	if result_type == "Void"
+		result = 0
+	else
+		result = repl_coerce(store, result, result_type)
+	end
+	store.depth[0] -= 1
+	state.checked[0] = previous_body
+	state.active_module[0] = previous_module
+	store.active_program[0] = previous_program
+	return result
+end
+
 def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, expected: String): ReplReference
+	if token_is(state, position[0], "fn")
+		origin := position[0]
+		syntax := state.lambdas[sparse_integer_at(state.lambda_origins, origin) - 1]
+		position[0] = syntax.finish
+		return repl_reference(repl_closure(state, origin, store, environment))
+	end
 	if token_is(state, position[0], "try")
 		origin := position[0]
 		position[0] += 1
@@ -288,12 +333,12 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 			return operand
 		end
 		operation := result_projection(state, origin, false)
-		if operation.origin < 0 || store.types[operand.value] != operation.result_type
+		if operation.origin < 0 || repl_type(store, operand.value) != operation.result_type
 			store.error[0] = "Result operand disagrees with its checked operation"
 			return repl_reference(0)
 		end
 		payload := store.children[operand.value][0]
-		if store.integers[operand.value] == operation.ok_variant
+		if repl_variant(store, operand.value) == operation.ok_variant
 			return repl_reference(payload)
 		end
 		converted := repl_coerce(store, payload, operation.boundary_error)
@@ -398,10 +443,10 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 				return repl_reference(environment.flow[1])
 			end
 			if element == ""
-				element = store.types[value.value]
+				element = repl_type(store, value.value)
 			end
 			if array_element_type(expected) == ""
-				element = nullable_common(element, store.types[value.value])
+				element = nullable_common(element, repl_type(store, value.value))
 			end
 			children.push(value.value)
 			if token_is(state, position[0], ",")
@@ -595,10 +640,31 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 			result = ReplReference.new(value: repl_payload(store, result.value), binding: result.binding, container: result.container, slot: result.slot)
 		end
 		value := repl_get(store, result.value)
+		if token_is(state, position[0], "(")
+			parts := callable_parts(value.type_name)
+			position[0] += 1
+			mut arguments: Array<Integer> := []
+			while !token_is(state, position[0], ")") && store.error[0] == ""
+				argument := repl_expression(state, position, store, environment, 1, parts[arguments.size() + 1])
+				if environment.flow[0] != 0
+					return repl_reference(environment.flow[1])
+				end
+				arguments.push(argument.value)
+				if token_is(state, position[0], ",")
+					position[0] += 1
+				end
+			end
+			position[0] += 1
+			if store.error[0] != ""
+				return repl_reference(0)
+			end
+			result = repl_reference(repl_indirect_call(store, result.value, arguments))
+			next
+		end
 		if token_is(state, position[0], "[")
 			if value.type_name == "Hash" || hash_key_type(value.type_name) != ""
 				plan := checked_hash_plan(state, position[0])
-				store.types[result.value] = plan.type_name
+				repl_set_type(store, result.value, plan.type_name)
 				position[0] += 1
 				key := repl_expression(state, position, store, environment, 1, plan.key_type)
 				if environment.flow[0] != 0
@@ -765,7 +831,7 @@ def repl_expression(mut state: CompilerState, mut position: Array<Integer>, mut 
 						return repl_reference(0)
 					end
 					plan := checked_range_require(state, expression_origin, origin, end_origin, position[0])
-					if plan.origin < 0 || store.types[result.value] != plan.start_type || store.types[right.value] != plan.end_type
+					if plan.origin < 0 || repl_type(store, result.value) != plan.start_type || repl_type(store, right.value) != plan.end_type
 						store.error[0] = "Range operands disagree with checked MIR"
 						return repl_reference(0)
 					end
@@ -835,7 +901,7 @@ def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut s
 	if store.error[0] != ""
 		return 0
 	end
-	if store.types[receiver] != plan.type_name || position[0] != plan.receiver_finish
+	if repl_type(store, receiver) != plan.type_name || position[0] != plan.receiver_finish
 		store.error[0] = "iteration receiver disagrees with checked MIR"
 		return 0
 	end
@@ -1022,15 +1088,15 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 	end
 	if assignment
 		position[0] += 1
-		mut expected := store.types[left.value]
+		mut expected := repl_type(store, left.value)
 		if left.binding >= 0
-			expected = store.types[repl_binding_value(store, environment, left.binding)]
+			expected = repl_type(store, repl_binding_value(store, environment, left.binding))
 		end
 		mut hash_assignment := false
 		if left.container >= 0
-			if hash_key_type(store.types[left.container]) != ""
+			if hash_key_type(repl_type(store, left.container)) != ""
 				hash_assignment = true
-				expected = hash_value_type(store.types[left.container])
+				expected = hash_value_type(repl_type(store, left.container))
 			end
 		end
 		right := repl_statement_expression(state, position, store, environment, expected)
@@ -1093,7 +1159,7 @@ end
 def repl_hash_method(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, receiver: Integer): Integer
 	plan := checked_hash_plan(state, position[0])
 	position[0] += 1
-	store.types[receiver] = plan.type_name
+	repl_set_type(store, receiver, plan.type_name)
 	mut argument := 0
 	if plan.kind == 5 || plan.kind == 6 || plan.kind == 13
 		argument = repl_expression(state, position, store, environment, 1, plan.key_type).value
@@ -1204,9 +1270,9 @@ def repl_control(mut state: CompilerState, mut position: Array<Integer>, mut sto
 			position[0] = branch.condition
 			condition := repl_expression(state, position, store, environment, 1, "Boolean")
 			selected = store.integers[condition.value] != 0
-		elsif control.kind == 2 && branch.condition >= 0 && find_enum_type(state, store.types[selector]) >= 0
+		elsif control.kind == 2 && branch.condition >= 0 && find_enum_type(state, repl_type(store, selector)) >= 0
 			pattern := state.checked[0].enum_patterns[sparse_integer_at(state.checked[0].enum_pattern_origins, branch.condition) - 1]
-			selected = store.integers[selector] == pattern.variant
+			selected = repl_variant(store, selector) == pattern.variant
 			if selected
 				mut slot := 0
 				while slot < pattern.bindings.size()
@@ -1217,7 +1283,7 @@ def repl_control(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		elsif control.kind == 2 && branch.condition >= 0
 			position[0] = branch.condition
 			while position[0] < branch.condition_finish && !selected
-				pattern := repl_expression(state, position, store, environment, 1, store.types[selector])
+				pattern := repl_expression(state, position, store, environment, 1, repl_type(store, selector))
 				comparison := repl_numeric(store, selector, "==", pattern.value)
 				selected = store.integers[comparison] != 0
 				if token_is(state, position[0], ",")
@@ -1259,12 +1325,12 @@ def repl_statement_expression(mut state: CompilerState, mut position: Array<Inte
 		return operand
 	end
 	operation := result_projection(state, origin, true)
-	if operation.origin < 0 || store.types[operand.value] != operation.result_type
+	if operation.origin < 0 || repl_type(store, operand.value) != operation.result_type
 		store.error[0] = "Result operand disagrees with its checked operation"
 		return repl_reference(0)
 	end
 	mut value := store.children[operand.value][0]
-	if store.integers[operand.value] == operation.err_variant
+	if repl_variant(store, operand.value) == operation.err_variant
 		saved := environment.count[0]
 		repl_bind(environment, load_string(state.token_texts, handler.binding), value, 0)
 		position[0] = handler.body

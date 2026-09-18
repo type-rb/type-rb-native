@@ -90,7 +90,11 @@ def check_function_body(mut state: CompilerState, function_index: Integer, mut l
 		if state.generic_template_mode[0] || state.lambda_phase[0] == 1
 			completion := check_block_value(state, position, locals, result_type, - 1, false)
 			if result_type != "Void" && completion.type_name != "Never"
-				diagnostic(state, "TRBN4004", load_integer(state.function_lines, function_index), "generic function must return on every completing path")
+				mut message := "function must return on every completing path"
+				if state.generic_template_mode[0]
+					message = "generic " + message
+				end
+				diagnostic(state, "TRBN4004", load_integer(state.function_lines, function_index), message)
 			end
 		else
 			check_block(state, position, locals, result_type, - 1)
@@ -124,9 +128,10 @@ def check_function_body(mut state: CompilerState, function_index: Integer, mut l
 end
 
 # Finish closure/generic/default discovery before freezing the MIR catalog.
-# Programs without fn retain the existing single checking pass.
+# File programs without fn retain the existing single checking pass.
+# REPL witnesses also analyze retained shared bindings before MIR lowering.
 def analyze_callable_bodies(mut state: CompilerState): Boolean
-	if state.lambdas.size() == 0 || state.hash_repl[0]
+	if state.lambdas.size() == 0 && !state.hash_repl[0]
 		return true
 	end
 	state.lambda_phase[0] = 1

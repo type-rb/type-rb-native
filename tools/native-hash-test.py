@@ -3,6 +3,7 @@
 import argparse
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 
@@ -121,10 +122,13 @@ end
 
         # Compile the TypeRB-authored bucket implementation directly. This proves
         # deletion clears references and releases capacity independently of RSS.
-        for module in ('repl_model', 'repl_hash'):
-            (root / (module + '.trb')).write_text((repository / 'compiler/cli' / (module + '.trb')).read_text())
-        (root / 'host.trb').write_text((repository / 'compiler/cli/host.trb').read_text())
-        source = root / 'storage.trb'
+        # REPL values retain checked program/type owners. Keep the internal
+        # consumer's imports complete as that representation evolves.
+        for directory in (repository / 'compiler/src', repository / 'compiler/cli'):
+            for module in directory.glob('*.trb'):
+                if not module.name.endswith('_test.trb'):
+                    shutil.copyfile(module, root / module.name)
+        source = root / 'hash_storage_probe.trb'
         source.write_text('''import { repl_store, repl_integer } from repl_model
 import { repl_hash_new, repl_hash_set, repl_hash_delete } from repl_hash
 

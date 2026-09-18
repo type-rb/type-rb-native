@@ -1,3 +1,5 @@
+import { callable_parts } from callable_types
+import { integer_string } from literals
 import { find_enum_type } from enum_types
 import { nullable_element } from nullable_types
 import { hash_key_type } from hash_types
@@ -37,6 +39,25 @@ def repl_default_seen(state: CompilerState, type_name: String, seen: Array<Strin
 	end
 	if string_starts_with(type_name, "Array<")
 		return "[]"
+	end
+	parts := callable_parts(type_name)
+	if parts.size() > 0
+		mut source := "fn("
+		mut parameter := 1
+		while parameter < parts.size()
+			if parameter > 1
+				source += ", "
+			end
+			source += "_argument" + integer_string(parameter) + ": " + repl_witness_type_name(state, parts[parameter])
+			parameter += 1
+		end
+		if parts[0] == "Void"
+			return source + ")\nreturn\nend"
+		end
+		source += "): " + repl_witness_type_name(state, parts[0]) + "\n"
+		# A never-executed typed projection works even when the result contains
+		# this callable recursively. Do not construct or replay a result value.
+		return source + "_witness: Array<" + repl_witness_type_name(state, parts[0]) + "> := []\nreturn _witness[0]\nend"
 	end
 	mut path: Array<String> := []
 	mut cursor := 0

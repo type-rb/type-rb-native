@@ -404,10 +404,10 @@ test('exact CLI inputs run quick and CLI authorities without core measurements',
   }
   const workflow = readFileSync(new URL('../.github/workflows/native-cli.yml', import.meta.url), 'utf8');
   const cliTests = readFileSync(new URL('../tools/native-cli-test.py', import.meta.url), 'utf8');
-  for (const name of ['native-enum-test.py', 'native-repl-flow-test.py']) {
+  for (const name of ['native-enum-test.py', 'native-repl-flow-test.py', 'native-callable-test.py']) {
     assert(cliTests.includes(name), `the CLI authority must execute ${name}`);
   }
-  for (const name of ['repl_check.trb', 'repl_defaults.trb']) {
+  for (const name of ['repl_check.trb', 'repl_defaults.trb', 'repl_callables.trb', 'repl_types.trb']) {
     assert(cliInputs.has(`compiler/cli/${name}`));
   }
   assert(workflow.includes('  workflow_call:'));

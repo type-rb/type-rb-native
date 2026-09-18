@@ -11,8 +11,9 @@ import { describe, expect, test } from trb/std/test
 import trb/std/process
 import trb/std/result
 
-def submission_test_state(source: String, start_line: Integer, finish_line: Integer, facts: Array<CheckedFlowFact>, reset_line: Integer =- 1): CompilerState
+def submission_test_state(source: String, start_line: Integer, finish_line: Integer, facts: Array<CheckedFlowFact>, reset_line: Integer =- 1, captured: Array<String> = []): CompilerState
 	mut state := compiler_new(source.size() + 1)
+	state.hash_repl[0] = true
 	lex(state, source)
 	parse_module(state, 0, state.entry_module[0])
 	resolve(state)
@@ -32,12 +33,30 @@ def submission_test_state(source: String, start_line: Integer, finish_line: Inte
 		end
 		resets.push(reset)
 	end
-	state.submissions.push(CheckedSubmission.new(start: start, finish: finish, before: facts, after: [], types: string_storage(source.size() + 1), mutable: integer_storage(source.size() + 1), resets: resets))
+	state.submissions.push(CheckedSubmission.new(start: start, finish: finish, before: facts, after: [], types: string_storage(source.size() + 1), mutable: integer_storage(source.size() + 1), resets: resets, captured: captured))
 	check(state)
 	return state
 end
 
 describe("Checked interactive submissions") do
+	test("preserves widening facts during analysis without emitting MIR") do
+		state := submission_test_state("def main()\nmut number: Float? := nil\nnumber = 3\nnumber.to_i()\nreturn\nend\n", 2, 5, [])
+		expect(has_diagnostic(state)).to_be_false()
+		expect(state.submissions[0].after.size()).to_equal(1)
+		expect(state.submissions[0].after[0].presence).to_equal(2)
+	end
+
+	test("invalidates retained mutable captures across a later submission call") do
+		prefix := "def touch()\nreturn\nend\ndef main()\nmut value: String? := nil\n"
+		facts := [CheckedFlowFact.new(name: "value", field: "", presence: 2)]
+		unsafe := submission_test_state(prefix + "touch()\nputs(value.size())\nreturn\nend\n", 6, 8, facts, - 1, ["value"])
+		expect(has_diagnostic(unsafe)).to_be_true()
+		safe := submission_test_state(prefix + "touch()\nif value != nil\nputs(value.size())\nend\nreturn\nend\n", 6, 10, facts, - 1, ["value"])
+		expect(has_diagnostic(safe)).to_be_false()
+		ordinary := submission_test_state(prefix + "touch()\nputs(value.size())\nreturn\nend\n", 6, 8, facts)
+		expect(has_diagnostic(ordinary)).to_be_false()
+	end
+
 	test("keeps explicit failure boundaries when checking accepted history") do
 		source := "def main()\nmut value: String? := nil\nvalue = \"kept\"\nputs(value == nil)\nvalue = \"again\"\nputs(value.size())\nreturn\nend\n"
 		state := submission_test_state(source, 2, 7, [], 4)
@@ -58,7 +77,7 @@ describe("Checked interactive submissions") do
 			before := control_test_output(emit_qbe(state))
 			intrinsic_mir_erase(state)
 			state.checked[0].nullable_reads.used[0] = 0
-			state.submissions[0] = CheckedSubmission.new(start: - 1, finish: - 1, before: [], after: [], types: string_storage(1), mutable: integer_storage(1), resets: [])
+			state.submissions[0] = CheckedSubmission.new(start: - 1, finish: - 1, before: [], after: [], types: string_storage(1), mutable: integer_storage(1), resets: [], captured: [])
 			expect(control_test_output(emit_qbe(state))).to_equal(before)
 			case logical_run_qbe(qbe, control_test_output(emit_qbe(state)))
 			when Result::Ok(output)

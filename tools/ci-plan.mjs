@@ -66,6 +66,7 @@ export const cliInputs = new Set([
   'tools/check-native-cli.sh',
   'tools/native-cli-test.py',
   'tools/native-enum-test.py',
+  'tools/native-callable-test.py',
   'tools/native-repl-flow-test.py',
   'tools/native-hash-test.py',
   'tools/native-cli-key-test.py',
@@ -91,6 +92,8 @@ export const cliInputs = new Set([
   'compiler/cli/repl_syntax.trb',
   'compiler/cli/repl_values.trb',
   'compiler/cli/repl_model.trb',
+  'compiler/cli/repl_callables.trb',
+  'compiler/cli/repl_types.trb',
   'compiler/cli/repl_hash.trb',
 ]);
 

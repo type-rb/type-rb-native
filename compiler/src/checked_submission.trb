@@ -2,7 +2,7 @@ import { token_is } from syntax_tokens
 import { nullable_fact, nullable_lookup } from nullable_flow
 import { nullable_element } from nullable_types
 import { find_field, find_record_type } from type_resolution
-import { CheckedFlowFact, CheckedLocals, CompilerState, diagnostic, local_find } from state
+import { CheckedFlowFact, CheckedLocals, CompilerState, diagnostic, local_find, local_identity } from state
 import { load_integer, load_string, store_integer, store_string } from storage
 
 # These facts come from a successfully checked and completed submission. They
@@ -21,6 +21,26 @@ def checked_submission_boundary(mut state: CompilerState, mut locals: CheckedLoc
 		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "return is only valid inside a function or method")
 	end
 	if origin == submission.start
+		submission.captured.each do |name|
+			binding := local_find(locals, name)
+			if binding < 0 || load_integer(locals.mutable, binding) == 0
+				diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "invalid retained capture binding")
+			else
+				identity := local_identity(locals, binding)
+				store_integer(locals.mir_cell_plans, identity, 1)
+				if state.lambda_phase[0] == 1
+					mut planned := false
+					state.checked[0].shared_bindings.each do |existing|
+						if existing == identity
+							planned = true
+						end
+					end
+					if !planned
+						state.checked[0].shared_bindings.push(identity)
+					end
+				end
+			end
+		end
 		submission.before.each do |fact|
 			binding := local_find(locals, fact.name)
 			mut field :=- 1
@@ -55,7 +75,7 @@ def checked_submission_boundary(mut state: CompilerState, mut locals: CheckedLoc
 			end
 		end
 	end
-	if origin == submission.finish
+	if origin == submission.finish && state.lambda_phase[0] != 1
 		mut binding := 0
 		while binding < locals.count[0]
 			declared := load_string(locals.types, binding)
@@ -102,7 +122,7 @@ end
 # Display and :type consume the same checked expression/assignment result.
 # Backend emission has no dependency on this optional frontend projection.
 def checked_submission_result(mut state: CompilerState, origin: Integer, type_name: String, mutable: Integer)
-	if state.submissions.size() > 0 && state.checked[0].function >= 0
+	if state.submissions.size() > 0 && state.checked[0].function >= 0 && state.lambda_phase[0] != 1
 		store_string(state.submissions[0].types, origin, type_name)
 		store_integer(state.submissions[0].mutable, origin, mutable)
 	end
