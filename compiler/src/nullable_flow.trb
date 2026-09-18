@@ -4,7 +4,7 @@ import { CheckedValue, checked_condition_value, checked_nullable_target, checked
 import { mir_checked_nullable } from nullable_mir
 import { nullable_element } from nullable_types
 import { CheckedLocals, CompilerState, NullableFact, local_find, local_identity, local_slot } from state
-import { load_string, store_string } from storage
+import { load_integer, load_string, sparse_integer_at, store_string } from storage
 
 def nullable_version(locals: CheckedLocals, binding: Integer): Integer
 	identity := local_identity(locals, binding)
@@ -122,6 +122,7 @@ end
 
 # Repeated bodies cannot retain a pre-loop fact for a binding they replace.
 def nullable_loop_writes(state: CompilerState, mut locals: CheckedLocals, start: Integer, finish: Integer)
+	nullable_capture_call(locals)
 	mut cursor := start
 	while cursor + 1 < finish
 		if token_is(state, cursor + 1, "=") || binary_operator_id(load_string(state.token_texts, cursor + 1)) >= 17
@@ -144,5 +145,17 @@ def nullable_loop_writes(state: CompilerState, mut locals: CheckedLocals, start:
 			end
 		end
 		cursor += 1
+	end
+end
+
+# An unknown call may invoke an escaped closure which replaces a shared cell.
+# Version changes also invalidate field proofs and propagate through branch joins.
+def nullable_capture_call(mut locals: CheckedLocals)
+	mut slot := 0
+	while slot < locals.count[0]
+		if load_integer(locals.mutable, slot) > 0 && sparse_integer_at(locals.mir_cell_plans, local_identity(locals, slot)) > 0
+			nullable_replace(locals, slot, load_string(locals.types, slot))
+		end
+		slot += 1
 	end
 end

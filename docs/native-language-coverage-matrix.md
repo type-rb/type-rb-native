@@ -20,7 +20,7 @@
 | Hash literal and required lookup | accepts | accepts | matches reference | matches reference |
 | Array each with live growth and index | accepts | accepts | matches reference | matches reference |
 | Range each (inclusive / exclusive / reversed) | accepts | accepts | matches reference | matches reference |
-| Range with captured endpoint effects (requires fn) | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Range with captured endpoint effects (requires fn) | accepts | accepts | matches reference | rejects valid input |
 | UTF-8 length, indexing, concatenation and interpolation | accepts | accepts | matches reference | matches reference |
 | Unicode local identifier | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Unicode scalar escapes | rejects valid input | rejects valid input | not reached | rejects valid input |
@@ -50,8 +50,8 @@
 | Generic function application | accepts | accepts | matches reference | matches reference |
 | Generic record | accepts | accepts | matches reference | matches reference |
 | Literal-field union narrowing | rejects valid input | rejects valid input | not reached | rejects valid input |
-| Typed function value and lexical capture | rejects valid input | rejects valid input | not reached | rejects valid input |
-| Function value mutates captured binding | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Typed function value and lexical capture | accepts | accepts | matches reference | rejects valid input |
+| Function value mutates captured binding | accepts | accepts | matches reference | rejects valid input |
 | Array alias and parameter rebinding | accepts | accepts | matches reference | matches reference |
 | Array index captured before growing RHS | accepts | accepts | matches reference | matches reference |
 | Nested managed Array values | accepts | accepts | matches reference | matches reference |
@@ -266,3 +266,9 @@
 | Unused callback call rejects a wrong argument type | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Unused callback call rejects a wrong return type | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Callback type rejects Void as a parameter | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Anonymous positional and higher-order calls | accepts | accepts | matches reference | rejects valid input |
+| Nested closures share cells across independent factories | accepts | accepts | matches reference | rejects valid input |
+| Escaped iteration bindings retain independent cells | accepts | accepts | matches reference | rejects valid input |
+| Concrete closure signatures and callable defaults | accepts; reference rejects | accepts; reference rejects | differs | rejects as reference |
+| Immutable nullable proofs and mixed closure captures | accepts | accepts | matches reference | rejects valid input |
+| Captured nominal Hash and Result values survive replacement | accepts | accepts | matches reference | rejects valid input |

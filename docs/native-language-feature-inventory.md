@@ -21,7 +21,7 @@ Each count describes registered probes, not language coverage percentages.
 | Nominal newtypes | basic | 1 / 1 | Closed/private constructors, methods, immutable representation and boundary diagnostics | NewtypeStatement |
 | Generic declarations and applications | basic | 11 / 67 | Generic methods, classes and interfaces; Wider constraints and type applications | GenericExpression |
 | Literal types and discriminated unions | basic | 1 / 1 | Shared discriminants, branch narrowing and invalid mutation/common-type boundaries |  |
-| Function values and lexical capture | basic | 3 / 9 | Authored fn creation and retained REPL values; captured environments, escaping/cyclic closures, shared mutable aliases and independent return/transfer boundaries; Callable equality, nullable signatures, parameter capabilities and generic closure specialization | LambdaExpression |
+| Function values and lexical capture | basic | 9 / 15 | Retained REPL code and environments across submissions; nominal remapping, collection and replay; Named declarations as values, callable equality, nullable signatures and remaining parameter-capability boundaries | LambdaExpression |
 | Arrays and checked indexes | basic | 1 / 8 | Removal during assignments/iteration and retained managed receivers; Remaining Array receiver APIs and invalid element/mutation combinations | ArrayLiteral, IndexExpression |
 | Hash values and operations | basic | 0 / 5 | All key/value representations, empty inference, managed lifetimes and missing-key failures | HashLiteral |
 | Structured and value-producing iteration | basic | 2 / 4 | Map/filter/reduce/chains, nested transfers, receiver replacement and live growth | IterationExpression, BlockExpression |

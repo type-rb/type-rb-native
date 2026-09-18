@@ -1,9 +1,8 @@
 # Verified callable signatures and indirect calls
 
-Status: implemented internal foundation; integration requires the checks below.
-Authored `fn` values and lexical captures remain unsupported. This checkpoint
-adds the typed call boundary needed by closure lowering, not complete ordinary
-function-value support.
+Status: authored `fn` checking, building and execution use verified MIR.
+Retained REPL function values and named declarations used as values remain gaps;
+this is not complete function-value coverage or a public callable ABI.
 
 ## Parsed anonymous bodies
 
@@ -23,10 +22,10 @@ it cannot accidentally expose nested names outside their lexical boundary.
 Body checking and capture selection now use the independent frames below.
 
 The REPL collects a complete anonymous body, including nested `fn` and compact
-statement separators. Ordinary checking still rejects construction explicitly
-until lexical capture lowering and retained REPL environments are implemented.
-The rejected ordinary probes remain coverage gaps, with updated diagnostic
-evidence. This parser checkpoint does not make function values executable.
+statement separators, but rejects construction until checked code and environments
+can be retained across submissions. Ordinary files materialize these bodies through
+the analysis and lowering phases below. The shared inventory records each path
+separately, keeping the interactive gap visible.
 
 ## Anonymous lexical checking
 
@@ -50,16 +49,39 @@ proofs are copied with the new lexical identity; captured storage keeps its
 declared type. Return, try/catch and must-use
 checks belong to that body, including unused nested bodies and every completing
 return path. Generic instances sharing source tokens retain distinct resolved
-projections. Anonymous parameters stay outside the named declaration catalog;
-nested expression facts stay in their own body tables, and the parent's path
-facts remain unchanged.
+projections. Parsed anonymous parameters stay outside the named declaration
+catalog. Analysis materializes separate concrete signatures after selecting captures; nested
+expression facts stay in their own body tables. Checking an anonymous body does
+not execute it or change the parent's path facts.
 
-This is semantic preparation for executable closure lowering. Ordinary fn
-construction still reports the explicit unsupported diagnostic after valid body
-analysis; invalid bodies report their actual checking error first. The ordinary
-coverage gaps remain. The shared-storage path below still needs coordinated
-body materialization and retained REPL execution before function-value support
-can be claimed.
+## Analysis and materialization
+
+Programs containing `fn` first check their concrete named/default bodies without
+emitting instructions. Anonymous analysis discovers nested captures, generic calls
+and default initializers through a worklist. Each closure receives a private
+function identity with captured parameters first and authored parameters after
+that prefix. All declarations are complete before MIR types/signatures or runtime
+adapters are emitted. Programs without `fn` keep their existing single pass.
+
+`lambda_lowering.trb` owns catalog materialization, inherited frame binding and
+environment construction. Each concrete body retains resolved type applications,
+anonymous identities and selected shared-binding plans. Lowering rechecks into
+fresh operation tables, avoiding duplicate expression facts from analysis. Empty
+Hash literals retain their analyzed concrete initializer types before being placed
+in shared cells; later inference cannot change the cell's storage type.
+
+Only actual captures occupy runtime parameters. Sparse child declaration IDs
+preserve the analyzed lexical identities even when unreferenced inherited names
+have no active slot. Mutable captures adopt the parent's cell; they are never
+boxed again. Authored mutable parameters reserve their incoming SSA IDs before
+allocating their own cells. Immutable nullable binding proofs remain available in
+the child; mutable and field proofs are not inherited.
+
+Unknown direct and indirect calls invalidate nullable facts for mutable captured
+bindings. Version changes also invalidate readonly-field proofs and propagate
+through conditional joins. Repeated regions discard these proofs before their
+first condition/body, so a later iteration cannot reuse a pre-call proof. This
+is conservative call-effect handling; unsafe reference acceptance is not copied.
 
 ## Ownership and representation
 
@@ -106,10 +128,10 @@ shadowed bindings cannot donate flow facts to a later occupant of the same slot.
 Each checked body owns these identities. Capture analysis records the unique
 mutable declaration identities requiring shared storage in each concrete body.
 
-This is not a public callable ABI or completed function-value syntax. Before
-accepting authored closures, lowering must materialize the selected captures and checked bodies, preserve
-readonly/mutable capabilities in shared mutable cells, and retain closure
-bodies/environments across REPL submissions. Named declarations used as values also remain unsupported.
+This is not a public callable ABI or completed function-value coverage. Ordinary
+files materialize selected captures and checked bodies while preserving readonly
+and mutable capabilities. Retained REPL code/environment identity and named
+declarations used as values still need implementation.
 
 The REPL pool now separates reusable name-lookup slots from capturable binding
 identity. Ordinary bindings retain direct value IDs. On first capture, a binding
@@ -144,11 +166,9 @@ cell; late capture-site boxing and stale identities are rejected. Multiple closu
 environments retain the same cell, and separate factory calls allocate distinct
 cells. Managed payload replacement uses existing Array tracing and root plans.
 
-This storage path is exercised through explicit analyzed plans and internal
-closure factories. Ordinary `fn` remains rejected until the checker orchestrates
-analysis before lowering, materializes concrete anonymous bodies and retains
-REPL code with the environment. Unknown calls must also invalidate mutable
-capture flow proofs before authored mutable closures are accepted.
+The ordinary pipeline now supplies these plans before lowering and constructs
+managed closures from the analyzed bindings. Internal explicit-plan fixtures remain
+independent controls for malformed storage and stale identity rejection.
 
 ## Validation and completion boundary
 
@@ -163,12 +183,15 @@ and instruction controls independently reject unverifiable MIR. Removing capture
 or environment roots is rejected independently of the runtime execution tests.
 Repeated scope-slot reuse also verifies binding identity and nullable facts.
 
-The shared ordinary inventory distinguishes unused callback signature checking
-from constructing and executing a function value. Its existing `fn`/capture
-cases remain rejected and visible as gaps in Capabilities. Internal fixture
-execution does not mark those ordinary cases as supported.
+The shared ordinary inventory distinguishes signature checking, file execution
+and retained REPL support. It includes higher-order calls, nested shared cells,
+independent factories, iteration cells, generic/default closures, nullable and
+managed captures. Ordinary check/build/execute observations update Capabilities;
+REPL construction remains explicitly rejected. Additional compiler tests erase
+frontend facts and force collection, and reject stale proofs after calls and at
+loop entry. Compiler implementation does not self-use the new function syntax.
 
-The canonical compiler closure contains 97 modules. Integration requires
+The canonical compiler closure contains 98 modules. Integration requires
 unchanged-seed ordinary core/CLI fixed points, exact recovery-source validation,
 snapshot-v4 compatibility, complete hosted recovery, target and lifetime checks.
 Compiler implementation does not use the new function syntax. No seed, reference

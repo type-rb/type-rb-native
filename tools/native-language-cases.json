@@ -515,13 +515,19 @@
         "callable-arity-rejection",
         "callable-argument-rejection",
         "callable-result-rejection",
-        "callable-void-parameter"
+        "callable-void-parameter",
+        "closure-positional",
+        "closure-shared-nested",
+        "closure-iteration-cells",
+        "closure-generic-defaults",
+        "closure-nullable-captures",
+        "closure-managed-captures"
       ],
       "pending": [
-        "Authored fn creation and retained REPL values; captured environments, escaping/cyclic closures, shared mutable aliases and independent return/transfer boundaries",
-        "Callable equality, nullable signatures, parameter capabilities and generic closure specialization"
+        "Retained REPL code and environments across submissions; nominal remapping, collection and replay",
+        "Named declarations as values, callable equality, nullable signatures and remaining parameter-capability boundaries"
       ],
-      "note": "Unused callback signature/body probes validate function types and call diagnostics. Internal MIR fixtures verify code references and indirect calls, but ordinary fn/capture creation remains rejected; these probes do not establish executable closure support."
+      "note": "Ordinary file checking, building and execution materialize authored fn bodies through MIR, including nested/escaping closures, shared mutable bindings, iteration cells and concrete generic/default signatures. Retained REPL function construction remains a measured gap; internal forced-GC and frontend-erasure controls supplement these ordinary probes."
     },
     {
       "id": "arrays",
@@ -1734,16 +1740,20 @@
       },
       "native": {
         "check": {
-          "code": 1,
-          "stdout": "",
-          "stderr": "<case>/main.trb:4: error[TRBN4004]: fn values require lexical capture lowering, which is not yet supported\n"
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
         },
         "build": {
-          "code": 1,
+          "code": 0,
           "stdout": "",
-          "stderr": "<case>/main.trb:4: error[TRBN4004]: fn values require lexical capture lowering, which is not yet supported\n"
+          "stderr": ""
         },
-        "execute": null,
+        "execute": {
+          "code": 0,
+          "stdout": "0\n1\n2\n9\n1\n9\n3\n",
+          "stderr": ""
+        },
         "repl": {
           "code": 0,
           "stdout": "",
@@ -3224,16 +3234,20 @@
       },
       "native": {
         "check": {
-          "code": 1,
-          "stdout": "",
-          "stderr": "<case>/main.trb:4: error[TRBN4004]: fn values require lexical capture lowering, which is not yet supported\n"
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
         },
         "build": {
-          "code": 1,
+          "code": 0,
           "stdout": "",
-          "stderr": "<case>/main.trb:4: error[TRBN4004]: fn values require lexical capture lowering, which is not yet supported\n"
+          "stderr": ""
         },
-        "execute": null,
+        "execute": {
+          "code": 0,
+          "stdout": "item 3\n",
+          "stderr": ""
+        },
         "repl": {
           "code": 0,
           "stdout": "",
@@ -3271,16 +3285,20 @@
       },
       "native": {
         "check": {
-          "code": 1,
-          "stdout": "",
-          "stderr": "<case>/main.trb:4: error[TRBN4004]: fn values require lexical capture lowering, which is not yet supported\n"
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
         },
         "build": {
-          "code": 1,
+          "code": 0,
           "stdout": "",
-          "stderr": "<case>/main.trb:4: error[TRBN4004]: fn values require lexical capture lowering, which is not yet supported\n"
+          "stderr": ""
         },
-        "execute": null,
+        "execute": {
+          "code": 0,
+          "stdout": "3\n",
+          "stderr": ""
+        },
         "repl": {
           "code": 0,
           "stdout": "",
@@ -13514,6 +13532,308 @@
           "code": 0,
           "stdout": "signature checked\n",
           "stderr": "(trb):1:23: error[TRB3000]: Void may be used only as the return type of a function type\n"
+        }
+      }
+    },
+    {
+      "id": "closure-positional",
+      "title": "Anonymous positional and higher-order calls",
+      "declarations": "alias Callback = (Integer) -> Integer\ndef apply(callback: Callback, value: Integer): Integer\nreturn callback(value)\nend\ndef probe()\ncallback := fn(value: Integer): Integer; return value + 2; end\nputs(apply(callback, 40))\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "42\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "42\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "42\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):6: error[TRBN4004]: fn values require lexical capture lowering, which is not yet supported\n(trb):5: error[TRBN4003]: unresolved function probe\n"
+        }
+      }
+    },
+    {
+      "id": "closure-shared-nested",
+      "title": "Nested closures share cells across independent factories",
+      "declarations": "alias Counter = () -> Integer\ndef factory(mut value: Integer): () -> Counter\n_unused := 100\nlabel := \"counter\"\nreturn fn(): Counter\nputs(label)\nmut delta := 2\nreturn fn(): Integer\nvalue += delta\ndelta += 1\nreturn value\nend\nend\nend\ndef probe()\nouter := factory(10)\na := outer()\nb := outer()\nother := factory(100)()\nputs(a())\nputs(a())\nputs(b())\nputs(other())\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "counter\ncounter\ncounter\n12\n15\n17\n102\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "counter\ncounter\ncounter\n12\n15\n17\n102\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "counter\ncounter\ncounter\n12\n15\n17\n102\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):5: error[TRBN4004]: fn values require lexical capture lowering, which is not yet supported\n(trb):3: error[TRBN4003]: unresolved function factory\n(trb):2: error[TRBN4003]: unresolved function probe\n"
+        }
+      }
+    },
+    {
+      "id": "closure-iteration-cells",
+      "title": "Escaped iteration bindings retain independent cells",
+      "declarations": "alias Read = () -> String\ndef probe()\nmut callbacks: Array<Read> := []\n[1, 2, 3].each do |i|\nmut value := i.to_s()\ncallback := fn(): String\nvalue = value + \"!\"\nreturn value\nend\ncallbacks.push(callback)\nend\nputs(callbacks[0]())\nputs(callbacks[1]())\nputs(callbacks[0]())\nputs(callbacks[2]())\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "1!\n2!\n1!!\n3!\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "1!\n2!\n1!!\n3!\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "1!\n2!\n1!!\n3!\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):6: error[TRBN4004]: fn values require lexical capture lowering, which is not yet supported\n(trb):2: error[TRBN4003]: unresolved function probe\n"
+        }
+      }
+    },
+    {
+      "id": "closure-generic-defaults",
+      "title": "Concrete closure signatures and callable defaults",
+      "declarations": "def identity<T>(value: T): T; return value; end\ndef factory<T>(value: T): () -> T\nreturn fn(): T; return identity<T>(value); end\nend\ndef apply(callback: () -> Integer = factory<Integer>(7)): Integer\nreturn callback()\nend\ndef probe()\ninteger := factory<Integer>(42)\ntext := factory<String>(\"text\")\nputs(integer())\nputs(text())\nputs(apply())\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:5:37: error[TRB3000]: fn() expects 0..0 arguments, got 1\n<case>/main.trb:5:37: error[TRB3000]: default value has type Integer, expected () -> Integer\n<case>/main.trb:9:12: error[TRB3000]: fn() expects 0..0 arguments, got 1\n<case>/main.trb:10:9: error[TRB3000]: fn() expects 0..0 arguments, got 1\n<case>/main.trb:11:6: error[TRB3000]: function integer is not declared or imported\n<case>/main.trb:12:6: error[TRB3000]: function text is not declared or imported\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:5:37: error[TRB3000]: fn() expects 0..0 arguments, got 1\n<case>/main.trb:5:37: error[TRB3000]: default value has type Integer, expected () -> Integer\n<case>/main.trb:9:12: error[TRB3000]: fn() expects 0..0 arguments, got 1\n<case>/main.trb:10:9: error[TRB3000]: fn() expects 0..0 arguments, got 1\n<case>/main.trb:11:6: error[TRB3000]: function integer is not declared or imported\n<case>/main.trb:12:6: error[TRB3000]: function text is not declared or imported\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):5:37: error[TRB3000]: fn() expects 0..0 arguments, got 1\n(trb):5:37: error[TRB3000]: default value has type Integer, expected () -> Integer\n(trb):6:12: error[TRB3000]: fn() expects 0..0 arguments, got 1\n(trb):7:9: error[TRB3000]: fn() expects 0..0 arguments, got 1\n(trb):8:6: error[TRB3000]: function integer is not declared or imported\n(trb):9:6: error[TRB3000]: function text is not declared or imported\n(trb):10:6: error[TRB3000]: function apply is not declared or imported\n(trb):5:1: error[TRB3000]: function probe is not declared or imported\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "42\ntext\n7\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3: error[TRBN4004]: fn values require lexical capture lowering, which is not yet supported\n(trb):10: error[TRBN4003]: unresolved function apply\n(trb):5: error[TRBN4003]: unresolved function probe\n"
+        }
+      }
+    },
+    {
+      "id": "closure-nullable-captures",
+      "title": "Immutable nullable proofs and mixed closure captures",
+      "declarations": "def factory(value: String?, amount: Float, enabled: Boolean): () -> String\nif value != nil\nreturn fn(): String\nif enabled\nputs(amount.to_i())\nreturn value + \"!\"\nend\nreturn value\nend\nend\nreturn fn(): String; return \"empty\"; end\nend\ndef probe()\ncallback := factory(\"hello\", 2.5, true)\nputs(callback())\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "2\nhello!\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "2\nhello!\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "2\nhello!\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3: error[TRBN4004]: fn values require lexical capture lowering, which is not yet supported\n(trb):2: error[TRBN4003]: unresolved function factory\n(trb):1: error[TRBN4003]: unresolved function probe\n"
+        }
+      }
+    },
+    {
+      "id": "closure-managed-captures",
+      "title": "Captured nominal Hash and Result values survive replacement",
+      "declarations": "import trb/std/result\nalias Read = () -> String\nrecord Box\nvalue: String\nend\ndef factory(): Read\nmut value := Box.new(value: \"one\")\nmut table := {}\ntable[\"value\"] = \"two\"\nanswer: Result<String, String> := Result<String, String>::Ok(\"ok\")\nreturn fn(): String\nvalue = Box.new(value: value.value + \"!\")\ntable[\"value\"] = table[\"value\"] + \"?\"\ncase answer\nwhen Result::Ok(text)\nreturn value.value + table[\"value\"] + text\nwhen Result::Err(error)\nreturn error\nend\nend\nend\ndef probe()\ncallback := factory()\nputs(callback())\nputs(callback())\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "one!two?ok\none!!two??ok\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "one!two?ok\none!!two??ok\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "one!two?ok\none!!two??ok\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):11: error[TRBN4004]: fn values require lexical capture lowering, which is not yet supported\n(trb):7: error[TRBN4003]: unresolved function factory\n(trb):6: error[TRBN4003]: unresolved function probe\n"
         }
       }
     }

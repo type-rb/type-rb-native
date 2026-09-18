@@ -1,4 +1,6 @@
 import { CheckedLambda, callable_parts } from callable_types
+import { declare_lambda, lower_lambda } from lambda_lowering
+import { declare_default_functions } from default_arguments
 import { checked_body_new } from checked_body
 import { checked_return_type, lambda_captures, lambda_locals, lambda_names, lambda_use_binding } from lambda_checking
 import { mir_checked_callable_call } from mir_callables
@@ -45,6 +47,11 @@ def checked_hash_literal(mut state: CompilerState, mut position: Array<Integer>,
 	line := load_integer(state.token_lines, origin)
 	mut key_type := hash_key_type(expected)
 	mut value_type := hash_value_type(expected)
+	if state.lambda_phase[0] == 2 && expected == ""
+		analyzed := load_string(state.checked[0].hash_initial_types, origin)
+		key_type = hash_key_type(analyzed)
+		value_type = hash_value_type(analyzed)
+	end
 	saved_mir := locals.mir_state[0]
 	mut diverged := false
 	mut entries := 0
@@ -305,7 +312,7 @@ def check_primary(
 	kind := load_integer(state.token_kinds, origin)
 	if token_is(state, origin, "fn")
 		value := check_lambda_value(state, position, locals)
-		if locals.lambda_result.size() == 0 && !has_diagnostic(state)
+		if state.lambda_phase[0] == 0 && locals.lambda_result.size() == 0 && !has_diagnostic(state)
 			return type_diagnostic(state, line, "fn values require lexical capture lowering, which is not yet supported")
 		end
 		return value
@@ -1872,7 +1879,7 @@ end
 
 # Each fn is checked in its own projection and transfer scope. The statement
 # checker selects captures through actual bound references, including nested fn.
-# Construction remains rejected until these checked bodies have MIR storage.
+# Analysis selects captures; the lowering phase constructs their MIR environment.
 def check_lambda_value(mut state: CompilerState, mut position: Array<Integer>, mut parent: CheckedLocals): CheckedValue
 	origin := position[0]
 	line := load_integer(state.token_lines, origin)
@@ -1881,6 +1888,10 @@ def check_lambda_value(mut state: CompilerState, mut position: Array<Integer>, m
 		return type_diagnostic(state, line, "fn requires an owned syntax region")
 	end
 	syntax := state.lambdas[encoded - 1]
+	if state.lambda_phase[0] == 2
+		position[0] = syntax.finish
+		return lower_lambda(state, parent, origin)
+	end
 	previous := state.checked[0]
 	type_name := load_string(previous.lambda_types, origin)
 	mut locals := lambda_locals(state, parent, syntax, type_name)
@@ -1893,6 +1904,7 @@ def check_lambda_value(mut state: CompilerState, mut position: Array<Integer>, m
 	state.checked[0].generic_binding[0] = previous.generic_binding[0]
 	mut names := lambda_names(locals, state.token_count[0] + 1)
 	if resolve_body_names(state, syntax.body_start, syntax.body_finish, names)
+		declare_default_functions(state)
 		mut inner := [syntax.body_start]
 		result_type := checked_return_type(state, locals)
 		completion := check_block_value(state, inner, locals, result_type, - 1, false)
@@ -1911,6 +1923,10 @@ def check_lambda_value(mut state: CompilerState, mut position: Array<Integer>, m
 		return checked_value("Invalid", 0, origin, 0)
 	end
 	captures := lambda_captures(state, parent, locals, origin)
-	state.checked[0].lambdas.push(CheckedLambda.new(origin: origin, type_name: type_name, body: body, captures: captures))
+	mut lambda := CheckedLambda.new(origin: origin, type_name: type_name, body: body, inherited_count: locals.capture_parents.size(), function: [- 1], captures: captures)
+	state.checked[0].lambdas.push(lambda)
+	if state.lambda_phase[0] == 1
+		declare_lambda(state, lambda)
+	end
 	return checked_value(type_name, 0, origin, 0)
 end

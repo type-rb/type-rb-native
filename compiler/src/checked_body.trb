@@ -3,7 +3,7 @@ import { CheckedLambda } from callable_types
 import { EnumPattern } from enum_model
 import { MirHashOperation } from hash_mir
 import { MirIteration, MirRangeConstruction } from iteration_mir
-import { IntegerStorage, StringStorage, integer_storage_span, string_storage_span } from storage
+import { IntegerStorage, StringStorage, integer_storage_span, store_string, string_storage_span } from storage
 
 # Optional frontend/REPL projections for one concrete function body. MIR owns
 # executable semantics; these tables may be discarded after checking.
@@ -28,6 +28,7 @@ record CheckedBody
 	range_origins: IntegerStorage
 	hash_operations: Array<MirHashOperation>
 	hash_origins: IntegerStorage
+	hash_initial_types: StringStorage
 	checked_operator_plans: IntegerStorage
 	loop_transfer_kinds: IntegerStorage
 	loop_transfer_targets: IntegerStorage
@@ -55,6 +56,44 @@ def checked_body_new(function: Integer, origin: Integer, finish: Integer): Check
 		range_origins: integer_storage_span(origin, finish),
 		hash_operations: [],
 		hash_origins: integer_storage_span(origin, finish),
+		hash_initial_types: string_storage_span(origin, finish),
+		checked_operator_plans: integer_storage_span(origin, finish),
+		loop_transfer_kinds: integer_storage_span(origin, finish),
+		loop_transfer_targets: integer_storage_span(origin, finish),
+		iterations: [],
+		iteration_origins: integer_storage_span(origin, finish),
+		diverging_hashes: integer_storage_span(origin, finish),
+	)
+end
+
+# Replay semantic checking into fresh operation tables; resolved declarations and
+# capture plans belong to analysis and retain their concrete function identity.
+def checked_body_lowering(previous: CheckedBody, function: Integer, origin: Integer, finish: Integer): CheckedBody
+	mut hash_initial_types := string_storage_span(origin, finish)
+	previous.hash_operations.each do |operation|
+		if operation.kind == 1
+			store_string(hash_initial_types, operation.origin, operation.type_name)
+		end
+	end
+	return CheckedBody.new(
+		function: function, generic_binding: previous.generic_binding, generic_calls: previous.generic_calls,
+		lambda_types: previous.lambda_types,
+		lambdas: previous.lambdas, shared_bindings: previous.shared_bindings,
+		local_types: previous.local_types,
+		result_operations: [],
+		generic_application_types: previous.generic_application_types,
+		generic_application_finishes: previous.generic_application_finishes,
+		enum_patterns: [],
+		enum_pattern_origins: integer_storage_span(origin, finish),
+		nullable_reads: string_storage_span(origin, finish),
+		safe_finishes: integer_storage_span(origin, finish),
+		safe_types: string_storage_span(origin, finish),
+		control_types: string_storage_span(origin, finish),
+		ranges: [],
+		range_origins: integer_storage_span(origin, finish),
+		hash_operations: [],
+		hash_origins: integer_storage_span(origin, finish),
+		hash_initial_types: hash_initial_types,
 		checked_operator_plans: integer_storage_span(origin, finish),
 		loop_transfer_kinds: integer_storage_span(origin, finish),
 		loop_transfer_targets: integer_storage_span(origin, finish),
