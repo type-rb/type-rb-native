@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 282 ordinary-path probes and 32 feature
+Status: the shared contract contains 288 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -661,6 +661,11 @@ and managed results and captured block parameters survive forced collection.
 Invalid result types, readonly source mutation and nonlocal transfers have
 explicit rejection cases. See [decision 0052](decisions/0052-collection-transform-mir.md).
 
-Predicates, search, keyed sorting, slicing and Hash iteration remain gaps.
+Array and Range `any?`, `all?` and `none?` use Boolean loop-carried results and
+ordinary MIR exit edges. Shared probes cover empty sources, short-circuit
+effects and failures, retained live sources, Range extrema, nested predicates,
+generic callbacks and captured managed values. The REPL consumes the same
+checked plans. Indexed predicates and non-Boolean results are rejected.
+Search, keyed sorting, slicing and Hash iteration remain gaps.
 Receiver APIs for removal/reordering and broader expression-context boundaries
 remain visible in the inventory; this coverage is not the entire collection API.

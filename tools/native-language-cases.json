@@ -595,13 +595,19 @@
         "transform-select-type",
         "transform-reduce-type",
         "transform-return",
-        "transform-readonly"
+        "transform-readonly",
+        "array-predicates",
+        "array-predicates-managed",
+        "predicate-result-type",
+        "predicate-result-void",
+        "predicate-return",
+        "predicate-indexed"
       ],
       "pending": [
-        "Predicates, search, keyed sorting, slicing and Hash iteration",
+        "Search, keyed sorting, slicing and Hash iteration",
         "Remaining receiver APIs that shorten or reorder an Array during traversal"
       ],
-      "note": "Array and Range each/map/select/reduce use shared checked statement bodies and ordinary MIR loops. Transforms retain one receiver, observe live Array growth/replacement, preserve visited selection values and evaluate reduce initializers before traversal. Indexed map/select and managed captures are covered."
+      "note": "Array and Range each/map/select/reduce use shared checked statement bodies and ordinary MIR loops. Transforms retain one receiver, observe live Array growth/replacement, preserve visited selection values and evaluate reduce initializers before traversal. Indexed map/select and managed captures are covered. Short-circuit any?/all?/none? retain the same live source, require Boolean results and lower early exits to ordinary MIR edges."
     },
     {
       "id": "ranges",
@@ -14482,6 +14488,280 @@
           "code": 0,
           "stdout": "[1] : Array<Integer>\n",
           "stderr": "(trb):2: error[TRBN4004]: push receiver is immutable\n"
+        }
+      }
+    },
+    {
+      "id": "array-predicates",
+      "title": "Short-circuit Array and Range predicates and boundary values",
+      "declarations": "def probe()\n\tempty: Array<Integer> := []\n\tmissing := empty.any? { |item| item > 0 }\n\tcomplete := empty.all? { |item| item > 0 }\n\tabsent := empty.none? { |item| item > 0 }\n\tputs(missing)\n\tputs(complete)\n\tputs(absent)\n\tmut visits := 0\n\tfound := [1, 2, 3].any? do |item|\n\t\tvisits += 1\n\t\titem == 2\n\tend\n\tputs(found)\n\tputs(visits)\n\tvisits = 0\n\tevery := [1, 2, 3].all?() do |item|\n\t\tvisits += 1\n\t\titem < 2\n\tend\n\tputs(every)\n\tputs(visits)\n\tvisits = 0\n\tno_match := [1, 2, 3].none? do |item|\n\t\tvisits += 1\n\t\titem == 2\n\tend\n\tputs(no_match)\n\tputs(visits)\n\tall_small := [1, 2].all? { |item| item < 3 }\n\tnone_small := [1, 2].none? { |item| item > 3 }\n\tany_large := [1, 2].any? { |item| item > 3 }\n\tputs(all_small)\n\tputs(none_small)\n\tputs(any_large)\n\tmaximum := (9007199254740991..9007199254740991).all? { |item| item > 0 }\n\texcluded := (9007199254740991...9007199254740991).any? { |item| item > 0 }\n\treversed := (3..1).none? { |item| item > 0 }\n\tputs(maximum)\n\tputs(excluded)\n\tputs(reversed)\n\t# Stop after the second element.\n\tfinite := (1..3).any? { |item| item == 2 }\n\tputs(finite)\n\tmut outer := 0\n\tnested := [1, 2].all? do |item|\n\t\touter += 1\n\t\tanswer := (1..3).any? { |other| item == other }\n\t\tanswer\n\tend\n\tputs(nested)\n\tputs(outer)\n\t# Lazy evaluation must skip the zero divisor after the first match.\n\tlazy := [1, 0].any? { |item| 10 / item > 0 }\n\tputs(lazy)\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "false\ntrue\ntrue\ntrue\n2\nfalse\n2\nfalse\n2\ntrue\ntrue\nfalse\ntrue\nfalse\ntrue\ntrue\ntrue\n2\ntrue\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "false\ntrue\ntrue\ntrue\n2\nfalse\n2\nfalse\n2\ntrue\ntrue\nfalse\ntrue\nfalse\ntrue\ntrue\ntrue\n2\ntrue\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "false\ntrue\ntrue\ntrue\n2\nfalse\n2\nfalse\n2\ntrue\ntrue\nfalse\ntrue\nfalse\ntrue\ntrue\ntrue\n2\ntrue\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "false\ntrue\ntrue\ntrue\n2\nfalse\n2\nfalse\n2\ntrue\ntrue\nfalse\ntrue\nfalse\ntrue\ntrue\ntrue\n2\ntrue\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "array-predicates-managed",
+      "title": "Live predicate sources, captures and generic callbacks",
+      "declarations": "def matches<T>(values: Array<T>, predicate: (T) -> Boolean): Boolean\n\treturn values.any? { |item| predicate(item) }\nend\n\ndef source(mut events: Array<Integer>, values: Array<Integer>): Array<Integer>\n\tevents.push(1)\n\treturn values\nend\n\ndef probe()\n\tmut values := [1, 2]\n\tmut retained := values\n\treadonly := retained\n\tmut events: Array<Integer> := []\n\tfound := source(events, readonly).any? do |item|\n\t\tevents.push(item)\n\t\tif item == 1\n\t\t\tretained.push(3)\n\t\t\tretained[1] = 20\n\t\t\tvalues = [99]\n\t\tend\n\t\titem == 3\n\tend\n\tputs(found)\n\tputs(events.size())\n\tputs(events[2])\n\tputs(events[3])\n\tputs(values[0])\n\tmut captured: Array<() -> String> := []\n\tlabels := [\"first\" + 1.to_s(), \"target\" + 2.to_s(), \"unvisited\"]\n\tselected := labels.any? do |label|\n\t\tcallback := fn(): String\n\t\t\treturn label\n\t\tend\n\t\tcaptured.push(callback)\n\t\tlabel = label + \"!\"\n\t\tlabel == \"target2!\"\n\tend\n\tputs(selected)\n\tputs(captured.size())\n\tputs(captured[0]())\n\tputs(captured[1]())\n\tpredicate := fn(value: String): Boolean\n\t\treturn value == \"target2\"\n\tend\n\tputs(matches<String>(labels, predicate))\n\tchecker := fn(values: Array<Integer>): Boolean\n\t\treturn values.none? { |item| item == 0 }\n\tend\n\tputs(checker([1, 2]))\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n4\n20\n3\n99\ntrue\n2\nfirst1!\ntarget2!\ntrue\ntrue\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n4\n20\n3\n99\ntrue\n2\nfirst1!\ntarget2!\ntrue\ntrue\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n4\n20\n3\n99\ntrue\n2\nfirst1!\ntarget2!\ntrue\ntrue\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n4\n20\n3\n99\ntrue\n2\nfirst1!\ntarget2!\ntrue\ntrue\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "predicate-result-type",
+      "title": "Predicates require Boolean results",
+      "declarations": "",
+      "body": "[1].any? { |item| item }",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:10: error[TRB3000]: any? block result must be Boolean, got Integer\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:10: error[TRB3000]: any? block result must be Boolean, got Integer\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1:10: error[TRB3000]: any? block result must be Boolean, got Integer\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: expected Boolean, found Integer\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: expected Boolean, found Integer\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1: error[TRBN4004]: expected Boolean, found Integer\n"
+        }
+      }
+    },
+    {
+      "id": "predicate-result-void",
+      "title": "Predicates require a result value",
+      "declarations": "",
+      "body": "[1].all? { |item| puts(item) }",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:19: error[TRB3000]: Void expression does not produce a value and cannot be used as a all? block result\n<case>/main.trb:3:10: error[TRB3000]: all? block result must be Boolean, got Invalid\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:19: error[TRB3000]: Void expression does not produce a value and cannot be used as a all? block result\n<case>/main.trb:3:10: error[TRB3000]: all? block result must be Boolean, got Invalid\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1:19: error[TRB3000]: Void expression does not produce a value and cannot be used as a all? block result\n(trb):1:10: error[TRB3000]: all? block result must be Boolean, got Invalid\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: collection block must end with a result expression\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: collection block must end with a result expression\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1: error[TRBN4004]: collection block must end with a result expression\n"
+        }
+      }
+    },
+    {
+      "id": "predicate-return",
+      "title": "Predicate blocks cannot return from their enclosing function",
+      "declarations": "",
+      "body": "[1].none? { |item| return item == 0 }",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:20: error[TRB3000]: return is not supported inside value-producing collection transformations yet\n<case>/main.trb:3:20: error[TRB3000]: none? block must end with a result expression\n<case>/main.trb:3:20: error[TRB3000]: return type is Boolean, expected Void\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:20: error[TRB3000]: return is not supported inside value-producing collection transformations yet\n<case>/main.trb:3:20: error[TRB3000]: none? block must end with a result expression\n<case>/main.trb:3:20: error[TRB3000]: return type is Boolean, expected Void\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1:20: error[TRB3000]: return is not supported inside value-producing collection transformations yet\n(trb):1:20: error[TRB3000]: none? block must end with a result expression\n(trb):1:20: error[TRB3000]: return is only valid inside a function or method\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: return is unavailable inside a value-producing collection block\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: return is unavailable inside a value-producing collection block\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1: error[TRBN4004]: return is only valid inside a function or method\n"
+        }
+      }
+    },
+    {
+      "id": "predicate-indexed",
+      "title": "Indexed predicates remain unsupported",
+      "declarations": "",
+      "body": "[1].any?.with_index { |item, index| item == index }",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:1: error[TRB3000]: any?.with_index is not supported; use each with an explicit accumulator\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:1: error[TRB3000]: any?.with_index is not supported; use each with an explicit accumulator\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1:1: error[TRB3000]: any?.with_index is not supported; use each with an explicit accumulator\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4002]: expected do, found .\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4002]: expected do, found .\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1: error[TRBN4002]: expected do, found .\n"
         }
       }
     }
