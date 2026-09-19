@@ -274,3 +274,5 @@
 | Captured nominal Hash and Result values survive replacement | accepts | accepts | matches reference | matches reference |
 | Retained shared closures run each initializer once | accepts | accepts | matches reference | matches reference |
 | Closure and mutable Array cycles survive submission collection | accepts | accepts | matches reference | matches reference |
+| Brace iteration with nested controls and lexical transfers | accepts; reference rejects | accepts; reference rejects | differs | output differs |
+| Multiline Array and Range brace iteration | accepts | accepts | matches reference | matches reference |

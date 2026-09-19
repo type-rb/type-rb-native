@@ -10,6 +10,17 @@ import { integer_storage, sparse_integer_at, store_integer } from storage
 import { describe, expect, test } from trb/std/test
 
 describe("Array iteration") do
+	test("rejects mismatched and unterminated brace bodies") do
+		cases := ["[1].each { |value|\nputs(value)\nend\n", "[1].each { |value|\nif value == 1\nputs(value)\n}\n", "[1].each { |value|\nputs(value)\n"]
+		cases.each do |body|
+			source := "def main()\n" + body
+			mut state := compiler_new(source.size() * 3 + 16)
+			expect(lex(state, source)).to_be_true()
+			expect(parse_module(state, 0, state.entry_module[0])).to_be_false()
+			expect(has_diagnostic(state)).to_be_true()
+		end
+	end
+
 	test("checks and emits a live receiver with indexed bindings and loop transfers") do
 		source := "def main()\nmut values := [1, 2]\nvalues.each.with_index do |value, index|\nif value == 1\nvalues.push(3)\nnext\nend\nputs(value)\nputs(index)\nend\nend\n"
 		mut state := compiler_new(source.size() * 3 + 16)

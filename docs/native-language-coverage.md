@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 272 ordinary-path probes and 32 feature
+Status: the shared contract contains 274 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -609,13 +609,20 @@ accepted-source amd64 bridge for the three read-only traversals below.
 
 The current slice supports statement `Array#each` and `Array#each.with_index`,
 with optional empty call parentheses, `do |value[, index]| ... end`, and
-single-line brace blocks. Brace statements may be separated by semicolons;
-multiline brace blocks are explicitly rejected for now. Block parameters have
+single- or multiline brace blocks. Both block forms share ordinary statement
+parsing, including nested conditions, cases, loops and iteration. Statements may
+be separated by newlines or semicolons. Block parameters have
 the reference's mutable local bindings and lexical shadowing. The receiver is
 evaluated once; each step reloads its current length and storage, so `push`
 and replacement of a future element are observed. Rebinding the source local
 does not retarget an active iteration. `next` advances the internal cursor,
 `break` exits the nearest loop, and `return` exits the enclosing function.
+
+The brace probes distinguish multiline statements from nested controls. The
+fixed reference accepts the former but rejects the latter;
+[TypeRB PR #723](https://github.com/type-rb/type-rb/pull/723) corrects its parser
+and REPL input completion. The registry preserves the pinned rejection rather
+than reporting full parity before the normal reference update.
 
 The structured `MirIteration` operation connects receiver and element types,
 source/body boundaries, and nearest-loop ownership. Ordinary code generation

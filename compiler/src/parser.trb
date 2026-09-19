@@ -180,18 +180,8 @@ def parse_iteration_statement(mut state: CompilerState, mut position: Array<Inte
 	mut terminator := "end"
 	if brace
 		terminator = "}"
-		if !parse_inline_iteration_body(state, position)
-			return false
-		end
-		mut token := delimiter
-		while token < position[0]
-			if load_integer(state.token_kinds, token) == 4 && load_string(state.token_texts, token) == "\n"
-				diagnostic(state, "TRBN4002", load_integer(state.token_lines, token), "multiline brace iteration is not supported; use do/end")
-				return false
-			end
-			token += 1
-		end
-	elsif !parse_statement_block(state, position)
+	end
+	if !parse_statement_block(state, position)
 		return false
 	end
 	body_finish := position[0]
@@ -463,27 +453,6 @@ def syntax_statement_boundary(state: CompilerState, origin: Integer): Boolean
 		return true
 	end
 	return token_is(state, origin, "}")
-end
-
-def parse_inline_iteration_body(mut state: CompilerState, mut position: Array<Integer>): Boolean
-	skip_newlines(state, position)
-	while !token_is(state, position[0], "}")
-		if terminal_token(state, position[0])
-			diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), "expected } for iteration")
-			return false
-		end
-		if syntax_loop_transfer_kind(state, position[0]) > 0 || token_is(state, position[0], "return")
-			parse_transfer_syntax(state, position)
-		elsif declaration_start(state, position[0])
-			parse_declaration_statement(state, position)
-		else
-			parse_simple_statement(state, position)
-		end
-		if has_diagnostic(state)
-			return false
-		end
-	end
-	return true
 end
 
 def parse_declaration_statement(mut state: CompilerState, mut position: Array<Integer>): Boolean

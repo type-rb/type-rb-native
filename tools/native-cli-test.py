@@ -168,6 +168,7 @@ end
                       'stable-array-bindings', 'conditional-array-headers', 'loop-array-headers',
                       'hash-values', 'hash-managed', 'hash-cycles',
                       'array-iteration-live', 'array-iteration-control', 'array-iteration-managed',
+                      'iteration-brace-blocks',
                       'logical-loop-stack',
                       'range-values', 'range-carriers', 'range-extrema', 'range-effects',
                       'range-precedence', 'range-managed', 'range-streaming',
@@ -278,7 +279,7 @@ end
                       'record-array-invariance', 'record-array-field-mutation',
                       'record-array-unknown', 'array-iteration-arity', 'array-iteration-duplicate',
                       'array-iteration-escaping', 'array-iteration-receiver',
-                      'array-iteration-constant-mutation', 'array-iteration-multiline-brace',
+                      'array-iteration-constant-mutation', 'array-iteration-brace-close',
                       'range-float', 'range-string', 'range-comparison', 'range-index',
                       'range-element-type', 'range-duplicate', 'range-escaping'):
         fixture = repository / 'compiler/conformance/invalid' / (case_name + '.source')

@@ -66,7 +66,7 @@ export const catalog = {
       description: 'General-purpose APIs expected by portable programs and application packages.',
       items: [
         capability('Arguments, numeric conversion, and Math.sqrt', 'verified', ['parity', 'ecosystem'], 'Provide the portable entry primitives used by the registered language benchmarks.', ['Portable entry', 'docs/native-language-coverage.md']),
-        capability('String and Array APIs', 'partial', ['parity', 'production', 'ecosystem'], 'Ordinary Array values, aliases and statement iteration have tested support. UTF-8 String values have tested ordinary size/index, concatenation and collection storage. Unicode escapes and the remaining String/Array receiver APIs are incomplete.'),
+        capability('String and Array APIs', 'partial', ['parity', 'production', 'ecosystem'], 'Ordinary Array values, aliases and statement iteration have tested support, including multiline brace bodies and nested control flow. UTF-8 String values have tested ordinary size/index, concatenation and collection storage. Unicode escapes and the remaining String/Array receiver APIs are incomplete.'),
         capability('Hash, Set, and Queue', 'partial', ['parity', 'production', 'ecosystem'], 'Ordinary Hash construction, inference, lookup, updates and selected receiver operations are covered. Hash iteration and the general Set/Queue surface remain incomplete.'),
         capability('JSON, CSV, and encodings', 'open', ['production', 'ecosystem'], 'Parse, generate, validate, and stream common structured-data formats.'),
         capability('Date, time, and time zones', 'open', ['production', 'ecosystem'], 'Provide clocks, durations, calendars, parsing, formatting, and time-zone data.'),
