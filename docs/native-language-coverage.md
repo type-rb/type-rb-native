@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 292 ordinary-path probes and 32 feature
+Status: the shared contract contains 300 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -36,6 +36,16 @@ remain required. Temporary performance/size regressions are observed during
 integration; detailed qualification occurs at coherent milestones. A feature
 need not manufacture a runtime speedup or a separate size budget revision to
 justify its existence. Final performance goals remain unchanged.
+
+## Integer receiver operations
+
+Integer `abs`, sign/zero/parity predicates, `min`, `max`, `clamp` and `to_f`
+now work in ordinary files and the REPL. Arguments follow source order; invalid
+clamp intervals fail after both limits have been evaluated. Numeric extrema,
+negative parity, chaining, safe navigation and captured calls share the reference
+contract. [Decision 0053](decisions/0053-integer-receiver-mir.md) records the
+existing scalar/CFG lowering and independently verified failure guard. Remaining
+Float receiver operations and wider numeric standard-library coverage stay open.
 
 ## Callable signatures and MIR foundation
 

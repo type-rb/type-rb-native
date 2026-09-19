@@ -6,7 +6,7 @@ Each count describes registered probes, not language coverage percentages.
 | --- | --- | --- | --- | --- |
 | Source text and lexical forms | basic | 1 / 2 | Invalid UTF-8 source and diagnostic positions; CRLF and source normalization; Identifier categories, reserved words and malformed literals | CommentStatement, BlankStatement, Identifier |
 | Strings and UTF-8 | basic | 4 / 13 | Unicode escapes and remaining String receiver APIs; Embedded-expression boundaries beyond the reviewed interpolation probes | Literal, InterpolatedString |
-| Numeric and Boolean operations | basic | 1 / 6 | All operators and assignment forms; mixed widening and every portable failure boundary; Short-circuit side effects and invalid RHS diagnostics across nested control | UnaryExpression, BinaryExpression |
+| Numeric and Boolean operations | basic | 1 / 14 | All operators and assignment forms; mixed widening and every portable failure boundary; Short-circuit side effects and invalid RHS diagnostics across nested control | UnaryExpression, BinaryExpression |
 | Bindings, constants and mutation | basic | 3 / 5 | Shadowing, duplicate declarations, unused/discard bindings and mutation through projections | VariableStatement, AssignmentStatement |
 | Function declarations and calls | basic | 0 / 3 | Every all-path return, evaluation-order and mutable-argument boundary | MethodStatement, ReturnStatement, CallExpression, ExpressionStatement |
 | Defaults and named arguments | basic | 0 / 13 | Method, function-value and payload-enum argument parity |  |
