@@ -1,7 +1,8 @@
 import { CheckedValue, checked_mir_value, checked_value, mir_checked_value, scalar_mir_disable, scalar_mir_instruction, scalar_mir_value } from checked_values
-import { MirBlock, MirFunction, MirInstruction, MirModule, mir_type_id } from mir
+import { MirBlock, MirFunction, MirInstruction, MirModule } from mir
 import { mir_control_active, mir_control_prepare } from mir_control
 import { MirFlow, mir_flow_type, mir_value_available } from mir_flow
+import { mir_semantic_type_id, mir_semantic_type_name } from mir_types
 import { CheckedLocals, CompilerState } from state
 import { load_integer, load_string } from storage
 
@@ -17,7 +18,7 @@ def mir_checked_string_operation(mut state: CompilerState, mut locals: CheckedLo
 	end
 	mut result :=- 1
 	if result_type != "Void"
-		result = scalar_mir_value(state, locals, mir_type_id(result_type), origin)
+		result = scalar_mir_value(state, locals, mir_semantic_type_id(state.scalar_mir, result_type), origin)
 	end
 	scalar_mir_instruction(state, locals, kind, result, first, second, payload, - 1, load_integer(state.token_lines, origin))
 	return mir_checked_value(result_type, result, 9007199254740991, 0)
@@ -74,6 +75,21 @@ def mir_string_instruction_error(flow: MirFlow, native_module: MirModule, functi
 	end
 	if !mir_value_available(flow, block, index, instruction.first)
 		return "MIR String operand is undefined"
+	end
+	if kind == 45
+		if first != 8 || instruction.second != - 1 || instruction.payload < 0 || instruction.payload > 2
+			return "MIR String sequence operand or mode differs"
+		end
+		mut expected := "Array<Integer>"
+		if instruction.payload == 1
+			expected = "Array<String>"
+		elsif instruction.payload == 2
+			expected = "String"
+		end
+		if mir_semantic_type_name(native_module, result) != expected
+			return "MIR String sequence result type differs"
+		end
+		return ""
 	end
 	if kind == 13 || kind == 14 || kind == 16 || kind == 44
 		if !mir_value_available(flow, block, index, instruction.second)

@@ -127,10 +127,10 @@ defaults and managed collections retain optional payloads through shared root
 planning. See [decision 0042](decisions/0042-nullable-mir.md) for the private layout
 and conservative fact invalidation across assignments and loop backedges.
 
-The ordinary compiler closure contains 104 modules. Implementation syntax stays
+The ordinary compiler closure contains 105 modules. Implementation syntax stays
 within the existing immutable seed and snapshot-v4 boundary; compiler self-use
 of the new syntax still depends on an accepted seed refresh. The shared language
-contract contains 332 cases with explicit remaining differences. Retained REPL
+contract contains 344 cases with explicit remaining differences. Retained REPL
 assignment flow now uses an ordinary checker projection, with conservative
 failure/interruption invalidation and explicit replay boundaries; see
 [decision 0043](decisions/0043-checked-repl-submissions.md). Ordinary enum payloads and exhaustive cases now have independently verified
@@ -271,3 +271,10 @@ runtime has no temporary String allocation. The 104-module closure separates
 query construction from runtime implementation. Unicode, external bytes,
 receiver retention and lexical transfers have distinct ordinary/MIR controls;
 see [decision 0055](decisions/0055-string-query-mir.md).
+
+String `codepoints`, `chars` and `reverse` now use independently verified typed
+sequence operations with explicit allocation/failure effects and source roots.
+The method owner was renamed to reflect both query and transform construction;
+a separate sequence runtime uses linear decoding and bounded temporary roots.
+The shared contract has 344 cases and keeps slicing unsupported explicitly.
+See [decision 0056](decisions/0056-string-sequence-mir.md).

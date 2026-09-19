@@ -91,6 +91,29 @@ puts(value)
 end
 ''', '1\n3\ntrue\ntrue\ntrue\nx😀y😀y\n'.encode(), force_gc=True)
 
+    compile_source('def join(left: String, right: String): String\nreturn left + right\nend\ndef main()\nvalue := join("x", "😀日本")\npoints := value.codepoints()\ncharacters := value.chars()\nreversed := value.reverse()\npoints.each { |point| puts(point) }\ncharacters.each { |character| puts(character) }\nputs(reversed)\nputs(value)\nend\n', '120\n128512\n26085\n26412\nx\n😀\n日\n本\n本日😀x\nx😀日本\n'.encode(), force_gc=True)
+
+    compile_source('def main()\nvalue := "A\x00😀"\nputs(value.codepoints()[1])\nputs(value.chars()[1].size())\nputs(value.reverse())\nend\n', '0\n1\n😀\0A\n'.encode(), force_gc=True)
+
+    # More than one backing-buffer growth while earlier results stay live.
+    compile_source('def join(left: String, right: String): String\nreturn left + right\nend\ndef main()\nvalue := join("' + '日本😀' * 32 + '", "!")\ncharacters := value.chars()\npoints := value.codepoints()\nreversed := value.reverse()\nputs(characters.size())\nputs(points.size())\nputs(characters[0])\nputs(characters[-1])\nputs(points[-1])\nputs(reversed.start_with?("!😀"))\nputs(value.end_with?("😀!"))\nend\n',
+                   '97\n97\n日\n!\n33\ntrue\ntrue\n'.encode(), force_gc=True)
+
+    sequence_source = """import trb/std/process
+def main()
+arguments := Process.argv()
+value := arguments[0]
+points := value.codepoints()
+characters := value.chars()
+reversed := value.reverse()
+points.each { |point| puts(point) }
+characters.each { |character| puts(character) }
+puts(reversed)
+end
+"""
+    compile_source(sequence_source, '65\n65533\nA\n�\n�A\n'.encode(), arguments=(b'A\xff',), force_gc=True)
+    compile_source(sequence_source, '65533\n65533\n�\n�\n��\n'.encode(), arguments=(b'\xe3\x81',), force_gc=True)
+
     query_source = '''import trb/std/process
 def show(value: Integer?)
 if value == nil
