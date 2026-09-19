@@ -24,7 +24,7 @@ Each count describes registered probes, not language coverage percentages.
 | Function values and lexical capture | basic | 1 / 17 | Named declarations as values, callable equality, nullable signatures and remaining parameter-capability boundaries | LambdaExpression |
 | Arrays and checked indexes | basic | 1 / 8 | Removal during assignments/iteration and retained managed receivers; Remaining Array receiver APIs and invalid element/mutation combinations | ArrayLiteral, IndexExpression |
 | Hash values and operations | basic | 0 / 5 | All key/value representations, empty inference, managed lifetimes and missing-key failures | HashLiteral |
-| Structured and value-producing iteration | basic | 2 / 4 | Map/filter/reduce/chains, nested transfers, receiver replacement and live growth | IterationExpression, BlockExpression |
+| Structured and value-producing iteration | basic | 3 / 6 | Map/select/reduce/chains and their mutation contract; Hash iteration | IterationExpression, BlockExpression |
 | Range values and boundaries | basic | 1 / 5 | Endpoint effects, empty/reversed ranges and next at both portable limits | RangeExpression |
 | Result and typed propagation | basic | 1 / 28 | General union errors and compiler-declared structured package boundaries | TryExpression, CatchExpression |
 | Classes, fields and methods | basic | 1 / 1 | Initialization, inheritance, dispatch, privacy and readonly fields | ClassStatement, FieldStatement |
