@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 274 ordinary-path probes and 32 feature
+Status: the shared contract contains 282 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -61,10 +61,8 @@ need no eager constructor. CLI controls cover declaration changes, failures, rep
 and collection of unreachable code contexts. Named declarations used as values and
 the remaining callable boundaries in the inventory are still gaps. Capabilities
 records each ordinary path separately; forced-GC internal fixtures supplement
-rather than replace those observations. The pinned reference still rejects
-`closure-generic-defaults`; the Go implementation at `279cd4980a32` passes its
-check/build/execution/REPL paths. The registry retains the pinned rejection as a
-visible reference-version difference until the normal reference update.
+rather than replace those observations. The updated reference passes `closure-generic-defaults` through check, build,
+execution and REPL; the registry now records those matching paths.
 
 ## Value-producing control and lexical transfers
 
@@ -131,10 +129,9 @@ not consult generic templates or source spellings. See
 [decision 0045](decisions/0045-generic-nominal-mir.md).
 
 Generic methods and classes/interfaces remain separate gaps. The shared
-imported-generic-enum
-case records a pinned reference defect as a difference, not a successful parity
-claim. [TypeRB PR #704](https://github.com/type-rb/type-rb/pull/704) addresses
-its checker identity and Ruby constructor failures. Compiler self-use of generic syntax awaits a seed that supports it.
+imported-generic-enum case now passes against the updated reference containing
+[TypeRB PR #704](https://github.com/type-rb/type-rb/pull/704). Compiler self-use
+of generic syntax awaits a seed that supports it.
 
 ## Transparent type aliases
 
@@ -167,8 +164,8 @@ concrete call sites cannot legalize operations on unconstrained `T`.
 Source/template erasure preserves verified QBE, and forced collection covers
 managed generic calls. See [decision 0048](decisions/0048-generic-function-mir.md)
 for ownership and remaining boundaries. Other generic declaration families remain
-gaps. The pinned reference's local-shadowing case is
-an explicit diagnostic difference, not a parity claim; [TypeRB PR #705](https://github.com/type-rb/type-rb/pull/705) fixes the reference checker.
+gaps. Both implementations reject local values used with generic type arguments;
+[TypeRB PR #705](https://github.com/type-rb/type-rb/pull/705) fixed the reference checker.
 
 ## Generic record field defaults
 
@@ -185,12 +182,10 @@ distinct abstract parameter identities; concrete MIR, roots and QBE do not need
 those bindings or source templates. See
 [decision 0049](decisions/0049-generic-record-default-mir.md).
 
-The fixed reference pin rejects full control expressions in record defaults and
-fails Go emission for ternaries that reference preceding fields. The shared
-contract records those failures and the existing Hash REPL display difference
-explicitly; successful Native paths are not called full reference parity.
-[TypeRB PR #706](https://github.com/type-rb/type-rb/pull/706) fixes the control-expression
-parser and Go emission, with cross-backend execution and REPL verification.
+Full control expressions in record defaults and ternaries referring to earlier
+fields now pass against the updated reference containing
+[TypeRB PR #706](https://github.com/type-rb/type-rb/pull/706). Remaining Hash REPL
+display differences stay explicit in the shared contract.
 
 ## Standard Result and typed control flow
 
@@ -618,11 +613,9 @@ and replacement of a future element are observed. Rebinding the source local
 does not retarget an active iteration. `next` advances the internal cursor,
 `break` exits the nearest loop, and `return` exits the enclosing function.
 
-The brace probes distinguish multiline statements from nested controls. The
-fixed reference accepts the former but rejects the latter;
-[TypeRB PR #723](https://github.com/type-rb/type-rb/pull/723) corrects its parser
-and REPL input completion. The registry preserves the pinned rejection rather
-than reporting full parity before the normal reference update.
+The brace probes cover multiline statements and nested controls. Both now
+pass against the updated reference containing
+[TypeRB PR #723](https://github.com/type-rb/type-rb/pull/723).
 
 The structured `MirIteration` operation connects receiver and element types,
 source/body boundaries, and nearest-loop ownership. Ordinary code generation
@@ -656,3 +649,18 @@ bound is now 1,024, with boundary tests; ordinary snapshots retain their
 512-function limit. The ordinary 4 MiB snapshot entry and remaining schema/type/
 instruction bounds remain unchanged. Failed smaller-bound recovery attempts remain validation evidence;
 a larger decode budget alone does not establish successful recovery.
+
+## Array and Range transformations
+
+`map`, `select` and `reduce(initial)` produce values through ordinary MIR loops;
+`map` and `select` support `with_index`. Brace and `do` blocks, chained results,
+empty/reversed ranges, portable maximum endpoints, readonly aliases, live Array
+appends/replacements, receiver rebinding and reduction evaluation order have
+shared check/build/execution/REPL probes. Selection retains the visited value,
+and managed results and captured block parameters survive forced collection.
+Invalid result types, readonly source mutation and nonlocal transfers have
+explicit rejection cases. See [decision 0052](decisions/0052-collection-transform-mir.md).
+
+Predicates, search, keyed sorting, slicing and Hash iteration remain gaps.
+Receiver APIs for removal/reordering and broader expression-context boundaries
+remain visible in the inventory; this coverage is not the entire collection API.

@@ -1,3 +1,4 @@
+import { MirTransform, transform_kind } from transform_model
 import { CheckedLambda, callable_parts } from callable_types
 import { declare_lambda, lower_lambda } from lambda_lowering
 import { declare_default_functions } from default_arguments
@@ -16,7 +17,7 @@ import { nullable_common, nullable_element, nullable_type } from nullable_types
 import { mir_checked_nullable, mir_nullable_coerce } from nullable_mir
 import { mir_value_complete, mir_value_exit, mir_value_join } from mir_value_control
 import { argument_binding_slot, argument_bindings, function_argument_bindings, record_argument_bindings } from argument_binding
-import { mir_checked_iteration_begin, mir_checked_iteration_end } from mir_iteration_control
+import { mir_checked_iteration_begin, mir_checked_iteration_end, mir_transform_yield } from mir_iteration_control
 import { mir_checked_range_new } from mir_ranges
 import { mir_checked_hash_index, mir_checked_hash_literal, mir_checked_hash_method, mir_checked_hash_store } from mir_hashes
 import { mir_checked_record_field, mir_checked_record_new } from mir_records
@@ -26,7 +27,7 @@ import { CheckedValue, checked_bound_value, checked_mir_value, checked_value, ch
 import { checked_hash_binding_target, checked_hash_method, checked_hash_plan, checked_hash_publish } from hash_checked
 import { mir_hash_operation } from hash_mir
 import { hash_key_type, hash_type, hash_value_type } from hash_types
-import { checked_iteration_require, checked_iteration_shape, checked_range_require, iteration_element_type } from iteration_checked
+import { checked_iteration_require, checked_iteration_shape, checked_range_require, checked_transform_require, checked_transform_shape, iteration_element_type } from iteration_checked
 import { MirIteration, MirRangeConstruction, mir_iteration_valid } from iteration_mir
 import { float_literal_in_range, integer_literal_in_range, number_is_float } from literals
 import { MirLoopTransfer, mir_loop_transfer_valid } from mir
@@ -297,6 +298,9 @@ def check_primary(
 		return check_control_value(state, position, locals, true, expected, checked_value("Invalid", 0, 9007199254740991, 0))
 	end
 	if token_is(state, position[0], "try")
+		if locals.value_block[0]
+			return type_diagnostic(state, load_integer(state.token_lines, position[0]), "try is unavailable inside a value-producing collection block")
+		end
 		try_origin := position[0]
 		advance(position)
 		value := check_postfix(state, position, locals, check_primary(state, position, locals, ""))
@@ -826,6 +830,13 @@ def check_postfix(
 			end
 		else
 			if token_is(state, position[0], ".")
+				if transform_kind(load_string(state.token_texts, position[0] + 1)) > 0
+					value = check_transform(state, position, locals, value)
+					if has_diagnostic(state)
+						return value
+					end
+					next
+				end
 				advance(position)
 				member := expect_identifier(state, position)
 				if member == "each" && syntax_iteration_suffix(state, position[0] - 2) >= 0
@@ -1630,6 +1641,9 @@ end
 
 def check_transfer_value(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, result_type: String, loop_origin: Integer, finish: Integer): CheckedValue
 	origin := position[0]
+	if token_is(state, origin, "return") && locals.value_block[0]
+		return type_diagnostic(state, load_integer(state.token_lines, origin), "return is unavailable inside a value-producing collection block")
+	end
 	if token_is(state, origin, "return") && locals.lambda_result.size() == 0 && sparse_integer_at(state.function_defaults, locals.mir_state[1]) > 0
 		return type_diagnostic(state, load_integer(state.token_lines, origin), "return is unavailable inside a default initializer")
 	end
@@ -1929,4 +1943,120 @@ def check_lambda_value(mut state: CompilerState, mut position: Array<Integer>, m
 		declare_lambda(state, lambda)
 	end
 	return checked_value(type_name, 0, origin, 0)
+end
+
+# Transform values are loop-carried bindings above the receiver/cursor boundary.
+# The same checked statement body supplies analysis, MIR and the REPL projection.
+def check_transform(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue): CheckedValue
+	origin := position[0]
+	line := load_integer(state.token_lines, origin)
+	encoded := sparse_integer_at(state.transform_origins, origin)
+	if encoded < 1 || encoded > state.transforms.size()
+		return type_diagnostic(state, line, "missing collection transform syntax")
+	end
+	syntax := state.transforms[encoded - 1]
+	shape := syntax.iteration
+	if !checked_transform_shape(state, syntax, origin)
+		return type_diagnostic(state, line, "invalid collection transform syntax")
+	end
+	element_type := iteration_element_type(receiver.type_name)
+	if element_type == ""
+		return type_diagnostic(state, line, "collection transform requires a supported Array or Range receiver")
+	end
+	mut initial := checked_value("Void", 0, origin, 0)
+	mut output := array_type(element_type)
+	if syntax.kind == 1
+		output = sparse_string_at(state.checked[0].transform_types, origin)
+	elsif syntax.kind == 3
+		position[0] = syntax.initial_start
+		initial = check_expression(state, position, locals, 1, "")
+		if position[0] != syntax.initial_finish || initial.type_name == "Void"
+			return type_diagnostic(state, line, "reduce requires an initial value")
+		end
+		if initial.type_name == "Never"
+			position[0] = shape.finish
+			return initial
+		end
+		output = initial.type_name
+	end
+	mut source_kind := 1
+	if receiver.type_name == "Range<Integer>"
+		source_kind = 2
+	end
+	plan := MirIteration.new(syntax: shape, parent_loop: locals.lexical_loop[0], source_kind: source_kind, type_name: receiver.type_name, element_type: element_type)
+	outer := locals.count[0]
+	flow_parent := locals.nullable_state[0]
+	flow_first := locals.nullable_facts.size()
+	local_bind(locals, "$transform.result", output, 1)
+	if syntax.kind != 3
+		initial = mir_checked_array_operation(state, locals, 19, - 1, - 1, 0, output, origin)
+	end
+	mir_binding_initialize(state, locals, outer, initial, origin)
+	saved := locals.count[0]
+	local_bind(locals, "$iteration.receiver", receiver.type_name, 1)
+	local_bind(locals, "$iteration.cursor", "Integer", 1)
+	if source_kind == 2 && shape.index_origin >= 0
+		local_bind(locals, "$iteration.ordinal", "Integer", 1)
+	end
+	element := mir_checked_iteration_begin(state, locals, plan, receiver, saved)
+	if syntax.kind == 3
+		accumulator := mir_binding_read(state, locals, outer, syntax.accumulator_origin)
+		local_bind(locals, load_string(state.token_texts, syntax.accumulator_origin), output, 1)
+		mir_binding_initialize(state, locals, locals.count[0] - 1, accumulator, syntax.accumulator_origin)
+		if load_string(state.token_texts, syntax.accumulator_origin) == load_string(state.token_texts, shape.element_origin)
+			return type_diagnostic(state, line, "collection block parameter is duplicated")
+		end
+	end
+	local_bind(locals, load_string(state.token_texts, shape.element_origin), element_type, 1)
+	mir_binding_initialize(state, locals, locals.count[0] - 1, element, shape.element_origin)
+	if shape.index_origin >= 0
+		if load_string(state.token_texts, shape.index_origin) == load_string(state.token_texts, shape.element_origin)
+			return type_diagnostic(state, line, "collection block parameter is duplicated")
+		end
+		mut index_slot := saved + 1
+		if source_kind == 2
+			index_slot = saved + 2
+		end
+		ordinal := mir_binding_read(state, locals, index_slot, shape.index_origin)
+		local_bind(locals, load_string(state.token_texts, shape.index_origin), "Integer", 1)
+		mir_binding_initialize(state, locals, locals.count[0] - 1, ordinal, shape.index_origin)
+	end
+	position[0] = shape.body_start
+	nullable_loop_writes(state, locals, shape.body_start, shape.body_finish)
+	previous_block := locals.value_block[0]
+	locals.value_block[0] = true
+	mut yielded := check_block_value(state, position, locals, "Void", - 1, true)
+	locals.value_block[0] = previous_block
+	if has_diagnostic(state)
+		return yielded
+	end
+	if position[0] != shape.body_finish || yielded.type_name == "Void" || yielded.type_name == "Never"
+		return type_diagnostic(state, line, "collection block must end with a result expression")
+	end
+	if syntax.kind == 1
+		output = array_type(yielded.type_name)
+		analyzed := sparse_string_at(state.checked[0].transform_types, origin)
+		if state.lambda_phase[0] == 2 && analyzed != output
+			return type_diagnostic(state, line, "collection result differs from analyzed type")
+		end
+		store_string(locals.types, outer, output)
+	elsif syntax.kind == 2
+		check_expected(state, yielded.type_name, "Boolean", line)
+	else
+		check_expected(state, yielded.type_name, output, line)
+		yielded = mir_nullable_coerce(state, locals, yielded, output, origin)
+	end
+	store_string(state.checked[0].transform_types, origin, output)
+	state.checked[0].transforms.push(MirTransform.new(syntax: syntax, iteration: plan, type_name: output))
+	store_integer(state.checked[0].transform_origins, origin, state.checked[0].transforms.size())
+	checked_transform_require(state, origin)
+	result_scope_check(state, locals, saved)
+	mir_transform_yield(state, locals, syntax.kind, outer, element, yielded, origin)
+	mir_checked_iteration_end(state, locals, plan, saved)
+	result := mir_binding_read(state, locals, outer, origin)
+	locals.count[0] = outer
+	nullable_finish(locals, flow_parent, flow_first, outer)
+	position[0] = shape.finish
+	# A transform result is an expression, not an assignable source binding.
+	return checked_value(output, result.category, origin, 1)
 end

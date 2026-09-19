@@ -18,7 +18,7 @@ import { sparse_integer_at, load_integer, load_string, sparse_string_at } from s
 import { parse_argument_label, syntax_statement_boundary, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_block_end, syntax_conditional_tail, binary_operator_id, syntax_expression_precedence, parse_expression_syntax, declaration_start } from parser
 import { mir_logical_short_value } from mir
 import { checked_loop_transfer_kind } from checked_program
-import { checked_iteration_require, checked_range_require } from iteration_checked
+import { checked_iteration_require, checked_range_require, checked_transform_require } from iteration_checked
 import { find_visible_enum, find_visible_function, find_visible_record } from declaration_lookup
 import { find_record_type, find_field, record_type, array_element_type } from type_resolution
 import { number_is_float, number_without_underscores, integer_string } from literals
@@ -707,6 +707,13 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 			end
 		else
 			if token_is(state, position[0], ".") || safe_origin >= 0
+				if sparse_integer_at(state.transform_origins, position[0]) > 0
+					result = repl_reference(repl_transform(state, position, store, environment, result.value))
+					if store.error[0] != ""
+						return result
+					end
+					next
+				end
 				position[0] += 1
 				member := load_string(state.token_texts, position[0])
 				position[0] += 1
@@ -852,6 +859,11 @@ def repl_block_end(state: CompilerState, start: Integer, stop_else: Boolean): In
 	mut position := start
 	mut depth := 0
 	while position < state.token_count[0]
+		transformed := sparse_integer_at(state.transform_origins, position)
+		if transformed > 0
+			position = state.transforms[transformed - 1].iteration.finish
+			next
+		end
 		caught := sparse_integer_at(state.catch_origins, position)
 		if caught > 0
 			position = state.catch_syntax[caught - 1].finish
@@ -1342,4 +1354,90 @@ def repl_statement_expression(mut state: CompilerState, mut position: Array<Inte
 		return repl_reference(environment.flow[1])
 	end
 	return repl_reference(repl_coerce(store, repl_coerce(store, value, operation.success_type), expected))
+end
+
+# Retain the source object, but read its current size and slot on each visit.
+def repl_transform(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, receiver: Integer): Integer
+	plan := checked_transform_require(state, position[0])
+	syntax := plan.syntax
+	shape := syntax.iteration
+	if shape.origin < 0 || repl_type(store, receiver) != plan.iteration.type_name
+		store.error[0] = "invalid checked collection transform"
+		return 0
+	end
+	mut result := 0
+	if syntax.kind == 3
+		position[0] = syntax.initial_start
+		result = repl_expression(state, position, store, environment, 1, plan.type_name).value
+		if store.error[0] != "" || environment.flow[0] != 0
+			return result
+		end
+	else
+		result = repl_value(store, plan.type_name, 0, 0.0, "", [])
+	end
+	saved := environment.count[0]
+	mut cursor := 0
+	mut ordinal := 0
+	mut bound := 0
+	mut exclusive := 0
+	if plan.iteration.source_kind == 2
+		cursor = store.integers[store.children[receiver][0]]
+		bound = store.integers[store.children[receiver][1]]
+		exclusive = store.integers[store.children[receiver][2]]
+	end
+	mut flow := [0]
+	while store.error[0] == ""
+		if plan.iteration.source_kind == 1
+			if cursor >= store.children[receiver].size()
+				break
+			end
+		elsif cursor > bound || (cursor == bound && exclusive == 1)
+			break
+		end
+		environment.count[0] = saved
+		mut element := 0
+		if plan.iteration.source_kind == 1
+			element = store.children[receiver][cursor]
+		else
+			element = repl_integer(store, cursor)
+		end
+		if syntax.kind == 3
+			repl_bind(environment, load_string(state.token_texts, syntax.accumulator_origin), result, 1)
+		end
+		repl_bind(environment, load_string(state.token_texts, shape.element_origin), element, 1)
+		if shape.index_origin >= 0
+			repl_bind(environment, load_string(state.token_texts, shape.index_origin), repl_integer(store, ordinal), 1)
+		end
+		position[0] = shape.body_start
+		yielded := repl_block(state, position, store, environment, flow, - 1)
+		if store.error[0] != "" || flow[0] != 0 || environment.flow[0] != 0
+			break
+		end
+		if syntax.kind == 1
+			store.children[result].push(repl_coerce(store, yielded, array_element_type(plan.type_name)))
+		elsif syntax.kind == 2
+			if store.integers[yielded] != 0
+				store.children[result].push(element)
+			end
+		else
+			result = repl_coerce(store, yielded, plan.type_name)
+		end
+		if plan.iteration.source_kind == 2 && cursor == bound
+			break
+		end
+		if shape.index_origin >= 0
+			if plan.iteration.source_kind == 2 && exclusive == 1 && cursor + 1 == bound
+				break
+			end
+			if ordinal == 9007199254740991
+				store.error[0] = "panic: Integer is outside the portable range"
+				break
+			end
+			ordinal += 1
+		end
+		cursor += 1
+	end
+	environment.count[0] = saved
+	position[0] = shape.finish
+	return result
 end
