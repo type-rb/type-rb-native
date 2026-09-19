@@ -1,8 +1,9 @@
 import { mir_nullable_coerce } from nullable_mir
 import { CheckedValue, checked_mir_value, checked_value, mir_add_value, mir_checked_value } from checked_values
-import { mir_control_active, mir_control_allocate, mir_control_arguments, mir_control_enter, mir_control_jump_arguments } from mir_control
+import { mir_control_active, mir_control_allocate, mir_control_arguments, mir_control_branch, mir_control_enter, mir_control_jump_arguments } from mir_control
 import { mir_semantic_type_id } from mir_types
 import { CheckedLocals, CompilerState } from state
+import { load_integer } from storage
 
 # Exit bridges let type checking discover a common result type without editing
 # previously emitted instructions or making source layout part of the backend.
@@ -52,4 +53,15 @@ def mir_value_complete(mut state: CompilerState, mut locals: CheckedLocals, join
 		index += 1
 	end
 	return mir_value_enter(state, locals, join.target, type_name, join.line)
+end
+
+# Select already-evaluated values through a typed join. Callers own lazy work.
+def mir_value_select(mut state: CompilerState, mut locals: CheckedLocals, condition: CheckedValue, first: CheckedValue, second: CheckedValue, origin: Integer): CheckedValue
+	line := load_integer(state.token_lines, origin)
+	mut join := mir_value_join(locals, line)
+	alternate := mir_control_branch(state, locals, condition, line)
+	mir_value_exit(state, locals, join, first)
+	mir_control_enter(state, locals, alternate, line)
+	mir_value_exit(state, locals, join, second)
+	return mir_value_complete(state, locals, join, first.type_name, origin)
 end

@@ -1,3 +1,4 @@
+import { float_method_kind, mir_float_method } from float_methods
 import { integer_method_arity, integer_method_kind, mir_integer_method } from integer_methods
 import { MirTransform, transform_kind } from transform_model
 import { CheckedLambda, callable_parts } from callable_types
@@ -607,8 +608,8 @@ def check_method_call(
 	if hash_key_type(receiver.type_name) != "" || receiver.type_name == "Hash"
 		return checked_hash_call(state, position, locals, receiver, method)
 	end
-	if receiver.type_name == "Integer" && integer_method_kind(method) > 0
-		return check_integer_method(state, position, locals, receiver, method)
+	if (receiver.type_name == "Integer" && integer_method_kind(method) > 0) || (receiver.type_name == "Float" && float_method_kind(method) > 0)
+		return check_numeric_method(state, position, locals, receiver, method)
 	end
 	line := load_integer(state.token_lines, position[0])
 	advance(position)
@@ -645,9 +646,6 @@ def check_method_call(
 		expect(state, position, ")")
 		if receiver.type_name == "String"
 			return mir_checked_string_operation(state, locals, 17, checked_mir_value(receiver), - 1, 2, "Integer", position[0] - 1)
-		end
-		if receiver.type_name == "Float"
-			return mir_checked_string_operation(state, locals, 17, checked_mir_value(receiver), - 1, 3, "Integer", position[0] - 1)
 		end
 	end
 	if method == "to_s"
@@ -710,7 +708,7 @@ def check_member(mut state: CompilerState, mut position: Array<Integer>, mut loc
 		end
 	end
 	if token_is(state, position[0], "(")
-		if value.category < 4 && member != "size" && member != "to_i" && member != "to_s" && member != "push" && member != "new" && !(value.type_name == "Integer" && integer_method_kind(member) > 0) && !((value.type_name == "Hash" || hash_key_type(value.type_name) != "") && checked_hash_method(member) != 0)
+		if value.category < 4 && member != "size" && member != "to_i" && member != "to_s" && member != "push" && member != "new" && !(value.type_name == "Integer" && integer_method_kind(member) > 0) && !(value.type_name == "Float" && float_method_kind(member) > 0) && !((value.type_name == "Hash" || hash_key_type(value.type_name) != "") && checked_hash_method(member) != 0)
 			scalar_mir_disable(locals)
 		end
 		if value.category >= 4
@@ -2085,11 +2083,15 @@ def check_transform(mut state: CompilerState, mut position: Array<Integer>, mut 
 end
 
 # Preserve source order and lexical transfers before lowering a receiver method.
-def check_integer_method(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue, method: String): CheckedValue
+def check_numeric_method(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue, method: String): CheckedValue
 	origin := position[0]
 	line := load_integer(state.token_lines, origin)
-	kind := integer_method_kind(method)
-	arity := integer_method_arity(kind)
+	mut kind := integer_method_kind(method)
+	mut arity := integer_method_arity(kind)
+	if receiver.type_name == "Float"
+		kind = float_method_kind(method)
+		arity = 0
+	end
 	advance(position)
 	skip_newlines(state, position)
 	mut arguments: Array<CheckedValue> := []
@@ -2097,7 +2099,7 @@ def check_integer_method(mut state: CompilerState, mut position: Array<Integer>,
 	mut diverged := false
 	while !token_is(state, position[0], ")") && !has_diagnostic(state)
 		if arguments.size() >= arity
-			return type_diagnostic(state, line, "Integer method argument count differs")
+			return type_diagnostic(state, line, receiver.type_name + " method argument count differs")
 		end
 		value := check_expression(state, position, locals, 1, "Integer")
 		arguments.push(value)
@@ -2113,7 +2115,7 @@ def check_integer_method(mut state: CompilerState, mut position: Array<Integer>,
 		skip_newlines(state, position)
 	end
 	if !expect(state, position, ")") || arguments.size() != arity
-		return type_diagnostic(state, line, "Integer method argument count differs")
+		return type_diagnostic(state, line, receiver.type_name + " method argument count differs")
 	end
 	if diverged
 		locals.mir_state[0] = saved
@@ -2121,6 +2123,9 @@ def check_integer_method(mut state: CompilerState, mut position: Array<Integer>,
 	end
 	if has_diagnostic(state)
 		return checked_value("Invalid", 0, origin, 0)
+	end
+	if receiver.type_name == "Float"
+		return mir_float_method(state, locals, kind, receiver, origin)
 	end
 	return mir_integer_method(state, locals, kind, receiver, arguments, origin)
 end
