@@ -1,3 +1,5 @@
+import { integer_method_arity, integer_method_kind } from integer_methods
+import { repl_integer_method } from repl_integer_methods
 import { callable_parts } from callable_types
 import { repl_closure, repl_closure_environment } from repl_callables
 import { select_checked_body } from state
@@ -725,6 +727,33 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 					if value.type_name == "Hash" || hash_key_type(value.type_name) != ""
 						result = repl_reference(repl_hash_method(state, position, store, environment, result.value))
 						if safe_origin >= 0 && environment.flow[0] == 0
+							result = repl_reference(repl_coerce(store, result.value, load_string(state.checked[0].safe_types, safe_origin)))
+						end
+						next
+					end
+					if value.type_name == "Integer" && integer_method_kind(member) > 0
+						kind := integer_method_kind(member)
+						position[0] += 1
+						skip_newlines(state, position)
+						mut arguments: Array<Integer> := []
+						while arguments.size() < integer_method_arity(kind)
+							argument := repl_expression(state, position, store, environment, 1, "Integer")
+							if environment.flow[0] != 0
+								return repl_reference(environment.flow[1])
+							end
+							if store.error[0] != ""
+								return repl_reference(0)
+							end
+							arguments.push(argument.value)
+							skip_newlines(state, position)
+							if token_is(state, position[0], ",")
+								position[0] += 1
+								skip_newlines(state, position)
+							end
+						end
+						position[0] += 1
+						result = repl_reference(repl_integer_method(store, kind, result.value, arguments))
+						if safe_origin >= 0 && environment.flow[0] == 0 && store.error[0] == ""
 							result = repl_reference(repl_coerce(store, result.value, load_string(state.checked[0].safe_types, safe_origin)))
 						end
 						next

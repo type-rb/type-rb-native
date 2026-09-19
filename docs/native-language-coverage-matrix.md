@@ -294,3 +294,11 @@
 | Retained search values, live traversal and managed captures | accepts | accepts | matches reference | matches reference |
 | Search predicates require Boolean results | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Indexed search blocks remain unsupported | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Integer methods | accepts | accepts | matches reference | matches reference |
+| Integer method order | accepts | accepts | matches reference | matches reference |
+| Integer clamp invalid | accepts | accepts | matches reference | rejects as reference |
+| Integer method extra argument | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Integer method missing argument | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Integer clamp missing bound | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Integer method float argument | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Integer method nullable argument | rejects as reference | rejects as reference | not reached | rejects as reference |
