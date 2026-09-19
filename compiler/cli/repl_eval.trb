@@ -1,3 +1,5 @@
+import { float_method_kind } from float_methods
+import { repl_float_method } from repl_float_methods
 import { integer_method_arity, integer_method_kind } from integer_methods
 import { repl_integer_method } from repl_integer_methods
 import { callable_parts } from callable_types
@@ -731,6 +733,16 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						end
 						next
 					end
+					if value.type_name == "Float" && float_method_kind(member) > 0
+						position[0] += 1
+						skip_newlines(state, position)
+						position[0] += 1
+						result = repl_reference(repl_float_method(store, float_method_kind(member), result.value))
+						if safe_origin >= 0 && environment.flow[0] == 0 && store.error[0] == ""
+							result = repl_reference(repl_coerce(store, result.value, load_string(state.checked[0].safe_types, safe_origin)))
+						end
+						next
+					end
 					if value.type_name == "Integer" && integer_method_kind(member) > 0
 						kind := integer_method_kind(member)
 						position[0] += 1
@@ -778,23 +790,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 								result = repl_reference(repl_string(store, integer_string(value.integer)))
 							else
 								if member == "to_i"
-									if value.type_name == "Float"
-										if value.floating != value.floating
-											store.error[0] = "panic: Float cannot be converted to Integer"
-										else
-											if value.floating > 9007199254740991.0
-												store.error[0] = "panic: Float cannot be converted to Integer"
-											else
-												if value.floating < - 9007199254740991.0
-													store.error[0] = "panic: Float cannot be converted to Integer"
-												else
-													result = repl_reference(repl_integer(store, value.floating.to_i()))
-												end
-											end
-										end
-									else
-										result = repl_reference(repl_integer(store, repl_string_integer(store, value.text)))
-									end
+									result = repl_reference(repl_integer(store, repl_string_integer(store, value.text)))
 								end
 							end
 						end

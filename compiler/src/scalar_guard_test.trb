@@ -1,7 +1,9 @@
 import { check, emit_qbe } from compiler
+import { intrinsic_mir_erase } from intrinsic_mir_test
 import { lex } from lexer
 import { MirInstruction, MirModule, mir_function_index, mir_instruction_with_payload } from mir
 import { mir_scalar_literal } from mir_analysis
+import { mir_numeric_plans_equal } from mir_numeric
 import { mir_function_with_guard, optimize_verified_mir } from mir_passes
 import { verify_mir } from mir_verifier
 import { parse_module } from parser
@@ -78,6 +80,24 @@ describe("MIR scalar Integer guards") do
 		expect(qbe.include?(", 33554432")).to_be_true()
 		optimize_verified_mir(state.scalar_mir)
 		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+	end
+
+	test("retains scalar guards and expansions after entry storage reordering") do
+		mut state := scalar_guard_state("((left + right) * (left + right + 1) / 2 + left + 1) * 1.0")
+		before := scalar_guard_output(emit_qbe(state))
+		plans := state.scalar_mir.numeric_plans[0]
+		function := state.scalar_mir.functions[mir_function_index(state.scalar_mir, 0)]
+		expect(function.kind).to_equal(1)
+		expect(function.integer_guard).to_equal(33554432)
+		intrinsic_mir_erase(state)
+		entry := state.scalar_mir.blocks[function.block_start]
+		state.scalar_mir.blocks[function.block_start] = state.scalar_mir.blocks[function.block_start + 1]
+		state.scalar_mir.blocks[function.block_start + 1] = entry
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		optimize_verified_mir(state.scalar_mir)
+		expect(mir_numeric_plans_equal(plans, state.scalar_mir.numeric_plans[0])).to_be_true()
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		expect(scalar_guard_output(emit_qbe(state))).to_equal(before)
 	end
 
 	test("rejects supplied, widened, non-power-of-two and missing guards") do

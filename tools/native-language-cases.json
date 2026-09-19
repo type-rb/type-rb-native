@@ -72,13 +72,34 @@
         "integer-method-missing-argument",
         "integer-clamp-missing-bound",
         "integer-method-float-argument",
-        "integer-method-nullable-argument"
+        "integer-method-nullable-argument",
+        "float-rounding-boundaries",
+        "float-classification",
+        "float-absolute-special",
+        "float-order-optional",
+        "float-floor-nonfinite",
+        "float-floor-nan",
+        "float-floor-outside",
+        "float-ceil-nonfinite",
+        "float-ceil-nan",
+        "float-ceil-outside",
+        "float-round-nonfinite",
+        "float-round-nan",
+        "float-round-outside",
+        "float-extra-argument",
+        "float-managed-calls",
+        "float-to-i-nonfinite",
+        "float-to-i-nan",
+        "float-to-i-outside",
+        "float-to-i-negative-outside",
+        "float-method-nullable-result",
+        "float-method-boolean-result"
       ],
       "pending": [
         "All operators and assignment forms; mixed widening and every portable failure boundary",
         "Short-circuit side effects and invalid RHS diagnostics across nested control"
       ],
-      "note": ""
+      "note": "Integer receiver operations and Float abs/floor/ceil/round/finite?/infinite?/nan?/to_i use typed MIR and checked portable conversions. Shared probes cover ties, limits, subnormals, signed zero, NaN, infinities, optional calls and managed captures; broader numeric APIs and Float String conversion remain open."
     },
     {
       "id": "bindings",
@@ -309,7 +330,9 @@
         "nullable-repl-rejected-assignment",
         "nullable-repl-conditional-assignment",
         "nullable-repl-partial-failure",
-        "nullable-repl-safe-navigation"
+        "nullable-repl-safe-navigation",
+        "float-order-optional",
+        "float-method-nullable-result"
       ],
       "pending": [
         "Class/callback and general pattern narrowing; collection/union optional conversions",
@@ -531,7 +554,8 @@
         "closure-nullable-captures",
         "closure-managed-captures",
         "closure-retained-calls",
-        "closure-retained-cycles"
+        "closure-retained-cycles",
+        "float-managed-calls"
       ],
       "pending": [
         "Named declarations as values, callable equality, nullable signatures and remaining parameter-capability boundaries"
@@ -15330,6 +15354,1053 @@
           "code": 0,
           "stdout": "",
           "stderr": "(trb):2: error[TRBN4004]: expected Integer, found Nil\n(trb):1: error[TRBN4003]: unresolved function probe\n"
+        }
+      }
+    },
+    {
+      "id": "float-rounding-boundaries",
+      "title": "Float rounding at ties, subnormals and portable Integer limits",
+      "files": {},
+      "declarations": "def smallest(): Float\n mut value := 1.0\n mut exponent := 0\n while exponent < 1074\n  value = value / 2.0\n  exponent += 1\n end\n return value\nend\ndef largest(): Float\n mut value := 1.9999999999999998\n mut exponent := 0\n while exponent < 1023\n  value = value * 2.0\n  exponent += 1\n end\n return value\nend\ndef reciprocal(value: Float): Float\n return 1.0 / value\nend\ndef negate(value: Float): Float\n return -value\nend\ndef probe()\nvalues := [-9007199254740991.0, -4503599627370495.0, -2.5, -1.5, -0.5000000000000001, -0.5, -0.49999999999999994, -smallest(), 0.0, smallest(), 0.49999999999999994, 0.5, 0.5000000000000001, 1.5, 2.5, 4503599627370495.0, 9007199254740991.0]\nvalues.each do |value|\n puts(value.floor())\n puts(value.ceil())\n puts(value.round())\nend\nend\n",
+      "body": "probe()",
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "-9007199254740991\n-9007199254740991\n-9007199254740991\n-4503599627370495\n-4503599627370495\n-4503599627370495\n-3\n-2\n-3\n-2\n-1\n-2\n-1\n0\n-1\n-1\n0\n-1\n-1\n0\n0\n-1\n0\n0\n0\n0\n0\n0\n1\n0\n0\n1\n0\n0\n1\n1\n0\n1\n1\n1\n2\n2\n2\n3\n3\n4503599627370495\n4503599627370495\n4503599627370495\n9007199254740991\n9007199254740991\n9007199254740991\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "-9007199254740991\n-9007199254740991\n-9007199254740991\n-4503599627370495\n-4503599627370495\n-4503599627370495\n-3\n-2\n-3\n-2\n-1\n-2\n-1\n0\n-1\n-1\n0\n-1\n-1\n0\n0\n-1\n0\n0\n0\n0\n0\n0\n1\n0\n0\n1\n0\n0\n1\n1\n0\n1\n1\n1\n2\n2\n2\n3\n3\n4503599627370495\n4503599627370495\n4503599627370495\n9007199254740991\n9007199254740991\n9007199254740991\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "-9007199254740991\n-9007199254740991\n-9007199254740991\n-4503599627370495\n-4503599627370495\n-4503599627370495\n-3\n-2\n-3\n-2\n-1\n-2\n-1\n0\n-1\n-1\n0\n-1\n-1\n0\n0\n-1\n0\n0\n0\n0\n0\n0\n1\n0\n0\n1\n0\n0\n1\n1\n0\n1\n1\n1\n2\n2\n2\n3\n3\n4503599627370495\n4503599627370495\n4503599627370495\n9007199254740991\n9007199254740991\n9007199254740991\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "-9007199254740991\n-9007199254740991\n-9007199254740991\n-4503599627370495\n-4503599627370495\n-4503599627370495\n-3\n-2\n-3\n-2\n-1\n-2\n-1\n0\n-1\n-1\n0\n-1\n-1\n0\n0\n-1\n0\n0\n0\n0\n0\n0\n1\n0\n0\n1\n0\n0\n1\n1\n0\n1\n1\n1\n2\n2\n2\n3\n3\n4503599627370495\n4503599627370495\n4503599627370495\n9007199254740991\n9007199254740991\n9007199254740991\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "float-classification",
+      "title": "Float finite, infinite and NaN classification",
+      "files": {},
+      "declarations": "def smallest(): Float\n mut value := 1.0\n mut exponent := 0\n while exponent < 1074\n  value = value / 2.0\n  exponent += 1\n end\n return value\nend\ndef largest(): Float\n mut value := 1.9999999999999998\n mut exponent := 0\n while exponent < 1023\n  value = value * 2.0\n  exponent += 1\n end\n return value\nend\ndef reciprocal(value: Float): Float\n return 1.0 / value\nend\ndef negate(value: Float): Float\n return -value\nend\ndef probe()\ninfinity := reciprocal(0.0)\nnan := infinity - infinity\nvalues := [negate(0.0), 0.0, -smallest(), smallest(), -largest(), largest(), infinity, -infinity, nan]\nvalues.each do |value|\n puts(value.finite?())\n puts(value.infinite?())\n puts(value.nan?())\nend\nend\n",
+      "body": "probe()",
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\nfalse\nfalse\ntrue\nfalse\nfalse\ntrue\nfalse\nfalse\ntrue\nfalse\nfalse\ntrue\nfalse\nfalse\ntrue\nfalse\nfalse\nfalse\ntrue\nfalse\nfalse\ntrue\nfalse\nfalse\nfalse\ntrue\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\nfalse\nfalse\ntrue\nfalse\nfalse\ntrue\nfalse\nfalse\ntrue\nfalse\nfalse\ntrue\nfalse\nfalse\ntrue\nfalse\nfalse\nfalse\ntrue\nfalse\nfalse\ntrue\nfalse\nfalse\nfalse\ntrue\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\nfalse\nfalse\ntrue\nfalse\nfalse\ntrue\nfalse\nfalse\ntrue\nfalse\nfalse\ntrue\nfalse\nfalse\ntrue\nfalse\nfalse\nfalse\ntrue\nfalse\nfalse\ntrue\nfalse\nfalse\nfalse\ntrue\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\nfalse\nfalse\ntrue\nfalse\nfalse\ntrue\nfalse\nfalse\ntrue\nfalse\nfalse\ntrue\nfalse\nfalse\ntrue\nfalse\nfalse\nfalse\ntrue\nfalse\nfalse\ntrue\nfalse\nfalse\nfalse\ntrue\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "float-absolute-special",
+      "title": "Float absolute value preserves NaN and normalizes negative zero",
+      "files": {},
+      "declarations": "def smallest(): Float\n mut value := 1.0\n mut exponent := 0\n while exponent < 1074\n  value = value / 2.0\n  exponent += 1\n end\n return value\nend\ndef largest(): Float\n mut value := 1.9999999999999998\n mut exponent := 0\n while exponent < 1023\n  value = value * 2.0\n  exponent += 1\n end\n return value\nend\ndef reciprocal(value: Float): Float\n return 1.0 / value\nend\ndef negate(value: Float): Float\n return -value\nend\ndef probe()\ninfinity := reciprocal(0.0)\nnan := infinity - infinity\nputs(reciprocal(negate(0.0)) < 0.0)\nputs(reciprocal(negate(0.0).abs()) > 0.0)\nputs((-2.5).abs() == 2.5)\nputs((-infinity).abs() == infinity)\nputs(nan.abs().nan?())\nputs((-smallest()).abs() == smallest())\nend\n",
+      "body": "probe()",
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\ntrue\ntrue\ntrue\ntrue\ntrue\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\ntrue\ntrue\ntrue\ntrue\ntrue\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\ntrue\ntrue\ntrue\ntrue\ntrue\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\ntrue\ntrue\ntrue\ntrue\ntrue\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "float-order-optional",
+      "title": "Float receiver effects and optional calls",
+      "files": {},
+      "declarations": "def smallest(): Float\n mut value := 1.0\n mut exponent := 0\n while exponent < 1074\n  value = value / 2.0\n  exponent += 1\n end\n return value\nend\ndef largest(): Float\n mut value := 1.9999999999999998\n mut exponent := 0\n while exponent < 1023\n  value = value * 2.0\n  exponent += 1\n end\n return value\nend\ndef reciprocal(value: Float): Float\n return 1.0 / value\nend\ndef negate(value: Float): Float\n return -value\nend\ndef mark(value: Float): Float\n puts(\"visit\")\n return value\nend\ndef optional_round(value: Float?): Integer?\n return value&.round()\nend\ndef probe()\nputs(mark(-2.5).round())\nabsent := optional_round(nil)\nputs(absent == nil)\npresent := optional_round(-2.5)\nif present != nil\n puts(present)\nend\nend\n",
+      "body": "probe()",
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "visit\n-3\ntrue\n-3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "visit\n-3\ntrue\n-3\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "visit\n-3\ntrue\n-3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "visit\n-3\ntrue\n-3\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "float-floor-nonfinite",
+      "title": "Float floor nonfinite",
+      "files": {},
+      "declarations": "def smallest(): Float\n mut value := 1.0\n mut exponent := 0\n while exponent < 1074\n  value = value / 2.0\n  exponent += 1\n end\n return value\nend\ndef largest(): Float\n mut value := 1.9999999999999998\n mut exponent := 0\n while exponent < 1023\n  value = value * 2.0\n  exponent += 1\n end\n return value\nend\ndef reciprocal(value: Float): Float\n return 1.0 / value\nend\ndef negate(value: Float): Float\n return -value\nend\ndef probe()\nvalue := reciprocal(0.0)\nputs(value.floor())\nend\n",
+      "body": "probe()",
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Float cannot be converted to Integer"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):27:6: error: Float cannot be converted to Integer\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Float cannot be converted to Integer"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):29: error: Float cannot be converted to Integer\n"
+        }
+      }
+    },
+    {
+      "id": "float-floor-nan",
+      "title": "Float floor nan",
+      "files": {},
+      "declarations": "def smallest(): Float\n mut value := 1.0\n mut exponent := 0\n while exponent < 1074\n  value = value / 2.0\n  exponent += 1\n end\n return value\nend\ndef largest(): Float\n mut value := 1.9999999999999998\n mut exponent := 0\n while exponent < 1023\n  value = value * 2.0\n  exponent += 1\n end\n return value\nend\ndef reciprocal(value: Float): Float\n return 1.0 / value\nend\ndef negate(value: Float): Float\n return -value\nend\ndef probe()\nvalue := reciprocal(0.0) - reciprocal(0.0)\nputs(value.floor())\nend\n",
+      "body": "probe()",
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Float cannot be converted to Integer"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):27:6: error: Float cannot be converted to Integer\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Float cannot be converted to Integer"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):29: error: Float cannot be converted to Integer\n"
+        }
+      }
+    },
+    {
+      "id": "float-floor-outside",
+      "title": "Float floor outside",
+      "files": {},
+      "declarations": "def smallest(): Float\n mut value := 1.0\n mut exponent := 0\n while exponent < 1074\n  value = value / 2.0\n  exponent += 1\n end\n return value\nend\ndef largest(): Float\n mut value := 1.9999999999999998\n mut exponent := 0\n while exponent < 1023\n  value = value * 2.0\n  exponent += 1\n end\n return value\nend\ndef reciprocal(value: Float): Float\n return 1.0 / value\nend\ndef negate(value: Float): Float\n return -value\nend\ndef probe()\nvalue := 9007199254740992.0\nputs(value.floor())\nend\n",
+      "body": "probe()",
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Integer is outside the portable range"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):27:6: error: Integer is outside the portable range\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Integer is outside the portable range"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):29: error: Integer is outside the portable range\n"
+        }
+      }
+    },
+    {
+      "id": "float-ceil-nonfinite",
+      "title": "Float ceil nonfinite",
+      "files": {},
+      "declarations": "def smallest(): Float\n mut value := 1.0\n mut exponent := 0\n while exponent < 1074\n  value = value / 2.0\n  exponent += 1\n end\n return value\nend\ndef largest(): Float\n mut value := 1.9999999999999998\n mut exponent := 0\n while exponent < 1023\n  value = value * 2.0\n  exponent += 1\n end\n return value\nend\ndef reciprocal(value: Float): Float\n return 1.0 / value\nend\ndef negate(value: Float): Float\n return -value\nend\ndef probe()\nvalue := reciprocal(0.0)\nputs(value.ceil())\nend\n",
+      "body": "probe()",
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Float cannot be converted to Integer"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):27:6: error: Float cannot be converted to Integer\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Float cannot be converted to Integer"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):29: error: Float cannot be converted to Integer\n"
+        }
+      }
+    },
+    {
+      "id": "float-ceil-nan",
+      "title": "Float ceil nan",
+      "files": {},
+      "declarations": "def smallest(): Float\n mut value := 1.0\n mut exponent := 0\n while exponent < 1074\n  value = value / 2.0\n  exponent += 1\n end\n return value\nend\ndef largest(): Float\n mut value := 1.9999999999999998\n mut exponent := 0\n while exponent < 1023\n  value = value * 2.0\n  exponent += 1\n end\n return value\nend\ndef reciprocal(value: Float): Float\n return 1.0 / value\nend\ndef negate(value: Float): Float\n return -value\nend\ndef probe()\nvalue := reciprocal(0.0) - reciprocal(0.0)\nputs(value.ceil())\nend\n",
+      "body": "probe()",
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Float cannot be converted to Integer"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):27:6: error: Float cannot be converted to Integer\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Float cannot be converted to Integer"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):29: error: Float cannot be converted to Integer\n"
+        }
+      }
+    },
+    {
+      "id": "float-ceil-outside",
+      "title": "Float ceil outside",
+      "files": {},
+      "declarations": "def smallest(): Float\n mut value := 1.0\n mut exponent := 0\n while exponent < 1074\n  value = value / 2.0\n  exponent += 1\n end\n return value\nend\ndef largest(): Float\n mut value := 1.9999999999999998\n mut exponent := 0\n while exponent < 1023\n  value = value * 2.0\n  exponent += 1\n end\n return value\nend\ndef reciprocal(value: Float): Float\n return 1.0 / value\nend\ndef negate(value: Float): Float\n return -value\nend\ndef probe()\nvalue := 9007199254740992.0\nputs(value.ceil())\nend\n",
+      "body": "probe()",
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Integer is outside the portable range"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):27:6: error: Integer is outside the portable range\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Integer is outside the portable range"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):29: error: Integer is outside the portable range\n"
+        }
+      }
+    },
+    {
+      "id": "float-round-nonfinite",
+      "title": "Float round nonfinite",
+      "files": {},
+      "declarations": "def smallest(): Float\n mut value := 1.0\n mut exponent := 0\n while exponent < 1074\n  value = value / 2.0\n  exponent += 1\n end\n return value\nend\ndef largest(): Float\n mut value := 1.9999999999999998\n mut exponent := 0\n while exponent < 1023\n  value = value * 2.0\n  exponent += 1\n end\n return value\nend\ndef reciprocal(value: Float): Float\n return 1.0 / value\nend\ndef negate(value: Float): Float\n return -value\nend\ndef probe()\nvalue := reciprocal(0.0)\nputs(value.round())\nend\n",
+      "body": "probe()",
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Float cannot be converted to Integer"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):27:6: error: Float cannot be converted to Integer\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Float cannot be converted to Integer"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):29: error: Float cannot be converted to Integer\n"
+        }
+      }
+    },
+    {
+      "id": "float-round-nan",
+      "title": "Float round nan",
+      "files": {},
+      "declarations": "def smallest(): Float\n mut value := 1.0\n mut exponent := 0\n while exponent < 1074\n  value = value / 2.0\n  exponent += 1\n end\n return value\nend\ndef largest(): Float\n mut value := 1.9999999999999998\n mut exponent := 0\n while exponent < 1023\n  value = value * 2.0\n  exponent += 1\n end\n return value\nend\ndef reciprocal(value: Float): Float\n return 1.0 / value\nend\ndef negate(value: Float): Float\n return -value\nend\ndef probe()\nvalue := reciprocal(0.0) - reciprocal(0.0)\nputs(value.round())\nend\n",
+      "body": "probe()",
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Float cannot be converted to Integer"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):27:6: error: Float cannot be converted to Integer\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Float cannot be converted to Integer"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):29: error: Float cannot be converted to Integer\n"
+        }
+      }
+    },
+    {
+      "id": "float-round-outside",
+      "title": "Float round outside",
+      "files": {},
+      "declarations": "def smallest(): Float\n mut value := 1.0\n mut exponent := 0\n while exponent < 1074\n  value = value / 2.0\n  exponent += 1\n end\n return value\nend\ndef largest(): Float\n mut value := 1.9999999999999998\n mut exponent := 0\n while exponent < 1023\n  value = value * 2.0\n  exponent += 1\n end\n return value\nend\ndef reciprocal(value: Float): Float\n return 1.0 / value\nend\ndef negate(value: Float): Float\n return -value\nend\ndef probe()\nvalue := 9007199254740992.0\nputs(value.round())\nend\n",
+      "body": "probe()",
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Integer is outside the portable range"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):27:6: error: Integer is outside the portable range\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Integer is outside the portable range"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):29: error: Integer is outside the portable range\n"
+        }
+      }
+    },
+    {
+      "id": "float-extra-argument",
+      "title": "Float extra argument",
+      "files": {},
+      "declarations": "def smallest(): Float\n mut value := 1.0\n mut exponent := 0\n while exponent < 1074\n  value = value / 2.0\n  exponent += 1\n end\n return value\nend\ndef largest(): Float\n mut value := 1.9999999999999998\n mut exponent := 0\n while exponent < 1023\n  value = value * 2.0\n  exponent += 1\n end\n return value\nend\ndef reciprocal(value: Float): Float\n return 1.0 / value\nend\ndef negate(value: Float): Float\n return -value\nend\ndef probe()\nputs(1.5.round(2))\nend\n",
+      "body": "probe()",
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:26:6: error[TRB3000]: round() expects 0..0 arguments, got 1\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:26:6: error[TRB3000]: round() expects 0..0 arguments, got 1\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):26:6: error[TRB3000]: round() expects 0..0 arguments, got 1\n(trb):25:1: error[TRB3000]: function probe is not declared or imported\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:26: error[TRBN4004]: Float method argument count differs\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:26: error[TRBN4004]: Float method argument count differs\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):26: error[TRBN4004]: Float method argument count differs\n(trb):25: error[TRBN4003]: unresolved function probe\n"
+        }
+      }
+    },
+    {
+      "id": "float-managed-calls",
+      "title": "Float aliases, record receivers and captured calls retain managed values",
+      "files": {},
+      "declarations": "alias Real = Float\nrecord Sample\n value: Real\n label: String\nend\n\ndef named_number<T>(item: T, operation: (T) -> Integer): Integer\n return operation(item)\nend\n\ndef probe()\n label := \"kept\" + 3.to_s()\n sample := Sample.new(value: -2.5, label: label)\n callback := fn(item: Sample): Integer\n  puts(item.label)\n  return item.value.abs().round()\n end\n puts(named_number<Sample>(sample, callback))\n rounded := [-2.5, 0.5, 9007199254740991.0].map { |value| value.round() }\n rounded.each { |value| puts(value) }\n mut count := 0\n next_value := fn(): Float\n  count += 1\n  return -1.5\n end\n puts(next_value().abs().ceil())\n puts(count)\n puts(sample.label)\n puts(sample.value.floor())\nend\n",
+      "body": "probe()",
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "kept3\n3\n-3\n1\n9007199254740991\n2\n1\nkept3\n-3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "kept3\n3\n-3\n1\n9007199254740991\n2\n1\nkept3\n-3\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "kept3\n3\n-3\n1\n9007199254740991\n2\n1\nkept3\n-3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "kept3\n3\n-3\n1\n9007199254740991\n2\n1\nkept3\n-3\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "float-to-i-nonfinite",
+      "title": "Float to_i nonfinite failure class",
+      "files": {},
+      "declarations": "def reciprocal(value: Float): Float\nreturn 1.0 / value\nend\ndef probe()\nvalue := reciprocal(0.0)\nputs(value.to_i())\nend\n",
+      "body": "probe()",
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Float cannot be converted to Integer"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):6:6: error: Float cannot be converted to Integer\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Float cannot be converted to Integer"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):8: error: Float cannot be converted to Integer\n"
+        }
+      }
+    },
+    {
+      "id": "float-to-i-nan",
+      "title": "Float to_i nan failure class",
+      "files": {},
+      "declarations": "def reciprocal(value: Float): Float\nreturn 1.0 / value\nend\ndef probe()\nvalue := reciprocal(0.0) - reciprocal(0.0)\nputs(value.to_i())\nend\n",
+      "body": "probe()",
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Float cannot be converted to Integer"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):6:6: error: Float cannot be converted to Integer\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Float cannot be converted to Integer"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):8: error: Float cannot be converted to Integer\n"
+        }
+      }
+    },
+    {
+      "id": "float-to-i-outside",
+      "title": "Float to_i outside failure class",
+      "files": {},
+      "declarations": "def reciprocal(value: Float): Float\nreturn 1.0 / value\nend\ndef probe()\nvalue := 9007199254740992.0\nputs(value.to_i())\nend\n",
+      "body": "probe()",
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Integer is outside the portable range"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):6:6: error: Integer is outside the portable range\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Integer is outside the portable range"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):8: error: Integer is outside the portable range\n"
+        }
+      }
+    },
+    {
+      "id": "float-to-i-negative-outside",
+      "title": "Float to_i negative-outside failure class",
+      "files": {},
+      "declarations": "def reciprocal(value: Float): Float\nreturn 1.0 / value\nend\ndef probe()\nvalue := -9007199254740992.0\nputs(value.to_i())\nend\n",
+      "body": "probe()",
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Integer is outside the portable range"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):6:6: error: Integer is outside the portable range\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Integer is outside the portable range"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):8: error: Integer is outside the portable range\n"
+        }
+      }
+    },
+    {
+      "id": "float-method-nullable-result",
+      "title": "Float rounding preserves an absent nullable result",
+      "files": {},
+      "declarations": "def convert(value: Float?): Integer\nreturn value&.round()\nend\n",
+      "body": "puts(1)",
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:2:1: error[TRB3000]: return type is Integer?, expected Integer\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:2:1: error[TRB3000]: return type is Integer?, expected Integer\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "1\n",
+          "stderr": "(trb):2:1: error[TRB3000]: return type is Integer?, expected Integer\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:2: error[TRBN4004]: expected Integer, found Integer?\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:2: error[TRBN4004]: expected Integer, found Integer?\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "1\n",
+          "stderr": "(trb):2: error[TRBN4004]: expected Integer, found Integer?\n"
+        }
+      }
+    },
+    {
+      "id": "float-method-boolean-result",
+      "title": "Float classification returns Boolean",
+      "files": {},
+      "declarations": "",
+      "body": "value: Integer := 1.0.finite?()\nputs(value)",
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:19: error[TRB3000]: cannot assign Boolean to Integer\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:19: error[TRB3000]: cannot assign Boolean to Integer\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1:19: error[TRB3000]: cannot assign Boolean to Integer\n(trb):1:6: error[TRB3000]: value is not declared\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: expected Integer, found Boolean\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: expected Integer, found Boolean\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1: error[TRBN4004]: expected Integer, found Boolean\n(trb):1: error[TRBN4003]: unresolved local value\n"
         }
       }
     }

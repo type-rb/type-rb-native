@@ -1,0 +1,53 @@
+import { ReplStore, repl_boolean, repl_float, repl_integer } from repl_model
+
+# Keep failure classes shared with ordinary Float-to-Integer conversion.
+def repl_float_integer(mut store: ReplStore, value: Float): Integer
+	difference := value - value
+	if difference != difference
+		store.error[0] = "panic: Float cannot be converted to Integer"
+		return 0
+	end
+	if value < - 9007199254740991.0 || value > 9007199254740991.0
+		store.error[0] = "panic: Integer is outside the portable range"
+		return 0
+	end
+	return value.to_i()
+end
+
+def repl_float_method(mut store: ReplStore, kind: Integer, receiver: Integer): Integer
+	value := store.floats[receiver]
+	if kind == 1
+		if value < 0.0
+			return repl_float(store, - value)
+		end
+		return repl_float(store, value + 0.0)
+	elsif kind == 7
+		return repl_boolean(store, value != value)
+	end
+	if kind == 5 || kind == 6
+		difference := value - value
+		if kind == 5
+			return repl_boolean(store, difference == difference)
+		end
+		return repl_boolean(store, value == value && difference != difference)
+	end
+	mut integer := repl_float_integer(store, value)
+	if store.error[0] != ""
+		return 0
+	end
+	if kind != 8
+		fraction := value - integer * 1.0
+		if kind == 2 && fraction < 0.0
+			integer -= 1
+		elsif kind == 3 && fraction > 0.0
+			integer += 1
+		elsif kind == 4
+			if fraction >= 0.5
+				integer += 1
+			elsif fraction <= - 0.5
+				integer -= 1
+			end
+		end
+	end
+	return repl_integer(store, integer)
+end

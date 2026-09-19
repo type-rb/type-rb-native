@@ -13,7 +13,7 @@ agree. Completed naming and extraction history is available in the
 | `compiler/src/checked_body.trb` | Concrete function-owned checked projections; shared parsed syntax stays in the program, and backend emission needs only verified MIR. |
 | `compiler/src/lambda_syntax.trb`, `compiler/src/lambda_resolution.trb` | Anonymous parameter grammar and per-body resolved signatures; recursive body parsing stays in the parser, while executable lexical capture lowering remains pending. |
 | `compiler/src/iteration_syntax.trb`, `iteration_mir.trb` | Parsed source regions are immutable syntax; concrete checked traversal plans bind those regions to receiver/element types and lexical loop owners. Executable traversal is ordinary MIR control flow. |
-| `compiler/src/mir_value_control.trb` | Typed branch exits, common result blocks and numeric join conversions; recursive source checking and REPL evaluation consume shared frontend regions. |
+| `compiler/src/mir_value_control.trb` | Typed branch exits, common result blocks, selection of evaluated values and numeric join conversions; recursive source checking and REPL evaluation consume shared frontend regions. |
 | `compiler/src/default_arguments.trb` | Private initializer declaration identities and preceding typed slots; ordinary checked functions and MIR own their bodies and calls. |
 | `compiler/cli/repl_project.trb` | REPL project discovery, generated-import filtering and visible nominal type names. Session checking/evaluation remains in the REPL adapters. |
 | `compiler/src/checked_submission.trb`, `compiler/cli/repl_check.trb` | Ordinary checked entry/exit facts and result types, plus REPL source loading and boundary mapping. Session completion and replay own fact persistence; QBE consumes only verified MIR. |

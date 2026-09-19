@@ -127,10 +127,10 @@ defaults and managed collections retain optional payloads through shared root
 planning. See [decision 0042](decisions/0042-nullable-mir.md) for the private layout
 and conservative fact invalidation across assignments and loop backedges.
 
-The ordinary compiler closure contains 101 modules. Implementation syntax stays
+The ordinary compiler closure contains 102 modules. Implementation syntax stays
 within the existing immutable seed and snapshot-v4 boundary; compiler self-use
 of the new syntax still depends on an accepted seed refresh. The shared language
-contract contains 300 cases with explicit remaining differences. Retained REPL
+contract contains 321 cases with explicit remaining differences. Retained REPL
 assignment flow now uses an ordinary checker projection, with conservative
 failure/interruption invalidation and explicit replay boundaries; see
 [decision 0043](decisions/0043-checked-repl-submissions.md). Ordinary enum payloads and exhaustive cases now have independently verified
@@ -247,3 +247,19 @@ Value-producing Array/Range transformations now share the same typed loop
 builders: map/select results and reduce accumulators are ordinary loop-carried
 values. Checked projections serve the REPL; source-erasure and forced-GC tests
 verify independent executable MIR. See [decision 0052](decisions/0052-collection-transform-mir.md).
+
+## Float receiver checkpoint
+
+Float absolute value, rounding and finite/infinite/NaN classification share
+existing verified operations, conversion failures and typed joins. Integer and
+Float receivers reuse numeric argument checking and a common value-selection
+builder. Ordinary and REPL checks include signed zero, rounding ties, portable
+limits, non-finite failures and managed captures. The new Float owner raises the
+ordinary closure to 102 modules; no new backend dispatch or instruction kind is
+needed. See [decision 0054](decisions/0054-float-receiver-mir.md). Wider numeric
+APIs and final performance qualification remain open.
+
+Scalar-leaf verification, Integer guard proofs and numeric call expansion also
+use the entry block's identity rather than its storage position. Reordering
+controls now cover scalar leaves as well as control-flow functions, preserving
+verified plans and source-independent execution.

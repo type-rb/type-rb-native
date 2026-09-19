@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 300 ordinary-path probes and 32 feature
+Status: the shared contract contains 321 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -44,8 +44,21 @@ now work in ordinary files and the REPL. Arguments follow source order; invalid
 clamp intervals fail after both limits have been evaluated. Numeric extrema,
 negative parity, chaining, safe navigation and captured calls share the reference
 contract. [Decision 0053](decisions/0053-integer-receiver-mir.md) records the
-existing scalar/CFG lowering and independently verified failure guard. Remaining
-Float receiver operations and wider numeric standard-library coverage stay open.
+existing scalar/CFG lowering and independently verified failure guard. Float
+receiver operations are described below; wider numeric standard-library coverage
+stays open.
+
+## Float receiver operations
+
+Float `abs`, `floor`, `ceil`, `round`, `finite?`, `infinite?` and `nan?` now work
+in ordinary programs and the REPL. Rounding produces checked portable Integers,
+with halfway values rounded away from zero. Absolute value normalizes negative
+zero, and classification distinguishes finite values, infinities and NaN.
+Optional calls, aliases, managed captures and failure classes share the reference
+contract. The REPL's existing `to_i` now also distinguishes non-finite inputs from
+finite out-of-range values. [Decision 0054](decisions/0054-float-receiver-mir.md)
+records the existing-operation lowering and boundary proofs. Float `to_s` and
+wider numeric package coverage remain open.
 
 ## Callable signatures and MIR foundation
 

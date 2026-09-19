@@ -302,3 +302,24 @@
 | Integer clamp missing bound | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Integer method float argument | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Integer method nullable argument | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Float rounding at ties, subnormals and portable Integer limits | accepts | accepts | matches reference | matches reference |
+| Float finite, infinite and NaN classification | accepts | accepts | matches reference | matches reference |
+| Float absolute value preserves NaN and normalizes negative zero | accepts | accepts | matches reference | matches reference |
+| Float receiver effects and optional calls | accepts | accepts | matches reference | matches reference |
+| Float floor nonfinite | accepts | accepts | matches reference | rejects as reference |
+| Float floor nan | accepts | accepts | matches reference | rejects as reference |
+| Float floor outside | accepts | accepts | matches reference | rejects as reference |
+| Float ceil nonfinite | accepts | accepts | matches reference | rejects as reference |
+| Float ceil nan | accepts | accepts | matches reference | rejects as reference |
+| Float ceil outside | accepts | accepts | matches reference | rejects as reference |
+| Float round nonfinite | accepts | accepts | matches reference | rejects as reference |
+| Float round nan | accepts | accepts | matches reference | rejects as reference |
+| Float round outside | accepts | accepts | matches reference | rejects as reference |
+| Float extra argument | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Float aliases, record receivers and captured calls retain managed values | accepts | accepts | matches reference | matches reference |
+| Float to_i nonfinite failure class | accepts | accepts | matches reference | rejects as reference |
+| Float to_i nan failure class | accepts | accepts | matches reference | rejects as reference |
+| Float to_i outside failure class | accepts | accepts | matches reference | rejects as reference |
+| Float to_i negative-outside failure class | accepts | accepts | matches reference | rejects as reference |
+| Float rounding preserves an absent nullable result | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Float classification returns Boolean | rejects as reference | rejects as reference | not reached | rejects as reference |

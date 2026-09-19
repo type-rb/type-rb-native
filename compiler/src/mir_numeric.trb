@@ -1,5 +1,5 @@
 import { integer_string } from literals
-import { MirFunction, MirModule, MirNumericOperation, MirNumericPlan, mir_function_index, mir_value_type } from mir
+import { MirFunction, MirModule, MirNumericOperation, MirNumericPlan, mir_block_index, mir_function_index, mir_value_type } from mir
 import { mir_loop_dominates } from mir_array_loops
 import { mir_build_flow, mir_flow_blocks } from mir_flow
 
@@ -155,9 +155,13 @@ def mir_numeric_mode(operator: Integer, left_small: Boolean, right_small: Boolea
 end
 
 def mir_numeric_leaf(native_module: MirModule, function: MirFunction, caller: Integer, site: Integer, arguments: Array<Integer>, mut budget: Array<Integer>): MirNumericPlan
+	entry := mir_block_index(native_module, function, function.entry_block)
+	if entry < 0
+		return mir_numeric_empty()
+	end
 	small := mir_numeric_small(native_module, function, arguments)
 	mut operations: Array<MirNumericOperation> := []
-	block := native_module.blocks[function.block_start]
+	block := native_module.blocks[entry]
 	mut index := block.instruction_start
 	while index < block.instruction_start + block.instruction_count
 		instruction := native_module.instructions[index]
@@ -224,7 +228,8 @@ def mir_numeric_plans(native_module: MirModule): Array<MirNumericPlan>
 					callee := mir_function_index(native_module, call.callee)
 					if callee >= 0 && native_module.signatures[call.callee].kind == 0
 						leaf := native_module.functions[callee]
-						if leaf.kind == 1 && native_module.blocks[leaf.block_start].instruction_count <= 32
+						entry := mir_block_index(native_module, leaf, leaf.entry_block)
+						if leaf.kind == 1 && entry >= 0 && native_module.blocks[entry].instruction_count <= 32
 							mut arguments: Array<Integer> := []
 							mut argument := 0
 							while argument < call.argument_count
