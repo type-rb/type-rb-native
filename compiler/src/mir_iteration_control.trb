@@ -131,13 +131,32 @@ def mir_checked_iteration_end(mut state: CompilerState, mut locals: CheckedLocal
 end
 
 # Selection appends the retained visited value even if the source slot or the
-# user parameter changes. Only the reducer replaces a loop-carried SSA value.
+# user parameter changes. Reducers and predicates carry their result through
+# SSA bindings; a predicate exits the loop as soon as its answer is known.
 def mir_transform_yield(mut state: CompilerState, mut locals: CheckedLocals, kind: Integer, result_slot: Integer, element: CheckedValue, yielded: CheckedValue, origin: Integer)
 	if !mir_control_active(locals)
 		return
 	end
 	if kind == 3
 		store_integer(locals.mir_values, result_slot, checked_mir_value(yielded) + 1)
+		return
+	end
+	if kind >= 4
+		mut result := checked_mir_value(yielded)
+		if kind == 6
+			zero := scalar_mir_literal(state, locals, "Boolean", origin, "false")
+			inverted := scalar_mir_binary(state, locals, "==", yielded, zero, "Boolean", origin)
+			result = checked_mir_value(inverted)
+		end
+		store_integer(locals.mir_values, result_slot, result + 1)
+		frame := locals.mir_loops[locals.mir_control[8] - 1]
+		continuation := mir_control_allocate(locals)
+		if kind == 5
+			mir_control_conditional(state, locals, checked_mir_value(yielded), continuation, locals.count[0], frame.exit, frame.exit_binding_count)
+		else
+			mir_control_conditional(state, locals, checked_mir_value(yielded), frame.exit, frame.exit_binding_count, continuation, locals.count[0])
+		end
+		mir_control_enter(state, locals, continuation, load_integer(state.token_lines, origin))
 		return
 	end
 	mut alternate :=- 1

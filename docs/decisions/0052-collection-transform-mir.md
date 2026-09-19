@@ -4,7 +4,8 @@ Status: implemented; integration validation is recorded with the reference updat
 
 ## Contract
 
-`Array<T>` and `Range<Integer>` support `map`, `select` and `reduce(initial)`
+`Array<T>` and `Range<Integer>` support `map`, `select`, `reduce(initial)`,
+`any?`, `all?` and `none?`
 with brace or `do` blocks. `map` and `select` also support `with_index`.
 Their block parameters are mutable lexical bindings. Each completing block
 must supply a result expression; selection requires Boolean, and reduction
@@ -22,6 +23,12 @@ Reduction evaluates its source before its initializer, then traverses the
 retained source after initializer effects. Empty reductions return the initial
 value. Range traversal streams its bounds and never computes inclusive end + 1.
 
+Predicates require a non-nullable Boolean block result. `any?` stops at the first
+true result, `all?` at the first false result, and `none?` at the first true
+result. Empty sources produce false, true and true respectively. No later
+element or block effect runs after a decisive result. Indexed predicate blocks
+remain unsupported, matching the reference language.
+
 These are the reference language's sequential traversal rules. The integration
 uses TypeRB PR #729; it does not introduce another mutation policy. Operations
 that shorten/reorder Arrays remain separately tracked receiver-API gaps.
@@ -35,11 +42,13 @@ and element types in each concrete `CheckedBody`. Analysis resolves map result
 types before lowering, sharing the existing closure analysis pass. Generic
 bodies and anonymous functions retain their own checked projections.
 
-The result Array or reducer accumulator is an explicit loop-carried binding
+The result Array, reducer accumulator or predicate Boolean is a loop-carried binding
 before the receiver/cursor exit boundary. Existing iteration builders emit
 ordinary typed blocks, live Array size/load operations and Range comparisons.
 Map appends the yielded value; selection conditionally appends the retained
-visited value; reduction replaces the accumulator. No new backend instruction,
+visited value; reduction replaces the accumulator. Predicates update their
+Boolean binding and branch directly to the existing loop exit on a decisive
+result. No new backend instruction,
 source-specific QBE path or external helper implements transformation semantics.
 
 REPL execution consumes the checked projection and retains values in its normal
@@ -51,3 +60,10 @@ selection values, nested Arrays, accumulators and captured block parameters.
 Compiler self-use of transformation syntax requires a future compatible
 immutable seed. This change keeps compiler implementation syntax within the
 current seed and preserves the independent recovery chain.
+
+The Native compiler fixture additionally checks short-circuiting a Range ending
+at the portable maximum after two visits. Shared reference comparisons use a
+bounded Range: the pinned generated Go implementation eagerly expands Range
+transform sources, tracked by [TypeRB #731](https://github.com/type-rb/type-rb/issues/731).
+Its REPL and the Native file/REPL paths stream this probe. This is a known
+reference code-generation gap, not a reason to expand a Native Range.

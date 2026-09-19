@@ -284,3 +284,9 @@
 | Reducer preserves the accumulator type | rejects as reference | rejects as reference | not reached | rejects as reference |
 | A collection block cannot return from its enclosing function | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Readonly receiver does not grant mutation through that reference | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Short-circuit Array and Range predicates and boundary values | accepts | accepts | matches reference | matches reference |
+| Live predicate sources, captures and generic callbacks | accepts | accepts | matches reference | matches reference |
+| Predicates require Boolean results | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Predicates require a result value | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Predicate blocks cannot return from their enclosing function | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Indexed predicates remain unsupported | rejects as reference | rejects as reference | not reached | rejects as reference |

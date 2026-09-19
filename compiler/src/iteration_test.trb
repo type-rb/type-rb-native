@@ -140,6 +140,33 @@ describe("iteration source proof") do
 end
 
 describe("value-producing collection blocks") do
+	test("rejects invalid predicate results and transfers") do
+		cases := ["[1].any? { |item| item }", "[1].all? { |item| puts(item) }", "[1].none? { |item| return item == 0 }", "[1].any? { |item| break; item == 1 }"]
+		cases.each do |body|
+			mut state := logical_checked_source("def main()\n" + body + "\nend\n")
+			expect(check(state)).to_be_false()
+		end
+	end
+
+	test("rejects indexed predicates and extra parameters during parsing") do
+		cases := ["[1].any?.with_index { |item, index| item == index }", "[1].all? { |item, other| item == other }"]
+		cases.each do |body|
+			source := "def main()\n" + body + "\nend\n"
+			mut state := compiler_new(source.size() + 1)
+			expect(lex(state, source)).to_be_true()
+			expect(parse_module(state, 0, state.entry_module[0])).to_be_false()
+			expect(has_diagnostic(state)).to_be_true()
+		end
+	end
+
+	test("requires Boolean predicate projections") do
+		mut state := iteration_test_state("def main()\nresult := [1].any? { |item| item > 0 }\nputs(result)\nend\n")
+		plan := state.checked[0].transforms[0]
+		state.checked[0].transforms[0] = MirTransform.new(syntax: plan.syntax, iteration: plan.iteration, type_name: "Array<Boolean>")
+		checked_transform_require(state, plan.syntax.iteration.origin)
+		expect(has_diagnostic(state)).to_be_true()
+	end
+
 	test("rejects result, binding, capability and transfer violations") do
 		cases := ["[1].map { |item| }", "[1].map { |item| item = 2 }", "[1].select { |item| item }", "[1].reduce(0) { |sum, item| sum.to_s() + item.to_s() }", "[1].map.with_index { |item, item| item }", "[1].reduce(0) { |item, item| item }", "[1].map { |item| return item }", "[1].map { |item| break; item }", "[1].map { |item| next; item }", "values := [1]\nvalues.map { |item| values.push(item); item }", "[1].map { |item| [2].each { |_other| return }; item }", "while true\n[1].map { |item| break; item }\nend"]
 		cases.each do |body|
