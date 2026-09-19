@@ -42,13 +42,24 @@
         "string-repeat-rejection",
         "utf8-storage",
         "utf8-nul",
-        "utf8-long"
+        "utf8-long",
+        "string-query-unicode",
+        "string-query-boundaries",
+        "string-query-managed",
+        "string-query-optional",
+        "string-query-transfer",
+        "string-query-extra-argument",
+        "string-query-missing-argument",
+        "string-query-wrong-argument",
+        "string-query-nullable-argument",
+        "string-query-nullable-result",
+        "string-query-boolean-result"
       ],
       "pending": [
         "Unicode escapes and remaining String receiver APIs",
         "Embedded-expression boundaries beyond the reviewed interpolation probes"
       ],
-      "note": "Ordinary UTF-8 literals, code-point size/index, collections and NUL/long data are covered. Additional CLI tests cover argv, invalid source, forced GC and terminal editing."
+      "note": "Ordinary UTF-8 literals, code-point size/index, collections and NUL/long data are covered. Additional CLI tests cover argv, invalid source, forced GC and terminal editing. String empty/include/start/end queries and nullable first/last search now share code-point offsets, argument ordering, optional receivers and managed lifetime checks. Unicode escapes and the remaining String APIs stay open."
     },
     {
       "id": "operators",
@@ -332,7 +343,9 @@
         "nullable-repl-partial-failure",
         "nullable-repl-safe-navigation",
         "float-order-optional",
-        "float-method-nullable-result"
+        "float-method-nullable-result",
+        "string-query-optional",
+        "string-query-nullable-result"
       ],
       "pending": [
         "Class/callback and general pattern narrowing; collection/union optional conversions",
@@ -555,7 +568,8 @@
         "closure-managed-captures",
         "closure-retained-calls",
         "closure-retained-cycles",
-        "float-managed-calls"
+        "float-managed-calls",
+        "string-query-managed"
       ],
       "pending": [
         "Named declarations as values, callable equality, nullable signatures and remaining parameter-capability boundaries"
@@ -1992,18 +2006,18 @@
         "check": {
           "code": 1,
           "stdout": "",
-          "stderr": "<case>/main.trb:4: error[TRBN4004]: unsupported method include?\n"
+          "stderr": "<case>/main.trb:5: error[TRBN4004]: unsupported method codepoints\n"
         },
         "build": {
           "code": 1,
           "stdout": "",
-          "stderr": "<case>/main.trb:4: error[TRBN4004]: unsupported method include?\n"
+          "stderr": "<case>/main.trb:5: error[TRBN4004]: unsupported method codepoints\n"
         },
         "execute": null,
         "repl": {
           "code": 0,
           "stdout": "",
-          "stderr": "(trb):3: error[TRBN4004]: unsupported method include?\n(trb):1: error[TRBN4003]: unresolved function probe\n"
+          "stderr": "(trb):4: error[TRBN4004]: unsupported method codepoints\n(trb):1: error[TRBN4003]: unresolved function probe\n"
         }
       }
     },
@@ -16367,6 +16381,519 @@
       "files": {},
       "declarations": "",
       "body": "value: Integer := 1.0.finite?()\nputs(value)",
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:19: error[TRB3000]: cannot assign Boolean to Integer\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:19: error[TRB3000]: cannot assign Boolean to Integer\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1:19: error[TRB3000]: cannot assign Boolean to Integer\n(trb):1:6: error[TRB3000]: value is not declared\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: expected Integer, found Boolean\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: expected Integer, found Boolean\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1: error[TRBN4004]: expected Integer, found Boolean\n(trb):1: error[TRBN4003]: unresolved local value\n"
+        }
+      }
+    },
+    {
+      "id": "string-query-unicode",
+      "title": "String queries use code-point offsets and literal matching",
+      "declarations": "def show(value: Integer?)\n if value == nil\n  puts(\"nil\")\n else\n  puts(value)\n end\nend\n\ndef probe()\ntext := \"A日本😀日本😀\"\nshow(text.index(\"日本\"))\nshow(text.rindex(\"日本\"))\nshow(text.index(\"😀\"))\nshow(text.rindex(\"😀\"))\nshow(text.index(\"本😀\"))\nshow(text.rindex(\"本😀\"))\nshow(text.index(\"\"))\nshow(text.rindex(\"\"))\nshow(text.index(\"missing\"))\nputs(text.include?(\"日本😀\"))\nputs(text.start_with?(\"A日\"))\nputs(text.end_with?(\"本😀\"))\nputs(text.start_with?(\"日本\"))\nputs(text.end_with?(\"A日\"))\nshow(\"ababa\".index(\"aba\"))\nshow(\"ababa\".rindex(\"aba\"))\nshow(\"é é\".index(\"é\"))\nshow(\"é é\".index(\"́\"))\nputs(\"é\".include?(\"é\"))\nshow(\"👩‍💻x👩‍💻\".rindex(\"💻\"))\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "1\n4\n3\n6\n2\n5\n0\n7\nnil\ntrue\ntrue\ntrue\nfalse\nfalse\n0\n2\n2\n3\nfalse\n6\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "1\n4\n3\n6\n2\n5\n0\n7\nnil\ntrue\ntrue\ntrue\nfalse\nfalse\n0\n2\n2\n3\nfalse\n6\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "1\n4\n3\n6\n2\n5\n0\n7\nnil\ntrue\ntrue\ntrue\nfalse\nfalse\n0\n2\n2\n3\nfalse\n6\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "1\n4\n3\n6\n2\n5\n0\n7\nnil\ntrue\ntrue\ntrue\nfalse\nfalse\n0\n2\n2\n3\nfalse\n6\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "string-query-boundaries",
+      "title": "String query empty and longer-pattern boundaries",
+      "declarations": "def show(value: Integer?)\n if value == nil\n  puts(\"nil\")\n else\n  puts(value)\n end\nend\n\ndef probe()\nputs(\"\".empty?())\nputs(\"😀\".empty?())\nputs(\"\".include?(\"\"))\nputs(\"\".start_with?(\"\"))\nputs(\"\".end_with?(\"\"))\nshow(\"\".index(\"\"))\nshow(\"\".rindex(\"\"))\nputs(\"\".include?(\"a\"))\nputs(\"a\".start_with?(\"ab\"))\nputs(\"a\".end_with?(\"ab\"))\nshow(\"a\".index(\"ab\"))\nshow(\"a\".rindex(\"ab\"))\nputs(\"😀\".include?(\"\"))\nputs(\"😀\".start_with?(\"\"))\nputs(\"😀\".end_with?(\"\"))\nshow(\"😀\".index(\"\"))\nshow(\"😀\".rindex(\"\"))\nshow(\"😀\".index(\"😀\"))\nshow(\"😀\".rindex(\"😀\"))\nputs(\"a\\nb\".include?(\"\\n\"))\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\nfalse\ntrue\ntrue\ntrue\n0\n0\nfalse\nfalse\nfalse\nnil\nnil\ntrue\ntrue\ntrue\n0\n1\n0\n0\ntrue\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\nfalse\ntrue\ntrue\ntrue\n0\n0\nfalse\nfalse\nfalse\nnil\nnil\ntrue\ntrue\ntrue\n0\n1\n0\n0\ntrue\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\nfalse\ntrue\ntrue\ntrue\n0\n0\nfalse\nfalse\nfalse\nnil\nnil\ntrue\ntrue\ntrue\n0\n1\n0\n0\ntrue\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\nfalse\ntrue\ntrue\ntrue\n0\n0\nfalse\nfalse\nfalse\nnil\nnil\ntrue\ntrue\ntrue\n0\n1\n0\n0\ntrue\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "string-query-managed",
+      "title": "String receiver capture, source order and managed values",
+      "declarations": "def show(value: Integer?)\n if value == nil\n  puts(\"nil\")\n else\n  puts(value)\n end\nend\nalias Text = String\nrecord Entry\n label: Text\nend\n\ndef probe()\nmut current := \"old\" + \"😀tail\"\nreceiver := fn(): String\n puts(\"receiver\")\n return current\nend\nargument := fn(): String\n puts(\"argument\")\n current = \"new\"\n return \"😀\" + \"tail\"\nend\nshow(receiver().index(argument()))\nputs(current)\nentry := Entry.new(label: \"kept\" + \"日本\")\nfind := fn(part: Text): Integer?\n return entry.label.index(part)\nend\nshow(find(\"日本\"))\nshow(entry.label.rindex(\"missing\"))\nputs(entry.label)\nvalues := [\"日x日\", \"😀x😀\"].map { |text| text.rindex(\"x\") }\nvalues.each { |value| show(value) }\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "receiver\nargument\n3\nnew\n4\nnil\nkept日本\n1\n1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "receiver\nargument\n3\nnew\n4\nnil\nkept日本\n1\n1\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "receiver\nargument\n3\nnew\n4\nnil\nkept日本\n1\n1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "receiver\nargument\n3\nnew\n4\nnil\nkept日本\n1\n1\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "string-query-optional",
+      "title": "Optional String queries skip arguments and flatten optional results",
+      "declarations": "def show(value: Integer?)\n if value == nil\n  puts(\"nil\")\n else\n  puts(value)\n end\nend\n\ndef probe()\nmut calls := 0\npart := fn(): String\n calls += 1\n return \"😀\"\nend\nabsent: String? := nil\nmissing := absent&.index(part())\nshow(missing)\nputs(calls)\npresent: String? := \"A😀B\"\nshow(present&.index(part()))\nshow(present&.rindex(\"missing\"))\nmatched := present&.include?(part())\nif matched != nil\n puts(matched)\nend\nputs(calls)\nempty := absent&.empty?()\nputs(empty == nil)\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "nil\n0\n1\nnil\ntrue\n2\ntrue\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "nil\n0\n1\nnil\ntrue\n2\ntrue\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "nil\n0\n1\nnil\ntrue\n2\ntrue\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "nil\n0\n1\nnil\ntrue\n2\ntrue\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "string-query-transfer",
+      "title": "String query arguments preserve lexical loop transfers",
+      "declarations": "\ndef probe()\nmut visits := 0\n[1, 2, 3].each do |value|\n found := \"abc\".include?(if value == 1\n  next\n elsif value == 3\n  break\n else\n  \"b\"\n end)\n puts(found)\n visits += 1\nend\nputs(visits)\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n1\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n1\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "string-query-extra-argument",
+      "title": "String empty query rejects extra arguments",
+      "declarations": "",
+      "body": "puts(\"\".empty?(\"a\"))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:6: error[TRB3000]: empty?() expects 0..0 arguments, got 1\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:6: error[TRB3000]: empty?() expects 0..0 arguments, got 1\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1:6: error[TRB3000]: empty?() expects 0..0 arguments, got 1\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: String method argument count differs\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: String method argument count differs\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1: error[TRBN4004]: String method argument count differs\n"
+        }
+      }
+    },
+    {
+      "id": "string-query-missing-argument",
+      "title": "String search requires a substring",
+      "declarations": "",
+      "body": "puts(\"abc\".include?())",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:6: error[TRB3000]: include?() expects 1..1 arguments, got 0\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:6: error[TRB3000]: include?() expects 1..1 arguments, got 0\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1:6: error[TRB3000]: include?() expects 1..1 arguments, got 0\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: String method argument count differs\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: String method argument count differs\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1: error[TRBN4004]: String method argument count differs\n"
+        }
+      }
+    },
+    {
+      "id": "string-query-wrong-argument",
+      "title": "String search rejects Integer arguments",
+      "declarations": "",
+      "body": "puts(\"abc\".include?(1))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:21: error[TRB3000]: argument 1 to include?() has type Integer, expected String\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:21: error[TRB3000]: argument 1 to include?() has type Integer, expected String\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1:21: error[TRB3000]: argument 1 to include?() has type Integer, expected String\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: expected String, found Integer\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: expected String, found Integer\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1: error[TRBN4004]: expected String, found Integer\n"
+        }
+      }
+    },
+    {
+      "id": "string-query-nullable-argument",
+      "title": "String search requires a present substring",
+      "declarations": "def invalid(part: String?): Boolean\n return \"abc\".include?(part)\nend\n",
+      "body": "puts(1)",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:2:24: error[TRB3000]: argument 1 to include?() has type String?, expected String\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:2:24: error[TRB3000]: argument 1 to include?() has type String?, expected String\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "1\n",
+          "stderr": "(trb):2:24: error[TRB3000]: argument 1 to include?() has type String?, expected String\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:2: error[TRBN4004]: expected String, found String?\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:2: error[TRBN4004]: expected String, found String?\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "1\n",
+          "stderr": "(trb):2: error[TRBN4004]: expected String, found String?\n"
+        }
+      }
+    },
+    {
+      "id": "string-query-nullable-result",
+      "title": "String search results require narrowing",
+      "declarations": "def invalid(): Integer\n return \"abc\".index(\"a\")\nend\n",
+      "body": "puts(1)",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:2:2: error[TRB3000]: return type is Integer?, expected Integer\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:2:2: error[TRB3000]: return type is Integer?, expected Integer\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "1\n",
+          "stderr": "(trb):2:2: error[TRB3000]: return type is Integer?, expected Integer\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:2: error[TRBN4004]: expected Integer, found Integer?\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:2: error[TRBN4004]: expected Integer, found Integer?\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "1\n",
+          "stderr": "(trb):2: error[TRBN4004]: expected Integer, found Integer?\n"
+        }
+      }
+    },
+    {
+      "id": "string-query-boolean-result",
+      "title": "String predicate results remain Boolean",
+      "declarations": "",
+      "body": "value: Integer := \"abc\".include?(\"a\")\nputs(value)",
+      "files": {},
       "reference": {
         "check": {
           "code": 1,

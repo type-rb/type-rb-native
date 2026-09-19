@@ -1,0 +1,61 @@
+import { CheckedValue, checked_mir_value, scalar_mir_binary, scalar_mir_literal } from checked_values
+import { mir_control_branch, mir_control_enter, mir_control_prepare } from mir_control
+import { mir_checked_string_operation } from mir_strings
+import { mir_value_complete, mir_value_exit, mir_value_join } from mir_value_control
+import { mir_checked_nullable } from nullable_mir
+import { CheckedLocals, CompilerState } from state
+import { load_integer } from storage
+
+def string_query_kind(name: String): Integer
+	if name == "empty?"
+		return 1
+	elsif name == "include?"
+		return 2
+	elsif name == "start_with?"
+		return 3
+	elsif name == "end_with?"
+		return 4
+	elsif name == "index"
+		return 5
+	elsif name == "rindex"
+		return 6
+	end
+	return 0
+end
+
+# Index search returns a code-point offset or -1 internally. Predicate modes
+# return zero or -1 and compare literal bytes. Public missing results
+# are explicit optional values; predicates and boxing stay in verified MIR.
+def mir_string_query(mut state: CompilerState, mut locals: CheckedLocals, kind: Integer, receiver: CheckedValue, argument: CheckedValue, origin: Integer): CheckedValue
+	mir_control_prepare(state, locals)
+	zero := scalar_mir_literal(state, locals, "Integer", origin, "0")
+	if kind == 1
+		size := mir_checked_string_operation(state, locals, 15, checked_mir_value(receiver), - 1, 0, "Integer", origin)
+		return scalar_mir_binary(state, locals, "==", size, zero, "Boolean", origin)
+	end
+	mut mode := 0
+	if kind == 2
+		mode = 4
+	end
+	if kind == 6
+		mode = 1
+	elsif kind == 3
+		mode = 2
+	elsif kind == 4
+		mode = 3
+	end
+	offset := mir_checked_string_operation(state, locals, 44, checked_mir_value(receiver), checked_mir_value(argument), mode, "Integer", origin)
+	found := scalar_mir_binary(state, locals, ">=", offset, zero, "Boolean", origin)
+	if kind < 5
+		return found
+	end
+	line := load_integer(state.token_lines, origin)
+	mut join := mir_value_join(locals, line)
+	alternate := mir_control_branch(state, locals, found, line)
+	present := mir_checked_nullable(state, locals, 34, offset, "Integer?", 0, origin)
+	mir_value_exit(state, locals, join, present)
+	mir_control_enter(state, locals, alternate, line)
+	absent := mir_checked_nullable(state, locals, 33, offset, "Integer?", 0, origin)
+	mir_value_exit(state, locals, join, absent)
+	return mir_value_complete(state, locals, join, "Integer?", origin)
+end

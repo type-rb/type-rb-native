@@ -68,6 +68,62 @@ puts(indexed("Aあ😀"))
 end
 ''', 'ああ😀\nあ😀\n'.encode(), force_gc=True)
 
+    # A query retains its captured receiver while evaluating an allocating
+    # argument. Search offsets count code points and survive later allocations.
+    compile_source('''def join(left: String, right: String): String
+return left + right
+end
+def show(value: Integer?)
+if value == nil
+puts("nil")
+else
+puts(value)
+end
+end
+def main()
+value := join("x", "😀y😀y")
+show(value.index(join("😀", "y")))
+show(value.rindex(join("😀", "y")))
+puts(value.include?(join("😀", "y")))
+puts(value.start_with?(join("x", "😀")))
+puts(value.end_with?(join("😀", "y")))
+puts(value)
+end
+''', '1\n3\ntrue\ntrue\ntrue\nx😀y😀y\n'.encode(), force_gc=True)
+
+    query_source = '''import trb/std/process
+def show(value: Integer?)
+if value == nil
+puts("nil")
+else
+puts(value)
+end
+end
+def main()
+arguments := Process.argv()
+value := arguments[0]
+part := arguments[1]
+puts(value.include?(part))
+puts(value.start_with?(part))
+puts(value.end_with?(part))
+show(value.index(part))
+show(value.rindex(part))
+end
+'''
+    # Indexed search follows decoded code points in external byte input, while
+    # literal predicates keep the reference's byte-exact matching semantics.
+    for value, part, expected in (
+        (b'\xc2x\xa2', '�'.encode(), b'false\nfalse\nfalse\n0\n2\n'),
+        ('¢'.encode(), b'\xa2', b'true\nfalse\ntrue\nnil\nnil\n'),
+        (b'\xff', b'\xff', b'true\ntrue\ntrue\n0\n0\n'),
+        (b'\xff', '�'.encode(), b'false\nfalse\nfalse\n0\n0\n'),
+        ('�'.encode(), b'\xff', b'false\nfalse\nfalse\n0\n0\n'),
+    ):
+        compile_source(query_source, expected, arguments=(value, part))
+
+    compile_source('def main()\nvalue := "A\0😀\0B"\nfirst := value.index("\0")\nlast := value.rindex("\0")\nif first != nil\nputs(first)\nend\nif last != nil\nputs(last)\nend\nputs(value.include?("😀\0"))\nend\n',
+                   b'1\n3\ntrue\n')
+
     # A real NUL in a literal must retain the full byte and code-point lengths.
     compile_source('def main()\ntext := "あ\0😀"\nputs(text)\nputs(text.size())\nputs(text[1])\nend\n',
                    'あ\0😀\n3\n\0\n'.encode())
