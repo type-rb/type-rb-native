@@ -5,6 +5,9 @@ import { mir_semantic_type_name } from mir_types
 # The checked declaration owns the adapter. Source aliases and call-site spelling
 # never select a runtime operation, and the backend never resolves them again.
 def mir_runtime_adapter(name: String): Integer
+	if name == "compiler_literal_byte"
+		return 12
+	end
 	names := ["compiler_file_exists", "compiler_read_source", "compiler_source_is_utf8", "compiler_string_bytes", "compiler_source_slice", "compiler_collect_project_sources", "compiler_eputs", "compiler_reset_temporary_storage"]
 	mut index := 0
 	while index < names.size()
@@ -28,6 +31,9 @@ def mir_call_symbol(signature: MirSignature): String
 	end
 	if signature.kind == 2
 		return signature.name
+	end
+	if signature.adapter == 12
+		return "trbn_literal_byte"
 	end
 	symbols := ["trbn_file_exists", "trbn_read_source", "trbn_string_is_utf8", "trbn_string_bytes", "trbn_source_slice", "trbn_collect_project_sources", "trbn_eputs", "trbn_temp_reset"]
 	return symbols[signature.adapter - 1]
@@ -120,7 +126,7 @@ def mir_intrinsic_signature_error(native_module: MirModule, signature: MirSignat
 		end
 		return ""
 	end
-	if signature.kind != 1 || adapter < 1 || adapter > 8
+	if signature.kind != 1 || adapter < 1 || (adapter > 8 && adapter != 12)
 		return "MIR external adapter is invalid"
 	end
 	if mir_runtime_adapter(signature.name) != adapter
@@ -145,6 +151,8 @@ def mir_intrinsic_signature_error(native_module: MirModule, signature: MirSignat
 	elsif adapter == 8
 		parameters = []
 		result = "Void"
+	elsif adapter == 12
+		parameters = ["Integer"]
 	end
 	if signature.parameter_types.size() != parameters.size() || signature.result_type != result
 		return "MIR runtime signature differs"

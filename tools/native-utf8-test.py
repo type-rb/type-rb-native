@@ -43,6 +43,35 @@ with tempfile.TemporaryDirectory(prefix='native UTF-8 日本語 ') as directory:
         result = run([output, *arguments])
         assert result.stdout == expected and result.stderr == b'', result
 
+    # Escaped byte fragments form a scalar only when joined. Retain earlier
+    # results while later joins allocate, including an embedded NUL.
+    compile_source(r'''def join(left: String, right: String): String
+return left + right
+end
+def main()
+lead := "\xc2"
+tail := "\242"
+saved := join(lead, tail)
+astral := join("\xf0\x9f", "\230\200")
+text := join(saved, "\000\u65e5\U0001f600")
+puts(saved)
+puts(saved.size())
+puts(astral)
+puts(astral.size())
+puts(text)
+puts(text.size())
+puts(text.codepoints()[1])
+puts("\a\b\f\n\r\t\v".size())
+puts(lead.size())
+end
+''', '¢\n1\n😀\n1\n¢\0日😀\n4\n0\n7\n1\n'.encode(), force_gc=True)
+
+    # Stress decoding and literal emission with every byte, repeatedly. These
+    # bytes remain exact even when String indexing would replace invalid UTF-8.
+    escaped_bytes = ''.join('\\x%02x' % value for value in range(256)) * 8
+    compile_source('def main()\ntext := "' + escaped_bytes + '"\nputs(text)\nputs(text.size())\nend\n',
+                   bytes(range(256)) * 8 + b'\n2048\n', force_gc=True)
+
     # Both MIR String functions and the nominal/Hash adapter must retain indexed
     # values and their owners when every String allocation collects the heap.
     compile_source('''record Box

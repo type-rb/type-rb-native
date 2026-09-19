@@ -23,7 +23,7 @@
 | Range with captured endpoint effects (requires fn) | accepts | accepts | matches reference | matches reference |
 | UTF-8 length, indexing, concatenation and interpolation | accepts | accepts | matches reference | matches reference |
 | Unicode local identifier | rejects valid input | rejects valid input | not reached | rejects valid input |
-| Unicode scalar escapes | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Unicode scalar escapes | accepts | accepts | matches reference | matches reference |
 | String search and code-point APIs | accepts | accepts | matches reference | matches reference |
 | Empty String and ASCII indexing | accepts | accepts | matches reference | matches reference |
 | Mixed numeric arithmetic and conversion | rejects valid input | rejects valid input | not reached | rejects valid input |
@@ -87,7 +87,7 @@
 | Portable Integer runtime overflow | accepts | accepts | matches reference | rejects as reference |
 | Reject unsupported Hash compound assignment | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Reject unsupported brace Unicode escape | rejects as reference | rejects as reference | not reached | rejects as reference |
-| Embedded zero and supplementary scalar escapes | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Embedded zero and supplementary scalar escapes | accepts | accepts | matches reference | matches reference |
 | Reject unsupported array equality | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Reject unsupported hash equality | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Unsupported String repetition and REPL diagnostic origin | rejects as reference | rejects as reference | not reached | rejects as reference |
@@ -364,3 +364,38 @@
 | String slice wrong argument | rejects as reference | rejects as reference | not reached | rejects as reference |
 | String slice nullable argument | rejects as reference | rejects as reference | not reached | rejects as reference |
 | String slice wrong result | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String escape simple controls | accepts | accepts | matches reference | matches reference |
+| String escape quote backslash | accepts | accepts | matches reference | matches reference |
+| String escape escaped interpolation | accepts | accepts | matches reference | matches reference |
+| String escape octal nul | accepts | accepts | matches reference | matches reference |
+| String escape octal ascii | accepts | accepts | matches reference | matches reference |
+| String escape octal invalid byte | accepts | accepts | matches reference | matches reference |
+| String escape hex nul | accepts | accepts | matches reference | matches reference |
+| String escape hex ascii | accepts | accepts | matches reference | matches reference |
+| String escape hex utf8 | accepts | accepts | matches reference | matches reference |
+| String escape hex astral | accepts | accepts | matches reference | matches reference |
+| String escape hex invalid byte | accepts | accepts | matches reference | matches reference |
+| String escape unicode bmp | accepts | accepts | matches reference | matches reference |
+| String escape unicode astral | accepts | accepts | matches reference | matches reference |
+| String escape unicode limit | accepts | accepts | matches reference | matches reference |
+| String escape escaped hash not interpolation | accepts | accepts | matches reference | matches reference |
+| String escape unicode hash not interpolation | accepts | accepts | matches reference | matches reference |
+| String escape mixed interpolation | accepts | accepts | matches reference | matches reference |
+| String escape invalid unknown | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String escape invalid short hex | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String escape invalid hex digit | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String escape invalid short unicode | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String escape invalid surrogate | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String escape invalid unicode high | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String escape invalid octal high | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String escape invalid octal digit | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String escape invalid short octal | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String escape invalid brace | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String escape invalid interpolated escape | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String escape scalar boundaries | accepts | accepts | matches reference | matches reference |
+| String escape byte boundaries | accepts | accepts | matches reference | matches reference |
+| String escape digit boundaries | accepts | accepts | matches reference | matches reference |
+| String escape all byte values | accepts | accepts | matches reference | matches reference |
+| String escape invalid large unicode | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String escape invalid last surrogate | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String escape invalid large octal | rejects as reference | rejects as reference | not reached | rejects as reference |

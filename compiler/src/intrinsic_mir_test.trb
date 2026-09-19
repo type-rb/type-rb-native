@@ -12,7 +12,7 @@ import trb/std/result
 import { describe, expect, test } from trb/std/test
 
 def intrinsic_mir_state(): CompilerState
-	source := "record CompilerProjectSources\npaths: Array<String>\nsources: Array<String>\nerror: String\nend\ndef compiler_main(source: String, mode: String, _file_mode: Boolean): Integer\nretained := source + \"-tail\"\nkey := compiler_source_slice(retained, 0, source.size())\nmut values := {\"saved\" => retained}\nbytes := compiler_string_bytes(key)\ncompiler_reset_temporary_storage()\nputs(values[\"saved\"])\nputs(bytes[0])\nputs(compiler_source_is_utf8(key))\nif mode == \"files\"\nif compiler_file_exists(source)\nputs(compiler_read_source(source))\nend\nproject := compiler_collect_project_sources(source, \"out\")\ncompiler_eputs(project.error)\nend\nreturn 0\nend\ndef compiler_file_exists(_path: String): Boolean\nreturn false\nend\ndef compiler_read_source(_path: String): String\nreturn \"\"\nend\ndef compiler_source_is_utf8(_text: String): Boolean\nreturn true\nend\ndef compiler_string_bytes(_text: String): Array<Integer>\nreturn []\nend\ndef emit_static_strings(text: String)\ncompiler_string_bytes(text)\nend\ndef compiler_source_slice(text: String, _start: Integer, _finish: Integer): String\nreturn text\nend\ndef compiler_collect_project_sources(_root: String, _out: String): CompilerProjectSources\nreturn CompilerProjectSources.new(paths: [], sources: [], error: \"\")\nend\ndef compiler_eputs(_text: String)\nend\ndef compiler_reset_temporary_storage()\nend\ndef compiler_file_main(_source: String, _path: String, _mode: String, _file: Boolean): Integer\nreturn 0\nend\ndef main()\nend\n"
+	source := "record CompilerProjectSources\npaths: Array<String>\nsources: Array<String>\nerror: String\nend\ndef compiler_main(source: String, mode: String, _file_mode: Boolean): Integer\nretained := source + \"-tail\"\nkey := compiler_source_slice(retained, 0, source.size())\nmut values := {\"saved\" => retained}\nbytes := compiler_string_bytes(key)\nliteral := compiler_literal_byte(194) + compiler_literal_byte(162)\nputs(literal.size())\nputs(compiler_string_bytes(literal)[0])\ncompiler_reset_temporary_storage()\nputs(values[\"saved\"])\nputs(bytes[0])\nputs(compiler_source_is_utf8(key))\nif mode == \"files\"\nif compiler_file_exists(source)\nputs(compiler_read_source(source))\nend\nproject := compiler_collect_project_sources(source, \"out\")\ncompiler_eputs(project.error)\nend\nreturn 0\nend\ndef compiler_file_exists(_path: String): Boolean\nreturn false\nend\ndef compiler_read_source(_path: String): String\nreturn \"\"\nend\ndef compiler_source_is_utf8(_text: String): Boolean\nreturn true\nend\ndef compiler_string_bytes(_text: String): Array<Integer>\nreturn []\nend\ndef compiler_literal_byte(_byte: Integer): String\nreturn \"unadapted\"\nend\ndef decode_escape(byte: Integer): String\nreturn compiler_literal_byte(byte)\nend\ndef emit_static_strings(text: String)\ncompiler_string_bytes(text)\nend\ndef compiler_source_slice(text: String, _start: Integer, _finish: Integer): String\nreturn text\nend\ndef compiler_collect_project_sources(_root: String, _out: String): CompilerProjectSources\nreturn CompilerProjectSources.new(paths: [], sources: [], error: \"\")\nend\ndef compiler_eputs(_text: String)\nend\ndef compiler_reset_temporary_storage()\nend\ndef compiler_file_main(_source: String, _path: String, _mode: String, _file: Boolean): Integer\nreturn 0\nend\ndef main()\nend\n"
 	mut state := logical_checked_source(source)
 	expect(check(state)).to_be_true()
 	return state
@@ -48,6 +48,7 @@ describe("MIR runtime and host calls") do
 		(1..8).each do |adapter|
 			expect(adapters.include?(adapter)).to_be_true()
 		end
+		expect(adapters.include?(12)).to_be_true()
 		caller := state.scalar_mir.functions[mir_function_index(state.scalar_mir, 0)]
 		expect(caller.kind).to_equal(3)
 		expect(state.scalar_mir.root_plans[0].capacity >= 3).to_be_true()
@@ -55,9 +56,12 @@ describe("MIR runtime and host calls") do
 
 	test("rejects forged runtime names adapters signatures and effect summaries") do
 		mut mode := 0
-		while mode < 11
+		while mode < 15
 			mut state := intrinsic_mir_state()
 			mut id := find_function_in_module(state, state.entry_module[0], "compiler_source_slice")
+			if mode >= 11
+				id = find_function_in_module(state, state.entry_module[0], "compiler_literal_byte")
+			end
 			if mode == 8
 				id = find_function_in_module(state, state.entry_module[0], "compiler_collect_project_sources")
 			end
@@ -91,6 +95,15 @@ describe("MIR runtime and host calls") do
 			elsif mode == 10
 				kind = 2
 				adapter = 8
+			elsif mode == 11
+				types = ["String"]
+			elsif mode == 12
+				types = []
+				mutable = []
+			elsif mode == 13
+				result = "Integer"
+			elsif mode == 14
+				mutable = [1]
 			else
 				call := state.scalar_mir.calls[0]
 				state.scalar_mir.calls[0] = MirCall.new(callee: call.callee, argument_start: call.argument_start, argument_count: call.argument_count, effects: 0)
@@ -130,16 +143,16 @@ describe("MIR runtime and host calls") do
 				if line == "}"
 					caller = false
 				end
-				if caller && (line.include?("call $trbn_source_slice(") || line.include?("call $trbn_string_bytes(") || line.include?("call $trbn_string_is_utf8(") || line.include?("call $trbn_temp_reset(") || line.include?("call $trbn_file_exists(") || line.include?("call $trbn_read_source(") || line.include?("call $trbn_collect_project_sources(") || line.include?("call $trbn_eputs("))
+				if caller && (line.include?("call $trbn_literal_byte(") || line.include?("call $trbn_source_slice(") || line.include?("call $trbn_string_bytes(") || line.include?("call $trbn_string_is_utf8(") || line.include?("call $trbn_temp_reset(") || line.include?("call $trbn_file_exists(") || line.include?("call $trbn_read_source(") || line.include?("call $trbn_collect_project_sources(") || line.include?("call $trbn_eputs("))
 					forced += "\tcall $trbn_gc_collect(w 0)\n"
 					hooks += 1
 				end
 				forced += line + "\n"
 			end
-			expect(hooks).to_equal(8)
+			expect(hooks).to_equal(11)
 			case logical_run_qbe_arguments(qbe, forced, ["--source-content", "probe", "abc"])
 			when Result::Ok(actual)
-				expect(actual).to_equal("abc-tail\n97\ntrue\n")
+				expect(actual).to_equal("1\n194\nabc-tail\n97\ntrue\n")
 			when Result::Err(error)
 				puts(error)
 				expect(false).to_be_true()
