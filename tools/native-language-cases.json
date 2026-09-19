@@ -601,13 +601,17 @@
         "predicate-result-type",
         "predicate-result-void",
         "predicate-return",
-        "predicate-indexed"
+        "predicate-indexed",
+        "collection-search",
+        "collection-search-managed",
+        "search-result-type",
+        "search-indexed"
       ],
       "pending": [
-        "Search, keyed sorting, slicing and Hash iteration",
+        "Keyed sorting, slicing and Hash iteration",
         "Remaining receiver APIs that shorten or reorder an Array during traversal"
       ],
-      "note": "Array and Range each/map/select/reduce use shared checked statement bodies and ordinary MIR loops. Transforms retain one receiver, observe live Array growth/replacement, preserve visited selection values and evaluate reduce initializers before traversal. Indexed map/select and managed captures are covered. Short-circuit any?/all?/none? retain the same live source, require Boolean results and lower early exits to ordinary MIR edges."
+      "note": "Array and Range each/map/select/reduce use shared checked statement bodies and ordinary MIR loops. Transforms retain one receiver, observe live Array growth/replacement, preserve visited selection values and evaluate reduce initializers before traversal. Indexed map/select and managed captures are covered. Short-circuit any?/all?/none? retain the same live source, require Boolean results and lower early exits to ordinary MIR edges. find/find_index retain visited values and produce checked nullable results with short-circuit exits."
     },
     {
       "id": "ranges",
@@ -14744,6 +14748,194 @@
           "code": 0,
           "stdout": "",
           "stderr": "(trb):1:1: error[TRB3000]: any?.with_index is not supported; use each with an explicit accumulator\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4002]: expected do, found .\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4002]: expected do, found .\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1: error[TRBN4002]: expected do, found .\n"
+        }
+      }
+    },
+    {
+      "id": "collection-search",
+      "title": "Nullable Array and Range search results and short-circuiting",
+      "declarations": "def report(value: Integer?)\n\tif value == nil\n\t\tputs(\"missing\")\n\telse\n\t\tputs(value)\n\tend\nend\n\ndef probe()\n\tempty: Array<Integer> := []\n\tfirst := empty.find { |item| item > 0 }\n\tposition := empty.find_index { |item| item > 0 }\n\treport(first)\n\treport(position)\n\tmut visits := 0\n\tfound := [0, 2, 3].find do |item|\n\t\tvisits += 1\n\t\titem == 0\n\tend\n\treport(found)\n\tputs(visits)\n\tindex := [4, 5].find_index { |item| item == 4 }\n\treport(index)\n\tmissing := [4, 5].find { |item| item == 9 }\n\treport(missing)\n\tfalse_value := [false, true].find { |item| !item }\n\tif false_value != nil\n\t\tputs(false_value)\n\tend\n\tdecimal := [1.5, 2.5].find { |item| item > 2.0 }\n\tif decimal != nil\n\t\tputs(decimal == 2.5)\n\tend\n\tvalues: Array<Integer?> := [nil, 2]\n\tabsent := values.find { |item| item == nil }\n\tputs(absent == nil)\n\tzero := values.find_index { |item| item == nil }\n\treport(zero)\n\tranged := (- 2..2).find { |item| item == 1 }\n\tranged_index := (- 2...2).find_index { |item| item == 1 }\n\treport(ranged)\n\treport(ranged_index)\n\tmaximum := (9007199254740991..9007199254740991).find_index { |item| item > 0 }\n\treport(maximum)\n\texcluded := (9007199254740991...9007199254740991).find { |item| item > 0 }\n\treport(excluded)\n\tlazy := [1, 0].find { |item| 10 / item > 0 }\n\treport(lazy)\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "missing\nmissing\n0\n1\n0\nmissing\nfalse\ntrue\ntrue\n0\n1\n3\n0\nmissing\n1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "missing\nmissing\n0\n1\n0\nmissing\nfalse\ntrue\ntrue\n0\n1\n3\n0\nmissing\n1\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "missing\nmissing\n0\n1\n0\nmissing\nfalse\ntrue\ntrue\n0\n1\n3\n0\nmissing\n1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "missing\nmissing\n0\n1\n0\nmissing\nfalse\ntrue\ntrue\n0\n1\n3\n0\nmissing\n1\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "collection-search-managed",
+      "title": "Retained search values, live traversal and managed captures",
+      "declarations": "record Entry\n\tname: String\nend\n\ndef first<T>(values: Array<T>, predicate: (T) -> Boolean): T?\n\treturn values.find { |item| predicate(item) }\nend\n\ndef probe()\n\tmut source := [Entry.new(name: \"original\" + 1.to_s())]\n\tselected := source.find do |item|\n\t\tsource[0] = Entry.new(name: \"replacement\")\n\t\titem = Entry.new(name: \"parameter\")\n\t\titem.name == \"parameter\"\n\tend\n\tif selected != nil\n\t\tputs(selected.name)\n\tend\n\tmut values := [1, 2]\n\tmut retained := values\n\tmut calls := 0\n\tindex := values.find_index do |item|\n\t\tcalls += 1\n\t\tif item == 1\n\t\t\tretained[1] = 20\n\t\t\tretained.push(3)\n\t\t\tvalues = [99]\n\t\tend\n\t\titem == 3\n\tend\n\tif index != nil\n\t\tputs(index)\n\tend\n\tputs(calls)\n\tputs(values[0])\n\tmut callbacks: Array<() -> String> := []\n\ttext := [\"first\" + 1.to_s(), \"second\" + 2.to_s()].find do |item|\n\t\tcallback := fn(): String\n\t\t\treturn item\n\t\tend\n\t\tcallbacks.push(callback)\n\t\titem = item + \"!\"\n\t\titem == \"second2!\"\n\tend\n\tif text != nil\n\t\tputs(text)\n\tend\n\tputs(callbacks[1]())\n\tpredicate := fn(value: String): Boolean\n\t\treturn value == \"generic\"\n\tend\n\tresult := first<String>([\"generic\"], predicate)\n\tif result != nil\n\t\tputs(result)\n\tend\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "original1\n2\n3\n99\nsecond2\nsecond2!\ngeneric\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "original1\n2\n3\n99\nsecond2\nsecond2!\ngeneric\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "original1\n2\n3\n99\nsecond2\nsecond2!\ngeneric\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "original1\n2\n3\n99\nsecond2\nsecond2!\ngeneric\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "search-result-type",
+      "title": "Search predicates require Boolean results",
+      "declarations": "",
+      "body": "[1].find { |item| item }",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:10: error[TRB3000]: find block result must be Boolean, got Integer\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:10: error[TRB3000]: find block result must be Boolean, got Integer\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1:10: error[TRB3000]: find block result must be Boolean, got Integer\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: expected Boolean, found Integer\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: expected Boolean, found Integer\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1: error[TRBN4004]: expected Boolean, found Integer\n"
+        }
+      }
+    },
+    {
+      "id": "search-indexed",
+      "title": "Indexed search blocks remain unsupported",
+      "declarations": "",
+      "body": "[1].find_index.with_index { |item, index| item == index }",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:1: error[TRB3000]: find_index.with_index is not supported; use each with an explicit accumulator\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:1: error[TRB3000]: find_index.with_index is not supported; use each with an explicit accumulator\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1:1: error[TRB3000]: find_index.with_index is not supported; use each with an explicit accumulator\n"
         }
       },
       "native": {

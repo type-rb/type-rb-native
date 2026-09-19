@@ -1,5 +1,7 @@
 import { CheckedValue, checked_mir_value, checked_value, mir_checked_value, scalar_mir_binary, scalar_mir_disable, scalar_mir_literal } from checked_values
 import { MirIteration } from iteration_mir
+import { MirTransform } from transform_model
+import { mir_nullable_coerce } from nullable_mir
 import { MirControlLoop } from mir
 import { mir_checked_array_operation } from mir_arrays
 import { mir_control_active, mir_control_allocate, mir_control_branch, mir_control_conditional, mir_control_enter, mir_control_jump, mir_control_loop_begin, mir_control_loop_branch, mir_control_prepare } from mir_control
@@ -9,6 +11,31 @@ import { load_integer, store_integer } from storage
 
 def mir_iteration_local(locals: CheckedLocals, slot: Integer, type_name: String, origin: Integer): CheckedValue
 	return mir_checked_value(type_name, load_integer(locals.mir_values, slot) - 1, origin, 0)
+end
+
+# A search boxes only the matching result, then takes the ordinary loop exit.
+# The visited value and internal cursor are independent of user parameters.
+def mir_transform_search_yield(mut state: CompilerState, mut locals: CheckedLocals, plan: MirTransform, result_slot: Integer, element: CheckedValue, yielded: CheckedValue)
+	if !mir_control_active(locals)
+		return
+	end
+	origin := plan.syntax.iteration.origin
+	line := load_integer(state.token_lines, origin)
+	frame := locals.mir_loops[locals.mir_control[8] - 1]
+	alternate := mir_control_branch(state, locals, yielded, line)
+	mut selected := checked_value(element.type_name, element.category, element.origin, element.mutable)
+	if plan.syntax.kind == 8
+		selected = mir_iteration_local(locals, result_slot + 2, "Integer", origin)
+		if plan.iteration.source_kind == 2
+			owner := load_integer(locals.mir_values, result_slot + 1) - 1
+			start := mir_checked_range_field(state, locals, owner, 0, origin)
+			selected = scalar_mir_binary(state, locals, "-", selected, start, "Integer", origin)
+		end
+	end
+	present := mir_nullable_coerce(state, locals, selected, plan.type_name, origin)
+	store_integer(locals.mir_values, result_slot, checked_mir_value(present) + 1)
+	mir_control_jump(state, locals, frame.exit, frame.exit_binding_count)
+	mir_control_enter(state, locals, alternate, line)
 end
 
 # Both Range comparisons and every exit are ordinary MIR control edges. The

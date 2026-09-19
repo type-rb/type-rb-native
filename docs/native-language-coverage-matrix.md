@@ -290,3 +290,7 @@
 | Predicates require a result value | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Predicate blocks cannot return from their enclosing function | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Indexed predicates remain unsupported | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Nullable Array and Range search results and short-circuiting | accepts | accepts | matches reference | matches reference |
+| Retained search values, live traversal and managed captures | accepts | accepts | matches reference | matches reference |
+| Search predicates require Boolean results | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Indexed search blocks remain unsupported | rejects as reference | rejects as reference | not reached | rejects as reference |

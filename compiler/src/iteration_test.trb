@@ -140,6 +140,17 @@ describe("iteration source proof") do
 end
 
 describe("value-producing collection blocks") do
+	test("verifies search nullable result types independently of source checking") do
+		operations := ["find", "find_index"]
+		operations.each do |operation|
+			mut state := iteration_test_state("def main()\nresult := [1]." + operation + " { |item| item > 0 }\nputs(result == nil)\nend\n")
+			plan := state.checked[0].transforms[0]
+			state.checked[0].transforms[0] = MirTransform.new(syntax: plan.syntax, iteration: plan.iteration, type_name: "String?")
+			checked_transform_require(state, plan.syntax.iteration.origin)
+			expect(has_diagnostic(state)).to_be_true()
+		end
+	end
+
 	test("rejects invalid predicate results and transfers") do
 		cases := ["[1].any? { |item| item }", "[1].all? { |item| puts(item) }", "[1].none? { |item| return item == 0 }", "[1].any? { |item| break; item == 1 }"]
 		cases.each do |body|
