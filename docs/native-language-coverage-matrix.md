@@ -55,7 +55,7 @@
 | Array alias and parameter rebinding | accepts | accepts | matches reference | matches reference |
 | Array index captured before growing RHS | accepts | accepts | matches reference | matches reference |
 | Nested managed Array values | accepts | accepts | matches reference | matches reference |
-| Array value-producing iteration | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Array value-producing iteration | accepts | accepts | matches reference | matches reference |
 | Hash key/value iteration | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Empty Hash inference and update | accepts | accepts | matches reference | matches reference |
 | Hash deletion, membership and size | accepts | accepts | matches reference | matches reference |
@@ -138,17 +138,17 @@
 | Reject stale nullable field narrowing after receiver assignment | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Retained nullable assignments preserve checked flow and display | accepts | accepts | matches reference | matches reference |
 | Rejected REPL assignment preserves the preceding fact | rejects as reference | rejects as reference | not reached | rejects as reference |
-| Conditional REPL replacement invalidates the preceding fact | accepts; reference rejects | accepts; reference rejects | differs | output differs |
-| Partial failure discards stale REPL narrowing | accepts; reference rejects | accepts; reference rejects | differs | diagnostic/output differs |
+| Conditional REPL replacement invalidates the preceding fact | accepts | accepts | matches reference | output differs |
+| Partial failure discards stale REPL narrowing | accepts | accepts | differs | rejects as reference |
 | Retained optional values use lazy safe navigation | accepts | accepts | matches reference | matches reference |
 | REPL rejects authored return outside a function | accepts | accepts | matches reference | rejects as reference |
 | Enum named payload order and patterns | accepts | accepts | matches reference | matches reference |
-| Recursive enum values stored in Hash | accepts | accepts; reference rejects | differs | matches reference |
+| Recursive enum values stored in Hash | accepts | accepts | matches reference | matches reference |
 | Enum payload shadows an outer binding | accepts | accepts | matches reference | matches reference |
 | Nullable enum and record payloads | accepts | accepts | matches reference | matches reference |
 | Enum selector order and lexical loop transfers | accepts | accepts | matches reference | matches reference |
 | Enum managed payload retains an Array alias | accepts | accepts | matches reference | matches reference |
-| Recursive record and enum fields | accepts | accepts; reference rejects | differs | rejects as reference |
+| Recursive record and enum fields | accepts | accepts | matches reference | rejects as reference |
 | Imported enum alias preserves nominal identity | accepts | accepts | matches reference | matches reference |
 | Reject an incomplete enum case | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Reject assignment to enum payload binding | rejects as reference | rejects as reference | not reached | rejects as reference |
@@ -160,7 +160,7 @@
 | Recursive generic record with optional tail | accepts | accepts | matches reference | matches reference |
 | Recursive generic enum with managed containers | accepts | accepts | matches reference | matches reference |
 | Nested generic arguments and named payload evaluation order | accepts | accepts | matches reference | matches reference |
-| Generic templates and arguments retain import identity | accepts; reference rejects | accepts; reference rejects | differs | output differs |
+| Generic templates and arguments retain import identity | accepts | accepts | matches reference | matches reference |
 | Generic record arguments are invariant | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Generic enum arguments are invariant | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Generic records with concrete default fields | accepts | accepts | matches reference | matches reference |
@@ -183,7 +183,7 @@
 | Result: catch argument rejected | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Result: managed payloads | accepts | accepts | matches reference | matches reference |
 | Result: nested payload | accepts | accepts | matches reference | matches reference |
-| Result: nullable error | accepts | accepts; reference rejects | differs | output differs |
+| Result: nullable error | accepts | accepts | matches reference | matches reference |
 | Result: unused loop local | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Result: unused branch local | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Result: explicit reassignment | accepts | accepts | matches reference | matches reference |
@@ -209,7 +209,7 @@
 | Generic functions require explicit type arguments | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Generic function type argument counts are exact | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Generic function arguments retain explicit type identity | rejects as reference | rejects as reference | not reached | rejects as reference |
-| Local values shadow generic functions | rejects valid input | rejects as reference | not reached | rejects as reference |
+| Local values shadow generic functions | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Unused generic parameter defaults are checked abstractly | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Unused generic functions require complete return flow | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Generic record defaults use preceding fields | accepts | accepts | matches reference | matches reference |
@@ -221,7 +221,7 @@
 | Generic defaults construct standard Result payloads | accepts | accepts | matches reference | matches reference |
 | Generic explicit fields precede defaults in declaration order | accepts | accepts | matches reference | matches reference |
 | Imported generic defaults retain declaration scope and aliases | accepts | accepts | matches reference | matches reference |
-| Generic defaults use lazy typed control expressions | accepts | accepts; reference rejects | differs | matches reference |
+| Generic defaults use lazy typed control expressions | accepts | accepts | matches reference | matches reference |
 | Unused generic defaults accept valid abstract values | accepts | accepts | matches reference | matches reference |
 | Reject concrete values as unconstrained generic defaults even when unused | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Reject unresolved names in unused generic defaults | rejects as reference | rejects as reference | not reached | rejects as reference |
@@ -231,13 +231,13 @@
 | Reject arithmetic on unconstrained generic default values | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Explicit fields do not hide invalid generic defaults | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Generic defaults cannot capture caller locals | rejects as reference | rejects as reference | not reached | rejects as reference |
-| Generic defaults retain prior fields through full if and enum case expressions | accepts; reference rejects | accepts; reference rejects | differs | output differs |
+| Generic defaults retain prior fields through full if and enum case expressions | accepts | accepts | matches reference | matches reference |
 | Scalar aliases in signatures | accepts | accepts | matches reference | matches reference |
 | Aliases in Array and Hash arguments | accepts | accepts | matches reference | output differs |
 | Nullable generic alias | accepts | accepts | matches reference | matches reference |
-| Identity alias in generic function signatures | accepts | accepts; reference rejects | differs | matches reference |
-| Record constructor through an alias | accepts | accepts; reference rejects | differs | output differs |
-| Generic record alias and field defaults | accepts | accepts; reference rejects | differs | output differs |
+| Identity alias in generic function signatures | accepts | accepts | matches reference | matches reference |
+| Record constructor through an alias | accepts | accepts | matches reference | matches reference |
+| Generic record alias and field defaults | accepts | accepts | matches reference | matches reference |
 | Enum variants through an alias | accepts | accepts | matches reference | output differs |
 | Generic enum alias and pattern inference | accepts | accepts | matches reference | output differs |
 | Reordered generic alias pattern arguments | accepts | accepts | matches reference | output differs |
@@ -245,10 +245,10 @@
 | Result alias propagation and recovery | accepts | accepts | matches reference | matches reference |
 | Generic record defaults with aliased field types | accepts | accepts | matches reference | matches reference |
 | Reject Void as an alias target | rejects as reference | rejects as reference | not reached | rejects as reference |
-| Imported aliases and record construction | accepts; reference rejects | accepts; reference rejects | differs | output differs |
+| Imported aliases and record construction | accepts | accepts | matches reference | matches reference |
 | Alias target resolves in its defining module | accepts | accepts; reference rejects | differs | matches reference |
 | Bare import of a type alias | accepts | accepts | matches reference | matches reference |
-| Recursive nominal alias | accepts | accepts; reference rejects | differs | rejects as reference |
+| Recursive nominal alias | accepts | accepts | matches reference | rejects as reference |
 | Reject a direct alias cycle | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Reject a growing generic alias cycle | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Reject an unused unresolved alias | rejects as reference | rejects as reference | not reached | rejects as reference |
@@ -258,7 +258,7 @@
 | Reject incompatible generic alias arguments | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Reject inconsistent repeated alias pattern parameters | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Reject mismatched concrete alias pattern arguments | rejects as reference | rejects as reference | not reached | rejects as reference |
-| Imported recursive alias in ordinary execution and REPL | accepts; reference rejects | accepts; reference rejects | differs | output differs |
+| Imported recursive alias in ordinary execution and REPL | accepts | accepts | matches reference | matches reference |
 | Independent aliases in nested generic arguments | accepts | accepts | matches reference | matches reference |
 | Unused typed callback body is checked, without constructing a function value | accepts | accepts | matches reference | matches reference |
 | Generic aliases compose callback parameter and return types | accepts | accepts | matches reference | matches reference |
@@ -269,10 +269,18 @@
 | Anonymous positional and higher-order calls | accepts | accepts | matches reference | matches reference |
 | Nested closures share cells across independent factories | accepts | accepts | matches reference | matches reference |
 | Escaped iteration bindings retain independent cells | accepts | accepts | matches reference | matches reference |
-| Concrete closure signatures and callable defaults | accepts; reference rejects | accepts; reference rejects | differs | output differs |
+| Concrete closure signatures and callable defaults | accepts | accepts | matches reference | matches reference |
 | Immutable nullable proofs and mixed closure captures | accepts | accepts | matches reference | matches reference |
 | Captured nominal Hash and Result values survive replacement | accepts | accepts | matches reference | matches reference |
 | Retained shared closures run each initializer once | accepts | accepts | matches reference | matches reference |
 | Closure and mutable Array cycles survive submission collection | accepts | accepts | matches reference | matches reference |
-| Brace iteration with nested controls and lexical transfers | accepts; reference rejects | accepts; reference rejects | differs | output differs |
+| Brace iteration with nested controls and lexical transfers | accepts | accepts | matches reference | matches reference |
 | Multiline Array and Range brace iteration | accepts | accepts | matches reference | matches reference |
+| Array and Range transformation values and indexed chains | accepts | accepts | matches reference | matches reference |
+| Live traversal, retained values and reducer evaluation order | accepts | accepts | matches reference | matches reference |
+| Transform closures, nested arrays and retained managed values | accepts | accepts | matches reference | matches reference |
+| Collection block requires a value | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Selection requires a Boolean predicate | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reducer preserves the accumulator type | rejects as reference | rejects as reference | not reached | rejects as reference |
+| A collection block cannot return from its enclosing function | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Readonly receiver does not grant mutation through that reference | rejects as reference | rejects as reference | not reached | rejects as reference |

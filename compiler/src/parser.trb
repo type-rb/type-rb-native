@@ -1,3 +1,4 @@
+import { TransformSyntax, transform_kind } from transform_model
 import { parse_type_alias } from alias_syntax
 import { LambdaSyntax } from callable_types
 import { parse_lambda_parameters } from lambda_syntax
@@ -322,6 +323,12 @@ def parse_primary_syntax(mut state: CompilerState, mut position: Array<Integer>)
 				return false
 			end
 		else
+			if token_is(state, position[0], ".") && transform_kind(load_string(state.token_texts, position[0] + 1)) > 0
+				if !parse_transform_syntax(state, position)
+					return false
+				end
+				next
+			end
 			if token_is(state, position[0], ".") || token_is(state, position[0], "&.") || token_is(state, position[0], "::")
 				advance(position)
 				member := expect_identifier(state, position)
@@ -1156,4 +1163,95 @@ def parse_statement_value_syntax(mut state: CompilerState, mut position: Array<I
 	state.catch_syntax.push(CatchSyntax.new(origin: origin, operand_finish: operand_finish, binding: binding, body: body, finish: position[0]))
 	store_integer(state.catch_origins, origin, state.catch_syntax.size())
 	return true
+end
+
+# Parse the shared statement grammar inside an expression-owned block.
+def parse_transform_syntax(mut state: CompilerState, mut position: Array<Integer>): Boolean
+	origin := position[0]
+	kind := transform_kind(load_string(state.token_texts, origin + 1))
+	position[0] += 2
+	mut initial_start :=- 1
+	mut initial_finish :=- 1
+	if kind == 3
+		if !expect(state, position, "(")
+			return false
+		end
+		skip_newlines(state, position)
+		initial_start = position[0]
+		if !parse_expression_syntax(state, position, 1)
+			return false
+		end
+		initial_finish = position[0]
+		skip_newlines(state, position)
+		if !expect(state, position, ")")
+			return false
+		end
+	elsif token_is(state, position[0], "(")
+		advance(position)
+		if !expect(state, position, ")")
+			return false
+		end
+	end
+	mut indexed := false
+	if kind != 3 && token_is(state, position[0], ".") && token_is(state, position[0] + 1, "with_index")
+		indexed = true
+		position[0] += 2
+		if token_is(state, position[0], "(")
+			advance(position)
+			if !expect(state, position, ")")
+				return false
+			end
+		end
+	end
+	brace := token_is(state, position[0], "{")
+	mut terminator := "end"
+	if brace
+		terminator = "}"
+		advance(position)
+	elsif !expect(state, position, "do")
+		return false
+	end
+	if !expect(state, position, "|")
+		return false
+	end
+	mut accumulator_origin :=- 1
+	if kind == 3
+		accumulator_origin = position[0]
+		expect_identifier(state, position)
+		if !expect(state, position, ",")
+			return false
+		end
+	end
+	element_origin := position[0]
+	expect_identifier(state, position)
+	mut index_origin :=- 1
+	if indexed
+		if !expect(state, position, ",")
+			return false
+		end
+		index_origin = position[0]
+		expect_identifier(state, position)
+	end
+	if !expect(state, position, "|")
+		return false
+	end
+	if !brace && !finish_statement(state, position)
+		return false
+	end
+	skip_newlines(state, position)
+	body_start := position[0]
+	if !parse_statement_block(state, position)
+		return false
+	end
+	body_finish := position[0]
+	if !expect(state, position, terminator)
+		return false
+	end
+	if sparse_integer_at(state.transform_origins, origin) == 0
+		shape := IterationSyntax.new(origin: origin, receiver_finish: origin, element_origin: element_origin, index_origin: index_origin, body_start: body_start, body_finish: body_finish, finish: position[0])
+		state.transforms.push(TransformSyntax.new(iteration: shape, kind: kind, initial_start: initial_start, initial_finish: initial_finish, accumulator_origin: accumulator_origin))
+		store_integer(state.transform_origins, origin, state.transforms.size())
+		store_integer(state.transform_origins, body_finish, - state.transforms.size())
+	end
+	return !has_diagnostic(state)
 end

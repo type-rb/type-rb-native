@@ -2,7 +2,7 @@ import { CheckedValue, checked_mir_value, checked_value, mir_checked_value, scal
 import { MirIteration } from iteration_mir
 import { MirControlLoop } from mir
 import { mir_checked_array_operation } from mir_arrays
-import { mir_control_active, mir_control_allocate, mir_control_conditional, mir_control_enter, mir_control_jump, mir_control_loop_begin, mir_control_loop_branch, mir_control_prepare } from mir_control
+import { mir_control_active, mir_control_allocate, mir_control_branch, mir_control_conditional, mir_control_enter, mir_control_jump, mir_control_loop_begin, mir_control_loop_branch, mir_control_prepare } from mir_control
 import { mir_checked_range_field } from mir_ranges
 import { CheckedLocals, CompilerState } from state
 import { load_integer, store_integer } from storage
@@ -128,4 +128,30 @@ def mir_checked_iteration_end(mut state: CompilerState, mut locals: CheckedLocal
 	locals.mir_control[8] = depth
 	locals.count[0] = saved
 	mir_control_enter(state, locals, frame.exit, line)
+end
+
+# Selection appends the retained visited value even if the source slot or the
+# user parameter changes. Only the reducer replaces a loop-carried SSA value.
+def mir_transform_yield(mut state: CompilerState, mut locals: CheckedLocals, kind: Integer, result_slot: Integer, element: CheckedValue, yielded: CheckedValue, origin: Integer)
+	if !mir_control_active(locals)
+		return
+	end
+	if kind == 3
+		store_integer(locals.mir_values, result_slot, checked_mir_value(yielded) + 1)
+		return
+	end
+	mut alternate :=- 1
+	if kind == 2
+		alternate = mir_control_branch(state, locals, yielded, load_integer(state.token_lines, origin))
+	end
+	owner := load_integer(locals.mir_values, result_slot) - 1
+	mut value := checked_mir_value(yielded)
+	if kind == 2
+		value = checked_mir_value(element)
+	end
+	mir_checked_array_operation(state, locals, 24, owner, value, 0, "Void", origin)
+	if kind == 2
+		mir_control_jump(state, locals, alternate, locals.count[0])
+		mir_control_enter(state, locals, alternate, load_integer(state.token_lines, origin))
+	end
 end

@@ -1,7 +1,9 @@
+import { MirTransform, TransformSyntax } from transform_model
+import { logical_checked_source } from logical_test
 import { checked_loop_transfer_kind } from checked_program
 import { check, emit_qbe } from compiler
 import { lex } from lexer
-import { checked_iteration_require } from iteration_checked
+import { checked_iteration_require, checked_transform_require } from iteration_checked
 import { MirIteration, mir_iteration_valid } from iteration_mir
 import { IterationSyntax, iteration_syntax_valid } from iteration_syntax
 import { parse_module } from parser
@@ -133,6 +135,56 @@ describe("iteration source proof") do
 				kind += 1
 			end
 			source += 1
+		end
+	end
+end
+
+describe("value-producing collection blocks") do
+	test("rejects result, binding, capability and transfer violations") do
+		cases := ["[1].map { |item| }", "[1].map { |item| item = 2 }", "[1].select { |item| item }", "[1].reduce(0) { |sum, item| sum.to_s() + item.to_s() }", "[1].map.with_index { |item, item| item }", "[1].reduce(0) { |item, item| item }", "[1].map { |item| return item }", "[1].map { |item| break; item }", "[1].map { |item| next; item }", "values := [1]\nvalues.map { |item| values.push(item); item }", "[1].map { |item| [2].each { |_other| return }; item }", "while true\n[1].map { |item| break; item }\nend"]
+		cases.each do |body|
+			mut state := logical_checked_source("def main()\n" + body + "\nend\n")
+			expect(check(state)).to_be_false()
+		end
+	end
+
+	test("permits owned nested loop transfers and function returns") do
+		mut state := iteration_test_state("def main()\nvalues := [1, 2].map do |item|\nmut total := item\n[3, 4].each do |other|\nif other == 3\nnext\nend\ntotal += other\nbreak\nend\ncallback := fn(): Integer; return total; end\ncallback()\nend\nputs(values[1])\nend\n")
+		emit_qbe(state)
+		expect(has_diagnostic(state)).to_be_false()
+	end
+
+	test("rejects missing and inconsistent transform syntax and checked projections") do
+		mut mutation := 0
+		while mutation < 8
+			mut state := iteration_test_state("def main()\nvalues := [1].select.with_index { |item, index| item > index }\nputs(values.size())\nend\n")
+			plan := state.checked[0].transforms[0]
+			origin := plan.syntax.iteration.origin
+			mut kind := plan.syntax.kind
+			mut output := plan.type_name
+			mut initial := plan.syntax.initial_start
+			if mutation == 0
+				store_integer(state.transform_origins, origin, 0)
+			elsif mutation == 1
+				store_integer(state.transform_origins, plan.syntax.iteration.body_finish, 0)
+			elsif mutation == 2
+				store_integer(state.checked[0].transform_origins, origin, 99)
+			elsif mutation == 3
+				kind = 1
+			elsif mutation == 4
+				output = "Array<String>"
+			elsif mutation == 5
+				output = "Integer"
+			elsif mutation == 6
+				initial = origin + 1
+			else
+				output = "Void"
+			end
+			syntax := TransformSyntax.new(iteration: plan.syntax.iteration, kind: kind, initial_start: initial, initial_finish: plan.syntax.initial_finish, accumulator_origin: plan.syntax.accumulator_origin)
+			state.checked[0].transforms[0] = MirTransform.new(syntax: syntax, iteration: plan.iteration, type_name: output)
+			checked_transform_require(state, origin)
+			expect(has_diagnostic(state)).to_be_true()
+			mutation += 1
 		end
 	end
 end

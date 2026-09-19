@@ -2,8 +2,7 @@
 
 TypeRB Native currently follows exact reference revisions during development. The
 current source and semantic oracle is TypeRB
-`dc01dc490b86128ec7c29ad806f0047afaedeb84`, released as
-[TypeRB 0.4.7](https://github.com/type-rb/type-rb/releases/tag/v0.4.7) and recorded
+`245ebcba45905037ea8f30d647d0893796441c88` (the `0.4.8-dev` development identity), recorded
 in `TYPE_RB_REVISION`. This declares one exact reference identity during Native
 development, without claiming a supported version range.
 
@@ -35,6 +34,20 @@ The earlier scoped-file successor is registered in
 passes the selected-reference, migration, exact-baseline, target-regression,
 fixed-point, process, resource, and size criteria.
 
+## Sequential Array transform reference update
+
+The current development pin includes [TypeRB PR #729](https://github.com/type-rb/type-rb/pull/729).
+It aligns sequential traversal across Go, Ruby, TypeScript and the REPL. Shared
+cases review live Array mutations, retained selection values and source/initial
+ordering. This is an exact development commit, not a new TypeRB release.
+
+The update also incorporates already merged fixes for nullable interactive
+assignments, recursive enum emission, generic imports/defaults, type aliases,
+callable defaults and nested brace controls. Their reviewed outcomes replace
+stale reference failures; remaining REPL declaration/display differences are
+preserved. [Integration evidence](../results/2026-09-07-string-escape-reference-compatibility/README.md)
+records the current validation state. Frozen measurements and seed pins are unchanged.
+
 ## TypeRB 0.4.7 reference update
 
 The release includes [TypeRB PR #686](https://github.com/type-rb/type-rb/pull/686),
@@ -46,7 +59,7 @@ execution and REPL. Its conditional-transfer reference REPL expectation changes
 from incomplete input to the same output as the compiled program. Native's
 unsupported conditional-transfer outcomes remain explicit coverage gaps.
 
-Current reference builds use `tools/build-reference.py`. It validates the
+Reference builds use `tools/build-reference.py`. It validates the
 compatibility manifest, exact clean checkout and source version, embeds the
 declared reference version, and verifies the executable's report. The release
 source retains `0.4.7-dev`; the explicit `0.4.7` build identity avoids depending
