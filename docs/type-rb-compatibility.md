@@ -45,7 +45,7 @@ The update also incorporates already merged fixes for nullable interactive
 assignments, recursive enum emission, generic imports/defaults, type aliases,
 callable defaults and nested brace controls. Their reviewed outcomes replace
 stale reference failures; remaining REPL declaration/display differences are
-preserved. [Integration evidence](../results/2026-09-19-array-transform-reference/README.md)
+preserved. [Integration evidence](../results/2026-09-07-string-escape-reference-compatibility/README.md)
 records the current validation state. Frozen measurements and seed pins are unchanged.
 
 ## TypeRB 0.4.7 reference update

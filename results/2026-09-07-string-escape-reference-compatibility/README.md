@@ -1,5 +1,25 @@
 # Current reference compatibility
 
+The selected development reference is TypeRB `0.4.8-dev` at
+`245ebcba45905037ea8f30d647d0893796441c88`, including sequential live Array
+traversal from [TypeRB PR #729](https://github.com/type-rb/type-rb/pull/729).
+[Native PR #497](https://github.com/type-rb/type-rb-native/pull/497) integrates
+Array/Range map, select and reduce through MIR and the REPL.
+
+The shared registry contains 282 cases. Local checks compare the exact reference
+and Native through checking, building, execution and the REPL; the PR records
+final correctness, recovery, target and memory authorities. Previously merged
+reference corrections for nullable assignments, recursive enums, generic
+imports/defaults, aliases and brace controls replace stale rejection outcomes.
+Remaining unsupported paths and display differences stay explicit.
+
+No new reference release, seed or performance qualification is inferred. The
+retained compatibility cohorts below keep their original source, workflow and
+measurement identities. This current integration summary shares the existing
+compatibility evidence slot instead of adding another dated result directory.
+
+# Previous released reference compatibility
+
 The current candidate selects the released TypeRB `0.4.7` source at
 `dc01dc490b86128ec7c29ad806f0047afaedeb84` in
 [PR #459](https://github.com/type-rb/type-rb-native/pull/459).
