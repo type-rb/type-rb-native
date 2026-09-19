@@ -9,7 +9,8 @@ and optional receiver search flattens to that same optional result. Indexes coun
 Unicode code points, including combining marks and the components of a grapheme
 cluster. Matching is literal, without normalization or locale rules.
 
-`string_queries.trb` owns method classification and typed construction. The
+`string_methods.trb` (originally `string_queries.trb`) owns method classification
+and typed construction. The
 primitive argument checker is shared with Integer and Float receivers. Empty
 testing uses existing String size and comparison. Internal instruction 44 takes
 two available Strings and returns an Integer search outcome with no failure edge.

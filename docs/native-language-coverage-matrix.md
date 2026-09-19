@@ -334,3 +334,15 @@
 | String search requires a present substring | rejects as reference | rejects as reference | not reached | rejects as reference |
 | String search results require narrowing | rejects as reference | rejects as reference | not reached | rejects as reference |
 | String predicate results remain Boolean | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Unicode sequences | accepts | accepts | matches reference | matches reference |
+| Empty single | accepts | accepts | matches reference | matches reference |
+| Fresh array storage | accepts | accepts | matches reference | matches reference |
+| Optional transforms | accepts | accepts | matches reference | matches reference |
+| Managed closures | accepts | accepts | matches reference | matches reference |
+| Nul preservation | accepts | accepts | matches reference | matches reference |
+| Chars arity | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Codepoints arity | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reverse arity | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Readonly derived array | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Point element type | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Character element type | rejects as reference | rejects as reference | not reached | rejects as reference |

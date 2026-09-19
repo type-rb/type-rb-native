@@ -1,6 +1,6 @@
 import { integer_string } from literals
-import { mir_operand_type } from mir_types
-import { MirInstruction, mir_type_name } from mir
+import { mir_operand_type, mir_semantic_type_name } from mir_types
+import { MirInstruction } from mir
 import { QbeEmitContext, QbeValue, emit_temporary, emitted_value } from qbe_context
 import { QbeOutput, qbe_output_line } from qbe_output
 import { CompilerState } from state
@@ -9,7 +9,7 @@ import { CompilerState } from state
 # root/effect inference here. The control adapter publishes the MIR root plan.
 def emit_mir_string_instruction(state: CompilerState, value_types: Array<Integer>, instruction: MirInstruction, operands: Array<String>, symbols: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
 	kind := instruction.kind
-	result_type := mir_type_name(mir_operand_type(value_types, instruction.result))
+	result_type := mir_semantic_type_name(state.scalar_mir, mir_operand_type(value_types, instruction.result))
 	if kind == 12
 		return emitted_value(symbols[instruction.payload], "String")
 	end
@@ -24,7 +24,13 @@ def emit_mir_string_instruction(state: CompilerState, value_types: Array<Integer
 		return emitted_value("", "Void")
 	end
 	result := emit_temporary(context)
-	if kind == 44
+	if kind == 45
+		if instruction.payload == 2
+			qbe_output_line(output, "\t" + result + " =l call $trbn_string_reverse(l " + first + ")")
+		else
+			qbe_output_line(output, "\t" + result + " =l call $trbn_string_sequence(l " + first + ", l " + integer_string(instruction.payload) + ")")
+		end
+	elsif kind == 44
 		qbe_output_line(output, "\t" + result + " =l call $trbn_string_query(l " + first + ", l " + operands[instruction.second] + ", l " + integer_string(instruction.payload) + ")")
 	elsif kind == 15
 		address := emit_temporary(context)

@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 332 ordinary-path probes and 32 feature
+Status: the shared contract contains 344 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -274,6 +274,13 @@ source-order binding rules.
 
 ## Ordinary UTF-8 String foundation
 
+String `codepoints`, `chars` and `reverse` also work in ordinary files and the
+REPL. They preserve code-point units, NUL, optional receivers and independent
+result Arrays; readonly bindings keep their existing restrictions. Ordinary
+runtime traversal is linear and retains managed sources/results through
+collection. [Decision 0056](decisions/0056-string-sequence-mir.md) records the
+typed operation, lifetime controls and the retained REPL boundary.
+
 String `empty?`, `include?`, `start_with?`, `end_with?`, `index` and `rindex`
 work in ordinary files and the REPL. First/last search returns an optional
 code-point offset, including overlapping matches; empty patterns match at zero
@@ -281,7 +288,7 @@ or size. Literal predicates do not normalize text. Receiver retention, argument
 order, aliases, nullable calls and lexical transfers use the common checked/MIR
 pipeline. [Decision 0055](decisions/0055-string-query-mir.md) records the search
 instruction, allocation-free runtime and external-byte semantics. Remaining
-String APIs, including the wider slicing/code-point case in the shared registry,
+String APIs, including the remaining slicing part of the combined String case in the shared registry,
 stay explicitly open.
 
 The shared cases cover Japanese text, two- through four-byte characters,
