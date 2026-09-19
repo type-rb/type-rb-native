@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the actual ordinary String-index runtime and its static values."""
+"""Verify ordinary String indexing and bounded, allocation-free queries."""
 import argparse
 import hashlib
 import json
@@ -18,8 +18,11 @@ source = args.source or repo / 'compiler/src/qbe_runtime.trb'
 decoded = '\n'.join(json.loads(s) for s in re.findall(r'"(?:[^"\\]|\\.)*"', source.read_text()))
 helpers = source.with_name('qbe_strings.trb')
 decoded += '\n' + '\n'.join(json.loads(s) for s in re.findall(r'"(?:[^"\\]|\\.)*"', helpers.read_text()))
+queries = source.with_name('qbe_string_queries.trb')
+decoded += '\n' + '\n'.join(json.loads(s) for s in re.findall(r'"(?:[^"\\]|\\.)*"', queries.read_text()))
 names = ['trbn_string_index', 'trbn_utf8_width', 'trbn_utf8_count', 'trbn_utf8_span',
-         'trbn_string_offset', 'trbn_string_from_codepoint', 'trbn_utf8_scalar', 'trbn_source_slice']
+         'trbn_string_offset', 'trbn_string_from_codepoint', 'trbn_utf8_scalar', 'trbn_source_slice',
+         'trbn_string_is_utf8', 'trbn_string_query', 'trbn_string_codepoint_query']
 bodies = []
 for name in names:
     matches = re.findall(r'^function l \$' + name + r'\([^\n]*\) \{.*?^\}', decoded, re.M | re.S)
@@ -37,6 +40,8 @@ observer = r'''
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
+#include <unistd.h>
 struct string { uint64_t descriptor; int64_t length, points; unsigned char bytes[]; };
 _Static_assert(sizeof(void *) == 8 && offsetof(struct string, bytes) == 24, "String ABI");
 extern struct string *trbn_string_index(struct string *, int64_t);
@@ -44,6 +49,7 @@ extern struct string *trbn_string_from_codepoint(int64_t);
 extern struct string *trbn_source_slice(struct string *, int64_t, int64_t);
 extern int64_t trbn_utf8_count(const unsigned char *, int64_t);
 extern int64_t trbn_utf8_scalar(const unsigned char *, int64_t);
+extern int64_t trbn_string_query(struct string *, struct string *, int64_t);
 static unsigned allocations;
 void *trbn_string_alloc(int64_t size) { ++allocations; return calloc(1, (size_t)size + 8); }
 void trbn_fail(const void *message, int64_t size) {
@@ -54,6 +60,27 @@ static struct string *make(const unsigned char *data, size_t size) {
     struct string *s = calloc(1, 25 + size); assert(s);
     s->length = size; s->points = trbn_utf8_count(data, size);
     memcpy(s->bytes, data, size); return s;
+}
+struct guarded { void *region; size_t size; struct string *value; };
+static struct guarded guard(const unsigned char *data, size_t size) {
+    size_t page = (size_t)sysconf(_SC_PAGESIZE);
+    assert(size % 8 == 0 && size + 24 < page);
+    unsigned char *region = mmap(NULL, page * 2, PROT_READ | PROT_WRITE,
+                                MAP_PRIVATE | MAP_ANON, -1, 0);
+    assert(region != MAP_FAILED);
+    assert(mprotect(region + page, page, PROT_NONE) == 0);
+    struct string *s = (struct string *)(region + page - size - 24);
+    s->length = size; s->points = trbn_utf8_count(data, size);
+    if (size) memcpy(s->bytes, data, size);
+    return (struct guarded){region, page * 2, s};
+}
+static void expect_query(struct string *value, const unsigned char *part, size_t size,
+                         int64_t first, int64_t last, int64_t prefix, int64_t suffix, int64_t contains) {
+    struct string *pattern = make(part, size);
+    const int64_t expected[] = {first, last, prefix, suffix, contains};
+    for (int mode = 0; mode < 5; ++mode)
+        assert(trbn_string_query(value, pattern, mode) == expected[mode]);
+    free(pattern);
 }
 int main(int argc, char **argv) {
     unsigned char ascii[128];
@@ -123,7 +150,39 @@ int main(int argc, char **argv) {
         assert(!memcmp(value->bytes, "\xef\xbf\xbd", 4));
         free(value); free(source);
     }
-    puts("ASCII cache; Unicode indexing, slicing, lifetime and scalar boundaries passed");
+    unsigned before_queries = allocations;
+    source = make((const unsigned char *)"ababa", 5);
+    expect_query(source, (const unsigned char *)"aba", 3, 0, 2, 0, 0, 0);
+    expect_query(source, (const unsigned char *)"", 0, 0, 5, 0, 0, 0);
+    expect_query(source, (const unsigned char *)"ababab", 6, -1, -1, -1, -1, -1);
+    free(source);
+    source = make((const unsigned char *)"a\0ba\0", 5);
+    expect_query(source, (const unsigned char *)"a\0", 2, 0, 3, 0, 0, 0);
+    free(source);
+    source = make((const unsigned char *)"\xc2\xa2", 2);
+    expect_query(source, (const unsigned char *)"\xa2", 1, -1, -1, -1, 0, 0);
+    free(source);
+    /* These Strings have no terminator: the first byte beyond the stored length
+       is inaccessible, for both the receiver and the pattern. */
+    struct guarded value = guard((const unsigned char *)"ab\xf0\x9f\x98\x80" "cd", 8);
+    expect_query(value.value, (const unsigned char *)"\xf0\x9f\x98\x80", 4, 2, 2, -1, -1, 0);
+    expect_query(value.value, (const unsigned char *)"cd", 2, 3, 3, -1, 0, 0);
+    expect_query(value.value, (const unsigned char *)"ce", 2, -1, -1, -1, -1, -1);
+    for (int mode = 0; mode < 5; ++mode) assert(trbn_string_query(value.value, value.value, mode) == 0);
+    struct guarded invalid_value = guard((const unsigned char *)"abcdef\xe3\x81", 8);
+    expect_query(invalid_value.value, (const unsigned char *)"\xef\xbf\xbd", 3, 6, 7, -1, -1, -1);
+    expect_query(invalid_value.value, (const unsigned char *)"\xe3\x81", 2, 6, 6, -1, 0, 0);
+    struct guarded empty = guard((const unsigned char *)"", 0);
+    for (int mode = 0; mode < 5; ++mode) {
+        assert(trbn_string_query(empty.value, empty.value, mode) == 0);
+        assert(trbn_string_query(empty.value, value.value, mode) == -1);
+        assert(trbn_string_query(value.value, empty.value, mode) == (mode == 1 ? 5 : 0));
+    }
+    assert(munmap(value.region, value.size) == 0);
+    assert(munmap(invalid_value.region, invalid_value.size) == 0);
+    assert(munmap(empty.region, empty.size) == 0);
+    assert(allocations == before_queries);
+    puts("String indexing, Unicode lifetime, allocation-free queries and guarded bounds passed");
     return 0;
 }
 '''
@@ -136,14 +195,16 @@ with tempfile.TemporaryDirectory(prefix='native String index ') as directory:
     subprocess.run(['/usr/bin/cc', '-O2', str(root / 'index.s'), str(root / 'observer.c'), '-o', str(root / 'probe')], check=True, capture_output=True, timeout=30)
     good = subprocess.run([str(root / 'probe')], capture_output=True, timeout=10)
     assert good.returncode == 0 and good.stderr == b'', good
-    assert good.stdout == b'ASCII cache; Unicode indexing, slicing, lifetime and scalar boundaries passed\n', good
+    assert good.stdout == b'String indexing, Unicode lifetime, allocation-free queries and guarded bounds passed\n', good
     observations.append({'case': 'ascii-cache', 'reads': 256, 'allocations': 0})
+    observations.append({'case': 'string-queries', 'modes': 5, 'allocations': 0,
+                         'controls': ['overlap', 'nul', 'invalid-utf8', 'guarded-spans', 'empty', 'oversized']})
     for length, index in [(0, 0), (0, -1), (128, -129), (128, 128), (128, -9007199254740991), (128, 9007199254740991)]:
         result = subprocess.run([str(root / 'probe'), str(length), str(index)], capture_output=True, timeout=10)
         assert result.returncode == 70 and result.stdout == b'', result
         assert result.stderr == b'panic: index is out of bounds\n', result
         observations.append({'case': 'required-bounds-failure', 'length': length, 'index': index})
-report = {'sourceSha256': hashlib.sha256(source.read_bytes()).hexdigest(), 'helpersSha256': hashlib.sha256(helpers.read_bytes()).hexdigest(), 'runtimeSha256': hashlib.sha256(il.encode()).hexdigest(), 'observations': observations}
+report = {'sourceSha256': hashlib.sha256(source.read_bytes()).hexdigest(), 'helpersSha256': hashlib.sha256(helpers.read_bytes()).hexdigest(), 'queriesSha256': hashlib.sha256(queries.read_bytes()).hexdigest(), 'runtimeSha256': hashlib.sha256(il.encode()).hexdigest(), 'observations': observations}
 if args.output:
     args.output.write_text(json.dumps(report, indent=2) + '\n')
-print('String indexing: ASCII cache, UTF-8 indexing/slicing/lifetime, scalar boundaries and 6 bounds failures passed')
+print('String indexing and queries: ASCII cache, UTF-8, zero-allocation queries, guarded spans and 6 bounds failures passed')

@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 321 ordinary-path probes and 32 feature
+Status: the shared contract contains 332 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -274,6 +274,16 @@ source-order binding rules.
 
 ## Ordinary UTF-8 String foundation
 
+String `empty?`, `include?`, `start_with?`, `end_with?`, `index` and `rindex`
+work in ordinary files and the REPL. First/last search returns an optional
+code-point offset, including overlapping matches; empty patterns match at zero
+or size. Literal predicates do not normalize text. Receiver retention, argument
+order, aliases, nullable calls and lexical transfers use the common checked/MIR
+pipeline. [Decision 0055](decisions/0055-string-query-mir.md) records the search
+instruction, allocation-free runtime and external-byte semantics. Remaining
+String APIs, including the wider slicing/code-point case in the shared registry,
+stay explicitly open.
+
 The shared cases cover Japanese text, two- through four-byte characters,
 combining code points, negative indices, concatenation, interpolation, equality,
 Hash keys, record/Array storage, embedded NUL and long literals. The additional
@@ -281,6 +291,8 @@ Hash keys, record/Array storage, embedded NUL and long literals. The additional
 source bytes before token decoding, and forces collection before every String
 allocation while indexed values and their owners remain live. Terminal tests
 exercise evaluation as well as wide-character and combining-mark editing.
+Query controls also cover allocating arguments, embedded NUL and malformed
+external byte input against the pinned reference semantics.
 
 String headers retain UTF-8 byte length and code-point count separately. Size is
 constant time; ASCII indexing keeps its bounded static cache and allocates

@@ -323,3 +323,14 @@
 | Float to_i negative-outside failure class | accepts | accepts | matches reference | rejects as reference |
 | Float rounding preserves an absent nullable result | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Float classification returns Boolean | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String queries use code-point offsets and literal matching | accepts | accepts | matches reference | matches reference |
+| String query empty and longer-pattern boundaries | accepts | accepts | matches reference | matches reference |
+| String receiver capture, source order and managed values | accepts | accepts | matches reference | matches reference |
+| Optional String queries skip arguments and flatten optional results | accepts | accepts | matches reference | matches reference |
+| String query arguments preserve lexical loop transfers | accepts | accepts | matches reference | matches reference |
+| String empty query rejects extra arguments | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String search requires a substring | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String search rejects Integer arguments | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String search requires a present substring | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String search results require narrowing | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String predicate results remain Boolean | rejects as reference | rejects as reference | not reached | rejects as reference |

@@ -9,7 +9,7 @@ import { load_integer, load_string } from storage
 # are deliberately absent; conversions and I/O are explicit operations too.
 def mir_checked_string_operation(mut state: CompilerState, mut locals: CheckedLocals, kind: Integer, first: Integer, second: Integer, payload: Integer, result_type: String, origin: Integer): CheckedValue
 	mir_control_prepare(state, locals)
-	if (kind != 12 && first < 0) || ((kind == 13 || kind == 14 || kind == 16) && second < 0)
+	if (kind != 12 && first < 0) || ((kind == 13 || kind == 14 || kind == 16 || kind == 44) && second < 0)
 		scalar_mir_disable(locals)
 	end
 	if !mir_control_active(locals)
@@ -75,12 +75,16 @@ def mir_string_instruction_error(flow: MirFlow, native_module: MirModule, functi
 	if !mir_value_available(flow, block, index, instruction.first)
 		return "MIR String operand is undefined"
 	end
-	if kind == 13 || kind == 14 || kind == 16
+	if kind == 13 || kind == 14 || kind == 16 || kind == 44
 		if !mir_value_available(flow, block, index, instruction.second)
 			return "MIR String operand is undefined"
 		end
 		if first != 8
 			return "MIR String operand type differs"
+		end
+		# String search: first/last code-point search or prefix/suffix/contains predicates.
+		if kind == 44 && second == 8 && result == 1 && instruction.payload >= 0 && instruction.payload <= 4
+			return ""
 		end
 		if kind == 14 && second == 8 && result == 2 && (instruction.payload == 0 || instruction.payload == 1)
 			return ""
