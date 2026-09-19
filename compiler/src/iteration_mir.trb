@@ -1,41 +1,17 @@
-# Structured traversal retains the receiver once. Array reads its live header;
-# Range streams captured bounds. Internal cursors are separate from bindings.
+import { IterationSyntax, iteration_syntax_valid } from iteration_syntax
+
+# Checked traversal binds immutable syntax to receiver/element types and the
+# lexical loop owner. Executable control flow is lowered to ordinary MIR edges.
 record MirIteration
-	origin: Integer
-	receiver_finish: Integer
-	element_origin: Integer
-	index_origin: Integer
-	body_start: Integer
-	body_finish: Integer
-	finish: Integer
+	syntax: IterationSyntax
 	parent_loop: Integer
 	source_kind: Integer
 	type_name: String
 	element_type: String
 end
 
-def mir_iteration_shape_valid(plan: MirIteration, origin: Integer, token_count: Integer): Boolean
-	if token_count <= 0 || plan.origin != origin || origin < 0 || plan.receiver_finish <= origin
-		return false
-	end
-	if plan.element_origin <= plan.receiver_finish || plan.body_start <= plan.element_origin
-		return false
-	end
-	if plan.index_origin >= 0
-		if plan.index_origin <= plan.element_origin || plan.index_origin >= plan.body_start
-			return false
-		end
-	elsif plan.index_origin != - 1
-		return false
-	end
-	if plan.body_finish < plan.body_start || plan.body_finish >= token_count - 1
-		return false
-	end
-	return plan.finish == plan.body_finish + 1
-end
-
 def mir_iteration_valid(plan: MirIteration, origin: Integer, token_count: Integer, array_type: String, element_type: String): Boolean
-	if !mir_iteration_shape_valid(plan, origin, token_count)
+	if !iteration_syntax_valid(plan.syntax, origin, token_count)
 		return false
 	end
 	if plan.parent_loop < - 1 || plan.parent_loop >= origin
