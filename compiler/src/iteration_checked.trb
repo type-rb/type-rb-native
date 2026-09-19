@@ -1,12 +1,13 @@
 import { token_is } from syntax_tokens
-import { MirIteration, MirRangeConstruction, mir_iteration_shape_valid, mir_iteration_valid, mir_range_valid } from iteration_mir
+import { MirIteration, MirRangeConstruction, mir_iteration_valid, mir_range_valid } from iteration_mir
+import { IterationSyntax, iteration_syntax_valid } from iteration_syntax
 import { syntax_iteration_suffix } from parser
 import { array_element_type } from type_resolution
 import { CompilerState, diagnostic } from state
 import { load_integer, sparse_integer_at } from storage
 
-def checked_iteration_shape(state: CompilerState, plan: MirIteration, origin: Integer): Boolean
-	if !mir_iteration_shape_valid(plan, origin, state.token_count[0])
+def checked_iteration_shape(state: CompilerState, plan: IterationSyntax, origin: Integer): Boolean
+	if !iteration_syntax_valid(plan, origin, state.token_count[0])
 		return false
 	end
 	# The parser pairs both boundaries. A stale end cannot silently skip
@@ -61,10 +62,11 @@ end
 
 def checked_iteration_require(mut state: CompilerState, origin: Integer, parent_loop: Integer): MirIteration
 	encoded := sparse_integer_at(state.checked[0].iteration_origins, origin)
-	invalid := MirIteration.new(origin: - 1, receiver_finish: - 1, element_origin: - 1, index_origin: - 1, body_start: - 1, body_finish: - 1, finish: - 1, parent_loop: - 1, source_kind: 1, type_name: "", element_type: "")
+	syntax := IterationSyntax.new(origin: - 1, receiver_finish: - 1, element_origin: - 1, index_origin: - 1, body_start: - 1, body_finish: - 1, finish: - 1)
+	invalid := MirIteration.new(syntax: syntax, parent_loop: - 1, source_kind: 1, type_name: "", element_type: "")
 	if encoded > 0 && encoded <= state.checked[0].iterations.size()
 		plan := state.checked[0].iterations[encoded - 1]
-		if checked_iteration_shape(state, plan, origin) && plan.parent_loop == parent_loop
+		if checked_iteration_shape(state, plan.syntax, origin) && plan.parent_loop == parent_loop
 			if mir_iteration_valid(plan, origin, state.token_count[0], plan.type_name, iteration_element_type(plan.type_name))
 				return plan
 			end

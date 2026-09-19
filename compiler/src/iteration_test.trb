@@ -2,7 +2,8 @@ import { checked_loop_transfer_kind } from checked_program
 import { check, emit_qbe } from compiler
 import { lex } from lexer
 import { checked_iteration_require } from iteration_checked
-import { MirIteration, mir_iteration_shape_valid, mir_iteration_valid } from iteration_mir
+import { MirIteration, mir_iteration_valid } from iteration_mir
+import { IterationSyntax, iteration_syntax_valid } from iteration_syntax
 import { parse_module } from parser
 import { resolve } from resolution
 import { CompilerState, compiler_new, has_diagnostic } from state
@@ -54,14 +55,14 @@ describe("Array iteration MIR") do
 	end
 
 	test("verifies source ranges, receiver types, and nearest loop ownership") do
-		plan := MirIteration.new(origin: 4, receiver_finish: 5, element_origin: 9, index_origin: 11, body_start: 14, body_finish: 20, finish: 21, parent_loop: - 1, source_kind: 1, type_name: "Array<Integer>", element_type: "Integer")
+		plan := MirIteration.new(syntax: IterationSyntax.new(origin: 4, receiver_finish: 5, element_origin: 9, index_origin: 11, body_start: 14, body_finish: 20, finish: 21), parent_loop: - 1, source_kind: 1, type_name: "Array<Integer>", element_type: "Integer")
 		expect(mir_iteration_valid(plan, 4, 22, "Array<Integer>", "Integer")).to_be_true()
 		expect(mir_iteration_valid(plan, 3, 22, "Array<Integer>", "Integer")).to_be_false()
 		expect(mir_iteration_valid(plan, 4, 21, "Array<Integer>", "Integer")).to_be_false()
 		expect(mir_iteration_valid(plan, 4, 22, "Array<String>", "String")).to_be_false()
 		expect(mir_iteration_valid(plan, 4, 22, "Array<Integer>", "")).to_be_false()
-		expect(mir_iteration_shape_valid(plan, 4, 0)).to_be_false()
-		expect(mir_iteration_shape_valid(plan, 4, - 9007199254740991)).to_be_false()
+		expect(iteration_syntax_valid(plan.syntax, 4, 0)).to_be_false()
+		expect(iteration_syntax_valid(plan.syntax, 4, - 9007199254740991)).to_be_false()
 	end
 
 	test("rejects missing, cross-origin, and stale typed operation plans") do
@@ -72,18 +73,18 @@ describe("Array iteration MIR") do
 			plan := state.checked[0].iterations[0]
 			mut element_type := plan.element_type
 			mut parent_loop := plan.parent_loop
-			mut index_origin := plan.index_origin
-			mut body_finish := plan.body_finish
-			mut finish := plan.finish
-			mut receiver_finish := plan.receiver_finish
+			mut index_origin := plan.syntax.index_origin
+			mut body_finish := plan.syntax.body_finish
+			mut finish := plan.syntax.finish
+			mut receiver_finish := plan.syntax.receiver_finish
 			if mode == 0
-				store_integer(state.iteration_origins, plan.origin, 0)
+				store_integer(state.iteration_origins, plan.syntax.origin, 0)
 			elsif mode == 1
-				store_integer(state.iteration_origins, plan.origin, 99)
+				store_integer(state.iteration_origins, plan.syntax.origin, 99)
 			elsif mode == 2
 				element_type = "String"
 			elsif mode == 3
-				parent_loop = plan.origin
+				parent_loop = plan.syntax.origin
 			elsif mode == 4
 				index_origin =- 1
 			elsif mode == 5
@@ -92,10 +93,10 @@ describe("Array iteration MIR") do
 			elsif mode == 6
 				receiver_finish += 1
 			else
-				store_integer(state.iteration_origins, plan.body_finish, 0)
+				store_integer(state.iteration_origins, plan.syntax.body_finish, 0)
 			end
-			state.checked[0].iterations[0] = MirIteration.new(origin: plan.origin, receiver_finish: receiver_finish, element_origin: plan.element_origin, index_origin: index_origin, body_start: plan.body_start, body_finish: body_finish, finish: finish, parent_loop: parent_loop, source_kind: 1, type_name: plan.type_name, element_type: element_type)
-			checked_iteration_require(state, plan.origin, - 1)
+			state.checked[0].iterations[0] = MirIteration.new(syntax: IterationSyntax.new(origin: plan.syntax.origin, receiver_finish: receiver_finish, element_origin: plan.syntax.element_origin, index_origin: index_origin, body_start: plan.syntax.body_start, body_finish: body_finish, finish: finish), parent_loop: parent_loop, source_kind: 1, type_name: plan.type_name, element_type: element_type)
+			checked_iteration_require(state, plan.syntax.origin, - 1)
 			expect(has_diagnostic(state)).to_be_true()
 			mode += 1
 		end
@@ -121,12 +122,12 @@ describe("iteration source proof") do
 				if kind != source + 1
 					mut state := iteration_test_state("def main()\n" + receiver + ".each do |value|\nnext\nend\nend\n")
 					plan := state.checked[0].iterations[0]
-					expect(checked_loop_transfer_kind(state, plan.body_start, plan.origin)).to_equal(2)
-					state.checked[0].iterations[0] = MirIteration.new(origin: plan.origin, receiver_finish: plan.receiver_finish, element_origin: plan.element_origin, index_origin: plan.index_origin, body_start: plan.body_start, body_finish: plan.body_finish, finish: plan.finish, parent_loop: plan.parent_loop, source_kind: kind, type_name: plan.type_name, element_type: plan.element_type)
-					checked_iteration_require(state, plan.origin, - 1)
+					expect(checked_loop_transfer_kind(state, plan.syntax.body_start, plan.syntax.origin)).to_equal(2)
+					state.checked[0].iterations[0] = MirIteration.new(syntax: plan.syntax, parent_loop: plan.parent_loop, source_kind: kind, type_name: plan.type_name, element_type: plan.element_type)
+					checked_iteration_require(state, plan.syntax.origin, - 1)
 					expect(has_diagnostic(state)).to_be_true()
 					state.diagnostic_count[0] = 0
-					expect(checked_loop_transfer_kind(state, plan.body_start, plan.origin)).to_equal(0)
+					expect(checked_loop_transfer_kind(state, plan.syntax.body_start, plan.syntax.origin)).to_equal(0)
 					expect(has_diagnostic(state)).to_be_true()
 				end
 				kind += 1

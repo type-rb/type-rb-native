@@ -104,7 +104,7 @@ vertical slices from remaining ownership.
 ### Current compiler source ownership
 
 The ordinary entry is [compiler/src/compiler.trb](../compiler/src/compiler.trb).
-Its explicit transitive import closure contains 95 canonical implementation modules:
+Its explicit transitive import closure contains 99 canonical implementation modules:
 
 | Modules in `compiler/src/` | Current responsibility |
 | --- | --- |
@@ -127,7 +127,7 @@ Its explicit transitive import closure contains 95 canonical implementation modu
 | `qbe_context.trb`, `qbe_functions.trb`, `qbe_numeric.trb`, `qbe_constants.trb` | Target context, function ABI/root-frame emission, MIR-selected numeric lowering and static data. |
 | `qbe_calls.trb`, `qbe_mir.trb`, `qbe_control.trb`, `qbe_strings.trb`, `qbe_arrays.trb`, `qbe_records.trb`, `qbe_hashes.trb`, `qbe_ranges.trb`, `qbe_roots.trb` | Shared typed scalar/call adaptation, verified Array loop plans, general scalar/managed blocks and MIR-selected root publication. |
 | `hash_types.trb`, `hash_mir.trb`, `hash_checked.trb` | Hash types and value layout, operation plans, and their checked source bindings. |
-| `iteration_mir.trb`, `iteration_checked.trb` | Range construction and Array/Range iteration plans, structural validation, and checked source bindings. |
+| `iteration_syntax.trb`, `iteration_mir.trb`, `iteration_checked.trb` | Immutable parsed iteration regions, typed Array/Range traversal plans, Range construction, structural validation, and checked source bindings. |
 | `qbe_output.trb`, `qbe_runtime.trb`, `hash_runtime.trb` | Ordered QBE output and runtime generation, including the Hash runtime. |
 | `project_config.trb` | Project configuration records, JSONC parsing, and validation. |
 | `checked_functions.trb` | Parameter binding, body checking and module finalization. |

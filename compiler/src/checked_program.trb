@@ -1225,7 +1225,7 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 	if receiver.type_name == "Range<Integer>"
 		source_kind = 2
 	end
-	plan := MirIteration.new(origin: origin, receiver_finish: shape.receiver_finish, element_origin: shape.element_origin, index_origin: shape.index_origin, body_start: shape.body_start, body_finish: shape.body_finish, finish: shape.finish, parent_loop: parent_loop, source_kind: source_kind, type_name: receiver.type_name, element_type: element_type)
+	plan := MirIteration.new(syntax: shape, parent_loop: parent_loop, source_kind: source_kind, type_name: receiver.type_name, element_type: element_type)
 	state.checked[0].iterations.push(plan)
 	store_integer(state.checked[0].iteration_origins, origin, state.checked[0].iterations.size())
 	checked_iteration_require(state, origin, parent_loop)
@@ -1233,36 +1233,36 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 	# Hidden receiver/cursor bindings provide the loop-carried MIR values.
 	local_bind(locals, "$iteration.receiver", receiver.type_name, 1)
 	local_bind(locals, "$iteration.cursor", "Integer", 1)
-	if source_kind == 2 && plan.index_origin >= 0
+	if source_kind == 2 && plan.syntax.index_origin >= 0
 		local_bind(locals, "$iteration.ordinal", "Integer", 1)
 	end
 	element := mir_checked_iteration_begin(state, locals, plan, receiver, saved)
-	local_bind(locals, load_string(state.token_texts, plan.element_origin), element_type, 1)
-	mir_binding_initialize(state, locals, locals.count[0] - 1, element, plan.element_origin)
-	if plan.index_origin >= 0
-		if load_string(state.token_texts, plan.element_origin) == load_string(state.token_texts, plan.index_origin)
-			diagnostic(state, "TRBN4004", load_integer(state.token_lines, plan.index_origin), "iteration block parameter is duplicated")
+	local_bind(locals, load_string(state.token_texts, plan.syntax.element_origin), element_type, 1)
+	mir_binding_initialize(state, locals, locals.count[0] - 1, element, plan.syntax.element_origin)
+	if plan.syntax.index_origin >= 0
+		if load_string(state.token_texts, plan.syntax.element_origin) == load_string(state.token_texts, plan.syntax.index_origin)
+			diagnostic(state, "TRBN4004", load_integer(state.token_lines, plan.syntax.index_origin), "iteration block parameter is duplicated")
 			return false
 		end
-		local_bind(locals, load_string(state.token_texts, plan.index_origin), "Integer", 1)
+		local_bind(locals, load_string(state.token_texts, plan.syntax.index_origin), "Integer", 1)
 		mut index_slot := saved + 1
 		if source_kind == 2
 			index_slot = saved + 2
 		end
-		ordinal := mir_binding_read(state, locals, index_slot, plan.index_origin)
-		mir_binding_initialize(state, locals, locals.count[0] - 1, ordinal, plan.index_origin)
+		ordinal := mir_binding_read(state, locals, index_slot, plan.syntax.index_origin)
+		mir_binding_initialize(state, locals, locals.count[0] - 1, ordinal, plan.syntax.index_origin)
 	end
-	position[0] = plan.body_start
-	nullable_loop_writes(state, locals, plan.body_start, plan.body_finish)
+	position[0] = plan.syntax.body_start
+	nullable_loop_writes(state, locals, plan.syntax.body_start, plan.syntax.body_finish)
 	check_block(state, position, locals, result_type, origin)
-	if position[0] != plan.body_finish
+	if position[0] != plan.syntax.body_finish
 		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "invalid iteration body boundary")
 	end
 	result_scope_check(state, locals, saved)
 	mir_checked_iteration_end(state, locals, plan, saved)
 	locals.count[0] = saved
 	nullable_finish(locals, flow_parent, flow_first, saved)
-	position[0] = plan.finish
+	position[0] = plan.syntax.finish
 	return finish_statement(state, position)
 end
 
@@ -1617,8 +1617,8 @@ def checked_loop_transfer_kind(mut state: CompilerState, origin: Integer, loop_o
 		encoded_iteration := sparse_integer_at(state.checked[0].iteration_origins, loop_origin)
 		if encoded_iteration > 0 && encoded_iteration <= state.checked[0].iterations.size()
 			iteration := state.checked[0].iterations[encoded_iteration - 1]
-			if checked_iteration_shape(state, iteration, loop_origin) && mir_iteration_valid(iteration, loop_origin, state.token_count[0], iteration.type_name, iteration_element_type(iteration.type_name))
-				if origin >= iteration.body_start && origin < iteration.body_finish
+			if checked_iteration_shape(state, iteration.syntax, loop_origin) && mir_iteration_valid(iteration, loop_origin, state.token_count[0], iteration.type_name, iteration_element_type(iteration.type_name))
+				if origin >= iteration.syntax.body_start && origin < iteration.syntax.body_finish
 					return plan.kind
 				end
 			end
