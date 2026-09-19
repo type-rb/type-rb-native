@@ -5,7 +5,7 @@ Status: implemented; integration validation is recorded with the reference updat
 ## Contract
 
 `Array<T>` and `Range<Integer>` support `map`, `select`, `reduce(initial)`,
-`any?`, `all?` and `none?`
+`any?`, `all?`, `none?`, `find` and `find_index`
 with brace or `do` blocks. `map` and `select` also support `with_index`.
 Their block parameters are mutable lexical bindings. Each completing block
 must supply a result expression; selection requires Boolean, and reduction
@@ -29,6 +29,14 @@ result. Empty sources produce false, true and true respectively. No later
 element or block effect runs after a decisive result. Indexed predicate blocks
 remain unsupported, matching the reference language.
 
+`find` returns the first visited value whose predicate is true; `find_index`
+returns its nonnegative traversal position. Both return `nil` when no value
+matches, and use the same Boolean predicate and short-circuit rules. Search
+retains the visited value before the block, including when the block reassigns
+its parameter or replaces the source slot. Nullable element types remain
+nullable rather than gaining another optional layer. Zero and false are present
+results, not absence.
+
 These are the reference language's sequential traversal rules. The integration
 uses TypeRB PR #729; it does not introduce another mutation policy. Operations
 that shorten/reorder Arrays remain separately tracked receiver-API gaps.
@@ -50,6 +58,12 @@ visited value; reduction replaces the accumulator. Predicates update their
 Boolean binding and branch directly to the existing loop exit on a decisive
 result. No new backend instruction,
 source-specific QBE path or external helper implements transformation semantics.
+
+Search initializes a typed absent result. Only the matching edge creates a
+present result through the existing nullable MIR operation and takes the loop
+exit. `find_index` reads the internal cursor independently of user bindings;
+for a Range, checked subtraction of the retained start gives the ordinal.
+The checked transform verifier independently validates each search result type.
 
 REPL execution consumes the checked projection and retains values in its normal
 store. Native execution depends only on verified MIR: erasing source tokens,

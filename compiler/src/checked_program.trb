@@ -17,7 +17,7 @@ import { nullable_common, nullable_element, nullable_type } from nullable_types
 import { mir_checked_nullable, mir_nullable_coerce } from nullable_mir
 import { mir_value_complete, mir_value_exit, mir_value_join } from mir_value_control
 import { argument_binding_slot, argument_bindings, function_argument_bindings, record_argument_bindings } from argument_binding
-import { mir_checked_iteration_begin, mir_checked_iteration_end, mir_transform_yield } from mir_iteration_control
+import { mir_checked_iteration_begin, mir_checked_iteration_end, mir_transform_search_yield, mir_transform_yield } from mir_iteration_control
 import { mir_checked_range_new } from mir_ranges
 import { mir_checked_hash_index, mir_checked_hash_literal, mir_checked_hash_method, mir_checked_hash_store } from mir_hashes
 import { mir_checked_record_field, mir_checked_record_new } from mir_records
@@ -1967,6 +1967,10 @@ def check_transform(mut state: CompilerState, mut position: Array<Integer>, mut 
 	mut output := array_type(element_type)
 	if syntax.kind == 1
 		output = sparse_string_at(state.checked[0].transform_types, origin)
+	elsif syntax.kind == 7
+		output = nullable_type(element_type)
+	elsif syntax.kind == 8
+		output = "Integer?"
 	elsif syntax.kind >= 4
 		output = "Boolean"
 	elsif syntax.kind == 3
@@ -1990,7 +1994,9 @@ def check_transform(mut state: CompilerState, mut position: Array<Integer>, mut 
 	flow_parent := locals.nullable_state[0]
 	flow_first := locals.nullable_facts.size()
 	local_bind(locals, "$transform.result", output, 1)
-	if syntax.kind >= 4
+	if syntax.kind >= 7
+		initial = mir_checked_nullable(state, locals, 33, initial, output, 0, origin)
+	elsif syntax.kind >= 4
 		mut empty := "true"
 		if syntax.kind == 4
 			empty = "false"
@@ -2055,11 +2061,16 @@ def check_transform(mut state: CompilerState, mut position: Array<Integer>, mut 
 		yielded = mir_nullable_coerce(state, locals, yielded, output, origin)
 	end
 	store_string(state.checked[0].transform_types, origin, output)
-	state.checked[0].transforms.push(MirTransform.new(syntax: syntax, iteration: plan, type_name: output))
+	transformation := MirTransform.new(syntax: syntax, iteration: plan, type_name: output)
+	state.checked[0].transforms.push(transformation)
 	store_integer(state.checked[0].transform_origins, origin, state.checked[0].transforms.size())
 	checked_transform_require(state, origin)
 	result_scope_check(state, locals, saved)
-	mir_transform_yield(state, locals, syntax.kind, outer, element, yielded, origin)
+	if syntax.kind >= 7
+		mir_transform_search_yield(state, locals, transformation, outer, element, yielded)
+	else
+		mir_transform_yield(state, locals, syntax.kind, outer, element, yielded, origin)
+	end
 	mir_checked_iteration_end(state, locals, plan, saved)
 	result := mir_binding_read(state, locals, outer, origin)
 	locals.count[0] = outer
