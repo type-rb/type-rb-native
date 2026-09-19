@@ -24,7 +24,7 @@
 | UTF-8 length, indexing, concatenation and interpolation | accepts | accepts | matches reference | matches reference |
 | Unicode local identifier | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Unicode scalar escapes | rejects valid input | rejects valid input | not reached | rejects valid input |
-| String search and code-point APIs | rejects valid input | rejects valid input | not reached | rejects valid input |
+| String search and code-point APIs | accepts | accepts | matches reference | matches reference |
 | Empty String and ASCII indexing | accepts | accepts | matches reference | matches reference |
 | Mixed numeric arithmetic and conversion | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Portable Integer endpoints | accepts | accepts | matches reference | matches reference |
@@ -346,3 +346,21 @@
 | Readonly derived array | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Point element type | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Character element type | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String slice success | accepts | accepts | matches reference | matches reference |
+| String slice captures receiver before evaluating endpoints | accepts | accepts | matches reference | matches reference |
+| String slice failure negative start | accepts | accepts | differs | rejects as reference |
+| String slice failure negative end | accepts | accepts | differs | rejects as reference |
+| String slice failure reversed | accepts | accepts | differs | rejects as reference |
+| String slice failure exclusive outside | accepts | accepts | differs | rejects as reference |
+| String slice failure inclusive end | accepts | accepts | differs | rejects as reference |
+| String slice failure portable max | accepts | accepts | differs | rejects as reference |
+| String slice optional | accepts | accepts | matches reference | matches reference |
+| String slice range values | accepts | accepts | matches reference | matches reference |
+| String slice unicode units | accepts | accepts | matches reference | matches reference |
+| String slice transfer | accepts | accepts | matches reference | matches reference |
+| String slice invalid order | accepts | accepts | differs | rejects as reference |
+| String slice missing argument | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String slice extra argument | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String slice wrong argument | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String slice nullable argument | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String slice wrong result | rejects as reference | rejects as reference | not reached | rejects as reference |

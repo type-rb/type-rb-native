@@ -99,6 +99,35 @@ end
     compile_source('def join(left: String, right: String): String\nreturn left + right\nend\ndef main()\nvalue := join("' + '日本😀' * 32 + '", "!")\ncharacters := value.chars()\npoints := value.codepoints()\nreversed := value.reverse()\nputs(characters.size())\nputs(points.size())\nputs(characters[0])\nputs(characters[-1])\nputs(points[-1])\nputs(reversed.start_with?("!😀"))\nputs(value.end_with?("😀!"))\nend\n',
                    '97\n97\n日\n!\n33\ntrue\ntrue\n'.encode(), force_gc=True)
 
+    # Capture the original receiver while allocating/evaluating Range endpoints,
+    # retain sliced results, and keep NUL within the code-point span.
+    compile_source('''def main()
+mut value := "A" + "日本😀"
+first := fn(): Integer
+ value = "replacement" + "!"
+ return 1
+end
+part := value.slice(first()...3)
+empty := value.slice(value.size()...value.size())
+puts(part)
+puts(empty.size())
+puts(value)
+end
+''', '日本\n0\nreplacement!\n'.encode(), force_gc=True)
+    compile_source('def main()\ntext := "A\0😀\0B"\npart := text.slice(1..3)\nputs(part)\nputs(part.size())\nputs(text.slice(5...5).size())\nend\n',
+                   '\0😀\0\n3\n0\n'.encode(), force_gc=True)
+
+    slice_source = '''import trb/std/process
+def main()
+value := Process.argv()[0]
+puts(value.slice(0...value.size()))
+puts(value.slice(1..1))
+puts(value.slice(value.size()...value.size()).size())
+end
+'''
+    compile_source(slice_source, 'A�B\n�\n0\n'.encode(), arguments=(b'A\xffB',), force_gc=True)
+    compile_source(slice_source, '��\n�\n0\n'.encode(), arguments=(b'\xe3\x81',), force_gc=True)
+
     sequence_source = """import trb/std/process
 def main()
 arguments := Process.argv()

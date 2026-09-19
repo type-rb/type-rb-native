@@ -65,13 +65,31 @@
         "string-sequence-reverse-arity",
         "string-sequence-readonly-derived-array",
         "string-sequence-point-element-type",
-        "string-sequence-character-element-type"
+        "string-sequence-character-element-type",
+        "string-slice-success",
+        "string-slice-order",
+        "string-slice-failure-negative-start",
+        "string-slice-failure-negative-end",
+        "string-slice-failure-reversed",
+        "string-slice-failure-exclusive-outside",
+        "string-slice-failure-inclusive-end",
+        "string-slice-failure-portable-max",
+        "string-slice-optional",
+        "string-slice-range-values",
+        "string-slice-unicode-units",
+        "string-slice-transfer",
+        "string-slice-invalid-order",
+        "string-slice-missing-argument",
+        "string-slice-extra-argument",
+        "string-slice-wrong-argument",
+        "string-slice-nullable-argument",
+        "string-slice-wrong-result"
       ],
       "pending": [
         "Unicode escapes and remaining String receiver APIs",
         "Embedded-expression boundaries beyond the reviewed interpolation probes"
       ],
-      "note": "Ordinary UTF-8 literals, code-point size/index, collections and NUL/long data are covered. Additional CLI tests cover argv, invalid source, forced GC and terminal editing. String empty/include/start/end queries and nullable first/last search now share code-point offsets, argument ordering, optional receivers and managed lifetime checks. Unicode escapes and the remaining String APIs stay open. Chars, codepoints and reverse preserve code-point units, independent result storage, NUL, optional receivers and managed lifetimes."
+      "note": "Ordinary UTF-8 literals, code-point size/index, collections and NUL/long data are covered. Additional CLI tests cover argv, invalid source, forced GC and terminal editing. String empty/include/start/end queries and nullable first/last search now share code-point offsets, argument ordering, optional receivers and managed lifetime checks. Unicode escapes and the remaining String APIs stay open. Chars, codepoints and reverse preserve code-point units, independent result storage, NUL, optional receivers and managed lifetimes. String slice now accepts checked code-point ranges, retaining receiver identity and optional short circuit; negative, reversed and out-of-bounds ranges fail explicitly."
     },
     {
       "id": "operators",
@@ -358,7 +376,8 @@
         "float-method-nullable-result",
         "string-query-optional",
         "string-query-nullable-result",
-        "string-sequence-optional-transforms"
+        "string-sequence-optional-transforms",
+        "string-slice-optional"
       ],
       "pending": [
         "Class/callback and general pattern narrowing; collection/union optional conversions",
@@ -2022,20 +2041,24 @@
       },
       "native": {
         "check": {
-          "code": 1,
-          "stdout": "",
-          "stderr": "<case>/main.trb:6: error[TRBN4004]: unsupported method slice\n"
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
         },
         "build": {
-          "code": 1,
-          "stdout": "",
-          "stderr": "<case>/main.trb:6: error[TRBN4004]: unsupported method slice\n"
-        },
-        "execute": null,
-        "repl": {
           "code": 0,
           "stdout": "",
-          "stderr": "(trb):5: error[TRBN4004]: unsupported method slice\n(trb):1: error[TRBN4003]: unresolved function probe\n"
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n128512\n日本\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n128512\n日本\n",
+          "stderr": ""
         }
       }
     },
@@ -17510,6 +17533,884 @@
           "code": 0,
           "stdout": "[\"a\"] : Array<String>\n",
           "stderr": "(trb):2: error[TRBN4004]: expected Integer, found String\n(trb):2: error[TRBN4003]: unresolved local value\n"
+        }
+      }
+    },
+    {
+      "id": "string-slice-success",
+      "title": "String slice success",
+      "declarations": "\ndef probe()\ntext := \"A😀BC\"\nputs(text.slice(1...3))\nputs(text.slice(1..2))\nputs(text.slice(0...4))\nputs(text.slice(4...4).size())\nputs(\"\".slice(0...0).size())\nputs(text.slice(1...1).size())\nputs(text.slice(1..1))\n\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "😀B\n😀B\nA😀BC\n0\n0\n0\n😀\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "😀B\n😀B\nA😀BC\n0\n0\n0\n😀\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "😀B\n😀B\nA😀BC\n0\n0\n0\n😀\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "😀B\n😀B\nA😀BC\n0\n0\n0\n😀\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "string-slice-order",
+      "title": "String slice captures receiver before evaluating endpoints",
+      "declarations": "def probe()\n mut text := \"original\"\n receiver := fn(): String\n  puts(\"receiver\")\n  return text\n end\n begin_at := fn(): Integer\n  puts(\"start\")\n  text = \"short\"\n  return 1\n end\n end_at := fn(): Integer\n  puts(\"end\")\n  return 4\n end\n puts(receiver().slice(begin_at()...end_at()))\n puts(text)\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "receiver\nstart\nend\nrig\nshort\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "receiver\nstart\nend\nrig\nshort\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "receiver\nstart\nend\nrig\nshort\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "receiver\nstart\nend\nrig\nshort\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "string-slice-failure-negative-start",
+      "title": "String slice failure negative start",
+      "declarations": "\ndef probe()\nputs(\"A😀BC\".slice(-1...1))\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: String slice range is out of bounds"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):2:6: error: String slice range is out of bounds\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderr": "panic: String slice range is out of bounds\n"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):4: error: String slice range is out of bounds\n"
+        }
+      }
+    },
+    {
+      "id": "string-slice-failure-negative-end",
+      "title": "String slice failure negative end",
+      "declarations": "\ndef probe()\nputs(\"A😀BC\".slice(0...-1))\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: String slice range is out of bounds"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):2:6: error: String slice range is out of bounds\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderr": "panic: String slice range is out of bounds\n"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):4: error: String slice range is out of bounds\n"
+        }
+      }
+    },
+    {
+      "id": "string-slice-failure-reversed",
+      "title": "String slice failure reversed",
+      "declarations": "\ndef probe()\nputs(\"A😀BC\".slice(2...1))\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: String slice range is out of bounds"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):2:6: error: String slice range is out of bounds\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderr": "panic: String slice range is out of bounds\n"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):4: error: String slice range is out of bounds\n"
+        }
+      }
+    },
+    {
+      "id": "string-slice-failure-exclusive-outside",
+      "title": "String slice failure exclusive outside",
+      "declarations": "\ndef probe()\nputs(\"A😀BC\".slice(0...5))\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: String slice range is out of bounds"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):2:6: error: String slice range is out of bounds\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderr": "panic: String slice range is out of bounds\n"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):4: error: String slice range is out of bounds\n"
+        }
+      }
+    },
+    {
+      "id": "string-slice-failure-inclusive-end",
+      "title": "String slice failure inclusive end",
+      "declarations": "\ndef probe()\nputs(\"A😀BC\".slice(4..4))\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: String slice range is out of bounds"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):2:6: error: String slice range is out of bounds\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderr": "panic: String slice range is out of bounds\n"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):4: error: String slice range is out of bounds\n"
+        }
+      }
+    },
+    {
+      "id": "string-slice-failure-portable-max",
+      "title": "String slice failure portable max",
+      "declarations": "\ndef probe()\nputs(\"A😀BC\".slice(0..9007199254740991))\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: String slice range is out of bounds"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):2:6: error: String slice range is out of bounds\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderr": "panic: String slice range is out of bounds\n"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):4: error: String slice range is out of bounds\n"
+        }
+      }
+    },
+    {
+      "id": "string-slice-optional",
+      "title": "String slice optional",
+      "declarations": "\ndef probe()\nmut calls := 0\nbounds := fn(): Range<Integer>\n calls += 1\n return 1..2\nend\nabsent: String? := nil\npresent: String? := \"A日本😀\"\nputs(absent&.slice(bounds()) == nil)\nputs(calls)\npart := present&.slice(bounds())\nif part != nil\n puts(part)\nend\nputs(calls)\n\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n0\n日本\n1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n0\n日本\n1\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n0\n日本\n1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n0\n日本\n1\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "string-slice-range-values",
+      "title": "String slice range values",
+      "declarations": "alias Span = Range<Integer>\ndef take(text: String, bounds: Span): String\nreturn text.slice(bounds)\nend\n\ndef probe()\ntext := \"A日本😀\"\nbounds: Span := 1...3\nputs(take(text, bounds))\nputs(take(text, bounds))\nmut later: Span := bounds\nlater = 0..0\nputs(take(text, later))\nputs(take(text, bounds))\nputs(text)\n\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "日本\n日本\nA\n日本\nA日本😀\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "日本\n日本\nA\n日本\nA日本😀\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "日本\n日本\nA\n日本\nA日本😀\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "日本\n日本\nA\n日本\nA日本😀\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "string-slice-unicode-units",
+      "title": "String slice unicode units",
+      "declarations": "\ndef probe()\nputs(\"é😀👩‍💻\".slice(1..2))\nputs(\"é😀👩‍💻\".slice(3...6))\nputs(\"é😀👩‍💻\".slice(4..4).codepoints()[0])\nputs(\"A\u0000😀\u0000B\".slice(1...4))\nputs(\"A\u0000😀\u0000B\".slice(1...4).size())\n\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "́😀\n👩‍💻\n8205\n\u0000😀\u0000\n3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "́😀\n👩‍💻\n8205\n\u0000😀\u0000\n3\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "́😀\n👩‍💻\n8205\n\u0000😀\u0000\n3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "́😀\n👩‍💻\n8205\n\u0000😀\u0000\n3\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "string-slice-transfer",
+      "title": "String slice transfer",
+      "declarations": "\ndef probe()\nmut visits := 0\n[1, 2, 3].each do |value|\n part := \"abc\".slice(if value == 1\n  next\n elsif value == 3\n  break\n else\n  1...2\n end)\n puts(part)\n visits += 1\nend\nputs(visits)\n\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "b\n1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "b\n1\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "b\n1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "b\n1\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "string-slice-invalid-order",
+      "title": "String slice invalid order",
+      "declarations": "\ndef probe()\nbegin_at := fn(): Integer\n puts(\"first\")\n return -1\nend\nend_at := fn(): Integer\n puts(\"last\")\n return 0\nend\nputs(\"a\".slice(begin_at()...end_at()))\n\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "first\nlast\n",
+          "stderrFirstLine": "panic: String slice range is out of bounds"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "first\nlast\n",
+          "stderr": "(trb):10:6: error: String slice range is out of bounds\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "first\nlast\n",
+          "stderr": "panic: String slice range is out of bounds\n"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "first\nlast\n",
+          "stderr": "(trb):13: error: String slice range is out of bounds\n"
+        }
+      }
+    },
+    {
+      "id": "string-slice-missing-argument",
+      "title": "String slice missing argument",
+      "declarations": "\ndef probe()\nputs(\"a\".slice())\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:6: error[TRB3000]: slice() expects 1..1 arguments, got 0\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:6: error[TRB3000]: slice() expects 1..1 arguments, got 0\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):2:6: error[TRB3000]: slice() expects 1..1 arguments, got 0\n(trb):1:1: error[TRB3000]: function probe is not declared or imported\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: String method argument count differs\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: String method argument count differs\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):2: error[TRBN4004]: String method argument count differs\n(trb):1: error[TRBN4003]: unresolved function probe\n"
+        }
+      }
+    },
+    {
+      "id": "string-slice-extra-argument",
+      "title": "String slice extra argument",
+      "declarations": "\ndef probe()\nputs(\"a\".slice(0...1, 0...1))\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:6: error[TRB3000]: slice() expects 1..1 arguments, got 2\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:6: error[TRB3000]: slice() expects 1..1 arguments, got 2\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):2:6: error[TRB3000]: slice() expects 1..1 arguments, got 2\n(trb):1:1: error[TRB3000]: function probe is not declared or imported\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: String method argument count differs\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: String method argument count differs\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):2: error[TRBN4004]: String method argument count differs\n(trb):1: error[TRBN4003]: unresolved function probe\n"
+        }
+      }
+    },
+    {
+      "id": "string-slice-wrong-argument",
+      "title": "String slice wrong argument",
+      "declarations": "\ndef probe()\nputs(\"a\".slice(1))\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:16: error[TRB3000]: argument 1 to slice() has type Integer, expected Range<Integer>\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:16: error[TRB3000]: argument 1 to slice() has type Integer, expected Range<Integer>\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):2:16: error[TRB3000]: argument 1 to slice() has type Integer, expected Range<Integer>\n(trb):1:1: error[TRB3000]: function probe is not declared or imported\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: expected Range<Integer>, found Integer\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: expected Range<Integer>, found Integer\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):2: error[TRBN4004]: expected Range<Integer>, found Integer\n(trb):1: error[TRBN4003]: unresolved function probe\n"
+        }
+      }
+    },
+    {
+      "id": "string-slice-nullable-argument",
+      "title": "String slice nullable argument",
+      "declarations": "\ndef probe()\nbounds: Range<Integer>? := nil\nputs(\"a\".slice(bounds))\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:16: error[TRB3000]: argument 1 to slice() has type Range<Integer>?, expected Range<Integer>\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:16: error[TRB3000]: argument 1 to slice() has type Range<Integer>?, expected Range<Integer>\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3:16: error[TRB3000]: argument 1 to slice() has type Range<Integer>?, expected Range<Integer>\n(trb):1:1: error[TRB3000]: function probe is not declared or imported\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4: error[TRBN4004]: expected Range<Integer>, found Range<Integer>?\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4: error[TRBN4004]: expected Range<Integer>, found Range<Integer>?\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3: error[TRBN4004]: expected Range<Integer>, found Range<Integer>?\n(trb):1: error[TRBN4003]: unresolved function probe\n"
+        }
+      }
+    },
+    {
+      "id": "string-slice-wrong-result",
+      "title": "String slice wrong result",
+      "declarations": "\ndef probe()\nvalue: Integer := \"a\".slice(0...1)\nputs(value)\nend\n",
+      "body": "probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:19: error[TRB3000]: cannot assign String to Integer\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:19: error[TRB3000]: cannot assign String to Integer\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):2:19: error[TRB3000]: cannot assign String to Integer\n(trb):1:1: error[TRB3000]: function probe is not declared or imported\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: expected Integer, found String\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: expected Integer, found String\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):2: error[TRBN4004]: expected Integer, found String\n(trb):1: error[TRBN4003]: unresolved function probe\n"
         }
       }
     }
