@@ -14,6 +14,7 @@ measurements provide intermediate feedback.
 | Scalar control | Mutable scalar locals and parameters, nested `if`/`elsif`/`else`, `while`, `break`/`next`, early returns and continuing joins publish typed blocks and live-value arguments. Loop transfers carry only the enclosing environment; branch/body locals remain lexical. QBE consumes admitted bodies without rereading their source. |
 | Short-circuit expressions | Scalar `&&` and `||` publish conditional RHS blocks and Boolean result joins, including nested call arguments and loop predicates. Dominance preserves earlier expression temporaries; skipped RHS calls and traps stay unexecuted. |
 | Calls and declarations | Declaration identities, parameter types/mutability and return types are captured before body checking. Ordinary calls with supported scalar and managed arguments/results, including nominal records and Hash/Range carriers, retain explicit arguments and conservative allocation, mutation, I/O and failure effects, including forward and recursive callees. |
+| Function values and lexical capture | Authored `fn` bodies, structural callback signatures, selected captured environments and indirect calls use verified MIR. Mutable captures share cells; the REPL retains checked code, environments and nominal type identities across submissions. Named declarations used as values remain unsupported. |
 | Managed Strings and roots | String literals, concatenation, equality, size, indexing, Integer/String/Float conversions and String/Boolean output use typed operations. Integer output explicitly converts first. Managed parameters, rebinding, returns and control joins use the same value/block path. MIR derives live-before roots at allocating operations and ordinary calls; verification recomputes the complete plan. |
 | Managed Arrays | Supported scalar and managed element Arrays, including nominal records and their nesting, retain semantic element identity. Literals, live size, checked indexing, assignment, compound assignment and push use typed operations with allocation/mutation/failure effects. Admitted parameters, returns, rebinding and loop/branch values share managed liveness. Assignment captures its checked logical position before RHS evaluation, then reloads storage for the final store. |
 | Nominal records | Declaration identity, authored names/origins and ordered field types live in MIR. Construction consumes an ordered operand span with allocating/failing effects; projections verify nominal owner and result type. Recursive records through containers retain their shells and field references. GC descriptors consume this verified table. |
@@ -193,15 +194,20 @@ Earlier extraction narratives, rejected variants and measurement links remain in
 [the immutable prior status](https://github.com/type-rb/type-rb-native/blob/7726ff18e9230cd149e9f0c317577f6429f907fc/docs/native-mir-optimization-status.md).
 Original evidence and the fixed migration/cumulative baselines are unchanged.
 
-## Callable MIR foundation
+## Function values and lexical capture
 
-Structural callback signatures, internal static code references and indirect calls
-now share verified MIR type, effect and root ownership. The backend consumes exact
-parameter/result types, including Float and Void. Internal fixtures cover callable
-parameters/returns and Array/Hash/record storage under frontend erasure and forced
-collection; malformed type and operand controls reject unsafe input. See
+Structural callback signatures, closure construction and indirect calls share
+verified MIR type, effect and root ownership. Ordinary `fn` bodies analyze selected
+captures and lower through the same checked body and MIR pipeline as named
+functions. Mutable captures share cells, and unknown calls invalidate their
+nullable proofs. The backend consumes verified capture layouts and exact
+parameter/result types, including Float and Void. The REPL retains checked code,
+environments and originating nominal types across submissions. See
 [decision 0051](decisions/0051-callable-mir-foundation.md).
 
-This is a prerequisite for ordinary `fn`/capture support, which remains open in
-the shared language inventory. Captured environments and retained REPL identities
-must be represented and verified before those cases become accepted.
+Shared ordinary-file and REPL probes cover higher-order calls, nested closures,
+managed captures and mutable cells. Internal fixtures add source erasure,
+reordered MIR storage, forced collection and malformed type/operand controls.
+Named declarations used as values and the remaining signature/capability
+boundaries stay open in the [language inventory](native-language-feature-inventory.md).
+This does not establish complete function-value coverage or a public callable ABI.
