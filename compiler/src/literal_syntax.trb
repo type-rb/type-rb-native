@@ -1,6 +1,6 @@
 import { scan_string } from lexer
 import { CompilerState, diagnostic, has_diagnostic } from state
-import { load_integer, load_string, store_integer, store_string } from storage
+import { load_integer, load_string, sparse_integer_at, store_integer, store_string } from storage
 
 # Expansion occurs only at the forward syntax cursor. Earlier declaration and
 # control origins remain stable; future tokens have no published syntax yet.
@@ -20,11 +20,13 @@ def expand_quoted_token(mut state: CompilerState, origin: Integer, interpolation
 		diagnostic(state, "TRBN4001", line, "invalid quoted Symbol literal")
 		return false
 	end
+	mut fused: Array<Integer> := []
 	mut kinds: Array<Integer> := []
 	mut texts: Array<String> := []
 	mut lines: Array<Integer> := []
 	mut index := previous
 	while index < state.token_count[0]
+		fused.push(sparse_integer_at(state.token_fused_literals, index))
 		kinds.push(load_integer(state.token_kinds, index))
 		texts.push(load_string(state.token_texts, index))
 		lines.push(load_integer(state.token_lines, index))
@@ -32,6 +34,7 @@ def expand_quoted_token(mut state: CompilerState, origin: Integer, interpolation
 	end
 	index = origin + 1
 	while index < previous
+		fused.push(sparse_integer_at(state.token_fused_literals, index))
 		kinds.push(load_integer(state.token_kinds, index))
 		texts.push(load_string(state.token_texts, index))
 		lines.push(load_integer(state.token_lines, index))
@@ -39,6 +42,7 @@ def expand_quoted_token(mut state: CompilerState, origin: Integer, interpolation
 	end
 	index = 0
 	while index < kinds.size()
+		store_integer(state.token_fused_literals, origin + index, fused[index])
 		store_integer(state.token_kinds, origin + index, kinds[index])
 		store_string(state.token_texts, origin + index, texts[index])
 		store_integer(state.token_lines, origin + index, lines[index])

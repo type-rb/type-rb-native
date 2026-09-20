@@ -1,12 +1,24 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 768 ordinary-path probes and 32 feature
+Status: the shared contract contains 829 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
 basic-language completion; [the generated family inventory](native-language-feature-inventory.md)
 records semantic contracts that still need tests. The earlier 19-case inventory
 was an initial sample, not a complete list of missing features.
+
+## Raw enums and instance methods
+
+Explicit String/Integer raw values, `raw_value()` and `from_raw()` use canonical
+Result/error identities and existing verified enum/record/union/control MIR.
+Ordinary enum instance methods use checked function calls, including defaults,
+privacy, nullable receivers and returned closures. Shared cases and independent
+MIR/GC and retained-session tests cover these combinations; see
+[decision 0070](decisions/0070-raw-enum-and-method-mir.md).
+
+Generic enum methods and attributes remain open. Reference initializer replay
+and REPL type/display differences are retained as explicit parity gaps.
 
 ## Union values and scalar type cases
 

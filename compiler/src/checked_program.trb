@@ -1,3 +1,6 @@
+import { checked_raw_enum_from, checked_raw_enum_value } from raw_enum_checked
+import { raw_enum_type } from raw_enum_types
+import { enum_method_function } from enum_methods
 import { union_parts } from union_types
 import { check_union_binding, check_union_patterns } from union_checked
 import { mir_union_operation } from union_mir
@@ -10,7 +13,7 @@ import { array_method_arity, array_method_kind, mir_array_method } from array_me
 import { mir_string_method, string_method_argument_type, string_method_arity, string_method_kind } from string_methods
 import { float_method_kind, mir_float_method } from float_methods
 import { integer_method_arity, integer_method_kind, mir_integer_method } from integer_methods
-import { MirTransform, transform_kind } from transform_model
+import { MirTransform } from transform_model
 import { CheckedLambda, callable_parts } from callable_types
 import { declare_lambda, lower_lambda } from lambda_lowering
 import { declare_default_functions } from default_arguments
@@ -22,7 +25,7 @@ import { checked_result_try, result_interactive_entry, result_operation, result_
 import { advance, expect, expect_identifier, finish_statement, parse_type, skip_newlines, token_is } from syntax_tokens
 import { check_enum_bindings, check_enum_patterns } from enum_checked
 import { mir_enum_construct, mir_enum_operation } from enum_mir
-import { enum_argument_bindings, enum_uppercase, find_enum_type, find_enum_variant } from enum_types
+import { enum_argument_bindings, enum_type, enum_uppercase, find_enum_type, find_enum_variant } from enum_types
 import { checked_submission_boundary, checked_submission_result } from checked_submission
 import { nullable_apply, nullable_finish, nullable_loop_writes, nullable_nil_condition, nullable_read, nullable_replace } from nullable_flow
 import { nullable_common, nullable_element, nullable_type } from nullable_types
@@ -434,6 +437,10 @@ def check_primary(
 				return checked_value("", 1, origin, 0)
 			end
 			if find_enum_type(state, sparse_string_at(state.checked[0].generic_application_types, origin)) >= 0
+				if token_is(state, application_finish, ".")
+					position[0] = application_finish
+					return checked_value(sparse_string_at(state.checked[0].generic_application_types, origin), 6, origin, 0)
+				end
 				return check_enum_constructor(state, position, locals)
 			end
 			if find_record_type(state, sparse_string_at(state.checked[0].generic_application_types, origin)) < 0
@@ -499,6 +506,10 @@ def check_primary(
 		if find_visible_generic_function(state, state.active_module[0], name) >= 0
 			return type_diagnostic(state, line, "function " + name + " requires an explicit fn wrapper to be used as a value")
 		end
+		enum_owner := find_visible_enum(state, state.active_module[0], name)
+		if enum_owner >= 0 && token_is(state, position[0], ".")
+			return checked_value(enum_type(enum_owner), 6, origin, 0)
+		end
 		if find_visible_record(state, state.active_module[0], name) >= 0
 			return checked_value("", 2, origin, 0)
 		end
@@ -507,12 +518,15 @@ def check_primary(
 	return type_diagnostic(state, line, "expected an expression")
 end
 
-def check_call(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, callee_category: Integer, callee_name: String): CheckedValue
+def check_call(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, callee_category: Integer, callee_name: String, target: Integer, mut receiver: Integer, bound: Boolean): CheckedValue
 	origin := position[0]
 	line := load_integer(state.token_lines, origin)
 	advance(position)
 	skip_newlines(state, position)
-	mut function := find_visible_function(state, state.active_module[0], callee_name)
+	mut function := target
+	if function < 0
+		function = find_visible_function(state, state.active_module[0], callee_name)
+	end
 	encoded := sparse_integer_at(state.checked[0].generic_calls, origin)
 	if encoded > 0
 		function = encoded - 1
@@ -528,6 +542,19 @@ def check_call(mut state: CompilerState, mut position: Array<Integer>, mut local
 		return type_diagnostic(state, line, "value is not callable")
 	end
 	mut bindings := function_argument_bindings(state, function)
+	if function >= 0 && sparse_string_at(state.function_receivers, function) != ""
+		if !bound
+			self_slot := local_find(locals, "self")
+			if self_slot < 0 || load_string(locals.types, self_slot) != sparse_string_at(state.function_receivers, function)
+				return type_diagnostic(state, line, "instance method requires its nominal receiver")
+			end
+			lambda_use_binding(locals, self_slot)
+			receiver = checked_mir_value(mir_binding_read(state, locals, self_slot, origin))
+		end
+		bindings.values[0] = receiver
+		bindings.provided[0] = true
+		bindings.position[0] = 1
+	end
 	if callee_category == 4
 		bindings = argument_bindings([], [])
 		result_type = "Array<String>"
@@ -647,6 +674,20 @@ def check_method_call(
 		receiver: CheckedValue,
 		method: String,
 	): CheckedValue
+	if method == "raw_value" && raw_enum_type(state, find_enum_type(state, receiver.type_name)) != ""
+		origin := position[0]
+		advance(position)
+		skip_newlines(state, position)
+		expect(state, position, ")")
+		return checked_raw_enum_value(state, locals, receiver, origin)
+	end
+	function := enum_method_function(state, receiver.type_name, method)
+	if function >= 0
+		if !namespace_member_access(state, load_integer(state.function_modules, function), load_string(state.function_names, function), position[0])
+			return checked_value("Invalid", 0, position[0], 0)
+		end
+		return check_call(state, position, locals, 1, "", function, checked_mir_value(receiver), true)
+	end
 	if hash_key_type(receiver.type_name) != "" || receiver.type_name == "Hash"
 		return checked_hash_call(state, position, locals, receiver, method)
 	end
@@ -748,6 +789,23 @@ end
 
 def check_member(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue, member: String): CheckedValue
 	mut value := checked_view(receiver, receiver.type_name, receiver.category)
+	if value.category == 6
+		owner := find_enum_type(state, value.type_name)
+		raw_type := raw_enum_type(state, owner)
+		origin := position[0]
+		if member != "from_raw" || raw_type == "" || !token_is(state, origin, "(")
+			return type_diagnostic(state, load_integer(state.token_lines, origin), "enum type requires a valid from_raw call")
+		end
+		advance(position)
+		skip_newlines(state, position)
+		argument := check_expression(state, position, locals, 1, raw_type)
+		skip_newlines(state, position)
+		expect(state, position, ")")
+		if argument.type_name == "Never"
+			return argument
+		end
+		return checked_raw_enum_from(state, locals, owner, argument, origin)
+	end
 	owner := find_record_type(state, value.type_name)
 	if owner >= 0
 		field := find_field(state, owner, member)
@@ -756,7 +814,7 @@ def check_member(mut state: CompilerState, mut position: Array<Integer>, mut loc
 		end
 	end
 	if token_is(state, position[0], "(")
-		if value.category < 4 && member != "size" && member != "to_i" && member != "to_s" && member != "push" && member != "new" && !(value.type_name == "Range<Integer>" && member == "to_a") && !(value.type_name == "Integer" && integer_method_kind(member) > 0) && !(value.type_name == "Float" && float_method_kind(member) > 0) && !(value.type_name == "String" && string_method_kind(member) > 0) && !(array_element_type(value.type_name) != "" && array_method_kind(member) > 0) && !((value.type_name == "Hash" || hash_key_type(value.type_name) != "") && checked_hash_method(member) != 0)
+		if value.category < 4 && !(member == "raw_value" && raw_enum_type(state, find_enum_type(state, value.type_name)) != "") && enum_method_function(state, value.type_name, member) < 0 && member != "size" && member != "to_i" && member != "to_s" && member != "push" && member != "new" && !(value.type_name == "Range<Integer>" && member == "to_a") && !(value.type_name == "Integer" && integer_method_kind(member) > 0) && !(value.type_name == "Float" && float_method_kind(member) > 0) && !(value.type_name == "String" && string_method_kind(member) > 0) && !(array_element_type(value.type_name) != "" && array_method_kind(member) > 0) && !((value.type_name == "Hash" || hash_key_type(value.type_name) != "") && checked_hash_method(member) != 0)
 			scalar_mir_disable(locals)
 		end
 		if value.category >= 4
@@ -876,11 +934,12 @@ def check_postfix(
 					locals,
 					value.category,
 					checked_reference_name(state, value.origin),
+					- 1, - 1, false,
 				)
 			end
 		else
 			if token_is(state, position[0], ".")
-				if transform_kind(load_string(state.token_texts, position[0] + 1)) > 0
+				if sparse_integer_at(state.transform_origins, position[0]) > 0
 					value = check_transform(state, position, locals, value)
 					if has_diagnostic(state)
 						return value

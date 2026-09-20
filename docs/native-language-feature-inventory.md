@@ -16,7 +16,7 @@ Each count describes registered probes, not language coverage percentages.
 | Records and field bindings | basic | 1 / 30 | Nominal cycles and defaults involving remaining unsupported value types | RecordStatement, RecordFieldStatement |
 | Member access and projections | basic | 1 / 4 | Safe member access, chained field narrowing and receiver replacement | MemberExpression |
 | Nullable values and narrowing | basic | 4 / 31 | Class/callback and general pattern narrowing; collection/union optional conversions; Nullable standard-library methods beyond the currently implemented Native APIs |  |
-| Enums and tagged values | basic | 1 / 19 | Raw values and conversion failures, enum methods and attributes; Nested module declarations and wider pattern forms | EnumStatement, EnumMemberStatement |
+| Enums and tagged values | basic | 7 / 80 | Generic enum methods, enum attributes and wider pattern forms; Reference REPL initializer replay (TypeRB #768) and shadowed standard error identity (#769); imported/nested REPL presentation parity | EnumStatement, EnumMemberStatement |
 | Transparent aliases | basic | 7 / 30 | Literal/union and class/interface alias targets; nested module declarations; Authored alias spelling in REPL display and diagnostics | TypeAliasStatement |
 | Nominal newtypes | basic | 1 / 1 | Closed/private constructors, methods, immutable representation and boundary diagnostics | NewtypeStatement |
 | Generic declarations and applications | basic | 4 / 70 | Generic methods, classes and interfaces; Wider constraints and type applications | GenericExpression |

@@ -156,7 +156,9 @@ def repl_project_source(source: String, prelude: String): String
 		if load_integer(session.import_kinds, index) == 0
 			# Match the original declaration, including when it has an alias.
 			explicit[load_string(session.import_declarations, index)] = 1
-		elsif load_string(session.import_symbols, index) == ""
+		else
+			# A bare alias still owns the package's one exported root.
+			# Suppress its generated import under the original spelling too.
 			paths[load_string(session.import_paths, index)] = 1
 		end
 		index += 1
@@ -324,9 +326,13 @@ def repl_standard_imports(names: Array<String>): String
 	mut result := "import trb/std/math\nimport trb/std/process\n"
 	mut result_root := true
 	mut unit_root := true
+	mut enum_error_root := true
 	names.each do |name|
 		if name == "Result"
 			result_root = false
+		end
+		if name == "EnumValueError"
+			enum_error_root = false
 		end
 		if name == "Unit"
 			unit_root = false
@@ -334,6 +340,9 @@ def repl_standard_imports(names: Array<String>): String
 	end
 	if result_root
 		result += "import trb/std/result\n"
+	end
+	if enum_error_root
+		result += "import { EnumValueError } from trb/std/errors\n"
 	end
 	if unit_root
 		result += "import trb/std/unit\n"

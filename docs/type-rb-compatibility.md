@@ -2,7 +2,7 @@
 
 TypeRB Native currently follows exact reference revisions during development. The
 current source and semantic oracle is TypeRB
-`569d49cf38b9ec59242f18219c356988ed5e82cd` (the `0.4.9-dev` development identity), recorded
+`e86ba0fdb4dd6a6845c176752fd5a6c29af3494c` (the `0.4.9-dev` development identity), recorded
 in `TYPE_RB_REVISION`. This declares one exact reference identity during Native
 development, without claiming a supported version range.
 
@@ -33,6 +33,16 @@ The earlier scoped-file successor is registered in
 [Darwin/Linux arm64 result](https://github.com/type-rb/type-rb-native/blob/5cf61c740aa600c34ed94f1b130ea2ffefd9e783/results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/README.md)
 passes the selected-reference, migration, exact-baseline, target-regression,
 fixed-point, process, resource, and size criteria.
+
+## Enum call reference update
+
+The exact pin incorporates [TypeRB PR #767](https://github.com/type-rb/type-rb/pull/767)
+for lazy nullable enum calls, receiver-before-argument evaluation, methods returning
+functions, and local/imported raw enum aliases. Shared observations use this exact
+checkout and AST. Reference REPL initializer replay and canonical error-record
+shadowing remain explicit in [#768](https://github.com/type-rb/type-rb/issues/768)
+and [#769](https://github.com/type-rb/type-rb/issues/769). This update does not
+publish a release or change the immutable Native bootstrap seed.
 
 ## Union and inferred declaration reference update
 
