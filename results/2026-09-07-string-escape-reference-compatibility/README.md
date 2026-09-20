@@ -1,6 +1,22 @@
 # Current reference compatibility
 
 The selected development reference is TypeRB `0.4.9-dev` at
+`df2a60e35b7f4140c98dcb29a9eaee4fee27252e`, incorporating
+[PR #773](https://github.com/type-rb/type-rb/pull/773).
+Descending Array sorts in the REPL keep NaNs last in natural and key-based
+ordering, matching compiled execution. Equal keys and signed zeros stay stable.
+
+The Native implementation adds key-based Array sorting through existing typed
+MIR loops and paired value/key buffers. Shared observations, exact AST coverage,
+recovery, ordinary self-hosting, CLI, target and memory validation remain required
+before acceptance. Safe block navigation remains an explicit reference defect
+in [TypeRB #774](https://github.com/type-rb/type-rb/issues/774). This update does
+not complete basic-language coverage, publish a release or seed, or qualify
+performance. Previous identities remain below.
+
+# Previous generic enum alias reference compatibility
+
+The selected development reference is TypeRB `0.4.9-dev` at
 `22c2e36340ef3a58fde52e1120cecb2ea8f36091`, incorporating
 [PR #771](https://github.com/type-rb/type-rb/pull/771).
 Concrete and generic enum aliases keep their specialized methods in Go output

@@ -38,11 +38,12 @@ forged comparison operands/modes/failure edges, and reject missing scratch roots
 The CLI checks Unicode/NUL storage, all lengths from zero through 67 against an
 independent oracle, complete reclamation and retained independent copies.
 
-The pinned reference REPL reverses NaN placement in descending order; this is
-tracked separately in [type-rb#772](https://github.com/type-rb/type-rb/issues/772).
-Keep that observation and existing presentation differences explicit until an
-accepted reference update replaces them. Key-based sorting and safe collection
-APIs remain part of basic-language completion.
+The initial reference REPL reversed NaN placement in descending order.
+[TypeRB #773](https://github.com/type-rb/type-rb/pull/773) fixes that defect, and
+the accepted reference update reviews its changed observation. Existing
+presentation differences remain explicit. [Decision 0073](0073-keyed-array-sorting-mir.md)
+extends the same merge machinery to key-based sorting; safe collection APIs
+remain part of basic-language completion.
 
 The immutable bootstrap seed remains unchanged. The core constructs sort MIR
 using its previously supported source subset; no new seed syntax is required.
