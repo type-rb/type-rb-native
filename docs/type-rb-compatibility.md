@@ -2,7 +2,7 @@
 
 TypeRB Native currently follows exact reference revisions during development. The
 current source and semantic oracle is TypeRB
-`909987e370a8ed4d8db1060ed5f0c6f00fd56dfd` (the `0.4.9-dev` development identity), recorded
+`3476aabdc385fd2b422364f69bbc1aa16e0bc231` (the `0.4.9-dev` development identity), recorded
 in `TYPE_RB_REVISION`. This declares one exact reference identity during Native
 development, without claiming a supported version range.
 
@@ -33,6 +33,19 @@ The earlier scoped-file successor is registered in
 [Darwin/Linux arm64 result](https://github.com/type-rb/type-rb-native/blob/5cf61c740aa600c34ed94f1b130ea2ffefd9e783/results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/README.md)
 passes the selected-reference, migration, exact-baseline, target-regression,
 fixed-point, process, resource, and size criteria.
+
+## Newtype reference update
+
+The exact pin incorporates [TypeRB PR #777](https://github.com/type-rb/type-rb/pull/777).
+Conflicting newtype declarations produce diagnostics without a checker crash.
+Transparent aliases retain nominal construction, Integer-to-Float conversion is
+explicit in typed IR, and inferred union representations retain their storage
+in generated Go. All three portable targets and the REPL have controls. The pin
+also incorporates [PR #776](https://github.com/type-rb/type-rb/pull/776), normalizing
+successfully decoded String literals before backend emission. The full remaining
+single-quote contract is still tracked separately in TypeRB #748.
+Shared observations and the reference AST inventory are reviewed at this accepted
+revision. This changes neither the release version nor the immutable Native seed.
 
 ## Sorting reference update
 

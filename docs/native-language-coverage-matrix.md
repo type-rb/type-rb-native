@@ -45,7 +45,7 @@
 | Payload enum and exhaustive case | accepts | accepts | matches reference | matches reference |
 | Raw-value enum | accepts | accepts | matches reference | matches reference |
 | Transparent type alias | accepts | accepts | matches reference | matches reference |
-| Nominal newtype construction and projection | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Nominal newtype construction and projection | accepts | accepts | matches reference | matches reference |
 | Parameters following nested generic annotations | accepts | accepts | matches reference | matches reference |
 | Generic function application | accepts | accepts | matches reference | matches reference |
 | Generic record | accepts | accepts | matches reference | matches reference |
@@ -1035,3 +1035,82 @@
 | Generic closer origins | accepts | accepts | matches reference | matches reference |
 | Invalid angle surplus | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Reject a question suffix on an uppercase call name | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Scalar identities | accepts | accepts | matches reference | matches reference |
+| Nominal equality | accepts | accepts | matches reference | matches reference |
+| Nested identities | accepts | accepts | matches reference | matches reference |
+| Float abi | accepts | accepts | matches reference | output differs |
+| Managed containers | accepts | accepts | matches reference | output differs |
+| Optional | accepts | accepts | matches reference | matches reference |
+| Nullable float | accepts | accepts | matches reference | matches reference |
+| Callable captures | accepts | accepts | matches reference | matches reference |
+| Managed captures | accepts | accepts | matches reference | matches reference |
+| Instance methods | accepts | accepts | matches reference | matches reference |
+| Closed factory | accepts | accepts | matches reference | matches reference |
+| Closed lambda | accepts | accepts | matches reference | matches reference |
+| Implicit methods | accepts | accepts | matches reference | matches reference |
+| Captured self | accepts | accepts | matches reference | matches reference |
+| Safe lazy call | accepts | accepts | matches reference | matches reference |
+| Generic container | accepts | accepts | matches reference | matches reference |
+| Representation array | accepts | accepts | matches reference | matches reference |
+| Representation callable | accepts | accepts | matches reference | matches reference |
+| Representation union | accepts | accepts | matches reference | matches reference |
+| Enum representation | accepts | accepts | matches reference | matches reference |
+| Record representation | accepts | accepts | matches reference | matches reference |
+| Closed record | accepts | accepts | matches reference | matches reference |
+| Namespace | accepts | accepts | matches reference | matches reference |
+| Import alias | accepts | accepts | matches reference | matches reference |
+| Transparent alias | accepts | accepts | matches reference | matches reference |
+| Default argument | accepts | accepts | matches reference | matches reference |
+| Constant | accepts | accepts | matches reference | matches reference |
+| Raw newtype constructors reject named arguments | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Newtype class and instance methods cannot share a name | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Private method | accepts | accepts | matches reference | matches reference |
+| Closed optional factory | accepts | accepts | matches reference | matches reference |
+| Invalid implicit assignment | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid different nominal | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid representation assignment | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid wrong constructor | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid wrong arity | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid arithmetic | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid ordering | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid representation equality | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid mutable equality | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid forwarding | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid closed external | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid closed import alias | rejects as reference | rejects as reference | not reached | diagnostic/output differs |
+| Invalid private external | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid instance via type | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid class via instance | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid nullable representation | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid nil representation | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid generic declaration | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid any representation | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid void representation | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid bare array | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid bare hash | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid cycle | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid container cycle | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid closed array | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid closed nested array | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid closed callable | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid late directive | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid duplicate directive | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid reserved new | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid reserved value | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid reserved initialize | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid body code | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid duplicate declaration | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid record collision | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Float widening | accepts | accepts | matches reference | matches reference |
+| Union mutation | accepts | accepts | matches reference | matches reference |
+| Mutable representation | accepts | accepts | matches reference | matches reference |
+| Closed union | accepts | accepts | matches reference | matches reference |
+| Closed enum | accepts | accepts | matches reference | matches reference |
+| Unused newtype declaration with a builtin name | accepts | accepts | matches reference | matches reference |
+| Unused newtype declaration with a builtin name | accepts | accepts | matches reference | matches reference |
+| Invalid hash cycle | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid callable cycle | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid closed union array | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid closed enum array | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Nominal values remain invalid Hash keys | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Union output remains a builtin gap | rejects valid input | rejects valid input | not reached | rejects valid input |

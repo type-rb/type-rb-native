@@ -1,6 +1,23 @@
 # Current reference compatibility
 
 The selected development reference is TypeRB `0.4.9-dev` at
+`3476aabdc385fd2b422364f69bbc1aa16e0bc231`, incorporating
+[PR #777](https://github.com/type-rb/type-rb/pull/777) and
+[PR #776](https://github.com/type-rb/type-rb/pull/776).
+Nominal constructor aliases and checked representation conversions survive typed
+IR lowering, inferred unions retain Go storage, and conflicting declarations
+produce diagnostics. Successfully decoded String literals have normalized backend
+spelling. Remaining single-quote semantics retain their own reference issue.
+
+Native newtypes preserve distinct MIR identities while erasing runtime storage.
+Shared observations, exact AST coverage, recovery, ordinary self-hosting, CLI,
+target and memory validation remain required before acceptance. This update does
+not complete basic-language coverage, publish a release or seed, or qualify
+performance. Previous identities remain below.
+
+# Previous safe-block reference compatibility
+
+The selected development reference is TypeRB `0.4.9-dev` at
 `909987e370a8ed4d8db1060ed5f0c6f00fd56dfd`, incorporating
 [PR #775](https://github.com/type-rb/type-rb/pull/775).
 Safe collection blocks preserve receiver-once evaluation, skip absent receivers

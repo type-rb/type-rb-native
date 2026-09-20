@@ -1,3 +1,6 @@
+import { NewtypeDefinition } from newtype_model
+import { newtype_type } from newtype_types
+import { parse_newtype_header } from newtype_syntax
 import { generic_application } from generic_arguments
 import { ConstantDeclaration } from constant_model
 import { TransformSyntax, transform_kind } from transform_model
@@ -1137,6 +1140,9 @@ def parse_declaration(mut state: CompilerState, mut position: Array<Integer>): B
 	if token_is(state, position[0], "module")
 		return parse_namespace(state, position)
 	end
+	if token_is(state, position[0], "newtype")
+		return parse_newtype_declaration(state, position)
+	end
 	if token_is(state, position[0], "alias")
 		return parse_type_alias(state, position)
 	end
@@ -1517,6 +1523,74 @@ def parse_enum_declaration(mut state: CompilerState, mut position: Array<Integer
 		mut token := start
 		while token < position[0]
 			store_string(state.token_namespaces, token, name)
+			token += 1
+		end
+		state.declaration_owner[0] = parent
+		if !parsed
+			return false
+		end
+	end
+	if !expect(state, position, "end")
+		return false
+	end
+	return finish_statement(state, position)
+end
+
+# Method bodies retain their lexical construction authority in token origins.
+def parse_newtype_declaration(mut state: CompilerState, mut position: Array<Integer>): Boolean
+	owner := parse_newtype_header(state, position)
+	if owner < 0 || has_diagnostic(state)
+		return false
+	end
+	if !token_is(state, position[0], "do")
+		return finish_statement(state, position)
+	end
+	advance(position)
+	if !finish_statement(state, position)
+		return false
+	end
+	mut method_seen := false
+	while !token_is(state, position[0], "end") && !has_diagnostic(state)
+		skip_newlines(state, position)
+		if token_is(state, position[0], "end")
+			break
+		end
+		row := state.newtypes[owner]
+		if token_is(state, position[0], "private")
+			if method_seen || row.closed
+				diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), "private new must occur once before newtype methods")
+				return false
+			end
+			advance(position)
+			if !expect(state, position, "new") || !finish_statement(state, position)
+				return false
+			end
+			state.newtypes[owner] = NewtypeDefinition.new(name: row.name, source_id: row.source_id, line: row.line, target: row.target, representation: row.representation, closed: true)
+			next
+		end
+		if !token_is(state, position[0], "def")
+			diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), "newtype body accepts only methods and private new")
+			return false
+		end
+		method_seen = true
+		mut name_origin := position[0] + 1
+		mut receiver := newtype_type(owner)
+		if token_is(state, name_origin, "self") && token_is(state, name_origin + 1, ".")
+			name_origin += 2
+			receiver = ""
+		end
+		name := load_string(state.token_texts, name_origin)
+		if name == "new" || name == "value" || name == "initialize"
+			diagnostic(state, "TRBN4002", load_integer(state.token_lines, name_origin), "newtype method name " + name + " is reserved")
+			return false
+		end
+		parent := state.declaration_owner[0]
+		start := position[0]
+		state.declaration_owner[0] = row.name
+		parsed := parse_function(state, position, receiver, [])
+		mut token := start
+		while token < position[0]
+			store_string(state.token_namespaces, token, row.name)
 			token += 1
 		end
 		state.declaration_owner[0] = parent

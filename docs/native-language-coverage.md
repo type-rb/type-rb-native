@@ -1,12 +1,35 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 1033 ordinary-path probes and 32 feature
+Status: the shared contract contains 1112 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
 basic-language completion; [the generated family inventory](native-language-feature-inventory.md)
 records semantic contracts that still need tests. The earlier 19-case inventory
 was an initial sample, not a complete list of missing features.
+
+## Nominal newtypes
+
+Ordinary files and retained sessions accept explicit nominal construction and
+projection, open mutable representations, closed factories, instance/class
+methods and lexical private access. Aliases, modules, generic containers,
+nullable calls, captures, defaults and constants retain their nominal identities.
+Managed representations keep ordinary lifetimes, while scalar representations
+use scalar storage without allocating a wrapper.
+
+MIR owns both nominal identity and physical representation. Independent checks
+reject forged constructors/projections, cycles, invalid mutability and missing
+managed roots after frontend erasure. Array/Hash slots, fields, direct/indirect
+calls and captured values use verified storage types, including wrapped Floats.
+Paired ordinary-path cases and Unicode/NUL forced-GC and retained-session controls
+cover these combinations. The exact reference incorporates
+[TypeRB #777](https://github.com/type-rb/type-rb/pull/777) for declaration-conflict
+crashes, alias construction and representation conversion.
+
+Literal/class/interface representations and method-specific generic parameters
+retain their owning family dependencies. General union output and existing Hash
+presentation differences remain explicit observations. See
+[decision 0077](decisions/0077-newtype-mir.md).
 
 ## Callable suffixes and lexical boundaries
 

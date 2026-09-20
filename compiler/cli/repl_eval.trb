@@ -1,3 +1,7 @@
+import { string_starts_with } from path
+import { find_newtype_in_module, find_newtype_type, newtype_type } from newtype_types
+import { newtype_method_function } from newtype_methods
+import { find_visible_newtype } from declaration_lookup
 import { repl_slice_available, repl_slice_next } from repl_sliced_iteration
 import { repl_array_sort_keys } from repl_array_sorting
 import { raw_enum_type } from raw_enum_types
@@ -110,6 +114,9 @@ def repl_numeric(mut store: ReplStore, left: Integer, operator: String, right: I
 			same =!same
 		end
 		return repl_boolean(store, same)
+	end
+	if string_starts_with(repl_type(store, left), "Newtype#")
+		return repl_numeric(store, store.children[left][0], operator, store.children[right][0])
 	end
 	a := repl_get(store, left)
 	b := repl_get(store, right)
@@ -529,6 +536,18 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		function := function_value - 1
 		return repl_reference(repl_value(store, declared_callable_type(state, function, 0), function, 0.0, "", []))
 	end
+	if text == "value" && token_is(state, position[0], "(")
+		self_slot := repl_find(environment, "self")
+		if self_slot >= 0
+			receiver := repl_binding_value(store, environment, self_slot)
+			if find_newtype_type(state, repl_type(store, receiver)) >= 0
+				position[0] += 1
+				skip_newlines(state, position)
+				position[0] += 1
+				return repl_reference(store.children[receiver][0])
+			end
+		end
+	end
 	if token_is(state, position[0], "(")
 		mut function := find_visible_function(state, state.active_module[0], text)
 		encoded := sparse_integer_at(state.checked[0].generic_calls, position[0])
@@ -537,7 +556,7 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		end
 		if function >= 0 && sparse_string_at(state.function_receivers, function) != ""
 			self_slot := repl_find(environment, "self")
-			return repl_reference(repl_enum_method_call(state, position, store, environment, function, repl_binding_value(store, environment, self_slot)))
+			return repl_reference(repl_nominal_method_call(state, position, store, environment, function, repl_binding_value(store, environment, self_slot)))
 		end
 		mut bindings := function_argument_bindings(state, function)
 		position[0] += 1
@@ -620,6 +639,35 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 			position[0] += 1
 		end
 		return repl_reference(repl_value(store, enum_type(owner), variant, 0.0, row.name, bindings.values))
+	end
+	mut newtype_owner := find_newtype_type(state, application_type)
+	if newtype_owner < 0
+		newtype_owner = find_visible_newtype(state, state.active_module[0], text)
+	end
+	if text == "self"
+		newtype_owner = find_newtype_in_module(state, state.active_module[0], state.declaration_owner[0])
+	end
+	if newtype_owner >= 0 && token_is(state, position[0], ".")
+		member := load_string(state.token_texts, position[0] + 1)
+		position[0] += 2
+		if member == "new"
+			position[0] += 1
+			skip_newlines(state, position)
+			representation := state.newtypes[newtype_owner].representation
+			argument := repl_expression(state, position, store, environment, 1, representation)
+			if environment.flow[0] != 0
+				return repl_reference(environment.flow[1])
+			end
+			skip_newlines(state, position)
+			if token_is(state, position[0], ",")
+				position[0] += 1
+				skip_newlines(state, position)
+			end
+			position[0] += 1
+			return repl_reference(repl_value(store, newtype_type(newtype_owner), 0, 0.0, "", [repl_coerce(store, argument.value, representation)]))
+		end
+		function := newtype_method_function(state, newtype_type(newtype_owner), member, true)
+		return repl_reference(repl_nominal_method_call(state, position, store, environment, function, - 1))
 	end
 	if token_is(state, position[0], ".")
 		position[0] += 1
@@ -820,6 +868,21 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						result = repl_callable_expression(state, position, store, environment, result.value)
 					end
 				elsif token_is(state, position[0], "(")
+					if find_newtype_type(state, value.type_name) >= 0
+						if member == "value"
+							position[0] += 1
+							skip_newlines(state, position)
+							position[0] += 1
+							result = repl_reference(value.children[0])
+						else
+							function := newtype_method_function(state, value.type_name, member, false)
+							result = repl_reference(repl_nominal_method_call(state, position, store, environment, function, result.value))
+						end
+						if safe_origin >= 0 && environment.flow[0] == 0
+							result = repl_reference(repl_coerce(store, result.value, load_string(state.checked[0].safe_types, safe_origin)))
+						end
+						next
+					end
 					if member == "raw_value" && raw_enum_type(state, find_enum_type(state, value.type_name)) != ""
 						position[0] += 1
 						skip_newlines(state, position)
@@ -832,7 +895,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 					end
 					method_function := enum_method_function(state, value.type_name, member)
 					if method_function >= 0
-						result = repl_reference(repl_enum_method_call(state, position, store, environment, method_function, result.value))
+						result = repl_reference(repl_nominal_method_call(state, position, store, environment, method_function, result.value))
 						if safe_origin >= 0 && environment.flow[0] == 0
 							result = repl_reference(repl_coerce(store, result.value, load_string(state.checked[0].safe_types, safe_origin)))
 						end
@@ -1751,11 +1814,13 @@ def repl_transform(mut state: CompilerState, mut position: Array<Integer>, mut s
 	return result
 end
 
-def repl_enum_method_call(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, function: Integer, receiver: Integer): Integer
+def repl_nominal_method_call(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, function: Integer, receiver: Integer): Integer
 	mut bindings := function_argument_bindings(state, function)
-	bindings.values[0] = receiver
-	bindings.provided[0] = true
-	bindings.position[0] = 1
+	if receiver >= 0
+		bindings.values[0] = receiver
+		bindings.provided[0] = true
+		bindings.position[0] = 1
+	end
 	position[0] += 1
 	skip_newlines(state, position)
 	while !token_is(state, position[0], ")")

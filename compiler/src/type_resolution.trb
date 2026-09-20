@@ -1,3 +1,5 @@
+import { find_newtype_type, newtype_type } from newtype_types
+import { find_visible_newtype } from declaration_lookup
 import { union_parts, union_type } from union_types
 import { namespace_parent } from namespace_model
 import { callable_parts, callable_type } from callable_types
@@ -89,6 +91,10 @@ def type_display(state: CompilerState, type_name: String): String
 	if hash_key_type(type_name) != ""
 		return "Hash<" + hash_key_type(type_name) + ", " + type_display(state, hash_value_type(type_name)) + ">"
 	end
+	newtype_index := find_newtype_type(state, type_name)
+	if newtype_index >= 0
+		return state.newtypes[newtype_index].name
+	end
 	enum_index := find_enum_type(state, type_name)
 	if enum_index >= 0
 		return state.enums[enum_index].name
@@ -157,8 +163,8 @@ def resolve_type_name(
 	if state.generic_template_mode[0] && abstract_generic_type_valid(state, type_name)
 		return type_name
 	end
-	if string_starts_with(type_name, "Record#") || string_starts_with(type_name, "Enum#")
-		if find_record_type(state, type_name) >= 0 || find_enum_type(state, type_name) >= 0
+	if string_starts_with(type_name, "Record#") || string_starts_with(type_name, "Enum#") || string_starts_with(type_name, "Newtype#")
+		if find_record_type(state, type_name) >= 0 || find_enum_type(state, type_name) >= 0 || find_newtype_type(state, type_name) >= 0
 			return type_name
 		end
 		return ""
@@ -229,6 +235,10 @@ def resolve_type_name(
 			end
 			return instantiate_generic_nominal(state, definition, resolved)
 		end
+	end
+	newtype_index := find_visible_newtype(state, module_index, type_name)
+	if newtype_index >= 0
+		return newtype_type(newtype_index)
 	end
 	enum_index := find_visible_enum(state, module_index, type_name)
 	if enum_index >= 0

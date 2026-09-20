@@ -1,3 +1,7 @@
+import { find_newtype_in_module, find_newtype_type, newtype_equality_type, newtype_type } from newtype_types
+import { find_visible_newtype } from declaration_lookup
+import { newtype_method_function } from newtype_methods
+import { mir_newtype_operation } from newtype_mir
 import { mir_sliced_iteration_begin, mir_sliced_iteration_end } from sliced_iteration
 import { checked_raw_enum_from, checked_raw_enum_value } from raw_enum_checked
 import { mir_array_sort_keys } from array_sorting
@@ -446,6 +450,10 @@ def check_primary(
 				position[0] = application_finish
 				return checked_value("", 1, origin, 0)
 			end
+			if find_newtype_type(state, sparse_string_at(state.checked[0].generic_application_types, origin)) >= 0
+				position[0] = application_finish
+				return checked_value(sparse_string_at(state.checked[0].generic_application_types, origin), 7, origin, 0)
+			end
 			if find_enum_type(state, sparse_string_at(state.checked[0].generic_application_types, origin)) >= 0
 				if token_is(state, application_finish, ".")
 					position[0] = application_finish
@@ -488,6 +496,21 @@ def check_primary(
 			store_integer(locals.result_uses, local_index, sparse_integer_at(locals.result_uses, local_index) + 1)
 			value := mir_binding_read(state, locals, local_index, origin)
 			return nullable_read(state, locals, value, local_index, - 1, origin)
+		end
+		if name == "value" && token_is(state, position[0], "(")
+			self_slot := local_find(locals, "self")
+			if self_slot >= 0 && find_newtype_type(state, load_string(locals.types, self_slot)) >= 0
+				lambda_use_binding(locals, self_slot)
+				receiver := mir_binding_read(state, locals, self_slot, origin)
+				return check_newtype_member(state, position, locals, receiver, "value")
+			end
+		end
+		mut newtype_owner := find_visible_newtype(state, state.active_module[0], name)
+		if name == "self"
+			newtype_owner = find_newtype_in_module(state, state.active_module[0], state.declaration_owner[0])
+		end
+		if newtype_owner >= 0 && token_is(state, position[0], ".")
+			return checked_value(newtype_type(newtype_owner), 7, origin, 0)
 		end
 		constant := find_visible_declaration(state, state.active_module[0], name, 7)
 		if constant >= 0
@@ -687,6 +710,9 @@ def check_method_call(
 		receiver: CheckedValue,
 		method: String,
 	): CheckedValue
+	if find_newtype_type(state, receiver.type_name) >= 0
+		return check_newtype_member(state, position, locals, receiver, method)
+	end
 	if method == "raw_value" && raw_enum_type(state, find_enum_type(state, receiver.type_name)) != ""
 		origin := position[0]
 		advance(position)
@@ -802,6 +828,9 @@ end
 
 def check_member(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue, member: String): CheckedValue
 	mut value := checked_view(receiver, receiver.type_name, receiver.category)
+	if find_newtype_type(state, value.type_name) >= 0
+		return check_newtype_member(state, position, locals, value, member)
+	end
 	if value.category == 6
 		owner := find_enum_type(state, value.type_name)
 		raw_type := raw_enum_type(state, owner)
@@ -1104,20 +1133,33 @@ def check_expression_value(
 				value = nullable_nil_condition(state, locals, subject, operator == "!=", operator_origin)
 				next
 			end
-			result_type := binary_result_type(state, operator, value.type_name, right.type_name, line, operator_origin)
+			mut binary_right := checked_view(right, right.type_name, right.category)
+			if find_newtype_type(state, value.type_name) >= 0 || find_newtype_type(state, right.type_name) >= 0
+				if value.type_name != right.type_name || (operator != "==" && operator != "!=") || newtype_equality_type(state, value.type_name) == ""
+					return type_diagnostic(state, line, "newtype operands require the same nominal type with portable equality")
+				end
+				mut owner := find_newtype_type(state, value.type_name)
+				while owner >= 0
+					representation := state.newtypes[owner].representation
+					value = mir_newtype_operation(state, locals, 56, value, owner, representation, operator_origin)
+					binary_right = mir_newtype_operation(state, locals, 56, binary_right, owner, representation, operator_origin)
+					owner = find_newtype_type(state, representation)
+				end
+			end
+			result_type := binary_result_type(state, operator, value.type_name, binary_right.type_name, line, operator_origin)
 			if precedence <= 2
-				value = mir_logical_join(state, locals, value, right, short, operator_origin)
+				value = mir_logical_join(state, locals, value, binary_right, short, operator_origin)
 			elsif find_enum_type(state, value.type_name) >= 0
-				value = mir_enum_operation(state, locals, 40, value, checked_mir_value(right), binary_operator_id(operator), "Boolean", operator_origin)
+				value = mir_enum_operation(state, locals, 40, value, checked_mir_value(binary_right), binary_operator_id(operator), "Boolean", operator_origin)
 			elsif value.type_name == "String"
-				value = mir_checked_string_binary(state, locals, value, right, operator, operator_origin)
+				value = mir_checked_string_binary(state, locals, value, binary_right, operator, operator_origin)
 			else
 				value = scalar_mir_binary(
 					state,
 					locals,
 					operator,
 					value,
-					right,
+					binary_right,
 					result_type,
 					operator_origin,
 				)
@@ -2441,4 +2483,47 @@ def check_primitive_method(mut state: CompilerState, mut position: Array<Integer
 		return mir_array_method(state, locals, kind, receiver, arguments[0], origin)
 	end
 	return mir_integer_method(state, locals, kind, receiver, arguments, origin)
+end
+
+def check_newtype_member(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue, member: String): CheckedValue
+	owner := find_newtype_type(state, receiver.type_name)
+	definition := state.newtypes[owner]
+	origin := position[0]
+	line := load_integer(state.token_lines, origin)
+	class_method := receiver.category == 7
+	if !token_is(state, origin, "(")
+		return type_diagnostic(state, line, "newtype member requires an explicit call")
+	end
+	if class_method && member == "new"
+		if definition.closed && (state.active_module[0] != definition.source_id || state.declaration_owner[0] != definition.name)
+			return type_diagnostic(state, line, "raw constructor for closed newtype " + definition.name + " is private")
+		end
+		advance(position)
+		skip_newlines(state, position)
+		value := check_expression(state, position, locals, 1, definition.representation)
+		skip_newlines(state, position)
+		if token_is(state, position[0], ",")
+			advance(position)
+			skip_newlines(state, position)
+		end
+		expect(state, position, ")")
+		if value.type_name == "Never"
+			return value
+		end
+		return mir_newtype_operation(state, locals, 55, value, owner, newtype_type(owner), origin)
+	end
+	if !class_method && member == "value"
+		advance(position)
+		skip_newlines(state, position)
+		expect(state, position, ")")
+		return mir_newtype_operation(state, locals, 56, receiver, owner, definition.representation, origin)
+	end
+	function := newtype_method_function(state, receiver.type_name, member, class_method)
+	if function < 0
+		return type_diagnostic(state, line, "newtype " + definition.name + " has no matching member " + member)
+	end
+	if !namespace_member_access(state, definition.source_id, definition.name + "::" + member, origin)
+		return checked_value("Invalid", 0, origin, 0)
+	end
+	return check_call(state, position, locals, 1, "", function, checked_mir_value(receiver), !class_method)
 end

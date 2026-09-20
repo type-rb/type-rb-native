@@ -37,6 +37,7 @@ subprocess.run([sys.executable, str(repository / "tools/native-sliced-iteration-
 subprocess.run([sys.executable, str(repository / "tools/native-array-join-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-string-trimming-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-symbol-test.py"), str(binary)], check=True)
+subprocess.run([sys.executable, str(repository / "tools/native-newtype-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-scalar-strings-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-union-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-hash-range-test.py"), str(binary)], check=True)
