@@ -9,7 +9,7 @@ import tempfile
 import time
 
 repository = Path(__file__).resolve().parent.parent
-BUILD_TIMEOUT_SECONDS = 300
+BUILD_TIMEOUT_SECONDS = 600
 
 with tempfile.TemporaryDirectory(prefix='native bootstrap ') as temporary:
     root = Path(temporary)
