@@ -27,6 +27,7 @@ subprocess.run([sys.executable, str(repository / "tools/native-alias-test.py"), 
 subprocess.run([sys.executable, str(repository / "tools/native-callable-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-array-copy-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-array-mutation-test.py"), str(binary)], check=True)
+subprocess.run([sys.executable, str(repository / "tools/native-array-query-test.py"), str(binary)], check=True)
 
 with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
     root = Path(temporary)

@@ -470,3 +470,44 @@
 | Array mutation extra shift | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Array mutation pop empty | accepts | accepts | differs | rejects as reference |
 | Array mutation shift empty | accepts | accepts | differs | rejects as reference |
+| Array query integers | accepts | accepts | matches reference | matches reference |
+| Array query empty | accepts | accepts | matches reference | matches reference |
+| Array query booleans | accepts | accepts | matches reference | matches reference |
+| Array query unicode nul | accepts | accepts | matches reference | matches reference |
+| Array query floats | accepts | accepts | matches reference | matches reference |
+| Array query enums | accepts | accepts | matches reference | matches reference |
+| Array query fresh | accepts | accepts | matches reference | matches reference |
+| Array query nested alias | accepts | accepts | matches reference | matches reference |
+| Array query record concat | accepts | accepts | matches reference | matches reference |
+| Array query hash concat | accepts | accepts | matches reference | matches reference |
+| Array query nullable concat | accepts | accepts | matches reference | matches reference |
+| Array query callable concat | accepts | accepts | matches reference | matches reference |
+| Array query generic concat | accepts | accepts | matches reference | matches reference |
+| Array query include receiver | accepts | accepts | matches reference | matches reference |
+| Array query include growth | accepts | accepts | matches reference | matches reference |
+| Array query count receiver | accepts | accepts | matches reference | matches reference |
+| Array query count growth | accepts | accepts | matches reference | matches reference |
+| Array query index receiver | accepts | accepts | matches reference | matches reference |
+| Array query index growth | accepts | accepts | matches reference | matches reference |
+| Array query concat receiver | accepts | accepts | matches reference | matches reference |
+| Array query concat growth | accepts | accepts | matches reference | matches reference |
+| Array query optional | accepts | accepts | matches reference | matches reference |
+| Array query concat optional | accepts | accepts | matches reference | matches reference |
+| Array query transfer | accepts | accepts | matches reference | matches reference |
+| Array query predicate nesting | accepts | accepts | matches reference | matches reference |
+| Array query expression nesting | accepts | accepts | matches reference | matches reference |
+| Array query nil values | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array query nullable equality | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array query record equality | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array query record unique | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array query payload equality | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array query nested equality | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array query function equality | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array query wrong needle | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array query wrong concat | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array query missing include | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array query extra count | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array query missing index | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array query extra unique | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array query missing concat | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array query temporary mutation | rejects as reference | rejects as reference | not reached | rejects as reference |
