@@ -551,3 +551,27 @@
 | Hash and Range range string | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Hash and Range mutable value | accepts | accepts | matches reference | matches reference |
 | Hash and Range captured bindings | accepts | accepts | matches reference | matches reference |
+| Array join edges | accepts | accepts | matches reference | matches reference |
+| Array join unicode nul | accepts | accepts | matches reference | matches reference |
+| Array join byte boundaries | accepts | accepts | matches reference | matches reference |
+| Array join temporary | accepts | accepts | matches reference | matches reference |
+| Array join readonly | accepts | accepts | matches reference | matches reference |
+| Array join grow | accepts | accepts | matches reference | matches reference |
+| Array join shorten | accepts | accepts | matches reference | matches reference |
+| Array join clear | accepts | accepts | matches reference | matches reference |
+| Array join replace | accepts | accepts | matches reference | matches reference |
+| Array join rebind | accepts | accepts | matches reference | matches reference |
+| Array join grow rebind | accepts | accepts | matches reference | matches reference |
+| Array join order | accepts | accepts | matches reference | matches reference |
+| Array join empty argument | accepts | accepts | matches reference | matches reference |
+| Array join optional | accepts | accepts | matches reference | matches reference |
+| Array join transfer | accepts | accepts | matches reference | matches reference |
+| Array join nested | accepts | accepts | matches reference | matches reference |
+| Array join lambda | accepts | accepts | matches reference | matches reference |
+| Array join integer elements | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array join nullable elements | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array join boolean elements | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array join nested elements | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array join wrong separator | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array join missing separator | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array join extra separator | rejects as reference | rejects as reference | not reached | rejects as reference |

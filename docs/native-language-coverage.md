@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 509 ordinary-path probes and 32 feature
+Status: the shared contract contains 573 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -73,6 +73,14 @@ cannot retain Array data or length across these mutations. Shared cases cover
 these combinations, argument effects, optional calls, lexical transfers and
 invalid capabilities/arity. [Decision 0060](decisions/0060-array-mutation-mir.md)
 records verifier, liveness, storage and GC controls.
+
+## Array String joining
+
+`Array<String>.join(separator)` retains its receiver before argument evaluation,
+then assembles the resulting current elements in one allocation. Byte-preserving
+Unicode/NUL behavior, boundary re-decoding, optional calls, managed lifetimes and
+REPL self-use are covered by [decision 0063](decisions/0063-array-join-mir.md).
+Sorting and safe collection APIs remain explicit inventory gaps.
 
 ## Array queries and concatenation
 

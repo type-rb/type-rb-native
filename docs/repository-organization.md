@@ -93,3 +93,6 @@ These are reproduction inputs, not alternate current implementation owners.
 
 See [compiler layout](compiler-project-layout.md), [retired controllers](retired-experiment-tools.md)
 and [validation](ci-validation.md) for those boundaries.
+
+`compiler/src/qbe_array_join.trb` owns the Array-to-String assembly runtime;
+typed validation and effects remain in the shared String MIR and root planners.
