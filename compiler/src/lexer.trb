@@ -1,3 +1,4 @@
+import { decode_escape } from string_escapes
 import { advance } from syntax_tokens
 import { CompilerState, add_module, diagnostic, has_diagnostic } from state
 import { load_integer, load_string, store_integer, store_string } from storage
@@ -137,32 +138,6 @@ def scan_number(
 	return
 end
 
-def decode_escape(mut state: CompilerState, escaped: String, line: Integer): String
-	mut value := ""
-	if escaped == "n"
-		value = "\n"
-	else
-		if escaped == "t"
-			value = "\t"
-		else
-			if escaped == "r"
-				value = "\r"
-			else
-				if escaped == "\""
-					value = "\""
-				else
-					if escaped == "\\"
-						value = "\\"
-					else
-						diagnostic(state, "TRBN4001", line, "unsupported String escape")
-					end
-				end
-			end
-		end
-	end
-	return value
-end
-
 # Locate embedded expressions without treating quoted braces as delimiters.
 def interpolation_end(source: String, mut index: Integer): Integer
 	mut depth := 1
@@ -272,10 +247,13 @@ def scan_string(
 							end
 							if escaped_hash
 								text += "#"
+								advance(position)
 							else
-								text += decode_escape(state, source[position[0]], line)
+								text += decode_escape(state, source, position, line)
 							end
-							advance(position)
+							if has_diagnostic(state)
+								return line - start_line
+							end
 							chunk_start = position[0]
 						end
 					else

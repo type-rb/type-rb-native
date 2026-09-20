@@ -1,0 +1,62 @@
+import { CompilerProjectSources, check, emit_qbe, load_project_sources } from compiler
+import { control_test_output } from control_mir_test
+import { find_function_in_module } from declaration_lookup
+import { intrinsic_mir_erase } from intrinsic_mir_test
+import { lex } from lexer
+import { logical_checked_source, logical_run_qbe, logical_run_qbe_arguments } from logical_test
+import { compiler_runtime_intrinsic, resolve } from resolution
+import { compiler_new, find_module } from state
+import trb/std/process
+import trb/std/result
+import { describe, expect, test } from trb/std/test
+
+describe("String escape decoding") do
+	test("keeps decoded ASCII literals independent of source") do
+		mut state := logical_checked_source("def main()\ntext := \"\\x41\\101\\u0041\\U00000041\"\nputs(text)\nputs(text.size())\nputs(\"\\u0023{missing}\")\nputs(\"\\x22quoted\\x22\")\nend\n")
+		expect(check(state)).to_be_true()
+		before := control_test_output(emit_qbe(state))
+		intrinsic_mir_erase(state)
+		expect(control_test_output(emit_qbe(state))).to_equal(before)
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe(qbe, before)
+			when Result::Ok(output)
+				expect(output).to_equal("AAAA\n4\n\#{missing}\n\"quoted\"\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+	test("rejects malformed numeric escapes and invalid scalar values before construction") do
+		invalid := ["\"\\x0\"", "\"\\xGG\"", "\"\\u123\"", "\"\\uD800\"", "\"\\uDFFF\"", "\"\\U00110000\"", "\"\\Uffffffff\"", "\"\\400\"", "\"\\777\"", "\"\\08\"", "\"\\0\"", "\"\\{bad}\"", "\"\\q\""]
+		invalid.each do |literal|
+			mut state := compiler_new(128)
+			expect(lex(state, "def main()\nputs(" + literal + ")\nend\n")).to_be_false()
+		end
+	end
+	test("binds the byte constructor through the canonical decoder and preserves siblings") do
+		mut state := load_project_sources("/project/trbconfig.jsonc", "/project/src", CompilerProjectSources.new(paths: ["/project/src/main.trb", "/project/src/lexer.trb", "/project/src/decoder.trb", "/project/src/literal_codec.trb", "/project/src/sibling.trb"], sources: ["import { compiler_source_slice } from lexer\nimport { decode_escape as decode } from decoder\nimport { ordinary } from sibling\ndef compiler_main(source: String, _mode: String, _file_mode: Boolean): Integer\nputs(compiler_source_slice(source, 0, 1))\nputs(decode(65))\nputs(ordinary())\nreturn 0\nend\ndef compiler_file_main(_source: String, _path: String, _mode: String, _file: Boolean): Integer\nreturn 0\nend\ndef main()\nend\n", "import { decode_escape } from decoder\ndef compiler_source_slice(_source: String, _start: Integer, _finish: Integer): String\nreturn decode_escape(65)\nend\n", "import { compiler_literal_byte } from literal_codec\ndef decode_escape(value: Integer): String\nreturn compiler_literal_byte(value)\nend\n", "def compiler_literal_byte(_value: Integer): String\nreturn \"unadapted\"\nend\n", "def compiler_literal_byte(_value: Integer): String\nreturn \"ordinary\"\nend\ndef ordinary(): String\nreturn compiler_literal_byte(65)\nend\n"], error: ""))
+		expect(resolve(state)).to_be_true()
+		expect(check(state)).to_be_true()
+		canonical := find_function_in_module(state, find_module(state, "literal_codec"), "compiler_literal_byte")
+		sibling := find_function_in_module(state, find_module(state, "sibling"), "compiler_literal_byte")
+		expect(compiler_runtime_intrinsic(state, canonical)).to_be_true()
+		expect(compiler_runtime_intrinsic(state, sibling)).to_be_false()
+		expect(state.scalar_mir.signatures[canonical].adapter).to_equal(12)
+		expect(state.scalar_mir.signatures[sibling].kind).to_equal(0)
+		before := control_test_output(emit_qbe(state))
+		intrinsic_mir_erase(state)
+		expect(control_test_output(emit_qbe(state))).to_equal(before)
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe_arguments(qbe, before, ["--source-content", "probe", "abc"])
+			when Result::Ok(output)
+				expect(output).to_equal("a\nA\nordinary\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+end

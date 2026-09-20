@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 362 ordinary-path probes and 32 feature
+Status: the shared contract contains 397 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -18,7 +18,7 @@ the shared probes reveal them.
 
 The ordinary String foundation now supports UTF-8 literals, code-point
 length/indexing, concatenation, interpolation, allocation/lifetime and source/REPL
-handling. Continue with the remaining escapes and String APIs recorded in the
+handling. Continue with the remaining String APIs recorded in the
 shared inventory. Keep raw byte operations explicit where source decoding or
 terminal editing needs them; character indexing and terminal cell widths remain
 separate contracts.
@@ -287,9 +287,8 @@ code-point offset, including overlapping matches; empty patterns match at zero
 or size. Literal predicates do not normalize text. Receiver retention, argument
 order, aliases, nullable calls and lexical transfers use the common checked/MIR
 pipeline. [Decision 0055](decisions/0055-string-query-mir.md) records the search
-instruction, allocation-free runtime and external-byte semantics. Remaining
-String APIs, including the remaining slicing part of the combined String case in the shared registry,
-stay explicitly open.
+instruction, allocation-free runtime and external-byte semantics. The combined
+String query and slicing case now passes; other String APIs stay explicitly open.
 
 The shared cases cover Japanese text, two- through four-byte characters,
 combining code points, negative indices, concatenation, interpolation, equality,
@@ -319,7 +318,7 @@ than the final ordinary compiler and must not be counted as ordinary UTF-8
 evidence. No seed, pin or Go fallback is added to the ordinary chain; acceptance
 requires the published seed's full replacement generations and fixed points.
 
-Unicode identifiers, Unicode escapes and the remaining String receiver APIs are
+Unicode identifiers and the remaining String receiver APIs are
 still tracked separately. This foundation does not mark the entire String family,
 standard library or basic-language milestone complete.
 
@@ -369,8 +368,7 @@ are visible separately and must not be attributed only to Native.
 A rejected REPL submission may leave the interactive session at exit status
 zero. Output and diagnostics determine the result, not exit status alone.
 UTF-8 literals, code-point size/index, concatenation/interpolation and managed
-collection storage now pass ordinary build, execution and REPL checks. Unicode
-escapes and additional String APIs remain explicit gaps.
+collection storage now pass ordinary build, execution and REPL checks. Additional String APIs remain explicit gaps.
 The while probe produces the same final value but lacks the reference's `[mut]`
 REPL display. These remain explicit differences. Snapshot/recovery coverage
 cannot establish ordinary check/build/run/REPL support.
@@ -722,3 +720,9 @@ and the REPL. Shared probes cover retained receiver identity, inclusive/exclusiv
 limits, Unicode, NUL, optional calls and lexical transfers. Invalid ranges remain
 explicit runtime failures; `try_slice` and other unimplemented APIs remain open.
 See [the MIR contract](decisions/0057-string-slice-mir.md).
+
+Control, octal, hexadecimal and scalar Unicode escapes now preserve exact bytes
+in ordinary file and REPL literals. Malformed digit counts and invalid Unicode
+scalars reject before construction. Escaped hash/quote values do not re-enter
+source interpolation, and byte joins retain accurate code-point counts. See
+[the decoder and bootstrap boundary](decisions/0058-string-escape-decoding.md).

@@ -104,12 +104,13 @@ vertical slices from remaining ownership.
 ### Current compiler source ownership
 
 The ordinary entry is [compiler/src/compiler.trb](../compiler/src/compiler.trb).
-Its explicit transitive import closure contains 106 canonical implementation modules:
+Its explicit transitive import closure contains 108 canonical implementation modules:
 
 | Modules in `compiler/src/` | Current responsibility |
 | --- | --- |
 | `transform_model.trb` | Parser-owned collection block shapes and concrete transform projections; lowering uses ordinary iteration control. |
 | `storage.trb`, `path.trb`, `literals.trb` | Shared storage, path predicates, and numeric/ASCII predicates. |
+| `string_escapes.trb`, `qbe_string_literals.trb` | String escape widths, byte/scalar validation and the private byte constructor; see [escape decoding](decisions/0058-string-escape-decoding.md). |
 | `state.trb` | Compiler state, symbol indexes, shared locals, and diagnostics. |
 | `parser.trb`, `syntax_tokens.trb`, `resolution.trb` | Syntax/token boundaries, import/declaration orchestration and body name resolution. |
 | `declaration_lookup.trb`, `type_resolution.trb` | Visible declaration identity, semantic type resolution and concrete nominal instantiation. |
