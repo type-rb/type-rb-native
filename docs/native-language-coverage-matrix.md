@@ -687,7 +687,7 @@
 | Private module methods permit lexical calls | accepts | accepts | matches reference | matches reference |
 | Private module methods reject external calls | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Qualified module payload patterns are exhaustive | accepts | accepts | matches reference | matches reference |
-| Qualified generic record aliases retain the reference constructor gap | accepts | accepts; reference rejects | differs | output differs |
+| Qualified generic record aliases preserve constructor identity | accepts | accepts | matches reference | matches reference |
 | Module aliases and defaults resolve lexical type owners | accepts | accepts | matches reference | matches reference |
 | Private methods permit calls qualified by their own module | accepts | accepts | matches reference | matches reference |
 | Private methods reject external qualified access | rejects as reference | rejects as reference | not reached | rejects as reference |
@@ -708,3 +708,65 @@
 | Float to_s rejects unexpected arguments | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Boolean to_s rejects unexpected arguments | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Scalar String results cannot initialize a numeric binding | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Union scalar cases | accepts | accepts | matches reference | matches reference |
+| Union numeric normalization | accepts | accepts | matches reference | matches reference |
+| Union inferred array | accepts | accepts | matches reference | matches reference |
+| Union inferred hash | accepts | accepts | matches reference | output differs |
+| Union contextual array | accepts | accepts | matches reference | matches reference |
+| Union widen | accepts | accepts | matches reference | matches reference |
+| Union retained mutation | accepts | accepts | matches reference | output differs |
+| Union optional | accepts | accepts | matches reference | matches reference |
+| Union grouped optional | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Union optional widen | accepts | accepts | matches reference | matches reference |
+| Union record field | accepts | accepts | matches reference | matches reference |
+| Union generic record | accepts | accepts | matches reference | matches reference |
+| Union generic function | accepts | accepts | matches reference | matches reference |
+| Union generic alias | accepts | accepts | matches reference | matches reference |
+| Union closure capture | accepts | accepts | matches reference | output differs |
+| Union callable argument | accepts | accepts | matches reference | matches reference |
+| Union enum payload | accepts | accepts | matches reference | matches reference |
+| Union pass composite | accepts | accepts | matches reference | matches reference |
+| Union nullable alternative | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Union imported alias | accepts | accepts | matches reference | matches reference |
+| Union else discard | accepts | accepts | matches reference | matches reference |
+| Union case value | accepts | accepts | matches reference | matches reference |
+| Union direct operator reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Union direct method reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Union narrowing reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Union incompatible reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Union duplicate pattern reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Union incomplete pattern reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Union foreign pattern reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Union pattern arity reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Union composite pattern reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Union array readonly reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Union boundary mixed numeric array | accepts | accepts | matches reference | matches reference |
+| Union boundary default | accepts | accepts | matches reference | matches reference |
+| Union boundary lazy optional | accepts | accepts | matches reference | matches reference |
+| Union boundary result | accepts | accepts | matches reference | matches reference |
+| Union boundary lambda patterns | accepts | accepts | matches reference | matches reference |
+| Union boundary returned pattern capture | accepts | accepts | matches reference | matches reference |
+| Union boundary shadow pattern | accepts | accepts | matches reference | matches reference |
+| Union boundary array nil inference | accepts | accepts | matches reference | matches reference |
+| Union boundary array only nil | accepts | accepts | matches reference | matches reference |
+| Union boundary hash nil inference | accepts | accepts | matches reference | output differs |
+| Union boundary optional array inference | accepts | accepts | matches reference | matches reference |
+| Union boundary nullable scalar into union | accepts | accepts | matches reference | matches reference |
+| Union boundary nullable union same payload | accepts | accepts | matches reference | matches reference |
+| Union boundary generic nested union | accepts | accepts | matches reference | matches reference |
+| Union boundary generic collapsed | accepts | accepts | matches reference | matches reference |
+| Union boundary alias pattern reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Union boundary named pattern reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Union boundary discard read reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Union boundary binding escape reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Union boundary wrong return reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Union boundary invariant array reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject runtime function calls as scalar case patterns | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Nullable scalar conversion into a numeric union preserves absence | accepts | accepts | matches reference | matches reference |
+| Imported inferred constants retain instantiated record types | accepts | accepts | matches reference | matches reference |
+| Imported inferred constants retain callable result types | accepts | accepts | matches reference | matches reference |
+| Reject authored internal Nil annotation | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject authored internal Nil alias | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject authored internal Nil parameter | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject authored internal Nil lambda | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject authored internal Nil import | rejects as reference | rejects as reference | not reached | rejects as reference |

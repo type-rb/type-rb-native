@@ -1,3 +1,4 @@
+import { union_parts } from union_types
 import { callable_parts } from callable_types
 import { nullable_element } from nullable_types
 import { ascii_code } from literals
@@ -36,6 +37,9 @@ def hash_type(key: String, value: String): String
 end
 
 def native_managed_type(type_name: String): Boolean
+	if union_parts(type_name).size() > 0
+		return true
+	end
 	if callable_parts(type_name).size() > 0
 		return true
 	end
@@ -50,6 +54,16 @@ end
 
 # Validate the word-sized scalar/managed layouts admitted by Hash MIR.
 def native_value_layout(type_name: String): Boolean
+	alternatives := union_parts(type_name)
+	if alternatives.size() > 0
+		mut valid := true
+		alternatives.each do |alternative|
+			if !native_value_layout(alternative)
+				valid = false
+			end
+		end
+		return valid
+	end
 	parts := callable_parts(type_name)
 	if parts.size() > 0
 		mut index := 0
@@ -67,7 +81,7 @@ def native_value_layout(type_name: String): Boolean
 	if optional != ""
 		return native_value_layout(optional)
 	end
-	if type_name == "Integer" || type_name == "Float" || type_name == "Boolean" || type_name == "String" || type_name == "Range<Integer>"
+	if type_name == "Nil" || type_name == "Integer" || type_name == "Float" || type_name == "Boolean" || type_name == "String" || type_name == "Range<Integer>"
 		return true
 	end
 	if hash_key_type(type_name) != ""
@@ -108,6 +122,16 @@ end
 # Checked generic bodies can carry abstract values without assigning a layout.
 # Only fully concrete types are admitted later by MIR/runtime layout checks.
 def semantic_value_type(type_name: String): Boolean
+	alternatives := union_parts(type_name)
+	if alternatives.size() > 0
+		mut valid := true
+		alternatives.each do |alternative|
+			if !semantic_value_type(alternative)
+				valid = false
+			end
+		end
+		return valid
+	end
 	parts := callable_parts(type_name)
 	if parts.size() > 0
 		mut index := 0

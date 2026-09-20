@@ -1,3 +1,4 @@
+import { integer_string } from literals
 import { declare_constant_functions } from constant_declarations
 import { next_generic_depth } from generic_bindings
 import { namespace_parent } from namespace_model
@@ -702,9 +703,24 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 			resolution_local_add(locals, load_string(state.token_texts, handler.binding), "", 0)
 		end
 	end
+	mut type_patterns: Hash<String, Integer> := {}
 	state.controls.each do |control|
 		if control.kind == 2 && control.origin >= body_start && control.finish <= body_finish && !lambda_contains_origin(state, body_start, body_finish, control.origin)
 			control.branches.each do |branch|
+				mut pattern_name := ""
+				if branch.condition >= 0
+					pattern_name = load_string(state.token_texts, branch.condition)
+				end
+				if branch.condition >= 0 && (pattern_name == "Integer" || pattern_name == "Float" || pattern_name == "Boolean" || pattern_name == "String") && token_is(state, branch.condition + 1, "(")
+					type_patterns[integer_string(branch.condition)] = branch.condition_finish
+					mut binding := branch.condition + 2
+					while binding < branch.condition_finish
+						if load_integer(state.token_kinds, binding) == 1
+							resolution_local_add(locals, load_string(state.token_texts, binding), "", 0)
+						end
+						binding += 1
+					end
+				end
 				if branch.condition >= 0 && token_is(state, branch.condition + 1, "::")
 					mut token := branch.condition
 					while token < branch.condition_finish && !token_is(state, token, "(")
@@ -725,6 +741,10 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 	finish := body_finish
 	mut skipping_type := false
 	while index < finish
+		if type_patterns.key?(integer_string(index))
+			index = type_patterns[integer_string(index)]
+			next
+		end
 		lambda := sparse_integer_at(state.lambda_origins, index)
 		if lambda > 0
 			index = state.lambdas[lambda - 1].finish

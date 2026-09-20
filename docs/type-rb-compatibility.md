@@ -2,7 +2,7 @@
 
 TypeRB Native currently follows exact reference revisions during development. The
 current source and semantic oracle is TypeRB
-`7f30c7ec18c4c8ccb9fe37a7ae35d535b64e91ad` (the `0.4.9-dev` development identity), recorded
+`569d49cf38b9ec59242f18219c356988ed5e82cd` (the `0.4.9-dev` development identity), recorded
 in `TYPE_RB_REVISION`. This declares one exact reference identity during Native
 development, without claiming a supported version range.
 
@@ -33,6 +33,18 @@ The earlier scoped-file successor is registered in
 [Darwin/Linux arm64 result](https://github.com/type-rb/type-rb-native/blob/5cf61c740aa600c34ed94f1b130ea2ffefd9e783/results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/README.md)
 passes the selected-reference, migration, exact-baseline, target-regression,
 fixed-point, process, resource, and size criteria.
+
+## Union and inferred declaration reference update
+
+The exact pin incorporates [TypeRB PR #761](https://github.com/type-rb/type-rb/pull/761)
+for qualified generic alias construction, [PR #762](https://github.com/type-rb/type-rb/pull/762)
+for imported inferred constant types, and [PR #763](https://github.com/type-rb/type-rb/pull/763)
+for union storage, nullable conversion, discard patterns, generic substitution
+and inferred Nil collections. Shared observations are reviewed against this exact
+checkout and AST. Remaining grouped and nullable-alternative boundaries are
+tracked in TypeRB [#764](https://github.com/type-rb/type-rb/issues/764) and
+[#765](https://github.com/type-rb/type-rb/issues/765); nullable literal-union
+comparisons are tracked in [#766](https://github.com/type-rb/type-rb/issues/766).
 
 ## Namespace and declaration identity reference update
 
@@ -355,15 +367,15 @@ must still fail explicitly.
 
 ## Current declaration-import mapping
 
-The self-hosted frontend implements the part of TypeRB 0.4 declaration imports
-that has a representation in its current record-and-function subset:
+The self-hosted frontend preserves canonical declaration identity for its
+implemented declaration families:
 
 | TypeRB behavior | Current Native behavior |
 | --- | --- |
-| Named import | Selects an exact top-level record or function declaration |
+| Named import | Selects an exact supported record, enum, function, alias, module or constant declaration |
 | Named `as` alias | Changes only the local binding; canonical declaration identity remains exact |
-| Bare project import | Selects one matching record root; records are the only root-eligible kind in the current subset |
-| Bare `as` alias | Selects the same unique record first, then changes its local binding |
+| Bare project import | Selects one matching supported record, enum, generic nominal, alias, module or constant root |
+| Bare `as` alias | Selects the same unique declaration first, then changes its local binding |
 | Root key | Removes ASCII `_` from the logical final path segment and folds ASCII case; declaration names fold ASCII case without removing `_` |
 | Directory entry | A resolved `name/index` module uses `name` as its logical root segment; `name` and `name/index` can resolve to that same module |
 | Direct/index conflict | Rejects a resolved graph containing both `name` and `name/index`; there is no precedence between two loaded module identities |
@@ -372,15 +384,16 @@ that has a representation in its current record-and-function subset:
 
 Bare imports do not create lowercase namespaces and never import every export.
 A top-level function remains available through an exact named import but cannot
-become a bare root. Zero matches, multiple matching record roots, and a
+become a bare root. Zero matches, multiple matching declaration roots, and a
 function-only match produce deterministic diagnostics.
 
-Package imports, `activate`, modules, classes, enums, interfaces, aliases,
-newtypes, constants, owned nested declarations, and project-aware formatter
-rewrites remain outside the self-hosted subset. Relevant source forms are
-rejected explicitly; they do not fall back to the pre-0.4 namespace or
-loaded-identity precedence model. Repository-owned TypeRB source is still
-formatted and checked by the pinned reference compiler.
+Nested and reopened modules, owned declarations, runtime constants, generic
+nominals and transparent aliases retain lexical identity. Classes, interfaces,
+newtypes, general package activation and project-aware formatter rewrites remain
+coverage work. Selected compiler-owned standard packages have explicit mappings;
+unsupported imports do not fall back to a namespace or loaded-identity precedence
+model. Repository-owned TypeRB source is still formatted and checked by the
+pinned reference compiler.
 
 ## Source pins and bootstrap seeds
 

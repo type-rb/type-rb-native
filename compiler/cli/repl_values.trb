@@ -1,6 +1,7 @@
+import { union_parts } from union_types
 import { callable_parts } from callable_types
 import { find_enum_type } from enum_types
-import { nullable_element } from nullable_types
+import { nullable_assignable, nullable_element } from nullable_types
 import { repl_absent, repl_none, repl_payload } from repl_nullable
 import { ReplStore, ReplEnvironment, repl_store, repl_value, repl_float, repl_get, repl_type, ReplValue } from repl_model
 import { repl_hash_new, repl_hash_set } from repl_hash
@@ -69,6 +70,24 @@ def repl_coerce(mut store: ReplStore, id: Integer, expected: String): Integer
 	if expected == "" || repl_type(store, id) == expected
 		return id
 	end
+	if union_parts(repl_type(store, id)).size() > 0
+		return repl_coerce(store, store.children[id][0], expected)
+	end
+	alternatives := union_parts(expected)
+	if alternatives.size() > 0
+		mut selected := ""
+		alternatives.each do |alternative|
+			if selected == "" && nullable_assignable(repl_type(store, id), alternative)
+				selected = alternative
+			end
+		end
+		if selected == ""
+			store.error[0] = "union value disagrees with its checked alternative"
+			return 0
+		end
+		payload := repl_coerce(store, id, selected)
+		return repl_value(store, expected, 0, 0.0, "", [payload])
+	end
 	element := nullable_element(expected)
 	if element != ""
 		if repl_absent(store, id)
@@ -103,7 +122,7 @@ def repl_render(state: CompilerState, store: ReplStore, id: Integer, depth: Inte
 	if repl_absent(store, id)
 		return "nil"
 	end
-	if nullable_element(repl_type(store, id)) != ""
+	if nullable_element(repl_type(store, id)) != "" || union_parts(repl_type(store, id)).size() > 0
 		return repl_render(state, store, store.children[id][0], depth)
 	end
 	value := repl_get(store, id)
