@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 698 ordinary-path probes and 32 feature
+Status: the shared contract contains 706 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -179,8 +179,19 @@ zero, and classification distinguishes finite values, infinities and NaN.
 Optional calls, aliases, managed captures and failure classes share the reference
 contract. The REPL's existing `to_i` now also distinguishes non-finite inputs from
 finite out-of-range values. [Decision 0054](decisions/0054-float-receiver-mir.md)
-records the existing-operation lowering and boundary proofs. Float `to_s` and
-wider numeric package coverage remain open.
+records the existing-operation lowering and boundary proofs. Wider numeric
+package coverage remains open.
+
+Float and Boolean `to_s` now return ordinary Strings in files and the REPL.
+Float `puts` uses the same conversion. Finite values use shortest-roundtrip fixed
+decimal notation, with `.0` for whole values and both signed zeros. NaN and
+infinities preserve the reference spelling. Conversion mode, exact operand/result
+types and allocation effects belong to verified MIR; Boolean text is static.
+[Decision 0068](decisions/0068-scalar-string-conversion.md) records the bounded
+runtime, asymmetric rounding intervals and ordinary compiler self-use. Shared
+cases cover extreme values, optional calls, constants, receiver effects and
+rejections; the CLI authority checks 8,392 binary64 boundaries and retained calls.
+General REPL value-display formatting remains separate from `to_s` parity.
 
 ## Callable signatures and MIR foundation
 

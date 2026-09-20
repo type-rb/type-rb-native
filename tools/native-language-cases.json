@@ -194,13 +194,21 @@
         "float-to-i-outside",
         "float-to-i-negative-outside",
         "float-method-nullable-result",
-        "float-method-boolean-result"
+        "float-method-boolean-result",
+        "scalar-string-boundaries",
+        "scalar-string-managed",
+        "scalar-string-nullable",
+        "scalar-string-order",
+        "scalar-string-constants",
+        "float-string-argument",
+        "boolean-string-argument",
+        "scalar-string-type-error"
       ],
       "pending": [
         "All operators and assignment forms; mixed widening and every portable failure boundary",
         "Short-circuit side effects and invalid RHS diagnostics across nested control"
       ],
-      "note": "Integer receiver operations and Float abs/floor/ceil/round/finite?/infinite?/nan?/to_i use typed MIR and checked portable conversions. Shared probes cover ties, limits, subnormals, signed zero, NaN, infinities, optional calls and managed captures; broader numeric APIs and Float String conversion remain open."
+      "note": "Integer and Float receiver operations, scalar String conversion and Float output use typed MIR and checked portable conversions. Shared probes cover ties, asymmetric rounding intervals, limits, subnormals, signed zero, NaN, infinities, optional calls, constants and managed captures; broader numeric APIs and general REPL Float display remain open."
     },
     {
       "id": "bindings",
@@ -2513,20 +2521,24 @@
       },
       "native": {
         "check": {
-          "code": 1,
-          "stdout": "",
-          "stderr": "<case>/main.trb:3: error[TRBN4004]: puts does not yet support Float\n"
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
         },
         "build": {
-          "code": 1,
-          "stdout": "",
-          "stderr": "<case>/main.trb:3: error[TRBN4004]: puts does not yet support Float\n"
-        },
-        "execute": null,
-        "repl": {
           "code": 0,
           "stdout": "",
-          "stderr": "(trb):2: error[TRBN4004]: puts does not yet support Float\n(trb):1: error[TRBN4003]: unresolved function probe\n"
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "2.5\n-3\n42\ntrue\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "2.5\n-3\n42\ntrue\n",
+          "stderr": ""
         }
       }
     },
@@ -35110,6 +35122,390 @@
           "code": 0,
           "stdout": "\"end\" : String\nend\n",
           "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "scalar-string-boundaries",
+      "title": "Float and Boolean conversion, special values and rounding boundaries",
+      "declarations": "def power(exponent: Integer): Float\n\tmut value := 1.0\n\tmut index := 0\n\twhile index > exponent\n\t\tvalue = value / 2.0\n\t\tindex -= 1\n\tend\n\twhile index < exponent\n\t\tvalue = value * 2.0\n\t\tindex += 1\n\tend\n\treturn value\nend\n\ndef divide(value: Float): Float\n\treturn 1.0 / value\nend\n\n",
+      "body": "\tinfinity := divide(0.0)\n\tvalues := [0.0, - 0.0, 1.0, - 42.0, 0.1, 0.0000001, 100000000000000000000000.0, 1.2345678901234567, power(- 1017), - power(- 695), power(- 1074), 1.9999999999999998 * power(1023), infinity, - infinity, infinity - infinity]\n\tvalues.each do |value|\n\t\tputs(value.to_s())\n\t\tputs(value)\n\tend\n\tputs(true.to_s())\n\tputs(false.to_s())",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "0.0\n0.0\n0.0\n0.0\n1.0\n1.0\n-42.0\n-42.0\n0.1\n0.1\n0.0000001\n0.0000001\n100000000000000000000000.0\n100000000000000000000000.0\n1.2345678901234567\n1.2345678901234567\n0.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007120236347223045\n0.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007120236347223045\n-0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006083493012144512\n-0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006083493012144512\n0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005\n0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005\n179769313486231570000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0\n179769313486231570000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0\nInfinity\nInfinity\n-Infinity\n-Infinity\nNaN\nNaN\ntrue\nfalse\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "+Inf : Float\n[0, -0, 1, -42, 0.1, 1e-07, 1e+23, 1.2345678901234567, 7.120236347223045e-307, -6.083493012144512e-210, 5e-324, 1.7976931348623157e+308, +Inf, -Inf, NaN] : Array<Float>\n0.0\n0.0\n0.0\n0.0\n1.0\n1.0\n-42.0\n-42.0\n0.1\n0.1\n0.0000001\n0.0000001\n100000000000000000000000.0\n100000000000000000000000.0\n1.2345678901234567\n1.2345678901234567\n0.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007120236347223045\n0.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007120236347223045\n-0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006083493012144512\n-0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006083493012144512\n0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005\n0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005\n179769313486231570000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0\n179769313486231570000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0\nInfinity\nInfinity\n-Infinity\n-Infinity\nNaN\nNaN\ntrue\nfalse\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "0.0\n0.0\n0.0\n0.0\n1.0\n1.0\n-42.0\n-42.0\n0.1\n0.1\n0.0000001\n0.0000001\n100000000000000000000000.0\n100000000000000000000000.0\n1.2345678901234567\n1.2345678901234567\n0.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007120236347223045\n0.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007120236347223045\n-0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006083493012144512\n-0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006083493012144512\n0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005\n0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005\n179769313486231570000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0\n179769313486231570000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0\nInfinity\nInfinity\n-Infinity\n-Infinity\nNaN\nNaN\ntrue\nfalse\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "inf : Float\n[0, -0, 1, -42, 0.10000000000000001, 9.9999999999999995e-08, 9.9999999999999992e+22, 1.2345678901234567, 7.1202363472230444e-307, -6.0834930121445114e-210, 4.9406564584124654e-324, 1.7976931348623157e+308, inf, -inf, nan] : Array<Float>\n0.0\n0.0\n0.0\n0.0\n1.0\n1.0\n-42.0\n-42.0\n0.1\n0.1\n0.0000001\n0.0000001\n100000000000000000000000.0\n100000000000000000000000.0\n1.2345678901234567\n1.2345678901234567\n0.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007120236347223045\n0.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007120236347223045\n-0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006083493012144512\n-0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006083493012144512\n0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005\n0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005\n179769313486231570000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0\n179769313486231570000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0\nInfinity\nInfinity\n-Infinity\n-Infinity\nNaN\nNaN\ntrue\nfalse\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "scalar-string-managed",
+      "title": "Scalar String conversion across callbacks, retained values and optional calls",
+      "declarations": "def optional(value: Float?): String?\n\treturn value&.to_s()\nend\n\ndef mark(mut calls: Array<Integer>, value: Float): Float\n\tcalls[0] += 1\n\treturn value\nend\n\n",
+      "body": "\tmut calls := [0]\n\tconvert := fn(value: Float): String\n\t\treturn \"held:\" + value.to_s()\n\tend\n\tmut values := [convert(0.1)]\n\tmut index := 0\n\twhile index < 1000\n\t\tvalues.push(convert(mark(calls, 1.25)))\n\t\tindex += 1\n\tend\n\tputs(values.first())\n\tputs(values.last())\n\tputs(calls[0])\n\tputs(optional(nil) == nil)\n\tpresent := optional(- 2.5)\n\tif present != nil\n\t\tputs(present)\n\tend\n\ttable := { true.to_s() => false.to_s() }\n\tputs(table[\"true\"])",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "held:0.1\nheld:1.25\n1000\ntrue\n-2.5\nfalse\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "[0] : Array<Integer> [mut]\n#<fn> : (Float) -> String\n[\"held:0.1\"] : Array<String> [mut]\n0 : Integer [mut]\n1000 : Integer [mut]\nheld:0.1\nheld:1.25\n1000\ntrue\n\"-2.5\" : String?\n-2.5\n{\"true\": \"false\"} : Hash<String, String>\nfalse\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "held:0.1\nheld:1.25\n1000\ntrue\n-2.5\nfalse\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "[0] : Array<Integer> [mut]\n#<fn> : (Float) -> String\n[\"held:0.1\"] : Array<String> [mut]\n0 : Integer [mut]\n1000 : Integer\nheld:0.1\nheld:1.25\n1000\ntrue\n\"-2.5\" : String?\n-2.5\n{\"true\" => \"false\"} : Hash<String, String>\nfalse\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "scalar-string-nullable",
+      "title": "Nullable Float and Boolean conversion preserves absence and values",
+      "declarations": "def probe(number: Float?, flag: Boolean?)\na := number&.to_s()\nb := flag&.to_s()\nif a != nil\nputs(a)\nelse\nputs(\"absent number\")\nend\nif b != nil\nputs(b)\nelse\nputs(\"absent flag\")\nend\nend\n",
+      "body": "probe(nil, nil)\nprobe(1.25, true)\nprobe(-2.5, false)",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "absent number\nabsent flag\n1.25\ntrue\n-2.5\nfalse\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "absent number\nabsent flag\n1.25\ntrue\n-2.5\nfalse\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "absent number\nabsent flag\n1.25\ntrue\n-2.5\nfalse\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "absent number\nabsent flag\n1.25\ntrue\n-2.5\nfalse\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "scalar-string-order",
+      "title": "Conversion and Float puts evaluate receivers once in authored order",
+      "declarations": "def mark(mut calls: Array<Integer>, value: Float): Float\ncalls[0] += 1\nputs(calls[0])\nreturn value\nend\n",
+      "body": "mut calls := [0]\nputs(mark(calls, 0.1).to_s() + \":\" + mark(calls, 1.25).to_s())\nputs(mark(calls, -2.5))\nputs(calls[0])",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "1\n2\n0.1:1.25\n3\n-2.5\n3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "[0] : Array<Integer> [mut]\n1\n2\n0.1:1.25\n3\n-2.5\n3\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "1\n2\n0.1:1.25\n3\n-2.5\n3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "[0] : Array<Integer> [mut]\n1\n2\n0.1:1.25\n3\n-2.5\n3\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "scalar-string-constants",
+      "title": "Converted constants retain exact strings across module identity and callbacks",
+      "declarations": "module Values\nSmall: String := 0.1.to_s()\nFlag: String := true.to_s()\nend\n",
+      "body": "puts(Values::Small)\nputs(Values::Flag)\nconvert := fn(value: Float): String; return Values::Small + \":\" + value.to_s(); end\nputs(convert(1.25))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "0.1\ntrue\n0.1:1.25\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "0.1\ntrue\n#<fn> : (Float) -> String\n0.1:1.25\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "0.1\ntrue\n0.1:1.25\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "0.1\ntrue\n#<fn> : (Float) -> String\n0.1:1.25\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "float-string-argument",
+      "title": "Float to_s rejects unexpected arguments",
+      "declarations": "",
+      "body": "puts(1.25.to_s(1))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:6: error[TRB3000]: to_s() expects 0..0 arguments, got 1\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:6: error[TRB3000]: to_s() expects 0..0 arguments, got 1\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1:6: error[TRB3000]: to_s() expects 0..0 arguments, got 1\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4002]: expected ), found 1\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4002]: expected ), found 1\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1: error[TRBN4002]: expected ), found 1\n"
+        }
+      }
+    },
+    {
+      "id": "boolean-string-argument",
+      "title": "Boolean to_s rejects unexpected arguments",
+      "declarations": "",
+      "body": "puts(true.to_s(1))",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:6: error[TRB3000]: to_s() expects 0..0 arguments, got 1\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:6: error[TRB3000]: to_s() expects 0..0 arguments, got 1\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1:6: error[TRB3000]: to_s() expects 0..0 arguments, got 1\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4002]: expected ), found 1\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4002]: expected ), found 1\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1: error[TRBN4002]: expected ), found 1\n"
+        }
+      }
+    },
+    {
+      "id": "scalar-string-type-error",
+      "title": "Scalar String results cannot initialize a numeric binding",
+      "declarations": "",
+      "body": "value: Integer := 1.25.to_s()\nputs(value)",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:19: error[TRB3000]: cannot assign String to Integer\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:19: error[TRB3000]: cannot assign String to Integer\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1:19: error[TRB3000]: cannot assign String to Integer\n(trb):1:6: error[TRB3000]: value is not declared\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: expected Integer, found String\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: expected Integer, found String\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1: error[TRBN4004]: expected Integer, found String\n(trb):1: error[TRBN4003]: unresolved local value\n"
         }
       }
     }

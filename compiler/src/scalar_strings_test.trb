@@ -1,0 +1,39 @@
+import { managed_mir_test_fixture } from hash_value_mir_test
+import { check } from compiler
+import { compiler_test_instruction_with_cell } from compiler_test
+import { logical_checked_source } from logical_test
+import { mir_instruction_effects } from mir_roots
+import { verify_mir } from mir_verifier
+import { describe, expect, test } from trb/std/test
+
+describe("Scalar String conversion MIR") do
+	test("formats special values and asymmetric rounding boundaries after erasing source") do
+		managed_mir_test_fixture("scalar-string-values", 1)
+	end
+
+	test("retains results and caller roots through callbacks optional calls and collection") do
+		managed_mir_test_fixture("scalar-string-managed", 1)
+	end
+
+	test("verifies exact conversion modes and allocation effects independently") do
+		mut state := logical_checked_source("def main()\nputs(1.25.to_s())\nputs(true.to_s())\nend\n")
+		expect(check(state)).to_be_true()
+		mut found := 0
+		state.scalar_mir.instructions.each.with_index do |instruction, index|
+			if instruction.kind == 17
+				if instruction.payload == 4
+					expect(mir_instruction_effects(state.scalar_mir, instruction)).to_equal(9)
+				else
+					expect(instruction.payload).to_equal(5)
+					expect(mir_instruction_effects(state.scalar_mir, instruction)).to_equal(0)
+				end
+				state.scalar_mir.instructions[index] = compiler_test_instruction_with_cell(instruction, 4, 1)
+				expect(verify_mir(state.scalar_mir, true).empty?()).to_be_false()
+				state.scalar_mir.instructions[index] = instruction
+				found += 1
+			end
+		end
+		expect(found).to_equal(2)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+	end
+end

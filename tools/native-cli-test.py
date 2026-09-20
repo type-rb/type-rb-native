@@ -32,6 +32,7 @@ subprocess.run([sys.executable, str(repository / "tools/native-array-query-test.
 subprocess.run([sys.executable, str(repository / "tools/native-array-join-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-string-trimming-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-symbol-test.py"), str(binary)], check=True)
+subprocess.run([sys.executable, str(repository / "tools/native-scalar-strings-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-hash-range-test.py"), str(binary)], check=True)
 
 with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
