@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 468 ordinary-path probes and 32 feature
+Status: the shared contract contains 509 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -72,8 +72,23 @@ RHS effects, including shortening and rebuilding storage. Loop-header proofs
 cannot retain Array data or length across these mutations. Shared cases cover
 these combinations, argument effects, optional calls, lexical transfers and
 invalid capabilities/arity. [Decision 0060](decisions/0060-array-mutation-mir.md)
-records verifier, liveness, storage and GC controls. Membership, concatenation,
-joining, uniqueness, sorting and safe collection forms remain open.
+records verifier, liveness, storage and GC controls.
+
+## Array queries and concatenation
+
+Array `include?`, `count`, `index`, `uniq` and `concat` now lower through existing
+typed MIR comparisons, loops, nullable construction and Array operations. Search
+uses portable primitive/payloadless-enum equality; `index` returns `Integer?`.
+Uniqueness retains first occurrences, including the first signed zero, while NaN
+remains unequal to itself. Concatenation and uniqueness allocate fresh outer
+storage and retain managed element identity. Arguments run once after capturing
+the receiver, and before reading its current contents.
+
+The shared contract covers Unicode/NUL, nullable calls, managed aliases, generic
+concatenation, receiver mutation/rebinding, lexical transfers and rejection
+boundaries. Source-erased/reordered MIR and forced-GC checks verify loop and root
+ownership; see [decision 0061](decisions/0061-array-query-loops.md). Array joining,
+sorting and safe collection forms remain open.
 
 ## Integer receiver operations
 

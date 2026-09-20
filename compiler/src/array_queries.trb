@@ -1,0 +1,156 @@
+import { CheckedValue, checked_mir_value, checked_value, scalar_mir_binary, scalar_mir_literal } from checked_values
+import { mir_enum_operation } from enum_mir
+import { enum_payloadless, find_enum_type } from enum_types
+import { mir_checked_array_operation } from mir_arrays
+import { mir_binding_initialize, mir_binding_read } from mir_bindings
+import { mir_control_active, mir_control_branch, mir_control_enter, mir_control_jump, mir_control_loop_begin, mir_control_loop_branch, mir_control_loop_end, mir_control_prepare } from mir_control
+import { mir_checked_string_binary } from mir_strings
+import { mir_checked_nullable, mir_nullable_coerce } from nullable_mir
+import { CheckedLocals, CompilerState, local_bind } from state
+import { load_integer, store_integer } from storage
+import { array_element_type } from type_resolution
+
+def array_query_comparable(state: CompilerState, element: String): Boolean
+	if element == "Integer" || element == "Float" || element == "Boolean" || element == "String"
+		return true
+	end
+	owner := find_enum_type(state, element)
+	if owner >= 0
+		return enum_payloadless(state, owner)
+	end
+	return false
+end
+
+def mir_array_query_binding(mut state: CompilerState, mut locals: CheckedLocals, name: String, value: CheckedValue, origin: Integer): Integer
+	slot := local_bind(locals, name, value.type_name, 1)
+	mir_binding_initialize(state, locals, slot, value, origin)
+	return slot
+end
+
+def mir_array_query_equal(mut state: CompilerState, mut locals: CheckedLocals, left: CheckedValue, right: CheckedValue, origin: Integer): CheckedValue
+	if left.type_name == "String"
+		return mir_checked_string_binary(state, locals, left, right, "==", origin)
+	elsif find_enum_type(state, left.type_name) >= 0
+		return mir_enum_operation(state, locals, 40, left, checked_mir_value(right), 6, "Boolean", origin)
+	end
+	return scalar_mir_binary(state, locals, "==", left, right, "Boolean", origin)
+end
+
+def mir_array_query_advance(mut state: CompilerState, mut locals: CheckedLocals, cursor: Integer, origin: Integer)
+	index := mir_binding_read(state, locals, cursor, origin)
+	one := scalar_mir_literal(state, locals, "Integer", origin, "1")
+	next_index := scalar_mir_binary(state, locals, "+", index, one, "Integer", origin)
+	store_integer(locals.mir_values, cursor, checked_mir_value(next_index) + 1)
+end
+
+# Private bindings cross the same typed edges as authored locals. Comparisons,
+# short circuiting, nullable results and allocation remain ordinary MIR facts.
+def mir_array_search(mut state: CompilerState, mut locals: CheckedLocals, kind: Integer, receiver: CheckedValue, argument: CheckedValue, origin: Integer): CheckedValue
+	mut output := "Boolean"
+	if kind == 11
+		output = "Integer"
+	elsif kind == 12
+		output = "Integer?"
+	end
+	mir_control_prepare(state, locals)
+	if !mir_control_active(locals)
+		return checked_value(output, 0, origin, 0)
+	end
+	outer := locals.count[0]
+	line := load_integer(state.token_lines, origin)
+	owner := mir_array_query_binding(state, locals, "$array.owner", receiver, origin)
+	needle := mir_array_query_binding(state, locals, "$array.needle", argument, origin)
+	zero := scalar_mir_literal(state, locals, "Integer", origin, "0")
+	cursor := mir_array_query_binding(state, locals, "$array.cursor", zero, origin)
+	mut initial := scalar_mir_literal(state, locals, "Integer", origin, "0")
+	if kind == 10
+		initial = scalar_mir_literal(state, locals, "Boolean", origin, "false")
+	elsif kind == 12
+		initial = mir_checked_nullable(state, locals, 33, zero, output, 0, origin)
+	end
+	result_slot := mir_array_query_binding(state, locals, "$array.result", initial, origin)
+	exit := mir_control_loop_begin(state, locals, origin, line)
+	array := mir_binding_read(state, locals, owner, origin)
+	size := mir_checked_array_operation(state, locals, 20, checked_mir_value(array), - 1, 0, "Integer", origin)
+	index := mir_binding_read(state, locals, cursor, origin)
+	condition := scalar_mir_binary(state, locals, "<", index, size, "Boolean", origin)
+	mir_control_loop_branch(state, locals, condition, exit, line)
+	body_array := mir_binding_read(state, locals, owner, origin)
+	body_index := mir_binding_read(state, locals, cursor, origin)
+	item := mir_checked_array_operation(state, locals, 22, checked_mir_value(body_array), checked_mir_value(body_index), 0, array_element_type(receiver.type_name), origin)
+	wanted := mir_binding_read(state, locals, needle, origin)
+	equal := mir_array_query_equal(state, locals, item, wanted, origin)
+	alternate := mir_control_branch(state, locals, equal, line)
+	mut matched := scalar_mir_literal(state, locals, "Boolean", origin, "true")
+	if kind == 11
+		count := mir_binding_read(state, locals, result_slot, origin)
+		one := scalar_mir_literal(state, locals, "Integer", origin, "1")
+		matched = scalar_mir_binary(state, locals, "+", count, one, "Integer", origin)
+	elsif kind == 12
+		matched = mir_nullable_coerce(state, locals, mir_binding_read(state, locals, cursor, origin), output, origin)
+	end
+	store_integer(locals.mir_values, result_slot, checked_mir_value(matched) + 1)
+	if kind == 11
+		mir_control_jump(state, locals, alternate, locals.count[0])
+	else
+		mir_control_jump(state, locals, exit, locals.count[0])
+	end
+	mir_control_enter(state, locals, alternate, line)
+	mir_array_query_advance(state, locals, cursor, origin)
+	mir_control_loop_end(state, locals, line)
+	result := mir_binding_read(state, locals, result_slot, origin)
+	locals.count[0] = outer
+	return checked_value(output, result.category, origin, 0)
+end
+
+def mir_array_append_all(mut state: CompilerState, mut locals: CheckedLocals, receiver: CheckedValue, target: CheckedValue, unique: Boolean, origin: Integer)
+	outer := locals.count[0]
+	line := load_integer(state.token_lines, origin)
+	owner := mir_array_query_binding(state, locals, "$array.source", receiver, origin)
+	destination := mir_array_query_binding(state, locals, "$array.destination", target, origin)
+	zero := scalar_mir_literal(state, locals, "Integer", origin, "0")
+	cursor := mir_array_query_binding(state, locals, "$array.position", zero, origin)
+	exit := mir_control_loop_begin(state, locals, origin, line)
+	array := mir_binding_read(state, locals, owner, origin)
+	size := mir_checked_array_operation(state, locals, 20, checked_mir_value(array), - 1, 0, "Integer", origin)
+	index := mir_binding_read(state, locals, cursor, origin)
+	condition := scalar_mir_binary(state, locals, "<", index, size, "Boolean", origin)
+	mir_control_loop_branch(state, locals, condition, exit, line)
+	body_array := mir_binding_read(state, locals, owner, origin)
+	body_index := mir_binding_read(state, locals, cursor, origin)
+	item := mir_checked_array_operation(state, locals, 22, checked_mir_value(body_array), checked_mir_value(body_index), 0, array_element_type(receiver.type_name), origin)
+	mut alternate :=- 1
+	if unique
+		current := mir_binding_read(state, locals, destination, origin)
+		present := mir_array_search(state, locals, 10, current, item, origin)
+		absent := scalar_mir_literal(state, locals, "Boolean", origin, "false")
+		missing := scalar_mir_binary(state, locals, "==", present, absent, "Boolean", origin)
+		alternate = mir_control_branch(state, locals, missing, line)
+	end
+	output := mir_binding_read(state, locals, destination, origin)
+	mir_checked_array_operation(state, locals, 24, checked_mir_value(output), checked_mir_value(item), 0, "Void", origin)
+	if unique
+		mir_control_jump(state, locals, alternate, locals.count[0])
+		mir_control_enter(state, locals, alternate, line)
+	end
+	mir_array_query_advance(state, locals, cursor, origin)
+	mir_control_loop_end(state, locals, line)
+	locals.count[0] = outer
+end
+
+def mir_array_query(mut state: CompilerState, mut locals: CheckedLocals, kind: Integer, receiver: CheckedValue, argument: CheckedValue, origin: Integer): CheckedValue
+	if kind <= 12
+		needle := mir_nullable_coerce(state, locals, argument, array_element_type(receiver.type_name), origin)
+		return mir_array_search(state, locals, kind, receiver, needle, origin)
+	end
+	mir_control_prepare(state, locals)
+	if !mir_control_active(locals)
+		return checked_value(receiver.type_name, 0, origin, 1)
+	end
+	result := mir_checked_array_operation(state, locals, 19, - 1, - 1, 0, receiver.type_name, origin)
+	mir_array_append_all(state, locals, receiver, result, kind == 13, origin)
+	if kind == 14
+		mir_array_append_all(state, locals, argument, result, false, origin)
+	end
+	return checked_value(result.type_name, result.category, origin, 1)
+end

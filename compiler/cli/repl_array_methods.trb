@@ -1,6 +1,9 @@
-import { ReplStore, repl_boolean, repl_value } from repl_model
+import { ReplStore, repl_boolean, repl_integer, repl_value, repl_variant } from repl_model
 
 def repl_array_method(mut store: ReplStore, kind: Integer, receiver: Integer, argument: Integer): Integer
+	if kind >= 10
+		return repl_array_query(store, kind, receiver, argument)
+	end
 	values := store.children[receiver]
 	if kind >= 7
 		if kind == 7
@@ -63,6 +66,56 @@ def repl_array_method(mut store: ReplStore, kind: Integer, receiver: Integer, ar
 		end
 		children.push(values[selected])
 		index += 1
+	end
+	return repl_value(store, store.types[receiver], 0, 0.0, "", children)
+end
+
+# The checker restricts equality queries to portable scalar/payloadless values.
+def repl_array_query_equal(store: ReplStore, first: Integer, second: Integer): Boolean
+	if store.types[first] == "String"
+		return store.texts[first] == store.texts[second]
+	elsif store.types[first] == "Float"
+		return store.floats[first] == store.floats[second]
+	end
+	return repl_variant(store, first) == repl_variant(store, second)
+end
+
+def repl_array_query(mut store: ReplStore, kind: Integer, receiver: Integer, argument: Integer): Integer
+	values := store.children[receiver]
+	mut count := 0
+	mut children: Array<Integer> := []
+	values.each.with_index do |value, index|
+		if kind == 14
+			children.push(value)
+		elsif kind == 13
+			mut present := false
+			children.each do |previous|
+				if repl_array_query_equal(store, previous, value)
+					present = true
+					break
+				end
+			end
+			if !present
+				children.push(value)
+			end
+		elsif repl_array_query_equal(store, value, argument)
+			if kind == 10
+				return repl_boolean(store, true)
+			elsif kind == 12
+				found := repl_integer(store, index)
+				return repl_value(store, "Integer?", 0, 0.0, "", [found])
+			end
+			count += 1
+		end
+	end
+	if kind == 10
+		return repl_boolean(store, false)
+	elsif kind == 11
+		return repl_integer(store, count)
+	elsif kind == 12
+		return repl_value(store, "Integer?", 0, 0.0, "", store.children[0])
+	elsif kind == 14
+		store.children[argument].each { |value| children.push(value) }
 	end
 	return repl_value(store, store.types[receiver], 0, 0.0, "", children)
 end
