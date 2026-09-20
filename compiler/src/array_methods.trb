@@ -1,0 +1,57 @@
+import { CheckedValue, checked_mir_value, checked_value, scalar_mir_binary, scalar_mir_instruction, scalar_mir_literal } from checked_values
+import { mir_checked_array_operation } from mir_arrays
+import { mir_control_active, mir_control_prepare } from mir_control
+import { array_element_type } from type_resolution
+import { CheckedLocals, CompilerState } from state
+import { load_integer } from storage
+
+def array_method_kind(name: String): Integer
+	if name == "empty?"
+		return 1
+	elsif name == "first"
+		return 2
+	elsif name == "last"
+		return 3
+	elsif name == "dup"
+		return 4
+	elsif name == "reverse"
+		return 5
+	elsif name == "slice"
+		return 6
+	end
+	return 0
+end
+
+def array_method_arity(kind: Integer): Integer
+	if kind == 6
+		return 1
+	end
+	return 0
+end
+
+def mir_array_method(mut state: CompilerState, mut locals: CheckedLocals, kind: Integer, receiver: CheckedValue, argument: CheckedValue, origin: Integer): CheckedValue
+	if kind >= 4
+		mut bounds :=- 1
+		if kind == 6
+			bounds = checked_mir_value(argument)
+		end
+		return mir_checked_array_operation(state, locals, 47, checked_mir_value(receiver), bounds, kind - 4, receiver.type_name, origin)
+	end
+	mir_control_prepare(state, locals)
+	zero := scalar_mir_literal(state, locals, "Integer", origin, "0")
+	size := mir_checked_array_operation(state, locals, 20, checked_mir_value(receiver), - 1, 0, "Integer", origin)
+	if kind == 1
+		return scalar_mir_binary(state, locals, "==", size, zero, "Boolean", origin)
+	end
+	present := scalar_mir_binary(state, locals, ">", size, zero, "Boolean", origin)
+	if mir_control_active(locals)
+		scalar_mir_instruction(state, locals, 43, - 1, checked_mir_value(present), - 1, 2, locals.mir_state[3], load_integer(state.token_lines, origin))
+	end
+	mut index := checked_mir_value(zero)
+	if kind == 3
+		one := scalar_mir_literal(state, locals, "Integer", origin, "1")
+		index = checked_mir_value(scalar_mir_binary(state, locals, "-", size, one, "Integer", origin))
+	end
+	result := mir_checked_array_operation(state, locals, 22, checked_mir_value(receiver), index, 0, array_element_type(receiver.type_name), origin)
+	return checked_value(result.type_name, result.category, origin, 1)
+end

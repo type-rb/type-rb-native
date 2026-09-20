@@ -399,3 +399,42 @@
 | String escape invalid large unicode | rejects as reference | rejects as reference | not reached | rejects as reference |
 | String escape invalid last surrogate | rejects as reference | rejects as reference | not reached | rejects as reference |
 | String escape invalid large octal | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array edges | accepts | accepts | matches reference | matches reference |
+| Array empty | accepts | accepts | matches reference | matches reference |
+| Array copies | accepts | accepts | matches reference | matches reference |
+| Array shallow | accepts | accepts | matches reference | matches reference |
+| Array slice live | accepts | accepts | matches reference | matches reference |
+| Array slice rebind | accepts | accepts | matches reference | matches reference |
+| Array first empty | accepts | accepts | differs | rejects as reference |
+| Array last empty | accepts | accepts | differs | rejects as reference |
+| Array slice negative | accepts | accepts | differs | rejects as reference |
+| Array optional | accepts | accepts | matches reference | matches reference |
+| Array borrowed mutable | accepts | accepts | matches reference | matches reference |
+| Array borrowed readonly | accepts | accepts | matches reference | matches reference |
+| Array temporary first mutation | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array nullable items | accepts | accepts | matches reference | matches reference |
+| Array float boolean string | accepts | accepts | matches reference | matches reference |
+| Array receiver order | accepts | accepts | matches reference | matches reference |
+| Array optional slice | accepts | accepts | matches reference | matches reference |
+| Array generic managed | accepts; reference rejects | accepts; reference rejects | differs | output differs |
+| Array enum items | accepts | accepts | matches reference | matches reference |
+| Array shallow callable | accepts | accepts | matches reference | matches reference |
+| Array slice boundaries | accepts | accepts | matches reference | matches reference |
+| Array copy fresh outer | accepts | accepts | matches reference | matches reference |
+| Array slice return | accepts | accepts | matches reference | matches reference |
+| Array slice next | accepts | accepts | matches reference | matches reference |
+| Array invalid reversed | accepts | accepts | differs | rejects as reference |
+| Array invalid past | accepts | accepts | differs | rejects as reference |
+| Array invalid inclusive end | accepts | accepts | differs | rejects as reference |
+| Array invalid max exclusive | accepts | accepts | differs | rejects as reference |
+| Array invalid max inclusive | accepts | accepts | differs | rejects as reference |
+| Array invalid min start | accepts | accepts | differs | rejects as reference |
+| Array invalid emptypredicate arity | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array invalid first arity | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array invalid last arity | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array invalid dup arity | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array invalid reverse arity | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array invalid slice type | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array invalid slice arity | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array temporary copy mutation | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array callable result | accepts; reference rejects | accepts; reference rejects | differs | output differs |

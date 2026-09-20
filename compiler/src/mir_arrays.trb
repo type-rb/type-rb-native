@@ -3,7 +3,7 @@ import { CheckedValue, checked_bound_value, checked_mir_value, checked_value, mi
 import { MirBlock, MirFunction, MirIndexedTarget, MirInstruction, MirModule } from mir
 import { mir_control_active, mir_control_prepare } from mir_control
 import { MirFlow, mir_flow_type, mir_value_available } from mir_flow
-import { mir_element_type, mir_semantic_type_id } from mir_types
+import { mir_element_type, mir_semantic_type_id, mir_semantic_type_name } from mir_types
 import { CheckedLocals, CompilerState } from state
 import { load_integer } from storage
 
@@ -13,11 +13,11 @@ import { load_integer } from storage
 def mir_checked_array_operation(mut state: CompilerState, mut locals: CheckedLocals, kind: Integer, first: Integer, second: Integer, payload: Integer, type_name: String, origin: Integer): CheckedValue
 	mir_control_prepare(state, locals)
 	type_id := mir_semantic_type_id(state.scalar_mir, type_name)
-	if (type_id == 0 && type_name != "Void") || (kind != 19 && first < 0) || (kind >= 21 && second < 0) || (kind == 23 && payload < 0)
+	if (type_id == 0 && type_name != "Void") || (kind != 19 && first < 0) || (((kind >= 21 && kind <= 24) || (kind == 47 && payload == 2)) && second < 0) || (kind == 23 && payload < 0)
 		scalar_mir_disable(locals)
 	end
 	mut mutable := 0
-	if kind == 19
+	if kind == 19 || kind == 47
 		mutable = 1
 	end
 	if !mir_control_active(locals)
@@ -74,7 +74,7 @@ end
 def mir_array_instruction_error(flow: MirFlow, native_module: MirModule, function: MirFunction, block: MirBlock, index: Integer, instruction: MirInstruction): String
 	kind := instruction.kind
 	result := mir_flow_type(flow, instruction.result)
-	if instruction.failure != - 1 || (kind != 23 && instruction.payload != 0)
+	if instruction.failure != - 1 || (kind != 23 && kind != 47 && instruction.payload != 0)
 		return "MIR Array operation shape differs"
 	end
 	if kind == 19
@@ -89,6 +89,19 @@ def mir_array_instruction_error(flow: MirFlow, native_module: MirModule, functio
 	element := mir_element_type(native_module, mir_flow_type(flow, instruction.first))
 	if element == 0
 		return "MIR Array owner type differs"
+	end
+	if kind == 47
+		if result != mir_flow_type(flow, instruction.first) || instruction.payload < 0 || instruction.payload > 2
+			return "MIR Array copy result or mode differs"
+		end
+		if instruction.payload < 2
+			if instruction.second != - 1
+				return "MIR Array copy has unexpected bounds"
+			end
+		elsif !mir_value_available(flow, block, index, instruction.second) || mir_semantic_type_name(native_module, mir_flow_type(flow, instruction.second)) != "Range<Integer>"
+			return "MIR Array slice requires available Integer bounds"
+		end
+		return ""
 	end
 	if kind == 20
 		if result != 1 || instruction.second != - 1
