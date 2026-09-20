@@ -3,7 +3,7 @@ import { check_union_member, narrow_union_discriminant } from union_members
 import { mir_literal_context } from literal_mir
 import { mir_literal_scalar } from nullable_mir
 import { find_newtype_in_module, find_newtype_type, newtype_equality_type, newtype_type } from newtype_types
-import { find_visible_newtype } from declaration_lookup
+import { find_visible_global, find_visible_newtype } from declaration_lookup
 import { newtype_method_function } from newtype_methods
 import { mir_newtype_operation } from newtype_mir
 import { mir_sliced_iteration_begin, mir_sliced_iteration_end } from sliced_iteration
@@ -58,7 +58,7 @@ import { float_literal_in_range, integer_literal_in_range, number_is_float } fro
 import { MirLoopTransfer, mir_loop_transfer_valid } from mir
 import { mir_checked_call, mir_checked_standard_call, mir_complete_arguments } from mir_calls
 import { mir_logical_begin, mir_logical_join } from mir_logical
-import { mir_checked_puts, mir_checked_string_binary, mir_checked_string_literal, mir_checked_string_operation } from mir_strings
+import { mir_checked_puts, mir_checked_string_binary, mir_checked_string_literal, mir_checked_string_operation, mir_puts_type } from mir_strings
 import { mir_control_active, mir_control_branch, mir_control_enter, mir_control_jump, mir_control_loop_begin, mir_control_loop_branch, mir_control_loop_end, mir_control_prepare, mir_control_return, mir_control_transfer } from mir_control
 import { binary_operator_id, declaration_start, parse_argument_label, syntax_block_end, syntax_conditional_tail, syntax_expression_precedence, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_statement_boundary } from parser
 import { resolve_body_names, standard_package_import, standard_package_root } from resolution
@@ -456,7 +456,7 @@ def check_primary(
 		application_finish := sparse_integer_at(state.checked[0].generic_application_finishes, origin)
 		if application_finish > origin
 			if sparse_integer_at(state.checked[0].generic_calls, application_finish) > 0
-				if local_find(locals, load_string(state.token_texts, origin)) >= 0
+				if local_find(locals, load_string(state.token_texts, origin)) >= 0 || find_visible_global(state, state.active_module[0], load_string(state.token_texts, origin), origin) >= 0
 					return type_diagnostic(state, line, "local value does not accept type arguments")
 				end
 				position[0] = application_finish
@@ -524,7 +524,7 @@ def check_primary(
 		if newtype_owner >= 0 && token_is(state, position[0], ".")
 			return checked_value(newtype_type(newtype_owner), 7, origin, 0)
 		end
-		constant := find_visible_declaration(state, state.active_module[0], name, 7)
+		constant := find_visible_global(state, state.active_module[0], name, origin)
 		if constant >= 0
 			return checked_global_read(state, locals, constant, origin)
 		end
@@ -640,7 +640,7 @@ def check_call(mut state: CompilerState, mut position: Array<Integer>, mut local
 				scalar_mir_disable(locals)
 			end
 			bindings.values[slot] = checked_mir_value(argument)
-			if (callee_name == "puts" && encoded == 0) && argument.type_name != "Never" && argument.type_name != "String" && argument.type_name != "Integer" && argument.type_name != "Boolean" && argument.type_name != "Float"
+			if (callee_name == "puts" && encoded == 0) && !mir_puts_type(argument.type_name)
 				diagnostic(state, "TRBN4004", line, "puts does not yet support " + type_display(state, argument.type_name))
 			end
 			if token_is(state, position[0], ",")

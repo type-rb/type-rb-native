@@ -95,7 +95,7 @@ values&.each_slice(2).with_index { |batch, index| puts(batch[0] + index) }
 ''')
     assert retained.stdout == ('nil : Array<Integer>? [mut]\n0 : Integer [mut]\n'
                                '[1, 2, 3] : Array<Integer>? [mut]\n3\n'
-                               'Array<Integer>\n3\nreloaded\n3\n1\n4\n'), retained
+                               'Array<Integer>?\n3\nreloaded\n3\n1\n4\n'), retained
     assert len(retained.stderr.splitlines()) == 1 and 'found Boolean' in retained.stderr, retained
 
 print('Sliced iteration, streamed bounds, fresh batches, managed lifetime and retained REPL checks passed')
