@@ -190,7 +190,12 @@
         "mutable-parameter",
         "top-level-constant",
         "unused-binding",
-        "immutable-assignment"
+        "immutable-assignment",
+        "array-mutation-assignment-unshift",
+        "array-mutation-assignment-rebuild",
+        "array-mutation-assignment-shrink",
+        "array-mutation-compound-shrink",
+        "array-mutation-invalid-target-first"
       ],
       "pending": [
         "Shadowing, duplicate declarations, unused/discard bindings and mutation through projections"
@@ -642,7 +647,7 @@
       "pending": [
         "Named declarations as values, callable equality, nullable signatures and remaining parameter-capability boundaries"
       ],
-      "note": "Ordinary files and retained REPL submissions construct authored fn values using analyzed captures and concrete checked bodies. Shared cases cover escaping/shared/iteration cells, generic/default signatures and cyclic containers; CLI controls additionally cover code/type ownership across new declarations, callbacks, failures, collection and replay. Named declarations used as values and the remaining listed boundaries are still open."
+      "note": "Ordinary files and retained REPL submissions construct authored fn values using analyzed captures and concrete checked bodies. Shared cases cover escaping/shared/iteration cells, generic/default signatures and cyclic containers; CLI controls additionally cover code/type ownership across new declarations, callbacks, failures, collection and replay. Named declarations used as values and the remaining listed boundaries are still open. Named-declaration values also depend on the unresolved reference check/build contract in type-rb/type-rb#711."
     },
     {
       "id": "arrays",
@@ -703,13 +708,45 @@
         "array-copy-invalid-slice-type",
         "array-copy-invalid-slice-arity",
         "array-copy-temporary-copy-mutation",
-        "array-copy-callable-first"
+        "array-copy-callable-first",
+        "array-mutation-edges",
+        "array-mutation-representations",
+        "array-mutation-nullable-items",
+        "array-mutation-managed-alias",
+        "array-mutation-receiver-order",
+        "array-mutation-argument-growth",
+        "array-mutation-argument-clear",
+        "array-mutation-optional",
+        "array-mutation-each-pop",
+        "array-mutation-each-shift",
+        "array-mutation-each-unshift",
+        "array-mutation-map-shift",
+        "array-mutation-select-shift",
+        "array-mutation-reduce-pop",
+        "array-mutation-find-shift",
+        "array-mutation-assignment-unshift",
+        "array-mutation-assignment-rebuild",
+        "array-mutation-assignment-shrink",
+        "array-mutation-compound-shrink",
+        "array-mutation-invalid-target-first",
+        "array-mutation-loop-shrink-bounds",
+        "array-mutation-transfer",
+        "array-mutation-readonly-pop",
+        "array-mutation-readonly-shift",
+        "array-mutation-readonly-unshift",
+        "array-mutation-temporary",
+        "array-mutation-wrong-element",
+        "array-mutation-missing-unshift",
+        "array-mutation-extra-pop",
+        "array-mutation-extra-shift",
+        "array-mutation-pop-empty",
+        "array-mutation-shift-empty"
       ],
       "pending": [
-        "Removal during assignments/iteration and retained managed receivers",
-        "Remaining Array receiver APIs and invalid element/mutation combinations"
+        "Remaining Array membership, concatenation, joining, uniqueness, sorting and safe APIs",
+        "Wider invalid element/mutation combinations"
       ],
-      "note": "Array empty?/first/last/dup/reverse/slice now share ordinary MIR and REPL semantics. Copies own fresh outer storage and preserve managed element identities. Shared cases cover receiver retention, range effects, optional calls, transfers, portable bounds and mutation capabilities. Two accepted Native cases expose separate pinned reference checker defects for generic and Function results."
+      "note": "Array edges/copies/slicing and mutable unshift/pop/shift share verified MIR and REPL semantics. Shared cases cover fresh outer storage, retained managed identities, optional calls, argument effects, live traversal and assignment-position rechecks. The exact reference includes the generic and Function-result checker fixes."
     },
     {
       "id": "hashes",
@@ -762,7 +799,14 @@
         "collection-search",
         "collection-search-managed",
         "search-result-type",
-        "search-indexed"
+        "search-indexed",
+        "array-mutation-each-pop",
+        "array-mutation-each-shift",
+        "array-mutation-each-unshift",
+        "array-mutation-map-shift",
+        "array-mutation-select-shift",
+        "array-mutation-reduce-pop",
+        "array-mutation-find-shift"
       ],
       "pending": [
         "Keyed sorting, slicing and Hash iteration",
@@ -21082,20 +21126,24 @@
       },
       "reference": {
         "check": {
-          "code": 1,
-          "stdout": "",
-          "stderr": "<case>/main.trb:6:8: error[TRB3000]: cannot infer T for dup()\n"
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
         },
         "build": {
-          "code": 1,
-          "stdout": "",
-          "stderr": "<case>/main.trb:6:8: error[TRB3000]: cannot infer T for dup()\n"
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
         },
-        "execute": null,
+        "execute": {
+          "code": 0,
+          "stdout": "AB\n2\n",
+          "stderr": ""
+        },
         "repl": {
           "code": 0,
-          "stdout": "",
-          "stderr": "(trb):6:8: error[TRB3000]: cannot infer T for dup()\n(trb):8:9: error[TRB3000]: duplicate is not a generic declaration\n(trb):8:9: error[TRB3000]: generic   is not callable\n(trb):5:1: error[TRB3000]: function probe is not declared or imported\n"
+          "stdout": "AB\n2\n",
+          "stderr": ""
         }
       }
     },
@@ -22085,20 +22133,1592 @@
       },
       "reference": {
         "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "7\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "7\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "array-mutation-edges",
+      "title": "Array mutation edges",
+      "declarations": "def probe()\nmut values := [1, 2, 3, 4]\nview := values\nvalues.unshift(0)\nputs(values.pop())\nputs(values.shift())\nview.each { |value| puts(value) }\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "4\n0\n1\n2\n3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "4\n0\n1\n2\n3\n",
+          "stderr": ""
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "4\n0\n1\n2\n3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "4\n0\n1\n2\n3\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "array-mutation-representations",
+      "title": "Array mutation representations",
+      "declarations": "def probe()\nmut floats := [1.5]\nfloats.unshift(-2.5)\nputs(floats.shift() == -2.5)\nputs(floats.pop() == 1.5)\nmut flags := [false]\nflags.unshift(true)\nputs(flags.pop())\nputs(flags.shift())\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\ntrue\nfalse\ntrue\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\ntrue\nfalse\ntrue\n",
+          "stderr": ""
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\ntrue\nfalse\ntrue\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\ntrue\nfalse\ntrue\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "array-mutation-nullable-items",
+      "title": "Array mutation nullable items",
+      "declarations": "def probe()\nmut values: Array<Integer?> := [nil]\nvalues.unshift(3)\nputs(values.pop() == nil)\nfirst := values.shift()\nif first != nil\nputs(first)\nend\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n3\n",
+          "stderr": ""
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n3\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "array-mutation-managed-alias",
+      "title": "Array mutation managed alias",
+      "declarations": "def probe()\nmut inner := [1]\nmut values := [inner]\nvalues.unshift(inner)\nmut removed := values.pop()\nremoved.push(2)\nputs(values[0].size())\nputs(inner.size())\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "2\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "2\n2\n",
+          "stderr": ""
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "2\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "2\n2\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "array-mutation-receiver-order",
+      "title": "Array mutation receiver order",
+      "declarations": "def probe()\nmut values := [1, 2]\nview := values\nargument := fn(): Integer\n values = [8, 9]\n return 7\nend\nvalues.unshift(argument())\nview.each { |item| puts(item) }\nvalues.each { |item| puts(item) }\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "7\n1\n2\n8\n9\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "7\n1\n2\n8\n9\n",
+          "stderr": ""
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "7\n1\n2\n8\n9\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "7\n1\n2\n8\n9\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "array-mutation-argument-growth",
+      "title": "Array mutation argument growth",
+      "declarations": "def probe()\nmut values := [1, 2, 3, 4]\nargument := fn(): Integer\n values.push(5)\n return 0\nend\nvalues.unshift(argument())\nvalues.each { |item| puts(item) }\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "0\n1\n2\n3\n4\n5\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "0\n1\n2\n3\n4\n5\n",
+          "stderr": ""
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "0\n1\n2\n3\n4\n5\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "0\n1\n2\n3\n4\n5\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "array-mutation-argument-clear",
+      "title": "Array mutation argument clear",
+      "declarations": "def probe()\nmut values := [1, 2]\nargument := fn(): Integer\n values.pop()\n values.pop()\n return 9\nend\nvalues.unshift(argument())\nputs(values.size())\nputs(values.first())\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "1\n9\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "1\n9\n",
+          "stderr": ""
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "1\n9\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "1\n9\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "array-mutation-optional",
+      "title": "Array mutation optional",
+      "declarations": "def probe()\nmut absent: Array<Integer>? := nil\nmut present: Array<Integer>? := [4]\nmut calls := 0\nargument := fn(): Integer\n calls += 1\n return 3\nend\nabsent&.unshift(argument())\npresent&.unshift(argument())\nputs(absent&.pop() == nil)\nlast := present&.pop()\nif last != nil\nputs(last)\nend\nputs(calls)\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n4\n1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n4\n1\n",
+          "stderr": ""
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n4\n1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n4\n1\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "array-mutation-each-pop",
+      "title": "Array mutation each pop",
+      "declarations": "def probe()\nmut values := [1, 2, 3, 4]\nview := values\nview.each do |value|\n puts(value)\n values.pop()\nend\nputs(values.size())\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "1\n2\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "1\n2\n2\n",
+          "stderr": ""
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "1\n2\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "1\n2\n2\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "array-mutation-each-shift",
+      "title": "Array mutation each shift",
+      "declarations": "def probe()\nmut values := [1, 2, 3, 4]\nvalues.each do |value|\n puts(value)\n values.shift()\nend\nvalues.each { |value| puts(value) }\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "1\n3\n3\n4\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "1\n3\n3\n4\n",
+          "stderr": ""
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "1\n3\n3\n4\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "1\n3\n3\n4\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "array-mutation-each-unshift",
+      "title": "Array mutation each unshift",
+      "declarations": "def probe()\nmut values := [1, 2, 3]\nmut inserted := false\nvalues.each do |value|\n puts(value)\n if !inserted\n  values.unshift(0)\n  inserted = true\n end\nend\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "1\n1\n2\n3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "1\n1\n2\n3\n",
+          "stderr": ""
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "1\n1\n2\n3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "1\n1\n2\n3\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "array-mutation-map-shift",
+      "title": "Array mutation map shift",
+      "declarations": "def probe()\nmut values := [1, 2, 3, 4]\nresult := values.map do |value|\n values.shift()\n value * 10\nend\nresult.each { |value| puts(value) }\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "10\n30\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "10\n30\n",
+          "stderr": ""
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "10\n30\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "10\n30\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "array-mutation-select-shift",
+      "title": "Array mutation select shift",
+      "declarations": "def probe()\nmut values := [1, 2, 3, 4]\nresult := values.select do |value|\n values.shift()\n value > 0\nend\nresult.each { |value| puts(value) }\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "1\n3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "1\n3\n",
+          "stderr": ""
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "1\n3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "1\n3\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "array-mutation-reduce-pop",
+      "title": "Array mutation reduce pop",
+      "declarations": "def probe()\nmut values := [1, 2, 3, 4]\nresult := values.reduce(0) do |sum, value|\n values.pop()\n sum + value\nend\nputs(result)\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "3\n",
+          "stderr": ""
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "3\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "array-mutation-find-shift",
+      "title": "Array mutation find shift",
+      "declarations": "def probe()\nmut values := [1, 2, 3]\nfound := values.find do |value|\n values.shift()\n value == 1\nend\nif found != nil\nputs(found)\nend\nputs(values.first())\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "1\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "1\n2\n",
+          "stderr": ""
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "1\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "1\n2\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "array-mutation-assignment-unshift",
+      "title": "Array mutation assignment unshift",
+      "declarations": "def probe()\nmut values := [1, 2]\nargument := fn(): Integer\n values.unshift(0)\n return 9\nend\nvalues[-1] += argument()\nvalues.each { |value| puts(value) }\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "0\n11\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "0\n11\n2\n",
+          "stderr": ""
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "0\n11\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "0\n11\n2\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "array-mutation-assignment-rebuild",
+      "title": "Array mutation assignment rebuild",
+      "declarations": "def probe()\nmut values := [1, 2]\nargument := fn(): Integer\n values.pop()\n values.push(3)\n return 9\nend\nvalues[-1] = argument()\nvalues.each { |value| puts(value) }\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "1\n9\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "1\n9\n",
+          "stderr": ""
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "1\n9\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "1\n9\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "array-mutation-assignment-shrink",
+      "title": "Array mutation assignment shrink",
+      "declarations": "def probe()\nmut values := [1, 2]\nargument := fn(): Integer\n puts(values.pop())\n return 9\nend\nvalues[-1] = argument()\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "2\n",
+          "stderr": "panic: index is out of bounds\n"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "2\n",
+          "stderr": "(trb):9: error: index is out of bounds\n"
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "2\n",
+          "stderrFirstLine": "panic: Array index is out of bounds"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "2\n",
+          "stderr": "(trb):7:1: error: array index is out of bounds\n"
+        }
+      }
+    },
+    {
+      "id": "array-mutation-compound-shrink",
+      "title": "Array mutation compound shrink",
+      "declarations": "def probe()\nmut values := [1, 2]\nargument := fn(): Integer\n puts(values.pop())\n return 9\nend\nvalues[-1] += argument()\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "2\n",
+          "stderr": "panic: index is out of bounds\n"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "2\n",
+          "stderr": "(trb):9: error: index is out of bounds\n"
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "2\n",
+          "stderrFirstLine": "panic: Array index is out of bounds"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "2\n",
+          "stderr": "(trb):7:1: error: array index is out of bounds\n"
+        }
+      }
+    },
+    {
+      "id": "array-mutation-invalid-target-first",
+      "title": "Array mutation invalid target first",
+      "declarations": "def probe()\nmut values := [1]\nargument := fn(): Integer\n puts(\"called\")\n values.unshift(0)\n return 9\nend\nvalues[1] = argument()\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderr": "panic: index is out of bounds\n"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):10: error: index is out of bounds\n"
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Array index is out of bounds"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):8:1: error: array index is out of bounds\n"
+        }
+      }
+    },
+    {
+      "id": "array-mutation-loop-shrink-bounds",
+      "title": "Array mutation loop shrink bounds",
+      "declarations": "def probe()\nmut values := [1]\nmut index := 0\nwhile index < values.size()\n values.pop()\n puts(values[index])\n index += 1\nend\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderr": "panic: index is out of bounds\n"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):10: error: index is out of bounds\n"
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Array index is out of bounds"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):6:7: error: array index is out of bounds\n"
+        }
+      }
+    },
+    {
+      "id": "array-mutation-transfer",
+      "title": "Array mutation transfer",
+      "declarations": "def probe()\nmut values := [1, 2]\nvalues.unshift(if true\n return\nelse\n 3\nend)\nputs(\"unreachable\")\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "array-mutation-readonly-pop",
+      "title": "Array mutation readonly pop",
+      "declarations": "def probe()\nvalues := [1]\nvalues.pop()\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
           "code": 1,
           "stdout": "",
-          "stderr": "<case>/main.trb:10:6: error[TRB3000]: function callback is not declared or imported\n"
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: pop receiver is immutable\n"
         },
         "build": {
           "code": 1,
           "stdout": "",
-          "stderr": "<case>/main.trb:10:6: error[TRB3000]: function callback is not declared or imported\n"
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: pop receiver is immutable\n"
         },
         "execute": null,
         "repl": {
           "code": 0,
           "stdout": "",
-          "stderr": "(trb):10:6: error[TRB3000]: function callback is not declared or imported\n(trb):1:1: error[TRB3000]: function probe is not declared or imported\n"
+          "stderr": "(trb):3: error[TRBN4004]: pop receiver is immutable\n(trb):1: error[TRBN4003]: unresolved function probe\n"
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:1: error[TRB3000]: values is immutable; declare it with mut to use pop()\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:1: error[TRB3000]: values is immutable; declare it with mut to use pop()\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3:1: error[TRB3000]: values is immutable; declare it with mut to use pop()\n(trb):1:1: error[TRB3000]: function probe is not declared or imported\n"
+        }
+      }
+    },
+    {
+      "id": "array-mutation-readonly-shift",
+      "title": "Array mutation readonly shift",
+      "declarations": "def probe()\nvalues := [1]\nvalues.shift()\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: shift receiver is immutable\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: shift receiver is immutable\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3: error[TRBN4004]: shift receiver is immutable\n(trb):1: error[TRBN4003]: unresolved function probe\n"
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:1: error[TRB3000]: values is immutable; declare it with mut to use shift()\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:1: error[TRB3000]: values is immutable; declare it with mut to use shift()\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3:1: error[TRB3000]: values is immutable; declare it with mut to use shift()\n(trb):1:1: error[TRB3000]: function probe is not declared or imported\n"
+        }
+      }
+    },
+    {
+      "id": "array-mutation-readonly-unshift",
+      "title": "Array mutation readonly unshift",
+      "declarations": "def probe()\nvalues := [1]\nvalues.unshift(0)\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: unshift receiver is immutable\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: unshift receiver is immutable\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3: error[TRBN4004]: unshift receiver is immutable\n(trb):1: error[TRBN4003]: unresolved function probe\n"
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:1: error[TRB3000]: values is immutable; declare it with mut to use unshift()\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:1: error[TRB3000]: values is immutable; declare it with mut to use unshift()\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3:1: error[TRB3000]: values is immutable; declare it with mut to use unshift()\n(trb):1:1: error[TRB3000]: function probe is not declared or imported\n"
+        }
+      }
+    },
+    {
+      "id": "array-mutation-temporary",
+      "title": "Array mutation temporary",
+      "declarations": "def probe()\nmut values := [1]\nvalues.dup().unshift(0)\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: unshift requires a mutable binding\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: unshift requires a mutable binding\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3: error[TRBN4004]: unshift requires a mutable binding\n(trb):1: error[TRBN4003]: unresolved function probe\n"
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:1: error[TRB3000]: unshift() requires a mutable binding\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:1: error[TRB3000]: unshift() requires a mutable binding\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3:1: error[TRB3000]: unshift() requires a mutable binding\n(trb):1:1: error[TRB3000]: function probe is not declared or imported\n"
+        }
+      }
+    },
+    {
+      "id": "array-mutation-wrong-element",
+      "title": "Array mutation wrong element",
+      "declarations": "def probe()\nmut values := [1]\nvalues.unshift(\"bad\")\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: expected Integer, found String\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: expected Integer, found String\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3: error[TRBN4004]: expected Integer, found String\n(trb):1: error[TRBN4003]: unresolved function probe\n"
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:16: error[TRB3000]: argument 1 to unshift() has type String, expected Integer\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:16: error[TRB3000]: argument 1 to unshift() has type String, expected Integer\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3:16: error[TRB3000]: argument 1 to unshift() has type String, expected Integer\n(trb):1:1: error[TRB3000]: function probe is not declared or imported\n"
+        }
+      }
+    },
+    {
+      "id": "array-mutation-missing-unshift",
+      "title": "Array mutation missing unshift",
+      "declarations": "def probe()\nmut values := [1]\nvalues.unshift()\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: Array<Integer> method argument count differs\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: Array<Integer> method argument count differs\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3: error[TRBN4004]: Array<Integer> method argument count differs\n(trb):1: error[TRBN4003]: unresolved function probe\n"
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:1: error[TRB3000]: unshift() expects 1..1 arguments, got 0\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:1: error[TRB3000]: unshift() expects 1..1 arguments, got 0\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3:1: error[TRB3000]: unshift() expects 1..1 arguments, got 0\n(trb):1:1: error[TRB3000]: function probe is not declared or imported\n"
+        }
+      }
+    },
+    {
+      "id": "array-mutation-extra-pop",
+      "title": "Array mutation extra pop",
+      "declarations": "def probe()\nmut values := [1]\nvalues.pop(0)\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: Array<Integer> method argument count differs\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: Array<Integer> method argument count differs\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3: error[TRBN4004]: Array<Integer> method argument count differs\n(trb):1: error[TRBN4003]: unresolved function probe\n"
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:1: error[TRB3000]: pop() expects 0..0 arguments, got 1\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:1: error[TRB3000]: pop() expects 0..0 arguments, got 1\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3:1: error[TRB3000]: pop() expects 0..0 arguments, got 1\n(trb):1:1: error[TRB3000]: function probe is not declared or imported\n"
+        }
+      }
+    },
+    {
+      "id": "array-mutation-extra-shift",
+      "title": "Array mutation extra shift",
+      "declarations": "def probe()\nmut values := [1]\nvalues.shift(0)\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: Array<Integer> method argument count differs\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4004]: Array<Integer> method argument count differs\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3: error[TRBN4004]: Array<Integer> method argument count differs\n(trb):1: error[TRBN4003]: unresolved function probe\n"
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:1: error[TRB3000]: shift() expects 0..0 arguments, got 1\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:1: error[TRB3000]: shift() expects 0..0 arguments, got 1\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3:1: error[TRB3000]: shift() expects 0..0 arguments, got 1\n(trb):1:1: error[TRB3000]: function probe is not declared or imported\n"
+        }
+      }
+    },
+    {
+      "id": "array-mutation-pop-empty",
+      "title": "Array mutation pop empty",
+      "declarations": "def probe()\nmut values: Array<Integer> := []\nvalues.pop()\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderr": "panic: Array is empty\n"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):5: error: Array is empty\n"
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Array is empty"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3:1: error: Array is empty\n"
+        }
+      }
+    },
+    {
+      "id": "array-mutation-shift-empty",
+      "title": "Array mutation shift empty",
+      "declarations": "def probe()\nmut values: Array<Integer> := []\nvalues.shift()\nend\n",
+      "body": "probe()",
+      "files": {},
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderr": "panic: Array is empty\n"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):5: error: Array is empty\n"
+        }
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 2,
+          "stdout": "",
+          "stderrFirstLine": "panic: Array is empty"
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):3:1: error: Array is empty\n"
         }
       }
     }

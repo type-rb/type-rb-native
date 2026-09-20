@@ -416,7 +416,7 @@
 | Array float boolean string | accepts | accepts | matches reference | matches reference |
 | Array receiver order | accepts | accepts | matches reference | matches reference |
 | Array optional slice | accepts | accepts | matches reference | matches reference |
-| Array generic managed | accepts; reference rejects | accepts; reference rejects | differs | output differs |
+| Array generic managed | accepts | accepts | matches reference | matches reference |
 | Array enum items | accepts | accepts | matches reference | matches reference |
 | Array shallow callable | accepts | accepts | matches reference | matches reference |
 | Array slice boundaries | accepts | accepts | matches reference | matches reference |
@@ -437,4 +437,36 @@
 | Array invalid slice type | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Array invalid slice arity | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Array temporary copy mutation | rejects as reference | rejects as reference | not reached | rejects as reference |
-| Array callable result | accepts; reference rejects | accepts; reference rejects | differs | output differs |
+| Array callable result | accepts | accepts | matches reference | matches reference |
+| Array mutation edges | accepts | accepts | matches reference | matches reference |
+| Array mutation representations | accepts | accepts | matches reference | matches reference |
+| Array mutation nullable items | accepts | accepts | matches reference | matches reference |
+| Array mutation managed alias | accepts | accepts | matches reference | matches reference |
+| Array mutation receiver order | accepts | accepts | matches reference | matches reference |
+| Array mutation argument growth | accepts | accepts | matches reference | matches reference |
+| Array mutation argument clear | accepts | accepts | matches reference | matches reference |
+| Array mutation optional | accepts | accepts | matches reference | matches reference |
+| Array mutation each pop | accepts | accepts | matches reference | matches reference |
+| Array mutation each shift | accepts | accepts | matches reference | matches reference |
+| Array mutation each unshift | accepts | accepts | matches reference | matches reference |
+| Array mutation map shift | accepts | accepts | matches reference | matches reference |
+| Array mutation select shift | accepts | accepts | matches reference | matches reference |
+| Array mutation reduce pop | accepts | accepts | matches reference | matches reference |
+| Array mutation find shift | accepts | accepts | matches reference | matches reference |
+| Array mutation assignment unshift | accepts | accepts | matches reference | matches reference |
+| Array mutation assignment rebuild | accepts | accepts | matches reference | matches reference |
+| Array mutation assignment shrink | accepts | accepts | differs | rejects as reference |
+| Array mutation compound shrink | accepts | accepts | differs | rejects as reference |
+| Array mutation invalid target first | accepts | accepts | differs | rejects as reference |
+| Array mutation loop shrink bounds | accepts | accepts | differs | rejects as reference |
+| Array mutation transfer | accepts | accepts | matches reference | matches reference |
+| Array mutation readonly pop | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array mutation readonly shift | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array mutation readonly unshift | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array mutation temporary | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array mutation wrong element | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array mutation missing unshift | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array mutation extra pop | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array mutation extra shift | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array mutation pop empty | accepts | accepts | differs | rejects as reference |
+| Array mutation shift empty | accepts | accepts | differs | rejects as reference |
