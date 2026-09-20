@@ -15,7 +15,6 @@ import { repl_closure, repl_closure_environment } from repl_callables
 import { select_checked_body } from state
 import { result_projection } from result_checked
 import { token_is, parse_type, skip_newlines } from syntax_tokens
-import { nullable_common } from nullable_types
 import { repl_absent, repl_none, repl_payload, repl_nullable_read } from repl_nullable
 import { standard_package_import } from resolution
 import { enum_argument_bindings, enum_type, find_enum_type, find_enum_variant } from enum_types
@@ -460,18 +459,17 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 	end
 	if text == "["
 		mut children: Array<Integer> := []
-		mut element := array_element_type(expected)
+		result_type := sparse_string_at(state.checked[0].array_literal_types, position[0] - 1)
+		element := array_element_type(result_type)
+		if element == "" && result_type != "Never"
+			store.error[0] = "Array literal has no checked element type"
+			return repl_reference(0)
+		end
 		skip_newlines(state, position)
 		while !token_is(state, position[0], "]")
 			value := repl_expression(state, position, store, environment, 1, element)
 			if environment.flow[0] != 0
 				return repl_reference(environment.flow[1])
-			end
-			if element == ""
-				element = repl_type(store, value.value)
-			end
-			if array_element_type(expected) == ""
-				element = nullable_common(element, repl_type(store, value.value))
 			end
 			children.push(value.value)
 			if token_is(state, position[0], ",")
@@ -488,7 +486,7 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 			children[child] = repl_coerce(store, children[child], element)
 			child += 1
 		end
-		return repl_reference(repl_value(store, "Array<" + element + ">", 0, 0.0, "", children))
+		return repl_reference(repl_value(store, result_type, 0, 0.0, "", children))
 	end
 	origin := position[0] - 1
 	selected_finish := sparse_integer_at(state.checked[0].resolved_finishes, origin)
@@ -1456,6 +1454,13 @@ def repl_control(mut state: CompilerState, mut position: Array<Integer>, mut sto
 			position[0] = branch.condition
 			condition := repl_expression(state, position, store, environment, 1, "Boolean")
 			selected = store.integers[condition.value] != 0
+		elsif control.kind == 2 && branch.condition >= 0 && sparse_integer_at(state.checked[0].union_pattern_origins, branch.condition) > 0
+			pattern := state.checked[0].union_patterns[sparse_integer_at(state.checked[0].union_pattern_origins, branch.condition) - 1]
+			payload := store.children[selector][0]
+			selected = repl_type(store, payload) == pattern.type_name
+			if selected
+				repl_bind(environment, load_string(state.token_texts, pattern.binding), payload, 0)
+			end
 		elsif control.kind == 2 && branch.condition >= 0 && find_enum_type(state, repl_type(store, selector)) >= 0
 			pattern := state.checked[0].enum_patterns[sparse_integer_at(state.checked[0].enum_pattern_origins, branch.condition) - 1]
 			selected = repl_variant(store, selector) == pattern.variant

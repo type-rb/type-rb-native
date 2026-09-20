@@ -1,6 +1,25 @@
 # Current reference compatibility
 
 The selected development reference is TypeRB `0.4.9-dev` at
+`569d49cf38b9ec59242f18219c356988ed5e82cd`, incorporating
+[PR #761](https://github.com/type-rb/type-rb/pull/761),
+[PR #762](https://github.com/type-rb/type-rb/pull/762) and
+[PR #763](https://github.com/type-rb/type-rb/pull/763).
+Qualified generic aliases and imported inferred constants retain their checked
+identity. Union assignments, discarded patterns, nullable injection/widening,
+generic substitution and inferred Nil collections execute across the portable
+backends and REPL.
+
+The 768-case registry adds general union composition and inferred import cases.
+Full shared observations, AST coverage, recovery, ordinary self-hosting, CLI,
+target and memory validation remain required before acceptance. Reference
+boundaries and presentation differences remain explicit; this update does not
+claim complete basic-language support, release a seed or qualify performance.
+Previous reference and measurement identities remain below.
+
+# Previous namespace reference compatibility
+
+The selected development reference is TypeRB `0.4.9-dev` at
 `7f30c7ec18c4c8ccb9fe37a7ae35d535b64e91ad`, including
 [PR #751](https://github.com/type-rb/type-rb/pull/751),
 [PR #753](https://github.com/type-rb/type-rb/pull/753),

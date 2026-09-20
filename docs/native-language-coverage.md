@@ -1,12 +1,26 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 706 ordinary-path probes and 32 feature
+Status: the shared contract contains 768 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
 basic-language completion; [the generated family inventory](native-language-feature-inventory.md)
 records semantic contracts that still need tests. The earlier 19-case inventory
 was an initial sample, not a complete list of missing features.
+
+## Union values and scalar type cases
+
+General unions now compose with Array/Hash inference, generic applications,
+aliases, records, enum payloads, optional values, Results, defaults and closures.
+Canonical alternatives and injection/test/extraction belong to verified MIR;
+scalar type cases check exact alternatives, exhaustive coverage and binding scope.
+Independent source-erased, reordered and forced-GC controls complement shared
+ordinary/REPL probes and retained-session tests. See
+[decision 0069](decisions/0069-union-value-mir.md).
+
+Literal types, discriminated unions and composite type patterns are not covered
+by this implementation. Reference boundaries for grouped annotations and
+nullable alternatives remain visible in the shared contract.
 
 ## Declaration namespaces and runtime constants
 
@@ -18,8 +32,9 @@ stable declaration identity. Shared cases distinguish immutable bindings from
 mutable scalar copies and source-function parameter bindings. See
 [decision 0067](decisions/0067-namespaces-and-constant-mir.md).
 
-Forward initialization dependencies, imported inferred constant types, qualified
-generic aliases and untyped empty collection inference remain explicit gaps.
+Imported inferred constant types and qualified generic aliases are covered by
+the updated reference. Forward initialization dependencies and untyped empty
+collection inference remain explicit gaps.
 This does not complete the module/binding families or the whole basic language.
 
 ## Symbol expressions
@@ -308,7 +323,8 @@ aliases when their underlying declarations are hidden.
 
 [Decision 0050](decisions/0050-transparent-alias-mir.md) records ownership and
 verification. Callable aliases now reach concrete MIR, including nullable payloads.
-Literal/union and class/interface targets and nested module aliases remain gaps. REPL display currently uses the underlying type rather than
+Union targets and nested module aliases now preserve their canonical identity.
+Literal and class/interface targets remain gaps. REPL display currently uses the underlying type rather than
 always retaining the authored alias. The fixed reference has alias-record
 construction ([TypeRB PR #709](https://github.com/type-rb/type-rb/pull/709)),
 [generic identity-alias Go output](https://github.com/type-rb/type-rb/issues/707) and

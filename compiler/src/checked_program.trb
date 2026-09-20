@@ -1,3 +1,6 @@
+import { union_parts } from union_types
+import { check_union_binding, check_union_patterns } from union_checked
+import { mir_union_operation } from union_mir
 import { checked_constant_read } from mir_globals
 import { namespace_parent } from namespace_model
 import { mir_range_array } from range_methods
@@ -285,6 +288,7 @@ def check_array_literal(
 	end
 	if diverged
 		locals.mir_state[0] = saved_mir
+		store_string(state.checked[0].array_literal_types, origin, "Never")
 		return checked_value("Never", 0, 9007199254740991, 0)
 	end
 	if element_type == ""
@@ -294,6 +298,7 @@ def check_array_literal(
 	if result_type == ""
 		return type_diagnostic(state, line, "unsupported Array element type " + element_type)
 	end
+	store_string(state.checked[0].array_literal_types, origin, result_type)
 	return mir_checked_array_literal(state, locals, result_type, element_type, origin, values)
 end
 
@@ -439,6 +444,9 @@ def check_primary(
 		end
 		mut selected_position := [origin]
 		mut name := load_string(state.token_texts, origin)
+		if name == "_"
+			return type_diagnostic(state, line, "blank binding _ cannot be used as a value")
+		end
 		if local_find(locals, name) < 0
 			name = parse_declaration_reference(state, selected_position)
 		else
@@ -1484,15 +1492,20 @@ def check_control_value(mut state: CompilerState, mut position: Array<Integer>, 
 	mut join := mir_value_join(locals, line)
 	mut selector := checked_value(predicate.type_name, predicate.category, predicate.origin, predicate.mutable)
 	mut enum_owner :=- 1
+	mut union_selector := false
 	if control.kind == 2
 		position[0] = control.selector
 		selector = check_expression(state, position, locals, 1, "")
 		enum_owner = find_enum_type(state, selector.type_name)
+		union_selector = union_parts(selector.type_name).size() > 0
+		if union_selector && !check_union_patterns(state, control, selector.type_name)
+			return checked_value("Invalid", 0, origin, 0)
+		end
 		if enum_owner >= 0 && !check_enum_patterns(state, control, enum_owner)
 			return checked_value("Invalid", 0, origin, 0)
 		end
-		if enum_owner < 0 && selector.type_name != "Never" && selector.type_name != "Integer" && selector.type_name != "String"
-			return type_diagnostic(state, line, "case selector requires Integer, String or enum")
+		if enum_owner < 0 && !union_selector && selector.type_name != "Never" && selector.type_name != "Integer" && selector.type_name != "String"
+			return type_diagnostic(state, line, "case selector requires Integer, String, enum or union")
 		end
 	elsif control.kind == 3
 		check_expected(state, predicate.type_name, "Boolean", line)
@@ -1515,7 +1528,10 @@ def check_control_value(mut state: CompilerState, mut position: Array<Integer>, 
 			mut condition := checked_view(predicate, predicate.type_name, predicate.category)
 			if control.kind == 2
 				position[0] = branch.condition
-				if enum_owner >= 0
+				if union_selector
+					pattern := state.checked[0].union_patterns[sparse_integer_at(state.checked[0].union_pattern_origins, branch.condition) - 1]
+					condition = mir_union_operation(state, locals, 53, selector, pattern.type_name, "Boolean", branch.condition)
+				elsif enum_owner >= 0
 					pattern := state.checked[0].enum_patterns[sparse_integer_at(state.checked[0].enum_pattern_origins, branch.condition) - 1]
 					condition = mir_enum_operation(state, locals, 38, selector, - 1, pattern.variant, "Boolean", branch.condition)
 				else
@@ -1532,13 +1548,16 @@ def check_control_value(mut state: CompilerState, mut position: Array<Integer>, 
 			alternate_flow = locals.nullable_state[0]
 			false_facts = condition.falsity
 			nullable_apply(locals, condition.truth)
-			if enum_owner >= 0 && branch_index == control.branches.size() - 1
+			if (enum_owner >= 0 || union_selector) && branch_index == control.branches.size() - 1
 				otherwise = true
 			else
 				alternate = mir_control_branch(state, locals, condition, line)
 			end
 		else
 			otherwise = true
+		end
+		if union_selector && branch.condition >= 0
+			check_union_binding(state, locals, selector, branch.condition)
 		end
 		if enum_owner >= 0 && branch.condition >= 0
 			check_enum_bindings(state, locals, selector, branch.condition)

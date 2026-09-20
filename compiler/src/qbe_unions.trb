@@ -1,0 +1,56 @@
+import { integer_string } from literals
+import { MirInstruction } from mir
+import { mir_managed_type, mir_operand_type, mir_semantic_type_name } from mir_types
+import { QbeEmitContext, QbeValue, emit_address, emit_label, emit_temporary, emit_typed_load, emit_typed_store, emitted_value } from qbe_context
+import { QbeOutput, qbe_output_branch, qbe_output_line } from qbe_output
+import { CompilerState } from state
+
+# Each alternative has its own traced descriptor. Tags carry canonical MIR type
+# identities; adding or reordering another union cannot reinterpret a payload.
+def emit_union_descriptors(state: CompilerState, mut output: QbeOutput)
+	state.scalar_mir.unions.each do |definition|
+		definition.alternatives.each do |alternative|
+			mut fields := "0, l 16"
+			if mir_managed_type(state.scalar_mir, alternative)
+				fields = "1, l 16, l 16"
+			end
+			qbe_output_line(output, "data $trbn_desc_union" + integer_string(definition.type_id) + "_" + integer_string(alternative) + " = align 8 { l 1, l " + fields + " }")
+		end
+	end
+	if state.scalar_mir.unions.size() > 0
+		qbe_output_line(output, "data $trbn_union_error = { b \"panic: union payload is unavailable\", b 10 }")
+	end
+end
+
+def emit_mir_union_instruction(state: CompilerState, types: Array<Integer>, instruction: MirInstruction, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
+	result_type := mir_operand_type(types, instruction.result)
+	type_name := mir_semantic_type_name(state.scalar_mir, result_type)
+	result := emit_temporary(context)
+	if instruction.kind == 52
+		qbe_output_line(output, "\t" + result + " =l call $trbn_gc_alloc(l $trbn_desc_union" + integer_string(result_type) + "_" + integer_string(instruction.payload) + ", l 16, l 0)")
+		tag := emit_address(context, output, result, 8)
+		qbe_output_line(output, "\tstorel " + integer_string(instruction.payload) + ", " + tag)
+		payload := emit_address(context, output, result, 16)
+		emit_typed_store(output, mir_semantic_type_name(state.scalar_mir, instruction.payload), operands[instruction.first], payload)
+		return emitted_value(result, type_name)
+	end
+	address := emit_address(context, output, operands[instruction.first], 8)
+	tag := emit_temporary(context)
+	qbe_output_line(output, "\t" + tag + " =l loadl " + address)
+	if instruction.kind == 53
+		qbe_output_line(output, "\t" + result + " =l ceql " + tag + ", " + integer_string(instruction.payload))
+	else
+		valid := emit_temporary(context)
+		present := emit_label(context)
+		invalid := emit_label(context)
+		qbe_output_line(output, "\t" + valid + " =w ceql " + tag + ", " + integer_string(instruction.payload))
+		qbe_output_branch(output, valid, present, invalid)
+		qbe_output_line(output, invalid)
+		qbe_output_line(output, "\tcall $trbn_fail(l $trbn_union_error, l 36)")
+		qbe_output_line(output, "\thlt")
+		qbe_output_line(output, present)
+		payload := emit_address(context, output, operands[instruction.first], 16)
+		emit_typed_load(output, result, type_name, payload)
+	end
+	return emitted_value(result, type_name)
+end

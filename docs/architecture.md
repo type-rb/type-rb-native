@@ -104,10 +104,11 @@ vertical slices from remaining ownership.
 ### Current compiler source ownership
 
 The ordinary entry is [compiler/src/compiler.trb](../compiler/src/compiler.trb).
-Its explicit transitive import closure contains 124 canonical implementation modules:
+Its explicit transitive import closure contains 128 canonical implementation modules:
 
 | Modules in `compiler/src/` | Current responsibility |
 | --- | --- |
+| `union_types.trb`, `union_checked.trb`, `union_mir.trb`, `qbe_unions.trb` | Canonical alternatives, scalar type cases, verified union injection/test/extraction and traced payload adaptation; see [decision 0069](decisions/0069-union-value-mir.md). |
 | `transform_model.trb` | Parser-owned collection block shapes and concrete transform projections; lowering uses ordinary iteration control. |
 | `qbe_array_join.trb` | Linear Array-to-String byte assembly for verified join MIR; see [decision 0063](decisions/0063-array-join-mir.md). |
 | `qbe_string_trimming.trb` | Unicode edge trimming and one retained-byte copy for verified String MIR; see [decision 0065](decisions/0065-string-trimming-mir.md). |

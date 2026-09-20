@@ -321,3 +321,10 @@ Source-erased and forced-GC controls cover managed results, and the CLI uses the
 ordinary Float conversion itself. A bounded decimal runtime retains the reference
 shortest-roundtrip contract, including asymmetric intervals at powers of two;
 see [decision 0068](decisions/0068-scalar-string-conversion.md).
+
+General unions now own a verified semantic alternative catalog and explicit
+injection, type-test and checked-extraction instructions. Widening and optional
+payload conversion lower through typed CFG edges. Traced payload descriptors,
+live roots and case results remain verifiable after frontend state is erased;
+see [decision 0069](decisions/0069-union-value-mir.md). Literal/discriminated unions
+and the remaining nominal families stay part of the completion milestone.

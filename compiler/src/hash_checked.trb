@@ -1,3 +1,4 @@
+import { union_parts } from union_types
 import { callable_parts } from callable_types
 import { find_enum_type } from enum_types
 import { token_is } from syntax_tokens
@@ -132,6 +133,16 @@ def checked_hash_binding_target(state: CompilerState, origin: Integer): Boolean
 end
 
 def checked_hash_value_layout(state: CompilerState, type_name: String): Boolean
+	alternatives := union_parts(type_name)
+	if alternatives.size() > 0
+		mut valid := true
+		alternatives.each do |alternative|
+			if !checked_hash_value_layout(state, alternative)
+				valid = false
+			end
+		end
+		return valid
+	end
 	parts := callable_parts(type_name)
 	if parts.size() > 0
 		mut index := 0
@@ -146,7 +157,7 @@ def checked_hash_value_layout(state: CompilerState, type_name: String): Boolean
 	if nullable_element(type_name) != ""
 		return checked_hash_value_layout(state, nullable_element(type_name))
 	end
-	if type_name == "Integer" || type_name == "Float" || type_name == "Boolean" || type_name == "String" || type_name == "Range<Integer>"
+	if type_name == "Nil" || type_name == "Integer" || type_name == "Float" || type_name == "Boolean" || type_name == "String" || type_name == "Range<Integer>"
 		return true
 	end
 	if hash_key_type(type_name) != ""

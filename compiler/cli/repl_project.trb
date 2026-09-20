@@ -1,3 +1,4 @@
+import { union_parts } from union_types
 import { namespace_parent } from namespace_model
 import { callable_parts } from callable_types
 import { generic_application } from generic_arguments
@@ -214,6 +215,19 @@ end
 # Reconstructed bindings need the visible alias, while values retain their
 # canonical record identity and render with the original declaration name.
 def repl_type_name(state: CompilerState, type_name: String): String
+	alternatives := union_parts(type_name)
+	if alternatives.size() > 0
+		mut text := ""
+		mut union_index := 0
+		alternatives.each do |alternative|
+			if union_index > 0
+				text += " | "
+			end
+			text += repl_type_name(state, alternative)
+			union_index += 1
+		end
+		return text
+	end
 	parts := callable_parts(type_name)
 	if parts.size() > 0 && nullable_element(type_name) == ""
 		mut text := "("
@@ -229,7 +243,7 @@ def repl_type_name(state: CompilerState, type_name: String): String
 	end
 	if nullable_element(type_name) != ""
 		element := nullable_element(type_name)
-		if callable_parts(element).size() > 0
+		if callable_parts(element).size() > 0 || union_parts(element).size() > 0
 			return "(" + repl_type_name(state, element) + ")?"
 		end
 		return repl_type_name(state, element) + "?"
@@ -334,6 +348,7 @@ def repl_witness_type_name(state: CompilerState, type_name: String): String
 end
 
 def repl_witness_type_name_at(state: CompilerState, type_name: String, blocked: Array<Integer>): String
+
 	mut index := 0
 	while index < state.alias_instances.size()
 		instance := state.alias_instances[index]
@@ -368,6 +383,19 @@ def repl_witness_type_name_at(state: CompilerState, type_name: String, blocked: 
 			end
 		end
 		index += 1
+	end
+	alternatives := union_parts(type_name)
+	if alternatives.size() > 0
+		mut text := ""
+		mut union_index := 0
+		alternatives.each do |alternative|
+			if union_index > 0
+				text += " | "
+			end
+			text += repl_witness_type_name_at(state, alternative, blocked)
+			union_index += 1
+		end
+		return text
 	end
 	parts := callable_parts(type_name)
 	if parts.size() > 0 && nullable_element(type_name) == ""
