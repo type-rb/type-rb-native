@@ -1,3 +1,4 @@
+import { enum_method_declaration_name, enum_method_function } from enum_methods
 import { integer_string } from literals
 import { resolve_raw_enum_results } from raw_enum_resolution
 import { declare_constant_functions } from constant_declarations
@@ -862,7 +863,19 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 							else
 								if token_is(state, index + 1, "(")
 									if text != "puts"
-										if find_visible_function(state, module_index, text) < 0 && local_find(locals, text) < 0 && find_visible_declaration(state, module_index, text, 7) < 0
+										mut implicit_method :=- 1
+										self_slot := local_find(locals, "self")
+										if self_slot >= 0 && local_find(locals, text) < 0
+											receiver := load_string(locals.types, self_slot)
+											declaration := enum_method_declaration_name(state, receiver, text)
+											if declaration != "" && namespace_parent(declaration) == state.declaration_owner[0]
+												implicit_method = enum_method_function(state, receiver, text)
+											end
+										end
+										if implicit_method >= 0
+											store_integer(state.checked[0].generic_calls, index + 1, implicit_method + 1)
+										end
+										if implicit_method < 0 && find_visible_function(state, module_index, text) < 0 && local_find(locals, text) < 0 && find_visible_declaration(state, module_index, text, 7) < 0
 											diagnostic(
 												state,
 												"TRBN4003",

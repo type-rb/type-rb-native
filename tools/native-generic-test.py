@@ -74,4 +74,45 @@ with tempfile.TemporaryDirectory(prefix='native generic ') as temporary:
                             capture_output=True, text=True, cwd=root, env=env, timeout=30)
     assert result.returncode == 1 and 'TRBN4004' in result.stderr, result
 
+    methods = """enum Choice<T>
+Value(value: T)
+Other(value: T)
+def _get(fallback: T): T
+case self
+when Choice::Value(value)
+return value
+when Choice::Other(_value)
+return fallback
+end
+end
+def reader(fallback: T): () -> T
+return fn(): T; return _get(fallback); end
+end
+def select(value: T, *, other: T = value): T
+return other
+end
+end
+"""
+    (root / 'choice.trb').write_text(methods)
+    retained = subprocess.run([str(binary), 'repl'], input="""import { Choice as Pick } from choice
+read := Pick<String>::Value("held").reader("unused")
+puts(read())
+enum Before
+Only
+end
+record Earlier
+number: Integer
+end
+puts(Pick<Integer>::Other(0).select(7))
+puts(read())
+puts(Pick<Integer>::Other(0).select("bad"))
+puts(read())
+:reload
+puts(read())
+:quit
+""", capture_output=True, text=True, cwd=root, env=env, timeout=30)
+    assert retained.returncode == 0, retained
+    assert retained.stdout == '#<fn> : () -> String\nheld\n7\nheld\nheld\nreloaded\nheld\n', retained
+    assert len(retained.stderr.splitlines()) == 1 and 'expected Integer, found String' in retained.stderr, retained
+
 print('PASS generic nominal identity, retained arguments, aliases, replay and invariance')

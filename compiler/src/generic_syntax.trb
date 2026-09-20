@@ -4,7 +4,7 @@ import { CompilerState, diagnostic, has_diagnostic, terminal_token } from state
 import { load_integer } from storage
 import { advance, expect, expect_identifier, finish_statement, parse_type, skip_newlines, token_is } from syntax_tokens
 
-def parse_generic_enum(mut state: CompilerState, mut position: Array<Integer>, name: String, line: Integer): Boolean
+def parse_generic_enum(mut state: CompilerState, mut position: Array<Integer>, name: String, line: Integer, mut method_owner: Array<Integer>): Boolean
 	parameters := parse_generic_parameters(state, position, line)
 	if has_diagnostic(state)
 		return false
@@ -17,6 +17,9 @@ def parse_generic_enum(mut state: CompilerState, mut position: Array<Integer>, n
 		if terminal_token(state, position[0])
 			diagnostic(state, "TRBN4002", line, "expected end for generic declaration " + name)
 			return false
+		end
+		if token_is(state, position[0], "def")
+			break
 		end
 		member_line := load_integer(state.token_lines, position[0])
 		member := expect_identifier(state, position)
@@ -75,10 +78,15 @@ def parse_generic_enum(mut state: CompilerState, mut position: Array<Integer>, n
 		diagnostic(state, "TRBN4002", line, "enum requires at least one variant")
 		return false
 	end
+	definition := state.generic_definitions.size()
+	state.generic_definitions.push(GenericDefinition.new(kind: 2, name: name, source_id: state.active_module[0], line: line, parameters: parameters, variants: variants))
+	if token_is(state, position[0], "def")
+		method_owner[1] = definition
+		return true
+	end
 	if !expect(state, position, "end")
 		return false
 	end
-	state.generic_definitions.push(GenericDefinition.new(kind: 2, name: name, source_id: state.active_module[0], line: line, parameters: parameters, variants: variants))
 	return finish_statement(state, position)
 end
 
