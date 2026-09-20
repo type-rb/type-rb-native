@@ -1214,19 +1214,19 @@
 | Literal union Hash keys: mixed key | rejects as reference | rejects as reference | not reached | diagnostic/output differs |
 | Literal union Hash keys: optional key | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Literal union Hash keys: optional refined | accepts | accepts | matches reference | matches reference |
-| Top-level bindings: scalars | accepts | accepts | matches reference | rejects valid input |
-| Top-level bindings: mutable | accepts | accepts | matches reference | rejects valid input |
-| Top-level bindings: managed replacement | accepts | accepts | matches reference | rejects valid input |
-| Top-level bindings: collection mutation | accepts | accepts | matches reference | rejects valid input |
-| Top-level bindings: collection rebinding | accepts | accepts | matches reference | rejects valid input |
-| Top-level bindings: closure shadowing | accepts | accepts | matches reference | rejects valid input |
-| Top-level bindings: closure writing | accepts | accepts | matches reference | rejects valid input |
+| Top-level bindings: scalars | accepts | accepts | matches reference | matches reference |
+| Top-level bindings: mutable | accepts | accepts | matches reference | matches reference |
+| Top-level bindings: managed replacement | accepts | accepts | matches reference | matches reference |
+| Top-level bindings: collection mutation | accepts | accepts | matches reference | matches reference |
+| Top-level bindings: collection rebinding | accepts | accepts | matches reference | matches reference |
+| Top-level bindings: closure shadowing | accepts | accepts | matches reference | matches reference |
+| Top-level bindings: closure writing | accepts | accepts | matches reference | matches reference |
 | Top-level bindings: callback | accepts | accepts | matches reference | matches reference |
-| Top-level bindings: defaults | accepts | accepts | matches reference | rejects valid input |
+| Top-level bindings: defaults | accepts | accepts | matches reference | matches reference |
 | Top-level bindings: nullable replace | accepts | accepts | matches reference | output differs |
 | Top-level bindings: nullable compound | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Top-level bindings: nullable call | rejects as reference | rejects as reference | not reached | rejects as reference |
-| Top-level bindings: nullable fresh guard | accepts | accepts | matches reference | rejects valid input |
+| Top-level bindings: nullable fresh guard | accepts | accepts | matches reference | matches reference |
 | Top-level bindings: module identity | accepts | accepts | matches reference | matches reference |
 | Top-level bindings: immutable | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Top-level bindings: readonly alias | rejects as reference | rejects as reference | not reached | rejects as reference |
@@ -1234,3 +1234,22 @@
 | Top-level bindings: duplicate | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Top-level bindings: blank | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Top-level bindings: mutable constant | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Lexical globals: function shadow | accepts | accepts | matches reference | output differs |
+| Lexical globals: binding before function | accepts | accepts | matches reference | matches reference |
+| Lexical globals: function self initializer | accepts | accepts | matches reference | matches reference |
+| Lexical globals: generic lexical | accepts | accepts | matches reference | output differs |
+| Lexical globals: default lexical | accepts | accepts | matches reference | output differs |
+| Lexical globals: lambda lexical | accepts | accepts | matches reference | output differs |
+| Lexical globals: mutable function | accepts | accepts | matches reference | matches reference |
+| Lexical globals: multiple bindings | accepts | accepts | matches reference | matches reference |
+| Lexical globals: invalid forward read | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Lexical globals: invalid forward write | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Lexical globals: invalid self initializer | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Lexical globals: invalid forward generic | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Lexical globals: invalid shadowed generic | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Optional output: nil | accepts | accepts | matches reference | matches reference |
+| Optional output: integer | accepts | accepts | matches reference | matches reference |
+| Optional output: float | accepts | accepts | matches reference | matches reference |
+| Optional output: boolean | accepts | accepts | matches reference | matches reference |
+| Optional output: string | accepts | accepts | matches reference | matches reference |
+| Optional output: replaced receiver | accepts | accepts | matches reference | matches reference |

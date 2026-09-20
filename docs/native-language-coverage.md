@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 1232 ordinary-path probes and 32 feature
+Status: the shared contract contains 1251 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -24,8 +24,23 @@ old value. Forced collections include Unicode/NUL values and exact reclamation.
 Project functions share their globals across REPL submissions and explicit replay.
 See [decision 0080](decisions/0080-global-binding-mir.md).
 
-Interactive variables visible to later named functions remain an implementation
-gap, exposed by the same paired cases. Lowercase variables in namespace bodies,
+Interactive variables are shared with later named functions and anonymous
+captures through persistent cells. Reassignment updates those cells; later
+same-named bindings cannot redirect an earlier named-function reference. Ordinary
+file bodies and session projections both preserve authored lexical order. Typed
+witness initializers describe existing values without evaluating them again.
+Load/replay validates the replacement program before executing authored
+initializers in order, and failed initializers invalidate earlier nullable facts.
+The CLI controls cover empty-Hash load inference and retained failure state.
+
+Optional scalar output uses existing MIR none/present tests, payload extraction,
+branches and scalar conversions. This preserves argument evaluation once, UTF-8
+and NUL String bytes, Boolean false and numeric zero. Current compiled Go output
+prints absent values as `<nil>` while its REPL prints `nil`; Native matches each
+path. [TypeRB #783](https://github.com/type-rb/type-rb/issues/783) tracks a portable
+formatting contract. General union and nominal output remain separate gaps.
+
+Lowercase variables in namespace bodies,
 forward initializer dependencies and untyped empty collection inference remain
 open. Compiler implementation state stays per invocation; adopting module storage
 in compiler sources still needs the accepted seed handoff described in

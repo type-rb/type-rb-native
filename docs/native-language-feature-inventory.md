@@ -7,7 +7,7 @@ Each count describes registered probes, not language coverage percentages.
 | Source text and lexical forms | basic | 2 / 39 | Invalid UTF-8 source and diagnostic positions; CRLF and source normalization; Unicode identifier categories, remaining reserved contexts and malformed literal contracts | CommentStatement, BlankStatement, Identifier |
 | Strings and UTF-8 | basic | 9 / 114 | Remaining String receiver APIs; Embedded-expression boundaries beyond the reviewed interpolation probes | Literal, InterpolatedString |
 | Numeric and Boolean operations | basic | 2 / 44 | All operators and assignment forms; mixed widening and every portable failure boundary; Short-circuit side effects and invalid RHS diagnostics across nested control | UnaryExpression, BinaryExpression |
-| Bindings, constants and mutation | basic | 20 / 59 | Shadowing, duplicate declarations, unused/discard bindings and mutation through projections; Interactive variables visible to later named functions; lowercase namespace-body variables; untyped empty collection inference | VariableStatement, AssignmentStatement |
+| Bindings, constants and mutation | basic | 15 / 72 | Shadowing, duplicate declarations, unused/discard bindings and mutation through projections; lowercase namespace-body variables; untyped empty collection inference | VariableStatement, AssignmentStatement |
 | Function declarations and calls | basic | 0 / 7 | Every all-path return, evaluation-order and mutable-argument boundary | MethodStatement, ReturnStatement, CallExpression, ExpressionStatement |
 | Defaults and named arguments | basic | 0 / 13 | Method, function-value and payload-enum argument parity |  |
 | Conditions and value-producing branches | basic | 0 / 16 | Nullable/union common result types and broader expression nesting boundaries | IfStatement |
@@ -15,7 +15,7 @@ Each count describes registered probes, not language coverage percentages.
 | Case statements and expressions | basic | 0 / 5 | Exhaustiveness, repeated/unreachable branches and pattern-binding diagnostics | CaseStatement |
 | Records and field bindings | basic | 1 / 30 | Nominal cycles and defaults involving remaining unsupported value types | RecordStatement, RecordFieldStatement |
 | Member access and projections | basic | 1 / 4 | Safe member access, chained field narrowing and receiver replacement | MemberExpression |
-| Nullable values and narrowing | basic | 4 / 38 | Class/callback and general pattern narrowing; collection/union optional conversions; Nullable standard-library methods beyond the currently implemented Native APIs |  |
+| Nullable values and narrowing | basic | 4 / 44 | Class/callback and general pattern narrowing; collection/union optional conversions; Nullable standard-library methods beyond the currently implemented Native APIs |  |
 | Enums and tagged values | basic | 6 / 110 | Method-specific type parameters, enum attributes and wider pattern forms; Reference REPL initializer replay (TypeRB #768) and shadowed standard error identity (#769); imported/nested REPL presentation parity | EnumStatement, EnumMemberStatement |
 | Transparent aliases | basic | 6 / 30 | Literal/discriminated union and class/interface alias targets; Authored alias spelling in REPL display and diagnostics | TypeAliasStatement |
 | Nominal newtypes | basic | 4 / 83 | Class/interface representation dependencies; Method-specific generic parameters with the remaining callable/generic family | NewtypeStatement |
