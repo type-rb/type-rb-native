@@ -805,14 +805,15 @@ checked Hash-plan verification and project-key membership, and `each.with_index`
 for MIR function lookup. These read-only traversals preserve early return,
 first-match ordering, empty/missing behavior and exact String equality.
 Range/Iterable, batch iteration, expression-position iteration,
-and the remaining Array APIs stay tracked in issue #410. The current Array API
-has no removal operation; the live-header implementation does not establish
-conformance for a future shrinking operation.
+and the remaining Array APIs stay tracked in issue #410. The original Array
+iteration checkpoint did not include removal operations. Ordinary shortening
+behavior is now covered by the [Array mutation contract](#array-insertion-and-removal).
 
-Compiler recovery metadata uses a separate 64 MiB input bound. The managed
-Array MIR compiler produces approximately 43.1 MB of recovery JSON, exceeding
-the previous 40 MiB boundary. The earlier complete Array iteration snapshot was
-34,616,510 bytes and required increasing the original 32 MiB bound to 40 MiB.
+Compiler recovery metadata uses a separate 80 MiB input bound. Namespace and
+constant integration produces 69,813,214 bytes of recovery JSON, exceeding the
+previous 64 MiB boundary; the new bound leaves about 20% headroom. The earlier
+managed Array MIR compiler produced approximately 43.1 MB, exceeding 40 MiB.
+The earlier complete Array iteration snapshot was 34,616,510 bytes and required increasing the original 32 MiB bound to 40 MiB.
 These are verbose recovery inputs, not application or shipped compiler binaries.
 Enum integration contains 515 compiler functions, so the compiler-only function
 bound is now 1,024, with boundary tests; ordinary snapshots retain their

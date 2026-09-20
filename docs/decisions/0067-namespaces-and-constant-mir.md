@@ -77,3 +77,9 @@ where the reference requires a supported declaration or explicit `fn` wrapper.
 Untyped empty Array/Hash constants still require annotations in Native; their
 reference inference remains visible in the shared cases. Top-level lowercase
 bindings and classes with their constants remain in the completion inventory.
+
+The complete compiler snapshot is 69,813,214 bytes, so compiler recovery uses an
+80 MiB input bound instead of 64 MiB. Exact-limit and one-byte-over controls cover
+both this entry and the unchanged ordinary 4 MiB entry. This is a bounded budget
+for verbose recovery metadata, not a binary-size or application-memory limit;
+the normal file-read default and other snapshot structural limits do not change.
