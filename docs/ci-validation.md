@@ -81,7 +81,9 @@ including subnormals, plus retained callbacks, optional calls and session replay
 
 The CLI cache test gives each complete core/CLI fixed-point rebuild a bounded
 300-second watchdog and records its elapsed time; the whole CLI job allows
-30 minutes for the repeated invalidation controls. A 120-second rebuild watchdog
+60 minutes for the repeated invalidation controls. The previous 30-minute job
+limit expired on Linux during the generic-enum integration after the CLI,
+UTF-8 and GC checks had passed. A 120-second rebuild watchdog
 expired during nullable integration after the ordinary build and functional
 controls had passed. These are execution deadlines, separate from the performance
 acceptance contracts. Timeout remains a failure and terminates the owned builder
