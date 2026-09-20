@@ -1,12 +1,23 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 573 ordinary-path probes and 32 feature
+Status: the shared contract contains 609 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
 basic-language completion; [the generated family inventory](native-language-feature-inventory.md)
 records semantic contracts that still need tests. The earlier 19-case inventory
 was an initial sample, not a complete list of missing features.
+
+## Hash key expressions
+
+Colon-separated Hash entries accept quoted String, Integer and computed keys.
+Parenthesized identifier labels retain their literal String name; other key
+expressions are evaluated before their value in authored order. Boolean and nil
+keys are rejected by the ordinary Hash type checker. This is the same typed Hash
+MIR as the arrow spelling, with no new operation or runtime representation.
+Ordinary execution and retained REPL probes include Unicode, NUL, interpolation,
+duplicate labels and side effects. An independent managed fixture erases source
+and reorders blocks before executing with forced collection.
 
 ## Current development priority
 
@@ -158,8 +169,15 @@ including shared cells, nested callbacks and cyclic containers. Nominal values k
 their originating type catalog when later declarations change local IDs. Typed
 witnesses never execute initializers or anonymous bodies; recursive callable results
 need no eager constructor. CLI controls cover declaration changes, failures, replay
-and collection of unreachable code contexts. Named declarations used as values and
-the remaining callable boundaries in the inventory are still gaps. Capabilities
+and collection of unreachable code contexts. Local and explicitly imported named
+functions now use the same verified callable MIR with an empty captured environment.
+Required positional signatures retain nominal identity, lexical shadowing, managed
+results and mutable parameter bindings. Generic/default/named-only declarations
+require an explicit typed `fn` wrapper. Nullable functions must be narrowed before
+calling, and function types can be direct generic arguments. Record callback fields
+use the same retained REPL call path, including optional receivers.
+[Decision 0064](decisions/0064-named-function-values.md) records the ownership and
+validation. Other callable boundaries remain listed in the inventory. Capabilities
 records each ordinary path separately; forced-GC internal fixtures supplement
 rather than replace those observations. The updated reference passes `closure-generic-defaults` through check, build,
 execution and REPL; the registry now records those matching paths.
@@ -244,8 +262,8 @@ REPL binding projections preserve canonical types; replay reconstructs visible
 aliases when their underlying declarations are hidden.
 
 [Decision 0050](decisions/0050-transparent-alias-mir.md) records ownership and
-verification. Literal/union, callable, class/interface targets and nested module
-aliases remain gaps. REPL display currently uses the underlying type rather than
+verification. Callable aliases now reach concrete MIR, including nullable payloads.
+Literal/union and class/interface targets and nested module aliases remain gaps. REPL display currently uses the underlying type rather than
 always retaining the authored alias. The fixed reference has alias-record
 construction ([TypeRB PR #709](https://github.com/type-rb/type-rb/pull/709)),
 [generic identity-alias Go output](https://github.com/type-rb/type-rb/issues/707) and
@@ -345,8 +363,9 @@ No absent operand or null placeholder enters the final MIR call. Tests cover
 source erasure, reversed block storage, forced collection, imported aliases,
 short-circuit defaults and independent REPL evaluation. Nullable defaults preserve
 the distinction between an omitted argument and an explicit `nil`; the shared
-`nullable-default-presence` case covers both paths. Method/function-value argument handling remains a gap until the underlying
-callable families are supported. Required payload-enum arguments use the same
+`nullable-default-presence` case covers both paths. Function values use required
+positional signatures and reject named/default declaration conversion without an
+explicit adapter. Method argument handling awaits the object declaration families. Required payload-enum arguments use the same
 source-order binding rules.
 
 ## Ordinary UTF-8 String foundation

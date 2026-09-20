@@ -26,6 +26,29 @@ with tempfile.TemporaryDirectory(prefix='native-callable-') as temporary:
         for message in errors:
             assert message in result.stderr, (message, result.stderr)
 
+    # Named declarations retain their checked program across later submissions.
+    run('def add(value: Integer): Integer; return value + 2; end\n'
+        'saved := add\n:type saved\nsaved(3)\n'
+        'record Later\nvalue: String\nend\nsaved(4)\n:reload\nsaved(5)',
+        '#<callable> : (Integer) -> Integer\n(Integer) -> Integer\n'
+        '5 : Integer\n6 : Integer\nreloaded\n7 : Integer\n')
+    run('def invoke(callback: (Integer) -> Integer): Integer; return callback(3); end\n'
+        'older := invoke\ndef add(value: Integer): Integer; return value + 2; end\n'
+        'newer := add\nolder(newer)\nolder(add)',
+        '#<callable> : ((Integer) -> Integer) -> Integer\n'
+        '#<callable> : (Integer) -> Integer\n5 : Integer\n5 : Integer\n')
+    run('def fail(value: Integer): Integer; return 10 / value; end\n'
+        'saved := fail\nsaved(0)\nsaved(2)\nputs("after failure")',
+        '#<callable> : (Integer) -> Integer\n5 : Integer\nafter failure\n',
+        ('division by zero',))
+    run('alias Callback = (Integer) -> Integer\n'
+        'def add(value: Integer): Integer; return value + 2; end\n'
+        'mut optional: Callback? := nil\noptional = add\noptional(7)\n'
+        'optional = nil\noptional(7)\nputs("after nil")',
+        'nil : ((Integer) -> Integer)? [mut]\n'
+        '#<callable> : ((Integer) -> Integer)? [mut]\n9 : Integer\n'
+        'nil : Nil [mut]\nafter nil\n', ('value is not directly callable',))
+
     # Bodies are collected atomically and never executed by :type or witnesses.
     run('f := fn(value: Integer): Integer\nputs("called")\nreturn value + 1\nend\n'
         ':type f\nf(2)\nf(3)\nputs("done")',

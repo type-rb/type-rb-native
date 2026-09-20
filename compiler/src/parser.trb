@@ -219,12 +219,26 @@ def parse_primary_syntax(mut state: CompilerState, mut position: Array<Integer>)
 		advance(position)
 		skip_newlines(state, position)
 		while !token_is(state, position[0], "}")
-			if load_integer(state.token_kinds, position[0]) == 1 && token_is(state, position[0] + 1, ":")
-				store_integer(state.token_kinds, position[0], 3)
-				store_string(state.token_texts, position[0] + 1, "=>")
-			end
+			key_start := position[0]
 			if !parse_expression_syntax(state, position, 1)
 				return false
+			end
+			if token_is(state, position[0], ":")
+				mut first := key_start
+				mut last := position[0] - 1
+				while first < last && token_is(state, first, "(") && token_is(state, last, ")")
+					first += 1
+					last -= 1
+					while first < last && load_integer(state.token_kinds, first) == 4
+						first += 1
+					end
+				end
+				# Parentheses preserve an identifier label; other expressions retain
+				# their evaluated key and are checked against the Hash key types.
+				if first == last && load_integer(state.token_kinds, first) == 1 && !token_is(state, first, "true") && !token_is(state, first, "false") && !token_is(state, first, "nil")
+					store_integer(state.token_kinds, first, 3)
+				end
+				store_string(state.token_texts, position[0], "=>")
 			end
 			if !expect(state, position, "=>")
 				return false

@@ -6,7 +6,7 @@ import { find_function_in_module } from declaration_lookup
 import { lex } from lexer
 import { MirCallable, MirInstruction, MirRootPlan, MirSignature, MirType } from mir
 import { mir_declare_signatures } from mir_calls
-import { declared_callable_type, mir_checked_callable_call, mir_checked_closure } from mir_callables
+import { mir_checked_closure } from mir_callables
 import { scalar_mir_commit } from mir_builder
 import { mir_control_return } from mir_control
 import { mir_declare_types } from mir_types
@@ -17,59 +17,22 @@ import { load_integer, load_string, sparse_integer_at, store_string } from stora
 import { control_test_output } from control_mir_test
 import { logical_run_qbe } from logical_test
 import { intrinsic_mir_erase } from intrinsic_mir_test
+import { managed_mir_test_fixture } from hash_value_mir_test
 import { verify_mir } from mir_verifier
 import trb/std/process
 import trb/std/result
 import { describe, expect, test } from trb/std/test
 
-# This fixture builds the entry MIR explicitly. Authored named function values
-# and fn/capture syntax are not ordinary language support in this checkpoint.
+# Authored declarations exercise the same verified closure and call operations
+# used by fn values, including higher-order calls and managed containers.
 def callable_mir_state(): CompilerState
-	source := "alias Callback = (String) -> String\nrecord Holder\ncallback: Callback\nend\ndef transform(value: String): String\nreturn value + \"!\"\nend\ndef keep(callback: Callback): Callback\nreturn callback\nend\ndef report(callback: Callback)\nvalues := [callback]\ntable: Hash<String, Callback> := {\"saved\" => callback}\nitem := Holder.new(callback: callback)\nputs(values[0](\"array\" + \" value\"))\nputs(table[\"saved\"](\"hash\" + \" value\"))\nputs(item.callback(\"field\" + \" value\"))\nend\ndef numeric(value: Float, other: Integer): Float\nreturn value + other\nend\ndef report_numeric(callback: (Float, Integer) -> Float)\nputs(callback(2.5, 3).to_i())\nend\ndef nothing()\nputs(\"void\")\nend\ndef report_void(callback: () -> Void)\ncallback()\nend\ndef main()\nend\n"
+	source := "alias Callback = (String) -> String\nrecord Holder\ncallback: Callback\nend\ndef transform(value: String): String\nreturn value + \"!\"\nend\ndef keep(callback: Callback): Callback\nreturn callback\nend\ndef report(callback: Callback)\nvalues := [callback]\ntable: Hash<String, Callback> := {\"saved\" => callback}\nitem := Holder.new(callback: callback)\nputs(values[0](\"array\" + \" value\"))\nputs(table[\"saved\"](\"hash\" + \" value\"))\nputs(item.callback(\"field\" + \" value\"))\nend\ndef numeric(value: Float, other: Integer): Float\nreturn value + other\nend\ndef report_numeric(callback: (Float, Integer) -> Float)\nputs(callback(2.5, 3).to_i())\nend\ndef nothing()\nputs(\"void\")\nend\ndef report_void(callback: () -> Void)\ncallback()\nend\ndef main()\ndispatch := report\nidentity := keep\ndispatch(identity(transform))\nreport_numeric(numeric)\nreport_void(nothing)\nend\n"
 	mut state := compiler_new(source.size() * 4 + 64)
-	valid := lex(state, source) && parse_module(state, 0, state.entry_module[0]) && resolve(state)
+	valid := lex(state, source) && parse_module(state, 0, state.entry_module[0]) && resolve(state) && check(state)
 	if !valid
 		puts(load_string(state.diagnostic_messages, 0))
 	end
 	expect(valid).to_be_true()
-	if !valid
-		return state
-	end
-	mir_declare_types(state)
-	mir_declare_signatures(state)
-	main := find_function_in_module(state, state.entry_module[0], "main")
-	mut function := 0
-	while function < state.function_count[0]
-		if function != main
-			expect(check_function(state, function)).to_be_true()
-		end
-		function += 1
-	end
-	mut locals := checked_function_locals(state, main)
-	origin := load_integer(state.function_body_starts, main)
-	targets := ["transform", "numeric", "nothing"]
-	consumers := ["report", "report_numeric", "report_void"]
-	mut index := 0
-	while index < targets.size()
-		target := find_function_in_module(state, state.entry_module[0], targets[index])
-		mut value := mir_checked_closure(state, locals, target, [], origin)
-		if index == 0
-			identity := find_function_in_module(state, state.entry_module[0], "keep")
-			callee := mir_checked_closure(state, locals, identity, [], origin)
-			value = mir_checked_callable_call(state, locals, callee, [checked_mir_value(value)], declared_callable_type(state, target, 0), origin)
-		end
-		consumer := find_function_in_module(state, state.entry_module[0], consumers[index])
-		callee := mir_checked_closure(state, locals, consumer, [], origin)
-		mir_checked_callable_call(state, locals, callee, [checked_mir_value(value)], "Void", origin)
-		index += 1
-	end
-	mir_control_return(state, locals, - 1)
-	expect(scalar_mir_commit(state, main, locals)).to_equal("")
-	finished := finalize_checked_module(state)
-	if !finished
-		puts(load_string(state.diagnostic_messages, 0))
-	end
-	expect(finished).to_be_true()
 	return state
 end
 
@@ -156,7 +119,7 @@ describe("Anonymous function syntax ownership") do
 end
 
 # Factories bind captured parameter prefixes explicitly; consumers use ordinary
-# checked source. This exercises escaped environments without claiming fn syntax.
+# checked source. Synthetic environments isolate capture verification from parsing.
 def callable_capture_state(): CompilerState
 	source := "alias Callback = (Integer) -> Integer\nrecord Envelope\ncallback: Callback\nend\ndef step(mut cell: Array<Integer>, label: String, scale: Float, enabled: Boolean, delta: Integer): Integer\nputs(label)\nif enabled\ncell[0] += delta + scale.to_i()\nend\nreturn cell[0]\nend\ndef make(mut cell: Array<Integer>, label: String, scale: Float, enabled: Boolean): Callback\nend\ndef dispatch(inner: Callback, value: Integer): Integer\nreturn inner(value)\nend\ndef wrap(inner: Callback): Callback\nend\ndef cycle_step(callbacks: Array<Callback>, delta: Integer): Integer\nreturn callbacks.size() + delta\nend\ndef make_cycle(callbacks: Array<Callback>): Callback\nend\ndef invoke(first: Callback, second: Callback)\nvalues := [first, second]\ntable: Hash<String, Callback> := {\"saved\" => values[1]}\nholder := Envelope.new(callback: table[\"saved\"])\nputs(values[0](1))\nputs(holder.callback(2))\nputs(values[0](3))\nend\ndef main()\nmut cell := [10]\nfirst := make(cell, \"one\" + \"!\", 1.5, true)\nsecond := make(cell, \"two\" + \"!\", 2.5, true)\ninvoke(wrap(first), second)\nother := make([100], \"other\" + \"!\", 3.5, true)\nputs(other(4))\nmut callbacks: Array<Callback> := []\ncycle := make_cycle(callbacks)\ncallbacks.push(cycle)\nputs(cycle(8))\nend\n"
 	mut state := compiler_new(source.size() * 4 + 64)
@@ -226,6 +189,9 @@ def callable_forced_collection(text: String): String
 end
 
 describe("MIR callable foundation") do
+	test("retains authored named and nullable function values without source or block order") do
+		managed_mir_test_fixture("named-function-values", 6)
+	end
 	test("executes verified indirect calls and containers after frontend erasure under forced collection") do
 		mut state := callable_mir_state()
 		before := control_test_output(emit_qbe(state))

@@ -1,6 +1,25 @@
 # Current reference compatibility
 
 The selected development reference is TypeRB `0.4.9-dev` at
+`d26f0e19a0fb52cdff7ef23ef2cca6d05e673ba3`, including
+[TypeRB PR #743](https://github.com/type-rb/type-rb/pull/743),
+[PR #744](https://github.com/type-rb/type-rb/pull/744),
+[PR #745](https://github.com/type-rb/type-rb/pull/745) and
+[PR #746](https://github.com/type-rb/type-rb/pull/746).
+Named function values retain their checked positional signatures and declaration
+identities. Nullable functions require narrowing, callee selection precedes
+arguments, and Hash literals preserve authored entry order and duplicate-key
+overwrites. The pin also includes Float negative-zero and Array edge-arity fixes.
+
+The shared contract contains 609 cases, including 30 new named-function cases
+and six Hash key-expression cases. Full exact-reference shared, recovery, CLI,
+target and memory validation remains required before acceptance. This integration
+does not qualify performance or publish a release or immutable bootstrap seed.
+The prior summaries and retained measurement identities remain below.
+
+# Previous Array mutation reference compatibility
+
+The selected development reference is TypeRB `0.4.9-dev` at
 `63c73105965c7ea7404c19b538b06f7f47c35a2d`, including
 [TypeRB PR #740](https://github.com/type-rb/type-rb/pull/740).
 Array insertion, concatenation and joining retain their receiver before argument
