@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 913 ordinary-path probes and 32 feature
+Status: the shared contract contains 948 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -43,10 +43,32 @@ arguments, `with_index`, wrong block arity and escaping transfers are rejected.
 
 Shared cases, source-erased/reordered MIR, missing-root controls, forced GC,
 an independent 68-length stable-identity oracle and retained REPL replay cover
-these contracts. The reference loses safe navigation on block iteration and
-can dereference `nil`; [type-rb#774](https://github.com/type-rb/type-rb/issues/774)
-and an explicit shared gap preserve that boundary. See
+these contracts. Safe block navigation follows the accepted reference correction
+in [type-rb#775](https://github.com/type-rb/type-rb/pull/775). See
 [decision 0073](decisions/0073-keyed-array-sorting-mir.md).
+
+## Safe collection blocks
+
+`&.each` supports Array, Range and Hash receivers. The sequential Array/Range
+transforms and Array keyed sorts also preserve the safe boundary. Evaluate the
+receiver once; an absent receiver skips operation arguments and the block.
+Present values keep ordinary live Array traversal, Hash entry snapshots, streamed
+Range endpoints and lexical transfers. Value-producing operations return nullable
+results when their receiver is nullable; `each` remains a statement.
+
+The parser's block shape feeds existing nullable tests, payload extraction,
+control edges and iteration MIR. The backend has no safe-block special case.
+Indexed forms put `&.` before `each`, `map` or `select`; the `with_index` modifier
+uses ordinary member syntax. Readonly and escaping-transfer checks remain active
+even when the runtime receiver is absent.
+
+Contextual nullable Array/Hash literals preserve their element types before
+container conversion. MIR-only collection scratch slots no longer consume
+lexical declaration identities, preserving closures declared after queries,
+sorting and Range materialization. Shared cases, erased/reordered MIR, forced
+collection and retained REPL failure/replay controls cover these combinations.
+Sliced iteration and concurrent transforms remain separate implementation work.
+See [decision 0074](decisions/0074-safe-collection-block-mir.md).
 
 ## Raw enums and instance methods
 

@@ -914,4 +914,39 @@
 | Array keyed ordering: reject break | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Array keyed ordering: reject next | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Array keyed ordering: reject immutable output | rejects as reference | rejects as reference | not reached | rejects as reference |
-| Array keyed ordering: safe navigation reference gap | rejects valid input | rejects valid input | not reached | rejects as reference |
+| Array keyed ordering: absent safe receiver | accepts | accepts | matches reference | matches reference |
+| Safe collection iteration | accepts | accepts | matches reference | matches reference |
+| Safe collection transforms | accepts | accepts | matches reference | matches reference |
+| Safe collection managed | accepts | accepts | matches reference | output differs |
+| Collection capture identities | accepts | accepts | matches reference | matches reference |
+| Safe block map | accepts | accepts | matches reference | matches reference |
+| Safe block indexed map | accepts | accepts | matches reference | matches reference |
+| Safe block select | accepts | accepts | matches reference | matches reference |
+| Safe block indexed select | accepts | accepts | matches reference | matches reference |
+| Safe block reduce | accepts | accepts | matches reference | matches reference |
+| Safe block any | accepts | accepts | matches reference | matches reference |
+| Safe block all | accepts | accepts | matches reference | matches reference |
+| Safe block none | accepts | accepts | matches reference | matches reference |
+| Safe block find | accepts | accepts | matches reference | matches reference |
+| Safe block find index | accepts | accepts | matches reference | matches reference |
+| Safe block sort by | accepts | accepts | matches reference | matches reference |
+| Safe block sort by descending | accepts | accepts | matches reference | matches reference |
+| Safe block receiver and initial order | accepts | accepts | matches reference | matches reference |
+| Safe block retains live array | accepts | accepts | matches reference | matches reference |
+| Safe block nested range | accepts | accepts | matches reference | matches reference |
+| Safe block nullable container literals | accepts | accepts | matches reference | matches reference |
+| Safe block value call chaining | accepts | accepts | matches reference | matches reference |
+| Safe block generic | accepts | accepts | matches reference | matches reference |
+| Safe block invalid ordinary nullable each | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Safe block invalid ordinary nullable map | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Safe block invalid unsafe result | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Safe block invalid safe index modifier | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Safe block invalid safe map index modifier | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Safe block invalid return from map | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Safe block invalid break from map | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Safe block invalid next from select | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Safe block invalid invalid key | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Safe block invalid wrong receiver | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Safe block invalid nullable predicate | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Safe block invalid hash transform | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Safe block invalid readonly receiver | rejects as reference | rejects as reference | not reached | rejects as reference |

@@ -1,6 +1,21 @@
 # Current reference compatibility
 
 The selected development reference is TypeRB `0.4.9-dev` at
+`909987e370a8ed4d8db1060ed5f0c6f00fd56dfd`, incorporating
+[PR #775](https://github.com/type-rb/type-rb/pull/775).
+Safe collection blocks preserve receiver-once evaluation, skip absent receivers
+and operation arguments, and expose nullable transform results across targets
+and the REPL. Nullable collection literal contexts preserve their element types.
+
+Native safe blocks lower through existing nullable and iteration MIR. Shared
+observations, exact AST coverage, recovery, ordinary self-hosting, CLI, target and
+memory validation remain required before acceptance. This update does not
+complete basic-language coverage, publish a release or seed, or qualify
+performance. Previous identities remain below.
+
+# Previous Array ordering reference compatibility
+
+The selected development reference is TypeRB `0.4.9-dev` at
 `df2a60e35b7f4140c98dcb29a9eaee4fee27252e`, incorporating
 [PR #773](https://github.com/type-rb/type-rb/pull/773).
 Descending Array sorts in the REPL keep NaNs last in natural and key-based
