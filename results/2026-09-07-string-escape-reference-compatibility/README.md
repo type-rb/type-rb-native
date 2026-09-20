@@ -1,6 +1,22 @@
 # Current reference compatibility
 
 The selected development reference is TypeRB `0.4.9-dev` at
+`5912014558c0839ae86dd83e3e2f33446b2190ba`, incorporating
+[PR #784](https://github.com/type-rb/type-rb/pull/784).
+Earlier named-function references retain their declaration in the REPL after a
+same-named value is introduced. TypeScript calls correctly select the later
+lexical value. Defaults, generic bodies, closures and replay retain this
+identity distinction.
+
+Native shares retained session variables with later named functions while
+preserving authored declaration order and single initialization. Exact AST,
+ordinary paths, recovery, self-hosting, target and lifetime checks remain
+required for this revision. No release, seed or complete language/performance
+qualification is claimed. Previous accepted identities and observations follow.
+
+# Previous global-binding reference compatibility
+
+The selected development reference is TypeRB `0.4.9-dev` at
 `418090424759e2c32f37ebe9d3fdcd78c8703c66`, incorporating
 [PR #782](https://github.com/type-rb/type-rb/pull/782).
 Top-level lowercase bindings retain module identity across generated targets and

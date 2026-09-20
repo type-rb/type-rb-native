@@ -2,7 +2,7 @@
 
 TypeRB Native currently follows exact reference revisions during development. The
 current source and semantic oracle is TypeRB
-`418090424759e2c32f37ebe9d3fdcd78c8703c66` (the `0.4.9-dev` development identity), recorded
+`5912014558c0839ae86dd83e3e2f33446b2190ba` (the `0.4.9-dev` development identity), recorded
 in `TYPE_RB_REVISION`. This declares one exact reference identity during Native
 development, without claiming a supported version range.
 
@@ -34,6 +34,16 @@ The earlier scoped-file successor is registered in
 passes the selected-reference, migration, exact-baseline, target-regression,
 fixed-point, process, resource, and size criteria.
 
+## Function binding identity reference update
+
+The exact pin incorporates [TypeRB PR #784](https://github.com/type-rb/type-rb/pull/784).
+The REPL resolves checked named-function references by declaration identity, so
+later same-named variables do not redirect earlier bodies, defaults or closures.
+TypeScript calls preserve the complementary lexical value selection. Shared
+ordinary and retained-session cases review both earlier and later references,
+including generic bodies and explicit replay. No bootstrap seed or release
+version changes.
+
 ## Global binding reference update
 
 The exact pin incorporates [TypeRB PR #782](https://github.com/type-rb/type-rb/pull/782).
@@ -44,8 +54,8 @@ source modules remain independent. Calls invalidate nullable proofs for writable
 globals; fresh guards and immutable values remain valid.
 
 Native follows the file/project contract with typed global reads and writes.
-Interactive variables visible to later named functions remain a distinct open
-REPL contract. Shared cases retain those differences. The exact AST, ordinary
+Interactive variables also share cells with later named functions and anonymous
+captures, while authored lexical order and initialization effects are retained. The exact AST, ordinary
 paths, lifetime checks and recovery are rechecked at this accepted revision;
 the immutable bootstrap seed and release versions are unchanged.
 

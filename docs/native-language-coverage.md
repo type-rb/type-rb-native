@@ -32,6 +32,8 @@ witness initializers describe existing values without evaluating them again.
 Load/replay validates the replacement program before executing authored
 initializers in order, and failed initializers invalidate earlier nullable facts.
 The CLI controls cover empty-Hash load inference and retained failure state.
+The exact reference includes the independent function/binding identity correction
+in [TypeRB #784](https://github.com/type-rb/type-rb/pull/784).
 
 Optional scalar output uses existing MIR none/present tests, payload extraction,
 branches and scalar conversions. This preserves argument evaluation once, UTF-8

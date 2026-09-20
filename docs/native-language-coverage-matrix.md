@@ -1234,12 +1234,12 @@
 | Top-level bindings: duplicate | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Top-level bindings: blank | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Top-level bindings: mutable constant | rejects as reference | rejects as reference | not reached | rejects as reference |
-| Lexical globals: function shadow | accepts | accepts | matches reference | output differs |
+| Lexical globals: function shadow | accepts | accepts | matches reference | matches reference |
 | Lexical globals: binding before function | accepts | accepts | matches reference | matches reference |
 | Lexical globals: function self initializer | accepts | accepts | matches reference | matches reference |
-| Lexical globals: generic lexical | accepts | accepts | matches reference | output differs |
-| Lexical globals: default lexical | accepts | accepts | matches reference | output differs |
-| Lexical globals: lambda lexical | accepts | accepts | matches reference | output differs |
+| Lexical globals: generic lexical | accepts | accepts | matches reference | matches reference |
+| Lexical globals: default lexical | accepts | accepts | matches reference | matches reference |
+| Lexical globals: lambda lexical | accepts | accepts | matches reference | matches reference |
 | Lexical globals: mutable function | accepts | accepts | matches reference | matches reference |
 | Lexical globals: multiple bindings | accepts | accepts | matches reference | matches reference |
 | Lexical globals: invalid forward read | rejects as reference | rejects as reference | not reached | rejects as reference |
