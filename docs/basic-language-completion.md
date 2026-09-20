@@ -70,10 +70,10 @@ or uncovered basic contracts remain. Keep every required correctness, lifetime,
 target, recovery and ordinary self-hosting check; qualify performance at the
 coherent milestone described in [MIR consolidation](mir-consolidation.md).
 
-The current source adds named function values, nullable and generic type
-combinations, and colon-separated Hash key expressions. These extend String
+The current source adds Unicode String trimming, named function values, nullable
+and generic type combinations, and colon-separated Hash key expressions. These extend String
 joining, Hash snapshot iteration and Range materialization, Array search,
 uniqueness, concatenation, insertion/removal, edges/copies/slicing, and the String
-query, sequence, slice and escape families. Its 609 registered cases include
+query, sequence, slice and escape families. Its 627 registered cases include
 explicit remaining differences; neither this count nor green regression CI
 closes #454.
