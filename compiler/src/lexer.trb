@@ -90,8 +90,10 @@ def scan_identifier(
 		end
 	end
 	if position[0] < source.size()
-		if source[position[0]] == "?"
-			advance(position)
+		if !character_in(source[start], "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+			if source[position[0]] == "?" || source[position[0]] == "!"
+				advance(position)
+			end
 		end
 	end
 	push_token(state, 1, compiler_source_slice(source, start, position[0]), line)
@@ -393,53 +395,19 @@ def scan_quoted_token(mut state: CompilerState, source: String, mut position: Ar
 end
 
 def two_character_symbol(pair: String): Boolean
-	mut supported := false
-	if pair == "->" || pair == "||"
-		supported = true
+	if pair == "->" || pair == "||" || pair == "&." || pair == "&&" || pair == "::" || pair == ":="
+		return true
 	end
-	if pair == "&."
-		supported = true
+	if pair == "==" || pair == "!=" || pair == "<=" || pair == ">=" || pair == "=>" || pair == ".."
+		return true
 	end
-	if pair == "&&"
-		supported = true
+	if pair == "+=" || pair == "-=" || pair == "*=" || pair == "/=" || pair == "%=" || pair == "**"
+		return true
 	end
-	if pair == "::"
-		supported = true
+	if pair == "<<" || pair == ">>" || pair == "=~" || pair == "!~"
+		return true
 	end
-	if pair == ":="
-		supported = true
-	end
-	if pair == "=="
-		supported = true
-	end
-	if pair == "!="
-		supported = true
-	end
-	if pair == "<="
-		supported = true
-	end
-	if pair == ">="
-		supported = true
-	end
-	if pair == "+="
-		supported = true
-	end
-	if pair == "-="
-		supported = true
-	end
-	if pair == "*="
-		supported = true
-	end
-	if pair == "/="
-		supported = true
-	end
-	if pair == "=>"
-		supported = true
-	end
-	if pair == "->"
-		supported = true
-	end
-	return supported
+	return false
 end
 
 def scan_symbol(
@@ -450,30 +418,28 @@ def scan_symbol(
 	)
 	character := source[position[0]]
 	mut symbol := character
-	if position[0] + 1 < source.size()
-		pair := character + source[position[0] + 1]
-		if pair == ".."
+	if position[0] + 2 < source.size()
+		triple := compiler_source_slice(source, position[0], position[0] + 3)
+		if triple == "..." || triple == "<=>" || triple == "**=" || triple == "&&=" || triple == "||="
+			symbol = triple
+		end
+	end
+	if symbol.size() == 1 && position[0] + 1 < source.size()
+		pair := compiler_source_slice(source, position[0], position[0] + 2)
+		if two_character_symbol(pair)
 			symbol = pair
-			advance(position)
-			if position[0] + 1 < source.size() && source[position[0] + 1] == "."
-				symbol = "..."
-				advance(position)
-			end
-		elsif two_character_symbol(pair)
-			symbol = pair
-			advance(position)
 		end
 	end
 	mut supported := symbol.size() >= 2
 	if !supported
-		supported = character_in(character, "()[]{}:,.+-*/%<>=!|?")
+		supported = character_in(character, "()[]{}:,.+-*/%<>=!|?&^~$\\")
 	end
 	if supported
 		push_token(state, 5, symbol, line)
 	else
 		diagnostic(state, "TRBN4001", line, "unsupported source character " + character)
 	end
-	advance(position)
+	position[0] += symbol.size()
 	return
 end
 

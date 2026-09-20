@@ -115,6 +115,7 @@ Its explicit transitive import closure contains 135 canonical implementation mod
 | `qbe_array_join.trb` | Linear Array-to-String byte assembly for verified join MIR; see [decision 0063](decisions/0063-array-join-mir.md). |
 | `qbe_string_trimming.trb` | Unicode edge trimming and one retained-byte copy for verified String MIR; see [decision 0065](decisions/0065-string-trimming-mir.md). |
 | `qbe_scalar_strings.trb` | Bounded binary64 shortest-roundtrip formatting for verified scalar conversion MIR; see [decision 0068](decisions/0068-scalar-string-conversion.md). |
+| `lexer.trb`, `syntax_tokens.trb` | Identifier/operator token boundaries and parser-owned nested generic closer expansion; see [decision 0076](decisions/0076-lexical-boundaries.md). |
 | `literal_syntax.trb` | Parser-selected String interpolation and literal Symbol normalization; see [decision 0066](decisions/0066-symbol-literal-syntax.md). |
 | `storage.trb`, `path.trb`, `literals.trb` | Shared storage, path predicates, and numeric/ASCII predicates. |
 | `string_escapes.trb`, `qbe_string_literals.trb` | String escape widths, byte/scalar validation and the private byte constructor; see [escape decoding](decisions/0058-string-escape-decoding.md). |

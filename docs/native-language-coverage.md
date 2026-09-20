@@ -1,12 +1,24 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 996 ordinary-path probes and 32 feature
+Status: the shared contract contains 1033 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
 basic-language completion; [the generated family inventory](native-language-feature-inventory.md)
 records semantic contracts that still need tests. The earlier 19-case inventory
 was an initial sample, not a complete list of missing features.
+
+## Callable suffixes and lexical boundaries
+
+ASCII callable names retain `?`/`!` through ordinary calls, imports, enum methods,
+function values and retained sessions. Reserved declarations reject while Symbol
+and Hash label text remains literal. Maximal operator tokens preserve Symbol
+spelling; type parsing expands nested closing angles without losing later source
+origins. Shared cases and source-erased/reordered/forced-GC MIR cover these
+boundaries, with Unicode/NUL returns and retained invalid-declaration/reload checks.
+Unicode identifiers and the reference's unsettled single-quote and remaining
+Symbol framing contracts stay explicit. See
+[decision 0076](decisions/0076-lexical-boundaries.md).
 
 ## Stable natural Array ordering
 

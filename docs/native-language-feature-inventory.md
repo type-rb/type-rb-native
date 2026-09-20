@@ -4,7 +4,7 @@ Each count describes registered probes, not language coverage percentages.
 
 | Family | Phase | Probes with differences | Uncovered contracts | Reference syntax nodes |
 | --- | --- | --- | --- | --- |
-| Source text and lexical forms | basic | 1 / 2 | Invalid UTF-8 source and diagnostic positions; CRLF and source normalization; Identifier categories, reserved words and malformed literals | CommentStatement, BlankStatement, Identifier |
+| Source text and lexical forms | basic | 2 / 39 | Invalid UTF-8 source and diagnostic positions; CRLF and source normalization; Unicode identifier categories, remaining reserved contexts and malformed literal contracts | CommentStatement, BlankStatement, Identifier |
 | Strings and UTF-8 | basic | 9 / 114 | Remaining String receiver APIs; Embedded-expression boundaries beyond the reviewed interpolation probes | Literal, InterpolatedString |
 | Numeric and Boolean operations | basic | 2 / 44 | All operators and assignment forms; mixed widening and every portable failure boundary; Short-circuit side effects and invalid RHS diagnostics across nested control | UnaryExpression, BinaryExpression |
 | Bindings, constants and mutation | basic | 9 / 39 | Shadowing, duplicate declarations, unused/discard bindings and mutation through projections; Top-level lowercase bindings and untyped empty collection inference | VariableStatement, AssignmentStatement |
@@ -16,12 +16,12 @@ Each count describes registered probes, not language coverage percentages.
 | Records and field bindings | basic | 1 / 30 | Nominal cycles and defaults involving remaining unsupported value types | RecordStatement, RecordFieldStatement |
 | Member access and projections | basic | 1 / 4 | Safe member access, chained field narrowing and receiver replacement | MemberExpression |
 | Nullable values and narrowing | basic | 4 / 38 | Class/callback and general pattern narrowing; collection/union optional conversions; Nullable standard-library methods beyond the currently implemented Native APIs |  |
-| Enums and tagged values | basic | 6 / 109 | Method-specific type parameters, enum attributes and wider pattern forms; Reference REPL initializer replay (TypeRB #768) and shadowed standard error identity (#769); imported/nested REPL presentation parity | EnumStatement, EnumMemberStatement |
+| Enums and tagged values | basic | 6 / 110 | Method-specific type parameters, enum attributes and wider pattern forms; Reference REPL initializer replay (TypeRB #768) and shadowed standard error identity (#769); imported/nested REPL presentation parity | EnumStatement, EnumMemberStatement |
 | Transparent aliases | basic | 7 / 30 | Literal/discriminated union and class/interface alias targets; Authored alias spelling in REPL display and diagnostics | TypeAliasStatement |
 | Nominal newtypes | basic | 1 / 1 | Closed/private constructors, methods, immutable representation and boundary diagnostics | NewtypeStatement |
-| Generic declarations and applications | basic | 4 / 71 | Method-specific type parameters, generic classes and interfaces; Wider constraints and type applications | GenericExpression |
+| Generic declarations and applications | basic | 4 / 74 | Method-specific type parameters, generic classes and interfaces; Wider constraints and type applications | GenericExpression |
 | Union values, literal types and discriminated unions | basic | 5 / 61 | Literal types, common discriminant access, branch narrowing and invalid mutation boundaries; Reference grouped annotation and nullable-alternative boundaries (TypeRB #764 and #765); composite type patterns remain staged in the reference |  |
-| Function values and lexical capture | basic | 0 / 54 | Callable equality, method references and remaining parameter-capability/narrowing combinations | LambdaExpression |
+| Function values and lexical capture | basic | 0 / 56 | Callable equality, method references and remaining parameter-capability/narrowing combinations | LambdaExpression |
 | Arrays and checked indexes | basic | 20 / 204 | Safe collection lookup and conversion APIs; Wider invalid element/mutation combinations | ArrayLiteral, IndexExpression |
 | Hash values and operations | basic | 0 / 11 | All key/value representations, empty inference, managed lifetimes and missing-key failures | HashLiteral |
 | Structured and value-producing iteration | basic | 2 / 176 | Remaining receiver APIs that shorten or reorder an Array during traversal | IterationExpression, BlockExpression |
@@ -30,8 +30,8 @@ Each count describes registered probes, not language coverage percentages.
 | Classes, fields and methods | basic | 1 / 1 | Initialization, inheritance, dispatch, privacy and readonly fields | ClassStatement, FieldStatement |
 | Explicit interface conformance | basic | 1 / 1 | Generic conformance, variance, inherited contracts and rejection controls | InterfaceStatement |
 | Modules and constant lookup | basic | 0 / 15 | Forward initialization dependencies and cycles; remaining module method boundaries | ModuleStatement |
-| Symbol values | basic | 1 / 31 | Single-quoted Symbol spellings and Unicode identifier names; Remaining operator spelling and multiline interpolation boundaries | SymbolLiteral |
-| Project imports and declaration identity | basic | 1 / 10 | Bare/named aliases, graph conflicts, missing/unused imports and file/project/REPL identity | ImportStatement |
+| Symbol values | basic | 2 / 34 | Single-quoted Symbol spellings and Unicode identifier names; Remaining reference operator/control framing and multiline interpolation boundaries | SymbolLiteral |
+| Project imports and declaration identity | basic | 1 / 11 | Bare/named aliases, graph conflicts, missing/unused imports and file/project/REPL identity | ImportStatement |
 | Target source interop | toolchain | 0 / 0 | Go/Ruby/TypeScript source emission and platform interop | NativeStatement, NativeBlock, NativeExpression |
 | JSX and web bindings | packages | 0 / 0 | Typed JSX and official web-package boundaries | JSXElement |
 | Package capability activation | packages | 0 / 0 | Package-owned activation and resolution | ActivateStatement |

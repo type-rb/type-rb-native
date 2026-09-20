@@ -70,7 +70,8 @@ or uncovered basic contracts remain. Keep every required correctness, lifetime,
 target, recovery and ordinary self-hosting check; qualify performance at the
 coherent milestone described in [MIR consolidation](mir-consolidation.md).
 
-The current source adds streamed Array/Range batches, safe collection blocks and nullable literal contexts,
+The current source adds callable suffixes, reserved-name checks and nested generic token boundaries,
+streamed Array/Range batches, safe collection blocks and nullable literal contexts,
 stable natural and key-based Array sorting, raw enum conversions and ordinary/generic enum instance methods,
 general union values and scalar type cases,
 Float/Boolean String conversion and Float output,
@@ -80,6 +81,6 @@ String trimming, named function values, nullable/generic combinations, and
 colon-separated Hash key expressions. These extend String
 joining, Hash snapshot iteration and Range materialization, Array search,
 uniqueness, concatenation, insertion/removal, edges/copies/slicing, and the String
-query, sequence, slice and escape families. Its 996 registered cases include
+query, sequence, slice and escape families. Its 1033 registered cases include
 explicit remaining differences; neither this count nor green regression CI
 closes #454.

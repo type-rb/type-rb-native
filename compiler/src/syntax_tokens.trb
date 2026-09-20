@@ -1,7 +1,7 @@
 import { union_type } from union_types
 import { callable_type } from callable_types
 import { CompilerState, InternalTypeAnnotation, diagnostic, has_diagnostic, terminal_token } from state
-import { load_integer, load_string } from storage
+import { load_integer, load_string, sparse_integer_at, store_integer, store_string } from storage
 
 def token_is(state: CompilerState, index: Integer, text: String): Boolean
 	kind := load_integer(state.token_kinds, index)
@@ -39,11 +39,23 @@ def expect(mut state: CompilerState, mut position: Array<Integer>, text: String)
 	return false
 end
 
+def valid_identifier(mut state: CompilerState, origin: Integer): Boolean
+	value := load_string(state.token_texts, origin)
+	if value == "try" || value == "catch" || value == "alias" || value == "newtype"
+		diagnostic(state, "TRBN4002", load_integer(state.token_lines, origin), "reserved keyword cannot be an identifier")
+		return false
+	end
+	if value.size() >= 5 && value[0] == "_" && value[1] == "_" && value[2] == "t" && value[3] == "r" && value[4] == "b"
+		diagnostic(state, "TRBN4002", load_integer(state.token_lines, origin), "identifier uses the compiler-reserved __trb prefix")
+		return false
+	end
+	return true
+end
+
 def expect_identifier(mut state: CompilerState, mut position: Array<Integer>): String
 	if load_integer(state.token_kinds, position[0]) == 1
 		value := load_string(state.token_texts, position[0])
-		if value == "try" || value == "catch"
-			diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), "Result control keyword cannot be an identifier")
+		if !valid_identifier(state, position[0])
 			return ""
 		end
 		position[0] = position[0] + 1
@@ -64,6 +76,26 @@ def parse_type(mut state: CompilerState, mut position: Array<Integer>): String
 		return parts[0]
 	end
 	return union_type(parts)
+end
+
+# Expand only at the forward type cursor. Previously published source origins
+# stay fixed, while the unparsed suffix gains the second generic closing angle.
+# Elsewhere >> remains one operator token, including within a Symbol literal.
+def expand_type_closer(mut state: CompilerState, origin: Integer)
+	if !token_is(state, origin, ">>")
+		return
+	end
+	mut index := state.token_count[0]
+	while index > origin
+		store_integer(state.token_kinds, index, load_integer(state.token_kinds, index - 1))
+		store_string(state.token_texts, index, load_string(state.token_texts, index - 1))
+		store_integer(state.token_lines, index, load_integer(state.token_lines, index - 1))
+		store_integer(state.token_fused_literals, index, sparse_integer_at(state.token_fused_literals, index - 1))
+		index -= 1
+	end
+	store_string(state.token_texts, origin, ">")
+	store_string(state.token_texts, origin + 1, ">")
+	state.token_count[0] += 1
 end
 
 def parse_type_atom(mut state: CompilerState, mut position: Array<Integer>): String
@@ -109,6 +141,7 @@ def parse_type_atom(mut state: CompilerState, mut position: Array<Integer>): Str
 			argument += "," + parse_type(state, position)
 			skip_newlines(state, position)
 		end
+		expand_type_closer(state, position[0])
 		if !expect(state, position, ">")
 			return ""
 		end

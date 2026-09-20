@@ -93,4 +93,33 @@ puts(:end)
     assert len(malformed.stderr.splitlines()) == 1, malformed
     assert b'unsupported String escape' in malformed.stderr, malformed
 
-print('Symbol bytes, GC, syntax origins and retained REPL checks passed')
+    suffixed = run([binary, 'repl'], data=r'''def label!(): String
+return "日\x00本"
+end
+read: () -> String := label!
+def label?(): String
+return "other"
+end
+puts(read())
+__trb_saved := 7
+def invalid(alias: Integer): Integer
+return alias
+end
+puts(label?())
+def operators!(): String
+values := {alias: :>>, newtype: :**}
+return values[:alias] + values[:newtype]
+end
+puts(operators!())
+:type read
+:reload
+puts(read())
+:quit
+'''.encode())
+    assert suffixed.stdout == ('#<callable> : () -> String\n日\x00本\nother\n'
+                               '>>**\n() -> String\n日\x00本\nother\n>>**\nreloaded\n日\x00本\n').encode(), suffixed
+    assert len(suffixed.stderr.splitlines()) == 2, suffixed
+    assert b'compiler-reserved __trb prefix' in suffixed.stderr, suffixed
+    assert b'reserved keyword cannot be an identifier' in suffixed.stderr, suffixed
+
+print('Symbol bytes, callable suffixes, reserved names, GC, origins and retained REPL checks passed')

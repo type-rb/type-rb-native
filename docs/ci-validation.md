@@ -311,3 +311,10 @@ invalidate the compiler evidence.
 Routing and tests cannot replace review of semantic proof boundaries. Preserve
 raw MIR verification, mutation/effect exclusions, negative cases, compactness
 and measured thresholds before accepting a compiler optimization.
+
+Callable suffix and lexical-boundary changes retain the shared ordinary/REPL
+registry, source-erased and reordered MIR under forced GC, and the Symbol CLI
+retained-session checks. Those checks exercise reserved-name failures, Unicode/NUL
+function returns and replay. Maximal operator tokenization is independently
+checked with nested generic annotations/applications and later default origins;
+it does not qualify unimplemented executable operators.

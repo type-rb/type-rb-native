@@ -998,3 +998,40 @@
 | Multiline size | accepts | accepts | matches reference | matches reference |
 | Invalid unreachable body | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Safe never size | accepts | accepts | matches reference | matches reference |
+| Bang callables | accepts | accepts | matches reference | matches reference |
+| Bang function value | accepts | accepts | matches reference | matches reference |
+| Suffix symbols | accepts | accepts | matches reference | matches reference |
+| Uppercase nullable | accepts | accepts | matches reference | matches reference |
+| Suffix import | accepts | accepts | matches reference | matches reference |
+| Invalid double suffix | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid upper callable | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Adjacent bang and equality token boundary in the pinned reference | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid binding alias | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid parameter alias | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid binding newtype | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid parameter newtype | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid binding __trb_saved | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid parameter __trb_saved | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Extended operator symbols | accepts | accepts | matches reference | matches reference |
+| Bang enum method | accepts | accepts | matches reference | matches reference |
+| Nested optional angles | accepts | accepts | matches reference | matches reference |
+| Reserved symbol labels | accepts | accepts | matches reference | output differs |
+| Ordinary not equal | accepts | accepts | matches reference | matches reference |
+| Bang captured value | accepts | accepts | matches reference | matches reference |
+| Invalid field alias | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid function alias | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid block alias | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid label alias | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid field newtype | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid function newtype | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid block newtype | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid label newtype | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid field __trb_saved | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid function __trb_saved | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid block __trb_saved | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid label __trb_saved | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid operator whitespace | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid bare reserved value | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Generic closer origins | accepts | accepts | matches reference | matches reference |
+| Invalid angle surplus | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject a question suffix on an uppercase call name | rejects as reference | rejects as reference | not reached | rejects as reference |
