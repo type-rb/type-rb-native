@@ -611,3 +611,21 @@
 | Hash key spelling effects | accepts | accepts | matches reference | matches reference |
 | Hash key spelling boolean-rejection | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Hash key spelling nil-rejection | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String trimming unicode white space | accepts | accepts | matches reference | matches reference |
+| String trimming non white space | accepts | accepts | matches reference | matches reference |
+| String trimming empty and all space | accepts | accepts | matches reference | matches reference |
+| String trimming directional | accepts | accepts | matches reference | matches reference |
+| String trimming interior and nul | accepts | accepts | matches reference | matches reference |
+| String trimming unicode count | accepts | accepts | matches reference | matches reference |
+| String trimming invalid bytes | accepts | accepts | matches reference | matches reference |
+| String trimming optional | accepts | accepts | matches reference | matches reference |
+| String trimming receiver effects | accepts | accepts | matches reference | matches reference |
+| String trimming managed values | accepts | accepts | matches reference | matches reference |
+| String trimming generic alias | accepts | accepts | matches reference | matches reference |
+| String trimming source retention | accepts | accepts | matches reference | matches reference |
+| String trimming strip arity | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String trimming lstrip arity | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String trimming rstrip arity | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String trimming wrong result | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String trimming nullable rejection | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String trimming named argument | rejects as reference | rejects as reference | not reached | rejects as reference |

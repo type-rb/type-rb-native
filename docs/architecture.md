@@ -104,12 +104,13 @@ vertical slices from remaining ownership.
 ### Current compiler source ownership
 
 The ordinary entry is [compiler/src/compiler.trb](../compiler/src/compiler.trb).
-Its explicit transitive import closure contains 114 canonical implementation modules:
+Its explicit transitive import closure contains 115 canonical implementation modules:
 
 | Modules in `compiler/src/` | Current responsibility |
 | --- | --- |
 | `transform_model.trb` | Parser-owned collection block shapes and concrete transform projections; lowering uses ordinary iteration control. |
 | `qbe_array_join.trb` | Linear Array-to-String byte assembly for verified join MIR; see [decision 0063](decisions/0063-array-join-mir.md). |
+| `qbe_string_trimming.trb` | Unicode edge trimming and one retained-byte copy for verified String MIR; see [decision 0065](decisions/0065-string-trimming-mir.md). |
 | `storage.trb`, `path.trb`, `literals.trb` | Shared storage, path predicates, and numeric/ASCII predicates. |
 | `string_escapes.trb`, `qbe_string_literals.trb` | String escape widths, byte/scalar validation and the private byte constructor; see [escape decoding](decisions/0058-string-escape-decoding.md). |
 | `state.trb` | Compiler state, symbol indexes, shared locals, and diagnostics. |
@@ -127,7 +128,7 @@ Its explicit transitive import closure contains 114 canonical implementation mod
 | `integer_methods.trb` | Integer receiver classification, arity and existing scalar/CFG construction, including an independently verified clamp guard; see [Integer receiver MIR](decisions/0053-integer-receiver-mir.md). |
 | `float_methods.trb` | Float receiver classification and existing scalar/CFG construction, including rounding and non-finite behavior; see [Float receiver MIR](decisions/0054-float-receiver-mir.md). |
 | `array_methods.trb`, `array_queries.trb`, `qbe_array_copies.trb`, `qbe_array_mutations.trb` | Array edges, copies, queries and insertion/removal lower through verified Array operations; bounded runtimes preserve shared headers, element identities and storage accounting. |
-| `string_methods.trb`, `qbe_string_queries.trb`, `qbe_string_sequences.trb`, `qbe_string_slices.trb` | String method classification, typed construction and bounded runtimes; see [query MIR](decisions/0055-string-query-mir.md), [sequence MIR](decisions/0056-string-sequence-mir.md) and [slice MIR](decisions/0057-string-slice-mir.md). |
+| `string_methods.trb`, `qbe_string_queries.trb`, `qbe_string_sequences.trb`, `qbe_string_slices.trb`, `qbe_string_trimming.trb` | String method classification, typed construction and bounded runtimes; see [query MIR](decisions/0055-string-query-mir.md), [sequence MIR](decisions/0056-string-sequence-mir.md) and [slice MIR](decisions/0057-string-slice-mir.md). |
 | `nullable_types.trb`, `nullable_flow.trb`, `nullable_mir.trb`, `qbe_nullable.trb` | Optional type identity, lexical and stable-field facts, typed storage/test/extraction and numeric conversion blocks, and representation adaptation; see [nullable MIR](decisions/0042-nullable-mir.md). |
 | `mir.trb`, `mir_types.trb`, `mir_analysis.trb`, `mir_numeric.trb`, `mir_array_loops.trb`, `mir_flow.trb`, `mir_identities.trb`, `mir_roots.trb`, `mir_passes.trb`, `mir_verifier.trb`, `mir_instructions.trb` | MIR model, semantic composite types and queries, reusable proofs, CFG/dominance, operation effects/liveness/root plans, rewrites, structural verification and instruction contracts. |
 | `mir_construction.trb`, `mir_builder.trb`, `mir_control.trb`, `mir_value_control.trb`, `mir_calls.trb`, `mir_intrinsics.trb`, `mir_logical.trb`, `mir_strings.trb`, `mir_arrays.trb`, `mir_records.trb`, `mir_hashes.trb`, `mir_hash_inference.trb`, `mir_ranges.trb`, `mir_iteration_control.trb` | Declaration-bound ordinary/runtime/host and standard-package call contracts, checked ABI shapes, block construction and publication of scalar and mutable scalar/managed control/value, Array, nominal record, Hash and Range operations, checked empty-Hash type constraints, live Array/streaming Range loops, conversion/I/O and short-circuit MIR. |

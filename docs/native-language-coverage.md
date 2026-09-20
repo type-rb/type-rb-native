@@ -1,12 +1,22 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 609 ordinary-path probes and 32 feature
+Status: the shared contract contains 627 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
 basic-language completion; [the generated family inventory](native-language-feature-inventory.md)
 records semantic contracts that still need tests. The earlier 19-case inventory
 was an initial sample, not a complete list of missing features.
+
+## Unicode String trimming
+
+`String.strip`, `lstrip` and `rstrip` use the reference Unicode White_Space set
+and preserve the retained bytes, including NUL and malformed UTF-8. Typed MIR
+owns the direction, operand types, allocation effects and live roots. Shared
+ordinary/REPL cases and independent source-erased, reordered, forced-GC and
+negative verifier controls are described in
+[decision 0065](decisions/0065-string-trimming-mir.md). The REPL itself uses these
+ordinary methods; remaining String transforms stay open in the inventory.
 
 ## Hash key expressions
 
@@ -106,8 +116,8 @@ the receiver, and before reading its current contents.
 The shared contract covers Unicode/NUL, nullable calls, managed aliases, generic
 concatenation, receiver mutation/rebinding, lexical transfers and rejection
 boundaries. Source-erased/reordered MIR and forced-GC checks verify loop and root
-ownership; see [decision 0061](decisions/0061-array-query-loops.md). Array joining,
-sorting and safe collection forms remain open.
+ownership; see [decision 0061](decisions/0061-array-query-loops.md). Sorting and safe
+collection forms remain open.
 
 ## Hash snapshot iteration and Range materialization
 
