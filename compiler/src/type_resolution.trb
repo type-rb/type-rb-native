@@ -1,3 +1,4 @@
+import { namespace_parent } from namespace_model
 import { callable_parts, callable_type } from callable_types
 import { TypeAliasInstance } from alias_model
 import { abstract_generic_type_valid, add_generic_binding, next_generic_depth } from generic_bindings
@@ -252,6 +253,8 @@ def instantiate_generic_nominal(mut state: CompilerState, definition: Integer, a
 		return ""
 	end
 	previous_module := state.active_module[0]
+	previous_owner := state.declaration_owner[0]
+	state.declaration_owner[0] = namespace_parent(declaration.name)
 	saved_alias_depth := state.alias_expansion_depth[0]
 	mut saved_alias_path: Array<Integer> := []
 	mut alias_step := 0
@@ -341,6 +344,7 @@ def instantiate_generic_nominal(mut state: CompilerState, definition: Integer, a
 	state.generic_depth[0] -= 1
 	state.checked[0].generic_binding[0] = saved_binding
 	state.active_module[0] = previous_module
+	state.declaration_owner[0] = previous_owner
 	return type_name
 end
 
@@ -467,8 +471,11 @@ def resolve_alias_type(mut state: CompilerState, index: Integer, arguments: Arra
 	state.alias_expansion_depth[0] = depth + 1
 	saved_binding := state.checked[0].generic_binding[0]
 	state.checked[0].generic_binding[0] = 0
+	previous_owner := state.declaration_owner[0]
+	state.declaration_owner[0] = namespace_parent(row.name)
 	target := generic_substitute(row.target, row.parameters, arguments)
 	resolved := resolve_type_name(state, row.source_id, target, false)
+	state.declaration_owner[0] = previous_owner
 	state.checked[0].generic_binding[0] = saved_binding
 	state.alias_expansion_depth[0] = depth
 	if resolved != "" && !has_diagnostic(state) && !state.alias_instance_lookup.key?(key)

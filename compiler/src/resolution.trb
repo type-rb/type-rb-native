@@ -1,20 +1,23 @@
+import { declare_constant_functions } from constant_declarations
 import { next_generic_depth } from generic_bindings
+import { namespace_parent } from namespace_model
 import { resolve_lambda_headers } from lambda_resolution
 import { lambda_contains_origin } from lambda_syntax
 import { instantiate_generic_function, validate_generic_functions } from generic_functions
-import { generic_arguments, generic_base } from generic_arguments
+import { generic_application, generic_arguments, generic_base } from generic_arguments
 import { load_standard_source, standard_source_kind } from standard_library
-import { find_alias_in_module, find_function_in_module, find_generic_function_in_module, find_generic_in_module, find_import_binding, find_record_in_module, find_visible_alias, find_visible_enum, find_visible_function, find_visible_generic, find_visible_generic_function, find_visible_record } from declaration_lookup
+import { find_alias_in_module, find_declaration_in_module, find_function_in_module, find_generic_function_in_module, find_generic_in_module, find_import_binding, find_record_in_module, find_visible_alias, find_visible_declaration, find_visible_enum, find_visible_function, find_visible_generic, find_visible_generic_function, find_visible_record } from declaration_lookup
+import { namespace_member_access, parse_declaration_reference } from namespace_references
 import { resolve_type_name, type_display } from type_resolution
 import { EnumField } from enum_model
 import { parse_type, token_is } from syntax_tokens
-import { nominal_application_end } from generic_syntax
+import { nominal_application_end, nominal_application_name } from generic_syntax
 import { validate_alias_declarations, validate_generic_declarations } from generic_validation
 import { find_enum_in_module, find_enum_variant } from enum_types
 import { syntax_loop_transfer_kind } from parser
 import { path_basename, path_directory, string_without_suffix } from path
 import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_bind, local_find, locals_new, select_checked_body, terminal_token } from state
-import { load_integer, load_string, sparse_integer_at, store_integer, store_string } from storage
+import { load_integer, load_string, sparse_integer_at, sparse_string_at, store_integer, store_string } from storage
 import { declare_default_functions } from default_arguments
 
 def import_path_value(raw: String): String
@@ -284,6 +287,26 @@ def resolve_bare_imports(mut state: CompilerState): Boolean
 				mut matches := 0
 				mut declaration := ""
 				mut candidates := ""
+				state.constants.each do |definition|
+					if definition.source_id == target && ascii_fold(definition.name) == wanted
+						if candidates != ""
+							candidates += ", "
+						end
+						candidates += definition.name
+						declaration = definition.name
+						matches += 1
+					end
+				end
+				state.namespaces.each do |definition|
+					if definition.source_id == target && ascii_fold(definition.name) == wanted
+						if candidates != ""
+							candidates += ", "
+						end
+						candidates += definition.name
+						declaration = definition.name
+						matches += 1
+					end
+				end
 				mut record_index := 0
 				while record_index < state.record_count[0]
 					if load_integer(state.record_modules, record_index) == target
@@ -423,7 +446,13 @@ def validate_import_bindings(mut state: CompilerState): Boolean
 			diagnostic(state, "TRBN4003", line, "import binding conflicts with local declaration " + name)
 		end
 		mut exported := target < - 1
+		if find_declaration_in_module(state, module_index, name, 6) >= 0 || find_declaration_in_module(state, module_index, name, 7) >= 0
+			diagnostic(state, "TRBN4003", line, "import binding conflicts with local declaration " + name)
+		end
 		if target >= 0
+			if find_declaration_in_module(state, target, declaration, 6) >= 0 || find_declaration_in_module(state, target, declaration, 7) >= 0
+				exported = true
+			end
 			if find_record_in_module(state, target, declaration) >= 0 || find_enum_in_module(state, target, declaration) >= 0 || find_generic_in_module(state, target, declaration) >= 0 || find_alias_in_module(state, target, declaration) >= 0
 				exported = true
 			end
@@ -457,6 +486,19 @@ def validate_import_usage(mut state: CompilerState): Boolean
 end
 
 def resolve_declarations(mut state: CompilerState): Boolean
+	state.namespaces.each do |declaration|
+		mut kind := 0
+		while kind < 6
+			if find_declaration_in_module(state, declaration.source_id, declaration.name, kind) >= 0
+				state.active_module[0] = declaration.source_id
+				diagnostic(state, "TRBN4003", declaration.line, "duplicate declaration " + declaration.name)
+			end
+			kind += 1
+		end
+	end
+	if has_diagnostic(state)
+		return false
+	end
 	if !validate_import_bindings(state)
 		return false
 	end
@@ -477,6 +519,7 @@ def resolve_declarations(mut state: CompilerState): Boolean
 		module_index := load_integer(state.record_modules, record_index)
 		state.active_module[0] = module_index
 		mut other_record := record_index - 1
+		state.declaration_owner[0] = namespace_parent(load_string(state.record_names, record_index))
 		while other_record >= 0
 			if load_integer(state.record_modules, other_record) != module_index
 				other_record =- 1
@@ -547,6 +590,7 @@ def resolve_declarations(mut state: CompilerState): Boolean
 			end
 		end
 		name := load_string(state.function_names, function_index)
+		state.declaration_owner[0] = namespace_parent(name)
 		if declared_functions.key?(name)
 			diagnostic(
 				state,
@@ -607,6 +651,7 @@ def resolve_function_body(
 	module_index := load_integer(state.function_modules, function_index)
 	state.active_module[0] = module_index
 	body_start := load_integer(state.function_body_starts, function_index)
+	state.declaration_owner[0] = sparse_string_at(state.token_namespaces, body_start)
 	body_finish := load_integer(state.function_body_ends, function_index)
 	parameter_start := load_integer(state.function_parameter_starts, function_index)
 	parameter_finish := parameter_start + load_integer(state.function_parameter_counts, function_index)
@@ -661,7 +706,11 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 		if control.kind == 2 && control.origin >= body_start && control.finish <= body_finish && !lambda_contains_origin(state, body_start, body_finish, control.origin)
 			control.branches.each do |branch|
 				if branch.condition >= 0 && token_is(state, branch.condition + 1, "::")
-					mut token := branch.condition + 4
+					mut token := branch.condition
+					while token < branch.condition_finish && !token_is(state, token, "(")
+						token += 1
+					end
+					token += 1
 					while token < branch.condition_finish
 						if load_integer(state.token_kinds, token) == 1 && !token_is(state, token + 1, ":")
 							resolution_local_add(locals, load_string(state.token_texts, token), "", 0)
@@ -689,14 +738,27 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 			end
 		else
 			if kind == 1
+				mut reference_name := text
+				mut reference_position := [index + 1]
+				if local_find(locals, text) < 0 && find_visible_declaration(state, module_index, text, 6) >= 0
+					reference_position[0] = index
+					reference_name = parse_declaration_reference(state, reference_position)
+				end
 				application_finish := nominal_application_end(state, index)
 				if application_finish > index
-					mut application_position := [index]
-					raw := parse_type(state, application_position)
+					mut application_position := [nominal_application_name(state, index)]
+					mut raw := parse_type(state, application_position)
+					if reference_position[0] > index + 1
+						raw = generic_application(reference_name, generic_arguments(raw))
+					end
 					if token_is(state, application_finish, "(")
 						definition := find_visible_generic_function(state, module_index, generic_base(raw))
 						if definition < 0
 							diagnostic(state, "TRBN4003", load_integer(state.token_lines, index), "unresolved generic function " + generic_base(raw))
+							return false
+						end
+						declaration := state.generic_functions[definition]
+						if !namespace_member_access(state, declaration.source_id, declaration.name, index)
 							return false
 						end
 						mut arguments: Array<String> := []
@@ -718,6 +780,16 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 					store_string(state.checked[0].generic_application_types, index, resolved)
 					store_integer(state.checked[0].generic_application_finishes, index, application_finish)
 					index = application_finish
+					next
+				end
+				if reference_position[0] > index + 1
+					alias_index := find_visible_alias(state, module_index, reference_name)
+					if alias_index >= 0 && state.type_aliases[alias_index].parameters.size() == 0
+						resolved := resolve_type_name(state, module_index, reference_name, false)
+						store_string(state.checked[0].generic_application_types, index, resolved)
+						store_integer(state.checked[0].generic_application_finishes, index, reference_position[0])
+					end
+					index = reference_position[0]
 					next
 				end
 				if local_find(locals, text) < 0 && (token_is(state, index + 1, "::") || (token_is(state, index + 1, ".") && token_is(state, index + 2, "new")))
@@ -769,7 +841,7 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 							else
 								if token_is(state, index + 1, "(")
 									if text != "puts"
-										if find_visible_function(state, module_index, text) < 0 && local_find(locals, text) < 0
+										if find_visible_function(state, module_index, text) < 0 && local_find(locals, text) < 0 && find_visible_declaration(state, module_index, text, 7) < 0
 											diagnostic(
 												state,
 												"TRBN4003",
@@ -790,7 +862,7 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 												)
 											end
 										else
-											if local_find(locals, text) < 0
+											if local_find(locals, text) < 0 && find_visible_declaration(state, module_index, text, 7) < 0
 												if find_import_binding(state, module_index, text) < 0
 													diagnostic(
 														state,
@@ -802,7 +874,7 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 											end
 										end
 									else
-										if local_find(locals, text) < 0 && find_visible_function(state, module_index, text) < 0 && find_visible_generic_function(state, module_index, text) < 0
+										if local_find(locals, text) < 0 && find_visible_function(state, module_index, text) < 0 && find_visible_generic_function(state, module_index, text) < 0 && find_visible_declaration(state, module_index, text, 7) < 0
 											diagnostic(
 												state,
 												"TRBN4003",
@@ -839,6 +911,9 @@ def resolve(mut state: CompilerState): Boolean
 		return false
 	end
 	declare_default_functions(state)
+	if !declare_constant_functions(state)
+		return false
+	end
 	mut function_index := 0
 	while function_index < state.function_count[0]
 		mut locals := locals_new(state.token_count[0] + 1)
@@ -948,6 +1023,7 @@ def resolve_enum_declarations(mut state: CompilerState): Boolean
 	while owner < state.enums.size()
 		definition := state.enums[owner]
 		state.active_module[0] = definition.source_id
+		state.declaration_owner[0] = namespace_parent(definition.name)
 		if find_enum_in_module(state, definition.source_id, definition.name) != owner || find_record_in_module(state, definition.source_id, definition.name) >= 0 || find_function_in_module(state, definition.source_id, definition.name) >= 0
 			diagnostic(state, "TRBN4003", definition.line, "duplicate declaration " + definition.name)
 		end

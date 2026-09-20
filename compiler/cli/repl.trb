@@ -1,3 +1,5 @@
+import { repl_initialize_constants } from repl_globals
+import { enum_uppercase } from enum_types
 import { repl_default } from repl_defaults
 import { token_is, skip_newlines } from syntax_tokens
 import { repl_checked, repl_checked_input } from repl_check
@@ -14,7 +16,7 @@ import { compiler_read_source, compiler_file_exists } from compiler
 import { lex, compiler_source_slice } from lexer
 import { path_directory, path_join, string_starts_with } from path
 import { native_cli_line, native_cli_eof, native_cli_tty, native_cli_write, native_cli_interrupt, native_cli_env, native_cli_mkdir } from host
-import { ReplStore, ReplEnvironment, repl_store, repl_environment, repl_type, repl_type_in, repl_activate } from repl_model
+import { ReplStore, ReplEnvironment, repl_store, repl_environment, repl_type, repl_type_in, repl_activate, repl_constant_key } from repl_model
 import { repl_binding_value, repl_render, repl_compact } from repl_values
 import { repl_statement } from repl_eval
 import { integer_string } from literals
@@ -93,6 +95,7 @@ end
 
 def repl_show(mut state: CompilerState, mut session: ReplSession, input: String, prefix: String, type_only: Boolean, display: Boolean): Boolean
 	state.active_module[0] = state.entry_module[0]
+	state.declaration_owner[0] = ""
 	line_number := repl_lines(prefix) + 1
 	main := find_function_in_module(state, state.entry_module[0], "main")
 	mut position := [load_integer(state.function_body_starts, main)]
@@ -109,6 +112,10 @@ def repl_show(mut state: CompilerState, mut session: ReplSession, input: String,
 		return true
 	end
 	repl_activate(session.store, state)
+	if !repl_initialize_constants(state, session.store)
+		native_cli_write(repl_error_text(session.store.error[0]) + "\n", 2)
+		return false
+	end
 	session.store.error[0] = ""
 	previous_count := session.environment.count[0]
 	mut flow := [0]
@@ -223,8 +230,27 @@ def repl_submit(mut session: ReplSession, input: String, type_only: Boolean, dis
 		return false
 	end
 	if declarations
+		if type_only
+			return true
+		end
 		repl_activate(session.store, state)
+		if !repl_initialize_constants(state, session.store)
+			native_cli_write(repl_error_text(session.store.error[0]) + "\n", 2)
+			return false
+		end
 		session.text[1] = repl_bindings(state, session)
+		if display
+			mut identity := 0
+			while identity < state.constants.size()
+				row := state.constants[identity]
+				if row.source_id == state.entry_module[0] && row.line > repl_lines(session.text[0]) && !row.name.include?("::")
+					key := repl_constant_key(state, identity)
+					value := session.store.constants[key]
+					puts(repl_editor_paint(repl_render(state, session.store, value, 0), 2, repl_use_color()) + repl_editor_paint(" : ", 4, repl_use_color()) + repl_editor_paint(repl_type_name(state, state.constant_types[identity]), 5, repl_use_color()))
+				end
+				identity += 1
+			end
+		end
 		session.text[0] += input + "\n"
 		session.facts[0] = state.submissions[0].after
 		return true
@@ -289,6 +315,16 @@ def repl_run(config: String): Integer
 		return 1
 	end
 	mut session := ReplSession.new(project: project, text: [project.imports, ""], store: repl_store(), environment: repl_environment(), submissions: [], facts: [[]], resets: [])
+	mut initial := repl_checked(project.imports + "def main()\nreturn\nend\n", project)
+	if has_diagnostic(initial)
+		repl_diagnostic(initial, 0)
+		return 1
+	end
+	repl_activate(session.store, initial)
+	if !repl_initialize_constants(initial, session.store)
+		native_cli_write(repl_error_text(session.store.error[0]) + "\n", 2)
+		return 1
+	end
 	mut pending := ""
 	interactive := native_cli_tty() != 0
 	mut history := native_cli_env("TRBN_HISTORY")
@@ -449,7 +485,7 @@ def repl_complete(session: ReplSession): ReplCandidates
 	while index < state.function_count[0]
 		if load_integer(state.function_modules, index) == state.entry_module[0]
 			name := load_string(state.function_names, index)
-			if name != "main" && sparse_integer_at(state.function_defaults, index) == 0 && sparse_integer_at(state.function_lambdas, index) == 0
+			if name != "main" && sparse_integer_at(state.function_expression_bodies, index) == 0 && sparse_integer_at(state.function_lambdas, index) == 0
 				repl_candidate(candidates, name, repl_function_insertion(state, index, name), repl_function_detail(state, index), 6)
 			end
 		end
@@ -568,6 +604,16 @@ def repl_replay(mut session: ReplSession, config: String, additional: Array<Stri
 		end
 	end
 	replayed.text[0] = declarations
+	mut initial := repl_checked(declarations + "def main()\nreturn\nend\n", project)
+	if has_diagnostic(initial)
+		repl_diagnostic(initial, 0)
+		return ReplReplay.new(session: session, success: false)
+	end
+	repl_activate(replayed.store, initial)
+	if !repl_initialize_constants(initial, replayed.store)
+		native_cli_write(repl_error_text(replayed.store.error[0]) + "\n", 2)
+		return ReplReplay.new(session: session, success: false)
+	end
 	index = 0
 	while index < inputs.size()
 		if repl_reset_at(session.resets, index)
@@ -622,8 +668,11 @@ def repl_is_declaration(input: String): Boolean
 	lex(probe, input)
 	mut first := [0]
 	skip_newlines(probe, first)
+	if load_integer(probe.token_kinds, first[0]) == 1 && enum_uppercase(load_string(probe.token_texts, first[0])) && (token_is(probe, first[0] + 1, ":=") || token_is(probe, first[0] + 1, ":"))
+		return true
+	end
 	mut declarations := token_is(probe, first[0], "def")
-	if token_is(probe, first[0], "record") || token_is(probe, first[0], "enum")
+	if token_is(probe, first[0], "record") || token_is(probe, first[0], "enum") || token_is(probe, first[0], "module")
 		declarations = true
 	end
 	if token_is(probe, first[0], "import") || token_is(probe, first[0], "alias")

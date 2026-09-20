@@ -1,0 +1,36 @@
+import { checked_function_locals } from checked_functions
+import { check_expression } from checked_program
+import { CompilerState, diagnostic, has_diagnostic } from state
+import { load_string, store_string } from storage
+
+# Infer once in the checked initialization order before freezing MIR signatures.
+# This pass checks expressions but does not execute initializer side effects.
+def infer_constant_types(mut state: CompilerState): Boolean
+	previous_phase := state.lambda_phase[0]
+	state.lambda_phase[0] = 1
+	state.constant_order.each do |index|
+		if has_diagnostic(state)
+			break
+		end
+		row := state.constants[index]
+		function := state.constant_functions[index]
+		mut locals := checked_function_locals(state, function)
+		mut position := [row.start]
+		expected := load_string(state.function_result_types, function)
+		value := check_expression(state, position, locals, 1, expected)
+		mut type_name := expected
+		if type_name == ""
+			type_name = value.type_name
+		end
+		if type_name == "Void" || type_name == "Nil" || type_name == "Never" || type_name == "Hash" || type_name == ""
+			diagnostic(state, "TRBN4004", row.line, "constant requires a concrete value type; add an annotation when needed")
+		end
+		if position[0] != row.finish
+			diagnostic(state, "TRBN4004", row.line, "checker did not consume the constant initializer")
+		end
+		state.constant_types[index] = type_name
+		store_string(state.function_result_types, function, type_name)
+	end
+	state.lambda_phase[0] = previous_phase
+	return !has_diagnostic(state)
+end

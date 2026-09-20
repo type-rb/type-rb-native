@@ -1,3 +1,4 @@
+import { namespace_parent, namespace_qualify } from namespace_model
 import { find_enum_in_module } from enum_types
 import { CompilerState, find_name_index, function_index_key } from state
 import { load_integer, load_string, store_integer } from storage
@@ -15,19 +16,7 @@ def find_generic_in_module(state: CompilerState, source: Integer, name: String):
 end
 
 def find_visible_generic(mut state: CompilerState, source: Integer, name: String): Integer
-	local := find_generic_in_module(state, source, name)
-	if local >= 0
-		return local
-	end
-	binding := find_import_binding(state, source, name)
-	if binding < 0
-		return - 1
-	end
-	resolved := find_generic_in_module(state, load_integer(state.import_targets, binding), load_string(state.import_declarations, binding))
-	if resolved >= 0
-		store_integer(state.import_used, binding, 1)
-	end
-	return resolved
+	return find_visible_declaration(state, source, name, 3)
 end
 
 def find_record_in_module(state: CompilerState, module_index: Integer, name: String): Integer
@@ -60,68 +49,15 @@ def find_import_binding(state: CompilerState, module_index: Integer, name: Strin
 end
 
 def find_visible_record(mut state: CompilerState, module_index: Integer, name: String): Integer
-	local := find_record_in_module(state, module_index, name)
-	if local >= 0
-		return local
-	end
-	import_index := find_import_binding(state, module_index, name)
-	if import_index < 0
-		return - 1
-	end
-	target := load_integer(state.import_targets, import_index)
-	if target < 0
-		return - 1
-	end
-	resolved := find_record_in_module(
-		state,
-		target,
-		load_string(state.import_declarations, import_index),
-	)
-	if resolved >= 0
-		store_integer(state.import_used, import_index, 1)
-	end
-	return resolved
+	return find_visible_declaration(state, module_index, name, 1)
 end
 
 def find_visible_function(mut state: CompilerState, module_index: Integer, name: String): Integer
-	local := find_function_in_module(state, module_index, name)
-	if local >= 0
-		return local
-	end
-	import_index := find_import_binding(state, module_index, name)
-	if import_index < 0
-		return - 1
-	end
-	target := load_integer(state.import_targets, import_index)
-	if target < 0
-		return - 1
-	end
-	resolved := find_function_in_module(
-		state,
-		target,
-		load_string(state.import_declarations, import_index),
-	)
-	if resolved >= 0
-		store_integer(state.import_used, import_index, 1)
-	end
-	return resolved
+	return find_visible_declaration(state, module_index, name, 0)
 end
 
 def find_visible_enum(mut state: CompilerState, source: Integer, name: String): Integer
-	local := find_enum_in_module(state, source, name)
-	if local >= 0
-		return local
-	end
-	binding := find_import_binding(state, source, name)
-	if binding < 0
-		return - 1
-	end
-	target := load_integer(state.import_targets, binding)
-	resolved := find_enum_in_module(state, target, load_string(state.import_declarations, binding))
-	if resolved >= 0
-		store_integer(state.import_used, binding, 1)
-	end
-	return resolved
+	return find_visible_declaration(state, source, name, 2)
 end
 
 def find_generic_function_in_module(state: CompilerState, source: Integer, name: String): Integer
@@ -137,19 +73,7 @@ def find_generic_function_in_module(state: CompilerState, source: Integer, name:
 end
 
 def find_visible_generic_function(mut state: CompilerState, source: Integer, name: String): Integer
-	local := find_generic_function_in_module(state, source, name)
-	if local >= 0
-		return local
-	end
-	binding := find_import_binding(state, source, name)
-	if binding < 0
-		return - 1
-	end
-	resolved := find_generic_function_in_module(state, load_integer(state.import_targets, binding), load_string(state.import_declarations, binding))
-	if resolved >= 0
-		store_integer(state.import_used, binding, 1)
-	end
-	return resolved
+	return find_visible_declaration(state, source, name, 4)
 end
 
 def find_alias_in_module(state: CompilerState, source: Integer, name: String): Integer
@@ -165,15 +89,91 @@ def find_alias_in_module(state: CompilerState, source: Integer, name: String): I
 end
 
 def find_visible_alias(mut state: CompilerState, source: Integer, name: String): Integer
-	local := find_alias_in_module(state, source, name)
+	return find_visible_declaration(state, source, name, 5)
+end
+
+# All declaration families share lexical namespace and import-alias selection.
+# The selected row retains its source/declaration identity; no spelling rewrite
+# is performed on the source token stream.
+def find_declaration_in_module(state: CompilerState, source: Integer, name: String, kind: Integer): Integer
+	if kind == 0
+		return find_function_in_module(state, source, name)
+	end
+	if kind == 1
+		return find_record_in_module(state, source, name)
+	end
+	if kind == 2
+		return find_enum_in_module(state, source, name)
+	end
+	if kind == 3
+		return find_generic_in_module(state, source, name)
+	end
+	if kind == 4
+		return find_generic_function_in_module(state, source, name)
+	end
+	if kind == 5
+		return find_alias_in_module(state, source, name)
+	end
+	if kind == 7
+		mut index := 0
+		while index < state.constants.size()
+			row := state.constants[index]
+			if row.source_id == source && row.name == name
+				return index
+			end
+			index += 1
+		end
+	end
+	if kind == 6
+		mut index := 0
+		while index < state.namespaces.size()
+			row := state.namespaces[index]
+			if row.source_id == source && row.name == name
+				return index
+			end
+			index += 1
+		end
+	end
+	return - 1
+end
+
+def find_visible_declaration(mut state: CompilerState, source: Integer, name: String, kind: Integer): Integer
+	mut owner := state.declaration_owner[0]
+	while owner != ""
+		local := find_declaration_in_module(state, source, namespace_qualify(owner, name), kind)
+		if local >= 0
+			return local
+		end
+		owner = namespace_parent(owner)
+	end
+	local := find_declaration_in_module(state, source, name, kind)
 	if local >= 0
 		return local
 	end
-	binding := find_import_binding(state, source, name)
+	mut root := ""
+	mut suffix := ""
+	mut index := 0
+	mut qualified := false
+	while index < name.size()
+		if name[index] == ":"
+			qualified = true
+		end
+		if qualified
+			suffix += name[index]
+		else
+			root += name[index]
+		end
+		index += 1
+	end
+	binding := find_import_binding(state, source, root)
 	if binding < 0
 		return - 1
 	end
-	resolved := find_alias_in_module(state, load_integer(state.import_targets, binding), load_string(state.import_declarations, binding))
+	target := load_integer(state.import_targets, binding)
+	if target < 0
+		return - 1
+	end
+	resolved := find_declaration_in_module(state, target, load_string(state.import_declarations, binding) + suffix, kind)
 	if resolved >= 0
 		store_integer(state.import_used, binding, 1)
 	end

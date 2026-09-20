@@ -1,3 +1,5 @@
+import { repl_constant_key } from repl_model
+import { checked_reference_name } from namespace_references
 import { repl_range_array } from repl_range_methods
 import { array_method_arity, array_method_kind } from array_methods
 import { repl_array_method } from repl_array_methods
@@ -255,15 +257,18 @@ def repl_call(mut state: CompilerState, function: Integer, arguments: Array<Inte
 	mut position := [load_integer(state.function_body_starts, function)]
 	mut flow := [0]
 	module_name := state.active_module[0]
+	previous_owner := state.declaration_owner[0]
+	state.declaration_owner[0] = sparse_string_at(state.token_namespaces, position[0])
 	state.active_module[0] = load_integer(state.function_modules, function)
 	mut result := 0
-	if sparse_integer_at(state.function_defaults, function) > 0
+	if sparse_integer_at(state.function_expression_bodies, function) > 0
 		value := repl_expression(state, position, store, environment, 1, load_string(state.function_result_types, function))
 		result = value.value
 	else
 		result = repl_block(state, position, store, environment, flow, - 1)
 	end
 	state.active_module[0] = module_name
+	state.declaration_owner[0] = previous_owner
 	state.checked[0] = previous_body
 	store.depth[0] -= 1
 	if load_string(state.function_result_types, function) == "Void"
@@ -309,6 +314,8 @@ def repl_indirect_call(mut store: ReplStore, id: Integer, arguments: Array<Integ
 	function := store.integers[id]
 	previous_body := select_checked_body(state, function)
 	previous_module := state.active_module[0]
+	previous_owner := state.declaration_owner[0]
+	state.declaration_owner[0] = sparse_string_at(state.token_namespaces, load_integer(state.function_body_starts, function))
 	state.active_module[0] = load_integer(state.function_modules, function)
 	store.depth[0] += 1
 	mut environment := repl_closure_environment(state, store, id, arguments)
@@ -324,6 +331,7 @@ def repl_indirect_call(mut store: ReplStore, id: Integer, arguments: Array<Integ
 	store.depth[0] -= 1
 	state.checked[0] = previous_body
 	state.active_module[0] = previous_module
+	state.declaration_owner[0] = previous_owner
 	store.active_program[0] = previous_program
 	return result
 end
@@ -366,7 +374,7 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 	if token_is(state, position[0], "if") || token_is(state, position[0], "case")
 		return repl_reference(repl_control(state, position, store, environment, 0))
 	end
-	text := load_string(state.token_texts, position[0])
+	mut text := load_string(state.token_texts, position[0])
 	kind := load_integer(state.token_kinds, position[0])
 	position[0] += 1
 	if kind == 2
@@ -483,6 +491,11 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		return repl_reference(repl_value(store, "Array<" + element + ">", 0, 0.0, "", children))
 	end
 	origin := position[0] - 1
+	selected_finish := sparse_integer_at(state.checked[0].resolved_finishes, origin)
+	if selected_finish > origin
+		text = checked_reference_name(state, origin)
+		position[0] = selected_finish
+	end
 	application_type := sparse_string_at(state.checked[0].generic_application_types, origin)
 	application_finish := sparse_integer_at(state.checked[0].generic_application_finishes, origin)
 	if application_finish > origin
@@ -490,9 +503,18 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 	end
 	binding := repl_find(environment, text)
 	if binding >= 0
-		return ReplReference.new(value: repl_nullable_read(state, store, repl_binding_value(store, environment, binding), position[0] - 1), binding: binding, container: - 1, slot: - 1)
+		return ReplReference.new(value: repl_nullable_read(state, store, repl_binding_value(store, environment, binding), origin), binding: binding, container: - 1, slot: - 1)
 	end
-	function_value := sparse_integer_at(state.checked[0].function_values, position[0] - 1)
+	constant := sparse_integer_at(state.checked[0].constant_references, origin)
+	if constant > 0
+		key := repl_constant_key(state, constant - 1)
+		if !store.constants.key?(key)
+			store.error[0] = "constant is not initialized"
+			return repl_reference(0)
+		end
+		return repl_reference(repl_nullable_read(state, store, store.constants[key], origin))
+	end
+	function_value := sparse_integer_at(state.checked[0].function_values, origin)
 	if function_value > 0
 		function := function_value - 1
 		return repl_reference(repl_value(store, declared_callable_type(state, function, 0), function, 0.0, "", []))

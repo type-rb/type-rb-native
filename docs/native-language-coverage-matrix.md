@@ -66,8 +66,8 @@
 | Result catch recovery | accepts | accepts | matches reference | matches reference |
 | Class fields, initializer and method | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Explicit interface conformance | rejects valid input | rejects valid input | not reached | rejects valid input |
-| Module declaration and constant | rejects valid input | rejects valid input | not reached | rejects as reference |
-| Top-level constant | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Module declaration and constant | accepts | accepts | matches reference | matches reference |
+| Top-level constant | accepts | accepts | matches reference | matches reference |
 | Symbol literal equality | accepts | accepts | matches reference | matches reference |
 | Named import alias and reachable file | accepts | accepts | matches reference | matches reference |
 | Reject unused local binding | accepts; reference rejects | accepts; reference rejects | differs | output differs |
@@ -601,7 +601,7 @@
 | Named function keyword call rejection | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Named function nullable call rejection | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Named function result ignored | rejects as reference | rejects as reference | not reached | matches reference |
-| Named function imported default rejection | rejects as reference | rejects as reference | not reached | diagnostic/output differs |
+| Named function imported default rejection | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Named function field optional | accepts | accepts | matches reference | matches reference |
 | Named function field order | accepts | accepts | matches reference | matches reference |
 | Named function generic nested | accepts | accepts | matches reference | matches reference |
@@ -657,5 +657,46 @@
 | Symbol invalid scalar | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Symbol invalid quoted nesting | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Symbol invalid missing name | rejects as reference | rejects as reference | not reached | rejects as reference |
-| Unquoted control keyword Symbol reference gap | accepts; reference rejects | accepts; reference rejects | differs | rejects as reference |
+| Keyword Symbols retain String semantics in files and the REPL | accepts | accepts | matches reference | matches reference |
 | Symbol patterns require an explicit String literal | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Inferred and annotated scalar constants | accepts | accepts | matches reference | matches reference |
+| Ordered constant initializers execute once | accepts | accepts | matches reference | matches reference |
+| Managed Array Hash and record constants | accepts | accepts | matches reference | output differs |
+| Typed empty containers and nullable constants | accepts | accepts | matches reference | matches reference |
+| Function-valued constants retain global reads | accepts | accepts | matches reference | matches reference |
+| Nested namespace constants preserve lexical parents | accepts | accepts | matches reference | matches reference |
+| Reopened namespaces share constant identity | accepts | accepts | matches reference | matches reference |
+| Declaration-owned defaults read lexical constants | accepts | accepts | matches reference | matches reference |
+| Scalar copies may have mutable local bindings | accepts | accepts | matches reference | matches reference |
+| Array parameter mutability preserves shared identity | accepts | accepts | matches reference | matches reference |
+| Named constant imports preserve source ownership | accepts | accepts | matches reference | matches reference |
+| Bare module aliases retain constant and method identities | accepts | accepts | matches reference | matches reference |
+| Imported module initializers precede their consumers once | accepts | accepts | matches reference | matches reference |
+| Constant Array bindings reject direct mutation | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Constant Array bindings reject indexed writes | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Constant references cannot become mutable bindings | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Hash parameter mutability preserves shared identity | accepts | accepts | matches reference | output differs |
+| Constant bindings cannot be reassigned | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Qualified constant bindings cannot be reassigned | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Duplicate constant declarations are rejected | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Constant annotations check initializer types | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Stable nullable constant reads narrow after a guard | accepts | accepts | matches reference | matches reference |
+| An initializer invokes an earlier function-valued constant | accepts | accepts | matches reference | matches reference |
+| Module records retain their lexical declaration owner | accepts | accepts | matches reference | matches reference |
+| Nested module enums preserve qualified variants | accepts | accepts | matches reference | matches reference |
+| Private module methods permit lexical calls | accepts | accepts | matches reference | matches reference |
+| Private module methods reject external calls | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Qualified module payload patterns are exhaustive | accepts | accepts | matches reference | matches reference |
+| Qualified generic record aliases retain the reference constructor gap | accepts | accepts; reference rejects | differs | output differs |
+| Module aliases and defaults resolve lexical type owners | accepts | accepts | matches reference | matches reference |
+| Private methods permit calls qualified by their own module | accepts | accepts | matches reference | matches reference |
+| Private methods reject external qualified access | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Private methods reject external function-value access | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Generic module methods remain unsupported by the reference | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Imported module aliases preserve method and record identity | accepts | accepts | matches reference | matches reference |
+| Constant inference nil | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Constant inference array | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Constant inference hash | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Constant record bindings reject field mutation | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Constant record projection rejects Array mutation | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Keyword Symbol constant uses ordinary String semantics | accepts | accepts | matches reference | matches reference |

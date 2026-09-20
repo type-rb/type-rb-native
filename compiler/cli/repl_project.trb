@@ -1,3 +1,4 @@
+import { namespace_parent } from namespace_model
 import { callable_parts } from callable_types
 import { generic_application } from generic_arguments
 import { standard_source_kind } from standard_library
@@ -74,6 +75,14 @@ def repl_project(config: String): ReplProject
 			names.push(definition.name)
 			modules.push(module_name)
 		end
+		state.constants.each do |definition|
+			names.push(definition.name)
+			modules.push(module_name)
+		end
+		state.namespaces.each do |definition|
+			names.push(definition.name)
+			modules.push(module_name)
+		end
 		state.enums.each do |definition|
 			names.push(definition.name)
 			modules.push(module_name)
@@ -91,7 +100,7 @@ def repl_project(config: String): ReplProject
 			end
 			peer += 1
 		end
-		if count == 1
+		if count == 1 && namespace_parent(names[index]) == ""
 			imports += "import { " + names[index] + " } from " + modules[index] + "\n"
 		end
 		index += 1
@@ -130,6 +139,12 @@ def repl_project_source(source: String, prelude: String): String
 		explicit[definition.name] = 1
 	end
 	session.type_aliases.each do |definition|
+		explicit[definition.name] = 1
+	end
+	session.constants.each do |definition|
+		explicit[definition.name] = 1
+	end
+	session.namespaces.each do |definition|
 		explicit[definition.name] = 1
 	end
 	session.enums.each do |definition|
@@ -262,16 +277,31 @@ def repl_visible_type_name(state: CompilerState, owner: Integer, name: String): 
 	if owner == state.entry_module[0]
 		return name
 	end
+	visible := repl_imported_name(state, owner, name)
+	if visible != ""
+		return visible
+	end
+	return name
+end
+
+def repl_imported_name(state: CompilerState, owner: Integer, name: String): String
 	start := load_integer(state.module_import_starts, state.entry_module[0])
 	finish := start + load_integer(state.module_import_counts, state.entry_module[0])
 	mut index := start
 	while index < finish
-		if load_integer(state.import_targets, index) == owner && load_string(state.import_declarations, index) == name
-			return load_string(state.import_symbols, index)
+		if load_integer(state.import_targets, index) == owner
+			declaration := load_string(state.import_declarations, index)
+			mut root := name
+			while root != ""
+				if root == declaration
+					return load_string(state.import_symbols, index) + compiler_source_slice(name, root.size(), name.size())
+				end
+				root = namespace_parent(root)
+			end
 		end
 		index += 1
 	end
-	return name
+	return ""
 end
 
 # The reference REPL makes these portable declaration roots available by
@@ -319,14 +349,7 @@ def repl_witness_type_name_at(state: CompilerState, type_name: String, blocked: 
 			if definition.source_id == state.entry_module[0]
 				visible = definition.name
 			else
-				mut binding := load_integer(state.module_import_starts, state.entry_module[0])
-				finish := binding + load_integer(state.module_import_counts, state.entry_module[0])
-				while binding < finish
-					if load_integer(state.import_targets, binding) == definition.source_id && load_string(state.import_declarations, binding) == definition.name
-						visible = load_string(state.import_symbols, binding)
-					end
-					binding += 1
-				end
+				visible = repl_imported_name(state, definition.source_id, definition.name)
 			end
 			if visible != ""
 				if instance.arguments.size() == 0

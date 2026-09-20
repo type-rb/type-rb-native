@@ -1,3 +1,6 @@
+import { emit_mir_globals } from qbe_globals
+import { mir_declare_globals } from mir_globals
+import { infer_constant_types } from constant_analysis
 import { emit_closure_adapters } from qbe_callables
 import { load_standard_source, standard_source_kind } from standard_library
 import { check_generic_templates } from generic_check
@@ -93,6 +96,7 @@ def emit_target_entry(mut output: QbeOutput)
 	if output.runtime_flags[1] == 1
 		emit_process_arguments(output)
 	end
+	qbe_output_line(output, "\tcall $trbn_initialize_constants()")
 	qbe_output_line(output, "\tstorel $trbn_qbe_darwin_arm64, $trbn_selected_qbe_target")
 	qbe_output_line(output, "\tstorel $trbn_dead_strip_darwin, $trbn_selected_dead_strip")
 	qbe_output_line(output, "\tstorel 0, $trbn_project_selected_linker")
@@ -198,6 +202,7 @@ def emit_entry(mut state: CompilerState, mut output: QbeOutput)
 		if output.runtime_flags[1] == 1
 			emit_process_arguments(output)
 		end
+		qbe_output_line(output, "\tcall $trbn_initialize_constants()")
 		main_index := find_function_in_module(state, state.entry_module[0], "main")
 		qbe_output_line(output, "\tcall $trbnf" + integer_string(main_index) + "()")
 		qbe_output_line(output, "\tcall $trbn_gc_finish()")
@@ -225,6 +230,7 @@ def emit_entry(mut state: CompilerState, mut output: QbeOutput)
 				qbe_output_line(output, "\tcall $trbn_static_strings_initialize()")
 			end
 			emit_process_arguments(output)
+			qbe_output_line(output, "\tcall $trbn_initialize_constants()")
 			qbe_output_line(output, "\t%status =l call $trbnf" + integer_string(cli_entry) + "()\n\tcall $trbn_gc_finish()\n\tret %status\n}")
 		else
 			emit_target_entry(output)
@@ -239,6 +245,7 @@ def emit_qbe(mut state: CompilerState): QbeOutput
 	if has_diagnostic(state)
 		return output
 	end
+	emit_mir_globals(state.scalar_mir, output)
 	emit_record_descriptors(state, output)
 	emit_closure_adapters(state, output)
 	compiler_runtime := compiler_entry_function(state) >= 0
@@ -996,6 +1003,9 @@ def check_function(mut state: CompilerState, function_index: Integer): Boolean
 end
 
 def check(mut state: CompilerState): Boolean
+	if !infer_constant_types(state)
+		return false
+	end
 	if !check_generic_templates(state)
 		return false
 	end
@@ -1004,6 +1014,7 @@ def check(mut state: CompilerState): Boolean
 	end
 	mir_declare_types(state)
 	mir_declare_signatures(state)
+	mir_declare_globals(state)
 	mut function_index := 0
 	while function_index < state.function_count[0]
 		check_function(state, function_index)

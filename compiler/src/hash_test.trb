@@ -231,8 +231,19 @@ describe("Native Hash") do
 		expect(checked_hash_valid(state, mir_hash_operation(1, 0, 2, 0, "Hash<Integer,Integer>", true, 1), false)).to_be_false()
 		expect(checked_hash_plan(state, 0).kind).to_equal(0)
 	end
+	test("accepts a readonly caller Hash through a source-function mutable parameter") do
+		source := "def fill(mut h: Hash<Integer, Integer>)\nh[1] = 2\nend\ndef main()\nh := {1 => 2}\nfill(h)\nend\n"
+		mut state := compiler_new(source.size() * 3 + 16)
+		expect(lex(state, source)).to_be_true()
+		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(resolve(state)).to_be_true()
+		expect(check(state)).to_be_true()
+		emit_qbe(state)
+		expect(has_diagnostic(state)).to_be_false()
+	end
+
 	test("rejects assignment through method results without a mutable binding") do
-		sources := ["def main()\nh := {1 => [2]}\nh.fetch(1)[0] = 3\nend\n", "def main()\nh := {1 => 2}\nh.size() = 3\nend\n", "def main()\n{1 => 2}[1] = 3\nend\n", "def fill(mut h: Hash<Integer, Integer>)\nh[1] = 2\nend\ndef main()\nh := {1 => 2}\nfill(h)\nend\n"]
+		sources := ["def main()\nh := {1 => [2]}\nh.fetch(1)[0] = 3\nend\n", "def main()\nh := {1 => 2}\nh.size() = 3\nend\n", "def main()\n{1 => 2}[1] = 3\nend\n"]
 		mut index := 0
 		while index < sources.size()
 			source := sources[index]

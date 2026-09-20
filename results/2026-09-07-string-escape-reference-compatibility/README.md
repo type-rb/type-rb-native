@@ -1,6 +1,31 @@
 # Current reference compatibility
 
 The selected development reference is TypeRB `0.4.9-dev` at
+`7f30c7ec18c4c8ccb9fe37a7ae35d535b64e91ad`, including
+[PR #751](https://github.com/type-rb/type-rb/pull/751),
+[PR #753](https://github.com/type-rb/type-rb/pull/753),
+[PR #754](https://github.com/type-rb/type-rb/pull/754),
+[PR #757](https://github.com/type-rb/type-rb/pull/757) and
+[PR #760](https://github.com/type-rb/type-rb/pull/760).
+These correct keyword Symbols, module/constant member identity, raw enum
+ownership and Go type/function name collisions in nested and imported modules.
+Constant fixes also preserve mutable scalar copies, reopened scopes, imported
+aliases, backend names and dependency-ordered REPL initialization.
+
+The shared registry now contains 698 cases, including 41 namespace/constant
+probes. Existing reference observations change only for module constants and
+keyword Symbols. Existing Native observations improve for top-level/module
+constants, keyword framing and invalid imported-project rejection. Hash REPL
+presentation, qualified generic alias construction in the reference, and
+untyped empty collection inference remain explicit differences. Review the
+complete shared run against this exact checkout and AST.
+Full shared, recovery, ordinary CLI, target and memory validation remains
+required before acceptance. No release, seed or performance qualification is
+inferred. Previous summaries and measurement identities remain below.
+
+# Previous Symbol reference compatibility
+
+The selected development reference is TypeRB `0.4.9-dev` at
 `ecfbcc4e0e72aaf09bba4f94e380d06d1be883be`, including
 [TypeRB PR #747](https://github.com/type-rb/type-rb/pull/747).
 Double-quoted Symbol contents validate their escapes, and portable Ruby output
