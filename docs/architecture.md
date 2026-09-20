@@ -104,7 +104,7 @@ vertical slices from remaining ownership.
 ### Current compiler source ownership
 
 The ordinary entry is [compiler/src/compiler.trb](../compiler/src/compiler.trb).
-Its explicit transitive import closure contains 105 canonical implementation modules:
+Its explicit transitive import closure contains 106 canonical implementation modules:
 
 | Modules in `compiler/src/` | Current responsibility |
 | --- | --- |
@@ -124,7 +124,7 @@ Its explicit transitive import closure contains 105 canonical implementation mod
 | `checked_program.trb`, `checked_values.trb`, `checked_types.trb` | Recursive expression/body checking, typed checked values and shared type/operator rules. |
 | `integer_methods.trb` | Integer receiver classification, arity and existing scalar/CFG construction, including an independently verified clamp guard; see [Integer receiver MIR](decisions/0053-integer-receiver-mir.md). |
 | `float_methods.trb` | Float receiver classification and existing scalar/CFG construction, including rounding and non-finite behavior; see [Float receiver MIR](decisions/0054-float-receiver-mir.md). |
-| `string_methods.trb`, `qbe_string_queries.trb`, `qbe_string_sequences.trb` | String method classification, typed query/sequence construction and bounded runtimes; see [query MIR](decisions/0055-string-query-mir.md) and [sequence MIR](decisions/0056-string-sequence-mir.md). |
+| `string_methods.trb`, `qbe_string_queries.trb`, `qbe_string_sequences.trb`, `qbe_string_slices.trb` | String method classification, typed construction and bounded runtimes; see [query MIR](decisions/0055-string-query-mir.md), [sequence MIR](decisions/0056-string-sequence-mir.md) and [slice MIR](decisions/0057-string-slice-mir.md). |
 | `nullable_types.trb`, `nullable_flow.trb`, `nullable_mir.trb`, `qbe_nullable.trb` | Optional type identity, lexical and stable-field facts, typed storage/test/extraction and numeric conversion blocks, and representation adaptation; see [nullable MIR](decisions/0042-nullable-mir.md). |
 | `mir.trb`, `mir_types.trb`, `mir_analysis.trb`, `mir_numeric.trb`, `mir_array_loops.trb`, `mir_flow.trb`, `mir_identities.trb`, `mir_roots.trb`, `mir_passes.trb`, `mir_verifier.trb`, `mir_instructions.trb` | MIR model, semantic composite types and queries, reusable proofs, CFG/dominance, operation effects/liveness/root plans, rewrites, structural verification and instruction contracts. |
 | `mir_construction.trb`, `mir_builder.trb`, `mir_control.trb`, `mir_value_control.trb`, `mir_calls.trb`, `mir_intrinsics.trb`, `mir_logical.trb`, `mir_strings.trb`, `mir_arrays.trb`, `mir_records.trb`, `mir_hashes.trb`, `mir_hash_inference.trb`, `mir_ranges.trb`, `mir_iteration_control.trb` | Declaration-bound ordinary/runtime/host and standard-package call contracts, checked ABI shapes, block construction and publication of scalar and mutable scalar/managed control/value, Array, nominal record, Hash and Range operations, checked empty-Hash type constraints, live Array/streaming Range loops, conversion/I/O and short-circuit MIR. |

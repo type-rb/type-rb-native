@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 344 ordinary-path probes and 32 feature
+Status: the shared contract contains 362 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -713,6 +713,12 @@ results. Their probes distinguish absence from zero/false, cover nullable
 elements and Range positions, and retain visited managed values after source
 replacement or parameter reassignment. Generic callbacks, captures and forced
 collection use the ordinary nullable and closure MIR contracts.
-Keyed sorting, slicing and Hash iteration remain gaps.
+Keyed sorting, Array slicing and Hash iteration remain gaps.
 Receiver APIs for removal/reordering and broader expression-context boundaries
 remain visible in the inventory; this coverage is not the entire collection API.
+
+String slicing now accepts checked `Range<Integer>` bounds in ordinary programs
+and the REPL. Shared probes cover retained receiver identity, inclusive/exclusive
+limits, Unicode, NUL, optional calls and lexical transfers. Invalid ranges remain
+explicit runtime failures; `try_slice` and other unimplemented APIs remain open.
+See [the MIR contract](decisions/0057-string-slice-mir.md).
