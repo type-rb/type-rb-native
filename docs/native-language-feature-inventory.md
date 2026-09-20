@@ -24,8 +24,8 @@ Each count describes registered probes, not language coverage percentages.
 | Function values and lexical capture | basic | 0 / 22 | Named declarations as values, callable equality, nullable signatures and remaining parameter-capability boundaries | LambdaExpression |
 | Arrays and checked indexes | basic | 16 / 124 | Remaining Array joining, sorting and safe APIs; Wider invalid element/mutation combinations | ArrayLiteral, IndexExpression |
 | Hash values and operations | basic | 0 / 5 | All key/value representations, empty inference, managed lifetimes and missing-key failures | HashLiteral |
-| Structured and value-producing iteration | basic | 1 / 32 | Keyed sorting, slicing and Hash iteration; Remaining receiver APIs that shorten or reorder an Array during traversal | IterationExpression, BlockExpression |
-| Range values and boundaries | basic | 1 / 5 | Endpoint effects, empty/reversed ranges and next at both portable limits | RangeExpression |
+| Structured and value-producing iteration | basic | 0 / 62 | Keyed sorting and sliced iteration; Remaining receiver APIs that shorten or reorder an Array during traversal | IterationExpression, BlockExpression |
+| Range values and boundaries | basic | 0 / 15 | none registered | RangeExpression |
 | Result and typed propagation | basic | 0 / 28 | General union errors and compiler-declared structured package boundaries | TryExpression, CatchExpression |
 | Classes, fields and methods | basic | 1 / 1 | Initialization, inheritance, dispatch, privacy and readonly fields | ClassStatement, FieldStatement |
 | Explicit interface conformance | basic | 1 / 1 | Generic conformance, variance, inherited contracts and rejection controls | InterfaceStatement |

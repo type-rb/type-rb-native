@@ -127,7 +127,7 @@ defaults and managed collections retain optional payloads through shared root
 planning. See [decision 0042](decisions/0042-nullable-mir.md) for the private layout
 and conservative fact invalidation across assignments and loop backedges.
 
-The ordinary compiler closure contains 112 modules. Implementation syntax stays
+The ordinary compiler closure contains 113 modules. Implementation syntax stays
 within the existing immutable seed and snapshot-v4 boundary; compiler self-use
 of the new syntax still depends on an accepted seed refresh. The shared language
 contract contains 509 cases with explicit remaining differences. Retained REPL
@@ -304,3 +304,10 @@ MIR loops, comparisons, nullable values and Array operations. They introduce no
 new instruction or backend semantic owner. Verified block arguments and root
 plans retain source and destination values across nested searches and allocation;
 see [decision 0061](decisions/0061-array-query-loops.md).
+
+Hash iteration now lowers a shallow entry snapshot to existing Hash projection,
+Array read and typed loop instructions. Range materialization shares the checked
+endpoint test used by iteration and carries its result through ordinary block
+parameters. Neither path adds an opcode or reads source plans in QBE; independent
+controls erase source, reorder blocks and force collection. See
+[decision 0062](decisions/0062-hash-range-collection-loops.md).

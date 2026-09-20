@@ -1,3 +1,4 @@
+import { hash_key_type } from hash_types
 import { MirTransform, TransformSyntax, mir_transform_valid, transform_kind, transform_syntax_valid } from transform_model
 import { token_is } from syntax_tokens
 import { MirIteration, MirRangeConstruction, mir_iteration_valid, mir_range_valid } from iteration_mir
@@ -31,15 +32,15 @@ def checked_iteration_shape(state: CompilerState, plan: IterationSyntax, origin:
 		end
 		suffix += 1
 	end
-	if ((indexed && plan.index_origin < 0) || (!indexed && plan.index_origin >= 0)) || load_integer(state.token_kinds, plan.element_origin) != 1
+	if (indexed && plan.second_origin < 0) || load_integer(state.token_kinds, plan.element_origin) != 1
 		return false
 	end
 	mut close := plan.element_origin + 1
-	if plan.index_origin >= 0
-		if plan.index_origin != close + 1 || !token_is(state, close, ",") || load_integer(state.token_kinds, plan.index_origin) != 1
+	if plan.second_origin >= 0
+		if plan.second_origin != close + 1 || !token_is(state, close, ",") || load_integer(state.token_kinds, plan.second_origin) != 1
 			return false
 		end
-		close = plan.index_origin + 1
+		close = plan.second_origin + 1
 	end
 	if !token_is(state, close, "|")
 		return false
@@ -61,13 +62,38 @@ def checked_iteration_shape(state: CompilerState, plan: IterationSyntax, origin:
 	return token_is(state, plan.body_finish, terminator)
 end
 
+def checked_iteration_indexed(state: CompilerState, shape: IterationSyntax): Boolean
+	mut cursor := shape.receiver_finish + 2
+	while cursor < shape.element_origin
+		if token_is(state, cursor, "with_index")
+			return true
+		end
+		cursor += 1
+	end
+	return false
+end
+
+def checked_iteration_parameters(state: CompilerState, plan: MirIteration): Boolean
+	indexed := checked_iteration_indexed(state, plan.syntax)
+	if plan.source_kind == 3
+		if indexed
+			return false
+		end
+		return plan.syntax.second_origin >= 0
+	end
+	if indexed
+		return plan.syntax.second_origin >= 0
+	end
+	return plan.syntax.second_origin < 0
+end
+
 def checked_iteration_require(mut state: CompilerState, origin: Integer, parent_loop: Integer): MirIteration
 	encoded := sparse_integer_at(state.checked[0].iteration_origins, origin)
-	syntax := IterationSyntax.new(origin: - 1, receiver_finish: - 1, element_origin: - 1, index_origin: - 1, body_start: - 1, body_finish: - 1, finish: - 1)
+	syntax := IterationSyntax.new(origin: - 1, receiver_finish: - 1, element_origin: - 1, second_origin: - 1, body_start: - 1, body_finish: - 1, finish: - 1)
 	invalid := MirIteration.new(syntax: syntax, parent_loop: - 1, source_kind: 1, type_name: "", element_type: "")
 	if encoded > 0 && encoded <= state.checked[0].iterations.size()
 		plan := state.checked[0].iterations[encoded - 1]
-		if checked_iteration_shape(state, plan.syntax, origin) && plan.parent_loop == parent_loop
+		if checked_iteration_shape(state, plan.syntax, origin) && plan.parent_loop == parent_loop && checked_iteration_parameters(state, plan)
 			if mir_iteration_valid(plan, origin, state.token_count[0], plan.type_name, iteration_element_type(plan.type_name))
 				return plan
 			end
@@ -84,6 +110,9 @@ end
 def iteration_element_type(type_name: String): String
 	if type_name == "Range<Integer>"
 		return "Integer"
+	end
+	if hash_key_type(type_name) != ""
+		return hash_key_type(type_name)
 	end
 	return array_element_type(type_name)
 end
@@ -150,7 +179,7 @@ def checked_transform_shape(state: CompilerState, plan: TransformSyntax, origin:
 		end
 		cursor += 2
 	end
-	if shape.index_origin >= 0
+	if shape.second_origin >= 0
 		if !token_is(state, cursor, ".") || !token_is(state, cursor + 1, "with_index")
 			return false
 		end
@@ -177,8 +206,8 @@ def checked_transform_shape(state: CompilerState, plan: TransformSyntax, origin:
 		return false
 	end
 	cursor += 1
-	if shape.index_origin >= 0
-		if !token_is(state, cursor, ",") || cursor + 1 != shape.index_origin || load_integer(state.token_kinds, cursor + 1) != 1
+	if shape.second_origin >= 0
+		if !token_is(state, cursor, ",") || cursor + 1 != shape.second_origin || load_integer(state.token_kinds, cursor + 1) != 1
 			return false
 		end
 		cursor += 2
@@ -216,7 +245,7 @@ def checked_transform_require(mut state: CompilerState, origin: Integer): MirTra
 		end
 	end
 	diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "invalid checked collection transform")
-	shape := IterationSyntax.new(origin: - 1, receiver_finish: - 1, element_origin: - 1, index_origin: - 1, body_start: - 1, body_finish: - 1, finish: - 1)
+	shape := IterationSyntax.new(origin: - 1, receiver_finish: - 1, element_origin: - 1, second_origin: - 1, body_start: - 1, body_finish: - 1, finish: - 1)
 	syntax := TransformSyntax.new(iteration: shape, kind: 0, initial_start: - 1, initial_finish: - 1, accumulator_origin: - 1)
 	iteration := MirIteration.new(syntax: shape, parent_loop: - 1, source_kind: 0, type_name: "", element_type: "")
 	return MirTransform.new(syntax: syntax, iteration: iteration, type_name: "")

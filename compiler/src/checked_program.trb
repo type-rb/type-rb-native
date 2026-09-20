@@ -1,3 +1,4 @@
+import { mir_range_array } from range_methods
 import { array_query_comparable } from array_queries
 import { array_method_arity, array_method_kind, mir_array_method } from array_methods
 import { mir_string_method, string_method_argument_type, string_method_arity, string_method_kind } from string_methods
@@ -32,7 +33,7 @@ import { CheckedValue, checked_bound_value, checked_mir_value, checked_value, ch
 import { checked_hash_binding_target, checked_hash_method, checked_hash_plan, checked_hash_publish } from hash_checked
 import { mir_hash_operation } from hash_mir
 import { hash_key_type, hash_type, hash_value_type } from hash_types
-import { checked_iteration_require, checked_iteration_shape, checked_range_require, checked_transform_require, checked_transform_shape, iteration_element_type } from iteration_checked
+import { checked_iteration_parameters, checked_iteration_require, checked_iteration_shape, checked_range_require, checked_transform_require, checked_transform_shape, iteration_element_type } from iteration_checked
 import { MirIteration, MirRangeConstruction, mir_iteration_valid } from iteration_mir
 import { float_literal_in_range, integer_literal_in_range, number_is_float } from literals
 import { MirLoopTransfer, mir_loop_transfer_valid } from mir
@@ -611,7 +612,7 @@ def check_method_call(
 	if hash_key_type(receiver.type_name) != "" || receiver.type_name == "Hash"
 		return checked_hash_call(state, position, locals, receiver, method)
 	end
-	if (receiver.type_name == "Integer" && integer_method_kind(method) > 0) || (receiver.type_name == "Float" && float_method_kind(method) > 0) || (receiver.type_name == "String" && string_method_kind(method) > 0) || (array_element_type(receiver.type_name) != "" && array_method_kind(method) > 0)
+	if (receiver.type_name == "Range<Integer>" && method == "to_a") || (receiver.type_name == "Integer" && integer_method_kind(method) > 0) || (receiver.type_name == "Float" && float_method_kind(method) > 0) || (receiver.type_name == "String" && string_method_kind(method) > 0) || (array_element_type(receiver.type_name) != "" && array_method_kind(method) > 0)
 		return check_primitive_method(state, position, locals, receiver, method)
 	end
 	line := load_integer(state.token_lines, position[0])
@@ -711,7 +712,7 @@ def check_member(mut state: CompilerState, mut position: Array<Integer>, mut loc
 		end
 	end
 	if token_is(state, position[0], "(")
-		if value.category < 4 && member != "size" && member != "to_i" && member != "to_s" && member != "push" && member != "new" && !(value.type_name == "Integer" && integer_method_kind(member) > 0) && !(value.type_name == "Float" && float_method_kind(member) > 0) && !(value.type_name == "String" && string_method_kind(member) > 0) && !(array_element_type(value.type_name) != "" && array_method_kind(member) > 0) && !((value.type_name == "Hash" || hash_key_type(value.type_name) != "") && checked_hash_method(member) != 0)
+		if value.category < 4 && member != "size" && member != "to_i" && member != "to_s" && member != "push" && member != "new" && !(value.type_name == "Range<Integer>" && member == "to_a") && !(value.type_name == "Integer" && integer_method_kind(member) > 0) && !(value.type_name == "Float" && float_method_kind(member) > 0) && !(value.type_name == "String" && string_method_kind(member) > 0) && !(array_element_type(value.type_name) != "" && array_method_kind(member) > 0) && !((value.type_name == "Hash" || hash_key_type(value.type_name) != "") && checked_hash_method(member) != 0)
 			scalar_mir_disable(locals)
 		end
 		if value.category >= 4
@@ -1234,14 +1235,21 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 	receiver := check_expression(state, position, locals, 1, "")
 	element_type := iteration_element_type(receiver.type_name)
 	if element_type == "" || position[0] != shape.receiver_finish
-		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "ordinary each requires a supported Array or Range receiver")
+		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "ordinary each requires a supported Array, Range or Hash receiver")
 		return false
 	end
 	mut source_kind := 1
 	if receiver.type_name == "Range<Integer>"
 		source_kind = 2
 	end
+	if hash_key_type(receiver.type_name) != ""
+		source_kind = 3
+	end
 	plan := MirIteration.new(syntax: shape, parent_loop: parent_loop, source_kind: source_kind, type_name: receiver.type_name, element_type: element_type)
+	if !checked_iteration_parameters(state, plan)
+		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "each block parameters differ from its receiver and with_index mode")
+		return false
+	end
 	state.checked[0].iterations.push(plan)
 	store_integer(state.checked[0].iteration_origins, origin, state.checked[0].iterations.size())
 	checked_iteration_require(state, origin, parent_loop)
@@ -1249,24 +1257,36 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 	# Hidden receiver/cursor bindings provide the loop-carried MIR values.
 	local_bind(locals, "$iteration.receiver", receiver.type_name, 1)
 	local_bind(locals, "$iteration.cursor", "Integer", 1)
-	if source_kind == 2 && plan.syntax.index_origin >= 0
+	if source_kind == 2 && plan.syntax.second_origin >= 0
 		local_bind(locals, "$iteration.ordinal", "Integer", 1)
+	end
+	if source_kind == 3
+		local_bind(locals, "$iteration.keys", array_type(element_type), 1)
+		local_bind(locals, "$iteration.values", array_type(hash_value_type(receiver.type_name)), 1)
 	end
 	element := mir_checked_iteration_begin(state, locals, plan, receiver, saved)
 	local_bind(locals, load_string(state.token_texts, plan.syntax.element_origin), element_type, 1)
 	mir_binding_initialize(state, locals, locals.count[0] - 1, element, plan.syntax.element_origin)
-	if plan.syntax.index_origin >= 0
-		if load_string(state.token_texts, plan.syntax.element_origin) == load_string(state.token_texts, plan.syntax.index_origin)
-			diagnostic(state, "TRBN4004", load_integer(state.token_lines, plan.syntax.index_origin), "iteration block parameter is duplicated")
+	if plan.syntax.second_origin >= 0
+		if load_string(state.token_texts, plan.syntax.element_origin) == load_string(state.token_texts, plan.syntax.second_origin)
+			diagnostic(state, "TRBN4004", load_integer(state.token_lines, plan.syntax.second_origin), "iteration block parameter is duplicated")
 			return false
 		end
-		local_bind(locals, load_string(state.token_texts, plan.syntax.index_origin), "Integer", 1)
+		mut second_type := "Integer"
+		if source_kind == 3
+			second_type = hash_value_type(receiver.type_name)
+		end
+		local_bind(locals, load_string(state.token_texts, plan.syntax.second_origin), second_type, 1)
 		mut index_slot := saved + 1
 		if source_kind == 2
 			index_slot = saved + 2
 		end
-		ordinal := mir_binding_read(state, locals, index_slot, plan.syntax.index_origin)
-		mir_binding_initialize(state, locals, locals.count[0] - 1, ordinal, plan.syntax.index_origin)
+		mut second := mir_binding_read(state, locals, index_slot, plan.syntax.second_origin)
+		if source_kind == 3
+			values := mir_binding_read(state, locals, saved + 3, plan.syntax.second_origin)
+			second = mir_checked_array_operation(state, locals, 22, checked_mir_value(values), checked_mir_value(second), 0, second_type, plan.syntax.second_origin)
+		end
+		mir_binding_initialize(state, locals, locals.count[0] - 1, second, plan.syntax.second_origin)
 	end
 	position[0] = plan.syntax.body_start
 	nullable_loop_writes(state, locals, plan.syntax.body_start, plan.syntax.body_finish)
@@ -1633,7 +1653,7 @@ def checked_loop_transfer_kind(mut state: CompilerState, origin: Integer, loop_o
 		encoded_iteration := sparse_integer_at(state.checked[0].iteration_origins, loop_origin)
 		if encoded_iteration > 0 && encoded_iteration <= state.checked[0].iterations.size()
 			iteration := state.checked[0].iterations[encoded_iteration - 1]
-			if checked_iteration_shape(state, iteration.syntax, loop_origin) && mir_iteration_valid(iteration, loop_origin, state.token_count[0], iteration.type_name, iteration_element_type(iteration.type_name))
+			if checked_iteration_shape(state, iteration.syntax, loop_origin) && checked_iteration_parameters(state, iteration) && mir_iteration_valid(iteration, loop_origin, state.token_count[0], iteration.type_name, iteration_element_type(iteration.type_name))
 				if origin >= iteration.syntax.body_start && origin < iteration.syntax.body_finish
 					return plan.kind
 				end
@@ -1965,7 +1985,7 @@ def check_transform(mut state: CompilerState, mut position: Array<Integer>, mut 
 		return type_diagnostic(state, line, "invalid collection transform syntax")
 	end
 	element_type := iteration_element_type(receiver.type_name)
-	if element_type == ""
+	if element_type == "" || hash_key_type(receiver.type_name) != ""
 		return type_diagnostic(state, line, "collection transform requires a supported Array or Range receiver")
 	end
 	mut initial := checked_value("Void", 0, origin, 0)
@@ -2014,7 +2034,7 @@ def check_transform(mut state: CompilerState, mut position: Array<Integer>, mut 
 	saved := locals.count[0]
 	local_bind(locals, "$iteration.receiver", receiver.type_name, 1)
 	local_bind(locals, "$iteration.cursor", "Integer", 1)
-	if source_kind == 2 && shape.index_origin >= 0
+	if source_kind == 2 && shape.second_origin >= 0
 		local_bind(locals, "$iteration.ordinal", "Integer", 1)
 	end
 	element := mir_checked_iteration_begin(state, locals, plan, receiver, saved)
@@ -2028,17 +2048,17 @@ def check_transform(mut state: CompilerState, mut position: Array<Integer>, mut 
 	end
 	local_bind(locals, load_string(state.token_texts, shape.element_origin), element_type, 1)
 	mir_binding_initialize(state, locals, locals.count[0] - 1, element, shape.element_origin)
-	if shape.index_origin >= 0
-		if load_string(state.token_texts, shape.index_origin) == load_string(state.token_texts, shape.element_origin)
+	if shape.second_origin >= 0
+		if load_string(state.token_texts, shape.second_origin) == load_string(state.token_texts, shape.element_origin)
 			return type_diagnostic(state, line, "collection block parameter is duplicated")
 		end
 		mut index_slot := saved + 1
 		if source_kind == 2
 			index_slot = saved + 2
 		end
-		ordinal := mir_binding_read(state, locals, index_slot, shape.index_origin)
-		local_bind(locals, load_string(state.token_texts, shape.index_origin), "Integer", 1)
-		mir_binding_initialize(state, locals, locals.count[0] - 1, ordinal, shape.index_origin)
+		ordinal := mir_binding_read(state, locals, index_slot, shape.second_origin)
+		local_bind(locals, load_string(state.token_texts, shape.second_origin), "Integer", 1)
+		mir_binding_initialize(state, locals, locals.count[0] - 1, ordinal, shape.second_origin)
 	end
 	position[0] = shape.body_start
 	nullable_loop_writes(state, locals, shape.body_start, shape.body_finish)
@@ -2092,7 +2112,10 @@ def check_primitive_method(mut state: CompilerState, mut position: Array<Integer
 	mut kind := integer_method_kind(method)
 	mut arity := integer_method_arity(kind)
 	mut argument_type := "Integer"
-	if receiver.type_name == "Float"
+	if receiver.type_name == "Range<Integer>"
+		kind = 1
+		arity = 0
+	elsif receiver.type_name == "Float"
 		kind = float_method_kind(method)
 		arity = 0
 	elsif receiver.type_name == "String"
@@ -2151,7 +2174,9 @@ def check_primitive_method(mut state: CompilerState, mut position: Array<Integer
 	if has_diagnostic(state)
 		return checked_value("Invalid", 0, origin, 0)
 	end
-	if receiver.type_name == "Float"
+	if receiver.type_name == "Range<Integer>"
+		return mir_range_array(state, locals, receiver, origin)
+	elsif receiver.type_name == "Float"
 		return mir_float_method(state, locals, kind, receiver, origin)
 	elsif receiver.type_name == "String"
 		if arity == 0
