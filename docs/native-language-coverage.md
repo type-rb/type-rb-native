@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 829 ordinary-path probes and 32 feature
+Status: the shared contract contains 858 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -17,8 +17,14 @@ privacy, nullable receivers and returned closures. Shared cases and independent
 MIR/GC and retained-session tests cover these combinations; see
 [decision 0070](decisions/0070-raw-enum-and-method-mir.md).
 
-Generic enum methods and attributes remain open. Reference initializer replay
-and REPL type/display differences are retained as explicit parity gaps.
+Generic enum methods inherit the receiver's type arguments through defaults,
+recursive/private calls and returned closures. Abstract checking still rejects
+invalid unused templates, and concrete methods are discovered before MIR catalogs
+freeze. Source/template-erased MIR tests and retained-session checks cover the
+boundary; see [decision 0071](decisions/0071-generic-enum-method-mir.md).
+
+Method-specific type parameters and enum attributes remain open. Reference
+initializer replay and REPL type/display differences remain explicit parity gaps.
 
 ## Union values and scalar type cases
 
@@ -298,12 +304,12 @@ nominal identity through declarations and reload. Payloadless equality requires
 the same enum type. [Decision 0044](decisions/0044-enum-mir.md) records the verified
 operations, traced layout and source-independent backend boundary.
 
-Raw values/conversions, enum methods, attributes and
-nested module declarations remain explicit gaps. Supporting this family does not
+Raw values/conversions, instance methods and nested module declarations now have
+the separate coverage described above. Attributes and wider patterns remain
+explicit gaps. Supporting these families does not
 complete all pattern, enum or basic-language contracts.
-The shared recursive cases also expose a pinned Go-output defect: inline
-recursive payloads pass checking but fail generated Go compilation.
-[TypeRB #701](https://github.com/type-rb/type-rb/issues/701) tracks that correction.
+Inline recursive payloads now pass file compilation and execution in both
+implementations; their shared cases retain the regression coverage.
 Mutually recursive REPL declarations still require a project/import boundary;
 separate interactive declarations cannot refer to a not-yet-declared type.
 
@@ -318,7 +324,8 @@ resolves complete concrete catalogs before MIR construction; backend output does
 not consult generic templates or source spellings. See
 [decision 0045](decisions/0045-generic-nominal-mir.md).
 
-Generic methods and classes/interfaces remain separate gaps. The shared
+Enum receiver methods are covered above; method-specific type parameters and
+generic classes/interfaces remain separate gaps. The shared
 imported-generic-enum case now passes against the updated reference containing
 [TypeRB PR #704](https://github.com/type-rb/type-rb/pull/704). Compiler self-use
 of generic syntax awaits a seed that supports it.
@@ -336,12 +343,11 @@ aliases when their underlying declarations are hidden.
 [Decision 0050](decisions/0050-transparent-alias-mir.md) records ownership and
 verification. Callable aliases now reach concrete MIR, including nullable payloads.
 Union targets and nested module aliases now preserve their canonical identity.
-Literal and class/interface targets remain gaps. REPL display currently uses the underlying type rather than
-always retaining the authored alias. The fixed reference has alias-record
-construction ([TypeRB PR #709](https://github.com/type-rb/type-rb/pull/709)),
-[generic identity-alias Go output](https://github.com/type-rb/type-rb/issues/707) and
+Literal and class/interface targets remain gaps. REPL display currently uses the
+underlying type rather than always retaining the authored alias. Alias record
+construction and generic identity aliases now execute in the reference. Its
 [same-package nominal-name collision](https://github.com/type-rb/type-rb/issues/708)
-defects; shared expectations retain those failures explicitly.
+remains an explicit failure in the shared expectations.
 
 ## Generic functions and parameter defaults
 

@@ -1,6 +1,22 @@
 # Current reference compatibility
 
 The selected development reference is TypeRB `0.4.9-dev` at
+`22c2e36340ef3a58fde52e1120cecb2ea8f36091`, incorporating
+[PR #771](https://github.com/type-rb/type-rb/pull/771).
+Concrete and generic enum aliases keep their specialized methods in Go output
+and the REPL. Nested imported constructors retain declaration identity; nullable
+calls, defaults and captured private methods preserve ordinary behavior.
+
+The 858-case registry adds generic enum receiver methods and their rejection
+boundaries. Exact shared observations, AST coverage, recovery, ordinary
+self-hosting, CLI, target and memory validation remain required before acceptance.
+Method-specific type parameters, attributes and the recorded reference defects
+remain explicit. This update does not complete basic-language coverage, publish
+a release or seed, or qualify performance. Previous identities remain below.
+
+# Previous enum call reference compatibility
+
+The selected development reference is TypeRB `0.4.9-dev` at
 `e86ba0fdb4dd6a6845c176752fd5a6c29af3494c`, incorporating
 [PR #767](https://github.com/type-rb/type-rb/pull/767).
 Nullable enum calls skip argument effects when absent and evaluate the receiver

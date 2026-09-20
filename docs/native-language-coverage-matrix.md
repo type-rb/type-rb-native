@@ -791,7 +791,7 @@
 | Raw enum method receiver once | accepts | accepts | matches reference | matches reference |
 | Raw enum method return callable | accepts | accepts | matches reference | matches reference |
 | Raw enum type alias static | accepts | accepts | matches reference | matches reference |
-| Raw enum generic method | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Raw enum generic method | accepts | accepts | matches reference | matches reference |
 | Raw enum mixed members reject | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Raw enum mixed types reject | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Raw enum duplicate string reject | rejects as reference | rejects as reference | not reached | rejects as reference |
@@ -831,3 +831,32 @@
 | Raw enum error uses canonical record identity | accepts | accepts; reference rejects | differs | matches reference |
 | Retain an implicit enum method receiver in a closure | accepts | accepts | matches reference | matches reference |
 | Distinguish ordinary enum methods from collection blocks | accepts | accepts | matches reference | matches reference |
+| Generic enum method two types | accepts | accepts | matches reference | matches reference |
+| Generic enum method explicit self | accepts | accepts | matches reference | matches reference |
+| Generic enum method implicit self | accepts | accepts | matches reference | matches reference |
+| Generic enum method closure self | accepts | accepts | matches reference | matches reference |
+| Generic enum method closure explicit | accepts | accepts | matches reference | matches reference |
+| Generic enum method default named | accepts | accepts | matches reference | matches reference |
+| Generic enum method recursive | accepts | accepts | matches reference | matches reference |
+| Generic enum method returned enum | accepts | accepts | matches reference | matches reference |
+| Generic enum method nested generic | accepts | accepts | matches reference | matches reference |
+| Generic enum method nullable | accepts | accepts | matches reference | matches reference |
+| Generic enum method array payload | accepts | accepts | matches reference | matches reference |
+| Generic enum method import alias | accepts | accepts | matches reference | matches reference |
+| Generic enum method alias target | accepts | accepts | matches reference | matches reference |
+| Generic enum method namespace | accepts | accepts | matches reference | matches reference |
+| Generic enum method private internal | accepts | accepts | matches reference | matches reference |
+| Generic enum method private external reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Generic enum method unused body reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Generic enum method unused operator reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Generic enum method unused return reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Generic enum method concrete template reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Generic enum method wrong argument reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Generic enum method missing argument reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Generic enum method extra argument reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Generic enum method immutable self reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Generic enum method payloadless reserved | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Generic enum method duplicate reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Generic enum method through transparent alias chains | accepts | accepts | matches reference | matches reference |
+| Generic enum method through an imported nested alias | accepts | accepts | matches reference | matches reference |
+| Generic enum alias method skips absent receiver arguments | accepts | accepts | matches reference | matches reference |

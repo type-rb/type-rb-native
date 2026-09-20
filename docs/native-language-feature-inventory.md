@@ -16,10 +16,10 @@ Each count describes registered probes, not language coverage percentages.
 | Records and field bindings | basic | 1 / 30 | Nominal cycles and defaults involving remaining unsupported value types | RecordStatement, RecordFieldStatement |
 | Member access and projections | basic | 1 / 4 | Safe member access, chained field narrowing and receiver replacement | MemberExpression |
 | Nullable values and narrowing | basic | 4 / 31 | Class/callback and general pattern narrowing; collection/union optional conversions; Nullable standard-library methods beyond the currently implemented Native APIs |  |
-| Enums and tagged values | basic | 7 / 80 | Generic enum methods, enum attributes and wider pattern forms; Reference REPL initializer replay (TypeRB #768) and shadowed standard error identity (#769); imported/nested REPL presentation parity | EnumStatement, EnumMemberStatement |
-| Transparent aliases | basic | 7 / 30 | Literal/union and class/interface alias targets; nested module declarations; Authored alias spelling in REPL display and diagnostics | TypeAliasStatement |
+| Enums and tagged values | basic | 6 / 109 | Method-specific type parameters, enum attributes and wider pattern forms; Reference REPL initializer replay (TypeRB #768) and shadowed standard error identity (#769); imported/nested REPL presentation parity | EnumStatement, EnumMemberStatement |
+| Transparent aliases | basic | 7 / 30 | Literal/discriminated union and class/interface alias targets; Authored alias spelling in REPL display and diagnostics | TypeAliasStatement |
 | Nominal newtypes | basic | 1 / 1 | Closed/private constructors, methods, immutable representation and boundary diagnostics | NewtypeStatement |
-| Generic declarations and applications | basic | 4 / 70 | Generic methods, classes and interfaces; Wider constraints and type applications | GenericExpression |
+| Generic declarations and applications | basic | 4 / 70 | Method-specific type parameters, generic classes and interfaces; Wider constraints and type applications | GenericExpression |
 | Union values, literal types and discriminated unions | basic | 5 / 61 | Literal types, common discriminant access, branch narrowing and invalid mutation boundaries; Reference grouped annotation and nullable-alternative boundaries (TypeRB #764 and #765); composite type patterns remain staged in the reference |  |
 | Function values and lexical capture | basic | 0 / 52 | Callable equality, method references and remaining parameter-capability/narrowing combinations | LambdaExpression |
 | Arrays and checked indexes | basic | 16 / 149 | Remaining Array sorting and safe APIs; Wider invalid element/mutation combinations | ArrayLiteral, IndexExpression |
