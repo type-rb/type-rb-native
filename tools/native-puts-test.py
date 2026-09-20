@@ -26,6 +26,8 @@ def main()
     puts(0)
     puts(-9007199254740991)
     puts(9007199254740991)
+    puts(1.5)
+    puts(-0.0)
     puts(true)
     puts(false)
     puts(1 < 2)
@@ -36,7 +38,7 @@ def main()
     puts(calls[0])
 end
 ''')
-    expected = '123\n0\n-9007199254740991\n9007199254740991\ntrue\nfalse\ntrue\ntext\n\n123\n1\n'
+    expected = '123\n0\n-9007199254740991\n9007199254740991\n1.5\n0.0\ntrue\nfalse\ntrue\ntext\n\n123\n1\n'
 
     def run(tool, *arguments, text=None, success=True):
         result = subprocess.run([str(tool), *map(str, arguments)], cwd=root,
@@ -50,15 +52,15 @@ end
     for tool in [binary] + ([reference] if reference else []):
         result = run(tool, 'run', source)
         assert result.stdout == expected and not result.stderr, result
-        result = run(tool, 'repl', text='puts(123)\nputs(true)\nputs(false)\n:quit\n')
-        assert result.stdout == '123\ntrue\nfalse\n' and not result.stderr, result
+        result = run(tool, 'repl', text='puts(123)\nputs(true)\nputs(false)\nputs(1.5)\nputs(-0.0)\n:quit\n')
+        assert result.stdout == '123\ntrue\nfalse\n1.5\n0.0\n' and not result.stderr, result
 
     for expression in ['puts()', 'puts(1, 2)', 'puts(1 + true)', 'takes_string(123)']:
         source.write_text('def takes_string(value: String)\nend\ndef main()\n' + expression + '\nend\n')
         assert 'TRBN4004' in run(binary, 'check', source, success=False).stderr
 
     # Wider output formatting remains explicit unsupported coverage, not Any.
-    for expression, typ in [('1.5', 'Float'), ('[1, 2]', 'Array<Integer>')]:
+    for expression, typ in [('[1, 2]', 'Array<Integer>')]:
         source.write_text('def main()\nputs(' + expression + ')\nend\n')
         assert 'puts does not yet support ' + typ in run(binary, 'check', source, success=False).stderr
 
