@@ -9,6 +9,7 @@ import tempfile
 import time
 
 repository = Path(__file__).resolve().parent.parent
+BUILD_TIMEOUT_SECONDS = 300
 
 with tempfile.TemporaryDirectory(prefix='native bootstrap ') as temporary:
     root = Path(temporary)
@@ -55,7 +56,7 @@ with tempfile.TemporaryDirectory(prefix='native bootstrap ') as temporary:
         start = time.monotonic()
         # This watchdog bounds a complete core/CLI fixed-point rebuild, not a
         # performance acceptance measurement. Retain the elapsed observation.
-        result = run('./trbn', '--version', timeout=300).stderr
+        result = run('./trbn', '--version', timeout=BUILD_TIMEOUT_SECONDS).stderr
         print(f'Native cache build: {time.monotonic() - start:.2f}s', flush=True)
         return result
 
@@ -136,12 +137,15 @@ with tempfile.TemporaryDirectory(prefix='native bootstrap ') as temporary:
 
     # Concurrent callers share one successful build and receive the same binary.
     edit('compiler/cli/main.trb', '\n# Concurrent edit\n')
+    started = time.monotonic()
+    deadline = started + BUILD_TIMEOUT_SECONDS
     children = [subprocess.Popen(['./trbn', '--version'], cwd=root, env=env,
                                  text=True, stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE, start_new_session=True)
                 for _ in range(2)]
     try:
-        outputs = [communicate(child, 120) for child in children]
+        outputs = [communicate(child, max(0.001, deadline - time.monotonic()))
+                   for child in children]
     finally:
         for child in children:
             if child.poll() is None:
@@ -153,6 +157,7 @@ with tempfile.TemporaryDirectory(prefix='native bootstrap ') as temporary:
     assert all(child.returncode == 0 for child in children), outputs
     assert outputs[0][0] == outputs[1][0], outputs
     assert sum('bootstrapping' in stderr for _, stderr in outputs) == 1, outputs
+    print(f'Native concurrent cache build: {time.monotonic() - started:.2f}s', flush=True)
     assert build() == ''
 
 print('Native bootstrap content cache, core reuse, failure and concurrency checks passed')

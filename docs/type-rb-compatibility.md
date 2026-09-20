@@ -2,7 +2,7 @@
 
 TypeRB Native currently follows exact reference revisions during development. The
 current source and semantic oracle is TypeRB
-`22c2e36340ef3a58fde52e1120cecb2ea8f36091` (the `0.4.9-dev` development identity), recorded
+`df2a60e35b7f4140c98dcb29a9eaee4fee27252e` (the `0.4.9-dev` development identity), recorded
 in `TYPE_RB_REVISION`. This declares one exact reference identity during Native
 development, without claiming a supported version range.
 
@@ -33,6 +33,15 @@ The earlier scoped-file successor is registered in
 [Darwin/Linux arm64 result](https://github.com/type-rb/type-rb-native/blob/5cf61c740aa600c34ed94f1b130ea2ffefd9e783/results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/README.md)
 passes the selected-reference, migration, exact-baseline, target-regression,
 fixed-point, process, resource, and size criteria.
+
+## Sorting reference update
+
+The exact pin incorporates [TypeRB PR #773](https://github.com/type-rb/type-rb/pull/773).
+Descending natural and key-based Array sorting in the REPL now retains NaNs
+after ordinary numbers without reversing equal keys or signed zeros. All three
+portable modes have compiled/REPL controls. Safe navigation on block iteration
+remains a reference defect tracked in [#774](https://github.com/type-rb/type-rb/issues/774).
+This changes neither the release version nor the immutable Native bootstrap seed.
 
 ## Generic enum alias reference update
 

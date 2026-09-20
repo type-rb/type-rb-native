@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 881 ordinary-path probes and 32 feature
+Status: the shared contract contains 913 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -20,11 +20,33 @@ The internal String comparison does not permit authored `String < String`.
 Shared cases cover empty/odd runs, portable Integer limits, infinities/NaNs,
 Unicode/NUL/invalid bytes, aliases, optional calls, effects and rejected element
 types. Independent MIR erasure/reordering, forced GC, a 68-length oracle and
-retained REPL replay complement them. The pinned reference's descending NaN
-REPL defect is tracked in [type-rb#772](https://github.com/type-rb/type-rb/issues/772);
-presentation and inline callable-array REPL differences remain visible.
-Key-based sorting and safe APIs remain open. See
+retained REPL replay complement them. The pinned reference incorporates
+[type-rb#773](https://github.com/type-rb/type-rb/pull/773), fixing descending NaN
+placement in the REPL; presentation and inline callable-array differences remain
+visible. Safe collection APIs remain open. See
 [decision 0072](decisions/0072-array-sorting-mir.md).
+
+## Key-based Array ordering
+
+`sort_by` and `sort_by_descending` accept a single block parameter and a portable
+Integer, Float or String key. They evaluate the receiver once, visit the retained
+Array's live contents and evaluate each visited element's key once. Source growth
+is visited; parameter reassignment or source replacement does not replace the
+retained value. The result owns fresh Array storage and keeps shallow aliases.
+
+Typed MIR collects values and keys in separate rooted Arrays and stably merges
+paired buffers. Equal keys keep their input order in both directions; NaNs are
+last. The comparison phase never calls the block. Ordinary nullable narrowing,
+union elements, records, callbacks, nested transforms, captures and readonly
+receivers use the same machinery. Non-Array sources, non-orderable keys, extra
+arguments, `with_index`, wrong block arity and escaping transfers are rejected.
+
+Shared cases, source-erased/reordered MIR, missing-root controls, forced GC,
+an independent 68-length stable-identity oracle and retained REPL replay cover
+these contracts. The reference loses safe navigation on block iteration and
+can dereference `nil`; [type-rb#774](https://github.com/type-rb/type-rb/issues/774)
+and an explicit shared gap preserve that boundary. See
+[decision 0073](decisions/0073-keyed-array-sorting-mir.md).
 
 ## Raw enums and instance methods
 
@@ -905,7 +927,7 @@ results. Their probes distinguish absence from zero/false, cover nullable
 elements and Range positions, and retain visited managed values after source
 replacement or parameter reassignment. Generic callbacks, captures and forced
 collection use the ordinary nullable and closure MIR contracts.
-Key-based Array sorting, safe lookup/conversion APIs and broader expression-context
+Safe lookup/conversion APIs and broader expression-context
 boundaries remain visible in the inventory; this coverage is not the entire collection API.
 
 String slicing now accepts checked `Range<Integer>` bounds in ordinary programs

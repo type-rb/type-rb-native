@@ -48,12 +48,18 @@ def repl_sort_bound(start: Integer, width: Integer, limit: Integer): Integer
 	return limit
 end
 
-def repl_array_sort(mut store: ReplStore, receiver: Integer, descending: Boolean): Integer
+def repl_array_sort_keys(mut store: ReplStore, receiver: Integer, keys: Array<Integer>, descending: Boolean): Integer
 	mut source: Array<Integer> := []
 	mut destination: Array<Integer> := []
+	mut source_keys: Array<Integer> := []
+	mut destination_keys: Array<Integer> := []
 	store.children[receiver].each do |value|
 		source.push(value)
 		destination.push(value)
+	end
+	keys.each do |key|
+		source_keys.push(key)
+		destination_keys.push(key)
 	end
 	mut width := 1
 	while width < source.size()
@@ -65,11 +71,27 @@ def repl_array_sort(mut store: ReplStore, receiver: Integer, descending: Boolean
 			mut right := middle
 			mut cursor := start
 			while cursor < finish
-				if left < middle && (right >= finish || !repl_sort_before(store, source[right], source[left], descending))
+				mut take_left := left < middle
+				if take_left && right < finish
+					mut first := source[right]
+					mut second := source[left]
+					if keys.size() > 0
+						first = source_keys[right]
+						second = source_keys[left]
+					end
+					take_left =!repl_sort_before(store, first, second, descending)
+				end
+				if take_left
 					destination[cursor] = source[left]
+					if keys.size() > 0
+						destination_keys[cursor] = source_keys[left]
+					end
 					left += 1
 				else
 					destination[cursor] = source[right]
+					if keys.size() > 0
+						destination_keys[cursor] = source_keys[right]
+					end
 					right += 1
 				end
 				cursor += 1
@@ -79,7 +101,14 @@ def repl_array_sort(mut store: ReplStore, receiver: Integer, descending: Boolean
 		previous := source
 		source = destination
 		destination = previous
+		previous_keys := source_keys
+		source_keys = destination_keys
+		destination_keys = previous_keys
 		width = repl_sort_bound(width, width, source.size())
 	end
 	return repl_value(store, store.types[receiver], 0, 0.0, "", source)
+end
+
+def repl_array_sort(mut store: ReplStore, receiver: Integer, descending: Boolean): Integer
+	return repl_array_sort_keys(store, receiver, [], descending)
 end

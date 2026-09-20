@@ -883,3 +883,35 @@
 | Array ordering: reject string operator | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Array ordering: reject nullable receiver | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Array ordering: reject immutable output | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array keyed ordering: integer keys | accepts | accepts | matches reference | matches reference |
+| Array keyed ordering: empty single | accepts | accepts | matches reference | matches reference |
+| Array keyed ordering: numeric live | accepts | accepts | matches reference | matches reference |
+| Array keyed ordering: managed narrowed | accepts | accepts | matches reference | matches reference |
+| Array keyed ordering: unicode keys | accepts | accepts | matches reference | output differs |
+| Array keyed ordering: nullable values | accepts | accepts | matches reference | matches reference |
+| Array keyed ordering: union values | accepts | accepts | matches reference | matches reference |
+| Array keyed ordering: boolean values | accepts | accepts | matches reference | matches reference |
+| Array keyed ordering: nested alias copy | accepts | accepts | matches reference | matches reference |
+| Array keyed ordering: receiver once | accepts | accepts | matches reference | matches reference |
+| Array keyed ordering: nested blocks | accepts | accepts | matches reference | matches reference |
+| Array keyed ordering: closure key | accepts | accepts | matches reference | matches reference |
+| Array keyed ordering: callable values | accepts | accepts | matches reference | matches reference |
+| Array keyed ordering: aliases | accepts | accepts | matches reference | matches reference |
+| Array keyed ordering: immutable receiver | accepts | accepts | matches reference | matches reference |
+| Array keyed ordering: key panic | accepts | accepts | matches reference | rejects as reference |
+| Array keyed ordering: reject boolean key | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array keyed ordering: reject array key | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array keyed ordering: reject nil key | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array keyed ordering: reject nullable key | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array keyed ordering: reject mixed key | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array keyed ordering: reject range | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array keyed ordering: reject hash | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array keyed ordering: reject extra argument | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array keyed ordering: reject named argument | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array keyed ordering: reject with index | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array keyed ordering: reject two parameters | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array keyed ordering: reject return | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array keyed ordering: reject break | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array keyed ordering: reject next | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array keyed ordering: reject immutable output | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array keyed ordering: safe navigation reference gap | rejects valid input | rejects valid input | not reached | rejects as reference |
