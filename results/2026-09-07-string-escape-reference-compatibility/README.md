@@ -1,6 +1,23 @@
 # Current reference compatibility
 
 The selected development reference is TypeRB `0.4.9-dev` at
+`e86ba0fdb4dd6a6845c176752fd5a6c29af3494c`, incorporating
+[PR #767](https://github.com/type-rb/type-rb/pull/767).
+Nullable enum calls skip argument effects when absent and evaluate the receiver
+first when present. Methods returning functions and raw enum aliases preserve
+their checked identity across portable backends and the REPL.
+
+The 829-case registry includes raw enum conversions and ordinary enum methods.
+Full shared observations, AST coverage, recovery, ordinary self-hosting, CLI,
+target and memory validation remain required before acceptance. Generic enum
+methods remain Native implementation work;
+reference REPL replay and error-record shadowing remain explicit defects.
+This update does not claim complete basic-language support, release a seed or
+qualify performance. Previous identities remain below.
+
+# Previous union reference compatibility
+
+The selected development reference is TypeRB `0.4.9-dev` at
 `569d49cf38b9ec59242f18219c356988ed5e82cd`, incorporating
 [PR #761](https://github.com/type-rb/type-rb/pull/761),
 [PR #762](https://github.com/type-rb/type-rb/pull/762) and

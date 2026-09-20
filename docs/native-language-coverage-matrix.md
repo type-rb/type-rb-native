@@ -43,7 +43,7 @@
 | Nullable short-circuit and safe member | accepts | accepts | matches reference | matches reference |
 | Nil equality | accepts | accepts | matches reference | matches reference |
 | Payload enum and exhaustive case | accepts | accepts | matches reference | matches reference |
-| Raw-value enum | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Raw-value enum | accepts | accepts | matches reference | matches reference |
 | Transparent type alias | accepts | accepts | matches reference | matches reference |
 | Nominal newtype construction and projection | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Parameters following nested generic annotations | accepts | accepts | matches reference | matches reference |
@@ -770,3 +770,64 @@
 | Reject authored internal Nil parameter | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Reject authored internal Nil lambda | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Reject authored internal Nil import | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum string roundtrip | accepts | accepts | matches reference | matches reference |
+| Raw enum string failure | accepts | accepts | matches reference | matches reference |
+| Raw enum integer roundtrip | accepts | accepts | matches reference | matches reference |
+| Raw enum integer failure | accepts | accepts | matches reference | matches reference |
+| Raw enum empty zero utf8 | accepts | accepts | matches reference | matches reference |
+| Raw enum nested module | accepts | accepts | matches reference | output differs |
+| Raw enum import alias | accepts | accepts | matches reference | output differs |
+| Raw enum module import alias | accepts | accepts | matches reference | output differs |
+| Raw enum array hash | accepts | accepts | matches reference | output differs |
+| Raw enum nullable | accepts | accepts | matches reference | matches reference |
+| Raw enum evaluation order | accepts | accepts | matches reference | output differs |
+| Raw enum result return | accepts | accepts | matches reference | matches reference |
+| Raw enum result try | accepts | accepts | matches reference | matches reference |
+| Raw enum result catch | accepts | accepts | matches reference | matches reference |
+| Raw enum ordinary method defaults | accepts | accepts | matches reference | matches reference |
+| Raw enum payload method closure | accepts | accepts | matches reference | matches reference |
+| Raw enum method argument order | accepts | accepts | matches reference | matches reference |
+| Raw enum method private internal | accepts | accepts | matches reference | matches reference |
+| Raw enum method receiver once | accepts | accepts | matches reference | matches reference |
+| Raw enum method return callable | accepts | accepts | matches reference | matches reference |
+| Raw enum type alias static | accepts | accepts | matches reference | matches reference |
+| Raw enum generic method | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Raw enum mixed members reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum mixed types reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum duplicate string reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum duplicate integer reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum duplicate zero reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum computed string reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum interpolated string reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum computed integer reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum float reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum boolean reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum nil reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum unary plus reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum large reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum payload reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum payload raw reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum generic raw reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum reserved raw method reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum reserved from method reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum class method reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum variant after method reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum method private external reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum method immutable self reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum method wrong argument reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum from wrong type reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum from missing reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum from extra reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum from named reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum raw extra reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum implicit conversion reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum plain raw reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum plain from reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum instance from reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum static raw reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Raw enum dot variant reject | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Nested imported raw enum alias chain | accepts | accepts | matches reference | matches reference |
+| Safe enum method calls skip nil arguments | accepts | accepts | matches reference | matches reference |
+| Raw enum error uses canonical record identity | accepts | accepts; reference rejects | differs | matches reference |
+| Retain an implicit enum method receiver in a closure | accepts | accepts | matches reference | matches reference |
+| Distinguish ordinary enum methods from collection blocks | accepts | accepts | matches reference | matches reference |
