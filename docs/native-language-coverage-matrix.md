@@ -1190,7 +1190,7 @@
 | Literal types: mixed zero tags | accepts | accepts | matches reference | matches reference |
 | Literal types: string sort | accepts | accepts | matches reference | matches reference |
 | Literal types: key snapshot | accepts | accepts | matches reference | matches reference |
-| Literal types: union hash key | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Literal types: union hash key | accepts | accepts | matches reference | output differs |
 | Literal types: invalid hash bare index | rejects as reference | rejects as reference | not reached | diagnostic/output differs |
 | Literal types: invalid hash bare construction | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Literal types: optional union literal | accepts | accepts | matches reference | matches reference |
@@ -1199,3 +1199,18 @@
 | Literal types: union float widen | accepts | accepts | matches reference | matches reference |
 | Literal types: nullable union float widen | accepts | accepts | matches reference | matches reference |
 | Literal types: invalid nullable literal arithmetic | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal union Hash keys: string | accepts | accepts | matches reference | matches reference |
+| Literal union Hash keys: integer | accepts | accepts | matches reference | matches reference |
+| Literal union Hash keys: computed identity | accepts | accepts | matches reference | output differs |
+| Literal union Hash keys: methods | accepts | accepts | matches reference | output differs |
+| Literal union Hash keys: bare key method | accepts | accepts | matches reference | output differs |
+| Literal union Hash keys: bare key index | rejects as reference | rejects as reference | not reached | diagnostic/output differs |
+| Literal union Hash keys: keys | accepts | accepts | matches reference | output differs |
+| Literal union Hash keys: iteration | accepts | accepts | matches reference | output differs |
+| Literal union Hash keys: copy merge | accepts | accepts | matches reference | output differs |
+| Literal union Hash keys: nullable | accepts | accepts | matches reference | output differs |
+| Literal union Hash keys: unicode nul | accepts | accepts | matches reference | output differs |
+| Literal union Hash keys: wrong domain | rejects as reference | rejects as reference | not reached | diagnostic/output differs |
+| Literal union Hash keys: mixed key | rejects as reference | rejects as reference | not reached | diagnostic/output differs |
+| Literal union Hash keys: optional key | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal union Hash keys: optional refined | accepts | accepts | matches reference | matches reference |

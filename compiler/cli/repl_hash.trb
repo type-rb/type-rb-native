@@ -1,3 +1,4 @@
+import { union_parts } from union_types
 import { ReplStore, ReplHashTable, repl_get, repl_value } from repl_model
 import { native_cli_byte } from host
 
@@ -18,7 +19,15 @@ def repl_hash_new(mut store: ReplStore, type_name: String, capacity: Integer): I
 	return repl_value(store, type_name, index, 0.0, "", [])
 end
 
-def repl_hash_code(store: ReplStore, key: Integer): Integer
+def repl_hash_key_payload(store: ReplStore, key: Integer): Integer
+	if union_parts(store.types[key]).size() > 0
+		return store.children[key][0]
+	end
+	return key
+end
+
+def repl_hash_code(store: ReplStore, input: Integer): Integer
+	key := repl_hash_key_payload(store, input)
 	if repl_get(store, key).type_name == "Integer"
 		value := store.integers[key]
 		mut low := value % 67108864
@@ -47,6 +56,7 @@ def repl_hash_slot(store: ReplStore, table: ReplHashTable, key: Integer): Intege
 		return - 1
 	end
 	mut slot := repl_hash_code(store, key) % capacity
+	query := repl_hash_key_payload(store, key)
 	mut deleted :=- 1
 	mut count := 0
 	while count < capacity
@@ -62,12 +72,13 @@ def repl_hash_slot(store: ReplStore, table: ReplHashTable, key: Integer): Intege
 				deleted = slot
 			end
 		else
-			if repl_get(store, key).type_name == "Integer"
-				if store.integers[stored] == store.integers[key]
+			payload := repl_hash_key_payload(store, stored)
+			if repl_get(store, query).type_name == "Integer"
+				if store.integers[payload] == store.integers[query]
 					return slot
 				end
 			else
-				if store.texts[stored] == store.texts[key]
+				if store.texts[payload] == store.texts[query]
 					return slot
 				end
 			end

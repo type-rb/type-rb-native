@@ -5,12 +5,28 @@ import { nullable_element } from nullable_types
 import { ascii_code } from literals
 import { string_starts_with } from path
 
-# Hash keys keep singleton constraints while using ordinary scalar storage.
-def hash_scalar_key(name: String): Boolean
+# Hash equality uses one scalar domain; union keys retain their boxed identity.
+def hash_key_storage_type(name: String): String
 	if name == "Integer" || name == "String"
-		return true
+		return name
 	end
-	return literal_type_base(name) != ""
+	base := literal_type_base(name)
+	if base != ""
+		return base
+	end
+	mut common := ""
+	union_parts(name).each do |part|
+		current := literal_type_base(part)
+		if current == "" || (common != "" && common != current)
+			return ""
+		end
+		common = current
+	end
+	return common
+end
+
+def hash_scalar_key(name: String): Boolean
+	return hash_key_storage_type(name) != ""
 end
 
 # Canonical singleton payloads escape punctuation, including the key separator.
@@ -26,7 +42,17 @@ def hash_key_type(type_name: String): String
 	end
 	mut key := ""
 	mut index := 5
-	while index < type_name.size() - 1 && type_name[index] != ","
+	mut depth := 0
+	while index < type_name.size() - 1
+		character := type_name[index]
+		if character == "," && depth == 0
+			break
+		end
+		if character == "<"
+			depth += 1
+		elsif character == ">"
+			depth -= 1
+		end
 		key += type_name[index]
 		index += 1
 	end

@@ -163,7 +163,11 @@ Ordinary and retained REPL probes include Unicode/NUL singleton strings, exact
 Hash keys, nullable values, numeric widening and rejected mutation. Independent
 MIR controls erase source and reorder declarations, forge constants and types,
 and force collection while managed values remain live. Singleton Hash keys use
-verified scalar storage; literal-union Hash keys remain an explicit gap. Class
+verified scalar storage. Homogeneous literal-union Hash keys preserve their
+union identity through payload equality, growth, deletion, copies and snapshots;
+managed key arrays keep Integer and String union objects alive. Mixed and
+nullable keys remain rejected, and indexed access requires the exact key type.
+See [decision 0079](decisions/0079-literal-union-hash-keys.md). Class
 discriminants depend on the object family's readonly-field rules. Reference
 boundaries for grouped annotations, nullable alternatives and composite type
 patterns remain visible, as do REPL type ordering, assignment and Hash display

@@ -104,7 +104,7 @@ vertical slices from remaining ownership.
 ### Current compiler source ownership
 
 The ordinary entry is [compiler/src/compiler.trb](../compiler/src/compiler.trb).
-Its explicit transitive import closure contains 148 canonical implementation modules:
+Its explicit transitive import closure contains 149 canonical implementation modules:
 
 | Modules in `compiler/src/` | Current responsibility |
 | --- | --- |
@@ -146,7 +146,7 @@ Its explicit transitive import closure contains 148 canonical implementation mod
 | `qbe_calls.trb`, `qbe_mir.trb`, `qbe_control.trb`, `qbe_strings.trb`, `qbe_arrays.trb`, `qbe_records.trb`, `qbe_hashes.trb`, `qbe_ranges.trb`, `qbe_roots.trb` | Shared typed scalar/call adaptation, verified Array loop plans, general scalar/managed blocks and MIR-selected root publication. |
 | `hash_types.trb`, `hash_mir.trb`, `hash_checked.trb` | Hash types and value layout, operation plans, and their checked source bindings. |
 | `iteration_syntax.trb`, `iteration_mir.trb`, `iteration_checked.trb` | Immutable parsed iteration regions, typed Array/Range traversal plans, Range construction, structural validation, and checked source bindings. |
-| `qbe_output.trb`, `qbe_runtime.trb`, `hash_runtime.trb` | Ordered QBE output and runtime generation, including the Hash runtime. |
+| `qbe_output.trb`, `qbe_runtime.trb`, `hash_runtime.trb`, `hash_key_runtime.trb` | Ordered QBE output and runtime generation; Hash key hashing/probing is separate from table allocation, growth and snapshots. Verified MIR selects scalar and union key layouts. |
 | `project_config.trb` | Project configuration records, JSONC parsing, and validation. |
 | `checked_functions.trb` | Parameter binding, body checking and module finalization. |
 | `compiler.trb` | Final checking orchestration, declaration-bound runtime hooks, QBE adaptation, emission temporary-storage lifetimes, and the remaining driver code. |

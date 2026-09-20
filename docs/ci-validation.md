@@ -83,6 +83,11 @@ including subnormals, plus retained callbacks, optional calls and session replay
 managed batches under forced collection, exact reclamation, bounded first-batch
 execution over the full portable Range, and retained REPL failure/replay.
 
+`native-union-hash-test.py` runs in both CLI authorities. It checks Integer and
+String literal-union keys through growth, deletion, copies and snapshots under
+forced GC, including Unicode/NUL payloads, exact reclamation, and retained
+snapshot closures across declaration remapping and replay.
+
 The CLI cache test gives each complete core/CLI fixed-point rebuild a bounded
 300-second watchdog and records its elapsed time; the whole CLI job allows
 60 minutes for the repeated invalidation controls. The previous 30-minute job
