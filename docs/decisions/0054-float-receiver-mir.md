@@ -6,7 +6,8 @@ Ordinary Float receivers support `abs`, `floor`, `ceil`, `round`, `finite?`,
 `infinite?` and `nan?`, in addition to the existing `to_i` conversion. Their
 zero-argument signatures follow the exact reference. Safe navigation preserves
 absence, receivers execute once, and aliases retain their canonical Float type.
-Float `to_s` and the wider numeric standard library remain separate gaps.
+Float `to_s` is covered by [decision 0068](0068-scalar-string-conversion.md);
+the wider numeric standard library remains a separate gap.
 
 `float_methods.trb` owns classification and typed MIR construction. The ordinary
 numeric receiver checker shares argument validation with Integer methods.

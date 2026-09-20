@@ -75,6 +75,9 @@ nominal remapping, cyclic captures, failure recovery and replay.
 `repl_globals.trb` retains runtime constants and is staged with the CLI modules.
 `native-constants-test.py` runs in both CLI authorities and checks persistent GC
 roots, initializer order, retained values, failed initialization and replay.
+`native-scalar-strings-test.py` runs in both CLI authorities and independently
+checks Float String conversion across every binary64 binade and adjacent values,
+including subnormals, plus retained callbacks, optional calls and session replay.
 
 The CLI cache test gives each complete core/CLI fixed-point rebuild a bounded
 300-second watchdog and records its elapsed time; the whole CLI job allows

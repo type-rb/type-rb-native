@@ -20,7 +20,7 @@ runtime dependencies; independent groups may advance while CI runs.
 
 | Group | Remaining work | Existing foundation |
 | --- | --- | --- |
-| Builtin values and conversions | Remaining Symbol quote/operator boundaries; Unicode identifiers; Float and Boolean String conversion; safe numeric/index/range conversions and structured errors | Portable numbers, UTF-8 Strings and portable Symbol spelling, nullable values, enums and Result MIR |
+| Builtin values and conversions | Remaining Symbol quote/operator boundaries; Unicode identifiers; safe numeric/index/range conversions and structured errors | Portable numbers and scalar String conversions, UTF-8 Strings and portable Symbol spelling, nullable values, enums and Result MIR |
 | Collection operations | Remaining String transforms; Array sorting; safe collection lookup and conversion | Checked indexes, retained receivers, shallow copies and String joining, Hash snapshots, Range materialization, sequential transforms |
 | Value declarations and identity | Forward initializer dependencies, top-level lowercase bindings, untyped empty collection inference and reference boundaries for imported inferred constants and qualified generic aliases | Nested/reopened modules, lexical privacy, typed runtime constants, ordered initializer functions and persistent global roots |
 | Nominal and union types | Newtypes/constructors; literal types and discriminated unions; raw-value enums/conversions and enum methods | Nominal records, payload enums, case and generic applications |
@@ -70,12 +70,13 @@ or uncovered basic contracts remain. Keep every required correctness, lifetime,
 target, recovery and ordinary self-hosting check; qualify performance at the
 coherent milestone described in [MIR consolidation](mir-consolidation.md).
 
-The current source adds nested/reopened modules and runtime constants with
+The current source adds Float/Boolean String conversion and Float output,
+nested/reopened modules and runtime constants with
 verified MIR globals, portable Symbol expressions and keyword framing, Unicode
 String trimming, named function values, nullable/generic combinations, and
 colon-separated Hash key expressions. These extend String
 joining, Hash snapshot iteration and Range materialization, Array search,
 uniqueness, concatenation, insertion/removal, edges/copies/slicing, and the String
-query, sequence, slice and escape families. Its 698 registered cases include
+query, sequence, slice and escape families. Its 706 registered cases include
 explicit remaining differences; neither this count nor green regression CI
 closes #454.

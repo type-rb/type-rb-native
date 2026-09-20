@@ -26,7 +26,7 @@
 | Unicode scalar escapes | accepts | accepts | matches reference | matches reference |
 | String search and code-point APIs | accepts | accepts | matches reference | matches reference |
 | Empty String and ASCII indexing | accepts | accepts | matches reference | matches reference |
-| Mixed numeric arithmetic and conversion | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Mixed numeric arithmetic and conversion | accepts | accepts | matches reference | matches reference |
 | Portable Integer endpoints | accepts | accepts | matches reference | matches reference |
 | Semicolon and comment separators | accepts | accepts | matches reference | matches reference |
 | Recursive calls and all-path returns | accepts | accepts | matches reference | matches reference |
@@ -700,3 +700,11 @@
 | Constant record bindings reject field mutation | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Constant record projection rejects Array mutation | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Keyword Symbol constant uses ordinary String semantics | accepts | accepts | matches reference | matches reference |
+| Float and Boolean conversion, special values and rounding boundaries | accepts | accepts | matches reference | output differs |
+| Scalar String conversion across callbacks, retained values and optional calls | accepts | accepts | matches reference | output differs |
+| Nullable Float and Boolean conversion preserves absence and values | accepts | accepts | matches reference | matches reference |
+| Conversion and Float puts evaluate receivers once in authored order | accepts | accepts | matches reference | matches reference |
+| Converted constants retain exact strings across module identity and callbacks | accepts | accepts | matches reference | matches reference |
+| Float to_s rejects unexpected arguments | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Boolean to_s rejects unexpected arguments | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Scalar String results cannot initialize a numeric binding | rejects as reference | rejects as reference | not reached | rejects as reference |

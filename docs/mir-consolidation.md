@@ -313,3 +313,11 @@ endpoint test used by iteration and carries its result through ordinary block
 parameters. Neither path adds an opcode or reads source plans in QBE; independent
 controls erase source, reorder blocks and force collection. See
 [decision 0062](decisions/0062-hash-range-collection-loops.md).
+
+Float and Boolean String conversion extend the verified scalar conversion
+instruction with exact modes and effects. Float output lowers through that
+conversion; the backend does not infer a formatting operation from source.
+Source-erased and forced-GC controls cover managed results, and the CLI uses the
+ordinary Float conversion itself. A bounded decimal runtime retains the reference
+shortest-roundtrip contract, including asymmetric intervals at powers of two;
+see [decision 0068](decisions/0068-scalar-string-conversion.md).
