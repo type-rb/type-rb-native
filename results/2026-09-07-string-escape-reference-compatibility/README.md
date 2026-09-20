@@ -1,6 +1,23 @@
 # Current reference compatibility
 
 The selected development reference is TypeRB `0.4.9-dev` at
+`63c73105965c7ea7404c19b538b06f7f47c35a2d`, including
+[TypeRB PR #740](https://github.com/type-rb/type-rb/pull/740).
+Array insertion, concatenation and joining retain their receiver before argument
+evaluation and inspect its current storage afterward. The pin also includes
+[PR #738](https://github.com/type-rb/type-rb/pull/738) for callable library results
+and [PR #739](https://github.com/type-rb/type-rb/pull/739) for generic library
+parameter binding. The two previously rejected reference cases now pass ordinary
+execution and the REPL; all other 434 existing expectations are unchanged.
+
+This integration adds checked Native insertion/removal, live mutation and managed
+lifetime cases. Full shared, recovery, CLI, target and memory validation remains
+required before acceptance. No release, seed or performance qualification is
+inferred, and retained measurements keep their original identities.
+
+# Previous Array lookup reference compatibility
+
+The selected development reference is TypeRB `0.4.9-dev` at
 `b819d7815d39d7bf283868585f8a2d45bcb6414c`, including
 [TypeRB PR #737](https://github.com/type-rb/type-rb/pull/737).
 Array slicing and safe lookup retain the receiver before argument evaluation,

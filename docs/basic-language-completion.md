@@ -21,11 +21,11 @@ runtime dependencies; independent groups may advance while CI runs.
 | Group | Remaining work | Existing foundation |
 | --- | --- | --- |
 | Builtin values and conversions | Symbol values/operations; Unicode identifiers; Float and Boolean String conversion; safe numeric/index/range conversions and structured errors | Portable numbers, UTF-8 Strings, nullable values, enums and Result MIR |
-| Collection operations | Remaining String transforms; Array removal/insertion, membership, concatenation, uniqueness, joining and sorting; Hash iteration/safe lookup; Range materialization | Checked indexes, retained receivers, shallow copies, Hash operations, sequential transforms |
+| Collection operations | Remaining String transforms; Array membership, concatenation, uniqueness, joining and sorting; Hash iteration/safe lookup; Range materialization | Checked indexes, retained receivers, shallow copies, Hash operations, sequential transforms |
 | Value declarations and identity | Top-level/module constants, nested module declarations, visibility and initialization order | Project import identity and declaration catalogs |
 | Nominal and union types | Newtypes/constructors; literal types and discriminated unions; raw-value enums/conversions and enum methods | Nominal records, payload enums, case and generic applications |
 | Object declarations | Classes, initialization, fields, privacy, inheritance and dispatch; interfaces and conformance | Nominal layouts, calls, receiver capabilities and managed values |
-| Callable and generic completion | Named functions as values; callable equality/nullable signatures; generic methods/classes/interfaces, constraints and remaining alias targets | Anonymous functions, shared captures, generic functions/records/enums and transparent aliases |
+| Callable and generic completion | Named functions as values ([reference issue #711](https://github.com/type-rb/type-rb/issues/711)); callable equality/nullable signatures; generic methods/classes/interfaces, constraints and remaining alias targets | Anonymous functions, shared captures, generic functions/records/enums and transparent aliases |
 | Structured runtime dependencies | Import-free bounded `concurrent_map` and its transfer, cancellation and lifetime contract | Sequential structured iteration and function values |
 
 The core API audit includes every import-free receiver declared for the covered
@@ -70,6 +70,6 @@ or uncovered basic contracts remain. Keep every required correctness, lifetime,
 target, recovery and ordinary self-hosting check; qualify performance at the
 coherent milestone described in [MIR consolidation](mir-consolidation.md).
 
-The current source adds Array edges/copies/slicing to the String query,
-sequence, slice and escape families. Its 436 registered cases include explicit
+The current source adds Array insertion/removal and edges/copies/slicing to the String query,
+sequence, slice and escape families. Its 468 registered cases include explicit
 remaining differences; neither this count nor green regression CI closes #454.

@@ -1,5 +1,6 @@
 import { CheckedValue, checked_mir_value, checked_value, scalar_mir_binary, scalar_mir_instruction, scalar_mir_literal } from checked_values
 import { mir_checked_array_operation } from mir_arrays
+import { mir_nullable_coerce } from nullable_mir
 import { mir_control_active, mir_control_prepare } from mir_control
 import { array_element_type } from type_resolution
 import { CheckedLocals, CompilerState } from state
@@ -18,18 +19,33 @@ def array_method_kind(name: String): Integer
 		return 5
 	elsif name == "slice"
 		return 6
+	elsif name == "unshift"
+		return 7
+	elsif name == "pop"
+		return 8
+	elsif name == "shift"
+		return 9
 	end
 	return 0
 end
 
 def array_method_arity(kind: Integer): Integer
-	if kind == 6
+	if kind == 6 || kind == 7
 		return 1
 	end
 	return 0
 end
 
 def mir_array_method(mut state: CompilerState, mut locals: CheckedLocals, kind: Integer, receiver: CheckedValue, argument: CheckedValue, origin: Integer): CheckedValue
+	if kind >= 7
+		element := array_element_type(receiver.type_name)
+		if kind == 7
+			value := mir_nullable_coerce(state, locals, argument, element, origin)
+			return mir_checked_array_operation(state, locals, 48, checked_mir_value(receiver), checked_mir_value(value), 0, "Void", origin)
+		end
+		result := mir_checked_array_operation(state, locals, 48, checked_mir_value(receiver), - 1, kind - 7, element, origin)
+		return checked_value(result.type_name, result.category, origin, 1)
+	end
 	if kind >= 4
 		mut bounds :=- 1
 		if kind == 6

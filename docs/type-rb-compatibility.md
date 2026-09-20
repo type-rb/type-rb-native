@@ -2,7 +2,7 @@
 
 TypeRB Native currently follows exact reference revisions during development. The
 current source and semantic oracle is TypeRB
-`b819d7815d39d7bf283868585f8a2d45bcb6414c` (the `0.4.9-dev` development identity), recorded
+`63c73105965c7ea7404c19b538b06f7f47c35a2d` (the `0.4.9-dev` development identity), recorded
 in `TYPE_RB_REVISION`. This declares one exact reference identity during Native
 development, without claiming a supported version range.
 
@@ -33,6 +33,21 @@ The earlier scoped-file successor is registered in
 [Darwin/Linux arm64 result](https://github.com/type-rb/type-rb-native/blob/5cf61c740aa600c34ed94f1b130ea2ffefd9e783/results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/README.md)
 passes the selected-reference, migration, exact-baseline, target-regression,
 fixed-point, process, resource, and size criteria.
+
+## Array mutation and library-result reference update
+
+The exact development pin includes [TypeRB PR #740](https://github.com/type-rb/type-rb/pull/740).
+Array `push`, `unshift`, `concat` and `join` retain the receiver before argument
+effects, then read that Array's current storage. TypeScript `concat` also waits
+until the right operand has been evaluated before copying left-hand elements.
+Native mutation cases preserve the same rule in ordinary programs and the REPL.
+
+The pin also incorporates [PR #738](https://github.com/type-rb/type-rb/pull/738)
+for Function results from library methods and
+[PR #739](https://github.com/type-rb/type-rb/pull/739) for outer generic arguments
+whose names coincide with bound library parameters. Review the two previously
+rejected reference cases and all existing expectations when adopting this pin.
+It is an exact development commit, not a release or immutable seed refresh.
 
 ## Array lookup reference update
 

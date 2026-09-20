@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 436 ordinary-path probes and 32 feature
+Status: the shared contract contains 468 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -51,13 +51,29 @@ empty edge access and invalid slice bounds fail explicitly.
 
 [Decision 0059](decisions/0059-array-copy-mir.md) records the checked copy operation,
 element descriptors, independent lifetime verification and storage accounting.
-The exact reference includes [TypeRB PR #737](https://github.com/type-rb/type-rb/pull/737)
-for retained Array lookup receivers. Shared probes also record two remaining
-reference checker gaps: Function results from library calls (fixed by
-[TypeRB PR #738](https://github.com/type-rb/type-rb/pull/738)) and generic library
-results whose outer type parameter shares the library parameter name. These
-expected reference rejections are not full parity. Remaining destructive Array
-APIs, keyed sorting and other collection operations stay open.
+The exact reference includes the retained receiver and library-result fixes in
+TypeRB PRs [#737](https://github.com/type-rb/type-rb/pull/737),
+[#738](https://github.com/type-rb/type-rb/pull/738),
+[#739](https://github.com/type-rb/type-rb/pull/739) and
+[#740](https://github.com/type-rb/type-rb/pull/740). The previously recorded generic
+and Function-result checker gaps now pass both ordinary execution and the REPL.
+
+## Array insertion and removal
+
+Array `unshift`, `pop` and `shift` now use a closed, verified MIR mutation
+operation and the retained REPL evaluator. Each requires a mutable binding.
+Insertion captures the Array before evaluating its argument; removal returns
+the selected element with its exact type and fails on empty storage. Managed
+results can outlive their former Array, and removed slots do not retain values.
+
+Live traversal observes insertion and removal through aliases. Existing pending
+assignments retain their previously normalized position and recheck bounds after
+RHS effects, including shortening and rebuilding storage. Loop-header proofs
+cannot retain Array data or length across these mutations. Shared cases cover
+these combinations, argument effects, optional calls, lexical transfers and
+invalid capabilities/arity. [Decision 0060](decisions/0060-array-mutation-mir.md)
+records verifier, liveness, storage and GC controls. Membership, concatenation,
+joining, uniqueness, sorting and safe collection forms remain open.
 
 ## Integer receiver operations
 

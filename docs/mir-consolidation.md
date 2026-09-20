@@ -127,10 +127,10 @@ defaults and managed collections retain optional payloads through shared root
 planning. See [decision 0042](decisions/0042-nullable-mir.md) for the private layout
 and conservative fact invalidation across assignments and loop backedges.
 
-The ordinary compiler closure contains 110 modules. Implementation syntax stays
+The ordinary compiler closure contains 111 modules. Implementation syntax stays
 within the existing immutable seed and snapshot-v4 boundary; compiler self-use
 of the new syntax still depends on an accepted seed refresh. The shared language
-contract contains 436 cases with explicit remaining differences. Retained REPL
+contract contains 468 cases with explicit remaining differences. Retained REPL
 assignment flow now uses an ordinary checker projection, with conservative
 failure/interruption invalidation and explicit replay boundaries; see
 [decision 0043](decisions/0043-checked-repl-submissions.md). Ordinary enum payloads and exhaustive cases now have independently verified
@@ -287,7 +287,14 @@ order, optional calls and Unicode; see [decision 0057](decisions/0057-string-sli
 
 String control, octal, hexadecimal and Unicode escapes now share a byte-preserving
 decoder across ordinary files and the REPL. A declaration-bound runtime adapter
-retains verified call types/effects and exact literal bytes. The 436-case contract
+retains verified call types/effects and exact literal bytes. The 468-case contract
 includes all byte values, scalar boundaries and malformed syntax; ordinary
 fixed points preserve the preceding seed and explicit recovery boundary. See
 [decision 0058](decisions/0058-string-escape-decoding.md).
+
+Array `unshift`, `pop` and `shift` now share an independently verified mutation
+operation. Its exact Array/element operands, closed mode, effects and managed
+roots precede backend lowering. Mutation invalidates retained loop storage
+plans, and checked assignment positions remain valid only while the current
+length admits them. Source-erased/reordered and forced-GC controls cover removed
+managed values and growth; see [decision 0060](decisions/0060-array-mutation-mir.md).

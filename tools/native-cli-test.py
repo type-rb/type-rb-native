@@ -26,6 +26,7 @@ subprocess.run([sys.executable, str(repository / "tools/native-result-test.py"),
 subprocess.run([sys.executable, str(repository / "tools/native-alias-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-callable-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-array-copy-test.py"), str(binary)], check=True)
+subprocess.run([sys.executable, str(repository / "tools/native-array-mutation-test.py"), str(binary)], check=True)
 
 with tempfile.TemporaryDirectory(prefix='native cli ') as temporary:
     root = Path(temporary)
@@ -282,7 +283,8 @@ end
                       'array-iteration-escaping', 'array-iteration-receiver',
                       'array-iteration-constant-mutation', 'array-iteration-brace-close',
                       'range-float', 'range-string', 'range-comparison', 'range-index',
-                      'range-element-type', 'range-duplicate', 'range-escaping'):
+                      'range-element-type', 'range-duplicate', 'range-escaping',
+                      'float-array-method-arity'):
         fixture = repository / 'compiler/conformance/invalid' / (case_name + '.source')
         case_source = root / (case_name + '.trb')
         case_source.write_text(fixture.read_text())

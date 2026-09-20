@@ -7,7 +7,7 @@ Each count describes registered probes, not language coverage percentages.
 | Source text and lexical forms | basic | 1 / 2 | Invalid UTF-8 source and diagnostic positions; CRLF and source normalization; Identifier categories, reserved words and malformed literals | CommentStatement, BlankStatement, Identifier |
 | Strings and UTF-8 | basic | 8 / 89 | Remaining String receiver APIs; Embedded-expression boundaries beyond the reviewed interpolation probes | Literal, InterpolatedString |
 | Numeric and Boolean operations | basic | 1 / 35 | All operators and assignment forms; mixed widening and every portable failure boundary; Short-circuit side effects and invalid RHS diagnostics across nested control | UnaryExpression, BinaryExpression |
-| Bindings, constants and mutation | basic | 3 / 5 | Shadowing, duplicate declarations, unused/discard bindings and mutation through projections | VariableStatement, AssignmentStatement |
+| Bindings, constants and mutation | basic | 6 / 10 | Shadowing, duplicate declarations, unused/discard bindings and mutation through projections | VariableStatement, AssignmentStatement |
 | Function declarations and calls | basic | 0 / 3 | Every all-path return, evaluation-order and mutable-argument boundary | MethodStatement, ReturnStatement, CallExpression, ExpressionStatement |
 | Defaults and named arguments | basic | 0 / 13 | Method, function-value and payload-enum argument parity |  |
 | Conditions and value-producing branches | basic | 0 / 16 | Nullable/union common result types and broader expression nesting boundaries | IfStatement |
@@ -22,9 +22,9 @@ Each count describes registered probes, not language coverage percentages.
 | Generic declarations and applications | basic | 4 / 67 | Generic methods, classes and interfaces; Wider constraints and type applications | GenericExpression |
 | Literal types and discriminated unions | basic | 1 / 1 | Shared discriminants, branch narrowing and invalid mutation/common-type boundaries |  |
 | Function values and lexical capture | basic | 0 / 20 | Named declarations as values, callable equality, nullable signatures and remaining parameter-capability boundaries | LambdaExpression |
-| Arrays and checked indexes | basic | 12 / 51 | Removal during assignments/iteration and retained managed receivers; Remaining Array receiver APIs and invalid element/mutation combinations | ArrayLiteral, IndexExpression |
+| Arrays and checked indexes | basic | 16 / 83 | Remaining Array membership, concatenation, joining, uniqueness, sorting and safe APIs; Wider invalid element/mutation combinations | ArrayLiteral, IndexExpression |
 | Hash values and operations | basic | 0 / 5 | All key/value representations, empty inference, managed lifetimes and missing-key failures | HashLiteral |
-| Structured and value-producing iteration | basic | 1 / 24 | Keyed sorting, slicing and Hash iteration; Remaining receiver APIs that shorten or reorder an Array during traversal | IterationExpression, BlockExpression |
+| Structured and value-producing iteration | basic | 1 / 31 | Keyed sorting, slicing and Hash iteration; Remaining receiver APIs that shorten or reorder an Array during traversal | IterationExpression, BlockExpression |
 | Range values and boundaries | basic | 1 / 5 | Endpoint effects, empty/reversed ranges and next at both portable limits | RangeExpression |
 | Result and typed propagation | basic | 0 / 28 | General union errors and compiler-declared structured package boundaries | TryExpression, CatchExpression |
 | Classes, fields and methods | basic | 1 / 1 | Initialization, inheritance, dispatch, privacy and readonly fields | ClassStatement, FieldStatement |

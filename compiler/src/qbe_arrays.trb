@@ -22,6 +22,27 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 		return emitted_value(result, type_name)
 	end
 	owner := operands[instruction.first]
+	if kind == 48
+		if instruction.payload == 0
+			mut value := operands[instruction.second]
+			if mir_semantic_type_name(state.scalar_mir, mir_operand_type(value_types, instruction.second)) == "Float"
+				value = emit_temporary(context)
+				qbe_output_line(output, "\t" + value + " =l cast " + operands[instruction.second])
+			end
+			qbe_output_line(output, "\tcall $trbn_array_unshift(l " + owner + ", l " + value + ")")
+			return emitted_value("", "Void")
+		else
+			mut raw := result
+			if type_name == "Float"
+				raw = emit_temporary(context)
+			end
+			qbe_output_line(output, "\t" + raw + " =l call $trbn_array_remove(l " + owner + ", w " + integer_string(instruction.payload) + ")")
+			if type_name == "Float"
+				qbe_output_line(output, "\t" + result + " =d cast " + raw)
+			end
+		end
+		return emitted_value(result, type_name)
+	end
 	if kind == 47
 		mut descriptor := "$trbn_desc_array_scalar"
 		if mir_managed_type(state.scalar_mir, mir_element_type(state.scalar_mir, type_id))
