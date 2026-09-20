@@ -49,6 +49,8 @@ with tempfile.TemporaryDirectory(prefix='native bootstrap ') as temporary:
         stdout, stderr = communicate(child, timeout)
         result = subprocess.CompletedProcess(command, child.returncode, stdout, stderr)
         if check:
+            if result.returncode != 0:
+                print(stdout, stderr, flush=True)
             result.check_returncode()
         return result
 
