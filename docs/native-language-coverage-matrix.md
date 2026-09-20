@@ -56,10 +56,10 @@
 | Array index captured before growing RHS | accepts | accepts | matches reference | matches reference |
 | Nested managed Array values | accepts | accepts | matches reference | matches reference |
 | Array value-producing iteration | accepts | accepts | matches reference | matches reference |
-| Hash key/value iteration | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Hash key/value iteration | accepts | accepts | matches reference | matches reference |
 | Empty Hash inference and update | accepts | accepts | matches reference | matches reference |
 | Hash deletion, membership and size | accepts | accepts | matches reference | matches reference |
-| Stored Range bounds and conversion | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Stored Range bounds and conversion | accepts | accepts | matches reference | matches reference |
 | Inclusive Range maximum endpoint | accepts | accepts | matches reference | matches reference |
 | Result storage and exhaustive case | accepts | accepts | matches reference | matches reference |
 | Result try propagation | accepts | accepts | matches reference | matches reference |
@@ -511,3 +511,43 @@
 | Array query extra unique | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Array query missing concat | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Array query temporary mutation | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Hash and Range string keys | accepts | accepts | matches reference | matches reference |
+| Hash and Range integer keys | accepts | accepts | matches reference | matches reference |
+| Hash and Range empty | accepts | accepts | matches reference | matches reference |
+| Hash and Range snapshot values | accepts | accepts | matches reference | matches reference |
+| Hash and Range snapshot deleted | accepts | accepts | matches reference | matches reference |
+| Hash and Range snapshot rebound | accepts | accepts | matches reference | matches reference |
+| Hash and Range snapshot growth | accepts | accepts | matches reference | matches reference |
+| Hash and Range snapshot alias | accepts | accepts | matches reference | matches reference |
+| Hash and Range shallow values | accepts | accepts | matches reference | matches reference |
+| Hash and Range block rebinding | accepts | accepts | matches reference | matches reference |
+| Hash and Range float values | accepts | accepts | matches reference | matches reference |
+| Hash and Range boolean values | accepts | accepts | matches reference | matches reference |
+| Hash and Range string values | accepts | accepts | matches reference | matches reference |
+| Hash and Range nullable values | accepts | accepts | matches reference | matches reference |
+| Hash and Range record values | accepts | accepts | matches reference | matches reference |
+| Hash and Range callable values | accepts | accepts | matches reference | matches reference |
+| Hash and Range range values | accepts | accepts | matches reference | matches reference |
+| Hash and Range nested | accepts | accepts | matches reference | matches reference |
+| Hash and Range transfers | accepts | accepts | matches reference | matches reference |
+| Hash and Range return | accepts | accepts | matches reference | matches reference |
+| Hash and Range generic | accepts | accepts | matches reference | matches reference |
+| Hash and Range one parameter | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Hash and Range three parameters | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Hash and Range indexed hash | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Hash and Range duplicate parameter | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Hash and Range extra argument | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Hash and Range array pair | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Hash and Range range pair | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Hash and Range hash transform | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Hash and Range range ends | accepts | accepts | matches reference | matches reference |
+| Hash and Range range extrema | accepts | accepts | matches reference | matches reference |
+| Hash and Range range fresh | accepts | accepts | matches reference | matches reference |
+| Hash and Range range effect | accepts | accepts | matches reference | matches reference |
+| Hash and Range range optional | accepts | accepts | matches reference | matches reference |
+| Hash and Range range carrier | accepts | accepts | matches reference | matches reference |
+| Hash and Range range growth | accepts | accepts | matches reference | matches reference |
+| Hash and Range range extra | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Hash and Range range string | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Hash and Range mutable value | accepts | accepts | matches reference | matches reference |
+| Hash and Range captured bindings | accepts | accepts | matches reference | matches reference |

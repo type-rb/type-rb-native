@@ -21,7 +21,7 @@ runtime dependencies; independent groups may advance while CI runs.
 | Group | Remaining work | Existing foundation |
 | --- | --- | --- |
 | Builtin values and conversions | Symbol values/operations; Unicode identifiers; Float and Boolean String conversion; safe numeric/index/range conversions and structured errors | Portable numbers, UTF-8 Strings, nullable values, enums and Result MIR |
-| Collection operations | Remaining String transforms; Array joining and sorting; Hash iteration/safe lookup; Range materialization | Checked indexes, retained receivers, shallow copies, Hash operations, sequential transforms |
+| Collection operations | Remaining String transforms; Array joining and sorting; safe collection lookup and conversion | Checked indexes, retained receivers, shallow copies, Hash snapshots, Range materialization, sequential transforms |
 | Value declarations and identity | Top-level/module constants, nested module declarations, visibility and initialization order | Project import identity and declaration catalogs |
 | Nominal and union types | Newtypes/constructors; literal types and discriminated unions; raw-value enums/conversions and enum methods | Nominal records, payload enums, case and generic applications |
 | Object declarations | Classes, initialization, fields, privacy, inheritance and dispatch; interfaces and conformance | Nominal layouts, calls, receiver capabilities and managed values |
@@ -70,7 +70,7 @@ or uncovered basic contracts remain. Keep every required correctness, lifetime,
 target, recovery and ordinary self-hosting check; qualify performance at the
 coherent milestone described in [MIR consolidation](mir-consolidation.md).
 
-The current source adds Array search, uniqueness, concatenation, insertion/removal
-and edges/copies/slicing to the String query,
-sequence, slice and escape families. Its 509 registered cases include explicit
+The current source adds Hash snapshot iteration and Range materialization to Array
+search, uniqueness, concatenation, insertion/removal and edges/copies/slicing, plus
+the String query, sequence, slice and escape families. Its 549 registered cases include explicit
 remaining differences; neither this count nor green regression CI closes #454.

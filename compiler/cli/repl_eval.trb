@@ -1,3 +1,4 @@
+import { repl_range_array } from repl_range_methods
 import { array_method_arity, array_method_kind } from array_methods
 import { repl_array_method } from repl_array_methods
 import { string_method_argument_type, string_method_arity, string_method_kind } from string_methods
@@ -737,6 +738,16 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						end
 						next
 					end
+					if value.type_name == "Range<Integer>" && member == "to_a"
+						position[0] += 1
+						skip_newlines(state, position)
+						position[0] += 1
+						result = repl_reference(repl_range_array(store, result.value))
+						if safe_origin >= 0
+							result = repl_reference(repl_coerce(store, result.value, load_string(state.checked[0].safe_types, safe_origin)))
+						end
+						next
+					end
 					if array_element_type(value.type_name) != "" && array_method_kind(member) > 0
 						kind := array_method_kind(member)
 						position[0] += 1
@@ -1016,9 +1027,26 @@ def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut s
 		bound = store.integers[store.children[receiver][1]]
 		exclusive = store.integers[store.children[receiver][2]]
 	end
+	mut keys: Array<Integer> := []
+	mut values: Array<Integer> := []
+	if plan.source_kind == 3
+		table := store.hashes[store.integers[receiver]]
+		mut slot := 0
+		while slot < table.keys.size()
+			if table.keys[slot] > 0
+				keys.push(table.keys[slot])
+				values.push(table.values[slot])
+			end
+			slot += 1
+		end
+	end
 	mut result := 0
 	while true
-		if plan.source_kind == 1
+		if plan.source_kind == 3
+			if cursor >= keys.size()
+				break
+			end
+		elsif plan.source_kind == 1
 			if cursor >= store.children[receiver].size()
 				break
 			end
@@ -1029,12 +1057,20 @@ def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut s
 		mut element := 0
 		if plan.source_kind == 1
 			element = store.children[receiver][cursor]
+		elsif plan.source_kind == 3
+			element = keys[cursor]
 		else
 			element = repl_integer(store, cursor)
 		end
 		repl_bind(environment, load_string(state.token_texts, plan.syntax.element_origin), element, 1)
-		if plan.syntax.index_origin >= 0
-			repl_bind(environment, load_string(state.token_texts, plan.syntax.index_origin), repl_integer(store, ordinal), 1)
+		if plan.syntax.second_origin >= 0
+			mut second := 0
+			if plan.source_kind == 3
+				second = values[cursor]
+			else
+				second = repl_integer(store, ordinal)
+			end
+			repl_bind(environment, load_string(state.token_texts, plan.syntax.second_origin), second, 1)
 		end
 		position[0] = plan.syntax.body_start
 		result = repl_block(state, position, store, environment, flow, plan.syntax.origin)
@@ -1052,7 +1088,7 @@ def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut s
 		if plan.source_kind == 2 && cursor == bound
 			break
 		end
-		if plan.syntax.index_origin >= 0
+		if plan.source_kind != 3 && plan.syntax.second_origin >= 0
 			# There is no next ordinal when the exclusive endpoint is next.
 			if plan.source_kind == 2 && exclusive == 1 && cursor + 1 == bound
 				break
@@ -1498,8 +1534,8 @@ def repl_transform(mut state: CompilerState, mut position: Array<Integer>, mut s
 			repl_bind(environment, load_string(state.token_texts, syntax.accumulator_origin), result, 1)
 		end
 		repl_bind(environment, load_string(state.token_texts, shape.element_origin), element, 1)
-		if shape.index_origin >= 0
-			repl_bind(environment, load_string(state.token_texts, shape.index_origin), repl_integer(store, ordinal), 1)
+		if shape.second_origin >= 0
+			repl_bind(environment, load_string(state.token_texts, shape.second_origin), repl_integer(store, ordinal), 1)
 		end
 		position[0] = shape.body_start
 		yielded := repl_block(state, position, store, environment, flow, - 1)
@@ -1537,7 +1573,7 @@ def repl_transform(mut state: CompilerState, mut position: Array<Integer>, mut s
 		if plan.iteration.source_kind == 2 && cursor == bound
 			break
 		end
-		if shape.index_origin >= 0 || syntax.kind == 8
+		if shape.second_origin >= 0 || syntax.kind == 8
 			if plan.iteration.source_kind == 2 && exclusive == 1 && cursor + 1 == bound
 				break
 			end

@@ -90,6 +90,22 @@ boundaries. Source-erased/reordered MIR and forced-GC checks verify loop and roo
 ownership; see [decision 0061](decisions/0061-array-query-loops.md). Array joining,
 sorting and safe collection forms remain open.
 
+## Hash snapshot iteration and Range materialization
+
+`Hash.each` binds the key and value from a shallow snapshot taken before its
+body. Additions, deletions, scalar replacements and receiver rebinding do not
+change the entries visited; mutations inside shared managed values remain
+visible. Enumeration order remains unspecified. The checker requires two
+parameters and rejects `Hash.each.with_index` and Hash transforms.
+
+`Range<Integer>.to_a()` creates a fresh Array with the same inclusive/exclusive,
+equal-bound and reversed-range behavior as `each`. Endpoint expressions run
+once, and the inclusive maximum exits before incrementing. Existing typed Hash,
+Array, Range and loop MIR instructions cover these operations in files and the
+REPL, including retained values, managed snapshots, transfers and optional calls.
+Source erasure, reordered blocks, forged checked plans/root maps and forced GC
+are independently checked; see [decision 0062](decisions/0062-hash-range-collection-loops.md).
+
 ## Integer receiver operations
 
 Integer `abs`, sign/zero/parity predicates, `min`, `max`, `clamp` and `to_f`
