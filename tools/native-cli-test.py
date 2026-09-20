@@ -282,7 +282,8 @@ end
                       'array-iteration-escaping', 'array-iteration-receiver',
                       'array-iteration-constant-mutation', 'array-iteration-brace-close',
                       'range-float', 'range-string', 'range-comparison', 'range-index',
-                      'range-element-type', 'range-duplicate', 'range-escaping'):
+                      'range-element-type', 'range-duplicate', 'range-escaping',
+                      'float-array-method-arity'):
         fixture = repository / 'compiler/conformance/invalid' / (case_name + '.source')
         case_source = root / (case_name + '.trb')
         case_source.write_text(fixture.read_text())
