@@ -29,6 +29,13 @@ collection. A returned table owns its keys after their source Array has expired;
 retained closures own snapshots after table deletion and declaration remapping.
 Allocation accounting requires exact reclamation and no live bytes at shutdown.
 
+The complete compiler recovery snapshot is 83,927,300 bytes, 41,220 bytes above
+the previous compiler-only 80 MiB decode bound. Raise that bound to 96 MiB with
+exact-limit and one-byte-over rejection controls. The ordinary 4 MiB snapshot
+limit and all other schema bounds remain unchanged. This budget describes
+verbose recovery JSON, not compiler or application binary size. Retain the failed
+smaller-bound attempt; the larger budget still requires complete recovery checks.
+
 Remaining empty-collection inference, other API gaps and REPL presentation
 differences stay explicit. This implements an existing language contract and
 does not qualify performance or complete the entire basic-language inventory.

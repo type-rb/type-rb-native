@@ -987,9 +987,11 @@ and the remaining Array APIs stay tracked in issue #410. The original Array
 iteration checkpoint did not include removal operations. Ordinary shortening
 behavior is now covered by the [Array mutation contract](#array-insertion-and-removal).
 
-Compiler recovery metadata uses a separate 80 MiB input bound. Namespace and
-constant integration produces 69,813,214 bytes of recovery JSON, exceeding the
-previous 64 MiB boundary; the new bound leaves about 20% headroom. The earlier
+Compiler recovery metadata uses a separate 96 MiB input bound. Literal-union Hash
+keys produce 83,927,300 bytes of recovery JSON, exceeding the previous 80 MiB
+boundary by 41,220 bytes; the new bound leaves about 20% headroom. Namespace and
+constant integration previously produced 69,813,214 bytes and required increasing
+the 64 MiB boundary to 80 MiB. The earlier
 managed Array MIR compiler produced approximately 43.1 MB, exceeding 40 MiB.
 The earlier complete Array iteration snapshot was 34,616,510 bytes and required increasing the original 32 MiB bound to 40 MiB.
 These are verbose recovery inputs, not application or shipped compiler binaries.
