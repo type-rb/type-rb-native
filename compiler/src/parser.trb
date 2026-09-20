@@ -144,6 +144,40 @@ def syntax_iteration_suffix(state: CompilerState, origin: Integer): Integer
 	return - 1
 end
 
+# A name such as map/select may also be an ordinary nominal method.
+# Only an actual block suffix selects collection-transform syntax.
+def syntax_transform_suffix(state: CompilerState, origin: Integer): Integer
+	if !token_is(state, origin, ".") || transform_kind(load_string(state.token_texts, origin + 1)) == 0
+		return - 1
+	end
+	mut cursor := origin + 2
+	if token_is(state, cursor, "(")
+		mut depth := 1
+		cursor += 1
+		while cursor < state.token_count[0] && depth > 0
+			if token_is(state, cursor, "(")
+				depth += 1
+			elsif token_is(state, cursor, ")")
+				depth -= 1
+			end
+			cursor += 1
+		end
+		if depth != 0
+			return - 1
+		end
+	end
+	if token_is(state, cursor, ".") && token_is(state, cursor + 1, "with_index")
+		cursor += 2
+		if token_is(state, cursor, "(") && token_is(state, cursor + 1, ")")
+			cursor += 2
+		end
+	end
+	if token_is(state, cursor, "do") || token_is(state, cursor, "{")
+		return cursor
+	end
+	return - 1
+end
+
 def parse_iteration_statement(mut state: CompilerState, mut position: Array<Integer>, origin: Integer): Boolean
 	receiver_finish := position[0]
 	delimiter := syntax_iteration_suffix(state, receiver_finish)
@@ -364,7 +398,7 @@ def parse_primary_syntax(mut state: CompilerState, mut position: Array<Integer>)
 				return false
 			end
 		else
-			if token_is(state, position[0], ".") && transform_kind(load_string(state.token_texts, position[0] + 1)) > 0
+			if syntax_transform_suffix(state, position[0]) >= 0
 				if !parse_transform_syntax(state, position)
 					return false
 				end
