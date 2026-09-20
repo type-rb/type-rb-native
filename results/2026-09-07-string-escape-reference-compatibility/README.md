@@ -1,6 +1,22 @@
 # Current reference compatibility
 
 The selected development reference is TypeRB `0.4.9-dev` at
+`ecfbcc4e0e72aaf09bba4f94e380d06d1be883be`, including
+[TypeRB PR #747](https://github.com/type-rb/type-rb/pull/747).
+Double-quoted Symbol contents validate their escapes, and portable Ruby output
+preserves interpolation-looking text literally. Existing named-function,
+nullable-call, callee-order and Hash-literal corrections remain included.
+
+The shared contract contains 657 cases, including new Symbol and quote-boundary
+observations. The control-keyword and multiline reference gaps remain explicit;
+this is not complete lexical or basic-language coverage. Full exact-reference
+shared, recovery, CLI, target and memory validation remains required before
+acceptance. No release, seed or performance qualification is inferred. Previous
+summaries and retained measurement identities remain below.
+
+# Previous named-function reference compatibility
+
+The selected development reference is TypeRB `0.4.9-dev` at
 `d26f0e19a0fb52cdff7ef23ef2cca6d05e673ba3`, including
 [TypeRB PR #743](https://github.com/type-rb/type-rb/pull/743),
 [PR #744](https://github.com/type-rb/type-rb/pull/744),
