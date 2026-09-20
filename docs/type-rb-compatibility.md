@@ -2,7 +2,7 @@
 
 TypeRB Native currently follows exact reference revisions during development. The
 current source and semantic oracle is TypeRB
-`245ebcba45905037ea8f30d647d0893796441c88` (the `0.4.8-dev` development identity), recorded
+`b819d7815d39d7bf283868585f8a2d45bcb6414c` (the `0.4.9-dev` development identity), recorded
 in `TYPE_RB_REVISION`. This declares one exact reference identity during Native
 development, without claiming a supported version range.
 
@@ -33,6 +33,21 @@ The earlier scoped-file successor is registered in
 [Darwin/Linux arm64 result](https://github.com/type-rb/type-rb-native/blob/5cf61c740aa600c34ed94f1b130ea2ffefd9e783/results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/README.md)
 passes the selected-reference, migration, exact-baseline, target-regression,
 fixed-point, process, resource, and size criteria.
+
+## Array lookup reference update
+
+The current development pin includes [TypeRB PR #737](https://github.com/type-rb/type-rb/pull/737).
+Array `slice`, `try_slice` and `try_fetch` retain the receiver before evaluating
+their argument, then use that Array's current storage. Argument-side rebinding
+no longer redirects compiled Go lookup to another Array. The pin also includes
+[PR #736](https://github.com/type-rb/type-rb/pull/736) for value queries,
+[PR #730](https://github.com/type-rb/type-rb/pull/730) for nested collection
+expressions and REPL completion, and
+[PR #732](https://github.com/type-rb/type-rb/pull/732) for streamed Range transforms.
+
+This is an exact `0.4.9-dev` commit, not a release. Shared expectations must be
+reviewed against the new ordinary execution and REPL observations. Historical
+measurements and immutable bootstrap seed identities retain their original pins.
 
 ## Sequential Array transform reference update
 

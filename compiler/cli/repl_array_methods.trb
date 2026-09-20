@@ -1,0 +1,44 @@
+import { ReplStore, repl_boolean, repl_value } from repl_model
+
+def repl_array_method(mut store: ReplStore, kind: Integer, receiver: Integer, argument: Integer): Integer
+	values := store.children[receiver]
+	if kind == 1
+		return repl_boolean(store, values.size() == 0)
+	end
+	if kind == 2 || kind == 3
+		if values.size() == 0
+			store.error[0] = "panic: Array is empty"
+			return 0
+		end
+		if kind == 2
+			return values[0]
+		end
+		return values[values.size() - 1]
+	end
+	mut first := 0
+	mut finish := values.size()
+	if kind == 6
+		bounds := store.children[argument]
+		first = store.integers[bounds[0]]
+		finish = store.integers[bounds[1]]
+		exclusive := store.integers[bounds[2]] == 1
+		if first < 0 || finish < 0 || first > finish || finish > values.size() || (!exclusive && finish == values.size())
+			store.error[0] = "panic: Array slice range is out of bounds"
+			return 0
+		end
+		if !exclusive
+			finish += 1
+		end
+	end
+	mut children: Array<Integer> := []
+	mut index := first
+	while index < finish
+		mut selected := index
+		if kind == 5
+			selected = finish - 1 - index
+		end
+		children.push(values[selected])
+		index += 1
+	end
+	return repl_value(store, store.types[receiver], 0, 0.0, "", children)
+end

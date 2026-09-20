@@ -1,5 +1,20 @@
 # Current reference compatibility
 
+The selected development reference is TypeRB `0.4.9-dev` at
+`b819d7815d39d7bf283868585f8a2d45bcb6414c`, including
+[TypeRB PR #737](https://github.com/type-rb/type-rb/pull/737).
+Array slicing and safe lookup retain the receiver before argument evaluation,
+while observing mutations to its current storage. The Native Array receiver
+implementation uses this rule for new shallow copies and strict edge access.
+
+All 397 previously registered shared cases retain their reviewed outcomes at
+the new pin. New Array cases explicitly record the remaining generic and
+Function-result reference checker gaps. Complete correctness, recovery, CLI,
+target and memory authorities remain required before acceptance. This current integration does not publish a release or a seed,
+qualify performance, or change the retained measurements below.
+
+# Previous sequential Array reference compatibility
+
 The selected development reference is TypeRB `0.4.8-dev` at
 `245ebcba45905037ea8f30d647d0893796441c88`, including sequential live Array
 traversal from [TypeRB PR #729](https://github.com/type-rb/type-rb/pull/729).

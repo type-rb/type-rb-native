@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 397 ordinary-path probes and 32 feature
+Status: the shared contract contains 436 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -9,6 +9,9 @@ records semantic contracts that still need tests. The earlier 19-case inventory
 was an initial sample, not a complete list of missing features.
 
 ## Current development priority
+
+The [basic-language completion plan](basic-language-completion.md) groups the
+remaining implementation and verification work into one completion milestone.
 
 Complete useful language families together with their MIR dependencies, instead
 of waiting for individual unsupported programs to be reported. TypeRB at
@@ -36,6 +39,25 @@ remain required. Temporary performance/size regressions are observed during
 integration; detailed qualification occurs at coherent milestones. A feature
 need not manufacture a runtime speedup or a separate size budget revision to
 justify its existence. Final performance goals remain unchanged.
+
+## Array edges and shallow copies
+
+Array `empty?`, `first`, `last`, `dup`, `reverse` and checked Range slicing now
+work through ordinary MIR and the REPL. Copies retain a fresh outer buffer and
+shared managed elements, including callable and nullable values. Slice evaluates
+its captured receiver before the Range and observes mutations to that same Array
+without following a rebound source variable. Optional absence skips arguments;
+empty edge access and invalid slice bounds fail explicitly.
+
+[Decision 0059](decisions/0059-array-copy-mir.md) records the checked copy operation,
+element descriptors, independent lifetime verification and storage accounting.
+The exact reference includes [TypeRB PR #737](https://github.com/type-rb/type-rb/pull/737)
+for retained Array lookup receivers. Shared probes also record two remaining
+reference checker gaps: Function results from library calls (fixed by
+[TypeRB PR #738](https://github.com/type-rb/type-rb/pull/738)) and generic library
+results whose outer type parameter shares the library parameter name. These
+expected reference rejections are not full parity. Remaining destructive Array
+APIs, keyed sorting and other collection operations stay open.
 
 ## Integer receiver operations
 
