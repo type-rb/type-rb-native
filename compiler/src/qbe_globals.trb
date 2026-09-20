@@ -1,0 +1,72 @@
+import { integer_string } from literals
+import { MirInstruction, MirModule } from mir
+import { mir_global_index } from mir_globals
+import { mir_semantic_type_name } from mir_types
+import { QbeEmitContext, QbeValue, emit_label, emit_temporary, emit_typed_load, emit_typed_store, emitted_value, qbe_type } from qbe_context
+import { QbeOutput, qbe_output_line } from qbe_output
+
+def emit_mir_global_read(native_module: MirModule, instruction: MirInstruction, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
+	row := native_module.globals[mir_global_index(native_module, instruction.payload)]
+	suffix := integer_string(row.id)
+	status := emit_temporary(context)
+	ready := emit_temporary(context)
+	valid := emit_label(context)
+	failed := emit_label(context)
+	qbe_output_line(output, "\t" + status + " =w loadw $trbn_constant_ready" + suffix)
+	qbe_output_line(output, "\t" + ready + " =w ceqw " + status + ", 1")
+	qbe_output_line(output, "\tjnz " + ready + ", " + valid + ", " + failed)
+	qbe_output_line(output, failed)
+	qbe_output_line(output, "\tcall $trbn_fail(l $trbn_constant_error, l 35)")
+	qbe_output_line(output, "\thlt")
+	qbe_output_line(output, valid)
+	result := emit_temporary(context)
+	type_name := mir_semantic_type_name(native_module, row.type_id)
+	emit_typed_load(output, result, type_name, "$trbn_constant" + suffix)
+	return emitted_value(result, type_name)
+end
+
+# Consume the verified catalog and order. No authored token, declaration
+# spelling, source traversal or initializer expression is interpreted here.
+def emit_mir_globals(native_module: MirModule, mut output: QbeOutput)
+	qbe_output_line(output, "data $trbn_constant_error = { b \"panic: constant is not initialized\", b 10 }")
+	mut roots := ""
+	mut count := 0
+	native_module.globals.each do |row|
+		suffix := integer_string(row.id)
+		qbe_output_line(output, "data $trbn_constant" + suffix + " = align 8 { z 8 }")
+		qbe_output_line(output, "data $trbn_constant_ready" + suffix + " = align 4 { w 0 }")
+		if row.managed
+			if count > 0
+				roots += ", "
+			end
+			roots += "l $trbn_constant" + suffix
+			count += 1
+		end
+	end
+	if count > 0
+		qbe_output_line(output, "data $trbn_constant_roots = align 8 { " + roots + " }")
+	end
+	qbe_output_line(output, "function $trbn_initialize_constants() {\n@start")
+	if count > 0
+		qbe_output_line(output, "\tstorel $trbn_constant_roots, $trbn_gc_constant_roots")
+		qbe_output_line(output, "\tstorel " + integer_string(count) + ", $trbn_gc_constant_root_count")
+	end
+	if native_module.global_initialization.size() > 0
+		qbe_output_line(output, "\t%roots =l loadl $trbn_gc_temp_count")
+	end
+	native_module.global_initialization.each do |identity|
+		row := native_module.globals[mir_global_index(native_module, identity)]
+		suffix := integer_string(row.id)
+		type_name := mir_semantic_type_name(native_module, row.type_id)
+		qbe_output_line(output, "\t%constant" + suffix + " =" + qbe_type(type_name) + " call $trbnf" + integer_string(row.initializer) + "()")
+		emit_typed_store(output, type_name, "%constant" + suffix, "$trbn_constant" + suffix)
+		qbe_output_line(output, "\tstorew 1, $trbn_constant_ready" + suffix)
+		qbe_output_line(output, "\tstorel %roots, $trbn_gc_temp_count")
+	end
+	qbe_output_line(output, "\tret\n}\n")
+end
+
+def emit_constant_roots_runtime(mut output: QbeOutput)
+	qbe_output_line(output, "data $trbn_gc_constant_roots = align 8 { l 0 }\ndata $trbn_gc_constant_root_count = align 8 { l 0 }")
+	qbe_output_line(output, "function $trbn_gc_mark_constants() {\n@start\n\t%data =l loadl $trbn_gc_constant_roots\n\t%count =l loadl $trbn_gc_constant_root_count\n\tjmp @loop\n@loop\n\t%index =l phi @start 0, @visit %next\n\t%done =w cslel %count, %index\n\tjnz %done, @finish, @visit\n@visit\n\t%offset =l mul %index, 8\n\t%slot =l add %data, %offset\n\t%address =l loadl %slot\n\t%value =l loadl %address\n\tcall $trbn_gc_mark(l %value)\n\t%next =l add %index, 1\n\tjmp @loop\n@finish\n\tret\n}\n")
+end

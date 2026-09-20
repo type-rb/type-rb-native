@@ -6,8 +6,21 @@ import { nullable_element } from nullable_types
 import { CheckedLocals, CompilerState, NullableFact, local_find, local_identity, local_slot } from state
 import { load_integer, load_string, sparse_integer_at, store_string } from storage
 
+# Lexical targets use active binding slots; immutable globals use -id-2.
+# -1 is no target. Global identities survive lexical scope entry and exit and
+# have no replacement version, because the language cannot rebind a constant.
+def nullable_identity(locals: CheckedLocals, binding: Integer): Integer
+	if binding < - 1
+		return binding
+	end
+	return local_identity(locals, binding)
+end
+
 def nullable_version(locals: CheckedLocals, binding: Integer): Integer
-	identity := local_identity(locals, binding)
+	if binding < - 1
+		return 0
+	end
+	identity := nullable_identity(locals, binding)
 	mut cursor := locals.nullable_state[0]
 	while cursor >= 0
 		fact := locals.nullable_facts[cursor]
@@ -21,7 +34,7 @@ end
 
 def nullable_fact(mut locals: CheckedLocals, binding: Integer, field: Integer, type_name: String, previous: Integer): Integer
 	id := locals.nullable_facts.size()
-	locals.nullable_facts.push(NullableFact.new(identity: local_identity(locals, binding), field: field, type_name: type_name, version: nullable_version(locals, binding), previous: previous))
+	locals.nullable_facts.push(NullableFact.new(identity: nullable_identity(locals, binding), field: field, type_name: type_name, version: nullable_version(locals, binding), previous: previous))
 	return id
 end
 
@@ -29,8 +42,11 @@ def nullable_apply(mut locals: CheckedLocals, facts: Integer)
 	mut cursor := facts
 	while cursor >= 0
 		fact := locals.nullable_facts[cursor]
-		binding := local_slot(locals, fact.identity)
-		if binding >= 0 && fact.version == nullable_version(locals, binding)
+		mut binding := local_slot(locals, fact.identity)
+		if fact.identity < - 1
+			binding = fact.identity
+		end
+		if binding != - 1 && fact.version == nullable_version(locals, binding)
 			locals.nullable_state[0] = nullable_fact(locals, binding, fact.field, fact.type_name, locals.nullable_state[0])
 		end
 		cursor = fact.previous
@@ -48,7 +64,7 @@ def nullable_replace(mut locals: CheckedLocals, binding: Integer, flow_type: Str
 end
 
 def nullable_lookup(locals: CheckedLocals, binding: Integer, field: Integer, declared: String): String
-	identity := local_identity(locals, binding)
+	identity := nullable_identity(locals, binding)
 	mut cursor := locals.nullable_state[0]
 	while cursor >= 0
 		fact := locals.nullable_facts[cursor]
@@ -67,7 +83,7 @@ end
 
 def nullable_read(mut state: CompilerState, mut locals: CheckedLocals, value: CheckedValue, binding: Integer, field: Integer, origin: Integer): CheckedValue
 	target := checked_nullable_target(value, binding, field)
-	if binding < 0 || nullable_element(value.type_name) == ""
+	if binding == - 1 || nullable_element(value.type_name) == ""
 		return target
 	end
 	flow := nullable_lookup(locals, binding, field, value.type_name)
@@ -92,7 +108,7 @@ def nullable_nil_condition(mut state: CompilerState, mut locals: CheckedLocals, 
 	mut truth :=- 1
 	mut falsity :=- 1
 	element := nullable_element(subject.type_name)
-	if subject.nullable_binding >= 0 && element != ""
+	if subject.nullable_binding != - 1 && element != ""
 		truth = nullable_fact(locals, subject.nullable_binding, subject.nullable_field, "Nil", - 1)
 		falsity = nullable_fact(locals, subject.nullable_binding, subject.nullable_field, element, - 1)
 		if different

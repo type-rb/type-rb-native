@@ -1,16 +1,19 @@
+import { ConstantDeclaration } from constant_model
 import { TransformSyntax, transform_kind } from transform_model
+import { NamespaceDeclaration, namespace_qualify } from namespace_model
+import { enum_uppercase } from enum_types
 import { expand_quoted_token } from literal_syntax
 import { parse_type_alias } from alias_syntax
 import { LambdaSyntax } from callable_types
 import { parse_lambda_parameters } from lambda_syntax
 import { GenericDefinition, GenericField, GenericFunction, GenericParameter, GenericVariant } from generic_model
 import { CatchSyntax } from result_model
-import { nominal_application_end, parse_generic_parameters } from generic_syntax
+import { nominal_application_end, nominal_application_name, parse_generic_parameters } from generic_syntax
 import { advance, expect, expect_identifier, finish_statement, parse_type, skip_newlines, token_is } from syntax_tokens
 import { parse_enum } from enum_syntax
 import iteration_syntax
 import { CompilerState, ControlBranch, ControlSyntax, DefaultInitializer, diagnostic, function_index_key, has_diagnostic, terminal_token } from state
-import { load_integer, load_string, sparse_integer_at, store_integer, store_string } from storage
+import { load_integer, load_string, sparse_integer_at, sparse_string_at, store_integer, store_string } from storage
 
 def declaration_start(state: CompilerState, index: Integer): Boolean
 	if token_is(state, index, "mut")
@@ -285,6 +288,7 @@ def parse_primary_syntax(mut state: CompilerState, mut position: Array<Integer>)
 	elsif kind == 1
 		application_end := nominal_application_end(state, position[0])
 		if application_end >= 0
+			position[0] = nominal_application_name(state, position[0])
 			parse_type(state, position)
 		else
 			advance(position)
@@ -619,7 +623,7 @@ end
 def parse_record(mut state: CompilerState, mut position: Array<Integer>): Boolean
 	line := load_integer(state.token_lines, position[0])
 	advance(position)
-	name := expect_identifier(state, position)
+	name := namespace_qualify(state.declaration_owner[0], expect_identifier(state, position))
 	mut parameters: Array<String> := []
 	mut fields: Array<GenericField> := []
 	if token_is(state, position[0], "<")
@@ -694,11 +698,27 @@ end
 def parse_function(mut state: CompilerState, mut position: Array<Integer>): Boolean
 	line := load_integer(state.token_lines, position[0])
 	advance(position)
-	name := expect_identifier(state, position)
+	mut name := expect_identifier(state, position)
+	if name == "self" && token_is(state, position[0], ".")
+		if state.declaration_owner[0] == ""
+			diagnostic(state, "TRBN4002", line, "class method requires a declaration owner")
+			return false
+		end
+		advance(position)
+		name = expect_identifier(state, position)
+	elsif state.declaration_owner[0] != ""
+		diagnostic(state, "TRBN4002", line, "module methods currently require def self.name")
+		return false
+	end
+	name = namespace_qualify(state.declaration_owner[0], name)
 	mut type_parameters: Array<String> := []
 	mut generic_parameters: Array<GenericParameter> := []
 	if token_is(state, position[0], "<")
 		type_parameters = parse_generic_parameters(state, position, line)
+		if state.declaration_owner[0] != ""
+			diagnostic(state, "TRBN4002", line, "module methods do not support type parameters")
+			return false
+		end
 	end
 	if !expect(state, position, "(")
 		return false
@@ -953,8 +973,98 @@ def parse_bare_import(mut state: CompilerState, mut position: Array<Integer>, li
 	return finish_statement(state, position)
 end
 
+def parse_namespace(mut state: CompilerState, mut position: Array<Integer>): Boolean
+	line := load_integer(state.token_lines, position[0])
+	advance(position)
+	leaf := expect_identifier(state, position)
+	if !enum_uppercase(leaf)
+		diagnostic(state, "TRBN4002", line, "module name must start with an uppercase letter")
+		return false
+	end
+	parent := state.declaration_owner[0]
+	name := namespace_qualify(parent, leaf)
+	mut found := false
+	state.namespaces.each do |declaration|
+		if declaration.source_id == state.active_module[0] && declaration.name == name
+			found = true
+		end
+	end
+	if !found
+		state.namespaces.push(NamespaceDeclaration.new(name: name, source_id: state.active_module[0], line: line))
+	end
+	if !finish_statement(state, position)
+		return false
+	end
+	start := position[0]
+	state.declaration_owner[0] = name
+	while !terminal_token(state, position[0]) && !token_is(state, position[0], "end") && !has_diagnostic(state)
+		parse_declaration(state, position)
+		skip_newlines(state, position)
+	end
+	mut token := start
+	while token < position[0]
+		if sparse_string_at(state.token_namespaces, token) == ""
+			store_string(state.token_namespaces, token, name)
+		end
+		token += 1
+	end
+	state.declaration_owner[0] = parent
+	if has_diagnostic(state) || !expect(state, position, "end")
+		return false
+	end
+	return finish_statement(state, position)
+end
+
+def parse_constant(mut state: CompilerState, mut position: Array<Integer>): Boolean
+	origin := position[0]
+	line := load_integer(state.token_lines, origin)
+	name := namespace_qualify(state.declaration_owner[0], expect_identifier(state, position))
+	mut annotation := ""
+	if token_is(state, position[0], ":")
+		advance(position)
+		annotation = parse_type(state, position)
+	end
+	if !expect(state, position, ":=")
+		return false
+	end
+	start := position[0]
+	if !parse_expression_syntax(state, position, 1)
+		return false
+	end
+	state.constants.push(ConstantDeclaration.new(name: name, source_id: state.active_module[0], line: line, origin: origin, start: start, finish: position[0], annotation: annotation))
+	return finish_statement(state, position)
+end
+
+def parse_declaration(mut state: CompilerState, mut position: Array<Integer>): Boolean
+	if load_integer(state.token_kinds, position[0]) == 1 && enum_uppercase(load_string(state.token_texts, position[0])) && (token_is(state, position[0] + 1, ":=") || token_is(state, position[0] + 1, ":"))
+		return parse_constant(state, position)
+	end
+	if token_is(state, position[0], "module")
+		return parse_namespace(state, position)
+	end
+	if token_is(state, position[0], "alias")
+		return parse_type_alias(state, position)
+	end
+	if token_is(state, position[0], "enum")
+		return parse_enum(state, position)
+	end
+	if token_is(state, position[0], "record")
+		return parse_record(state, position)
+	end
+	if token_is(state, position[0], "def")
+		return parse_function(state, position)
+	end
+	mut scope := ""
+	if state.declaration_owner[0] == ""
+		scope = "top-level "
+	end
+	diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), "unsupported " + scope + "declaration " + load_string(state.token_texts, position[0]))
+	return false
+end
+
 def parse_module(mut state: CompilerState, start: Integer, module_index: Integer): Boolean
 	state.active_module[0] = module_index
+	state.declaration_owner[0] = ""
 	import_start := state.import_count[0]
 	store_integer(state.module_import_starts, module_index, import_start)
 	store_integer(state.module_import_counts, module_index, 0)
@@ -971,24 +1081,7 @@ def parse_module(mut state: CompilerState, start: Integer, module_index: Integer
 				parse_bare_import(state, position, line)
 			end
 		else
-			if token_is(state, position[0], "alias")
-				parse_type_alias(state, position)
-			elsif token_is(state, position[0], "enum")
-				parse_enum(state, position)
-			elsif token_is(state, position[0], "record")
-				parse_record(state, position)
-			else
-				if token_is(state, position[0], "def")
-					parse_function(state, position)
-				else
-					diagnostic(
-						state,
-						"TRBN4002",
-						load_integer(state.token_lines, position[0]),
-						"unsupported top-level declaration " + load_string(state.token_texts, position[0]),
-					)
-				end
-			end
+			parse_declaration(state, position)
 		end
 		if has_diagnostic(state)
 			return false

@@ -84,12 +84,21 @@ end
 
 # Syntactic type applications require a call or constructor suffix.
 # Comparison operators never consume a speculative type argument list.
+def nominal_application_name(state: CompilerState, origin: Integer): Integer
+	mut token := origin
+	while (token_is(state, token + 1, "::") || token_is(state, token + 1, ".")) && load_integer(state.token_kinds, token + 2) == 1
+		token += 2
+	end
+	return token
+end
+
 def nominal_application_end(state: CompilerState, origin: Integer): Integer
-	if !token_is(state, origin + 1, "<")
+	name_origin := nominal_application_name(state, origin)
+	if !token_is(state, name_origin + 1, "<")
 		return - 1
 	end
 	mut depth := 1
-	mut token := origin + 2
+	mut token := name_origin + 2
 	while token < state.token_count[0] && depth > 0
 		if token_is(state, token, "<")
 			depth += 1
@@ -102,7 +111,7 @@ def nominal_application_end(state: CompilerState, origin: Integer): Integer
 				return - 1
 			end
 		elsif token_is(state, token, "(") || token_is(state, token, "->")
-		elsif load_integer(state.token_kinds, token) != 1 && load_integer(state.token_kinds, token) != 4 && !token_is(state, token, ",") && !token_is(state, token, "?")
+		elsif load_integer(state.token_kinds, token) != 1 && load_integer(state.token_kinds, token) != 4 && !token_is(state, token, ",") && !token_is(state, token, "?") && !token_is(state, token, "::")
 			return - 1
 		end
 		token += 1

@@ -66,4 +66,31 @@ end
     assert b':5: error[TRBN4004]:' in failed.stderr, failed
     assert len(failed.stderr.splitlines()) == 1, failed
 
+    # The ordinary parser owns colon disambiguation for submission framing too.
+    keywords = run([binary, 'repl'], data=b'''def names(): String
+return :end + :fn
+end
+puts(names())
+def apply(*, callback: () -> String): String
+return callback()
+end
+puts(apply(callback: fn(): String
+return :if
+end))
+puts(:return)
+:quit
+''')
+    assert keywords.stdout == b'endfn\nif\nreturn\n' and not keywords.stderr, keywords
+
+    malformed = run([binary, 'repl'], data=r'''def invalid()
+text := "#{"ok"}\q"
+puts(text)
+end
+puts(:end)
+:quit
+'''.encode())
+    assert malformed.stdout == b'end\n', malformed
+    assert len(malformed.stderr.splitlines()) == 1, malformed
+    assert b'unsupported String escape' in malformed.stderr, malformed
+
 print('Symbol bytes, GC, syntax origins and retained REPL checks passed')

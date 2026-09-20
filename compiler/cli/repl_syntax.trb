@@ -1,4 +1,6 @@
-import { token_is } from syntax_tokens
+import { token_is, skip_newlines } from syntax_tokens
+import { parse_module } from parser
+import { enum_uppercase } from enum_types
 import { string_starts_with } from path
 import { compiler_new, has_diagnostic } from state
 import { load_integer, load_string } from storage
@@ -449,6 +451,25 @@ def repl_incomplete(text: String): Boolean
 		message := load_string(state.diagnostic_messages, 0)
 		return string_starts_with(message, "unterminated")
 	end
+	# Let the ordinary parser select literal contexts before counting keywords.
+	# In particular, :end is a value, whereas callback: fn opens a real body.
+	# An incomplete parse still normalizes its successfully consumed prefix.
+	mut first := [0]
+	skip_newlines(state, first)
+	declaration := token_is(state, first[0], "def") || token_is(state, first[0], "record") || token_is(state, first[0], "enum") || token_is(state, first[0], "module") || token_is(state, first[0], "alias") || token_is(state, first[0], "import") || (enum_uppercase(load_string(state.token_texts, first[0])) && (token_is(state, first[0] + 1, ":=") || token_is(state, first[0] + 1, ":")))
+	if !declaration
+		wrapped := "def main()\n" + text + "\nend\n"
+		state = compiler_new(wrapped.size() * 3 + 16)
+		lex(state, wrapped)
+	end
+	parse_module(state, 0, state.entry_module[0])
+	if has_diagnostic(state) && load_string(state.diagnostic_codes, 0) == "TRBN4001"
+		# A rejected interpolation can leave only its opening synthetic tokens.
+		# Frame the original authored tokens so that the error is submitted once
+		# its enclosing declaration is complete, rather than waiting forever.
+		state = compiler_new(text.size() * 3 + 16)
+		lex(state, text)
+	end
 	mut depth := 0
 	mut delimiters := 0
 	mut transfer_depth :=- 1
@@ -458,7 +479,7 @@ def repl_incomplete(text: String): Boolean
 		if token_is(state, index, "def") || token_is(state, index, "fn")
 			depth += 1
 		end
-		if token_is(state, index, "record") || token_is(state, index, "enum")
+		if token_is(state, index, "record") || token_is(state, index, "enum") || token_is(state, index, "module")
 			depth += 1
 		end
 		if token_is(state, index, "return") || token_is(state, index, "break") || token_is(state, index, "next")

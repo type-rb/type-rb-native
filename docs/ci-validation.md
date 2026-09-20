@@ -72,6 +72,9 @@ The callable environment and type-context adapters (`repl_callables.trb` and
 `repl_types.trb`) are also staged in every CLI build. `native-callable-test.py`
 is invoked by the CLI authority on both targets and covers retained calls,
 nominal remapping, cyclic captures, failure recovery and replay.
+`repl_globals.trb` retains runtime constants and is staged with the CLI modules.
+`native-constants-test.py` runs in both CLI authorities and checks persistent GC
+roots, initializer order, retained values, failed initialization and replay.
 
 The CLI cache test gives each complete core/CLI fixed-point rebuild a bounded
 300-second watchdog and records its elapsed time; the whole CLI job allows

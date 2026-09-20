@@ -13,13 +13,14 @@ import { mir_managed_type, mir_semantic_type_id } from mir_types
 import { verify_mir } from mir_verifier
 import { resolve_function_body, validate_import_usage } from resolution
 import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_add, local_identity, locals_new, select_checked_body } from state
-import { load_integer, load_string, sparse_integer_at, store_integer } from storage
+import { load_integer, load_string, sparse_integer_at, sparse_string_at, store_integer } from storage
 
 # Parameter binding and body checking are separate semantic stages. All
 # concrete functions start MIR here and require an owned body before finalization.
 def checked_function_locals(mut state: CompilerState, function_index: Integer): CheckedLocals
 	select_checked_body(state, function_index)
 	state.active_module[0] = load_integer(state.function_modules, function_index)
+	state.declaration_owner[0] = sparse_string_at(state.token_namespaces, load_integer(state.function_body_starts, function_index))
 	mut locals := locals_new(state.token_count[0] + 1)
 	if state.generic_template_mode[0] || state.lambda_phase[0] == 1
 		locals.mir_state[1] = function_index
@@ -77,7 +78,7 @@ def check_function_body(mut state: CompilerState, function_index: Integer, mut l
 		mir_control_prepare(state, locals)
 	end
 	mut position := [load_integer(state.function_body_starts, function_index)]
-	if sparse_integer_at(state.function_defaults, function_index) > 0
+	if sparse_integer_at(state.function_expression_bodies, function_index) > 0
 		value := check_expression(state, position, locals, 1, result_type)
 		returned := checked_mir_value(value)
 		if returned >= 0

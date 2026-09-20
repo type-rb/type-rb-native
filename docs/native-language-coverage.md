@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 657 ordinary-path probes and 32 feature
+Status: the shared contract contains 698 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -8,14 +8,28 @@ basic-language completion; [the generated family inventory](native-language-feat
 records semantic contracts that still need tests. The earlier 19-case inventory
 was an initial sample, not a complete list of missing features.
 
+## Declaration namespaces and runtime constants
+
+Nested and reopened modules preserve lexical methods, nominal types, aliases,
+defaults, visibility and import identity. Top-level/module constants lower to
+checked initializer functions and verified MIR globals, with explicit order,
+persistent GC roots and retained REPL values. Nullable constant reads narrow by
+stable declaration identity. Shared cases distinguish immutable bindings from
+mutable scalar copies and source-function parameter bindings. See
+[decision 0067](decisions/0067-namespaces-and-constant-mir.md).
+
+Forward initialization dependencies, imported inferred constant types, qualified
+generic aliases and untyped empty collection inference remain explicit gaps.
+This does not complete the module/binding families or the whole basic language.
+
 ## Symbol expressions
 
 Unquoted and double-quoted Symbol spellings use the reference String semantics.
 Quoted interpolation-looking contents remain literal; actual String interpolation,
 Hash labels and named arguments retain their separate syntax. Existing String
 MIR covers values, defaults, nullable results, captures and managed storage, with
-source-erased/reordered/forced-GC and retained-session checks. Single-quote and
-reference control-keyword boundaries remain explicit; see
+source-erased/reordered/forced-GC and retained-session checks. Keyword Symbols also retain their literal identity in REPL framing. Single-quote,
+operator spelling and multiline interpolation boundaries remain explicit; see
 [decision 0066](decisions/0066-symbol-literal-syntax.md).
 
 ## Unicode String trimming
@@ -827,9 +841,8 @@ results. Their probes distinguish absence from zero/false, cover nullable
 elements and Range positions, and retain visited managed values after source
 replacement or parameter reassignment. Generic callbacks, captures and forced
 collection use the ordinary nullable and closure MIR contracts.
-Keyed sorting, Array slicing and Hash iteration remain gaps.
-Receiver APIs for removal/reordering and broader expression-context boundaries
-remain visible in the inventory; this coverage is not the entire collection API.
+Array sorting, safe lookup/conversion APIs and broader expression-context
+boundaries remain visible in the inventory; this coverage is not the entire collection API.
 
 String slicing now accepts checked `Range<Integer>` bounds in ordinary programs
 and the REPL. Shared probes cover retained receiver identity, inclusive/exclusive

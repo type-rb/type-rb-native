@@ -1,4 +1,7 @@
+import { checked_constant_read } from mir_globals
+import { namespace_parent } from namespace_model
 import { mir_range_array } from range_methods
+import { checked_reference_name, namespace_member_access, parse_declaration_reference, parse_namespace_reference } from namespace_references
 import { array_query_comparable } from array_queries
 import { array_method_arity, array_method_kind, mir_array_method } from array_methods
 import { mir_string_method, string_method_argument_type, string_method_arity, string_method_kind } from string_methods
@@ -16,7 +19,7 @@ import { checked_result_try, result_interactive_entry, result_operation, result_
 import { advance, expect, expect_identifier, finish_statement, parse_type, skip_newlines, token_is } from syntax_tokens
 import { check_enum_bindings, check_enum_patterns } from enum_checked
 import { mir_enum_construct, mir_enum_operation } from enum_mir
-import { enum_argument_bindings, find_enum_type, find_enum_variant } from enum_types
+import { enum_argument_bindings, enum_uppercase, find_enum_type, find_enum_variant } from enum_types
 import { checked_submission_boundary, checked_submission_result } from checked_submission
 import { nullable_apply, nullable_finish, nullable_loop_writes, nullable_nil_condition, nullable_read, nullable_replace } from nullable_flow
 import { nullable_common, nullable_element, nullable_type } from nullable_types
@@ -43,7 +46,7 @@ import { mir_checked_puts, mir_checked_string_binary, mir_checked_string_literal
 import { mir_control_active, mir_control_branch, mir_control_enter, mir_control_jump, mir_control_loop_begin, mir_control_loop_branch, mir_control_loop_end, mir_control_prepare, mir_control_return, mir_control_transfer } from mir_control
 import { binary_operator_id, declaration_start, parse_argument_label, syntax_block_end, syntax_conditional_tail, syntax_expression_precedence, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_statement_boundary } from parser
 import { resolve_body_names, standard_package_import, standard_package_root } from resolution
-import { find_visible_enum, find_visible_function, find_visible_generic_function, find_visible_record } from declaration_lookup
+import { find_visible_declaration, find_visible_enum, find_visible_function, find_visible_generic_function, find_visible_record } from declaration_lookup
 import { string_starts_with } from path
 import { array_element_type, array_type, common_array_element_type, find_field, find_record_type, record_type, resolve_type_name, type_display } from type_resolution
 import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_add, local_bind, local_find, terminal_token } from state
@@ -434,11 +437,20 @@ def check_primary(
 			position[0] = application_finish
 			return checked_value("", 2, origin, 0)
 		end
-		if token_is(state, origin + 1, "::")
+		mut selected_position := [origin]
+		mut name := load_string(state.token_texts, origin)
+		if local_find(locals, name) < 0
+			name = parse_declaration_reference(state, selected_position)
+		else
+			selected_position[0] += 1
+		end
+		if token_is(state, selected_position[0], "::")
 			return check_enum_constructor(state, position, locals)
 		end
-		name := load_string(state.token_texts, origin)
-		advance(position)
+		position[0] = selected_position[0]
+		if find_visible_declaration(state, state.active_module[0], name, 6) >= 0
+			return type_diagnostic(state, line, "module declaration is not a runtime value")
+		end
 		if name == "true"
 			return scalar_mir_literal(state, locals, "Boolean", origin, "true")
 		end
@@ -452,6 +464,10 @@ def check_primary(
 			value := mir_binding_read(state, locals, local_index, origin)
 			return nullable_read(state, locals, value, local_index, - 1, origin)
 		end
+		constant := find_visible_declaration(state, state.active_module[0], name, 7)
+		if constant >= 0
+			return checked_constant_read(state, locals, constant, origin)
+		end
 		standard_package := standard_package_import(state, state.active_module[0], name)
 		if standard_package < - 1
 			return checked_value(standard_package_root(standard_package), 2 - standard_package, origin, 0)
@@ -461,8 +477,14 @@ def check_primary(
 		end
 		function := find_visible_function(state, state.active_module[0], name)
 		if function >= 0
+			if !namespace_member_access(state, load_integer(state.function_modules, function), load_string(state.function_names, function), origin)
+				return checked_value("", 0, origin, 0)
+			end
 			if token_is(state, position[0], "(")
 				return checked_value("", 1, origin, 0)
+			end
+			if namespace_parent(load_string(state.function_names, function)) != ""
+				return type_diagnostic(state, line, "module method requires an explicit fn wrapper to be used as a value")
 			end
 			return checked_function_value(state, locals, function, origin)
 		end
@@ -532,11 +554,6 @@ def check_call(mut state: CompilerState, mut position: Array<Integer>, mut local
 				scalar_mir_disable(locals)
 			end
 			bindings.values[slot] = checked_mir_value(argument)
-			if function >= 0 && hash_key_type(expected) != ""
-				if load_integer(state.parameter_mutable, parameter_start + slot) != 0 && checked_readonly_reference_binding(state, locals, argument)
-					diagnostic(state, "TRBN4004", argument_line, "mutable Hash argument requires a mutable binding or fresh value")
-				end
-			end
 			if (callee_name == "puts" && encoded == 0) && argument.type_name != "Never" && argument.type_name != "String" && argument.type_name != "Integer" && argument.type_name != "Boolean"
 				diagnostic(state, "TRBN4004", line, "puts does not yet support " + type_display(state, argument.type_name))
 			end
@@ -566,7 +583,7 @@ def check_call(mut state: CompilerState, mut position: Array<Integer>, mut local
 end
 
 def check_record_new(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, record_origin: Integer): CheckedValue
-	record_name := load_string(state.token_texts, record_origin)
+	record_name := checked_reference_name(state, record_origin)
 	mut record_index := find_record_type(state, sparse_string_at(state.checked[0].generic_application_types, record_origin))
 	if record_index < 0
 		record_index = find_visible_record(state, state.active_module[0], record_name)
@@ -844,7 +861,7 @@ def check_postfix(
 					position,
 					locals,
 					value.category,
-					load_string(state.token_texts, value.origin),
+					checked_reference_name(state, value.origin),
 				)
 			end
 		else
@@ -1073,7 +1090,10 @@ def checked_readonly_reference_binding(
 			return false
 		end
 	end
-	return local_find(locals, load_string(state.token_texts, value.origin)) >= 0
+	if local_find(locals, load_string(state.token_texts, value.origin)) >= 0
+		return true
+	end
+	return sparse_integer_at(state.checked[0].constant_references, value.origin) > 0
 end
 
 def check_declaration(
@@ -1089,6 +1109,9 @@ def check_declaration(
 	end
 	line := load_integer(state.token_lines, position[0])
 	name := expect_identifier(state, position)
+	if enum_uppercase(name)
+		diagnostic(state, "TRBN4004", line, "constants may be declared only at top level or in a module")
+	end
 	mut declared_type := ""
 	if token_is(state, position[0], ":")
 		advance(position)
@@ -1682,7 +1705,7 @@ def check_transfer_value(mut state: CompilerState, mut position: Array<Integer>,
 	if token_is(state, origin, "return") && locals.value_block[0]
 		return type_diagnostic(state, load_integer(state.token_lines, origin), "return is unavailable inside a value-producing collection block")
 	end
-	if token_is(state, origin, "return") && locals.lambda_result.size() == 0 && sparse_integer_at(state.function_defaults, locals.mir_state[1]) > 0
+	if token_is(state, origin, "return") && locals.lambda_result.size() == 0 && sparse_integer_at(state.function_expression_bodies, locals.mir_state[1]) > 0
 		return type_diagnostic(state, load_integer(state.token_lines, origin), "return is unavailable inside a default initializer")
 	end
 	line := load_integer(state.token_lines, origin)
@@ -1791,7 +1814,7 @@ def check_enum_constructor(mut state: CompilerState, mut position: Array<Integer
 	if owner >= 0
 		position[0] = sparse_integer_at(state.checked[0].generic_application_finishes, origin)
 	else
-		owner = find_visible_enum(state, state.active_module[0], expect_identifier(state, position))
+		owner = find_visible_enum(state, state.active_module[0], parse_namespace_reference(state, position))
 	end
 	if owner < 0
 		return type_diagnostic(state, line, "enum constructor requires explicit type arguments")

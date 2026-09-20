@@ -2,7 +2,7 @@
 
 TypeRB Native currently follows exact reference revisions during development. The
 current source and semantic oracle is TypeRB
-`ecfbcc4e0e72aaf09bba4f94e380d06d1be883be` (the `0.4.9-dev` development identity), recorded
+`7f30c7ec18c4c8ccb9fe37a7ae35d535b64e91ad` (the `0.4.9-dev` development identity), recorded
 in `TYPE_RB_REVISION`. This declares one exact reference identity during Native
 development, without claiming a supported version range.
 
@@ -33,6 +33,21 @@ The earlier scoped-file successor is registered in
 [Darwin/Linux arm64 result](https://github.com/type-rb/type-rb-native/blob/5cf61c740aa600c34ed94f1b130ea2ffefd9e783/results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/README.md)
 passes the selected-reference, migration, exact-baseline, target-regression,
 fixed-point, process, resource, and size criteria.
+
+## Namespace and declaration identity reference update
+
+The exact development pin includes [TypeRB PR #753](https://github.com/type-rb/type-rb/pull/753)
+for module member and constant identity, [PR #754](https://github.com/type-rb/type-rb/pull/754)
+for raw enum ownership, and [PR #757](https://github.com/type-rb/type-rb/pull/757)
+for Go type/function name collisions in nested and imported modules. It also
+includes [PR #751](https://github.com/type-rb/type-rb/pull/751) for keyword Symbol
+literals, and [PR #760](https://github.com/type-rb/type-rb/pull/760) for scalar
+constant copies, reopened module scopes, cross-target constant names and
+dependency-ordered REPL initialization. Shared observations must be reviewed against this exact checkout and
+AST; a reference fix does not silently change an existing expectation.
+
+This is a development reference update. Releases, immutable bootstrap seeds and
+historical measurements retain their separate identities.
 
 ## Named functions and Hash literal reference update
 
