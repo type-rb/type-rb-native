@@ -90,6 +90,12 @@ acceptance contracts. Timeout remains a failure and terminates the owned builder
 process group. Cache reuse, failure atomicity and concurrent-caller assertions
 remain required.
 
+Concurrent callers share the same 300-second rebuild deadline, including the
+launcher's bounded lock wait. Key-based sorting CI exposed a remaining
+120-second concurrent-call timeout after ordinary rebuilds and functional checks
+had passed. The concurrent test records elapsed time and still requires both
+callers to succeed, identical output, exactly one builder and subsequent reuse.
+
 The documentation authority checks evidence retention, skill metadata, public
 path hygiene, the capability catalog and benchmark explorer. Pages does not
 repeat those checks in a separate PR workflow. Its main-push deployment and
