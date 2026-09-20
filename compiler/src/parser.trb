@@ -1,3 +1,4 @@
+import { generic_application } from generic_arguments
 import { ConstantDeclaration } from constant_model
 import { TransformSyntax, transform_kind } from transform_model
 import { NamespaceDeclaration, namespace_qualify } from namespace_model
@@ -729,7 +730,7 @@ def parse_record(mut state: CompilerState, mut position: Array<Integer>): Boolea
 	return finish_statement(state, position)
 end
 
-def parse_function(mut state: CompilerState, mut position: Array<Integer>, receiver_type: String): Boolean
+def parse_function(mut state: CompilerState, mut position: Array<Integer>, receiver_type: String, outer_parameters: Array<String>): Boolean
 	line := load_integer(state.token_lines, position[0])
 	advance(position)
 	mut name := expect_identifier(state, position)
@@ -750,6 +751,9 @@ def parse_function(mut state: CompilerState, mut position: Array<Integer>, recei
 	end
 	name = namespace_qualify(state.declaration_owner[0], name)
 	mut type_parameters: Array<String> := []
+	outer_parameters.each do |parameter|
+		type_parameters.push(parameter)
+	end
 	mut generic_parameters: Array<GenericParameter> := []
 	if token_is(state, position[0], "<")
 		type_parameters = parse_generic_parameters(state, position, line)
@@ -765,12 +769,16 @@ def parse_function(mut state: CompilerState, mut position: Array<Integer>, recei
 	parameter_start := state.parameter_count[0]
 	mut parameter_count := 0
 	if receiver_type != ""
-		store_string(state.parameter_names, parameter_start, "self")
-		store_string(state.parameter_types, parameter_start, receiver_type)
-		store_integer(state.parameter_mutable, parameter_start, 0)
-		store_integer(state.parameter_named_only, parameter_start, 0)
-		store_integer(state.parameter_lines, parameter_start, line)
-		state.parameter_count[0] += 1
+		if type_parameters.size() > 0
+			generic_parameters.push(GenericParameter.new(name: "self", type_name: receiver_type, line: line, mutable: 0, named_only: 0, default_start: - 1, default_finish: - 1))
+		else
+			store_string(state.parameter_names, parameter_start, "self")
+			store_string(state.parameter_types, parameter_start, receiver_type)
+			store_integer(state.parameter_mutable, parameter_start, 0)
+			store_integer(state.parameter_named_only, parameter_start, 0)
+			store_integer(state.parameter_lines, parameter_start, line)
+			state.parameter_count[0] += 1
+		end
 		parameter_count = 1
 	end
 	mut named_only := 0
@@ -873,7 +881,7 @@ def parse_function(mut state: CompilerState, mut position: Array<Integer>, recei
 		return false
 	end
 	if type_parameters.size() > 0
-		state.generic_functions.push(GenericFunction.new(name: name, source_id: state.active_module[0], line: line, type_parameters: type_parameters, parameters: generic_parameters, result_type: result_type, body_start: body_start, body_finish: body_end))
+		state.generic_functions.push(GenericFunction.new(receiver_type: receiver_type, name: name, source_id: state.active_module[0], line: line, type_parameters: type_parameters, parameters: generic_parameters, result_type: result_type, body_start: body_start, body_finish: body_end))
 		return true
 	end
 	function_index := state.function_count[0]
@@ -1100,7 +1108,7 @@ def parse_declaration(mut state: CompilerState, mut position: Array<Integer>): B
 		return parse_record(state, position)
 	end
 	if token_is(state, position[0], "def")
-		return parse_function(state, position, "")
+		return parse_function(state, position, "", [])
 	end
 	mut scope := ""
 	if state.declaration_owner[0] == ""
@@ -1436,15 +1444,27 @@ end
 
 # Variant syntax is parsed separately; method bodies reuse ordinary functions.
 def parse_enum_declaration(mut state: CompilerState, mut position: Array<Integer>): Boolean
-	mut method_owner := [- 1]
+	mut method_owner := [- 1, - 1]
 	if !parse_enum(state, position, method_owner)
 		return false
 	end
 	owner := method_owner[0]
-	if owner < 0
+	generic_owner := method_owner[1]
+	if owner < 0 && generic_owner < 0
 		return true
 	end
-	name := state.enums[owner].name
+	mut name := ""
+	mut receiver_type := ""
+	mut parameters: Array<String> := []
+	if generic_owner >= 0
+		definition := state.generic_definitions[generic_owner]
+		name = definition.name
+		parameters = definition.parameters
+		receiver_type = generic_application(name, parameters)
+	else
+		name = state.enums[owner].name
+		receiver_type = enum_type(owner)
+	end
 	while token_is(state, position[0], "def") && !has_diagnostic(state)
 		method_name := load_string(state.token_texts, position[0] + 1)
 		if method_name == "raw_value" || method_name == "from_raw"
@@ -1454,7 +1474,7 @@ def parse_enum_declaration(mut state: CompilerState, mut position: Array<Integer
 		parent := state.declaration_owner[0]
 		start := position[0]
 		state.declaration_owner[0] = name
-		parsed := parse_function(state, position, enum_type(owner))
+		parsed := parse_function(state, position, receiver_type, parameters)
 		mut token := start
 		while token < position[0]
 			store_string(state.token_namespaces, token, name)

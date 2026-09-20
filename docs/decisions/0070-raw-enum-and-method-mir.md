@@ -11,7 +11,7 @@ Keep raw literal values and their origins in frontend declaration records.
 Validate literal spelling before optimization can erase whether an expression
 was authored: folded String concatenation is still an expression, not an enum
 literal. Reject duplicate values, mixed representations, missing raw values,
-payload/raw combinations, reserved method names and unsupported generic methods.
+payload/raw combinations, reserved method names and unsupported method forms.
 
 Resolve the compiler-owned Result and error record by module identity before
 freezing MIR type catalogs. An authored record with the same leaf name cannot
@@ -46,7 +46,9 @@ Dedicated REPL checks retain conversion results and returned closures across
 new declarations, rejected submissions and reload, including a shadowed error
 record name.
 
-Generic enum methods and enum attributes remain explicit inventory work.
+Methods inheriting generic enum parameters are covered by
+[decision 0071](0071-generic-enum-method-mir.md). Method-specific parameters and
+enum attributes remain explicit inventory work.
 Reference [initializer replay](https://github.com/type-rb/type-rb/issues/768),
 [standard error shadowing](https://github.com/type-rb/type-rb/issues/769), and
 presentation differences remain visible
