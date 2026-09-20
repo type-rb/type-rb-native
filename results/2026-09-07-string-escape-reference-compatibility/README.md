@@ -1,6 +1,21 @@
 # Current reference compatibility
 
 The selected development reference is TypeRB `0.4.9-dev` at
+`418090424759e2c32f37ebe9d3fdcd78c8703c66`, incorporating
+[PR #782](https://github.com/type-rb/type-rb/pull/782).
+Top-level lowercase bindings retain module identity across generated targets and
+the REPL. Nullable proofs cannot survive a call that may replace mutable global
+storage. Native follows those contracts with independently verified MIR reads,
+writes and persistent managed roots. Interactive named-function access to session
+variables remains explicit pending work.
+
+Exact AST, ordinary-path observations, recovery, self-hosting, target and lifetime
+checks remain required. No release, seed or full-language/performance qualification
+is claimed. Previous accepted identities and observations follow.
+
+# Previous literal reference compatibility
+
+The selected development reference is TypeRB `0.4.9-dev` at
 `59cd287ffcc6bc2d8dcf7fadd6a5bf2a360e566f`, incorporating
 [PR #780](https://github.com/type-rb/type-rb/pull/780) and
 [PR #781](https://github.com/type-rb/type-rb/pull/781).

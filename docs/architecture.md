@@ -123,7 +123,7 @@ Its explicit transitive import closure contains 149 canonical implementation mod
 | `string_escapes.trb`, `qbe_string_literals.trb` | String escape widths, byte/scalar validation and the private byte constructor; see [escape decoding](decisions/0058-string-escape-decoding.md). |
 | `state.trb` | Compiler state, symbol indexes, shared locals, and diagnostics. |
 | `namespace_model.trb`, `namespace_references.trb` | Source-owned declaration namespaces, qualified references and private member access. |
-| `constant_model.trb`, `constant_declarations.trb`, `constant_analysis.trb`, `mir_globals.trb`, `qbe_globals.trb` | Runtime initializer bodies, exact constant types, verified global identities/order/reads and persistent GC roots; see [decision 0067](decisions/0067-namespaces-and-constant-mir.md). |
+| `global_model.trb`, `global_declarations.trb`, `global_analysis.trb`, `mir_globals.trb`, `qbe_globals.trb` | Runtime initializer bodies, exact global types and mutability, verified identities/order/reads/writes and persistent GC roots; see [decision 0080](decisions/0080-global-binding-mir.md). |
 | `parser.trb`, `syntax_tokens.trb`, `resolution.trb` | Syntax/token boundaries, import/declaration orchestration and body name resolution. |
 | `declaration_lookup.trb`, `type_resolution.trb` | Visible declaration identity, semantic type resolution and concrete nominal instantiation. |
 | `generic_model.trb`, `generic_arguments.trb`, `generic_syntax.trb`, `generic_validation.trb` | Authored generic templates, recursive type substitution, explicit applications and template validation; see [generic nominal MIR](decisions/0045-generic-nominal-mir.md). |

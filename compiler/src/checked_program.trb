@@ -14,7 +14,7 @@ import { enum_method_declaration_name, enum_method_function } from enum_methods
 import { union_parts } from union_types
 import { check_union_binding, check_union_patterns } from union_checked
 import { mir_union_operation } from union_mir
-import { checked_constant_read } from mir_globals
+import { checked_global_read } from mir_globals
 import { namespace_parent } from namespace_model
 import { mir_range_array } from range_methods
 import { checked_reference_name, namespace_member_access, parse_declaration_reference, parse_namespace_reference } from namespace_references
@@ -37,7 +37,7 @@ import { check_enum_bindings, check_enum_patterns } from enum_checked
 import { mir_enum_construct, mir_enum_operation } from enum_mir
 import { enum_argument_bindings, enum_type, enum_uppercase, find_enum_type, find_enum_variant } from enum_types
 import { checked_submission_boundary, checked_submission_result } from checked_submission
-import { nullable_apply, nullable_finish, nullable_loop_writes, nullable_nil_condition, nullable_read, nullable_replace } from nullable_flow
+import { nullable_apply, nullable_finish, nullable_loop_writes, nullable_nil_condition, nullable_read, nullable_replace, nullable_replace_type } from nullable_flow
 import { nullable_common, nullable_element, nullable_type } from nullable_types
 import { mir_checked_nullable, mir_nullable_coerce } from nullable_mir
 import { mir_value_complete, mir_value_exit, mir_value_join } from mir_value_control
@@ -526,7 +526,7 @@ def check_primary(
 		end
 		constant := find_visible_declaration(state, state.active_module[0], name, 7)
 		if constant >= 0
-			return checked_constant_read(state, locals, constant, origin)
+			return checked_global_read(state, locals, constant, origin)
 		end
 		standard_package := standard_package_import(state, state.active_module[0], name)
 		if standard_package < - 1
@@ -1247,7 +1247,7 @@ def checked_readonly_reference_binding(
 	if local_find(locals, load_string(state.token_texts, value.origin)) >= 0
 		return true
 	end
-	return sparse_integer_at(state.checked[0].constant_references, value.origin) > 0
+	return sparse_integer_at(state.checked[0].global_references, value.origin) > 0
 end
 
 def check_declaration(
@@ -1263,6 +1263,9 @@ def check_declaration(
 	end
 	line := load_integer(state.token_lines, position[0])
 	name := expect_identifier(state, position)
+	if name == "_"
+		diagnostic(state, "TRBN4004", line, "blank binding _ is only valid as a parameter or pattern binding")
+	end
 	if enum_uppercase(name)
 		diagnostic(state, "TRBN4004", line, "constants may be declared only at top level or in a module")
 	end
@@ -1354,6 +1357,8 @@ def check_simple_statement(
 		mut expected := left.type_name
 		if left.nullable_binding >= 0 && left.nullable_field == - 1
 			expected = load_string(locals.types, left.nullable_binding)
+		elsif left.nullable_binding < - 1 && left.nullable_field == - 1
+			expected = state.global_types[- left.nullable_binding - 2]
 		end
 		right := check_statement_value(state, position, locals, expected)
 		if right.type_name == "Never"
@@ -1362,6 +1367,8 @@ def check_simple_statement(
 		end
 		if left.nullable_binding >= 0 && left.nullable_field == - 1
 			nullable_replace(locals, left.nullable_binding, right.flow_type)
+		elsif left.nullable_binding < - 1 && left.nullable_field == - 1
+			nullable_replace_type(locals, left.nullable_binding, expected, right.flow_type)
 		end
 		mut display_type := expected
 		if right.flow_type == "Nil"
@@ -1378,6 +1385,17 @@ def check_simple_statement(
 	else
 		if binary_operator_id(operator) >= 17
 			compound := operator[0]
+			mut declared := left.type_name
+			if left.nullable_field == - 1
+				if left.nullable_binding >= 0
+					declared = load_string(locals.types, left.nullable_binding)
+				elsif left.nullable_binding < - 1
+					declared = state.global_types[- left.nullable_binding - 2]
+				end
+			end
+			if nullable_element(declared) != ""
+				diagnostic(state, "TRBN4004", line, "compound assignment requires a non-nullable binding")
+			end
 			if left.mutable == 0
 				diagnostic(state, "TRBN4004", line, "assignment target is immutable")
 			end

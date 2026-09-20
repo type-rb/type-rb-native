@@ -7,7 +7,7 @@ import { repl_slice_available, repl_slice_next } from repl_sliced_iteration
 import { repl_array_sort_keys } from repl_array_sorting
 import { raw_enum_type } from raw_enum_types
 import { repl_raw_enum_from, repl_raw_enum_value } from repl_raw_enums
-import { repl_constant_key } from repl_model
+import { repl_global_key } from repl_model
 import { checked_reference_name } from namespace_references
 import { enum_method_function } from enum_methods
 import { repl_range_array } from repl_range_methods
@@ -534,18 +534,18 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 	if application_finish > origin
 		position[0] = application_finish
 	end
-	binding := repl_find(environment, text)
-	if binding >= 0
-		return ReplReference.new(value: repl_nullable_read(state, store, repl_binding_value(store, environment, binding), origin), binding: binding, container: - 1, slot: - 1)
-	end
-	constant := sparse_integer_at(state.checked[0].constant_references, origin)
+	constant := sparse_integer_at(state.checked[0].global_references, origin)
 	if constant > 0
-		key := repl_constant_key(state, constant - 1)
-		if !store.constants.key?(key)
+		key := repl_global_key(state, constant - 1)
+		if !store.globals.key?(key)
 			store.error[0] = "constant is not initialized"
 			return repl_reference(0)
 		end
-		return repl_reference(repl_nullable_read(state, store, store.constants[key], origin))
+		return ReplReference.new(value: repl_nullable_read(state, store, store.globals[key], origin), binding: - constant - 1, container: - 1, slot: - 1)
+	end
+	binding := repl_find(environment, text)
+	if binding >= 0
+		return ReplReference.new(value: repl_nullable_read(state, store, repl_binding_value(store, environment, binding), origin), binding: binding, container: - 1, slot: - 1)
 	end
 	function_value := sparse_integer_at(state.checked[0].function_values, origin)
 	if function_value > 0
@@ -1463,6 +1463,8 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 		mut expected := repl_type(store, left.value)
 		if left.binding >= 0
 			expected = repl_type(store, repl_binding_value(store, environment, left.binding))
+		elsif left.binding < - 1
+			expected = state.global_types[- left.binding - 2]
 		end
 		mut hash_assignment := false
 		if left.container >= 0
@@ -1486,6 +1488,8 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 			end
 			if left.binding >= 0
 				repl_assign_binding(store, environment, left.binding, result)
+			elsif left.binding < - 1
+				store.globals[repl_global_key(state, - left.binding - 2)] = result
 			else
 				if left.slot >= store.children[left.container].size()
 					store.error[0] = "panic: index is out of bounds"

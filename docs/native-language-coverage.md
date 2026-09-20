@@ -1,12 +1,36 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 1112 ordinary-path probes and 32 feature
+Status: the shared contract contains 1232 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
 basic-language completion; [the generated family inventory](native-language-feature-inventory.md)
 records semantic contracts that still need tests. The earlier 19-case inventory
 was an initial sample, not a complete list of missing features.
+
+## File and project global bindings
+
+Lowercase top-level variables have private source-module identity. Functions,
+closures and defaults read the same storage, local shadowing stays lexical, and
+`mut` controls both assignment and mutable access. Imported functions retain their
+own variables; ordinary imports cannot expose lowercase source-module storage.
+Calls and branch/loop joins invalidate stale nullable proofs for writable globals.
+
+Verified MIR declares each global's exact type, mutability, initialization order
+and persistent root. Reads and writes survive source erasure and catalog reorder;
+forged write capabilities, wrong value types and invalid instruction shapes fail
+verification. Runtime replacement preserves both the new root and any retained
+old value. Forced collections include Unicode/NUL values and exact reclamation.
+Project functions share their globals across REPL submissions and explicit replay.
+See [decision 0080](decisions/0080-global-binding-mir.md).
+
+Interactive variables visible to later named functions remain an implementation
+gap, exposed by the same paired cases. Lowercase variables in namespace bodies,
+forward initializer dependencies and untyped empty collection inference remain
+open. Compiler implementation state stays per invocation; adopting module storage
+in compiler sources still needs the accepted seed handoff described in
+[bootstrap seed updates](bootstrap-seed-updates.md). File/project support alone
+does not close the bindings family or establish complete basic coverage.
 
 ## Nominal newtypes
 

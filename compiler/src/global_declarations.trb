@@ -5,7 +5,7 @@ import { CompilerState, diagnostic, has_diagnostic } from state
 import { load_integer, store_integer, store_string } from storage
 import { resolve_type_name } from type_resolution
 
-def order_constant_module(mut state: CompilerState, source: Integer, mut visited: Array<Integer>)
+def order_global_module(mut state: CompilerState, source: Integer, mut visited: Array<Integer>)
 	if visited[source] != 0
 		return
 	end
@@ -15,21 +15,21 @@ def order_constant_module(mut state: CompilerState, source: Integer, mut visited
 	while binding < finish
 		target := load_integer(state.import_targets, binding)
 		if target >= 0
-			order_constant_module(state, target, visited)
+			order_global_module(state, target, visited)
 		end
 		binding += 1
 	end
 	mut index := 0
-	while index < state.constants.size()
-		if state.constants[index].source_id == source
-			state.constant_order.push(index)
+	while index < state.globals.size()
+		if state.globals[index].source_id == source
+			state.global_order.push(index)
 		end
 		index += 1
 	end
 end
 
-def declare_constant_functions(mut state: CompilerState): Boolean
-	if state.constants.size() == 0
+def declare_global_functions(mut state: CompilerState): Boolean
+	if state.globals.size() == 0
 		return true
 	end
 	mut visited: Array<Integer> := []
@@ -38,17 +38,17 @@ def declare_constant_functions(mut state: CompilerState): Boolean
 		visited.push(0)
 		source += 1
 	end
-	order_constant_module(state, state.entry_module[0], visited)
+	order_global_module(state, state.entry_module[0], visited)
 	# Configured projects check every production source, including independent
 	# roots. File-root loading has already restricted this catalog to imports.
 	source = 0
 	while source < state.module_count[0]
-		order_constant_module(state, source, visited)
+		order_global_module(state, source, visited)
 		source += 1
 	end
 	mut index := 0
-	while index < state.constants.size()
-		row := state.constants[index]
+	while index < state.globals.size()
+		row := state.globals[index]
 		state.active_module[0] = row.source_id
 		state.declaration_owner[0] = namespace_parent(row.name)
 		mut kind := 0
@@ -78,8 +78,8 @@ def declare_constant_functions(mut state: CompilerState): Boolean
 		store_integer(state.function_body_ends, function, row.finish)
 		store_integer(state.function_lines, function, row.line)
 		store_integer(state.function_expression_bodies, function, 2)
-		state.constant_types.push("")
-		state.constant_functions.push(function)
+		state.global_types.push("")
+		state.global_functions.push(function)
 		state.function_count[0] += 1
 		index += 1
 	end

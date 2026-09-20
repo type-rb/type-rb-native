@@ -1214,3 +1214,23 @@
 | Literal union Hash keys: mixed key | rejects as reference | rejects as reference | not reached | diagnostic/output differs |
 | Literal union Hash keys: optional key | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Literal union Hash keys: optional refined | accepts | accepts | matches reference | matches reference |
+| Top-level bindings: scalars | accepts | accepts | matches reference | rejects valid input |
+| Top-level bindings: mutable | accepts | accepts | matches reference | rejects valid input |
+| Top-level bindings: managed replacement | accepts | accepts | matches reference | rejects valid input |
+| Top-level bindings: collection mutation | accepts | accepts | matches reference | rejects valid input |
+| Top-level bindings: collection rebinding | accepts | accepts | matches reference | rejects valid input |
+| Top-level bindings: closure shadowing | accepts | accepts | matches reference | rejects valid input |
+| Top-level bindings: closure writing | accepts | accepts | matches reference | rejects valid input |
+| Top-level bindings: callback | accepts | accepts | matches reference | matches reference |
+| Top-level bindings: defaults | accepts | accepts | matches reference | rejects valid input |
+| Top-level bindings: nullable replace | accepts | accepts | matches reference | output differs |
+| Top-level bindings: nullable compound | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Top-level bindings: nullable call | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Top-level bindings: nullable fresh guard | accepts | accepts | matches reference | rejects valid input |
+| Top-level bindings: module identity | accepts | accepts | matches reference | matches reference |
+| Top-level bindings: immutable | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Top-level bindings: readonly alias | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Top-level bindings: private import | rejects as reference | rejects as reference | not reached | diagnostic/output differs |
+| Top-level bindings: duplicate | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Top-level bindings: blank | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Top-level bindings: mutable constant | rejects as reference | rejects as reference | not reached | rejects as reference |

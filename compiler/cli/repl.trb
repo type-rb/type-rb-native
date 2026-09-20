@@ -1,4 +1,4 @@
-import { repl_initialize_constants } from repl_globals
+import { repl_initialize_globals } from repl_globals
 import { enum_uppercase } from enum_types
 import { repl_default } from repl_defaults
 import { token_is, skip_newlines } from syntax_tokens
@@ -16,7 +16,7 @@ import { compiler_read_source, compiler_file_exists } from compiler
 import { lex, compiler_source_slice } from lexer
 import { path_directory, path_join, string_starts_with } from path
 import { native_cli_line, native_cli_eof, native_cli_tty, native_cli_write, native_cli_interrupt, native_cli_env, native_cli_mkdir } from host
-import { ReplStore, ReplEnvironment, repl_store, repl_environment, repl_type, repl_type_in, repl_activate, repl_constant_key } from repl_model
+import { ReplStore, ReplEnvironment, repl_store, repl_environment, repl_type, repl_type_in, repl_activate, repl_global_key } from repl_model
 import { repl_binding_value, repl_render, repl_compact } from repl_values
 import { repl_statement } from repl_eval
 import { integer_string } from literals
@@ -112,7 +112,7 @@ def repl_show(mut state: CompilerState, mut session: ReplSession, input: String,
 		return true
 	end
 	repl_activate(session.store, state)
-	if !repl_initialize_constants(state, session.store)
+	if !repl_initialize_globals(state, session.store)
 		native_cli_write(repl_error_text(session.store.error[0]) + "\n", 2)
 		return false
 	end
@@ -236,19 +236,19 @@ def repl_submit(mut session: ReplSession, input: String, type_only: Boolean, dis
 			return true
 		end
 		repl_activate(session.store, state)
-		if !repl_initialize_constants(state, session.store)
+		if !repl_initialize_globals(state, session.store)
 			native_cli_write(repl_error_text(session.store.error[0]) + "\n", 2)
 			return false
 		end
 		session.text[1] = repl_bindings(state, session)
 		if display
 			mut identity := 0
-			while identity < state.constants.size()
-				row := state.constants[identity]
+			while identity < state.globals.size()
+				row := state.globals[identity]
 				if row.source_id == state.entry_module[0] && row.line > repl_lines(session.text[0]) && !row.name.include?("::")
-					key := repl_constant_key(state, identity)
-					value := session.store.constants[key]
-					puts(repl_editor_paint(repl_render(state, session.store, value, 0), 2, repl_use_color()) + repl_editor_paint(" : ", 4, repl_use_color()) + repl_editor_paint(repl_type_name(state, state.constant_types[identity]), 5, repl_use_color()))
+					key := repl_global_key(state, identity)
+					value := session.store.globals[key]
+					puts(repl_editor_paint(repl_render(state, session.store, value, 0), 2, repl_use_color()) + repl_editor_paint(" : ", 4, repl_use_color()) + repl_editor_paint(repl_type_name(state, state.global_types[identity]), 5, repl_use_color()))
 				end
 				identity += 1
 			end
@@ -323,7 +323,7 @@ def repl_run(config: String): Integer
 		return 1
 	end
 	repl_activate(session.store, initial)
-	if !repl_initialize_constants(initial, session.store)
+	if !repl_initialize_globals(initial, session.store)
 		native_cli_write(repl_error_text(session.store.error[0]) + "\n", 2)
 		return 1
 	end
@@ -612,7 +612,7 @@ def repl_replay(mut session: ReplSession, config: String, additional: Array<Stri
 		return ReplReplay.new(session: session, success: false)
 	end
 	repl_activate(replayed.store, initial)
-	if !repl_initialize_constants(initial, replayed.store)
+	if !repl_initialize_globals(initial, replayed.store)
 		native_cli_write(repl_error_text(replayed.store.error[0]) + "\n", 2)
 		return ReplReplay.new(session: session, success: false)
 	end

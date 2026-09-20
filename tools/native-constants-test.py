@@ -30,7 +30,7 @@ with tempfile.TemporaryDirectory(prefix='native-constants-') as temporary:
     hooks = 0
     for line in lines:
         if line.startswith(('function ', 'export function ')):
-            caller = '$trbn_initialize_constants(' in line or '$main(' in line
+            caller = '$trbn_initialize_globals(' in line or '$main(' in line
         if caller and 'call $trbnf' in line:
             forced.append('\tcall $trbn_gc_collect(w 0)\n')
             hooks += 1

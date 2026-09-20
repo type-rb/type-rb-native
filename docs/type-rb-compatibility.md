@@ -2,7 +2,7 @@
 
 TypeRB Native currently follows exact reference revisions during development. The
 current source and semantic oracle is TypeRB
-`59cd287ffcc6bc2d8dcf7fadd6a5bf2a360e566f` (the `0.4.9-dev` development identity), recorded
+`418090424759e2c32f37ebe9d3fdcd78c8703c66` (the `0.4.9-dev` development identity), recorded
 in `TYPE_RB_REVISION`. This declares one exact reference identity during Native
 development, without claiming a supported version range.
 
@@ -33,6 +33,21 @@ The earlier scoped-file successor is registered in
 [Darwin/Linux arm64 result](https://github.com/type-rb/type-rb-native/blob/5cf61c740aa600c34ed94f1b130ea2ffefd9e783/results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/README.md)
 passes the selected-reference, migration, exact-baseline, target-regression,
 fixed-point, process, resource, and size criteria.
+
+## Global binding reference update
+
+The exact pin incorporates [TypeRB PR #782](https://github.com/type-rb/type-rb/pull/782).
+Lowercase source-module variables keep checked declaration identity across all
+three generated targets and the REPL. Ruby methods can read the same storage,
+later local declarations cannot capture an earlier global reference, and separate
+source modules remain independent. Calls invalidate nullable proofs for writable
+globals; fresh guards and immutable values remain valid.
+
+Native follows the file/project contract with typed global reads and writes.
+Interactive variables visible to later named functions remain a distinct open
+REPL contract. Shared cases retain those differences. The exact AST, ordinary
+paths, lifetime checks and recovery are rechecked at this accepted revision;
+the immutable bootstrap seed and release versions are unchanged.
 
 ## Newtype reference update
 

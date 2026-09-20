@@ -2,7 +2,7 @@ import { NewtypeDefinition } from newtype_model
 import { newtype_type } from newtype_types
 import { parse_newtype_header } from newtype_syntax
 import { generic_application } from generic_arguments
-import { ConstantDeclaration } from constant_model
+import { GlobalDeclaration } from global_model
 import { TransformSyntax, transform_kind } from transform_model
 import { NamespaceDeclaration, namespace_qualify } from namespace_model
 import { enum_type, enum_uppercase } from enum_types
@@ -1113,10 +1113,28 @@ def parse_namespace(mut state: CompilerState, mut position: Array<Integer>): Boo
 	return finish_statement(state, position)
 end
 
-def parse_constant(mut state: CompilerState, mut position: Array<Integer>): Boolean
+def parse_global(mut state: CompilerState, mut position: Array<Integer>): Boolean
 	origin := position[0]
 	line := load_integer(state.token_lines, origin)
+	mut mutable := false
+	if token_is(state, position[0], "mut")
+		mutable = true
+		advance(position)
+	end
+	constant := enum_uppercase(load_string(state.token_texts, position[0]))
 	name := namespace_qualify(state.declaration_owner[0], expect_identifier(state, position))
+	if name == "_"
+		diagnostic(state, "TRBN4002", line, "blank binding _ is only valid as a parameter or pattern binding")
+		return false
+	end
+	if constant && mutable
+		diagnostic(state, "TRBN4002", line, "constant cannot be mutable")
+		return false
+	end
+	if !constant && state.declaration_owner[0] != ""
+		diagnostic(state, "TRBN4002", line, "lowercase module-body bindings are not supported")
+		return false
+	end
 	mut annotation := ""
 	if token_is(state, position[0], ":")
 		advance(position)
@@ -1129,13 +1147,13 @@ def parse_constant(mut state: CompilerState, mut position: Array<Integer>): Bool
 	if !parse_expression_syntax(state, position, 1)
 		return false
 	end
-	state.constants.push(ConstantDeclaration.new(name: name, source_id: state.active_module[0], line: line, origin: origin, start: start, finish: position[0], annotation: annotation))
+	state.globals.push(GlobalDeclaration.new(constant: constant, mutable: mutable, name: name, source_id: state.active_module[0], line: line, origin: origin, start: start, finish: position[0], annotation: annotation))
 	return finish_statement(state, position)
 end
 
 def parse_declaration(mut state: CompilerState, mut position: Array<Integer>): Boolean
-	if load_integer(state.token_kinds, position[0]) == 1 && enum_uppercase(load_string(state.token_texts, position[0])) && (token_is(state, position[0] + 1, ":=") || token_is(state, position[0] + 1, ":"))
-		return parse_constant(state, position)
+	if declaration_start(state, position[0])
+		return parse_global(state, position)
 	end
 	if token_is(state, position[0], "module")
 		return parse_namespace(state, position)
