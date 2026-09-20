@@ -112,7 +112,7 @@ puts(read())
 :quit
 """, capture_output=True, text=True, cwd=root, env=env, timeout=30)
     assert retained.returncode == 0, retained
-    assert retained.stdout == '#<fn> : () -> String\nheld\n7\nheld\nheld\nreloaded\nheld\n', retained
+    assert retained.stdout == '#<fn> : () -> String\nheld\n7\nheld\nheld\nheld\n7\nheld\nheld\nreloaded\nheld\n', retained
     assert len(retained.stderr.splitlines()) == 1 and 'expected Integer, found String' in retained.stderr, retained
 
 print('PASS generic nominal identity, retained arguments, aliases, replay and invariance')
