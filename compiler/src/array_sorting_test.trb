@@ -1,0 +1,80 @@
+import { check } from compiler
+import { compiler_test_instruction_with_cell } from compiler_test
+import { managed_mir_test_fixture } from hash_value_mir_test
+import { logical_checked_source } from logical_test
+import { MirRootPlan } from mir
+import { mir_instruction_effects } from mir_roots
+import { verify_mir } from mir_verifier
+import { load_string } from storage
+import { describe, expect, test } from trb/std/test
+
+describe("Array sorting MIR") do
+	test("sorts stably with NaNs last through erased and reordered MIR") do
+		managed_mir_test_fixture("array-sorting-mir", 8)
+	end
+	test("retains managed copies closures and optional receivers across collection") do
+		managed_mir_test_fixture("array-sorting-managed-mir", 8)
+	end
+	test("lowers every portable ordering to verified control flow") do
+		["[3, 1, 2]", "[2.5, 1.0]", "[\"日本\", \"a\"]"].each do |source|
+			mut state := logical_checked_source("def main()\nputs(" + source + ".sort().size())\nend\n")
+			checked := check(state)
+			if !checked
+				puts(load_string(state.diagnostic_messages, 0))
+			end
+			expect(checked).to_be_true()
+			expect(verify_mir(state.scalar_mir, true)).to_equal("")
+			expect(state.scalar_mir.blocks.size() > 15).to_be_true()
+			state.scalar_mir.instructions.each do |instruction|
+				expect(instruction.kind <= 47).to_be_true()
+			end
+		end
+	end
+	test("rejects malformed internal String ordering facts") do
+		mut mutation := 0
+		while mutation < 7
+			mut state := logical_checked_source("def main()\nputs([\"b\", \"a\"].sort()[0])\nend\n")
+			expect(check(state)).to_be_true()
+			mut index := 0
+			while state.scalar_mir.instructions[index].kind != 14
+				index += 1
+			end
+			instruction := state.scalar_mir.instructions[index]
+			expect(instruction.payload).to_equal(2)
+			expect(mir_instruction_effects(state.scalar_mir, instruction)).to_equal(0)
+			mut cell := mutation
+			mut value := 999999
+			if mutation == 4
+				value = 3
+			elsif mutation == 5
+				value = 0
+			elsif mutation == 6
+				cell = 4
+				value =- 1
+			end
+			state.scalar_mir.instructions[index] = compiler_test_instruction_with_cell(instruction, cell, value)
+			expect(verify_mir(state.scalar_mir, true).empty?()).to_be_false()
+			mutation += 1
+		end
+	end
+	test("rejects a scratch allocation that loses the copied managed input") do
+		mut state := logical_checked_source("def main()\nputs([\"b\", \"a\"].sort()[0])\nend\n")
+		expect(check(state)).to_be_true()
+		plan := state.scalar_mir.root_plans[0]
+		mut copies := 0
+		mut point := 0
+		while copies < 2
+			if state.scalar_mir.instructions[plan.instructions[point]].kind == 47
+				copies += 1
+			end
+			if copies < 2
+				point += 1
+			end
+		end
+		expect(plan.roots[point].size() >= 1).to_be_true()
+		mut roots := plan.roots
+		roots[point] = []
+		state.scalar_mir.root_plans[0] = MirRootPlan.new(function_id: plan.function_id, instructions: plan.instructions, roots: roots, capacity: plan.capacity)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR live root plan differs")
+	end
+end
