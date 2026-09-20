@@ -1,7 +1,7 @@
 import { ConstantDeclaration } from constant_model
 import { TransformSyntax, transform_kind } from transform_model
 import { NamespaceDeclaration, namespace_qualify } from namespace_model
-import { enum_uppercase } from enum_types
+import { enum_type, enum_uppercase } from enum_types
 import { expand_quoted_token } from literal_syntax
 import { parse_type_alias } from alias_syntax
 import { LambdaSyntax } from callable_types
@@ -695,18 +695,22 @@ def parse_record(mut state: CompilerState, mut position: Array<Integer>): Boolea
 	return finish_statement(state, position)
 end
 
-def parse_function(mut state: CompilerState, mut position: Array<Integer>): Boolean
+def parse_function(mut state: CompilerState, mut position: Array<Integer>, receiver_type: String): Boolean
 	line := load_integer(state.token_lines, position[0])
 	advance(position)
 	mut name := expect_identifier(state, position)
 	if name == "self" && token_is(state, position[0], ".")
+		if receiver_type != ""
+			diagnostic(state, "TRBN4002", line, "enum class methods are not supported")
+			return false
+		end
 		if state.declaration_owner[0] == ""
 			diagnostic(state, "TRBN4002", line, "class method requires a declaration owner")
 			return false
 		end
 		advance(position)
 		name = expect_identifier(state, position)
-	elsif state.declaration_owner[0] != ""
+	elsif state.declaration_owner[0] != "" && receiver_type == ""
 		diagnostic(state, "TRBN4002", line, "module methods currently require def self.name")
 		return false
 	end
@@ -726,6 +730,15 @@ def parse_function(mut state: CompilerState, mut position: Array<Integer>): Bool
 	skip_newlines(state, position)
 	parameter_start := state.parameter_count[0]
 	mut parameter_count := 0
+	if receiver_type != ""
+		store_string(state.parameter_names, parameter_start, "self")
+		store_string(state.parameter_types, parameter_start, receiver_type)
+		store_integer(state.parameter_mutable, parameter_start, 0)
+		store_integer(state.parameter_named_only, parameter_start, 0)
+		store_integer(state.parameter_lines, parameter_start, line)
+		state.parameter_count[0] += 1
+		parameter_count = 1
+	end
 	mut named_only := 0
 	mut named_count := 0
 	mut default_seen := false
@@ -830,6 +843,7 @@ def parse_function(mut state: CompilerState, mut position: Array<Integer>): Bool
 		return true
 	end
 	function_index := state.function_count[0]
+	store_string(state.function_receivers, function_index, receiver_type)
 	store_string(state.function_names, function_index, name)
 	store_integer(state.function_modules, function_index, state.active_module[0])
 	store_integer(state.function_parameter_starts, function_index, parameter_start)
@@ -1046,13 +1060,13 @@ def parse_declaration(mut state: CompilerState, mut position: Array<Integer>): B
 		return parse_type_alias(state, position)
 	end
 	if token_is(state, position[0], "enum")
-		return parse_enum(state, position)
+		return parse_enum_declaration(state, position)
 	end
 	if token_is(state, position[0], "record")
 		return parse_record(state, position)
 	end
 	if token_is(state, position[0], "def")
-		return parse_function(state, position)
+		return parse_function(state, position, "")
 	end
 	mut scope := ""
 	if state.declaration_owner[0] == ""
@@ -1384,4 +1398,41 @@ def parse_transform_syntax(mut state: CompilerState, mut position: Array<Integer
 		store_integer(state.transform_origins, body_finish, - state.transforms.size())
 	end
 	return !has_diagnostic(state)
+end
+
+# Variant syntax is parsed separately; method bodies reuse ordinary functions.
+def parse_enum_declaration(mut state: CompilerState, mut position: Array<Integer>): Boolean
+	mut method_owner := [- 1]
+	if !parse_enum(state, position, method_owner)
+		return false
+	end
+	owner := method_owner[0]
+	if owner < 0
+		return true
+	end
+	name := state.enums[owner].name
+	while token_is(state, position[0], "def") && !has_diagnostic(state)
+		method_name := load_string(state.token_texts, position[0] + 1)
+		if method_name == "raw_value" || method_name == "from_raw"
+			diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), "enum method name " + method_name + " is reserved")
+			return false
+		end
+		parent := state.declaration_owner[0]
+		start := position[0]
+		state.declaration_owner[0] = name
+		parsed := parse_function(state, position, enum_type(owner))
+		mut token := start
+		while token < position[0]
+			store_string(state.token_namespaces, token, name)
+			token += 1
+		end
+		state.declaration_owner[0] = parent
+		if !parsed
+			return false
+		end
+	end
+	if !expect(state, position, "end")
+		return false
+	end
+	return finish_statement(state, position)
 end

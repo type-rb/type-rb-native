@@ -1,5 +1,8 @@
+import { raw_enum_type } from raw_enum_types
+import { repl_raw_enum_from, repl_raw_enum_value } from repl_raw_enums
 import { repl_constant_key } from repl_model
 import { checked_reference_name } from namespace_references
+import { enum_method_function } from enum_methods
 import { repl_range_array } from repl_range_methods
 import { array_method_arity, array_method_kind } from array_methods
 import { repl_array_method } from repl_array_methods
@@ -523,6 +526,10 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		if encoded > 0
 			function = encoded - 1
 		end
+		if function >= 0 && sparse_string_at(state.function_receivers, function) != ""
+			self_slot := repl_find(environment, "self")
+			return repl_reference(repl_enum_method_call(state, position, store, environment, function, repl_binding_value(store, environment, self_slot)))
+		end
 		mut bindings := function_argument_bindings(state, function)
 		position[0] += 1
 		skip_newlines(state, position)
@@ -609,6 +616,23 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		position[0] += 1
 		member := load_string(state.token_texts, position[0])
 		position[0] += 2
+		if member == "from_raw"
+			call_origin := position[0] - 1
+			state.checked[0].raw_enum_conversions.each do |operation|
+				if operation.origin == call_origin
+					skip_newlines(state, position)
+					argument := repl_expression(state, position, store, environment, 1, raw_enum_type(state, operation.owner))
+					if environment.flow[0] != 0
+						return repl_reference(environment.flow[1])
+					end
+					skip_newlines(state, position)
+					position[0] += 1
+					return repl_reference(repl_raw_enum_from(state, store, operation.owner, argument.value, operation.result_type))
+				end
+			end
+			store.error[0] = "raw enum conversion has no checked result"
+			return repl_reference(0)
+		end
 		if standard_package_import(state, state.active_module[0], text) == - 3
 			argument := repl_expression(state, position, store, environment, 1, "Float")
 			if environment.flow[0] != 0
@@ -781,6 +805,24 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						result = repl_callable_expression(state, position, store, environment, result.value)
 					end
 				elsif token_is(state, position[0], "(")
+					if member == "raw_value" && raw_enum_type(state, find_enum_type(state, value.type_name)) != ""
+						position[0] += 1
+						skip_newlines(state, position)
+						position[0] += 1
+						result = repl_reference(repl_raw_enum_value(state, store, result.value))
+						if safe_origin >= 0
+							result = repl_reference(repl_coerce(store, result.value, load_string(state.checked[0].safe_types, safe_origin)))
+						end
+						next
+					end
+					method_function := enum_method_function(state, value.type_name, member)
+					if method_function >= 0
+						result = repl_reference(repl_enum_method_call(state, position, store, environment, method_function, result.value))
+						if safe_origin >= 0 && environment.flow[0] == 0
+							result = repl_reference(repl_coerce(store, result.value, load_string(state.checked[0].safe_types, safe_origin)))
+						end
+						next
+					end
 					if value.type_name == "Hash" || hash_key_type(value.type_name) != ""
 						result = repl_reference(repl_hash_method(state, position, store, environment, result.value))
 						if safe_origin >= 0 && environment.flow[0] == 0
@@ -1642,4 +1684,41 @@ def repl_transform(mut state: CompilerState, mut position: Array<Integer>, mut s
 	environment.count[0] = saved
 	position[0] = shape.finish
 	return result
+end
+
+def repl_enum_method_call(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, function: Integer, receiver: Integer): Integer
+	mut bindings := function_argument_bindings(state, function)
+	bindings.values[0] = receiver
+	bindings.provided[0] = true
+	bindings.position[0] = 1
+	position[0] += 1
+	skip_newlines(state, position)
+	while !token_is(state, position[0], ")")
+		label := parse_argument_label(state, position)
+		slot := argument_binding_slot(bindings, label)
+		if slot < 0
+			store.error[0] = bindings.error[0]
+			return 0
+		end
+		start := load_integer(state.function_parameter_starts, function)
+		type_name := load_string(state.parameter_types, start + slot)
+		value := repl_expression(state, position, store, environment, 1, type_name)
+		if environment.flow[0] != 0
+			return environment.flow[1]
+		end
+		bindings.values[slot] = repl_coerce(store, value.value, type_name)
+		if token_is(state, position[0], ",")
+			position[0] += 1
+		end
+		skip_newlines(state, position)
+		if store.error[0] != ""
+			return 0
+		end
+	end
+	position[0] += 1
+	repl_complete_arguments(state, bindings, store)
+	if store.error[0] != ""
+		return 0
+	end
+	return repl_call(state, function, bindings.values, store)
 end

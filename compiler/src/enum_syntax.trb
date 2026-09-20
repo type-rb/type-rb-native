@@ -1,3 +1,4 @@
+import { parse_raw_enum_value, validate_raw_enum } from raw_enum_syntax
 import { parse_generic_enum } from generic_syntax
 import { namespace_qualify } from namespace_model
 import { advance, expect, expect_identifier, finish_statement, parse_type, skip_newlines, token_is } from syntax_tokens
@@ -6,7 +7,7 @@ import { enum_uppercase } from enum_types
 import { CompilerState, diagnostic, has_diagnostic, terminal_token } from state
 import { load_integer } from storage
 
-def parse_enum(mut state: CompilerState, mut position: Array<Integer>): Boolean
+def parse_enum(mut state: CompilerState, mut position: Array<Integer>, mut method_owner: Array<Integer>): Boolean
 	line := load_integer(state.token_lines, position[0])
 	advance(position)
 	leaf := expect_identifier(state, position)
@@ -23,10 +24,20 @@ def parse_enum(mut state: CompilerState, mut position: Array<Integer>): Boolean
 	end
 	owner := state.enums.size()
 	start := state.enum_variants.size()
+	state.enums.push(EnumDefinition.new(name: name, source_id: state.active_module[0], line: line, variant_start: start, variant_count: 0))
 	while !token_is(state, position[0], "end") && !has_diagnostic(state)
 		if terminal_token(state, position[0])
 			diagnostic(state, "TRBN4002", line, "expected end for enum " + name)
 			return false
+		end
+		if token_is(state, position[0], "def")
+			if state.enum_variants.size() == start
+				diagnostic(state, "TRBN4002", line, "enum requires at least one variant")
+				return false
+			end
+			state.enums[owner] = EnumDefinition.new(name: name, source_id: state.active_module[0], line: line, variant_start: start, variant_count: state.enum_variants.size() - start)
+			method_owner[0] = owner
+			return validate_raw_enum(state, owner)
 		end
 		variant_line := load_integer(state.token_lines, position[0])
 		variant := expect_identifier(state, position)
@@ -78,6 +89,11 @@ def parse_enum(mut state: CompilerState, mut position: Array<Integer>): Boolean
 				return false
 			end
 		end
+		if token_is(state, position[0], "=")
+			if !parse_raw_enum_value(state, position, state.enum_variants.size())
+				return false
+			end
+		end
 		if !finish_statement(state, position)
 			return false
 		end
@@ -90,6 +106,9 @@ def parse_enum(mut state: CompilerState, mut position: Array<Integer>): Boolean
 	if !expect(state, position, "end")
 		return false
 	end
-	state.enums.push(EnumDefinition.new(name: name, source_id: state.active_module[0], line: line, variant_start: start, variant_count: state.enum_variants.size() - start))
+	state.enums[owner] = EnumDefinition.new(name: name, source_id: state.active_module[0], line: line, variant_start: start, variant_count: state.enum_variants.size() - start)
+	if !validate_raw_enum(state, owner)
+		return false
+	end
 	return finish_statement(state, position)
 end

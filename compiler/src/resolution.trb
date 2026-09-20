@@ -1,4 +1,5 @@
 import { integer_string } from literals
+import { resolve_raw_enum_results } from raw_enum_resolution
 import { declare_constant_functions } from constant_declarations
 import { next_generic_depth } from generic_bindings
 import { namespace_parent } from namespace_model
@@ -7,7 +8,7 @@ import { lambda_contains_origin } from lambda_syntax
 import { instantiate_generic_function, validate_generic_functions } from generic_functions
 import { generic_application, generic_arguments, generic_base } from generic_arguments
 import { load_standard_source, standard_source_kind } from standard_library
-import { find_alias_in_module, find_declaration_in_module, find_function_in_module, find_generic_function_in_module, find_generic_in_module, find_import_binding, find_record_in_module, find_visible_alias, find_visible_declaration, find_visible_enum, find_visible_function, find_visible_generic, find_visible_generic_function, find_visible_record } from declaration_lookup
+import { find_alias_in_module, find_declaration_in_module, find_function_in_module, find_generic_function_in_module, find_generic_in_module, find_import_binding, find_record_in_module, find_result_pattern, find_visible_alias, find_visible_declaration, find_visible_enum, find_visible_function, find_visible_generic_function, find_visible_record } from declaration_lookup
 import { namespace_member_access, parse_declaration_reference } from namespace_references
 import { resolve_type_name, type_display } from type_resolution
 import { EnumField } from enum_model
@@ -812,7 +813,7 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 					index = reference_position[0]
 					next
 				end
-				if local_find(locals, text) < 0 && (token_is(state, index + 1, "::") || (token_is(state, index + 1, ".") && token_is(state, index + 2, "new")))
+				if local_find(locals, text) < 0 && (token_is(state, index + 1, "::") || token_is(state, index + 1, "."))
 					alias_index := find_visible_alias(state, module_index, text)
 					if alias_index >= 0 && state.type_aliases[alias_index].parameters.size() == 0
 						resolved := resolve_type_name(state, module_index, text, false)
@@ -841,7 +842,7 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 					end
 					if previous == "." || previous == "&." || previous == "::"
 					elsif token_is(state, index + 1, "::")
-						if find_visible_enum(state, module_index, text) < 0 && find_visible_generic(state, module_index, text) < 0 && find_visible_alias(state, module_index, text) < 0
+						if find_visible_enum(state, module_index, text) < 0 && find_result_pattern(state, module_index, text) < 0 && find_visible_alias(state, module_index, text) < 0
 							diagnostic(state, "TRBN4003", load_integer(state.token_lines, index), "unresolved enum " + text)
 						end
 					else
@@ -882,7 +883,7 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 												)
 											end
 										else
-											if local_find(locals, text) < 0 && find_visible_declaration(state, module_index, text, 7) < 0
+											if local_find(locals, text) < 0 && find_visible_enum(state, module_index, text) < 0 && find_visible_alias(state, module_index, text) < 0 && find_visible_declaration(state, module_index, text, 7) < 0
 												if find_import_binding(state, module_index, text) < 0
 													diagnostic(
 														state,
@@ -916,6 +917,10 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 end
 
 def resolve(mut state: CompilerState): Boolean
+	if state.raw_enum_values.size() > 0
+		load_standard_source(state, 1)
+		load_standard_source(state, 3)
+	end
 	mut import_index := 0
 	while import_index < state.import_count[0]
 		kind := standard_source_kind(import_path_value(load_string(state.import_paths, import_index)))
@@ -928,6 +933,9 @@ def resolve(mut state: CompilerState): Boolean
 		return false
 	end
 	if !resolve_declarations(state)
+		return false
+	end
+	if !resolve_raw_enum_results(state)
 		return false
 	end
 	declare_default_functions(state)
