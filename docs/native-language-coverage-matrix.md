@@ -68,7 +68,7 @@
 | Explicit interface conformance | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Module declaration and constant | rejects valid input | rejects valid input | not reached | rejects as reference |
 | Top-level constant | rejects valid input | rejects valid input | not reached | rejects valid input |
-| Symbol literal equality | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Symbol literal equality | accepts | accepts | matches reference | matches reference |
 | Named import alias and reachable file | accepts | accepts | matches reference | matches reference |
 | Reject unused local binding | accepts; reference rejects | accepts; reference rejects | differs | output differs |
 | Reject immutable binding assignment | rejects as reference | rejects as reference | not reached | rejects as reference |
@@ -629,3 +629,33 @@
 | String trimming wrong result | rejects as reference | rejects as reference | not reached | rejects as reference |
 | String trimming nullable rejection | rejects as reference | rejects as reference | not reached | rejects as reference |
 | String trimming named argument | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Symbol names and types | accepts | accepts | matches reference | matches reference |
+| Symbol keyword names | accepts | accepts | matches reference | matches reference |
+| Symbol operator names | accepts | accepts | matches reference | matches reference |
+| Symbol quoted unicode | accepts | accepts | matches reference | matches reference |
+| Symbol quoted escapes | accepts | accepts | matches reference | matches reference |
+| Symbol quoted literal interpolation | accepts | accepts | matches reference | matches reference |
+| Symbol normal interpolation | accepts | accepts | matches reference | matches reference |
+| Symbol hash labels | accepts | accepts | matches reference | matches reference |
+| Symbol arguments and defaults | accepts | accepts | matches reference | matches reference |
+| Symbol record defaults | accepts | accepts | matches reference | matches reference |
+| Symbol controls | accepts | accepts | matches reference | matches reference |
+| Symbol generic alias | accepts | accepts | matches reference | matches reference |
+| Symbol managed callback | accepts | accepts | matches reference | matches reference |
+| Symbol optional | accepts | accepts | matches reference | matches reference |
+| Symbol arrays and range | accepts | accepts | matches reference | matches reference |
+| Multiline interpolation reference boundary | accepts; reference rejects | accepts; reference rejects | differs | output differs |
+| Symbol interpolation default origins | accepts | accepts | matches reference | matches reference |
+| Symbol interpolation lambda origins | accepts | accepts | matches reference | matches reference |
+| Symbol interpolation local ids | accepts | accepts | matches reference | matches reference |
+| Symbol interpolation unknown rejection | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Symbol invalid integer assignment | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Symbol invalid addition | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Symbol invalid argument | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Symbol invalid condition | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Symbol invalid escape | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Symbol invalid scalar | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Symbol invalid quoted nesting | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Symbol invalid missing name | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Unquoted control keyword Symbol reference gap | accepts; reference rejects | accepts; reference rejects | differs | rejects as reference |
+| Symbol patterns require an explicit String literal | rejects as reference | rejects as reference | not reached | rejects as reference |

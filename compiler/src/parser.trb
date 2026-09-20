@@ -1,4 +1,5 @@
 import { TransformSyntax, transform_kind } from transform_model
+import { expand_quoted_token } from literal_syntax
 import { parse_type_alias } from alias_syntax
 import { LambdaSyntax } from callable_types
 import { parse_lambda_parameters } from lambda_syntax
@@ -199,22 +200,44 @@ def parse_iteration_statement(mut state: CompilerState, mut position: Array<Inte
 end
 
 def parse_primary_syntax(mut state: CompilerState, mut position: Array<Integer>): Boolean
-	if token_is(state, position[0], "try")
+	if !expand_quoted_token(state, position[0], true)
+		return false
+	end
+	symbol := token_is(state, position[0], ":")
+	if symbol
+		advance(position)
+		if !expand_quoted_token(state, position[0], false)
+			return false
+		end
+		kind := load_integer(state.token_kinds, position[0])
+		if kind == 0 || kind == 4 || kind == 6
+			diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), "expected a Symbol literal name")
+			return false
+		end
+		store_integer(state.token_kinds, position[0], 3)
+		advance(position)
+	end
+	if !symbol && token_is(state, position[0], "try")
 		advance(position)
 		return parse_primary_syntax(state, position)
 	end
-	mut control := token_is(state, position[0], "if")
-	if !control
-		control = token_is(state, position[0], "case")
+	mut control := false
+	mut lambda := false
+	mut hash_literal := false
+	if !symbol
+		control = token_is(state, position[0], "if")
+		if !control
+			control = token_is(state, position[0], "case")
+		end
+		lambda = token_is(state, position[0], "fn")
+		hash_literal = token_is(state, position[0], "{")
 	end
 	if control && !parse_control_syntax(state, position)
 		return false
 	end
-	lambda := token_is(state, position[0], "fn")
 	if lambda && !parse_lambda_syntax(state, position)
 		return false
 	end
-	hash_literal := token_is(state, position[0], "{")
 	if hash_literal
 		advance(position)
 		skip_newlines(state, position)
@@ -258,7 +281,7 @@ def parse_primary_syntax(mut state: CompilerState, mut position: Array<Integer>)
 		end
 	end
 	kind := load_integer(state.token_kinds, position[0])
-	if hash_literal || control || lambda
+	if hash_literal || control || lambda || symbol
 	elsif kind == 1
 		application_end := nominal_application_end(state, position[0])
 		if application_end >= 0

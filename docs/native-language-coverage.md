@@ -1,12 +1,22 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 627 ordinary-path probes and 32 feature
+Status: the shared contract contains 657 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
 basic-language completion; [the generated family inventory](native-language-feature-inventory.md)
 records semantic contracts that still need tests. The earlier 19-case inventory
 was an initial sample, not a complete list of missing features.
+
+## Symbol expressions
+
+Unquoted and double-quoted Symbol spellings use the reference String semantics.
+Quoted interpolation-looking contents remain literal; actual String interpolation,
+Hash labels and named arguments retain their separate syntax. Existing String
+MIR covers values, defaults, nullable results, captures and managed storage, with
+source-erased/reordered/forced-GC and retained-session checks. Single-quote and
+reference control-keyword boundaries remain explicit; see
+[decision 0066](decisions/0066-symbol-literal-syntax.md).
 
 ## Unicode String trimming
 
