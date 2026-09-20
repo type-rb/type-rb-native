@@ -175,8 +175,10 @@ survive active-slot reuse and own nullable facts.
 from ordinary acceptance. Authored `fn` bodies now use analyzed captures, shared
 mutable cells and concrete MIR declarations, with ordinary file check/build/run
 and retained REPL coverage. REPL code/type contexts survive later submissions and
-are collected with their reachable values. Named declarations as values and the
-remaining signature/capability boundaries are still open. Internal factories remain
+are collected with their reachable values. Named declaration values now reuse the
+same callable operations, including optional receiver calls and direct generic
+function-type arguments; see [Decision 0064](decisions/0064-named-function-values.md).
+The remaining signature/capability boundaries stay explicit. Internal factories remain
 independent lifetime controls, alongside the shared ordinary cases.
 
 ## Development loop

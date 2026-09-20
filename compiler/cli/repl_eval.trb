@@ -8,6 +8,7 @@ import { repl_float_method } from repl_float_methods
 import { integer_method_arity, integer_method_kind } from integer_methods
 import { repl_integer_method } from repl_integer_methods
 import { callable_parts } from callable_types
+import { declared_callable_type } from mir_callables
 import { repl_closure, repl_closure_environment } from repl_callables
 import { select_checked_body } from state
 import { result_projection } from result_checked
@@ -399,6 +400,7 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		return repl_reference(repl_boolean(store, store.integers[operand.value] == 0))
 	end
 	if text == "("
+		skip_newlines(state, position)
 		result := repl_expression(state, position, store, environment, 1, expected)
 		if environment.flow[0] != 0
 			return repl_reference(environment.flow[1])
@@ -483,6 +485,11 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 	binding := repl_find(environment, text)
 	if binding >= 0
 		return ReplReference.new(value: repl_nullable_read(state, store, repl_binding_value(store, environment, binding), position[0] - 1), binding: binding, container: - 1, slot: - 1)
+	end
+	function_value := sparse_integer_at(state.checked[0].function_values, position[0] - 1)
+	if function_value > 0
+		function := function_value - 1
+		return repl_reference(repl_value(store, declared_callable_type(state, function, 0), function, 0.0, "", []))
 	end
 	if token_is(state, position[0], "(")
 		mut function := find_visible_function(state, state.active_module[0], text)
@@ -628,6 +635,30 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 	return repl_reference(0)
 end
 
+def repl_callable_expression(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, callable: Integer): ReplReference
+	parts := callable_parts(store.types[callable])
+	position[0] += 1
+	skip_newlines(state, position)
+	mut arguments: Array<Integer> := []
+	while !token_is(state, position[0], ")") && store.error[0] == ""
+		argument := repl_expression(state, position, store, environment, 1, parts[arguments.size() + 1])
+		if environment.flow[0] != 0
+			return repl_reference(environment.flow[1])
+		end
+		arguments.push(argument.value)
+		skip_newlines(state, position)
+		if token_is(state, position[0], ",")
+			position[0] += 1
+			skip_newlines(state, position)
+		end
+	end
+	position[0] += 1
+	if store.error[0] != ""
+		return repl_reference(0)
+	end
+	return repl_reference(repl_indirect_call(store, callable, arguments))
+end
+
 def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, expected: String): ReplReference
 	mut result := repl_primary(state, position, store, environment, expected)
 	if environment.flow[0] != 0
@@ -650,24 +681,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		end
 		value := repl_get(store, result.value)
 		if token_is(state, position[0], "(")
-			parts := callable_parts(value.type_name)
-			position[0] += 1
-			mut arguments: Array<Integer> := []
-			while !token_is(state, position[0], ")") && store.error[0] == ""
-				argument := repl_expression(state, position, store, environment, 1, parts[arguments.size() + 1])
-				if environment.flow[0] != 0
-					return repl_reference(environment.flow[1])
-				end
-				arguments.push(argument.value)
-				if token_is(state, position[0], ",")
-					position[0] += 1
-				end
-			end
-			position[0] += 1
-			if store.error[0] != ""
-				return repl_reference(0)
-			end
-			result = repl_reference(repl_indirect_call(store, result.value, arguments))
+			result = repl_callable_expression(state, position, store, environment, result.value)
 			next
 		end
 		if token_is(state, position[0], "[")
@@ -730,7 +744,15 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 					position[0] -= 2
 					break
 				end
-				if token_is(state, position[0], "(")
+				record_index := find_record_type(state, value.type_name)
+				if record_index >= 0
+					field := find_field(state, record_index, member)
+					start := load_integer(state.record_field_starts, record_index)
+					result = ReplReference.new(value: repl_nullable_read(state, store, value.children[field - start], position[0] - 1), binding: - 1, container: result.value, slot: field - start)
+					if token_is(state, position[0], "(")
+						result = repl_callable_expression(state, position, store, environment, result.value)
+					end
+				elsif token_is(state, position[0], "(")
 					if value.type_name == "Hash" || hash_key_type(value.type_name) != ""
 						result = repl_reference(repl_hash_method(state, position, store, environment, result.value))
 						if safe_origin >= 0 && environment.flow[0] == 0
@@ -873,11 +895,6 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						end
 					end
 					position[0] += 1
-				else
-					record_index := find_record_type(state, value.type_name)
-					field := find_field(state, record_index, member)
-					start := load_integer(state.record_field_starts, record_index)
-					result = ReplReference.new(value: repl_nullable_read(state, store, value.children[field - start], position[0] - 1), binding: - 1, container: result.value, slot: field - start)
 				end
 			else
 				complete = true

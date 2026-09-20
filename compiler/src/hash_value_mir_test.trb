@@ -24,6 +24,9 @@ def hash_value_mir_state(): CompilerState
 end
 
 describe("Hash value MIR") do
+	test("retains colon key evaluation and labels in erased managed MIR") do
+		managed_mir_test_fixture("hash-key-spelling", 6)
+	end
 	test("resolves independent empty types across conditional and loop edges") do
 		mut state := logical_checked_source("def main()\nmut integers := {}\nmut words := {}\nmut i := 0\nwhile i < 2\nintegers[i] = i\ni += 1\nend\nif true\nwords[\"key\"] = \"value\"\nend\nputs(integers[1])\nputs(words[\"key\"])\nend\n")
 		expect(check(state)).to_be_true()
@@ -132,6 +135,7 @@ def managed_mir_test_fixture(name: String, minimum_hooks: Integer)
 			expect(checked).to_be_true()
 			expect(state.scalar_mir.functions.size()).to_equal(state.function_count[0])
 			before := control_test_output(emit_qbe(state))
+			expect(state.diagnostic_count[0]).to_equal(0)
 			state.scalar_mir.functions.each do |function|
 				mut token := load_integer(state.function_body_starts, function.id)
 				while token < load_integer(state.function_body_ends, function.id)
@@ -182,6 +186,7 @@ def managed_mir_test_fixture(name: String, minimum_hooks: Integer)
 			end
 			expect(verify_mir(state.scalar_mir, true)).to_equal("")
 			reordered := control_test_output(emit_qbe(state))
+			expect(state.diagnostic_count[0]).to_equal(0)
 			mut forced := ""
 			mut ordinary := false
 			mut hooks := 0
@@ -198,6 +203,9 @@ def managed_mir_test_fixture(name: String, minimum_hooks: Integer)
 					hooks += 1
 				end
 				forced += line + "\n"
+			end
+			if hooks < minimum_hooks
+				puts(name + ": collection hooks " + hooks.to_s() + ", diagnostic " + load_string(state.diagnostic_messages, 0))
 			end
 			expect(hooks >= minimum_hooks).to_be_true()
 			case logical_run_qbe(qbe, forced)

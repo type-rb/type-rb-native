@@ -2,7 +2,7 @@
 
 TypeRB Native currently follows exact reference revisions during development. The
 current source and semantic oracle is TypeRB
-`63c73105965c7ea7404c19b538b06f7f47c35a2d` (the `0.4.9-dev` development identity), recorded
+`d26f0e19a0fb52cdff7ef23ef2cca6d05e673ba3` (the `0.4.9-dev` development identity), recorded
 in `TYPE_RB_REVISION`. This declares one exact reference identity during Native
 development, without claiming a supported version range.
 
@@ -33,6 +33,24 @@ The earlier scoped-file successor is registered in
 [Darwin/Linux arm64 result](https://github.com/type-rb/type-rb-native/blob/5cf61c740aa600c34ed94f1b130ea2ffefd9e783/results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/README.md)
 passes the selected-reference, migration, exact-baseline, target-regression,
 fixed-point, process, resource, and size criteria.
+
+## Named functions and Hash literal reference update
+
+The exact development pin incorporates [TypeRB PR #743](https://github.com/type-rb/type-rb/pull/743)
+for named function values, [PR #744](https://github.com/type-rb/type-rb/pull/744)
+for nullable callable rejection and [PR #745](https://github.com/type-rb/type-rb/pull/745)
+for callee selection before arguments. Required positional function signatures
+retain declaration and nominal identities; defaulted, named-only and generic
+functions require explicit typed adapters. Optional record callback calls skip
+arguments when their receiver is absent.
+
+[PR #746](https://github.com/type-rb/type-rb/pull/746) preserves Hash literal
+key/value evaluation order and duplicate-key overwrites across backends and the
+REPL. The pin also includes [PR #741](https://github.com/type-rb/type-rb/pull/741)
+for Float negative zero and [PR #742](https://github.com/type-rb/type-rb/pull/742)
+for Array edge-method arity. Review all shared observations, including the new
+named-function and colon-key cases, against this exact source and AST.
+This is a development reference update, not a release or immutable seed refresh.
 
 ## Array mutation and library-result reference update
 

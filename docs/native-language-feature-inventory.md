@@ -17,13 +17,13 @@ Each count describes registered probes, not language coverage percentages.
 | Member access and projections | basic | 1 / 4 | Safe member access, chained field narrowing and receiver replacement | MemberExpression |
 | Nullable values and narrowing | basic | 4 / 31 | Class/callback and general pattern narrowing; collection/union optional conversions; Nullable standard-library methods beyond the currently implemented Native APIs |  |
 | Enums and tagged values | basic | 1 / 19 | Raw values and conversion failures, enum methods and attributes; Nested module declarations and wider pattern forms | EnumStatement, EnumMemberStatement |
-| Transparent aliases | basic | 7 / 30 | Literal/union, callable and class/interface alias targets; nested module declarations; Authored alias spelling in REPL display and diagnostics | TypeAliasStatement |
+| Transparent aliases | basic | 7 / 30 | Literal/union and class/interface alias targets; nested module declarations; Authored alias spelling in REPL display and diagnostics | TypeAliasStatement |
 | Nominal newtypes | basic | 1 / 1 | Closed/private constructors, methods, immutable representation and boundary diagnostics | NewtypeStatement |
-| Generic declarations and applications | basic | 4 / 68 | Generic methods, classes and interfaces; Wider constraints and type applications | GenericExpression |
+| Generic declarations and applications | basic | 4 / 70 | Generic methods, classes and interfaces; Wider constraints and type applications | GenericExpression |
 | Literal types and discriminated unions | basic | 1 / 1 | Shared discriminants, branch narrowing and invalid mutation/common-type boundaries |  |
-| Function values and lexical capture | basic | 0 / 22 | Named declarations as values, callable equality, nullable signatures and remaining parameter-capability boundaries | LambdaExpression |
-| Arrays and checked indexes | basic | 16 / 148 | Remaining Array sorting and safe APIs; Wider invalid element/mutation combinations | ArrayLiteral, IndexExpression |
-| Hash values and operations | basic | 0 / 5 | All key/value representations, empty inference, managed lifetimes and missing-key failures | HashLiteral |
+| Function values and lexical capture | basic | 1 / 52 | Callable equality, method references and remaining parameter-capability/narrowing combinations | LambdaExpression |
+| Arrays and checked indexes | basic | 16 / 149 | Remaining Array sorting and safe APIs; Wider invalid element/mutation combinations | ArrayLiteral, IndexExpression |
+| Hash values and operations | basic | 0 / 11 | All key/value representations, empty inference, managed lifetimes and missing-key failures | HashLiteral |
 | Structured and value-producing iteration | basic | 0 / 62 | Keyed sorting and sliced iteration; Remaining receiver APIs that shorten or reorder an Array during traversal | IterationExpression, BlockExpression |
 | Range values and boundaries | basic | 0 / 15 | none registered | RangeExpression |
 | Result and typed propagation | basic | 0 / 28 | General union errors and compiler-declared structured package boundaries | TryExpression, CatchExpression |

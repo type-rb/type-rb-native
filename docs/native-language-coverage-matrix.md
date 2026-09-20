@@ -575,3 +575,39 @@
 | Array join wrong separator | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Array join missing separator | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Array join extra separator | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Named function values | accepts | accepts | matches reference | matches reference |
+| Named function managed result | accepts | accepts | matches reference | matches reference |
+| Named function float boolean | accepts | accepts | matches reference | matches reference |
+| Named function void zero | accepts | accepts | matches reference | matches reference |
+| Named function storage | accepts | accepts | matches reference | matches reference |
+| Named function nullable | accepts | accepts | matches reference | matches reference |
+| Named function nullable anonymous | accepts | accepts | matches reference | matches reference |
+| Named function nullable parameter | accepts | accepts | matches reference | matches reference |
+| Named function shadow capture | accepts | accepts | matches reference | matches reference |
+| Named function mutable parameter | accepts | accepts | matches reference | matches reference |
+| Named function recursion | accepts | accepts | matches reference | matches reference |
+| Named function result | accepts | accepts | matches reference | matches reference |
+| Named function generic use | accepts | accepts | matches reference | matches reference |
+| Named function adapters | accepts | accepts | matches reference | matches reference |
+| Named function imports | accepts | accepts | matches reference | matches reference |
+| Named function default rejection | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Named function keyword rejection | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Named function generic rejection | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Named function parameter rejection | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Named function result rejection | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Named function signature arity rejection | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Named function arity rejection | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Named function argument rejection | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Named function keyword call rejection | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Named function nullable call rejection | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Named function result ignored | rejects as reference | rejects as reference | not reached | matches reference |
+| Named function imported default rejection | rejects as reference | rejects as reference | not reached | diagnostic/output differs |
+| Named function field optional | accepts | accepts | matches reference | matches reference |
+| Named function field order | accepts | accepts | matches reference | matches reference |
+| Named function generic nested | accepts | accepts | matches reference | matches reference |
+| Hash key spelling quoted | accepts | accepts | matches reference | matches reference |
+| Hash key spelling computed | accepts | accepts | matches reference | matches reference |
+| Hash key spelling integer | accepts | accepts | matches reference | matches reference |
+| Hash key spelling effects | accepts | accepts | matches reference | matches reference |
+| Hash key spelling boolean-rejection | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Hash key spelling nil-rejection | rejects as reference | rejects as reference | not reached | rejects as reference |
