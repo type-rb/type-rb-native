@@ -22,7 +22,7 @@ Each count describes registered probes, not language coverage percentages.
 | Generic declarations and applications | basic | 4 / 68 | Generic methods, classes and interfaces; Wider constraints and type applications | GenericExpression |
 | Literal types and discriminated unions | basic | 1 / 1 | Shared discriminants, branch narrowing and invalid mutation/common-type boundaries |  |
 | Function values and lexical capture | basic | 0 / 22 | Named declarations as values, callable equality, nullable signatures and remaining parameter-capability boundaries | LambdaExpression |
-| Arrays and checked indexes | basic | 16 / 124 | Remaining Array joining, sorting and safe APIs; Wider invalid element/mutation combinations | ArrayLiteral, IndexExpression |
+| Arrays and checked indexes | basic | 16 / 148 | Remaining Array sorting and safe APIs; Wider invalid element/mutation combinations | ArrayLiteral, IndexExpression |
 | Hash values and operations | basic | 0 / 5 | All key/value representations, empty inference, managed lifetimes and missing-key failures | HashLiteral |
 | Structured and value-producing iteration | basic | 0 / 62 | Keyed sorting and sliced iteration; Remaining receiver APIs that shorten or reorder an Array during traversal | IterationExpression, BlockExpression |
 | Range values and boundaries | basic | 0 / 15 | none registered | RangeExpression |
