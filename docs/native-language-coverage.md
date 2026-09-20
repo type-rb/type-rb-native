@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 948 ordinary-path probes and 32 feature
+Status: the shared contract contains 996 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -47,6 +47,23 @@ these contracts. Safe block navigation follows the accepted reference correction
 in [type-rb#775](https://github.com/type-rb/type-rb/pull/775). See
 [decision 0073](decisions/0073-keyed-array-sorting-mir.md).
 
+## Streamed sliced iteration
+
+Array and Range `each_slice(size)` retain the receiver and evaluate the Integer
+size once, including for an empty source. Safe calls skip size effects and the
+body when absent. Every batch is a fresh shallow Array; full batches observe
+subsequent source changes, while a final partial batch cannot restart an exhausted
+iterator. `with_index` counts batches. Range endpoints never require `end + 1`
+and a huge range can exit after its first small batch.
+
+Existing typed MIR loops, Array operations, roots and a verified size guard own
+execution. Lexical transfers in both the size and block keep their owners.
+Shared cases cover mutation, aliases, captures, generic/nullable values, boundary
+sizes, lazy calls and invalid syntax/types. Independent erased/reordered MIR,
+forced collection, retained REPL replay and bounded-streaming checks complement
+ordinary paired outcomes. The combinations also repair REPL unary `+`. See
+[decision 0075](decisions/0075-sliced-iteration-mir.md).
+
 ## Safe collection blocks
 
 `&.each` supports Array, Range and Hash receivers. The sequential Array/Range
@@ -67,7 +84,7 @@ container conversion. MIR-only collection scratch slots no longer consume
 lexical declaration identities, preserving closures declared after queries,
 sorting and Range materialization. Shared cases, erased/reordered MIR, forced
 collection and retained REPL failure/replay controls cover these combinations.
-Sliced iteration and concurrent transforms remain separate implementation work.
+Concurrent transforms remain separate implementation work.
 See [decision 0074](decisions/0074-safe-collection-block-mir.md).
 
 ## Raw enums and instance methods

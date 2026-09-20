@@ -1,3 +1,4 @@
+import { repl_slice_available, repl_slice_next } from repl_sliced_iteration
 import { repl_array_sort_keys } from repl_array_sorting
 import { raw_enum_type } from raw_enum_types
 import { repl_raw_enum_from, repl_raw_enum_value } from repl_raw_enums
@@ -397,6 +398,13 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 	end
 	if text == "false"
 		return repl_reference(repl_boolean(store, false))
+	end
+	if text == "+"
+		operand := repl_expression(state, position, store, environment, 7, "")
+		if environment.flow[0] != 0
+			return repl_reference(environment.flow[1])
+		end
+		return repl_reference(operand.value)
 	end
 	if text == "-"
 		operand := repl_expression(state, position, store, environment, 7, "")
@@ -799,7 +807,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 				position[0] += 1
 				member := load_string(state.token_texts, position[0])
 				position[0] += 1
-				if member == "each" && syntax_iteration_suffix(state, position[0] - 2) >= 0
+				if (member == "each" || member == "each_slice") && syntax_iteration_suffix(state, position[0] - 2) >= 0
 					position[0] -= 2
 					break
 				end
@@ -1123,6 +1131,19 @@ def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut s
 		store.error[0] = "iteration receiver disagrees with checked MIR"
 		return 0
 	end
+	mut slice_size := 0
+	if plan.syntax.slice_start >= 0
+		position[0] = plan.syntax.slice_start
+		size := repl_expression(state, position, store, environment, 1, "Integer").value
+		if store.error[0] != "" || environment.flow[0] != 0
+			return environment.flow[1]
+		end
+		slice_size = store.integers[size]
+		if slice_size <= 0
+			store.error[0] = "panic: each_slice size must be greater than zero"
+			return 0
+		end
+	end
 	saved := environment.count[0]
 	mut cursor := 0
 	mut ordinal := 0
@@ -1146,9 +1167,14 @@ def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut s
 			slot += 1
 		end
 	end
+	mut slice_cursor := [cursor, bound, exclusive, 0]
 	mut result := 0
 	while true
-		if plan.source_kind == 3
+		if slice_size > 0
+			if !repl_slice_available(store, receiver, plan.source_kind == 2, slice_cursor)
+				break
+			end
+		elsif plan.source_kind == 3
 			if cursor >= keys.size()
 				break
 			end
@@ -1161,7 +1187,9 @@ def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut s
 		end
 		environment.count[0] = saved
 		mut element := 0
-		if plan.source_kind == 1
+		if slice_size > 0
+			element = repl_slice_next(store, receiver, plan.source_kind == 2, plan.element_type, slice_size, slice_cursor)
+		elsif plan.source_kind == 1
 			element = store.children[receiver][cursor]
 		elsif plan.source_kind == 3
 			element = keys[cursor]
@@ -1191,21 +1219,34 @@ def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut s
 		if store.error[0] != ""
 			break
 		end
-		if plan.source_kind == 2 && cursor == bound
-			break
-		end
-		if plan.source_kind != 3 && plan.syntax.second_origin >= 0
-			# There is no next ordinal when the exclusive endpoint is next.
-			if plan.source_kind == 2 && exclusive == 1 && cursor + 1 == bound
+		if slice_size > 0
+			if !repl_slice_available(store, receiver, plan.source_kind == 2, slice_cursor)
 				break
 			end
-			if ordinal == 9007199254740991
-				store.error[0] = "panic: Integer is outside the portable range"
+			if plan.syntax.second_origin >= 0
+				if ordinal == 9007199254740991
+					store.error[0] = "panic: Integer is outside the portable range"
+					break
+				end
+				ordinal += 1
+			end
+		else
+			if plan.source_kind == 2 && cursor == bound
 				break
 			end
-			ordinal += 1
+			if plan.source_kind != 3 && plan.syntax.second_origin >= 0
+				# There is no next ordinal when the exclusive endpoint is next.
+				if plan.source_kind == 2 && exclusive == 1 && cursor + 1 == bound
+					break
+				end
+				if ordinal == 9007199254740991
+					store.error[0] = "panic: Integer is outside the portable range"
+					break
+				end
+				ordinal += 1
+			end
+			cursor += 1
 		end
-		cursor += 1
 	end
 	environment.count[0] = saved
 	position[0] = plan.syntax.finish

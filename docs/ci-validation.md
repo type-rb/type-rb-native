@@ -79,6 +79,10 @@ roots, initializer order, retained values, failed initialization and replay.
 checks Float String conversion across every binary64 binade and adjacent values,
 including subnormals, plus retained callbacks, optional calls and session replay.
 
+`native-sliced-iteration-test.py` runs in both CLI authorities. It checks fresh
+managed batches under forced collection, exact reclamation, bounded first-batch
+execution over the full portable Range, and retained REPL failure/replay.
+
 The CLI cache test gives each complete core/CLI fixed-point rebuild a bounded
 300-second watchdog and records its elapsed time; the whole CLI job allows
 60 minutes for the repeated invalidation controls. The previous 30-minute job

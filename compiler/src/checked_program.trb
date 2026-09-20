@@ -1,3 +1,4 @@
+import { mir_sliced_iteration_begin, mir_sliced_iteration_end } from sliced_iteration
 import { checked_raw_enum_from, checked_raw_enum_value } from raw_enum_checked
 import { mir_array_sort_keys } from array_sorting
 import { raw_enum_type } from raw_enum_types
@@ -43,7 +44,7 @@ import { CheckedValue, checked_bound_value, checked_mir_value, checked_value, ch
 import { checked_hash_binding_target, checked_hash_method, checked_hash_plan, checked_hash_publish } from hash_checked
 import { mir_hash_operation } from hash_mir
 import { hash_key_type, hash_type, hash_value_type } from hash_types
-import { checked_iteration_parameters, checked_iteration_require, checked_iteration_shape, checked_range_require, checked_transform_require, checked_transform_shape, iteration_element_type } from iteration_checked
+import { checked_iteration_parameters, checked_iteration_require, checked_iteration_shape, checked_range_require, checked_slice_zero_literal, checked_transform_require, checked_transform_shape, iteration_element_type } from iteration_checked
 import { MirIteration, MirRangeConstruction, mir_iteration_valid } from iteration_mir
 import { float_literal_in_range, integer_literal_in_range, number_is_float } from literals
 import { MirLoopTransfer, mir_loop_transfer_valid } from mir
@@ -56,7 +57,7 @@ import { resolve_body_names, standard_package_import, standard_package_root } fr
 import { find_visible_declaration, find_visible_enum, find_visible_function, find_visible_generic_function, find_visible_record } from declaration_lookup
 import { string_starts_with } from path
 import { array_element_type, array_type, common_array_element_type, find_field, find_record_type, record_type, resolve_type_name, type_display } from type_resolution
-import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_add, local_bind, local_find, terminal_token } from state
+import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_add, local_bind, local_bind_temporary, local_find, terminal_token } from state
 import { load_integer, load_string, sparse_integer_at, sparse_string_at, store_integer, store_string } from storage
 
 def checked_hash_literal(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, expected: String): CheckedValue
@@ -1343,22 +1344,27 @@ def check_simple_statement(
 	return left
 end
 
-def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, result_type: String, parent_loop: Integer): Boolean
+def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, result_type: String, parent_loop: Integer): CheckedValue
 	flow_parent := locals.nullable_state[0]
 	flow_first := locals.nullable_facts.size()
 	origin := position[0]
 	encoded := sparse_integer_at(state.iteration_origins, origin)
 	if encoded < 1 || encoded > state.iterations.size()
-		return false
+		return checked_value("Invalid", 0, origin, 0)
 	end
 	shape := state.iterations[encoded - 1]
 	if !checked_iteration_shape(state, shape, origin)
 		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "invalid iteration syntax plan")
-		return false
+		return checked_value("Invalid", 0, origin, 0)
 	end
 	mut receiver := check_expression(state, position, locals, 1, "")
-	mut absent :=- 1
+	saved_mir := locals.mir_state[0]
+	mut optional := false
 	if token_is(state, shape.receiver_finish, "&.") && nullable_element(receiver.type_name) != ""
+		optional = true
+	end
+	mut absent :=- 1
+	if optional
 		condition := nullable_nil_condition(state, locals, receiver, true, shape.receiver_finish)
 		absent = mir_control_branch(state, locals, condition, load_integer(state.token_lines, origin))
 		nullable_apply(locals, condition.truth)
@@ -1369,7 +1375,7 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 	element_type := iteration_element_type(receiver.type_name)
 	if element_type == "" || position[0] != shape.receiver_finish
 		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "ordinary each requires a supported Array, Range or Hash receiver")
-		return false
+		return checked_value("Invalid", 0, origin, 0)
 	end
 	mut source_kind := 1
 	if receiver.type_name == "Range<Integer>"
@@ -1381,29 +1387,62 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 	plan := MirIteration.new(syntax: shape, parent_loop: parent_loop, source_kind: source_kind, type_name: receiver.type_name, element_type: element_type)
 	if !checked_iteration_parameters(state, plan)
 		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "each block parameters differ from its receiver and with_index mode")
-		return false
+		return checked_value("Invalid", 0, origin, 0)
+	end
+	mut size := checked_value("Integer", 0, origin, 0)
+	mut block_type := element_type
+	if shape.slice_start >= 0
+		position[0] = shape.slice_start
+		size = check_expression(state, position, locals, 1, "Integer")
+		if !check_expected(state, size.type_name, "Integer", load_integer(state.token_lines, shape.slice_start))
+			return checked_value("Invalid", 0, origin, 0)
+		end
+		if position[0] != shape.slice_finish
+			diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "invalid each_slice size boundary")
+			return checked_value("Invalid", 0, origin, 0)
+		end
+		if checked_slice_zero_literal(state, size.origin)
+			diagnostic(state, "TRBN4004", load_integer(state.token_lines, shape.slice_start), "each_slice size must be greater than zero")
+			return checked_value("Invalid", 0, origin, 0)
+		end
+		block_type = array_type(element_type)
 	end
 	state.checked[0].iterations.push(plan)
 	store_integer(state.checked[0].iteration_origins, origin, state.checked[0].iterations.size())
 	checked_iteration_require(state, origin, parent_loop)
+	# A size expression may leave its enclosing function or loop. Still check
+	# the unreachable block, without constructing an iteration or Never operand.
+	if size.type_name == "Never"
+		scalar_mir_disable(locals)
+	end
 	saved := locals.count[0]
-	# Hidden receiver/cursor bindings provide the loop-carried MIR values.
-	local_bind(locals, "$iteration.receiver", receiver.type_name, 1)
-	local_bind(locals, "$iteration.cursor", "Integer", 1)
-	if source_kind == 2 && plan.syntax.second_origin >= 0
-		local_bind(locals, "$iteration.ordinal", "Integer", 1)
+	mut element := checked_value(block_type, 0, plan.syntax.element_origin, 1)
+	if shape.slice_start >= 0
+		local_bind_temporary(locals, "$slice.receiver", receiver.type_name, 1)
+		local_bind_temporary(locals, "$slice.cursor", "Integer", 1)
+		local_bind_temporary(locals, "$slice.ordinal", "Integer", 1)
+		local_bind_temporary(locals, "$slice.size", "Integer", 1)
+		local_bind_temporary(locals, "$slice.finished", "Boolean", 1)
+		element = mir_sliced_iteration_begin(state, locals, plan, receiver, size, saved)
+	else
+		# Hidden receiver/cursor bindings provide the loop-carried MIR values.
+		local_bind(locals, "$iteration.receiver", receiver.type_name, 1)
+		local_bind(locals, "$iteration.cursor", "Integer", 1)
+		if source_kind == 2 && plan.syntax.second_origin >= 0
+			local_bind(locals, "$iteration.ordinal", "Integer", 1)
+		end
+		if source_kind == 3
+			local_bind(locals, "$iteration.keys", array_type(element_type), 1)
+			local_bind(locals, "$iteration.values", array_type(hash_value_type(receiver.type_name)), 1)
+		end
+		element = mir_checked_iteration_begin(state, locals, plan, receiver, saved)
 	end
-	if source_kind == 3
-		local_bind(locals, "$iteration.keys", array_type(element_type), 1)
-		local_bind(locals, "$iteration.values", array_type(hash_value_type(receiver.type_name)), 1)
-	end
-	element := mir_checked_iteration_begin(state, locals, plan, receiver, saved)
-	local_bind(locals, load_string(state.token_texts, plan.syntax.element_origin), element_type, 1)
+	local_bind(locals, load_string(state.token_texts, plan.syntax.element_origin), block_type, 1)
 	mir_binding_initialize(state, locals, locals.count[0] - 1, element, plan.syntax.element_origin)
 	if plan.syntax.second_origin >= 0
 		if load_string(state.token_texts, plan.syntax.element_origin) == load_string(state.token_texts, plan.syntax.second_origin)
 			diagnostic(state, "TRBN4004", load_integer(state.token_lines, plan.syntax.second_origin), "iteration block parameter is duplicated")
-			return false
+			return checked_value("Invalid", 0, origin, 0)
 		end
 		mut second_type := "Integer"
 		if source_kind == 3
@@ -1411,7 +1450,7 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 		end
 		local_bind(locals, load_string(state.token_texts, plan.syntax.second_origin), second_type, 1)
 		mut index_slot := saved + 1
-		if source_kind == 2
+		if source_kind == 2 || shape.slice_start >= 0
 			index_slot = saved + 2
 		end
 		mut second := mir_binding_read(state, locals, index_slot, plan.syntax.second_origin)
@@ -1428,15 +1467,26 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "invalid iteration body boundary")
 	end
 	result_scope_check(state, locals, saved)
-	mir_checked_iteration_end(state, locals, plan, saved)
+	if shape.slice_start >= 0
+		mir_sliced_iteration_end(state, locals, plan, saved)
+	else
+		mir_checked_iteration_end(state, locals, plan, saved)
+	end
 	locals.count[0] = saved
+	if size.type_name == "Never"
+		locals.mir_state[0] = saved_mir
+	end
 	if absent >= 0
 		mir_control_jump(state, locals, absent, saved)
 		mir_control_enter(state, locals, absent, load_integer(state.token_lines, origin))
 	end
 	nullable_finish(locals, flow_parent, flow_first, saved)
 	position[0] = plan.syntax.finish
-	return finish_statement(state, position)
+	finish_statement(state, position)
+	if size.type_name == "Never" && !optional
+		return checked_value("Never", 0, origin, 0)
+	end
+	return checked_value("Void", 0, origin, 0)
 end
 
 def checked_while(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, result_type: String): Boolean
@@ -1532,7 +1582,7 @@ def check_block_value(mut state: CompilerState, mut position: Array<Integer>, mu
 		elsif token_is(state, position[0], "while")
 			checked_while(state, position, locals, result_type)
 		elsif sparse_integer_at(state.iteration_origins, position[0]) > 0
-			checked_iteration(state, position, locals, result_type, loop_origin)
+			result = checked_iteration(state, position, locals, result_type, loop_origin)
 		elsif declaration_start(state, position[0])
 			result = check_declaration(state, position, locals)
 		else

@@ -950,3 +950,51 @@
 | Safe block invalid nullable predicate | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Safe block invalid hash transform | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Safe block invalid readonly receiver | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array batches | accepts | accepts | matches reference | matches reference |
+| Range batches | accepts | accepts | matches reference | matches reference |
+| Range streaming | accepts | accepts | matches reference | matches reference |
+| Live full batch | accepts | accepts | matches reference | matches reference |
+| Exhausted partial batch | accepts | accepts | matches reference | matches reference |
+| Requested size preserved | accepts | accepts | matches reference | matches reference |
+| Retained source and size | accepts | accepts | matches reference | matches reference |
+| Shrink source | accepts | accepts | matches reference | matches reference |
+| Receiver size order | accepts | accepts | matches reference | matches reference |
+| Argument mutates source | accepts | accepts | matches reference | matches reference |
+| Empty evaluates size | accepts | accepts | matches reference | matches reference |
+| Safe optional | accepts | accepts | matches reference | matches reference |
+| Safe absent runtime size | accepts | accepts | matches reference | matches reference |
+| Transfers | accepts | accepts | matches reference | matches reference |
+| Nested loops | accepts | accepts | matches reference | matches reference |
+| Fresh batches | accepts | accepts | matches reference | matches reference |
+| Managed shallow | accepts | accepts | matches reference | matches reference |
+| Readonly fresh batch | accepts | accepts | matches reference | matches reference |
+| Nullable elements | accepts | accepts | matches reference | matches reference |
+| Generic batches | accepts | accepts | matches reference | matches reference |
+| Captures | accepts | accepts | matches reference | matches reference |
+| Literal zero | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal paren zero | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal zero padded | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal negative | accepts | accepts | matches reference | rejects as reference |
+| Literal negative zero | accepts | accepts | matches reference | rejects as reference |
+| Literal positive zero | accepts | accepts | matches reference | rejects as reference |
+| Dynamic zero array | accepts | accepts | matches reference | rejects as reference |
+| Dynamic zero empty range | accepts | accepts | matches reference | rejects as reference |
+| Never size | accepts | accepts | matches reference | matches reference |
+| Invalid wrong size | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid float size | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid missing size | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid empty args | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid extra arg | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid named arg | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid wrong arity | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid indexed arity | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid duplicate params | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid hash | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid ordinary optional | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid safe index modifier | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Invalid readonly source | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Unary plus | accepts | accepts | matches reference | matches reference |
+| Trailing comma | accepts | accepts | matches reference | matches reference |
+| Multiline size | accepts | accepts | matches reference | matches reference |
+| Invalid unreachable body | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Safe never size | accepts | accepts | matches reference | matches reference |

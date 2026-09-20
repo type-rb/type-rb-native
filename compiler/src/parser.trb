@@ -126,11 +126,25 @@ def parse_arguments_syntax(mut state: CompilerState, mut position: Array<Integer
 end
 
 def syntax_iteration_suffix(state: CompilerState, origin: Integer): Integer
-	if (!token_is(state, origin, ".") && !token_is(state, origin, "&.")) || !token_is(state, origin + 1, "each")
+	if (!token_is(state, origin, ".") && !token_is(state, origin, "&.")) || (!token_is(state, origin + 1, "each") && !token_is(state, origin + 1, "each_slice"))
 		return - 1
 	end
 	mut cursor := origin + 2
-	if token_is(state, cursor, "(") && token_is(state, cursor + 1, ")")
+	if token_is(state, origin + 1, "each_slice") && token_is(state, cursor, "(")
+		mut depth := 1
+		cursor += 1
+		while cursor < state.token_count[0] && depth > 0
+			if token_is(state, cursor, "(")
+				depth += 1
+			elsif token_is(state, cursor, ")")
+				depth -= 1
+			end
+			cursor += 1
+		end
+		if depth != 0
+			return - 1
+		end
+	elsif token_is(state, cursor, "(") && token_is(state, cursor + 1, ")")
 		cursor += 2
 	end
 	if token_is(state, cursor, ".") && token_is(state, cursor + 1, "with_index")
@@ -186,8 +200,30 @@ def parse_iteration_statement(mut state: CompilerState, mut position: Array<Inte
 		return false
 	end
 	brace := token_is(state, delimiter, "{")
+	mut slice_start :=- 1
+	mut slice_finish :=- 1
+	position[0] = receiver_finish + 2
+	if token_is(state, receiver_finish + 1, "each_slice")
+		if !expect(state, position, "(")
+			return false
+		end
+		skip_newlines(state, position)
+		slice_start = position[0]
+		if !parse_expression_syntax(state, position, 1)
+			return false
+		end
+		slice_finish = position[0]
+		skip_newlines(state, position)
+		if token_is(state, position[0], ",")
+			advance(position)
+			skip_newlines(state, position)
+		end
+		if !expect(state, position, ")")
+			return false
+		end
+	end
 	mut indexed := false
-	mut scan := receiver_finish + 2
+	mut scan := position[0]
 	while scan < delimiter
 		if token_is(state, scan, "with_index")
 			indexed = true
@@ -230,7 +266,7 @@ def parse_iteration_statement(mut state: CompilerState, mut position: Array<Inte
 	end
 	# Re-parsing unreachable syntax must not replace an already checked plan.
 	if sparse_integer_at(state.iteration_origins, origin) == 0
-		state.iterations.push(IterationSyntax.new(origin: origin, receiver_finish: receiver_finish, element_origin: element_origin, second_origin: second_origin, body_start: body_start, body_finish: body_finish, finish: position[0]))
+		state.iterations.push(IterationSyntax.new(origin: origin, receiver_finish: receiver_finish, slice_start: slice_start, slice_finish: slice_finish, element_origin: element_origin, second_origin: second_origin, body_start: body_start, body_finish: body_finish, finish: position[0]))
 		store_integer(state.iteration_origins, origin, state.iterations.size())
 		store_integer(state.iteration_origins, body_finish, - state.iterations.size())
 	end
@@ -408,7 +444,7 @@ def parse_primary_syntax(mut state: CompilerState, mut position: Array<Integer>)
 			if token_is(state, position[0], ".") || token_is(state, position[0], "&.") || token_is(state, position[0], "::")
 				advance(position)
 				member := expect_identifier(state, position)
-				if member == "each" && syntax_iteration_suffix(state, position[0] - 2) >= 0
+				if (member == "each" || member == "each_slice") && syntax_iteration_suffix(state, position[0] - 2) >= 0
 					position[0] -= 2
 					break
 				end
@@ -1434,7 +1470,7 @@ def parse_transform_syntax(mut state: CompilerState, mut position: Array<Integer
 		return false
 	end
 	if sparse_integer_at(state.transform_origins, origin) == 0
-		shape := IterationSyntax.new(origin: origin, receiver_finish: origin, element_origin: element_origin, second_origin: second_origin, body_start: body_start, body_finish: body_finish, finish: position[0])
+		shape := IterationSyntax.new(origin: origin, receiver_finish: origin, slice_start: - 1, slice_finish: - 1, element_origin: element_origin, second_origin: second_origin, body_start: body_start, body_finish: body_finish, finish: position[0])
 		state.transforms.push(TransformSyntax.new(iteration: shape, kind: kind, initial_start: initial_start, initial_finish: initial_finish, accumulator_origin: accumulator_origin))
 		store_integer(state.transform_origins, origin, state.transforms.size())
 		store_integer(state.transform_origins, body_finish, - state.transforms.size())

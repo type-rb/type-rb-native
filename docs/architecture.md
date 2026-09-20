@@ -104,10 +104,11 @@ vertical slices from remaining ownership.
 ### Current compiler source ownership
 
 The ordinary entry is [compiler/src/compiler.trb](../compiler/src/compiler.trb).
-Its explicit transitive import closure contains 134 canonical implementation modules:
+Its explicit transitive import closure contains 135 canonical implementation modules:
 
 | Modules in `compiler/src/` | Current responsibility |
 | --- | --- |
+| `sliced_iteration.trb` | Streams fresh Array batches from retained Array/Range receivers through verified MIR control edges. |
 | `raw_enum_types.trb`, `raw_enum_syntax.trb`, `raw_enum_checked.trb`, `raw_enum_resolution.trb`, `enum_methods.trb` | Raw value declarations, canonical conversions, standard dependencies and receiver-specialized ordinary/generic enum method resolution; see [decisions 0070](decisions/0070-raw-enum-and-method-mir.md) and [0071](decisions/0071-generic-enum-method-mir.md). |
 | `union_types.trb`, `union_checked.trb`, `union_mir.trb`, `qbe_unions.trb` | Canonical alternatives, scalar type cases, verified union injection/test/extraction and traced payload adaptation; see [decision 0069](decisions/0069-union-value-mir.md). |
 | `transform_model.trb` | Parser-owned collection block shapes and concrete transform projections; lowering uses ordinary iteration control. |
