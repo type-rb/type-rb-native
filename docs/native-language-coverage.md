@@ -1,12 +1,30 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 858 ordinary-path probes and 32 feature
+Status: the shared contract contains 881 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
 basic-language completion; [the generated family inventory](native-language-feature-inventory.md)
 records semantic contracts that still need tests. The earlier 19-case inventory
 was an initial sample, not a complete list of missing features.
+
+## Stable natural Array ordering
+
+`sort()` and `sort_descending()` return independent Arrays of non-nullable
+Integer, Float or String elements. Stable merging, run bounds and element stores
+use ordinary verified MIR blocks and Array instructions. NaNs follow numbers in
+both directions; signed zero and equal values retain their order. String order
+is bounded and byte-preserving, agreeing with Unicode code-point order for UTF-8.
+The internal String comparison does not permit authored `String < String`.
+
+Shared cases cover empty/odd runs, portable Integer limits, infinities/NaNs,
+Unicode/NUL/invalid bytes, aliases, optional calls, effects and rejected element
+types. Independent MIR erasure/reordering, forced GC, a 68-length oracle and
+retained REPL replay complement them. The pinned reference's descending NaN
+REPL defect is tracked in [type-rb#772](https://github.com/type-rb/type-rb/issues/772);
+presentation and inline callable-array REPL differences remain visible.
+Key-based sorting and safe APIs remain open. See
+[decision 0072](decisions/0072-array-sorting-mir.md).
 
 ## Raw enums and instance methods
 
@@ -887,7 +905,7 @@ results. Their probes distinguish absence from zero/false, cover nullable
 elements and Range positions, and retain visited managed values after source
 replacement or parameter reassignment. Generic callbacks, captures and forced
 collection use the ordinary nullable and closure MIR contracts.
-Array sorting, safe lookup/conversion APIs and broader expression-context
+Key-based Array sorting, safe lookup/conversion APIs and broader expression-context
 boundaries remain visible in the inventory; this coverage is not the entire collection API.
 
 String slicing now accepts checked `Range<Integer>` bounds in ordinary programs

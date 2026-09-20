@@ -104,10 +104,11 @@ vertical slices from remaining ownership.
 ### Current compiler source ownership
 
 The ordinary entry is [compiler/src/compiler.trb](../compiler/src/compiler.trb).
-Its explicit transitive import closure contains 128 canonical implementation modules:
+Its explicit transitive import closure contains 134 canonical implementation modules:
 
 | Modules in `compiler/src/` | Current responsibility |
 | --- | --- |
+| `raw_enum_types.trb`, `raw_enum_syntax.trb`, `raw_enum_checked.trb`, `raw_enum_resolution.trb`, `enum_methods.trb` | Raw value declarations, canonical conversions, standard dependencies and receiver-specialized ordinary/generic enum method resolution; see [decisions 0070](decisions/0070-raw-enum-and-method-mir.md) and [0071](decisions/0071-generic-enum-method-mir.md). |
 | `union_types.trb`, `union_checked.trb`, `union_mir.trb`, `qbe_unions.trb` | Canonical alternatives, scalar type cases, verified union injection/test/extraction and traced payload adaptation; see [decision 0069](decisions/0069-union-value-mir.md). |
 | `transform_model.trb` | Parser-owned collection block shapes and concrete transform projections; lowering uses ordinary iteration control. |
 | `qbe_array_join.trb` | Linear Array-to-String byte assembly for verified join MIR; see [decision 0063](decisions/0063-array-join-mir.md). |
@@ -132,7 +133,7 @@ Its explicit transitive import closure contains 128 canonical implementation mod
 | `checked_program.trb`, `checked_values.trb`, `checked_types.trb` | Recursive expression/body checking, typed checked values and shared type/operator rules. |
 | `integer_methods.trb` | Integer receiver classification, arity and existing scalar/CFG construction, including an independently verified clamp guard; see [Integer receiver MIR](decisions/0053-integer-receiver-mir.md). |
 | `float_methods.trb` | Float receiver classification and existing scalar/CFG construction, including rounding and non-finite behavior; see [Float receiver MIR](decisions/0054-float-receiver-mir.md). |
-| `array_methods.trb`, `array_queries.trb`, `qbe_array_copies.trb`, `qbe_array_mutations.trb` | Array edges, copies, queries and insertion/removal lower through verified Array operations; bounded runtimes preserve shared headers, element identities and storage accounting. |
+| `array_methods.trb`, `array_queries.trb`, `array_sorting.trb`, `qbe_array_copies.trb`, `qbe_array_mutations.trb` | Array edges, copies, queries, stable sorting and insertion/removal lower through verified Array operations; bounded runtimes preserve shared headers, element identities and storage accounting. |
 | `string_methods.trb`, `qbe_string_queries.trb`, `qbe_string_sequences.trb`, `qbe_string_slices.trb`, `qbe_string_trimming.trb` | String method classification, typed construction and bounded runtimes; see [query MIR](decisions/0055-string-query-mir.md), [sequence MIR](decisions/0056-string-sequence-mir.md) and [slice MIR](decisions/0057-string-slice-mir.md). |
 | `nullable_types.trb`, `nullable_flow.trb`, `nullable_mir.trb`, `qbe_nullable.trb` | Optional type identity, lexical and stable-field facts, typed storage/test/extraction and numeric conversion blocks, and representation adaptation; see [nullable MIR](decisions/0042-nullable-mir.md). |
 | `mir.trb`, `mir_types.trb`, `mir_analysis.trb`, `mir_numeric.trb`, `mir_array_loops.trb`, `mir_flow.trb`, `mir_identities.trb`, `mir_roots.trb`, `mir_passes.trb`, `mir_verifier.trb`, `mir_instructions.trb` | MIR model, semantic composite types and queries, reusable proofs, CFG/dominance, operation effects/liveness/root plans, rewrites, structural verification and instruction contracts. |

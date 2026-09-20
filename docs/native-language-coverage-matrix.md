@@ -860,3 +860,26 @@
 | Generic enum method through transparent alias chains | accepts | accepts | matches reference | matches reference |
 | Generic enum method through an imported nested alias | accepts | accepts | matches reference | matches reference |
 | Generic enum alias method skips absent receiver arguments | accepts | accepts | matches reference | matches reference |
+| Array ordering: integer order | accepts | accepts | matches reference | matches reference |
+| Array ordering: empty single | accepts | accepts | matches reference | matches reference |
+| Array ordering: integer limits | accepts | accepts | matches reference | matches reference |
+| Array ordering: unicode prefix nul | accepts | accepts | matches reference | output differs |
+| Array ordering: invalid bytes | accepts | accepts | matches reference | matches reference |
+| Array ordering: float specials | accepts | accepts | matches reference | output differs |
+| Array ordering: independent copy | accepts | accepts | matches reference | matches reference |
+| Array ordering: single evaluation | accepts | accepts | matches reference | matches reference |
+| Array ordering: optional | accepts | accepts | matches reference | matches reference |
+| Array ordering: aliases | accepts | accepts | matches reference | matches reference |
+| Array ordering: captured copy | accepts | accepts | matches reference | matches reference |
+| Array ordering: retained | accepts | accepts | matches reference | matches reference |
+| Array ordering: reject boolean | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array ordering: reject nullable element | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array ordering: reject record | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array ordering: reject enum | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array ordering: reject nested array | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array ordering: reject callable | rejects as reference | rejects as reference | not reached | diagnostic/output differs |
+| Array ordering: reject extra argument | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array ordering: reject descending extra | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array ordering: reject string operator | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array ordering: reject nullable receiver | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Array ordering: reject immutable output | rejects as reference | rejects as reference | not reached | rejects as reference |

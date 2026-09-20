@@ -30,6 +30,7 @@ subprocess.run([sys.executable, str(repository / "tools/native-constants-test.py
 subprocess.run([sys.executable, str(repository / "tools/native-array-copy-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-array-mutation-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-array-query-test.py"), str(binary)], check=True)
+subprocess.run([sys.executable, str(repository / "tools/native-array-sorting-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-array-join-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-string-trimming-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-symbol-test.py"), str(binary)], check=True)

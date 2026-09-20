@@ -21,7 +21,7 @@ runtime dependencies; independent groups may advance while CI runs.
 | Group | Remaining work | Existing foundation |
 | --- | --- | --- |
 | Builtin values and conversions | Remaining Symbol quote/operator boundaries; Unicode identifiers; safe numeric/index/range conversions and structured errors | Portable numbers and scalar String conversions, UTF-8 Strings and portable Symbol spelling, nullable values, enums and Result MIR |
-| Collection operations | Remaining String transforms; Array sorting; safe collection lookup and conversion | Checked indexes, retained receivers, shallow copies and String joining, Hash snapshots, Range materialization, sequential transforms |
+| Collection operations | Remaining String transforms; key-based Array sorting; safe collection lookup and conversion | Checked indexes, stable natural-order sorting, retained receivers, shallow copies and String joining, Hash snapshots, Range materialization, sequential transforms |
 | Value declarations and identity | Forward initializer dependencies, top-level lowercase bindings and untyped empty collection inference | Nested/reopened modules, lexical privacy, inferred imported constants, qualified aliases, typed runtime constants, ordered initializer functions and persistent global roots |
 | Nominal and union types | Newtypes/constructors; literal types and discriminated unions; remaining enum attributes and patterns | General union values and scalar type cases, nominal records, payload/raw enums, checked raw conversions and ordinary enum methods |
 | Object declarations | Classes, initialization, fields, privacy, inheritance and dispatch; interfaces and conformance | Nominal layouts, calls, receiver capabilities and managed values |
@@ -70,7 +70,7 @@ or uncovered basic contracts remain. Keep every required correctness, lifetime,
 target, recovery and ordinary self-hosting check; qualify performance at the
 coherent milestone described in [MIR consolidation](mir-consolidation.md).
 
-The current source adds raw enum conversions and ordinary/generic enum instance methods,
+The current source adds stable natural-order Array sorting, raw enum conversions and ordinary/generic enum instance methods,
 general union values and scalar type cases,
 Float/Boolean String conversion and Float output,
 nested/reopened modules and runtime constants with
@@ -79,6 +79,6 @@ String trimming, named function values, nullable/generic combinations, and
 colon-separated Hash key expressions. These extend String
 joining, Hash snapshot iteration and Range materialization, Array search,
 uniqueness, concatenation, insertion/removal, edges/copies/slicing, and the String
-query, sequence, slice and escape families. Its 858 registered cases include
+query, sequence, slice and escape families. Its 881 registered cases include
 explicit remaining differences; neither this count nor green regression CI
 closes #454.

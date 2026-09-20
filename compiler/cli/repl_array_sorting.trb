@@ -1,0 +1,85 @@
+import { ReplStore, repl_value } from repl_model
+import { compiler_string_bytes } from qbe_constants
+
+# Byte order agrees with code-point order for UTF-8 and preserves the reference
+# behavior for externally supplied invalid bytes, prefixes and embedded NULs.
+def repl_sort_string_before(first: String, second: String): Boolean
+	left := compiler_string_bytes(first)
+	right := compiler_string_bytes(second)
+	mut index := 0
+	while index < left.size() && index < right.size()
+		if left[index] != right[index]
+			return left[index] < right[index]
+		end
+		index += 1
+	end
+	return left.size() < right.size()
+end
+
+def repl_sort_before(store: ReplStore, first: Integer, second: Integer, descending: Boolean): Boolean
+	if store.types[first] == "String"
+		if descending
+			return repl_sort_string_before(store.texts[second], store.texts[first])
+		end
+		return repl_sort_string_before(store.texts[first], store.texts[second])
+	elsif store.types[first] == "Float"
+		left := store.floats[first]
+		right := store.floats[second]
+		if left != left
+			return false
+		elsif right != right
+			return true
+		end
+		if descending
+			return left > right
+		end
+		return left < right
+	end
+	if descending
+		return store.integers[first] > store.integers[second]
+	end
+	return store.integers[first] < store.integers[second]
+end
+
+def repl_sort_bound(start: Integer, width: Integer, limit: Integer): Integer
+	if width <= limit - start
+		return start + width
+	end
+	return limit
+end
+
+def repl_array_sort(mut store: ReplStore, receiver: Integer, descending: Boolean): Integer
+	mut source: Array<Integer> := []
+	mut destination: Array<Integer> := []
+	store.children[receiver].each do |value|
+		source.push(value)
+		destination.push(value)
+	end
+	mut width := 1
+	while width < source.size()
+		mut start := 0
+		while start < source.size()
+			middle := repl_sort_bound(start, width, source.size())
+			finish := repl_sort_bound(middle, width, source.size())
+			mut left := start
+			mut right := middle
+			mut cursor := start
+			while cursor < finish
+				if left < middle && (right >= finish || !repl_sort_before(store, source[right], source[left], descending))
+					destination[cursor] = source[left]
+					left += 1
+				else
+					destination[cursor] = source[right]
+					right += 1
+				end
+				cursor += 1
+			end
+			start = finish
+		end
+		previous := source
+		source = destination
+		destination = previous
+		width = repl_sort_bound(width, width, source.size())
+	end
+	return repl_value(store, store.types[receiver], 0, 0.0, "", source)
+end

@@ -1,0 +1,207 @@
+import { mir_array_query_advance, mir_array_query_binding } from array_queries
+import { CheckedValue, checked_mir_value, checked_value, scalar_mir_binary, scalar_mir_literal } from checked_values
+import { mir_checked_array_operation } from mir_arrays
+import { mir_binding_read } from mir_bindings
+import { mir_control_active, mir_control_allocate, mir_control_branch, mir_control_enter, mir_control_jump, mir_control_loop_begin, mir_control_loop_branch, mir_control_loop_end, mir_control_prepare } from mir_control
+import { mir_checked_string_operation } from mir_strings
+import { CheckedLocals, CompilerState } from state
+import { load_integer, store_integer } from storage
+import { array_element_type } from type_resolution
+
+def mir_sort_assign(mut locals: CheckedLocals, slot: Integer, value: CheckedValue)
+	store_integer(locals.mir_values, slot, checked_mir_value(value) + 1)
+end
+
+# Return min(start + width, limit) without evaluating an overflowing sum.
+def mir_sort_bound(mut state: CompilerState, mut locals: CheckedLocals, start: CheckedValue, width: CheckedValue, limit: CheckedValue, origin: Integer): CheckedValue
+	outer := locals.count[0]
+	line := load_integer(state.token_lines, origin)
+	first := mir_array_query_binding(state, locals, "$sort.bound.start", start, origin)
+	step := mir_array_query_binding(state, locals, "$sort.bound.width", width, origin)
+	result := mir_array_query_binding(state, locals, "$sort.bound.result", limit, origin)
+	remaining := scalar_mir_binary(state, locals, "-", limit, start, "Integer", origin)
+	fits := scalar_mir_binary(state, locals, "<=", width, remaining, "Boolean", origin)
+	join := mir_control_branch(state, locals, fits, line)
+	left := mir_binding_read(state, locals, first, origin)
+	right := mir_binding_read(state, locals, step, origin)
+	mir_sort_assign(locals, result, scalar_mir_binary(state, locals, "+", left, right, "Integer", origin))
+	mir_control_jump(state, locals, join, locals.count[0])
+	mir_control_enter(state, locals, join, line)
+	value := mir_binding_read(state, locals, result, origin)
+	locals.count[0] = outer
+	return value
+end
+
+# The String ordering operation is internal; authored String < stays invalid.
+# Float NaNs are last in either direction, and equal values never precede.
+def mir_sort_before(mut state: CompilerState, mut locals: CheckedLocals, first: CheckedValue, second: CheckedValue, descending: Boolean, origin: Integer): CheckedValue
+	if first.type_name == "String"
+		if descending
+			return mir_checked_string_operation(state, locals, 14, checked_mir_value(second), checked_mir_value(first), 2, "Boolean", origin)
+		end
+		return mir_checked_string_operation(state, locals, 14, checked_mir_value(first), checked_mir_value(second), 2, "Boolean", origin)
+	end
+	mut comparison := "<"
+	if descending
+		comparison = ">"
+	end
+	if first.type_name == "Integer"
+		return scalar_mir_binary(state, locals, comparison, first, second, "Boolean", origin)
+	end
+	outer := locals.count[0]
+	line := load_integer(state.token_lines, origin)
+	left := mir_array_query_binding(state, locals, "$sort.compare.left", first, origin)
+	right := mir_array_query_binding(state, locals, "$sort.compare.right", second, origin)
+	initial := scalar_mir_literal(state, locals, "Boolean", origin, "false")
+	result := mir_array_query_binding(state, locals, "$sort.compare.result", initial, origin)
+	ordered := scalar_mir_binary(state, locals, "==", first, first, "Boolean", origin)
+	join := mir_control_branch(state, locals, ordered, line)
+	right_value := mir_binding_read(state, locals, right, origin)
+	right_nan := scalar_mir_binary(state, locals, "!=", right_value, right_value, "Boolean", origin)
+	alternate := mir_control_branch(state, locals, right_nan, line)
+	mir_sort_assign(locals, result, scalar_mir_literal(state, locals, "Boolean", origin, "true"))
+	mir_control_jump(state, locals, join, locals.count[0])
+	mir_control_enter(state, locals, alternate, line)
+	left_value := mir_binding_read(state, locals, left, origin)
+	second_value := mir_binding_read(state, locals, right, origin)
+	mir_sort_assign(locals, result, scalar_mir_binary(state, locals, comparison, left_value, second_value, "Boolean", origin))
+	mir_control_jump(state, locals, join, locals.count[0])
+	mir_control_enter(state, locals, join, line)
+	value := mir_binding_read(state, locals, result, origin)
+	locals.count[0] = outer
+	return value
+end
+
+def mir_sort_item(mut state: CompilerState, mut locals: CheckedLocals, owner: Integer, cursor: Integer, element: String, origin: Integer): CheckedValue
+	array := mir_binding_read(state, locals, owner, origin)
+	index := mir_binding_read(state, locals, cursor, origin)
+	return mir_checked_array_operation(state, locals, 22, checked_mir_value(array), checked_mir_value(index), 0, element, origin)
+end
+
+# Select the left run on ties, without reading either exhausted run.
+def mir_sort_take_left(mut state: CompilerState, mut locals: CheckedLocals, owner: Integer, left: Integer, right: Integer, middle: Integer, finish: Integer, element: String, descending: Boolean, origin: Integer): CheckedValue
+	outer := locals.count[0]
+	line := load_integer(state.token_lines, origin)
+	initial := scalar_mir_literal(state, locals, "Boolean", origin, "false")
+	result := mir_array_query_binding(state, locals, "$sort.take.left", initial, origin)
+	left_index := mir_binding_read(state, locals, left, origin)
+	mid := mir_binding_read(state, locals, middle, origin)
+	left_present := scalar_mir_binary(state, locals, "<", left_index, mid, "Boolean", origin)
+	join := mir_control_branch(state, locals, left_present, line)
+	mir_sort_assign(locals, result, scalar_mir_literal(state, locals, "Boolean", origin, "true"))
+	right_index := mir_binding_read(state, locals, right, origin)
+	end_index := mir_binding_read(state, locals, finish, origin)
+	right_present := scalar_mir_binary(state, locals, "<", right_index, end_index, "Boolean", origin)
+	no_right := mir_control_branch(state, locals, right_present, line)
+	first := mir_sort_item(state, locals, owner, right, element, origin)
+	second := mir_sort_item(state, locals, owner, left, element, origin)
+	before := mir_sort_before(state, locals, first, second, descending, origin)
+	absent := scalar_mir_literal(state, locals, "Boolean", origin, "false")
+	mir_sort_assign(locals, result, scalar_mir_binary(state, locals, "==", before, absent, "Boolean", origin))
+	mir_control_jump(state, locals, no_right, locals.count[0])
+	mir_control_enter(state, locals, no_right, line)
+	mir_control_jump(state, locals, join, locals.count[0])
+	mir_control_enter(state, locals, join, line)
+	value := mir_binding_read(state, locals, result, origin)
+	locals.count[0] = outer
+	return value
+end
+
+def mir_sort_write(mut state: CompilerState, mut locals: CheckedLocals, owner: Integer, destination: Integer, selected: Integer, cursor: Integer, element: String, origin: Integer)
+	item := mir_sort_item(state, locals, owner, selected, element, origin)
+	target := mir_binding_read(state, locals, destination, origin)
+	index := mir_binding_read(state, locals, cursor, origin)
+	mir_checked_array_operation(state, locals, 23, checked_mir_value(target), checked_mir_value(index), checked_mir_value(item), "Void", origin)
+	mir_array_query_advance(state, locals, selected, origin)
+end
+
+def mir_sort_merge(mut state: CompilerState, mut locals: CheckedLocals, owner: Integer, destination: Integer, start: Integer, middle: Integer, finish: Integer, element: String, descending: Boolean, origin: Integer)
+	outer := locals.count[0]
+	line := load_integer(state.token_lines, origin)
+	first := mir_binding_read(state, locals, start, origin)
+	left := mir_array_query_binding(state, locals, "$sort.left", first, origin)
+	second := mir_binding_read(state, locals, middle, origin)
+	right := mir_array_query_binding(state, locals, "$sort.right", second, origin)
+	cursor := mir_array_query_binding(state, locals, "$sort.cursor", first, origin)
+	exit := mir_control_loop_begin(state, locals, origin, line)
+	index := mir_binding_read(state, locals, cursor, origin)
+	limit := mir_binding_read(state, locals, finish, origin)
+	condition := scalar_mir_binary(state, locals, "<", index, limit, "Boolean", origin)
+	mir_control_loop_branch(state, locals, condition, exit, line)
+	take_left := mir_sort_take_left(state, locals, owner, left, right, middle, finish, element, descending, origin)
+	join := mir_control_allocate(locals)
+	alternate := mir_control_branch(state, locals, take_left, line)
+	mir_sort_write(state, locals, owner, destination, left, cursor, element, origin)
+	mir_control_jump(state, locals, join, locals.count[0])
+	mir_control_enter(state, locals, alternate, line)
+	mir_sort_write(state, locals, owner, destination, right, cursor, element, origin)
+	mir_control_jump(state, locals, join, locals.count[0])
+	mir_control_enter(state, locals, join, line)
+	mir_array_query_advance(state, locals, cursor, origin)
+	mir_control_loop_end(state, locals, line)
+	locals.count[0] = outer
+end
+
+def mir_sort_runs(mut state: CompilerState, mut locals: CheckedLocals, owner: Integer, destination: Integer, size: Integer, width: Integer, element: String, descending: Boolean, origin: Integer)
+	outer := locals.count[0]
+	line := load_integer(state.token_lines, origin)
+	zero := scalar_mir_literal(state, locals, "Integer", origin, "0")
+	start := mir_array_query_binding(state, locals, "$sort.start", zero, origin)
+	bindings := locals.count[0]
+	exit := mir_control_loop_begin(state, locals, origin, line)
+	first := mir_binding_read(state, locals, start, origin)
+	limit := mir_binding_read(state, locals, size, origin)
+	condition := scalar_mir_binary(state, locals, "<", first, limit, "Boolean", origin)
+	mir_control_loop_branch(state, locals, condition, exit, line)
+	current := mir_binding_read(state, locals, start, origin)
+	step := mir_binding_read(state, locals, width, origin)
+	length := mir_binding_read(state, locals, size, origin)
+	bound := mir_sort_bound(state, locals, current, step, length, origin)
+	middle := mir_array_query_binding(state, locals, "$sort.middle", bound, origin)
+	next_step := mir_binding_read(state, locals, width, origin)
+	next_limit := mir_binding_read(state, locals, size, origin)
+	end_value := mir_sort_bound(state, locals, bound, next_step, next_limit, origin)
+	finish := mir_array_query_binding(state, locals, "$sort.finish", end_value, origin)
+	mir_sort_merge(state, locals, owner, destination, start, middle, finish, element, descending, origin)
+	mir_sort_assign(locals, start, mir_binding_read(state, locals, finish, origin))
+	locals.count[0] = bindings
+	mir_control_loop_end(state, locals, line)
+	locals.count[0] = outer
+end
+
+# Stable bottom-up merge sort. Both buffers are ordinary rooted Array values;
+# all loops, bounds, comparisons and stores remain visible to verified MIR.
+def mir_array_sort(mut state: CompilerState, mut locals: CheckedLocals, receiver: CheckedValue, descending: Boolean, origin: Integer): CheckedValue
+	mir_control_prepare(state, locals)
+	if !mir_control_active(locals)
+		return checked_value(receiver.type_name, 0, origin, 1)
+	end
+	outer := locals.count[0]
+	line := load_integer(state.token_lines, origin)
+	copy := mir_checked_array_operation(state, locals, 47, checked_mir_value(receiver), - 1, 0, receiver.type_name, origin)
+	owner := mir_array_query_binding(state, locals, "$sort.source", copy, origin)
+	scratch := mir_checked_array_operation(state, locals, 47, checked_mir_value(copy), - 1, 0, receiver.type_name, origin)
+	destination := mir_array_query_binding(state, locals, "$sort.destination", scratch, origin)
+	length := mir_checked_array_operation(state, locals, 20, checked_mir_value(copy), - 1, 0, "Integer", origin)
+	size := mir_array_query_binding(state, locals, "$sort.size", length, origin)
+	one := scalar_mir_literal(state, locals, "Integer", origin, "1")
+	width := mir_array_query_binding(state, locals, "$sort.width", one, origin)
+	exit := mir_control_loop_begin(state, locals, origin, line)
+	step := mir_binding_read(state, locals, width, origin)
+	limit := mir_binding_read(state, locals, size, origin)
+	condition := scalar_mir_binary(state, locals, "<", step, limit, "Boolean", origin)
+	mir_control_loop_branch(state, locals, condition, exit, line)
+	mir_sort_runs(state, locals, owner, destination, size, width, array_element_type(receiver.type_name), descending, origin)
+	previous := mir_binding_read(state, locals, owner, origin)
+	current := mir_binding_read(state, locals, destination, origin)
+	mir_sort_assign(locals, owner, current)
+	mir_sort_assign(locals, destination, previous)
+	current_width := mir_binding_read(state, locals, width, origin)
+	current_size := mir_binding_read(state, locals, size, origin)
+	next_width := mir_sort_bound(state, locals, current_width, current_width, current_size, origin)
+	mir_sort_assign(locals, width, next_width)
+	mir_control_loop_end(state, locals, line)
+	result := mir_binding_read(state, locals, owner, origin)
+	locals.count[0] = outer
+	return checked_value(receiver.type_name, result.category, origin, 1)
+end
