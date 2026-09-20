@@ -1,5 +1,4 @@
 import { decode_escape } from string_escapes
-import { advance } from syntax_tokens
 import { CompilerState, add_module, diagnostic, has_diagnostic } from state
 import { load_integer, load_string, store_integer, store_string } from storage
 
@@ -83,7 +82,7 @@ def scan_identifier(
 					source[position[0]],
 					"0123456789fretnmoidupglsavchbyxkwqzjABCDEFGHIJKLMNOPQRSTUVWXYZ_",
 				)
-				advance(position)
+				position[0] += 1
 			else
 				scanning = false
 			end
@@ -92,7 +91,7 @@ def scan_identifier(
 	if position[0] < source.size()
 		if !character_in(source[start], "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
 			if source[position[0]] == "?" || source[position[0]] == "!"
-				advance(position)
+				position[0] += 1
 			end
 		end
 	end
@@ -113,7 +112,7 @@ def scan_number(
 			scanning = false
 		else
 			if number_character(source[position[0]])
-				advance(position)
+				position[0] += 1
 			else
 				scanning = false
 			end
@@ -122,14 +121,14 @@ def scan_number(
 	if position[0] + 1 < source.size()
 		if source[position[0]] == "."
 			if character_in(source[position[0] + 1], "0123456789")
-				advance(position)
+				position[0] += 1
 				scanning = true
 				while scanning
 					if position[0] >= source.size()
 						scanning = false
 					else
 						if number_character(source[position[0]])
-							advance(position)
+							position[0] += 1
 						else
 							scanning = false
 						end
@@ -217,7 +216,7 @@ def scan_string(
 		interpolation: Boolean,
 	): Integer
 	start_line := line
-	advance(position)
+	position[0] += 1
 	mut interpolated := false
 	mut text := ""
 	mut chunk_start := position[0]
@@ -232,7 +231,7 @@ def scan_string(
 				text += compiler_source_slice(source, chunk_start, position[0])
 				closed = true
 				scanning = false
-				advance(position)
+				position[0] += 1
 			else
 				if current == "\n"
 					diagnostic(state, "TRBN4001", line, "unterminated String literal")
@@ -240,7 +239,7 @@ def scan_string(
 				else
 					if current == "\\"
 						text += compiler_source_slice(source, chunk_start, position[0])
-						advance(position)
+						position[0] += 1
 						if position[0] >= source.size()
 							diagnostic(state, "TRBN4001", line, "unterminated String escape")
 							scanning = false
@@ -248,7 +247,7 @@ def scan_string(
 							escaped_hash := source[position[0]] == "#"
 							if escaped_hash
 								text += "#"
-								advance(position)
+								position[0] += 1
 							else
 								text += decode_escape(state, source, position, line)
 							end
@@ -339,13 +338,13 @@ def scan_string(
 										end
 									end
 								else
-									advance(position)
+									position[0] += 1
 								end
 							else
-								advance(position)
+								position[0] += 1
 							end
 						else
-							advance(position)
+							position[0] += 1
 						end
 					end
 				end
@@ -452,7 +451,7 @@ def skip_comment(source: String, mut position: Array<Integer>)
 			if source[position[0]] == "\n"
 				scanning = false
 			else
-				advance(position)
+				position[0] += 1
 			end
 		end
 	end
@@ -471,20 +470,20 @@ def lex_source(mut state: CompilerState, source: String, terminal_kind: Integer)
 	while position[0] < source.size()
 		character = source[position[0]]
 		if character == " "
-			advance(position)
+			position[0] += 1
 		else
 			if character == "\t"
-				advance(position)
+				position[0] += 1
 			else
 				if character == "\r"
-					advance(position)
+					position[0] += 1
 				else
 					if character == "\n" || character == ";"
 						push_token(state, 4, character, line)
 						if character == "\n"
 							line += 1
 						end
-						advance(position)
+						position[0] += 1
 					else
 						if character == "#"
 							skip_comment(source, position)

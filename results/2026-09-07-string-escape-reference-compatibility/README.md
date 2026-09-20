@@ -1,6 +1,53 @@
 # Current reference compatibility
 
 The selected development reference is TypeRB `0.4.9-dev` at
+`59cd287ffcc6bc2d8dcf7fadd6a5bf2a360e566f`, incorporating
+[PR #780](https://github.com/type-rb/type-rb/pull/780) and
+[PR #781](https://github.com/type-rb/type-rb/pull/781).
+Nullable literal unions retain nil checks and explicit Integer-to-Float
+conversions. Common record fields of unions perform the same numeric widening
+in the REPL as in compiled execution, including singleton Integer fields.
+
+Native adopts these corrections with explicit literal MIR and reviewed shared
+cases. Exact AST, ordinary check/build/execution/REPL, recovery, self-hosting,
+target and lifetime checks remain required. No release or seed is published,
+and no full-language or performance qualification is claimed. Previous accepted
+identities and observations follow.
+
+# Previous union-alias reference compatibility
+
+The selected development reference is TypeRB `0.4.9-dev` at
+`24dd15db447066cae8b8eb73a40cc063a2842f59`, incorporating
+[PR #779](https://github.com/type-rb/type-rb/pull/779).
+Nested and generic union aliases normalize before common-member and discriminant
+checking. Scalar subsumption retains matching Go storage. Literal Integer
+indexes, literal String receivers and standard collection parameters preserve
+ordinary character semantics and expression-aware constraints.
+
+Native adopts these corrections alongside verified literal constraints and
+common union fields. Shared check/build/execution/REPL observations, exact AST
+coverage, ordinary self-hosting, recovery and lifetime checks remain required.
+This update publishes neither a release nor a seed and makes no full-language
+or performance claim. Previous accepted identities and observations follow.
+
+# Previous literal-boundary reference compatibility
+
+The selected development reference is TypeRB `0.4.9-dev` at
+`ece27df01351e1499d23bb07bf39d140f81cc8d8`, incorporating
+[PR #778](https://github.com/type-rb/type-rb/pull/778).
+Literal-union parameters retain portable type syntax. Reassignment to singleton
+or literal-union bindings and collection entries uses the same expression-aware
+rules as initial declarations; arbitrary scalars still cannot narrow implicitly.
+
+Native retains literal constraints in verified MIR and widens them explicitly.
+Shared check/build/execution/REPL observations, exact AST coverage, recovery,
+ordinary self-hosting, target and lifetime checks remain required. This update
+does not publish a release or seed, complete basic-language coverage or qualify
+performance. Previous accepted identities and observations remain below.
+
+# Previous nominal reference compatibility
+
+The selected development reference is TypeRB `0.4.9-dev` at
 `3476aabdc385fd2b422364f69bbc1aa16e0bc231`, incorporating
 [PR #777](https://github.com/type-rb/type-rb/pull/777) and
 [PR #776](https://github.com/type-rb/type-rb/pull/776).

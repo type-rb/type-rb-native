@@ -1,3 +1,7 @@
+import { check_literal_case, literal_branch_types, literal_case_type, literal_scalar_type } from literal_cases
+import { check_union_member, narrow_union_discriminant } from union_members
+import { mir_literal_context } from literal_mir
+import { mir_literal_scalar } from nullable_mir
 import { find_newtype_in_module, find_newtype_type, newtype_equality_type, newtype_type } from newtype_types
 import { find_visible_newtype } from declaration_lookup
 import { newtype_method_function } from newtype_methods
@@ -47,7 +51,7 @@ import { binary_result_type, check_expected, numeric_type, type_diagnostic } fro
 import { CheckedValue, checked_bound_value, checked_mir_value, checked_value, checked_view, scalar_mir_binary, scalar_mir_disable, scalar_mir_literal, scalar_mir_unary } from checked_values
 import { checked_hash_binding_target, checked_hash_method, checked_hash_plan, checked_hash_publish } from hash_checked
 import { mir_hash_operation } from hash_mir
-import { hash_key_type, hash_type, hash_value_type } from hash_types
+import { hash_key_type, hash_scalar_key, hash_type, hash_value_type } from hash_types
 import { checked_iteration_parameters, checked_iteration_require, checked_iteration_shape, checked_range_require, checked_slice_zero_literal, checked_transform_require, checked_transform_shape, iteration_element_type } from iteration_checked
 import { MirIteration, MirRangeConstruction, mir_iteration_valid } from iteration_mir
 import { float_literal_in_range, integer_literal_in_range, number_is_float } from literals
@@ -86,14 +90,17 @@ def checked_hash_literal(mut state: CompilerState, mut position: Array<Integer>,
 	advance(position)
 	skip_newlines(state, position)
 	while !token_is(state, position[0], "}")
-		key := check_expression(state, position, locals, 1, key_type)
+		key := check_expression(state, position, locals, 1, "")
 		if key.type_name == "Never"
 			diverged = true
 			scalar_mir_disable(locals)
-		elsif key.type_name != "Integer" && key.type_name != "String"
+		elsif !hash_scalar_key(key.type_name)
 			return type_diagnostic(state, line, "Hash key must be String or Integer")
 		end
 		if key.type_name != "Never"
+			if key_type != "" && key_type != key.type_name
+				return type_diagnostic(state, line, "Hash key type must match exactly")
+			end
 			key_type = key.type_name
 		end
 		keys.push(checked_mir_value(key))
@@ -139,15 +146,18 @@ def checked_hash_index(mut state: CompilerState, mut position: Array<Integer>, m
 	origin := position[0]
 	line := load_integer(state.token_lines, origin)
 	advance(position)
-	key := check_expression(state, position, locals, 1, hash_key_type(receiver.type_name))
+	key := check_expression(state, position, locals, 1, "")
 	if key.type_name == "Never"
 		finish := position[0]
 		expect(state, position, "]")
 		checked_hash_publish(state, mir_hash_operation(2, origin, finish, receiver.origin, receiver.type_name, receiver.mutable != 0, 0))
 		return key
 	end
-	if key.type_name != "Integer" && key.type_name != "String"
+	if !hash_scalar_key(key.type_name)
 		return type_diagnostic(state, line, "Hash key must be String or Integer")
+	end
+	if hash_key_type(receiver.type_name) != "" && hash_key_type(receiver.type_name) != key.type_name
+		return type_diagnostic(state, line, "Hash key type must match exactly")
 	end
 	finish := position[0]
 	expect(state, position, "]")
@@ -410,7 +420,7 @@ def check_primary(
 	end
 	if token_is(state, position[0], "-")
 		advance(position)
-		value := check_postfix(
+		mut value := check_postfix(
 			state,
 			position,
 			locals,
@@ -419,6 +429,7 @@ def check_primary(
 		if value.type_name == "Never"
 			return value
 		end
+		value = mir_literal_scalar(state, locals, value, origin)
 		if !numeric_type(value.type_name)
 			return type_diagnostic(state, line, "unary - requires Integer or Float")
 		end
@@ -426,7 +437,7 @@ def check_primary(
 	end
 	if token_is(state, position[0], "+")
 		advance(position)
-		value := check_postfix(
+		mut value := check_postfix(
 			state,
 			position,
 			locals,
@@ -435,6 +446,7 @@ def check_primary(
 		if value.type_name == "Never"
 			return value
 		end
+		value = mir_literal_scalar(state, locals, value, origin)
 		if !numeric_type(value.type_name)
 			return type_diagnostic(state, line, "unary + requires Integer or Float")
 		end
@@ -619,7 +631,10 @@ def check_call(mut state: CompilerState, mut position: Array<Integer>, mut local
 			elsif function >= 0
 				expected = load_string(state.parameter_types, parameter_start + slot)
 			end
-			argument := check_expression(state, position, locals, 1, expected)
+			mut argument := check_expression(state, position, locals, 1, expected)
+			if callee_name == "puts" && encoded == 0
+				argument = mir_literal_scalar(state, locals, argument, origin)
+			end
 			if argument.type_name == "Never"
 				diverged = true
 				scalar_mir_disable(locals)
@@ -827,7 +842,7 @@ def check_never_postfix(mut state: CompilerState, mut position: Array<Integer>, 
 end
 
 def check_member(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue, member: String): CheckedValue
-	mut value := checked_view(receiver, receiver.type_name, receiver.category)
+	mut value := mir_literal_scalar(state, locals, checked_view(receiver, receiver.type_name, receiver.category), position[0])
 	if find_newtype_type(state, value.type_name) >= 0
 		return check_newtype_member(state, position, locals, value, member)
 	end
@@ -892,6 +907,9 @@ def check_member(mut state: CompilerState, mut position: Array<Integer>, mut loc
 			end
 		end
 	else
+		if union_parts(value.type_name).size() > 0
+			return check_union_member(state, locals, value, member, position[0] - 1)
+		end
 		record_index := find_record_type(state, value.type_name)
 		if record_index < 0
 			value = type_diagnostic(
@@ -1099,7 +1117,7 @@ def check_expression_value(
 			advance(position)
 			skip_newlines(state, position)
 			end_origin := position[0]
-			right := check_expression(state, position, locals, precedence + 1, "")
+			mut right := check_expression(state, position, locals, precedence + 1, "")
 			if precedence <= 2
 				nullable_finish(locals, flow_parent, flow_first, locals.count[0])
 			end
@@ -1109,6 +1127,8 @@ def check_expression_value(
 				next
 			end
 			if precedence == 3
+				value = mir_literal_scalar(state, locals, value, operator_origin)
+				right = mir_literal_scalar(state, locals, right, operator_origin)
 				if value.type_name != "Integer" || right.type_name != "Integer"
 					return type_diagnostic(state, line, "Range endpoints must be Integer")
 				end
@@ -1146,6 +1166,8 @@ def check_expression_value(
 					owner = find_newtype_type(state, representation)
 				end
 			end
+			value = mir_literal_scalar(state, locals, value, operator_origin)
+			binary_right = mir_literal_scalar(state, locals, binary_right, operator_origin)
 			result_type := binary_result_type(state, operator, value.type_name, binary_right.type_name, line, operator_origin)
 			if precedence <= 2
 				value = mir_logical_join(state, locals, value, binary_right, short, operator_origin)
@@ -1183,6 +1205,7 @@ def check_expression(
 	expression_origin := position[0]
 	line := load_integer(state.token_lines, expression_origin)
 	mut value := check_expression_value(state, position, locals, minimum_precedence, expected)
+	value = mir_literal_context(state, locals, value, expected, expression_origin, position[0])
 	check_expected(state, value.type_name, expected, line)
 	value = mir_nullable_coerce(state, locals, value, expected, expression_origin)
 	mut displayed_mutable := 0
@@ -1672,18 +1695,29 @@ def check_control_value(mut state: CompilerState, mut position: Array<Integer>, 
 	mut selector := checked_value(predicate.type_name, predicate.category, predicate.origin, predicate.mutable)
 	mut enum_owner :=- 1
 	mut union_selector := false
+	mut literal_selector := false
 	if control.kind == 2
 		position[0] = control.selector
 		selector = check_expression(state, position, locals, 1, "")
 		enum_owner = find_enum_type(state, selector.type_name)
+		if literal_case_type(selector.type_name) || selector.type_name == "Integer" || selector.type_name == "String"
+			literal_selector = check_literal_case(state, control, selector.type_name)
+			if has_diagnostic(state)
+				return checked_value("Invalid", 0, origin, 0)
+			end
+			selector = mir_literal_scalar(state, locals, selector, control.selector)
+		end
 		union_selector = union_parts(selector.type_name).size() > 0
+		if literal_selector
+			union_selector = false
+		end
 		if union_selector && !check_union_patterns(state, control, selector.type_name)
 			return checked_value("Invalid", 0, origin, 0)
 		end
 		if enum_owner >= 0 && !check_enum_patterns(state, control, enum_owner)
 			return checked_value("Invalid", 0, origin, 0)
 		end
-		if enum_owner < 0 && !union_selector && selector.type_name != "Never" && selector.type_name != "Integer" && selector.type_name != "String"
+		if enum_owner < 0 && !union_selector && !literal_selector && selector.type_name != "Never" && selector.type_name != "Integer" && selector.type_name != "String"
 			return type_diagnostic(state, line, "case selector requires Integer, String, enum or union")
 		end
 	elsif control.kind == 3
@@ -1710,6 +1744,21 @@ def check_control_value(mut state: CompilerState, mut position: Array<Integer>, 
 				if union_selector
 					pattern := state.checked[0].union_patterns[sparse_integer_at(state.checked[0].union_pattern_origins, branch.condition) - 1]
 					condition = mir_union_operation(state, locals, 53, selector, pattern.type_name, "Boolean", branch.condition)
+				elsif literal_selector && union_parts(selector.type_name).size() > 0
+					mut first := true
+					literal_branch_types(state, branch.condition, branch.condition_finish).each do |literal|
+						mut short :=- 1
+						if !first
+							short = mir_logical_begin(state, locals, condition, 1, branch.condition)
+						end
+						test := mir_union_operation(state, locals, 53, selector, literal, "Boolean", branch.condition)
+						if first
+							condition = test
+						else
+							condition = mir_logical_join(state, locals, condition, test, short, branch.condition)
+						end
+						first = false
+					end
 				elsif enum_owner >= 0
 					pattern := state.checked[0].enum_patterns[sparse_integer_at(state.checked[0].enum_pattern_origins, branch.condition) - 1]
 					condition = mir_enum_operation(state, locals, 38, selector, - 1, pattern.variant, "Boolean", branch.condition)
@@ -1727,7 +1776,7 @@ def check_control_value(mut state: CompilerState, mut position: Array<Integer>, 
 			alternate_flow = locals.nullable_state[0]
 			false_facts = condition.falsity
 			nullable_apply(locals, condition.truth)
-			if (enum_owner >= 0 || union_selector) && branch_index == control.branches.size() - 1
+			if (enum_owner >= 0 || union_selector || literal_selector) && branch_index == control.branches.size() - 1
 				otherwise = true
 			else
 				alternate = mir_control_branch(state, locals, condition, line)
@@ -1740,6 +1789,9 @@ def check_control_value(mut state: CompilerState, mut position: Array<Integer>, 
 		end
 		if enum_owner >= 0 && branch.condition >= 0
 			check_enum_bindings(state, locals, selector, branch.condition)
+		end
+		if control.kind == 2 && literal_selector
+			narrow_union_discriminant(state, locals, control, branch_index)
 		end
 		position[0] = branch.body
 		mut value := checked_value("Void", 0, 9007199254740991, 0)
@@ -2343,6 +2395,7 @@ def check_transform(mut state: CompilerState, mut position: Array<Integer>, mut 
 		end
 		store_string(locals.types, outer, output)
 	elsif syntax.kind >= 9
+		yielded = mir_literal_scalar(state, locals, yielded, origin)
 		key_type = yielded.type_name
 		if key_type != "Integer" && key_type != "Float" && key_type != "String"
 			return type_diagnostic(state, line, "sorting key requires portable natural order")
@@ -2413,7 +2466,7 @@ def check_primitive_method(mut state: CompilerState, mut position: Array<Integer
 			argument_type = array_element_type(receiver.type_name)
 		end
 		if kind >= 16
-			if argument_type != "Integer" && argument_type != "Float" && argument_type != "String"
+			if argument_type != "Integer" && argument_type != "Float" && argument_type != "String" && literal_scalar_type(argument_type) == ""
 				return type_diagnostic(state, line, method + " requires portable ordering for its Array element type")
 			end
 		elsif kind == 15

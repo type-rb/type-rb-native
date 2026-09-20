@@ -49,7 +49,7 @@
 | Parameters following nested generic annotations | accepts | accepts | matches reference | matches reference |
 | Generic function application | accepts | accepts | matches reference | matches reference |
 | Generic record | accepts | accepts | matches reference | matches reference |
-| Literal-field union narrowing | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Literal-field union narrowing | accepts | accepts | matches reference | matches reference |
 | Typed function value and lexical capture | accepts | accepts | matches reference | matches reference |
 | Function value mutates captured binding | accepts | accepts | matches reference | matches reference |
 | Array alias and parameter rebinding | accepts | accepts | matches reference | matches reference |
@@ -1114,3 +1114,88 @@
 | Invalid closed enum array | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Nominal values remain invalid Hash keys | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Union output remains a builtin gap | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Literal types: scalar | accepts | accepts | matches reference | matches reference |
+| Literal types: negative | accepts | accepts | matches reference | matches reference |
+| Literal types: zero | accepts | accepts | matches reference | matches reference |
+| Literal types: grouping | accepts | accepts | matches reference | matches reference |
+| Literal types: spelling | accepts | accepts | matches reference | matches reference |
+| Literal types: operators | accepts | accepts | matches reference | matches reference |
+| Literal types: widening | accepts | accepts | matches reference | matches reference |
+| Literal types: subsumption | accepts | accepts | matches reference | matches reference |
+| Literal types: union injection | accepts | accepts | matches reference | output differs |
+| Literal types: union widen | accepts | accepts | matches reference | matches reference |
+| Literal types: union case | accepts | accepts | matches reference | matches reference |
+| Literal types: case alternatives | accepts | accepts | matches reference | matches reference |
+| Literal types: array context | accepts | accepts | matches reference | matches reference |
+| Literal types: hash context | accepts | accepts | matches reference | output differs |
+| Literal types: alias | accepts | accepts | matches reference | matches reference |
+| Literal types: record | accepts | accepts | matches reference | matches reference |
+| Literal types: return | accepts | accepts | matches reference | matches reference |
+| Literal types: default | accepts | accepts | matches reference | matches reference |
+| Literal types: callable | accepts | accepts | matches reference | matches reference |
+| Literal types: generic | accepts | accepts | matches reference | matches reference |
+| Literal types: newtype | accepts | accepts | matches reference | matches reference |
+| Literal types: unicode | accepts | accepts | matches reference | output differs |
+| Literal types: invalid wrong integer | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal types: invalid wrong string | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal types: invalid inferred scalar | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal types: invalid computed integer | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal types: invalid computed string | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal types: invalid unary plus | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal types: invalid nullable modifier | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal types: invalid float type | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal types: invalid boolean type | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal types: invalid wrong return | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal types: invalid missing union case | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal types: invalid outside union case | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal types: invalid duplicate case | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal types: common field | accepts | accepts | matches reference | matches reference |
+| Literal types: discriminated case | accepts | accepts | matches reference | matches reference |
+| Literal types: scalar case | accepts | accepts | matches reference | matches reference |
+| Literal types: string union operators | accepts | accepts | matches reference | matches reference |
+| Literal types: integer union operators | accepts | accepts | matches reference | matches reference |
+| Literal types: escaped delimiters | accepts | accepts | matches reference | matches reference |
+| Literal types: escaped spelling | accepts | accepts | matches reference | matches reference |
+| Literal types: generic record | accepts | accepts | matches reference | matches reference |
+| Literal types: enum payload | accepts | accepts | matches reference | matches reference |
+| Literal types: closed newtype | accepts | accepts | matches reference | matches reference |
+| Literal types: newtype equality | accepts | accepts | matches reference | matches reference |
+| Literal types: string output | accepts | accepts | matches reference | matches reference |
+| Literal types: collection assignment | accepts | accepts | matches reference | output differs |
+| Literal types: union else | accepts | accepts | matches reference | matches reference |
+| Literal types: union parenthesized | accepts | accepts | matches reference | matches reference |
+| Literal types: union overlap | accepts | accepts | matches reference | matches reference |
+| Literal types: union import | accepts | accepts | matches reference | matches reference |
+| Literal types: common numeric field | accepts | accepts | matches reference | output differs |
+| Literal types: invalid union missing field | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal types: invalid union replaced narrowing | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal types: invalid overlap wrong field | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal types: invalid mixed selector | accepts | accepts | matches reference | output differs |
+| Literal types: invalid wrong array value | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal types: invalid wrong hash value | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal types: invalid wrong reassignment | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal types: invalid wrong generic | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal types: invalid computed generic | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal types: invalid too large type | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal types: invalid interpolated string | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal types: invalid duplicate escaped case | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal types: boundary literal hash key | accepts | accepts | matches reference | output differs |
+| Literal types: boundary literal index | accepts | accepts | matches reference | matches reference |
+| Literal types: boundary literal natural sort | accepts | accepts | matches reference | matches reference |
+| Literal types: boundary literal sort key | accepts | accepts | matches reference | matches reference |
+| Literal types: boundary literal search | accepts | accepts | matches reference | matches reference |
+| Literal types: boundary literal join | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal types: boundary literal call argument | accepts | accepts | matches reference | matches reference |
+| Literal types: boundary alias optional | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal types: mixed zero tags | accepts | accepts | matches reference | matches reference |
+| Literal types: string sort | accepts | accepts | matches reference | matches reference |
+| Literal types: key snapshot | accepts | accepts | matches reference | matches reference |
+| Literal types: union hash key | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Literal types: invalid hash bare index | rejects as reference | rejects as reference | not reached | diagnostic/output differs |
+| Literal types: invalid hash bare construction | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal types: optional union literal | accepts | accepts | matches reference | matches reference |
+| Literal types: optional singleton binding | accepts | accepts | matches reference | matches reference |
+| Literal types: optional literal array | accepts | accepts | matches reference | matches reference |
+| Literal types: union float widen | accepts | accepts | matches reference | matches reference |
+| Literal types: nullable union float widen | accepts | accepts | matches reference | matches reference |
+| Literal types: invalid nullable literal arithmetic | rejects as reference | rejects as reference | not reached | rejects as reference |

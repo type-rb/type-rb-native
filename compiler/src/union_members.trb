@@ -1,0 +1,143 @@
+import { literal_type_base } from literal_types
+import { literal_branch_types } from literal_cases
+import { union_parts, union_type } from union_types
+import { mir_union_operation } from union_mir
+import { mir_nullable_coerce } from nullable_mir
+import { nullable_fact, nullable_lookup } from nullable_flow
+import { mir_control_active, mir_control_allocate, mir_control_arguments, mir_control_branch, mir_control_enter, mir_control_jump_arguments, mir_control_prepare } from mir_control
+import { mir_checked_record_field } from mir_records
+import { CheckedValue, checked_mir_value, checked_view, mir_add_value } from checked_values
+import { mir_semantic_type_id } from mir_types
+import { find_field, find_record_type } from type_resolution
+import { CheckedLocals, CompilerState, ControlSyntax, diagnostic, local_find } from state
+import { load_integer, load_string } from storage
+
+# Every alternative must expose the field through the same record storage model.
+def union_member_type(state: CompilerState, name: String, member: String): String
+	mut types: Array<String> := []
+	union_parts(name).each do |alternative|
+		owner := find_record_type(state, alternative)
+		if owner < 0
+			return ""
+		end
+		field := find_field(state, owner, member)
+		if field < 0
+			return ""
+		end
+		types.push(load_string(state.field_types, field))
+	end
+	if types.size() == 0
+		return ""
+	end
+	return union_type(types)
+end
+
+def check_union_member(mut state: CompilerState, mut locals: CheckedLocals, value: CheckedValue, member: String, origin: Integer): CheckedValue
+	expected := union_member_type(state, value.type_name, member)
+	line := load_integer(state.token_lines, origin)
+	if expected == ""
+		diagnostic(state, "TRBN4004", line, "union alternatives do not expose a common record field " + member)
+		return checked_view(value, "Invalid", 0)
+	end
+	mir_control_prepare(state, locals)
+	if !mir_control_active(locals)
+		return checked_view(value, expected, 0)
+	end
+	join := mir_control_allocate(locals)
+	alternatives := union_parts(value.type_name)
+	mut index := 0
+	while index < alternatives.size()
+		alternative := alternatives[index]
+		mut next_branch :=- 1
+		if index + 1 < alternatives.size()
+			condition := mir_union_operation(state, locals, 53, value, alternative, "Boolean", origin)
+			next_branch = mir_control_branch(state, locals, condition, line)
+		end
+		payload := mir_union_operation(state, locals, 54, value, alternative, alternative, origin)
+		field := find_field(state, find_record_type(state, alternative), member)
+		projected := mir_checked_record_field(state, locals, payload, field, load_string(state.field_types, field), origin)
+		converted := mir_nullable_coerce(state, locals, projected, expected, origin)
+		arguments := mir_control_arguments(locals, locals.count[0])
+		locals.mir_arguments.push(checked_mir_value(converted))
+		mir_control_jump_arguments(state, locals, join, arguments, locals.count[0] + 1)
+		if next_branch >= 0
+			mir_control_enter(state, locals, next_branch, line)
+		end
+		index += 1
+	end
+	mir_control_enter(state, locals, join, line)
+	result := mir_add_value(state, locals, mir_semantic_type_id(state.scalar_mir, expected), line)
+	locals.mir_arguments.push(result)
+	locals.mir_control[5] += 1
+	return CheckedValue.new(type_name: expected, category: - result - 1, origin: 9007199254740991, mutable: value.mutable, binding: value.binding, readonly: true, immutable_reference: false, nullable_binding: - 1, nullable_field: - 1, truth: - 1, falsity: - 1, flow_type: expected)
+end
+
+# Only a direct lexical receiver supplies a reusable discriminant fact. Record
+# fields are immutable; replacing the binding invalidates this versioned fact.
+def narrow_union_discriminant(state: CompilerState, mut locals: CheckedLocals, control: ControlSyntax, branch_index: Integer)
+	mut first := control.selector
+	mut finish := control.selector_finish
+	while finish - first > 3 && load_string(state.token_texts, first) == "(" && load_string(state.token_texts, finish - 1) == ")"
+		first += 1
+		finish -= 1
+	end
+	if finish - first != 3 || load_string(state.token_texts, first + 1) != "."
+		return
+	end
+	binding := local_find(locals, load_string(state.token_texts, first))
+	if binding < 0
+		return
+	end
+	declared := load_string(locals.types, binding)
+	actual := nullable_lookup(locals, binding, - 1, declared)
+	alternatives := union_parts(actual)
+	if alternatives.size() == 0
+		return
+	end
+	member := load_string(state.token_texts, first + 2)
+	branch := control.branches[branch_index]
+	mut matched: Array<String> := []
+	mut values: Array<String> := []
+	if branch.condition >= 0
+		values = literal_branch_types(state, branch.condition, branch.condition_finish)
+	else
+		mut previous := 0
+		while previous < branch_index
+			row := control.branches[previous]
+			literal_branch_types(state, row.condition, row.condition_finish).each do |value|
+				values.push(value)
+			end
+			previous += 1
+		end
+	end
+	alternatives.each do |alternative|
+		owner := find_record_type(state, alternative)
+		if owner < 0
+			return
+		end
+		field := find_field(state, owner, member)
+		if field < 0
+			return
+		end
+		type_name := load_string(state.field_types, field)
+		if literal_type_base(type_name) == ""
+			return
+		end
+		mut present := false
+		values.each do |value|
+			if value == type_name
+				present = true
+			end
+		end
+		mut selected := present
+		if branch.condition < 0
+			selected =!selected
+		end
+		if selected
+			matched.push(alternative)
+		end
+	end
+	if matched.size() > 0
+		locals.nullable_state[0] = nullable_fact(locals, binding, - 1, union_type(matched), locals.nullable_state[0])
+	end
+end

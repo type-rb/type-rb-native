@@ -1,3 +1,4 @@
+import { union_parts } from union_types
 import { string_starts_with } from path
 import { find_newtype_in_module, find_newtype_type, newtype_type } from newtype_types
 import { newtype_method_function } from newtype_methods
@@ -108,6 +109,12 @@ def repl_string_integer(mut store: ReplStore, text: String): Integer
 end
 
 def repl_numeric(mut store: ReplStore, left: Integer, operator: String, right: Integer): Integer
+	if union_parts(repl_type(store, left)).size() > 0
+		return repl_numeric(store, store.children[left][0], operator, right)
+	end
+	if union_parts(repl_type(store, right)).size() > 0
+		return repl_numeric(store, left, operator, store.children[right][0])
+	end
 	if repl_type(store, left) == "Nil" || repl_type(store, right) == "Nil"
 		mut same := repl_absent(store, left) == repl_absent(store, right)
 		if operator == "!="
@@ -120,6 +127,11 @@ def repl_numeric(mut store: ReplStore, left: Integer, operator: String, right: I
 	end
 	a := repl_get(store, left)
 	b := repl_get(store, right)
+	if (a.type_name == "String") != (b.type_name == "String")
+		if operator == "==" || operator == "!="
+			return repl_boolean(store, operator == "!=")
+		end
+	end
 	if a.type_name == "String"
 		if operator == "+"
 			return repl_string(store, a.text + b.text)
@@ -418,7 +430,11 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		if environment.flow[0] != 0
 			return repl_reference(environment.flow[1])
 		end
-		value := repl_get(store, operand.value)
+		mut id := operand.value
+		if union_parts(repl_type(store, id)).size() > 0
+			id = store.children[id][0]
+		end
+		value := repl_get(store, id)
 		if value.type_name == "Float"
 			return repl_reference(repl_float(store, - value.floating))
 		end
@@ -593,8 +609,12 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		end
 		arguments := bindings.values
 		if text == "puts" && function < 0
-			if store.types[arguments[0]] == "String"
-				puts(store.texts[arguments[0]])
+			mut printed := arguments[0]
+			if union_parts(repl_type(store, printed)).size() > 0
+				printed = store.children[printed][0]
+			end
+			if repl_get(store, printed).type_name == "String"
+				puts(store.texts[printed])
 			elsif repl_type(store, arguments[0]) == "Float"
 				puts(repl_scalar_string(repl_get(store, arguments[0])))
 			else
@@ -790,6 +810,9 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 				next
 			end
 			result = ReplReference.new(value: repl_payload(store, result.value), binding: result.binding, container: result.container, slot: result.slot)
+		end
+		if token_is(state, position[0], ".") && union_parts(repl_type(store, result.value)).size() > 0
+			result = repl_reference(store.children[result.value][0])
 		end
 		value := repl_get(store, result.value)
 		if token_is(state, position[0], "(")
@@ -1105,11 +1128,13 @@ def repl_expression(mut state: CompilerState, mut position: Array<Integer>, mut 
 						return repl_reference(0)
 					end
 					plan := checked_range_require(state, expression_origin, origin, end_origin, position[0])
-					if plan.origin < 0 || repl_type(store, result.value) != plan.start_type || repl_type(store, right.value) != plan.end_type
+					start := repl_coerce(store, result.value, plan.start_type)
+					finish := repl_coerce(store, right.value, plan.end_type)
+					if plan.origin < 0 || repl_type(store, start) != plan.start_type || repl_type(store, finish) != plan.end_type
 						store.error[0] = "Range operands disagree with checked MIR"
 						return repl_reference(0)
 					end
-					result = repl_reference(repl_value(store, "Range<Integer>", 0, 0.0, "", [result.value, right.value, repl_integer(store, plan.exclusive)]))
+					result = repl_reference(repl_value(store, "Range<Integer>", 0, 0.0, "", [start, finish, repl_integer(store, plan.exclusive)]))
 				else
 					result = repl_reference(repl_numeric(store, result.value, operator, right.value))
 				end

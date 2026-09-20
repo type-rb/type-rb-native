@@ -23,7 +23,7 @@ runtime dependencies; independent groups may advance while CI runs.
 | Builtin values and conversions | Remaining Symbol quote/operator boundaries; Unicode identifiers; safe numeric/index/range conversions and structured errors | Portable numbers and scalar String conversions, UTF-8 Strings and portable Symbol spelling, nullable values, enums and Result MIR |
 | Collection operations | Remaining String transforms; safe collection lookup and conversion | Checked indexes, stable natural and key-based sorting, safe blocks, streamed sliced iteration, retained receivers, shallow copies and String joining, Hash snapshots, Range materialization, sequential transforms |
 | Value declarations and identity | Forward initializer dependencies, top-level lowercase bindings and untyped empty collection inference | Nested/reopened modules, lexical privacy, inferred imported constants, qualified aliases, typed runtime constants, ordered initializer functions and persistent global roots |
-| Nominal and union types | Literal types and discriminated unions; remaining enum attributes and patterns | Nominal newtypes with explicit construction/projection and closed factories; general union values and scalar type cases, nominal records, payload/raw enums, checked raw conversions and ordinary enum methods |
+| Nominal and union types | Literal-union Hash keys; class discriminants; remaining enum attributes and patterns | Literal constraints, common record members and overlapping discriminant narrowing; nominal newtypes with explicit construction/projection and closed factories; general union values and scalar type cases, nominal records, payload/raw enums, checked raw conversions and ordinary enum methods |
 | Object declarations | Classes, initialization, fields, privacy, inheritance and dispatch; interfaces and conformance | Nominal layouts, calls, receiver capabilities and managed values |
 | Callable and generic completion | Callable equality and remaining nullable-signature combinations; method-specific type parameters, generic classes/interfaces, constraints and remaining alias targets | Anonymous and named function values, shared captures, generic functions/records/enums, receiver-specialized enum methods and transparent aliases |
 | Structured runtime dependencies | Import-free bounded `concurrent_map` and its transfer, cancellation and lifetime contract | Sequential structured iteration and function values |
@@ -70,7 +70,9 @@ or uncovered basic contracts remain. Keep every required correctness, lifetime,
 target, recovery and ordinary self-hosting check; qualify performance at the
 coherent milestone described in [MIR consolidation](mir-consolidation.md).
 
-The current source adds nominal newtypes with erased storage and verified construction policy, callable suffixes, reserved-name checks and nested generic token boundaries,
+The current source adds literal constraints and common record fields with verified
+widening and discriminant narrowing, nominal newtypes with erased storage and
+verified construction policy, callable suffixes, reserved-name checks and nested generic token boundaries,
 streamed Array/Range batches, safe collection blocks and nullable literal contexts,
 stable natural and key-based Array sorting, raw enum conversions and ordinary/generic enum instance methods,
 general union values and scalar type cases,
@@ -81,6 +83,6 @@ String trimming, named function values, nullable/generic combinations, and
 colon-separated Hash key expressions. These extend String
 joining, Hash snapshot iteration and Range materialization, Array search,
 uniqueness, concatenation, insertion/removal, edges/copies/slicing, and the String
-query, sequence, slice and escape families. Its 1112 registered cases include
+query, sequence, slice and escape families. Its 1197 registered cases include
 explicit remaining differences; neither this count nor green regression CI
 closes #454.

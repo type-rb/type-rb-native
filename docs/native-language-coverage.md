@@ -150,9 +150,24 @@ Independent source-erased, reordered and forced-GC controls complement shared
 ordinary/REPL probes and retained-session tests. See
 [decision 0069](decisions/0069-union-value-mir.md).
 
-Literal types, discriminated unions and composite type patterns are not covered
-by this implementation. Reference boundaries for grouped annotations and
-nullable alternatives remain visible in the shared contract.
+Integer and String literal types now preserve singleton constraints through
+signatures, containers, aliases, nominal representations and captures. Authored
+literals satisfy explicit constraints; computed scalars cannot narrow implicitly.
+Verified constants and widening retain semantic identities without extra boxes.
+Finite literal cases support homogeneous and mixed domains, and common record
+members lower through checked alternatives. Direct lexical discriminants narrow
+overlapping record alternatives while rebinding invalidates the fact. See
+[decision 0078](decisions/0078-literal-types-and-union-members.md).
+
+Ordinary and retained REPL probes include Unicode/NUL singleton strings, exact
+Hash keys, nullable values, numeric widening and rejected mutation. Independent
+MIR controls erase source and reorder declarations, forge constants and types,
+and force collection while managed values remain live. Singleton Hash keys use
+verified scalar storage; literal-union Hash keys remain an explicit gap. Class
+discriminants depend on the object family's readonly-field rules. Reference
+boundaries for grouped annotations, nullable alternatives and composite type
+patterns remain visible, as do REPL type ordering, assignment and Hash display
+differences.
 
 ## Declaration namespaces and runtime constants
 

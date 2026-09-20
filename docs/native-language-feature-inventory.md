@@ -12,15 +12,15 @@ Each count describes registered probes, not language coverage percentages.
 | Defaults and named arguments | basic | 0 / 13 | Method, function-value and payload-enum argument parity |  |
 | Conditions and value-producing branches | basic | 0 / 16 | Nullable/union common result types and broader expression nesting boundaries | IfStatement |
 | Loop control and transfers | basic | 1 / 10 | Additional nested transfer and diagnostic-origin differential probes | WhileStatement, BreakStatement, NextStatement |
-| Case statements and expressions | basic | 1 / 5 | Exhaustiveness, repeated/unreachable branches and pattern-binding diagnostics | CaseStatement |
+| Case statements and expressions | basic | 0 / 5 | Exhaustiveness, repeated/unreachable branches and pattern-binding diagnostics | CaseStatement |
 | Records and field bindings | basic | 1 / 30 | Nominal cycles and defaults involving remaining unsupported value types | RecordStatement, RecordFieldStatement |
 | Member access and projections | basic | 1 / 4 | Safe member access, chained field narrowing and receiver replacement | MemberExpression |
 | Nullable values and narrowing | basic | 4 / 38 | Class/callback and general pattern narrowing; collection/union optional conversions; Nullable standard-library methods beyond the currently implemented Native APIs |  |
 | Enums and tagged values | basic | 6 / 110 | Method-specific type parameters, enum attributes and wider pattern forms; Reference REPL initializer replay (TypeRB #768) and shadowed standard error identity (#769); imported/nested REPL presentation parity | EnumStatement, EnumMemberStatement |
-| Transparent aliases | basic | 7 / 30 | Literal/discriminated union and class/interface alias targets; Authored alias spelling in REPL display and diagnostics | TypeAliasStatement |
-| Nominal newtypes | basic | 4 / 80 | Literal/discriminated and class/interface representation dependencies; Method-specific generic parameters with the remaining callable/generic family | NewtypeStatement |
+| Transparent aliases | basic | 6 / 30 | Literal/discriminated union and class/interface alias targets; Authored alias spelling in REPL display and diagnostics | TypeAliasStatement |
+| Nominal newtypes | basic | 4 / 83 | Class/interface representation dependencies; Method-specific generic parameters with the remaining callable/generic family | NewtypeStatement |
 | Generic declarations and applications | basic | 4 / 74 | Method-specific type parameters, generic classes and interfaces; Wider constraints and type applications | GenericExpression |
-| Union values, literal types and discriminated unions | basic | 5 / 61 | Literal types, common discriminant access, branch narrowing and invalid mutation boundaries; Reference grouped annotation and nullable-alternative boundaries (TypeRB #764 and #765); composite type patterns remain staged in the reference |  |
+| Union values, literal types and discriminated unions | basic | 13 / 146 | Literal-union Hash key storage and lookup; Class discriminants and their readonly-field rules with the object family; Reference grouped annotation and nullable-alternative boundaries (TypeRB #764 and #765); composite type patterns remain staged in the reference |  |
 | Function values and lexical capture | basic | 0 / 56 | Callable equality, method references and remaining parameter-capability/narrowing combinations | LambdaExpression |
 | Arrays and checked indexes | basic | 20 / 204 | Safe collection lookup and conversion APIs; Wider invalid element/mutation combinations | ArrayLiteral, IndexExpression |
 | Hash values and operations | basic | 0 / 11 | All key/value representations, empty inference, managed lifetimes and missing-key failures | HashLiteral |

@@ -1,10 +1,19 @@
+import { literal_type_base } from literal_types
 import { union_parts } from union_types
 import { callable_parts } from callable_types
 import { nullable_element } from nullable_types
 import { ascii_code } from literals
 import { string_starts_with } from path
 
-# Canonical Hash spellings contain one scalar key and one resolved value type.
+# Hash keys keep singleton constraints while using ordinary scalar storage.
+def hash_scalar_key(name: String): Boolean
+	if name == "Integer" || name == "String"
+		return true
+	end
+	return literal_type_base(name) != ""
+end
+
+# Canonical singleton payloads escape punctuation, including the key separator.
 def hash_key_type(type_name: String): String
 	if !string_starts_with(type_name, "Hash<") || type_name[type_name.size() - 1] != ">"
 		return ""
@@ -14,6 +23,15 @@ def hash_key_type(type_name: String): String
 	end
 	if string_starts_with(type_name, "Hash<String,")
 		return "String"
+	end
+	mut key := ""
+	mut index := 5
+	while index < type_name.size() - 1 && type_name[index] != ","
+		key += type_name[index]
+		index += 1
+	end
+	if index < type_name.size() - 1 && hash_scalar_key(key)
+		return key
 	end
 	return ""
 end
@@ -37,6 +55,9 @@ def hash_type(key: String, value: String): String
 end
 
 def native_managed_type(type_name: String): Boolean
+	if literal_type_base(type_name) != ""
+		return literal_type_base(type_name) == "String"
+	end
 	if union_parts(type_name).size() > 0
 		return true
 	end
@@ -54,6 +75,9 @@ end
 
 # Validate the word-sized scalar/managed layouts admitted by Hash MIR.
 def native_value_layout(type_name: String): Boolean
+	if literal_type_base(type_name) != ""
+		return true
+	end
 	alternatives := union_parts(type_name)
 	if alternatives.size() > 0
 		mut valid := true

@@ -1,7 +1,8 @@
 import { token_is } from syntax_tokens
 import { binary_operator_id } from parser
 import { CheckedValue, checked_condition_value, checked_nullable_target, checked_view } from checked_values
-import { mir_checked_nullable } from nullable_mir
+import { union_parts } from union_types
+import { mir_checked_nullable, mir_union_narrow } from nullable_mir
 import { nullable_element } from nullable_types
 import { CheckedLocals, CompilerState, NullableFact, local_find, local_identity, local_slot } from state
 import { load_integer, load_string, sparse_integer_at, store_string } from storage
@@ -83,7 +84,7 @@ end
 
 def nullable_read(mut state: CompilerState, mut locals: CheckedLocals, value: CheckedValue, binding: Integer, field: Integer, origin: Integer): CheckedValue
 	target := checked_nullable_target(value, binding, field)
-	if binding == - 1 || nullable_element(value.type_name) == ""
+	if binding == - 1 || (nullable_element(value.type_name) == "" && union_parts(value.type_name).size() == 0)
 		return target
 	end
 	flow := nullable_lookup(locals, binding, field, value.type_name)
@@ -91,6 +92,10 @@ def nullable_read(mut state: CompilerState, mut locals: CheckedLocals, value: Ch
 		return target
 	end
 	store_string(state.checked[0].nullable_reads, origin, flow)
+	if union_parts(value.type_name).size() > 0
+		narrowed := mir_union_narrow(state, locals, value, flow, origin)
+		return checked_view(target, flow, narrowed.category)
+	end
 	mut kind := 36
 	if flow == "Nil"
 		kind = 33
