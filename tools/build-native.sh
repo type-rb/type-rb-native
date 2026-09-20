@@ -44,7 +44,7 @@ lock="$cache/build.lock"
 lock_wait=0
 while ! mkdir "$lock" 2>/dev/null; do
 	lock_wait=$((lock_wait + 1))
-	test "$lock_wait" -le 300 || fail "another build holds $lock; inspect its owner before removing a stale lock"
+	test "$lock_wait" -le 600 || fail "another build holds $lock; inspect its owner before removing a stale lock"
 	sleep 1
 done
 printf '%s\n' "$$" > "$lock/pid"
