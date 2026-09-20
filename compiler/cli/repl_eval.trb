@@ -722,6 +722,9 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		if store.error[0] != ""
 			return repl_reference(0)
 		end
+		if syntax_iteration_suffix(state, position[0]) >= 0
+			break
+		end
 		mut safe_origin :=- 1
 		if token_is(state, position[0], "&.")
 			safe_origin = position[0]
@@ -787,6 +790,9 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 					result = repl_reference(repl_transform(state, position, store, environment, result.value))
 					if store.error[0] != ""
 						return result
+					end
+					if safe_origin >= 0 && environment.flow[0] == 0
+						result = repl_reference(repl_coerce(store, result.value, load_string(state.checked[0].safe_types, safe_origin)))
 					end
 					next
 				end
@@ -1099,9 +1105,19 @@ def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut s
 		store.error[0] = "invalid checked iteration"
 		return 0
 	end
-	receiver := repl_expression(state, position, store, environment, 1, plan.type_name).value
+	mut receiver := repl_expression(state, position, store, environment, 1, plan.type_name).value
 	if store.error[0] != ""
 		return 0
+	end
+	if environment.flow[0] != 0
+		return environment.flow[1]
+	end
+	if token_is(state, plan.syntax.receiver_finish, "&.")
+		if repl_absent(store, receiver)
+			position[0] = plan.syntax.finish
+			return 0
+		end
+		receiver = repl_payload(store, receiver)
 	end
 	if repl_type(store, receiver) != plan.type_name || position[0] != plan.syntax.receiver_finish
 		store.error[0] = "iteration receiver disagrees with checked MIR"

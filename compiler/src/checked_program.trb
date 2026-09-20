@@ -62,8 +62,12 @@ import { load_integer, load_string, sparse_integer_at, sparse_string_at, store_i
 def checked_hash_literal(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, expected: String): CheckedValue
 	origin := position[0]
 	line := load_integer(state.token_lines, origin)
-	mut key_type := hash_key_type(expected)
-	mut value_type := hash_value_type(expected)
+	mut context := expected
+	if nullable_element(context) != ""
+		context = nullable_element(context)
+	end
+	mut key_type := hash_key_type(context)
+	mut value_type := hash_value_type(context)
 	if state.lambda_phase[0] == 2 && expected == ""
 		analyzed := sparse_string_at(state.checked[0].hash_initial_types, origin)
 		key_type = hash_key_type(analyzed)
@@ -91,11 +95,11 @@ def checked_hash_literal(mut state: CompilerState, mut position: Array<Integer>,
 		if !expect(state, position, "=>")
 			return checked_value("Invalid", 0, origin, 0)
 		end
-		value := check_expression(state, position, locals, 1, hash_value_type(expected))
+		value := check_expression(state, position, locals, 1, hash_value_type(context))
 		if value.type_name == "Never"
 			diverged = true
 			scalar_mir_disable(locals)
-		elsif hash_value_type(expected) == ""
+		elsif hash_value_type(context) == ""
 			common := common_array_element_type(value_type, value.type_name)
 			if common == ""
 				return type_diagnostic(state, line, "incompatible Hash value types")
@@ -251,7 +255,11 @@ def check_array_literal(
 	line := load_integer(state.token_lines, origin)
 	advance(position)
 	skip_newlines(state, position)
-	contextual_element_type := array_element_type(expected)
+	mut context := expected
+	if nullable_element(context) != ""
+		context = nullable_element(context)
+	end
+	contextual_element_type := array_element_type(context)
 	mut element_type := contextual_element_type
 	saved_mir := locals.mir_state[0]
 	mut diverged := false
@@ -894,6 +902,9 @@ def check_postfix(
 		if value.type_name == "Never"
 			return check_never_postfix(state, position, locals, value)
 		end
+		if syntax_iteration_suffix(state, position[0]) >= 0
+			break
+		end
 		if token_is(state, position[0], "&.")
 			value = check_safe_member(state, position, locals, value)
 			if has_diagnostic(state)
@@ -1345,7 +1356,16 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "invalid iteration syntax plan")
 		return false
 	end
-	receiver := check_expression(state, position, locals, 1, "")
+	mut receiver := check_expression(state, position, locals, 1, "")
+	mut absent :=- 1
+	if token_is(state, shape.receiver_finish, "&.") && nullable_element(receiver.type_name) != ""
+		condition := nullable_nil_condition(state, locals, receiver, true, shape.receiver_finish)
+		absent = mir_control_branch(state, locals, condition, load_integer(state.token_lines, origin))
+		nullable_apply(locals, condition.truth)
+		present_type := nullable_element(receiver.type_name)
+		payload := mir_checked_nullable(state, locals, 36, receiver, present_type, 0, shape.receiver_finish)
+		receiver = checked_view(receiver, present_type, payload.category)
+	end
 	element_type := iteration_element_type(receiver.type_name)
 	if element_type == "" || position[0] != shape.receiver_finish
 		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "ordinary each requires a supported Array, Range or Hash receiver")
@@ -1410,6 +1430,10 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 	result_scope_check(state, locals, saved)
 	mir_checked_iteration_end(state, locals, plan, saved)
 	locals.count[0] = saved
+	if absent >= 0
+		mir_control_jump(state, locals, absent, saved)
+		mir_control_enter(state, locals, absent, load_integer(state.token_lines, origin))
+	end
 	nullable_finish(locals, flow_parent, flow_first, saved)
 	position[0] = plan.syntax.finish
 	return finish_statement(state, position)
@@ -1836,19 +1860,27 @@ def check_transfer_value(mut state: CompilerState, mut position: Array<Integer>,
 	return checked_value("Never", 0, 9007199254740991, 0)
 end
 
+def check_safe_present_member(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue): CheckedValue
+	if sparse_integer_at(state.transform_origins, position[0]) > 0
+		return check_transform(state, position, locals, receiver)
+	end
+	advance(position)
+	member := expect_identifier(state, position)
+	mut value := check_member(state, position, locals, receiver, member)
+	if callable_parts(value.type_name).size() > 0 && token_is(state, position[0], "(")
+		value = check_callable_call(state, position, locals, value)
+	end
+	return value
+end
+
 # The receiver dominates both edges. Only the present edge evaluates authored
-# arguments; the absent edge contributes none, or no result for a Void call.
+# arguments and blocks; the absent edge contributes none, or no Void result.
 def check_safe_member(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue): CheckedValue
 	origin := position[0]
 	line := load_integer(state.token_lines, origin)
-	advance(position)
-	member := expect_identifier(state, position)
 	element := nullable_element(receiver.type_name)
 	if element == ""
-		mut value := check_member(state, position, locals, receiver, member)
-		if callable_parts(value.type_name).size() > 0 && token_is(state, position[0], "(")
-			value = check_callable_call(state, position, locals, value)
-		end
+		value := check_safe_present_member(state, position, locals, receiver)
 		store_integer(state.checked[0].safe_finishes, origin, position[0])
 		store_string(state.checked[0].safe_types, origin, value.type_name)
 		return value
@@ -1859,10 +1891,7 @@ def check_safe_member(mut state: CompilerState, mut position: Array<Integer>, mu
 	alternate := mir_control_branch(state, locals, condition, line)
 	nullable_apply(locals, condition.truth)
 	payload := mir_checked_nullable(state, locals, 36, receiver, element, 0, origin)
-	mut value := check_member(state, position, locals, checked_view(receiver, element, payload.category), member)
-	if callable_parts(value.type_name).size() > 0 && token_is(state, position[0], "(")
-		value = check_callable_call(state, position, locals, value)
-	end
+	value := check_safe_present_member(state, position, locals, checked_view(receiver, element, payload.category))
 	nullable_finish(locals, flow_parent, flow_first, locals.count[0])
 	mut result_type := nullable_type(value.type_name)
 	if value.type_name == "Void"

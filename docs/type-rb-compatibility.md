@@ -2,7 +2,7 @@
 
 TypeRB Native currently follows exact reference revisions during development. The
 current source and semantic oracle is TypeRB
-`df2a60e35b7f4140c98dcb29a9eaee4fee27252e` (the `0.4.9-dev` development identity), recorded
+`909987e370a8ed4d8db1060ed5f0c6f00fd56dfd` (the `0.4.9-dev` development identity), recorded
 in `TYPE_RB_REVISION`. This declares one exact reference identity during Native
 development, without claiming a supported version range.
 
@@ -39,8 +39,8 @@ fixed-point, process, resource, and size criteria.
 The exact pin incorporates [TypeRB PR #773](https://github.com/type-rb/type-rb/pull/773).
 Descending natural and key-based Array sorting in the REPL now retains NaNs
 after ordinary numbers without reversing equal keys or signed zeros. All three
-portable modes have compiled/REPL controls. Safe navigation on block iteration
-remains a reference defect tracked in [#774](https://github.com/type-rb/type-rb/issues/774).
+portable modes have compiled/REPL controls. The later safe-block reference update
+below resolves [#774](https://github.com/type-rb/type-rb/issues/774).
 This changes neither the release version nor the immutable Native bootstrap seed.
 
 ## Generic enum alias reference update
@@ -62,6 +62,16 @@ checkout and AST. Reference REPL initializer replay and canonical error-record
 shadowing remain explicit in [#768](https://github.com/type-rb/type-rb/issues/768)
 and [#769](https://github.com/type-rb/type-rb/issues/769). This update does not
 publish a release or change the immutable Native bootstrap seed.
+
+## Safe collection block reference update
+
+The exact pin incorporates [TypeRB PR #775](https://github.com/type-rb/type-rb/pull/775).
+Safe block calls retain their receiver, skip operation arguments and the body
+when absent, and preserve nullable transform results. Indexed blocks put the safe
+operator before the operation, as in `values&.each.with_index`. Nullable collection
+literals and nested Ruby concurrent blocks retain their types and bindings.
+The shared AST inventory and old safe-sort rejection probe are reviewed against
+this accepted reference; the earlier issue #774 is resolved by that change.
 
 ## Union and inferred declaration reference update
 
@@ -351,7 +361,7 @@ directory APIs, repeated scalar CLI options, corrected safe-navigation
 evaluation, CLI application failures, and a focused undeclared-value
 diagnostic correction.
 
-Native does not currently use the changed CLI or safe-navigation surfaces. Its
+At that revision Native did not use the changed CLI or safe-navigation surfaces. Its
 direct source break was removal of `trb/std/filesystem`. All 39 affected root,
 compiler-test, and historical benchmark-controller sources now use identical
 repository-owned support. Reads are scoped and bounded to 67,108,864 bytes by

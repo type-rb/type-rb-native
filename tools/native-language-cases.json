@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "referenceAstSha256": "494765b4710121d76154b323187ee50778cec1ef1907df3859a3b13669361f90",
+  "referenceAstSha256": "c87666ee5f318b2a4880924504f1dc5211c3c665188589bb0c93da710bb9877b",
   "features": [
     {
       "id": "lexical",
@@ -484,7 +484,9 @@
         "array-query-nullable-concat",
         "array-query-optional",
         "array-query-concat-optional",
-        "array-query-nullable-equality"
+        "array-query-nullable-equality",
+        "safe-block-nullable-container-literals",
+        "safe-block-value-call-chaining"
       ],
       "pending": [
         "Class/callback and general pattern narrowing; collection/union optional conversions",
@@ -895,7 +897,8 @@
         "named-function-imported-default-rejection",
         "named-function-field-optional",
         "named-function-field-order",
-        "named-function-generic-nested"
+        "named-function-generic-nested",
+        "collection-capture-identities"
       ],
       "pending": [
         "Callable equality, method references and remaining parameter-capability/narrowing combinations"
@@ -1114,7 +1117,7 @@
         "array-key-sort-reject-break",
         "array-key-sort-reject-next",
         "array-key-sort-reject-immutable-output",
-        "array-key-sort-safe-navigation-reference-gap"
+        "array-key-sort-safe-navigation"
       ],
       "pending": [
         "Safe collection lookup and conversion APIs",
@@ -1249,10 +1252,45 @@
         "array-key-sort-reject-break",
         "array-key-sort-reject-next",
         "array-key-sort-reject-immutable-output",
-        "array-key-sort-safe-navigation-reference-gap"
+        "array-key-sort-safe-navigation",
+        "safe-collection-iteration",
+        "safe-collection-transforms",
+        "safe-collection-managed",
+        "collection-capture-identities",
+        "safe-block-map",
+        "safe-block-indexed-map",
+        "safe-block-select",
+        "safe-block-indexed-select",
+        "safe-block-reduce",
+        "safe-block-any",
+        "safe-block-all",
+        "safe-block-none",
+        "safe-block-find",
+        "safe-block-find-index",
+        "safe-block-sort-by",
+        "safe-block-sort-by-descending",
+        "safe-block-receiver-and-initial-order",
+        "safe-block-retains-live-array",
+        "safe-block-nested-range",
+        "safe-block-nullable-container-literals",
+        "safe-block-value-call-chaining",
+        "safe-block-generic",
+        "safe-block-invalid-ordinary-nullable-each",
+        "safe-block-invalid-ordinary-nullable-map",
+        "safe-block-invalid-unsafe-result",
+        "safe-block-invalid-safe-index-modifier",
+        "safe-block-invalid-safe-map-index-modifier",
+        "safe-block-invalid-return-from-map",
+        "safe-block-invalid-break-from-map",
+        "safe-block-invalid-next-from-select",
+        "safe-block-invalid-invalid-key",
+        "safe-block-invalid-wrong-receiver",
+        "safe-block-invalid-nullable-predicate",
+        "safe-block-invalid-hash-transform",
+        "safe-block-invalid-readonly-receiver"
       ],
       "pending": [
-        "Sliced iteration and safe block navigation (type-rb/type-rb#774)",
+        "Sliced iteration",
         "Remaining receiver APIs that shorten or reorder an Array during traversal"
       ],
       "note": "Array and Range each/map/select/reduce use shared checked statement bodies and ordinary MIR loops. Transforms retain one receiver, observe live Array growth/replacement, preserve visited selection values and evaluate reduce initializers before traversal. Indexed map/select and managed captures are covered. Short-circuit any?/all?/none? retain the same live source, require Boolean results and lower early exits to ordinary MIR edges. find/find_index retain visited values and produce checked nullable results with short-circuit exits. Hash each snapshots keys and values before its body; insertion, deletion, rebinding, managed aliases and loop transfers are covered without promising enumeration order. Array sort_by/sort_by_descending collect retained values and keys once through the same live iteration, then stably sort paired private buffers through ordinary MIR control flow."
@@ -45518,8 +45556,8 @@
       }
     },
     {
-      "id": "array-key-sort-safe-navigation-reference-gap",
-      "title": "Array keyed ordering: safe navigation reference gap",
+      "id": "array-key-sort-safe-navigation",
+      "title": "Array keyed ordering: absent safe receiver",
       "declarations": "",
       "body": "values: Array<Integer>? := nil\nvalues&.sort_by { |value| value }\n",
       "files": {},
@@ -45535,32 +45573,1717 @@
           "stderr": ""
         },
         "execute": {
-          "code": 2,
+          "code": 0,
           "stdout": "",
-          "stderrFirstLine": "panic: runtime error: invalid memory address or nil pointer dereference"
+          "stderr": ""
         },
         "repl": {
           "code": 0,
+          "stdout": "nil : Array<Integer>?\nnil : Array<Integer>?\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "nil : Array<Integer>?\nnil : Array<Integer>?\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "safe-collection-iteration",
+      "title": "Safe collection iteration",
+      "declarations": "\ndef visit(values: Array<Integer>?): Integer\n\tmut total := 0\n\tvalues&.each.with_index do |value, index|\n\t\tif value == 2\n\t\t\tnext\n\t\tend\n\t\tif value == 4\n\t\t\tbreak\n\t\tend\n\t\ttotal += value * 10 + index\n\tend\n\treturn total\nend\n\ndef early(values: Range<Integer>?): Integer\n\tvalues&.each do |value|\n\t\tif value == 2\n\t\t\treturn value\n\t\tend\n\tend\n\treturn - 1\nend\n\ndef entries(values: Hash<String, Integer>?): Integer\n\tmut total := 0\n\tvalues&.each { |key, value| total += key.size() + value }\n\treturn total\nend\n\ndef source(mut calls: Array<Integer>): Array<Integer>?\n\tcalls.push(1)\n\treturn [4, 5]\nend\n",
+      "body": "\tputs(visit(nil))\n\tputs(visit([1, 2, 3, 4, 5]))\n\tputs(early(nil))\n\tputs(early(1..3))\n\tputs(entries(nil))\n\tputs(entries({ \"a\": 2, \"bb\": 3 }))\n\tmut calls: Array<Integer> := []\n\tmut total := 0\n\tsource(calls)&.each { |value| total += value }\n\tputs(calls.size())\n\tputs(total)\n\tmut values := [1, 2]\n\tmut optional: Array<Integer>? := values\n\toptional&.each do |value|\n\t\tif value == 1\n\t\t\toptional = nil\n\t\t\tvalues.push(3)\n\t\tend\n\t\ttotal += value\n\tend\n\tputs(total)\n\tputs(optional == nil)\n\t(2..3)&.each.with_index { |value, index| puts(value + index) }\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "0\n42\n-1\n2\n0\n8\n1\n9\n15\ntrue\n2\n4\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "0\n42\n-1\n2\n0\n8\n[] : Array<Integer> [mut]\n0 : Integer [mut]\n1\n9\n[1, 2] : Array<Integer> [mut]\n[1, 2] : Array<Integer>? [mut]\n15\ntrue\n2\n4\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "0\n42\n-1\n2\n0\n8\n1\n9\n15\ntrue\n2\n4\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "0\n42\n-1\n2\n0\n8\n[] : Array<Integer> [mut]\n0 : Integer [mut]\n1\n9\n[1, 2] : Array<Integer> [mut]\n[1, 2] : Array<Integer>? [mut]\n15\ntrue\n2\n4\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "safe-collection-transforms",
+      "title": "Safe collection transforms",
+      "declarations": "\ndef integer_or(value: Integer?, fallback: Integer): Integer\n\tif value == nil\n\t\treturn fallback\n\tend\n\treturn value\nend\n\ndef truth(value: Boolean?): Boolean\n\tif value == nil\n\t\treturn false\n\tend\n\treturn value\nend\n\ndef initial(mut calls: Array<Integer>): Integer\n\tcalls.push(10)\n\treturn 10\nend\n\ndef summarize(values: Array<Integer>?, mut calls: Array<Integer>)\n\tputs(values&.map { |value| calls.push(value); value + 1 } == nil)\n\tputs(integer_or(values&.select { |value| value > 1 }&.size(), - 1))\n\tputs(integer_or(values&.reduce(initial(calls)) { |sum, value| sum + value }, - 1))\n\tputs(truth(values&.any? { |value| value == 2 }))\n\tputs(truth(values&.all? { |value| value > 0 }))\n\tputs(truth(values&.none? { |value| value < 0 }))\n\tputs(integer_or(values&.find { |value| value == 2 }, - 1))\n\tputs(integer_or(values&.find_index { |value| value == 2 }, - 1))\n\tputs(integer_or(values&.sort_by { |value| value % 2 }&.size(), - 1))\n\tputs(integer_or(values&.sort_by_descending { |value| value }&.size(), - 1))\nend\n\ndef range_sum(values: Range<Integer>?): Integer?\n\treturn values&.map.with_index { |value, index| value + index }&.reduce(0) { |sum, value| sum + value }\nend\n",
+      "body": "\tmut calls: Array<Integer> := []\n\tsummarize(nil, calls)\n\tputs(calls.size())\n\tsummarize([3, 1, 2], calls)\n\tputs(calls.size())\n\tputs(calls[3])\n\tputs(range_sum(nil) == nil)\n\tputs(integer_or(range_sum(2..4), - 1))\n\tvalues: Array<Integer> := [2, 1]&.map { |value| value + 1 }\n\tputs(values[0])\n\toptional: Array<Integer?>? := [nil, 2]\n\tputs(optional&.find { |value| value == nil } == nil)\n\tputs(integer_or(optional&.map { |value| value }&.size(), - 1))\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n-1\n-1\nfalse\nfalse\nfalse\n-1\n-1\n-1\n-1\n0\nfalse\n2\n16\ntrue\ntrue\ntrue\n2\n2\n3\n3\n4\n10\ntrue\n12\n3\ntrue\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "[] : Array<Integer> [mut]\ntrue\n-1\n-1\nfalse\nfalse\nfalse\n-1\n-1\n-1\n-1\n0\nfalse\n2\n16\ntrue\ntrue\ntrue\n2\n2\n3\n3\n4\n10\ntrue\n12\n[3, 2] : Array<Integer>\n3\n[nil, 2] : Array<Integer?>?\ntrue\n2\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n-1\n-1\nfalse\nfalse\nfalse\n-1\n-1\n-1\n-1\n0\nfalse\n2\n16\ntrue\ntrue\ntrue\n2\n2\n3\n3\n4\n10\ntrue\n12\n3\ntrue\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "[] : Array<Integer> [mut]\ntrue\n-1\n-1\nfalse\nfalse\nfalse\n-1\n-1\n-1\n-1\n0\nfalse\n2\n16\ntrue\ntrue\ntrue\n2\n2\n3\n3\n4\n10\ntrue\n12\n[3, 2] : Array<Integer>\n3\n[nil, 2] : Array<Integer?>?\ntrue\n2\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "safe-collection-managed",
+      "title": "Safe collection managed",
+      "declarations": "\nrecord Entry\n\ttext: String\n\tvalues: Array<String>\nend\n\ndef copy(values: Array<Entry>?): Array<String>?\n\treturn values&.map do |entry|\n\t\tentry.text + entry.values[0]\n\tend\nend\n",
+      "body": "\tmut values := [Entry.new(text: \"b\", values: [\"1\"]), Entry.new(text: \"a\", values: [\"2\"])]\n\toptional: Array<Entry>? := values\n\tmut calls := 0\n\tordered := optional&.sort_by do |entry|\n\t\tcalls += 1\n\t\tif calls == 1\n\t\t\tvalues.push(Entry.new(text: \"a\", values: [\"3\"]))\n\t\tend\n\t\tentry.text + \"!\"\n\tend\n\tordered&.each { |entry| puts(entry.values[0]) }\n\tputs(calls)\n\tcopy(optional)&.each { |value| puts(value) }\n\tputs(copy(nil) == nil)\n\tmut callback_total := 0\n\tcallback := fn(value: Integer): Integer\n\t\tcallback_total += value\n\t\treturn callback_total\n\tend\n\tcallbacks: Array<(Integer) -> Integer>? := [callback, callback]\n\tcallbacks&.map { |call| call(2) }&.each { |value| puts(value) }\n\tputs(callback_total)\n\ttable: Hash<String, Array<String>>? := { \"a\": [\"retained\"] }\n\ttable&.each { |key, entries| puts(key + entries[0]) }\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "2\n3\n1\n3\nb1\na2\na3\ntrue\n2\n4\n4\naretained\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "[Entry(text: \"b\", values: [\"1\"]), Entry(text: \"a\", values: [\"2\"])] : Array<Entry> [mut]\n[Entry(text: \"b\", values: [\"1\"]), Entry(text: \"a\", values: [\"2\"])] : Array<Entry>?\n0 : Integer [mut]\n[Entry(text: \"a\", values: [\"2\"]), Entry(text: \"a\", values: [\"3\"]), Entry(text: \"b\", values: [\"1\"])] : Array<Entry>?\n2\n3\n1\n3\nb1\na2\na3\ntrue\n0 : Integer [mut]\n#<fn> : (Integer) -> Integer\n[#<fn>, #<fn>] : Array<(Integer) -> Integer>?\n2\n4\n4\n{\"a\": [\"retained\"]} : Hash<String, Array<String>>?\naretained\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "2\n3\n1\n3\nb1\na2\na3\ntrue\n2\n4\n4\naretained\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "[Entry(text: \"b\", values: [\"1\"]), Entry(text: \"a\", values: [\"2\"])] : Array<Entry> [mut]\n[Entry(text: \"b\", values: [\"1\"]), Entry(text: \"a\", values: [\"2\"])] : Array<Entry>?\n0 : Integer [mut]\n[Entry(text: \"a\", values: [\"2\"]), Entry(text: \"a\", values: [\"3\"]), Entry(text: \"b\", values: [\"1\"])] : Array<Entry>?\n2\n3\n1\n3\nb1\na2\na3\ntrue\n0 : Integer [mut]\n#<fn> : (Integer) -> Integer\n[#<fn>, #<fn>] : Array<(Integer) -> Integer>?\n2\n4\n4\n{\"a\" => [\"retained\"]} : Hash<String, Array<String>>?\naretained\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "collection-capture-identities",
+      "title": "Collection capture identities",
+      "declarations": "",
+      "body": "\t_ascending := [3, 1, 2].sort()\n\t_descending := [3.0, 1.0].sort_descending()\n\t_keyed := [2, 1].sort_by { |value| value }\n\t_present := [1, 2].include?(1)\n\t_index := [1, 2].index(2)\n\t_count := [1, 2, 1].count(1)\n\t_unique := [1, 2, 1].uniq()\n\t_range := (1..3).to_a()\n\tmut total := 2\n\tunchanged := 7\n\tupdate := fn(): Integer\n\t\ttotal += unchanged\n\t\treturn total\n\tend\n\tputs(update())\n\tputs(update())\n\tputs(total)\n\t_repeated := [\"z\", \"a\"].sort()\n\tother := fn(): Integer\n\t\treturn total + unchanged\n\tend\n\tputs(other())\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "9\n16\n16\n23\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "[1, 2, 3] : Array<Integer>\n[3, 1] : Array<Float>\n[1, 2] : Array<Integer>\ntrue : Boolean\n1 : Integer?\n2 : Integer\n[1, 2] : Array<Integer>\n[1, 2, 3] : Array<Integer>\n2 : Integer [mut]\n7 : Integer\n#<fn> : () -> Integer\n9\n16\n16\n[\"a\", \"z\"] : Array<String>\n#<fn> : () -> Integer\n23\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "9\n16\n16\n23\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "[1, 2, 3] : Array<Integer>\n[3, 1] : Array<Float>\n[1, 2] : Array<Integer>\ntrue : Boolean\n1 : Integer?\n2 : Integer\n[1, 2] : Array<Integer>\n[1, 2, 3] : Array<Integer>\n2 : Integer [mut]\n7 : Integer\n#<fn> : () -> Integer\n9\n16\n16\n[\"a\", \"z\"] : Array<String>\n#<fn> : () -> Integer\n23\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "safe-block-map",
+      "title": "Safe block map",
+      "declarations": "def probe(values: Array<Integer>?)\nmut visits := 0\nresult := values&.map do |value|\nvisits += 1\nvalue + 1\nend\nputs(result == nil)\nif result != nil\nputs(result[0])\nend\nputs(visits)\nend\n",
+      "body": "probe(nil)\nprobe([2, 1])\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n3\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n3\n2\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n3\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n3\n2\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "safe-block-indexed-map",
+      "title": "Safe block indexed map",
+      "declarations": "def probe(values: Array<Integer>?)\nmut visits := 0\nresult := values&.map.with_index do |value, index|\nvisits += 1\nvalue + index\nend\nputs(result == nil)\nif result != nil\nputs(result[1])\nend\nputs(visits)\nend\n",
+      "body": "probe(nil)\nprobe([2, 1])\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n2\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n2\n2\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n2\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n2\n2\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "safe-block-select",
+      "title": "Safe block select",
+      "declarations": "def probe(values: Array<Integer>?)\nmut visits := 0\nresult := values&.select do |value|\nvisits += 1\nvalue > 1\nend\nputs(result == nil)\nif result != nil\nputs(result.size())\nend\nputs(visits)\nend\n",
+      "body": "probe(nil)\nprobe([2, 1])\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n1\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n1\n2\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n1\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n1\n2\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "safe-block-indexed-select",
+      "title": "Safe block indexed select",
+      "declarations": "def probe(values: Array<Integer>?)\nmut visits := 0\nresult := values&.select.with_index do |_value, index|\nvisits += 1\nindex == 0\nend\nputs(result == nil)\nif result != nil\nputs(result[0])\nend\nputs(visits)\nend\n",
+      "body": "probe(nil)\nprobe([2, 1])\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n2\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n2\n2\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n2\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n2\n2\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "safe-block-reduce",
+      "title": "Safe block reduce",
+      "declarations": "def probe(values: Array<Integer>?)\nmut visits := 0\nresult := values&.reduce(0) do |sum, value|\nvisits += 1\nsum + value\nend\nputs(result == nil)\nif result != nil\nputs(result)\nend\nputs(visits)\nend\n",
+      "body": "probe(nil)\nprobe([2, 1])\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n3\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n3\n2\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n3\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n3\n2\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "safe-block-any",
+      "title": "Safe block any",
+      "declarations": "def probe(values: Array<Integer>?)\nmut visits := 0\nresult := values&.any? do |value|\nvisits += 1\nvalue > 1\nend\nputs(result == nil)\nif result != nil\nputs(result)\nend\nputs(visits)\nend\n",
+      "body": "probe(nil)\nprobe([2, 1])\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\ntrue\n1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\ntrue\n1\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\ntrue\n1\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\ntrue\n1\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "safe-block-all",
+      "title": "Safe block all",
+      "declarations": "def probe(values: Array<Integer>?)\nmut visits := 0\nresult := values&.all? do |value|\nvisits += 1\nvalue > 0\nend\nputs(result == nil)\nif result != nil\nputs(result)\nend\nputs(visits)\nend\n",
+      "body": "probe(nil)\nprobe([2, 1])\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\ntrue\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\ntrue\n2\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\ntrue\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\ntrue\n2\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "safe-block-none",
+      "title": "Safe block none",
+      "declarations": "def probe(values: Array<Integer>?)\nmut visits := 0\nresult := values&.none? do |value|\nvisits += 1\nvalue < 0\nend\nputs(result == nil)\nif result != nil\nputs(result)\nend\nputs(visits)\nend\n",
+      "body": "probe(nil)\nprobe([2, 1])\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\ntrue\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\ntrue\n2\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\ntrue\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\ntrue\n2\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "safe-block-find",
+      "title": "Safe block find",
+      "declarations": "def probe(values: Array<Integer>?)\nmut visits := 0\nresult := values&.find do |value|\nvisits += 1\nvalue == 1\nend\nputs(result == nil)\nif result != nil\nputs(result)\nend\nputs(visits)\nend\n",
+      "body": "probe(nil)\nprobe([2, 1])\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n1\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n1\n2\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n1\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n1\n2\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "safe-block-find-index",
+      "title": "Safe block find index",
+      "declarations": "def probe(values: Array<Integer>?)\nmut visits := 0\nresult := values&.find_index do |value|\nvisits += 1\nvalue == 1\nend\nputs(result == nil)\nif result != nil\nputs(result)\nend\nputs(visits)\nend\n",
+      "body": "probe(nil)\nprobe([2, 1])\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n1\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n1\n2\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n1\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n1\n2\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "safe-block-sort-by",
+      "title": "Safe block sort by",
+      "declarations": "def probe(values: Array<Integer>?)\nmut visits := 0\nresult := values&.sort_by do |value|\nvisits += 1\nvalue\nend\nputs(result == nil)\nif result != nil\nputs(result[0])\nend\nputs(visits)\nend\n",
+      "body": "probe(nil)\nprobe([2, 1])\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n1\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n1\n2\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n1\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n1\n2\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "safe-block-sort-by-descending",
+      "title": "Safe block sort by descending",
+      "declarations": "def probe(values: Array<Integer>?)\nmut visits := 0\nresult := values&.sort_by_descending do |value|\nvisits += 1\nvalue\nend\nputs(result == nil)\nif result != nil\nputs(result[0])\nend\nputs(visits)\nend\n",
+      "body": "probe(nil)\nprobe([2, 1])\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n2\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n2\n2\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n2\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\n0\nfalse\n2\n2\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "safe-block-receiver-and-initial-order",
+      "title": "Safe block receiver and initial order",
+      "declarations": "def source(mut log: Array<Integer>, present: Boolean): Array<Integer>?\nlog.push(7)\nif present\nreturn [1, 2]\nend\nreturn nil\nend\ndef initial(mut log: Array<Integer>): Integer\nlog.push(5)\nreturn 5\nend\n",
+      "body": "mut log: Array<Integer> := []\nabsent := source(log, false)&.reduce(initial(log)) { |sum, value| sum + value }\nputs(absent == nil)\nputs(log.size())\npresent := source(log, true)&.reduce(initial(log)) { |sum, value| sum + value }\nif present != nil\nputs(present)\nend\nlog.each { |value| puts(value) }\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n1\n8\n7\n7\n5\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "[] : Array<Integer> [mut]\nnil : Integer?\ntrue\n1\n8 : Integer?\n8\n7\n7\n5\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n1\n8\n7\n7\n5\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "[] : Array<Integer> [mut]\nnil : Integer?\ntrue\n1\n8 : Integer?\n8\n7\n7\n5\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "safe-block-retains-live-array",
+      "title": "Safe block retains live array",
+      "declarations": "",
+      "body": "mut values := [1, 2]\nmut optional: Array<Integer>? := values\nresult := optional&.select do |value|\nif value == 1\noptional = nil\nvalues[0] = 9\nvalues.push(3)\nend\nvalue < 3\nend\nputs(optional == nil)\nresult&.each { |value| puts(value) }\nputs(values[0])\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n1\n2\n9\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "[1, 2] : Array<Integer> [mut]\n[1, 2] : Array<Integer>? [mut]\n[1, 2] : Array<Integer>?\ntrue\n1\n2\n9\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n1\n2\n9\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "[1, 2] : Array<Integer> [mut]\n[1, 2] : Array<Integer>? [mut]\n[1, 2] : Array<Integer>?\ntrue\n1\n2\n9\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "safe-block-nested-range",
+      "title": "Safe block nested range",
+      "declarations": "",
+      "body": "missing: Range<Integer>? := nil\npresent: Range<Integer>? := (9007199254740990..9007199254740991)\nputs(missing&.map { |value| value } == nil)\npresent&.map.with_index { |value, index| value - index }&.each { |value| puts(value) }\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n9007199254740990\n9007199254740990\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "nil : Range<Integer>?\n9007199254740990..9007199254740991 : Range<Integer>?\ntrue\n9007199254740990\n9007199254740990\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n9007199254740990\n9007199254740990\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "nil : Range<Integer>?\n9007199254740990..9007199254740991 : Range<Integer>?\ntrue\n9007199254740990\n9007199254740990\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "safe-block-nullable-container-literals",
+      "title": "Safe block nullable container literals",
+      "declarations": "def show(values: Array<Integer?>?, table: Hash<String, Integer?>?)\nputs(values&.size() == nil)\nvalues&.each { |value| puts(value == nil) }\nputs(table&.size() == nil)\nmut absent := 0\ntable&.each { |_key, value| if value == nil; absent += 1; end }\nputs(absent)\nend\n",
+      "body": "show([], {})\nshow([nil, 2], {\"a\": nil, \"b\": 3})\nnested: Array<Array<Integer?>?>? := [nil, [], [nil, 4]]\nnested&.each do |values|\nvalues&.each { |value| puts(value == nil) }\nend\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "false\nfalse\n0\nfalse\ntrue\nfalse\nfalse\n1\ntrue\nfalse\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "false\nfalse\n0\nfalse\ntrue\nfalse\nfalse\n1\n[nil, [], [nil, 4]] : Array<Array<Integer?>?>?\ntrue\nfalse\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "false\nfalse\n0\nfalse\ntrue\nfalse\nfalse\n1\ntrue\nfalse\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "false\nfalse\n0\nfalse\ntrue\nfalse\nfalse\n1\n[nil, [], [nil, 4]] : Array<Array<Integer?>?>?\ntrue\nfalse\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "safe-block-value-call-chaining",
+      "title": "Safe block value call chaining",
+      "declarations": "",
+      "body": "missing: Array<Integer>? := nil\npresent: Array<Integer>? := [2, 3]\nputs(missing&.map { |value| fn(): Integer; return value; end } == nil)\ncallbacks := present&.map { |value| fn(): Integer; return value; end }\ncallbacks&.each { |callback| puts(callback()) }\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n2\n3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "nil : Array<Integer>?\n[2, 3] : Array<Integer>?\ntrue\n[#<fn>, #<fn>] : Array<() -> Integer>?\n2\n3\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\n2\n3\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "nil : Array<Integer>?\n[2, 3] : Array<Integer>?\ntrue\n[#<fn>, #<fn>] : Array<() -> Integer>?\n2\n3\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "safe-block-generic",
+      "title": "Safe block generic",
+      "declarations": "def copy<T>(values: Array<T>?): Array<T>?\nreturn values&.map { |value| value }\nend\n",
+      "body": "puts(copy<Integer>(nil) == nil)\ncopy<String>([\"a\", \"b\"])&.each { |value| puts(value) }\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\na\nb\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\na\nb\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "true\na\nb\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "true\na\nb\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "safe-block-invalid-ordinary-nullable-each",
+      "title": "Safe block invalid ordinary nullable each",
+      "declarations": "",
+      "body": "values: Array<Integer>? := nil\nvalues.each { |value| puts(value) }\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:1: error[TRB3000]: nullable iteration source requires safe navigation or explicit narrowing\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:1: error[TRB3000]: nullable iteration source requires safe navigation or explicit narrowing\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
           "stdout": "nil : Array<Integer>?\n",
-          "stderr": "(trb):2:1: error: Array<Integer>? is not iterable\n"
+          "stderr": "(trb):2:1: error[TRB3000]: nullable iteration source requires safe navigation or explicit narrowing\n"
         }
       },
       "native": {
         "check": {
           "code": 1,
           "stdout": "",
-          "stderr": "<case>/main.trb:4: error[TRBN4002]: unexpected token { after statement\n"
+          "stderr": "<case>/main.trb:4: error[TRBN4004]: ordinary each requires a supported Array, Range or Hash receiver\n"
         },
         "build": {
           "code": 1,
           "stdout": "",
-          "stderr": "<case>/main.trb:4: error[TRBN4002]: unexpected token { after statement\n"
+          "stderr": "<case>/main.trb:4: error[TRBN4004]: ordinary each requires a supported Array, Range or Hash receiver\n"
         },
         "execute": null,
         "repl": {
           "code": 0,
           "stdout": "nil : Array<Integer>?\n",
-          "stderr": "(trb):2: error[TRBN4002]: unexpected token { after statement\n"
+          "stderr": "(trb):2: error[TRBN4004]: ordinary each requires a supported Array, Range or Hash receiver\n"
+        }
+      }
+    },
+    {
+      "id": "safe-block-invalid-ordinary-nullable-map",
+      "title": "Safe block invalid ordinary nullable map",
+      "declarations": "",
+      "body": "values: Array<Integer>? := nil\nvalues.map { |value| value }\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:1: error[TRB3000]: nullable iteration source requires safe navigation or explicit narrowing\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:1: error[TRB3000]: nullable iteration source requires safe navigation or explicit narrowing\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "nil : Array<Integer>?\n",
+          "stderr": "(trb):2:1: error[TRB3000]: nullable iteration source requires safe navigation or explicit narrowing\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4: error[TRBN4004]: collection transform requires a supported Array or Range receiver\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4: error[TRBN4004]: collection transform requires a supported Array or Range receiver\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "nil : Array<Integer>?\n",
+          "stderr": "(trb):2: error[TRBN4004]: collection transform requires a supported Array or Range receiver\n"
+        }
+      }
+    },
+    {
+      "id": "safe-block-invalid-unsafe-result",
+      "title": "Safe block invalid unsafe result",
+      "declarations": "",
+      "body": "values: Array<Integer>? := nil\nresult: Array<Integer> := values&.map { |value| value }\nputs(result.size())\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:1: error[TRB3000]: cannot assign Array<Integer>? to Array<Integer>\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:1: error[TRB3000]: cannot assign Array<Integer>? to Array<Integer>\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "nil : Array<Integer>?\n",
+          "stderr": "(trb):2:1: error[TRB3000]: cannot assign Array<Integer>? to Array<Integer>\n(trb):2:6: error[TRB3000]: result is not declared\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4: error[TRBN4004]: expected Array<Integer>, found Array<Integer>?\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4: error[TRBN4004]: expected Array<Integer>, found Array<Integer>?\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "nil : Array<Integer>?\n",
+          "stderr": "(trb):2: error[TRBN4004]: expected Array<Integer>, found Array<Integer>?\n(trb):2: error[TRBN4003]: unresolved local result\n"
+        }
+      }
+    },
+    {
+      "id": "safe-block-invalid-safe-index-modifier",
+      "title": "Safe block invalid safe index modifier",
+      "declarations": "",
+      "body": "[1].each&.with_index { |value, index| puts(value + index) }\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:1: error[TRB1000]: safe navigation must precede the iteration operation, not with_index\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:1: error[TRB1000]: safe navigation must precede the iteration operation, not with_index\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1:1: error[TRB1000]: safe navigation must precede the iteration operation, not with_index\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4002]: unexpected token { after statement\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4002]: unexpected token { after statement\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1: error[TRBN4002]: unexpected token { after statement\n"
+        }
+      }
+    },
+    {
+      "id": "safe-block-invalid-safe-map-index-modifier",
+      "title": "Safe block invalid safe map index modifier",
+      "declarations": "",
+      "body": "[1].map&.with_index { |value, index| value + index }\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:1: error[TRB1000]: safe navigation must precede the iteration operation, not with_index\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3:1: error[TRB1000]: safe navigation must precede the iteration operation, not with_index\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1:1: error[TRB1000]: safe navigation must precede the iteration operation, not with_index\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4002]: unexpected token { after statement\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:3: error[TRBN4002]: unexpected token { after statement\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):1: error[TRBN4002]: unexpected token { after statement\n"
+        }
+      }
+    },
+    {
+      "id": "safe-block-invalid-return-from-map",
+      "title": "Safe block invalid return from map",
+      "declarations": "",
+      "body": "values: Array<Integer>? := nil\nvalues&.map { |value| return value }\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:23: error[TRB3000]: return is not supported inside value-producing collection transformations yet\n<case>/main.trb:4:23: error[TRB3000]: map block must end with a result expression\n<case>/main.trb:4:23: error[TRB3000]: return type is Integer, expected Void\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:23: error[TRB3000]: return is not supported inside value-producing collection transformations yet\n<case>/main.trb:4:23: error[TRB3000]: map block must end with a result expression\n<case>/main.trb:4:23: error[TRB3000]: return type is Integer, expected Void\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "nil : Array<Integer>?\n",
+          "stderr": "(trb):2:23: error[TRB3000]: return is not supported inside value-producing collection transformations yet\n(trb):2:23: error[TRB3000]: map block must end with a result expression\n(trb):2:23: error[TRB3000]: return is only valid inside a function or method\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4: error[TRBN4004]: return is unavailable inside a value-producing collection block\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4: error[TRBN4004]: return is unavailable inside a value-producing collection block\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "nil : Array<Integer>?\n",
+          "stderr": "(trb):2: error[TRBN4004]: return is only valid inside a function or method\n"
+        }
+      }
+    },
+    {
+      "id": "safe-block-invalid-break-from-map",
+      "title": "Safe block invalid break from map",
+      "declarations": "",
+      "body": "values: Array<Integer>? := nil\nvalues&.map { |_value| break }\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:24: error[TRB3000]: break is not supported inside value-producing collection transformations yet\n<case>/main.trb:4:24: error[TRB3000]: map block must end with a result expression\n<case>/main.trb:4:24: error[TRB3000]: break is only valid inside while or an iteration block\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:24: error[TRB3000]: break is not supported inside value-producing collection transformations yet\n<case>/main.trb:4:24: error[TRB3000]: map block must end with a result expression\n<case>/main.trb:4:24: error[TRB3000]: break is only valid inside while or an iteration block\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "nil : Array<Integer>?\n",
+          "stderr": "(trb):2:24: error[TRB3000]: break is not supported inside value-producing collection transformations yet\n(trb):2:24: error[TRB3000]: map block must end with a result expression\n(trb):2:24: error[TRB3000]: break is only valid inside while or an iteration block\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4: error[TRBN4004]: break is only valid inside a loop\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4: error[TRBN4004]: break is only valid inside a loop\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "nil : Array<Integer>?\n",
+          "stderr": "(trb):2: error[TRBN4004]: break is only valid inside a loop\n"
+        }
+      }
+    },
+    {
+      "id": "safe-block-invalid-next-from-select",
+      "title": "Safe block invalid next from select",
+      "declarations": "",
+      "body": "values: Array<Integer>? := nil\nvalues&.select { |_value| next }\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:27: error[TRB3000]: next is not supported inside value-producing collection transformations yet\n<case>/main.trb:4:27: error[TRB3000]: select block must end with a result expression\n<case>/main.trb:4:27: error[TRB3000]: next is only valid inside while or an iteration block\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:27: error[TRB3000]: next is not supported inside value-producing collection transformations yet\n<case>/main.trb:4:27: error[TRB3000]: select block must end with a result expression\n<case>/main.trb:4:27: error[TRB3000]: next is only valid inside while or an iteration block\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "nil : Array<Integer>?\n",
+          "stderr": "(trb):2:27: error[TRB3000]: next is not supported inside value-producing collection transformations yet\n(trb):2:27: error[TRB3000]: select block must end with a result expression\n(trb):2:27: error[TRB3000]: next is only valid inside while or an iteration block\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4: error[TRBN4004]: next is only valid inside a loop\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4: error[TRBN4004]: next is only valid inside a loop\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "nil : Array<Integer>?\n",
+          "stderr": "(trb):2: error[TRBN4004]: next is only valid inside a loop\n"
+        }
+      }
+    },
+    {
+      "id": "safe-block-invalid-invalid-key",
+      "title": "Safe block invalid invalid key",
+      "declarations": "",
+      "body": "values: Array<Integer>? := nil\nvalues&.sort_by { |_value| true }\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:17: error[TRB3000]: sort_by block result must have portable natural order, got Boolean\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:17: error[TRB3000]: sort_by block result must have portable natural order, got Boolean\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "nil : Array<Integer>?\n",
+          "stderr": "(trb):2:17: error[TRB3000]: sort_by block result must have portable natural order, got Boolean\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4: error[TRBN4004]: sorting key requires portable natural order\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4: error[TRBN4004]: sorting key requires portable natural order\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "nil : Array<Integer>?\n",
+          "stderr": "(trb):2: error[TRBN4004]: sorting key requires portable natural order\n"
+        }
+      }
+    },
+    {
+      "id": "safe-block-invalid-wrong-receiver",
+      "title": "Safe block invalid wrong receiver",
+      "declarations": "",
+      "body": "value: Integer? := nil\nvalue&.map { |value| value }\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:1: error[TRB3000]: Integer is not iterable\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:1: error[TRB3000]: Integer is not iterable\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "nil : Integer?\n",
+          "stderr": "(trb):2:1: error[TRB3000]: Integer is not iterable\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4: error[TRBN4004]: collection transform requires a supported Array or Range receiver\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4: error[TRBN4004]: collection transform requires a supported Array or Range receiver\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "nil : Integer?\n",
+          "stderr": "(trb):2: error[TRBN4004]: collection transform requires a supported Array or Range receiver\n"
+        }
+      }
+    },
+    {
+      "id": "safe-block-invalid-nullable-predicate",
+      "title": "Safe block invalid nullable predicate",
+      "declarations": "",
+      "body": "values: Array<Integer>? := nil\nvalues&.any? { |_value| nil }\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:14: error[TRB3000]: any? block result must be Boolean, got Nil\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:14: error[TRB3000]: any? block result must be Boolean, got Nil\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "nil : Array<Integer>?\n",
+          "stderr": "(trb):2:14: error[TRB3000]: any? block result must be Boolean, got Nil\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4: error[TRBN4004]: expected Boolean, found Nil\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4: error[TRBN4004]: expected Boolean, found Nil\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "nil : Array<Integer>?\n",
+          "stderr": "(trb):2: error[TRBN4004]: expected Boolean, found Nil\n"
+        }
+      }
+    },
+    {
+      "id": "safe-block-invalid-hash-transform",
+      "title": "Safe block invalid hash transform",
+      "declarations": "",
+      "body": "values: Hash<String, Integer>? := nil\nvalues&.map { |value| value }\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:1: error[TRB3000]: Hash iteration supports only each in v0.1\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4:1: error[TRB3000]: Hash iteration supports only each in v0.1\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "nil : Hash<String, Integer>?\n",
+          "stderr": "(trb):2:1: error[TRB3000]: Hash iteration supports only each in v0.1\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4: error[TRBN4004]: collection transform requires a supported Array or Range receiver\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:4: error[TRBN4004]: collection transform requires a supported Array or Range receiver\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "nil : Hash<String, Integer>?\n",
+          "stderr": "(trb):2: error[TRBN4004]: collection transform requires a supported Array or Range receiver\n"
+        }
+      }
+    },
+    {
+      "id": "safe-block-invalid-readonly-receiver",
+      "title": "Safe block invalid readonly receiver",
+      "declarations": "def visit(values: Array<Integer>?)\nvalues&.each { |value| values.push(value) }\nend\n",
+      "body": "visit([1])\n",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:2:24: error[TRB3000]: type Array<Integer>? has no member push\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:2:24: error[TRB3000]: type Array<Integer>? has no member push\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):2:24: error[TRB3000]: type Array<Integer>? has no member push\n(trb):1:1: error[TRB3000]: function visit is not declared or imported\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:2: error[TRBN4004]: push receiver is immutable\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:2: error[TRBN4004]: push receiver is immutable\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):2: error[TRBN4004]: push receiver is immutable\n(trb):1: error[TRBN4003]: unresolved function visit\n"
         }
       }
     }

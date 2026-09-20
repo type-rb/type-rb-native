@@ -32,6 +32,7 @@ subprocess.run([sys.executable, str(repository / "tools/native-array-mutation-te
 subprocess.run([sys.executable, str(repository / "tools/native-array-query-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-array-sorting-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-keyed-array-sorting-test.py"), str(binary)], check=True)
+subprocess.run([sys.executable, str(repository / "tools/native-safe-block-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-array-join-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-string-trimming-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-symbol-test.py"), str(binary)], check=True)
