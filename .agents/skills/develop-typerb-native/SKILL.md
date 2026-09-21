@@ -47,6 +47,11 @@ The CI plan for the actual changed paths determines required authorities; do
 not skip them because a change looks small. Complete focused local checks and
 the required CI, fixing failures caused by the change. After they pass, repeat
 or broaden checks only for new edits, failures, or unresolved concerns.
+Use CI as the full integration authority by default, with additional full local
+recovery for bootstrap or validation-orchestration changes and failure diagnosis.
+For basic-language coverage, combine syntax, checking, MIR, execution and REPL
+into a coherent family rather than opening a PR for each internal step. A larger
+PR with reviewable commits and complete acceptance evidence is appropriate.
 
 For root TypeRB source checks, use the exact `TYPE_RB_REVISION` compiler:
 

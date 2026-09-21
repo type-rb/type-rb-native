@@ -130,8 +130,9 @@ the Pages workflow requires documentation validation, not compiler benchmarks.
    The retired source-era benchmark controllers are no longer rebuilt or tested
    against current source; see [their preserved versions](retired-experiment-tools.md).
 3. **Correctness and CLI.** Complete Native, target and applicable memory jobs
-   start after quick succeeds on non-draft core PRs. The CLI authority runs after
-   quick for applicable changes, including drafts as before.
+   start after quick succeeds on non-draft core PRs. Complete CLI validation,
+   including bootstrap-cache invalidation, also starts only when the applicable
+   PR is ready. Development drafts retain the source/CLI checks in quick feedback.
 4. **Comparative measurement.** Applicable non-draft changes wait for Native,
    targets, memory, tooling and CLI success before starting comparisons. Existing
    repetitions, interleaving, baseline identities, raw evidence and limits stay
@@ -141,11 +142,22 @@ the Pages workflow requires documentation validation, not compiler benchmarks.
    jobs reject acceptance. Unexpected execution of a disabled authority also
    rejects the plan/result mismatch.
 
-Drafts receive quick, applicable tooling/CLI and documentation feedback but
+Drafts receive quick, applicable tooling and documentation feedback but
 reject merge acceptance with `Draft feedback is not merge acceptance`. Marking
 ready triggers complete validation; converting back to draft cancels the old
 run. New commits cancel superseded PR work. Cancelled measurements are not
 accepted results.
+
+Develop complete language families with focused local units, reference/Native
+positive and negative cases, MIR ownership and retained REPL checks. Include an
+ordinary Native build when compiler source changes. Hosted CI is the complete
+integration authority by default; full local recovery is additionally required
+for bootstrap or validation-orchestration changes and recovery/platform diagnosis.
+Optional local suites without recovery variables remain partial evidence. Do
+not mark a language family complete or merge while required CI is pending.
+Larger cohesive PRs may combine syntax through execution and REPL; keep one
+ready candidate and one subsequent development batch instead of repeatedly
+revalidating a stack of small dependent PRs.
 
 `Main validation` replaces the separate Native, memory and documentation push
 triggers. It executes the same planner using the complete **before-to-head**
@@ -238,9 +250,9 @@ them would remove coverage. Ordinary B1-to-B4 regeneration also preserves its
 sequential seed dependencies. No generation check or benchmark repetition is
 removed by test-only routing.
 
-Quick checks retain their ordering for compiler/CLI changes. Additional runner
-fan-out or performance-before-correctness would change resource usage or the
-failure policy, so neither is used for these scoped improvements.
+Quick checks retain their ordering for compiler/CLI changes. Independent recovery
+controls use bounded concurrency within the existing runner, as described below.
+Comparative performance still follows complete correctness acceptance.
 
 ## Recovery scheduling and stage evidence
 
@@ -274,6 +286,32 @@ malformed, reordered, repeated or incomplete evidence rejects an otherwise
 successful suite. Previously completed phases remain visible when a later
 phase fails, but the summary cannot claim successful recovery. Both raw receipts
 and the summary live in the always-uploaded suite evidence directory.
+
+After generation production and ordinary fixed points complete, the thirteen
+independent generation commands run with bounded concurrency. Each retains its
+exact executable, arguments and expected stdout, zero exit status and empty
+stderr. All results are collected in input order, including failures after a
+peer fails. Empty batches, duplicate labels, launch failures and output mismatches
+reject acceptance. The B0-to-B3 recovery and B1-to-B4 ordinary generation chains
+remain sequential; no dependent producer/consumer pair runs concurrently.
+
+Module-boundary controls use the same limit across modules. Each module owns
+separate mutation, missing-module and malformed-module directories; shared
+compiler inputs are read-only. Every module still checks changed QBE, diagnostic
+and exit behavior, failure before external tools, and absent output/intermediate
+files. Hidden-import and unrelated-sibling controls also remain required. Both
+control groups fully join before their stage-end receipt is written. Their
+descendants stay in the root suite's owned process group for cancellation.
+
+`TYPE_RB_NATIVE_RECOVERY_JOBS` defaults to `2`; explicit values `1` through `4`
+are accepted, with `1` available for serial diagnosis. Other values fail before
+workspace allocation. The limit is per root invocation; the compiler suite
+continues independently. This is test orchestration through the pinned Go
+reference's `concurrent_map`, not a Native concurrency-support claim or a new
+ordinary compiler dependency. Synthetic subprocess tests check bounded overlap,
+exactly-once admission/completion and complete, ordered failure collection at
+limits 1, 2 and 4. Record phase durations and runner resource costs when evaluating
+the change; do not present an estimated speedup as a measurement.
 
 The source-mutation helper uses the reference compiler's code-point `index`,
 `rindex` and `slice` operations. Comparing the first and last match preserves
