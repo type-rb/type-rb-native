@@ -21,7 +21,33 @@ with tempfile.TemporaryDirectory(prefix='native-object-methods-') as temporary:
         assert result.returncode == 0, (command, result.stdout, result.stderr)
         return result
 
-    for name in ('object-class-static-method', 'object-class-generic-instance-method'):
+    for name in (
+        'object-class-array-field',
+        'object-class-branch-initialization',
+        'object-class-captured-value',
+        'object-class-constant',
+        'object-class-constructor-named-default',
+        'object-class-field-assignment',
+        'object-class-field-default',
+        'object-class-float-boolean-fields',
+        'object-class-generic-field',
+        'object-class-generic-instance-method',
+        'object-class-in-hash',
+        'object-class-in-record',
+        'object-class-initializer',
+        'object-class-managed-fields',
+        'object-class-mutable-fields',
+        'object-class-named-constructor',
+        'object-class-named-method-default',
+        'object-class-nullable',
+        'object-class-private-method',
+        'object-class-readonly-initialization',
+        'object-class-recursive-field',
+        'object-class-reference-alias',
+        'object-class-self-method-call',
+        'object-class-self-return',
+        'object-class-static-method',
+    ):
         fixture = repository / 'compiler/conformance/valid' / name
         source = root / 'main.trb'
         source.write_text(fixture.with_suffix('.trb').read_text())
@@ -35,7 +61,7 @@ with tempfile.TemporaryDirectory(prefix='native-object-methods-') as temporary:
                 ordinary = '$trbnf' in line
             if line == '}':
                 ordinary = False
-            if ordinary and ('call $trbn_gc_alloc(' in line or 'call $trbnf' in line):
+            if ordinary and ('call $trbn_gc_alloc(' in line or 'call $trbnf' in line or 'call $trbn_hash_' in line):
                 forced.append('\tcall $trbn_gc_collect(w 0)')
                 hooks += 1
             forced.append(line)
@@ -107,6 +133,50 @@ puts(Answer.make().value(extra: 3))
     assert not initialized.stderr, initialized
     assert initialized.stdout == '7\n#<Answer > : Answer\n42\n9\n43\n', initialized
 
+    fields = run([binary, 'repl'], data='''class Box<T>
+readonly @label: String := "kept"
+@value: T
+def initialize(value: T)
+@value = value
+end
+def replace(value: T)
+@value = value
+end
+end
+mut saved := Box<String>.new("a" + "b")
+read := fn(): String; return saved.value; end
+saved.replace("c" + "d")
+class Earlier
+end
+puts(saved.value)
+puts(read())
+saved.value = "end"
+puts(read())
+:reload
+puts(saved.value)
+puts(read())
+:quit
+''')
+    assert not fields.stderr, fields
+    assert fields.stdout == (
+        '#<Box label: "kept", value: "ab"> : Box<String> [mut]\n'
+        '#<fn> : () -> String\ncd\ncd\n"end" : String\nend\n'
+        'cd\ncd\nend\nreloaded\nend\nend\n'), fields
+
+    defaults = run([binary, 'repl'], data='''class Defaults
+@first: String := "a" + "b"
+readonly @second: String := @first + "c"
+end
+item := Defaults.new()
+puts(item.second)
+class Later
+end
+puts(item.second)
+:quit
+''')
+    assert not defaults.stderr, defaults
+    assert defaults.stdout == '#<Defaults first: "ab", second: "abc"> : Defaults\nabc\nabc\n', defaults
+
     (root / 'src').mkdir()
     (root / 'trbconfig.jsonc').write_text('{"name":"objects","sourceDir":"src"}')
     (root / 'src/helper.trb').write_text(
@@ -115,4 +185,4 @@ puts(Answer.make().value(extra: 3))
     assert not imported.stderr, imported
     assert imported.stdout == '#<Helper > : Helper\n17\n17\nreloaded\n17\n', imported
 
-print('Native object methods, forced collection, retained identities and replay passed')
+print('Native object methods, fields, initialization, forced collection, retained identities and replay passed')

@@ -1,4 +1,6 @@
-import { ObjectDefinition } from object_model
+import { ObjectDefinition, ObjectField, ObjectMethod } from object_model
+import { GenericFunction, GenericParameter } from generic_model
+import { generic_application } from generic_arguments
 import { namespace_qualify } from namespace_model
 import { parse_generic_parameters } from generic_syntax
 import { CompilerState, has_diagnostic, terminal_token } from state
@@ -59,4 +61,24 @@ def parse_object_header(mut state: CompilerState, mut position: Array<Integer>):
 		finish_statement(state, position)
 	end
 	return ObjectDefinition.new(name: name, source_id: state.active_module[0], line: line, origin: origin, interface_type: interface_type, parameters: parameters, superclass: superclass, interfaces: interfaces, fields: [], methods: [])
+end
+
+# A default-only class still owns an ordinary checked constructor body.
+def object_default_constructor(mut state: CompilerState, header: ObjectDefinition, fields: Array<ObjectField>, mut methods: Array<ObjectMethod>, finish: Integer)
+	if header.interface_type || fields.size() == 0
+		return
+	end
+	methods.each do |method|
+		if method.name == "initialize" && !method.class_member
+			return
+		end
+	end
+	mut receiver := header.name
+	if header.parameters.size() > 0
+		receiver = generic_application(header.name, header.parameters)
+	end
+	parameter := GenericParameter.new(name: "self", type_name: receiver, line: header.line, mutable: 0, named_only: 0, default_start: - 1, default_finish: - 1)
+	index := state.generic_functions.size()
+	state.generic_functions.push(GenericFunction.new(receiver_type: receiver, name: header.name + "::initialize", source_id: header.source_id, line: header.line, type_parameters: header.parameters, parameters: [parameter], result_type: "Void", body_start: finish, body_finish: finish))
+	methods.push(ObjectMethod.new(name: "initialize", class_member: false, origin: header.origin, function: - 1, generic_function: index))
 end

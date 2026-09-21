@@ -372,6 +372,7 @@ record CheckedLocals
 	mir_blocks: Array<MirBlock>
 	mir_loops: Array<MirControlLoop>
 	mir_hash_refinements: Array<Integer>
+	mir_object_targets: Array<MirIndexedTarget>
 	mir_targets: Array<MirIndexedTarget>
 	mir_calls: Array<MirCall>
 	mir_arguments: Array<Integer>
@@ -402,6 +403,7 @@ def locals_new(capacity: Integer): CheckedLocals
 		mir_blocks: [],
 		mir_loops: [],
 		mir_hash_refinements: [],
+		mir_object_targets: [],
 		mir_targets: [],
 		mir_calls: [],
 		mir_arguments: [],
@@ -509,7 +511,25 @@ def select_checked_body(mut state: CompilerState, function: Integer): CheckedBod
 	end
 	mut encoded := sparse_integer_at(state.checked_body_indices, function)
 	if encoded == 0
-		state.checked_bodies.push(checked_body_new(function, load_integer(state.function_body_starts, function), load_integer(state.function_body_ends, function) + 1))
+		mut origin := load_integer(state.function_body_starts, function)
+		mut finish := load_integer(state.function_body_ends, function) + 1
+		state.generic_function_instances.each do |instance|
+			if instance.function == function
+				state.objects.each do |definition|
+					definition.methods.each do |method|
+						if method.generic_function == instance.definition
+							origin = definition.origin
+							definition.fields.each do |field|
+								if field.default_finish >= finish
+									finish = field.default_finish + 1
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+		state.checked_bodies.push(checked_body_new(function, origin, finish))
 		encoded = state.checked_bodies.size()
 		store_integer(state.checked_body_indices, function, encoded)
 	end

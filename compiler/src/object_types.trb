@@ -1,5 +1,6 @@
 import { integer_string } from literals
 import { CompilerState } from state
+import { load_integer, load_string } from storage
 
 def object_type(owner: Integer, interface_type: Boolean): String
 	if interface_type
@@ -82,4 +83,41 @@ end
 def object_abstract_method(state: CompilerState, template: Integer): Boolean
 	owner := object_method_owner(state, template)
 	return owner >= 0 && state.objects[owner].interface_type
+end
+
+# The constructor contract is attached to the concrete receiver specialization.
+def object_initializer_owner(state: CompilerState, function: Integer): Integer
+	state.generic_function_instances.each do |instance|
+		if instance.function == function
+			owner := object_method_owner(state, instance.definition)
+			if owner >= 0
+				state.objects[owner].methods.each do |method|
+					if method.generic_function == instance.definition && method.name == "initialize" && !method.class_member
+						return find_object_type(state, load_string(state.parameter_types, load_integer(state.function_parameter_starts, function)))
+					end
+				end
+			end
+		end
+	end
+	return - 1
+end
+
+def object_initializer_function(state: CompilerState, owner: Integer): Integer
+	state.generic_function_instances.each do |instance|
+		if object_initializer_owner(state, instance.function) == owner
+			return instance.function
+		end
+	end
+	return - 1
+end
+
+def object_field_index(state: CompilerState, owner: Integer, name: String): Integer
+	mut index := 0
+	state.object_instances[owner].fields.each do |field|
+		if field.name == name
+			return index
+		end
+		index += 1
+	end
+	return - 1
 end
