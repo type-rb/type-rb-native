@@ -215,7 +215,10 @@ end
                          if line.startswith('type-rb-native-gc-stat-v1,automatic-collections,')]
             assert len(automatic) == 1 and int(automatic[0]) > 0, collected.stderr
         submission = fixture.read_text().replace('def main()', 'def exercise_control_case()')
-        assert run('repl', text=submission + '\nexercise_control_case()\n:quit\n') == expected
+        # Interactive top-level bindings display their initialized value.
+        expected_repl = ('1 : Integer\n' if case_name == 'namespace-binding-storage' else '') + expected
+        actual_repl = run('repl', text=submission + '\nexercise_control_case()\n:quit\n')
+        assert actual_repl == expected_repl, (case_name, actual_repl, expected_repl)
     # Keep optional identities across distinct submissions and record-ID remapping.
     retained = run('repl', text=(
         'record Cell\nvalue: String?\nend\n'
