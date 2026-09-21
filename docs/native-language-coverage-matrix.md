@@ -828,7 +828,7 @@
 | Raw enum dot variant reject | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Nested imported raw enum alias chain | accepts | accepts | matches reference | matches reference |
 | Safe enum method calls skip nil arguments | accepts | accepts | matches reference | matches reference |
-| Raw enum error uses canonical record identity | accepts | accepts; reference rejects | differs | matches reference |
+| Raw enum error uses canonical record identity | accepts | accepts | matches reference | matches reference |
 | Retain an implicit enum method receiver in a closure | accepts | accepts | matches reference | matches reference |
 | Distinguish ordinary enum methods from collection blocks | accepts | accepts | matches reference | matches reference |
 | Generic enum method two types | accepts | accepts | matches reference | matches reference |
@@ -1354,3 +1354,49 @@
 | Safe collection lookup: mutable payload | accepts | accepts | matches reference | matches reference |
 | Safe collection lookup: mutable from readonly | accepts | accepts | matches reference | matches reference |
 | Safe collection lookup: shallow slice | accepts | accepts | matches reference | matches reference |
+| String transform split empty | accepts | accepts | matches reference | matches reference |
+| String transform split missing | accepts | accepts | matches reference | matches reference |
+| String transform split edges | accepts | accepts | matches reference | matches reference |
+| String transform split overlap | accepts | accepts | matches reference | matches reference |
+| String transform split wide pattern | accepts | accepts | matches reference | matches reference |
+| String transform split unicode | accepts | accepts | matches reference | matches reference |
+| String transform split combining | accepts | accepts | matches reference | matches reference |
+| String transform split literal | accepts | accepts | matches reference | matches reference |
+| String transform split space | accepts | accepts | matches reference | matches reference |
+| String transform split nul | accepts | accepts | matches reference | matches reference |
+| String transform replace empty | accepts | accepts | matches reference | matches reference |
+| String transform replace missing | accepts | accepts | matches reference | matches reference |
+| String transform replace same | accepts | accepts | matches reference | matches reference |
+| String transform replace overlap | accepts | accepts | matches reference | matches reference |
+| String transform replace delete | accepts | accepts | matches reference | matches reference |
+| String transform replace literal | accepts | accepts | matches reference | matches reference |
+| String transform replace wide pattern | accepts | accepts | matches reference | matches reference |
+| String transform replace unicode | accepts | accepts | matches reference | matches reference |
+| String transform replace recursion | accepts | accepts | matches reference | matches reference |
+| String transform replace nul | accepts | accepts | matches reference | matches reference |
+| String transform replace nul result | accepts | accepts | matches reference | matches reference |
+| String transform replace combining | accepts | accepts | matches reference | matches reference |
+| String transform case ascii | accepts | accepts | matches reference | matches reference |
+| String transform case empty | accepts | accepts | matches reference | matches reference |
+| String transform case simple | accepts | accepts | matches reference | matches reference |
+| String transform case supplementary | accepts | accepts | matches reference | matches reference |
+| String transform case width | accepts | accepts | matches reference | matches reference |
+| String transform case unmapped | accepts | accepts | matches reference | matches reference |
+| String transform case greek | accepts | accepts | matches reference | matches reference |
+| String transform case cyrillic | accepts | accepts | matches reference | matches reference |
+| String transform split independent | accepts | accepts | matches reference | matches reference |
+| String transform safe call | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String transform argument order | accepts | accepts | matches reference | matches reference |
+| String transform split receiver retained | accepts | accepts | matches reference | matches reference |
+| String transform generic container | accepts | accepts | matches reference | matches reference |
+| String transform function value | accepts | accepts | matches reference | matches reference |
+| String transform invalid split type | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String transform invalid replacement type | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String transform invalid pattern type | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String transform invalid case argument | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String transform invalid replace arity | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String transform invalid extra argument | rejects as reference | rejects as reference | not reached | rejects as reference |
+| String transform empty split | accepts | accepts | matches reference | rejects as reference |
+| String transform empty pattern | accepts | accepts | matches reference | rejects as reference |
+| String transform empty pattern effects | accepts | accepts | matches reference | rejects as reference |
+| String transform rejects named builtin arguments | rejects as reference | rejects as reference | not reached | rejects as reference |

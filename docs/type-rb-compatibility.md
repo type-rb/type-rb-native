@@ -2,7 +2,7 @@
 
 TypeRB Native currently follows exact reference revisions during development. The
 current source and semantic oracle is TypeRB
-`49c6d422e944e37f50a9b3a30941dd6c4d3ae256` (the `0.4.9-dev` development identity), recorded
+`04d5ecf23a546abad5bd72ac283756282edb365f` (the `0.4.9-dev` development identity), recorded
 in `TYPE_RB_REVISION`. This declares one exact reference identity during Native
 development, without claiming a supported version range.
 
@@ -35,6 +35,14 @@ passes the selected-reference, migration, exact-baseline, target-regression,
 fixed-point, process, resource, and size criteria.
 
 ## Builtin values and Unicode reference update
+
+The current pin additionally incorporates
+[TypeRB #792](https://github.com/type-rb/type-rb/pull/792). Standard Result and error
+types retain canonical identity across local shadows and imported aliases, and
+raw-enum conversions no longer select an unrelated same-named record. The shared
+raw-enum error case now compiles and executes in both implementations. String
+transforms use this accepted reference; Unicode output-mode case differences
+remain tracked in [TypeRB #791](https://github.com/type-rb/type-rb/issues/791).
 
 The exact pin incorporates [TypeRB #788](https://github.com/type-rb/type-rb/pull/788),
 [#789](https://github.com/type-rb/type-rb/pull/789) and

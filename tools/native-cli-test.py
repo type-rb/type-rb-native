@@ -40,6 +40,7 @@ subprocess.run([sys.executable, str(repository / "tools/native-safe-block-test.p
 subprocess.run([sys.executable, str(repository / "tools/native-sliced-iteration-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-array-join-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-string-trimming-test.py"), str(binary)], check=True)
+subprocess.run([sys.executable, str(repository / "tools/native-string-transforms-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-symbol-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-newtype-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-literal-test.py"), str(binary)], check=True)

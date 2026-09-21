@@ -1,12 +1,29 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 1352 ordinary-path probes and 32 feature
+Status: the shared contract contains 1398 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
 basic-language completion; [the generated family inventory](native-language-feature-inventory.md)
 records semantic contracts that still need tests. The earlier 19-case inventory
 was an initial sample, not a complete list of missing features.
+
+## String splitting, replacement and case conversion
+
+`split` preserves literal separators and empty fields. `replace_all` replaces
+non-overlapping literal matches without interpreting replacement syntax. Both
+preserve embedded NUL and arbitrary bytes, reject empty patterns after evaluating
+arguments, and retain the original receiver across argument effects. Unicode
+`upcase` and `downcase` follow the pinned Go reference's simple Unicode 17.0.0
+mapping, including changing UTF-8 widths and replacement of malformed bytes.
+Reference output-mode differences remain explicit under
+[TypeRB #791](https://github.com/type-rb/type-rb/issues/791).
+
+Typed MIR verifies operands, effects and roots independently of frontend bodies.
+The regenerated CLI uses the same transforms for retained values and recovers
+from invalid empty patterns. Byte-level, exhaustive mapping, allocation and
+forced-GC tests supplement the shared check/build/execution/REPL cases. See
+[decision 0084](decisions/0084-string-transform-mir.md).
 
 ## Builtin Result values and Unicode identifiers
 
@@ -279,7 +296,7 @@ owns the direction, operand types, allocation effects and live roots. Shared
 ordinary/REPL cases and independent source-erased, reordered, forced-GC and
 negative verifier controls are described in
 [decision 0065](decisions/0065-string-trimming-mir.md). The REPL itself uses these
-ordinary methods; remaining String transforms stay open in the inventory.
+ordinary methods. String transforms are covered by the family above; portable case semantics remain a reference boundary.
 
 ## Hash key expressions
 
@@ -305,7 +322,7 @@ the shared probes reveal them.
 
 The ordinary String foundation now supports UTF-8 literals, code-point
 length/indexing, concatenation, interpolation, allocation/lifetime and source/REPL
-handling. Continue with the remaining String APIs recorded in the
+handling. Continue with the remaining receiver combinations recorded in the
 shared inventory. Keep raw byte operations explicit where source decoding or
 terminal editing needs them; character indexing and terminal cell widths remain
 separate contracts.
@@ -699,8 +716,8 @@ than the final ordinary compiler and must not be counted as ordinary UTF-8
 evidence. No seed, pin or Go fallback is added to the ordinary chain; acceptance
 requires the published seed's full replacement generations and fixed points.
 
-Unicode identifiers now follow the builtin-value family above. Remaining String
-receiver APIs stay separate gaps. This foundation does not mark the entire String family,
+Unicode identifiers and String transforms now follow the families above. Portable
+Unicode case behavior across reference output modes remains a separate gap. This foundation does not mark the entire String family,
 standard library or basic-language milestone complete.
 
 ## Readonly record field correction

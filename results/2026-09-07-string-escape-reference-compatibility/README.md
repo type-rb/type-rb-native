@@ -1,6 +1,21 @@
 # Current reference compatibility
 
 The selected development reference is TypeRB `0.4.9-dev` at
+`04d5ecf23a546abad5bd72ac283756282edb365f`, incorporating
+[PR #792](https://github.com/type-rb/type-rb/pull/792).
+Standard Result/error declarations preserve canonical identity through same-named
+local declarations, import aliases and nested raw-enum conversions. Generated Go,
+Ruby and TypeScript programs and retained REPL sessions have regression coverage.
+Native adopts the corrected ordinary raw-enum error observation alongside String
+transforms; exact AST, ordinary paths, recovery and target checks remain required.
+Unicode case mapping follows the pinned Go implementation; output-mode differences
+remain tracked in [TypeRB #791](https://github.com/type-rb/type-rb/issues/791).
+This update changes no release or immutable seed and claims neither complete
+language parity nor final performance qualification. Earlier evidence follows.
+
+# Previous builtin-value reference compatibility
+
+The selected development reference is TypeRB `0.4.9-dev` at
 `49c6d422e944e37f50a9b3a30941dd6c4d3ae256`, incorporating
 [PR #788](https://github.com/type-rb/type-rb/pull/788),
 [PR #789](https://github.com/type-rb/type-rb/pull/789) and
