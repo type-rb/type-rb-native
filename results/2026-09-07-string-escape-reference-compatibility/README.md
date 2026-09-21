@@ -1,6 +1,101 @@
 # Current reference compatibility
 
 The selected development reference is TypeRB `0.4.9-dev` at
+`5912014558c0839ae86dd83e3e2f33446b2190ba`, incorporating
+[PR #784](https://github.com/type-rb/type-rb/pull/784).
+Earlier named-function references retain their declaration in the REPL after a
+same-named value is introduced. TypeScript calls correctly select the later
+lexical value. Defaults, generic bodies, closures and replay retain this
+identity distinction.
+
+Native shares retained session variables with later named functions while
+preserving authored declaration order and single initialization. Exact AST,
+ordinary paths, recovery, self-hosting, target and lifetime checks remain
+required for this revision. No release, seed or complete language/performance
+qualification is claimed. Previous accepted identities and observations follow.
+
+# Previous global-binding reference compatibility
+
+The selected development reference is TypeRB `0.4.9-dev` at
+`418090424759e2c32f37ebe9d3fdcd78c8703c66`, incorporating
+[PR #782](https://github.com/type-rb/type-rb/pull/782).
+Top-level lowercase bindings retain module identity across generated targets and
+the REPL. Nullable proofs cannot survive a call that may replace mutable global
+storage. Native follows those contracts with independently verified MIR reads,
+writes and persistent managed roots. Interactive named-function access to session
+variables remains explicit pending work.
+
+Exact AST, ordinary-path observations, recovery, self-hosting, target and lifetime
+checks remain required. No release, seed or full-language/performance qualification
+is claimed. Previous accepted identities and observations follow.
+
+# Previous literal reference compatibility
+
+The selected development reference is TypeRB `0.4.9-dev` at
+`59cd287ffcc6bc2d8dcf7fadd6a5bf2a360e566f`, incorporating
+[PR #780](https://github.com/type-rb/type-rb/pull/780) and
+[PR #781](https://github.com/type-rb/type-rb/pull/781).
+Nullable literal unions retain nil checks and explicit Integer-to-Float
+conversions. Common record fields of unions perform the same numeric widening
+in the REPL as in compiled execution, including singleton Integer fields.
+
+Native adopts these corrections with explicit literal MIR and reviewed shared
+cases. Exact AST, ordinary check/build/execution/REPL, recovery, self-hosting,
+target and lifetime checks remain required. No release or seed is published,
+and no full-language or performance qualification is claimed. Previous accepted
+identities and observations follow.
+
+# Previous union-alias reference compatibility
+
+The selected development reference is TypeRB `0.4.9-dev` at
+`24dd15db447066cae8b8eb73a40cc063a2842f59`, incorporating
+[PR #779](https://github.com/type-rb/type-rb/pull/779).
+Nested and generic union aliases normalize before common-member and discriminant
+checking. Scalar subsumption retains matching Go storage. Literal Integer
+indexes, literal String receivers and standard collection parameters preserve
+ordinary character semantics and expression-aware constraints.
+
+Native adopts these corrections alongside verified literal constraints and
+common union fields. Shared check/build/execution/REPL observations, exact AST
+coverage, ordinary self-hosting, recovery and lifetime checks remain required.
+This update publishes neither a release nor a seed and makes no full-language
+or performance claim. Previous accepted identities and observations follow.
+
+# Previous literal-boundary reference compatibility
+
+The selected development reference is TypeRB `0.4.9-dev` at
+`ece27df01351e1499d23bb07bf39d140f81cc8d8`, incorporating
+[PR #778](https://github.com/type-rb/type-rb/pull/778).
+Literal-union parameters retain portable type syntax. Reassignment to singleton
+or literal-union bindings and collection entries uses the same expression-aware
+rules as initial declarations; arbitrary scalars still cannot narrow implicitly.
+
+Native retains literal constraints in verified MIR and widens them explicitly.
+Shared check/build/execution/REPL observations, exact AST coverage, recovery,
+ordinary self-hosting, target and lifetime checks remain required. This update
+does not publish a release or seed, complete basic-language coverage or qualify
+performance. Previous accepted identities and observations remain below.
+
+# Previous nominal reference compatibility
+
+The selected development reference is TypeRB `0.4.9-dev` at
+`3476aabdc385fd2b422364f69bbc1aa16e0bc231`, incorporating
+[PR #777](https://github.com/type-rb/type-rb/pull/777) and
+[PR #776](https://github.com/type-rb/type-rb/pull/776).
+Nominal constructor aliases and checked representation conversions survive typed
+IR lowering, inferred unions retain Go storage, and conflicting declarations
+produce diagnostics. Successfully decoded String literals have normalized backend
+spelling. Remaining single-quote semantics retain their own reference issue.
+
+Native newtypes preserve distinct MIR identities while erasing runtime storage.
+Shared observations, exact AST coverage, recovery, ordinary self-hosting, CLI,
+target and memory validation remain required before acceptance. This update does
+not complete basic-language coverage, publish a release or seed, or qualify
+performance. Previous identities remain below.
+
+# Previous safe-block reference compatibility
+
+The selected development reference is TypeRB `0.4.9-dev` at
 `909987e370a8ed4d8db1060ed5f0c6f00fd56dfd`, incorporating
 [PR #775](https://github.com/type-rb/type-rb/pull/775).
 Safe collection blocks preserve receiver-once evaluation, skip absent receivers

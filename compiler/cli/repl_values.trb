@@ -1,3 +1,5 @@
+import { literal_type_base, literal_integer_type, literal_string_type } from literal_types
+import { find_newtype_type } from newtype_types
 import { union_parts } from union_types
 import { callable_parts } from callable_types
 import { find_enum_type } from enum_types
@@ -73,11 +75,24 @@ def repl_coerce(mut store: ReplStore, id: Integer, expected: String): Integer
 	if union_parts(repl_type(store, id)).size() > 0
 		return repl_coerce(store, store.children[id][0], expected)
 	end
+	value := repl_get(store, id)
+	mut literal := ""
+	if value.type_name == "Integer"
+		literal = literal_integer_type(integer_string(value.integer))
+	elsif value.type_name == "String"
+		literal = literal_string_type(value.text)
+	end
+	if expected == literal
+		return repl_value(store, expected, value.integer, value.floating, value.text, [])
+	end
+	if literal_type_base(repl_type(store, id)) == expected
+		return repl_value(store, expected, value.integer, value.floating, value.text, [])
+	end
 	alternatives := union_parts(expected)
 	if alternatives.size() > 0
 		mut selected := ""
 		alternatives.each do |alternative|
-			if selected == "" && nullable_assignable(repl_type(store, id), alternative)
+			if selected == "" && (nullable_assignable(repl_type(store, id), alternative) || literal == alternative)
 				selected = alternative
 			end
 		end
@@ -97,7 +112,7 @@ def repl_coerce(mut store: ReplStore, id: Integer, expected: String): Integer
 		return repl_value(store, expected, 0, 0.0, "", [payload])
 	end
 	if expected == "Float"
-		if repl_type(store, id) == "Integer"
+		if repl_get(store, id).type_name == "Integer"
 			return repl_float(store, store.integers[id])
 		end
 	end
@@ -126,6 +141,9 @@ def repl_render(state: CompilerState, store: ReplStore, id: Integer, depth: Inte
 		return repl_render(state, store, store.children[id][0], depth)
 	end
 	value := repl_get(store, id)
+	if find_newtype_type(state, value.type_name) >= 0
+		return repl_render(state, store, value.children[0], depth)
+	end
 	if value.type_name == "Integer"
 		return integer_string(value.integer)
 	end
@@ -298,8 +316,8 @@ def repl_compact(source: ReplStore, mut environment: ReplEnvironment): ReplStore
 		mapping.push(- 1)
 	end
 	mapping[0] = 0
-	source.constants.each do |key, value|
-		target.constants[key] = repl_copy_value(source, target, value, mapping, programs)
+	source.globals.each do |key, value|
+		target.globals[key] = repl_copy_value(source, target, value, mapping, programs)
 	end
 	mut index := 0
 	while index < environment.count[0]

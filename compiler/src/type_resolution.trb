@@ -1,3 +1,6 @@
+import { literal_type_base, literal_type_display } from literal_types
+import { find_newtype_type, newtype_type } from newtype_types
+import { find_visible_newtype } from declaration_lookup
 import { union_parts, union_type } from union_types
 import { namespace_parent } from namespace_model
 import { callable_parts, callable_type } from callable_types
@@ -9,7 +12,7 @@ import { GenericInstance } from generic_model
 import { generic_application, generic_arguments, generic_base, generic_substitute } from generic_arguments
 import { enum_type, find_enum_type } from enum_types
 import { nullable_common, nullable_element, nullable_type } from nullable_types
-import { hash_key_type, hash_type, hash_value_type, semantic_value_type } from hash_types
+import { hash_key_type, hash_scalar_key, hash_type, hash_value_type, semantic_value_type } from hash_types
 import { ascii_code, integer_string } from literals
 import { string_starts_with } from path
 import { CompilerState, DefaultInitializer, diagnostic, has_diagnostic } from state
@@ -32,6 +35,9 @@ def find_record_type(state: CompilerState, type_name: String): Integer
 end
 
 def type_display(state: CompilerState, type_name: String): String
+	if literal_type_base(type_name) != ""
+		return literal_type_display(type_name)
+	end
 	alternatives := union_parts(type_name)
 	if alternatives.size() > 0
 		mut names: Array<String> := []
@@ -87,7 +93,11 @@ def type_display(state: CompilerState, type_name: String): String
 		return type_display(state, optional) + "?"
 	end
 	if hash_key_type(type_name) != ""
-		return "Hash<" + hash_key_type(type_name) + ", " + type_display(state, hash_value_type(type_name)) + ">"
+		return "Hash<" + type_display(state, hash_key_type(type_name)) + ", " + type_display(state, hash_value_type(type_name)) + ">"
+	end
+	newtype_index := find_newtype_type(state, type_name)
+	if newtype_index >= 0
+		return state.newtypes[newtype_index].name
 	end
 	enum_index := find_enum_type(state, type_name)
 	if enum_index >= 0
@@ -144,6 +154,9 @@ def resolve_type_name(
 		type_name: String,
 		allow_void: Boolean,
 	): String
+	if literal_type_base(type_name) != ""
+		return type_name
+	end
 	encoded := state.checked[0].generic_binding[0]
 	if encoded > 0
 		binding := state.generic_bindings[encoded - 1]
@@ -157,8 +170,8 @@ def resolve_type_name(
 	if state.generic_template_mode[0] && abstract_generic_type_valid(state, type_name)
 		return type_name
 	end
-	if string_starts_with(type_name, "Record#") || string_starts_with(type_name, "Enum#")
-		if find_record_type(state, type_name) >= 0 || find_enum_type(state, type_name) >= 0
+	if string_starts_with(type_name, "Record#") || string_starts_with(type_name, "Enum#") || string_starts_with(type_name, "Newtype#")
+		if find_record_type(state, type_name) >= 0 || find_enum_type(state, type_name) >= 0 || find_newtype_type(state, type_name) >= 0
 			return type_name
 		end
 		return ""
@@ -205,7 +218,7 @@ def resolve_type_name(
 	if generic_base(type_name) == "Hash" && parts.size() == 2
 		key := resolve_type_name(state, module_index, parts[0], false)
 		value := resolve_type_name(state, module_index, parts[1], false)
-		if (key != "String" && key != "Integer") || value == ""
+		if !hash_scalar_key(key) || value == ""
 			return ""
 		end
 		return hash_type(key, value)
@@ -229,6 +242,10 @@ def resolve_type_name(
 			end
 			return instantiate_generic_nominal(state, definition, resolved)
 		end
+	end
+	newtype_index := find_visible_newtype(state, module_index, type_name)
+	if newtype_index >= 0
+		return newtype_type(newtype_index)
 	end
 	enum_index := find_visible_enum(state, module_index, type_name)
 	if enum_index >= 0

@@ -1,12 +1,88 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 948 ordinary-path probes and 32 feature
+Status: the shared contract contains 1251 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
 basic-language completion; [the generated family inventory](native-language-feature-inventory.md)
 records semantic contracts that still need tests. The earlier 19-case inventory
 was an initial sample, not a complete list of missing features.
+
+## File and project global bindings
+
+Lowercase top-level variables have private source-module identity. Functions,
+closures and defaults read the same storage, local shadowing stays lexical, and
+`mut` controls both assignment and mutable access. Imported functions retain their
+own variables; ordinary imports cannot expose lowercase source-module storage.
+Calls and branch/loop joins invalidate stale nullable proofs for writable globals.
+
+Verified MIR declares each global's exact type, mutability, initialization order
+and persistent root. Reads and writes survive source erasure and catalog reorder;
+forged write capabilities, wrong value types and invalid instruction shapes fail
+verification. Runtime replacement preserves both the new root and any retained
+old value. Forced collections include Unicode/NUL values and exact reclamation.
+Project functions share their globals across REPL submissions and explicit replay.
+See [decision 0080](decisions/0080-global-binding-mir.md).
+
+Interactive variables are shared with later named functions and anonymous
+captures through persistent cells. Reassignment updates those cells; later
+same-named bindings cannot redirect an earlier named-function reference. Ordinary
+file bodies and session projections both preserve authored lexical order. Typed
+witness initializers describe existing values without evaluating them again.
+Load/replay validates the replacement program before executing authored
+initializers in order, and failed initializers invalidate earlier nullable facts.
+The CLI controls cover empty-Hash load inference and retained failure state.
+The exact reference includes the independent function/binding identity correction
+in [TypeRB #784](https://github.com/type-rb/type-rb/pull/784).
+
+Optional scalar output uses existing MIR none/present tests, payload extraction,
+branches and scalar conversions. This preserves argument evaluation once, UTF-8
+and NUL String bytes, Boolean false and numeric zero. Current compiled Go output
+prints absent values as `<nil>` while its REPL prints `nil`; Native matches each
+path. [TypeRB #783](https://github.com/type-rb/type-rb/issues/783) tracks a portable
+formatting contract. General union and nominal output remain separate gaps.
+
+Lowercase variables in namespace bodies,
+forward initializer dependencies and untyped empty collection inference remain
+open. Compiler implementation state stays per invocation; adopting module storage
+in compiler sources still needs the accepted seed handoff described in
+[bootstrap seed updates](bootstrap-seed-updates.md). File/project support alone
+does not close the bindings family or establish complete basic coverage.
+
+## Nominal newtypes
+
+Ordinary files and retained sessions accept explicit nominal construction and
+projection, open mutable representations, closed factories, instance/class
+methods and lexical private access. Aliases, modules, generic containers,
+nullable calls, captures, defaults and constants retain their nominal identities.
+Managed representations keep ordinary lifetimes, while scalar representations
+use scalar storage without allocating a wrapper.
+
+MIR owns both nominal identity and physical representation. Independent checks
+reject forged constructors/projections, cycles, invalid mutability and missing
+managed roots after frontend erasure. Array/Hash slots, fields, direct/indirect
+calls and captured values use verified storage types, including wrapped Floats.
+Paired ordinary-path cases and Unicode/NUL forced-GC and retained-session controls
+cover these combinations. The exact reference incorporates
+[TypeRB #777](https://github.com/type-rb/type-rb/pull/777) for declaration-conflict
+crashes, alias construction and representation conversion.
+
+Literal/class/interface representations and method-specific generic parameters
+retain their owning family dependencies. General union output and existing Hash
+presentation differences remain explicit observations. See
+[decision 0077](decisions/0077-newtype-mir.md).
+
+## Callable suffixes and lexical boundaries
+
+ASCII callable names retain `?`/`!` through ordinary calls, imports, enum methods,
+function values and retained sessions. Reserved declarations reject while Symbol
+and Hash label text remains literal. Maximal operator tokens preserve Symbol
+spelling; type parsing expands nested closing angles without losing later source
+origins. Shared cases and source-erased/reordered/forced-GC MIR cover these
+boundaries, with Unicode/NUL returns and retained invalid-declaration/reload checks.
+Unicode identifiers and the reference's unsettled single-quote and remaining
+Symbol framing contracts stay explicit. See
+[decision 0076](decisions/0076-lexical-boundaries.md).
 
 ## Stable natural Array ordering
 
@@ -47,6 +123,23 @@ these contracts. Safe block navigation follows the accepted reference correction
 in [type-rb#775](https://github.com/type-rb/type-rb/pull/775). See
 [decision 0073](decisions/0073-keyed-array-sorting-mir.md).
 
+## Streamed sliced iteration
+
+Array and Range `each_slice(size)` retain the receiver and evaluate the Integer
+size once, including for an empty source. Safe calls skip size effects and the
+body when absent. Every batch is a fresh shallow Array; full batches observe
+subsequent source changes, while a final partial batch cannot restart an exhausted
+iterator. `with_index` counts batches. Range endpoints never require `end + 1`
+and a huge range can exit after its first small batch.
+
+Existing typed MIR loops, Array operations, roots and a verified size guard own
+execution. Lexical transfers in both the size and block keep their owners.
+Shared cases cover mutation, aliases, captures, generic/nullable values, boundary
+sizes, lazy calls and invalid syntax/types. Independent erased/reordered MIR,
+forced collection, retained REPL replay and bounded-streaming checks complement
+ordinary paired outcomes. The combinations also repair REPL unary `+`. See
+[decision 0075](decisions/0075-sliced-iteration-mir.md).
+
 ## Safe collection blocks
 
 `&.each` supports Array, Range and Hash receivers. The sequential Array/Range
@@ -67,7 +160,7 @@ container conversion. MIR-only collection scratch slots no longer consume
 lexical declaration identities, preserving closures declared after queries,
 sorting and Range materialization. Shared cases, erased/reordered MIR, forced
 collection and retained REPL failure/replay controls cover these combinations.
-Sliced iteration and concurrent transforms remain separate implementation work.
+Concurrent transforms remain separate implementation work.
 See [decision 0074](decisions/0074-safe-collection-block-mir.md).
 
 ## Raw enums and instance methods
@@ -98,9 +191,28 @@ Independent source-erased, reordered and forced-GC controls complement shared
 ordinary/REPL probes and retained-session tests. See
 [decision 0069](decisions/0069-union-value-mir.md).
 
-Literal types, discriminated unions and composite type patterns are not covered
-by this implementation. Reference boundaries for grouped annotations and
-nullable alternatives remain visible in the shared contract.
+Integer and String literal types now preserve singleton constraints through
+signatures, containers, aliases, nominal representations and captures. Authored
+literals satisfy explicit constraints; computed scalars cannot narrow implicitly.
+Verified constants and widening retain semantic identities without extra boxes.
+Finite literal cases support homogeneous and mixed domains, and common record
+members lower through checked alternatives. Direct lexical discriminants narrow
+overlapping record alternatives while rebinding invalidates the fact. See
+[decision 0078](decisions/0078-literal-types-and-union-members.md).
+
+Ordinary and retained REPL probes include Unicode/NUL singleton strings, exact
+Hash keys, nullable values, numeric widening and rejected mutation. Independent
+MIR controls erase source and reorder declarations, forge constants and types,
+and force collection while managed values remain live. Singleton Hash keys use
+verified scalar storage. Homogeneous literal-union Hash keys preserve their
+union identity through payload equality, growth, deletion, copies and snapshots;
+managed key arrays keep Integer and String union objects alive. Mixed and
+nullable keys remain rejected, and indexed access requires the exact key type.
+See [decision 0079](decisions/0079-literal-union-hash-keys.md). Class
+discriminants depend on the object family's readonly-field rules. Reference
+boundaries for grouped annotations, nullable alternatives and composite type
+patterns remain visible, as do REPL type ordering, assignment and Hash display
+differences.
 
 ## Declaration namespaces and runtime constants
 
@@ -916,9 +1028,11 @@ and the remaining Array APIs stay tracked in issue #410. The original Array
 iteration checkpoint did not include removal operations. Ordinary shortening
 behavior is now covered by the [Array mutation contract](#array-insertion-and-removal).
 
-Compiler recovery metadata uses a separate 80 MiB input bound. Namespace and
-constant integration produces 69,813,214 bytes of recovery JSON, exceeding the
-previous 64 MiB boundary; the new bound leaves about 20% headroom. The earlier
+Compiler recovery metadata uses a separate 96 MiB input bound. Literal-union Hash
+keys produce 83,927,300 bytes of recovery JSON, exceeding the previous 80 MiB
+boundary by 41,220 bytes; the new bound leaves about 20% headroom. Namespace and
+constant integration previously produced 69,813,214 bytes and required increasing
+the 64 MiB boundary to 80 MiB. The earlier
 managed Array MIR compiler produced approximately 43.1 MB, exceeding 40 MiB.
 The earlier complete Array iteration snapshot was 34,616,510 bytes and required increasing the original 32 MiB bound to 40 MiB.
 These are verbose recovery inputs, not application or shipped compiler binaries.

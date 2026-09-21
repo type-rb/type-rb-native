@@ -1,3 +1,12 @@
+import { check_literal_case, literal_branch_types, literal_case_type, literal_scalar_type } from literal_cases
+import { check_union_member, narrow_union_discriminant } from union_members
+import { mir_literal_context } from literal_mir
+import { mir_literal_scalar } from nullable_mir
+import { find_newtype_in_module, find_newtype_type, newtype_equality_type, newtype_type } from newtype_types
+import { find_visible_global, find_visible_newtype } from declaration_lookup
+import { newtype_method_function } from newtype_methods
+import { mir_newtype_operation } from newtype_mir
+import { mir_sliced_iteration_begin, mir_sliced_iteration_end } from sliced_iteration
 import { checked_raw_enum_from, checked_raw_enum_value } from raw_enum_checked
 import { mir_array_sort_keys } from array_sorting
 import { raw_enum_type } from raw_enum_types
@@ -5,7 +14,7 @@ import { enum_method_declaration_name, enum_method_function } from enum_methods
 import { union_parts } from union_types
 import { check_union_binding, check_union_patterns } from union_checked
 import { mir_union_operation } from union_mir
-import { checked_constant_read } from mir_globals
+import { checked_global_read } from mir_globals
 import { namespace_parent } from namespace_model
 import { mir_range_array } from range_methods
 import { checked_reference_name, namespace_member_access, parse_declaration_reference, parse_namespace_reference } from namespace_references
@@ -28,7 +37,7 @@ import { check_enum_bindings, check_enum_patterns } from enum_checked
 import { mir_enum_construct, mir_enum_operation } from enum_mir
 import { enum_argument_bindings, enum_type, enum_uppercase, find_enum_type, find_enum_variant } from enum_types
 import { checked_submission_boundary, checked_submission_result } from checked_submission
-import { nullable_apply, nullable_finish, nullable_loop_writes, nullable_nil_condition, nullable_read, nullable_replace } from nullable_flow
+import { nullable_apply, nullable_finish, nullable_loop_writes, nullable_nil_condition, nullable_read, nullable_replace, nullable_replace_type } from nullable_flow
 import { nullable_common, nullable_element, nullable_type } from nullable_types
 import { mir_checked_nullable, mir_nullable_coerce } from nullable_mir
 import { mir_value_complete, mir_value_exit, mir_value_join } from mir_value_control
@@ -42,21 +51,21 @@ import { binary_result_type, check_expected, numeric_type, type_diagnostic } fro
 import { CheckedValue, checked_bound_value, checked_mir_value, checked_value, checked_view, scalar_mir_binary, scalar_mir_disable, scalar_mir_literal, scalar_mir_unary } from checked_values
 import { checked_hash_binding_target, checked_hash_method, checked_hash_plan, checked_hash_publish } from hash_checked
 import { mir_hash_operation } from hash_mir
-import { hash_key_type, hash_type, hash_value_type } from hash_types
-import { checked_iteration_parameters, checked_iteration_require, checked_iteration_shape, checked_range_require, checked_transform_require, checked_transform_shape, iteration_element_type } from iteration_checked
+import { hash_key_type, hash_scalar_key, hash_type, hash_value_type } from hash_types
+import { checked_iteration_parameters, checked_iteration_require, checked_iteration_shape, checked_range_require, checked_slice_zero_literal, checked_transform_require, checked_transform_shape, iteration_element_type } from iteration_checked
 import { MirIteration, MirRangeConstruction, mir_iteration_valid } from iteration_mir
 import { float_literal_in_range, integer_literal_in_range, number_is_float } from literals
 import { MirLoopTransfer, mir_loop_transfer_valid } from mir
 import { mir_checked_call, mir_checked_standard_call, mir_complete_arguments } from mir_calls
 import { mir_logical_begin, mir_logical_join } from mir_logical
-import { mir_checked_puts, mir_checked_string_binary, mir_checked_string_literal, mir_checked_string_operation } from mir_strings
+import { mir_checked_puts, mir_checked_string_binary, mir_checked_string_literal, mir_checked_string_operation, mir_puts_type } from mir_strings
 import { mir_control_active, mir_control_branch, mir_control_enter, mir_control_jump, mir_control_loop_begin, mir_control_loop_branch, mir_control_loop_end, mir_control_prepare, mir_control_return, mir_control_transfer } from mir_control
 import { binary_operator_id, declaration_start, parse_argument_label, syntax_block_end, syntax_conditional_tail, syntax_expression_precedence, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_statement_boundary } from parser
 import { resolve_body_names, standard_package_import, standard_package_root } from resolution
 import { find_visible_declaration, find_visible_enum, find_visible_function, find_visible_generic_function, find_visible_record } from declaration_lookup
 import { string_starts_with } from path
 import { array_element_type, array_type, common_array_element_type, find_field, find_record_type, record_type, resolve_type_name, type_display } from type_resolution
-import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_add, local_bind, local_find, terminal_token } from state
+import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_add, local_bind, local_bind_temporary, local_find, terminal_token } from state
 import { load_integer, load_string, sparse_integer_at, sparse_string_at, store_integer, store_string } from storage
 
 def checked_hash_literal(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, expected: String): CheckedValue
@@ -81,14 +90,17 @@ def checked_hash_literal(mut state: CompilerState, mut position: Array<Integer>,
 	advance(position)
 	skip_newlines(state, position)
 	while !token_is(state, position[0], "}")
-		key := check_expression(state, position, locals, 1, key_type)
+		key := check_expression(state, position, locals, 1, "")
 		if key.type_name == "Never"
 			diverged = true
 			scalar_mir_disable(locals)
-		elsif key.type_name != "Integer" && key.type_name != "String"
+		elsif !hash_scalar_key(key.type_name)
 			return type_diagnostic(state, line, "Hash key must be String or Integer")
 		end
 		if key.type_name != "Never"
+			if key_type != "" && key_type != key.type_name
+				return type_diagnostic(state, line, "Hash key type must match exactly")
+			end
 			key_type = key.type_name
 		end
 		keys.push(checked_mir_value(key))
@@ -134,15 +146,18 @@ def checked_hash_index(mut state: CompilerState, mut position: Array<Integer>, m
 	origin := position[0]
 	line := load_integer(state.token_lines, origin)
 	advance(position)
-	key := check_expression(state, position, locals, 1, hash_key_type(receiver.type_name))
+	key := check_expression(state, position, locals, 1, "")
 	if key.type_name == "Never"
 		finish := position[0]
 		expect(state, position, "]")
 		checked_hash_publish(state, mir_hash_operation(2, origin, finish, receiver.origin, receiver.type_name, receiver.mutable != 0, 0))
 		return key
 	end
-	if key.type_name != "Integer" && key.type_name != "String"
+	if !hash_scalar_key(key.type_name)
 		return type_diagnostic(state, line, "Hash key must be String or Integer")
+	end
+	if hash_key_type(receiver.type_name) != "" && hash_key_type(receiver.type_name) != key.type_name
+		return type_diagnostic(state, line, "Hash key type must match exactly")
 	end
 	finish := position[0]
 	expect(state, position, "]")
@@ -405,7 +420,7 @@ def check_primary(
 	end
 	if token_is(state, position[0], "-")
 		advance(position)
-		value := check_postfix(
+		mut value := check_postfix(
 			state,
 			position,
 			locals,
@@ -414,6 +429,7 @@ def check_primary(
 		if value.type_name == "Never"
 			return value
 		end
+		value = mir_literal_scalar(state, locals, value, origin)
 		if !numeric_type(value.type_name)
 			return type_diagnostic(state, line, "unary - requires Integer or Float")
 		end
@@ -421,7 +437,7 @@ def check_primary(
 	end
 	if token_is(state, position[0], "+")
 		advance(position)
-		value := check_postfix(
+		mut value := check_postfix(
 			state,
 			position,
 			locals,
@@ -430,6 +446,7 @@ def check_primary(
 		if value.type_name == "Never"
 			return value
 		end
+		value = mir_literal_scalar(state, locals, value, origin)
 		if !numeric_type(value.type_name)
 			return type_diagnostic(state, line, "unary + requires Integer or Float")
 		end
@@ -439,11 +456,15 @@ def check_primary(
 		application_finish := sparse_integer_at(state.checked[0].generic_application_finishes, origin)
 		if application_finish > origin
 			if sparse_integer_at(state.checked[0].generic_calls, application_finish) > 0
-				if local_find(locals, load_string(state.token_texts, origin)) >= 0
+				if local_find(locals, load_string(state.token_texts, origin)) >= 0 || find_visible_global(state, state.active_module[0], load_string(state.token_texts, origin), origin) >= 0
 					return type_diagnostic(state, line, "local value does not accept type arguments")
 				end
 				position[0] = application_finish
 				return checked_value("", 1, origin, 0)
+			end
+			if find_newtype_type(state, sparse_string_at(state.checked[0].generic_application_types, origin)) >= 0
+				position[0] = application_finish
+				return checked_value(sparse_string_at(state.checked[0].generic_application_types, origin), 7, origin, 0)
 			end
 			if find_enum_type(state, sparse_string_at(state.checked[0].generic_application_types, origin)) >= 0
 				if token_is(state, application_finish, ".")
@@ -488,9 +509,24 @@ def check_primary(
 			value := mir_binding_read(state, locals, local_index, origin)
 			return nullable_read(state, locals, value, local_index, - 1, origin)
 		end
-		constant := find_visible_declaration(state, state.active_module[0], name, 7)
+		if name == "value" && token_is(state, position[0], "(")
+			self_slot := local_find(locals, "self")
+			if self_slot >= 0 && find_newtype_type(state, load_string(locals.types, self_slot)) >= 0
+				lambda_use_binding(locals, self_slot)
+				receiver := mir_binding_read(state, locals, self_slot, origin)
+				return check_newtype_member(state, position, locals, receiver, "value")
+			end
+		end
+		mut newtype_owner := find_visible_newtype(state, state.active_module[0], name)
+		if name == "self"
+			newtype_owner = find_newtype_in_module(state, state.active_module[0], state.declaration_owner[0])
+		end
+		if newtype_owner >= 0 && token_is(state, position[0], ".")
+			return checked_value(newtype_type(newtype_owner), 7, origin, 0)
+		end
+		constant := find_visible_global(state, state.active_module[0], name, origin)
 		if constant >= 0
-			return checked_constant_read(state, locals, constant, origin)
+			return checked_global_read(state, locals, constant, origin)
 		end
 		standard_package := standard_package_import(state, state.active_module[0], name)
 		if standard_package < - 1
@@ -595,13 +631,16 @@ def check_call(mut state: CompilerState, mut position: Array<Integer>, mut local
 			elsif function >= 0
 				expected = load_string(state.parameter_types, parameter_start + slot)
 			end
-			argument := check_expression(state, position, locals, 1, expected)
+			mut argument := check_expression(state, position, locals, 1, expected)
+			if callee_name == "puts" && encoded == 0
+				argument = mir_literal_scalar(state, locals, argument, origin)
+			end
 			if argument.type_name == "Never"
 				diverged = true
 				scalar_mir_disable(locals)
 			end
 			bindings.values[slot] = checked_mir_value(argument)
-			if (callee_name == "puts" && encoded == 0) && argument.type_name != "Never" && argument.type_name != "String" && argument.type_name != "Integer" && argument.type_name != "Boolean" && argument.type_name != "Float"
+			if (callee_name == "puts" && encoded == 0) && !mir_puts_type(argument.type_name)
 				diagnostic(state, "TRBN4004", line, "puts does not yet support " + type_display(state, argument.type_name))
 			end
 			if token_is(state, position[0], ",")
@@ -686,6 +725,9 @@ def check_method_call(
 		receiver: CheckedValue,
 		method: String,
 	): CheckedValue
+	if find_newtype_type(state, receiver.type_name) >= 0
+		return check_newtype_member(state, position, locals, receiver, method)
+	end
 	if method == "raw_value" && raw_enum_type(state, find_enum_type(state, receiver.type_name)) != ""
 		origin := position[0]
 		advance(position)
@@ -800,7 +842,10 @@ def check_never_postfix(mut state: CompilerState, mut position: Array<Integer>, 
 end
 
 def check_member(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue, member: String): CheckedValue
-	mut value := checked_view(receiver, receiver.type_name, receiver.category)
+	mut value := mir_literal_scalar(state, locals, checked_view(receiver, receiver.type_name, receiver.category), position[0])
+	if find_newtype_type(state, value.type_name) >= 0
+		return check_newtype_member(state, position, locals, value, member)
+	end
 	if value.category == 6
 		owner := find_enum_type(state, value.type_name)
 		raw_type := raw_enum_type(state, owner)
@@ -862,6 +907,9 @@ def check_member(mut state: CompilerState, mut position: Array<Integer>, mut loc
 			end
 		end
 	else
+		if union_parts(value.type_name).size() > 0
+			return check_union_member(state, locals, value, member, position[0] - 1)
+		end
 		record_index := find_record_type(state, value.type_name)
 		if record_index < 0
 			value = type_diagnostic(
@@ -1069,7 +1117,7 @@ def check_expression_value(
 			advance(position)
 			skip_newlines(state, position)
 			end_origin := position[0]
-			right := check_expression(state, position, locals, precedence + 1, "")
+			mut right := check_expression(state, position, locals, precedence + 1, "")
 			if precedence <= 2
 				nullable_finish(locals, flow_parent, flow_first, locals.count[0])
 			end
@@ -1079,6 +1127,8 @@ def check_expression_value(
 				next
 			end
 			if precedence == 3
+				value = mir_literal_scalar(state, locals, value, operator_origin)
+				right = mir_literal_scalar(state, locals, right, operator_origin)
 				if value.type_name != "Integer" || right.type_name != "Integer"
 					return type_diagnostic(state, line, "Range endpoints must be Integer")
 				end
@@ -1103,20 +1153,35 @@ def check_expression_value(
 				value = nullable_nil_condition(state, locals, subject, operator == "!=", operator_origin)
 				next
 			end
-			result_type := binary_result_type(state, operator, value.type_name, right.type_name, line, operator_origin)
+			mut binary_right := checked_view(right, right.type_name, right.category)
+			if find_newtype_type(state, value.type_name) >= 0 || find_newtype_type(state, right.type_name) >= 0
+				if value.type_name != right.type_name || (operator != "==" && operator != "!=") || newtype_equality_type(state, value.type_name) == ""
+					return type_diagnostic(state, line, "newtype operands require the same nominal type with portable equality")
+				end
+				mut owner := find_newtype_type(state, value.type_name)
+				while owner >= 0
+					representation := state.newtypes[owner].representation
+					value = mir_newtype_operation(state, locals, 56, value, owner, representation, operator_origin)
+					binary_right = mir_newtype_operation(state, locals, 56, binary_right, owner, representation, operator_origin)
+					owner = find_newtype_type(state, representation)
+				end
+			end
+			value = mir_literal_scalar(state, locals, value, operator_origin)
+			binary_right = mir_literal_scalar(state, locals, binary_right, operator_origin)
+			result_type := binary_result_type(state, operator, value.type_name, binary_right.type_name, line, operator_origin)
 			if precedence <= 2
-				value = mir_logical_join(state, locals, value, right, short, operator_origin)
+				value = mir_logical_join(state, locals, value, binary_right, short, operator_origin)
 			elsif find_enum_type(state, value.type_name) >= 0
-				value = mir_enum_operation(state, locals, 40, value, checked_mir_value(right), binary_operator_id(operator), "Boolean", operator_origin)
+				value = mir_enum_operation(state, locals, 40, value, checked_mir_value(binary_right), binary_operator_id(operator), "Boolean", operator_origin)
 			elsif value.type_name == "String"
-				value = mir_checked_string_binary(state, locals, value, right, operator, operator_origin)
+				value = mir_checked_string_binary(state, locals, value, binary_right, operator, operator_origin)
 			else
 				value = scalar_mir_binary(
 					state,
 					locals,
 					operator,
 					value,
-					right,
+					binary_right,
 					result_type,
 					operator_origin,
 				)
@@ -1140,6 +1205,7 @@ def check_expression(
 	expression_origin := position[0]
 	line := load_integer(state.token_lines, expression_origin)
 	mut value := check_expression_value(state, position, locals, minimum_precedence, expected)
+	value = mir_literal_context(state, locals, value, expected, expression_origin, position[0])
 	check_expected(state, value.type_name, expected, line)
 	value = mir_nullable_coerce(state, locals, value, expected, expression_origin)
 	mut displayed_mutable := 0
@@ -1181,7 +1247,7 @@ def checked_readonly_reference_binding(
 	if local_find(locals, load_string(state.token_texts, value.origin)) >= 0
 		return true
 	end
-	return sparse_integer_at(state.checked[0].constant_references, value.origin) > 0
+	return sparse_integer_at(state.checked[0].global_references, value.origin) > 0
 end
 
 def check_declaration(
@@ -1197,6 +1263,9 @@ def check_declaration(
 	end
 	line := load_integer(state.token_lines, position[0])
 	name := expect_identifier(state, position)
+	if name == "_"
+		diagnostic(state, "TRBN4004", line, "blank binding _ is only valid as a parameter or pattern binding")
+	end
 	if enum_uppercase(name)
 		diagnostic(state, "TRBN4004", line, "constants may be declared only at top level or in a module")
 	end
@@ -1288,6 +1357,8 @@ def check_simple_statement(
 		mut expected := left.type_name
 		if left.nullable_binding >= 0 && left.nullable_field == - 1
 			expected = load_string(locals.types, left.nullable_binding)
+		elsif left.nullable_binding < - 1 && left.nullable_field == - 1
+			expected = state.global_types[- left.nullable_binding - 2]
 		end
 		right := check_statement_value(state, position, locals, expected)
 		if right.type_name == "Never"
@@ -1296,6 +1367,8 @@ def check_simple_statement(
 		end
 		if left.nullable_binding >= 0 && left.nullable_field == - 1
 			nullable_replace(locals, left.nullable_binding, right.flow_type)
+		elsif left.nullable_binding < - 1 && left.nullable_field == - 1
+			nullable_replace_type(locals, left.nullable_binding, expected, right.flow_type)
 		end
 		mut display_type := expected
 		if right.flow_type == "Nil"
@@ -1312,6 +1385,17 @@ def check_simple_statement(
 	else
 		if binary_operator_id(operator) >= 17
 			compound := operator[0]
+			mut declared := left.type_name
+			if left.nullable_field == - 1
+				if left.nullable_binding >= 0
+					declared = load_string(locals.types, left.nullable_binding)
+				elsif left.nullable_binding < - 1
+					declared = state.global_types[- left.nullable_binding - 2]
+				end
+			end
+			if nullable_element(declared) != ""
+				diagnostic(state, "TRBN4004", line, "compound assignment requires a non-nullable binding")
+			end
 			if left.mutable == 0
 				diagnostic(state, "TRBN4004", line, "assignment target is immutable")
 			end
@@ -1343,22 +1427,27 @@ def check_simple_statement(
 	return left
 end
 
-def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, result_type: String, parent_loop: Integer): Boolean
+def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, result_type: String, parent_loop: Integer): CheckedValue
 	flow_parent := locals.nullable_state[0]
 	flow_first := locals.nullable_facts.size()
 	origin := position[0]
 	encoded := sparse_integer_at(state.iteration_origins, origin)
 	if encoded < 1 || encoded > state.iterations.size()
-		return false
+		return checked_value("Invalid", 0, origin, 0)
 	end
 	shape := state.iterations[encoded - 1]
 	if !checked_iteration_shape(state, shape, origin)
 		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "invalid iteration syntax plan")
-		return false
+		return checked_value("Invalid", 0, origin, 0)
 	end
 	mut receiver := check_expression(state, position, locals, 1, "")
-	mut absent :=- 1
+	saved_mir := locals.mir_state[0]
+	mut optional := false
 	if token_is(state, shape.receiver_finish, "&.") && nullable_element(receiver.type_name) != ""
+		optional = true
+	end
+	mut absent :=- 1
+	if optional
 		condition := nullable_nil_condition(state, locals, receiver, true, shape.receiver_finish)
 		absent = mir_control_branch(state, locals, condition, load_integer(state.token_lines, origin))
 		nullable_apply(locals, condition.truth)
@@ -1369,7 +1458,7 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 	element_type := iteration_element_type(receiver.type_name)
 	if element_type == "" || position[0] != shape.receiver_finish
 		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "ordinary each requires a supported Array, Range or Hash receiver")
-		return false
+		return checked_value("Invalid", 0, origin, 0)
 	end
 	mut source_kind := 1
 	if receiver.type_name == "Range<Integer>"
@@ -1381,29 +1470,62 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 	plan := MirIteration.new(syntax: shape, parent_loop: parent_loop, source_kind: source_kind, type_name: receiver.type_name, element_type: element_type)
 	if !checked_iteration_parameters(state, plan)
 		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "each block parameters differ from its receiver and with_index mode")
-		return false
+		return checked_value("Invalid", 0, origin, 0)
+	end
+	mut size := checked_value("Integer", 0, origin, 0)
+	mut block_type := element_type
+	if shape.slice_start >= 0
+		position[0] = shape.slice_start
+		size = check_expression(state, position, locals, 1, "Integer")
+		if !check_expected(state, size.type_name, "Integer", load_integer(state.token_lines, shape.slice_start))
+			return checked_value("Invalid", 0, origin, 0)
+		end
+		if position[0] != shape.slice_finish
+			diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "invalid each_slice size boundary")
+			return checked_value("Invalid", 0, origin, 0)
+		end
+		if checked_slice_zero_literal(state, size.origin)
+			diagnostic(state, "TRBN4004", load_integer(state.token_lines, shape.slice_start), "each_slice size must be greater than zero")
+			return checked_value("Invalid", 0, origin, 0)
+		end
+		block_type = array_type(element_type)
 	end
 	state.checked[0].iterations.push(plan)
 	store_integer(state.checked[0].iteration_origins, origin, state.checked[0].iterations.size())
 	checked_iteration_require(state, origin, parent_loop)
+	# A size expression may leave its enclosing function or loop. Still check
+	# the unreachable block, without constructing an iteration or Never operand.
+	if size.type_name == "Never"
+		scalar_mir_disable(locals)
+	end
 	saved := locals.count[0]
-	# Hidden receiver/cursor bindings provide the loop-carried MIR values.
-	local_bind(locals, "$iteration.receiver", receiver.type_name, 1)
-	local_bind(locals, "$iteration.cursor", "Integer", 1)
-	if source_kind == 2 && plan.syntax.second_origin >= 0
-		local_bind(locals, "$iteration.ordinal", "Integer", 1)
+	mut element := checked_value(block_type, 0, plan.syntax.element_origin, 1)
+	if shape.slice_start >= 0
+		local_bind_temporary(locals, "$slice.receiver", receiver.type_name, 1)
+		local_bind_temporary(locals, "$slice.cursor", "Integer", 1)
+		local_bind_temporary(locals, "$slice.ordinal", "Integer", 1)
+		local_bind_temporary(locals, "$slice.size", "Integer", 1)
+		local_bind_temporary(locals, "$slice.finished", "Boolean", 1)
+		element = mir_sliced_iteration_begin(state, locals, plan, receiver, size, saved)
+	else
+		# Hidden receiver/cursor bindings provide the loop-carried MIR values.
+		local_bind(locals, "$iteration.receiver", receiver.type_name, 1)
+		local_bind(locals, "$iteration.cursor", "Integer", 1)
+		if source_kind == 2 && plan.syntax.second_origin >= 0
+			local_bind(locals, "$iteration.ordinal", "Integer", 1)
+		end
+		if source_kind == 3
+			local_bind(locals, "$iteration.keys", array_type(element_type), 1)
+			local_bind(locals, "$iteration.values", array_type(hash_value_type(receiver.type_name)), 1)
+		end
+		element = mir_checked_iteration_begin(state, locals, plan, receiver, saved)
 	end
-	if source_kind == 3
-		local_bind(locals, "$iteration.keys", array_type(element_type), 1)
-		local_bind(locals, "$iteration.values", array_type(hash_value_type(receiver.type_name)), 1)
-	end
-	element := mir_checked_iteration_begin(state, locals, plan, receiver, saved)
-	local_bind(locals, load_string(state.token_texts, plan.syntax.element_origin), element_type, 1)
+	local_bind(locals, load_string(state.token_texts, plan.syntax.element_origin), block_type, 1)
 	mir_binding_initialize(state, locals, locals.count[0] - 1, element, plan.syntax.element_origin)
 	if plan.syntax.second_origin >= 0
 		if load_string(state.token_texts, plan.syntax.element_origin) == load_string(state.token_texts, plan.syntax.second_origin)
 			diagnostic(state, "TRBN4004", load_integer(state.token_lines, plan.syntax.second_origin), "iteration block parameter is duplicated")
-			return false
+			return checked_value("Invalid", 0, origin, 0)
 		end
 		mut second_type := "Integer"
 		if source_kind == 3
@@ -1411,7 +1533,7 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 		end
 		local_bind(locals, load_string(state.token_texts, plan.syntax.second_origin), second_type, 1)
 		mut index_slot := saved + 1
-		if source_kind == 2
+		if source_kind == 2 || shape.slice_start >= 0
 			index_slot = saved + 2
 		end
 		mut second := mir_binding_read(state, locals, index_slot, plan.syntax.second_origin)
@@ -1428,15 +1550,26 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "invalid iteration body boundary")
 	end
 	result_scope_check(state, locals, saved)
-	mir_checked_iteration_end(state, locals, plan, saved)
+	if shape.slice_start >= 0
+		mir_sliced_iteration_end(state, locals, plan, saved)
+	else
+		mir_checked_iteration_end(state, locals, plan, saved)
+	end
 	locals.count[0] = saved
+	if size.type_name == "Never"
+		locals.mir_state[0] = saved_mir
+	end
 	if absent >= 0
 		mir_control_jump(state, locals, absent, saved)
 		mir_control_enter(state, locals, absent, load_integer(state.token_lines, origin))
 	end
 	nullable_finish(locals, flow_parent, flow_first, saved)
 	position[0] = plan.syntax.finish
-	return finish_statement(state, position)
+	finish_statement(state, position)
+	if size.type_name == "Never" && !optional
+		return checked_value("Never", 0, origin, 0)
+	end
+	return checked_value("Void", 0, origin, 0)
 end
 
 def checked_while(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, result_type: String): Boolean
@@ -1532,7 +1665,7 @@ def check_block_value(mut state: CompilerState, mut position: Array<Integer>, mu
 		elsif token_is(state, position[0], "while")
 			checked_while(state, position, locals, result_type)
 		elsif sparse_integer_at(state.iteration_origins, position[0]) > 0
-			checked_iteration(state, position, locals, result_type, loop_origin)
+			result = checked_iteration(state, position, locals, result_type, loop_origin)
 		elsif declaration_start(state, position[0])
 			result = check_declaration(state, position, locals)
 		else
@@ -1580,18 +1713,29 @@ def check_control_value(mut state: CompilerState, mut position: Array<Integer>, 
 	mut selector := checked_value(predicate.type_name, predicate.category, predicate.origin, predicate.mutable)
 	mut enum_owner :=- 1
 	mut union_selector := false
+	mut literal_selector := false
 	if control.kind == 2
 		position[0] = control.selector
 		selector = check_expression(state, position, locals, 1, "")
 		enum_owner = find_enum_type(state, selector.type_name)
+		if literal_case_type(selector.type_name) || selector.type_name == "Integer" || selector.type_name == "String"
+			literal_selector = check_literal_case(state, control, selector.type_name)
+			if has_diagnostic(state)
+				return checked_value("Invalid", 0, origin, 0)
+			end
+			selector = mir_literal_scalar(state, locals, selector, control.selector)
+		end
 		union_selector = union_parts(selector.type_name).size() > 0
+		if literal_selector
+			union_selector = false
+		end
 		if union_selector && !check_union_patterns(state, control, selector.type_name)
 			return checked_value("Invalid", 0, origin, 0)
 		end
 		if enum_owner >= 0 && !check_enum_patterns(state, control, enum_owner)
 			return checked_value("Invalid", 0, origin, 0)
 		end
-		if enum_owner < 0 && !union_selector && selector.type_name != "Never" && selector.type_name != "Integer" && selector.type_name != "String"
+		if enum_owner < 0 && !union_selector && !literal_selector && selector.type_name != "Never" && selector.type_name != "Integer" && selector.type_name != "String"
 			return type_diagnostic(state, line, "case selector requires Integer, String, enum or union")
 		end
 	elsif control.kind == 3
@@ -1618,6 +1762,21 @@ def check_control_value(mut state: CompilerState, mut position: Array<Integer>, 
 				if union_selector
 					pattern := state.checked[0].union_patterns[sparse_integer_at(state.checked[0].union_pattern_origins, branch.condition) - 1]
 					condition = mir_union_operation(state, locals, 53, selector, pattern.type_name, "Boolean", branch.condition)
+				elsif literal_selector && union_parts(selector.type_name).size() > 0
+					mut first := true
+					literal_branch_types(state, branch.condition, branch.condition_finish).each do |literal|
+						mut short :=- 1
+						if !first
+							short = mir_logical_begin(state, locals, condition, 1, branch.condition)
+						end
+						test := mir_union_operation(state, locals, 53, selector, literal, "Boolean", branch.condition)
+						if first
+							condition = test
+						else
+							condition = mir_logical_join(state, locals, condition, test, short, branch.condition)
+						end
+						first = false
+					end
 				elsif enum_owner >= 0
 					pattern := state.checked[0].enum_patterns[sparse_integer_at(state.checked[0].enum_pattern_origins, branch.condition) - 1]
 					condition = mir_enum_operation(state, locals, 38, selector, - 1, pattern.variant, "Boolean", branch.condition)
@@ -1635,7 +1794,7 @@ def check_control_value(mut state: CompilerState, mut position: Array<Integer>, 
 			alternate_flow = locals.nullable_state[0]
 			false_facts = condition.falsity
 			nullable_apply(locals, condition.truth)
-			if (enum_owner >= 0 || union_selector) && branch_index == control.branches.size() - 1
+			if (enum_owner >= 0 || union_selector || literal_selector) && branch_index == control.branches.size() - 1
 				otherwise = true
 			else
 				alternate = mir_control_branch(state, locals, condition, line)
@@ -1648,6 +1807,9 @@ def check_control_value(mut state: CompilerState, mut position: Array<Integer>, 
 		end
 		if enum_owner >= 0 && branch.condition >= 0
 			check_enum_bindings(state, locals, selector, branch.condition)
+		end
+		if control.kind == 2 && literal_selector
+			narrow_union_discriminant(state, locals, control, branch_index)
 		end
 		position[0] = branch.body
 		mut value := checked_value("Void", 0, 9007199254740991, 0)
@@ -2251,6 +2413,7 @@ def check_transform(mut state: CompilerState, mut position: Array<Integer>, mut 
 		end
 		store_string(locals.types, outer, output)
 	elsif syntax.kind >= 9
+		yielded = mir_literal_scalar(state, locals, yielded, origin)
 		key_type = yielded.type_name
 		if key_type != "Integer" && key_type != "Float" && key_type != "String"
 			return type_diagnostic(state, line, "sorting key requires portable natural order")
@@ -2321,7 +2484,7 @@ def check_primitive_method(mut state: CompilerState, mut position: Array<Integer
 			argument_type = array_element_type(receiver.type_name)
 		end
 		if kind >= 16
-			if argument_type != "Integer" && argument_type != "Float" && argument_type != "String"
+			if argument_type != "Integer" && argument_type != "Float" && argument_type != "String" && literal_scalar_type(argument_type) == ""
 				return type_diagnostic(state, line, method + " requires portable ordering for its Array element type")
 			end
 		elsif kind == 15
@@ -2391,4 +2554,47 @@ def check_primitive_method(mut state: CompilerState, mut position: Array<Integer
 		return mir_array_method(state, locals, kind, receiver, arguments[0], origin)
 	end
 	return mir_integer_method(state, locals, kind, receiver, arguments, origin)
+end
+
+def check_newtype_member(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue, member: String): CheckedValue
+	owner := find_newtype_type(state, receiver.type_name)
+	definition := state.newtypes[owner]
+	origin := position[0]
+	line := load_integer(state.token_lines, origin)
+	class_method := receiver.category == 7
+	if !token_is(state, origin, "(")
+		return type_diagnostic(state, line, "newtype member requires an explicit call")
+	end
+	if class_method && member == "new"
+		if definition.closed && (state.active_module[0] != definition.source_id || state.declaration_owner[0] != definition.name)
+			return type_diagnostic(state, line, "raw constructor for closed newtype " + definition.name + " is private")
+		end
+		advance(position)
+		skip_newlines(state, position)
+		value := check_expression(state, position, locals, 1, definition.representation)
+		skip_newlines(state, position)
+		if token_is(state, position[0], ",")
+			advance(position)
+			skip_newlines(state, position)
+		end
+		expect(state, position, ")")
+		if value.type_name == "Never"
+			return value
+		end
+		return mir_newtype_operation(state, locals, 55, value, owner, newtype_type(owner), origin)
+	end
+	if !class_method && member == "value"
+		advance(position)
+		skip_newlines(state, position)
+		expect(state, position, ")")
+		return mir_newtype_operation(state, locals, 56, receiver, owner, definition.representation, origin)
+	end
+	function := newtype_method_function(state, receiver.type_name, member, class_method)
+	if function < 0
+		return type_diagnostic(state, line, "newtype " + definition.name + " has no matching member " + member)
+	end
+	if !namespace_member_access(state, definition.source_id, definition.name + "::" + member, origin)
+		return checked_value("Invalid", 0, origin, 0)
+	end
+	return check_call(state, position, locals, 1, "", function, checked_mir_value(receiver), !class_method)
 end

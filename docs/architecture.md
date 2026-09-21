@@ -104,22 +104,26 @@ vertical slices from remaining ownership.
 ### Current compiler source ownership
 
 The ordinary entry is [compiler/src/compiler.trb](../compiler/src/compiler.trb).
-Its explicit transitive import closure contains 134 canonical implementation modules:
+Its explicit transitive import closure contains 149 canonical implementation modules:
 
 | Modules in `compiler/src/` | Current responsibility |
 | --- | --- |
+| `compiler_bytes.trb`, `literal_types.trb`, `literal_type_syntax.trb`, `literal_mir.trb`, `literal_cases.trb`, `union_members.trb` | Byte-exact singleton types, verified constants/widening, exhaustive literal cases and common union fields with lexical discriminant narrowing; see [decision 0078](decisions/0078-literal-types-and-union-members.md). |
+| `newtype_model.trb`, `newtype_types.trb`, `newtype_syntax.trb`, `newtype_resolution.trb`, `newtype_methods.trb`, `newtype_mir.trb`, `newtype_mir_types.trb` | Nominal construction policy, representation resolution, method identity and verified storage erasure; see [decision 0077](decisions/0077-newtype-mir.md). |
+| `sliced_iteration.trb` | Streams fresh Array batches from retained Array/Range receivers through verified MIR control edges. |
 | `raw_enum_types.trb`, `raw_enum_syntax.trb`, `raw_enum_checked.trb`, `raw_enum_resolution.trb`, `enum_methods.trb` | Raw value declarations, canonical conversions, standard dependencies and receiver-specialized ordinary/generic enum method resolution; see [decisions 0070](decisions/0070-raw-enum-and-method-mir.md) and [0071](decisions/0071-generic-enum-method-mir.md). |
 | `union_types.trb`, `union_checked.trb`, `union_mir.trb`, `qbe_unions.trb` | Canonical alternatives, scalar type cases, verified union injection/test/extraction and traced payload adaptation; see [decision 0069](decisions/0069-union-value-mir.md). |
 | `transform_model.trb` | Parser-owned collection block shapes and concrete transform projections; lowering uses ordinary iteration control. |
 | `qbe_array_join.trb` | Linear Array-to-String byte assembly for verified join MIR; see [decision 0063](decisions/0063-array-join-mir.md). |
 | `qbe_string_trimming.trb` | Unicode edge trimming and one retained-byte copy for verified String MIR; see [decision 0065](decisions/0065-string-trimming-mir.md). |
 | `qbe_scalar_strings.trb` | Bounded binary64 shortest-roundtrip formatting for verified scalar conversion MIR; see [decision 0068](decisions/0068-scalar-string-conversion.md). |
+| `lexer.trb`, `syntax_tokens.trb` | Identifier/operator token boundaries and parser-owned nested generic closer expansion; see [decision 0076](decisions/0076-lexical-boundaries.md). |
 | `literal_syntax.trb` | Parser-selected String interpolation and literal Symbol normalization; see [decision 0066](decisions/0066-symbol-literal-syntax.md). |
 | `storage.trb`, `path.trb`, `literals.trb` | Shared storage, path predicates, and numeric/ASCII predicates. |
 | `string_escapes.trb`, `qbe_string_literals.trb` | String escape widths, byte/scalar validation and the private byte constructor; see [escape decoding](decisions/0058-string-escape-decoding.md). |
 | `state.trb` | Compiler state, symbol indexes, shared locals, and diagnostics. |
 | `namespace_model.trb`, `namespace_references.trb` | Source-owned declaration namespaces, qualified references and private member access. |
-| `constant_model.trb`, `constant_declarations.trb`, `constant_analysis.trb`, `mir_globals.trb`, `qbe_globals.trb` | Runtime initializer bodies, exact constant types, verified global identities/order/reads and persistent GC roots; see [decision 0067](decisions/0067-namespaces-and-constant-mir.md). |
+| `global_model.trb`, `global_declarations.trb`, `global_analysis.trb`, `mir_globals.trb`, `qbe_globals.trb` | Runtime initializer bodies, exact global types and mutability, verified identities/order/reads/writes and persistent GC roots; see [decision 0080](decisions/0080-global-binding-mir.md). |
 | `parser.trb`, `syntax_tokens.trb`, `resolution.trb` | Syntax/token boundaries, import/declaration orchestration and body name resolution. |
 | `declaration_lookup.trb`, `type_resolution.trb` | Visible declaration identity, semantic type resolution and concrete nominal instantiation. |
 | `generic_model.trb`, `generic_arguments.trb`, `generic_syntax.trb`, `generic_validation.trb` | Authored generic templates, recursive type substitution, explicit applications and template validation; see [generic nominal MIR](decisions/0045-generic-nominal-mir.md). |
@@ -142,7 +146,7 @@ Its explicit transitive import closure contains 134 canonical implementation mod
 | `qbe_calls.trb`, `qbe_mir.trb`, `qbe_control.trb`, `qbe_strings.trb`, `qbe_arrays.trb`, `qbe_records.trb`, `qbe_hashes.trb`, `qbe_ranges.trb`, `qbe_roots.trb` | Shared typed scalar/call adaptation, verified Array loop plans, general scalar/managed blocks and MIR-selected root publication. |
 | `hash_types.trb`, `hash_mir.trb`, `hash_checked.trb` | Hash types and value layout, operation plans, and their checked source bindings. |
 | `iteration_syntax.trb`, `iteration_mir.trb`, `iteration_checked.trb` | Immutable parsed iteration regions, typed Array/Range traversal plans, Range construction, structural validation, and checked source bindings. |
-| `qbe_output.trb`, `qbe_runtime.trb`, `hash_runtime.trb` | Ordered QBE output and runtime generation, including the Hash runtime. |
+| `qbe_output.trb`, `qbe_runtime.trb`, `hash_runtime.trb`, `hash_key_runtime.trb` | Ordered QBE output and runtime generation; Hash key hashing/probing is separate from table allocation, growth and snapshots. Verified MIR selects scalar and union key layouts. |
 | `project_config.trb` | Project configuration records, JSONC parsing, and validation. |
 | `checked_functions.trb` | Parameter binding, body checking and module finalization. |
 | `compiler.trb` | Final checking orchestration, declaration-bound runtime hooks, QBE adaptation, emission temporary-storage lifetimes, and the remaining driver code. |

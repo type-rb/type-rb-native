@@ -84,7 +84,7 @@ mapped&.each { |value| puts(value) }
         'nil : Array<Integer>? [mut]\n0 : Integer [mut]\n'
         'nil : Array<Integer>? [mut]\nArray<Integer>?\n'
         '[3, 1] : Array<Integer>? [mut]\n[4, 2] : Array<Integer>? [mut]\n'
-        '4\n2\nArray<Integer>\n2\n4\n2\n2\nreloaded\n2\n4\n2\n'), retained
+        '4\n2\nArray<Integer>?\n2\n4\n2\n2\nreloaded\n2\n4\n2\n'), retained
     assert len(retained.stderr.splitlines()) == 1 and 'found Array<Boolean>' in retained.stderr, retained
 
 print('Safe collection blocks, retained state, replay and managed lifetime checks passed')

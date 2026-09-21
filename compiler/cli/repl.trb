@@ -1,22 +1,21 @@
-import { repl_initialize_constants } from repl_globals
-import { enum_uppercase } from enum_types
-import { repl_default } from repl_defaults
-import { token_is, skip_newlines } from syntax_tokens
+import { repl_initialize_globals, repl_link_globals } from repl_globals
+import { repl_binding_witnesses, repl_loaded_bindings, repl_projected_globals, repl_lines, repl_is_declaration } from repl_projection
+import { skip_newlines } from syntax_tokens
 import { repl_checked, repl_checked_input } from repl_check
-import { ReplProject, repl_project, repl_type_name, repl_witness_type_name } from repl_project
+import { ReplProject, repl_project, repl_type_name } from repl_project
 import { cli_diagnostic } from diagnostics
 import { ReplCandidates, repl_editor_read, repl_editor_paint } from repl_editor
 import { repl_incomplete, repl_escape } from repl_syntax
 import { repl_history_load, repl_history_save } from repl_history
-import { CheckedFlowFact, CompilerState, compiler_new, has_diagnostic } from state
+import { CheckedFlowFact, CompilerState, has_diagnostic } from state
 import { sparse_integer_at, sparse_string_at, load_integer, load_string } from storage
 import { find_function_in_module } from declaration_lookup
 import { find_record_type } from type_resolution
 import { compiler_read_source, compiler_file_exists } from compiler
-import { lex, compiler_source_slice } from lexer
+import { compiler_source_slice } from lexer
 import { path_directory, path_join, string_starts_with } from path
 import { native_cli_line, native_cli_eof, native_cli_tty, native_cli_write, native_cli_interrupt, native_cli_env, native_cli_mkdir } from host
-import { ReplStore, ReplEnvironment, repl_store, repl_environment, repl_type, repl_type_in, repl_activate, repl_constant_key } from repl_model
+import { ReplStore, ReplEnvironment, repl_store, repl_environment, repl_type, repl_type_in, repl_activate, repl_global_key } from repl_model
 import { repl_binding_value, repl_render, repl_compact } from repl_values
 import { repl_statement } from repl_eval
 import { integer_string } from literals
@@ -61,18 +60,6 @@ def repl_trim(text: String): String
 	return compiler_source_slice(text, start, finish)
 end
 
-def repl_lines(text: String): Integer
-	mut lines := 0
-	mut index := 0
-	while index < text.size()
-		if text[index] == "\n"
-			lines += 1
-		end
-		index += 1
-	end
-	return lines
-end
-
 def repl_help()
 	puts("Enter TypeRB expressions, bindings, functions, records, or imports.")
 	puts(":type EXPRESSION  Show the checked type without evaluating")
@@ -112,7 +99,8 @@ def repl_show(mut state: CompilerState, mut session: ReplSession, input: String,
 		return true
 	end
 	repl_activate(session.store, state)
-	if !repl_initialize_constants(state, session.store)
+	repl_link_globals(state, session.store, session.environment)
+	if !repl_initialize_globals(state, session.store)
 		native_cli_write(repl_error_text(session.store.error[0]) + "\n", 2)
 		return false
 	end
@@ -145,7 +133,8 @@ def repl_show(mut state: CompilerState, mut session: ReplSession, input: String,
 	if session.store.error[0] != ""
 		session.environment.count[0] = previous_count
 	end
-	session.text[1] = repl_bindings(state, session)
+	session.text[1] = repl_binding_witnesses(state, session.store, session.environment)
+	session.text[2] = repl_binding_witnesses(state, session.store, session.environment, true)
 	if session.store.error[0] != "" || flow[0] != 0
 		session.facts[0] = []
 		if !repl_reset_at(session.resets, session.submissions.size())
@@ -189,7 +178,16 @@ def repl_session_lines(session: ReplSession): Integer
 	return count
 end
 
-def repl_submit(mut session: ReplSession, input: String, type_only: Boolean, display: Boolean): Boolean
+def repl_submit(mut session: ReplSession, input: String, type_only: Boolean, display: Boolean, replay_inputs: Array<String> = []): Boolean
+	mut authored: Array<String> := []
+	if replay_inputs.empty?()
+		session.submissions.each do |previous|
+			authored.push(previous)
+		end
+		authored.push(input)
+	else
+		authored = replay_inputs
+	end
 	declarations := repl_is_declaration(input)
 	if declarations
 		mut inputs: Array<String> := []
@@ -197,32 +195,33 @@ def repl_submit(mut session: ReplSession, input: String, type_only: Boolean, dis
 			inputs.push(submission)
 		end
 		inputs.push(input)
-		if !repl_validate_inputs(session.project, inputs, session.resets)
+		if !repl_validate_inputs(session.project, inputs, session.resets, session.text[2])
 			return false
 		end
 	end
-	prefix := session.text[0] + "def main()\n" + session.text[1]
+	header := session.text[0] + session.text[2]
+	prefix := header + "def main()\n" + session.text[1]
 	mut source := prefix + input + "\nreturn\nend\n"
 	if declarations
-		source = session.text[0] + input + "\ndef main()\n" + session.text[1] + "return\nend\n"
+		source = session.text[0] + input + "\n" + session.text[2] + "def main()\n" + session.text[1] + "return\nend\n"
 	end
 	mut start_line := repl_lines(prefix) + 1
 	mut finish_line := start_line + repl_lines(input) + 1
-	mut projected_start := repl_lines(session.text[0] + "def main()\n") + 1
+	mut projected_start := repl_lines(session.text[0]) + 1
 	if declarations
-		projected_start = repl_lines(session.text[0] + input + "\ndef main()\n") + 1
-		start_line = repl_lines(session.text[0] + input + "\ndef main()\n" + session.text[1]) + 1
+		projected_start = repl_lines(session.text[0] + input + "\n") + 1
+		start_line = repl_lines(session.text[0] + input + "\n" + session.text[2] + "def main()\n" + session.text[1]) + 1
 		finish_line = start_line
 	end
 	mut captured: Array<String> := []
 	mut binding := 0
 	while binding < session.environment.count[0]
-		if session.environment.cells[binding] > 0 && session.environment.mutable[binding] > 0
+		if session.environment.mutable[binding] > 0
 			captured.push(session.environment.names[binding])
 		end
 		binding += 1
 	end
-	mut state := repl_checked_input(source, session.project, start_line, finish_line, session.facts[0], [], captured, projected_start, start_line)
+	mut state := repl_checked_input(source, session.project, start_line, finish_line, session.facts[0], [], captured, projected_start, start_line, authored, session.submissions.size() + 1)
 	if has_diagnostic(state)
 		mut offset := repl_lines(prefix)
 		if declarations
@@ -236,25 +235,42 @@ def repl_submit(mut session: ReplSession, input: String, type_only: Boolean, dis
 			return true
 		end
 		repl_activate(session.store, state)
-		if !repl_initialize_constants(state, session.store)
+		repl_link_globals(state, session.store, session.environment)
+		if !repl_initialize_globals(state, session.store)
+			session.facts[0] = []
+			session.text[1] = repl_binding_witnesses(state, session.store, session.environment)
+			session.text[2] = repl_binding_witnesses(state, session.store, session.environment, true)
+			if !repl_reset_at(session.resets, session.submissions.size())
+				session.resets.push(session.submissions.size())
+			end
 			native_cli_write(repl_error_text(session.store.error[0]) + "\n", 2)
 			return false
 		end
-		session.text[1] = repl_bindings(state, session)
+		session.text[1] = repl_binding_witnesses(state, session.store, session.environment)
+		session.text[2] = repl_binding_witnesses(state, session.store, session.environment, true)
 		if display
 			mut identity := 0
-			while identity < state.constants.size()
-				row := state.constants[identity]
-				if row.source_id == state.entry_module[0] && row.line > repl_lines(session.text[0]) && !row.name.include?("::")
-					key := repl_constant_key(state, identity)
-					value := session.store.constants[key]
-					puts(repl_editor_paint(repl_render(state, session.store, value, 0), 2, repl_use_color()) + repl_editor_paint(" : ", 4, repl_use_color()) + repl_editor_paint(repl_type_name(state, state.constant_types[identity]), 5, repl_use_color()))
+			while identity < state.globals.size()
+				row := state.globals[identity]
+				if row.source_id == state.entry_module[0] && row.line > repl_lines(session.text[0]) && row.line <= repl_lines(session.text[0] + input + "\n") && !row.name.include?("::")
+					key := repl_global_key(state, identity)
+					value := session.store.children[session.store.globals[key]][0]
+					puts(repl_editor_paint(repl_render(state, session.store, value, 0), 2, repl_use_color()) + repl_editor_paint(" : ", 4, repl_use_color()) + repl_editor_paint(repl_type_name(state, state.global_types[identity]), 5, repl_use_color()))
 				end
 				identity += 1
 			end
 		end
+		mut initializes := false
+		state.globals.each do |row|
+			if row.source_id == state.entry_module[0] && row.line > repl_lines(session.text[0]) && row.line <= repl_lines(session.text[0] + input + "\n")
+				initializes = true
+			end
+		end
 		session.text[0] += input + "\n"
 		session.facts[0] = state.submissions[0].after
+		if initializes
+			session.facts[0] = []
+		end
 		return true
 	end
 	return repl_show(state, session, input, prefix, type_only, display)
@@ -316,14 +332,14 @@ def repl_run(config: String): Integer
 		native_cli_write("trbn: " + project.error + "\n", 2)
 		return 1
 	end
-	mut session := ReplSession.new(project: project, text: [project.imports, ""], store: repl_store(), environment: repl_environment(), submissions: [], facts: [[]], resets: [])
+	mut session := ReplSession.new(project: project, text: [project.imports, "", ""], store: repl_store(), environment: repl_environment(), submissions: [], facts: [[]], resets: [])
 	mut initial := repl_checked(project.imports + "def main()\nreturn\nend\n", project)
 	if has_diagnostic(initial)
 		repl_diagnostic(initial, 0)
 		return 1
 	end
 	repl_activate(session.store, initial)
-	if !repl_initialize_constants(initial, session.store)
+	if !repl_initialize_globals(initial, session.store)
 		native_cli_write(repl_error_text(session.store.error[0]) + "\n", 2)
 		return 1
 	end
@@ -407,25 +423,6 @@ def repl_run(config: String): Integer
 	return 0
 end
 
-def repl_bindings(state: CompilerState, session: ReplSession): String
-	mut source := ""
-	mut index := 0
-	while index < session.environment.count[0]
-		if session.environment.mutable[index] == 1
-			source += "mut "
-		end
-		id := repl_binding_value(session.store, session.environment, index)
-		type_name := repl_type(session.store, id)
-		source += session.environment.names[index]
-		if type_name != "Hash"
-			source += ": " + repl_witness_type_name(state, type_name)
-		end
-		source += " := " + repl_default(state, type_name) + "\n"
-		index += 1
-	end
-	return source
-end
-
 def repl_complete(session: ReplSession): ReplCandidates
 	mut candidates := ReplCandidates.new(labels: [], insertions: [], details: [], kinds: [])
 	repl_candidate(candidates, ":type", ":type ", "show checked type", 0)
@@ -450,7 +447,7 @@ def repl_complete(session: ReplSession): ReplCandidates
 		repl_candidate(candidates, types[keyword], types[keyword], "built-in type", 5)
 		keyword += 1
 	end
-	state := repl_checked(session.text[0] + "def main()\n" + session.text[1] + "return\nend\n", session.project)
+	state := repl_checked_input(session.text[0] + session.text[2] + "def main()\n" + session.text[1] + "return\nend\n", session.project, - 1, - 1, [], [], [], repl_lines(session.text[0]) + 1, repl_lines(session.text[0] + session.text[2] + "def main()\n" + session.text[1]) + 1, session.submissions)
 
 	mut index := 0
 	while index < session.environment.count[0]
@@ -520,7 +517,7 @@ end
 
 # Check retained authored uses before accepting a declaration that may hide an
 # automatic binding. Validation never replays already executed side effects.
-def repl_validate_inputs(project: ReplProject, inputs: Array<String>, resets: Array<Integer>): Boolean
+def repl_validate_inputs(project: ReplProject, inputs: Array<String>, resets: Array<Integer>, bindings: String = ""): Boolean
 	mut declarations := project.imports
 	mut body := ""
 	mut index := 0
@@ -532,6 +529,8 @@ def repl_validate_inputs(project: ReplProject, inputs: Array<String>, resets: Ar
 		end
 		index += 1
 	end
+	projection_start := repl_lines(declarations) + 1
+	declarations += bindings
 	mut reset_lines: Array<Integer> := []
 	mut body_line := repl_lines(declarations) + 2
 	index = 0
@@ -544,7 +543,7 @@ def repl_validate_inputs(project: ReplProject, inputs: Array<String>, resets: Ar
 		end
 		index += 1
 	end
-	checked := repl_checked_input(declarations + "def main()\n" + body + "return\nend\n", project, repl_lines(declarations) + 2, body_line, [], reset_lines)
+	checked := repl_checked_input(declarations + "def main()\n" + body + "return\nend\n", project, repl_lines(declarations) + 2, body_line, [], reset_lines, [], projection_start, repl_lines(declarations) + 1, inputs)
 	if has_diagnostic(checked)
 		mut offset := repl_lines(project.imports)
 		mut body_offset := repl_lines(declarations) + 1
@@ -583,7 +582,7 @@ def repl_replay(mut session: ReplSession, config: String, additional: Array<Stri
 		native_cli_write("trbn: " + project.error + "\n", 2)
 		return ReplReplay.new(session: session, success: false)
 	end
-	mut replayed := ReplSession.new(project: project, text: [project.imports, ""], store: repl_store(), environment: repl_environment(), submissions: [], facts: [[]], resets: [])
+	mut replayed := ReplSession.new(project: project, text: [project.imports, "", ""], store: repl_store(), environment: repl_environment(), submissions: [], facts: [[]], resets: [])
 	mut inputs: Array<String> := []
 	mut index := 0
 	while index < session.submissions.size()
@@ -596,7 +595,8 @@ def repl_replay(mut session: ReplSession, config: String, additional: Array<Stri
 		index += 1
 	end
 	# Check the complete replacement before replaying any observable effects.
-	if !repl_validate_inputs(project, inputs, session.resets)
+	mut projected := session.text[2] + repl_loaded_bindings(additional)
+	if !repl_validate_inputs(project, inputs, session.resets, projected)
 		return ReplReplay.new(session: session, success: false)
 	end
 	mut declarations := project.imports
@@ -606,26 +606,64 @@ def repl_replay(mut session: ReplSession, config: String, additional: Array<Stri
 		end
 	end
 	replayed.text[0] = declarations
-	mut initial := repl_checked(declarations + "def main()\nreturn\nend\n", project)
+	mut initial := repl_checked_input(declarations + projected + "def main()\nreturn\nend\n", project, - 1, - 1, [], [], [], repl_lines(declarations) + 1, repl_lines(declarations + projected) + 1, inputs)
 	if has_diagnostic(initial)
 		repl_diagnostic(initial, 0)
 		return ReplReplay.new(session: session, success: false)
 	end
+	projected = repl_projected_globals(initial, repl_lines(declarations))
+	replayed.text[2] = projected
 	repl_activate(replayed.store, initial)
-	if !repl_initialize_constants(initial, replayed.store)
+	# Reserve authored globals and future bindings without running initializers.
+	# Project modules initialize once; session globals follow authored input order.
+	mut identity := 0
+	while identity < initial.globals.size()
+		row := initial.globals[identity]
+		if row.source_id == initial.entry_module[0]
+			replayed.store.globals[repl_global_key(initial, identity)] = 0
+		end
+		identity += 1
+	end
+	if !repl_initialize_globals(initial, replayed.store)
 		native_cli_write(repl_error_text(replayed.store.error[0]) + "\n", 2)
 		return ReplReplay.new(session: session, success: false)
 	end
 	index = 0
+	mut declaration_line := repl_lines(project.imports) + 1
 	while index < inputs.size()
 		if repl_reset_at(session.resets, index)
 			replayed.facts[0] = []
 			replayed.resets.push(index)
 		end
 		if !repl_is_declaration(inputs[index])
-			if !repl_submit(replayed, inputs[index], false, false)
+			if !repl_submit(replayed, inputs[index], false, false, inputs)
 				return ReplReplay.new(session: session, success: false)
 			end
+		else
+			finish := declaration_line + repl_lines(inputs[index]) + 1
+			repl_activate(replayed.store, initial)
+			repl_link_globals(initial, replayed.store, replayed.environment)
+			mut initializes := false
+			identity = 0
+			while identity < initial.globals.size()
+				row := initial.globals[identity]
+				if row.source_id == initial.entry_module[0] && row.line >= declaration_line && row.line < finish
+					replayed.store.globals.delete(repl_global_key(initial, identity))
+					initializes = true
+				end
+				identity += 1
+			end
+			if initializes
+				if !repl_initialize_globals(initial, replayed.store)
+					native_cli_write(repl_error_text(replayed.store.error[0]) + "\n", 2)
+					return ReplReplay.new(session: session, success: false)
+				end
+				replayed.facts[0] = []
+			end
+			declaration_line = finish
+		end
+		if index + 1 < inputs.size()
+			replayed.text[2] = projected
 		end
 		replayed.submissions.push(inputs[index])
 		replayed = ReplSession.new(project: replayed.project, text: replayed.text, store: repl_compact(replayed.store, replayed.environment), environment: replayed.environment, submissions: replayed.submissions, facts: replayed.facts, resets: replayed.resets)
@@ -663,24 +701,6 @@ def repl_split_source(source: String): Array<String>
 		submissions.push(pending)
 	end
 	return submissions
-end
-
-def repl_is_declaration(input: String): Boolean
-	mut probe := compiler_new(input.size() * 3 + 16)
-	lex(probe, input)
-	mut first := [0]
-	skip_newlines(probe, first)
-	if load_integer(probe.token_kinds, first[0]) == 1 && enum_uppercase(load_string(probe.token_texts, first[0])) && (token_is(probe, first[0] + 1, ":=") || token_is(probe, first[0] + 1, ":"))
-		return true
-	end
-	mut declarations := token_is(probe, first[0], "def")
-	if token_is(probe, first[0], "record") || token_is(probe, first[0], "enum") || token_is(probe, first[0], "module")
-		declarations = true
-	end
-	if token_is(probe, first[0], "import") || token_is(probe, first[0], "alias")
-		declarations = true
-	end
-	return declarations
 end
 
 def repl_cancelled(status: Integer): Boolean

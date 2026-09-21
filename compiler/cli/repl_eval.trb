@@ -1,7 +1,13 @@
+import { union_parts } from union_types
+import { string_starts_with } from path
+import { find_newtype_in_module, find_newtype_type, newtype_type } from newtype_types
+import { newtype_method_function } from newtype_methods
+import { find_visible_newtype } from declaration_lookup
+import { repl_slice_available, repl_slice_next } from repl_sliced_iteration
 import { repl_array_sort_keys } from repl_array_sorting
 import { raw_enum_type } from raw_enum_types
 import { repl_raw_enum_from, repl_raw_enum_value } from repl_raw_enums
-import { repl_constant_key } from repl_model
+import { repl_global_key } from repl_model
 import { checked_reference_name } from namespace_references
 import { enum_method_function } from enum_methods
 import { repl_range_array } from repl_range_methods
@@ -103,6 +109,12 @@ def repl_string_integer(mut store: ReplStore, text: String): Integer
 end
 
 def repl_numeric(mut store: ReplStore, left: Integer, operator: String, right: Integer): Integer
+	if union_parts(repl_type(store, left)).size() > 0
+		return repl_numeric(store, store.children[left][0], operator, right)
+	end
+	if union_parts(repl_type(store, right)).size() > 0
+		return repl_numeric(store, left, operator, store.children[right][0])
+	end
 	if repl_type(store, left) == "Nil" || repl_type(store, right) == "Nil"
 		mut same := repl_absent(store, left) == repl_absent(store, right)
 		if operator == "!="
@@ -110,8 +122,16 @@ def repl_numeric(mut store: ReplStore, left: Integer, operator: String, right: I
 		end
 		return repl_boolean(store, same)
 	end
+	if string_starts_with(repl_type(store, left), "Newtype#")
+		return repl_numeric(store, store.children[left][0], operator, store.children[right][0])
+	end
 	a := repl_get(store, left)
 	b := repl_get(store, right)
+	if (a.type_name == "String") != (b.type_name == "String")
+		if operator == "==" || operator == "!="
+			return repl_boolean(store, operator == "!=")
+		end
+	end
 	if a.type_name == "String"
 		if operator == "+"
 			return repl_string(store, a.text + b.text)
@@ -398,12 +418,23 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 	if text == "false"
 		return repl_reference(repl_boolean(store, false))
 	end
+	if text == "+"
+		operand := repl_expression(state, position, store, environment, 7, "")
+		if environment.flow[0] != 0
+			return repl_reference(environment.flow[1])
+		end
+		return repl_reference(operand.value)
+	end
 	if text == "-"
 		operand := repl_expression(state, position, store, environment, 7, "")
 		if environment.flow[0] != 0
 			return repl_reference(environment.flow[1])
 		end
-		value := repl_get(store, operand.value)
+		mut id := operand.value
+		if union_parts(repl_type(store, id)).size() > 0
+			id = store.children[id][0]
+		end
+		value := repl_get(store, id)
 		if value.type_name == "Float"
 			return repl_reference(repl_float(store, - value.floating))
 		end
@@ -503,23 +534,35 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 	if application_finish > origin
 		position[0] = application_finish
 	end
-	binding := repl_find(environment, text)
-	if binding >= 0
-		return ReplReference.new(value: repl_nullable_read(state, store, repl_binding_value(store, environment, binding), origin), binding: binding, container: - 1, slot: - 1)
-	end
-	constant := sparse_integer_at(state.checked[0].constant_references, origin)
+	constant := sparse_integer_at(state.checked[0].global_references, origin)
 	if constant > 0
-		key := repl_constant_key(state, constant - 1)
-		if !store.constants.key?(key)
+		key := repl_global_key(state, constant - 1)
+		if !store.globals.key?(key) || store.globals[key] == 0
 			store.error[0] = "constant is not initialized"
 			return repl_reference(0)
 		end
-		return repl_reference(repl_nullable_read(state, store, store.constants[key], origin))
+		return ReplReference.new(value: repl_nullable_read(state, store, store.children[store.globals[key]][0], origin), binding: - constant - 1, container: - 1, slot: - 1)
+	end
+	binding := repl_find(environment, text)
+	if binding >= 0
+		return ReplReference.new(value: repl_nullable_read(state, store, repl_binding_value(store, environment, binding), origin), binding: binding, container: - 1, slot: - 1)
 	end
 	function_value := sparse_integer_at(state.checked[0].function_values, origin)
 	if function_value > 0
 		function := function_value - 1
 		return repl_reference(repl_value(store, declared_callable_type(state, function, 0), function, 0.0, "", []))
+	end
+	if text == "value" && token_is(state, position[0], "(")
+		self_slot := repl_find(environment, "self")
+		if self_slot >= 0
+			receiver := repl_binding_value(store, environment, self_slot)
+			if find_newtype_type(state, repl_type(store, receiver)) >= 0
+				position[0] += 1
+				skip_newlines(state, position)
+				position[0] += 1
+				return repl_reference(store.children[receiver][0])
+			end
+		end
 	end
 	if token_is(state, position[0], "(")
 		mut function := find_visible_function(state, state.active_module[0], text)
@@ -529,7 +572,7 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		end
 		if function >= 0 && sparse_string_at(state.function_receivers, function) != ""
 			self_slot := repl_find(environment, "self")
-			return repl_reference(repl_enum_method_call(state, position, store, environment, function, repl_binding_value(store, environment, self_slot)))
+			return repl_reference(repl_nominal_method_call(state, position, store, environment, function, repl_binding_value(store, environment, self_slot)))
 		end
 		mut bindings := function_argument_bindings(state, function)
 		position[0] += 1
@@ -566,12 +609,21 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		end
 		arguments := bindings.values
 		if text == "puts" && function < 0
-			if store.types[arguments[0]] == "String"
-				puts(store.texts[arguments[0]])
-			elsif repl_type(store, arguments[0]) == "Float"
-				puts(repl_scalar_string(repl_get(store, arguments[0])))
+			mut printed := arguments[0]
+			if union_parts(repl_type(store, printed)).size() > 0
+				printed = store.children[printed][0]
+			end
+			if repl_absent(store, printed)
+				puts("nil")
 			else
-				puts(repl_render(state, store, arguments[0], 0))
+				printed = repl_payload(store, printed)
+				if repl_get(store, printed).type_name == "String"
+					puts(store.texts[printed])
+				elsif repl_type(store, printed) == "Float"
+					puts(repl_scalar_string(repl_get(store, printed)))
+				else
+					puts(repl_render(state, store, printed, 0))
+				end
 			end
 			return repl_reference(0)
 		end
@@ -612,6 +664,35 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 			position[0] += 1
 		end
 		return repl_reference(repl_value(store, enum_type(owner), variant, 0.0, row.name, bindings.values))
+	end
+	mut newtype_owner := find_newtype_type(state, application_type)
+	if newtype_owner < 0
+		newtype_owner = find_visible_newtype(state, state.active_module[0], text)
+	end
+	if text == "self"
+		newtype_owner = find_newtype_in_module(state, state.active_module[0], state.declaration_owner[0])
+	end
+	if newtype_owner >= 0 && token_is(state, position[0], ".")
+		member := load_string(state.token_texts, position[0] + 1)
+		position[0] += 2
+		if member == "new"
+			position[0] += 1
+			skip_newlines(state, position)
+			representation := state.newtypes[newtype_owner].representation
+			argument := repl_expression(state, position, store, environment, 1, representation)
+			if environment.flow[0] != 0
+				return repl_reference(environment.flow[1])
+			end
+			skip_newlines(state, position)
+			if token_is(state, position[0], ",")
+				position[0] += 1
+				skip_newlines(state, position)
+			end
+			position[0] += 1
+			return repl_reference(repl_value(store, newtype_type(newtype_owner), 0, 0.0, "", [repl_coerce(store, argument.value, representation)]))
+		end
+		function := newtype_method_function(state, newtype_type(newtype_owner), member, true)
+		return repl_reference(repl_nominal_method_call(state, position, store, environment, function, - 1))
 	end
 	if token_is(state, position[0], ".")
 		position[0] += 1
@@ -735,6 +816,9 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 			end
 			result = ReplReference.new(value: repl_payload(store, result.value), binding: result.binding, container: result.container, slot: result.slot)
 		end
+		if token_is(state, position[0], ".") && union_parts(repl_type(store, result.value)).size() > 0
+			result = repl_reference(store.children[result.value][0])
+		end
 		value := repl_get(store, result.value)
 		if token_is(state, position[0], "(")
 			result = repl_callable_expression(state, position, store, environment, result.value)
@@ -799,7 +883,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 				position[0] += 1
 				member := load_string(state.token_texts, position[0])
 				position[0] += 1
-				if member == "each" && syntax_iteration_suffix(state, position[0] - 2) >= 0
+				if (member == "each" || member == "each_slice") && syntax_iteration_suffix(state, position[0] - 2) >= 0
 					position[0] -= 2
 					break
 				end
@@ -812,6 +896,21 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						result = repl_callable_expression(state, position, store, environment, result.value)
 					end
 				elsif token_is(state, position[0], "(")
+					if find_newtype_type(state, value.type_name) >= 0
+						if member == "value"
+							position[0] += 1
+							skip_newlines(state, position)
+							position[0] += 1
+							result = repl_reference(value.children[0])
+						else
+							function := newtype_method_function(state, value.type_name, member, false)
+							result = repl_reference(repl_nominal_method_call(state, position, store, environment, function, result.value))
+						end
+						if safe_origin >= 0 && environment.flow[0] == 0
+							result = repl_reference(repl_coerce(store, result.value, load_string(state.checked[0].safe_types, safe_origin)))
+						end
+						next
+					end
 					if member == "raw_value" && raw_enum_type(state, find_enum_type(state, value.type_name)) != ""
 						position[0] += 1
 						skip_newlines(state, position)
@@ -824,7 +923,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 					end
 					method_function := enum_method_function(state, value.type_name, member)
 					if method_function >= 0
-						result = repl_reference(repl_enum_method_call(state, position, store, environment, method_function, result.value))
+						result = repl_reference(repl_nominal_method_call(state, position, store, environment, method_function, result.value))
 						if safe_origin >= 0 && environment.flow[0] == 0
 							result = repl_reference(repl_coerce(store, result.value, load_string(state.checked[0].safe_types, safe_origin)))
 						end
@@ -1034,11 +1133,13 @@ def repl_expression(mut state: CompilerState, mut position: Array<Integer>, mut 
 						return repl_reference(0)
 					end
 					plan := checked_range_require(state, expression_origin, origin, end_origin, position[0])
-					if plan.origin < 0 || repl_type(store, result.value) != plan.start_type || repl_type(store, right.value) != plan.end_type
+					start := repl_coerce(store, result.value, plan.start_type)
+					finish := repl_coerce(store, right.value, plan.end_type)
+					if plan.origin < 0 || repl_type(store, start) != plan.start_type || repl_type(store, finish) != plan.end_type
 						store.error[0] = "Range operands disagree with checked MIR"
 						return repl_reference(0)
 					end
-					result = repl_reference(repl_value(store, "Range<Integer>", 0, 0.0, "", [result.value, right.value, repl_integer(store, plan.exclusive)]))
+					result = repl_reference(repl_value(store, "Range<Integer>", 0, 0.0, "", [start, finish, repl_integer(store, plan.exclusive)]))
 				else
 					result = repl_reference(repl_numeric(store, result.value, operator, right.value))
 				end
@@ -1123,6 +1224,19 @@ def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut s
 		store.error[0] = "iteration receiver disagrees with checked MIR"
 		return 0
 	end
+	mut slice_size := 0
+	if plan.syntax.slice_start >= 0
+		position[0] = plan.syntax.slice_start
+		size := repl_expression(state, position, store, environment, 1, "Integer").value
+		if store.error[0] != "" || environment.flow[0] != 0
+			return environment.flow[1]
+		end
+		slice_size = store.integers[size]
+		if slice_size <= 0
+			store.error[0] = "panic: each_slice size must be greater than zero"
+			return 0
+		end
+	end
 	saved := environment.count[0]
 	mut cursor := 0
 	mut ordinal := 0
@@ -1146,9 +1260,14 @@ def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut s
 			slot += 1
 		end
 	end
+	mut slice_cursor := [cursor, bound, exclusive, 0]
 	mut result := 0
 	while true
-		if plan.source_kind == 3
+		if slice_size > 0
+			if !repl_slice_available(store, receiver, plan.source_kind == 2, slice_cursor)
+				break
+			end
+		elsif plan.source_kind == 3
 			if cursor >= keys.size()
 				break
 			end
@@ -1161,7 +1280,9 @@ def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut s
 		end
 		environment.count[0] = saved
 		mut element := 0
-		if plan.source_kind == 1
+		if slice_size > 0
+			element = repl_slice_next(store, receiver, plan.source_kind == 2, plan.element_type, slice_size, slice_cursor)
+		elsif plan.source_kind == 1
 			element = store.children[receiver][cursor]
 		elsif plan.source_kind == 3
 			element = keys[cursor]
@@ -1191,21 +1312,34 @@ def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut s
 		if store.error[0] != ""
 			break
 		end
-		if plan.source_kind == 2 && cursor == bound
-			break
-		end
-		if plan.source_kind != 3 && plan.syntax.second_origin >= 0
-			# There is no next ordinal when the exclusive endpoint is next.
-			if plan.source_kind == 2 && exclusive == 1 && cursor + 1 == bound
+		if slice_size > 0
+			if !repl_slice_available(store, receiver, plan.source_kind == 2, slice_cursor)
 				break
 			end
-			if ordinal == 9007199254740991
-				store.error[0] = "panic: Integer is outside the portable range"
+			if plan.syntax.second_origin >= 0
+				if ordinal == 9007199254740991
+					store.error[0] = "panic: Integer is outside the portable range"
+					break
+				end
+				ordinal += 1
+			end
+		else
+			if plan.source_kind == 2 && cursor == bound
 				break
 			end
-			ordinal += 1
+			if plan.source_kind != 3 && plan.syntax.second_origin >= 0
+				# There is no next ordinal when the exclusive endpoint is next.
+				if plan.source_kind == 2 && exclusive == 1 && cursor + 1 == bound
+					break
+				end
+				if ordinal == 9007199254740991
+					store.error[0] = "panic: Integer is outside the portable range"
+					break
+				end
+				ordinal += 1
+			end
+			cursor += 1
 		end
-		cursor += 1
 	end
 	environment.count[0] = saved
 	position[0] = plan.syntax.finish
@@ -1334,6 +1468,8 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 		mut expected := repl_type(store, left.value)
 		if left.binding >= 0
 			expected = repl_type(store, repl_binding_value(store, environment, left.binding))
+		elsif left.binding < - 1
+			expected = state.global_types[- left.binding - 2]
 		end
 		mut hash_assignment := false
 		if left.container >= 0
@@ -1357,6 +1493,8 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 			end
 			if left.binding >= 0
 				repl_assign_binding(store, environment, left.binding, result)
+			elsif left.binding < - 1
+				store.children[store.globals[repl_global_key(state, - left.binding - 2)]][0] = result
 			else
 				if left.slot >= store.children[left.container].size()
 					store.error[0] = "panic: index is out of bounds"
@@ -1710,11 +1848,13 @@ def repl_transform(mut state: CompilerState, mut position: Array<Integer>, mut s
 	return result
 end
 
-def repl_enum_method_call(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, function: Integer, receiver: Integer): Integer
+def repl_nominal_method_call(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, function: Integer, receiver: Integer): Integer
 	mut bindings := function_argument_bindings(state, function)
-	bindings.values[0] = receiver
-	bindings.provided[0] = true
-	bindings.position[0] = 1
+	if receiver >= 0
+		bindings.values[0] = receiver
+		bindings.provided[0] = true
+		bindings.position[0] = 1
+	end
 	position[0] += 1
 	skip_newlines(state, position)
 	while !token_is(state, position[0], ")")

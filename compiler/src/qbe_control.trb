@@ -1,5 +1,5 @@
 import { emit_mir_union_instruction } from qbe_unions
-import { emit_mir_global_read } from qbe_globals
+import { emit_mir_global_read, emit_mir_global_write } from qbe_globals
 import { emit_mir_callable } from qbe_callables
 import { emit_mir_enum_instruction } from qbe_enums
 import { emit_mir_nullable_instruction } from qbe_nullable
@@ -7,7 +7,7 @@ import { emit_mir_range_instruction } from qbe_ranges
 import { emit_mir_hash_instruction } from qbe_hashes
 import { emit_mir_record_instruction } from qbe_records
 import { emit_mir_array_headers, emit_mir_array_instruction } from qbe_arrays
-import { mir_semantic_type_name } from mir_types
+import { mir_storage_type_name } from mir_types
 import { integer_string } from literals
 import { MirFunction, mir_block_index, mir_function_index } from mir
 import { mir_numeric_find, mir_numeric_operation } from mir_numeric
@@ -57,7 +57,7 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 			end
 			operands[value.id] = "%mir_value" + integer_string(value.id)
 			value_types[value.id] = value.type_id
-			types[value.id] = mir_semantic_type_name(state.scalar_mir, value.type_id)
+			types[value.id] = mir_storage_type_name(state.scalar_mir, value.type_id)
 		end
 	end
 	mut index := 0
@@ -83,10 +83,20 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 				point += 1
 			end
 			mut value := emitted_value("", "Void")
-			if instruction.kind >= 52 && instruction.kind <= 54
+			if instruction.kind == 55 || instruction.kind == 56 || instruction.kind == 58
+				value = emitted_value(operands[instruction.first], types[instruction.result])
+			elsif instruction.kind == 57
+				mut operand := state.scalar_mir.literal_texts[instruction.payload]
+				if types[instruction.result] == "String"
+					operand = symbols[instruction.payload]
+				end
+				value = emitted_value(operand, types[instruction.result])
+			elsif instruction.kind >= 52 && instruction.kind <= 54
 				value = emit_mir_union_instruction(state, value_types, instruction, operands, context, output)
 			elsif instruction.kind == 51
 				value = emit_mir_global_read(state.scalar_mir, instruction, context, output)
+			elsif instruction.kind == 59
+				emit_mir_global_write(state.scalar_mir, instruction, operands[instruction.first], context, output)
 			elsif instruction.kind == 43
 				valid := emit_label(context)
 				failed := emit_label(context)
@@ -94,6 +104,8 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 				qbe_output_line(output, failed)
 				if instruction.payload == 1
 					qbe_output_line(output, "\tcall $trbn_fail(l $trbn_clamp_error, l 37)")
+				elsif instruction.payload == 3
+					qbe_output_line(output, "\tcall $trbn_fail(l $trbn_slice_size_error, l 49)")
 				else
 					qbe_output_line(output, "\tcall $trbn_fail(l $trbn_array_empty_error, l 22)")
 				end

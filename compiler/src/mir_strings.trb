@@ -1,6 +1,10 @@
+import { nullable_element } from nullable_types
+import { literal_type_base } from literal_types
+import { mir_literal_widen } from literal_mir
+import { mir_checked_nullable } from nullable_mir
 import { CheckedValue, checked_mir_value, checked_value, mir_checked_value, scalar_mir_disable, scalar_mir_instruction, scalar_mir_value } from checked_values
 import { MirBlock, MirFunction, MirInstruction, MirModule } from mir
-import { mir_control_active, mir_control_prepare } from mir_control
+import { mir_control_active, mir_control_allocate, mir_control_branch, mir_control_enter, mir_control_jump, mir_control_prepare } from mir_control
 import { MirFlow, mir_flow_type, mir_value_available } from mir_flow
 import { mir_semantic_type_id, mir_semantic_type_name } from mir_types
 import { CheckedLocals, CompilerState } from state
@@ -43,12 +47,61 @@ def mir_checked_string_binary(mut state: CompilerState, mut locals: CheckedLocal
 	return mir_checked_string_operation(state, locals, kind, checked_mir_value(left), checked_mir_value(right), payload, result_type, origin)
 end
 
+# Printing an optional scalar uses ordinary verified branches and payload
+# operations. The backend receives only existing scalar conversions and I/O.
+def mir_puts_type(type_name: String): Boolean
+	element := nullable_element(type_name)
+	if element != ""
+		return mir_puts_type(element)
+	end
+	base := literal_type_base(type_name)
+	if base != ""
+		return mir_puts_type(base)
+	end
+	if type_name == "String" || type_name == "Integer" || type_name == "Float" || type_name == "Boolean" || type_name == "Nil" || type_name == "Never"
+		return true
+	end
+	return false
+end
+
+def mir_puts_nil(mut state: CompilerState, mut locals: CheckedLocals, origin: Integer): CheckedValue
+	literal := locals.mir_literal_texts.size()
+	locals.mir_literal_texts.push("<nil>")
+	value := mir_checked_string_operation(state, locals, 12, - 1, - 1, literal, "String", origin)
+	return mir_checked_string_operation(state, locals, 18, checked_mir_value(value), - 1, 0, "Void", origin)
+end
+
 def mir_checked_puts(mut state: CompilerState, mut locals: CheckedLocals, arguments: Array<Integer>, origin: Integer): CheckedValue
 	if arguments.size() != 1 || arguments[0] < 0
 		scalar_mir_disable(locals)
 		return checked_value("Void", 0, 9007199254740991, 0)
 	end
 	mut value := arguments[0]
+	type_name := mir_semantic_type_name(state.scalar_mir, locals.mir_value_rows[value].type_id)
+	if type_name == "Nil"
+		return mir_puts_nil(state, locals, origin)
+	end
+	element := nullable_element(type_name)
+	if element != ""
+		mir_control_prepare(state, locals)
+		line := load_integer(state.token_lines, origin)
+		optional := mir_checked_value(type_name, value, origin, 0)
+		condition := mir_checked_nullable(state, locals, 35, optional, "Boolean", 1, origin)
+		alternate := mir_control_branch(state, locals, condition, line)
+		payload := mir_checked_nullable(state, locals, 36, optional, element, 0, origin)
+		mir_checked_puts(state, locals, [checked_mir_value(payload)], origin)
+		join := mir_control_allocate(locals)
+		mir_control_jump(state, locals, join, locals.count[0])
+		mir_control_enter(state, locals, alternate, line)
+		mir_puts_nil(state, locals, origin)
+		mir_control_jump(state, locals, join, locals.count[0])
+		mir_control_enter(state, locals, join, line)
+		return checked_value("Void", 0, 9007199254740991, 0)
+	end
+	if literal_type_base(type_name) != ""
+		widened := mir_literal_widen(state, locals, mir_checked_value(type_name, value, origin, 0), origin)
+		value = checked_mir_value(widened)
+	end
 	if locals.mir_value_rows[value].type_id == 1
 		converted := mir_checked_string_operation(state, locals, 17, value, - 1, 1, "String", origin)
 		value = checked_mir_value(converted)

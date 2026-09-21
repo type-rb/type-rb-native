@@ -1,16 +1,31 @@
+import { hash_key_storage_type } from hash_types
 import { mir_nullable_coerce } from nullable_mir
 import { CheckedValue, checked_bound_value, checked_mir_value, checked_value, mir_checked_value, scalar_mir_disable, scalar_mir_instruction, scalar_mir_value } from checked_values
 import { mir_hash_capacity } from hash_mir
 import { MirBlock, MirFunction, MirIndexedTarget, MirInstruction, MirModule } from mir
 import { mir_control_active, mir_control_prepare } from mir_control
 import { MirFlow, mir_flow_type, mir_value_available } from mir_flow
-import { mir_element_type, mir_hash_key_type, mir_hash_kind, mir_hash_value_type, mir_semantic_type_id } from mir_types
+import { mir_element_type, mir_hash_key_type, mir_hash_kind, mir_hash_value_type, mir_semantic_type_id, mir_semantic_type_name } from mir_types
 import { CheckedLocals, CompilerState } from state
 import { load_integer } from storage
 
 # 27 allocates a Hash with a verified capacity hint; 28 is required lookup;
 # 29 stores payload into owner[key]; 30 carries the existing method identity.
 # A store captures the owner and key before checking its RHS, never a slot address.
+def mir_hash_key_flags(native_module: MirModule, owner: Integer): Integer
+	key := mir_hash_key_type(native_module, owner)
+	mut flags := 0
+	if hash_key_storage_type(mir_semantic_type_name(native_module, key)) == "String"
+		flags = 1
+	end
+	if key >= 9 && key - 9 < native_module.types.size()
+		if native_module.types[key - 9].kind == 10
+			flags += 4
+		end
+	end
+	return flags
+end
+
 def mir_checked_hash_operation(mut state: CompilerState, mut locals: CheckedLocals, kind: Integer, first: Integer, second: Integer, payload: Integer, type_name: String, origin: Integer): CheckedValue
 	mir_control_prepare(state, locals)
 	type_id := mir_semantic_type_id(state.scalar_mir, type_name)

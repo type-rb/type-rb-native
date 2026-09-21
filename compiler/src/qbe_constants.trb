@@ -1,29 +1,13 @@
+import { compiler_string_bytes } from compiler_bytes
 import { emit_union_descriptors } from qbe_unions
 import { emit_enum_descriptors } from qbe_enums
 import { emit_nullable_descriptors } from qbe_nullable
 import { mir_managed_type } from mir_types
-import { ascii_code, integer_string } from literals
+import { integer_string } from literals
 import { QbeOutput, qbe_output_line } from qbe_output
 import { compiler_entry_function } from resolution
 import { CompilerState, diagnostic, has_diagnostic } from state
 import { load_integer, load_string, store_integer } from storage
-
-# Typed compiler-runtime byte access. The ASCII body keeps the preceding seed's
-# first generation reproducible; current compiler calls use the resolved runtime
-# adapter, just like file input and source slicing. It is not a public String API.
-def compiler_string_bytes(value: String): Array<Integer>
-	mut bytes: Array<Integer> := []
-	mut index := 0
-	while index < value.size()
-		code := ascii_code(value[index])
-		if code < 0
-			return []
-		end
-		bytes.push(code)
-		index += 1
-	end
-	return bytes
-end
 
 def static_string_bytes(value: String): Array<Integer>
 	return compiler_string_bytes(value)
@@ -199,7 +183,11 @@ def emit_static_strings(
 		output.mir_literal_symbols.push("")
 	end
 	state.scalar_mir.instructions.each do |instruction|
-		if instruction.kind == 12
+		mut string_literal := instruction.kind == 12
+		if instruction.kind == 57 && instruction.first == 8
+			string_literal = true
+		end
+		if string_literal
 			values.push(state.scalar_mir.literal_texts[instruction.payload])
 			tokens.push(state.token_count[0] + instruction.payload)
 			literals.push(instruction.payload)

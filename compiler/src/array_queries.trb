@@ -1,3 +1,4 @@
+import { literal_scalar_type } from literal_cases
 import { CheckedValue, checked_mir_value, checked_value, scalar_mir_binary, scalar_mir_literal } from checked_values
 import { mir_enum_operation } from enum_mir
 import { enum_payloadless, find_enum_type } from enum_types
@@ -5,13 +6,13 @@ import { mir_checked_array_operation } from mir_arrays
 import { mir_binding_initialize, mir_binding_read } from mir_bindings
 import { mir_control_active, mir_control_branch, mir_control_enter, mir_control_jump, mir_control_loop_begin, mir_control_loop_branch, mir_control_loop_end, mir_control_prepare } from mir_control
 import { mir_checked_string_binary } from mir_strings
-import { mir_checked_nullable, mir_nullable_coerce } from nullable_mir
+import { mir_checked_nullable, mir_literal_scalar, mir_nullable_coerce } from nullable_mir
 import { CheckedLocals, CompilerState, local_bind_temporary } from state
 import { load_integer, store_integer } from storage
 import { array_element_type } from type_resolution
 
 def array_query_comparable(state: CompilerState, element: String): Boolean
-	if element == "Integer" || element == "Float" || element == "Boolean" || element == "String"
+	if literal_scalar_type(element) != "" || element == "Integer" || element == "Float" || element == "Boolean" || element == "String"
 		return true
 	end
 	owner := find_enum_type(state, element)
@@ -27,7 +28,9 @@ def mir_array_query_binding(mut state: CompilerState, mut locals: CheckedLocals,
 	return slot
 end
 
-def mir_array_query_equal(mut state: CompilerState, mut locals: CheckedLocals, left: CheckedValue, right: CheckedValue, origin: Integer): CheckedValue
+def mir_array_query_equal(mut state: CompilerState, mut locals: CheckedLocals, left_value: CheckedValue, right_value: CheckedValue, origin: Integer): CheckedValue
+	left := mir_literal_scalar(state, locals, left_value, origin)
+	right := mir_literal_scalar(state, locals, right_value, origin)
 	if left.type_name == "String"
 		return mir_checked_string_binary(state, locals, left, right, "==", origin)
 	elsif find_enum_type(state, left.type_name) >= 0

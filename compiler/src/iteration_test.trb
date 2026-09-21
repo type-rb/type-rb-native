@@ -46,6 +46,34 @@ def iteration_test_state(source: String): CompilerState
 end
 
 describe("Array iteration MIR") do
+	test("rejects stale sliced size regions and a Hash traversal substituted for batching") do
+		mut mode := 0
+		while mode < 6
+			mut state := iteration_test_state("def main()\n[1, 2].each_slice(1).with_index do |batch, index|\nputs(batch[0] + index)\nend\nend\n")
+			plan := state.checked[0].iterations[0]
+			mut first := plan.syntax.slice_start
+			mut last := plan.syntax.slice_finish
+			mut kind := plan.source_kind
+			if mode == 0
+				first =- 1
+			elsif mode == 1
+				last =- 1
+			elsif mode == 2
+				first += 1
+			elsif mode == 3
+				last += 1
+			elsif mode == 4
+				first = plan.syntax.receiver_finish
+			else
+				kind = 3
+			end
+			shape := IterationSyntax.new(origin: plan.syntax.origin, receiver_finish: plan.syntax.receiver_finish, slice_start: first, slice_finish: last, element_origin: plan.syntax.element_origin, second_origin: plan.syntax.second_origin, body_start: plan.syntax.body_start, body_finish: plan.syntax.body_finish, finish: plan.syntax.finish)
+			state.checked[0].iterations[0] = MirIteration.new(syntax: shape, parent_loop: plan.parent_loop, source_kind: kind, type_name: plan.type_name, element_type: plan.element_type)
+			checked_iteration_require(state, plan.syntax.origin, - 1)
+			expect(has_diagnostic(state)).to_be_true()
+			mode += 1
+		end
+	end
 	test("treats unallocated sparse origin entries as absent") do
 		mut storage := integer_storage(1024)
 		expect(sparse_integer_at(storage, 0)).to_equal(0)
@@ -57,7 +85,7 @@ describe("Array iteration MIR") do
 	end
 
 	test("verifies source ranges, receiver types, and nearest loop ownership") do
-		plan := MirIteration.new(syntax: IterationSyntax.new(origin: 4, receiver_finish: 5, element_origin: 9, second_origin: 11, body_start: 14, body_finish: 20, finish: 21), parent_loop: - 1, source_kind: 1, type_name: "Array<Integer>", element_type: "Integer")
+		plan := MirIteration.new(syntax: IterationSyntax.new(origin: 4, receiver_finish: 5, slice_start: - 1, slice_finish: - 1, element_origin: 9, second_origin: 11, body_start: 14, body_finish: 20, finish: 21), parent_loop: - 1, source_kind: 1, type_name: "Array<Integer>", element_type: "Integer")
 		expect(mir_iteration_valid(plan, 4, 22, "Array<Integer>", "Integer")).to_be_true()
 		expect(mir_iteration_valid(plan, 3, 22, "Array<Integer>", "Integer")).to_be_false()
 		expect(mir_iteration_valid(plan, 4, 21, "Array<Integer>", "Integer")).to_be_false()
@@ -97,7 +125,7 @@ describe("Array iteration MIR") do
 			else
 				store_integer(state.iteration_origins, plan.syntax.body_finish, 0)
 			end
-			state.checked[0].iterations[0] = MirIteration.new(syntax: IterationSyntax.new(origin: plan.syntax.origin, receiver_finish: receiver_finish, element_origin: plan.syntax.element_origin, second_origin: second_origin, body_start: plan.syntax.body_start, body_finish: body_finish, finish: finish), parent_loop: parent_loop, source_kind: 1, type_name: plan.type_name, element_type: element_type)
+			state.checked[0].iterations[0] = MirIteration.new(syntax: IterationSyntax.new(origin: plan.syntax.origin, receiver_finish: receiver_finish, slice_start: - 1, slice_finish: - 1, element_origin: plan.syntax.element_origin, second_origin: second_origin, body_start: plan.syntax.body_start, body_finish: body_finish, finish: finish), parent_loop: parent_loop, source_kind: 1, type_name: plan.type_name, element_type: element_type)
 			checked_iteration_require(state, plan.syntax.origin, - 1)
 			expect(has_diagnostic(state)).to_be_true()
 			mode += 1

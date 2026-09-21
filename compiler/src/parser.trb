@@ -1,5 +1,8 @@
+import { NewtypeDefinition } from newtype_model
+import { newtype_type } from newtype_types
+import { parse_newtype_header } from newtype_syntax
 import { generic_application } from generic_arguments
-import { ConstantDeclaration } from constant_model
+import { GlobalDeclaration } from global_model
 import { TransformSyntax, transform_kind } from transform_model
 import { NamespaceDeclaration, namespace_qualify } from namespace_model
 import { enum_type, enum_uppercase } from enum_types
@@ -10,7 +13,7 @@ import { parse_lambda_parameters } from lambda_syntax
 import { GenericDefinition, GenericField, GenericFunction, GenericParameter, GenericVariant } from generic_model
 import { CatchSyntax } from result_model
 import { nominal_application_end, nominal_application_name, parse_generic_parameters } from generic_syntax
-import { advance, expect, expect_identifier, finish_statement, parse_type, skip_newlines, token_is } from syntax_tokens
+import { advance, expect, expect_identifier, finish_statement, parse_type, skip_newlines, token_is, valid_identifier } from syntax_tokens
 import { parse_enum } from enum_syntax
 import iteration_syntax
 import { CompilerState, ControlBranch, ControlSyntax, DefaultInitializer, diagnostic, function_index_key, has_diagnostic, terminal_token } from state
@@ -106,6 +109,9 @@ def parse_arguments_syntax(mut state: CompilerState, mut position: Array<Integer
 		else
 			if load_integer(state.token_kinds, position[0]) == 1
 				if token_is(state, position[0] + 1, ":")
+					if !valid_identifier(state, position[0])
+						return false
+					end
 					advance(position)
 					advance(position)
 				end
@@ -126,11 +132,25 @@ def parse_arguments_syntax(mut state: CompilerState, mut position: Array<Integer
 end
 
 def syntax_iteration_suffix(state: CompilerState, origin: Integer): Integer
-	if (!token_is(state, origin, ".") && !token_is(state, origin, "&.")) || !token_is(state, origin + 1, "each")
+	if (!token_is(state, origin, ".") && !token_is(state, origin, "&.")) || (!token_is(state, origin + 1, "each") && !token_is(state, origin + 1, "each_slice"))
 		return - 1
 	end
 	mut cursor := origin + 2
-	if token_is(state, cursor, "(") && token_is(state, cursor + 1, ")")
+	if token_is(state, origin + 1, "each_slice") && token_is(state, cursor, "(")
+		mut depth := 1
+		cursor += 1
+		while cursor < state.token_count[0] && depth > 0
+			if token_is(state, cursor, "(")
+				depth += 1
+			elsif token_is(state, cursor, ")")
+				depth -= 1
+			end
+			cursor += 1
+		end
+		if depth != 0
+			return - 1
+		end
+	elsif token_is(state, cursor, "(") && token_is(state, cursor + 1, ")")
 		cursor += 2
 	end
 	if token_is(state, cursor, ".") && token_is(state, cursor + 1, "with_index")
@@ -186,8 +206,30 @@ def parse_iteration_statement(mut state: CompilerState, mut position: Array<Inte
 		return false
 	end
 	brace := token_is(state, delimiter, "{")
+	mut slice_start :=- 1
+	mut slice_finish :=- 1
+	position[0] = receiver_finish + 2
+	if token_is(state, receiver_finish + 1, "each_slice")
+		if !expect(state, position, "(")
+			return false
+		end
+		skip_newlines(state, position)
+		slice_start = position[0]
+		if !parse_expression_syntax(state, position, 1)
+			return false
+		end
+		slice_finish = position[0]
+		skip_newlines(state, position)
+		if token_is(state, position[0], ",")
+			advance(position)
+			skip_newlines(state, position)
+		end
+		if !expect(state, position, ")")
+			return false
+		end
+	end
 	mut indexed := false
-	mut scan := receiver_finish + 2
+	mut scan := position[0]
 	while scan < delimiter
 		if token_is(state, scan, "with_index")
 			indexed = true
@@ -230,7 +272,7 @@ def parse_iteration_statement(mut state: CompilerState, mut position: Array<Inte
 	end
 	# Re-parsing unreachable syntax must not replace an already checked plan.
 	if sparse_integer_at(state.iteration_origins, origin) == 0
-		state.iterations.push(IterationSyntax.new(origin: origin, receiver_finish: receiver_finish, element_origin: element_origin, second_origin: second_origin, body_start: body_start, body_finish: body_finish, finish: position[0]))
+		state.iterations.push(IterationSyntax.new(origin: origin, receiver_finish: receiver_finish, slice_start: slice_start, slice_finish: slice_finish, element_origin: element_origin, second_origin: second_origin, body_start: body_start, body_finish: body_finish, finish: position[0]))
 		store_integer(state.iteration_origins, origin, state.iterations.size())
 		store_integer(state.iteration_origins, body_finish, - state.iterations.size())
 	end
@@ -408,7 +450,7 @@ def parse_primary_syntax(mut state: CompilerState, mut position: Array<Integer>)
 			if token_is(state, position[0], ".") || token_is(state, position[0], "&.") || token_is(state, position[0], "::")
 				advance(position)
 				member := expect_identifier(state, position)
-				if member == "each" && syntax_iteration_suffix(state, position[0] - 2) >= 0
+				if (member == "each" || member == "each_slice") && syntax_iteration_suffix(state, position[0] - 2) >= 0
 					position[0] -= 2
 					break
 				end
@@ -1071,10 +1113,28 @@ def parse_namespace(mut state: CompilerState, mut position: Array<Integer>): Boo
 	return finish_statement(state, position)
 end
 
-def parse_constant(mut state: CompilerState, mut position: Array<Integer>): Boolean
+def parse_global(mut state: CompilerState, mut position: Array<Integer>): Boolean
 	origin := position[0]
 	line := load_integer(state.token_lines, origin)
+	mut mutable := false
+	if token_is(state, position[0], "mut")
+		mutable = true
+		advance(position)
+	end
+	constant := enum_uppercase(load_string(state.token_texts, position[0]))
 	name := namespace_qualify(state.declaration_owner[0], expect_identifier(state, position))
+	if name == "_"
+		diagnostic(state, "TRBN4002", line, "blank binding _ is only valid as a parameter or pattern binding")
+		return false
+	end
+	if constant && mutable
+		diagnostic(state, "TRBN4002", line, "constant cannot be mutable")
+		return false
+	end
+	if !constant && state.declaration_owner[0] != ""
+		diagnostic(state, "TRBN4002", line, "lowercase module-body bindings are not supported")
+		return false
+	end
 	mut annotation := ""
 	if token_is(state, position[0], ":")
 		advance(position)
@@ -1087,16 +1147,19 @@ def parse_constant(mut state: CompilerState, mut position: Array<Integer>): Bool
 	if !parse_expression_syntax(state, position, 1)
 		return false
 	end
-	state.constants.push(ConstantDeclaration.new(name: name, source_id: state.active_module[0], line: line, origin: origin, start: start, finish: position[0], annotation: annotation))
+	state.globals.push(GlobalDeclaration.new(constant: constant, mutable: mutable, name: name, source_id: state.active_module[0], line: line, origin: origin, start: start, finish: position[0], annotation: annotation))
 	return finish_statement(state, position)
 end
 
 def parse_declaration(mut state: CompilerState, mut position: Array<Integer>): Boolean
-	if load_integer(state.token_kinds, position[0]) == 1 && enum_uppercase(load_string(state.token_texts, position[0])) && (token_is(state, position[0] + 1, ":=") || token_is(state, position[0] + 1, ":"))
-		return parse_constant(state, position)
+	if declaration_start(state, position[0])
+		return parse_global(state, position)
 	end
 	if token_is(state, position[0], "module")
 		return parse_namespace(state, position)
+	end
+	if token_is(state, position[0], "newtype")
+		return parse_newtype_declaration(state, position)
 	end
 	if token_is(state, position[0], "alias")
 		return parse_type_alias(state, position)
@@ -1434,7 +1497,7 @@ def parse_transform_syntax(mut state: CompilerState, mut position: Array<Integer
 		return false
 	end
 	if sparse_integer_at(state.transform_origins, origin) == 0
-		shape := IterationSyntax.new(origin: origin, receiver_finish: origin, element_origin: element_origin, second_origin: second_origin, body_start: body_start, body_finish: body_finish, finish: position[0])
+		shape := IterationSyntax.new(origin: origin, receiver_finish: origin, slice_start: - 1, slice_finish: - 1, element_origin: element_origin, second_origin: second_origin, body_start: body_start, body_finish: body_finish, finish: position[0])
 		state.transforms.push(TransformSyntax.new(iteration: shape, kind: kind, initial_start: initial_start, initial_finish: initial_finish, accumulator_origin: accumulator_origin))
 		store_integer(state.transform_origins, origin, state.transforms.size())
 		store_integer(state.transform_origins, body_finish, - state.transforms.size())
@@ -1478,6 +1541,74 @@ def parse_enum_declaration(mut state: CompilerState, mut position: Array<Integer
 		mut token := start
 		while token < position[0]
 			store_string(state.token_namespaces, token, name)
+			token += 1
+		end
+		state.declaration_owner[0] = parent
+		if !parsed
+			return false
+		end
+	end
+	if !expect(state, position, "end")
+		return false
+	end
+	return finish_statement(state, position)
+end
+
+# Method bodies retain their lexical construction authority in token origins.
+def parse_newtype_declaration(mut state: CompilerState, mut position: Array<Integer>): Boolean
+	owner := parse_newtype_header(state, position)
+	if owner < 0 || has_diagnostic(state)
+		return false
+	end
+	if !token_is(state, position[0], "do")
+		return finish_statement(state, position)
+	end
+	advance(position)
+	if !finish_statement(state, position)
+		return false
+	end
+	mut method_seen := false
+	while !token_is(state, position[0], "end") && !has_diagnostic(state)
+		skip_newlines(state, position)
+		if token_is(state, position[0], "end")
+			break
+		end
+		row := state.newtypes[owner]
+		if token_is(state, position[0], "private")
+			if method_seen || row.closed
+				diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), "private new must occur once before newtype methods")
+				return false
+			end
+			advance(position)
+			if !expect(state, position, "new") || !finish_statement(state, position)
+				return false
+			end
+			state.newtypes[owner] = NewtypeDefinition.new(name: row.name, source_id: row.source_id, line: row.line, target: row.target, representation: row.representation, closed: true)
+			next
+		end
+		if !token_is(state, position[0], "def")
+			diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), "newtype body accepts only methods and private new")
+			return false
+		end
+		method_seen = true
+		mut name_origin := position[0] + 1
+		mut receiver := newtype_type(owner)
+		if token_is(state, name_origin, "self") && token_is(state, name_origin + 1, ".")
+			name_origin += 2
+			receiver = ""
+		end
+		name := load_string(state.token_texts, name_origin)
+		if name == "new" || name == "value" || name == "initialize"
+			diagnostic(state, "TRBN4002", load_integer(state.token_lines, name_origin), "newtype method name " + name + " is reserved")
+			return false
+		end
+		parent := state.declaration_owner[0]
+		start := position[0]
+		state.declaration_owner[0] = row.name
+		parsed := parse_function(state, position, receiver, [])
+		mut token := start
+		while token < position[0]
+			store_string(state.token_namespaces, token, row.name)
 			token += 1
 		end
 		state.declaration_owner[0] = parent

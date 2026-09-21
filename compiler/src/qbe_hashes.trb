@@ -1,6 +1,7 @@
+import { mir_hash_key_flags } from mir_hashes
 import { integer_string } from literals
 import { MirInstruction } from mir
-import { mir_hash_key_type, mir_hash_value_type, mir_managed_type, mir_operand_type, mir_semantic_type_name } from mir_types
+import { mir_hash_value_type, mir_managed_type, mir_operand_type, mir_storage_type_name } from mir_types
 import { QbeEmitContext, QbeValue, emit_address, emit_temporary, emitted_value } from qbe_context
 import { QbeOutput, qbe_output_line } from qbe_output
 import { CompilerState } from state
@@ -9,15 +10,12 @@ import { CompilerState } from state
 # No source lookup or adapter-local managed-root inference participates here.
 def emit_mir_hash_instruction(state: CompilerState, value_types: Array<Integer>, instruction: MirInstruction, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput): QbeValue
 	native_module := state.scalar_mir
-	result_type := mir_semantic_type_name(native_module, mir_operand_type(value_types, instruction.result))
+	result_type := mir_storage_type_name(native_module, mir_operand_type(value_types, instruction.result))
 	output.runtime_flags[5] = 1
 	result := emit_temporary(context)
 	if instruction.kind == 27
 		type_id := mir_operand_type(value_types, instruction.result)
-		mut flags := 0
-		if mir_hash_key_type(native_module, type_id) == 8
-			flags = 1
-		end
+		mut flags := mir_hash_key_flags(native_module, type_id)
 		if mir_managed_type(native_module, mir_hash_value_type(native_module, type_id))
 			flags += 2
 		end
@@ -30,7 +28,7 @@ def emit_mir_hash_instruction(state: CompilerState, value_types: Array<Integer>,
 		argument = operands[instruction.second]
 	end
 	if instruction.kind == 29
-		value_type := mir_semantic_type_name(native_module, mir_operand_type(value_types, instruction.payload))
+		value_type := mir_storage_type_name(native_module, mir_operand_type(value_types, instruction.payload))
 		bits := emit_hash_bits(context, output, operands[instruction.payload], value_type)
 		qbe_output_line(output, "\tcall $trbn_hash_set(l " + owner + ", l " + argument + ", l " + bits + ")")
 		return emitted_value("", "Void")

@@ -1,3 +1,5 @@
+import { union_parts } from union_types
+import { repl_type } from repl_model
 import { nullable_element } from nullable_types
 import { ReplStore, repl_value } from repl_model
 import { CompilerState } from state
@@ -34,6 +36,17 @@ def repl_nullable_read(state: CompilerState, mut store: ReplStore, id: Integer, 
 	flow := sparse_string_at(state.checked[0].nullable_reads, origin)
 	if flow == ""
 		return id
+	end
+	if union_parts(repl_type(store, id)).size() > 0
+		payload := store.children[id][0]
+		if union_parts(flow).size() > 0
+			return repl_value(store, flow, 0, 0.0, "", [payload])
+		end
+		if repl_type(store, payload) != flow
+			store.error[0] = "checked union payload disagrees with its narrowed type"
+			return 0
+		end
+		return payload
 	end
 	if flow == "Nil"
 		if !repl_absent(store, id)

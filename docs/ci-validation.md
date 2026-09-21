@@ -79,9 +79,21 @@ roots, initializer order, retained values, failed initialization and replay.
 checks Float String conversion across every binary64 binade and adjacent values,
 including subnormals, plus retained callbacks, optional calls and session replay.
 
+`native-sliced-iteration-test.py` runs in both CLI authorities. It checks fresh
+managed batches under forced collection, exact reclamation, bounded first-batch
+execution over the full portable Range, and retained REPL failure/replay.
+
+`native-union-hash-test.py` runs in both CLI authorities. It checks Integer and
+String literal-union keys through growth, deletion, copies and snapshots under
+forced GC, including Unicode/NUL payloads, exact reclamation, and retained
+snapshot closures across declaration remapping and replay.
+
 The CLI cache test gives each complete core/CLI fixed-point rebuild a bounded
-300-second watchdog and records its elapsed time; the whole CLI job allows
-60 minutes for the repeated invalidation controls. The previous 30-minute job
+600-second watchdog and records its elapsed time; the whole CLI job allows
+90 minutes for the repeated invalidation controls. Literal-union Hash integration
+completed Linux rebuilds in 272 and 289 seconds before another rebuild exceeded
+the earlier 300-second deadline. The ordinary fixed point and CLI/GC controls
+had passed. The previous 30-minute job
 limit expired on Linux during the generic-enum integration after the CLI,
 UTF-8 and GC checks had passed. A 120-second rebuild watchdog
 expired during nullable integration after the ordinary build and functional
@@ -90,7 +102,7 @@ acceptance contracts. Timeout remains a failure and terminates the owned builder
 process group. Cache reuse, failure atomicity and concurrent-caller assertions
 remain required.
 
-Concurrent callers share the same 300-second rebuild deadline, including the
+Concurrent callers share the same 600-second rebuild deadline, including the
 launcher's bounded lock wait. Key-based sorting CI exposed a remaining
 120-second concurrent-call timeout after ordinary rebuilds and functional checks
 had passed. The concurrent test records elapsed time and still requires both
@@ -307,3 +319,10 @@ invalidate the compiler evidence.
 Routing and tests cannot replace review of semantic proof boundaries. Preserve
 raw MIR verification, mutation/effect exclusions, negative cases, compactness
 and measured thresholds before accepting a compiler optimization.
+
+Callable suffix and lexical-boundary changes retain the shared ordinary/REPL
+registry, source-erased and reordered MIR under forced GC, and the Symbol CLI
+retained-session checks. Those checks exercise reserved-name failures, Unicode/NUL
+function returns and replay. Maximal operator tokenization is independently
+checked with nested generic annotations/applications and later default origins;
+it does not qualify unimplemented executable operators.

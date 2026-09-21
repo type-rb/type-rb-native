@@ -1,3 +1,5 @@
+import { literal_type_base, literal_type_display } from literal_types
+import { find_newtype_type } from newtype_types
 import { union_parts } from union_types
 import { namespace_parent } from namespace_model
 import { callable_parts } from callable_types
@@ -76,9 +78,11 @@ def repl_project(config: String): ReplProject
 			names.push(definition.name)
 			modules.push(module_name)
 		end
-		state.constants.each do |definition|
-			names.push(definition.name)
-			modules.push(module_name)
+		state.globals.each do |definition|
+			if definition.constant
+				names.push(definition.name)
+				modules.push(module_name)
+			end
 		end
 		state.namespaces.each do |definition|
 			names.push(definition.name)
@@ -142,7 +146,7 @@ def repl_project_source(source: String, prelude: String): String
 	session.type_aliases.each do |definition|
 		explicit[definition.name] = 1
 	end
-	session.constants.each do |definition|
+	session.globals.each do |definition|
 		explicit[definition.name] = 1
 	end
 	session.namespaces.each do |definition|
@@ -217,6 +221,9 @@ end
 # Reconstructed bindings need the visible alias, while values retain their
 # canonical record identity and render with the original declaration name.
 def repl_type_name(state: CompilerState, type_name: String): String
+	if literal_type_base(type_name) != ""
+		return literal_type_display(type_name)
+	end
 	alternatives := union_parts(type_name)
 	if alternatives.size() > 0
 		mut text := ""
@@ -251,7 +258,7 @@ def repl_type_name(state: CompilerState, type_name: String): String
 		return repl_type_name(state, element) + "?"
 	end
 	if hash_key_type(type_name) != ""
-		return "Hash<" + hash_key_type(type_name) + ", " + repl_type_name(state, hash_value_type(type_name)) + ">"
+		return "Hash<" + repl_type_name(state, hash_key_type(type_name)) + ", " + repl_type_name(state, hash_value_type(type_name)) + ">"
 	end
 	element := array_element_type(type_name)
 	if element != ""
@@ -271,6 +278,11 @@ def repl_type_name(state: CompilerState, type_name: String): String
 			argument_index += 1
 		end
 		return application_name + ">"
+	end
+	newtype_index := find_newtype_type(state, type_name)
+	if newtype_index >= 0
+		definition := state.newtypes[newtype_index]
+		return repl_visible_type_name(state, definition.source_id, definition.name)
 	end
 	mut name := ""
 	mut owner :=- 1
@@ -357,7 +369,6 @@ def repl_witness_type_name(state: CompilerState, type_name: String): String
 end
 
 def repl_witness_type_name_at(state: CompilerState, type_name: String, blocked: Array<Integer>): String
-
 	mut index := 0
 	while index < state.alias_instances.size()
 		instance := state.alias_instances[index]
@@ -393,6 +404,10 @@ def repl_witness_type_name_at(state: CompilerState, type_name: String, blocked: 
 		end
 		index += 1
 	end
+	if literal_type_base(type_name) != ""
+		return literal_type_display(type_name)
+	end
+
 	alternatives := union_parts(type_name)
 	if alternatives.size() > 0
 		mut text := ""
@@ -432,7 +447,7 @@ def repl_witness_type_name_at(state: CompilerState, type_name: String, blocked: 
 		return "Array<" + repl_witness_type_name_at(state, element, blocked) + ">"
 	end
 	if hash_key_type(type_name) != ""
-		return "Hash<" + hash_key_type(type_name) + "," + repl_witness_type_name_at(state, hash_value_type(type_name), blocked) + ">"
+		return "Hash<" + repl_witness_type_name_at(state, hash_key_type(type_name), blocked) + "," + repl_witness_type_name_at(state, hash_value_type(type_name), blocked) + ">"
 	end
 	return repl_type_name(state, type_name)
 end

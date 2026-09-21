@@ -8,6 +8,21 @@ import { array_element_type } from type_resolution
 import { CompilerState, diagnostic } from state
 import { load_integer, load_string, sparse_integer_at } from storage
 
+def checked_slice_zero_literal(state: CompilerState, origin: Integer): Boolean
+	if origin < 0 || origin >= state.token_count[0] || load_integer(state.token_kinds, origin) != 2
+		return false
+	end
+	text := load_string(state.token_texts, origin)
+	mut index := 0
+	while index < text.size()
+		if text[index] != "0" && text[index] != "_"
+			return false
+		end
+		index += 1
+	end
+	return text.size() > 0
+end
+
 def checked_iteration_shape(state: CompilerState, plan: IterationSyntax, origin: Integer): Boolean
 	if !iteration_syntax_valid(plan, origin, state.token_count[0])
 		return false
@@ -26,6 +41,45 @@ def checked_iteration_shape(state: CompilerState, plan: IterationSyntax, origin:
 	end
 	mut indexed := false
 	mut suffix := plan.receiver_finish + 2
+	if plan.slice_start >= 0
+		if !token_is(state, plan.receiver_finish + 1, "each_slice") || !token_is(state, suffix, "(")
+			return false
+		end
+		suffix += 1
+		while load_integer(state.token_kinds, suffix) == 4
+			suffix += 1
+		end
+		if suffix != plan.slice_start
+			return false
+		end
+		mut depth := 0
+		while suffix < plan.slice_finish
+			if token_is(state, suffix, "(")
+				depth += 1
+			elsif token_is(state, suffix, ")")
+				depth -= 1
+				if depth < 0
+					return false
+				end
+			end
+			suffix += 1
+		end
+		while load_integer(state.token_kinds, suffix) == 4
+			suffix += 1
+		end
+		if token_is(state, suffix, ",")
+			suffix += 1
+			while load_integer(state.token_kinds, suffix) == 4
+				suffix += 1
+			end
+		end
+		if depth != 0 || !token_is(state, suffix, ")")
+			return false
+		end
+		suffix += 1
+	elsif !token_is(state, plan.receiver_finish + 1, "each")
+		return false
+	end
 	while suffix < delimiter
 		if token_is(state, suffix, "with_index")
 			indexed = true
@@ -64,6 +118,9 @@ end
 
 def checked_iteration_indexed(state: CompilerState, shape: IterationSyntax): Boolean
 	mut cursor := shape.receiver_finish + 2
+	if shape.slice_start >= 0
+		cursor = shape.slice_finish + 1
+	end
 	while cursor < shape.element_origin
 		if token_is(state, cursor, "with_index")
 			return true
@@ -76,7 +133,7 @@ end
 def checked_iteration_parameters(state: CompilerState, plan: MirIteration): Boolean
 	indexed := checked_iteration_indexed(state, plan.syntax)
 	if plan.source_kind == 3
-		if indexed
+		if indexed || plan.syntax.slice_start >= 0
 			return false
 		end
 		return plan.syntax.second_origin >= 0
@@ -89,7 +146,7 @@ end
 
 def checked_iteration_require(mut state: CompilerState, origin: Integer, parent_loop: Integer): MirIteration
 	encoded := sparse_integer_at(state.checked[0].iteration_origins, origin)
-	syntax := IterationSyntax.new(origin: - 1, receiver_finish: - 1, element_origin: - 1, second_origin: - 1, body_start: - 1, body_finish: - 1, finish: - 1)
+	syntax := IterationSyntax.new(origin: - 1, receiver_finish: - 1, slice_start: - 1, slice_finish: - 1, element_origin: - 1, second_origin: - 1, body_start: - 1, body_finish: - 1, finish: - 1)
 	invalid := MirIteration.new(syntax: syntax, parent_loop: - 1, source_kind: 1, type_name: "", element_type: "")
 	if encoded > 0 && encoded <= state.checked[0].iterations.size()
 		plan := state.checked[0].iterations[encoded - 1]
@@ -245,7 +302,7 @@ def checked_transform_require(mut state: CompilerState, origin: Integer): MirTra
 		end
 	end
 	diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "invalid checked collection transform")
-	shape := IterationSyntax.new(origin: - 1, receiver_finish: - 1, element_origin: - 1, second_origin: - 1, body_start: - 1, body_finish: - 1, finish: - 1)
+	shape := IterationSyntax.new(origin: - 1, receiver_finish: - 1, slice_start: - 1, slice_finish: - 1, element_origin: - 1, second_origin: - 1, body_start: - 1, body_finish: - 1, finish: - 1)
 	syntax := TransformSyntax.new(iteration: shape, kind: 0, initial_start: - 1, initial_finish: - 1, accumulator_origin: - 1)
 	iteration := MirIteration.new(syntax: shape, parent_loop: - 1, source_kind: 0, type_name: "", element_type: "")
 	return MirTransform.new(syntax: syntax, iteration: iteration, type_name: "", key_type: "")

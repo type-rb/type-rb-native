@@ -3,7 +3,7 @@ import { integer_string } from literals
 import { MirInstruction } from mir
 import { mir_callable_id } from mir_callables
 import { mir_call_symbol } from mir_intrinsics
-import { mir_semantic_type_name } from mir_types
+import { mir_storage_name, mir_storage_type_name } from mir_types
 import { QbeEmitContext, QbeValue, emit_address, emit_temporary, emit_typed_load, emit_typed_store, emitted_value, qbe_type } from qbe_context
 import { QbeOutput, qbe_output_line } from qbe_output
 import { CompilerState } from state
@@ -27,7 +27,7 @@ def emit_closure_adapters(state: CompilerState, mut output: QbeOutput)
 				mut offsets := ""
 				mut index := 0
 				while index < instruction.second
-					if native_managed_type(signature.parameter_types[index])
+					if native_managed_type(mir_storage_name(state.scalar_mir, signature.parameter_types[index]))
 						managed += 1
 						offsets += ", l " + integer_string(16 + index * 8)
 					end
@@ -35,13 +35,13 @@ def emit_closure_adapters(state: CompilerState, mut output: QbeOutput)
 				end
 				qbe_output_line(output, "data $" + name + "_descriptor = align 8 { l 1, l " + integer_string(managed) + ", l " + integer_string((instruction.second + 1) * 8) + offsets + " }")
 				mut result_prefix := ""
-				if signature.result_type != "Void"
-					result_prefix = qbe_type(signature.result_type) + " "
+				if mir_storage_name(state.scalar_mir, signature.result_type) != "Void"
+					result_prefix = qbe_type(mir_storage_name(state.scalar_mir, signature.result_type)) + " "
 				end
 				mut parameters := "l %closure"
 				index = instruction.second
 				while index < signature.parameter_types.size()
-					parameters += ", " + qbe_type(signature.parameter_types[index]) + " %p" + integer_string(index)
+					parameters += ", " + qbe_type(mir_storage_name(state.scalar_mir, signature.parameter_types[index])) + " %p" + integer_string(index)
 					index += 1
 				end
 				qbe_output_line(output, "function " + result_prefix + "$" + name + "(" + parameters + ") {\n@start")
@@ -55,16 +55,16 @@ def emit_closure_adapters(state: CompilerState, mut output: QbeOutput)
 					if index < instruction.second
 						address := "%capture" + integer_string(index)
 						qbe_output_line(output, "\t" + address + " =l add %closure, " + integer_string(16 + index * 8))
-						emit_typed_load(output, operand, signature.parameter_types[index], address)
+						emit_typed_load(output, operand, mir_storage_name(state.scalar_mir, signature.parameter_types[index]), address)
 					end
-					arguments += qbe_type(signature.parameter_types[index]) + " " + operand
+					arguments += qbe_type(mir_storage_name(state.scalar_mir, signature.parameter_types[index])) + " " + operand
 					index += 1
 				end
 				call := "call $" + mir_call_symbol(signature) + "(" + arguments + ")"
-				if signature.result_type == "Void"
+				if mir_storage_name(state.scalar_mir, signature.result_type) == "Void"
 					qbe_output_line(output, "\t" + call + "\n\tret\n}\n")
 				else
-					qbe_output_line(output, "\t%result =" + qbe_type(signature.result_type) + " " + call + "\n\tret %result\n}\n")
+					qbe_output_line(output, "\t%result =" + qbe_type(mir_storage_name(state.scalar_mir, signature.result_type)) + " " + call + "\n\tret %result\n}\n")
 				end
 			end
 		end
@@ -85,10 +85,10 @@ def emit_mir_callable(state: CompilerState, types: Array<Integer>, instruction: 
 		while index < instruction.second
 			slot := emit_address(context, output, result, 16 + index * 8)
 			value := state.scalar_mir.arguments[instruction.first + index]
-			emit_typed_store(output, signature.parameter_types[index], operands[value], slot)
+			emit_typed_store(output, mir_storage_name(state.scalar_mir, signature.parameter_types[index]), operands[value], slot)
 			index += 1
 		end
-		return emitted_value(result, mir_semantic_type_name(state.scalar_mir, types[instruction.result]))
+		return emitted_value(result, mir_storage_type_name(state.scalar_mir, types[instruction.result]))
 	end
 	signature := state.scalar_mir.callables[mir_callable_id(state.scalar_mir, types[instruction.first])]
 	owner := operands[instruction.first]
@@ -98,7 +98,7 @@ def emit_mir_callable(state: CompilerState, types: Array<Integer>, instruction: 
 	mut arguments := "l " + owner
 	mut index := 0
 	while index < instruction.second
-		arguments += ", " + qbe_type(mir_semantic_type_name(state.scalar_mir, signature.parameters[index])) + " " + operands[state.scalar_mir.arguments[instruction.payload + index]]
+		arguments += ", " + qbe_type(mir_storage_type_name(state.scalar_mir, signature.parameters[index])) + " " + operands[state.scalar_mir.arguments[instruction.payload + index]]
 		index += 1
 	end
 	text := "call " + code + "(" + arguments + ")"
@@ -106,7 +106,7 @@ def emit_mir_callable(state: CompilerState, types: Array<Integer>, instruction: 
 		qbe_output_line(output, "\t" + text)
 		return emitted_value("", "Void")
 	end
-	result_type := mir_semantic_type_name(state.scalar_mir, signature.result)
+	result_type := mir_storage_type_name(state.scalar_mir, signature.result)
 	result := emit_temporary(context)
 	qbe_output_line(output, "\t" + result + " =" + qbe_type(result_type) + " " + text)
 	return emitted_value(result, result_type)

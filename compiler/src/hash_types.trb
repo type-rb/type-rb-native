@@ -1,10 +1,35 @@
+import { literal_type_base } from literal_types
 import { union_parts } from union_types
 import { callable_parts } from callable_types
 import { nullable_element } from nullable_types
 import { ascii_code } from literals
 import { string_starts_with } from path
 
-# Canonical Hash spellings contain one scalar key and one resolved value type.
+# Hash equality uses one scalar domain; union keys retain their boxed identity.
+def hash_key_storage_type(name: String): String
+	if name == "Integer" || name == "String"
+		return name
+	end
+	base := literal_type_base(name)
+	if base != ""
+		return base
+	end
+	mut common := ""
+	union_parts(name).each do |part|
+		current := literal_type_base(part)
+		if current == "" || (common != "" && common != current)
+			return ""
+		end
+		common = current
+	end
+	return common
+end
+
+def hash_scalar_key(name: String): Boolean
+	return hash_key_storage_type(name) != ""
+end
+
+# Canonical singleton payloads escape punctuation, including the key separator.
 def hash_key_type(type_name: String): String
 	if !string_starts_with(type_name, "Hash<") || type_name[type_name.size() - 1] != ">"
 		return ""
@@ -14,6 +39,25 @@ def hash_key_type(type_name: String): String
 	end
 	if string_starts_with(type_name, "Hash<String,")
 		return "String"
+	end
+	mut key := ""
+	mut index := 5
+	mut depth := 0
+	while index < type_name.size() - 1
+		character := type_name[index]
+		if character == "," && depth == 0
+			break
+		end
+		if character == "<"
+			depth += 1
+		elsif character == ">"
+			depth -= 1
+		end
+		key += type_name[index]
+		index += 1
+	end
+	if index < type_name.size() - 1 && hash_scalar_key(key)
+		return key
 	end
 	return ""
 end
@@ -37,6 +81,9 @@ def hash_type(key: String, value: String): String
 end
 
 def native_managed_type(type_name: String): Boolean
+	if literal_type_base(type_name) != ""
+		return literal_type_base(type_name) == "String"
+	end
 	if union_parts(type_name).size() > 0
 		return true
 	end
@@ -54,6 +101,9 @@ end
 
 # Validate the word-sized scalar/managed layouts admitted by Hash MIR.
 def native_value_layout(type_name: String): Boolean
+	if literal_type_base(type_name) != ""
+		return true
+	end
 	alternatives := union_parts(type_name)
 	if alternatives.size() > 0
 		mut valid := true
@@ -99,6 +149,8 @@ def native_value_layout(type_name: String): Boolean
 	mut prefix := 7
 	if string_starts_with(type_name, "Enum#")
 		prefix = 5
+	elsif string_starts_with(type_name, "Newtype#")
+		prefix = 8
 	elsif !string_starts_with(type_name, "Record#")
 		return false
 	end

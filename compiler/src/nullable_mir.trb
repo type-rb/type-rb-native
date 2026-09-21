@@ -1,3 +1,6 @@
+import { literal_scalar_type } from literal_cases
+import { literal_type_base } from literal_types
+import { mir_literal_widen } from literal_mir
 import { union_parts } from union_types
 import { mir_union_operation } from union_mir
 import { mir_control_active, mir_control_allocate, mir_control_arguments, mir_control_branch, mir_control_enter, mir_control_jump_arguments, mir_control_prepare } from mir_control
@@ -27,6 +30,9 @@ end
 def mir_nullable_coerce(mut state: CompilerState, mut locals: CheckedLocals, value: CheckedValue, expected: String, origin: Integer): CheckedValue
 	if value.type_name == expected || expected == "" || value.type_name == "Never"
 		return value
+	end
+	if literal_type_base(value.type_name) != "" && literal_type_base(expected) == "" && union_parts(expected).size() == 0 && nullable_element(expected) == ""
+		return mir_nullable_coerce(state, locals, mir_literal_widen(state, locals, value, origin), expected, origin)
 	end
 	if expected == "Float" && value.type_name == "Integer"
 		return scalar_mir_convert_float(state, locals, value, origin)
@@ -160,6 +166,52 @@ def mir_union_coerce(mut state: CompilerState, mut locals: CheckedLocals, value:
 		end
 		payload := mir_union_operation(state, locals, 54, value, alternative, alternative, origin)
 		converted := mir_nullable_coerce(state, locals, payload, expected, origin)
+		arguments := mir_control_arguments(locals, locals.count[0])
+		locals.mir_arguments.push(checked_mir_value(converted))
+		mir_control_jump_arguments(state, locals, join, arguments, locals.count[0] + 1)
+		if next_branch >= 0
+			mir_control_enter(state, locals, next_branch, line)
+		end
+		index += 1
+	end
+	mir_control_enter(state, locals, join, line)
+	result := mir_add_value(state, locals, mir_semantic_type_id(state.scalar_mir, expected), line)
+	locals.mir_arguments.push(result)
+	locals.mir_control[5] += 1
+	return checked_view(value, expected, - result - 1)
+end
+
+def mir_literal_scalar(mut state: CompilerState, mut locals: CheckedLocals, value: CheckedValue, origin: Integer): CheckedValue
+	base := literal_scalar_type(value.type_name)
+	if base == ""
+		return value
+	end
+	return mir_nullable_coerce(state, locals, value, base, origin)
+end
+
+# Branch facts authorize a subset; extraction still checks its runtime tag.
+# The narrowed representation retains every overlapping alternative.
+def mir_union_narrow(mut state: CompilerState, mut locals: CheckedLocals, value: CheckedValue, expected: String, origin: Integer): CheckedValue
+	mir_control_prepare(state, locals)
+	if !mir_control_active(locals)
+		return checked_view(value, expected, 0)
+	end
+	alternatives := union_parts(expected)
+	if alternatives.size() == 0
+		return mir_union_operation(state, locals, 54, value, expected, expected, origin)
+	end
+	line := load_integer(state.token_lines, origin)
+	join := mir_control_allocate(locals)
+	mut index := 0
+	while index < alternatives.size()
+		alternative := alternatives[index]
+		mut next_branch :=- 1
+		if index + 1 < alternatives.size()
+			condition := mir_union_operation(state, locals, 53, value, alternative, "Boolean", origin)
+			next_branch = mir_control_branch(state, locals, condition, line)
+		end
+		payload := mir_union_operation(state, locals, 54, value, alternative, alternative, origin)
+		converted := mir_union_operation(state, locals, 52, payload, alternative, expected, origin)
 		arguments := mir_control_arguments(locals, locals.count[0])
 		locals.mir_arguments.push(checked_mir_value(converted))
 		mir_control_jump_arguments(state, locals, join, arguments, locals.count[0] + 1)
