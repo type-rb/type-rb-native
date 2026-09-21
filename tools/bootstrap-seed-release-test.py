@@ -13,6 +13,16 @@ spec.loader.exec_module(seed)
 
 
 class SeedReleaseTests(unittest.TestCase):
+    def test_invalid_corpus_has_complete_diagnostic_expectations(self):
+        directory = Path(__file__).resolve().parent.parent / "compiler/conformance/invalid"
+        sources = {path.stem for path in directory.glob("*.source")}
+        diagnostics = {path.stem for path in directory.glob("*.diag")}
+        self.assertTrue(sources)
+        self.assertEqual(sources, diagnostics, "every rejection fixture needs its exact diagnostic oracle")
+        for path in directory.glob("*.diag"):
+            with self.subTest(fixture=path.stem):
+                self.assertTrue(path.read_text().startswith("TRBN"))
+
     def test_active_ci_consumers_authenticate_the_current_seed(self):
         root = Path(__file__).resolve().parent.parent
         for name in ("static-string-compactness", "runtime-worker-memory",
