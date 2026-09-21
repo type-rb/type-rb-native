@@ -1,3 +1,4 @@
+import { object_abstract_function } from object_types
 import { mir_semantic_type_id, mir_semantic_type_name, mir_semantic_value_type } from mir_types
 import { nullable_capture_call } from nullable_flow
 import { MirFlow, mir_flow_type, mir_value_available } from mir_flow
@@ -36,6 +37,16 @@ def mir_declare_signatures(mut state: CompilerState)
 		source := load_integer(state.function_modules, index)
 		mut kind := 0
 		mut adapter := 0
+		if object_abstract_function(state, index)
+			kind = 4
+			mut method_index := 0
+			state.scalar_mir.object_methods.each do |method|
+				if method.function == index
+					adapter = method_index
+				end
+				method_index += 1
+			end
+		end
 		name := load_string(state.function_names, index)
 		if compiler_runtime_intrinsic(state, index)
 			kind = 1
@@ -165,7 +176,7 @@ def mir_signatures_error(native_module: MirModule): String
 	mut index := 0
 	while index < native_module.signatures.size()
 		signature := native_module.signatures[index]
-		if signature.id != index || signature.kind < 0 || signature.kind > 3
+		if signature.id != index || signature.kind < 0 || signature.kind > 4
 			return "MIR declaration identity is invalid"
 		end
 		if !mir_origin_valid(signature.source_id, signature.line, native_module.source_count[0])
@@ -202,8 +213,8 @@ def mir_function_signature_error(native_module: MirModule, function: MirFunction
 		return "MIR function declaration is missing"
 	end
 	signature := native_module.signatures[function.id]
-	if signature.kind == 3
-		return "MIR standard package call cannot have a function body"
+	if signature.kind == 3 || signature.kind == 4
+		return "MIR abstract or standard call cannot have a function body"
 	end
 	if function.source_id != signature.source_id || function.line != signature.line || function.result_type != signature.result_type || function.parameter_count != signature.parameter_types.size()
 		return "MIR function declaration differs"

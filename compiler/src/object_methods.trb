@@ -1,7 +1,7 @@
 import { declare_default_functions } from default_arguments
 import { next_generic_depth } from generic_bindings
-import { instantiate_generic_function } from generic_functions
-import { find_object_type } from object_types
+import { instantiate_method_signature } from generic_functions
+import { find_object_type, object_instance_type } from object_types
 import { CompilerState } from state
 
 # Specialization uses the nominal receiver's arguments before method arguments.
@@ -13,11 +13,8 @@ def object_method_function(mut state: CompilerState, type_name: String, member: 
 	end
 	instance := state.object_instances[owner]
 	declaration := state.objects[instance.definition]
-	if declaration.interface_type
-		return - 1
-	end
 	declaration.methods.each do |method|
-		if method.name == member && method.class_member == class_member
+		if method.name == member && ((method.class_member && class_member) || (!method.class_member && !class_member))
 			mut arguments: Array<String> := []
 			instance.arguments.each do |argument|
 				arguments.push(argument)
@@ -25,10 +22,37 @@ def object_method_function(mut state: CompilerState, type_name: String, member: 
 			method_arguments.each do |argument|
 				arguments.push(argument)
 			end
-			function := instantiate_generic_function(state, method.generic_function, arguments, next_generic_depth(state))
+			function := instantiate_method_signature(state, method.generic_function, arguments, next_generic_depth(state), "")
 			declare_default_functions(state)
 			return function
 		end
+	end
+	# Initializer inheritance is deliberately not inferred while portable
+	# superclass initialization remains unspecified.
+	if instance.superclass >= 0 && member != "initialize"
+		return inherited_method_function(state, owner, instance.superclass, member, class_member, method_arguments)
+	end
+	return - 1
+end
+
+def inherited_method_function(mut state: CompilerState, receiver: Integer, owner: Integer, member: String, class_member: Boolean, method_arguments: Array<String>): Integer
+	instance := state.object_instances[owner]
+	state.objects[instance.definition].methods.each do |method|
+		if method.name == member && ((method.class_member && class_member) || (!method.class_member && !class_member))
+			mut arguments: Array<String> := []
+			instance.arguments.each { |argument| arguments.push(argument) }
+			method_arguments.each { |argument| arguments.push(argument) }
+			mut receiver_type := ""
+			if !class_member
+				receiver_type = object_instance_type(state, receiver)
+			end
+			function := instantiate_method_signature(state, method.generic_function, arguments, next_generic_depth(state), receiver_type)
+			declare_default_functions(state)
+			return function
+		end
+	end
+	if instance.superclass >= 0
+		return inherited_method_function(state, receiver, instance.superclass, member, class_member, method_arguments)
 	end
 	return - 1
 end

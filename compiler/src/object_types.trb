@@ -1,4 +1,5 @@
 import { integer_string } from literals
+import { nullable_assignable, nullable_element } from nullable_types
 import { CompilerState } from state
 import { load_integer, load_string } from storage
 
@@ -82,7 +83,43 @@ end
 
 def object_abstract_method(state: CompilerState, template: Integer): Boolean
 	owner := object_method_owner(state, template)
-	return owner >= 0 && state.objects[owner].interface_type
+	if owner < 0
+		return false
+	end
+	return state.objects[owner].interface_type
+end
+
+def object_abstract_function(state: CompilerState, function: Integer): Boolean
+	state.generic_function_instances.each do |instance|
+		if instance.function == function
+			return object_abstract_method(state, instance.definition)
+		end
+	end
+	return false
+end
+
+def object_function_owner(state: CompilerState, function: Integer): Integer
+	state.generic_function_instances.each do |instance|
+		if instance.function == function
+			return object_method_owner(state, instance.definition)
+		end
+	end
+	return - 1
+end
+
+def object_value_assignable(state: CompilerState, actual: String, expected: String): Boolean
+	if nullable_assignable(actual, expected) || object_assignable(state, actual, expected)
+		return true
+	end
+	target := nullable_element(expected)
+	if target != ""
+		payload := nullable_element(actual)
+		if payload != ""
+			return object_value_assignable(state, payload, target)
+		end
+		return object_value_assignable(state, actual, target)
+	end
+	return false
 end
 
 # The constructor contract is attached to the concrete receiver specialization.

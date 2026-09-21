@@ -1,5 +1,5 @@
 import { checked_instance_field, checked_object_field, mir_checked_object_store } from object_fields
-import { object_field_index, object_instance_type } from object_types
+import { object_field_index, object_function_owner, object_instance_type } from object_types
 import { generic_arguments } from generic_arguments
 import { find_object_type } from object_types
 import { object_method_function } from object_methods
@@ -2696,8 +2696,8 @@ def check_object_member(mut state: CompilerState, mut position: Array<Integer>, 
 	owner := find_object_type(state, receiver.type_name)
 	instance := state.object_instances[owner]
 	definition := state.objects[instance.definition]
-	if definition.interface_type
-		return type_diagnostic(state, line, "interface dispatch requires Native MIR lowering")
+	if definition.interface_type && receiver.category == 8
+		return type_diagnostic(state, line, "interface cannot be constructed or used as a class receiver")
 	end
 	mut method_arguments: Array<String> := []
 	if token_is(state, position[0], "<")
@@ -2711,7 +2711,11 @@ def check_object_member(mut state: CompilerState, mut position: Array<Integer>, 
 	if !token_is(state, position[0], "(")
 		field := object_field_index(state, owner, "@" + member)
 		if receiver.category != 8 && field >= 0
-			return checked_object_field(state, locals, receiver, field, origin - 1, position[0], false)
+			mut internal := false
+			if receiver.origin >= 0 && receiver.origin < state.token_count[0] && token_is(state, receiver.origin, "self") && state.declaration_owner[0] == definition.name && state.active_module[0] == definition.source_id
+				internal = true
+			end
+			return checked_object_field(state, locals, receiver, field, origin - 1, position[0], internal)
 		end
 		return type_diagnostic(state, line, "unknown class field or missing method call")
 	end
@@ -2741,7 +2745,9 @@ def check_object_member(mut state: CompilerState, mut position: Array<Integer>, 
 	if function < 0
 		return type_diagnostic(state, line, "unknown class method " + member)
 	end
-	if !namespace_member_access(state, definition.source_id, definition.name + "::" + member, origin)
+	declaring_owner := object_function_owner(state, function)
+	declaring := state.objects[declaring_owner]
+	if !namespace_member_access(state, declaring.source_id, declaring.name + "::" + member, origin)
 		return checked_value("Invalid", 0, origin, 0)
 	end
 	store_integer(state.checked[0].generic_calls, position[0], function + 1)

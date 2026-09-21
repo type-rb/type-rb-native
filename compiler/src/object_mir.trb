@@ -28,8 +28,16 @@ def mir_object_instruction_error(flow: MirFlow, native_module: MirModule, block:
 			return "MIR class allocation identity differs"
 		end
 		definition := native_module.objects[owner]
-		if definition.interface_type || definition.superclass != - 1
+		if definition.interface_type
 			return "MIR class allocation requires concrete owned storage"
+		end
+		mut parent := mir_object_id(native_module, definition.superclass)
+		while parent >= 0
+			ancestor := native_module.objects[parent]
+			if ancestor.fields.size() > 0 || ancestor.initializer >= 0
+				return "MIR inherited class allocation requires initialized parent storage"
+			end
+			parent = mir_object_id(native_module, ancestor.superclass)
 		end
 		if instruction.first != - 1 || instruction.second != - 1
 			return "MIR class allocation shape differs"

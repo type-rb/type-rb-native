@@ -44,11 +44,18 @@ end
 # Concrete instances share authored body origins, but own signatures and facts.
 # Publish the identity before visiting its body so recursion reuses the instance.
 def instantiate_generic_function(mut state: CompilerState, definition: Integer, arguments: Array<String>, depth: Integer): Integer
-	row := state.generic_functions[definition]
 	if object_abstract_method(state, definition)
+		row := state.generic_functions[definition]
 		diagnostic(state, "TRBN4003", row.line, "interface method has no executable body")
 		return - 1
 	end
+	return instantiate_method_signature(state, definition, arguments, depth, "")
+end
+
+# Abstract contracts own signatures but never executable bodies. Inherited
+# methods specialize the receiver as well as the declaring class's arguments.
+def instantiate_method_signature(mut state: CompilerState, definition: Integer, arguments: Array<String>, depth: Integer, receiver: String): Integer
+	row := state.generic_functions[definition]
 	if arguments.size() != row.type_parameters.size()
 		diagnostic(state, "TRBN4003", row.line, "generic function type argument count differs")
 		return - 1
@@ -63,7 +70,10 @@ def instantiate_generic_function(mut state: CompilerState, definition: Integer, 
 		diagnostic(state, "TRBN4003", row.line, "invalid generic function type argument")
 		return - 1
 	end
-	key := generic_application(integer_string(definition), arguments)
+	mut key := generic_application(integer_string(definition), arguments)
+	if receiver != ""
+		key += ":" + receiver
+	end
 	if state.generic_function_lookup.key?(key)
 		return state.generic_function_instances[state.generic_function_lookup[key]].function
 	end
@@ -82,7 +92,7 @@ def instantiate_generic_function(mut state: CompilerState, definition: Integer, 
 	store_integer(state.function_lines, function, row.line)
 	state.function_count[0] += 1
 	instance := state.generic_function_instances.size()
-	state.generic_function_instances.push(GenericFunctionInstance.new(definition: definition, arguments: arguments, function: function))
+	state.generic_function_instances.push(GenericFunctionInstance.new(application_key: key, definition: definition, arguments: arguments, function: function))
 	state.generic_function_lookup[key] = instance
 	store_integer(state.function_generic_bindings, function, add_generic_binding(state, row.source_id, row.type_parameters, arguments, depth))
 	saved_owner := state.declaration_owner[0]
@@ -91,7 +101,10 @@ def instantiate_generic_function(mut state: CompilerState, definition: Integer, 
 	state.checked[0].generic_binding[0] = 0
 	row.parameters.each do |parameter|
 		index := state.parameter_count[0]
-		type_name := resolve_type_name(state, row.source_id, generic_substitute(parameter.type_name, row.type_parameters, arguments), false)
+		mut type_name := resolve_type_name(state, row.source_id, generic_substitute(parameter.type_name, row.type_parameters, arguments), false)
+		if parameter.name == "self" && row.receiver_type != "" && receiver != ""
+			type_name = receiver
+		end
 		store_string(state.parameter_names, index, parameter.name)
 		store_string(state.parameter_types, index, type_name)
 		store_integer(state.parameter_lines, index, parameter.line)
@@ -105,7 +118,11 @@ def instantiate_generic_function(mut state: CompilerState, definition: Integer, 
 		state.parameter_count[0] += 1
 	end
 	if row.receiver_type != ""
-		store_string(state.function_receivers, function, resolve_type_name(state, row.source_id, generic_substitute(row.receiver_type, row.type_parameters, arguments), false))
+		mut receiver_type := receiver
+		if receiver_type == ""
+			receiver_type = resolve_type_name(state, row.source_id, generic_substitute(row.receiver_type, row.type_parameters, arguments), false)
+		end
+		store_string(state.function_receivers, function, receiver_type)
 	end
 	store_string(state.function_result_types, function, resolve_type_name(state, row.source_id, generic_substitute(row.result_type, row.type_parameters, arguments), true))
 	state.checked[0].generic_binding[0] = saved_binding

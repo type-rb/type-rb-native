@@ -1,7 +1,8 @@
 import { nominal_application_end } from generic_syntax
 import { find_visible_declaration } from declaration_lookup
 import { resolve_type_name } from type_resolution
-import { find_object_type, object_field_index, object_initializer_owner } from object_types
+import { find_object_type, object_field_index, object_initializer_owner, object_abstract_function } from object_types
+import { mir_object_witness } from object_dispatch_mir
 import { repl_builtin_number_parse, repl_string_integer, repl_string_float } from repl_number_parsing
 import { builtin_result_method } from builtin_results
 import { repl_builtin_lookup } from repl_builtin_lookup
@@ -228,6 +229,9 @@ def repl_numeric(mut store: ReplStore, left: Integer, operator: String, right: I
 end
 
 def repl_call(mut state: CompilerState, function: Integer, arguments: Array<Integer>, mut store: ReplStore): Integer
+	if object_abstract_function(state, function)
+		return repl_interface_call(state, function, arguments, store)
+	end
 	if store.depth[0] > 256
 		store.error[0] = "REPL call depth limit exceeded"
 		return 0
@@ -276,6 +280,43 @@ def repl_call(mut state: CompilerState, function: Integer, arguments: Array<Inte
 		return 0
 	end
 	return repl_coerce(store, result, load_string(state.function_result_types, function))
+end
+
+# Retained boxes carry the actual class value. Remapping a submission changes
+# nominal IDs, so dispatch always uses the newly checked witness catalog.
+def repl_interface_call(mut state: CompilerState, function: Integer, arguments: Array<Integer>, mut store: ReplStore): Integer
+	if arguments.size() == 0 || store.children[arguments[0]].size() != 1
+		store.error[0] = "interface call has no checked receiver"
+		return 0
+	end
+	receiver := store.children[arguments[0]][0]
+	owner := find_object_type(state, repl_type(store, receiver))
+	contract := find_object_type(state, repl_type(store, arguments[0]))
+	index := mir_object_witness(state.scalar_mir, owner, contract)
+	if index < 0
+		store.error[0] = "interface call has no checked implementation"
+		return 0
+	end
+	witness := state.scalar_mir.object_witnesses[index]
+	mut slot := 0
+	state.scalar_mir.object_methods.each do |method|
+		if method.owner == contract
+			if method.function == function
+				mut values: Array<Integer> := []
+				witness.arguments[slot].each do |argument|
+					if argument == 0
+						values.push(receiver)
+					else
+						values.push(arguments[argument])
+					end
+				end
+				return repl_call(state, state.scalar_mir.object_methods[witness.methods[slot]].function, values, store)
+			end
+			slot += 1
+		end
+	end
+	store.error[0] = "interface call has no checked method"
+	return 0
 end
 
 def repl_complete_arguments(mut state: CompilerState, mut bindings: ArgumentBindings, mut store: ReplStore)

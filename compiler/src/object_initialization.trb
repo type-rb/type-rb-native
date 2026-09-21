@@ -40,7 +40,7 @@ def mir_object_self_aliases(native_module: MirModule, function: MirFunction, flo
 					while incoming < flow.predecessors[block_index].size()
 						if flow.ranks[flow.predecessors[block_index][incoming]] >= 0
 							argument := native_module.arguments[flow.incoming_starts[block_index][incoming] + parameter]
-							known := aliases.key?(integer_string(argument)) && aliases[integer_string(argument)] == 1
+							known := mir_object_alias(aliases, argument)
 							if exact && !known
 								selected = false
 							elsif !exact && known
@@ -68,7 +68,10 @@ end
 
 def mir_object_alias(aliases: Hash<String, Integer>, value: Integer): Boolean
 	key := integer_string(value)
-	return aliases.key?(key) && aliases[key] == 1
+	if !aliases.key?(key)
+		return false
+	end
+	return aliases[key] == 1
 end
 
 def mir_object_incoming(flow: MirFlow, outputs: Array<Array<Integer>>, block: Integer, count: Integer): Array<Integer>
@@ -154,10 +157,21 @@ def mir_object_initialization_error(native_module: MirModule, function: MirFunct
 		end
 	end
 	mut managed: Hash<String, Integer> := {}
-	aliases.keys().each do |key|
-		if aliases[key] == 1
-			managed[key] = 1
+	if receiver >= 0
+		managed[integer_string(receiver)] = 1
+	end
+	block_index = 0
+	while block_index < function.block_count
+		block := native_module.blocks[function.block_start + block_index]
+		mut parameter := 0
+		while parameter < block.parameter_count
+			value := native_module.arguments[block.parameter_start + parameter]
+			if mir_object_alias(aliases, value)
+				managed[integer_string(value)] = 1
+			end
+			parameter += 1
 		end
+		block_index += 1
 	end
 	block_index = 0
 	while block_index < function.block_count

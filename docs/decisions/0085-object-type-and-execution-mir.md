@@ -33,14 +33,37 @@ Concrete class methods specialize the class arguments followed by method argumen
 ordinary function signatures and calls own argument binding, defaults, results and
 receiver identity. Discovery finishes before MIR signatures and layouts are frozen.
 
-MIR instruction 63 allocates a field-free concrete class. Its independent verifier
-checks nominal identity, operand shape and the absence of inherited or local
-storage; its allocation effect participates in normal managed-root planning.
-Instance and class calls, private internal calls, explicit method type arguments,
-class factories, named/default parameters and stored/captured receivers use this path.
-QBE emits object descriptors and allocation from the verified object catalog and
-never reinterprets authored object declarations. Source-erased emission, forced
-collection and corrupt allocation instructions exercise this boundary.
+MIR instruction 63 allocates zeroed, traceable class storage. A class with fields
+must immediately enter its registered initializer, after explicit arguments and
+omitted parameter defaults have been evaluated. Instructions 64 and 65 load and
+store typed fields. A CFG analysis derives receiver aliases and intersects the
+initialized-field sets at joins and backedges. It rejects reads and escapes before
+initialization, completing returns with missing fields, and readonly stores outside
+the declaring initializer. Declaration defaults execute in order and can read
+initialized earlier fields. Zeroed GC storage is not a language-level default.
+
+Interface method signatures use declaration kind 4 without executable source
+bodies. The method catalog retains receiver identity, parameter names, positional
+and named-only regions, and required/optional presence. Explicit nominal edges
+produce witnesses binding every interface method to a concrete implementation.
+Named arguments are permuted by label; positional names and implementation-local
+mutability do not affect conformance. Missing methods and mismatched signatures
+are rejected even for unused declarations and generic templates.
+
+Instruction 66 converts a concrete class value into a managed interface box with
+the original object and a verified witness table. Independent MIR checks validate
+that table's owners, complete method set, target signatures and argument
+permutations. QBE translates the table to call adapters and emits a tracing
+descriptor for the retained object; it performs no source-level lookup. Arrays,
+Hashes, nullable values, arguments, returns and captured receivers use the same
+managed representation. Source-erased emission, forced collection and corrupt
+conversion/witness tests exercise the boundary.
+
+Field-free parent methods specialize against the concrete child receiver while
+preserving the declaring scope for constants and private access. Inherited
+explicit interface edges reuse those concrete targets. Parent constructors and
+parent field storage remain guarded until portable initialization is defined.
+Overrides remain guarded while the reference dispatch discrepancy is unresolved.
 
 The retained REPL consumes the checked callee identity, preserves nominal values
 with their original type catalog, and remaps concrete generic identities when a
@@ -49,13 +72,11 @@ stored values into the next check without calling their constructors again.
 Class/interface input framing, project imports and explicit replay use the same
 ordinary declaration and checking contracts.
 
-Storage-bearing classes, inheritance and interface implementation remain explicitly
-guarded at the ordinary execution boundary. The type graph and field-free path do
-not establish method-signature conformance, definite field initialization, legal
-field mutation or interface dispatch safety. Those facts need checked operations
-and independent verification before their guards can be removed. Draft fixtures
-remain outside the passing Capabilities registry until the coherent family is
-accepted through the CLI and retained REPL as well as the core compiler.
+The shared ordinary check/build/execution/REPL registry contains 45 object
+cases, including negative observations. The ordinary CLI authority also exercises
+retained fields, heterogeneous interface values, captures and replay. Required
+hosted integration authorities remain separate from these focused checks; the
+remaining guarded contracts prevent a claim of complete object coverage.
 
 Construction through a class alias remains guarded because the pinned reference
 rejects that receiver; aliases remain valid type annotations. Accepted namespaced
@@ -72,10 +93,11 @@ method contracts; a passing nominal graph must not hide the discrepancy.
 The implementation follows the reference class contract without resolving its
 explicitly deferred questions: superclass constructor chaining, initialization
 order across initialized superclasses, mutating-method receiver requirements,
-variance, generic class methods and same-named fields/methods. Follow-on execution
-work includes definite initialization, field reads/writes, inherited/interface
-dispatch, complete method contracts and retained REPL behavior. Existing call,
-GC-root and source-erased controls must extend to those operations.
+variance, generic class methods and same-named fields/methods. Reference gaps also include incomplete constructor-path initialization checks
+([TypeRB #800](https://github.com/type-rb/type-rb/issues/800)) and constructor
+parameter defaults referring to an unavailable receiver
+([TypeRB #801](https://github.com/type-rb/type-rb/issues/801)). Native initialization
+proofs reject those unsafe paths instead of exposing zeroed storage.
 
 Acceptance for the complete family requires paired positive and negative cases,
 ordinary check/build/run/REPL behavior, independent MIR corruption and lifetime

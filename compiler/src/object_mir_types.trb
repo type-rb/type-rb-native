@@ -44,16 +44,16 @@ def mir_object_types_error(native_module: MirModule): String
 				return "MIR superclass is not a class"
 			end
 		end
-		mut contracts: Hash<Integer, Integer> := {}
+		mut contracts: Hash<String, Integer> := {}
 		row.interfaces.each do |type_id|
 			contract := mir_object_id(native_module, type_id)
 			if contract < 0 || contract >= native_module.objects.size()
 				return "MIR implemented interface identity is invalid"
 			end
-			if !native_module.objects[contract].interface_type || contracts.key?(type_id)
+			if !native_module.objects[contract].interface_type || contracts.key?(integer_string(type_id))
 				return "MIR implemented interface kind or uniqueness differs"
 			end
-			contracts[type_id] = 1
+			contracts[integer_string(type_id)] = 1
 		end
 		mut fields: Hash<String, Integer> := {}
 		row.fields.each do |field|
@@ -64,7 +64,10 @@ def mir_object_types_error(native_module: MirModule): String
 			if !mir_origin_valid(row.source_id, field.line, native_module.source_count[0])
 				return "MIR object field origin is invalid"
 			end
-			mut valid := mir_control_value_type(field.type_id) || field.type_id == 3 || field.type_id == 6
+			mut valid := false
+			if mir_control_value_type(field.type_id) || field.type_id == 3 || field.type_id == 6
+				valid = true
+			end
 			if field.type_id >= 9 && field.type_id - 9 < native_module.types.size()
 				valid = true
 			end
@@ -85,13 +88,13 @@ def mir_object_types_error(native_module: MirModule): String
 	# Edges are now in range. Cycles are distinct from valid recursive fields.
 	owner = 0
 	while owner < native_module.objects.size()
-		mut seen: Hash<Integer, Integer> := {}
+		mut seen: Hash<String, Integer> := {}
 		mut current := owner
 		while current >= 0
-			if seen.key?(current)
+			if seen.key?(integer_string(current))
 				return "MIR class inheritance is cyclic"
 			end
-			seen[current] = 1
+			seen[integer_string(current)] = 1
 			current = mir_object_id(native_module, native_module.objects[current].superclass)
 		end
 		owner += 1
