@@ -1,0 +1,76 @@
+import { find_generic_in_module, find_record_in_module } from declaration_lookup
+import { find_enum_type, find_enum_variant } from enum_types
+import { hash_key_type, hash_value_type } from hash_types
+import { load_standard_source } from standard_library
+import { array_element_type, instantiate_generic_nominal, record_type } from type_resolution
+import { CompilerState } from state
+import { load_integer, load_string } from storage
+
+def builtin_result_method(receiver: String, method: String): Integer
+	if receiver == "String"
+		if method == "try_to_i"
+			return 4
+		end
+		if method == "try_to_f"
+			return 5
+		end
+	end
+	if method == "try_fetch"
+		if receiver == "String" || array_element_type(receiver) != ""
+			return 1
+		end
+		if hash_key_type(receiver) != ""
+			return 3
+		end
+	end
+	if method == "try_slice" && (receiver == "String" || array_element_type(receiver) != "")
+		return 2
+	end
+	return 0
+end
+
+# Discover implicit declaration dependencies before ordinary type resolution.
+# String contents never trigger an extra body-analysis pass in the compiler itself.
+def builtin_result_source(state: CompilerState): Boolean
+	mut index := 0
+	while index < state.token_count[0]
+		if load_integer(state.token_kinds, index) == 1
+			name := load_string(state.token_texts, index)
+			if name == "try_fetch" || name == "try_slice" || name == "try_to_i" || name == "try_to_f"
+				return true
+			end
+		end
+		index += 1
+	end
+	return false
+end
+
+def builtin_result_type(mut state: CompilerState, success: String, error: String): String
+	result_source := load_standard_source(state, 1)
+	error_source := load_standard_source(state, 3)
+	definition := find_generic_in_module(state, result_source, "Result")
+	error_type := record_type(find_record_in_module(state, error_source, error))
+	return instantiate_generic_nominal(state, definition, [success, error_type])
+end
+
+def builtin_lookup_result(mut state: CompilerState, receiver: String, kind: Integer): String
+	if kind == 2
+		return builtin_result_type(state, receiver, "SliceRangeError")
+	end
+	if kind == 3
+		return builtin_result_type(state, hash_value_type(receiver), "KeyLookupError")
+	end
+	mut success := "String"
+	if receiver != "String"
+		success = array_element_type(receiver)
+	end
+	return builtin_result_type(state, success, "IndexLookupError")
+end
+
+def builtin_result_variant(state: CompilerState, type_name: String, ok: Boolean): Integer
+	mut name := "Err"
+	if ok
+		name = "Ok"
+	end
+	return find_enum_variant(state, find_enum_type(state, type_name), name)
+end

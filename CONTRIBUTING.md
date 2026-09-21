@@ -30,6 +30,13 @@ out of the root README; link to the owning status page or dated evidence.
 
 Keep implementation drafts in the quick-feedback stage. After focused local
 proof and negative-case review, mark cohesive PRs ready for complete correctness.
+During basic-language completion, organize changes by complete language families:
+syntax, checking, MIR ownership, execution, REPL and shared conformance belong
+in the same integration candidate. Large PRs are appropriate when they close
+that coherent contract; keep their commits and acceptance evidence reviewable.
+Prefer one ready integration candidate and one subsequent development batch
+over a stack of small PRs that repeatedly run complete validation. Measure
+progress by completed language contracts and remaining gaps, not PR count.
 During MIR consolidation, detailed comparative cost qualification belongs at
 milestones; costs observed during migration do not establish qualification. See the
 [CI validation stages](docs/ci-validation.md) for routing, manual runs, and
@@ -97,6 +104,13 @@ changes, failures or unresolved concerns rather than by default.
 For compiler-source changes, also enable the recovery/QBE environment described
 in [the compiler recovery guidance](.agents/skills/develop-typerb-native/references/bootstrap.md).
 An optional test that skips recovery does not count as recovery evidence.
+Hosted CI owns complete integration verification by default. Locally, run the
+affected units, positive/negative reference comparisons, MIR and REPL checks,
+and the ordinary Native build when compiler source changes. A second full local
+recovery run is required when changing bootstrap or validation orchestration,
+or when diagnosing a recovery or platform failure; it is not a prerequisite
+for every intermediate language edit. Record pending CI authorities explicitly
+and merge only after all applicable checks accept the candidate.
 
 For source and compatibility validation, run the maintained root checks:
 

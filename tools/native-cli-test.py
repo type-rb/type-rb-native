@@ -24,6 +24,7 @@ subprocess.run([sys.executable, str(repository / "tools/native-enum-test.py"), s
 subprocess.run([sys.executable, str(repository / "tools/native-raw-enum-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-generic-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-result-test.py"), str(binary)], check=True)
+subprocess.run([sys.executable, str(repository / "tools/native-builtin-values-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-alias-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-callable-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-constants-test.py"), str(binary)], check=True)
@@ -39,6 +40,7 @@ subprocess.run([sys.executable, str(repository / "tools/native-safe-block-test.p
 subprocess.run([sys.executable, str(repository / "tools/native-sliced-iteration-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-array-join-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-string-trimming-test.py"), str(binary)], check=True)
+subprocess.run([sys.executable, str(repository / "tools/native-string-transforms-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-symbol-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-newtype-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-literal-test.py"), str(binary)], check=True)
@@ -196,6 +198,7 @@ end
                       'string-index-lifetime', 'default-arguments-mir',
                       'value-control-mir', 'value-transfer-mir', 'nullable-values-mir',
                       'namespace-binding-storage',
+                      'builtin-result-values', 'unicode-identifier-values',
                       'boolean-array-depth', 'record-array-depth'):
         fixture = repository / 'compiler/conformance/valid' / (case_name + '.trb')
         expected = fixture.with_suffix('.out').read_text()

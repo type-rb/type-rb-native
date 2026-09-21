@@ -39,7 +39,11 @@ compiler self-use adopts syntax beyond the verified checkout seed.
 
 ## Required compiler-source verification
 
-For compiler-source changes, also enable the recovery and QBE-backed tests:
+Compiler-source integration requires the recovery and QBE-backed tests in CI.
+During development, use focused local proof and ordinary Native regeneration;
+do not duplicate the full recovery suite for every intermediate language edit.
+Bootstrap and validation-orchestration changes additionally require full local
+recovery, as does diagnosis of recovery or platform failures. For a full run,
 set `TYPE_RB_NATIVE_REFERENCE_TRB` to the absolute pinned compiler executable
 and `TYPE_RB_NATIVE_QBE` to QBE 1.3, together with `TYPE_RB_NATIVE_ROOT`, when
 running the root and `compiler` suites. Without those variables, optional

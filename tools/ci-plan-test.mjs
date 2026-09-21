@@ -281,6 +281,23 @@ test('deletions, renames, mixed changes and unknown paths fail toward more check
 test('draft feedback cannot be accepted even when all jobs happen to succeed', () => {
   assert.notDeepEqual(acceptance(results(classify(['README.md'], true))), []);
 });
+test('draft development defers expensive authorities without relaxing ready acceptance', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/pull-request.yml', import.meta.url), 'utf8');
+  for (const job of ['cli', 'native', 'targets', 'memory']) {
+    const block = workflow.match(new RegExp(`^  ${job}:\\n([\\s\\S]*?)(?=^  [a-z]+:)`, 'm'))?.[1];
+    assert(block?.includes('needs: [plan, quick]'), `${job} must follow quick feedback`);
+    assert(block.includes("needs.plan.outputs.draft == 'false'"), `${job} must wait for ready integration`);
+  }
+  for (const file of ['compiler/cli/main.trb', 'compiler/src/compiler.trb']) {
+    const draft = results(classify([file], true));
+    for (const job of ['cli', 'native', 'targets', 'memory']) draft[job].result = 'skipped';
+    assert(acceptance(draft).some(error => error.includes('Draft feedback')));
+    const ready = results(classify([file], false));
+    assert.deepEqual(acceptance(ready), []);
+    ready.cli.result = 'skipped';
+    assert.notDeepEqual(acceptance(ready), [], 'ready CLI validation cannot be skipped');
+  }
+});
 test('failed, cancelled, skipped, missing and pending required jobs reject acceptance', () => {
   for (const job of ['quick', 'documentation', 'native', 'targets', 'memory', 'performance', 'tooling', 'cli']) {
     for (const state of ['failure', 'cancelled', 'skipped', 'pending', undefined]) {

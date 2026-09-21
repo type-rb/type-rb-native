@@ -1,12 +1,53 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 1274 ordinary-path probes and 32 feature
+Status: the shared contract contains 1398 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
 basic-language completion; [the generated family inventory](native-language-feature-inventory.md)
 records semantic contracts that still need tests. The earlier 19-case inventory
 was an initial sample, not a complete list of missing features.
+
+## String splitting, replacement and case conversion
+
+`split` preserves literal separators and empty fields. `replace_all` replaces
+non-overlapping literal matches without interpreting replacement syntax. Both
+preserve embedded NUL and arbitrary bytes, reject empty patterns after evaluating
+arguments, and retain the original receiver across argument effects. Unicode
+`upcase` and `downcase` follow the pinned Go reference's simple Unicode 17.0.0
+mapping, including changing UTF-8 widths and replacement of malformed bytes.
+Reference output-mode differences remain explicit under
+[TypeRB #791](https://github.com/type-rb/type-rb/issues/791).
+
+Typed MIR verifies operands, effects and roots independently of frontend bodies.
+The regenerated CLI uses the same transforms for retained values and recovers
+from invalid empty patterns. Byte-level, exhaustive mapping, allocation and
+forced-GC tests supplement the shared check/build/execution/REPL cases. See
+[decision 0084](decisions/0084-string-transform-mir.md).
+
+## Builtin Result values and Unicode identifiers
+
+Array/String `try_fetch` and `try_slice`, Hash `try_fetch`, String `try_to_i` and
+`try_to_f`, and strict String `to_f` use the standard structured failure contract.
+Receiver/argument effects run once before live bounds/key checks. Negative indexes,
+empty exclusive slices, Unicode code-point indexes, portable numeric limits,
+signed zero, subnormals and invalid/NUL input have paired ordinary-path probes.
+MIR owns typed comparisons, branches, aggregate construction and independently
+verified scalar parsing operations; it retains managed payloads after source-body
+erasure, block reordering and forced collection. The REPL reuses core parsing and
+preserves saved Results across declaration growth, aliases and explicit replay.
+
+Ordinary Native files and sessions accept Unicode letters and decimal continuation
+digits using the reference Go toolchain's categories, without normalizing names.
+Generated tables are checked against all 1,114,112 code points. Invalid categories
+and callable suffix boundaries remain explicit rejections. Recovered Native
+generations also compile Unicode fixtures; the Go-hosted recovery frontend's
+bootstrap-compatible ASCII fallback is separate evidence.
+
+Direct catch-tail empty Arrays receive the known success type. Wider contextual
+inference and discarded untyped empty collections remain incomplete. Existing
+Hash/embedded-NUL display differences and diagnostic presentation remain visible
+in the shared observations. See [decision 0083](decisions/0083-builtin-result-values.md).
 
 ## File and project global bindings
 
@@ -88,8 +129,8 @@ and Hash label text remains literal. Maximal operator tokens preserve Symbol
 spelling; type parsing expands nested closing angles without losing later source
 origins. Shared cases and source-erased/reordered/forced-GC MIR cover these
 boundaries, with Unicode/NUL returns and retained invalid-declaration/reload checks.
-Unicode identifiers and the reference's unsettled single-quote and remaining
-Symbol framing contracts stay explicit. See
+Unicode identifiers follow the builtin-value family above. The reference's
+unsettled single-quote and remaining Symbol framing contracts stay explicit. See
 [decision 0076](decisions/0076-lexical-boundaries.md).
 
 ## Stable natural Array ordering
@@ -107,7 +148,7 @@ types. Independent MIR erasure/reordering, forced GC, a 68-length oracle and
 retained REPL replay complement them. The pinned reference incorporates
 [type-rb#773](https://github.com/type-rb/type-rb/pull/773), fixing descending NaN
 placement in the REPL; presentation and inline callable-array differences remain
-visible. Safe collection APIs remain open. See
+visible. Safe collection lookups follow the builtin-value family above. See
 [decision 0072](decisions/0072-array-sorting-mir.md).
 
 ## Key-based Array ordering
@@ -255,7 +296,7 @@ owns the direction, operand types, allocation effects and live roots. Shared
 ordinary/REPL cases and independent source-erased, reordered, forced-GC and
 negative verifier controls are described in
 [decision 0065](decisions/0065-string-trimming-mir.md). The REPL itself uses these
-ordinary methods; remaining String transforms stay open in the inventory.
+ordinary methods. String transforms are covered by the family above; portable case semantics remain a reference boundary.
 
 ## Hash key expressions
 
@@ -281,7 +322,7 @@ the shared probes reveal them.
 
 The ordinary String foundation now supports UTF-8 literals, code-point
 length/indexing, concatenation, interpolation, allocation/lifetime and source/REPL
-handling. Continue with the remaining String APIs recorded in the
+handling. Continue with the remaining receiver combinations recorded in the
 shared inventory. Keep raw byte operations explicit where source decoding or
 terminal editing needs them; character indexing and terminal cell widths remain
 separate contracts.
@@ -675,8 +716,8 @@ than the final ordinary compiler and must not be counted as ordinary UTF-8
 evidence. No seed, pin or Go fallback is added to the ordinary chain; acceptance
 requires the published seed's full replacement generations and fixed points.
 
-Unicode identifiers and the remaining String receiver APIs are
-still tracked separately. This foundation does not mark the entire String family,
+Unicode identifiers and String transforms now follow the families above. Portable
+Unicode case behavior across reference output modes remains a separate gap. This foundation does not mark the entire String family,
 standard library or basic-language milestone complete.
 
 ## Readonly record field correction
@@ -1071,13 +1112,14 @@ results. Their probes distinguish absence from zero/false, cover nullable
 elements and Range positions, and retain visited managed values after source
 replacement or parameter reassignment. Generic callbacks, captures and forced
 collection use the ordinary nullable and closure MIR contracts.
-Safe lookup/conversion APIs and broader expression-context
-boundaries remain visible in the inventory; this coverage is not the entire collection API.
+Safe lookup/conversion APIs follow the builtin-value family above. Broader
+expression-context boundaries remain visible in the inventory; this coverage is
+not the entire collection API.
 
 String slicing now accepts checked `Range<Integer>` bounds in ordinary programs
 and the REPL. Shared probes cover retained receiver identity, inclusive/exclusive
 limits, Unicode, NUL, optional calls and lexical transfers. Invalid ranges remain
-explicit runtime failures; `try_slice` and other unimplemented APIs remain open.
+explicit runtime failures; `try_slice` supplies the corresponding structured Result.
 See [the MIR contract](decisions/0057-string-slice-mir.md).
 
 Control, octal, hexadecimal and scalar Unicode escapes now preserve exact bytes

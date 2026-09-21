@@ -1,3 +1,6 @@
+import { repl_builtin_number_parse, repl_string_integer, repl_string_float } from repl_number_parsing
+import { builtin_result_method } from builtin_results
+import { repl_builtin_lookup } from repl_builtin_lookup
 import { union_parts } from union_types
 import { string_starts_with } from path
 import { find_newtype_in_module, find_newtype_type, newtype_type } from newtype_types
@@ -15,6 +18,7 @@ import { array_method_arity, array_method_kind } from array_methods
 import { repl_array_method } from repl_array_methods
 import { string_method_argument_type, string_method_arity, string_method_kind } from string_methods
 import { repl_string_method } from repl_string_methods
+import { repl_string_transform } from repl_string_transforms
 import { float_method_kind } from float_methods
 import { repl_float_method } from repl_float_methods
 import { integer_method_arity, integer_method_kind } from integer_methods
@@ -61,49 +65,6 @@ def repl_number(text: String): Integer
 			digit += 1
 		end
 		index += 1
-	end
-	return result
-end
-
-# Validate before conversion so a bad value reports a recoverable REPL error.
-def repl_string_integer(mut store: ReplStore, text: String): Integer
-	mut index := 0
-	mut negative := false
-	if text.size() > 0
-		if text[0] == "-"
-			negative = true
-			index = 1
-		end
-		if text[0] == "+"
-			index = 1
-		end
-	end
-	if index == text.size()
-		store.error[0] = "panic: invalid Integer"
-		return 0
-	end
-	mut result := 0
-	while index < text.size()
-		mut digit := 0
-		while digit < 10
-			if integer_string(digit) == text[index]
-				if result > (9007199254740991 - digit) / 10
-					store.error[0] = "panic: Integer is outside the portable range"
-					return 0
-				end
-				result = result * 10 + digit
-				digit = 10
-			end
-			digit += 1
-		end
-		if digit == 10
-			store.error[0] = "panic: invalid Integer"
-			return 0
-		end
-		index += 1
-	end
-	if negative
-		return - result
 	end
 	return result
 end
@@ -929,6 +890,47 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						end
 						next
 					end
+					if builtin_result_method(value.type_name, member) > 0
+						origin := position[0]
+						kind := builtin_result_method(value.type_name, member)
+						if kind == 4 || kind == 5
+							position[0] += 1
+							skip_newlines(state, position)
+							position[0] += 1
+							result = repl_reference(repl_builtin_number_parse(state, store, result.value, kind == 5, load_string(state.checked[0].builtin_result_types, origin)))
+							if safe_origin >= 0 && store.error[0] == ""
+								result = repl_reference(repl_coerce(store, result.value, load_string(state.checked[0].safe_types, safe_origin)))
+							end
+							next
+						end
+						mut argument_type := "Integer"
+						if kind == 2
+							argument_type = "Range<Integer>"
+						elsif kind == 3
+							argument_type = hash_key_type(value.type_name)
+						end
+						position[0] += 1
+						skip_newlines(state, position)
+						argument := repl_expression(state, position, store, environment, 1, argument_type)
+						if environment.flow[0] != 0
+							return repl_reference(environment.flow[1])
+						end
+						if store.error[0] != ""
+							return repl_reference(0)
+						end
+						skip_newlines(state, position)
+						if token_is(state, position[0], ",")
+							position[0] += 1
+							skip_newlines(state, position)
+						end
+						position[0] += 1
+						converted := repl_coerce(store, argument.value, argument_type)
+						result = repl_reference(repl_builtin_lookup(state, store, kind, result.value, converted, load_string(state.checked[0].builtin_result_types, origin)))
+						if safe_origin >= 0 && environment.flow[0] == 0 && store.error[0] == ""
+							result = repl_reference(repl_coerce(store, result.value, load_string(state.checked[0].safe_types, safe_origin)))
+						end
+						next
+					end
 					if value.type_name == "Hash" || hash_key_type(value.type_name) != ""
 						result = repl_reference(repl_hash_method(state, position, store, environment, result.value))
 						if safe_origin >= 0 && environment.flow[0] == 0
@@ -986,7 +988,8 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						position[0] += 1
 						skip_newlines(state, position)
 						mut argument :=- 1
-						if string_method_arity(kind) == 1
+						mut arguments: Array<Integer> := []
+						while arguments.size() < string_method_arity(kind)
 							checked_argument := repl_expression(state, position, store, environment, 1, string_method_argument_type(kind))
 							if environment.flow[0] != 0
 								return repl_reference(environment.flow[1])
@@ -995,6 +998,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 								return repl_reference(0)
 							end
 							argument = checked_argument.value
+							arguments.push(argument)
 							skip_newlines(state, position)
 							if token_is(state, position[0], ",")
 								position[0] += 1
@@ -1002,7 +1006,11 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 							end
 						end
 						position[0] += 1
-						result = repl_reference(repl_string_method(store, kind, result.value, argument))
+						if kind >= 14
+							result = repl_reference(repl_string_transform(store, kind, result.value, arguments))
+						else
+							result = repl_reference(repl_string_method(store, kind, result.value, argument))
+						end
 						if safe_origin >= 0 && environment.flow[0] == 0 && store.error[0] == ""
 							result = repl_reference(repl_coerce(store, result.value, load_string(state.checked[0].safe_types, safe_origin)))
 						end
@@ -1064,7 +1072,9 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 							if member == "to_s"
 								result = repl_reference(repl_string(store, repl_scalar_string(value)))
 							else
-								if member == "to_i"
+								if member == "to_f"
+									result = repl_reference(repl_float(store, repl_string_float(store, value.text)))
+								elsif member == "to_i"
 									result = repl_reference(repl_integer(store, repl_string_integer(store, value.text)))
 								end
 							end

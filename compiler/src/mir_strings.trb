@@ -14,7 +14,7 @@ import { load_integer, load_string } from storage
 # are deliberately absent; conversions and I/O are explicit operations too.
 def mir_checked_string_operation(mut state: CompilerState, mut locals: CheckedLocals, kind: Integer, first: Integer, second: Integer, payload: Integer, result_type: String, origin: Integer): CheckedValue
 	mir_control_prepare(state, locals)
-	if (kind != 12 && first < 0) || ((kind == 13 || kind == 14 || kind == 16 || kind == 44 || kind == 46 || kind == 49) && second < 0)
+	if (kind != 12 && first < 0) || ((kind == 13 || kind == 14 || kind == 16 || kind == 44 || kind == 46 || kind == 49 || kind == 60 || kind == 61) && second < 0) || (kind == 61 && payload < 0)
 		scalar_mir_disable(locals)
 	end
 	if !mir_control_active(locals)
@@ -120,6 +120,29 @@ def mir_string_instruction_error(flow: MirFlow, native_module: MirModule, functi
 	first := mir_flow_type(flow, instruction.first)
 	second := mir_flow_type(flow, instruction.second)
 	kind := instruction.kind
+	# Replacement carries its third SSA operand in payload, like Array/Hash stores.
+	if kind >= 60 && kind <= 62
+		if !mir_value_available(flow, block, index, instruction.first) || first != 8
+			return "MIR String transform receiver is unavailable or not String"
+		end
+		if kind == 62
+			if result != 8 || instruction.second != - 1 || instruction.payload < 0 || instruction.payload > 1
+				return "MIR String case conversion shape differs"
+			end
+			return ""
+		end
+		if !mir_value_available(flow, block, index, instruction.second) || second != 8
+			return "MIR String transform pattern is unavailable or not String"
+		end
+		if kind == 60
+			if mir_semantic_type_name(native_module, result) != "Array<String>" || instruction.payload != 0
+				return "MIR String split result or payload differs"
+			end
+		elsif result != 8 || !mir_value_available(flow, block, index, instruction.payload) || mir_flow_type(flow, instruction.payload) != 8
+			return "MIR String replacement result or operand differs"
+		end
+		return ""
+	end
 	if kind == 50
 		if !mir_value_available(flow, block, index, instruction.first)
 			return "MIR String trim operand is undefined"
@@ -201,6 +224,9 @@ def mir_string_instruction_error(flow: MirFlow, native_module: MirModule, functi
 			return ""
 		end
 		if kind == 17
+			if first == 8 && ((instruction.payload == 6 && result == 5) || ((instruction.payload == 7 || instruction.payload == 8) && result == 1))
+				return ""
+			end
 			if result == 8 && ((instruction.payload == 1 && first == 1) || (instruction.payload == 4 && first == 5) || (instruction.payload == 5 && first == 2))
 				return ""
 			end
