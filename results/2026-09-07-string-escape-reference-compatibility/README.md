@@ -1,6 +1,25 @@
 # Current reference compatibility
 
 The selected development reference is TypeRB `0.4.9-dev` at
+`92e170123eae0dc697138f3a1091441fe95e1b89`, incorporating
+[PR #803](https://github.com/type-rb/type-rb/pull/803),
+[#806](https://github.com/type-rb/type-rb/pull/806),
+[#807](https://github.com/type-rb/type-rb/pull/807),
+[#808](https://github.com/type-rb/type-rb/pull/808),
+[#809](https://github.com/type-rb/type-rb/pull/809),
+[#811](https://github.com/type-rb/type-rb/pull/811) and
+[#812](https://github.com/type-rb/type-rb/pull/812).
+Qualified records and interfaces retain nominal identity through namespace and
+import aliases. Class methods preserve their lexical owners, private implicit
+receivers and callable results across generated targets and the REPL.
+Native pairs those contracts with ordinary path, forced-collection and retained
+session controls. Exact AST, reference observations, recovery, self-hosting and
+target validation remain required. No release, immutable seed or performance
+qualification changes. Previous reference identities and their evidence follow.
+
+# Previous standard-error reference compatibility
+
+The selected development reference is TypeRB `0.4.9-dev` at
 `04d5ecf23a546abad5bd72ac283756282edb365f`, incorporating
 [PR #792](https://github.com/type-rb/type-rb/pull/792).
 Standard Result/error declarations preserve canonical identity through same-named

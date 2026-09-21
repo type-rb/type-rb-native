@@ -877,7 +877,7 @@
 | Array ordering: reject record | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Array ordering: reject enum | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Array ordering: reject nested array | rejects as reference | rejects as reference | not reached | rejects as reference |
-| Array ordering: reject callable | rejects as reference | rejects as reference | not reached | diagnostic/output differs |
+| Array ordering: reject callable | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Array ordering: reject extra argument | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Array ordering: reject descending extra | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Array ordering: reject string operator | rejects as reference | rejects as reference | not reached | rejects as reference |
@@ -1424,7 +1424,7 @@
 | Class named constructor | accepts | accepts | matches reference | matches reference |
 | Class named method default | accepts | accepts | matches reference | matches reference |
 | Class nullable | accepts | accepts | matches reference | matches reference |
-| Class private method | accepts | accepts | matches reference | output differs |
+| Class private method | accepts | accepts | matches reference | matches reference |
 | Class readonly initialization | accepts | accepts | matches reference | matches reference |
 | Class recursive field | accepts | accepts | matches reference | matches reference |
 | Class reference alias | accepts | accepts | matches reference | matches reference |
@@ -1435,7 +1435,7 @@
 | Object field type | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Object implicit interface | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Object instance through class | rejects as reference | rejects as reference | not reached | rejects as reference |
-| Object interface construction | rejects valid input | rejects as reference | not reached | rejects as reference |
+| Object interface construction | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Object interface missing method | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Object interface return mismatch | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Object private field | rejects as reference | rejects as reference | not reached | rejects as reference |
@@ -1443,3 +1443,26 @@
 | Object readonly field write | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Object readonly method write | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Object uninitialized field | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Records with identical names in separate namespaces | accepts | accepts | matches reference | matches reference |
+| Nested generic record defaults retain their declaring scope | accepts | accepts | matches reference | matches reference |
+| Imported record namespaces, aliases and local shadows | accepts | accepts | matches reference | matches reference |
+| Matching fields do not imply record identity | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Generic record construction beside a same-named class | accepts | accepts | matches reference | matches reference |
+| Record cannot expose an unrelated class method | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Qualified class methods retain self type | accepts | accepts | matches reference | matches reference |
+| Qualified class constants retain their owner | accepts | accepts | matches reference | matches reference |
+| Inherited methods and captures retain lexical constants | accepts | accepts | matches reference | matches reference |
+| Imported qualified classes retain return types and constants | accepts | accepts | matches reference | matches reference |
+| Superclass resolves through a namespace import alias | accepts | accepts | matches reference | matches reference |
+| Imported interface beside a same-named local class | accepts | accepts | matches reference | matches reference |
+| Same-named generic interfaces retain namespace identity | accepts | accepts | matches reference | matches reference |
+| Imported generic implementation retains interface identity | accepts | accepts | matches reference | matches reference |
+| Matching members do not imply imported conformance | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Interface alias edges retain their defining module | accepts | accepts | matches reference | matches reference |
+| Imported descendant retains explicit interface conformance | accepts | accepts | matches reference | matches reference |
+| Namespace aliases retain generic interface edges | accepts | accepts | matches reference | matches reference |
+| Interface result annotation retains declaration scope | accepts | accepts | matches reference | matches reference |
+| Interface cannot expose an unrelated class method | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Generic interface dispatch returns captured callable values | accepts | accepts | matches reference | matches reference |
+| Imported interface dispatch returns callable values | accepts | accepts | matches reference | matches reference |
+| Inherited static method resolves across source modules | accepts | accepts | matches reference | matches reference |

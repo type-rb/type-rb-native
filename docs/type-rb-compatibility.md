@@ -2,7 +2,7 @@
 
 TypeRB Native currently follows exact reference revisions during development. The
 current source and semantic oracle is TypeRB
-`04d5ecf23a546abad5bd72ac283756282edb365f` (the `0.4.9-dev` development identity), recorded
+`92e170123eae0dc697138f3a1091441fe95e1b89` (the `0.4.9-dev` development identity), recorded
 in `TYPE_RB_REVISION`. This declares one exact reference identity during Native
 development, without claiming a supported version range.
 
@@ -33,6 +33,32 @@ The earlier scoped-file successor is registered in
 [Darwin/Linux arm64 result](https://github.com/type-rb/type-rb-native/blob/5cf61c740aa600c34ed94f1b130ea2ffefd9e783/results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/README.md)
 passes the selected-reference, migration, exact-baseline, target-regression,
 fixed-point, process, resource, and size criteria.
+
+## Nominal declarations and object reference update
+
+The exact pin incorporates [TypeRB #812](https://github.com/type-rb/type-rb/pull/812),
+[#811](https://github.com/type-rb/type-rb/pull/811) and
+[#809](https://github.com/type-rb/type-rb/pull/809). Records and interfaces retain
+source and namespace identities across imported aliases, generic applications,
+declaration-scoped signatures and retained sessions. Qualified class execution
+preserves self types, constants and imported superclass owners.
+
+It also incorporates inherited class methods
+([#803](https://github.com/type-rb/type-rb/pull/803)), implicit private REPL receivers
+([#806](https://github.com/type-rb/type-rb/pull/806)), callable interface results
+([#807](https://github.com/type-rb/type-rb/pull/807)) and nested function values
+([#808](https://github.com/type-rb/type-rb/pull/808)). Shared ordinary cases and
+forced-collection/retained-session controls cover the corresponding Native
+contracts. The reference AST is unchanged; snapshot v4 and the immutable bootstrap
+seed retain their existing identities. This is a development reference update,
+not a release or complete object/language or performance qualification.
+
+Reobserving the existing shared cases changes three reviewed outcomes: implicit
+private method calls now execute in the REPL; interface construction rejects in
+the checker through [#794](https://github.com/type-rb/type-rb/pull/794); and inline
+callable Arrays parse before sorting rejects their unsupported element order.
+The remaining observations are preserved. Twenty-three additional shared cases
+cover nominal record, class and interface boundaries across ordinary paths.
 
 ## Builtin values and Unicode reference update
 

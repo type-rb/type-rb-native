@@ -53,6 +53,12 @@ with tempfile.TemporaryDirectory(prefix='native-object-methods-') as temporary:
         'object-class-self-method-call',
         'object-class-self-return',
         'object-class-static-method',
+        'nominal-record-default-scope',
+        'nominal-record-class-shadow',
+        'nominal-class-inherited-capture',
+        'nominal-interface-separate',
+        'nominal-interface-result-scope',
+        'nominal-interface-callable',
     ):
         fixture = repository / 'compiler/conformance/valid' / name
         source = root / 'main.trb'
@@ -226,6 +232,52 @@ puts(read())
         '[#<Label text: "changed">, #<Fixed >] : Array<Named>\n'
         'changed\nfixed\nchanged\nchanged\nchanged\nfixed\n'
         'reloaded\nchanged\nchanged\n'), interfaces
+
+    namespaced = run([binary, 'repl'], data='''module First
+record Entry
+value: String
+end
+interface Source
+read(): Entry
+end
+class Holder implements Source
+@entry: Entry
+def initialize(text: String)
+@entry = Entry.new(value: text)
+end
+def read(): Entry
+return @entry
+end
+end
+end
+source: First::Source := First::Holder.new("a" + "b")
+read := fn(): String; return source.read().value; end
+module Second
+record Entry
+value: Integer
+end
+interface Source
+read(): Entry
+end
+end
+second := Second::Entry.new(value: 7)
+:type source
+:type second
+puts(read())
+puts(second.value)
+:reload
+:type source
+:type second
+puts(read())
+puts(second.value)
+:quit
+''')
+    assert not namespaced.stderr, namespaced
+    assert namespaced.stdout == (
+        '#<First::Holder entry: First::Entry(value: "ab")> : First::Source\n'
+        '#<fn> : () -> String\nSecond::Entry(value: 7) : Second::Entry\n'
+        'First::Source\nSecond::Entry\nab\n7\nab\n7\nreloaded\n'
+        'First::Source\nSecond::Entry\nab\n7\n'), namespaced
 
     (root / 'src').mkdir()
     (root / 'trbconfig.jsonc').write_text('{"name":"objects","sourceDir":"src"}')

@@ -72,27 +72,24 @@ stored values into the next check without calling their constructors again.
 Class/interface input framing, project imports and explicit replay use the same
 ordinary declaration and checking contracts.
 
-The shared ordinary check/build/execution/REPL registry contains 45 object
-cases, including negative observations. The ordinary CLI authority also exercises
-retained fields, heterogeneous interface values, captures and replay. Required
+The shared ordinary check/build/execution/REPL registry includes positive and
+negative object cases plus qualified record, class and interface contracts.
+The ordinary CLI authority also exercises retained fields, heterogeneous interface
+values, nested nominal identities, returned captures and replay. Required
 hosted integration authorities remain separate from these focused checks; the
 remaining guarded contracts prevent a claim of complete object coverage.
 
 Construction through a class alias remains guarded because the pinned reference
-rejects that receiver; aliases remain valid type annotations. Accepted namespaced
-class programs also expose target code-generation failures documented in
-[TypeRB #798](https://github.com/type-rb/type-rb/issues/798). Keep those reproductions
-separate from the shared passing execution cases until the reference fixes land.
-
-The pinned reference REPL loses the implicit receiver of private method calls
-([TypeRB #804](https://github.com/type-rb/type-rb/issues/804));
-[TypeRB #806](https://github.com/type-rb/type-rb/pull/806) corrects it, while the
-shared registry retains that difference until the reference pin advances.
-Interface methods returning callable values expose a separate reference checking
-gap in [TypeRB #805](https://github.com/type-rb/type-rb/issues/805).
-Inherited class-method code generation is corrected in
-[TypeRB #803](https://github.com/type-rb/type-rb/pull/803), separately from
-inherited instance override dispatch.
+rejects that receiver; aliases remain valid type annotations. The current
+reference incorporates qualified class execution
+([TypeRB #811](https://github.com/type-rb/type-rb/pull/811)), nominal interfaces
+([#809](https://github.com/type-rb/type-rb/pull/809)), namespaced records
+([#812](https://github.com/type-rb/type-rb/pull/812)), private REPL receivers
+([#806](https://github.com/type-rb/type-rb/pull/806)), callable interface results
+([#807](https://github.com/type-rb/type-rb/pull/807)) and inherited class methods
+([#803](https://github.com/type-rb/type-rb/pull/803)). Paired ordinary cases retain
+these owners through aliases, captures and imported descendants. Inherited
+instance overrides remain a separate contract.
 
 A separate reference discrepancy remains in inherited self-method dispatch:
 Go, Ruby and TypeScript do not agree when an inherited method calls an overridden
