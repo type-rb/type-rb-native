@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 1441 ordinary-path probes and 32 feature
+Status: the shared contract contains 1464 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -24,14 +24,28 @@ that identity. The backend emits verified call adapters and tracing descriptors
 without resolving source methods. Forced collection, erased/reordered MIR and
 corrupted witness controls supplement the paired ordinary cases.
 
-Initialized superclasses and inherited overrides remain guarded. The shared
-registry also exposes reference private-method REPL and interface-construction
-failures, together with diagnostic differences. Class-alias construction,
-qualified class execution and the reference's deferred object contracts remain
-listed in the feature inventory. See
+Qualified classes and imported parents retain return types and lexical constants,
+including inherited captures and class methods. Namespace and import aliases
+preserve interface identity, explicit conformance and callable results. Retained
+record/interface values keep their owners when later declarations reuse a name
+and after explicit replay. The forced-collection suite includes these nested
+nominal and callable paths with exact reclamation checks.
+
+Initialized superclasses and inherited overrides remain guarded. Class-alias
+construction, static `self.new`, diagnostic differences and the reference's
+deferred object contracts remain listed in the feature inventory. See
 [decision 0085](decisions/0085-object-type-and-execution-mir.md) for the implemented
 boundary and outstanding reference issues. This does not complete the object
 family or the basic-language milestone.
+
+## Namespaced record identity
+
+Records with the same name in different source modules or namespaces are distinct
+types. Generic fields and defaults use their declaration scope; reopened and
+nested namespaces, imported aliases and record aliases preserve that identity.
+Matching field shapes do not permit assignment between unrelated declarations,
+and a record cannot expose an unrelated class's methods. Shared ordinary and
+retained-session cases cover these contracts alongside class/interface identity.
 
 ## String splitting, replacement and case conversion
 
@@ -172,8 +186,10 @@ Unicode/NUL/invalid bytes, aliases, optional calls, effects and rejected element
 types. Independent MIR erasure/reordering, forced GC, a 68-length oracle and
 retained REPL replay complement them. The pinned reference incorporates
 [type-rb#773](https://github.com/type-rb/type-rb/pull/773), fixing descending NaN
-placement in the REPL; presentation and inline callable-array differences remain
-visible. Safe collection lookups follow the builtin-value family above. See
+placement in the REPL. With [#808](https://github.com/type-rb/type-rb/pull/808),
+inline callable Arrays parse in both implementations and reject sorting because
+callables have no portable natural order. Remaining REPL presentation differences
+stay visible. Safe collection lookups follow the builtin-value family above. See
 [decision 0072](decisions/0072-array-sorting-mir.md).
 
 ## Key-based Array ordering

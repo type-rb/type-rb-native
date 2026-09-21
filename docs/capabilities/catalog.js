@@ -12,21 +12,21 @@ const capability = (title, status, scopes, description, evidence) => ({
 
 export const catalog = {
   schemaVersion: 1,
-  updatedAt: '2026-09-14',
+  updatedAt: '2026-09-22',
   areas: [
     {
       id: 'language',
       title: 'Language and type system',
       description: 'Portable TypeRB semantics expressed through the Native frontend and runtime.',
       items: [
-        capability('Core direct calls and statement control', 'verified', ['parity'], 'Execute the bounded control-flow and direct-call surface, including required named-only arguments and reordered record labels with authored evaluation order. Defaults remain incomplete.', ['Control flow', 'docs/native-language-coverage.md']),
+        capability('Core direct calls and statement control', 'verified', ['parity'], 'Execute the bounded control-flow and direct-call surface, including positional and named-only defaults and reordered record labels with authored evaluation order. Wider callable and diagnostic contracts remain explicit in the ordinary inventory.', ['Control flow', 'docs/native-language-coverage.md']),
         capability('Checked Integer and binary64 Float', 'verified', ['parity', 'ecosystem'], 'Preserve portable Integer bounds and the selected Float behavior.', ['Numeric semantics', 'docs/native-language-coverage.md']),
         capability('Snapshot records, enums, Result, and try', 'verified', ['parity', 'production'], 'The snapshot/recovery path lowers aggregates, tagged values and Result propagation. Ordinary enum and Result support has separate checked/MIR and shared-language evidence.', ['Aggregate recovery', 'docs/snapshot-recovery.md']),
         capability('Snapshot managed String, Array, and closures', 'verified', ['parity', 'production', 'ecosystem'], 'The snapshot/recovery path executes managed UTF-8 strings, arrays and closures. Ordinary coverage is verified separately; snapshot closure support does not establish ordinary closure support.', ['Managed recovery', 'docs/snapshot-recovery.md']),
         capability('Ordinary UTF-8 String literals and operations', 'partial', ['parity', 'production', 'ecosystem'], 'Ordinary build and REPL cover UTF-8 literals and identifier categories, code-point size/index, safe lookups/slices, concatenation, interpolation and managed collection storage. CLI tests cover retained values, argv and terminal editing. Further String APIs, malformed-source origins and presentation parity remain incomplete.', ['Ordinary UTF-8 coverage', 'docs/native-language-coverage.md']),
         capability('Complete TypeRB syntax and diagnostics', 'partial', ['parity', 'production', 'ecosystem'], 'The reference-derived ordinary-path inventory covers valid, rejected and boundary cases across basic syntax families. Known differences and untested contracts remain; a green regression is not complete language parity.', ['Ordinary language matrix', 'docs/native-language-coverage-matrix.md']),
-        capability('Generics', 'partial', ['parity', 'production', 'ecosystem'], 'Explicit generic records, enums and top-level functions use invariant concrete MIR types, nested and recursive arguments and imported identities. Function templates and parameter defaults are checked even when unused. Generic record defaults, methods, aliases and wider type contracts remain open.'),
-        capability('Classes, interfaces, and dispatch', 'open', ['parity', 'production', 'ecosystem'], 'Ordinary class and explicit interface probes are rejected. Field, initialization, conformance and dispatch support remains to be implemented.'),
+        capability('Generics', 'partial', ['parity', 'production', 'ecosystem'], 'Explicit generic records, enums, functions, classes and interfaces retain concrete MIR identities through namespaces, aliases and imports. Function templates and record/parameter defaults are checked even when unused. Remaining method combinations, generic class methods, variance and wider type contracts stay open.', ['Generic and nominal coverage', 'docs/native-language-coverage.md']),
+        capability('Classes, interfaces, and dispatch', 'partial', ['parity', 'production', 'ecosystem'], 'Constructors, ordered field defaults, generic fields and instance methods, field-free inheritance, and explicit interface dispatch use verified MIR and managed storage. Qualified identities, retained REPL values and replay are covered. Initialized superclasses, inherited overrides and the remaining object contracts are still incomplete.', ['Object MIR and coverage', 'docs/decisions/0085-object-type-and-execution-mir.md']),
         capability('Concurrency semantics', 'open', ['parity', 'production', 'ecosystem'], 'Implement portable tasks, cancellation, synchronization, and failure behavior.'),
       ],
     },
