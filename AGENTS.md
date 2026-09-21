@@ -24,6 +24,11 @@ for specialized constraints. For routine documentation edits, check the changed
 text and applicable documentation CI. For code, complete the authorities in
 [CI validation](docs/ci-validation.md); avoid redundant runs after they pass
 unless a new change, failure, or unresolved concern warrants them.
+Use focused local proof during development and hosted CI for complete integration
+by default. Bootstrap and validation-orchestration changes also need full local
+recovery. Until basic-language coverage is complete, prefer coherent language
+families in larger, reviewable PRs over separate PRs for each implementation step;
+follow `CONTRIBUTING.md` for the development and integration cadence.
 
 ## Public repository boundary
 

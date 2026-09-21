@@ -1,3 +1,4 @@
+import { RecoveryCommandControl, recovery_control_limit, collect_recovery_controls, run_recovery_command_controls } from compiler_recovery_controls
 import { compiler_recovery_mutations } from compiler_recovery_mutations
 import { decode_recovery_managed_snapshot, decode_bootstrap_snapshot } from recovery_managed_snapshot
 import { build_compiler_recovery_executable, build_recovery_managed_executable } from recovery_managed_toolchain
@@ -959,72 +960,60 @@ def _recovery_build_cycle(
 	end
 	_recovery_stage("end", "ordinary-fixed-point")
 	_recovery_stage("start", "generation-controls")
+	limit := case recovery_control_limit(_recovery_environment("TYPE_RB_NATIVE_RECOVERY_JOBS"))
+	when Result::Ok(value)
+		value
+	when Result::Err(error)
+		puts(error)
+		return false
+	end
+	mut controls: Array<RecoveryCommandControl> := []
 	seeds := [b0_path, b1.output_path, b2.output_path]
 	expected_qbe := [b1_qbe, b2_qbe, b3_qbe]
-	mut seed_index := 0
-	while seed_index < seeds.size()
-		case Process.run(seeds[seed_index], ["--source-content", "check", recovery_source])
-		when Result::Ok(process)
-			if !process.success || process.stdout != "ok\n" || process.stderr != ""
-				puts("compiler source check differs at seed " + seed_index.to_s())
-				return false
-			end
-		when Result::Err(error)
-			puts(error.operation + ": " + error.message)
-			return false
-		end
-		case Process.run(seeds[seed_index], ["--source-content", "emit-qbe", recovery_source])
-		when Result::Ok(process)
-			if !process.success || process.stdout != expected_qbe[seed_index] || process.stderr != ""
-				puts("repeated compiler QBE differs at seed " + seed_index.to_s())
-				return false
-			end
-		when Result::Err(error)
-			puts(error.operation + ": " + error.message)
-			return false
-		end
-		seed_index += 1
+	seeds.each.with_index do |seed, index|
+		controls.push(RecoveryCommandControl.new(
+				label: "compiler source check at seed " + index.to_s(),
+				executable: seed,
+				arguments: ["--source-content", "check", recovery_source],
+				expected_stdout: "ok\n",
+			))
+		controls.push(RecoveryCommandControl.new(
+				label: "repeated compiler QBE at seed " + index.to_s(),
+				executable: seed,
+				arguments: ["--source-content", "emit-qbe", recovery_source],
+				expected_stdout: expected_qbe[index],
+			))
 	end
 	file_seeds := [b1.output_path, b2.output_path]
-	seed_index = 0
-	while seed_index < file_seeds.size()
-		case Process.run(file_seeds[seed_index], ["check", compiler_path])
-		when Result::Ok(process)
-			if !process.success || process.stdout != "ok\n" || process.stderr != ""
-				puts("file-oriented compiler source check differs at seed " + seed_index.to_s())
-				return false
-			end
-		when Result::Err(error)
-			puts(error.operation + ": " + error.message)
-			return false
-		end
-		case Process.run(file_seeds[seed_index], ["emit-qbe", compiler_path])
-		when Result::Ok(process)
-			if !process.success || process.stdout != canonical_qbe || process.stderr != ""
-				puts("file-oriented compiler QBE differs at seed " + seed_index.to_s())
-				return false
-			end
-		when Result::Err(error)
-			puts(error.operation + ": " + error.message)
-			return false
-		end
-		seed_index += 1
+	file_seeds.each.with_index do |seed, index|
+		controls.push(RecoveryCommandControl.new(
+				label: "file-oriented compiler check at seed " + index.to_s(),
+				executable: seed,
+				arguments: ["check", compiler_path],
+				expected_stdout: "ok\n",
+			))
+		controls.push(RecoveryCommandControl.new(
+				label: "file-oriented compiler QBE at seed " + index.to_s(),
+				executable: seed,
+				arguments: ["emit-qbe", compiler_path],
+				expected_stdout: canonical_qbe,
+			))
 	end
 	program := "def main()\n\tputs(\"ok\")\n\treturn\nend\n"
-	mut executables := [b1.output_path, b2.output_path, b3.output_path]
-	mut index := 0
-	while index < executables.size()
-		case Process.run(executables[index], ["--source-content", "check", program])
-		when Result::Ok(process)
-			if !process.success || process.stdout != "ok\n" || process.stderr != ""
-				puts("self-hosted compiler check failed")
-				return false
-			end
-		when Result::Err(error)
-			puts(error.operation + ": " + error.message)
-			return false
-		end
-		index += 1
+	executables := [b1.output_path, b2.output_path, b3.output_path]
+	executables.each.with_index do |executable, index|
+		controls.push(RecoveryCommandControl.new(
+				label: "self-hosted compiler check " + index.to_s(),
+				executable: executable,
+				arguments: ["--source-content", "check", program],
+				expected_stdout: "ok\n",
+			))
+	end
+	case run_recovery_command_controls(controls, limit)
+	when Result::Ok(_value)
+	when Result::Err(error)
+		puts(error)
+		return false
 	end
 	return true
 end
@@ -1408,6 +1397,77 @@ def _recovery_require_compiler_imports(executable: String, entry: String): Resul
 	return Result<Boolean, String>::Ok(true)
 end
 
+record RecoveryModuleControl
+	executable: String
+	workspace: String
+	closure: RecoveryCompilerSources
+	mutations: Array<Array<String>>
+	canonical_qbe: String
+	index: Integer
+end
+
+# Each task owns its mutation, missing-module and malformed-module directories.
+def _recovery_verify_module_control(control: RecoveryModuleControl): Result<Boolean, String>
+	executable := control.executable
+	workspace := control.workspace
+	names := control.closure.names
+	sources := control.closure.contents
+	mutations := control.mutations
+	index := control.index
+	mut changed: Array<String> := []
+	sources.each do |source|
+		changed.push(source)
+	end
+	mut found := false
+	mutations.each do |mutation|
+		if mutation[0] == names[index]
+			changed[index] = try _recovery_replace_once(sources[index], mutation[1], mutation[2])
+			found = true
+		end
+	end
+	if !found
+		return Result<Boolean, String>::Err("missing compiler module mutation: " + names[index])
+	end
+	directory := workspace + "/compiler-source-compiler-" + names[index] + "-mutation"
+	try _prepare_compiler_closure(directory, names, changed, "")
+	emission := try _recovery_process(executable, ["emit-qbe", directory + "/compiler.trb"])
+	if emission.status != 0 || emission.stdout.empty?() || !emission.stderr.empty?()
+		return Result<Boolean, String>::Err(names[index] + " mutation emission failed: " + emission.stderr)
+	end
+	if emission.stdout == control.canonical_qbe
+		return Result<Boolean, String>::Err(names[index] + " mutation did not change compiler QBE")
+	end
+	try _recovery_require_no_intermediates(directory)
+
+	missing := workspace + "/compiler-source-compiler-missing-" + names[index]
+	try _prepare_compiler_closure(missing, names, sources, names[index])
+	missing_output := missing + "/compiler"
+	missing_build := try _recovery_build(executable, missing + "/compiler.trb", missing_output, missing + "/missing-qbe", missing + "/missing-cc")
+	if missing_build.status != 1 || !missing_build.stdout.empty?()
+		return Result<Boolean, String>::Err("missing " + names[index] + " module did not fail before tools")
+	end
+	if !missing_build.stderr.include?("cannot resolve project import " + names[index])
+		return Result<Boolean, String>::Err("missing " + names[index] + " module diagnostic differs: " + missing_build.stderr)
+	end
+	try _recovery_require_missing(missing_output)
+	try _recovery_require_no_intermediates(missing)
+
+	malformed := workspace + "/compiler-source-compiler-malformed-" + names[index]
+	changed[index] = sources[index] + "\n@\n"
+	try _prepare_compiler_closure(malformed, names, changed, "")
+	malformed_output := malformed + "/compiler"
+	malformed_build := try _recovery_build(executable, malformed + "/compiler.trb", malformed_output, malformed + "/missing-qbe", malformed + "/missing-cc")
+	if malformed_build.status != 1 || !malformed_build.stdout.empty?()
+		return Result<Boolean, String>::Err("malformed " + names[index] + " module did not fail before tools")
+	end
+	if !malformed_build.stderr.include?("TRBN4001")
+		return Result<Boolean, String>::Err("malformed " + names[index] + " module diagnostic differs: " + malformed_build.stderr)
+	end
+	try _recovery_require_missing(malformed_output)
+	try _recovery_require_no_intermediates(malformed)
+	return Result<Boolean, String>::Ok(true)
+end
+
 def _recovery_verify_compiler_source_closure(
 		executable: String,
 		compiler_path: String,
@@ -1424,65 +1484,24 @@ def _recovery_verify_compiler_source_closure(
 	names := closure.names
 	sources := closure.contents
 	mutations := compiler_recovery_mutations()
-	mut index := 0
-	while index < names.size()
-		if names[index] == "compiler"
-			index += 1
-			next
+	limit := try recovery_control_limit(_recovery_environment("TYPE_RB_NATIVE_RECOVERY_JOBS"))
+	mut controls: Array<RecoveryModuleControl> := []
+	names.each.with_index do |name, index|
+		if name != "compiler"
+			controls.push(RecoveryModuleControl.new(
+					executable: executable,
+					workspace: workspace,
+					closure: closure,
+					mutations: mutations,
+					canonical_qbe: canonical.stdout,
+					index: index,
+				))
 		end
-		mut changed: Array<String> := []
-		sources.each do |source|
-			changed.push(source)
-		end
-		mut found := false
-		mutations.each do |mutation|
-			if mutation[0] == names[index]
-				changed[index] = try _recovery_replace_once(sources[index], mutation[1], mutation[2])
-				found = true
-			end
-		end
-		if !found
-			return Result<Boolean, String>::Err("missing compiler module mutation: " + names[index])
-		end
-		directory := workspace + "/compiler-source-compiler-" + names[index] + "-mutation"
-		try _prepare_compiler_closure(directory, names, changed, "")
-		emission := try _recovery_process(executable, ["emit-qbe", directory + "/compiler.trb"])
-		if emission.status != 0 || emission.stdout.empty?() || !emission.stderr.empty?()
-			return Result<Boolean, String>::Err(names[index] + " mutation emission failed: " + emission.stderr)
-		end
-		if emission.stdout == canonical.stdout
-			return Result<Boolean, String>::Err(names[index] + " mutation did not change compiler QBE")
-		end
-		try _recovery_require_no_intermediates(directory)
-
-		missing := workspace + "/compiler-source-compiler-missing-" + names[index]
-		try _prepare_compiler_closure(missing, names, sources, names[index])
-		missing_output := missing + "/compiler"
-		missing_build := try _recovery_build(executable, missing + "/compiler.trb", missing_output, missing + "/missing-qbe", missing + "/missing-cc")
-		if missing_build.status != 1 || !missing_build.stdout.empty?()
-			return Result<Boolean, String>::Err("missing " + names[index] + " module did not fail before tools")
-		end
-		if !missing_build.stderr.include?("cannot resolve project import " + names[index])
-			return Result<Boolean, String>::Err("missing " + names[index] + " module diagnostic differs: " + missing_build.stderr)
-		end
-		try _recovery_require_missing(missing_output)
-		try _recovery_require_no_intermediates(missing)
-
-		malformed := workspace + "/compiler-source-compiler-malformed-" + names[index]
-		changed[index] = sources[index] + "\n@\n"
-		try _prepare_compiler_closure(malformed, names, changed, "")
-		malformed_output := malformed + "/compiler"
-		malformed_build := try _recovery_build(executable, malformed + "/compiler.trb", malformed_output, malformed + "/missing-qbe", malformed + "/missing-cc")
-		if malformed_build.status != 1 || !malformed_build.stdout.empty?()
-			return Result<Boolean, String>::Err("malformed " + names[index] + " module did not fail before tools")
-		end
-		if !malformed_build.stderr.include?("TRBN4001")
-			return Result<Boolean, String>::Err("malformed " + names[index] + " module diagnostic differs: " + malformed_build.stderr)
-		end
-		try _recovery_require_missing(malformed_output)
-		try _recovery_require_no_intermediates(malformed)
-		index += 1
 	end
+	results := controls.concurrent_map(limit: limit) do |control|
+		_recovery_verify_module_control(control)
+	end
+	try collect_recovery_controls(results)
 
 	unrelated := workspace + "/compiler-source-compiler-unrelated"
 	try _prepare_compiler_closure(unrelated, names, sources, "")
@@ -2016,6 +2035,13 @@ describe("Native compiler recovery") do
 		if root.empty?() || reference_trb.empty?() || qbe.empty?()
 			expect(true).to_be_true()
 		else
+			case recovery_control_limit(_recovery_environment("TYPE_RB_NATIVE_RECOVERY_JOBS"))
+			when Result::Ok(limit)
+				puts("Recovery control concurrency: " + limit.to_s())
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
 			case allocate_compiler_recovery_workspace(_recovery_environment("TYPE_RB_NATIVE_RECOVERY_RECEIPT"))
 			when Result::Err(error)
 				puts(error)
