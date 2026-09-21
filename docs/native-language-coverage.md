@@ -572,9 +572,10 @@ resolves complete concrete catalogs before MIR construction; backend output does
 not consult generic templates or source spellings. See
 [decision 0045](decisions/0045-generic-nominal-mir.md).
 
-Enum receiver methods are covered above; method-specific type parameters and
-generic classes/interfaces remain separate gaps. The shared
-imported-generic-enum case now passes against the updated reference containing
+Enum receiver methods are covered above. Generic classes, interfaces and explicit
+class instance-method applications use the object MIR described above;
+Method-specific enum parameters and the guarded object combinations remain gaps.
+The shared imported-generic-enum case now passes against the updated reference containing
 [TypeRB PR #704](https://github.com/type-rb/type-rb/pull/704). Compiler self-use
 of generic syntax awaits a seed that supports it.
 
@@ -591,8 +592,9 @@ aliases when their underlying declarations are hidden.
 [Decision 0050](decisions/0050-transparent-alias-mir.md) records ownership and
 verification. Callable aliases now reach concrete MIR, including nullable payloads.
 Union targets and nested module aliases now preserve their canonical identity.
-Literal and class/interface targets remain gaps. REPL display currently uses the
-underlying type rather than always retaining the authored alias. Alias record
+Class/interface type annotations now share the object catalog; construction
+through class aliases and literal targets remain gaps. REPL display currently uses
+the underlying type rather than always retaining the authored alias. Alias record
 construction and generic identity aliases now execute in the reference. Its
 [same-package nominal-name collision](https://github.com/type-rb/type-rb/issues/708)
 remains an explicit failure in the shared expectations.
@@ -608,8 +610,9 @@ concrete call sites cannot legalize operations on unconstrained `T`.
 
 Source/template erasure preserves verified QBE, and forced collection covers
 managed generic calls. See [decision 0048](decisions/0048-generic-function-mir.md)
-for ownership and remaining boundaries. Other generic declaration families remain
-gaps. Both implementations reject local values used with generic type arguments;
+for ownership and remaining boundaries. Generic object applications have their
+separate coverage above; the feature inventory records unresolved combinations.
+Both implementations reject local values used with generic type arguments;
 [TypeRB PR #705](https://github.com/type-rb/type-rb/pull/705) fixed the reference checker.
 
 ## Generic record field defaults

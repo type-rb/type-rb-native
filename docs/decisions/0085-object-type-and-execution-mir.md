@@ -84,9 +84,13 @@ class programs also expose target code-generation failures documented in
 [TypeRB #798](https://github.com/type-rb/type-rb/issues/798). Keep those reproductions
 separate from the shared passing execution cases until the reference fixes land.
 
-The reference REPL still loses the implicit receiver of private method calls
-([TypeRB #804](https://github.com/type-rb/type-rb/issues/804)); the shared registry
-retains that difference. Inherited class-method code generation is corrected in
+The pinned reference REPL loses the implicit receiver of private method calls
+([TypeRB #804](https://github.com/type-rb/type-rb/issues/804));
+[TypeRB #806](https://github.com/type-rb/type-rb/pull/806) corrects it, while the
+shared registry retains that difference until the reference pin advances.
+Interface methods returning callable values expose a separate reference checking
+gap in [TypeRB #805](https://github.com/type-rb/type-rb/issues/805).
+Inherited class-method code generation is corrected in
 [TypeRB #803](https://github.com/type-rb/type-rb/pull/803), separately from
 inherited instance override dispatch.
 
