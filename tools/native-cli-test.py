@@ -29,6 +29,7 @@ subprocess.run([sys.executable, str(repository / "tools/native-callable-test.py"
 subprocess.run([sys.executable, str(repository / "tools/native-constants-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-global-bindings-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-repl-global-bindings-test.py"), str(binary)], check=True)
+subprocess.run([sys.executable, str(repository / "tools/native-namespace-bindings-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-array-copy-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-array-mutation-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-array-query-test.py"), str(binary)], check=True)
@@ -194,6 +195,7 @@ end
                       'range-precedence', 'range-managed', 'range-streaming',
                       'string-index-lifetime', 'default-arguments-mir',
                       'value-control-mir', 'value-transfer-mir', 'nullable-values-mir',
+                      'namespace-binding-storage',
                       'boolean-array-depth', 'record-array-depth'):
         fixture = repository / 'compiler/conformance/valid' / (case_name + '.trb')
         expected = fixture.with_suffix('.out').read_text()

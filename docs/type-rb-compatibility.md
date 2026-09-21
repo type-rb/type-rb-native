@@ -2,7 +2,7 @@
 
 TypeRB Native currently follows exact reference revisions during development. The
 current source and semantic oracle is TypeRB
-`5912014558c0839ae86dd83e3e2f33446b2190ba` (the `0.4.9-dev` development identity), recorded
+`424d38cecf163153f47324a86ed793746368f153` (the `0.4.9-dev` development identity), recorded
 in `TYPE_RB_REVISION`. This declares one exact reference identity during Native
 development, without claiming a supported version range.
 
@@ -33,6 +33,19 @@ The earlier scoped-file successor is registered in
 [Darwin/Linux arm64 result](https://github.com/type-rb/type-rb-native/blob/5cf61c740aa600c34ed94f1b130ea2ffefd9e783/results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/README.md)
 passes the selected-reference, migration, exact-baseline, target-regression,
 fixed-point, process, resource, and size criteria.
+
+## Namespace binding reference update
+
+The exact pin includes [TypeRB PR #786](https://github.com/type-rb/type-rb/pull/786).
+Lowercase namespace declarations retain shared lexical storage across methods,
+closures and REPL replay, and calls invalidate stale nullable proofs for mutable
+values. Native uses the existing typed global MIR operations and roots. Nested
+and reopened namespaces preserve lexical visibility before later inner bindings.
+Qualified lowercase member access remains a reference boundary in
+[TypeRB #787](https://github.com/type-rb/type-rb/issues/787), and Ruby namespace
+collisions are independently tracked in [#785](https://github.com/type-rb/type-rb/issues/785).
+The exact accepted source, AST and ordinary paths are checked; no release or
+immutable bootstrap seed changes.
 
 ## Function binding identity reference update
 

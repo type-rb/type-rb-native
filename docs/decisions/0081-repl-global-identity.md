@@ -44,7 +44,7 @@ and conversions. It follows current reference output on each path, including the
 tracked compiled/REPL Nil formatting difference in TypeRB issue #783. It does not
 introduce backend type inference or general union/nominal printing.
 
-Namespace-body lowercase declarations, forward initialization dependencies and
-untyped collection inference outside the already supported session body remain
-explicit pending contracts. This change does not close the complete bindings or
-basic-language inventory.
+Namespace-body lowercase declarations are extended by [decision 0082](0082-namespace-binding-mir.md).
+Forward initialization dependencies and untyped collection inference outside the
+already supported session body remain explicit pending contracts. These changes
+do not close the complete bindings or basic-language inventory.

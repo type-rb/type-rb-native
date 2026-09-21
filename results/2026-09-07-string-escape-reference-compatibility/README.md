@@ -1,6 +1,25 @@
 # Current reference compatibility
 
 The selected development reference is TypeRB `0.4.9-dev` at
+`424d38cecf163153f47324a86ed793746368f153`, incorporating
+[PR #786](https://github.com/type-rb/type-rb/pull/786).
+Namespace-body lowercase bindings retain shared declaration storage and lexical
+shadowing across module methods, closures and retained sessions. Calls invalidate
+stale nullable proofs for mutable namespace storage. The reference correction has
+executable Go/Ruby/TypeScript coverage and complete compiler tests.
+
+Native lowers these lexical bindings through existing verified global MIR,
+initialization and roots. Qualified binding-member access remains an explicit
+reference boundary in [TypeRB #787](https://github.com/type-rb/type-rb/issues/787).
+Ruby's separate same-named namespace collision is tracked in
+[TypeRB #785](https://github.com/type-rb/type-rb/issues/785).
+Exact ordinary-path, recovery, self-hosting, target and lifetime checks remain
+required; this update does not qualify complete language support or performance,
+or change a release or immutable seed. Previous identities and evidence follow.
+
+# Previous shared-session reference compatibility
+
+The selected development reference is TypeRB `0.4.9-dev` at
 `5912014558c0839ae86dd83e3e2f33446b2190ba`, incorporating
 [PR #784](https://github.com/type-rb/type-rb/pull/784).
 Earlier named-function references retain their declaration in the REPL after a
