@@ -46,9 +46,10 @@ MIR controls erase the frontend and reorder catalogs before execution. Forced-GC
 tests retain replaced Unicode/NUL values, release mutable roots and check exact
 reclamation; project sessions cover retained function values and replay.
 
-Interactive variables visible to later named functions remain a separate REPL
-implementation gap. Lowercase namespace-body bindings, forward initialization and
-untyped empty collection inference remain explicit pending contracts. Compiler
-state remains per invocation; compiler-source use of new module-storage syntax
-depends on an accepted immutable seed handoff. These boundaries remain in the
-generated inventory, and this change makes no full-language or performance claim.
+Interactive variables visible to later named functions are extended by
+[decision 0081](0081-repl-global-identity.md), and lowercase namespace-body bindings
+by [decision 0082](0082-namespace-binding-mir.md). Forward initialization and untyped
+empty collection inference remain explicit pending contracts. Compiler state
+remains per invocation; compiler-source use of new module-storage syntax depends
+on an accepted immutable seed handoff. These boundaries remain in the generated
+inventory, and this change makes no full-language or performance claim.

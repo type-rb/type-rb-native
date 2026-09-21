@@ -1253,3 +1253,26 @@
 | Optional output: boolean | accepts | accepts | matches reference | matches reference |
 | Optional output: string | accepts | accepts | matches reference | matches reference |
 | Optional output: replaced receiver | accepts | accepts | matches reference | matches reference |
+| Namespace bindings: shared | accepts | accepts | matches reference | matches reference |
+| Namespace bindings: reopened | accepts | accepts | matches reference | matches reference |
+| Namespace bindings: nested | accepts | accepts | matches reference | matches reference |
+| Namespace bindings: outer before inner | accepts | accepts | matches reference | matches reference |
+| Namespace bindings: closure shadow | accepts | accepts | matches reference | matches reference |
+| Namespace bindings: managed | accepts | accepts | matches reference | matches reference |
+| Namespace bindings: hash | accepts | accepts | matches reference | matches reference |
+| Namespace bindings: array | accepts | accepts | matches reference | matches reference |
+| Namespace bindings: callable | accepts | accepts | matches reference | matches reference |
+| Namespace bindings: initializer | accepts | accepts | matches reference | matches reference |
+| Namespace bindings: nullable fresh | accepts | accepts | matches reference | matches reference |
+| Namespace bindings: nullable local | accepts | accepts | matches reference | matches reference |
+| Namespace bindings: nullable immutable | accepts | accepts | matches reference | matches reference |
+| Namespace bindings: invalid nullable direct | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Namespace bindings: invalid nullable closure | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Namespace bindings: invalid forward | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Namespace bindings: invalid immutable | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Namespace bindings: invalid duplicate | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Namespace bindings: invalid readonly array | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Namespace bindings: invalid qualified gap | rejects valid input | rejects as reference | not reached | rejects as reference |
+| Namespace bindings: invalid blank | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Namespace bindings: import alias | accepts | accepts | matches reference | matches reference |
+| Namespace bindings: import identity | accepts | accepts | matches reference | matches reference |

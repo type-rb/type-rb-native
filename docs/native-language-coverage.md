@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 1251 ordinary-path probes and 32 feature
+Status: the shared contract contains 1274 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -42,9 +42,17 @@ prints absent values as `<nil>` while its REPL prints `nil`; Native matches each
 path. [TypeRB #783](https://github.com/type-rb/type-rb/issues/783) tracks a portable
 formatting contract. General union and nominal output remain separate gaps.
 
-Lowercase variables in namespace bodies,
-forward initializer dependencies and untyped empty collection inference remain
-open. Compiler implementation state stays per invocation; adopting module storage
+Namespace-body lowercase variables share the same typed global storage. Nested
+and reopened namespaces, imported aliases, managed containers and closures keep
+independent declaration identities. A method declared before a later inner
+binding still reads the earlier outer binding. Same-submission REPL references
+follow token order, and explicit load/replay reexecutes initializers in order.
+See [decision 0082](decisions/0082-namespace-binding-mir.md).
+
+Forward initializer dependencies and untyped empty collection inference remain
+open. Qualified lowercase members also remain unsupported while the reference's
+checked-but-non-executable boundary is resolved in
+[TypeRB #787](https://github.com/type-rb/type-rb/issues/787). Compiler implementation state stays per invocation; adopting module storage
 in compiler sources still needs the accepted seed handoff described in
 [bootstrap seed updates](bootstrap-seed-updates.md). File/project support alone
 does not close the bindings family or establish complete basic coverage.
