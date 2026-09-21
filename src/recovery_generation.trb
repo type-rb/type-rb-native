@@ -28,8 +28,16 @@ def build_recovery_generation(
 		workspace: String,
 		generation: String,
 	): Result<RecoveryGenerationReport, RecoveryGenerationError>
+	source_path := workspace + "/" + generation + ".source.trb"
+	case native_write_text(source_path, compiler_source)
+	when Result::Ok(_unit)
+	when Result::Err(error)
+		return Result<RecoveryGenerationReport, RecoveryGenerationError>::Err(
+			RecoveryGenerationError.new(phase: generation + "-write-source", message: error.operation + ": " + error.message)
+		)
+	end
 	compiler_started := Instant.now()
-	compiler_process := case Process.run(seed_path, ["--source-content", "emit-qbe", compiler_source])
+	compiler_process := case Process.run(seed_path, ["--source-file", "emit-qbe", source_path])
 	when Result::Ok(process)
 		process
 	when Result::Err(error)

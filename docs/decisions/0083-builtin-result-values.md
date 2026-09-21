@@ -36,8 +36,10 @@ decoder and byte-preserving names retain distinct spellings without normalizatio
 ASCII constant/reserved-name rules remain unchanged. The immutable seed compiles
 ASCII implementation source; the ordinary Native compiler's existing byte adapter
 handles Unicode input. Recovered Native generations exercise these names directly.
-The Go-hosted recovery frontend's ASCII fallback is recorded separately and does
-not establish Unicode frontend coverage.
+B0 and the matched Go frontend execute the canonical ASCII byte-access fallback;
+their explicit rejection is checked separately. B1 and every later recovered
+Native generation must check and emit the Unicode fixture through both literal
+source and ordinary file inputs. B0 does not establish Unicode frontend coverage.
 
 Paired ordinary check/build/execution/REPL cases retain rejected inputs and
 presentation gaps. Independent MIR verification rejects forged conversion types,

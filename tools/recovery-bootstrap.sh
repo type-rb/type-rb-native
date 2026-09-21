@@ -15,9 +15,6 @@ workspace=$5
 generation=$6
 
 mkdir -p "$workspace"
-source_text=$(command cat "$compiler_source"; printf x)
-source_text=${source_text%x}
-
-"$seed" --source-content emit-qbe "$source_text" > "$workspace/$generation.ssa"
+"$seed" --source-file emit-qbe "$compiler_source" > "$workspace/$generation.ssa"
 "$qbe" -t arm64_apple "$workspace/$generation.ssa" > "$workspace/$generation.s"
 "$cc" "$workspace/$generation.s" -Wl,-dead_strip -o "$workspace/$generation"

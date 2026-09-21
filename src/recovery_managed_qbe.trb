@@ -1,3 +1,4 @@
+import { recovery_bootstrap_file_runtime } from recovery_bootstrap_io
 import { emit_recovery_hash_runtime } from recovery_hash_runtime
 import { Diagnostic, boundary_diagnostic } from diagnostic
 import { ComparisonOperator, FloatBinaryOperator, RecoveryScalarInstruction, IntegerBinaryOperator, ScalarType } from recovery_scalar_mir
@@ -256,7 +257,7 @@ def _recovery_managed_qbe_bootstrap_function_index(native_module: RecoveryManage
 end
 
 def _recovery_compiler_usage(): String
-	return "usage: compiler --source-content MODE SOURCE\n"
+	return "usage: compiler {--source-content MODE SOURCE|--source-file MODE FILE}\n"
 end
 
 def _recovery_managed_qbe_emit_bootstrap_data(mut writer: StringBuilder)
@@ -269,6 +270,10 @@ def _recovery_managed_qbe_emit_bootstrap_data(mut writer: StringBuilder)
 		index += 1
 	end
 	_qbe_line(writer, "data $trbn_bootstrap_usage = { b " + values.join(" ") + " }")
+	_qbe_line(writer, "data $trbn_bootstrap_source_file = { b \"--source-file\", b 0 }")
+	_qbe_line(writer, "data $trbn_bootstrap_rb = { b \"rb\", b 0 }")
+	_qbe_line(writer, "data $trbn_bootstrap_file_error = { b \"compiler: cannot read source file: \" }")
+	_qbe_line(writer, "data $trbn_bootstrap_newline = { b 10 }")
 	_qbe_line(
 		writer,
 		"data $trbn_bootstrap_source_content = { b 45 45 115 111 117 114 99 101 45 99 111 110 116 101 110 116 0 }",
@@ -278,6 +283,7 @@ def _recovery_managed_qbe_emit_bootstrap_data(mut writer: StringBuilder)
 end
 
 def _recovery_managed_qbe_emit_bootstrap_runtime(mut writer: StringBuilder)
+	_qbe_line(writer, recovery_bootstrap_file_runtime())
 	_qbe_line(writer, "function l $trbn_bootstrap_string_from_c(l %source) {")
 	_qbe_line(writer, "@start")
 	_qbe_line(writer, "\t%length =l call $strlen(l %source)")
@@ -1916,7 +1922,11 @@ def _recovery_managed_qbe_emit_bootstrap_entry(function_index: Integer, mut writ
 	_qbe_line(writer, "\t%flag =l loadl %flag_address")
 	_qbe_line(writer, "\t%flag_comparison =w call $strcmp(l %flag, l $trbn_bootstrap_source_content)")
 	_qbe_line(writer, "\t%valid_flag =w ceqw %flag_comparison, 0")
-	_qbe_line(writer, "\tjnz %valid_flag, @compile, @usage")
+	_qbe_line(writer, "\tjnz %valid_flag, @compile, @check_file_flag")
+	_qbe_line(writer, "@check_file_flag")
+	_qbe_line(writer, "\t%file_flag_comparison =w call $strcmp(l %flag, l $trbn_bootstrap_source_file)")
+	_qbe_line(writer, "\t%valid_file_flag =w ceqw %file_flag_comparison, 0")
+	_qbe_line(writer, "\tjnz %valid_file_flag, @compile, @usage")
 	_qbe_line(writer, "@usage")
 	_qbe_line(writer, "\tcall $write(w 2, l $trbn_bootstrap_usage, l " + _recovery_compiler_usage().to_bytes().size().to_s() + ")")
 	_qbe_line(writer, "\tret 64")
@@ -1933,7 +1943,23 @@ def _recovery_managed_qbe_emit_bootstrap_entry(function_index: Integer, mut writ
 	_qbe_line(writer, "\tstorel %root_frame, $trbn_roots")
 	_qbe_line(writer, "\t%source_argument_address =l add %argv, 24")
 	_qbe_line(writer, "\t%source_argument =l loadl %source_argument_address")
-	_qbe_line(writer, "\t%source =l call $trbn_bootstrap_string_from_c(l %source_argument)")
+	_qbe_line(writer, "\tjnz %valid_flag, @source_content, @source_file")
+	_qbe_line(writer, "@source_content")
+	_qbe_line(writer, "\t%content =l call $trbn_bootstrap_string_from_c(l %source_argument)")
+	_qbe_line(writer, "\tjmp @source_ready")
+	_qbe_line(writer, "@source_file")
+	_qbe_line(writer, "\t%file_source =l call $trbn_bootstrap_read_file(l %source_argument)")
+	_qbe_line(writer, "\t%file_missing =w ceql %file_source, 0")
+	_qbe_line(writer, "\tjnz %file_missing, @file_error, @source_ready")
+	_qbe_line(writer, "@file_error")
+	_qbe_line(writer, "\tcall $write(w 2, l $trbn_bootstrap_file_error, l 35)")
+	_qbe_line(writer, "\t%path_length =l call $strlen(l %source_argument)")
+	_qbe_line(writer, "\tcall $write(w 2, l %source_argument, l %path_length)")
+	_qbe_line(writer, "\tcall $write(w 2, l $trbn_bootstrap_newline, l 1)")
+	_qbe_line(writer, "\tstorel %previous_roots, $trbn_roots")
+	_qbe_line(writer, "\tret 66")
+	_qbe_line(writer, "@source_ready")
+	_qbe_line(writer, "\t%source =l phi @source_content %content, @source_file %file_source")
 	_qbe_line(writer, "\tstorel %source, %source_root")
 	_qbe_line(writer, "\t%mode_argument_address =l add %argv, 16")
 	_qbe_line(writer, "\t%mode_argument =l loadl %mode_argument_address")

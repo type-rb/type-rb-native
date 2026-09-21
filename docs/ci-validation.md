@@ -243,6 +243,15 @@ PR. No generic diagnostic-to-acceptance switch exists. A future candidate-scoped
 acceptance budget requires a reviewed enforcement change and fail-closed tests
 before it can affect CI acceptance.
 
+Full flattened source reaches recovery compilers through the hidden
+`--source-file MODE FILE` adapter, including repeated generation controls and
+the shell cross-check. This reads literal source without resolving imports from
+the transport path. Small differential probes retain `--source-content`; the
+ordinary file/project commands remain separate. Tests compare both adapters'
+output and failures, paths with spaces, missing files and input larger than
+conservative command-line limits. B0 bounds the file to the same 64 MiB as the
+reference source preparation and releases its temporary file buffer.
+
 Generation controls check the recovery source through B0, B1 and B2 and compare
 repeated QBE emission against each previously built generation. Those repeated
 commands test distinct seed/command behavior and deterministic output; deleting
