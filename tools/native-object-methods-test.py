@@ -59,6 +59,16 @@ with tempfile.TemporaryDirectory(prefix='native-object-methods-') as temporary:
         'nominal-interface-separate',
         'nominal-interface-result-scope',
         'nominal-interface-callable',
+        'class-union-readonly-discriminants',
+        'class-union-overlap-else',
+        'class-union-captured-discriminants',
+        'class-union-collections',
+        'class-union-nullable-container',
+        'class-union-result-payload',
+        'class-union-generic-field',
+        'class-union-common-managed-field',
+        'class-union-common-numeric-field',
+        'class-union-common-callable',
     ):
         fixture = repository / 'compiler/conformance/valid' / name
         source = root / 'main.trb'
@@ -278,6 +288,55 @@ puts(second.value)
         '#<fn> : () -> String\nSecond::Entry(value: 7) : Second::Entry\n'
         'First::Source\nSecond::Entry\nab\n7\nab\n7\nreloaded\n'
         'First::Source\nSecond::Entry\nab\n7\n'), namespaced
+
+    union_values = run([binary, 'repl'], data='''class Loaded
+readonly @kind: "loaded" := "loaded"
+@value: String
+def initialize(value: String)
+@value = value + "!"
+end
+end
+class Missing
+readonly @kind: "missing" := "missing"
+@code: Integer := 404
+end
+alias Response = Loaded | Missing
+def read(value: Response): String
+return case value.kind
+when "loaded"
+value.value
+when "missing"
+value.code.to_s()
+end
+end
+def retain(value: Response): () -> String
+return fn(): String
+return read(value)
+end
+end
+mut saved: Response := Loaded.new("held")
+reader := fn(): String; return read(saved); end
+class Later
+end
+puts(reader())
+saved = Missing.new()
+puts(reader())
+:reload
+puts(reader())
+:quit
+''')
+    assert not union_values.stderr, union_values
+    assert union_values.stdout == (
+        '#<Loaded kind: "loaded", value: "held!"> : Loaded | Missing [mut]\n'
+        '#<fn> : () -> String\n'
+        'held!\n'
+        '#<Missing code: 404, kind: "missing"> : Loaded | Missing [mut]\n'
+        '404\n'
+        'held!\n'
+        '404\n'
+        'reloaded\n'
+        '404\n'
+    ), union_values
 
     (root / 'src').mkdir()
     (root / 'trbconfig.jsonc').write_text('{"name":"objects","sourceDir":"src"}')

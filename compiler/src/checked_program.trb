@@ -8,7 +8,7 @@ import { builtin_result_method } from builtin_results
 import { mir_builtin_number_parse } from builtin_number_parsing
 import { mir_builtin_lookup } from builtin_lookup
 import { check_literal_case, literal_branch_types, literal_case_type, literal_scalar_type } from literal_cases
-import { check_union_member, narrow_union_discriminant } from union_members
+import { check_union_member, narrow_union_discriminant, union_member_type } from union_members
 import { mir_literal_context } from literal_mir
 import { mir_literal_scalar } from nullable_mir
 import { find_newtype_in_module, find_newtype_type, newtype_equality_type, newtype_type } from newtype_types
@@ -905,6 +905,9 @@ def check_member(mut state: CompilerState, mut position: Array<Integer>, mut loc
 		if field >= 0 && callable_parts(load_string(state.field_types, field)).size() > 0
 			return mir_checked_record_field(state, locals, value, field, load_string(state.field_types, field), position[0] - 1)
 		end
+	end
+	if union_parts(value.type_name).size() > 0 && callable_parts(union_member_type(state, value.type_name, member)).size() > 0
+		return check_union_member(state, locals, value, member, position[0] - 1)
 	end
 	if token_is(state, position[0], "(")
 		if value.category < 4 && !(member == "raw_value" && raw_enum_type(state, find_enum_type(state, value.type_name)) != "") && enum_method_function(state, value.type_name, member) < 0 && builtin_result_method(value.type_name, member) == 0 && member != "size" && member != "to_i" && member != "to_f" && member != "to_s" && member != "push" && member != "new" && !(value.type_name == "Range<Integer>" && member == "to_a") && !(value.type_name == "Integer" && integer_method_kind(member) > 0) && !(value.type_name == "Float" && float_method_kind(member) > 0) && !(value.type_name == "String" && string_method_kind(member) > 0) && !(array_element_type(value.type_name) != "" && array_method_kind(member) > 0) && !((value.type_name == "Hash" || hash_key_type(value.type_name) != "") && checked_hash_method(member) != 0)

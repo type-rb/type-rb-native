@@ -35,12 +35,26 @@ def checked_object_field(mut state: CompilerState, mut locals: CheckedLocals, re
 			locals.mir_object_targets.push(MirIndexedTarget.new(origin: origin, owner: operand, index: field))
 		end
 		if !assignment
-			result := scalar_mir_value(state, locals, state.scalar_mir.objects[owner].fields[field].type_id, origin)
-			scalar_mir_instruction(state, locals, 64, result, operand, - 1, field, - 1, load_integer(state.token_lines, origin))
-			category =- result - 1
+			category = mir_checked_object_field(state, locals, receiver, field, origin).category
 		end
 	end
 	return CheckedValue.new(type_name: row.type_name, category: category, origin: origin, mutable: mutable, binding: binding, readonly: readonly, immutable_reference: false, nullable_binding: - 1, nullable_field: - 1, truth: - 1, falsity: - 1, flow_type: row.type_name)
+end
+
+# Common union members use the same typed field read after their payload has
+# been checked. This operation carries no assignment target or source lookup.
+def mir_checked_object_field(mut state: CompilerState, mut locals: CheckedLocals, receiver: CheckedValue, field: Integer, origin: Integer): CheckedValue
+	owner := find_object_type(state, receiver.type_name)
+	row := state.object_instances[owner].fields[field]
+	mut category := 0
+	mir_control_prepare(state, locals)
+	operand := checked_mir_value(receiver)
+	if mir_control_active(locals) && operand >= 0
+		result := scalar_mir_value(state, locals, state.scalar_mir.objects[owner].fields[field].type_id, origin)
+		scalar_mir_instruction(state, locals, 64, result, operand, - 1, field, - 1, load_integer(state.token_lines, origin))
+		category =- result - 1
+	end
+	return checked_bound_value(row.type_name, category, origin, receiver.mutable, receiver.binding)
 end
 
 def checked_instance_field(mut state: CompilerState, mut locals: CheckedLocals, origin: Integer, next_token: Integer): CheckedValue

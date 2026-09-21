@@ -9,6 +9,7 @@ import { mir_instruction_effects } from mir_roots
 import { verify_mir } from mir_verifier
 import { MirType } from mir
 import { CompilerState } from state
+import { object_execution_state } from object_execution_test
 import { describe, expect, test } from trb/std/test
 
 def literal_mir_state(): CompilerState
@@ -33,6 +34,35 @@ describe("Literal constraints and discriminant MIR") do
 	end
 	test("preserves overlapping discriminants closures and else narrowing after collection") do
 		managed_mir_test_fixture("literal-discriminants-mir", 6)
+	end
+	test("preserves readonly class alternatives and managed fields after source erasure") do
+		# The Go-hosted byte adapter remains ASCII-only; ordinary Native lifetime
+		# tests also execute the separate Unicode discriminant fixture.
+		["class-union-overlap-else", "class-union-captured-discriminants", "class-union-collections", "class-union-nullable-container", "class-union-result-payload", "class-union-generic-field", "class-union-common-managed-field", "class-union-common-numeric-field", "class-union-common-callable"].each do |name|
+			managed_mir_test_fixture(name, 2)
+		end
+	end
+	test("independently verifies extracted class identities and common field types") do
+		mut state := object_execution_state("class Count\n@value: Integer := 3\nend\nclass Ratio\n@value: Float := 2.5\nend\nalias NumericChoice = Count | Ratio\ndef read(value: NumericChoice): Float\nreturn value.value\nend\ndef main()\nputs(read(Count.new()))\nputs(read(Ratio.new()))\nend\n")
+		mut extractions := 0
+		mut fields := 0
+		state.scalar_mir.instructions.each.with_index do |instruction, index|
+			if instruction.kind == 54 || instruction.kind == 64
+				if instruction.kind == 54
+					extractions += 1
+				else
+					fields += 1
+				end
+				[1, 2, 4].each do |cell|
+					state.scalar_mir.instructions[index] = compiler_test_instruction_with_cell(instruction, cell, 999999)
+					expect(verify_mir(state.scalar_mir, true).empty?()).to_be_false()
+				end
+				state.scalar_mir.instructions[index] = instruction
+			end
+		end
+		expect(extractions).to_equal(2)
+		expect(fields).to_equal(2)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
 	end
 	test("preserves literal keys ordered collections and mixed exhaustive cases after source erasure") do
 		managed_mir_test_fixture("literal-collections-mir", 2)

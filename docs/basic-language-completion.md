@@ -23,9 +23,9 @@ runtime dependencies; independent groups may advance while CI runs.
 | Builtin values and conversions | Remaining Symbol quote/operator boundaries and malformed-source origins | Portable numbers, strict/safe numeric String conversions, structured Result errors, UTF-8 Strings and Unicode identifiers, nullable values and enums |
 | Collection operations | Contextual empty-collection inference and remaining receiver combinations; portable Unicode case contract across reference output modes | Literal String splitting/replacement and simple Unicode case conversion, safe Array/String/Hash retrieval and slicing, checked indexes, stable natural and key-based sorting, safe blocks, streamed sliced iteration, retained receivers, shallow copies and String joining, Hash snapshots, Range materialization, sequential transforms |
 | Value declarations and identity | Forward initializer dependencies, qualified namespace binding members and untyped empty collection inference | Nested/reopened modules, lexical privacy, inferred imported constants, qualified aliases, typed runtime constants and lexical file/project/namespace variables, ordered initializer functions, shared REPL cells with lexical declaration identity, and persistent global roots |
-| Nominal and union types | Class discriminants; remaining enum attributes and patterns | Literal constraints and literal-union Hash keys, common record members and overlapping discriminant narrowing; nominal newtypes with explicit construction/projection and closed factories; general union values and scalar type cases, nominal records, payload/raw enums, checked raw conversions and ordinary enum methods |
-| Object declarations | Classes, initialization, fields, privacy, inheritance and dispatch; interfaces and conformance | Nominal layouts, calls, receiver capabilities and managed values |
-| Callable and generic completion | Callable equality and remaining nullable-signature combinations; method-specific type parameters, generic classes/interfaces, constraints and remaining alias targets | Anonymous and named function values, shared captures, generic functions/records/enums, receiver-specialized enum methods and transparent aliases |
+| Nominal and union types | Reference common-field visibility and assignment defects; remaining enum attributes and patterns | Literal constraints and literal-union Hash keys, common record/class fields and readonly class discriminants with overlapping narrowing; nominal newtypes with explicit construction/projection and closed factories; general union values and scalar type cases, nominal records, payload/raw enums, checked raw conversions and ordinary enum methods |
+| Object declarations | Initialized superclass construction, inherited overrides, class-alias construction and deferred receiver contracts | Classes and generic fields, ordered initialization with MIR definite-assignment checks, instance/class/private methods, field-free inheritance, explicit interfaces and managed witness dispatch |
+| Callable and generic completion | Callable equality and remaining nullable-signature combinations; generic interface methods, constraints and remaining alias targets | Anonymous and named function values, shared captures, generic functions/records/enums/classes/interfaces, concrete generic instance methods, receiver-specialized enum methods and transparent aliases |
 | Structured runtime dependencies | Import-free bounded `concurrent_map` and its transfer, cancellation and lifetime contract | Sequential structured iteration and function values |
 
 The core API audit includes every import-free receiver declared for the covered
@@ -77,8 +77,8 @@ REPL ordering and earlier outer bindings, shared interactive globals with checke
 once-only initializers and explicit replay, optional scalar output through verified
 MIR branches, and file/project lowercase bindings with verified mutable
 global storage, reference-correct nullable invalidation and source identity,
-literal constraints and common record fields with verified
-widening and discriminant narrowing, nominal newtypes with erased storage and
+literal constraints and common record/class fields with verified
+widening and readonly discriminant narrowing, nominal newtypes with erased storage and
 verified construction policy, callable suffixes, reserved-name checks and nested generic token boundaries,
 streamed Array/Range batches, safe collection blocks and nullable literal contexts,
 stable natural and key-based Array sorting, raw enum conversions and ordinary/generic enum instance methods,
@@ -92,6 +92,6 @@ joining, Hash snapshot iteration and Range materialization, Array search,
 uniqueness, concatenation, insertion/removal, edges/copies/slicing, and the String
 query, sequence, slice and escape families. Literal-union Hash keys preserve
 their semantic identity through lookup, copies, snapshots and collection.
-Its 1398 registered cases include
+Its 1495 registered cases include
 explicit remaining differences; neither this count nor green regression CI
 closes #454.
