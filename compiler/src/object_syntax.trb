@@ -1,0 +1,62 @@
+import { ObjectDefinition } from object_model
+import { namespace_qualify } from namespace_model
+import { parse_generic_parameters } from generic_syntax
+import { CompilerState, has_diagnostic, terminal_token } from state
+import { load_integer } from storage
+import { advance, expect_identifier, finish_statement, parse_type, token_is } from syntax_tokens
+
+# The first angle in a class header can introduce either type parameters or a
+# superclass. A balanced list on the same logical line denotes parameters.
+def object_header_parameters(state: CompilerState, origin: Integer): Boolean
+	mut index := origin
+	mut depth := 0
+	while !terminal_token(state, index) && load_integer(state.token_kinds, index) != 4
+		if token_is(state, index, "<")
+			depth += 1
+		elsif token_is(state, index, ">")
+			depth -= 1
+		elsif token_is(state, index, ">>")
+			depth -= 2
+		end
+		if depth <= 0
+			return true
+		end
+		index += 1
+	end
+	return false
+end
+
+def parse_object_header(mut state: CompilerState, mut position: Array<Integer>): ObjectDefinition
+	origin := position[0]
+	line := load_integer(state.token_lines, origin)
+	interface_type := token_is(state, origin, "interface")
+	advance(position)
+	mut name := expect_identifier(state, position)
+	while token_is(state, position[0], "::") && !has_diagnostic(state)
+		advance(position)
+		name += "::" + expect_identifier(state, position)
+	end
+	name = namespace_qualify(state.declaration_owner[0], name)
+	mut parameters: Array<String> := []
+	if token_is(state, position[0], "<") && (interface_type || object_header_parameters(state, position[0]))
+		parameters = parse_generic_parameters(state, position, line)
+	end
+	mut superclass := ""
+	if token_is(state, position[0], "<") && !interface_type
+		advance(position)
+		superclass = parse_type(state, position)
+	end
+	mut interfaces: Array<String> := []
+	if token_is(state, position[0], "implements") && !interface_type
+		advance(position)
+		interfaces.push(parse_type(state, position))
+		while token_is(state, position[0], ",") && !has_diagnostic(state)
+			advance(position)
+			interfaces.push(parse_type(state, position))
+		end
+	end
+	if !has_diagnostic(state)
+		finish_statement(state, position)
+	end
+	return ObjectDefinition.new(name: name, source_id: state.active_module[0], line: line, origin: origin, interface_type: interface_type, parameters: parameters, superclass: superclass, interfaces: interfaces, fields: [], methods: [])
+end
