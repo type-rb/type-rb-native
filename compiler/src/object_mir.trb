@@ -1,0 +1,34 @@
+import { CheckedValue, checked_value, mir_checked_value, scalar_mir_instruction, scalar_mir_value } from checked_values
+import { MirInstruction, MirModule } from mir
+import { mir_control_active, mir_control_prepare } from mir_control
+import { MirFlow, mir_flow_type } from mir_flow
+import { mir_object_id } from object_mir_types
+import { CheckedLocals, CompilerState } from state
+import { load_integer } from storage
+
+# 63 allocates a field-free class instance. Storage-bearing constructors require
+# a separate definite-initialization proof before this operation can expand.
+def mir_checked_object_new(mut state: CompilerState, mut locals: CheckedLocals, owner: Integer, type_name: String, origin: Integer): CheckedValue
+	mir_control_prepare(state, locals)
+	if !mir_control_active(locals)
+		return checked_value(type_name, 0, 9007199254740991, 1)
+	end
+	result := scalar_mir_value(state, locals, state.scalar_mir.objects[owner].type_id, origin)
+	scalar_mir_instruction(state, locals, 63, result, - 1, - 1, owner, - 1, load_integer(state.token_lines, origin))
+	return mir_checked_value(type_name, result, 9007199254740991, 1)
+end
+
+def mir_object_instruction_error(flow: MirFlow, native_module: MirModule, instruction: MirInstruction): String
+	owner := mir_object_id(native_module, mir_flow_type(flow, instruction.result))
+	if owner < 0 || instruction.payload != owner
+		return "MIR class allocation identity differs"
+	end
+	definition := native_module.objects[owner]
+	if definition.interface_type || definition.fields.size() != 0 || definition.superclass != - 1
+		return "MIR class allocation requires a field-free concrete class"
+	end
+	if instruction.first != - 1 || instruction.second != - 1 || instruction.failure != - 1
+		return "MIR class allocation shape differs"
+	end
+	return ""
+end

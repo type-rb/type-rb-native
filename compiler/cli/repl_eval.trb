@@ -1,3 +1,7 @@
+import { nominal_application_end } from generic_syntax
+import { find_visible_declaration } from declaration_lookup
+import { resolve_type_name } from type_resolution
+import { find_object_type } from object_types
 import { repl_builtin_number_parse, repl_string_integer, repl_string_float } from repl_number_parsing
 import { builtin_result_method } from builtin_results
 import { repl_builtin_lookup } from repl_builtin_lookup
@@ -627,6 +631,15 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		end
 		return repl_reference(repl_value(store, enum_type(owner), variant, 0.0, row.name, bindings.values))
 	end
+	mut object_type := application_type
+	if find_visible_declaration(state, state.active_module[0], text, 9) >= 0 && find_object_type(state, object_type) < 0
+		object_type = resolve_type_name(state, state.active_module[0], text, false)
+	end
+	if find_object_type(state, object_type) >= 0 && token_is(state, position[0], ".")
+		member := load_string(state.token_texts, position[0] + 1)
+		position[0] += 2
+		return repl_reference(repl_object_method(state, position, store, environment, object_type, member, - 1))
+	end
 	mut newtype_owner := find_newtype_type(state, application_type)
 	if newtype_owner < 0
 		newtype_owner = find_visible_newtype(state, state.active_module[0], text)
@@ -848,6 +861,13 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 				if (member == "each" || member == "each_slice") && syntax_iteration_suffix(state, position[0] - 2) >= 0
 					position[0] -= 2
 					break
+				end
+				if find_object_type(state, value.type_name) >= 0
+					result = repl_reference(repl_object_method(state, position, store, environment, value.type_name, member, result.value))
+					if safe_origin >= 0 && environment.flow[0] == 0
+						result = repl_reference(repl_coerce(store, result.value, load_string(state.checked[0].safe_types, safe_origin)))
+					end
+					next
 				end
 				record_index := find_record_type(state, value.type_name)
 				if record_index >= 0
@@ -1896,4 +1916,34 @@ def repl_nominal_method_call(mut state: CompilerState, mut position: Array<Integ
 		return 0
 	end
 	return repl_call(state, function, bindings.values, store)
+end
+
+# Object evaluation consumes the callee chosen by ordinary checking. Explicit
+# method arguments are skipped, never re-inferred against a retained value.
+def repl_object_method(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, type_name: String, member: String, receiver: Integer): Integer
+	if token_is(state, position[0], "<")
+		finish := nominal_application_end(state, position[0] - 1)
+		if finish < 0
+			store.error[0] = "class method has no checked type application"
+			return 0
+		end
+		position[0] = finish
+	end
+	encoded := sparse_integer_at(state.checked[0].generic_calls, position[0])
+	if receiver < 0 && member == "new"
+		value := repl_value(store, type_name, 0, 0.0, "", [])
+		if encoded > 0
+			repl_nominal_method_call(state, position, store, environment, encoded - 1, value)
+		else
+			position[0] += 1
+			skip_newlines(state, position)
+			position[0] += 1
+		end
+		return value
+	end
+	if encoded <= 0
+		store.error[0] = "class method has no checked callee"
+		return 0
+	end
+	return repl_nominal_method_call(state, position, store, environment, encoded - 1, receiver)
 end

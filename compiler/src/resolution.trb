@@ -1,3 +1,4 @@
+import { object_method_function } from object_methods
 import { find_object_in_module } from object_types
 import { resolve_object_declarations, validate_object_inheritance } from object_resolution
 import { builtin_result_source } from builtin_results
@@ -795,6 +796,19 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 				end
 				application_finish := nominal_application_end(state, index)
 				if application_finish > index
+					# Receiver methods bind after expression typing. Their explicit type
+					# arguments must not be mistaken for a free generic function.
+					mut receiver_application := local_find(locals, text) >= 0 && nominal_application_name(state, index) > index
+					if index > body_start && (token_is(state, index - 1, ".") || token_is(state, index - 1, "&."))
+						receiver_application = true
+					end
+					if nominal_application_name(state, index) >= reference_position[0] && find_visible_declaration(state, module_index, reference_name, 9) >= 0
+						receiver_application = true
+					end
+					if receiver_application
+						index = application_finish
+						next
+					end
 					mut application_position := [nominal_application_name(state, index)]
 					mut raw := parse_type(state, application_position)
 					if reference_position[0] > index + 1
@@ -898,6 +912,9 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 											if declaration != "" && namespace_parent(declaration) == state.declaration_owner[0]
 												implicit_method = enum_method_function(state, receiver, text)
 											end
+											if implicit_method < 0
+												implicit_method = object_method_function(state, receiver, text, false, [])
+											end
 										end
 										if implicit_method >= 0
 											store_integer(state.checked[0].generic_calls, index + 1, implicit_method + 1)
@@ -914,7 +931,7 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 								else
 									if token_is(state, index + 1, ".")
 										if token_is(state, index + 2, "new")
-											if find_visible_record(state, module_index, text) < 0 && find_visible_newtype(state, module_index, text) < 0 && !(text == "self" && find_newtype_in_module(state, module_index, state.declaration_owner[0]) >= 0) && find_visible_alias(state, module_index, text) < 0
+											if find_visible_declaration(state, module_index, text, 9) < 0 && find_visible_record(state, module_index, text) < 0 && find_visible_newtype(state, module_index, text) < 0 && !(text == "self" && find_newtype_in_module(state, module_index, state.declaration_owner[0]) >= 0) && find_visible_alias(state, module_index, text) < 0
 												diagnostic(
 													state,
 													"TRBN4003",
@@ -923,7 +940,7 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 												)
 											end
 										else
-											if local_find(locals, text) < 0 && find_visible_newtype(state, module_index, text) < 0 && !(text == "self" && find_newtype_in_module(state, module_index, state.declaration_owner[0]) >= 0) && find_visible_enum(state, module_index, text) < 0 && find_visible_alias(state, module_index, text) < 0 && find_visible_global(state, module_index, text, index) < 0
+											if local_find(locals, text) < 0 && find_visible_declaration(state, module_index, text, 9) < 0 && find_visible_newtype(state, module_index, text) < 0 && !(text == "self" && find_newtype_in_module(state, module_index, state.declaration_owner[0]) >= 0) && find_visible_enum(state, module_index, text) < 0 && find_visible_alias(state, module_index, text) < 0 && find_visible_global(state, module_index, text, index) < 0
 												if find_import_binding(state, module_index, text) < 0
 													diagnostic(
 														state,

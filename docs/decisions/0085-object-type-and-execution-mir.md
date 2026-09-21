@@ -27,13 +27,41 @@ name creates nominal conformance. The pinned reference rejects assigning a child
 class value to a parent-class binding; the inheritance graph does not authorize
 that conversion. An inherited explicit interface edge remains available.
 
-This type graph is preparation for object execution. It does not establish
-method-signature conformance, definite field initialization, legal field mutation,
-constructor effects or dispatch safety. Those facts and the corresponding typed
-operations must be checked and independently verified before QBE adaptation.
-Abstract interface signatures must never become executable empty functions.
-Object declarations still fail the ordinary execution boundary until those parts
-are implemented; draft fixtures are not registered as passing capabilities.
+Object methods, including nongeneric methods, retain immutable templates.
+Interface templates describe contracts and cannot instantiate executable functions.
+Concrete class methods specialize the class arguments followed by method arguments;
+ordinary function signatures and calls own argument binding, defaults, results and
+receiver identity. Discovery finishes before MIR signatures and layouts are frozen.
+
+MIR instruction 63 allocates a field-free concrete class. Its independent verifier
+checks nominal identity, operand shape and the absence of inherited or local
+storage; its allocation effect participates in normal managed-root planning.
+Instance and class calls, private internal calls, explicit method type arguments,
+class factories, named/default parameters and stored/captured receivers use this path.
+QBE emits object descriptors and allocation from the verified object catalog and
+never reinterprets authored object declarations. Source-erased emission, forced
+collection and corrupt allocation instructions exercise this boundary.
+
+The retained REPL consumes the checked callee identity, preserves nominal values
+with their original type catalog, and remaps concrete generic identities when a
+later declaration changes catalog order. Typed, never-executed projections carry
+stored values into the next check without calling their constructors again.
+Class/interface input framing, project imports and explicit replay use the same
+ordinary declaration and checking contracts.
+
+Storage-bearing classes, inheritance and interface implementation remain explicitly
+guarded at the ordinary execution boundary. The type graph and field-free path do
+not establish method-signature conformance, definite field initialization, legal
+field mutation or interface dispatch safety. Those facts need checked operations
+and independent verification before their guards can be removed. Draft fixtures
+remain outside the passing Capabilities registry until the coherent family is
+accepted through the CLI and retained REPL as well as the core compiler.
+
+Construction through a class alias remains guarded because the pinned reference
+rejects that receiver; aliases remain valid type annotations. Accepted namespaced
+class programs also expose target code-generation failures documented in
+[TypeRB #798](https://github.com/type-rb/type-rb/issues/798). Keep those reproductions
+separate from the shared passing execution cases until the reference fixes land.
 
 A separate reference discrepancy remains in inherited self-method dispatch:
 Go, Ruby and TypeScript do not agree when an inherited method calls an overridden
@@ -45,9 +73,9 @@ The implementation follows the reference class contract without resolving its
 explicitly deferred questions: superclass constructor chaining, initialization
 order across initialized superclasses, mutating-method receiver requirements,
 variance, generic class methods and same-named fields/methods. Follow-on execution
-work includes checked allocation and initialization, field reads/writes, instance
-and class method selection, inherited/interface dispatch, concrete generic method
-instances, GC roots, retained REPL behavior and source-erased emission.
+work includes definite initialization, field reads/writes, inherited/interface
+dispatch, complete method contracts and retained REPL behavior. Existing call,
+GC-root and source-erased controls must extend to those operations.
 
 Acceptance for the complete family requires paired positive and negative cases,
 ordinary check/build/run/REPL behavior, independent MIR corruption and lifetime

@@ -1,0 +1,34 @@
+import { declare_default_functions } from default_arguments
+import { next_generic_depth } from generic_bindings
+import { instantiate_generic_function } from generic_functions
+import { find_object_type } from object_types
+import { CompilerState } from state
+
+# Specialization uses the nominal receiver's arguments before method arguments.
+# Contracts retain signatures without producing empty executable functions.
+def object_method_function(mut state: CompilerState, type_name: String, member: String, class_member: Boolean, method_arguments: Array<String>): Integer
+	owner := find_object_type(state, type_name)
+	if owner < 0
+		return - 1
+	end
+	instance := state.object_instances[owner]
+	declaration := state.objects[instance.definition]
+	if declaration.interface_type
+		return - 1
+	end
+	declaration.methods.each do |method|
+		if method.name == member && method.class_member == class_member
+			mut arguments: Array<String> := []
+			instance.arguments.each do |argument|
+				arguments.push(argument)
+			end
+			method_arguments.each do |argument|
+				arguments.push(argument)
+			end
+			function := instantiate_generic_function(state, method.generic_function, arguments, next_generic_depth(state))
+			declare_default_functions(state)
+			return function
+		end
+	end
+	return - 1
+end

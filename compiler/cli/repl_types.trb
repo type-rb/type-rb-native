@@ -1,3 +1,4 @@
+import { find_object_type, find_object_in_module, object_instance_type } from object_types
 import { find_newtype_type, find_newtype_in_module, newtype_type } from newtype_types
 import { union_parts, union_type } from union_types
 import { callable_parts, callable_type } from callable_types
@@ -58,6 +59,22 @@ def repl_remap_type(previous: CompilerState, current: CompilerState, type_name: 
 	element := array_inner_name(type_name)
 	if element != ""
 		return "Array<" + repl_remap_type(previous, current, element) + ">"
+	end
+	object_index := find_object_type(previous, type_name)
+	if object_index >= 0
+		row := previous.object_instances[object_index]
+		definition := previous.objects[row.definition]
+		source := find_module(current, load_string(previous.module_names, definition.source_id))
+		next_definition := find_object_in_module(current, source, definition.name)
+		mut arguments: Array<String> := []
+		row.arguments.each do |argument|
+			arguments.push(repl_remap_type(previous, current, argument))
+		end
+		object_key := generic_application(integer_string(next_definition), arguments)
+		if current.object_instance_lookup.key?(object_key)
+			return object_instance_type(current, current.object_instance_lookup[object_key])
+		end
+		return "Invalid"
 	end
 	newtype_index := find_newtype_type(previous, type_name)
 	if newtype_index >= 0

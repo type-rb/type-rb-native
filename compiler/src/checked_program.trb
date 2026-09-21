@@ -1,3 +1,7 @@
+import { generic_arguments } from generic_arguments
+import { find_object_type } from object_types
+import { object_method_function } from object_methods
+import { mir_checked_object_new } from object_mir
 import { builtin_result_method } from builtin_results
 import { mir_builtin_number_parse } from builtin_number_parsing
 import { mir_builtin_lookup } from builtin_lookup
@@ -65,7 +69,7 @@ import { mir_checked_puts, mir_checked_string_binary, mir_checked_string_literal
 import { mir_control_active, mir_control_branch, mir_control_enter, mir_control_jump, mir_control_loop_begin, mir_control_loop_branch, mir_control_loop_end, mir_control_prepare, mir_control_return, mir_control_transfer } from mir_control
 import { binary_operator_id, declaration_start, parse_argument_label, syntax_block_end, syntax_conditional_tail, syntax_expression_precedence, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_statement_boundary } from syntax_forms
 import { resolve_body_names, standard_package_import, standard_package_root } from resolution
-import { find_visible_declaration, find_visible_enum, find_visible_function, find_visible_generic_function, find_visible_record } from declaration_lookup
+import { find_visible_alias, find_visible_declaration, find_visible_enum, find_visible_function, find_visible_generic_function, find_visible_record } from declaration_lookup
 import { string_starts_with } from path
 import { array_element_type, array_type, common_array_element_type, find_field, find_record_type, record_type, resolve_type_name, type_display } from type_resolution
 import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_add, local_bind, local_bind_temporary, local_find, terminal_token } from state
@@ -465,6 +469,10 @@ def check_primary(
 				position[0] = application_finish
 				return checked_value("", 1, origin, 0)
 			end
+			if find_object_type(state, sparse_string_at(state.checked[0].generic_application_types, origin)) >= 0
+				position[0] = application_finish
+				return checked_value(sparse_string_at(state.checked[0].generic_application_types, origin), 8, origin, 0)
+			end
 			if find_newtype_type(state, sparse_string_at(state.checked[0].generic_application_types, origin)) >= 0
 				position[0] = application_finish
 				return checked_value(sparse_string_at(state.checked[0].generic_application_types, origin), 7, origin, 0)
@@ -560,6 +568,9 @@ def check_primary(
 		enum_owner := find_visible_enum(state, state.active_module[0], name)
 		if enum_owner >= 0 && token_is(state, position[0], ".")
 			return checked_value(enum_type(enum_owner), 6, origin, 0)
+		end
+		if find_visible_declaration(state, state.active_module[0], name, 9) >= 0
+			return checked_value(resolve_type_name(state, state.active_module[0], name, false), 8, origin, 0)
 		end
 		if find_visible_record(state, state.active_module[0], name) >= 0
 			return checked_value("", 2, origin, 0)
@@ -853,6 +864,9 @@ end
 
 def check_member(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue, member: String): CheckedValue
 	mut value := mir_literal_scalar(state, locals, checked_view(receiver, receiver.type_name, receiver.category), position[0])
+	if find_object_type(state, value.type_name) >= 0
+		return check_object_member(state, position, locals, value, member)
+	end
 	if find_newtype_type(state, value.type_name) >= 0
 		return check_newtype_member(state, position, locals, value, member)
 	end
@@ -2658,4 +2672,64 @@ def check_builtin_lookup(mut state: CompilerState, mut position: Array<Integer>,
 		return argument
 	end
 	return mir_builtin_lookup(state, locals, kind, receiver, argument, origin)
+end
+
+# Object calls share ordinary argument binding and function MIR. Abstract
+# contracts and instance allocation never masquerade as empty source bodies.
+def check_object_member(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue, member: String): CheckedValue
+	origin := position[0]
+	line := load_integer(state.token_lines, origin)
+	owner := find_object_type(state, receiver.type_name)
+	instance := state.object_instances[owner]
+	definition := state.objects[instance.definition]
+	if definition.interface_type
+		return type_diagnostic(state, line, "interface dispatch requires Native MIR lowering")
+	end
+	mut method_arguments: Array<String> := []
+	if token_is(state, position[0], "<")
+		mut application := [position[0] - 1]
+		raw := parse_type(state, application)
+		generic_arguments(raw).each do |argument|
+			method_arguments.push(resolve_type_name(state, state.active_module[0], argument, false))
+		end
+		position[0] = application[0]
+	end
+	if !token_is(state, position[0], "(")
+		return type_diagnostic(state, line, "class method requires a call")
+	end
+	class_member := receiver.category == 8
+	if class_member && member == "new"
+		if find_visible_alias(state, state.active_module[0], checked_reference_name(state, receiver.origin)) >= 0
+			return type_diagnostic(state, line, "construction through a class alias is unsupported")
+		end
+		if method_arguments.size() > 0
+			return type_diagnostic(state, line, "constructor type arguments belong to the class")
+		end
+		value := mir_checked_object_new(state, locals, owner, receiver.type_name, origin)
+		initializer := object_method_function(state, receiver.type_name, "initialize", false, [])
+		if initializer >= 0
+			if load_string(state.function_result_types, initializer) != "Void"
+				return type_diagnostic(state, line, "class initializer must return Void")
+			end
+			store_integer(state.checked[0].generic_calls, position[0], initializer + 1)
+			called := check_call(state, position, locals, 1, "initialize", initializer, checked_mir_value(value), true)
+			if called.type_name == "Never"
+				return called
+			end
+		else
+			advance(position)
+			skip_newlines(state, position)
+			expect(state, position, ")")
+		end
+		return value
+	end
+	function := object_method_function(state, receiver.type_name, member, class_member, method_arguments)
+	if function < 0
+		return type_diagnostic(state, line, "unknown class method " + member)
+	end
+	if !namespace_member_access(state, definition.source_id, definition.name + "::" + member, origin)
+		return checked_value("Invalid", 0, origin, 0)
+	end
+	store_integer(state.checked[0].generic_calls, position[0], function + 1)
+	return check_call(state, position, locals, 1, "", function, checked_mir_value(receiver), true)
 end
