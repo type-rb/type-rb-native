@@ -1,3 +1,4 @@
+import { find_object_type } from object_types
 import { literal_type_base, literal_integer_type, literal_string_type } from literal_types
 import { find_newtype_type } from newtype_types
 import { union_parts } from union_types
@@ -76,6 +77,9 @@ def repl_coerce(mut store: ReplStore, id: Integer, expected: String): Integer
 		return repl_coerce(store, store.children[id][0], expected)
 	end
 	value := repl_get(store, id)
+	if string_starts_with(expected, "Interface#") && string_starts_with(value.type_name, "Class#")
+		return repl_value(store, expected, 0, 0.0, "", [id])
+	end
 	mut literal := ""
 	if value.type_name == "Integer"
 		literal = literal_integer_type(integer_string(value.integer))
@@ -142,6 +146,9 @@ def repl_render(state: CompilerState, store: ReplStore, id: Integer, depth: Inte
 	end
 	value := repl_get(store, id)
 	if find_newtype_type(state, value.type_name) >= 0
+		return repl_render(state, store, value.children[0], depth)
+	end
+	if string_starts_with(value.type_name, "Interface#")
 		return repl_render(state, store, value.children[0], depth)
 	end
 	if value.type_name == "Integer"
@@ -219,6 +226,34 @@ def repl_render(state: CompilerState, store: ReplStore, id: Integer, depth: Inte
 	instance := generic_instance_for_type(state, value.type_name)
 	if instance >= 0
 		nominal_name = state.generic_definitions[state.generic_instances[instance].definition].name
+	end
+	object_index := find_object_type(state, value.type_name)
+	if object_index >= 0
+		definition := state.objects[state.object_instances[object_index].definition]
+		mut names: Array<String> := []
+		state.object_instances[object_index].fields.each do |field|
+			names.push(field.name)
+		end
+		mut rendered := "#<" + definition.name + " "
+		mut first := true
+		names.sort().each do |name|
+			mut slot := 0
+			while state.object_instances[object_index].fields[slot].name != name
+				slot += 1
+			end
+			if !first
+				rendered += ", "
+			end
+			first = false
+			mut field_name := ""
+			mut character := 1
+			while character < name.size()
+				field_name += name[character]
+				character += 1
+			end
+			rendered += field_name + ": " + repl_render(state, store, value.children[slot], depth + 1)
+		end
+		return rendered + ">"
 	end
 	enum_index := find_enum_type(state, value.type_name)
 	if enum_index >= 0

@@ -1,3 +1,4 @@
+import { object_initializer_owner } from object_types
 import { integer_string } from literals
 import { CompilerState } from state
 import { load_integer, load_string, sparse_integer_at, store_integer, store_string } from storage
@@ -41,6 +42,9 @@ def declare_default_functions(mut state: CompilerState)
 		else
 			module_index = load_integer(state.function_modules, initializer.owner)
 			start = load_integer(state.function_parameter_starts, initializer.owner)
+			if object_initializer_owner(state, initializer.owner) >= 0
+				start += 1
+			end
 			count = initializer.slot - start
 			result_type = load_string(state.parameter_types, initializer.slot)
 		end
@@ -77,6 +81,17 @@ end
 def default_arguments(values: Array<Integer>, count: Integer): Array<Integer>
 	mut arguments: Array<Integer> := []
 	mut index := 0
+	while index < count
+		arguments.push(values[index])
+		index += 1
+	end
+	return arguments
+end
+
+# Constructor parameter defaults precede receiver creation and cannot see self.
+def default_call_arguments(state: CompilerState, callee: Integer, values: Array<Integer>, count: Integer): Array<Integer>
+	mut arguments: Array<Integer> := []
+	mut index := count - load_integer(state.function_parameter_counts, callee)
 	while index < count
 		arguments.push(values[index])
 		index += 1

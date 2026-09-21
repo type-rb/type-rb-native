@@ -1,3 +1,6 @@
+import { declare_object_witnesses, prepare_object_dispatch } from object_dispatch
+import { object_abstract_function, object_initializer_owner } from object_types
+import { mir_initialize_object_field } from object_fields
 import { builtin_result_source } from builtin_results
 import { result_scope_check } from result_checked
 import { checked_body_lowering } from checked_body
@@ -78,6 +81,16 @@ def check_function_body(mut state: CompilerState, function_index: Integer, mut l
 	if (result_type == "Void" || mir_managed_type(state.scalar_mir, mir_semantic_type_id(state.scalar_mir, result_type))) && locals.mir_state[0] == 1
 		mir_control_prepare(state, locals)
 	end
+	owner := object_initializer_owner(state, function_index)
+	if owner >= 0
+		state.object_instances[owner].fields.each do |field|
+			if field.default_start >= 0
+				mut default_position := [field.default_start]
+				value := check_expression(state, default_position, locals, 1, field.type_name)
+				mir_initialize_object_field(state, locals, owner, field.name, value, field.origin)
+			end
+		end
+	end
 	mut position := [load_integer(state.function_body_starts, function_index)]
 	if sparse_integer_at(state.function_expression_bodies, function_index) > 0
 		value := check_expression(state, position, locals, 1, result_type)
@@ -139,14 +152,15 @@ def analyze_callable_bodies(mut state: CompilerState): Boolean
 			generic_methods = true
 		end
 	end
-	if state.lambdas.size() == 0 && state.transforms.size() == 0 && !state.hash_repl[0] && !generic_methods && !builtin_result_source(state)
+	if state.lambdas.size() == 0 && state.transforms.size() == 0 && !state.hash_repl[0] && !generic_methods && state.objects.size() == 0 && !builtin_result_source(state)
 		return true
 	end
 	state.lambda_phase[0] = 1
 	resolved := state.function_count[0]
+	mut objects := prepare_object_dispatch(state, 0)
 	mut function := 0
 	while function < state.function_count[0] && !has_diagnostic(state)
-		if sparse_integer_at(state.function_lambdas, function) == 0
+		if sparse_integer_at(state.function_lambdas, function) == 0 && !object_abstract_function(state, function)
 			if function >= resolved
 				mut names := locals_new(state.token_count[0] + 1)
 				resolve_function_body(state, function, names)
@@ -158,7 +172,11 @@ def analyze_callable_bodies(mut state: CompilerState): Boolean
 				declare_default_functions(state)
 			end
 		end
+		objects = prepare_object_dispatch(state, objects)
 		function += 1
+	end
+	if !declare_object_witnesses(state)
+		return false
 	end
 	if has_diagnostic(state)
 		return false
@@ -168,7 +186,7 @@ def analyze_callable_bodies(mut state: CompilerState): Boolean
 		encoded := sparse_integer_at(state.checked_body_indices, function)
 		if encoded > 0
 			previous := state.checked_bodies[encoded - 1]
-			state.checked_bodies[encoded - 1] = checked_body_lowering(previous, function, load_integer(state.function_body_starts, function), load_integer(state.function_body_ends, function) + 1)
+			state.checked_bodies[encoded - 1] = checked_body_lowering(previous, function, previous.resolved_names.origin, previous.resolved_names.limit[0])
 		end
 		function += 1
 	end

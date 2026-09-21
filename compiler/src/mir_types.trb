@@ -1,3 +1,7 @@
+import { MirObject, MirObjectField } from object_model
+import { object_initializer_function, object_instance_type } from object_types
+import { mir_object_types_error } from object_mir_types
+import { type_display } from type_resolution
 import { literal_type_base } from literal_types
 import { mir_newtype_types_error, mir_representation_type } from newtype_mir_types
 import { MirNewtype } from newtype_model
@@ -221,7 +225,38 @@ def mir_declare_types(mut state: CompilerState)
 		native_module.types.push(MirType.new(kind: 11, name: newtype_type(owner), element: 0, key: 0, declaration: owner))
 		native_module.newtypes.push(MirNewtype.new(declaration: owner, type_id: id, name: definition.name, source_id: definition.source_id, line: definition.line, representation: 0, closed: definition.closed))
 	end
+	declaration = 0
+	state.object_instances.each do |instance|
+		definition := state.objects[instance.definition]
+		id := native_module.types.size() + 9
+		mut kind := 13
+		if definition.interface_type
+			kind = 14
+		end
+		name := object_instance_type(state, declaration)
+		native_module.types.push(MirType.new(kind: kind, name: name, element: 0, key: 0, declaration: declaration))
+		native_module.objects.push(MirObject.new(initializer: object_initializer_function(state, declaration), declaration: declaration, type_id: id, name: type_display(state, name), source_id: definition.source_id, line: definition.line, interface_type: definition.interface_type, superclass: - 1, interfaces: [], fields: []))
+		declaration += 1
+	end
 	mir_declare_enums(state)
+	declaration = 0
+	state.object_instances.each do |instance|
+		row := native_module.objects[declaration]
+		mut parent :=- 1
+		if instance.superclass >= 0
+			parent = native_module.objects[instance.superclass].type_id
+		end
+		mut interfaces: Array<Integer> := []
+		instance.interfaces.each do |contract|
+			interfaces.push(native_module.objects[contract].type_id)
+		end
+		mut fields: Array<MirObjectField> := []
+		instance.fields.each do |field|
+			fields.push(MirObjectField.new(name: field.name, type_id: mir_semantic_type_id(native_module, field.type_name), line: field.line, readonly: field.readonly))
+		end
+		native_module.objects[declaration] = MirObject.new(initializer: row.initializer, declaration: declaration, type_id: row.type_id, name: row.name, source_id: row.source_id, line: row.line, interface_type: row.interface_type, superclass: parent, interfaces: interfaces, fields: fields)
+		declaration += 1
+	end
 	declaration = 0
 	while declaration < native_module.newtypes.size()
 		row := native_module.newtypes[declaration]
@@ -295,7 +330,7 @@ def mir_types_error(native_module: MirModule): String
 	mut index := 0
 	while index < native_module.types.size()
 		row := native_module.types[index]
-		if row.kind < 1 || row.kind > 12
+		if row.kind < 1 || row.kind > 14
 			return "MIR composite kind is invalid"
 		end
 		if row.kind == 1 || row.kind == 3 || row.kind == 6 || row.kind == 12
@@ -316,6 +351,18 @@ def mir_types_error(native_module: MirModule): String
 				return "MIR nominal type identity differs"
 			end
 			expected = "Record#" + integer_string(row.declaration)
+		elsif row.kind == 13 || row.kind == 14
+			if row.declaration < 0 || row.declaration >= native_module.objects.size()
+				return "MIR object declaration is missing"
+			end
+			definition := native_module.objects[row.declaration]
+			if definition.type_id != index + 9
+				return "MIR object type identity differs"
+			end
+			expected = "Class#" + integer_string(row.declaration)
+			if row.kind == 14
+				expected = "Interface#" + integer_string(row.declaration)
+			end
 		elsif row.kind == 12
 			base := literal_type_base(row.name)
 			if base == "" || row.element != mir_type_id(base)
@@ -410,7 +457,7 @@ def mir_types_error(native_module: MirModule): String
 		else
 			expected = "Hash"
 		end
-		if (row.kind != 2 && row.kind != 8 && row.kind != 9 && row.kind != 10 && row.kind != 11 && row.declaration != - 1) || (row.kind != 3 && row.key != 0)
+		if (row.kind != 2 && row.kind != 8 && row.kind != 9 && row.kind != 10 && row.kind != 11 && row.kind != 13 && row.kind != 14 && row.declaration != - 1) || (row.kind != 3 && row.key != 0)
 			return "MIR composite identity shape differs"
 		end
 		if row.name != expected || mir_type_id(row.name) != 0
@@ -443,6 +490,10 @@ def mir_types_error(native_module: MirModule): String
 			return "MIR union alternative ownership differs"
 		end
 		index += 1
+	end
+	object_error := mir_object_types_error(native_module)
+	if object_error != ""
+		return object_error
 	end
 	newtype_error := mir_newtype_types_error(native_module)
 	if newtype_error != ""

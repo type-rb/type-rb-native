@@ -1,0 +1,87 @@
+import { CheckedValue, checked_value, mir_checked_value, scalar_mir_instruction, scalar_mir_value } from checked_values
+import { MirBlock, MirInstruction, MirModule } from mir
+import { mir_control_active, mir_control_prepare } from mir_control
+import { MirFlow, mir_flow_type, mir_value_available } from mir_flow
+import { mir_object_id } from object_mir_types
+import { CheckedLocals, CompilerState } from state
+import { load_integer } from storage
+
+# 63 allocates zeroed, traceable storage. A storage-bearing allocation is
+# immediately consumed by its independently verified initializer. 64/65 load/store.
+def mir_checked_object_new(mut state: CompilerState, mut locals: CheckedLocals, owner: Integer, type_name: String, origin: Integer): CheckedValue
+	mir_control_prepare(state, locals)
+	if !mir_control_active(locals)
+		return checked_value(type_name, 0, 9007199254740991, 1)
+	end
+	result := scalar_mir_value(state, locals, state.scalar_mir.objects[owner].type_id, origin)
+	scalar_mir_instruction(state, locals, 63, result, - 1, - 1, owner, - 1, load_integer(state.token_lines, origin))
+	return mir_checked_value(type_name, result, 9007199254740991, 1)
+end
+
+def mir_object_instruction_error(flow: MirFlow, native_module: MirModule, block: MirBlock, index: Integer, instruction: MirInstruction): String
+	if instruction.failure != - 1
+		return "MIR class operation failure shape differs"
+	end
+	if instruction.kind == 63
+		owner := mir_object_id(native_module, mir_flow_type(flow, instruction.result))
+		if owner < 0 || instruction.payload != owner
+			return "MIR class allocation identity differs"
+		end
+		definition := native_module.objects[owner]
+		if definition.interface_type
+			return "MIR class allocation requires concrete owned storage"
+		end
+		mut parent := mir_object_id(native_module, definition.superclass)
+		while parent >= 0
+			ancestor := native_module.objects[parent]
+			if ancestor.fields.size() > 0 || ancestor.initializer >= 0
+				return "MIR inherited class allocation requires initialized parent storage"
+			end
+			parent = mir_object_id(native_module, ancestor.superclass)
+		end
+		if instruction.first != - 1 || instruction.second != - 1
+			return "MIR class allocation shape differs"
+		end
+		if definition.fields.size() > 0
+			if definition.initializer < 0 || index + 1 >= block.instruction_start + block.instruction_count
+				return "MIR class allocation requires its initializer"
+			end
+			following := native_module.instructions[index + 1]
+			if following.kind != 11 || following.payload < 0 || following.payload >= native_module.calls.size()
+				return "MIR class allocation must immediately enter its initializer"
+			end
+			call := native_module.calls[following.payload]
+			if call.callee != definition.initializer || call.argument_count == 0 || call.argument_start < 0 || call.argument_start >= native_module.arguments.size()
+				return "MIR class allocation initializer differs"
+			end
+			if native_module.arguments[call.argument_start] != instruction.result
+				return "MIR class allocation receiver differs"
+			end
+			mut argument := 1
+			while argument < call.argument_count
+				if call.argument_start + argument >= native_module.arguments.size() || native_module.arguments[call.argument_start + argument] == instruction.result
+					return "MIR uninitialized class appears outside the receiver slot"
+				end
+				argument += 1
+			end
+		end
+		return ""
+	end
+	owner := mir_object_id(native_module, mir_flow_type(flow, instruction.first))
+	if owner < 0 || !mir_value_available(flow, block, index, instruction.first)
+		return "MIR class field receiver differs"
+	end
+	definition := native_module.objects[owner]
+	if definition.interface_type || instruction.payload < 0 || instruction.payload >= definition.fields.size()
+		return "MIR class field identity differs"
+	end
+	field := definition.fields[instruction.payload]
+	if instruction.kind == 64
+		if instruction.second != - 1 || mir_flow_type(flow, instruction.result) != field.type_id
+			return "MIR class field load type differs"
+		end
+	elsif instruction.result != - 1 || !mir_value_available(flow, block, index, instruction.second) || mir_flow_type(flow, instruction.second) != field.type_id
+		return "MIR class field store type differs"
+	end
+	return ""
+end

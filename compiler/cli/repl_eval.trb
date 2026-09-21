@@ -1,3 +1,8 @@
+import { nominal_application_end } from generic_syntax
+import { find_visible_declaration } from declaration_lookup
+import { resolve_type_name } from type_resolution
+import { find_object_type, object_field_index, object_initializer_owner, object_abstract_function } from object_types
+import { mir_object_witness } from object_dispatch_mir
 import { repl_builtin_number_parse, repl_string_integer, repl_string_float } from repl_number_parsing
 import { builtin_result_method } from builtin_results
 import { repl_builtin_lookup } from repl_builtin_lookup
@@ -33,14 +38,15 @@ import { repl_absent, repl_none, repl_payload, repl_nullable_read } from repl_nu
 import { standard_package_import } from resolution
 import { enum_argument_bindings, enum_type, find_enum_type, find_enum_variant } from enum_types
 import { ArgumentBindings, argument_binding_slot, function_argument_bindings, record_argument_bindings } from argument_binding
-import { default_arguments } from default_arguments
+import { default_call_arguments } from default_arguments
 import { hash_key_type, hash_value_type } from hash_types
 import { checked_hash_plan } from hash_checked
 import { repl_hash_new, repl_hash_set, repl_hash_get, repl_hash_slot, repl_hash_delete, repl_hash_update } from repl_hash
 import trb/std/math
 import { CompilerState } from state
 import { sparse_integer_at, load_integer, load_string, sparse_string_at } from storage
-import { parse_argument_label, syntax_statement_boundary, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_block_end, syntax_conditional_tail, binary_operator_id, syntax_expression_precedence, parse_expression_syntax, declaration_start } from parser
+import { parse_argument_label, syntax_statement_boundary, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_block_end, syntax_conditional_tail, binary_operator_id, syntax_expression_precedence, declaration_start } from syntax_forms
+import { parse_expression_syntax } from body_syntax
 import { mir_logical_short_value } from mir
 import { checked_loop_transfer_kind } from checked_program
 import { checked_iteration_require, checked_range_require, checked_transform_require } from iteration_checked
@@ -223,6 +229,9 @@ def repl_numeric(mut store: ReplStore, left: Integer, operator: String, right: I
 end
 
 def repl_call(mut state: CompilerState, function: Integer, arguments: Array<Integer>, mut store: ReplStore): Integer
+	if object_abstract_function(state, function)
+		return repl_interface_call(state, function, arguments, store)
+	end
 	if store.depth[0] > 256
 		store.error[0] = "REPL call depth limit exceeded"
 		return 0
@@ -244,6 +253,18 @@ def repl_call(mut state: CompilerState, function: Integer, arguments: Array<Inte
 	previous_owner := state.declaration_owner[0]
 	state.declaration_owner[0] = sparse_string_at(state.token_namespaces, position[0])
 	state.active_module[0] = load_integer(state.function_modules, function)
+	owner := object_initializer_owner(state, function)
+	if owner >= 0
+		mut field_index := 0
+		state.object_instances[owner].fields.each do |field|
+			if field.default_start >= 0
+				mut default_position := [field.default_start]
+				value := repl_expression(state, default_position, store, environment, 1, field.type_name)
+				store.children[arguments[0]][field_index] = repl_coerce(store, value.value, field.type_name)
+			end
+			field_index += 1
+		end
+	end
 	mut result := 0
 	if sparse_integer_at(state.function_expression_bodies, function) > 0
 		value := repl_expression(state, position, store, environment, 1, load_string(state.function_result_types, function))
@@ -261,6 +282,43 @@ def repl_call(mut state: CompilerState, function: Integer, arguments: Array<Inte
 	return repl_coerce(store, result, load_string(state.function_result_types, function))
 end
 
+# Retained boxes carry the actual class value. Remapping a submission changes
+# nominal IDs, so dispatch always uses the newly checked witness catalog.
+def repl_interface_call(mut state: CompilerState, function: Integer, arguments: Array<Integer>, mut store: ReplStore): Integer
+	if arguments.size() == 0 || store.children[arguments[0]].size() != 1
+		store.error[0] = "interface call has no checked receiver"
+		return 0
+	end
+	receiver := store.children[arguments[0]][0]
+	owner := find_object_type(state, repl_type(store, receiver))
+	contract := find_object_type(state, repl_type(store, arguments[0]))
+	index := mir_object_witness(state.scalar_mir, owner, contract)
+	if index < 0
+		store.error[0] = "interface call has no checked implementation"
+		return 0
+	end
+	witness := state.scalar_mir.object_witnesses[index]
+	mut slot := 0
+	state.scalar_mir.object_methods.each do |method|
+		if method.owner == contract
+			if method.function == function
+				mut values: Array<Integer> := []
+				witness.arguments[slot].each do |argument|
+					if argument == 0
+						values.push(receiver)
+					else
+						values.push(arguments[argument])
+					end
+				end
+				return repl_call(state, state.scalar_mir.object_methods[witness.methods[slot]].function, values, store)
+			end
+			slot += 1
+		end
+	end
+	store.error[0] = "interface call has no checked method"
+	return 0
+end
+
 def repl_complete_arguments(mut state: CompilerState, mut bindings: ArgumentBindings, mut store: ReplStore)
 	mut index := 0
 	while index < bindings.values.size()
@@ -269,7 +327,7 @@ def repl_complete_arguments(mut state: CompilerState, mut bindings: ArgumentBind
 				store.error[0] = "missing checked argument " + bindings.names[index]
 				return
 			end
-			arguments := default_arguments(bindings.values, index)
+			arguments := default_call_arguments(state, bindings.defaults[index], bindings.values, index)
 			bindings.values[index] = repl_call(state, bindings.defaults[index], arguments, store)
 			if store.error[0] != ""
 				return
@@ -361,6 +419,17 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 	mut text := load_string(state.token_texts, position[0])
 	kind := load_integer(state.token_kinds, position[0])
 	position[0] += 1
+	if kind == 8
+		self_binding := repl_find(environment, "self")
+		if self_binding < 0
+			store.error[0] = "instance field has no checked receiver"
+			return repl_reference(0)
+		end
+		receiver := repl_binding_value(store, environment, self_binding)
+		owner := find_object_type(state, repl_type(store, receiver))
+		field := object_field_index(state, owner, text)
+		return ReplReference.new(value: store.children[receiver][field], binding: - 1, container: receiver, slot: field)
+	end
 	if kind == 2
 		if number_is_float(text)
 			return repl_reference(repl_float(store, native_cli_float(number_without_underscores(text))))
@@ -626,6 +695,15 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		end
 		return repl_reference(repl_value(store, enum_type(owner), variant, 0.0, row.name, bindings.values))
 	end
+	mut object_type := application_type
+	if find_visible_declaration(state, state.active_module[0], text, 9) >= 0 && find_object_type(state, object_type) < 0
+		object_type = resolve_type_name(state, state.active_module[0], text, false)
+	end
+	if find_object_type(state, object_type) >= 0 && token_is(state, position[0], ".")
+		member := load_string(state.token_texts, position[0] + 1)
+		position[0] += 2
+		return repl_reference(repl_object_method(state, position, store, environment, object_type, member, - 1))
+	end
 	mut newtype_owner := find_newtype_type(state, application_type)
 	if newtype_owner < 0
 		newtype_owner = find_visible_newtype(state, state.active_module[0], text)
@@ -847,6 +925,19 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 				if (member == "each" || member == "each_slice") && syntax_iteration_suffix(state, position[0] - 2) >= 0
 					position[0] -= 2
 					break
+				end
+				if find_object_type(state, value.type_name) >= 0
+					owner := find_object_type(state, value.type_name)
+					field := object_field_index(state, owner, "@" + member)
+					if field >= 0 && !token_is(state, position[0], "(") && !token_is(state, position[0], "<")
+						result = ReplReference.new(value: store.children[result.value][field], binding: - 1, container: result.value, slot: field)
+					else
+						result = repl_reference(repl_object_method(state, position, store, environment, value.type_name, member, result.value))
+					end
+					if safe_origin >= 0 && environment.flow[0] == 0
+						result = repl_reference(repl_coerce(store, result.value, load_string(state.checked[0].safe_types, safe_origin)))
+					end
+					next
 				end
 				record_index := find_record_type(state, value.type_name)
 				if record_index >= 0
@@ -1483,6 +1574,10 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 		end
 		mut hash_assignment := false
 		if left.container >= 0
+			object_owner := find_object_type(state, repl_type(store, left.container))
+			if object_owner >= 0
+				expected = state.object_instances[object_owner].fields[left.slot].type_name
+			end
 			if hash_key_type(repl_type(store, left.container)) != ""
 				hash_assignment = true
 				expected = hash_value_type(repl_type(store, left.container))
@@ -1895,4 +1990,38 @@ def repl_nominal_method_call(mut state: CompilerState, mut position: Array<Integ
 		return 0
 	end
 	return repl_call(state, function, bindings.values, store)
+end
+
+# Object evaluation consumes the callee chosen by ordinary checking. Explicit
+# method arguments are skipped, never re-inferred against a retained value.
+def repl_object_method(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, type_name: String, member: String, receiver: Integer): Integer
+	if token_is(state, position[0], "<")
+		finish := nominal_application_end(state, position[0] - 1)
+		if finish < 0
+			store.error[0] = "class method has no checked type application"
+			return 0
+		end
+		position[0] = finish
+	end
+	encoded := sparse_integer_at(state.checked[0].generic_calls, position[0])
+	if receiver < 0 && member == "new"
+		mut fields: Array<Integer> := []
+		state.object_instances[find_object_type(state, type_name)].fields.each do |_field|
+			fields.push(0)
+		end
+		value := repl_value(store, type_name, 0, 0.0, "", fields)
+		if encoded > 0
+			repl_nominal_method_call(state, position, store, environment, encoded - 1, value)
+		else
+			position[0] += 1
+			skip_newlines(state, position)
+			position[0] += 1
+		end
+		return value
+	end
+	if encoded <= 0
+		store.error[0] = "class method has no checked callee"
+		return 0
+	end
+	return repl_nominal_method_call(state, position, store, environment, encoded - 1, receiver)
 end

@@ -104,11 +104,13 @@ vertical slices from remaining ownership.
 ### Current compiler source ownership
 
 The ordinary entry is [compiler/src/compiler.trb](../compiler/src/compiler.trb).
-Its explicit transitive import closure contains 149 canonical implementation modules:
+Its explicit transitive import closure is registered in
+`src/compiler_recovery_layout.trb`:
 
 | Modules in `compiler/src/` | Current responsibility |
 | --- | --- |
 | `compiler_bytes.trb`, `literal_types.trb`, `literal_type_syntax.trb`, `literal_mir.trb`, `literal_cases.trb`, `union_members.trb` | Byte-exact singleton types, verified constants/widening, exhaustive literal cases and common union fields with lexical discriminant narrowing; see [decision 0078](decisions/0078-literal-types-and-union-members.md). |
+| `object_model.trb`, `object_syntax.trb`, `object_types.trb`, `object_resolution.trb`, `object_methods.trb`, `object_fields.trb`, `object_initialization.trb`, `object_dispatch.trb`, `object_dispatch_shapes.trb`, `object_dispatch_mir.trb`, `object_mir_types.trb`, `object_mir.trb`, `qbe_objects.trb`, `qbe_object_dispatch.trb` | Authored and concrete object identities, method specialization, definite field initialization, typed field operations and explicit interface witnesses. Backend adapters consume verified layouts and dispatch; see [decision 0085](decisions/0085-object-type-and-execution-mir.md). |
 | `newtype_model.trb`, `newtype_types.trb`, `newtype_syntax.trb`, `newtype_resolution.trb`, `newtype_methods.trb`, `newtype_mir.trb`, `newtype_mir_types.trb` | Nominal construction policy, representation resolution, method identity and verified storage erasure; see [decision 0077](decisions/0077-newtype-mir.md). |
 | `sliced_iteration.trb` | Streams fresh Array batches from retained Array/Range receivers through verified MIR control edges. |
 | `raw_enum_types.trb`, `raw_enum_syntax.trb`, `raw_enum_checked.trb`, `raw_enum_resolution.trb`, `enum_methods.trb` | Raw value declarations, canonical conversions, standard dependencies and receiver-specialized ordinary/generic enum method resolution; see [decisions 0070](decisions/0070-raw-enum-and-method-mir.md) and [0071](decisions/0071-generic-enum-method-mir.md). |

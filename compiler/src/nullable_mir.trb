@@ -1,3 +1,5 @@
+import { mir_object_coerce } from object_dispatch_mir
+import { object_value_assignable } from object_types
 import { literal_scalar_type } from literal_cases
 import { literal_type_base } from literal_types
 import { mir_literal_widen } from literal_mir
@@ -27,7 +29,8 @@ def mir_checked_nullable(mut state: CompilerState, mut locals: CheckedLocals, ki
 	return mir_checked_value(type_name, result, origin, value.mutable)
 end
 
-def mir_nullable_coerce(mut state: CompilerState, mut locals: CheckedLocals, value: CheckedValue, expected: String, origin: Integer): CheckedValue
+def mir_nullable_coerce(mut state: CompilerState, mut locals: CheckedLocals, mut value: CheckedValue, expected: String, origin: Integer): CheckedValue
+	value = mir_object_coerce(state, locals, value, expected, origin)
 	if value.type_name == expected || expected == "" || value.type_name == "Never"
 		return value
 	end
@@ -52,13 +55,13 @@ def mir_nullable_coerce(mut state: CompilerState, mut locals: CheckedLocals, val
 			return mir_union_operation(state, locals, 52, converted, selected, expected, origin)
 		end
 	end
-	if !nullable_assignable(value.type_name, expected)
+	if !object_value_assignable(state, value.type_name, expected)
 		return value
 	end
 	if union_parts(value.type_name).size() > 0
 		return mir_union_coerce(state, locals, value, expected, origin)
 	end
-	if nullable_element(expected) == "" || !nullable_assignable(value.type_name, expected)
+	if nullable_element(expected) == "" || !object_value_assignable(state, value.type_name, expected)
 		return value
 	end
 	if nullable_element(value.type_name) != ""

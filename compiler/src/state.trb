@@ -1,3 +1,4 @@
+import { ObjectDefinition, ObjectInstance } from object_model
 import { NewtypeDefinition } from newtype_model
 import { GlobalDeclaration } from global_model
 import { TransformSyntax } from transform_model
@@ -69,6 +70,9 @@ record CheckedSubmission
 end
 
 record CompilerState
+	objects: Array<ObjectDefinition>
+	object_instances: Array<ObjectInstance>
+	object_instance_lookup: Hash<String, Integer>
 	newtypes: Array<NewtypeDefinition>
 	token_fused_literals: IntegerStorage
 	raw_enum_values: Array<RawEnumValue>
@@ -190,7 +194,7 @@ record CompilerState
 end
 
 def compiler_new(capacity: Integer): CompilerState
-	return CompilerState.new(newtypes: [], token_fused_literals: integer_storage(capacity), raw_enum_values: [], raw_enum_results: string_storage(capacity), function_receivers: string_storage(capacity), internal_type_annotations: [], projected_type_lines: [- 1, - 1],
+	return CompilerState.new(objects: [], object_instances: [], object_instance_lookup: {}, newtypes: [], token_fused_literals: integer_storage(capacity), raw_enum_values: [], raw_enum_results: string_storage(capacity), function_receivers: string_storage(capacity), internal_type_annotations: [], projected_type_lines: [- 1, - 1],
 		global_scope_orders: integer_storage(capacity), globals: [], global_types: [], global_functions: [], global_order: [],
 		namespaces: [], declaration_owner: [""], token_namespaces: string_storage(capacity),
 		lambdas: [], lambda_origins: integer_storage(capacity),
@@ -218,7 +222,7 @@ def compiler_new(capacity: Integer): CompilerState
 		token_texts: string_storage(capacity),
 		token_lines: integer_storage(capacity),
 		token_count: [0],
-		scalar_mir: MirModule.new(newtypes: [], unions: [], globals: [], global_initialization: [], callables: [], enums: [], enum_variants: [], enum_fields: [], numeric_plans: [[]], types: [], records: [], fields: [], root_plans: [], array_loops: [],
+		scalar_mir: MirModule.new(object_methods: [], object_witnesses: [], objects: [], newtypes: [], unions: [], globals: [], global_initialization: [], callables: [], enums: [], enum_variants: [], enum_fields: [], numeric_plans: [[]], types: [], records: [], fields: [], root_plans: [], array_loops: [],
 			signatures: [], calls: [],
 			source_count: [1],
 			entry_function: [0],
@@ -368,6 +372,7 @@ record CheckedLocals
 	mir_blocks: Array<MirBlock>
 	mir_loops: Array<MirControlLoop>
 	mir_hash_refinements: Array<Integer>
+	mir_object_targets: Array<MirIndexedTarget>
 	mir_targets: Array<MirIndexedTarget>
 	mir_calls: Array<MirCall>
 	mir_arguments: Array<Integer>
@@ -398,6 +403,7 @@ def locals_new(capacity: Integer): CheckedLocals
 		mir_blocks: [],
 		mir_loops: [],
 		mir_hash_refinements: [],
+		mir_object_targets: [],
 		mir_targets: [],
 		mir_calls: [],
 		mir_arguments: [],
@@ -505,7 +511,25 @@ def select_checked_body(mut state: CompilerState, function: Integer): CheckedBod
 	end
 	mut encoded := sparse_integer_at(state.checked_body_indices, function)
 	if encoded == 0
-		state.checked_bodies.push(checked_body_new(function, load_integer(state.function_body_starts, function), load_integer(state.function_body_ends, function) + 1))
+		mut origin := load_integer(state.function_body_starts, function)
+		mut finish := load_integer(state.function_body_ends, function) + 1
+		state.generic_function_instances.each do |instance|
+			if instance.function == function
+				state.objects.each do |definition|
+					definition.methods.each do |method|
+						if method.generic_function == instance.definition
+							origin = definition.origin
+							definition.fields.each do |field|
+								if field.default_finish >= finish
+									finish = field.default_finish + 1
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+		state.checked_bodies.push(checked_body_new(function, origin, finish))
 		encoded = state.checked_bodies.size()
 		store_integer(state.checked_body_indices, function, encoded)
 	end

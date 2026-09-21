@@ -1,3 +1,5 @@
+import { declare_object_witnesses, prepare_object_dispatch } from object_dispatch
+import { object_abstract_function, object_abstract_method } from object_types
 import { alias_pattern_type } from alias_patterns
 import { generic_program_fork } from generic_program
 import { instantiate_generic_function } from generic_functions
@@ -43,8 +45,10 @@ def check_generic_templates(mut state: CompilerState): Boolean
 	mut function := state.function_count[0]
 	mut definition := 0
 	while definition < program.generic_functions.size()
-		arguments := abstract_generic_arguments("function", definition, program.generic_functions[definition].type_parameters)
-		instantiate_generic_function(program, definition, arguments, 0)
+		if !object_abstract_method(program, definition)
+			arguments := abstract_generic_arguments("function", definition, program.generic_functions[definition].type_parameters)
+			instantiate_generic_function(program, definition, arguments, 0)
+		end
 		definition += 1
 	end
 	nominal = 0
@@ -56,8 +60,12 @@ def check_generic_templates(mut state: CompilerState): Boolean
 		nominal += 1
 	end
 	declare_default_functions(program)
-	finish := program.function_count[0]
-	while function < finish && !has_diagnostic(program)
+	mut objects := prepare_object_dispatch(program, 0)
+	while function < program.function_count[0] && !has_diagnostic(program)
+		if object_abstract_function(program, function)
+			function += 1
+			next
+		end
 		mut names := locals_new(program.token_count[0] + 1)
 		resolve_function_body(program, function, names)
 		declare_default_functions(program)
@@ -65,7 +73,11 @@ def check_generic_templates(mut state: CompilerState): Boolean
 			mut locals := checked_function_locals(program, function)
 			check_function_body(program, function, locals)
 		end
+		objects = prepare_object_dispatch(program, objects)
 		function += 1
+	end
+	if !has_diagnostic(program)
+		declare_object_witnesses(program)
 	end
 	alias_index = 0
 	while alias_index < state.type_aliases.size() && !has_diagnostic(program)

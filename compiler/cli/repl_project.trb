@@ -1,3 +1,4 @@
+import { find_object_type } from object_types
 import { literal_type_base, literal_type_display } from literal_types
 import { find_newtype_type } from newtype_types
 import { union_parts } from union_types
@@ -88,6 +89,10 @@ def repl_project(config: String): ReplProject
 			names.push(definition.name)
 			modules.push(module_name)
 		end
+		state.objects.each do |definition|
+			names.push(definition.name)
+			modules.push(module_name)
+		end
 		state.enums.each do |definition|
 			names.push(definition.name)
 			modules.push(module_name)
@@ -150,6 +155,9 @@ def repl_project_source(source: String, prelude: String): String
 		explicit[definition.name] = 1
 	end
 	session.namespaces.each do |definition|
+		explicit[definition.name] = 1
+	end
+	session.objects.each do |definition|
 		explicit[definition.name] = 1
 	end
 	session.enums.each do |definition|
@@ -278,6 +286,20 @@ def repl_type_name(state: CompilerState, type_name: String): String
 			argument_index += 1
 		end
 		return application_name + ">"
+	end
+	object_index := find_object_type(state, type_name)
+	if object_index >= 0
+		row := state.object_instances[object_index]
+		definition := state.objects[row.definition]
+		name := repl_visible_type_name(state, definition.source_id, definition.name)
+		if row.arguments.size() == 0
+			return name
+		end
+		mut arguments: Array<String> := []
+		row.arguments.each do |argument|
+			arguments.push(repl_type_name(state, argument))
+		end
+		return generic_application(name, arguments)
 	end
 	newtype_index := find_newtype_type(state, type_name)
 	if newtype_index >= 0

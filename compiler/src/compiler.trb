@@ -1,3 +1,5 @@
+import { emit_object_dispatch } from qbe_object_dispatch
+import { object_abstract_function } from object_types
 import { emit_number_parsing_runtime } from qbe_number_parsing
 import { emit_float_string_runtime } from qbe_scalar_strings
 import { emit_mir_globals } from qbe_globals
@@ -250,6 +252,7 @@ def emit_qbe(mut state: CompilerState): QbeOutput
 	emit_mir_globals(state.scalar_mir, output)
 	emit_record_descriptors(state, output)
 	emit_closure_adapters(state, output)
+	emit_object_dispatch(state.scalar_mir, output)
 	compiler_runtime := compiler_entry_function(state) >= 0
 	emit_qbe_runtime(output, compiler_runtime)
 	function_count := state.function_count[0]
@@ -266,7 +269,7 @@ def emit_qbe(mut state: CompilerState): QbeOutput
 			signature := state.scalar_mir.signatures[function_index]
 			intrinsic = signature.kind == 1
 		end
-		if !intrinsic
+		if !intrinsic && state.scalar_mir.signatures[function_index].kind != 4
 			emit_function(state, function_index, output)
 			compiler_reset_temporary_storage()
 		end
@@ -1033,7 +1036,9 @@ def check(mut state: CompilerState): Boolean
 	mir_declare_globals(state)
 	mut function_index := 0
 	while function_index < state.function_count[0]
-		check_function(state, function_index)
+		if !object_abstract_function(state, function_index)
+			check_function(state, function_index)
+		end
 		function_index += 1
 	end
 	return finalize_checked_module(state)

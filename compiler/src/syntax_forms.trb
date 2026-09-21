@@ -1,0 +1,221 @@
+import { transform_kind } from transform_model
+import { token_is } from syntax_tokens
+import { CompilerState } from state
+import { load_integer, load_string } from storage
+
+def declaration_start(state: CompilerState, index: Integer): Boolean
+	if token_is(state, index, "mut")
+		return true
+	end
+	if load_integer(state.token_kinds, index) != 1
+		return false
+	end
+	if token_is(state, index + 1, ":=")
+		return true
+	end
+	return token_is(state, index + 1, ":")
+end
+
+def syntax_block_end(state: CompilerState, index: Integer): Boolean
+	kind := load_integer(state.token_kinds, index)
+	if kind != 1
+		if kind != 5
+			return false
+		end
+	end
+	word := load_string(state.token_texts, index)
+	if word == "end"
+		return true
+	end
+	return word == "}"
+end
+
+def syntax_conditional_tail(state: CompilerState, index: Integer): Boolean
+	if token_is(state, index, "else")
+		return true
+	end
+	if token_is(state, index, "elsif")
+		return true
+	end
+	return token_is(state, index, "when")
+end
+
+def syntax_expression_precedence(operator: String): Integer
+	if operator == ".." || operator == "..."
+		return 3
+	end
+	# Keep scalar spelling recognition in the shared operator catalog.
+	identity := binary_operator_id(operator)
+	if identity == 0
+		return 0
+	end
+	if identity <= 2
+		return 6
+	end
+	if identity <= 5
+		return 7
+	end
+	if identity <= 7
+		return 4
+	end
+	if identity <= 11
+		return 5
+	end
+	if identity == 12
+		return 1
+	end
+	if identity == 13
+		return 2
+	end
+	return 0
+end
+
+def parse_argument_label(state: CompilerState, mut position: Array<Integer>): String
+	if load_integer(state.token_kinds, position[0]) == 1 && token_is(state, position[0] + 1, ":")
+		label := load_string(state.token_texts, position[0])
+		position[0] += 2
+		return label
+	end
+	return ""
+end
+
+def syntax_iteration_suffix(state: CompilerState, origin: Integer): Integer
+	if (!token_is(state, origin, ".") && !token_is(state, origin, "&.")) || (!token_is(state, origin + 1, "each") && !token_is(state, origin + 1, "each_slice"))
+		return - 1
+	end
+	mut cursor := origin + 2
+	if token_is(state, origin + 1, "each_slice") && token_is(state, cursor, "(")
+		mut depth := 1
+		cursor += 1
+		while cursor < state.token_count[0] && depth > 0
+			if token_is(state, cursor, "(")
+				depth += 1
+			elsif token_is(state, cursor, ")")
+				depth -= 1
+			end
+			cursor += 1
+		end
+		if depth != 0
+			return - 1
+		end
+	elsif token_is(state, cursor, "(") && token_is(state, cursor + 1, ")")
+		cursor += 2
+	end
+	if token_is(state, cursor, ".") && token_is(state, cursor + 1, "with_index")
+		cursor += 2
+		if token_is(state, cursor, "(") && token_is(state, cursor + 1, ")")
+			cursor += 2
+		end
+	end
+	if token_is(state, cursor, "do") || token_is(state, cursor, "{")
+		return cursor
+	end
+	return - 1
+end
+
+# A name such as map/select may also be an ordinary nominal method.
+# Only an actual block suffix selects collection-transform syntax.
+def syntax_transform_suffix(state: CompilerState, origin: Integer): Integer
+	if (!token_is(state, origin, ".") && !token_is(state, origin, "&.")) || transform_kind(load_string(state.token_texts, origin + 1)) == 0
+		return - 1
+	end
+	mut cursor := origin + 2
+	if token_is(state, cursor, "(")
+		mut depth := 1
+		cursor += 1
+		while cursor < state.token_count[0] && depth > 0
+			if token_is(state, cursor, "(")
+				depth += 1
+			elsif token_is(state, cursor, ")")
+				depth -= 1
+			end
+			cursor += 1
+		end
+		if depth != 0
+			return - 1
+		end
+	end
+	if token_is(state, cursor, ".") && token_is(state, cursor + 1, "with_index")
+		cursor += 2
+		if token_is(state, cursor, "(") && token_is(state, cursor + 1, ")")
+			cursor += 2
+		end
+	end
+	if token_is(state, cursor, "do") || token_is(state, cursor, "{")
+		return cursor
+	end
+	return - 1
+end
+
+def syntax_statement_boundary(state: CompilerState, origin: Integer): Boolean
+	if load_integer(state.token_kinds, origin) == 4
+		return true
+	end
+	return token_is(state, origin, "}")
+end
+
+def syntax_loop_transfer_kind(state: CompilerState, origin: Integer): Integer
+	if token_is(state, origin, "break")
+		return 1
+	end
+	if token_is(state, origin, "next")
+		return 2
+	end
+	return 0
+end
+
+def binary_operator_id(operator: String): Integer
+	if operator == "+"
+		return 1
+	end
+	if operator == "-"
+		return 2
+	end
+	if operator == "*"
+		return 3
+	end
+	if operator == "/"
+		return 4
+	end
+	if operator == "%"
+		return 5
+	end
+	if operator == "=="
+		return 6
+	end
+	if operator == "!="
+		return 7
+	end
+	if operator == "<"
+		return 8
+	end
+	if operator == "<="
+		return 9
+	end
+	if operator == ">"
+		return 10
+	end
+	if operator == ">="
+		return 11
+	end
+	if operator == "||"
+		return 12
+	end
+	if operator == "&&"
+		return 13
+	end
+	# The high tag identifies the four supported compound assignments.
+	if operator == "+="
+		return 17
+	end
+	if operator == "-="
+		return 18
+	end
+	if operator == "*="
+		return 19
+	end
+	if operator == "/="
+		return 20
+	end
+	return 0
+end

@@ -465,7 +465,7 @@ def repl_incomplete(text: String): Boolean
 	# An incomplete parse still normalizes its successfully consumed prefix.
 	mut first := [0]
 	skip_newlines(state, first)
-	declaration := token_is(state, first[0], "def") || token_is(state, first[0], "record") || token_is(state, first[0], "enum") || token_is(state, first[0], "module") || token_is(state, first[0], "alias") || token_is(state, first[0], "newtype") || token_is(state, first[0], "import") || (enum_uppercase(load_string(state.token_texts, first[0])) && (token_is(state, first[0] + 1, ":=") || token_is(state, first[0] + 1, ":")))
+	declaration := token_is(state, first[0], "def") || token_is(state, first[0], "class") || token_is(state, first[0], "interface") || token_is(state, first[0], "record") || token_is(state, first[0], "enum") || token_is(state, first[0], "module") || token_is(state, first[0], "alias") || token_is(state, first[0], "newtype") || token_is(state, first[0], "import") || (enum_uppercase(load_string(state.token_texts, first[0])) && (token_is(state, first[0] + 1, ":=") || token_is(state, first[0] + 1, ":")))
 	if !declaration
 		wrapped := "def main()\n" + text + "\nend\n"
 		state = compiler_new(wrapped.size() * 3 + 16)
@@ -480,16 +480,20 @@ def repl_incomplete(text: String): Boolean
 		lex(state, text)
 	end
 	mut depth := 0
+	mut interface_depth :=- 1
 	mut delimiters := 0
 	mut transfer_depth :=- 1
 	mut transfer_delimiters :=- 1
 	mut index := 0
 	while index < state.token_count[0]
-		if token_is(state, index, "def") || token_is(state, index, "fn")
+		if (token_is(state, index, "def") && interface_depth != depth) || token_is(state, index, "fn")
 			depth += 1
 		end
-		if token_is(state, index, "record") || token_is(state, index, "enum") || token_is(state, index, "module")
+		if token_is(state, index, "record") || token_is(state, index, "enum") || token_is(state, index, "module") || token_is(state, index, "class") || token_is(state, index, "interface")
 			depth += 1
+		end
+		if token_is(state, index, "interface")
+			interface_depth = depth
 		end
 		if token_is(state, index, "return") || token_is(state, index, "break") || token_is(state, index, "next")
 			transfer_depth = depth
@@ -520,6 +524,9 @@ def repl_incomplete(text: String): Boolean
 			depth += 1
 		end
 		if token_is(state, index, "end")
+			if interface_depth == depth
+				interface_depth =- 1
+			end
 			depth -= 1
 		end
 		if token_is(state, index, "(")

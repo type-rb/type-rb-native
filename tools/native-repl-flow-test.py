@@ -87,7 +87,7 @@ with tempfile.TemporaryDirectory(prefix='native-repl-flow-') as temporary:
         ':type value\nvalue.value.size()\nvalue.value = "invalid"\n:reload\n'
         ':type value\nvalue.value.size()',
         'nil : Visible? [mut]\nEntry(value: "kept") : Visible? [mut]\nVisible\n'
-        '4 : Integer\nreloaded\nVisible\n4 : Integer\n', ('record field is readonly',))
+        '4 : Integer\nreloaded\nVisible\n4 : Integer\n', ('field is readonly',))
 
     (root / 'loaded.input').write_text('if value != nil\nputs(value.size())\nend\n')
     run('mut value: String? := nil\nvalue = "kept"\n'

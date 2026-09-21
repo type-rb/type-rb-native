@@ -1,12 +1,37 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 1398 ordinary-path probes and 32 feature
+Status: the shared contract contains 1441 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
 basic-language completion; [the generated family inventory](native-language-feature-inventory.md)
 records semantic contracts that still need tests. The earlier 19-case inventory
 was an initial sample, not a complete list of missing features.
+
+## Classes, fields and explicit interfaces
+
+Ordinary constructors, ordered field defaults, scalar/managed/generic fields,
+instance/class/private methods and field-free inherited methods use typed MIR.
+Readonly fields can be initialized only by their declaring initializer. A CFG
+proof rejects uninitialized reads, premature receiver escapes and incomplete
+constructor paths. Retained sessions preserve object aliases, mutable fields,
+captured receivers, generic identities and project replay.
+
+Explicit and inherited interface conformance produces independently verified
+method witnesses. Managed interface boxes retain the original class object;
+heterogeneous Arrays, nullable values, captures, arguments and results preserve
+that identity. The backend emits verified call adapters and tracing descriptors
+without resolving source methods. Forced collection, erased/reordered MIR and
+corrupted witness controls supplement the paired ordinary cases.
+
+Initialized superclasses and inherited overrides remain guarded. The shared
+registry also exposes reference private-method REPL and interface-construction
+failures, together with diagnostic differences. Class-alias construction,
+qualified class execution and the reference's deferred object contracts remain
+listed in the feature inventory. See
+[decision 0085](decisions/0085-object-type-and-execution-mir.md) for the implemented
+boundary and outstanding reference issues. This does not complete the object
+family or the basic-language milestone.
 
 ## String splitting, replacement and case conversion
 
@@ -547,9 +572,10 @@ resolves complete concrete catalogs before MIR construction; backend output does
 not consult generic templates or source spellings. See
 [decision 0045](decisions/0045-generic-nominal-mir.md).
 
-Enum receiver methods are covered above; method-specific type parameters and
-generic classes/interfaces remain separate gaps. The shared
-imported-generic-enum case now passes against the updated reference containing
+Enum receiver methods are covered above. Generic classes, interfaces and explicit
+class instance-method applications use the object MIR described above;
+Method-specific enum parameters and the guarded object combinations remain gaps.
+The shared imported-generic-enum case now passes against the updated reference containing
 [TypeRB PR #704](https://github.com/type-rb/type-rb/pull/704). Compiler self-use
 of generic syntax awaits a seed that supports it.
 
@@ -566,8 +592,9 @@ aliases when their underlying declarations are hidden.
 [Decision 0050](decisions/0050-transparent-alias-mir.md) records ownership and
 verification. Callable aliases now reach concrete MIR, including nullable payloads.
 Union targets and nested module aliases now preserve their canonical identity.
-Literal and class/interface targets remain gaps. REPL display currently uses the
-underlying type rather than always retaining the authored alias. Alias record
+Class/interface type annotations now share the object catalog; construction
+through class aliases and literal targets remain gaps. REPL display currently uses
+the underlying type rather than always retaining the authored alias. Alias record
 construction and generic identity aliases now execute in the reference. Its
 [same-package nominal-name collision](https://github.com/type-rb/type-rb/issues/708)
 remains an explicit failure in the shared expectations.
@@ -583,8 +610,9 @@ concrete call sites cannot legalize operations on unconstrained `T`.
 
 Source/template erasure preserves verified QBE, and forced collection covers
 managed generic calls. See [decision 0048](decisions/0048-generic-function-mir.md)
-for ownership and remaining boundaries. Other generic declaration families remain
-gaps. Both implementations reject local values used with generic type arguments;
+for ownership and remaining boundaries. Generic object applications have their
+separate coverage above; the feature inventory records unresolved combinations.
+Both implementations reject local values used with generic type arguments;
 [TypeRB PR #705](https://github.com/type-rb/type-rb/pull/705) fixed the reference checker.
 
 ## Generic record field defaults

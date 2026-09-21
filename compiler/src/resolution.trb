@@ -1,3 +1,7 @@
+import { object_initializer_owner } from object_types
+import { object_method_function } from object_methods
+import { find_object_in_module } from object_types
+import { resolve_object_declarations, validate_object_inheritance } from object_resolution
 import { builtin_result_source } from builtin_results
 import { find_newtype_type } from newtype_types
 import { find_visible_global, find_visible_newtype } from declaration_lookup
@@ -22,7 +26,7 @@ import { parse_type, token_is } from syntax_tokens
 import { nominal_application_end, nominal_application_name } from generic_syntax
 import { validate_alias_declarations, validate_generic_declarations } from generic_validation
 import { find_enum_in_module, find_enum_variant } from enum_types
-import { syntax_loop_transfer_kind } from parser
+import { syntax_loop_transfer_kind } from syntax_forms
 import { path_basename, path_directory, string_without_suffix } from path
 import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_bind, local_find, locals_new, select_checked_body, terminal_token } from state
 import { load_integer, load_string, sparse_integer_at, sparse_string_at, store_integer, store_string } from storage
@@ -457,7 +461,7 @@ def validate_import_bindings(mut state: CompilerState): Boolean
 			end
 			other += 1
 		end
-		if find_record_in_module(state, module_index, name) >= 0 || find_enum_in_module(state, module_index, name) >= 0 || find_generic_in_module(state, module_index, name) >= 0 || find_alias_in_module(state, module_index, name) >= 0 || find_newtype_in_module(state, module_index, name) >= 0
+		if find_record_in_module(state, module_index, name) >= 0 || find_enum_in_module(state, module_index, name) >= 0 || find_generic_in_module(state, module_index, name) >= 0 || find_alias_in_module(state, module_index, name) >= 0 || find_newtype_in_module(state, module_index, name) >= 0 || find_object_in_module(state, module_index, name) >= 0
 			diagnostic(state, "TRBN4003", line, "import binding conflicts with local declaration " + name)
 		end
 		if find_function_in_module(state, module_index, name) >= 0 || find_generic_function_in_module(state, module_index, name) >= 0
@@ -472,7 +476,7 @@ def validate_import_bindings(mut state: CompilerState): Boolean
 			if find_declaration_in_module(state, target, declaration, 6) >= 0 || (global >= 0 && state.globals[global].constant)
 				exported = true
 			end
-			if find_record_in_module(state, target, declaration) >= 0 || find_enum_in_module(state, target, declaration) >= 0 || find_generic_in_module(state, target, declaration) >= 0 || find_alias_in_module(state, target, declaration) >= 0 || find_newtype_in_module(state, target, declaration) >= 0
+			if find_record_in_module(state, target, declaration) >= 0 || find_enum_in_module(state, target, declaration) >= 0 || find_generic_in_module(state, target, declaration) >= 0 || find_alias_in_module(state, target, declaration) >= 0 || find_newtype_in_module(state, target, declaration) >= 0 || find_object_in_module(state, target, declaration) >= 0
 				exported = true
 			end
 			if find_function_in_module(state, target, declaration) >= 0 || find_generic_function_in_module(state, target, declaration) >= 0
@@ -528,6 +532,9 @@ def resolve_declarations(mut state: CompilerState): Boolean
 		return false
 	end
 	if !validate_generic_declarations(state)
+		return false
+	end
+	if !resolve_object_declarations(state)
 		return false
 	end
 	if !resolve_enum_declarations(state)
@@ -690,6 +697,14 @@ def resolve_function_body(
 		)
 		parameter_index += 1
 	end
+	owner := object_initializer_owner(state, function_index)
+	if owner >= 0
+		state.object_instances[owner].fields.each do |field|
+			if field.default_start >= 0 && !resolve_body_names(state, field.default_start, field.default_finish, locals)
+				return false
+			end
+		end
+	end
 	return resolve_body_names(state, body_start, body_finish, locals)
 end
 
@@ -790,6 +805,22 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 				end
 				application_finish := nominal_application_end(state, index)
 				if application_finish > index
+					# Receiver methods bind after expression typing. Their explicit type
+					# arguments must not be mistaken for a free generic function.
+					mut receiver_application := false
+					if local_find(locals, text) >= 0 && nominal_application_name(state, index) > index
+						receiver_application = true
+					end
+					if index > body_start && (token_is(state, index - 1, ".") || token_is(state, index - 1, "&."))
+						receiver_application = true
+					end
+					if nominal_application_name(state, index) >= reference_position[0] && find_visible_declaration(state, module_index, reference_name, 9) >= 0
+						receiver_application = true
+					end
+					if receiver_application
+						index = application_finish
+						next
+					end
 					mut application_position := [nominal_application_name(state, index)]
 					mut raw := parse_type(state, application_position)
 					if reference_position[0] > index + 1
@@ -893,6 +924,9 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 											if declaration != "" && namespace_parent(declaration) == state.declaration_owner[0]
 												implicit_method = enum_method_function(state, receiver, text)
 											end
+											if implicit_method < 0
+												implicit_method = object_method_function(state, receiver, text, false, [])
+											end
 										end
 										if implicit_method >= 0
 											store_integer(state.checked[0].generic_calls, index + 1, implicit_method + 1)
@@ -909,7 +943,7 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 								else
 									if token_is(state, index + 1, ".")
 										if token_is(state, index + 2, "new")
-											if find_visible_record(state, module_index, text) < 0 && find_visible_newtype(state, module_index, text) < 0 && !(text == "self" && find_newtype_in_module(state, module_index, state.declaration_owner[0]) >= 0) && find_visible_alias(state, module_index, text) < 0
+											if find_visible_declaration(state, module_index, text, 9) < 0 && find_visible_record(state, module_index, text) < 0 && find_visible_newtype(state, module_index, text) < 0 && !(text == "self" && find_newtype_in_module(state, module_index, state.declaration_owner[0]) >= 0) && find_visible_alias(state, module_index, text) < 0
 												diagnostic(
 													state,
 													"TRBN4003",
@@ -918,7 +952,7 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 												)
 											end
 										else
-											if local_find(locals, text) < 0 && find_visible_newtype(state, module_index, text) < 0 && !(text == "self" && find_newtype_in_module(state, module_index, state.declaration_owner[0]) >= 0) && find_visible_enum(state, module_index, text) < 0 && find_visible_alias(state, module_index, text) < 0 && find_visible_global(state, module_index, text, index) < 0
+											if local_find(locals, text) < 0 && find_visible_declaration(state, module_index, text, 9) < 0 && find_visible_newtype(state, module_index, text) < 0 && !(text == "self" && find_newtype_in_module(state, module_index, state.declaration_owner[0]) >= 0) && find_visible_enum(state, module_index, text) < 0 && find_visible_alias(state, module_index, text) < 0 && find_visible_global(state, module_index, text, index) < 0
 												if find_import_binding(state, module_index, text) < 0
 													diagnostic(
 														state,
@@ -987,7 +1021,7 @@ def resolve(mut state: CompilerState): Boolean
 			return false
 		end
 	end
-	return !has_diagnostic(state)
+	return validate_object_inheritance(state)
 end
 
 def compiler_main_signature(state: CompilerState, index: Integer): Integer
