@@ -84,6 +84,12 @@ class programs also expose target code-generation failures documented in
 [TypeRB #798](https://github.com/type-rb/type-rb/issues/798). Keep those reproductions
 separate from the shared passing execution cases until the reference fixes land.
 
+The reference REPL still loses the implicit receiver of private method calls
+([TypeRB #804](https://github.com/type-rb/type-rb/issues/804)); the shared registry
+retains that difference. Inherited class-method code generation is corrected in
+[TypeRB #803](https://github.com/type-rb/type-rb/pull/803), separately from
+inherited instance override dispatch.
+
 A separate reference discrepancy remains in inherited self-method dispatch:
 Go, Ruby and TypeScript do not agree when an inherited method calls an overridden
 method. [TypeRB #797](https://github.com/type-rb/type-rb/issues/797) records a
