@@ -251,6 +251,12 @@ ordinary file/project commands remain separate. Tests compare both adapters'
 output and failures, paths with spaces, missing files and input larger than
 conservative command-line limits. B0 bounds the file to the same 64 MiB as the
 reference source preparation and releases its temporary file buffer.
+The small compiler-shaped transport fixture runs before full recovery generation
+and independently checks byte retention, Unicode counts/indexes, malformed bytes
+and the size boundary. Recovery String indexing uses a direct offset when byte
+and code-point counts are equal, avoiding a scan from the beginning for every
+ASCII source character. Multi-byte input still uses bounded UTF-8 traversal;
+this recovery-runtime change does not claim faster ordinary application output.
 
 Generation controls check the recovery source through B0, B1 and B2 and compare
 repeated QBE emission against each previously built generation. Those repeated

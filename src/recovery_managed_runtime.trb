@@ -1,3 +1,4 @@
+import { emit_recovery_utf8_runtime } from recovery_utf8_runtime
 import { qbe_line } from qbe
 
 def emit_recovery_managed_runtime(mut writer: StringBuilder)
@@ -17,6 +18,7 @@ def emit_recovery_managed_runtime(mut writer: StringBuilder)
 	qbe_line(writer, "data $trbn_desc_string = align 8 { l 0 }")
 	qbe_line(writer, "data $trbn_desc_closure = align 8 { l 1, l 1, l 40 }")
 	qbe_line(writer, "")
+	emit_recovery_utf8_runtime(writer)
 	lines := _recovery_managed_runtime_lines()
 	mut index := 0
 	while index < lines.size()
@@ -467,37 +469,25 @@ def _recovery_managed_runtime_lines(): Array<String>
 		"\thlt",
 		"}",
 		"",
-		"function l $trbn_utf8_width(l %address) {",
-		"@start",
-		"\t%byte =w loadub %address",
-		"\t%ascii =w cultw %byte, 128",
-		"\tjnz %ascii, @one, @check_two",
-		"@check_two",
-		"\t%two =w cultw %byte, 224",
-		"\tjnz %two, @two, @check_three",
-		"@check_three",
-		"\t%three =w cultw %byte, 240",
-		"\tjnz %three, @three, @four",
-		"@one",
-		"\tret 1",
-		"@two",
-		"\tret 2",
-		"@three",
-		"\tret 3",
-		"@four",
-		"\tret 4",
-		"}",
-		"",
 		"function l $trbn_string_index(l %string, l %index) {",
 		"@start",
 		"\t%length_address =l add %string, 40",
 		"\t%length =l loadl %length_address",
 		"\t%actual =l call $trbn_normalize_index(l %length, l %index, w 0)",
+		"\t%byte_length_address =l add %string, 32",
+		"\t%byte_length =l loadl %byte_length_address",
+		"\t%bytes =l add %string, 48",
+		"\t%single_byte =w ceql %length, %byte_length",
+		"\tjnz %single_byte, @direct, @scan",
+		"@direct",
+		"\t%direct_source =l add %bytes, %actual",
+		"\t%direct_object =l call $trbn_string_new(l %direct_source, l 1, l 1)",
+		"\tret %direct_object",
+		"@scan",
 		"\t%offset_slot =l alloc8 8",
 		"\t%position_slot =l alloc8 8",
 		"\tstorel 0, %offset_slot",
 		"\tstorel 0, %position_slot",
-		"\t%bytes =l add %string, 48",
 		"\tjmp @loop",
 		"@loop",
 		"\t%position =l loadl %position_slot",
@@ -506,7 +496,8 @@ def _recovery_managed_runtime_lines(): Array<String>
 		"@advance",
 		"\t%offset =l loadl %offset_slot",
 		"\t%address =l add %bytes, %offset",
-		"\t%width =l call $trbn_utf8_width(l %address)",
+		"\t%remaining =l sub %byte_length, %offset",
+		"\t%width =l call $trbn_utf8_width(l %address, l %remaining)",
 		"\t%next_offset =l add %offset, %width",
 		"\tstorel %next_offset, %offset_slot",
 		"\t%next_position =l add %position, 1",
@@ -515,7 +506,8 @@ def _recovery_managed_runtime_lines(): Array<String>
 		"@found",
 		"\t%final_offset =l loadl %offset_slot",
 		"\t%source =l add %bytes, %final_offset",
-		"\t%final_width =l call $trbn_utf8_width(l %source)",
+		"\t%final_remaining =l sub %byte_length, %final_offset",
+		"\t%final_width =l call $trbn_utf8_width(l %source, l %final_remaining)",
 		"\t%object =l call $trbn_string_new(l %source, l %final_width, l 1)",
 		"\tret %object",
 		"}",

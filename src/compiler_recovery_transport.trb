@@ -92,7 +92,7 @@ end
 # byte preservation and failure boundaries are tested before full generations.
 def verify_recovery_transport_runtime(reference: String, qbe: String, workspace: String): Result<Boolean, String>
 	fixture := workspace + "/transport fixture.trb"
-	try _transport_write(fixture, "def compiler_main(source: String, mode: String, _file_mode: Boolean): Integer\n\tputs(source)\n\tputs(mode)\n\treturn 0\nend\ndef main()\n\treturn\nend\n")
+	try _transport_write(fixture, "def compiler_main(source: String, mode: String, _file_mode: Boolean): Integer\n\tputs(source)\n\tputs(mode)\n\tif source.size() > 0\n\t\tputs(source[0])\n\t\tputs(source[-1])\n\t\tputs(source[source.size() / 2])\n\tend\n\treturn 0\nend\ndef main()\n\treturn\nend\n")
 	snapshot := try _transport_run(reference, ["compiler", "bootstrap-snapshot", "--snapshot-version", "4", fixture])
 	if snapshot.status != 0 || !snapshot.stderr.empty?()
 		return Result<Boolean, String>::Err("transport fixture snapshot failed: " + snapshot.stderr)
@@ -116,16 +116,33 @@ def verify_recovery_transport_runtime(reference: String, qbe: String, workspace:
 		large.append("source transport")
 		index += 1
 	end
-	values := ["", "a\n\n", "a\x00b", large.to_s()]
+	values := ["", "a\n\n", "a\x00b", "é日本𐐨", "a日b𐐨c", large.to_s()]
 	index = 0
 	while index < values.size()
 		value := values[index]
 		try _transport_write(path, value)
+		mut expected := value + "\ncheck\n"
+		if !value.empty?()
+			expected += value[0] + "\n" + value[- 1] + "\n" + value[value.size() / 2] + "\n"
+		end
 		output := try _transport_run(executable, ["--source-file", "check", path])
-		if output.status != 0 || output.stdout != value + "\ncheck\n" || !output.stderr.empty?()
+		if index == 3 || index == 4
+			content := try _transport_run(executable, ["--source-content", "check", value])
+			if content.status != 0 || content.stdout != expected || !content.stderr.empty?()
+				return Result<Boolean, String>::Err("argv String code-point count or index differs")
+			end
+		end
+		if output.status != 0 || output.stdout != expected || !output.stderr.empty?()
 			return Result<Boolean, String>::Err("literal file bytes changed at transport case " + index.to_s())
 		end
 		index += 1
+	end
+	# Process.run normalizes invalid UTF-8 in captured text. A binary subprocess
+	# observer checks exact external bytes independently, including truncated,
+	# surrogate and out-of-range sequences mixed with valid UTF-8.
+	byte_probe := try _transport_run("python3", ["-c", "import pathlib, subprocess, sys\nexe, name = sys.argv[1:]\npath = pathlib.Path(name)\ncases = [(b'\\xff\\x80', b'\\xff', b'\\x80', b'\\x80'), (b'a\\xe2', b'a', b'\\xe2', b'\\xe2'), (b'a\\xe6\\x97\\xa5\\xffb', b'a', b'b', b'\\xff'), (b'\\xed\\xa0\\x80', b'\\xed', b'\\x80', b'\\xa0'), (b'\\xf4\\x90\\x80\\x80', b'\\xf4', b'\\x80', b'\\x80')]\nfor value, first, last, middle in cases:\n    path.write_bytes(value)\n    result = subprocess.run([exe, '--source-file', 'check', name], capture_output=True, timeout=30)\n    expected = value + b'\\ncheck\\n' + first + b'\\n' + last + b'\\n' + middle + b'\\n'\n    assert (result.returncode, result.stdout, result.stderr) == (0, expected, b''), (value, result)\n", executable, path])
+	if byte_probe.status != 0 || !byte_probe.stdout.empty?() || !byte_probe.stderr.empty?()
+		return Result<Boolean, String>::Err("invalid external-byte indexing differs: " + byte_probe.stderr)
 	end
 	sparse := try _transport_run("python3", ["-c", "import sys; f=open(sys.argv[1], 'wb'); f.truncate(67108865); f.close()", path])
 	if sparse.status != 0
