@@ -4,10 +4,10 @@ Each count describes registered probes, not language coverage percentages.
 
 | Family | Phase | Probes with differences | Uncovered contracts | Reference syntax nodes |
 | --- | --- | --- | --- | --- |
-| Source text and lexical forms | basic | 2 / 39 | Invalid UTF-8 source and diagnostic positions; CRLF and source normalization; Unicode identifier categories, remaining reserved contexts and malformed literal contracts | CommentStatement, BlankStatement, Identifier |
-| Strings and UTF-8 | basic | 9 / 114 | Remaining String receiver APIs; Embedded-expression boundaries beyond the reviewed interpolation probes | Literal, InterpolatedString |
+| Source text and lexical forms | basic | 2 / 64 | Invalid UTF-8 source and diagnostic positions; CRLF and source normalization; Remaining reserved contexts and malformed literal contracts | CommentStatement, BlankStatement, Identifier |
+| Strings and UTF-8 | basic | 10 / 134 | Remaining String receiver APIs; Embedded-expression boundaries beyond the reviewed interpolation probes | Literal, InterpolatedString |
 | Numeric and Boolean operations | basic | 2 / 44 | All operators and assignment forms; mixed widening and every portable failure boundary; Short-circuit side effects and invalid RHS diagnostics across nested control | UnaryExpression, BinaryExpression |
-| Bindings, constants and mutation | basic | 12 / 95 | Shadowing, duplicate declarations, unused/discard bindings and mutation through projections; Untyped empty collection inference; qualified namespace binding members (TypeRB #787) | VariableStatement, AssignmentStatement |
+| Bindings, constants and mutation | basic | 12 / 99 | Shadowing, duplicate declarations, unused/discard bindings and mutation through projections; Untyped empty collection inference; qualified namespace binding members (TypeRB #787) | VariableStatement, AssignmentStatement |
 | Function declarations and calls | basic | 0 / 7 | Every all-path return, evaluation-order and mutable-argument boundary | MethodStatement, ReturnStatement, CallExpression, ExpressionStatement |
 | Defaults and named arguments | basic | 0 / 13 | Method, function-value and payload-enum argument parity |  |
 | Conditions and value-producing branches | basic | 0 / 16 | Nullable/union common result types and broader expression nesting boundaries | IfStatement |
@@ -22,15 +22,15 @@ Each count describes registered probes, not language coverage percentages.
 | Generic declarations and applications | basic | 4 / 74 | Method-specific type parameters, generic classes and interfaces; Wider constraints and type applications | GenericExpression |
 | Union values, literal types and discriminated unions | basic | 24 / 161 | Class discriminants and their readonly-field rules with the object family; Reference grouped annotation and nullable-alternative boundaries (TypeRB #764 and #765); composite type patterns remain staged in the reference |  |
 | Function values and lexical capture | basic | 0 / 56 | Callable equality, method references and remaining parameter-capability/narrowing combinations | LambdaExpression |
-| Arrays and checked indexes | basic | 20 / 204 | Safe collection lookup and conversion APIs; Wider invalid element/mutation combinations | ArrayLiteral, IndexExpression |
-| Hash values and operations | basic | 11 / 26 | All key/value representations, empty inference, managed lifetimes and missing-key failures | HashLiteral |
+| Arrays and checked indexes | basic | 22 / 233 | Remaining receiver combinations and contextual/discarded empty collection inference; Wider invalid element/mutation combinations | ArrayLiteral, IndexExpression |
+| Hash values and operations | basic | 13 / 30 | Wider key/value representations, empty inference and managed lifetime combinations | HashLiteral |
 | Structured and value-producing iteration | basic | 2 / 176 | Remaining receiver APIs that shorten or reorder an Array during traversal | IterationExpression, BlockExpression |
 | Range values and boundaries | basic | 0 / 19 | none registered | RangeExpression |
-| Result and typed propagation | basic | 0 / 28 | General union errors and compiler-declared structured package boundaries | TryExpression, CatchExpression |
+| Result and typed propagation | basic | 5 / 81 | General union errors and compiler-declared structured package boundaries | TryExpression, CatchExpression |
 | Classes, fields and methods | basic | 1 / 1 | Initialization, inheritance, dispatch, privacy and readonly fields | ClassStatement, FieldStatement |
 | Explicit interface conformance | basic | 1 / 1 | Generic conformance, variance, inherited contracts and rejection controls | InterfaceStatement |
 | Modules and constant lookup | basic | 1 / 38 | Forward initialization dependencies and cycles; remaining module method boundaries | ModuleStatement |
-| Symbol values | basic | 2 / 34 | Single-quoted Symbol spellings and Unicode identifier names; Remaining reference operator/control framing and multiline interpolation boundaries | SymbolLiteral |
+| Symbol values | basic | 2 / 35 | Single-quoted Symbol spellings; Remaining reference operator/control framing and multiline interpolation boundaries | SymbolLiteral |
 | Project imports and declaration identity | basic | 1 / 11 | Bare/named aliases, graph conflicts, missing/unused imports and file/project/REPL identity | ImportStatement |
 | Target source interop | toolchain | 0 / 0 | Go/Ruby/TypeScript source emission and platform interop | NativeStatement, NativeBlock, NativeExpression |
 | JSX and web bindings | packages | 0 / 0 | Typed JSX and official web-package boundaries | JSXElement |

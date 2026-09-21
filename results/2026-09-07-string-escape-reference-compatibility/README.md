@@ -1,6 +1,26 @@
 # Current reference compatibility
 
 The selected development reference is TypeRB `0.4.9-dev` at
+`49c6d422e944e37f50a9b3a30941dd6c4d3ae256`, incorporating
+[PR #788](https://github.com/type-rb/type-rb/pull/788),
+[PR #789](https://github.com/type-rb/type-rb/pull/789) and
+[PR #790](https://github.com/type-rb/type-rb/pull/790).
+Unicode identifier spellings remain distinct in Go output, unsupported Unicode
+source characters retain their diagnostic text and span, and builtin Result
+operations preserve imported error aliases across generated targets.
+
+Native uses reviewed ordinary cases for Unicode names, safe collection
+retrieval/slicing and numeric String conversions. MIR constructs standard Result
+values and errors through verified operations, and retained sessions reuse core
+parsing. The exact AST, ordinary paths, recovery, target and lifetime checks remain
+required. The Go-hosted recovery frontend's ASCII fallback and existing display
+and contextual-inference gaps stay explicit. No release, immutable seed or
+complete language/performance qualification is implied. Earlier identities and
+their separate evidence follow.
+
+# Previous namespace-binding reference compatibility
+
+The selected development reference is TypeRB `0.4.9-dev` at
 `424d38cecf163153f47324a86ed793746368f153`, incorporating
 [PR #786](https://github.com/type-rb/type-rb/pull/786).
 Namespace-body lowercase bindings retain shared declaration storage and lexical

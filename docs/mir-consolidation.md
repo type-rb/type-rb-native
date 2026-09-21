@@ -328,3 +328,16 @@ payload conversion lower through typed CFG edges. Traced payload descriptors,
 live roots and case results remain verifiable after frontend state is erased;
 see [decision 0069](decisions/0069-union-value-mir.md). Literal/discriminated unions
 and the remaining nominal families stay part of the completion milestone.
+
+## Builtin Result values and Unicode frontend coverage
+
+Safe Array/String/Hash retrieval and slicing now compose existing typed MIR
+comparisons, branches, reads and aggregate construction. String numeric parsing
+adds independently verified scalar conversion/status operations while Result
+ownership and failure construction remain target-independent. The REPL uses
+the same core parsing runtime and retains structured values across replay.
+Unicode names use frontend category tables and the existing Native byte adapter,
+with ordinary/recovered Native evidence separate from the Go-hosted frontend.
+See [decision 0083](decisions/0083-builtin-result-values.md) and the reviewed
+Capabilities inventory for remaining contracts; this is integration coverage,
+not final cost qualification.

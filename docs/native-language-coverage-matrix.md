@@ -22,7 +22,7 @@
 | Range each (inclusive / exclusive / reversed) | accepts | accepts | matches reference | matches reference |
 | Range with captured endpoint effects (requires fn) | accepts | accepts | matches reference | matches reference |
 | UTF-8 length, indexing, concatenation and interpolation | accepts | accepts | matches reference | matches reference |
-| Unicode local identifier | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Unicode local identifier | accepts | accepts | matches reference | matches reference |
 | Unicode scalar escapes | accepts | accepts | matches reference | matches reference |
 | String search and code-point APIs | accepts | accepts | matches reference | matches reference |
 | Empty String and ASCII indexing | accepts | accepts | matches reference | matches reference |
@@ -1276,3 +1276,81 @@
 | Namespace bindings: invalid blank | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Namespace bindings: import alias | accepts | accepts | matches reference | matches reference |
 | Namespace bindings: import identity | accepts | accepts | matches reference | matches reference |
+| Safe collection lookup: array bounds | accepts | accepts | matches reference | matches reference |
+| Safe collection lookup: string codepoints | accepts | accepts | matches reference | output differs |
+| Safe collection lookup: array slices | accepts | accepts | matches reference | matches reference |
+| Safe collection lookup: string slices | accepts | accepts | matches reference | matches reference |
+| Safe collection lookup: empty array slices | accepts | accepts | matches reference | matches reference |
+| Safe collection lookup: empty string slices | accepts | accepts | matches reference | matches reference |
+| Safe collection lookup: hash missing | accepts | accepts | matches reference | output differs |
+| Safe collection lookup: hash integer | accepts | accepts | matches reference | output differs |
+| Safe collection lookup: nil element | accepts | accepts | matches reference | output differs |
+| Safe collection lookup: live append | accepts | accepts | matches reference | matches reference |
+| Safe collection lookup: live remove | accepts | accepts | matches reference | matches reference |
+| Safe collection lookup: live slice | accepts | accepts | matches reference | matches reference |
+| Safe collection lookup: hash key effect | accepts | accepts | matches reference | matches reference |
+| Safe collection lookup: optional skip | accepts | accepts | matches reference | matches reference |
+| Safe collection lookup: optional present | accepts | accepts | matches reference | matches reference |
+| Safe collection lookup: generic propagation | accepts | accepts | matches reference | matches reference |
+| Safe collection lookup: record payload | accepts | accepts | matches reference | matches reference |
+| Safe collection lookup: float payload | accepts | accepts | matches reference | matches reference |
+| Safe collection lookup: error alias | accepts | accepts | matches reference | matches reference |
+| Safe collection lookup: retained result | accepts | accepts | matches reference | matches reference |
+| Safe collection lookup: invalid missing argument | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Safe collection lookup: invalid extra argument | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Safe collection lookup: invalid wrong index | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Safe collection lookup: invalid float index | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Safe collection lookup: invalid wrong range | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Safe collection lookup: invalid wrong key | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Safe collection lookup: invalid wrong receiver | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Safe collection lookup: invalid named index | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Safe collection lookup: invalid unhandled result | rejects as reference | rejects as reference | not reached | matches reference |
+| Safe collection lookup: nested empty catch | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Discarded untyped empty Array before a catch result | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Safe collection lookup: hash error storage | accepts | accepts | matches reference | matches reference |
+| Portable Integer parsing | accepts | accepts | matches reference | matches reference |
+| Portable Float parsing | accepts | accepts | matches reference | matches reference |
+| Portable number conversion: retained error | accepts | accepts | matches reference | matches reference |
+| Portable number conversion: strict float | accepts | accepts | matches reference | matches reference |
+| Portable number conversion: receiver once | accepts | accepts | matches reference | matches reference |
+| Portable number conversion: optional | accepts | accepts | matches reference | matches reference |
+| Portable number conversion: typed propagation | accepts | accepts | matches reference | matches reference |
+| Portable number conversion: strict integer format | accepts | accepts | matches reference | rejects as reference |
+| Portable number conversion: strict integer range | accepts | accepts | matches reference | rejects as reference |
+| Portable number conversion: strict float format | accepts | accepts | matches reference | rejects as reference |
+| Portable number conversion: strict float range | accepts | accepts | matches reference | rejects as reference |
+| Portable number conversion: strict float nul | accepts | accepts | matches reference | rejects as reference |
+| Portable number conversion: invalid integer arguments | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Portable number conversion: invalid float arguments | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Portable number conversion: invalid strict arguments | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Portable number conversion: invalid integer receiver | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Portable number conversion: invalid unhandled | rejects as reference | rejects as reference | not reached | matches reference |
+| Unicode identifiers: locals | accepts | accepts | matches reference | matches reference |
+| Unicode identifiers: scripts | accepts | accepts | matches reference | matches reference |
+| Unicode identifiers: supplementary | accepts | accepts | matches reference | matches reference |
+| Unicode identifiers: decimal continuation | accepts | accepts | matches reference | matches reference |
+| Unicode identifiers: uppercase variable | accepts | accepts | matches reference | matches reference |
+| Unicode identifiers: no normalization | accepts | accepts | matches reference | matches reference |
+| Unicode identifiers: keyword prefix | accepts | accepts | matches reference | matches reference |
+| Unicode identifiers: function | accepts | accepts | matches reference | matches reference |
+| Unicode identifiers: callable | accepts | accepts | matches reference | matches reference |
+| Unicode identifiers: suffix | accepts | accepts | matches reference | matches reference |
+| Unicode identifiers: record | accepts | accepts | matches reference | matches reference |
+| Unicode identifiers: generic | accepts | accepts | matches reference | matches reference |
+| Unicode identifiers: namespace | accepts | accepts | matches reference | matches reference |
+| Unicode identifiers: enum | accepts | accepts | matches reference | matches reference |
+| Unicode identifiers: symbol | accepts | accepts | matches reference | matches reference |
+| Unicode identifiers: hash label | accepts | accepts | matches reference | output differs |
+| Unicode identifiers: import alias | accepts | accepts | matches reference | matches reference |
+| Unicode identifiers: invalid leading digit | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Unicode identifiers: invalid emoji | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Unicode identifiers: invalid combining | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Unicode identifiers: invalid nondecimal | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Unicode identifiers: invalid letter number | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Unicode identifiers: invalid zero width | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Unicode identifiers: invalid unassigned | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Unicode identifiers: invalid upper suffix | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Safe collection lookup: immutable payload | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Safe collection lookup: mutable payload | accepts | accepts | matches reference | matches reference |
+| Safe collection lookup: mutable from readonly | accepts | accepts | matches reference | matches reference |
+| Safe collection lookup: shallow slice | accepts | accepts | matches reference | matches reference |

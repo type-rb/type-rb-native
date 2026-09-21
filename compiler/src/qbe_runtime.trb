@@ -115,14 +115,6 @@ def emit_process_runtime(mut output: QbeOutput)
 	return
 end
 
-def emit_string_to_integer_runtime(mut output: QbeOutput)
-	qbe_output_line(
-		output,
-		"\ndata $trbn_invalid_integer_error = { b \"panic: invalid Integer\", b 10 }\n\nfunction l $trbn_string_to_integer(l %string) {\n@start\n\t%length_address =l add %string, 8\n\t%length =l loadl %length_address\n\t%empty =w ceql %length, 0\n\tjnz %empty, @invalid, @first\n@first\n\t%parse_start_slot =l alloc8 8\n\t%data =l add %string, 24\n\t%first =w loadub %data\n\t%plus =w ceqw %first, 43\n\t%minus =w ceqw %first, 45\n\t%signed =w or %plus, %minus\n\tjnz %signed, @signed, @unsigned\n@signed\n\t%sign_only =w ceql %length, 1\n\tjnz %sign_only, @invalid, @signed_start\n@signed_start\n\t%signed_index =l copy 1\n\tstorel %signed_index, %parse_start_slot\n\tjmp @validate\n@unsigned\n\t%unsigned_index =l copy 0\n\tstorel %unsigned_index, %parse_start_slot\n\tjmp @validate\n@validate\n\t%validation_index =l phi @signed_start %signed_index, @unsigned %unsigned_index, @validate_next %validation_next\n\t%validation_done =w cslel %length, %validation_index\n\tjnz %validation_done, @parse_start, @validate_digit\n@validate_digit\n\t%validation_address =l add %data, %validation_index\n\t%validation_character =w loadub %validation_address\n\t%validation_below =w csltw %validation_character, 48\n\t%validation_above =w csgtw %validation_character, 57\n\t%validation_invalid =w or %validation_below, %validation_above\n\tjnz %validation_invalid, @invalid, @validate_next\n@validate_next\n\t%validation_next =l add %validation_index, 1\n\tjmp @validate\n@parse_start\n\t%parse_begin =l loadl %parse_start_slot\n\tjmp @parse\n@parse\n\t%parse_index =l phi @parse_start %parse_begin, @parse_next %next_index\n\t%accumulator =l phi @parse_start 0, @parse_next %next_accumulator\n\t%parse_done =w cslel %length, %parse_index\n\tjnz %parse_done, @sign, @parse_digit\n@parse_digit\n\t%parse_address =l add %data, %parse_index\n\t%parse_character =w loadub %parse_address\n\t%digit_word =w sub %parse_character, 48\n\t%digit =l extuw %digit_word\n\t%large_prefix =w csgtl %accumulator, 900719925474099\n\t%limit_prefix =w ceql %accumulator, 900719925474099\n\t%large_digit =w csgtl %digit, 1\n\t%limit_overflow =w and %limit_prefix, %large_digit\n\t%overflow =w or %large_prefix, %limit_overflow\n\tjnz %overflow, @range, @accumulate\n@accumulate\n\t%scaled =l mul %accumulator, 10\n\t%next_accumulator =l add %scaled, %digit\n\tjmp @parse_next\n@parse_next\n\t%next_index =l add %parse_index, 1\n\tjmp @parse\n@sign\n\tjnz %minus, @negative, @positive\n@negative\n\t%negative_result =l sub 0, %accumulator\n\tret %negative_result\n@positive\n\tret %accumulator\n@invalid\n\tcall $trbn_fail(l $trbn_invalid_integer_error, l 23)\n\thlt\n@range\n\tcall $trbn_fail(l $trbn_integer_range_error, l 45)\n\thlt\n}",
-	)
-	return
-end
-
 def emit_integer_to_string_runtime(mut output: QbeOutput)
 	qbe_output_line(
 		output,

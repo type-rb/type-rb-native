@@ -20,8 +20,8 @@ runtime dependencies; independent groups may advance while CI runs.
 
 | Group | Remaining work | Existing foundation |
 | --- | --- | --- |
-| Builtin values and conversions | Remaining Symbol quote/operator boundaries; Unicode identifiers; safe numeric/index/range conversions and structured errors | Portable numbers and scalar String conversions, UTF-8 Strings and portable Symbol spelling, nullable values, enums and Result MIR |
-| Collection operations | Remaining String transforms; safe collection lookup and conversion | Checked indexes, stable natural and key-based sorting, safe blocks, streamed sliced iteration, retained receivers, shallow copies and String joining, Hash snapshots, Range materialization, sequential transforms |
+| Builtin values and conversions | Remaining Symbol quote/operator boundaries and malformed-source origins | Portable numbers, strict/safe numeric String conversions, structured Result errors, UTF-8 Strings and Unicode identifiers, nullable values and enums |
+| Collection operations | Remaining String transforms and contextual empty-collection inference | Safe Array/String/Hash retrieval and slicing, checked indexes, stable natural and key-based sorting, safe blocks, streamed sliced iteration, retained receivers, shallow copies and String joining, Hash snapshots, Range materialization, sequential transforms |
 | Value declarations and identity | Forward initializer dependencies, qualified namespace binding members and untyped empty collection inference | Nested/reopened modules, lexical privacy, inferred imported constants, qualified aliases, typed runtime constants and lexical file/project/namespace variables, ordered initializer functions, shared REPL cells with lexical declaration identity, and persistent global roots |
 | Nominal and union types | Class discriminants; remaining enum attributes and patterns | Literal constraints and literal-union Hash keys, common record members and overlapping discriminant narrowing; nominal newtypes with explicit construction/projection and closed factories; general union values and scalar type cases, nominal records, payload/raw enums, checked raw conversions and ordinary enum methods |
 | Object declarations | Classes, initialization, fields, privacy, inheritance and dispatch; interfaces and conformance | Nominal layouts, calls, receiver capabilities and managed values |
@@ -70,7 +70,9 @@ or uncovered basic contracts remain. Keep every required correctness, lifetime,
 target, recovery and ordinary self-hosting check; qualify performance at the
 coherent milestone described in [MIR consolidation](mir-consolidation.md).
 
-The current source adds lexical namespace-body variables, including same-submission
+The current source adds Unicode identifiers, safe collection retrieval/slicing,
+structured number parsing and retained Result values through verified MIR and
+shared core/REPL parsing. It also adds lexical namespace-body variables, including same-submission
 REPL ordering and earlier outer bindings, shared interactive globals with checked lexical scope,
 once-only initializers and explicit replay, optional scalar output through verified
 MIR branches, and file/project lowercase bindings with verified mutable
@@ -90,6 +92,6 @@ joining, Hash snapshot iteration and Range materialization, Array search,
 uniqueness, concatenation, insertion/removal, edges/copies/slicing, and the String
 query, sequence, slice and escape families. Literal-union Hash keys preserve
 their semantic identity through lookup, copies, snapshots and collection.
-Its 1274 registered cases include
+Its 1352 registered cases include
 explicit remaining differences; neither this count nor green regression CI
 closes #454.

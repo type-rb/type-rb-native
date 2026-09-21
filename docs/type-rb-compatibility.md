@@ -2,7 +2,7 @@
 
 TypeRB Native currently follows exact reference revisions during development. The
 current source and semantic oracle is TypeRB
-`424d38cecf163153f47324a86ed793746368f153` (the `0.4.9-dev` development identity), recorded
+`49c6d422e944e37f50a9b3a30941dd6c4d3ae256` (the `0.4.9-dev` development identity), recorded
 in `TYPE_RB_REVISION`. This declares one exact reference identity during Native
 development, without claiming a supported version range.
 
@@ -33,6 +33,22 @@ The earlier scoped-file successor is registered in
 [Darwin/Linux arm64 result](https://github.com/type-rb/type-rb-native/blob/5cf61c740aa600c34ed94f1b130ea2ffefd9e783/results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/README.md)
 passes the selected-reference, migration, exact-baseline, target-regression,
 fixed-point, process, resource, and size criteria.
+
+## Builtin values and Unicode reference update
+
+The exact pin incorporates [TypeRB #788](https://github.com/type-rb/type-rb/pull/788),
+[#789](https://github.com/type-rb/type-rb/pull/789) and
+[#790](https://github.com/type-rb/type-rb/pull/790). Go output preserves distinct
+Unicode identifier spellings, unsupported Unicode source characters produce
+original-character diagnostics, and safe builtin operations retain imported
+Result/error aliases in generated code. These are independent reference compiler
+corrections with Go, Ruby, TypeScript and REPL controls.
+
+Native pairs ordinary Unicode names and safe collection/number operations against
+this accepted source and exact AST. Recovered Native generations also exercise
+Unicode input; the Go-hosted recovery frontend's ASCII fallback remains explicit.
+Shared observations preserve remaining Hash/NUL presentation differences and
+contextual empty-collection gaps. No release or immutable bootstrap seed changes.
 
 ## Namespace binding reference update
 

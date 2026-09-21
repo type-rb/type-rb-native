@@ -1,3 +1,6 @@
+import { builtin_result_method } from builtin_results
+import { mir_builtin_number_parse } from builtin_number_parsing
+import { mir_builtin_lookup } from builtin_lookup
 import { check_literal_case, literal_branch_types, literal_case_type, literal_scalar_type } from literal_cases
 import { check_union_member, narrow_union_discriminant } from union_members
 import { mir_literal_context } from literal_mir
@@ -742,6 +745,9 @@ def check_method_call(
 		end
 		return check_call(state, position, locals, 1, "", function, checked_mir_value(receiver), true)
 	end
+	if builtin_result_method(receiver.type_name, method) > 0
+		return check_builtin_lookup(state, position, locals, receiver, method)
+	end
 	if hash_key_type(receiver.type_name) != "" || receiver.type_name == "Hash"
 		return checked_hash_call(state, position, locals, receiver, method)
 	end
@@ -778,6 +784,10 @@ def check_method_call(
 			return value
 		end
 		return mir_checked_array_operation(state, locals, 24, checked_mir_value(receiver), checked_mir_value(value), 0, "Void", position[0] - 1)
+	end
+	if method == "to_f" && receiver.type_name == "String"
+		expect(state, position, ")")
+		return mir_checked_string_operation(state, locals, 17, checked_mir_value(receiver), - 1, 6, "Float", position[0] - 1)
 	end
 	if method == "to_i"
 		expect(state, position, ")")
@@ -871,7 +881,7 @@ def check_member(mut state: CompilerState, mut position: Array<Integer>, mut loc
 		end
 	end
 	if token_is(state, position[0], "(")
-		if value.category < 4 && !(member == "raw_value" && raw_enum_type(state, find_enum_type(state, value.type_name)) != "") && enum_method_function(state, value.type_name, member) < 0 && member != "size" && member != "to_i" && member != "to_s" && member != "push" && member != "new" && !(value.type_name == "Range<Integer>" && member == "to_a") && !(value.type_name == "Integer" && integer_method_kind(member) > 0) && !(value.type_name == "Float" && float_method_kind(member) > 0) && !(value.type_name == "String" && string_method_kind(member) > 0) && !(array_element_type(value.type_name) != "" && array_method_kind(member) > 0) && !((value.type_name == "Hash" || hash_key_type(value.type_name) != "") && checked_hash_method(member) != 0)
+		if value.category < 4 && !(member == "raw_value" && raw_enum_type(state, find_enum_type(state, value.type_name)) != "") && enum_method_function(state, value.type_name, member) < 0 && builtin_result_method(value.type_name, member) == 0 && member != "size" && member != "to_i" && member != "to_f" && member != "to_s" && member != "push" && member != "new" && !(value.type_name == "Range<Integer>" && member == "to_a") && !(value.type_name == "Integer" && integer_method_kind(member) > 0) && !(value.type_name == "Float" && float_method_kind(member) > 0) && !(value.type_name == "String" && string_method_kind(member) > 0) && !(array_element_type(value.type_name) != "" && array_method_kind(member) > 0) && !((value.type_name == "Hash" || hash_key_type(value.type_name) != "") && checked_hash_method(member) != 0)
 			scalar_mir_disable(locals)
 		end
 		if value.category >= 4
@@ -1328,10 +1338,11 @@ def check_simple_statement(
 		mut state: CompilerState,
 		mut position: Array<Integer>,
 		mut locals: CheckedLocals,
+		contextual: String,
 	): CheckedValue
 	origin := position[0]
 	line := load_integer(state.token_lines, position[0])
-	left := check_statement_value(state, position, locals, "")
+	left := check_statement_value(state, position, locals, contextual)
 	mut display_mutable := 0
 	if left.nullable_binding >= 0 && left.nullable_field == - 1
 		display_mutable = left.mutable
@@ -1596,11 +1607,11 @@ def checked_while(mut state: CompilerState, mut position: Array<Integer>, mut lo
 end
 
 def check_block(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, result_type: String, loop_origin: Integer): Boolean
-	check_block_value(state, position, locals, result_type, loop_origin, false)
+	check_block_value(state, position, locals, result_type, loop_origin, false, "")
 	return !has_diagnostic(state)
 end
 
-def check_block_value(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, result_type: String, loop_origin: Integer, wants_value: Boolean): CheckedValue
+def check_block_value(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, result_type: String, loop_origin: Integer, wants_value: Boolean, expected: String): CheckedValue
 	saved_loop := locals.lexical_loop[0]
 	locals.lexical_loop[0] = loop_origin
 	saved_mir := locals.mir_state[0]
@@ -1613,6 +1624,18 @@ def check_block_value(mut state: CompilerState, mut position: Array<Integer>, mu
 			break
 		end
 		statement_origin := position[0]
+		# Only the final value inherits context; earlier statements and explicit
+		# returns keep their own expression/function boundaries.
+		mut contextual := ""
+		if wants_value && expected != ""
+			mut after := [sparse_integer_at(state.statement_finishes, statement_origin)]
+			if after[0] > 0
+				skip_newlines(state, after)
+				if syntax_block_end(state, after[0]) || syntax_conditional_tail(state, after[0])
+					contextual = expected
+				end
+			end
+		end
 		checked_submission_boundary(state, locals, position[0])
 		if diverged
 			# Continue checking unreachable syntax and types without creating
@@ -1669,7 +1692,7 @@ def check_block_value(mut state: CompilerState, mut position: Array<Integer>, mu
 		elsif declaration_start(state, position[0])
 			result = check_declaration(state, position, locals)
 		else
-			result = check_simple_statement(state, position, locals)
+			result = check_simple_statement(state, position, locals, contextual)
 		end
 		if standard_result_instance(state, result.type_name) >= 0 && !result_interactive_entry(state, locals)
 			mut after := [position[0]]
@@ -1820,7 +1843,7 @@ def check_control_value(mut state: CompilerState, mut position: Array<Integer>, 
 			if locals.mir_state[1] >= 0 || locals.lambda_result.size() > 0
 				result_type = checked_return_type(state, locals)
 			end
-			value = check_block_value(state, position, locals, result_type, locals.lexical_loop[0], wants_value)
+			value = check_block_value(state, position, locals, result_type, locals.lexical_loop[0], wants_value, "")
 		end
 		if reachable && value.type_name != "Never" && checked_readonly_reference_binding(state, locals, value)
 			immutable_reference = true
@@ -2183,7 +2206,7 @@ def check_statement_value(mut state: CompilerState, mut position: Array<Integer>
 	store_integer(locals.mir_values, locals.count[0] - 1, checked_mir_value(error) + 1)
 	position[0] = handler.body
 	boundary := checked_return_type(state, locals)
-	recovered := check_block_value(state, position, locals, boundary, locals.lexical_loop[0], true)
+	recovered := check_block_value(state, position, locals, boundary, locals.lexical_loop[0], true, operation.success_type)
 	result_scope_check(state, locals, saved_count)
 	locals.count[0] = saved_count
 	if recovered.type_name != "Never"
@@ -2267,7 +2290,7 @@ def check_lambda_value(mut state: CompilerState, mut position: Array<Integer>, m
 		declare_default_functions(state)
 		mut inner := [syntax.body_start]
 		result_type := checked_return_type(state, locals)
-		completion := check_block_value(state, inner, locals, result_type, - 1, false)
+		completion := check_block_value(state, inner, locals, result_type, - 1, false, "")
 		result_scope_check(state, locals, locals.capture_parents.size())
 		if !has_diagnostic(state)
 			if inner[0] != syntax.body_finish
@@ -2397,7 +2420,7 @@ def check_transform(mut state: CompilerState, mut position: Array<Integer>, mut 
 	nullable_loop_writes(state, locals, shape.body_start, shape.body_finish)
 	previous_block := locals.value_block[0]
 	locals.value_block[0] = true
-	mut yielded := check_block_value(state, position, locals, "Void", - 1, true)
+	mut yielded := check_block_value(state, position, locals, "Void", - 1, true, "")
 	locals.value_block[0] = previous_block
 	if has_diagnostic(state)
 		return yielded
@@ -2597,4 +2620,39 @@ def check_newtype_member(mut state: CompilerState, mut position: Array<Integer>,
 		return checked_value("Invalid", 0, origin, 0)
 	end
 	return check_call(state, position, locals, 1, "", function, checked_mir_value(receiver), !class_method)
+end
+
+# Capture receiver and authored argument once before the live bounds/key query.
+def check_builtin_lookup(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue, method: String): CheckedValue
+	origin := position[0]
+	kind := builtin_result_method(receiver.type_name, method)
+	mut expected := "Integer"
+	if kind == 2
+		expected = "Range<Integer>"
+	elsif kind == 3
+		expected = hash_key_type(receiver.type_name)
+	end
+	advance(position)
+	skip_newlines(state, position)
+	if kind == 4 || kind == 5
+		expect(state, position, ")")
+		if has_diagnostic(state)
+			return checked_value("Invalid", 0, origin, 0)
+		end
+		return mir_builtin_number_parse(state, locals, receiver, kind == 5, origin)
+	end
+	argument := check_expression(state, position, locals, 1, expected)
+	skip_newlines(state, position)
+	if token_is(state, position[0], ",")
+		advance(position)
+		skip_newlines(state, position)
+	end
+	expect(state, position, ")")
+	if has_diagnostic(state)
+		return checked_value("Invalid", 0, origin, 0)
+	end
+	if argument.type_name == "Never"
+		return argument
+	end
+	return mir_builtin_lookup(state, locals, kind, receiver, argument, origin)
 end
