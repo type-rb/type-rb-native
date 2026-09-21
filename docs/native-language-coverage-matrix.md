@@ -64,8 +64,8 @@
 | Result storage and exhaustive case | accepts | accepts | matches reference | matches reference |
 | Result try propagation | accepts | accepts | matches reference | matches reference |
 | Result catch recovery | accepts | accepts | matches reference | matches reference |
-| Class fields, initializer and method | rejects valid input | rejects valid input | not reached | rejects valid input |
-| Explicit interface conformance | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Class fields, initializer and method | accepts | accepts | matches reference | matches reference |
+| Explicit interface conformance | accepts | accepts | matches reference | matches reference |
 | Module declaration and constant | accepts | accepts | matches reference | matches reference |
 | Top-level constant | accepts | accepts | matches reference | matches reference |
 | Symbol literal equality | accepts | accepts | matches reference | matches reference |
@@ -1400,3 +1400,46 @@
 | String transform empty pattern | accepts | accepts | matches reference | rejects as reference |
 | String transform empty pattern effects | accepts | accepts | matches reference | rejects as reference |
 | String transform rejects named builtin arguments | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Class array field | accepts | accepts | matches reference | matches reference |
+| Class branch initialization | accepts | accepts | matches reference | matches reference |
+| Class captured value | accepts | accepts | matches reference | matches reference |
+| Class constant | accepts | accepts | matches reference | matches reference |
+| Class constructor named default | accepts | accepts | matches reference | matches reference |
+| Class field assignment | accepts | accepts | matches reference | matches reference |
+| Class field default | accepts | accepts | matches reference | matches reference |
+| Class float boolean fields | accepts | accepts | matches reference | matches reference |
+| Class generic field | accepts | accepts | matches reference | matches reference |
+| Class generic instance method | accepts | accepts | matches reference | matches reference |
+| Class generic interface | accepts | accepts | matches reference | matches reference |
+| Class in hash | accepts | accepts | matches reference | matches reference |
+| Class in record | accepts | accepts | matches reference | matches reference |
+| Class inherited interface | accepts | accepts | matches reference | matches reference |
+| Class inherited method | accepts | accepts | matches reference | matches reference |
+| Class initializer | accepts | accepts | matches reference | matches reference |
+| Class interface array | accepts | accepts | matches reference | matches reference |
+| Class interface dispatch | accepts | accepts | matches reference | matches reference |
+| Class interface two implementations | accepts | accepts | matches reference | matches reference |
+| Class managed fields | accepts | accepts | matches reference | matches reference |
+| Class mutable fields | accepts | accepts | matches reference | matches reference |
+| Class named constructor | accepts | accepts | matches reference | matches reference |
+| Class named method default | accepts | accepts | matches reference | matches reference |
+| Class nullable | accepts | accepts | matches reference | matches reference |
+| Class private method | accepts | accepts | matches reference | output differs |
+| Class readonly initialization | accepts | accepts | matches reference | matches reference |
+| Class recursive field | accepts | accepts | matches reference | matches reference |
+| Class reference alias | accepts | accepts | matches reference | matches reference |
+| Class self method call | accepts | accepts | matches reference | matches reference |
+| Class self return | accepts | accepts | matches reference | matches reference |
+| Class static method | accepts | accepts | matches reference | matches reference |
+| Class through instance | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Object field type | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Object implicit interface | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Object instance through class | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Object interface construction | rejects valid input | rejects as reference | not reached | rejects as reference |
+| Object interface missing method | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Object interface return mismatch | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Object private field | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Object private method | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Object readonly field write | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Object readonly method write | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Object uninitialized field | rejects as reference | rejects as reference | not reached | rejects as reference |

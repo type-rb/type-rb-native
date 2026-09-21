@@ -88,6 +88,10 @@ String literal-union keys through growth, deletion, copies and snapshots under
 forced GC, including Unicode/NUL payloads, exact reclamation, and retained
 snapshot closures across declaration remapping and replay.
 
+`native-object-methods-test.py` runs in both CLI authorities. It covers class
+fields and constructors, inherited methods, explicit interface dispatch, forced
+collection with exact reclamation, retained aliases/captures and replay.
+
 The CLI cache test gives each complete core/CLI fixed-point rebuild a bounded
 600-second watchdog and records its elapsed time; the whole CLI job allows
 90 minutes for the repeated invalidation controls. Literal-union Hash integration

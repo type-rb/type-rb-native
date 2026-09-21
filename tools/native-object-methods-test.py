@@ -32,6 +32,12 @@ with tempfile.TemporaryDirectory(prefix='native-object-methods-') as temporary:
         'object-class-float-boolean-fields',
         'object-class-generic-field',
         'object-class-generic-instance-method',
+        'object-class-generic-interface',
+        'object-class-inherited-interface',
+        'object-class-inherited-method',
+        'object-class-interface-array',
+        'object-class-interface-dispatch',
+        'object-class-interface-two-implementations',
         'object-class-in-hash',
         'object-class-in-record',
         'object-class-initializer',
@@ -177,6 +183,50 @@ puts(item.second)
     assert not defaults.stderr, defaults
     assert defaults.stdout == '#<Defaults first: "ab", second: "abc"> : Defaults\nabc\nabc\n', defaults
 
+    interfaces = run([binary, 'repl'], data='''interface Named
+name(): String
+end
+class Label implements Named
+@text: String
+def initialize(text: String)
+@text = text
+end
+def name(): String
+return @text
+end
+def replace(text: String)
+@text = text
+end
+end
+class Fixed implements Named
+def name(): String
+return "fixed"
+end
+end
+mut source := Label.new("a" + "b")
+value: Named := source
+read := fn(): String; return value.name(); end
+source.replace("changed")
+class Later
+end
+puts(value.name())
+puts(read())
+items: Array<Named> := [source, Fixed.new()]
+items.each { |item| puts(item.name()) }
+:reload
+puts(value.name())
+puts(read())
+:quit
+''')
+    assert not interfaces.stderr, interfaces
+    assert interfaces.stdout == (
+        '#<Label text: "ab"> : Label [mut]\n'
+        '#<Label text: "ab"> : Named\n#<fn> : () -> String\n'
+        'changed\nchanged\n'
+        '[#<Label text: "changed">, #<Fixed >] : Array<Named>\n'
+        'changed\nfixed\nchanged\nchanged\nchanged\nfixed\n'
+        'reloaded\nchanged\nchanged\n'), interfaces
+
     (root / 'src').mkdir()
     (root / 'trbconfig.jsonc').write_text('{"name":"objects","sourceDir":"src"}')
     (root / 'src/helper.trb').write_text(
@@ -185,4 +235,4 @@ puts(item.second)
     assert not imported.stderr, imported
     assert imported.stdout == '#<Helper > : Helper\n17\n17\nreloaded\n17\n', imported
 
-print('Native object methods, fields, initialization, forced collection, retained identities and replay passed')
+print('Native object methods, fields, initialization, inheritance, interface dispatch, forced collection, retained identities and replay passed')

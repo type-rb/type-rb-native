@@ -43,6 +43,7 @@ subprocess.run([sys.executable, str(repository / "tools/native-string-trimming-t
 subprocess.run([sys.executable, str(repository / "tools/native-string-transforms-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-symbol-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-newtype-test.py"), str(binary)], check=True)
+subprocess.run([sys.executable, str(repository / "tools/native-object-methods-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-literal-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-union-hash-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-scalar-strings-test.py"), str(binary)], check=True)
@@ -560,7 +561,7 @@ pair
     for expected in ['5 : Integer', 'Integer\n', '[9, 2, 3]', 'out of bounds',
                      '3 : Integer', 'invalid Integer', '12 : Integer',
                      'outside the portable range', '[1, 2.5] : Array<Float>',
-                     'division by zero', '14 : Integer', 'record field is readonly',
+                     'division by zero', '14 : Integer', 'field is readonly',
                      'left: 2, right: 4', 'left: 7, right: 4']:
         assert expected in output, (expected, output)
     assert output.count('once') == 1, output
