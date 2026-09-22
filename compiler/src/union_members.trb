@@ -6,25 +6,63 @@ import { mir_nullable_coerce } from nullable_mir
 import { nullable_fact, nullable_lookup } from nullable_flow
 import { mir_control_active, mir_control_allocate, mir_control_arguments, mir_control_branch, mir_control_enter, mir_control_jump_arguments, mir_control_prepare } from mir_control
 import { mir_checked_record_field } from mir_records
+import { mir_checked_object_field } from object_fields
+import { find_object_type, object_field_index } from object_types
 import { CheckedValue, checked_mir_value, checked_view, mir_add_value } from checked_values
 import { mir_semantic_type_id } from mir_types
 import { find_field, find_record_type } from type_resolution
 import { CheckedLocals, CompilerState, ControlSyntax, diagnostic, local_find } from state
 import { load_integer, load_string } from storage
 
-# Every alternative must expose the field through the same record storage model.
+# A common member must use the same storage model in every alternative. Class
+# and record layouts stay distinct even when their visible field names match.
+def union_member_storage(state: CompilerState, name: String): Integer
+	if find_record_type(state, name) >= 0
+		return 1
+	end
+	owner := find_object_type(state, name)
+	if owner >= 0 && !state.objects[state.object_instances[owner].definition].interface_type
+		return 2
+	end
+	return 0
+end
+
+def union_member_field_type(state: CompilerState, name: String, member: String, readonly: Boolean): String
+	record_owner := find_record_type(state, name)
+	if record_owner >= 0
+		field := find_field(state, record_owner, member)
+		if field >= 0
+			return load_string(state.field_types, field)
+		end
+	else
+		owner := find_object_type(state, name)
+		if owner >= 0 && member.size() > 0 && member[0] != "_"
+			field := object_field_index(state, owner, "@" + member)
+			if field >= 0
+				row := state.object_instances[owner].fields[field]
+				if !readonly || row.readonly
+					return row.type_name
+				end
+			end
+		end
+	end
+	return ""
+end
+
 def union_member_type(state: CompilerState, name: String, member: String): String
 	mut types: Array<String> := []
+	mut storage := 0
 	union_parts(name).each do |alternative|
-		owner := find_record_type(state, alternative)
-		if owner < 0
+		model := union_member_storage(state, alternative)
+		if model == 0 || (storage != 0 && model != storage)
 			return ""
 		end
-		field := find_field(state, owner, member)
-		if field < 0
+		storage = model
+		type_name := union_member_field_type(state, alternative, member, false)
+		if type_name == ""
 			return ""
 		end
-		types.push(load_string(state.field_types, field))
+		types.push(type_name)
 	end
 	if types.size() == 0
 		return ""
@@ -32,11 +70,21 @@ def union_member_type(state: CompilerState, name: String, member: String): Strin
 	return union_type(types)
 end
 
+def mir_checked_union_member(mut state: CompilerState, mut locals: CheckedLocals, value: CheckedValue, member: String, origin: Integer): CheckedValue
+	record_owner := find_record_type(state, value.type_name)
+	if record_owner >= 0
+		field := find_field(state, record_owner, member)
+		return mir_checked_record_field(state, locals, value, field, load_string(state.field_types, field), origin)
+	end
+	field := object_field_index(state, find_object_type(state, value.type_name), "@" + member)
+	return mir_checked_object_field(state, locals, value, field, origin)
+end
+
 def check_union_member(mut state: CompilerState, mut locals: CheckedLocals, value: CheckedValue, member: String, origin: Integer): CheckedValue
 	expected := union_member_type(state, value.type_name, member)
 	line := load_integer(state.token_lines, origin)
 	if expected == ""
-		diagnostic(state, "TRBN4004", line, "union alternatives do not expose a common record field " + member)
+		diagnostic(state, "TRBN4004", line, "union alternatives do not expose a common data field " + member)
 		return checked_view(value, "Invalid", 0)
 	end
 	mir_control_prepare(state, locals)
@@ -54,8 +102,7 @@ def check_union_member(mut state: CompilerState, mut locals: CheckedLocals, valu
 			next_branch = mir_control_branch(state, locals, condition, line)
 		end
 		payload := mir_union_operation(state, locals, 54, value, alternative, alternative, origin)
-		field := find_field(state, find_record_type(state, alternative), member)
-		projected := mir_checked_record_field(state, locals, payload, field, load_string(state.field_types, field), origin)
+		projected := mir_checked_union_member(state, locals, payload, member, origin)
 		converted := mir_nullable_coerce(state, locals, projected, expected, origin)
 		arguments := mir_control_arguments(locals, locals.count[0])
 		locals.mir_arguments.push(checked_mir_value(converted))
@@ -73,7 +120,8 @@ def check_union_member(mut state: CompilerState, mut locals: CheckedLocals, valu
 end
 
 # Only a direct lexical receiver supplies a reusable discriminant fact. Record
-# fields are immutable; replacing the binding invalidates this versioned fact.
+# fields and readonly class fields cannot change through another alias;
+# replacing the binding invalidates this versioned fact.
 def narrow_union_discriminant(state: CompilerState, mut locals: CheckedLocals, control: ControlSyntax, branch_index: Integer)
 	mut first := control.selector
 	mut finish := control.selector_finish
@@ -111,15 +159,7 @@ def narrow_union_discriminant(state: CompilerState, mut locals: CheckedLocals, c
 		end
 	end
 	alternatives.each do |alternative|
-		owner := find_record_type(state, alternative)
-		if owner < 0
-			return
-		end
-		field := find_field(state, owner, member)
-		if field < 0
-			return
-		end
-		type_name := load_string(state.field_types, field)
+		type_name := union_member_field_type(state, alternative, member, true)
 		if literal_type_base(type_name) == ""
 			return
 		end

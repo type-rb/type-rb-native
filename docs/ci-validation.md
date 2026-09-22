@@ -91,6 +91,9 @@ snapshot closures across declaration remapping and replay.
 `native-object-methods-test.py` runs in both CLI authorities. It covers class
 fields and constructors, inherited methods, explicit interface dispatch, forced
 collection with exact reclamation, retained aliases/captures and replay.
+Class union fixtures also exercise readonly discriminants, overlapping tags,
+different field offsets, generic and nullable payloads, containers, captures and
+Results. Retained union receivers preserve aliases across type growth and replay.
 
 The CLI cache test gives each complete core/CLI fixed-point rebuild a bounded
 600-second watchdog and records its elapsed time; the whole CLI job allows

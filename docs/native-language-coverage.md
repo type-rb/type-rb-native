@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 1464 ordinary-path probes and 32 feature
+Status: the shared contract contains 1495 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -286,8 +286,12 @@ signatures, containers, aliases, nominal representations and captures. Authored
 literals satisfy explicit constraints; computed scalars cannot narrow implicitly.
 Verified constants and widening retain semantic identities without extra boxes.
 Finite literal cases support homogeneous and mixed domains, and common record
-members lower through checked alternatives. Direct lexical discriminants narrow
-overlapping record alternatives while rebinding invalidates the fact. See
+or class members lower through checked alternatives using their own storage model.
+Direct lexical discriminants narrow overlapping alternatives while rebinding
+invalidates the fact. Class tags must be readonly in every alternative. Common
+mutable fields remain readable without supplying a stable narrowing fact. Generic,
+imported, captured, nullable, Array, Hash and Result alternatives retain their
+ordinary identities and lifetimes. See
 [decision 0078](decisions/0078-literal-types-and-union-members.md).
 
 Ordinary and retained REPL probes include Unicode/NUL singleton strings, exact
@@ -298,8 +302,11 @@ verified scalar storage. Homogeneous literal-union Hash keys preserve their
 union identity through payload equality, growth, deletion, copies and snapshots;
 managed key arrays keep Integer and String union objects alive. Mixed and
 nullable keys remain rejected, and indexed access requires the exact key type.
-See [decision 0079](decisions/0079-literal-union-hash-keys.md). Class
-discriminants depend on the object family's readonly-field rules. Reference
+See [decision 0079](decisions/0079-literal-union-hash-keys.md). The shared cases
+retain reference private-field visibility and common-field assignment defects
+([TypeRB #814](https://github.com/type-rb/type-rb/issues/814) and
+[#815](https://github.com/type-rb/type-rb/issues/815)); Native rejects those boundaries.
+Reference
 boundaries for grouped annotations, nullable alternatives and composite type
 patterns remain visible, as do REPL type ordering, assignment and Hash display
 differences.

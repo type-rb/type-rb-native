@@ -26,11 +26,39 @@ compare alternative tags, keeping `0` distinct from `"0"`. Singleton Hash keys
 retain their semantic type IDs with the ordinary scalar key representation.
 Hash keys formed from literal unions still need a separate verified key layout;
 this change does not erase their constraint or accept unverified storage.
-Common data members require every nominal alternative to expose the member;
-selection lowers through the alternative's verified record layout. Exhaustive
+Common data members require every nominal alternative to expose the member
+through the same storage model. Record alternatives use verified record layouts;
+class alternatives use the same typed field loads as ordinary class receivers.
+Mixed record/class storage, private class fields, missing members and common methods
+remain rejected. Exhaustive
 literal cases and branch-local discriminant narrowing belong in semantic
 checking and MIR, preserving overlapping alternatives and mutation invalidation.
-Classes will reuse this boundary with their separate readonly-field contract.
+
+Common callable fields use indirect calls after the same checked projection;
+this does not select ordinary methods from a union. Field readonly flags prevent
+replacement, while mutable receivers retain the existing shallow collection
+capabilities of their fields.
+
+Class discriminants must be readonly in every alternative. Reading a common
+mutable field is valid, but it cannot establish a stable discriminant fact.
+Direct lexical receivers retain overlapping alternatives or the unhandled
+alternatives of an `else` branch. Rebinding invalidates the fact; ordinary mutable
+fields remain writable through a correctly narrowed mutable class receiver.
+Generic fields accept validated singleton types without replacing type parameters
+with arbitrary concrete types during declaration validation.
+
+Common fields lower to union tests, checked payload extraction, record/class
+loads, explicit widening and typed join arguments. No new backend instruction
+or source-dependent emitter analysis is needed. Independent verifier controls
+reject forged extraction identities and field layouts; source-erased/reordered
+MIR, forced collection and retained REPL replay cover managed alternatives.
+
+The pinned reference still permits external private fields through unions
+([TypeRB #814](https://github.com/type-rb/type-rb/issues/814)) and accepts common-field
+stores that generate invalid Go ([#815](https://github.com/type-rb/type-rb/issues/815)).
+Native rejects both boundaries; the shared registry preserves their differing
+check/build/execution/REPL outcomes. This is not complete union parity or a
+portable common-field assignment contract.
 
 The REPL preserves the singleton's semantic type independently of scalar storage.
 Retained declarations, failed edits and replay must preserve those constraints.

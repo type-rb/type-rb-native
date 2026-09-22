@@ -1466,3 +1466,34 @@
 | Generic interface dispatch returns captured callable values | accepts | accepts | matches reference | matches reference |
 | Imported interface dispatch returns callable values | accepts | accepts | matches reference | matches reference |
 | Inherited static method resolves across source modules | accepts | accepts | matches reference | matches reference |
+| Class unions: readonly discriminants | accepts | accepts | matches reference | matches reference |
+| Class unions: captured discriminants | accepts | accepts | matches reference | matches reference |
+| Class unions: overlap else | accepts | accepts | matches reference | matches reference |
+| Class unions: collections | accepts | accepts | matches reference | output differs |
+| Class unions: nullable container | accepts | accepts | matches reference | matches reference |
+| Class unions: result payload | accepts | accepts | matches reference | matches reference |
+| Class unions: generic field | accepts | accepts | matches reference | matches reference |
+| Class unions: common numeric field | accepts | accepts | matches reference | matches reference |
+| Class unions: common managed field | accepts | accepts | matches reference | matches reference |
+| Class unions: receiver once | accepts | accepts | matches reference | matches reference |
+| Class unions: grouped literals | accepts | accepts | matches reference | matches reference |
+| Class unions: narrowed method | accepts | accepts | matches reference | matches reference |
+| Class unions: imported readonly | accepts | accepts | matches reference | matches reference |
+| Class unions: reject mutable discriminant | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Class unions: reject partly readonly | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Class unions: reject mixed storage | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Class unions: reject missing field | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Class unions: reject common method | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Class unions: reject readonly write | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Class unions: reject replaced binding | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Class unions: reject nonexhaustive | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Class unions: reject nonliteral tag | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Class unions: private field | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Class unions: common field write | rejects valid input | rejects as reference | not reached | rejects valid input |
+| Class unions: narrowed mutable field | accepts | accepts | matches reference | matches reference |
+| Class unions: generic string discriminant | accepts | accepts | matches reference | matches reference |
+| Class unions: reject generic wrong literal | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Class unions: mutable projection | accepts | accepts | matches reference | matches reference |
+| Class unions: immutable projection | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Class unions: readonly projection | accepts | accepts | matches reference | matches reference |
+| Class unions: common callable | accepts | accepts | matches reference | rejects valid input |
