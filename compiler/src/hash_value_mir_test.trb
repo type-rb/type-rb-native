@@ -89,6 +89,55 @@ describe("Hash value MIR") do
 		end
 	end
 
+	test("joins inferred Hash value alternatives before verified stores") do
+		sources := [
+			"def main()\nmut values := {}\nif true\nvalues[1] = [2]\nelse\nvalues[1] = [4.5]\nend\nputs(values.size())\nend\n",
+			"def main()\nmut values := {}\nif false\nvalues[1] = [2]\nelse\nvalues[1] = [4.5]\nend\nputs(values.size())\nend\n",
+			"def main()\nmut values := {}\nif true\nvalues[1] = 2\nelse\nvalues[1] = nil\nend\nputs(values.size())\nend\n",
+			"def main()\nmut values := {}\nif false\nvalues[1] = 2\nelse\nvalues[1] = nil\nend\nputs(values.size())\nend\n",
+			"def main()\nmut values := {}\nif true\nvalues[1] = 2\nelse\nvalues[1] = \"word\"\nend\nputs(values.size())\nend\n",
+			"def main()\nmut values := {}\nif false\nvalues[1] = 2\nelse\nvalues[1] = \"word\"\nend\nputs(values.size())\nend\n",
+			"def main()\nmut values := {}\ncase 1\nwhen 1\nvalues[1] = 2\nwhen 2\nvalues[1] = 4.5\nelse\nvalues[1] = \"word\"\nend\nputs(values.size())\nend\n",
+			"def main()\nmut values := {}\ncase 3\nwhen 1\nvalues[1] = 2\nwhen 2\nvalues[1] = 4.5\nelse\nvalues[1] = \"word\"\nend\nputs(values.size())\nend\n",
+		]
+		sources.each do |source|
+			mut state := logical_checked_source(source)
+			checked := check(state)
+			if !checked
+				puts(load_string(state.diagnostic_messages, 0))
+			end
+			expect(checked).to_be_true()
+			expect(verify_mir(state.scalar_mir, true)).to_equal("")
+			qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+			if qbe != nil
+				case logical_run_qbe(qbe, control_test_output(emit_qbe(state)))
+				when Result::Ok(actual)
+					expect(actual).to_equal("1\n")
+				when Result::Err(error)
+					puts(error)
+					expect(false).to_be_true()
+				end
+			end
+			mut interactive := logical_checked_source(source)
+			interactive.hash_repl[0] = true
+			if !check(interactive)
+				puts(load_string(interactive.diagnostic_messages, 0))
+				expect(false).to_be_true()
+			end
+			expect(verify_mir(interactive.scalar_mir, true)).to_equal("")
+		end
+		rejected := [
+			"def main()\nmut values := {}\nvalues[1] = [2]\nvalues[2] = [4.5]\nend\n",
+			"def main()\nmut values := {}\nvalues[1] = 2\nvalues[2] = nil\nend\n",
+			"def main()\nmut values: Hash<Integer, Integer> := {}\nif true\nvalues[1] = 2\nelse\nvalues[1] = \"word\"\nend\nend\n",
+			"def main()\nmut values := {}\nif true\nvalues[1] = [2]\nelse\nvalues[\"key\"] = [4.5]\nend\nend\n",
+		]
+		rejected.each do |source|
+			mut state := logical_checked_source(source)
+			expect(check(state)).to_be_false()
+		end
+	end
+
 	test("resolves a checked unreachable first store through the live exit edge") do
 		mut state := logical_checked_source("def main()\nmut table := {}\n[1].each do |_value|\nbreak\ntable[1] = 2\nend\nputs(table.size())\nend\n")
 		expect(check(state)).to_be_true()
@@ -156,6 +205,10 @@ describe("Hash value MIR") do
 
 	test("executes erased Hash MIR with captured stores, Float values and forced collection") do
 		managed_mir_test_fixture("managed-hash-mir", 21)
+	end
+
+	test("retains joined Hash alternatives through forced collection and erased MIR") do
+		managed_mir_test_fixture("managed-hash-joined-values", 10)
 	end
 end
 
