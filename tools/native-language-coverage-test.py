@@ -80,8 +80,9 @@ class LanguageCoverageTests(unittest.TestCase):
         changed = copy.deepcopy(self.document["cases"][0]["reference"])
         changed["check"] = {"code": 1, "stdout": "", "stderr": "invalid source"}
         with patch.object(sys, "argv", ["coverage", "--reference", sys.executable, "--case", "integer", "--observe"]), \
-                patch.object(coverage, "collect", return_value={"reference": changed}), patch("builtins.print"):
+                patch.object(coverage, "collect", return_value={"reference": changed}), patch("builtins.print") as output:
             self.assertEqual(coverage.main(), 1)
+            output.assert_any_call("Language case mismatches (1): integer", file=sys.stderr)
 
     def test_rejection_and_runtime_failure_cases_retain_each_oracles_outcome(self):
         cases = {case["id"]: case for case in coverage.validate(self.document)}

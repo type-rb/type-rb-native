@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 import signal
 import subprocess
+import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 
@@ -376,6 +377,9 @@ def main():
             if failed or args.require_parity and gaps:
                 report["failures"].append(case["id"])
     print(json.dumps(report, ensure_ascii=False, indent=2))
+    if report["failures"]:
+        print("Language case mismatches (" + str(len(report["failures"])) + "): " +
+              ", ".join(report["failures"]), file=sys.stderr)
     return 1 if report["failures"] or args.require_parity and report["uncoveredContracts"] else 0
 
 
