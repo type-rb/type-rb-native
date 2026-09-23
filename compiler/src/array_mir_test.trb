@@ -70,6 +70,43 @@ describe("Managed Array MIR") do
 			expect(verify_mir(state.scalar_mir, true)).to_equal("")
 		end
 	end
+	test("promotes numeric empty Array writes throughout one control statement") do
+		sources := [
+			"def main()\nmut values := []\nif true\nvalues.push(1)\nelse\nvalues.push(2.0)\nend\nputs(values[0])\nend\n",
+			"def main()\nmut values := []\nif false\nvalues.push(1)\nelse\nvalues.push(2.0)\nend\nputs(values[0])\nend\n",
+			"def main()\nmut values := []\nif true\nvalues.push(1)\nvalues.push(2.0)\nelse\nvalues.push(3)\nend\nputs(values[0])\nend\n",
+			"def main()\nmut values := []\nif true\nvalues.push(1.0)\nelse\nvalues.push(2)\nend\nputs(values[0])\nend\n",
+			"def main()\nmut values := []\nif true\nvalues.unshift(1)\nelse\nvalues.push(2.0)\nend\nputs(values[0])\nend\n",
+			"def main()\nmut values := []\nif true\nvalues.push(1)\nvalues.push(2)\nelse\nvalues.push(3.0)\nend\nputs(values[1])\nend\n",
+			"def main()\nmut values := []\nif true\nvalues.push(1)\nvalues.unshift(2)\nelse\nvalues.push(3.0)\nend\nputs(values[0])\nend\n",
+			"def main()\nmut values := []\nif true\nvalues.push(1)\nvalues.unshift(2.0)\nelse\nvalues.push(3)\nend\nputs(values[0])\nend\n",
+		]
+		outputs := ["1.0\n", "2.0\n", "1.0\n", "1.0\n", "1.0\n", "2.0\n", "2.0\n", "2.0\n"]
+		sources.each.with_index do |source, index|
+			mut state := logical_checked_source(source)
+			checked := check(state)
+			if !checked
+				puts(index)
+				puts(load_string(state.diagnostic_messages, 0))
+			end
+			expect(checked).to_be_true()
+			expect(verify_mir(state.scalar_mir, true)).to_equal("")
+			qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+			if qbe != nil
+				case logical_run_qbe(qbe, control_test_output(emit_qbe(state)))
+				when Result::Ok(actual)
+					expect(actual).to_equal(outputs[index])
+				when Result::Err(error)
+					puts(error)
+					expect(false).to_be_true()
+				end
+			end
+		end
+		mut separate := logical_checked_source("def main()\nmut values := []\nvalues.push(1)\nvalues.push(2.0)\nputs(values[0])\nend\n")
+		expect(check(separate)).to_be_false()
+		mut explicit := logical_checked_source("def main()\nmut values: Array<Integer> := []\nif true\nvalues.push(1)\nelse\nvalues.push(2.0)\nend\nputs(values[0])\nend\n")
+		expect(check(explicit)).to_be_false()
+	end
 
 	test("elides discarded untyped empty collections without inventing element types") do
 		source := "def main()\n[]\n{}\nputs(1)\nend\n"

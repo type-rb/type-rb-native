@@ -89,9 +89,11 @@ Direct catch-tail empty Arrays receive the known success type. Standalone
 discarded untyped empty collections produce no allocation. Mutable local empty
 Arrays can gain an element type from later `push`, `unshift`, or assignment of a
 typed Array; `size` and `empty?` may precede that write, and same-type writes
-can occur on different control-flow branches. Branches with different numeric
-element types still need reference-compatible promotion before MIR generation.
-Other contextual inference remains incomplete. Existing
+can occur on different control-flow branches. A single conditional statement
+also promotes mixed Integer and Float first writes to `Array<Float>` in checked
+MIR, including an Integer inserted by `unshift`; separate later statements
+still retain the first inferred type. Other contextual inference remains
+incomplete. Existing
 Hash/embedded-NUL display differences and diagnostic presentation remain visible
 in the shared observations. See [decision 0083](decisions/0083-builtin-result-values.md).
 

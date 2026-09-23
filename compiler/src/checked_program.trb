@@ -57,7 +57,7 @@ import { mir_checked_hash_index, mir_checked_hash_literal, mir_checked_hash_meth
 import { mir_checked_record_field, mir_checked_record_new } from mir_records
 import { mir_checked_array_index, mir_checked_array_literal, mir_checked_array_operation, mir_checked_array_refine, mir_checked_array_store } from mir_arrays
 import { binary_result_type, check_expected, numeric_type, type_diagnostic } from checked_types
-import { CheckedValue, checked_bound_value, checked_mir_value, checked_value, checked_view, scalar_mir_binary, scalar_mir_disable, scalar_mir_literal, scalar_mir_unary } from checked_values
+import { CheckedValue, checked_bound_value, checked_mir_value, checked_value, checked_view, scalar_mir_binary, scalar_mir_convert_float, scalar_mir_disable, scalar_mir_literal, scalar_mir_unary } from checked_values
 import { checked_hash_binding_target, checked_hash_method, checked_hash_plan, checked_hash_publish } from hash_checked
 import { mir_hash_operation } from hash_mir
 import { hash_key_type, hash_scalar_key, hash_type, hash_value_type } from hash_types
@@ -756,8 +756,42 @@ def checked_array_refine(mut state: CompilerState, mut locals: CheckedLocals, re
 	store_string(locals.types, binding, inferred)
 	store_string(state.checked[0].array_literal_types, load_integer(locals.array_literal_origins, binding) - 1, inferred)
 	store_string(state.checked[0].local_types, load_integer(locals.array_declaration_origins, binding) - 1, inferred)
+	if receiver.type_name == "Array"
+		store_integer(locals.array_inference_regions, binding, locals.array_active_region[0])
+	end
 	mir_checked_array_refine(state, locals, receiver, inferred)
 	return ""
+end
+
+def checked_array_numeric_region(state: CompilerState, locals: CheckedLocals, receiver: CheckedValue): Boolean
+	if receiver.type_name != "Array<Integer>" || locals.array_active_region[0] == 0
+		return false
+	end
+	if receiver.origin < 0 || receiver.origin >= state.token_count[0]
+		return false
+	end
+	binding := local_find(locals, load_string(state.token_texts, receiver.origin))
+	if binding < 0 || load_integer(locals.array_literal_origins, binding) == 0 || load_integer(locals.array_inference_regions, binding) != locals.array_active_region[0]
+		return false
+	end
+	return true
+end
+
+def checked_array_numeric_candidate(mut state: CompilerState, mut locals: CheckedLocals, value: CheckedValue, origin: Integer, eligible: Boolean): Integer
+	if !eligible || value.type_name != "Integer" || locals.array_active_region[0] == 0
+		return - 1
+	end
+	converted := scalar_mir_convert_float(state, locals, value, origin)
+	return checked_mir_value(converted)
+end
+
+def checked_array_numeric_record(mut locals: CheckedLocals, receiver: CheckedValue, conversion: Integer)
+	if conversion < 0
+		return
+	end
+	locals.mir_array_numeric_candidates.push(locals.mir_instructions.size() - 1)
+	locals.mir_array_numeric_candidates.push(conversion)
+	locals.mir_array_numeric_candidates.push(checked_mir_value(receiver))
 end
 
 def check_method_call(
@@ -790,7 +824,11 @@ def check_method_call(
 	if hash_key_type(receiver.type_name) != "" || receiver.type_name == "Hash"
 		return checked_hash_call(state, position, locals, receiver, method)
 	end
-	if receiver.type_name == "Array" && method == "unshift"
+	mut unshift_numeric_region := false
+	if receiver.type_name == "Array<Integer>" && method == "unshift"
+		unshift_numeric_region = checked_array_numeric_region(state, locals, receiver)
+	end
+	if (receiver.type_name == "Array" || unshift_numeric_region) && method == "unshift"
 		origin := position[0]
 		line := load_integer(state.token_lines, origin)
 		if receiver.mutable == 0
@@ -801,7 +839,11 @@ def check_method_call(
 		end
 		advance(position)
 		skip_newlines(state, position)
-		value := check_expression(state, position, locals, 1, "")
+		mut argument_type := array_element_type(receiver.type_name)
+		if unshift_numeric_region
+			argument_type = ""
+		end
+		value := check_expression(state, position, locals, 1, argument_type)
 		skip_newlines(state, position)
 		expect(state, position, ")")
 		if value.type_name == "Never"
@@ -810,11 +852,27 @@ def check_method_call(
 		if has_diagnostic(state)
 			return checked_value("Invalid", 0, origin, 0)
 		end
-		error := checked_array_refine(state, locals, receiver, value.type_name)
-		if error != ""
-			return type_diagnostic(state, line, error)
+		if receiver.type_name == "Array"
+			error := checked_array_refine(state, locals, receiver, value.type_name)
+			if error != ""
+				return type_diagnostic(state, line, error)
+			end
+		elsif value.type_name == "Float"
+			error := checked_array_refine(state, locals, receiver, "Float")
+			if error != ""
+				return type_diagnostic(state, line, error)
+			end
+		else
+			check_expected(state, value.type_name, "Integer", line)
 		end
-		return mir_checked_array_operation(state, locals, 48, checked_mir_value(receiver), checked_mir_value(value), 0, "Void", origin)
+		mut candidate_eligible := unshift_numeric_region
+		if receiver.type_name == "Array"
+			candidate_eligible = true
+		end
+		conversion := checked_array_numeric_candidate(state, locals, value, origin, candidate_eligible)
+		result := mir_checked_array_operation(state, locals, 48, checked_mir_value(receiver), checked_mir_value(value), 0, "Void", origin)
+		checked_array_numeric_record(locals, receiver, conversion)
+		return result
 	end
 	if (receiver.type_name == "Range<Integer>" && method == "to_a") || (receiver.type_name == "Integer" && integer_method_kind(method) > 0) || (receiver.type_name == "Float" && float_method_kind(method) > 0) || (receiver.type_name == "String" && string_method_kind(method) > 0) || (array_element_type(receiver.type_name) != "" && array_method_kind(method) > 0) || (receiver.type_name == "Array" && method == "empty?")
 		return check_primitive_method(state, position, locals, receiver, method)
@@ -834,6 +892,7 @@ def check_method_call(
 	end
 	if method == "push"
 		element_type := array_element_type(receiver.type_name)
+		numeric_region := checked_array_numeric_region(state, locals, receiver)
 		if element_type == "" && receiver.type_name != "Array"
 			return type_diagnostic(state, line, "push is unavailable on " + type_display(state, receiver.type_name))
 		end
@@ -842,7 +901,11 @@ def check_method_call(
 		elsif !receiver.binding
 			diagnostic(state, "TRBN4004", line, "push requires a mutable binding")
 		end
-		value := check_expression(state, position, locals, 1, element_type)
+		mut argument_type := element_type
+		if numeric_region
+			argument_type = ""
+		end
+		value := check_expression(state, position, locals, 1, argument_type)
 		skip_newlines(state, position)
 		expect(state, position, ")")
 		if value.type_name == "Never"
@@ -853,8 +916,24 @@ def check_method_call(
 			if error != ""
 				return type_diagnostic(state, line, error)
 			end
+		elsif numeric_region && !has_diagnostic(state)
+			if value.type_name == "Float"
+				error := checked_array_refine(state, locals, receiver, "Float")
+				if error != ""
+					return type_diagnostic(state, line, error)
+				end
+			else
+				check_expected(state, value.type_name, element_type, line)
+			end
 		end
-		return mir_checked_array_operation(state, locals, 24, checked_mir_value(receiver), checked_mir_value(value), 0, "Void", position[0] - 1)
+		mut candidate_eligible := numeric_region
+		if receiver.type_name == "Array"
+			candidate_eligible = true
+		end
+		conversion := checked_array_numeric_candidate(state, locals, value, position[0] - 1, candidate_eligible)
+		result := mir_checked_array_operation(state, locals, 24, checked_mir_value(receiver), checked_mir_value(value), 0, "Void", position[0] - 1)
+		checked_array_numeric_record(locals, receiver, conversion)
+		return result
 	end
 	if method == "to_f" && receiver.type_name == "String"
 		expect(state, position, ")")
@@ -1819,7 +1898,12 @@ def check_block_value(mut state: CompilerState, mut position: Array<Integer>, mu
 			if !wants_value
 				last = false
 			end
+			saved_array_region := locals.array_active_region[0]
+			if saved_array_region == 0
+				locals.array_active_region[0] = position[0] + 1
+			end
 			result = check_control_value(state, position, locals, last, "", checked_value("Invalid", 0, 9007199254740991, 0))
+			locals.array_active_region[0] = saved_array_region
 			finish_statement(state, position)
 		elsif token_is(state, position[0], "while")
 			checked_while(state, position, locals, result_type)
