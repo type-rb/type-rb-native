@@ -1,9 +1,61 @@
 import { integer_string } from literals
 import { MirArrayLoop, MirInstruction } from mir
 import { mir_element_type, mir_managed_type, mir_operand_type, mir_storage_type_name } from mir_types
-import { QbeEmitContext, QbeValue, emit_temporary, emit_typed_load, emit_typed_store, emitted_value } from qbe_context
-import { QbeOutput, qbe_output_line } from qbe_output
+import { QbeEmitContext, QbeValue, emit_label, emit_temporary, emit_typed_load, emit_typed_store, emitted_value } from qbe_context
+import { QbeOutput, qbe_output_branch, qbe_output_line } from qbe_output
 import { CompilerState } from state
+
+# Keep the full runtime check for negative and invalid indexes. The ordinary
+# nonnegative case can use the Array's current length directly. A captured
+# assignment target needs only its checked logical index before the RHS.
+def emit_checked_array_access(owner: String, requested: String, capture_index: Boolean, mut context: QbeEmitContext, mut output: QbeOutput): String
+	length_slot := emit_temporary(context)
+	length := emit_temporary(context)
+	valid := emit_temporary(context)
+	fast := emit_label(context)
+	slow := emit_label(context)
+	complete := emit_label(context)
+	qbe_output_line(output, "\t" + length_slot + " =l add " + owner + ", 8")
+	qbe_output_line(output, "\t" + length + " =l loadl " + length_slot)
+	qbe_output_line(output, "\t" + valid + " =w cultl " + requested + ", " + length)
+	qbe_output_branch(output, valid, fast, slow)
+	qbe_output_line(output, fast)
+	mut fast_value := requested
+	if capture_index
+		# Block arguments may have multiple incoming QBE definitions. Give the
+		# phi a fresh predecessor-local operand instead of using one directly.
+		fast_value = emit_temporary(context)
+		qbe_output_line(output, "\t" + fast_value + " =l copy " + requested)
+	else
+		data_slot := emit_temporary(context)
+		data := emit_temporary(context)
+		offset := emit_temporary(context)
+		fast_value = emit_temporary(context)
+		qbe_output_line(output, "\t" + data_slot + " =l add " + owner + ", 24")
+		qbe_output_line(output, "\t" + data + " =l loadl " + data_slot)
+		qbe_output_line(output, "\t" + offset + " =l mul " + requested + ", 8")
+		qbe_output_line(output, "\t" + fast_value + " =l add " + data + ", " + offset)
+	end
+	qbe_output_line(output, "\tjmp " + complete)
+	qbe_output_line(output, slow)
+	mut slow_value := emit_temporary(context)
+	qbe_output_line(output, "\t" + slow_value + " =l call $trbn_array_address(l " + owner + ", l " + requested + ")")
+	if capture_index
+		data_slot := emit_temporary(context)
+		data := emit_temporary(context)
+		offset := emit_temporary(context)
+		index := emit_temporary(context)
+		qbe_output_line(output, "\t" + data_slot + " =l add " + owner + ", 24")
+		qbe_output_line(output, "\t" + data + " =l loadl " + data_slot)
+		qbe_output_line(output, "\t" + offset + " =l sub " + slow_value + ", " + data)
+		qbe_output_line(output, "\t" + index + " =l shr " + offset + ", 3")
+		slow_value = index
+	end
+	qbe_output_line(output, complete)
+	result := emit_temporary(context)
+	qbe_output_line(output, "\t" + result + " =l phi " + fast + " " + fast_value + ", " + slow + " " + slow_value)
+	return result
+end
 
 # No source analysis or implicit roots: each allocation/push has its own MIR
 # safe point. Only verified non-allocating loop plans retain storage addresses
@@ -95,16 +147,9 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 		return emitted_value(result, type_name)
 	end
 	output.runtime_flags[3] = 1
-	address := emit_temporary(context)
-	qbe_output_line(output, "\t" + address + " =l call $trbn_array_address(l " + owner + ", l " + second + ")")
+	address := emit_checked_array_access(owner, second, kind == 21, context, output)
 	if kind == 21
-		data_slot := emit_temporary(context)
-		data := emit_temporary(context)
-		offset := emit_temporary(context)
-		qbe_output_line(output, "\t" + data_slot + " =l add " + owner + ", 24")
-		qbe_output_line(output, "\t" + data + " =l loadl " + data_slot)
-		qbe_output_line(output, "\t" + offset + " =l sub " + address + ", " + data)
-		qbe_output_line(output, "\t" + result + " =l shr " + offset + ", 3")
+		return emitted_value(address, type_name)
 	elsif kind == 22
 		emit_typed_load(output, result, type_name, address)
 	else

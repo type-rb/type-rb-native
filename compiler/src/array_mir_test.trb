@@ -107,6 +107,23 @@ describe("Managed Array MIR") do
 		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR live root plan differs")
 	end
 
+	test("executes an assignment whose index joins two control-flow paths") do
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			source := "def main()\nmut values := [1, 2]\nmut index := 0\nif values.size() == 2\nindex = 1\nelse\nindex = 0\nend\nvalues[index] = 7\nputs(values[0])\nputs(values[1])\nend\n"
+			mut state := logical_checked_source(source)
+			expect(check(state)).to_be_true()
+			expect(verify_mir(state.scalar_mir, true)).to_equal("")
+			case logical_run_qbe(qbe, control_test_output(emit_qbe(state)))
+			when Result::Ok(actual)
+				expect(actual).to_equal("1\n7\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+
 	test("executes erased reordered Array MIR with collection at every allocating operation") do
 		root := Process.environment("TYPE_RB_NATIVE_ROOT")
 		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
