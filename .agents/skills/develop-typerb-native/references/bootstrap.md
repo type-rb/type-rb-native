@@ -46,9 +46,14 @@ Keep compiler sources unchanged during each multi-generation regeneration; a
 mid-build edit makes the fixed-point comparison meaningless. In a fresh task
 worktree, point `TRBN_QBE` and `TRBN_BOOTSTRAP_SEED` at already verified local
 assets when available so the fast loop does not wait on network downloads.
+When compiler-module imports change, update `src/compiler_recovery_layout.trb`
+and run the focused `Compiler recovery source closure` root test before pushing.
 Run `tools/check-bootstrap-snapshot.sh /path/to/pinned/trb` on the canonical
 compiler closure before publishing each compiler-source batch. It is a short
-snapshot-v4 compatibility check, not a replacement for recovery-enabled suites.
+snapshot-v4 compatibility check, not a check of the Native decoder's byte bound
+or a replacement for recovery-enabled suites. If a larger compiler snapshot
+reaches that bound, measure the emitted bytes and retain exact-limit tests when
+adjusting the compiler-only limit.
 Bootstrap and validation-orchestration changes additionally require full local
 recovery, as does diagnosis of recovery or platform failures. For a full run,
 set `TYPE_RB_NATIVE_REFERENCE_TRB` to the absolute pinned compiler executable

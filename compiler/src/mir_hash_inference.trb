@@ -1,6 +1,6 @@
 import { integer_string } from literals
 import { MirInstruction, MirModule, MirValue, mir_table_span_valid } from mir
-import { mir_element_type, mir_hash_kind, mir_semantic_type_name } from mir_types
+import { mir_element_type, mir_hash_key_type, mir_hash_kind, mir_hash_value_type, mir_semantic_type_name } from mir_types
 import { CheckedLocals } from state
 
 def mir_hash_component(mut parents: Array<Integer>, value: Integer): Integer
@@ -26,6 +26,29 @@ def mir_array_numeric_common(native_module: MirModule, first: Integer, second: I
 		return first
 	end
 	return 0
+end
+
+def mir_hash_numeric_common(native_module: MirModule, first: Integer, second: Integer): Integer
+	if mir_hash_kind(native_module, first) != 3 || mir_hash_kind(native_module, second) != 3 || mir_hash_key_type(native_module, first) != mir_hash_key_type(native_module, second)
+		return 0
+	end
+	left := mir_semantic_type_name(native_module, mir_hash_value_type(native_module, first))
+	right := mir_semantic_type_name(native_module, mir_hash_value_type(native_module, second))
+	if left == "Integer" && right == "Float"
+		return second
+	end
+	if left == "Float" && right == "Integer"
+		return first
+	end
+	return 0
+end
+
+def mir_collection_numeric_common(native_module: MirModule, first: Integer, second: Integer): Integer
+	common := mir_array_numeric_common(native_module, first, second)
+	if common != 0
+		return common
+	end
+	return mir_hash_numeric_common(native_module, first, second)
 end
 
 def mir_hash_join_edge(locals: CheckedLocals, blocks: Hash<String, Integer>, mut parents: Array<Integer>, target: Integer, start: Integer, count: Integer): String
@@ -87,6 +110,9 @@ def mir_finalize_hash_types(native_module: MirModule, mut locals: CheckedLocals)
 	if locals.mir_array_numeric_candidates.size() % 3 != 0
 		return "MIR Array numeric candidate shape differs"
 	end
+	if locals.mir_hash_numeric_candidates.size() % 3 != 0
+		return "MIR Hash numeric candidate shape differs"
+	end
 	mut parents: Array<Integer> := []
 	mut types: Array<Integer> := []
 	mut pending_roots: Array<Boolean> := []
@@ -119,7 +145,7 @@ def mir_finalize_hash_types(native_module: MirModule, mut locals: CheckedLocals)
 		end
 	end
 	locals.mir_value_rows.each do |value|
-		if mir_pending_array(native_module, value.type_id)
+		if mir_pending_array(native_module, value.type_id) || mir_hash_kind(native_module, value.type_id) == 5
 			pending_roots[mir_hash_component(parents, value.id)] = true
 		end
 	end
@@ -127,7 +153,7 @@ def mir_finalize_hash_types(native_module: MirModule, mut locals: CheckedLocals)
 		if mir_hash_kind(native_module, value.type_id) != 5 && !mir_pending_array(native_module, value.type_id)
 			root := mir_hash_component(parents, value.id)
 			if types[root] != 0 && types[root] != value.type_id
-				common := mir_array_numeric_common(native_module, types[root], value.type_id)
+				common := mir_collection_numeric_common(native_module, types[root], value.type_id)
 				if !pending_roots[root] || common == 0
 					return "MIR Hash inference edge types conflict"
 				end
@@ -146,9 +172,14 @@ def mir_finalize_hash_types(native_module: MirModule, mut locals: CheckedLocals)
 		end
 		root := mir_hash_component(parents, value)
 		if types[root] != 0 && types[root] != type_id
-			return "MIR Hash inference types conflict"
+			common := mir_hash_numeric_common(native_module, types[root], type_id)
+			if !pending_roots[root] || common == 0
+				return "MIR Hash inference types conflict"
+			end
+			types[root] = common
+		else
+			types[root] = type_id
 		end
-		types[root] = type_id
 		index += 2
 	end
 	index = 0
@@ -160,7 +191,7 @@ def mir_finalize_hash_types(native_module: MirModule, mut locals: CheckedLocals)
 		end
 		root := mir_hash_component(parents, value)
 		if types[root] != 0 && types[root] != type_id
-			common := mir_array_numeric_common(native_module, types[root], type_id)
+			common := mir_collection_numeric_common(native_module, types[root], type_id)
 			if !pending_roots[root] || common == 0
 				return "MIR Array inference types conflict"
 			end
@@ -178,7 +209,7 @@ def mir_finalize_hash_types(native_module: MirModule, mut locals: CheckedLocals)
 		root := mir_hash_component(parents, value.id)
 		type_id := types[root]
 		mut numeric_widen := false
-		if pending_roots[root] && mir_semantic_type_name(native_module, value.type_id) == "Array<Integer>" && mir_semantic_type_name(native_module, type_id) == "Array<Float>"
+		if pending_roots[root] && type_id != 0 && mir_collection_numeric_common(native_module, value.type_id, type_id) == type_id
 			numeric_widen = true
 		end
 		if pending_hash || pending_array || numeric_widen
@@ -210,6 +241,24 @@ def mir_finalize_hash_types(native_module: MirModule, mut locals: CheckedLocals)
 		end
 		if mir_semantic_type_name(native_module, types[mir_hash_component(parents, owner)]) == "Array<Float>"
 			locals.mir_instructions[instruction_index] = MirInstruction.new(kind: instruction.kind, result: instruction.result, first: instruction.first, second: conversion, payload: instruction.payload, failure: instruction.failure, source_id: instruction.source_id, line: instruction.line)
+		end
+		index += 3
+	end
+	index = 0
+	while index < locals.mir_hash_numeric_candidates.size()
+		instruction_index := locals.mir_hash_numeric_candidates[index]
+		conversion := locals.mir_hash_numeric_candidates[index + 1]
+		owner := locals.mir_hash_numeric_candidates[index + 2]
+		if instruction_index < 0 || instruction_index >= locals.mir_instructions.size() || conversion < 0 || conversion >= parents.size() || owner < 0 || owner >= parents.size()
+			return "MIR Hash numeric candidate is invalid"
+		end
+		instruction := locals.mir_instructions[instruction_index]
+		if instruction.kind != 29 || instruction.first != owner || instruction.payload < 0 || instruction.payload >= parents.size() || mir_semantic_type_name(native_module, locals.mir_value_rows[instruction.payload].type_id) != "Integer" || mir_semantic_type_name(native_module, locals.mir_value_rows[conversion].type_id) != "Float"
+			return "MIR Hash numeric candidate operation differs"
+		end
+		resolved := types[mir_hash_component(parents, owner)]
+		if mir_hash_kind(native_module, resolved) == 3 && mir_semantic_type_name(native_module, mir_hash_value_type(native_module, resolved)) == "Float"
+			locals.mir_instructions[instruction_index] = MirInstruction.new(kind: instruction.kind, result: instruction.result, first: instruction.first, second: instruction.second, payload: conversion, failure: instruction.failure, source_id: instruction.source_id, line: instruction.line)
 		end
 		index += 3
 	end

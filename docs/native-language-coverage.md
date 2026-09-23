@@ -274,6 +274,12 @@ collection and retained REPL failure/replay controls cover these combinations.
 Concurrent transforms remain separate implementation work.
 See [decision 0074](decisions/0074-safe-collection-block-mir.md).
 
+An inferred empty Hash widens Integer values to Float when the first stores
+occur inside the same `if` or `case` statement. The checked binding and MIR
+join agree on the widened type, including stores on earlier paths. The key
+type remains fixed, and a later separate assignment does not reopen inference.
+Shared positive and rejection cases cover file execution and retained REPL.
+
 ## Raw enums and instance methods
 
 Explicit String/Integer raw values, `raw_value()` and `from_raw()` use canonical
@@ -1162,9 +1168,11 @@ and the remaining Array APIs stay tracked in issue #410. The original Array
 iteration checkpoint did not include removal operations. Ordinary shortening
 behavior is now covered by the [Array mutation contract](#array-insertion-and-removal).
 
-Compiler recovery metadata uses a separate 96 MiB input bound. Literal-union Hash
-keys produce 83,927,300 bytes of recovery JSON, exceeding the previous 80 MiB
-boundary by 41,220 bytes; the new bound leaves about 20% headroom. Namespace and
+Compiler recovery metadata uses a separate 128 MiB input bound. The current
+compiler produces 101,209,018 bytes of recovery JSON, 545,722 bytes over the
+previous 96 MiB bound; the 128 MiB bound leaves about 25% headroom. Earlier,
+literal-union Hash keys produced 83,927,300 bytes, exceeding the prior 80 MiB
+boundary by 41,220 bytes. Namespace and
 constant integration previously produced 69,813,214 bytes and required increasing
 the 64 MiB boundary to 80 MiB. The earlier
 managed Array MIR compiler produced approximately 43.1 MB, exceeding 40 MiB.

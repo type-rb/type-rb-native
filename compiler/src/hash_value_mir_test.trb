@@ -49,6 +49,46 @@ describe("Hash value MIR") do
 		expect(words > 3).to_be_true()
 	end
 
+	test("promotes inferred Hash values across one control statement") do
+		sources := [
+			"def main()\nmut values := {}\nif true\nvalues[1] = 2\nelse\nvalues[1] = 4.5\nend\nputs(values[1])\nend\n",
+			"def main()\nmut values := {}\nif false\nvalues[1] = 2\nelse\nvalues[1] = 4.5\nend\nputs(values[1])\nend\n",
+			"def main()\nmut values := {}\nif true\nvalues[\"item\"] = 1.5\nelse\nvalues[\"item\"] = 2\nend\nputs(values[\"item\"])\nend\n",
+			"def main()\nmut values := {}\nif true\nvalues[1] = 2\nvalues[3] = 4.5\nelse\nvalues[1] = 6\nend\nputs(values[1])\nend\n",
+		]
+		outputs := ["2.0\n", "4.5\n", "1.5\n", "2.0\n"]
+		sources.each.with_index do |source, index|
+			mut state := logical_checked_source(source)
+			checked := check(state)
+			if !checked
+				puts(index)
+				puts(load_string(state.diagnostic_messages, 0))
+			end
+			expect(checked).to_be_true()
+			expect(verify_mir(state.scalar_mir, true)).to_equal("")
+			qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+			if qbe != nil
+				case logical_run_qbe(qbe, control_test_output(emit_qbe(state)))
+				when Result::Ok(actual)
+					expect(actual).to_equal(outputs[index])
+				when Result::Err(error)
+					puts(error)
+					expect(false).to_be_true()
+				end
+			end
+		end
+		rejected := [
+			"def main()\nmut values := {}\nvalues[1] = 2\nvalues[3] = 4.5\nputs(values[1])\nend\n",
+			"def main()\nmut values := {}\nif true\nvalues[1] = 2\nelse\nvalues[1] = 3\nend\nvalues[4] = 4.5\nend\n",
+			"def main()\nmut values: Hash<Integer, Integer> := {}\nif true\nvalues[1] = 2\nelse\nvalues[1] = 4.5\nend\nend\n",
+			"def main()\nmut values := {}\nif true\nvalues[1] = 2\nelse\nvalues[\"item\"] = 4\nend\nend\n",
+		]
+		rejected.each do |source|
+			mut state := logical_checked_source(source)
+			expect(check(state)).to_be_false()
+		end
+	end
+
 	test("resolves a checked unreachable first store through the live exit edge") do
 		mut state := logical_checked_source("def main()\nmut table := {}\n[1].each do |_value|\nbreak\ntable[1] = 2\nend\nputs(table.size())\nend\n")
 		expect(check(state)).to_be_true()

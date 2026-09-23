@@ -191,9 +191,28 @@ def checked_hash_index(mut state: CompilerState, mut position: Array<Integer>, m
 	return mir_checked_hash_index(state, locals, receiver, key, hash_value_type(type_name), origin, kind == 3)
 end
 
+def checked_hash_numeric_region(state: CompilerState, locals: CheckedLocals, origin: Integer): Boolean
+	if origin < 0 || origin >= state.token_count[0]
+		return false
+	end
+	plan := checked_hash_plan(state, origin)
+	if plan.kind != 3 || plan.receiver_origin < 0 || plan.receiver_origin >= state.token_count[0] || hash_value_type(plan.type_name) != "Integer" || locals.inference_active_region[0] == 0
+		return false
+	end
+	binding := local_find(locals, load_string(state.token_texts, plan.receiver_origin))
+	if binding < 0 || load_integer(locals.hash_literal_origins, binding) == 0 || load_integer(locals.hash_inference_regions, binding) != locals.inference_active_region[0]
+		return false
+	end
+	return true
+end
+
 def checked_hash_refine(mut state: CompilerState, mut locals: CheckedLocals, origin: Integer, value_type: String)
 	plan := checked_hash_plan(state, origin)
-	if plan.kind != 3 || plan.value_type != ""
+	if plan.kind != 3
+		return
+	end
+	mut first_store := plan.value_type == ""
+	if !first_store && !(plan.value_type == "Integer" && value_type == "Float" && checked_hash_numeric_region(state, locals, origin))
 		return
 	end
 	binding := local_find(locals, load_string(state.token_texts, plan.receiver_origin))
@@ -203,6 +222,13 @@ def checked_hash_refine(mut state: CompilerState, mut locals: CheckedLocals, ori
 	end
 	type_name := hash_type(plan.key_type, value_type)
 	store_string(locals.types, binding, type_name)
+	if first_store
+		store_integer(locals.hash_inference_regions, binding, locals.inference_active_region[0])
+	end
+	declaration := load_integer(locals.hash_declaration_origins, binding)
+	if declaration > 0
+		store_string(state.checked[0].local_types, declaration - 1, type_name)
+	end
 	literal_origin := load_integer(locals.hash_literal_origins, binding) - 1
 	literal := checked_hash_plan(state, literal_origin)
 	if literal.kind != 1
@@ -757,28 +783,28 @@ def checked_array_refine(mut state: CompilerState, mut locals: CheckedLocals, re
 	store_string(state.checked[0].array_literal_types, load_integer(locals.array_literal_origins, binding) - 1, inferred)
 	store_string(state.checked[0].local_types, load_integer(locals.array_declaration_origins, binding) - 1, inferred)
 	if receiver.type_name == "Array"
-		store_integer(locals.array_inference_regions, binding, locals.array_active_region[0])
+		store_integer(locals.array_inference_regions, binding, locals.inference_active_region[0])
 	end
 	mir_checked_array_refine(state, locals, receiver, inferred)
 	return ""
 end
 
 def checked_array_numeric_region(state: CompilerState, locals: CheckedLocals, receiver: CheckedValue): Boolean
-	if receiver.type_name != "Array<Integer>" || locals.array_active_region[0] == 0
+	if receiver.type_name != "Array<Integer>" || locals.inference_active_region[0] == 0
 		return false
 	end
 	if receiver.origin < 0 || receiver.origin >= state.token_count[0]
 		return false
 	end
 	binding := local_find(locals, load_string(state.token_texts, receiver.origin))
-	if binding < 0 || load_integer(locals.array_literal_origins, binding) == 0 || load_integer(locals.array_inference_regions, binding) != locals.array_active_region[0]
+	if binding < 0 || load_integer(locals.array_literal_origins, binding) == 0 || load_integer(locals.array_inference_regions, binding) != locals.inference_active_region[0]
 		return false
 	end
 	return true
 end
 
 def checked_array_numeric_candidate(mut state: CompilerState, mut locals: CheckedLocals, value: CheckedValue, origin: Integer, eligible: Boolean): Integer
-	if !eligible || value.type_name != "Integer" || locals.array_active_region[0] == 0
+	if !eligible || value.type_name != "Integer" || locals.inference_active_region[0] == 0
 		return - 1
 	end
 	converted := scalar_mir_convert_float(state, locals, value, origin)
@@ -1481,6 +1507,7 @@ def check_declaration(
 			return checked_value("Invalid", 0, 9007199254740991, 0)
 		end
 		store_integer(locals.hash_literal_origins, locals.count[0] - 1, value.origin + 1)
+		store_integer(locals.hash_declaration_origins, locals.count[0] - 1, origin + 1)
 	end
 	if added && local_type == "Array"
 		if !token_is(state, value.origin, "[") || !token_is(state, value.origin + 1, "]")
@@ -1540,7 +1567,8 @@ def check_simple_statement(
 			expected = state.global_types[- left.nullable_binding - 2]
 		end
 		mut right_expected := expected
-		if expected == "Array"
+		hash_numeric_region := checked_hash_numeric_region(state, locals, left.origin)
+		if expected == "Array" || hash_numeric_region
 			right_expected = ""
 		end
 		right := check_statement_value(state, position, locals, right_expected)
@@ -1559,6 +1587,9 @@ def check_simple_statement(
 				end
 			end
 		end
+		if hash_numeric_region && right.type_name != "Float"
+			check_expected(state, right.type_name, "Integer", line)
+		end
 		if left.nullable_binding >= 0 && left.nullable_field == - 1
 			nullable_replace(locals, left.nullable_binding, right.flow_type)
 		elsif left.nullable_binding < - 1 && left.nullable_field == - 1
@@ -1571,12 +1602,17 @@ def check_simple_statement(
 		checked_submission_result(state, origin, display_type, display_mutable)
 		checked_hash_refine(state, locals, left.origin, right.type_name)
 		hash := checked_hash_plan(state, left.origin)
+		mut hash_conversion :=- 1
+		if hash.kind == 3 && right.type_name == "Integer" && checked_hash_numeric_region(state, locals, left.origin)
+			converted := scalar_mir_convert_float(state, locals, right, left.origin)
+			hash_conversion = checked_mir_value(converted)
+		end
 		if mir_checked_union_store(state, locals, left, right)
 			# The receiver was selected before the right-hand side.
 		elsif mir_checked_object_store(state, locals, left, right)
 			# The receiver was evaluated before the right-hand side.
 		elsif hash.kind == 3
-			mir_checked_hash_store(state, locals, left, right, hash.type_name)
+			mir_checked_hash_store(state, locals, left, right, hash.type_name, hash_conversion)
 		elsif !mir_checked_array_store(state, locals, left, right)
 			mir_binding_assign(state, locals, left, right)
 		end
@@ -1898,12 +1934,12 @@ def check_block_value(mut state: CompilerState, mut position: Array<Integer>, mu
 			if !wants_value
 				last = false
 			end
-			saved_array_region := locals.array_active_region[0]
-			if saved_array_region == 0
-				locals.array_active_region[0] = position[0] + 1
+			saved_region := locals.inference_active_region[0]
+			if saved_region == 0
+				locals.inference_active_region[0] = position[0] + 1
 			end
 			result = check_control_value(state, position, locals, last, "", checked_value("Invalid", 0, 9007199254740991, 0))
-			locals.array_active_region[0] = saved_array_region
+			locals.inference_active_region[0] = saved_region
 			finish_statement(state, position)
 		elsif token_is(state, position[0], "while")
 			checked_while(state, position, locals, result_type)
