@@ -49,6 +49,8 @@ the required CI, fixing failures caused by the change. After they pass, repeat
 or broaden checks only for new edits, failures, or unresolved concerns.
 Use CI as the full integration authority by default, with additional full local
 recovery for bootstrap or validation-orchestration changes and failure diagnosis.
+While a run is in progress, inspect completed failures as well as unfinished
+jobs; an early CLI or target failure can coexist with a long-running Native job.
 After changing checked binding or diagnostic behavior, use the existing Native
 compiler with `tools/check-conformance-sources.py` for a quick conformance
 source scan before the full recovery run; keep the latter as the authority.

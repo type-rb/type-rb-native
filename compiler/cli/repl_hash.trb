@@ -3,19 +3,19 @@ import { ReplStore, ReplHashTable, repl_get, repl_value } from repl_model
 import { native_cli_byte } from host
 
 # Buckets contain pool identities. Zero is empty and -1 is deleted.
-def repl_hash_table(capacity: Integer): ReplHashTable
+def repl_hash_table(capacity: Integer, order: Array<Integer>): ReplHashTable
 	mut keys: Array<Integer> := []
 	mut values: Array<Integer> := []
 	while keys.size() < capacity
 		keys.push(0)
 		values.push(0)
 	end
-	return ReplHashTable.new(keys: keys, values: values, sizes: [0, 0])
+	return ReplHashTable.new(keys: keys, values: values, sizes: [0, 0], order: order)
 end
 
 def repl_hash_new(mut store: ReplStore, type_name: String, capacity: Integer): Integer
 	index := store.hashes.size()
-	store.hashes.push(repl_hash_table(capacity))
+	store.hashes.push(repl_hash_table(capacity, []))
 	return repl_value(store, type_name, index, 0.0, "", [])
 end
 
@@ -92,7 +92,7 @@ end
 def repl_hash_rebuild(mut store: ReplStore, id: Integer, capacity: Integer)
 	index := store.integers[id]
 	old := store.hashes[index]
-	mut table := repl_hash_table(capacity)
+	mut table := repl_hash_table(capacity, old.order)
 	mut slot := 0
 	while slot < old.keys.size()
 		key := old.keys[slot]
@@ -133,6 +133,7 @@ def repl_hash_set(mut store: ReplStore, id: Integer, key: Integer, value: Intege
 	table.keys[slot] = key
 	table.values[slot] = value
 	table.sizes[0] += 1
+	table.order.push(key)
 end
 
 def repl_hash_get(mut store: ReplStore, id: Integer, key: Integer): Integer
@@ -154,12 +155,20 @@ def repl_hash_delete(mut store: ReplStore, id: Integer, key: Integer): Integer
 		return 0
 	end
 	value := table.values[slot]
+	mut order_index := 0
+	while order_index < table.order.size()
+		if table.order[order_index] == table.keys[slot]
+			table.order[order_index] = 0
+			break
+		end
+		order_index += 1
+	end
 	table.keys[slot] =- 1
 	table.values[slot] = 0
 	table.sizes[0] -= 1
 	table.sizes[1] += 1
 	if table.sizes[0] == 0
-		store.hashes[index] = repl_hash_table(0)
+		store.hashes[index] = repl_hash_table(0, [])
 	elsif table.keys.size() > 8 && table.sizes[0] * 8 < table.keys.size()
 		repl_hash_rebuild(store, id, table.keys.size() / 2)
 	end
@@ -168,11 +177,15 @@ end
 
 def repl_hash_update(mut store: ReplStore, target: Integer, source: Integer)
 	table := store.hashes[store.integers[source]]
-	mut slot := 0
-	while slot < table.keys.size()
-		if table.keys[slot] > 0
-			repl_hash_set(store, target, table.keys[slot], table.values[slot])
+	mut index := 0
+	while index < table.order.size()
+		key := table.order[index]
+		if key > 0
+			slot := repl_hash_slot(store, table, key)
+			if slot >= 0
+				repl_hash_set(store, target, table.keys[slot], table.values[slot])
+			end
 		end
-		slot += 1
+		index += 1
 	end
 end
