@@ -9,7 +9,7 @@ import { mir_instruction_effects } from mir_roots
 import { verify_mir } from mir_verifier
 import { MirType } from mir
 import { CompilerState } from state
-import { object_execution_state } from object_execution_test
+import { object_execution_run, object_execution_state } from object_execution_test
 import { describe, expect, test } from trb/std/test
 
 def literal_mir_state(): CompilerState
@@ -63,6 +63,23 @@ describe("Literal constraints and discriminant MIR") do
 		expect(extractions).to_equal(2)
 		expect(fields).to_equal(2)
 		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+	end
+	test("stores through common class union fields using verified object MIR") do
+		mut state := object_execution_state("class First\n@value: Integer := 1\nend\nclass Second\n@value: Integer := 2\nend\nalias Choice = First | Second\ndef update(mut item: Choice)\nitem.value = 3\nitem.value += 4\nputs(item.value)\nend\ndef main()\nmut first: Choice := First.new()\nupdate(first)\nputs(first.value)\nmut second: Choice := Second.new()\nupdate(second)\nputs(second.value)\nmut current: Choice := First.new()\noriginal := current\nreplace := fn(): Integer\ncurrent = Second.new()\nreturn 9\nend\ncurrent.value = replace()\nputs(original.value)\nputs(current.value)\nend\n")
+		object_execution_run(state, "7\n7\n7\n7\n9\n2\n")
+	end
+	test("rejects unsafe class union field stores before publishing MIR") do
+		prefix := "class First\n@value: Integer := 1\nend\n"
+		["class Second\nreadonly @value: Integer := 2\nend\n", "class Second\n@value: String := \"two\"\nend\n", "class Second\n@_value: Integer := 2\nend\n"].each do |second|
+			mut state := logical_checked_source(prefix + second + "alias Choice = First | Second\ndef main()\nmut item: Choice := First.new()\nitem.value = 3\nend\n")
+			expect(check(state)).to_be_false()
+		end
+		mut immutable := logical_checked_source(prefix + "class Second\n@value: Integer := 2\nend\nalias Choice = First | Second\ndef main()\nitem: Choice := First.new()\nitem.value = 3\nend\n")
+		expect(check(immutable)).to_be_false()
+	end
+	test("retains managed values written through class union alternatives") do
+		mut state := object_execution_state("class First\n@value: String := \"first\"\nend\nclass Second\n@value: String := \"second\"\nend\nalias Choice = First | Second\ndef update(mut item: Choice, suffix: String)\nitem.value = \"held\" + suffix\nputs(item.value)\nend\ndef main()\nmut first: Choice := First.new()\nupdate(first, \" one\")\nmut second: Choice := Second.new()\nupdate(second, \" two\")\nputs(first.value)\nputs(second.value)\nend\n")
+		object_execution_run(state, "held one\nheld two\nheld one\nheld two\n")
 	end
 	test("preserves literal keys ordered collections and mixed exhaustive cases after source erasure") do
 		managed_mir_test_fixture("literal-collections-mir", 2)

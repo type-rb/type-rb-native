@@ -1268,13 +1268,16 @@
         "class-union-mutable-projection",
         "class-union-immutable-projection",
         "class-union-readonly-projection",
-        "class-union-common-callable"
+        "class-union-common-callable",
+        "class-union-common-store-rebind",
+        "class-union-common-store-import",
+        "class-union-common-store-readonly",
+        "class-union-common-store-mixed-types"
       ],
       "pending": [
-        "Reference grouped annotation and nullable-alternative boundaries (TypeRB #764 and #765); composite type patterns remain staged in the reference",
-        "Native common class-union field assignment"
+        "Reference grouped annotation and nullable-alternative boundaries (TypeRB #764 and #765); composite type patterns remain staged in the reference"
       ],
-      "note": "General and literal unions compose with collections, optional values, generics, aliases, nominal payloads, Results and closures through verified MIR. Singleton constraints widen explicitly; literal cases, common record/class data members and callable fields and overlapping discriminants preserve exhaustive checking and mutation invalidation. Homogeneous literal-union Hash keys retain typed identity through value-based lookup, copies and snapshots. Readonly class discriminants preserve overlapping alternatives, generic/imported identities and existing shallow field capabilities. The pinned reference rejects private union fields and executes common class-union field writes; Native still rejects the latter. REPL presentation differences remain."
+      "note": "General and literal unions compose with collections, optional values, generics, aliases, nominal payloads, Results and closures through verified MIR. Singleton constraints widen explicitly; literal cases, common record/class data members and callable fields and overlapping discriminants preserve exhaustive checking and mutation invalidation. Homogeneous literal-union Hash keys retain typed identity through value-based lookup, copies and snapshots. Readonly class discriminants preserve overlapping alternatives, generic/imported identities and existing shallow field capabilities. The pinned reference and Native reject private union fields and execute common class-union field writes through variant-specific verified MIR. REPL presentation differences remain."
     },
     {
       "id": "callables",
@@ -2040,13 +2043,17 @@
         "class-union-common-callable",
         "object-class-alias-constructor-method",
         "object-class-alias-generic-qualified",
-        "object-class-alias-imported"
+        "object-class-alias-imported",
+        "class-union-common-store-rebind",
+        "class-union-common-store-import",
+        "class-union-common-store-readonly",
+        "class-union-common-store-mixed-types"
       ],
       "pending": [
         "Initialized superclass storage and constructor chaining; inherited overrides (TypeRB #797)",
         "Static self.new"
       ],
-      "note": "Ordinary constructors, field defaults, scalar/managed/generic fields, instance/class/private methods, readonly initialization and field-free inheritance use verified MIR. Qualified classes, imported parents and inherited constants preserve lexical owners. The retained REPL preserves aliases, captures and replay. Shared negative observations retain diagnostic differences. Class aliases construct their canonical targets through the same checked allocation and constructor path."
+      "note": "Ordinary constructors, field defaults, scalar/managed/generic fields, instance/class/private methods, readonly initialization and field-free inheritance use verified MIR. Qualified classes, imported parents and inherited constants preserve lexical owners. The retained REPL preserves aliases, captures and replay. Shared negative observations retain diagnostic differences. Class aliases construct their canonical targets through the same checked allocation and constructor path. Common class-union field stores select the receiver before the RHS and write through verified alternative-specific MIR."
     },
     {
       "id": "interfaces",
@@ -74030,20 +74037,24 @@
       },
       "native": {
         "check": {
-          "code": 1,
-          "stdout": "",
-          "stderr": "<case>/main.trb:9: error[TRBN4004]: expected First | Second, found Integer\n"
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
         },
         "build": {
-          "code": 1,
+          "code": 0,
           "stdout": "",
-          "stderr": "<case>/main.trb:9: error[TRBN4004]: expected First | Second, found Integer\n"
+          "stderr": ""
         },
-        "execute": null,
+        "execute": {
+          "code": 0,
+          "stdout": "3\n",
+          "stderr": ""
+        },
         "repl": {
           "code": 0,
-          "stdout": "#<First value: 1> : First | Second [mut]\n1\n",
-          "stderr": "(trb):9: error[TRBN4004]: expected First | Second, found Integer\n(trb):9: error[TRBN4003]: unresolved function set\n"
+          "stdout": "#<First value: 1> : First | Second [mut]\n3\n",
+          "stderr": ""
         }
       }
     },
@@ -74540,6 +74551,196 @@
           "code": 0,
           "stdout": "21\n",
           "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "class-union-common-store-rebind",
+      "title": "Class union store retains its receiver across RHS rebinding",
+      "declarations": "class First\n@value: Integer := 1\nend\nclass Second\n@value: Integer := 2\nend\nalias Choice = First | Second\ndef object_probe()\nmut current: Choice := First.new()\noriginal := current\nreplace := fn(): Integer\ncurrent = Second.new()\nreturn 9\nend\ncurrent.value = replace()\nputs(original.value)\nputs(current.value)\nend\n",
+      "body": "object_probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 1 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "9\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "9\n2\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "9\n2\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "9\n2\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "class-union-common-store-import",
+      "title": "Imported class union common field stores",
+      "declarations": "import { Choice, make_first, make_second } from models\ndef object_probe()\nmut first: Choice := make_first()\nfirst.value = 8\nputs(first.value)\nmut second: Choice := make_second()\nsecond.value += 5\nputs(second.value)\nend\n",
+      "body": "object_probe()",
+      "files": {
+        "models.trb": "class First\n@value: Integer := 1\nend\nclass Second\n@value: Integer := 2\nend\nalias Choice = First | Second\ndef make_first(): Choice\nreturn First.new()\nend\ndef make_second(): Choice\nreturn Second.new()\nend\n"
+      },
+      "reference": {
+        "check": {
+          "code": 0,
+          "stdout": "checked 2 file(s) for mode go\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "executable -> <case>/reference-program\n",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "8\n7\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "8\n7\n",
+          "stderr": ""
+        }
+      },
+      "native": {
+        "check": {
+          "code": 0,
+          "stdout": "ok\n",
+          "stderr": ""
+        },
+        "build": {
+          "code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "execute": {
+          "code": 0,
+          "stdout": "8\n7\n",
+          "stderr": ""
+        },
+        "repl": {
+          "code": 0,
+          "stdout": "8\n7\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "id": "class-union-common-store-readonly",
+      "title": "Class union store rejects a readonly alternative",
+      "declarations": "class First\n@value: Integer := 1\nend\nclass Second\nreadonly @value: Integer := 2\nend\nalias Choice = First | Second\ndef object_probe()\nmut item: Choice := First.new()\nitem.value = 3\nend\n",
+      "body": "object_probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:10:1: error[TRB3000]: field value is readonly\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:10:1: error[TRB3000]: field value is readonly\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):10:1: error[TRB3000]: field value is readonly\n(trb):8:1: error[TRB3000]: function object_probe is not declared or imported\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:10: error[TRBN4004]: union field value is readonly\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:10: error[TRBN4004]: union field value is readonly\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):10: error[TRBN4004]: union field value is readonly\n(trb):8: error[TRBN4003]: unresolved function object_probe\n"
+        }
+      }
+    },
+    {
+      "id": "class-union-common-store-mixed-types",
+      "title": "Class union store rejects differing field types",
+      "declarations": "class First\n@value: Integer := 1\nend\nclass Second\n@value: String := \"two\"\nend\nalias Choice = First | Second\ndef object_probe()\nmut item: Choice := First.new()\nitem.value = 3\nend\n",
+      "body": "object_probe()",
+      "files": {},
+      "reference": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:10:1: error[TRB3000]: union field value has different types in its alternatives; narrow the receiver before assignment\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:10:1: error[TRB3000]: union field value has different types in its alternatives; narrow the receiver before assignment\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):10:1: error[TRB3000]: union field value has different types in its alternatives; narrow the receiver before assignment\n(trb):8:1: error[TRB3000]: function object_probe is not declared or imported\n"
+        }
+      },
+      "native": {
+        "check": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:10: error[TRBN4004]: union field value has different types in its alternatives\n"
+        },
+        "build": {
+          "code": 1,
+          "stdout": "",
+          "stderr": "<case>/main.trb:10: error[TRBN4004]: union field value has different types in its alternatives\n"
+        },
+        "execute": null,
+        "repl": {
+          "code": 0,
+          "stdout": "",
+          "stderr": "(trb):10: error[TRBN4004]: union field value has different types in its alternatives\n(trb):8: error[TRBN4003]: unresolved function object_probe\n"
         }
       }
     }
