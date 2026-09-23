@@ -77,6 +77,15 @@ def mir_call_value_type(native_module: MirModule, name: String): Boolean
 	return false
 end
 
+# Only the verified standard math adapter is pure. Ordinary and host calls
+# retain conservative effects until an interprocedural summary proves more.
+def mir_call_effects(signature: MirSignature): Integer
+	if signature.kind == 3 && signature.adapter == 11
+		return 0
+	end
+	return 15
+end
+
 # The resolver has already bound the package identity, including import aliases.
 # Standard APIs have their own signature kind, separate from compiler privileges.
 def mir_checked_standard_call(mut state: CompilerState, mut locals: CheckedLocals, category: Integer, arguments: Array<Integer>, result_type: String, origin: Integer): CheckedValue
@@ -135,7 +144,7 @@ def mir_checked_call(mut state: CompilerState, mut locals: CheckedLocals, callee
 		locals.mir_arguments.push(value)
 	end
 	call := locals.mir_calls.size()
-	locals.mir_calls.push(MirCall.new(callee: callee, argument_start: start, argument_count: arguments.size(), effects: 15))
+	locals.mir_calls.push(MirCall.new(callee: callee, argument_start: start, argument_count: arguments.size(), effects: mir_call_effects(signature)))
 	mut result :=- 1
 	if result_type != "Void"
 		result = scalar_mir_value(state, locals, mir_semantic_type_id(state.scalar_mir, result_type), origin)
@@ -242,7 +251,7 @@ def mir_call_error(flow: MirFlow, native_module: MirModule, function: MirFunctio
 		return "MIR call declaration is missing"
 	end
 	signature := native_module.signatures[call.callee]
-	if call.effects != 15
+	if call.effects != mir_call_effects(signature)
 		return "MIR call effects or adapter differ"
 	end
 	if !mir_table_span_valid(call.argument_start, call.argument_count, native_module.arguments.size())

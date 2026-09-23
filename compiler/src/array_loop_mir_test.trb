@@ -43,6 +43,23 @@ describe("Array loop CFG MIR") do
 		end
 	end
 
+	test("retains Array traversal proofs across verified pure math calls") do
+		source := "import trb/std/math\ndef sum(values: Array<Float>): Float\nmut index := 0\nmut total := 0.0\nwhile index < values.size()\ntotal += values[index] + Math.sqrt(4.0)\nindex += 1\nend\nreturn total\nend\ndef main()\nputs(sum([1.0, 2.0]) == 7.0)\nend\n"
+		state := array_loop_mir_check(source)
+		index := mir_function_index(state.scalar_mir, 0)
+		expect(state.scalar_mir.array_loops[index].size()).to_equal(1)
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe(qbe, control_test_output(emit_qbe(state)))
+			when Result::Ok(actual)
+				expect(actual).to_equal("true\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+
 	test("retains checks for different arrays changed indexes and header effects") do
 		bodies := [
 			"while index < values.size()\ntotal += other[index]\nindex += 1\nend",
@@ -59,7 +76,7 @@ describe("Array loop CFG MIR") do
 			index := mir_function_index(state.scalar_mir, 1)
 			expect(state.scalar_mir.functions[index].kind).to_equal(3)
 			expect(state.scalar_mir.array_loops[index].size()).to_equal(0)
-			expect(control_test_output(emit_qbe(state)).include?("call $trbn_array_address(")).to_be_true()
+			expect(control_test_output(emit_qbe(state)).include?("call $trbn_fail(l $trbn_bounds_error, l 30)")).to_be_true()
 		end
 	end
 

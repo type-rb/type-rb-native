@@ -130,6 +130,32 @@ describe("MIR standard package calls") do
 		expect(state.scalar_mir.signatures[5].adapter).to_equal(11)
 		expect(state.scalar_mir.functions[mir_function_index(state.scalar_mir, 3)].kind).to_equal(1)
 		expect(state.scalar_mir.root_plans[0].capacity >= 2).to_be_true()
+		mut math_calls := 0
+		mut process_calls := 0
+		state.scalar_mir.calls.each do |call|
+			signature := state.scalar_mir.signatures[call.callee]
+			if signature.kind == 3 && signature.adapter == 11
+				expect(call.effects).to_equal(0)
+				math_calls += 1
+			elsif signature.kind == 3 && signature.adapter == 10
+				expect(call.effects).to_equal(15)
+				process_calls += 1
+			end
+		end
+		expect(math_calls).to_equal(2)
+		expect(process_calls).to_equal(2)
+		mut instruction_index := 0
+		while instruction_index < state.scalar_mir.instructions.size()
+			instruction := state.scalar_mir.instructions[instruction_index]
+			if instruction.kind == 11
+				call := state.scalar_mir.calls[instruction.payload]
+				signature := state.scalar_mir.signatures[call.callee]
+				if signature.kind == 3 && signature.adapter == 11
+					expect(state.scalar_mir.root_plans[0].instructions.include?(instruction_index)).to_be_false()
+				end
+			end
+			instruction_index += 1
+		end
 	end
 
 	test("executes erased reordered standard calls and retains live argv results at collection") do
@@ -162,13 +188,13 @@ describe("MIR standard package calls") do
 			if line == "}"
 				caller = false
 			end
-			if caller && (line.include?("call $trbn_process_argv(") || line.include?("call $sqrt("))
+			if caller && line.include?("call $trbn_process_argv(")
 				forced += "\tcall $trbn_gc_collect(w 0)\n"
 				hooks += 1
 			end
 			forced += line + "\n"
 		end
-		expect(hooks).to_equal(4)
+		expect(hooks).to_equal(2)
 		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
 		if qbe != nil
 			case logical_run_qbe_arguments(qbe, forced, ["81"])
@@ -215,6 +241,23 @@ describe("MIR standard package calls") do
 			expect(verify_mir(state.scalar_mir, true).empty?()).to_be_false()
 			mode += 1
 		end
+	end
+
+	test("rejects forged standard math call effects") do
+		mut state := standard_call_test_state()
+		mut index := 0
+		mut found := false
+		while index < state.scalar_mir.calls.size()
+			call := state.scalar_mir.calls[index]
+			if state.scalar_mir.signatures[call.callee].adapter == 11
+				state.scalar_mir.calls[index] = MirCall.new(callee: call.callee, argument_start: call.argument_start, argument_count: call.argument_count, effects: 15)
+				found = true
+				break
+			end
+			index += 1
+		end
+		expect(found).to_be_true()
+		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR call effects or adapter differ")
 	end
 
 	test("preserves package and unreachable-tail diagnostics") do
