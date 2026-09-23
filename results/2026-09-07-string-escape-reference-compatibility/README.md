@@ -1,6 +1,19 @@
 # Current reference compatibility
 
 The selected development reference is TypeRB `0.4.9-dev` at
+`71519dac58abc79811a35ef88fe9f38ccc435185`, incorporating
+[PR #820](https://github.com/type-rb/type-rb/pull/820).
+Transparent class aliases resolve to their target class for construction and
+class-method calls, including generic, qualified and imported targets. Native
+uses this merged reference to verify its corresponding MIR lowering. Focused
+Native object execution and self-build passed locally; exact AST, shared
+observations, recovery and target validation remain required. This development
+pin does not change a release, immutable seed or performance qualification.
+Previous reference identities and evidence follow.
+
+# Previous object-reference compatibility
+
+The selected development reference is TypeRB `0.4.9-dev` at
 `92e170123eae0dc697138f3a1091441fe95e1b89`, incorporating
 [PR #803](https://github.com/type-rb/type-rb/pull/803),
 [#806](https://github.com/type-rb/type-rb/pull/806),

@@ -1497,3 +1497,6 @@
 | Class unions: immutable projection | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Class unions: readonly projection | accepts | accepts | matches reference | matches reference |
 | Class unions: common callable | accepts | accepts | matches reference | rejects valid input |
+| Class alias construction and class method | accepts | accepts | matches reference | matches reference |
+| Qualified generic class alias construction | accepts | accepts | matches reference | matches reference |
+| Imported class alias construction | accepts | accepts | matches reference | matches reference |

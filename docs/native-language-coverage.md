@@ -31,8 +31,10 @@ record/interface values keep their owners when later declarations reuse a name
 and after explicit replay. The forced-collection suite includes these nested
 nominal and callable paths with exact reclamation checks.
 
-Initialized superclasses and inherited overrides remain guarded. Class-alias
-construction, static `self.new`, diagnostic differences and the reference's
+Initialized superclasses and inherited overrides remain guarded. Construction
+through class aliases uses the canonical class's checked MIR allocation and
+constructor path, including generic, qualified and imported targets. Static
+`self.new`, diagnostic differences and the reference's
 deferred object contracts remain listed in the feature inventory. See
 [decision 0085](decisions/0085-object-type-and-execution-mir.md) for the implemented
 boundary and outstanding reference issues. This does not complete the object
@@ -615,8 +617,9 @@ aliases when their underlying declarations are hidden.
 [Decision 0050](decisions/0050-transparent-alias-mir.md) records ownership and
 verification. Callable aliases now reach concrete MIR, including nullable payloads.
 Union targets and nested module aliases now preserve their canonical identity.
-Class/interface type annotations now share the object catalog; construction
-through class aliases and literal targets remain gaps. REPL display currently uses
+Class/interface type annotations now share the object catalog; class-alias
+construction resolves to the canonical class, while literal targets remain a gap.
+REPL display currently uses
 the underlying type rather than always retaining the authored alias. Alias record
 construction and generic identity aliases now execute in the reference. Its
 [same-package nominal-name collision](https://github.com/type-rb/type-rb/issues/708)

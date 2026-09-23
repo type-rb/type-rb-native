@@ -2,7 +2,7 @@
 
 TypeRB Native currently follows exact reference revisions during development. The
 current source and semantic oracle is TypeRB
-`92e170123eae0dc697138f3a1091441fe95e1b89` (the `0.4.9-dev` development identity), recorded
+`71519dac58abc79811a35ef88fe9f38ccc435185` (the `0.4.9-dev` development identity), recorded
 in `TYPE_RB_REVISION`. This declares one exact reference identity during Native
 development, without claiming a supported version range.
 
