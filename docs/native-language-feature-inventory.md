@@ -22,8 +22,8 @@ Each count describes registered probes, not language coverage percentages.
 | Generic declarations and applications | basic | 3 / 80 | Remaining method-specific generic combinations and deferred generic class methods; Wider constraints and type applications | GenericExpression |
 | Union values, literal types and discriminated unions | basic | 12 / 197 | Reference grouped annotation and nullable-alternative boundaries (TypeRB #764 and #765); composite type patterns remain staged in the reference |  |
 | Function values and lexical capture | basic | 0 / 56 | Callable equality, method references and remaining parameter-capability/narrowing combinations | LambdaExpression |
-| Arrays and checked indexes | basic | 19 / 241 | Remaining receiver combinations and contextual empty collection inference; Wider invalid element/mutation combinations | ArrayLiteral, IndexExpression |
-| Hash values and operations | basic | 2 / 38 | Wider key/value representations, dynamic Any operations, empty inference and managed lifetime combinations | HashLiteral |
+| Arrays and checked indexes | basic | 19 / 243 | Remaining receiver combinations and contextual empty collection inference; Wider invalid element/mutation combinations | ArrayLiteral, IndexExpression |
+| Hash values and operations | basic | 2 / 40 | Wider key/value representations, dynamic Any operations, empty inference and managed lifetime combinations | HashLiteral |
 | Structured and value-producing iteration | basic | 1 / 176 | Remaining receiver APIs that shorten or reorder an Array during traversal | IterationExpression, BlockExpression |
 | Range values and boundaries | basic | 0 / 19 | none registered | RangeExpression |
 | Result and typed propagation | basic | 1 / 81 | General union errors and compiler-declared structured package boundaries | TryExpression, CatchExpression |
