@@ -61,6 +61,11 @@ for that alternative. The right-hand side is evaluated once; rebinding the
 source binding during that evaluation does not redirect the store. Readonly,
 private, missing or differently typed fields reject before MIR publication.
 
+Output of a union whose alternatives are printable scalars follows the same
+verified tag branches and payload extraction. Each branch uses the ordinary
+scalar conversion and output operation. An unprintable alternative still
+rejects during semantic checking; union output does not add a backend opcode.
+
 The pinned reference rejects external private fields through unions
 ([TypeRB #816](https://github.com/type-rb/type-rb/pull/816)) and executes common
 class-union field stores ([#817](https://github.com/type-rb/type-rb/pull/817)).

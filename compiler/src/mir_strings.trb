@@ -2,6 +2,8 @@ import { nullable_element } from nullable_types
 import { literal_type_base } from literal_types
 import { mir_literal_widen } from literal_mir
 import { mir_checked_nullable } from nullable_mir
+import { mir_union_operation } from union_mir
+import { union_parts } from union_types
 import { CheckedValue, checked_mir_value, checked_value, mir_checked_value, scalar_mir_disable, scalar_mir_instruction, scalar_mir_value } from checked_values
 import { MirBlock, MirFunction, MirInstruction, MirModule } from mir
 import { mir_control_active, mir_control_allocate, mir_control_branch, mir_control_enter, mir_control_jump, mir_control_prepare } from mir_control
@@ -47,9 +49,18 @@ def mir_checked_string_binary(mut state: CompilerState, mut locals: CheckedLocal
 	return mir_checked_string_operation(state, locals, kind, checked_mir_value(left), checked_mir_value(right), payload, result_type, origin)
 end
 
-# Printing an optional scalar uses ordinary verified branches and payload
-# operations. The backend receives only existing scalar conversions and I/O.
+# Printing optional and union scalars uses ordinary verified branches and
+# payload operations. The backend receives only existing conversions and I/O.
 def mir_puts_type(type_name: String): Boolean
+	parts := union_parts(type_name)
+	if parts.size() > 0
+		parts.each do |part|
+			if !mir_puts_type(part)
+				return false
+			end
+		end
+		return true
+	end
 	element := nullable_element(type_name)
 	if element != ""
 		return mir_puts_type(element)
@@ -95,6 +106,34 @@ def mir_checked_puts(mut state: CompilerState, mut locals: CheckedLocals, argume
 		mir_control_enter(state, locals, alternate, line)
 		mir_puts_nil(state, locals, origin)
 		mir_control_jump(state, locals, join, locals.count[0])
+		mir_control_enter(state, locals, join, line)
+		return checked_value("Void", 0, 9007199254740991, 0)
+	end
+	alternatives := union_parts(type_name)
+	if alternatives.size() > 0
+		mir_control_prepare(state, locals)
+		if !mir_control_active(locals)
+			return checked_value("Void", 0, 9007199254740991, 0)
+		end
+		line := load_integer(state.token_lines, origin)
+		union_value := mir_checked_value(type_name, value, origin, 0)
+		join := mir_control_allocate(locals)
+		mut index := 0
+		while index < alternatives.size()
+			alternative := alternatives[index]
+			mut next_branch :=- 1
+			if index + 1 < alternatives.size()
+				condition := mir_union_operation(state, locals, 53, union_value, alternative, "Boolean", origin)
+				next_branch = mir_control_branch(state, locals, condition, line)
+			end
+			payload := mir_union_operation(state, locals, 54, union_value, alternative, alternative, origin)
+			mir_checked_puts(state, locals, [checked_mir_value(payload)], origin)
+			mir_control_jump(state, locals, join, locals.count[0])
+			if next_branch >= 0
+				mir_control_enter(state, locals, next_branch, line)
+			end
+			index += 1
+		end
 		mir_control_enter(state, locals, join, line)
 		return checked_value("Void", 0, 9007199254740991, 0)
 	end
