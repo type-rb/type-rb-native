@@ -1,8 +1,9 @@
 import { integer_string } from literals
-import { MirArrayLoop, MirBlock, MirFunction, MirModule } from mir
+import { MirArrayHeader, MirArrayLoop, MirBlock, MirFunction, MirModule } from mir
 import { mir_exact_integer_literal } from mir_analysis
-import { MirFlow, mir_build_flow, mir_flow_blocks } from mir_flow
+import { MirFlow, mir_build_flow, mir_flow_blocks, mir_flow_type } from mir_flow
 import { mir_instruction_effects, mir_live_add, mir_live_equal } from mir_roots
+import { mir_element_type } from mir_types
 
 # A checked position (kind 21) is an in-range logical index for its owner.
 # Reuse it within the same MIR block until an operation can change collection
@@ -153,7 +154,38 @@ def mir_loop_parameter(native_module: MirModule, header: MirBlock, value: Intege
 end
 
 def mir_no_array_loop(): MirArrayLoop
-	return MirArrayLoop.new(header: - 1, preheader: - 1, owner: - 1, length: - 1, loads: [])
+	return MirArrayLoop.new(header: - 1, preheader: - 1, owner: - 1, length: - 1, accesses: [], headers: [])
+end
+
+# Retain only independent Array owners whose header parameter has exactly the
+# same identity on every backedge. This proves stable length and backing data,
+# but does not equate its length to the loop's guard Array.
+def mir_array_stable_headers(native_module: MirModule, flow: MirFlow, header: MirBlock, header_index: Integer, preheader_start: Integer, guard_owner: Integer, aliases: Hash<String, Integer>): Array<MirArrayHeader>
+	mut headers: Array<MirArrayHeader> := []
+	mut slot := 0
+	while slot < header.parameter_count
+		identity := native_module.arguments[header.parameter_start + slot]
+		if identity != guard_owner && mir_element_type(native_module, mir_flow_type(flow, identity)) != 0
+			mut stable := true
+			mut edge := 0
+			while edge < flow.predecessors[header_index].size()
+				previous := flow.predecessors[header_index][edge]
+				if mir_loop_dominates(flow, header_index, previous)
+					start := flow.incoming_starts[header_index][edge]
+					if mir_loop_alias(aliases, native_module.arguments[start + slot]) != identity
+						stable = false
+					end
+				end
+				edge += 1
+			end
+			if stable
+				owner := native_module.arguments[preheader_start + slot]
+				headers.push(MirArrayHeader.new(identity: identity, owner: owner, accesses: [], nonnegative_accesses: []))
+			end
+		end
+		slot += 1
+	end
+	return headers
 end
 
 def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlow, header_index: Integer): MirArrayLoop
@@ -184,6 +216,7 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 	end
 	aliases := mir_loop_aliases(native_module, function, flow, header)
 	mut preheader :=- 1
+	mut preheader_start :=- 1
 	mut owner :=- 1
 	mut members: Array<Integer> := [header_index]
 	mut visited: Hash<String, Integer> := {}
@@ -219,6 +252,7 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 				return mir_no_array_loop()
 			end
 			preheader = block.id
+			preheader_start = start
 			owner = native_module.arguments[start + owner_slot]
 		end
 		edge += 1
@@ -245,10 +279,12 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 	if visited.key?(integer_string(flow.blocks[integer_string(header.second_target)]))
 		return mir_no_array_loop()
 	end
-	mut loads: Array<Integer> := []
+	mut accesses: Array<Integer> := []
+	mut headers := mir_array_stable_headers(native_module, flow, header, header_index, preheader_start, length.first, aliases)
 	body := flow.blocks[integer_string(header.first_target)]
 	members.each do |member|
 		block := native_module.blocks[function.block_start + member]
+		mut captured: Hash<String, Integer> := {}
 		mut instruction_index := block.instruction_start
 		while instruction_index < block.instruction_start + block.instruction_count
 			instruction := native_module.instructions[instruction_index]
@@ -261,18 +297,44 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 			if (instruction.kind < 6 || instruction.kind > 9) && (instruction.kind < 20 || instruction.kind > 23) && !pure_call
 				return mir_no_array_loop()
 			end
-			if instruction.kind == 22 && mir_loop_dominates(flow, body, member)
-				if mir_loop_alias(aliases, instruction.first) == length.first && mir_loop_alias(aliases, instruction.second) == condition.first
-					mir_live_add(loads, instruction_index)
+			if instruction.kind >= 21 && instruction.kind <= 23 && mir_loop_dominates(flow, body, member)
+				if mir_loop_alias(aliases, instruction.first) == length.first
+					mut guarded := mir_loop_alias(aliases, instruction.second) == condition.first
+					if !guarded && captured.key?(integer_string(instruction.second))
+						guarded = captured[integer_string(instruction.second)] == length.first
+					end
+					if guarded
+						mir_live_add(accesses, instruction_index)
+						if instruction.kind == 21
+							captured[integer_string(instruction.result)] = length.first
+						end
+					end
+				end
+			end
+			if instruction.kind >= 20 && instruction.kind <= 23
+				identity := mir_loop_alias(aliases, instruction.first)
+				headers.each do |candidate|
+					if candidate.identity == identity
+						mir_live_add(candidate.accesses, instruction_index)
+						if instruction.kind >= 21 && mir_loop_alias(aliases, instruction.second) == condition.first && mir_loop_dominates(flow, body, member)
+							mir_live_add(candidate.nonnegative_accesses, instruction_index)
+						end
+					end
 				end
 			end
 			instruction_index += 1
 		end
 	end
-	if loads.size() == 0
+	if accesses.size() == 0
 		return mir_no_array_loop()
 	end
-	return MirArrayLoop.new(header: header.id, preheader: preheader, owner: owner, length: length_index, loads: loads)
+	mut reused: Array<MirArrayHeader> := []
+	headers.each do |candidate|
+		if candidate.accesses.size() > 1
+			reused.push(candidate)
+		end
+	end
+	return MirArrayLoop.new(header: header.id, preheader: preheader, owner: owner, length: length_index, accesses: accesses, headers: reused)
 end
 
 def mir_function_array_loops(native_module: MirModule, function: MirFunction): Array<MirArrayLoop>
@@ -340,8 +402,17 @@ def mir_array_loops_equal(left: Array<MirArrayLoop>, right: Array<MirArrayLoop>)
 	while index < left.size()
 		a := left[index]
 		b := right[index]
-		if a.header != b.header || a.preheader != b.preheader || a.owner != b.owner || a.length != b.length || !mir_live_equal(a.loads, b.loads)
+		if a.header != b.header || a.preheader != b.preheader || a.owner != b.owner || a.length != b.length || !mir_live_equal(a.accesses, b.accesses) || a.headers.size() != b.headers.size()
 			return false
+		end
+		mut header := 0
+		while header < a.headers.size()
+			left_header := a.headers[header]
+			right_header := b.headers[header]
+			if left_header.identity != right_header.identity || left_header.owner != right_header.owner || !mir_live_equal(left_header.accesses, right_header.accesses) || !mir_live_equal(left_header.nonnegative_accesses, right_header.nonnegative_accesses)
+				return false
+			end
+			header += 1
 		end
 		index += 1
 	end
