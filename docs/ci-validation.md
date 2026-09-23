@@ -116,6 +116,14 @@ acceptance contracts. Timeout remains a failure and terminates the owned builder
 process group. Cache reuse, failure atomicity and concurrent-caller assertions
 remain required.
 
+After a nested compiler input is added and rebuilt, the modification and
+removal controls start from copies of that same verified cache state. They run
+in separate checkouts, so each must independently invalidate its core key and
+complete a real fixed-point rebuild. These two independent builds overlap
+under a shared 600-second watchdog; the log records both build times and
+the cohort wall time. A timeout or cancellation terminates owned builder
+process groups before either temporary checkout is removed.
+
 Concurrent callers share the same 600-second rebuild deadline, including the
 launcher's bounded lock wait. Key-based sorting CI exposed a remaining
 120-second concurrent-call timeout after ordinary rebuilds and functional checks
@@ -335,9 +343,11 @@ descendants stay in the root suite's owned process group for cancellation.
 `TYPE_RB_NATIVE_RECOVERY_JOBS` defaults to `2`; explicit values `1` through `4`
 are accepted, with `1` available for serial diagnosis. Other values fail before
 workspace allocation. The limit is per root invocation; the compiler suite
-continues independently. This is test orchestration through the pinned Go
-reference's `concurrent_map`, not a Native concurrency-support claim or a new
-ordinary compiler dependency. Synthetic subprocess tests check bounded overlap,
+continues independently. Native CI explicitly uses `4` for the independent
+recovery controls, while local runs keep the more conservative default. This is
+test orchestration through the pinned Go reference's `concurrent_map`, not a
+Native concurrency-support claim or a new ordinary compiler dependency.
+Synthetic subprocess tests check bounded overlap,
 exactly-once admission/completion and complete, ordered failure collection at
 limits 1, 2 and 4. Record phase durations and runner resource costs when evaluating
 the change; do not present an estimated speedup as a measurement.
