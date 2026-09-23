@@ -1652,6 +1652,30 @@ def check_block(mut state: CompilerState, mut position: Array<Integer>, mut loca
 	return !has_diagnostic(state)
 end
 
+# An empty collection expression discarded by its enclosing block has no
+# elements to evaluate and no observable allocation. A value-producing final
+# statement and an interactive submission still need a concrete element type.
+def checked_discarded_empty_collection(state: CompilerState, position: Array<Integer>, wants_value: Boolean, locals: CheckedLocals): Boolean
+	origin := position[0]
+	if result_interactive_entry(state, locals) && !wants_value
+		return false
+	end
+	if !(token_is(state, origin, "[") && token_is(state, origin + 1, "]")) && !(token_is(state, origin, "{") && token_is(state, origin + 1, "}"))
+		return false
+	end
+	mut after := [origin + 2]
+	if load_integer(state.token_kinds, after[0]) != 4 && !terminal_token(state, after[0]) && !token_is(state, after[0], "}")
+		return false
+	end
+	if wants_value
+		skip_newlines(state, after)
+		if syntax_block_end(state, after[0]) || syntax_conditional_tail(state, after[0])
+			return false
+		end
+	end
+	return true
+end
+
 def check_block_value(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, result_type: String, loop_origin: Integer, wants_value: Boolean, expected: String): CheckedValue
 	saved_loop := locals.lexical_loop[0]
 	locals.lexical_loop[0] = loop_origin
@@ -1732,6 +1756,9 @@ def check_block_value(mut state: CompilerState, mut position: Array<Integer>, mu
 			result = checked_iteration(state, position, locals, result_type, loop_origin)
 		elsif declaration_start(state, position[0])
 			result = check_declaration(state, position, locals)
+		elsif checked_discarded_empty_collection(state, position, wants_value, locals)
+			position[0] += 2
+			finish_statement(state, position)
 		else
 			result = check_simple_statement(state, position, locals, contextual)
 		end

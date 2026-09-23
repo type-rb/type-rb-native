@@ -1451,6 +1451,20 @@ def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut s
 end
 
 def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, mut flow: Array<Integer>, loop_origin: Integer): Integer
+	# The checker deliberately records no value plan for a discarded empty
+	# collection. Follow that checked omission instead of attempting to create
+	# an untyped Array or Hash during retained REPL execution.
+	collection_origin := position[0]
+	if syntax_statement_boundary(state, collection_origin + 2)
+		if token_is(state, collection_origin, "[") && token_is(state, collection_origin + 1, "]") && sparse_string_at(state.checked[0].array_literal_types, collection_origin) == ""
+			position[0] += 2
+			return 0
+		end
+		if token_is(state, collection_origin, "{") && token_is(state, collection_origin + 1, "}") && checked_hash_plan(state, collection_origin).kind == 0
+			position[0] += 2
+			return 0
+		end
+	end
 	if sparse_integer_at(state.iteration_origins, position[0]) > 0
 		return repl_iteration(state, position, store, environment, flow, loop_origin)
 	end

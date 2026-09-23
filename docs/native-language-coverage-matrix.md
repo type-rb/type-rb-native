@@ -1312,7 +1312,8 @@
 | Safe collection lookup: invalid named index | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Safe collection lookup: invalid unhandled result | rejects as reference | rejects as reference | not reached | matches reference |
 | Safe collection lookup: nested empty catch | rejects as reference | rejects as reference | not reached | rejects as reference |
-| Discarded untyped empty Array before a catch result | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Discarded untyped empty Array before a catch result | accepts | accepts | matches reference | matches reference |
+| Discarded untyped empty Array and Hash expressions | accepts | accepts | matches reference | matches reference |
 | Safe collection lookup: hash error storage | accepts | accepts | matches reference | matches reference |
 | Portable Integer parsing | accepts | accepts | matches reference | matches reference |
 | Portable Float parsing | accepts | accepts | matches reference | matches reference |
