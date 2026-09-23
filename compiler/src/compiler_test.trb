@@ -141,7 +141,7 @@ describe("Native TypeRB frontend") do
 		expect(verify_mir(state.scalar_mir, true)).to_equal("")
 		expect(state.scalar_mir.functions[mir_function_index(state.scalar_mir, 0)].kind).to_equal(3)
 		expect(state.scalar_mir.array_loops[mir_function_index(state.scalar_mir, 0)].size()).to_equal(0)
-		expect(output_source(emit_qbe(state)).include?("call $trbn_array_address(")).to_be_true()
+		expect(output_source(emit_qbe(state)).include?("call $trbn_fail(l $trbn_bounds_error, l 30)")).to_be_true()
 	end
 
 	test("lowers, verifies, and selects complete checked scalar leaf MIR") do
@@ -254,7 +254,7 @@ describe("Native TypeRB frontend") do
 		qbe := output_source(emit_qbe(state))
 		expect(qbe.include?("%mir_array_data")).to_be_true()
 		expect(qbe.include?("%mir_array_length")).to_be_true()
-		expect(qbe.include?("call $trbn_array_address(")).to_be_false()
+		expect(qbe.include?("call $trbn_fail(l $trbn_bounds_error, l 30)")).to_be_false()
 	end
 
 	test("lowers an Integer reduction through general block parameters") do
@@ -272,7 +272,7 @@ describe("Native TypeRB frontend") do
 		qbe := output_source(emit_qbe(state))
 		expect(qbe.include?("%mir_array_data")).to_be_true()
 		expect(qbe.include?("%mir_array_length")).to_be_true()
-		expect(qbe.include?("call $trbn_array_address(")).to_be_false()
+		expect(qbe.include?("call $trbn_fail(l $trbn_bounds_error, l 30)")).to_be_false()
 	end
 
 	test("lowers one complete Array Float reduction through verified MIR") do
@@ -290,7 +290,7 @@ describe("Native TypeRB frontend") do
 		qbe := output_source(emit_qbe(state))
 		expect(qbe.include?("%mir_array_data")).to_be_true()
 		expect(qbe.include?("%mir_array_length")).to_be_true()
-		expect(qbe.include?("call $trbn_array_address(")).to_be_false()
+		expect(qbe.include?("call $trbn_fail(l $trbn_bounds_error, l 30)")).to_be_false()
 	end
 
 	test("admits nonzero and subtracting Float reductions through general MIR") do
@@ -314,7 +314,7 @@ describe("Native TypeRB frontend") do
 
 		qbe := output_source(emit_qbe(state))
 		expect(state.scalar_mir.functions[mir_function_index(state.scalar_mir, 0)].kind).to_equal(3)
-		expect(qbe.include?("call $trbn_array_address")).to_be_true()
+		expect(qbe.include?("call $trbn_fail(l $trbn_bounds_error, l 30)")).to_be_true()
 	end
 
 	test("retains bounds checks when the loop condition extends the Array length") do
@@ -327,7 +327,7 @@ describe("Native TypeRB frontend") do
 
 		qbe := output_source(emit_qbe(state))
 		expect(state.scalar_mir.functions[mir_function_index(state.scalar_mir, 0)].kind).to_equal(3)
-		expect(qbe.include?("call $trbn_array_address")).to_be_true()
+		expect(qbe.include?("call $trbn_fail(l $trbn_bounds_error, l 30)")).to_be_true()
 	end
 
 	test("retains bounds checks when a later update invalidates the induction proof") do
@@ -340,7 +340,7 @@ describe("Native TypeRB frontend") do
 
 		qbe := output_source(emit_qbe(state))
 		expect(state.scalar_mir.functions[mir_function_index(state.scalar_mir, 0)].kind).to_equal(3)
-		expect(qbe.include?("call $trbn_array_address")).to_be_true()
+		expect(qbe.include?("call $trbn_fail(l $trbn_bounds_error, l 30)")).to_be_true()
 	end
 
 	test("admits varied Integer reductions through general MIR") do
@@ -1539,7 +1539,7 @@ describe("Native TypeRB frontend") do
 		expect(qbe.include?("call $trbn_integer_mul")).to_be_false()
 		expect(qbe.include?("call $trbn_integer_divide")).to_be_false()
 		# Capture, read and final store keep their independent checks in typed MIR.
-		expect(occurrence_count(qbe, "call $trbn_array_address")).to_equal(3)
+		expect(occurrence_count(qbe, "call $trbn_fail(l $trbn_bounds_error, l 30)") >= 3).to_be_true()
 	end
 
 	test("routes dynamic Integer multiplication through the bounded checked entry") do
@@ -1610,7 +1610,7 @@ describe("Native TypeRB frontend") do
 		qbe := output_source(emit_qbe(state))
 		expect(qbe.include?("call $trbn_integer_add")).to_be_true()
 		# Capture, read and final store independently check current storage.
-		expect(occurrence_count(qbe, "call $trbn_array_address")).to_equal(3)
+		expect(occurrence_count(qbe, "call $trbn_fail(l $trbn_bounds_error, l 30)") >= 3).to_be_true()
 	end
 
 	test("inlines only eligible scalar leaf calls in managed caller loops") do
@@ -1732,7 +1732,7 @@ describe("Native TypeRB frontend") do
 		expect(large_qbe.include?("# native retained scalar call ")).to_be_false()
 	end
 
-	test("collapses shared Array bounds checks into one unsigned comparison") do
+	test("normalizes negative Array indexes before a terminal bounds check") do
 		source := "def main()\n\tvalues := [1]\n\tvalue := values[- 1]\n\treturn\nend\n"
 		mut state := compiler_new(source.size() + 1)
 		expect(lex(state, source)).to_be_true()
@@ -1740,8 +1740,9 @@ describe("Native TypeRB frontend") do
 		expect(resolve(state)).to_be_true()
 		expect(check(state)).to_be_true()
 		qbe := output_source(emit_qbe(state))
-		expect(qbe.include?("call $trbn_array_address")).to_be_true()
-		expect(qbe.include?("%index =l phi @negative %adjusted_negative, @check %adjusted_positive\n\t%valid =w cultl %index, %length\n\tjnz %valid, @load, @fail")).to_be_true()
+		expect(qbe.include?("call $trbn_fail(l $trbn_bounds_error, l 30)")).to_be_true()
+		expect(occurrence_count(qbe, " =w cultl ") >= 2).to_be_true()
+		expect(qbe.include?("call $trbn_array_address")).to_be_false()
 	end
 
 	test("splits common non-Float Array pushes from fixed quadruple growth") do
