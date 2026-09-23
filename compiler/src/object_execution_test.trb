@@ -109,8 +109,30 @@ describe("Object executable MIR") do
 		object_execution_run(state, "42\n")
 	end
 
-	test("keeps class alias construction guarded pending reference support") do
-		mut state := logical_checked_source("class Answer\nend\nalias Selected = Answer\ndef main()\nSelected.new()\nend\n")
+	test("constructs and calls class members through a transparent alias") do
+		mut state := object_execution_state("class Answer\n@value: Integer\ndef initialize(value: Integer)\n@value = value\nend\ndef self.constant(): Integer\nreturn 5\nend\nend\nalias Selected = Answer\ndef main()\nputs(Selected.new(14).value)\nputs(Selected.constant())\nend\n")
+		object_execution_run(state, "14\n5\n")
+	end
+
+	test("specializes class construction through generic and namespaced aliases") do
+		mut state := object_execution_state("module Models\nclass Box<T>\n@value: T\ndef initialize(value: T)\n@value = value\nend\nend\nalias Wrapped<T> = Box<T>\nend\nalias NumberBox = Models::Wrapped<Integer>\ndef main()\nputs(Models::Wrapped<Integer>.new(7).value)\nputs(NumberBox.new(8).value)\nend\n")
+		object_execution_run(state, "7\n8\n")
+	end
+
+	test("checks class alias constructor arguments before MIR publication") do
+		["Selected.new(\"wrong\")", "Selected.new()", "Selected.new(1, 2)"].each do |call|
+			mut state := logical_checked_source("class Answer\ndef initialize(value: Integer)\nend\nend\nalias Selected = Answer\ndef main()\n" + call + "\nend\n")
+			expect(check(state)).to_be_false()
+		end
+	end
+
+	test("keeps named constructor defaults through a class alias") do
+		mut state := object_execution_state("class Answer\n@value: Integer\ndef initialize(*, value: Integer = 7)\n@value = value\nend\nend\nalias Selected = Answer\ndef main()\nputs(Selected.new().value)\nputs(Selected.new(value: 9).value)\nend\n")
+		object_execution_run(state, "7\n9\n")
+	end
+
+	test("does not construct an interface through an alias") do
+		mut state := logical_checked_source("interface Answer\nvalue(): Integer\nend\nalias Selected = Answer\ndef main()\nSelected.new()\nend\n")
 		expect(check(state)).to_be_false()
 	end
 

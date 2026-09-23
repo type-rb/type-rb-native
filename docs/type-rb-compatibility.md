@@ -2,7 +2,7 @@
 
 TypeRB Native currently follows exact reference revisions during development. The
 current source and semantic oracle is TypeRB
-`92e170123eae0dc697138f3a1091441fe95e1b89` (the `0.4.9-dev` development identity), recorded
+`71519dac58abc79811a35ef88fe9f38ccc435185` (the `0.4.9-dev` development identity), recorded
 in `TYPE_RB_REVISION`. This declares one exact reference identity during Native
 development, without claiming a supported version range.
 
@@ -33,6 +33,23 @@ The earlier scoped-file successor is registered in
 [Darwin/Linux arm64 result](https://github.com/type-rb/type-rb-native/blob/5cf61c740aa600c34ed94f1b130ea2ffefd9e783/results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/README.md)
 passes the selected-reference, migration, exact-baseline, target-regression,
 fixed-point, process, resource, and size criteria.
+
+## Class alias and constructor reference update
+
+The current development pin incorporates
+[TypeRB #820](https://github.com/type-rb/type-rb/pull/820), so transparent
+class aliases construct the canonical target and call its class methods through
+ordinary, generic, qualified and imported names. The same pin also includes
+constructor-path initialization checks
+([#813](https://github.com/type-rb/type-rb/pull/813)), private union-member
+visibility ([#816](https://github.com/type-rb/type-rb/pull/816)), common union
+field assignment ([#817](https://github.com/type-rb/type-rb/pull/817)),
+constructor default-receiver checking
+([#818](https://github.com/type-rb/type-rb/pull/818)) and Ruby keyword-binding
+output ([#819](https://github.com/type-rb/type-rb/pull/819)). The alias cases
+have paired Native check, build, execution and REPL observations; the broader
+reference changes remain subject to the complete shared registry and target
+validation. The AST shape and bootstrap seed remain unchanged.
 
 ## Nominal declarations and object reference update
 

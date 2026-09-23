@@ -79,9 +79,11 @@ values, nested nominal identities, returned captures and replay. Required
 hosted integration authorities remain separate from these focused checks; the
 remaining guarded contracts prevent a claim of complete object coverage.
 
-Construction through a class alias remains guarded because the pinned reference
-rejects that receiver; aliases remain valid type annotations. The current
-reference incorporates qualified class execution
+Construction and class-method calls through a transparent class alias now resolve
+to the canonical target, including generic, qualified and imported classes. The
+checked allocator and constructor path owns the resulting MIR; an alias does not
+create a second nominal class. The pinned reference incorporates this behavior
+([TypeRB #820](https://github.com/type-rb/type-rb/pull/820)), qualified class execution
 ([TypeRB #811](https://github.com/type-rb/type-rb/pull/811)), nominal interfaces
 ([#809](https://github.com/type-rb/type-rb/pull/809)), namespaced records
 ([#812](https://github.com/type-rb/type-rb/pull/812)), private REPL receivers
@@ -100,11 +102,12 @@ method contracts; a passing nominal graph must not hide the discrepancy.
 The implementation follows the reference class contract without resolving its
 explicitly deferred questions: superclass constructor chaining, initialization
 order across initialized superclasses, mutating-method receiver requirements,
-variance, generic class methods and same-named fields/methods. Reference gaps also include incomplete constructor-path initialization checks
-([TypeRB #800](https://github.com/type-rb/type-rb/issues/800)) and constructor
-parameter defaults referring to an unavailable receiver
-([TypeRB #801](https://github.com/type-rb/type-rb/issues/801)). Native initialization
-proofs reject those unsafe paths instead of exposing zeroed storage.
+variance, generic class methods and same-named fields/methods. The pinned
+reference includes constructor-path initialization checks
+([TypeRB #813](https://github.com/type-rb/type-rb/pull/813)) and rejects
+constructor defaults referring to an unavailable receiver
+([TypeRB #818](https://github.com/type-rb/type-rb/pull/818)). Native initialization
+proofs reject unsafe paths instead of exposing zeroed storage.
 
 Acceptance for the complete family requires paired positive and negative cases,
 ordinary check/build/run/REPL behavior, independent MIR corruption and lifetime

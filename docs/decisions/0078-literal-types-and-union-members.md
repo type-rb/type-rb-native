@@ -53,12 +53,12 @@ or source-dependent emitter analysis is needed. Independent verifier controls
 reject forged extraction identities and field layouts; source-erased/reordered
 MIR, forced collection and retained REPL replay cover managed alternatives.
 
-The pinned reference still permits external private fields through unions
-([TypeRB #814](https://github.com/type-rb/type-rb/issues/814)) and accepts common-field
-stores that generate invalid Go ([#815](https://github.com/type-rb/type-rb/issues/815)).
-Native rejects both boundaries; the shared registry preserves their differing
-check/build/execution/REPL outcomes. This is not complete union parity or a
-portable common-field assignment contract.
+The pinned reference rejects external private fields through unions
+([TypeRB #816](https://github.com/type-rb/type-rb/pull/816)) and executes common
+class-union field stores ([#817](https://github.com/type-rb/type-rb/pull/817)).
+Native rejects the store; the shared registry preserves that check, build,
+execution and REPL parity gap. This is not complete union parity or a portable
+common-field assignment contract.
 
 The REPL preserves the singleton's semantic type independently of scalar storage.
 Retained declarations, failed edits and replay must preserve those constraints.
