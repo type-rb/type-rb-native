@@ -40,8 +40,41 @@ describe("MIR declaration-bound calls") do
 		expect(mir_function_index(state.scalar_mir, 2) >= 0).to_be_true()
 		expect(state.scalar_mir.calls.size()).to_equal(7)
 		state.scalar_mir.calls.each do |call|
-			expect(call.effects).to_equal(15)
+			if call.callee == 1
+				expect(call.effects).to_equal(8)
+			else
+				expect(call.effects).to_equal(15)
+			end
 		end
+	end
+
+	test("omits GC roots at verified scalar leaf calls but rejects forged effects") do
+		mut state := call_test_state()
+		walk := mir_function_index(state.scalar_mir, 0)
+		expect(walk >= 0).to_be_true()
+		mut scalar_calls := 0
+		mut instruction_index := 0
+		while instruction_index < state.scalar_mir.instructions.size()
+			instruction := state.scalar_mir.instructions[instruction_index]
+			if instruction.kind == 11 && state.scalar_mir.calls[instruction.payload].callee == 1
+				expect(state.scalar_mir.root_plans[walk].instructions.include?(instruction_index)).to_be_false()
+				call := state.scalar_mir.calls[instruction.payload]
+				state.scalar_mir.calls[instruction.payload] = MirCall.new(callee: call.callee, argument_start: call.argument_start, argument_count: call.argument_count, effects: 15)
+				scalar_calls += 1
+			end
+			instruction_index += 1
+		end
+		expect(scalar_calls).to_equal(1)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR call effects or adapter differ")
+	end
+
+	test("keeps a live Array without loop root publication around a scalar helper") do
+		source := "def denominator(index: Integer): Float\nreturn 1.0 / (index + 1)\nend\ndef total(values: Array<Float>): Float\nmut result: Float := 0\nmut index := 0\nwhile index < values.size()\nresult += denominator(index) * values[index]\nindex += 1\nend\nreturn result\nend\ndef main()\nputs(total([1.0, 2.0]))\nend\n"
+		mut state := logical_checked_source(source)
+		expect(check(state)).to_be_true()
+		expect(state.scalar_mir.functions[mir_function_index(state.scalar_mir, 0)].kind).to_equal(1)
+		expect(state.scalar_mir.root_plans[mir_function_index(state.scalar_mir, 1)].instructions.size()).to_equal(0)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
 	end
 
 	test("emits calls loops and transfers after their checked bodies are unavailable") do
