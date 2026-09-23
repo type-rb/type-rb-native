@@ -304,11 +304,12 @@ verified scalar storage. Homogeneous literal-union Hash keys preserve their
 union identity through payload equality, growth, deletion, copies and snapshots;
 managed key arrays keep Integer and String union objects alive. Mixed and
 nullable keys remain rejected, and indexed access requires the exact key type.
-See [decision 0079](decisions/0079-literal-union-hash-keys.md). The shared cases
-retain reference private-field visibility and common-field assignment defects
-([TypeRB #814](https://github.com/type-rb/type-rb/issues/814) and
-[#815](https://github.com/type-rb/type-rb/issues/815)); Native rejects those boundaries.
-Reference
+See [decision 0079](decisions/0079-literal-union-hash-keys.md). The pinned
+reference rejects external private fields through unions
+([TypeRB #816](https://github.com/type-rb/type-rb/pull/816)) and executes common
+class-union field assignments
+([#817](https://github.com/type-rb/type-rb/pull/817)). Native still rejects the
+common-field store; its shared case remains an explicit parity gap. Reference
 boundaries for grouped annotations, nullable alternatives and composite type
 patterns remain visible, as do REPL type ordering, assignment and Hash display
 differences.

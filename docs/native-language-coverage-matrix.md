@@ -1488,8 +1488,8 @@
 | Class unions: reject replaced binding | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Class unions: reject nonexhaustive | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Class unions: reject nonliteral tag | rejects as reference | rejects as reference | not reached | rejects as reference |
-| Class unions: private field | rejects valid input | rejects valid input | not reached | rejects valid input |
-| Class unions: common field write | rejects valid input | rejects as reference | not reached | rejects valid input |
+| Class unions: private field | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Class unions: common field write | rejects valid input | rejects valid input | not reached | rejects valid input |
 | Class unions: narrowed mutable field | accepts | accepts | matches reference | matches reference |
 | Class unions: generic string discriminant | accepts | accepts | matches reference | matches reference |
 | Class unions: reject generic wrong literal | rejects as reference | rejects as reference | not reached | rejects as reference |
