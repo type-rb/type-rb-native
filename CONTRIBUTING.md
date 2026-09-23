@@ -112,6 +112,21 @@ or when diagnosing a recovery or platform failure; it is not a prerequisite
 for every intermediate language edit. Record pending CI authorities explicitly
 and merge only after all applicable checks accept the candidate.
 
+Keep the edit loop local and narrow. For example, after a MIR Array change,
+run its QBE-backed compiler tests with the pinned reference compiler and QBE:
+
+```sh
+TYPE_RB_NATIVE_ROOT="$PWD" TYPE_RB_NATIVE_QBE=/path/to/qbe \
+  /path/to/pinned/trb test --config compiler/trbconfig.jsonc \
+  -t 'Array loop CFG MIR'
+```
+
+Use the matching test name for another feature family. Run formatting, type
+checking, reference/Native behavior cases and the ordinary Native fixed point
+as the batch becomes coherent; leave the full cross-platform recovery, target,
+CLI and memory authorities to the one ready PR. Start the next local batch while
+that PR validates instead of waiting for each hosted job to finish.
+
 For source and compatibility validation, run the maintained root checks:
 
 ```sh
