@@ -11,6 +11,12 @@ import time
 repository = Path(__file__).resolve().parent.parent
 BUILD_TIMEOUT_SECONDS = 600
 
+def stop_on_signal(signum, _frame):
+    # Let the active build's finally block reap its whole process group.
+    raise SystemExit(128 + signum)
+
+signal.signal(signal.SIGTERM, stop_on_signal)
+
 with tempfile.TemporaryDirectory(prefix='native bootstrap ') as temporary:
     root = Path(temporary)
     for directory in ['compiler', 'bin', '.trb/bootstrap']:
@@ -20,6 +26,22 @@ with tempfile.TemporaryDirectory(prefix='native bootstrap ') as temporary:
         shutil.copy2(repository / file, root / file)
     env = {key: value for key, value in os.environ.items()
            if key not in ['TRBN_CC', 'TRBN_QBE', 'TRBN_BOOTSTRAP_SEED']}
+
+    def stop_owned(child):
+        if child.poll() is not None:
+            return
+        try:
+            os.killpg(child.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        try:
+            child.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(child.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            child.wait()
 
     def communicate(child, timeout):
         try:
@@ -42,11 +64,15 @@ with tempfile.TemporaryDirectory(prefix='native bootstrap ') as temporary:
             print(stdout, stderr, flush=True)
             raise
 
-    def run(*command, timeout=120, check=True, environment=env):
-        child = subprocess.Popen(command, cwd=root, env=environment, text=True,
+    def run(*command, timeout=120, check=True, environment=env, directory=root):
+        child = subprocess.Popen(command, cwd=directory, env=environment, text=True,
                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                  start_new_session=True)
-        stdout, stderr = communicate(child, timeout)
+        try:
+            stdout, stderr = communicate(child, timeout)
+        except BaseException:
+            stop_owned(child)
+            raise
         result = subprocess.CompletedProcess(command, child.returncode, stdout, stderr)
         if check:
             if result.returncode != 0:
@@ -54,20 +80,22 @@ with tempfile.TemporaryDirectory(prefix='native bootstrap ') as temporary:
             result.check_returncode()
         return result
 
-    def build():
+    def build(directory=root, label=''):
         start = time.monotonic()
         # This watchdog bounds a complete core/CLI fixed-point rebuild, not a
         # performance acceptance measurement. Retain the elapsed observation.
-        result = run('./trbn', '--version', timeout=BUILD_TIMEOUT_SECONDS).stderr
-        print(f'Native cache build: {time.monotonic() - start:.2f}s', flush=True)
+        result = run('./trbn', '--version', timeout=BUILD_TIMEOUT_SECONDS,
+                     directory=directory).stderr
+        print(f'Native cache build{(" " + label) if label else ""}: '
+              f'{time.monotonic() - start:.2f}s', flush=True)
         return result
 
-    def snapshot():
-        return tuple((root / file).stat().st_mtime_ns for file in
+    def snapshot(directory=root):
+        return tuple((directory / file).stat().st_mtime_ns for file in
                      ['bin/trbn', '.trb/bootstrap/core/compiler', '.trb/bootstrap/inputs'])
 
-    def edit(file, text):
-        path = root / file
+    def edit(file, text, directory=root):
+        path = directory / file
         before = path.stat()
         path.write_text(path.read_text() + text)
         # Content changes must invalidate even when timestamps are preserved.
@@ -119,11 +147,58 @@ with tempfile.TemporaryDirectory(prefix='native bootstrap ') as temporary:
     nested.mkdir()
     extra = nested / 'extra.trb'
     extra.write_text('# Nested input\n')
-    assert 'reusing' not in build()
-    edit('compiler/src/unused/extra.trb', '# Changed nested input\n')
-    assert 'reusing' not in build()
-    extra.unlink()
-    assert 'reusing' not in build()
+    assert 'reusing' not in build(label='nested addition')
+    # Modification and removal both start from the verified added-input cache.
+    # They need independent checkouts so each real rebuild checks its own key.
+    with tempfile.TemporaryDirectory(prefix='native bootstrap nested ') as temporary_nested:
+        modified_root = Path(temporary_nested)
+        shutil.copytree(root, modified_root, dirs_exist_ok=True)
+        assert snapshot(modified_root) == snapshot()
+        assert build(modified_root, 'relocated cache hit') == ''
+        edit('compiler/src/unused/extra.trb', '# Changed nested input\n', modified_root)
+        extra.unlink()
+        started = time.monotonic()
+        with tempfile.TemporaryFile(mode='w+t') as changed_log, \
+             tempfile.TemporaryFile(mode='w+t') as removed_log:
+            children = []
+            cases = [(modified_root, 'nested modification', changed_log),
+                     (root, 'nested removal', removed_log)]
+            try:
+                for directory, _label, log in cases:
+                    children.append(subprocess.Popen(
+                        ['./trbn', '--version'], cwd=directory, env=env,
+                        stdout=log, stderr=subprocess.STDOUT,
+                        start_new_session=True))
+                deadline = started + BUILD_TIMEOUT_SECONDS
+                finished = [0.0, 0.0]
+                while any(child.poll() is None for child in children):
+                    for index, child in enumerate(children):
+                        if finished[index] == 0.0 and child.poll() is not None:
+                            finished[index] = time.monotonic() - started
+                    if time.monotonic() >= deadline:
+                        raise subprocess.TimeoutExpired('./trbn --version', BUILD_TIMEOUT_SECONDS)
+                    time.sleep(0.1)
+                outputs = []
+                for index, (directory, label, log) in enumerate(cases):
+                    child = children[index]
+                    if finished[index] == 0.0:
+                        finished[index] = time.monotonic() - started
+                    log.seek(0)
+                    output = log.read()
+                    print(f'Native cache build {label}: {finished[index]:.2f}s', flush=True)
+                    if child.returncode != 0:
+                        print(output, flush=True)
+                        raise subprocess.CalledProcessError(child.returncode,
+                                                            ['./trbn', '--version'], output)
+                    outputs.append(output)
+                changed_result, removed_result = outputs
+            finally:
+                for child in children:
+                    stop_owned(child)
+        assert 'reusing' not in changed_result
+        assert 'reusing' not in removed_result
+        print(f'Native parallel nested invalidation: '
+              f'{time.monotonic() - started:.2f}s', flush=True)
 
     # Failed compilation must leave all published binaries and keys untouched.
     baseline = snapshot()

@@ -116,6 +116,14 @@ acceptance contracts. Timeout remains a failure and terminates the owned builder
 process group. Cache reuse, failure atomicity and concurrent-caller assertions
 remain required.
 
+After a nested compiler input is added and rebuilt, the modification and
+removal controls start from copies of that same verified cache state. They run
+in separate checkouts, so each must independently invalidate its core key and
+complete a real fixed-point rebuild. These two independent builds overlap
+under a shared 600-second watchdog; the log records both build times and
+the cohort wall time. A timeout or cancellation terminates owned builder
+process groups before either temporary checkout is removed.
+
 Concurrent callers share the same 600-second rebuild deadline, including the
 launcher's bounded lock wait. Key-based sorting CI exposed a remaining
 120-second concurrent-call timeout after ordinary rebuilds and functional checks
