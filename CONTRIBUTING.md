@@ -136,6 +136,16 @@ the recovery compiler cannot yet read:
 tools/check-bootstrap-snapshot.sh /path/to/pinned/trb
 ```
 
+When checked binding or diagnostic behavior changes, scan the reviewed
+conformance sources with an already built Native compiler before rerunning the
+long recovery suite. This checks all valid, runtime-failing and compile-failing
+source expectations in seconds; it does not replace MIR, runtime or recovery
+verification:
+
+```sh
+python3 tools/check-conformance-sources.py /path/to/native-compiler
+```
+
 For source and compatibility validation, run the maintained root checks:
 
 ```sh
