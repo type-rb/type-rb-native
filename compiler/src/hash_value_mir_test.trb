@@ -24,6 +24,46 @@ def hash_value_mir_state(): CompilerState
 end
 
 describe("Hash value MIR") do
+	test("boxes explicit and inferred Any collection elements with verified MIR") do
+		sources := [
+			"def main()\nmut values: Array<Any> := [1, \"text\"]\nvalues.push(true)\nputs(values.size())\nend\n",
+			"def main()\nmut values: Hash<Integer, Any> := {}\nvalues[1] = 1\nvalues[2] = \"text\"\nputs(values.size())\nend\n",
+			"def main()\nmut values := {}\nvalues[1] = []\nvalues[2] = [\"x\"]\nvalues[1].push(2)\nputs(values[1].size())\nend\n",
+		]
+		outputs := ["3\n", "2\n", "1\n"]
+		sources.each.with_index do |source, index|
+			mut state := logical_checked_source(source)
+			checked := check(state)
+			if !checked
+				puts(index)
+				puts(load_string(state.diagnostic_messages, 0))
+			end
+			expect(checked).to_be_true()
+			expect(verify_mir(state.scalar_mir, true)).to_equal("")
+			qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+			if qbe != nil
+				case logical_run_qbe(qbe, control_test_output(emit_qbe(state)))
+				when Result::Ok(actual)
+					expect(actual).to_equal(outputs[index])
+				when Result::Err(error)
+					puts(error)
+					expect(false).to_be_true()
+				end
+			end
+		end
+	end
+	test("rejects an Any injection whose tag does not match its operand") do
+		mut state := logical_checked_source("def main()\nmut values: Array<Any> := [\"kept\"]\nputs(values.size())\nend\n")
+		expect(check(state)).to_be_true()
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		mut index := 0
+		while state.scalar_mir.instructions[index].kind != 52
+			index += 1
+		end
+		instruction := state.scalar_mir.instructions[index]
+		state.scalar_mir.instructions[index] = compiler_test_instruction_with_cell(instruction, 4, 1)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR union injection alternative differs")
+	end
 	test("retains colon key evaluation and labels in erased managed MIR") do
 		managed_mir_test_fixture("hash-key-spelling", 6)
 	end
@@ -209,6 +249,10 @@ describe("Hash value MIR") do
 
 	test("retains joined Hash alternatives through forced collection and erased MIR") do
 		managed_mir_test_fixture("managed-hash-joined-values", 10)
+	end
+
+	test("retains Any-boxed Hash values through forced collection and erased MIR") do
+		managed_mir_test_fixture("managed-hash-any-values", 8)
 	end
 end
 

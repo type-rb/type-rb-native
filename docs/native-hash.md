@@ -15,6 +15,11 @@ label keys, contextual `Hash<K, V>` annotations, and a fresh mutable empty
 binding refined by its first indexed write. Values written within the same
 `if` or `case` can join numeric, `Nil`, and union alternatives; later
 separate assignments and explicit Hash annotations retain their declared type.
+An inferred Hash whose first value is `[]` uses `Array<Any>` as its value
+boundary. Later differently typed Array elements are boxed through verified
+MIR, so each stored Array can grow independently. Explicit `Array<Any>` and
+`Hash<K, Any>` storage use the same representation; dynamic operations on an
+extracted `Any` are still tracked as separate language coverage.
 Function parameters/results and
 record fields carry concrete Hash types. Existing immutable rules remain in
 force; copy is shallow and iteration order is unspecified.
@@ -58,7 +63,8 @@ plans; those paths remain until their enclosing functions migrate.
 The runtime uses open addressing with linear probing, a power-of-two capacity
 and a maximum occupied load of three quarters. A compact Hash header references
 two word Arrays: one for keys and one for values. Each slot costs two machine
-words, with no per-entry box. Integer keys encode the entire portable range;
+words; the Hash itself adds no per-entry box, while `Any` and union values
+carry their own tagged boxes. Integer keys encode the entire portable range;
 String keys compare length and bytes. Integer mixing and String hashing are
 independent of the frontend representation.
 
