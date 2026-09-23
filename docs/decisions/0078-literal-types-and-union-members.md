@@ -53,12 +53,20 @@ or source-dependent emitter analysis is needed. Independent verifier controls
 reject forged extraction identities and field layouts; source-erased/reordered
 MIR, forced collection and retained REPL replay cover managed alternatives.
 
+Common class-union stores select and retain the receiver before evaluating the
+right-hand side. Each alternative must expose an equivalent, writable class
+field and the receiver binding must be mutable. MIR branches on the union tag,
+extracts the verified class payload and emits the existing typed object store
+for that alternative. The right-hand side is evaluated once; rebinding the
+source binding during that evaluation does not redirect the store. Readonly,
+private, missing or differently typed fields reject before MIR publication.
+
 The pinned reference rejects external private fields through unions
 ([TypeRB #816](https://github.com/type-rb/type-rb/pull/816)) and executes common
 class-union field stores ([#817](https://github.com/type-rb/type-rb/pull/817)).
-Native rejects the store; the shared registry preserves that check, build,
-execution and REPL parity gap. This is not complete union parity or a portable
-common-field assignment contract.
+The shared registry pairs Native and reference check, build, execution and
+REPL outcomes for ordinary, imported and side-effecting stores and rejected
+alternatives. This does not complete union parity.
 
 The REPL preserves the singleton's semantic type independently of scalar storage.
 Retained declarations, failed edits and replay must preserve those constraints.

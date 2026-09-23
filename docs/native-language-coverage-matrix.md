@@ -1489,7 +1489,7 @@
 | Class unions: reject nonexhaustive | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Class unions: reject nonliteral tag | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Class unions: private field | rejects as reference | rejects as reference | not reached | rejects as reference |
-| Class unions: common field write | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Class unions: common field write | accepts | accepts | matches reference | matches reference |
 | Class unions: narrowed mutable field | accepts | accepts | matches reference | matches reference |
 | Class unions: generic string discriminant | accepts | accepts | matches reference | matches reference |
 | Class unions: reject generic wrong literal | rejects as reference | rejects as reference | not reached | rejects as reference |
@@ -1500,3 +1500,7 @@
 | Class alias construction and class method | accepts | accepts | matches reference | matches reference |
 | Qualified generic class alias construction | accepts | accepts | matches reference | matches reference |
 | Imported class alias construction | accepts | accepts | matches reference | matches reference |
+| Class union store retains its receiver across RHS rebinding | accepts | accepts | matches reference | matches reference |
+| Imported class union common field stores | accepts | accepts | matches reference | matches reference |
+| Class union store rejects a readonly alternative | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Class union store rejects differing field types | rejects as reference | rejects as reference | not reached | rejects as reference |

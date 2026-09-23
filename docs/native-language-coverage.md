@@ -295,6 +295,11 @@ mutable fields remain readable without supplying a stable narrowing fact. Generi
 imported, captured, nullable, Array, Hash and Result alternatives retain their
 ordinary identities and lifetimes. See
 [decision 0078](decisions/0078-literal-types-and-union-members.md).
+Common class-union fields are writable when every alternative exposes an
+equivalently typed mutable field and the receiver binding is mutable. The
+receiver is selected once before the right-hand side, and variant-specific
+checked MIR stores the result; readonly or differently typed alternatives
+reject without publishing executable MIR.
 
 Ordinary and retained REPL probes include Unicode/NUL singleton strings, exact
 Hash keys, nullable values, numeric widening and rejected mutation. Independent
@@ -308,8 +313,9 @@ See [decision 0079](decisions/0079-literal-union-hash-keys.md). The pinned
 reference rejects external private fields through unions
 ([TypeRB #816](https://github.com/type-rb/type-rb/pull/816)) and executes common
 class-union field assignments
-([#817](https://github.com/type-rb/type-rb/pull/817)). Native still rejects the
-common-field store; its shared case remains an explicit parity gap. Reference
+([#817](https://github.com/type-rb/type-rb/pull/817)). Paired ordinary and REPL
+cases now cover simple/compound stores, right-hand-side rebinding, imports and
+unsafe rejections. Reference
 boundaries for grouped annotations, nullable alternatives and composite type
 patterns remain visible, as do REPL type ordering, assignment and Hash display
 differences.

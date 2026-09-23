@@ -4,15 +4,18 @@ import { union_parts, union_type } from union_types
 import { mir_union_operation } from union_mir
 import { mir_nullable_coerce } from nullable_mir
 import { nullable_fact, nullable_lookup } from nullable_flow
-import { mir_control_active, mir_control_allocate, mir_control_arguments, mir_control_branch, mir_control_enter, mir_control_jump_arguments, mir_control_prepare } from mir_control
+import { mir_control_active, mir_control_allocate, mir_control_arguments, mir_control_branch, mir_control_enter, mir_control_jump, mir_control_jump_arguments, mir_control_prepare } from mir_control
 import { mir_checked_record_field } from mir_records
 import { mir_checked_object_field } from object_fields
 import { find_object_type, object_field_index } from object_types
-import { CheckedValue, checked_mir_value, checked_view, mir_add_value } from checked_values
+import { CheckedValue, checked_bound_value, checked_mir_value, checked_view, mir_add_value, scalar_mir_disable, scalar_mir_instruction } from checked_values
+import { MirUnionTarget } from mir
 import { mir_semantic_type_id } from mir_types
 import { find_field, find_record_type } from type_resolution
 import { CheckedLocals, CompilerState, ControlSyntax, diagnostic, local_find } from state
 import { load_integer, load_string } from storage
+import { binary_operator_id } from syntax_forms
+import { token_is } from syntax_tokens
 
 # A common member must use the same storage model in every alternative. Class
 # and record layouts stay distinct even when their visible field names match.
@@ -70,6 +73,36 @@ def union_member_type(state: CompilerState, name: String, member: String): Strin
 	return union_type(types)
 end
 
+# A common store has one exact field type and a writable class layout in every
+# alternative. The checked target keeps the receiver selected before the RHS.
+def union_member_write_type(mut state: CompilerState, name: String, member: String, origin: Integer): String
+	mut common := ""
+	line := load_integer(state.token_lines, origin)
+	union_parts(name).each do |alternative|
+		if union_member_storage(state, alternative) != 2 || member.size() == 0 || member[0] == "_"
+			diagnostic(state, "TRBN4004", line, "union assignment requires a public class field in every alternative")
+			return ""
+		end
+		owner := find_object_type(state, alternative)
+		field := object_field_index(state, owner, "@" + member)
+		if field < 0
+			diagnostic(state, "TRBN4004", line, "union assignment requires a common class field " + member)
+			return ""
+		end
+		row := state.object_instances[owner].fields[field]
+		if row.readonly
+			diagnostic(state, "TRBN4004", line, "union field " + member + " is readonly")
+			return ""
+		end
+		if common != "" && common != row.type_name
+			diagnostic(state, "TRBN4004", line, "union field " + member + " has different types in its alternatives")
+			return ""
+		end
+		common = row.type_name
+	end
+	return common
+end
+
 def mir_checked_union_member(mut state: CompilerState, mut locals: CheckedLocals, value: CheckedValue, member: String, origin: Integer): CheckedValue
 	record_owner := find_record_type(state, value.type_name)
 	if record_owner >= 0
@@ -87,9 +120,24 @@ def check_union_member(mut state: CompilerState, mut locals: CheckedLocals, valu
 		diagnostic(state, "TRBN4004", line, "union alternatives do not expose a common data field " + member)
 		return checked_view(value, "Invalid", 0)
 	end
+	assignment := token_is(state, origin + 1, "=")
+	compound := binary_operator_id(load_string(state.token_texts, origin + 1)) >= 17
+	if assignment || compound
+		writable := union_member_write_type(state, value.type_name, member, origin)
+		if writable == ""
+			return checked_view(value, "Invalid", 0)
+		end
+		operand := checked_mir_value(value)
+		if mir_control_active(locals) && operand >= 0
+			locals.mir_union_targets.push(MirUnionTarget.new(origin: origin, owner: operand, type_name: value.type_name, member: member))
+		end
+		if assignment
+			return checked_bound_value(writable, 0, origin, value.mutable, value.binding)
+		end
+	end
 	mir_control_prepare(state, locals)
 	if !mir_control_active(locals)
-		return checked_view(value, expected, 0)
+		return checked_bound_value(expected, 0, origin, value.mutable, value.binding)
 	end
 	join := mir_control_allocate(locals)
 	alternatives := union_parts(value.type_name)
@@ -116,7 +164,47 @@ def check_union_member(mut state: CompilerState, mut locals: CheckedLocals, valu
 	result := mir_add_value(state, locals, mir_semantic_type_id(state.scalar_mir, expected), line)
 	locals.mir_arguments.push(result)
 	locals.mir_control[5] += 1
-	return CheckedValue.new(type_name: expected, category: - result - 1, origin: 9007199254740991, mutable: value.mutable, binding: value.binding, readonly: true, immutable_reference: false, nullable_binding: - 1, nullable_field: - 1, truth: - 1, falsity: - 1, flow_type: expected)
+	return CheckedValue.new(type_name: expected, category: - result - 1, origin: origin, mutable: value.mutable, binding: value.binding, readonly: !(assignment || compound), immutable_reference: false, nullable_binding: - 1, nullable_field: - 1, truth: - 1, falsity: - 1, flow_type: expected)
+end
+
+def mir_checked_union_store(mut state: CompilerState, mut locals: CheckedLocals, target: CheckedValue, value: CheckedValue): Boolean
+	mut index := locals.mir_union_targets.size() - 1
+	while index >= 0
+		row := locals.mir_union_targets[index]
+		if row.origin == target.origin
+			if mir_control_active(locals)
+				operand := checked_mir_value(value)
+				if operand < 0
+					scalar_mir_disable(locals)
+					return true
+				end
+				receiver := checked_bound_value(row.type_name, - row.owner - 1, row.origin, 1, true)
+				join := mir_control_allocate(locals)
+				alternatives := union_parts(row.type_name)
+				mut alternative_index := 0
+				while alternative_index < alternatives.size()
+					alternative := alternatives[alternative_index]
+					mut next_branch :=- 1
+					if alternative_index + 1 < alternatives.size()
+						condition := mir_union_operation(state, locals, 53, receiver, alternative, "Boolean", row.origin)
+						next_branch = mir_control_branch(state, locals, condition, load_integer(state.token_lines, row.origin))
+					end
+					payload := mir_union_operation(state, locals, 54, receiver, alternative, alternative, row.origin)
+					field := object_field_index(state, find_object_type(state, alternative), "@" + row.member)
+					scalar_mir_instruction(state, locals, 65, - 1, checked_mir_value(payload), operand, field, - 1, load_integer(state.token_lines, row.origin))
+					mir_control_jump(state, locals, join, locals.count[0])
+					if next_branch >= 0
+						mir_control_enter(state, locals, next_branch, load_integer(state.token_lines, row.origin))
+					end
+					alternative_index += 1
+				end
+				mir_control_enter(state, locals, join, load_integer(state.token_lines, row.origin))
+			end
+			return true
+		end
+		index -= 1
+	end
+	return false
 end
 
 # Only a direct lexical receiver supplies a reusable discriminant fact. Record

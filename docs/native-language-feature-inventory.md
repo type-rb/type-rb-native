@@ -20,14 +20,14 @@ Each count describes registered probes, not language coverage percentages.
 | Transparent aliases | basic | 6 / 33 | Literal/discriminated union alias targets; Authored alias spelling in REPL display and diagnostics | TypeAliasStatement |
 | Nominal newtypes | basic | 4 / 83 | Class/interface representation dependencies; Method-specific generic parameters with the remaining callable/generic family | NewtypeStatement |
 | Generic declarations and applications | basic | 4 / 80 | Remaining method-specific generic combinations and deferred generic class methods; Wider constraints and type applications | GenericExpression |
-| Union values, literal types and discriminated unions | basic | 27 / 192 | Reference grouped annotation and nullable-alternative boundaries (TypeRB #764 and #765); composite type patterns remain staged in the reference; Native common class-union field assignment |  |
+| Union values, literal types and discriminated unions | basic | 26 / 196 | Reference grouped annotation and nullable-alternative boundaries (TypeRB #764 and #765); composite type patterns remain staged in the reference |  |
 | Function values and lexical capture | basic | 0 / 56 | Callable equality, method references and remaining parameter-capability/narrowing combinations | LambdaExpression |
 | Arrays and checked indexes | basic | 21 / 233 | Remaining receiver combinations and contextual/discarded empty collection inference; Wider invalid element/mutation combinations | ArrayLiteral, IndexExpression |
 | Hash values and operations | basic | 13 / 30 | Wider key/value representations, empty inference and managed lifetime combinations | HashLiteral |
 | Structured and value-producing iteration | basic | 2 / 176 | Remaining receiver APIs that shorten or reorder an Array during traversal | IterationExpression, BlockExpression |
 | Range values and boundaries | basic | 0 / 19 | none registered | RangeExpression |
 | Result and typed propagation | basic | 5 / 81 | General union errors and compiler-declared structured package boundaries | TryExpression, CatchExpression |
-| Classes, fields and methods | basic | 3 / 75 | Initialized superclass storage and constructor chaining; inherited overrides (TypeRB #797); Static self.new | ClassStatement, FieldStatement |
+| Classes, fields and methods | basic | 2 / 79 | Initialized superclass storage and constructor chaining; inherited overrides (TypeRB #797); Static self.new | ClassStatement, FieldStatement |
 | Explicit interface conformance | basic | 0 / 21 | Variance and method-specific generic contracts with the reference object specification; Initialized-superclass and override dependencies | InterfaceStatement |
 | Modules and constant lookup | basic | 1 / 38 | Forward initialization dependencies and cycles; remaining module method boundaries | ModuleStatement |
 | Symbol values | basic | 2 / 35 | Single-quoted Symbol spellings; Remaining reference operator/control framing and multiline interpolation boundaries | SymbolLiteral |

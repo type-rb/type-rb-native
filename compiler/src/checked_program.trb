@@ -8,7 +8,7 @@ import { builtin_result_method } from builtin_results
 import { mir_builtin_number_parse } from builtin_number_parsing
 import { mir_builtin_lookup } from builtin_lookup
 import { check_literal_case, literal_branch_types, literal_case_type, literal_scalar_type } from literal_cases
-import { check_union_member, narrow_union_discriminant, union_member_type } from union_members
+import { check_union_member, mir_checked_union_store, narrow_union_discriminant, union_member_type } from union_members
 import { mir_literal_context } from literal_mir
 import { mir_literal_scalar } from nullable_mir
 import { find_newtype_in_module, find_newtype_type, newtype_equality_type, newtype_type } from newtype_types
@@ -1417,7 +1417,9 @@ def check_simple_statement(
 		checked_submission_result(state, origin, display_type, display_mutable)
 		checked_hash_refine(state, locals, left.origin, right.type_name)
 		hash := checked_hash_plan(state, left.origin)
-		if mir_checked_object_store(state, locals, left, right)
+		if mir_checked_union_store(state, locals, left, right)
+			# The receiver was selected before the right-hand side.
+		elsif mir_checked_object_store(state, locals, left, right)
 			# The receiver was evaluated before the right-hand side.
 		elsif hash.kind == 3
 			mir_checked_hash_store(state, locals, left, right, hash.type_name)
@@ -1456,7 +1458,7 @@ def check_simple_statement(
 				else
 					value = scalar_mir_binary(state, locals, compound, left, right, result_type, operator_origin)
 				end
-				if !mir_checked_object_store(state, locals, left, value) && !mir_checked_array_store(state, locals, left, value)
+				if !mir_checked_union_store(state, locals, left, value) && !mir_checked_object_store(state, locals, left, value) && !mir_checked_array_store(state, locals, left, value)
 					mir_binding_assign(state, locals, left, value)
 				end
 			end
