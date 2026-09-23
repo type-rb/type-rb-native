@@ -274,6 +274,12 @@ collection and retained REPL failure/replay controls cover these combinations.
 Concurrent transforms remain separate implementation work.
 See [decision 0074](decisions/0074-safe-collection-block-mir.md).
 
+An inferred empty Hash widens Integer values to Float when the first stores
+occur inside the same `if` or `case` statement. The checked binding and MIR
+join agree on the widened type, including stores on earlier paths. The key
+type remains fixed, and a later separate assignment does not reopen inference.
+Shared positive and rejection cases cover file execution and retained REPL.
+
 ## Raw enums and instance methods
 
 Explicit String/Integer raw values, `raw_value()` and `from_raw()` use canonical

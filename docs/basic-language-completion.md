@@ -88,10 +88,10 @@ nested/reopened modules and runtime constants with
 verified MIR globals, portable Symbol expressions and keyword framing, Unicode
 String trimming, named function values, nullable/generic combinations, and
 colon-separated Hash key expressions. These extend String
-joining, Hash snapshot iteration and Range materialization, Array search,
+joining, Hash snapshot iteration and scoped numeric value inference, Range materialization, Array search,
 uniqueness, concatenation, insertion/removal, edges/copies/slicing, and the String
 query, sequence, slice and escape families. Literal-union Hash keys preserve
 their semantic identity through lookup, copies, snapshots and collection.
-Its 1508 registered cases include
+Its 1519 registered cases include
 explicit remaining differences; neither this count nor green regression CI
 closes #454.
