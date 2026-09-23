@@ -4,7 +4,7 @@
 | --- | --- | --- | --- | --- |
 | Integer arithmetic | accepts | accepts | matches reference | matches reference |
 | if / else | accepts | accepts | matches reference | matches reference |
-| while | accepts | accepts | matches reference | output differs |
+| while | accepts | accepts | matches reference | matches reference |
 | Short-circuit OR / AND | accepts | accepts | matches reference | matches reference |
 | Record construction and field read | accepts | accepts | matches reference | matches reference |
 | Array&lt;Integer&gt; | accepts | accepts | matches reference | matches reference |
@@ -136,14 +136,14 @@
 | Nullable Array elements and stable record fields | accepts | accepts | matches reference | matches reference |
 | Safe navigation evaluates the receiver once | accepts | accepts | matches reference | matches reference |
 | Safe navigation skips argument side effects | accepts | accepts | matches reference | matches reference |
-| Nullable Hash and Array storage | accepts | accepts | matches reference | output differs |
-| Loop guards recheck replaced nullable values | accepts | accepts | matches reference | output differs |
+| Nullable Hash and Array storage | accepts | accepts | matches reference | matches reference |
+| Loop guards recheck replaced nullable values | accepts | accepts | matches reference | matches reference |
 | Safe navigation preserves nullable field results | accepts | accepts | matches reference | matches reference |
 | Reject nonnullable use after assignment of nil | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Reject stale nullable field narrowing after receiver assignment | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Retained nullable assignments preserve checked flow and display | accepts | accepts | matches reference | matches reference |
 | Rejected REPL assignment preserves the preceding fact | rejects as reference | rejects as reference | not reached | rejects as reference |
-| Conditional REPL replacement invalidates the preceding fact | accepts | accepts | matches reference | output differs |
+| Conditional REPL replacement invalidates the preceding fact | accepts | accepts | matches reference | matches reference |
 | Partial failure discards stale REPL narrowing | accepts | accepts | differs | rejects as reference |
 | Retained optional values use lazy safe navigation | accepts | accepts | matches reference | matches reference |
 | REPL rejects authored return outside a function | accepts | accepts | matches reference | rejects as reference |
@@ -218,7 +218,7 @@
 | Unused generic parameter defaults are checked abstractly | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Unused generic functions require complete return flow | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Generic record defaults use preceding fields | accepts | accepts | matches reference | matches reference |
-| Generic record defaults construct typed containers | accepts | accepts | matches reference | output differs |
+| Generic record defaults construct typed containers | accepts | accepts | matches reference | matches reference |
 | Omitted generic managed defaults allocate independently | accepts | accepts | matches reference | matches reference |
 | Generic defaults retain nested nominal values | accepts | accepts | matches reference | matches reference |
 | Generic defaults call generic functions with distinct type owners | accepts | accepts | matches reference | matches reference |
@@ -238,7 +238,7 @@
 | Generic defaults cannot capture caller locals | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Generic defaults retain prior fields through full if and enum case expressions | accepts | accepts | matches reference | matches reference |
 | Scalar aliases in signatures | accepts | accepts | matches reference | matches reference |
-| Aliases in Array and Hash arguments | accepts | accepts | matches reference | output differs |
+| Aliases in Array and Hash arguments | accepts | accepts | matches reference | matches reference |
 | Nullable generic alias | accepts | accepts | matches reference | matches reference |
 | Identity alias in generic function signatures | accepts | accepts | matches reference | matches reference |
 | Record constructor through an alias | accepts | accepts | matches reference | matches reference |
@@ -666,7 +666,7 @@
 | Symbol patterns require an explicit String literal | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Inferred and annotated scalar constants | accepts | accepts | matches reference | matches reference |
 | Ordered constant initializers execute once | accepts | accepts | matches reference | matches reference |
-| Managed Array Hash and record constants | accepts | accepts | matches reference | output differs |
+| Managed Array Hash and record constants | accepts | accepts | matches reference | matches reference |
 | Typed empty containers and nullable constants | accepts | accepts | matches reference | matches reference |
 | Function-valued constants retain global reads | accepts | accepts | matches reference | matches reference |
 | Nested namespace constants preserve lexical parents | accepts | accepts | matches reference | matches reference |
@@ -680,7 +680,7 @@
 | Constant Array bindings reject direct mutation | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Constant Array bindings reject indexed writes | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Constant references cannot become mutable bindings | rejects as reference | rejects as reference | not reached | rejects as reference |
-| Hash parameter mutability preserves shared identity | accepts | accepts | matches reference | output differs |
+| Hash parameter mutability preserves shared identity | accepts | accepts | matches reference | matches reference |
 | Constant bindings cannot be reassigned | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Qualified constant bindings cannot be reassigned | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Duplicate constant declarations are rejected | rejects as reference | rejects as reference | not reached | rejects as reference |
@@ -706,7 +706,7 @@
 | Constant record projection rejects Array mutation | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Keyword Symbol constant uses ordinary String semantics | accepts | accepts | matches reference | matches reference |
 | Float and Boolean conversion, special values and rounding boundaries | accepts | accepts | matches reference | output differs |
-| Scalar String conversion across callbacks, retained values and optional calls | accepts | accepts | matches reference | output differs |
+| Scalar String conversion across callbacks, retained values and optional calls | accepts | accepts | matches reference | matches reference |
 | Nullable Float and Boolean conversion preserves absence and values | accepts | accepts | matches reference | matches reference |
 | Conversion and Float puts evaluate receivers once in authored order | accepts | accepts | matches reference | matches reference |
 | Converted constants retain exact strings across module identity and callbacks | accepts | accepts | matches reference | matches reference |
@@ -784,7 +784,7 @@
 | Raw enum nested module | accepts | accepts | matches reference | output differs |
 | Raw enum import alias | accepts | accepts | matches reference | output differs |
 | Raw enum module import alias | accepts | accepts | matches reference | output differs |
-| Raw enum array hash | accepts | accepts | matches reference | output differs |
+| Raw enum array hash | accepts | accepts | matches reference | matches reference |
 | Raw enum nullable | accepts | accepts | matches reference | matches reference |
 | Raw enum evaluation order | accepts | accepts | matches reference | output differs |
 | Raw enum result return | accepts | accepts | matches reference | matches reference |
@@ -923,7 +923,7 @@
 | Array keyed ordering: absent safe receiver | accepts | accepts | matches reference | matches reference |
 | Safe collection iteration | accepts | accepts | matches reference | matches reference |
 | Safe collection transforms | accepts | accepts | matches reference | matches reference |
-| Safe collection managed | accepts | accepts | matches reference | output differs |
+| Safe collection managed | accepts | accepts | matches reference | matches reference |
 | Collection capture identities | accepts | accepts | matches reference | matches reference |
 | Safe block map | accepts | accepts | matches reference | matches reference |
 | Safe block indexed map | accepts | accepts | matches reference | matches reference |
@@ -1044,8 +1044,8 @@
 | Scalar identities | accepts | accepts | matches reference | matches reference |
 | Nominal equality | accepts | accepts | matches reference | matches reference |
 | Nested identities | accepts | accepts | matches reference | matches reference |
-| Float abi | accepts | accepts | matches reference | output differs |
-| Managed containers | accepts | accepts | matches reference | output differs |
+| Float abi | accepts | accepts | matches reference | matches reference |
+| Managed containers | accepts | accepts | matches reference | matches reference |
 | Optional | accepts | accepts | matches reference | matches reference |
 | Nullable float | accepts | accepts | matches reference | matches reference |
 | Callable captures | accepts | accepts | matches reference | matches reference |
@@ -1133,7 +1133,7 @@
 | Literal types: union case | accepts | accepts | matches reference | matches reference |
 | Literal types: case alternatives | accepts | accepts | matches reference | matches reference |
 | Literal types: array context | accepts | accepts | matches reference | matches reference |
-| Literal types: hash context | accepts | accepts | matches reference | output differs |
+| Literal types: hash context | accepts | accepts | matches reference | matches reference |
 | Literal types: alias | accepts | accepts | matches reference | matches reference |
 | Literal types: record | accepts | accepts | matches reference | matches reference |
 | Literal types: return | accepts | accepts | matches reference | matches reference |
@@ -1185,7 +1185,7 @@
 | Literal types: invalid too large type | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Literal types: invalid interpolated string | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Literal types: invalid duplicate escaped case | rejects as reference | rejects as reference | not reached | rejects as reference |
-| Literal types: boundary literal hash key | accepts | accepts | matches reference | output differs |
+| Literal types: boundary literal hash key | accepts | accepts | matches reference | matches reference |
 | Literal types: boundary literal index | accepts | accepts | matches reference | matches reference |
 | Literal types: boundary literal natural sort | accepts | accepts | matches reference | matches reference |
 | Literal types: boundary literal sort key | accepts | accepts | matches reference | matches reference |
@@ -1196,8 +1196,8 @@
 | Literal types: mixed zero tags | accepts | accepts | matches reference | matches reference |
 | Literal types: string sort | accepts | accepts | matches reference | matches reference |
 | Literal types: key snapshot | accepts | accepts | matches reference | matches reference |
-| Literal types: union hash key | accepts | accepts | matches reference | output differs |
-| Literal types: invalid hash bare index | rejects as reference | rejects as reference | not reached | diagnostic/output differs |
+| Literal types: union hash key | accepts | accepts | matches reference | matches reference |
+| Literal types: invalid hash bare index | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Literal types: invalid hash bare construction | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Literal types: optional union literal | accepts | accepts | matches reference | matches reference |
 | Literal types: optional singleton binding | accepts | accepts | matches reference | matches reference |
@@ -1207,16 +1207,16 @@
 | Literal types: invalid nullable literal arithmetic | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Literal union Hash keys: string | accepts | accepts | matches reference | matches reference |
 | Literal union Hash keys: integer | accepts | accepts | matches reference | matches reference |
-| Literal union Hash keys: computed identity | accepts | accepts | matches reference | output differs |
-| Literal union Hash keys: methods | accepts | accepts | matches reference | output differs |
-| Literal union Hash keys: bare key method | accepts | accepts | matches reference | output differs |
-| Literal union Hash keys: bare key index | rejects as reference | rejects as reference | not reached | diagnostic/output differs |
-| Literal union Hash keys: keys | accepts | accepts | matches reference | output differs |
-| Literal union Hash keys: iteration | accepts | accepts | matches reference | output differs |
-| Literal union Hash keys: copy merge | accepts | accepts | matches reference | output differs |
-| Literal union Hash keys: nullable | accepts | accepts | matches reference | output differs |
+| Literal union Hash keys: computed identity | accepts | accepts | matches reference | matches reference |
+| Literal union Hash keys: methods | accepts | accepts | matches reference | matches reference |
+| Literal union Hash keys: bare key method | accepts | accepts | matches reference | matches reference |
+| Literal union Hash keys: bare key index | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Literal union Hash keys: keys | accepts | accepts | matches reference | matches reference |
+| Literal union Hash keys: iteration | accepts | accepts | matches reference | matches reference |
+| Literal union Hash keys: copy merge | accepts | accepts | matches reference | matches reference |
+| Literal union Hash keys: nullable | accepts | accepts | matches reference | matches reference |
 | Literal union Hash keys: unicode nul | accepts | accepts | matches reference | output differs |
-| Literal union Hash keys: wrong domain | rejects as reference | rejects as reference | not reached | diagnostic/output differs |
+| Literal union Hash keys: wrong domain | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Literal union Hash keys: mixed key | rejects as reference | rejects as reference | not reached | diagnostic/output differs |
 | Literal union Hash keys: optional key | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Literal union Hash keys: optional refined | accepts | accepts | matches reference | matches reference |
@@ -1229,7 +1229,7 @@
 | Top-level bindings: closure writing | accepts | accepts | matches reference | matches reference |
 | Top-level bindings: callback | accepts | accepts | matches reference | matches reference |
 | Top-level bindings: defaults | accepts | accepts | matches reference | matches reference |
-| Top-level bindings: nullable replace | accepts | accepts | matches reference | output differs |
+| Top-level bindings: nullable replace | accepts | accepts | matches reference | matches reference |
 | Top-level bindings: nullable compound | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Top-level bindings: nullable call | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Top-level bindings: nullable fresh guard | accepts | accepts | matches reference | matches reference |
@@ -1288,9 +1288,9 @@
 | Safe collection lookup: string slices | accepts | accepts | matches reference | matches reference |
 | Safe collection lookup: empty array slices | accepts | accepts | matches reference | matches reference |
 | Safe collection lookup: empty string slices | accepts | accepts | matches reference | matches reference |
-| Safe collection lookup: hash missing | accepts | accepts | matches reference | output differs |
-| Safe collection lookup: hash integer | accepts | accepts | matches reference | output differs |
-| Safe collection lookup: nil element | accepts | accepts | matches reference | output differs |
+| Safe collection lookup: hash missing | accepts | accepts | matches reference | matches reference |
+| Safe collection lookup: hash integer | accepts | accepts | matches reference | matches reference |
+| Safe collection lookup: nil element | accepts | accepts | matches reference | matches reference |
 | Safe collection lookup: live append | accepts | accepts | matches reference | matches reference |
 | Safe collection lookup: live remove | accepts | accepts | matches reference | matches reference |
 | Safe collection lookup: live slice | accepts | accepts | matches reference | matches reference |
@@ -1347,7 +1347,7 @@
 | Unicode identifiers: namespace | accepts | accepts | matches reference | matches reference |
 | Unicode identifiers: enum | accepts | accepts | matches reference | matches reference |
 | Unicode identifiers: symbol | accepts | accepts | matches reference | matches reference |
-| Unicode identifiers: hash label | accepts | accepts | matches reference | output differs |
+| Unicode identifiers: hash label | accepts | accepts | matches reference | matches reference |
 | Unicode identifiers: import alias | accepts | accepts | matches reference | matches reference |
 | Unicode identifiers: invalid leading digit | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Unicode identifiers: invalid emoji | rejects as reference | rejects as reference | not reached | rejects as reference |
@@ -1476,7 +1476,7 @@
 | Class unions: readonly discriminants | accepts | accepts | matches reference | matches reference |
 | Class unions: captured discriminants | accepts | accepts | matches reference | matches reference |
 | Class unions: overlap else | accepts | accepts | matches reference | matches reference |
-| Class unions: collections | accepts | accepts | matches reference | output differs |
+| Class unions: collections | accepts | accepts | matches reference | matches reference |
 | Class unions: nullable container | accepts | accepts | matches reference | matches reference |
 | Class unions: result payload | accepts | accepts | matches reference | matches reference |
 | Class unions: generic field | accepts | accepts | matches reference | matches reference |
