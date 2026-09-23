@@ -429,6 +429,16 @@ test('exact CLI inputs run quick and CLI authorities without core measurements',
   }
   assert(workflow.includes('  workflow_call:'));
   assert(!workflow.includes('  pull_request:'), 'one shared PR planner, no separate path-filtered run');
+  const cliJobs = workflow.split('\n  cache:\n');
+  assert.equal(cliJobs.length, 2, 'CLI smoke and cache invalidation must be separate required jobs');
+  assert(cliJobs[0].includes('  build:\n') && cliJobs[0].includes('tools/native-cli-test.py bin/trbn'));
+  assert(!cliJobs[0].includes('tools/native-bootstrap-test.py'));
+  assert(cliJobs[1].includes('tools/native-bootstrap-test.py'));
+  assert(cliJobs[1].includes('native-cli-cache-${{ matrix.platform }}'));
+  assert(cliJobs[1].includes('if: always()') && cliJobs[1].includes('if-no-files-found: error'));
+  assert.equal((workflow.match(/- runner: macos-14/g) || []).length, 2);
+  assert.equal((workflow.match(/- runner: ubuntu-24.04-arm/g) || []).length, 2);
+  assert.equal((workflow.match(/timeout-minutes: 90/g) || []).length, 2);
   assert.equal(classify(['compiler/conformance/README.md'], false).cli, false);
 });
 
