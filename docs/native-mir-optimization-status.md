@@ -98,8 +98,10 @@ functions. Malformed element graphs, Array operations and omitted roots reject.
 - `mir_arrays.trb`: typed Array construction, selection, load/store and push
   contracts; no backend address is retained across a right-hand side.
 - `mir_array_loops.trb`: verified loop-header and within-block checked-index
-  reuse plans. Stable peer Arrays retain their own length and storage across a
-  pure loop; proven nonnegative positions still check each peer's own length.
+  reuse plans. Stable Arrays retain their own length and storage across pure
+  Array-size or scalar-counted loops; only the Array-size guard proves checked
+  positions for its own owner. Proven nonnegative positions still check each
+  other Array's own length.
   Allocation, mutation, I/O and calls with unknown effects invalidate reuse.
 - `mir_records.trb`, `qbe_records.trb`: nominal construction/projection contracts and their ABI adaptation. Readonly field bindings remain distinct from SSA IDs and mutable projected values.
 - `qbe_arrays.trb`: ABI adaptation of verified Array operations.

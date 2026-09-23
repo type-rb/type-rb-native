@@ -28,6 +28,80 @@ def array_loop_mir_check(source: String): CompilerState
 end
 
 describe("Array loop CFG MIR") do
+	test("caches stable Arrays in scalar-counted loops without eliding bounds") do
+		source := "def scan(values: Array<Integer>, other: Array<Integer>, limit: Integer): Integer\nmut index := 0\nmut total := 0\nwhile index < limit\ntotal += values[index] + other[index]\nindex += 1\nend\nreturn total\nend\ndef main()\nputs(scan([1, 2, 3], [4, 5, 6], 2))\nend\n"
+		mut state := array_loop_mir_check(source)
+		function_index := mir_function_index(state.scalar_mir, 0)
+		expect(state.scalar_mir.array_loops[function_index].size()).to_equal(1)
+		plan := state.scalar_mir.array_loops[function_index][0]
+		expect(plan.owner).to_equal(- 1)
+		expect(plan.length).to_equal(- 1)
+		expect(plan.accesses.size()).to_equal(0)
+		expect(plan.headers.size()).to_equal(2)
+		qbe_source := control_test_output(emit_qbe(state))
+		expect(qbe_source.include?("call $trbn_fail(l $trbn_bounds_error, l 30)")).to_be_true()
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe(qbe, qbe_source)
+			when Result::Ok(actual)
+				expect(actual).to_equal("12\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+		old := plan.headers[0]
+		state.scalar_mir.array_loops[function_index][0].headers[0] = MirArrayHeader.new(identity: old.identity, owner: old.owner, accesses: old.accesses, nonnegative_accesses: [])
+		expect(verify_mir(state.scalar_mir, true).empty?()).to_be_false()
+	end
+
+	test("does not retain a scalar-counted loop header across Array growth") do
+		source := "def grow(mut values: Array<Integer>, limit: Integer): Integer\nmut index := 0\nmut total := 0\nwhile index < limit\ntotal += values[index]\nvalues.push(index)\nindex += 1\nend\nreturn total\nend\ndef main()\nend\n"
+		state := array_loop_mir_check(source)
+		function_index := mir_function_index(state.scalar_mir, 0)
+		expect(state.scalar_mir.array_loops[function_index].size()).to_equal(0)
+	end
+
+	test("retains a bounds check for a proven nonnegative next index") do
+		source := "def scan(values: Array<Integer>, limit: Integer): Integer\nmut index := 0\nmut total := 0\nwhile index < limit\nnext_index := index + 1\ntotal += values[next_index]\nindex = next_index\nend\nreturn total\nend\ndef main()\nputs(scan([0, 1, 2, 3], 2))\nend\n"
+		mut state := array_loop_mir_check(source)
+		function_index := mir_function_index(state.scalar_mir, 0)
+		plan := state.scalar_mir.array_loops[function_index][0]
+		expect(plan.headers.size()).to_equal(1)
+		expect(plan.headers[0].nonnegative_accesses.size()).to_equal(1)
+		qbe_source := control_test_output(emit_qbe(state))
+		expect(qbe_source.include?("call $trbn_fail(l $trbn_bounds_error, l 30)")).to_be_true()
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe(qbe, qbe_source)
+			when Result::Ok(actual)
+				expect(actual).to_equal("3\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+
+	test("keeps negative Array positions in scalar-counted loops") do
+		source := "def last_twice(values: Array<Integer>): Integer\nmut index := 0\nmut total := 0\nwhile index < 2\ntotal += values[-1]\nindex += 1\nend\nreturn total\nend\ndef main()\nputs(last_twice([1, 2, 3]))\nend\n"
+		state := array_loop_mir_check(source)
+		function_index := mir_function_index(state.scalar_mir, 0)
+		plan := state.scalar_mir.array_loops[function_index][0]
+		expect(plan.headers.size()).to_equal(1)
+		expect(plan.headers[0].nonnegative_accesses.size()).to_equal(0)
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe(qbe, control_test_output(emit_qbe(state)))
+			when Result::Ok(actual)
+				expect(actual).to_equal("6\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+
 	test("uses the verified loop guard for captured Array assignment positions") do
 		source := "def increment(mut values: Array<Integer>): Integer\nmut index := 0\nwhile index < values.size()\nvalues[index] += 1\nindex += 1\nend\nreturn values.size()\nend\ndef main()\nmut values := [1, 2, 3]\nputs(increment(values))\nputs(values[0])\nputs(values[1])\nputs(values[2])\nend\n"
 		state := array_loop_mir_check(source)
@@ -56,11 +130,15 @@ describe("Array loop CFG MIR") do
 		end
 	end
 
-	test("does not reuse a different Array's guard for captured assignments") do
+	test("keeps another Array's assignment bounds despite header reuse") do
 		source := array_loop_mir_source("mut separate := [1]\nwhile index < values.size()\nseparate[index] += 1\nindex += 1\nend")
 		state := array_loop_mir_check(source)
 		function_index := mir_function_index(state.scalar_mir, 1)
-		expect(state.scalar_mir.array_loops[function_index].size()).to_equal(0)
+		expect(state.scalar_mir.array_loops[function_index].size()).to_equal(1)
+		plan := state.scalar_mir.array_loops[function_index][0]
+		expect(plan.accesses.size()).to_equal(0)
+		expect(plan.headers.size()).to_equal(1)
+		expect(control_test_output(emit_qbe(state)).include?("call $trbn_fail(l $trbn_bounds_error, l 30)")).to_be_true()
 	end
 
 	test("executes guarded Array writes after source erasure and block reordering") do
@@ -186,7 +264,12 @@ describe("Array loop CFG MIR") do
 			state := array_loop_mir_check(array_loop_mir_source(body))
 			index := mir_function_index(state.scalar_mir, 1)
 			expect(state.scalar_mir.functions[index].kind).to_equal(3)
-			expect(state.scalar_mir.array_loops[index].size()).to_equal(0)
+			if body == bodies[0]
+				expect(state.scalar_mir.array_loops[index].size()).to_equal(1)
+				expect(state.scalar_mir.array_loops[index][0].accesses.size()).to_equal(0)
+			else
+				expect(state.scalar_mir.array_loops[index].size()).to_equal(0)
+			end
 			expect(control_test_output(emit_qbe(state)).include?("call $trbn_fail(l $trbn_bounds_error, l 30)")).to_be_true()
 		end
 	end

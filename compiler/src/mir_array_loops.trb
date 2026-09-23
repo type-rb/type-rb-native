@@ -142,6 +142,26 @@ def mir_loop_literal(native_module: MirModule, flow: MirFlow, value: Integer, te
 	return mir_exact_integer_literal(native_module, native_module.instructions[position], text)
 end
 
+# A checked increment of the zero-origin induction value is also nonnegative.
+# It does not prove the position belongs to any particular Array.
+def mir_loop_nonnegative_index(native_module: MirModule, flow: MirFlow, aliases: Hash<String, Integer>, induction: Integer, value: Integer): Boolean
+	if mir_loop_alias(aliases, value) == induction
+		return true
+	end
+	definition := mir_loop_definition(flow, value)
+	if definition < 0
+		return false
+	end
+	instruction := native_module.instructions[definition]
+	if instruction.kind != 7 || (instruction.payload != 1 && instruction.payload != 13) || instruction.failure < 0
+		return false
+	end
+	if mir_loop_alias(aliases, instruction.first) != induction
+		return false
+	end
+	return mir_loop_literal(native_module, flow, mir_loop_alias(aliases, instruction.second), "1")
+end
+
 def mir_loop_parameter(native_module: MirModule, header: MirBlock, value: Integer): Integer
 	mut slot := 0
 	while slot < header.parameter_count
@@ -157,9 +177,9 @@ def mir_no_array_loop(): MirArrayLoop
 	return MirArrayLoop.new(header: - 1, preheader: - 1, owner: - 1, length: - 1, accesses: [], headers: [])
 end
 
-# Retain only independent Array owners whose header parameter has exactly the
-# same identity on every backedge. This proves stable length and backing data,
-# but does not equate its length to the loop's guard Array.
+# Retain Array owners whose header parameter has exactly the same identity on
+# every backedge. This proves stable length and backing data, but does not
+# equate their lengths to a separate loop guard or scalar bound.
 def mir_array_stable_headers(native_module: MirModule, flow: MirFlow, header: MirBlock, header_index: Integer, preheader_start: Integer, guard_owner: Integer, aliases: Hash<String, Integer>): Array<MirArrayHeader>
 	mut headers: Array<MirArrayHeader> := []
 	mut slot := 0
@@ -201,17 +221,23 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 	if condition.kind != 7 || condition.payload != 8
 		return mir_no_array_loop()
 	end
-	length_index := mir_loop_definition(flow, condition.second)
-	if length_index < header.instruction_start || length_index >= header.instruction_start + header.instruction_count
-		return mir_no_array_loop()
+	mut length_index := mir_loop_definition(flow, condition.second)
+	mut guard_owner :=- 1
+	if length_index >= header.instruction_start && length_index < header.instruction_start + header.instruction_count
+		length := native_module.instructions[length_index]
+		if length.kind == 20
+			guard_owner = length.first
+		end
 	end
-	length := native_module.instructions[length_index]
-	if length.kind != 20
-		return mir_no_array_loop()
+	if guard_owner < 0
+		length_index =- 1
 	end
 	index_slot := mir_loop_parameter(native_module, header, condition.first)
-	owner_slot := mir_loop_parameter(native_module, header, length.first)
-	if index_slot < 0 || owner_slot < 0
+	mut owner_slot :=- 1
+	if guard_owner >= 0
+		owner_slot = mir_loop_parameter(native_module, header, guard_owner)
+	end
+	if index_slot < 0 || (guard_owner >= 0 && owner_slot < 0)
 		return mir_no_array_loop()
 	end
 	aliases := mir_loop_aliases(native_module, function, flow, header)
@@ -228,9 +254,12 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 		block := native_module.blocks[function.block_start + block_index]
 		start := flow.incoming_starts[header_index][edge]
 		index_value := mir_loop_alias(aliases, native_module.arguments[start + index_slot])
-		owner_value := mir_loop_alias(aliases, native_module.arguments[start + owner_slot])
+		mut owner_value :=- 1
+		if owner_slot >= 0
+			owner_value = mir_loop_alias(aliases, native_module.arguments[start + owner_slot])
+		end
 		if mir_loop_dominates(flow, header_index, block_index)
-			if owner_value != length.first
+			if guard_owner >= 0 && owner_value != guard_owner
 				return mir_no_array_loop()
 			end
 			if index_value != condition.first
@@ -253,7 +282,9 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 			end
 			preheader = block.id
 			preheader_start = start
-			owner = native_module.arguments[start + owner_slot]
+			if owner_slot >= 0
+				owner = native_module.arguments[start + owner_slot]
+			end
 		end
 		edge += 1
 	end
@@ -280,7 +311,7 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 		return mir_no_array_loop()
 	end
 	mut accesses: Array<Integer> := []
-	mut headers := mir_array_stable_headers(native_module, flow, header, header_index, preheader_start, length.first, aliases)
+	mut headers := mir_array_stable_headers(native_module, flow, header, header_index, preheader_start, guard_owner, aliases)
 	body := flow.blocks[integer_string(header.first_target)]
 	members.each do |member|
 		block := native_module.blocks[function.block_start + member]
@@ -297,16 +328,16 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 			if (instruction.kind < 6 || instruction.kind > 9) && (instruction.kind < 20 || instruction.kind > 23) && !pure_call
 				return mir_no_array_loop()
 			end
-			if instruction.kind >= 21 && instruction.kind <= 23 && mir_loop_dominates(flow, body, member)
-				if mir_loop_alias(aliases, instruction.first) == length.first
+			if guard_owner >= 0 && instruction.kind >= 21 && instruction.kind <= 23 && mir_loop_dominates(flow, body, member)
+				if mir_loop_alias(aliases, instruction.first) == guard_owner
 					mut guarded := mir_loop_alias(aliases, instruction.second) == condition.first
 					if !guarded && captured.key?(integer_string(instruction.second))
-						guarded = captured[integer_string(instruction.second)] == length.first
+						guarded = captured[integer_string(instruction.second)] == guard_owner
 					end
 					if guarded
 						mir_live_add(accesses, instruction_index)
 						if instruction.kind == 21
-							captured[integer_string(instruction.result)] = length.first
+							captured[integer_string(instruction.result)] = guard_owner
 						end
 					end
 				end
@@ -316,7 +347,7 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 				headers.each do |candidate|
 					if candidate.identity == identity
 						mir_live_add(candidate.accesses, instruction_index)
-						if instruction.kind >= 21 && mir_loop_alias(aliases, instruction.second) == condition.first && mir_loop_dominates(flow, body, member)
+						if instruction.kind >= 21 && mir_loop_dominates(flow, body, member) && mir_loop_nonnegative_index(native_module, flow, aliases, condition.first, instruction.second)
 							mir_live_add(candidate.nonnegative_accesses, instruction_index)
 						end
 					end
@@ -325,14 +356,14 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 			instruction_index += 1
 		end
 	end
-	if accesses.size() == 0
-		return mir_no_array_loop()
-	end
 	mut reused: Array<MirArrayHeader> := []
 	headers.each do |candidate|
-		if candidate.accesses.size() > 1
+		if candidate.accesses.size() > 0
 			reused.push(candidate)
 		end
+	end
+	if accesses.size() == 0 && reused.size() == 0
+		return mir_no_array_loop()
 	end
 	return MirArrayLoop.new(header: header.id, preheader: preheader, owner: owner, length: length_index, accesses: accesses, headers: reused)
 end
@@ -371,22 +402,21 @@ def mir_array_loop_candidate(native_module: MirModule, block: MirBlock): Boolean
 	if block.terminator != 2
 		return false
 	end
-	mut length :=- 1
+	mut condition :=- 1
 	mut index := block.instruction_start
 	while index < block.instruction_start + block.instruction_count
 		instruction := native_module.instructions[index]
 		if instruction.result == block.condition && instruction.kind == 7 && instruction.payload == 8
-			length = instruction.second
+			condition = instruction.first
 		end
 		index += 1
 	end
-	if length < 0
+	if condition < 0
 		return false
 	end
-	index = block.instruction_start
-	while index < block.instruction_start + block.instruction_count
-		instruction := native_module.instructions[index]
-		if instruction.result == length && instruction.kind == 20
+	index = block.parameter_start
+	while index < block.parameter_start + block.parameter_count
+		if native_module.arguments[index] == condition
 			return true
 		end
 		index += 1
