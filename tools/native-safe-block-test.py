@@ -69,7 +69,7 @@ mut mapped := values&.map { |value| calls += 1; value + 1 }
 values = [3, 1]
 mapped = values&.map { |value| calls += 1; value + 1 }
 mapped&.each { |value| puts(value) }
-mapped = values&.map { |value| true }
+mapped = values&.map { |_value| true }
 record Before
 text: String
 end
