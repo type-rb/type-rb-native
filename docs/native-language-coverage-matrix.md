@@ -717,7 +717,7 @@
 | Union scalar output | accepts | accepts | matches reference | matches reference |
 | Union numeric normalization | accepts | accepts | matches reference | matches reference |
 | Union inferred array | accepts | accepts | matches reference | matches reference |
-| Union inferred hash | accepts | accepts | matches reference | output differs |
+| Union inferred hash | accepts | accepts | matches reference | matches reference |
 | Union contextual array | accepts | accepts | matches reference | matches reference |
 | Union widen | accepts | accepts | matches reference | matches reference |
 | Union retained mutation | accepts | accepts | matches reference | output differs |
@@ -755,7 +755,7 @@
 | Union boundary shadow pattern | accepts | accepts | matches reference | matches reference |
 | Union boundary array nil inference | accepts | accepts | matches reference | matches reference |
 | Union boundary array only nil | accepts | accepts | matches reference | matches reference |
-| Union boundary hash nil inference | accepts | accepts | matches reference | output differs |
+| Union boundary hash nil inference | accepts | accepts | matches reference | matches reference |
 | Union boundary optional array inference | accepts | accepts | matches reference | matches reference |
 | Union boundary nullable scalar into union | accepts | accepts | matches reference | matches reference |
 | Union boundary nullable union same payload | accepts | accepts | matches reference | matches reference |
@@ -1021,7 +1021,7 @@
 | Extended operator symbols | accepts | accepts | matches reference | matches reference |
 | Bang enum method | accepts | accepts | matches reference | matches reference |
 | Nested optional angles | accepts | accepts | matches reference | matches reference |
-| Reserved symbol labels | accepts | accepts | matches reference | output differs |
+| Reserved symbol labels | accepts | accepts | matches reference | matches reference |
 | Ordinary not equal | accepts | accepts | matches reference | matches reference |
 | Bang captured value | accepts | accepts | matches reference | matches reference |
 | Invalid field alias | rejects as reference | rejects as reference | not reached | rejects as reference |
