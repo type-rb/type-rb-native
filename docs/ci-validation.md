@@ -343,9 +343,11 @@ descendants stay in the root suite's owned process group for cancellation.
 `TYPE_RB_NATIVE_RECOVERY_JOBS` defaults to `2`; explicit values `1` through `4`
 are accepted, with `1` available for serial diagnosis. Other values fail before
 workspace allocation. The limit is per root invocation; the compiler suite
-continues independently. This is test orchestration through the pinned Go
-reference's `concurrent_map`, not a Native concurrency-support claim or a new
-ordinary compiler dependency. Synthetic subprocess tests check bounded overlap,
+continues independently. Native CI explicitly uses `4` for the independent
+recovery controls, while local runs keep the more conservative default. This is
+test orchestration through the pinned Go reference's `concurrent_map`, not a
+Native concurrency-support claim or a new ordinary compiler dependency.
+Synthetic subprocess tests check bounded overlap,
 exactly-once admission/completion and complete, ordered failure collection at
 limits 1, 2 and 4. Record phase durations and runner resource costs when evaluating
 the change; do not present an estimated speedup as a measurement.
