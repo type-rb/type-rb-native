@@ -94,7 +94,7 @@ also promotes mixed Integer and Float first writes to `Array<Float>` in checked
 MIR, including an Integer inserted by `unshift`; separate later statements
 still retain the first inferred type. Other contextual inference remains
 incomplete. Existing
-Hash/embedded-NUL display differences and diagnostic presentation remain visible
+Hash key-order/embedded-NUL display differences and diagnostic presentation remain visible
 in the shared observations. See [decision 0083](decisions/0083-builtin-result-values.md).
 
 ## Authored local bindings
@@ -177,8 +177,8 @@ crashes, alias construction and representation conversion.
 
 Literal/class/interface representations and method-specific generic parameters
 retain their owning family dependencies. Printable scalar unions, including
-newtype representations, use verified MIR dispatch for output. Existing Hash
-presentation differences remain explicit observations. See
+newtype representations, use verified MIR dispatch for output. Remaining Hash
+key-order and embedded-NUL presentation differences remain explicit observations. See
 [decision 0077](decisions/0077-newtype-mir.md).
 
 ## Callable suffixes and lexical boundaries
@@ -342,8 +342,8 @@ class-union field assignments
 cases now cover simple/compound stores, right-hand-side rebinding, imports and
 unsafe rejections. Reference
 boundaries for grouped annotations, nullable alternatives and composite type
-patterns remain visible, as do REPL type ordering, assignment and Hash display
-differences.
+patterns remain visible, as do the remaining REPL type ordering, Hash key-order
+and embedded-NUL display differences.
 
 ## Declaration namespaces and runtime constants
 
@@ -599,6 +599,11 @@ replacement is tracked in [TypeRB #699](https://github.com/type-rb/type-rb/issue
 and [TypeRB PR #698](https://github.com/type-rb/type-rb/pull/698) fixes partial
 failure. The exact reference pin and its reviewed expectations remain unchanged.
 
+Successful `if`, `case` and `while` submissions display the checked type and
+mutability of the last statement that actually ran. Calls and collection
+expressions retain their own result type even when they execute a block. Hash
+values use colon-separated key/value rendering, including nested values.
+
 ## Enum payloads and exhaustive case
 
 Ordinary nominal enums support payloadless and required positional/named payload
@@ -691,7 +696,7 @@ those bindings or source templates. See
 Full control expressions in record defaults and ternaries referring to earlier
 fields now pass against the updated reference containing
 [TypeRB PR #706](https://github.com/type-rb/type-rb/pull/706). Remaining Hash REPL
-display differences stay explicit in the shared contract.
+key-order and embedded-NUL differences stay explicit in the shared contract.
 
 ## Standard Result and typed control flow
 

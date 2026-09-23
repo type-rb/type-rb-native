@@ -22,7 +22,7 @@ jobs:
           - runner: ubuntu-24.04-arm
             platform: linux-arm64
     runs-on: ${{ matrix.runner }}
-    # Fixed-point and cache-invalidation controls rebuild the compiler repeatedly.
+    # The smoke authority includes source/REPL coverage and packaged binaries.
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
@@ -45,7 +45,7 @@ jobs:
         run: |
           python3 tools/native-cli-test.py bin/trbn
           python3 tools/native-hash-test.py bin/trbn
-      - name: Exercise scalar puts and checkout cache invalidation
+      - name: Exercise scalar puts and source diagnostics
         run: |
           python3 tools/native-puts-test.py bin/trbn
           python3 tools/native-puts-writev-test.py --qbe bin/qbe
@@ -53,7 +53,6 @@ jobs:
           python3 tools/native-utf8-test.py bin/trbn
           python3 tools/native-diagnostics-test.py bin/trbn
           python3 tools/native-interpolation-test.py bin/trbn
-          python3 tools/native-bootstrap-test.py
       - name: Verify ordinary language coverage without a reference compiler
         run: |
           python3 tools/native-language-coverage-test.py
@@ -96,3 +95,35 @@ jobs:
             dist/*.tar.gz
             dist/*.sha256
           if-no-files-found: error
+
+  cache:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            platform: darwin-arm64
+          - runner: ubuntu-24.04-arm
+            platform: linux-arm64
+    runs-on: ${{ matrix.runner }}
+    # Repeated compiler rebuilds are independently retryable from CLI smoke.
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install Linux linker
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y lld
+      - name: Build from the pinned native seed and verify fixed points
+        run: ./trbn --version
+      - name: Exercise checkout cache invalidation
+        run: |
+          set -o pipefail
+          python3 tools/native-bootstrap-test.py 2>&1 | tee "$RUNNER_TEMP/native-bootstrap-cache.log"
+      - name: Retain cache-invalidation evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: native-cli-cache-${{ matrix.platform }}
+          path: ${{ runner.temp }}/native-bootstrap-cache.log
+          if-no-files-found: error
+          retention-days: 30

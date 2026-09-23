@@ -1722,6 +1722,8 @@ end
 def repl_statement(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, mut flow: Array<Integer>, loop_origin: Integer): Integer
 	environment.flow[0] = flow[0]
 	environment.flow[2] = loop_origin
+	origin := position[0]
+	environment.result_origin[0] = origin
 	guard := sparse_integer_at(state.control_origins, position[0])
 	if guard > 0 && state.controls[guard - 1].kind == 4
 		control := state.controls[guard - 1]
@@ -1743,6 +1745,12 @@ def repl_statement(mut state: CompilerState, mut position: Array<Integer>, mut s
 		return result
 	end
 	result := repl_statement_value(state, position, store, environment, environment.flow, loop_origin)
+	# A call or collection expression can evaluate a block, but its own checked
+	# type is the displayed result. Only statement controls expose the selected
+	# branch's last executed statement.
+	if !token_is(state, origin, "if") && !token_is(state, origin, "case") && !token_is(state, origin, "while")
+		environment.result_origin[0] = origin
+	end
 	flow[0] = environment.flow[0]
 	if flow[0] != 0
 		environment.flow[1] = result

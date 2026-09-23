@@ -30,6 +30,21 @@ with tempfile.TemporaryDirectory(prefix='native-repl-flow-') as temporary:
         'value = nil\n:type value\nvalue == nil',
         'nil : String? [mut]\n"kept" : String? [mut]\nString\n4 : Integer\n'
         'nil : Nil [mut]\nNil\ntrue : Boolean\n')
+    run('mut value: String? := "hello"\nif true\nvalue = nil\nend\n'
+        'value = "again"\nwhile value != nil\nvalue = nil\nend\n'
+        'h := {1 => {"a" => 2}}',
+        '"hello" : String? [mut]\nnil : Nil [mut]\n'
+        '"again" : String? [mut]\nnil : Nil [mut]\n'
+        '{1: {"a": 2}} : Hash<Integer, Hash<String, Integer>>\n')
+    run('mut visits := 0\nif true\nvisits += 1\nend\nvisits\n'
+        'mut h := {"a" => [1]}\nif true\nh = {"b" => [2]}\nend\nh',
+        '0 : Integer [mut]\n1 : Integer [mut]\n1 : Integer [mut]\n'
+        '{"a": [1]} : Hash<String, Array<Integer>> [mut]\n'
+        '{"b": [2]} : Hash<String, Array<Integer>> [mut]\n'
+        '{"b": [2]} : Hash<String, Array<Integer>> [mut]\n')
+    run('mut number := 1\ncase number\nwhen 1\nnumber += 2\nelse\nnumber += 10\n'
+        'end\nif false\nnumber += 100\nend\nnumber',
+        '1 : Integer [mut]\n3 : Integer [mut]\n3 : Integer [mut]\n')
     run('mut events := [1]\nmut value: String? := nil\nevents.push(2)\n'
         'value = "kept"\n# a leading comment\n\nvalue.size()\nputs(events.size())',
         '[1] : Array<Integer> [mut]\nnil : String? [mut]\n"kept" : String? [mut]\n4 : Integer\n2\n')
