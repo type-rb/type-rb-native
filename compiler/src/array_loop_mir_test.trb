@@ -249,6 +249,23 @@ describe("Array loop CFG MIR") do
 		end
 	end
 
+	test("retains Array traversal proofs across verified failure-only scalar calls") do
+		source := "def denominator(index: Integer): Float\nreturn 1.0 / (index + 1)\nend\ndef sum(values: Array<Float>): Float\nmut index := 0\nmut total := 0.0\nwhile index < values.size()\ntotal += denominator(index) * values[index]\nindex += 1\nend\nreturn total\nend\ndef main()\nputs(sum([1.0, 2.0]))\nend\n"
+		state := array_loop_mir_check(source)
+		index := mir_function_index(state.scalar_mir, 1)
+		expect(state.scalar_mir.array_loops[index].size()).to_equal(1)
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe(qbe, control_test_output(emit_qbe(state)))
+			when Result::Ok(actual)
+				expect(actual).to_equal("2.0\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+
 	test("retains checks for different arrays changed indexes and header effects") do
 		bodies := [
 			"while index < values.size()\ntotal += other[index]\nindex += 1\nend",
