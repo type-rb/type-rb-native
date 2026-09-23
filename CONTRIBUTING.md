@@ -127,6 +127,15 @@ as the batch becomes coherent; leave the full cross-platform recovery, target,
 CLI and memory authorities to the one ready PR. Start the next local batch while
 that PR validates instead of waiting for each hosted job to finish.
 
+For any compiler-source edit, also check the recovery snapshot subset before
+publishing. This quick check uses the same canonical source copy and snapshot
+version as CI, and catches syntax that ordinary Native regeneration accepts but
+the recovery compiler cannot yet read:
+
+```sh
+tools/check-bootstrap-snapshot.sh /path/to/pinned/trb
+```
+
 For source and compatibility validation, run the maintained root checks:
 
 ```sh
