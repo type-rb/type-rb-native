@@ -3,6 +3,8 @@
 | Case | Check | Build | Execute | REPL |
 | --- | --- | --- | --- | --- |
 | Integer arithmetic | accepts | accepts | matches reference | matches reference |
+| Integer power, precedence and associativity | accepts | accepts | matches reference | matches reference |
+| Float and mixed numeric power | accepts | accepts | matches reference | matches reference |
 | if / else | accepts | accepts | matches reference | matches reference |
 | while | accepts | accepts | matches reference | matches reference |
 | Short-circuit OR / AND | accepts | accepts | matches reference | matches reference |

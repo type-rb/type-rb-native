@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 1508 ordinary-path probes and 32 feature
+Status: the shared contract contains more than 1,500 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -507,6 +507,14 @@ contract. [Decision 0053](decisions/0053-integer-receiver-mir.md) records the
 existing scalar/CFG lowering and independently verified failure guard. Float
 receiver operations are described below; wider numeric standard-library coverage
 stays open.
+
+Integer and Float `**` now follow the reference's right-associative precedence,
+including unary minus below exponentiation. Integer power uses repeated checked
+multiplication, rejects negative exponents and preserves the portable range;
+Float and mixed numeric power use libm. Checked MIR owns the result and failure
+types, while the REPL evaluates the same source forms. Shared cases cover
+ordinary execution and retained sessions; negative-exponent and overflow
+failures are also checked directly.
 
 ## Float receiver operations
 
