@@ -1,9 +1,10 @@
 # Ordinary Hash implementation
 
-Status: ordinary implementation accepted in [PR #401](https://github.com/type-rb/type-rb-native/pull/401).
+Status: initial ordinary implementation accepted in [PR #401](https://github.com/type-rb/type-rb-native/pull/401).
 The separate [Hash cost decision](decisions/0033-hash-compiler-budget.md)
-records the acceptance budget and required full validation. This subset is not
-a claim of complete TypeRB library support.
+records that acceptance budget. The [ordinary-language registry](../tools/native-language-cases.json)
+tracks subsequent coverage and remaining gaps; this document is not a claim of
+complete TypeRB library support.
 
 ## Language boundary
 
@@ -11,17 +12,19 @@ Use the pinned TypeRB revision as the semantic authority. This slice supports
 homogeneous Integer or String keys and existing scalar, Array, named record,
 and recursively typed Hash values. Literals support `key => value`, String
 label keys, contextual `Hash<K, V>` annotations, and a fresh mutable empty
-binding refined by its first indexed write. Function parameters/results and
+binding refined by its first indexed write. Values written within the same
+`if` or `case` can join numeric, `Nil`, and union alternatives; later
+separate assignments and explicit Hash annotations retain their declared type.
+Function parameters/results and
 record fields carry concrete Hash types. Existing immutable rules remain in
 force; copy is shallow and iteration order is unspecified.
 
 Indexed reads and `fetch` require a present key. Indexed writes insert or
 replace. The method subset is `size`, `empty?`, `key?`, `delete`, `dup`, `merge`,
 `update`, `keys`, `values`, and `fetch`. Deletion also requires a present key.
-The returned Arrays must have an already supported ordinary Array element type;
-Array-of-Hash values are outside this slice. `try_fetch` awaits ordinary Result
-support. Hash iteration blocks await the ordinary closure/block representation.
-Those boundaries report unsupported input rather than substitute semantics.
+The returned Arrays use the ordinary Array element implementation. `try_fetch`
+uses a structured Result, and Hash iteration blocks use entry snapshots. The
+registry records the precise receiver and value combinations still pending.
 
 An unresolved empty Hash can survive a REPL submission and answer `size` and
 `empty?`; subsequent indexed insertion establishes its key/value type. Ordinary
@@ -38,7 +41,9 @@ publishes one plan per operation; `hash_checked.trb` verifies source boundaries,
 operation kinds, key/value metadata and mutation permissions before MIR construction
 or REPL evaluation. `mir_hashes.trb` publishes typed allocation, lookup, store and
 method instructions. `mir_hash_inference.trb` finalizes checked first-store types
-across CFG arguments and parameters before publication; raw MIR verification
+across CFG arguments and parameters before publication. It inserts the required
+Float, nullable, or union representation at a joined store, without speculative
+allocation for exact-type stores; raw MIR verification
 never infers or repairs malformed types. Independent empty bindings retain
 independent constraints.
 

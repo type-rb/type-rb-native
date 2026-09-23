@@ -1,5 +1,5 @@
 import { checked_instance_field, checked_object_field, mir_checked_object_store } from object_fields
-import { object_field_index, object_function_owner, object_instance_type } from object_types
+import { object_field_index, object_function_owner, object_instance_type, object_value_assignable } from object_types
 import { generic_arguments } from generic_arguments
 import { find_object_type } from object_types
 import { object_method_function } from object_methods
@@ -191,12 +191,12 @@ def checked_hash_index(mut state: CompilerState, mut position: Array<Integer>, m
 	return mir_checked_hash_index(state, locals, receiver, key, hash_value_type(type_name), origin, kind == 3)
 end
 
-def checked_hash_numeric_region(state: CompilerState, locals: CheckedLocals, origin: Integer): Boolean
+def checked_hash_inference_region(state: CompilerState, locals: CheckedLocals, origin: Integer): Boolean
 	if origin < 0 || origin >= state.token_count[0]
 		return false
 	end
 	plan := checked_hash_plan(state, origin)
-	if plan.kind != 3 || plan.receiver_origin < 0 || plan.receiver_origin >= state.token_count[0] || hash_value_type(plan.type_name) != "Integer" || locals.inference_active_region[0] == 0
+	if plan.kind != 3 || plan.receiver_origin < 0 || plan.receiver_origin >= state.token_count[0] || hash_value_type(plan.type_name) == "" || locals.inference_active_region[0] == 0
 		return false
 	end
 	binding := local_find(locals, load_string(state.token_texts, plan.receiver_origin))
@@ -206,21 +206,39 @@ def checked_hash_numeric_region(state: CompilerState, locals: CheckedLocals, ori
 	return true
 end
 
+def checked_hash_numeric_region(state: CompilerState, locals: CheckedLocals, origin: Integer): Boolean
+	if !checked_hash_inference_region(state, locals, origin)
+		return false
+	end
+	return hash_value_type(checked_hash_plan(state, origin).type_name) == "Integer"
+end
+
 def checked_hash_refine(mut state: CompilerState, mut locals: CheckedLocals, origin: Integer, value_type: String)
 	plan := checked_hash_plan(state, origin)
 	if plan.kind != 3
 		return
 	end
-	mut first_store := plan.value_type == ""
-	if !first_store && !(plan.value_type == "Integer" && value_type == "Float" && checked_hash_numeric_region(state, locals, origin))
+	first_store := plan.value_type == ""
+	if !first_store && !checked_hash_inference_region(state, locals, origin)
 		return
+	end
+	mut resolved := value_type
+	if !first_store
+		resolved = common_array_element_type(plan.value_type, value_type)
+		if resolved == ""
+			diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "incompatible inferred Hash value types")
+			return
+		end
+		if resolved == plan.value_type
+			return
+		end
 	end
 	binding := local_find(locals, load_string(state.token_texts, plan.receiver_origin))
 	if binding < 0
 		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "empty Hash requires a typed binding")
 		return
 	end
-	type_name := hash_type(plan.key_type, value_type)
+	type_name := hash_type(plan.key_type, resolved)
 	store_string(locals.types, binding, type_name)
 	if first_store
 		store_integer(locals.hash_inference_regions, binding, locals.inference_active_region[0])
@@ -1567,8 +1585,8 @@ def check_simple_statement(
 			expected = state.global_types[- left.nullable_binding - 2]
 		end
 		mut right_expected := expected
-		hash_numeric_region := checked_hash_numeric_region(state, locals, left.origin)
-		if expected == "Array" || hash_numeric_region
+		hash_inference_region := checked_hash_inference_region(state, locals, left.origin)
+		if expected == "Array" || hash_inference_region
 			right_expected = ""
 		end
 		right := check_statement_value(state, position, locals, right_expected)
@@ -1587,9 +1605,6 @@ def check_simple_statement(
 				end
 			end
 		end
-		if hash_numeric_region && right.type_name != "Float"
-			check_expected(state, right.type_name, "Integer", line)
-		end
 		if left.nullable_binding >= 0 && left.nullable_field == - 1
 			nullable_replace(locals, left.nullable_binding, right.flow_type)
 		elsif left.nullable_binding < - 1 && left.nullable_field == - 1
@@ -1602,6 +1617,13 @@ def check_simple_statement(
 		checked_submission_result(state, origin, display_type, display_mutable)
 		checked_hash_refine(state, locals, left.origin, right.type_name)
 		hash := checked_hash_plan(state, left.origin)
+		mut hash_value := checked_view(right, right.type_name, right.category)
+		if hash.kind == 3 && hash_inference_region
+			value_type := hash_value_type(hash.type_name)
+			if value_type != "" && object_value_assignable(state, right.type_name, value_type)
+				hash_value = mir_nullable_coerce(state, locals, right, value_type, left.origin)
+			end
+		end
 		mut hash_conversion :=- 1
 		if hash.kind == 3 && right.type_name == "Integer" && checked_hash_numeric_region(state, locals, left.origin)
 			converted := scalar_mir_convert_float(state, locals, right, left.origin)
@@ -1612,7 +1634,7 @@ def check_simple_statement(
 		elsif mir_checked_object_store(state, locals, left, right)
 			# The receiver was evaluated before the right-hand side.
 		elsif hash.kind == 3
-			mir_checked_hash_store(state, locals, left, right, hash.type_name, hash_conversion)
+			mir_checked_hash_store(state, locals, left, hash_value, hash.type_name, hash_conversion)
 		elsif !mir_checked_array_store(state, locals, left, right)
 			mir_binding_assign(state, locals, left, right)
 		end
