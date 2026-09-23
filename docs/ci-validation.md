@@ -95,10 +95,17 @@ Class union fixtures also exercise readonly discriminants, overlapping tags,
 different field offsets, generic and nullable payloads, containers, captures and
 Results. Retained union receivers preserve aliases across type growth and replay.
 
-The CLI cache test gives each complete core/CLI fixed-point rebuild a bounded
-600-second watchdog and records its elapsed time; the whole CLI job allows
-90 minutes for the repeated invalidation controls. Literal-union Hash integration
-completed Linux rebuilds in 272 and 289 seconds before another rebuild exceeded
+The CLI smoke and cache-invalidation jobs run independently on both Darwin and
+Linux arm64. Each builds from the pinned Native seed and verifies fixed points;
+the smoke job retains CLI/REPL, language observations and distribution artifacts,
+while the cache job retains the repeated invalidation controls and their log.
+Both jobs must succeed for the reusable CLI authority to pass, so a failed smoke
+does not require rerunning the independent cache job. The duplicated initial
+build is included when comparing total runner time and wall time. The cache test
+gives each complete core/CLI fixed-point rebuild a bounded 600-second watchdog
+and records its elapsed time; both jobs retain the 90-minute limit.
+Literal-union Hash integration completed Linux rebuilds in 272 and 289 seconds
+before another rebuild exceeded
 the earlier 300-second deadline. The ordinary fixed point and CLI/GC controls
 had passed. The previous 30-minute job
 limit expired on Linux during the generic-enum integration after the CLI,
