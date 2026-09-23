@@ -356,8 +356,11 @@ mutable scalar copies and source-function parameter bindings. See
 [decision 0067](decisions/0067-namespaces-and-constant-mir.md).
 
 Imported inferred constant types and qualified generic aliases are covered by
-the updated reference. Forward initialization dependencies and untyped empty
-collection inference remain explicit gaps.
+the updated reference. Direct and grouped empty Array constants infer
+`Array<Any>`; empty Hash constants retain the untyped `Hash` boundary for
+`size` and `empty?`. Local empty collections still require concrete annotations
+or element witnesses, as in the pinned reference. Forward initialization
+dependencies and broader contextual empty collection inference remain open.
 This does not complete the module/binding families or the whole basic language.
 
 ## Symbol expressions
