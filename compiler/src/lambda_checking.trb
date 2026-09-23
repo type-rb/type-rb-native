@@ -1,6 +1,6 @@
 import { LambdaCapture, LambdaSyntax, callable_parts } from callable_types
 import { nullable_fact, nullable_lookup } from nullable_flow
-import { CheckedLocals, CompilerState, diagnostic, local_add, local_bind, local_find, local_identity, local_slot, locals_new } from state
+import { CheckedLocals, CompilerState, diagnostic, local_add, local_bind, local_find, local_identity, local_require_use, local_slot, locals_new } from state
 import { load_integer, load_string, sparse_integer_at, store_integer } from storage
 
 # Clone visible declarations as an inherited prefix, without their SSA values,
@@ -37,7 +37,9 @@ def lambda_locals(mut state: CompilerState, parent: CheckedLocals, syntax: Lambd
 	mut parameter := 0
 	while parameter < syntax.parameters.size()
 		row := syntax.parameters[parameter]
-		local_add(state, locals, row.name, parts[parameter + 1], row.mutable, load_integer(state.token_lines, row.origin))
+		if local_add(state, locals, row.name, parts[parameter + 1], row.mutable, load_integer(state.token_lines, row.origin))
+			local_require_use(locals, locals.count[0] - 1, row.name, row.origin, 2)
+		end
 		parameter += 1
 	end
 	return locals
@@ -93,7 +95,7 @@ def lambda_captures(mut state: CompilerState, mut parent: CheckedLocals, locals:
 			end
 			captures.push(LambdaCapture.new(identity: identity, child_identity: index, name: load_string(parent.names, slot), type_name: declared, flow_type: flow, mutable: load_integer(parent.mutable, slot)))
 			lambda_use_binding(parent, slot)
-			store_integer(parent.result_uses, slot, sparse_integer_at(parent.result_uses, slot) + 1)
+			store_integer(parent.binding_use_counts, slot, sparse_integer_at(parent.binding_use_counts, slot) + 1)
 		end
 		index += 1
 	end

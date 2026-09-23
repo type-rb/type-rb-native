@@ -435,7 +435,7 @@ end
 
 describe("Anonymous lexical body checking") do
 	test("captures only referenced parent identities with their declared capabilities") do
-		source := "def factory(mut counter: Integer, label: String, other: String)\nputs(other)\ncallback := fn(delta: Integer): Integer\nputs(label)\ncounter += delta\nreturn counter\nend\nend\ndef main()\nfactory(1, \"label\", \"other\")\nend\n"
+		source := "def factory(mut counter: Integer, label: String, other: String)\nputs(other)\n_callback := fn(delta: Integer): Integer\nputs(label)\ncounter += delta\nreturn counter\nend\nend\ndef main()\nfactory(1, \"label\", \"other\")\nend\n"
 		mut state := lambda_analysis_state(source)
 		expect(has_diagnostic(state)).to_be_false()
 		select_checked_body(state, 0)
@@ -456,7 +456,7 @@ describe("Anonymous lexical body checking") do
 	end
 
 	test("lets fn parameters and local declarations shadow parent bindings") do
-		source := "def factory(value: Integer, text: Integer, kept: String)\nputs(value + text)\ncallback := fn(value: String): String\ntext := value + kept\nreturn text\nend\nend\ndef main()\nend\n"
+		source := "def factory(value: Integer, text: Integer, kept: String)\nputs(value + text)\n_callback := fn(value: String): String\ntext := value + kept\nreturn text\nend\nend\ndef main()\nend\n"
 		mut state := lambda_analysis_state(source)
 		expect(has_diagnostic(state)).to_be_false()
 		select_checked_body(state, 0)
@@ -467,7 +467,7 @@ describe("Anonymous lexical body checking") do
 	end
 
 	test("propagates transitive captures while keeping nested parameters local") do
-		source := "def factory(mut counter: Integer, unused: String)\nputs(unused)\nouter := fn(seed: Integer): () -> Integer\nreturn fn(): Integer\ncounter += seed\nreturn counter\nend\nend\nend\ndef main()\nend\n"
+		source := "def factory(mut counter: Integer, unused: String)\nputs(unused)\n_outer := fn(seed: Integer): () -> Integer\nreturn fn(): Integer\ncounter += seed\nreturn counter\nend\nend\nend\ndef main()\nend\n"
 		mut state := lambda_analysis_state(source)
 		expect(has_diagnostic(state)).to_be_false()
 		select_checked_body(state, 0)
@@ -484,7 +484,7 @@ describe("Anonymous lexical body checking") do
 	end
 
 	test("distinguishes reused iteration slots and excludes hidden iteration state") do
-		source := "def factory(mut counter: Integer)\nouter := fn()\n[1].each do |item|\ncallback := fn(): Integer; return item + counter; end\nputs(callback())\nend\n[2].each do |item|\ncallback := fn(): Integer; return item + counter; end\nputs(callback())\nend\nend\nend\ndef main()\nend\n"
+		source := "def factory(mut counter: Integer)\n_outer := fn()\n[1].each do |item|\ncallback := fn(): Integer; return item + counter; end\nputs(callback())\nend\n[2].each do |item|\ncallback := fn(): Integer; return item + counter; end\nputs(callback())\nend\nend\nend\ndef main()\nend\n"
 		mut state := lambda_analysis_state(source)
 		expect(has_diagnostic(state)).to_be_false()
 		select_checked_body(state, 0)
@@ -572,7 +572,7 @@ describe("Anonymous lexical body checking") do
 		expect(body_ids[0] != body_ids[1]).to_be_true()
 	end
 	test("retains immutable nullable binding proofs without narrowing mutable captures") do
-		accepted := lambda_analysis_state("def factory(value: Integer?)\nif value != nil\ncallback := fn(): Integer; return value; end\nend\nend\ndef main()\nend\n")
+		accepted := lambda_analysis_state("def factory(value: Integer?)\nif value != nil\n_callback := fn(): Integer; return value; end\nend\nend\ndef main()\nend\n")
 		expect(has_diagnostic(accepted)).to_be_false()
 		rejected := lambda_analysis_state("def factory(mut value: Integer?)\nif value != nil\ncallback := fn(): Integer; return value; end\nend\nend\ndef main()\nend\n")
 		expect(load_string(rejected.diagnostic_messages, 0)).to_equal("expected Integer, found Integer?")

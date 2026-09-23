@@ -32,6 +32,47 @@ def array_mir_test_read(path: String): String
 end
 
 describe("Managed Array MIR") do
+	test("elides discarded untyped empty collections without inventing element types") do
+		source := "def main()\n[]\n{}\nputs(1)\nend\n"
+		mut state := logical_checked_source(source)
+		expect(check(state)).to_be_true()
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe(qbe, control_test_output(emit_qbe(state)))
+			when Result::Ok(actual)
+				expect(actual).to_equal("1\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+		mut required := logical_checked_source("def values(): Array<Integer>\nreturn []\nend\ndef main()\nputs(values().size())\nend\n")
+		expect(check(required)).to_be_true()
+		mut untyped := logical_checked_source("def main()\nvalue := []\nputs(value.size())\nend\n")
+		expect(check(untyped)).to_be_false()
+		mut discarded_hash := logical_checked_source("def main()\n{}\nputs(1)\nend\n")
+		expect(check(discarded_hash)).to_be_true()
+		mut branch_state := logical_checked_source("def main()\nvalues := if true\n[]\n[2]\nelse\n[3]\nend\nputs(values.size())\nend\n")
+		expect(check(branch_state)).to_be_true()
+		expect(verify_mir(branch_state.scalar_mir, true)).to_equal("")
+		mut interactive_branch := logical_checked_source("def main()\nvalues := if true\n[]\n[2]\nelse\n[3]\nend\nputs(values.size())\nend\n")
+		interactive_branch.hash_repl[0] = true
+		expect(check(interactive_branch)).to_be_true()
+		mut interactive_value := logical_checked_source("def main()\n[]\nend\n")
+		interactive_value.hash_repl[0] = true
+		expect(check(interactive_value)).to_be_false()
+		if qbe != nil
+			case logical_run_qbe(qbe, control_test_output(emit_qbe(branch_state)))
+			when Result::Ok(actual)
+				expect(actual).to_equal("1\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+
 	test("keeps computed method results immutable while retaining writable elements") do
 		["values.size() = 1", "values.size() += 1", "values.push(1) = values.push(2)"].each do |statement|
 			mut state := logical_checked_source("def main()\nmut values := [1]\n" + statement + "\nend\n")
@@ -43,7 +84,7 @@ describe("Managed Array MIR") do
 	end
 
 	test("requires binding roots for mutation but permits fresh Array arguments") do
-		["", "marker := {1 => 1}\n"].each do |prefix|
+		["", "_marker := {1 => 1}\n"].each do |prefix|
 			["[1] = [2]", "([1])[0] = 2", "[[1]][0].push(2)", "[1].push(2)", "([1]).push(2)", "[[1]][0][0] += 2"].each do |statement|
 				mut state := logical_checked_source("def main()\n" + prefix + statement + "\nend\n")
 				expect(check(state)).to_be_false()

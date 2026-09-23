@@ -70,7 +70,12 @@
 | Top-level constant | accepts | accepts | matches reference | matches reference |
 | Symbol literal equality | accepts | accepts | matches reference | matches reference |
 | Named import alias and reachable file | accepts | accepts | matches reference | matches reference |
-| Reject unused local binding | accepts; reference rejects | accepts; reference rejects | differs | output differs |
+| Reject unused local binding | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject unused block parameter | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject unused enum pattern binding | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject unused catch binding | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Accept named discarded local and block parameter | accepts | accepts | matches reference | matches reference |
+| Count a closure capture as a local use | accepts | accepts | matches reference | matches reference |
 | Reject immutable binding assignment | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Reject record field rebinding | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Reject non-Boolean condition | rejects as reference | rejects as reference | not reached | rejects as reference |
@@ -1307,7 +1312,8 @@
 | Safe collection lookup: invalid named index | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Safe collection lookup: invalid unhandled result | rejects as reference | rejects as reference | not reached | matches reference |
 | Safe collection lookup: nested empty catch | rejects as reference | rejects as reference | not reached | rejects as reference |
-| Discarded untyped empty Array before a catch result | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Discarded untyped empty Array before a catch result | accepts | accepts | matches reference | matches reference |
+| Discarded untyped empty Array and Hash expressions | accepts | accepts | matches reference | matches reference |
 | Safe collection lookup: hash error storage | accepts | accepts | matches reference | matches reference |
 | Portable Integer parsing | accepts | accepts | matches reference | matches reference |
 | Portable Float parsing | accepts | accepts | matches reference | matches reference |

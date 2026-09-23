@@ -42,6 +42,9 @@ compiler self-use adopts syntax beyond the verified checkout seed.
 Compiler-source integration requires the recovery and QBE-backed tests in CI.
 During development, use focused local proof and ordinary Native regeneration;
 do not duplicate the full recovery suite for every intermediate language edit.
+Run `tools/check-bootstrap-snapshot.sh /path/to/pinned/trb` on the canonical
+compiler closure before publishing each compiler-source batch. It is a short
+snapshot-v4 compatibility check, not a replacement for recovery-enabled suites.
 Bootstrap and validation-orchestration changes additionally require full local
 recovery, as does diagnosis of recovery or platform failures. For a full run,
 set `TYPE_RB_NATIVE_REFERENCE_TRB` to the absolute pinned compiler executable

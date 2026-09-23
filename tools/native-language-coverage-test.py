@@ -85,8 +85,8 @@ class LanguageCoverageTests(unittest.TestCase):
     def test_rejection_and_runtime_failure_cases_retain_each_oracles_outcome(self):
         cases = {case["id"]: case for case in coverage.validate(self.document)}
         self.assertNotEqual(cases["unused-binding"]["reference"]["check"]["code"], 0)
-        self.assertEqual(cases["unused-binding"]["native"]["check"]["code"], 0)
-        self.assertIn("check", coverage.parity_gaps(cases["unused-binding"]))
+        self.assertNotEqual(cases["unused-binding"]["native"]["check"]["code"], 0)
+        self.assertNotIn("check", coverage.parity_gaps(cases["unused-binding"]))
         failure = cases["array-runtime-bounds"]["reference"]["execute"]
         self.assertNotEqual(failure["code"], 0)
         good = {"code": failure["code"], "stdout": failure["stdout"],
