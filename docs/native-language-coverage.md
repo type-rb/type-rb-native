@@ -85,8 +85,13 @@ and callable suffix boundaries remain explicit rejections. Recovered Native
 generations also compile Unicode fixtures; the Go-hosted recovery frontend's
 bootstrap-compatible ASCII fallback is separate evidence.
 
-Direct catch-tail empty Arrays receive the known success type. Wider contextual
-inference and discarded untyped empty collections remain incomplete. Existing
+Direct catch-tail empty Arrays receive the known success type. Standalone
+discarded untyped empty collections produce no allocation. Mutable local empty
+Arrays can gain an element type from later `push`, `unshift`, or assignment of a
+typed Array; `size` and `empty?` may precede that write, and same-type writes
+can occur on different control-flow branches. Branches with different numeric
+element types still need reference-compatible promotion before MIR generation.
+Other contextual inference remains incomplete. Existing
 Hash/embedded-NUL display differences and diagnostic presentation remain visible
 in the shared observations. See [decision 0083](decisions/0083-builtin-result-values.md).
 

@@ -11,7 +11,7 @@ import { verify_mir } from mir_verifier
 import { native_read_text } from native_file_system
 import { string_starts_with } from path
 import { CompilerState } from state
-import { load_integer, store_string } from storage
+import { load_integer, load_string, store_string } from storage
 import { describe, expect, test } from trb/std/test
 
 def array_mir_test_state(): CompilerState
@@ -32,6 +32,45 @@ def array_mir_test_read(path: String): String
 end
 
 describe("Managed Array MIR") do
+	test("infers a mutable empty Array from a later element write") do
+		source := "def main()\nmut values := []\nputs(values.size())\nvalues.push(3)\nputs(values[0])\nend\n"
+		mut state := logical_checked_source(source)
+		checked := check(state)
+		if !checked
+			puts(load_string(state.diagnostic_messages, 0))
+		end
+		expect(checked).to_be_true()
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe(qbe, control_test_output(emit_qbe(state)))
+			when Result::Ok(actual)
+				expect(actual).to_equal("0\n3\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+	test("keeps empty Array inference across ordinary mutations and control flow") do
+		sources := [
+			"def main()\nmut values := []\nputs(values.empty?())\nvalues.push(3)\nputs(values[0])\nend\n",
+			"def main()\nmut values := []\nvalues.unshift(3)\nputs(values[0])\nend\n",
+			"def main()\nmut values := []\nvalues = [3]\nputs(values[0])\nend\n",
+			"def main()\nmut values := []\nif true\nvalues.push(3)\nelse\nvalues.push(4)\nend\nputs(values[0])\nend\n",
+		]
+		sources.each.with_index do |source, index|
+			mut state := logical_checked_source(source)
+			checked := check(state)
+			if !checked
+				puts(index)
+				puts(load_string(state.diagnostic_messages, 0))
+			end
+			expect(checked).to_be_true()
+			expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		end
+	end
+
 	test("elides discarded untyped empty collections without inventing element types") do
 		source := "def main()\n[]\n{}\nputs(1)\nend\n"
 		mut state := logical_checked_source(source)

@@ -1511,3 +1511,8 @@
 | Imported class union common field stores | accepts | accepts | matches reference | matches reference |
 | Class union store rejects a readonly alternative | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Class union store rejects differing field types | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Mutable empty Array inference from later writes | accepts | accepts | matches reference | matches reference |
+| Mutable empty Array inference through branch writes | accepts | accepts | matches reference | matches reference |
+| Mutable empty Array without element evidence | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Mutable empty Array inference of scalar and managed types | accepts | accepts | matches reference | matches reference |
+| Untyped mutable Array cannot escape before inference | rejects as reference | rejects as reference | not reached | rejects as reference |

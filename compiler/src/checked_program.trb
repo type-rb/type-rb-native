@@ -55,7 +55,7 @@ import { mir_checked_iteration_begin, mir_checked_iteration_end, mir_transform_s
 import { mir_checked_range_new } from mir_ranges
 import { mir_checked_hash_index, mir_checked_hash_literal, mir_checked_hash_method, mir_checked_hash_store } from mir_hashes
 import { mir_checked_record_field, mir_checked_record_new } from mir_records
-import { mir_checked_array_index, mir_checked_array_literal, mir_checked_array_operation, mir_checked_array_store } from mir_arrays
+import { mir_checked_array_index, mir_checked_array_literal, mir_checked_array_operation, mir_checked_array_refine, mir_checked_array_store } from mir_arrays
 import { binary_result_type, check_expected, numeric_type, type_diagnostic } from checked_types
 import { CheckedValue, checked_bound_value, checked_mir_value, checked_value, checked_view, scalar_mir_binary, scalar_mir_disable, scalar_mir_literal, scalar_mir_unary } from checked_values
 import { checked_hash_binding_target, checked_hash_method, checked_hash_plan, checked_hash_publish } from hash_checked
@@ -327,10 +327,10 @@ def check_array_literal(
 		store_string(state.checked[0].array_literal_types, origin, "Never")
 		return checked_value("Never", 0, 9007199254740991, 0)
 	end
-	if element_type == ""
-		return type_diagnostic(state, line, "empty Array literal requires a contextual type")
+	mut result_type := "Array"
+	if element_type != ""
+		result_type = array_type(element_type)
 	end
-	result_type := array_type(element_type)
 	if result_type == ""
 		return type_diagnostic(state, line, "unsupported Array element type " + element_type)
 	end
@@ -744,6 +744,22 @@ def check_record_new(mut state: CompilerState, mut position: Array<Integer>, mut
 	return mir_checked_record_new(state, locals, record_index, record_type(record_index), bindings.values, origin)
 end
 
+def checked_array_refine(mut state: CompilerState, mut locals: CheckedLocals, receiver: CheckedValue, element_type: String): String
+	binding := local_find(locals, load_string(state.token_texts, receiver.origin))
+	if binding < 0 || load_integer(locals.array_literal_origins, binding) == 0
+		return "cannot infer an untyped Array after its value escapes"
+	end
+	inferred := array_type(element_type)
+	if inferred == ""
+		return "unsupported inferred Array element type " + element_type
+	end
+	store_string(locals.types, binding, inferred)
+	store_string(state.checked[0].array_literal_types, load_integer(locals.array_literal_origins, binding) - 1, inferred)
+	store_string(state.checked[0].local_types, load_integer(locals.array_declaration_origins, binding) - 1, inferred)
+	mir_checked_array_refine(state, locals, receiver, inferred)
+	return ""
+end
+
 def check_method_call(
 		mut state: CompilerState,
 		mut position: Array<Integer>,
@@ -774,7 +790,33 @@ def check_method_call(
 	if hash_key_type(receiver.type_name) != "" || receiver.type_name == "Hash"
 		return checked_hash_call(state, position, locals, receiver, method)
 	end
-	if (receiver.type_name == "Range<Integer>" && method == "to_a") || (receiver.type_name == "Integer" && integer_method_kind(method) > 0) || (receiver.type_name == "Float" && float_method_kind(method) > 0) || (receiver.type_name == "String" && string_method_kind(method) > 0) || (array_element_type(receiver.type_name) != "" && array_method_kind(method) > 0)
+	if receiver.type_name == "Array" && method == "unshift"
+		origin := position[0]
+		line := load_integer(state.token_lines, origin)
+		if receiver.mutable == 0
+			return type_diagnostic(state, line, "unshift receiver is immutable")
+		end
+		if !receiver.binding
+			return type_diagnostic(state, line, "unshift requires a mutable binding")
+		end
+		advance(position)
+		skip_newlines(state, position)
+		value := check_expression(state, position, locals, 1, "")
+		skip_newlines(state, position)
+		expect(state, position, ")")
+		if value.type_name == "Never"
+			return value
+		end
+		if has_diagnostic(state)
+			return checked_value("Invalid", 0, origin, 0)
+		end
+		error := checked_array_refine(state, locals, receiver, value.type_name)
+		if error != ""
+			return type_diagnostic(state, line, error)
+		end
+		return mir_checked_array_operation(state, locals, 48, checked_mir_value(receiver), checked_mir_value(value), 0, "Void", origin)
+	end
+	if (receiver.type_name == "Range<Integer>" && method == "to_a") || (receiver.type_name == "Integer" && integer_method_kind(method) > 0) || (receiver.type_name == "Float" && float_method_kind(method) > 0) || (receiver.type_name == "String" && string_method_kind(method) > 0) || (array_element_type(receiver.type_name) != "" && array_method_kind(method) > 0) || (receiver.type_name == "Array" && method == "empty?")
 		return check_primitive_method(state, position, locals, receiver, method)
 	end
 	line := load_integer(state.token_lines, position[0])
@@ -785,14 +827,14 @@ def check_method_call(
 		if receiver.type_name == "String"
 			return mir_checked_string_operation(state, locals, 15, checked_mir_value(receiver), - 1, 0, "Integer", position[0] - 1)
 		end
-		if array_element_type(receiver.type_name) != ""
+		if array_element_type(receiver.type_name) != "" || receiver.type_name == "Array"
 			return mir_checked_array_operation(state, locals, 20, checked_mir_value(receiver), - 1, 0, "Integer", position[0] - 1)
 		end
 		return type_diagnostic(state, line, "size is unavailable on " + type_display(state, receiver.type_name))
 	end
 	if method == "push"
 		element_type := array_element_type(receiver.type_name)
-		if element_type == ""
+		if element_type == "" && receiver.type_name != "Array"
 			return type_diagnostic(state, line, "push is unavailable on " + type_display(state, receiver.type_name))
 		end
 		if receiver.mutable == 0
@@ -805,6 +847,12 @@ def check_method_call(
 		expect(state, position, ")")
 		if value.type_name == "Never"
 			return value
+		end
+		if receiver.type_name == "Array" && !has_diagnostic(state)
+			error := checked_array_refine(state, locals, receiver, value.type_name)
+			if error != ""
+				return type_diagnostic(state, line, error)
+			end
 		end
 		return mir_checked_array_operation(state, locals, 24, checked_mir_value(receiver), checked_mir_value(value), 0, "Void", position[0] - 1)
 	end
@@ -910,7 +958,7 @@ def check_member(mut state: CompilerState, mut position: Array<Integer>, mut loc
 		return check_union_member(state, locals, value, member, position[0] - 1)
 	end
 	if token_is(state, position[0], "(")
-		if value.category < 4 && !(member == "raw_value" && raw_enum_type(state, find_enum_type(state, value.type_name)) != "") && enum_method_function(state, value.type_name, member) < 0 && builtin_result_method(value.type_name, member) == 0 && member != "size" && member != "to_i" && member != "to_f" && member != "to_s" && member != "push" && member != "new" && !(value.type_name == "Range<Integer>" && member == "to_a") && !(value.type_name == "Integer" && integer_method_kind(member) > 0) && !(value.type_name == "Float" && float_method_kind(member) > 0) && !(value.type_name == "String" && string_method_kind(member) > 0) && !(array_element_type(value.type_name) != "" && array_method_kind(member) > 0) && !((value.type_name == "Hash" || hash_key_type(value.type_name) != "") && checked_hash_method(member) != 0)
+		if value.category < 4 && !(member == "raw_value" && raw_enum_type(state, find_enum_type(state, value.type_name)) != "") && enum_method_function(state, value.type_name, member) < 0 && builtin_result_method(value.type_name, member) == 0 && member != "size" && member != "to_i" && member != "to_f" && member != "to_s" && member != "push" && member != "new" && !(value.type_name == "Range<Integer>" && member == "to_a") && !(value.type_name == "Integer" && integer_method_kind(member) > 0) && !(value.type_name == "Float" && float_method_kind(member) > 0) && !(value.type_name == "String" && string_method_kind(member) > 0) && !(array_element_type(value.type_name) != "" && array_method_kind(member) > 0) && !(value.type_name == "Array" && (member == "empty?" || member == "unshift")) && !((value.type_name == "Hash" || hash_key_type(value.type_name) != "") && checked_hash_method(member) != 0)
 			scalar_mir_disable(locals)
 		end
 		if value.category >= 4
@@ -1355,6 +1403,14 @@ def check_declaration(
 		end
 		store_integer(locals.hash_literal_origins, locals.count[0] - 1, value.origin + 1)
 	end
+	if added && local_type == "Array"
+		if !token_is(state, value.origin, "[") || !token_is(state, value.origin + 1, "]")
+			diagnostic(state, "TRBN4004", line, "untyped Array aliases require an Array<T> annotation")
+			return checked_value("Invalid", 0, 9007199254740991, 0)
+		end
+		store_integer(locals.array_literal_origins, locals.count[0] - 1, value.origin + 1)
+		store_integer(locals.array_declaration_origins, locals.count[0] - 1, origin + 1)
+	end
 	if added && value.type_name != "Never"
 		mir_binding_initialize(state, locals, locals.count[0] - 1, value, origin)
 	end
@@ -1404,10 +1460,25 @@ def check_simple_statement(
 		elsif left.nullable_binding < - 1 && left.nullable_field == - 1
 			expected = state.global_types[- left.nullable_binding - 2]
 		end
-		right := check_statement_value(state, position, locals, expected)
+		mut right_expected := expected
+		if expected == "Array"
+			right_expected = ""
+		end
+		right := check_statement_value(state, position, locals, right_expected)
 		if right.type_name == "Never"
 			finish_statement(state, position)
 			return right
+		end
+		if expected == "Array"
+			element_type := array_element_type(right.type_name)
+			if element_type == ""
+				diagnostic(state, "TRBN4004", line, "untyped Array assignment requires a typed Array value")
+			else
+				error := checked_array_refine(state, locals, left, element_type)
+				if error != ""
+					diagnostic(state, "TRBN4004", line, error)
+				end
+			end
 		end
 		if left.nullable_binding >= 0 && left.nullable_field == - 1
 			nullable_replace(locals, left.nullable_binding, right.flow_type)
@@ -2575,7 +2646,7 @@ def check_primitive_method(mut state: CompilerState, mut position: Array<Integer
 		kind = string_method_kind(method)
 		arity = string_method_arity(kind)
 		argument_type = string_method_argument_type(kind)
-	elsif array_element_type(receiver.type_name) != ""
+	elsif array_element_type(receiver.type_name) != "" || receiver.type_name == "Array"
 		kind = array_method_kind(method)
 		arity = array_method_arity(kind)
 		argument_type = "Range<Integer>"
@@ -2649,7 +2720,7 @@ def check_primitive_method(mut state: CompilerState, mut position: Array<Integer
 		end
 		return mir_string_method(state, locals, kind, receiver, arguments[0], origin)
 	end
-	if array_element_type(receiver.type_name) != ""
+	if array_element_type(receiver.type_name) != "" || receiver.type_name == "Array"
 		if arity == 0
 			return mir_array_method(state, locals, kind, receiver, receiver, origin)
 		end

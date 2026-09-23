@@ -1,6 +1,6 @@
 import { integer_string } from literals
 import { MirModule, MirValue, mir_table_span_valid } from mir
-import { mir_hash_kind } from mir_types
+import { mir_element_type, mir_hash_kind, mir_semantic_type_name } from mir_types
 import { CheckedLocals } from state
 
 def mir_hash_component(mut parents: Array<Integer>, value: Integer): Integer
@@ -10,6 +10,10 @@ def mir_hash_component(mut parents: Array<Integer>, value: Integer): Integer
 		at = parents[at]
 	end
 	return at
+end
+
+def mir_pending_array(native_module: MirModule, type_id: Integer): Boolean
+	return mir_semantic_type_name(native_module, type_id) == "Array"
 end
 
 def mir_hash_join_edge(locals: CheckedLocals, blocks: Hash<String, Integer>, mut parents: Array<Integer>, target: Integer, start: Integer, count: Integer): String
@@ -42,16 +46,19 @@ end
 
 # Finalize builder-local first-store constraints before publishing any MIR.
 # CFG argument/parameter pairs share a type. Source local names do not identify
-# values: distinct empty Hashes and replacement allocations stay independent.
+# values: distinct empty collections and replacement allocations stay independent.
 # The raw MIR verifier never calls this pass or repairs malformed input.
 def mir_finalize_hash_types(native_module: MirModule, mut locals: CheckedLocals): String
 	mut pending := locals.mir_hash_refinements.size() > 0
+	if locals.mir_array_refinements.size() > 0
+		pending = true
+	end
 	# Checking an unreachable store can refine the lexical type even though
 	# no store instruction is emitted. Its live exit parameters still constrain
 	# the earlier empty allocation, so inspect CFG types without a store witness.
 	if !pending
 		locals.mir_value_rows.each do |value|
-			if mir_hash_kind(native_module, value.type_id) == 5
+			if mir_hash_kind(native_module, value.type_id) == 5 || mir_pending_array(native_module, value.type_id)
 				pending = true
 			end
 		end
@@ -61,6 +68,9 @@ def mir_finalize_hash_types(native_module: MirModule, mut locals: CheckedLocals)
 	end
 	if locals.mir_hash_refinements.size() % 2 != 0
 		return "MIR Hash inference constraint shape differs"
+	end
+	if locals.mir_array_refinements.size() % 2 != 0
+		return "MIR Array inference constraint shape differs"
 	end
 	mut parents: Array<Integer> := []
 	mut types: Array<Integer> := []
@@ -92,7 +102,7 @@ def mir_finalize_hash_types(native_module: MirModule, mut locals: CheckedLocals)
 		end
 	end
 	locals.mir_value_rows.each do |value|
-		if mir_hash_kind(native_module, value.type_id) != 5
+		if mir_hash_kind(native_module, value.type_id) != 5 && !mir_pending_array(native_module, value.type_id)
 			root := mir_hash_component(parents, value.id)
 			if types[root] != 0 && types[root] != value.type_id
 				return "MIR Hash inference edge types conflict"
@@ -115,15 +125,36 @@ def mir_finalize_hash_types(native_module: MirModule, mut locals: CheckedLocals)
 		index += 2
 	end
 	index = 0
+	while index < locals.mir_array_refinements.size()
+		value := locals.mir_array_refinements[index]
+		type_id := locals.mir_array_refinements[index + 1]
+		if value < 0 || value >= parents.size() || mir_element_type(native_module, type_id) == 0
+			return "MIR Array inference constraint type differs"
+		end
+		root := mir_hash_component(parents, value)
+		if types[root] != 0 && types[root] != type_id
+			return "MIR Array inference types conflict"
+		end
+		types[root] = type_id
+		index += 2
+	end
+	index = 0
 	while index < locals.mir_value_rows.size()
 		value := locals.mir_value_rows[index]
-		if mir_hash_kind(native_module, value.type_id) == 5
+		pending_hash := mir_hash_kind(native_module, value.type_id) == 5
+		pending_array := mir_pending_array(native_module, value.type_id)
+		if pending_hash || pending_array
 			type_id := types[mir_hash_component(parents, value.id)]
 			if type_id != 0
-				if mir_hash_kind(native_module, type_id) != 3
+				if pending_hash && mir_hash_kind(native_module, type_id) != 3
 					return "MIR Hash inference resolved a non-Hash type"
 				end
+				if pending_array && mir_element_type(native_module, type_id) == 0
+					return "MIR Array inference resolved a non-Array type"
+				end
 				locals.mir_value_rows[index] = MirValue.new(function_id: value.function_id, id: value.id, type_id: type_id, source_id: value.source_id, line: value.line)
+			elsif pending_array
+				return "empty Array literal requires a contextual type"
 			end
 		end
 		index += 1
