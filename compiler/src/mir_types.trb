@@ -168,7 +168,9 @@ def mir_semantic_type_id(mut native_module: MirModule, name: String): Integer
 	mut kind := 1
 	mut element := 0
 	mut key := 0
-	if name == "Nil"
+	if name == "Any"
+		kind = 16
+	elsif name == "Nil"
 		kind = 7
 	elsif nullable_element(name) != ""
 		kind = 6
@@ -332,7 +334,7 @@ def mir_types_error(native_module: MirModule): String
 	mut index := 0
 	while index < native_module.types.size()
 		row := native_module.types[index]
-		if row.kind < 1 || row.kind > 15
+		if row.kind < 1 || row.kind > 16
 			return "MIR composite kind is invalid"
 		end
 		if row.kind == 1 || row.kind == 3 || row.kind == 6 || row.kind == 12
@@ -456,6 +458,8 @@ def mir_types_error(native_module: MirModule): String
 			expected = "Nil"
 		elsif row.kind == 4
 			expected = "Range<Integer>"
+		elsif row.kind == 16
+			expected = "Any"
 		elsif row.kind == 15
 			expected = "Array"
 		else
@@ -638,6 +642,12 @@ def mir_union_id(native_module: MirModule, type_id: Integer): Integer
 end
 
 def mir_union_contains(native_module: MirModule, type_id: Integer, alternative: Integer): Boolean
+	if mir_semantic_type_name(native_module, type_id) == "Any"
+		if alternative == type_id
+			return false
+		end
+		return mir_semantic_value_type(native_module, alternative)
+	end
 	owner := mir_union_id(native_module, type_id)
 	if owner < 0 || owner >= native_module.unions.size()
 		return false

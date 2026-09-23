@@ -1520,6 +1520,8 @@
 | Separate writes keep the first inferred element type | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Numeric Hash value inference across control branches | accepts | accepts | matches reference | matches reference |
 | Hash value inference joins managed and optional alternatives | accepts | accepts | matches reference | matches reference |
+| Any collection values in Arrays and inferred Hashes | accepts | accepts | matches reference | matches reference |
+| Retained REPL Hash with independently growing Any Arrays | accepts | accepts | matches reference | matches reference |
 | Separate Hash writes do not join unrelated values | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Separate writes keep the first inferred Hash value type | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Empty Hash inference keeps the first key type | rejects as reference | rejects as reference | not reached | rejects as reference |

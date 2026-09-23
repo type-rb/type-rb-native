@@ -55,6 +55,9 @@ source scan before the full recovery run; keep the latter as the authority.
 For basic-language coverage, combine syntax, checking, MIR, execution and REPL
 into a coherent family rather than opening a PR for each internal step. A larger
 PR with reviewable commits and complete acceptance evidence is appropriate.
+When probing reference language semantics, run the exact `TYPE_RB_REVISION`
+compiler used by compatibility checks; an installed `trb` may be a different
+release and can disagree on check, generated code, or execution.
 
 For root TypeRB source checks, use the exact `TYPE_RB_REVISION` compiler:
 
