@@ -314,8 +314,11 @@ def validate_repository_values(
     )
     if not re.search(rf"if version != {snapshot_version}\b", snapshot_source):
         raise ValidationError("snapshotSchemaVersion disagrees with the current decoder")
-    if f"--snapshot-version {snapshot_version}" not in workflow:
+    if 'tools/check-bootstrap-snapshot.sh "$RUNNER_TEMP/trb"' not in workflow:
         raise ValidationError("snapshotSchemaVersion disagrees with the bootstrap workflow")
+    snapshot_check = (root / "tools/check-bootstrap-snapshot.sh").read_text(encoding="utf-8")
+    if f"--snapshot-version {snapshot_version}" not in snapshot_check:
+        raise ValidationError("snapshotSchemaVersion disagrees with the bootstrap snapshot check")
 
     seed_manifest_path = (
         root

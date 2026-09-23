@@ -37,6 +37,22 @@ class CompatibilityManifestTest(unittest.TestCase):
     def test_current_manifest_is_valid(self) -> None:
         self.validate(self.manifest)
 
+    def test_bootstrap_snapshot_command_matches_the_manifest(self) -> None:
+        checks = [
+            (ROOT / ".github/workflows/native-validation.yml", 'tools/check-bootstrap-snapshot.sh "$RUNNER_TEMP/trb"'),
+            (ROOT / "tools/check-bootstrap-snapshot.sh", "--snapshot-version 4"),
+        ]
+        read_text = Path.read_text
+        for path, command in checks:
+            with self.subTest(path=path):
+                def read_source(candidate, *args, **kwargs):
+                    source = read_text(candidate, *args, **kwargs)
+                    return source.replace(command, "missing-snapshot-command") if candidate == path else source
+
+                with patch.object(Path, "read_text", read_source):
+                    with self.assertRaisesRegex(ValidationError, "snapshotSchemaVersion"):
+                        self.validate(self.manifest)
+
     def test_target_tokens_are_checked_in_the_runtime_source_owner(self) -> None:
         runtime = ROOT / "compiler/src/qbe_runtime.trb"
         read_text = Path.read_text
