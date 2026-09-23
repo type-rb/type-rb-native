@@ -8,6 +8,7 @@
 | if / else | accepts | accepts | matches reference | matches reference |
 | while | accepts | accepts | matches reference | matches reference |
 | Short-circuit OR / AND | accepts | accepts | matches reference | matches reference |
+| Boolean short-circuit assignment | accepts | accepts | matches reference | matches reference |
 | Record construction and field read | accepts | accepts | matches reference | matches reference |
 | Array&lt;Integer&gt; | accepts | accepts | matches reference | matches reference |
 | elsif | accepts | accepts | matches reference | matches reference |
@@ -719,7 +720,7 @@
 | Union scalar output | accepts | accepts | matches reference | matches reference |
 | Union numeric normalization | accepts | accepts | matches reference | matches reference |
 | Union inferred array | accepts | accepts | matches reference | matches reference |
-| Union inferred hash | accepts | accepts | matches reference | output differs |
+| Union inferred hash | accepts | accepts | matches reference | matches reference |
 | Union contextual array | accepts | accepts | matches reference | matches reference |
 | Union widen | accepts | accepts | matches reference | matches reference |
 | Union retained mutation | accepts | accepts | matches reference | output differs |
@@ -757,7 +758,7 @@
 | Union boundary shadow pattern | accepts | accepts | matches reference | matches reference |
 | Union boundary array nil inference | accepts | accepts | matches reference | matches reference |
 | Union boundary array only nil | accepts | accepts | matches reference | matches reference |
-| Union boundary hash nil inference | accepts | accepts | matches reference | output differs |
+| Union boundary hash nil inference | accepts | accepts | matches reference | matches reference |
 | Union boundary optional array inference | accepts | accepts | matches reference | matches reference |
 | Union boundary nullable scalar into union | accepts | accepts | matches reference | matches reference |
 | Union boundary nullable union same payload | accepts | accepts | matches reference | matches reference |
@@ -1023,7 +1024,7 @@
 | Extended operator symbols | accepts | accepts | matches reference | matches reference |
 | Bang enum method | accepts | accepts | matches reference | matches reference |
 | Nested optional angles | accepts | accepts | matches reference | matches reference |
-| Reserved symbol labels | accepts | accepts | matches reference | output differs |
+| Reserved symbol labels | accepts | accepts | matches reference | matches reference |
 | Ordinary not equal | accepts | accepts | matches reference | matches reference |
 | Bang captured value | accepts | accepts | matches reference | matches reference |
 | Invalid field alias | rejects as reference | rejects as reference | not reached | rejects as reference |
@@ -1524,6 +1525,10 @@
 | Hash value inference joins managed and optional alternatives | accepts | accepts | matches reference | matches reference |
 | Any collection values in Arrays and inferred Hashes | accepts | accepts | matches reference | matches reference |
 | Retained REPL Hash with independently growing Any Arrays | accepts | accepts | matches reference | matches reference |
+| Output of scalar and Array values retrieved as Any | accepts | accepts | matches reference | matches reference |
+| Ordered output of Hash values retrieved as Any | accepts | accepts | matches reference | matches reference |
+| Any Hash output preserves REPL order after deletion and reinsertion | accepts | accepts | matches reference | matches reference |
+| A retrieved Any value does not permit unverified arithmetic | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Separate Hash writes do not join unrelated values | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Separate writes keep the first inferred Hash value type | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Empty Hash inference keeps the first key type | rejects as reference | rejects as reference | not reached | rejects as reference |

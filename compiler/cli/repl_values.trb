@@ -7,7 +7,7 @@ import { find_enum_type } from enum_types
 import { nullable_assignable, nullable_element } from nullable_types
 import { repl_absent, repl_none, repl_payload } from repl_nullable
 import { ReplStore, ReplEnvironment, repl_store, repl_value, repl_float, repl_get, repl_type, ReplValue } from repl_model
-import { repl_hash_new, repl_hash_set } from repl_hash
+import { repl_hash_new, repl_hash_set, repl_hash_slot } from repl_hash
 import { hash_key_type } from hash_types
 import { CompilerState } from state
 import { type_display, find_record_type, generic_instance_for_type } from type_resolution
@@ -208,17 +208,21 @@ def repl_render(state: CompilerState, store: ReplStore, id: Integer, depth: Inte
 	if value.type_name == "Hash" || hash_key_type(value.type_name) != ""
 		table := store.hashes[value.integer]
 		mut rendered := "{"
-		mut slot := 0
+		mut index := 0
 		mut count := 0
-		while slot < table.keys.size()
-			if table.keys[slot] > 0
-				if count > 0
-					rendered += ", "
+		while index < table.order.size()
+			key := table.order[index]
+			if key > 0
+				slot := repl_hash_slot(store, table, key)
+				if slot >= 0
+					if count > 0
+						rendered += ", "
+					end
+					rendered += repl_render(state, store, table.keys[slot], depth + 1) + ": " + repl_render(state, store, table.values[slot], depth + 1)
+					count += 1
 				end
-				rendered += repl_render(state, store, table.keys[slot], depth + 1) + ": " + repl_render(state, store, table.values[slot], depth + 1)
-				count += 1
 			end
-			slot += 1
+			index += 1
 		end
 		return rendered + "}"
 	end
@@ -308,14 +312,18 @@ def repl_copy_value(source: ReplStore, mut target: ReplStore, id: Integer, mut m
 		copied := repl_hash_new(target, value.type_name, table.keys.size())
 		mapping[id] = copied
 		target.value_programs[copied] = owner
-		mut slot := 0
-		while slot < table.keys.size()
-			if table.keys[slot] > 0
-				key := repl_copy_value(source, target, table.keys[slot], mapping, programs)
-				item := repl_copy_value(source, target, table.values[slot], mapping, programs)
-				repl_hash_set(target, copied, key, item)
+		mut index := 0
+		while index < table.order.size()
+			key_id := table.order[index]
+			if key_id > 0
+				slot := repl_hash_slot(source, table, key_id)
+				if slot >= 0
+					key := repl_copy_value(source, target, table.keys[slot], mapping, programs)
+					item := repl_copy_value(source, target, table.values[slot], mapping, programs)
+					repl_hash_set(target, copied, key, item)
+				end
 			end
-			slot += 1
+			index += 1
 		end
 		return copied
 	end

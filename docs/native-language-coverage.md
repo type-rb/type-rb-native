@@ -497,6 +497,18 @@ REPL, including retained values, managed snapshots, transfers and optional calls
 Source erasure, reordered blocks, forged checked plans/root maps and forced GC
 are independently checked; see [decision 0062](decisions/0062-hash-range-collection-loops.md).
 
+## Output of `Any` values
+
+`puts` accepts a value retrieved as `Any` and dispatches from its verified MIR
+type tag. Ordinary execution covers scalar, nil, Array and Hash payloads;
+collection writers follow their checked element types and retain the boxed
+value through allocation and output. The compiled representation follows the
+pinned Go output for these payloads, including sorted Hash keys. The REPL uses
+its own human-readable collection display and preserves Hash insertion order.
+Other operations on `Any` remain statically checked rather than gaining an
+implicit dynamic fallback. The shared cases and forced-GC MIR tests cover the
+supported output boundary; broader `Any` operations remain in the inventory.
+
 ## Integer receiver operations
 
 Integer `abs`, sign/zero/parity predicates, `min`, `max`, `clamp` and `to_f`
@@ -515,6 +527,11 @@ Float and mixed numeric power use libm. Checked MIR owns the result and failure
 types, while the REPL evaluates the same source forms. Shared cases cover
 ordinary execution and retained sessions; negative-exponent and overflow
 failures are also checked directly.
+
+Boolean `||=` and `&&=` now keep the right-hand side and target write on the
+taken branch in checked MIR and the REPL. Indexed Array targets select their
+position once before the right-hand side. The shared case covers ordinary
+binding behavior; a QBE-backed test checks skipped effects and Array indexing.
 
 ## Float receiver operations
 
