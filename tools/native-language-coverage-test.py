@@ -54,7 +54,8 @@ class LanguageCoverageTests(unittest.TestCase):
     def test_table_does_not_count_session_exit_zero_as_feature_support(self):
         table = coverage.coverage_table(coverage.validate(self.document))
         self.assertIn("| UTF-8 String literal | accepts | accepts | matches reference | matches reference |", table)
-        self.assertIn("| while | accepts | accepts | matches reference | output differs |", table)
+        self.assertIn("| while | accepts | accepts | matches reference | matches reference |", table)
+        self.assertIn("| Union inferred hash | accepts | accepts | matches reference | output differs |", table)
         self.assertIn("| elsif | accepts | accepts | matches reference | matches reference |", table)
         self.assertIn("Array&lt;Boolean&gt;", table)
         self.assertEqual(table, coverage.coverage_table(self.document["cases"]))
