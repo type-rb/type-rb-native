@@ -27,48 +27,67 @@ end
 # indexes; all other values reach a terminal failure. The verifier owns the
 # Array operation; hot-path values are not live across the failure call.
 # A captured assignment target needs only its checked logical index before RHS.
-def emit_checked_array_access(owner: String, requested: String, capture_index: Boolean, mut context: QbeEmitContext, mut output: QbeOutput): String
-	length_slot := emit_temporary(context)
-	length := emit_temporary(context)
-	positive_valid := emit_temporary(context)
-	positive := emit_label(context)
-	negative := emit_label(context)
-	negative_valid := emit_temporary(context)
-	negative_accepted := emit_label(context)
-	accepted := emit_label(context)
-	rejected := emit_label(context)
-	qbe_output_line(output, "\t" + length_slot + " =l add " + owner + ", 8")
-	qbe_output_line(output, "\t" + length + " =l loadl " + length_slot)
-	qbe_output_line(output, "\t" + positive_valid + " =w cultl " + requested + ", " + length)
-	qbe_output_branch(output, positive_valid, positive, negative)
-	qbe_output_line(output, positive)
-	positive_index := emit_temporary(context)
-	qbe_output_line(output, "\t" + positive_index + " =l copy " + requested)
-	qbe_output_line(output, "\tjmp " + accepted)
-	qbe_output_line(output, negative)
-	adjusted := emit_temporary(context)
-	qbe_output_line(output, "\t" + adjusted + " =l add " + requested + ", " + length)
-	qbe_output_line(output, "\t" + negative_valid + " =w cultl " + adjusted + ", " + length)
-	qbe_output_branch(output, negative_valid, negative_accepted, rejected)
-	qbe_output_line(output, negative_accepted)
-	negative_index := emit_temporary(context)
-	qbe_output_line(output, "\t" + negative_index + " =l copy " + adjusted)
-	qbe_output_line(output, "\tjmp " + accepted)
-	qbe_output_line(output, rejected)
-	qbe_output_line(output, "\tcall $trbn_fail(l $trbn_bounds_error, l 30)")
-	qbe_output_line(output, "\thlt")
-	qbe_output_line(output, accepted)
-	index := emit_temporary(context)
-	qbe_output_line(output, "\t" + index + " =l phi " + positive + " " + positive_index + ", " + negative_accepted + " " + negative_index)
+def emit_checked_array_access(owner: String, requested: String, capture_index: Boolean, nonnegative: Boolean, cached_length: String, cached_data: String, mut context: QbeEmitContext, mut output: QbeOutput): String
+	mut length := cached_length
+	if length == ""
+		length_slot := emit_temporary(context)
+		length = emit_temporary(context)
+		qbe_output_line(output, "\t" + length_slot + " =l add " + owner + ", 8")
+		qbe_output_line(output, "\t" + length + " =l loadl " + length_slot)
+	end
+	mut index := requested
+	if nonnegative
+		valid := emit_temporary(context)
+		accepted := emit_label(context)
+		rejected := emit_label(context)
+		qbe_output_line(output, "\t" + valid + " =w cultl " + requested + ", " + length)
+		qbe_output_branch(output, valid, accepted, rejected)
+		qbe_output_line(output, rejected)
+		qbe_output_line(output, "\tcall $trbn_fail(l $trbn_bounds_error, l 30)")
+		qbe_output_line(output, "\thlt")
+		qbe_output_line(output, accepted)
+	else
+		positive_valid := emit_temporary(context)
+		positive := emit_label(context)
+		negative := emit_label(context)
+		negative_valid := emit_temporary(context)
+		negative_accepted := emit_label(context)
+		accepted := emit_label(context)
+		rejected := emit_label(context)
+		qbe_output_line(output, "\t" + positive_valid + " =w cultl " + requested + ", " + length)
+		qbe_output_branch(output, positive_valid, positive, negative)
+		qbe_output_line(output, positive)
+		positive_index := emit_temporary(context)
+		qbe_output_line(output, "\t" + positive_index + " =l copy " + requested)
+		qbe_output_line(output, "\tjmp " + accepted)
+		qbe_output_line(output, negative)
+		adjusted := emit_temporary(context)
+		qbe_output_line(output, "\t" + adjusted + " =l add " + requested + ", " + length)
+		qbe_output_line(output, "\t" + negative_valid + " =w cultl " + adjusted + ", " + length)
+		qbe_output_branch(output, negative_valid, negative_accepted, rejected)
+		qbe_output_line(output, negative_accepted)
+		negative_index := emit_temporary(context)
+		qbe_output_line(output, "\t" + negative_index + " =l copy " + adjusted)
+		qbe_output_line(output, "\tjmp " + accepted)
+		qbe_output_line(output, rejected)
+		qbe_output_line(output, "\tcall $trbn_fail(l $trbn_bounds_error, l 30)")
+		qbe_output_line(output, "\thlt")
+		qbe_output_line(output, accepted)
+		index = emit_temporary(context)
+		qbe_output_line(output, "\t" + index + " =l phi " + positive + " " + positive_index + ", " + negative_accepted + " " + negative_index)
+	end
 	if capture_index
 		return index
 	end
-	data_slot := emit_temporary(context)
-	data := emit_temporary(context)
+	mut data := cached_data
+	if data == ""
+		data_slot := emit_temporary(context)
+		data = emit_temporary(context)
+		qbe_output_line(output, "\t" + data_slot + " =l add " + owner + ", 24")
+		qbe_output_line(output, "\t" + data + " =l loadl " + data_slot)
+	end
 	offset := emit_temporary(context)
 	result := emit_temporary(context)
-	qbe_output_line(output, "\t" + data_slot + " =l add " + owner + ", 24")
-	qbe_output_line(output, "\t" + data + " =l loadl " + data_slot)
 	qbe_output_line(output, "\t" + offset + " =l mul " + index + ", 8")
 	qbe_output_line(output, "\t" + result + " =l add " + data + ", " + offset)
 	return result
@@ -125,18 +144,34 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 		return emitted_value(result, type_name)
 	end
 	mut selected :=- 1
+	mut cached_length := ""
+	mut cached_data := ""
+	mut nonnegative := false
 	plans.each do |plan|
 		if kind == 20 && plan.length == instruction_index
 			selected = plan.header
 		end
-		plan.loads.each do |load|
-			if kind == 22 && load == instruction_index
+		plan.accesses.each do |access|
+			if (kind == 21 || kind == 22 || kind == 23) && access == instruction_index
 				selected = plan.header
+			end
+		end
+		plan.headers.each do |header|
+			header.accesses.each do |access|
+				if access == instruction_index
+					name := integer_string(plan.header) + "_" + integer_string(header.identity)
+					cached_length = "%mir_array_length" + name
+					cached_data = "%mir_array_data" + name
+					nonnegative = array_check_reusable(header.nonnegative_accesses, instruction_index)
+				end
 			end
 		end
 	end
 	if kind == 20 && selected >= 0
 		return emitted_value("%mir_array_length" + integer_string(selected), "Integer")
+	end
+	if kind == 20 && cached_length != ""
+		return emitted_value(cached_length, "Integer")
 	end
 	if kind == 20
 		address := emit_temporary(context)
@@ -155,28 +190,41 @@ def emit_mir_array_instruction(state: CompilerState, value_types: Array<Integer>
 		end
 		return emitted_value("", "Void")
 	end
-	if kind == 22 && selected >= 0
+	if (kind == 22 || kind == 23) && selected >= 0
 		offset := emit_temporary(context)
 		address := emit_temporary(context)
 		qbe_output_line(output, "\t" + offset + " =l mul " + second + ", 8")
 		qbe_output_line(output, "\t" + address + " =l add %mir_array_data" + integer_string(selected) + ", " + offset)
-		emit_typed_load(output, result, type_name, address)
-		return emitted_value(result, type_name)
+		if kind == 22
+			emit_typed_load(output, result, type_name, address)
+			return emitted_value(result, type_name)
+		end
+		element := mir_element_type(state.scalar_mir, mir_operand_type(value_types, instruction.first))
+		emit_typed_store(output, mir_storage_type_name(state.scalar_mir, element), operands[instruction.payload], address)
+		return emitted_value("", "Void")
+	end
+	if kind == 21 && selected >= 0
+		# The verified zero-origin, unit-step loop guard proves this index is
+		# already a nonnegative logical position for the guarded owner.
+		return emitted_value(second, "Integer")
 	end
 	mut address := ""
 	if (kind == 22 || kind == 23) && array_check_reusable(check_reuse, instruction_index)
 		# The verified plan proves `second` is a checked logical index for this
 		# exact owner with no intervening mutation. Reload storage after RHS.
-		data_slot := emit_temporary(context)
-		data := emit_temporary(context)
+		mut data := cached_data
+		if data == ""
+			data_slot := emit_temporary(context)
+			data = emit_temporary(context)
+			qbe_output_line(output, "\t" + data_slot + " =l add " + owner + ", 24")
+			qbe_output_line(output, "\t" + data + " =l loadl " + data_slot)
+		end
 		offset := emit_temporary(context)
 		address = emit_temporary(context)
-		qbe_output_line(output, "\t" + data_slot + " =l add " + owner + ", 24")
-		qbe_output_line(output, "\t" + data + " =l loadl " + data_slot)
 		qbe_output_line(output, "\t" + offset + " =l mul " + second + ", 8")
 		qbe_output_line(output, "\t" + address + " =l add " + data + ", " + offset)
 	else
-		address = emit_checked_array_access(owner, second, kind == 21, context, output)
+		address = emit_checked_array_access(owner, second, kind == 21, nonnegative, cached_length, cached_data, context, output)
 	end
 	if kind == 21
 		return emitted_value(address, type_name)
@@ -200,6 +248,16 @@ def emit_mir_array_headers(plans: Array<MirArrayLoop>, block: Integer, operands:
 			qbe_output_line(output, "\t%mir_array_length" + integer_string(plan.header) + " =l loadl " + length)
 			qbe_output_line(output, "\t" + data + " =l add " + owner + ", 24")
 			qbe_output_line(output, "\t%mir_array_data" + integer_string(plan.header) + " =l loadl " + data)
+			plan.headers.each do |header|
+				extra_owner := operands[header.owner]
+				name := integer_string(plan.header) + "_" + integer_string(header.identity)
+				extra_length := emit_temporary(context)
+				extra_data := emit_temporary(context)
+				qbe_output_line(output, "\t" + extra_length + " =l add " + extra_owner + ", 8")
+				qbe_output_line(output, "\t%mir_array_length" + name + " =l loadl " + extra_length)
+				qbe_output_line(output, "\t" + extra_data + " =l add " + extra_owner + ", 24")
+				qbe_output_line(output, "\t%mir_array_data" + name + " =l loadl " + extra_data)
+			end
 		end
 	end
 end
