@@ -3,7 +3,7 @@ import { mir_semantic_type_id, mir_semantic_type_name, mir_semantic_value_type }
 import { nullable_capture_call } from nullable_flow
 import { MirFlow, mir_flow_type, mir_value_available } from mir_flow
 import { CheckedValue, checked_mir_value, checked_value, mir_checked_value, scalar_mir_disable, scalar_mir_instruction, scalar_mir_value } from checked_values
-import { MirBlock, MirCall, MirFunction, MirInstruction, MirModule, MirSignature, mir_origin_valid, mir_table_span_valid, mir_type_id, mir_value_type } from mir
+import { MirBlock, MirCall, MirFunction, MirInstruction, MirModule, MirSignature, mir_function_index, mir_origin_valid, mir_table_span_valid, mir_type_id, mir_value_type } from mir
 import { mir_control_active, mir_control_prepare } from mir_control
 import { mir_intrinsic_signature_error, mir_runtime_adapter } from mir_intrinsics
 import { compiler_host_intrinsic, compiler_runtime_intrinsic } from resolution
@@ -84,6 +84,32 @@ def mir_call_effects(signature: MirSignature): Integer
 		return 0
 	end
 	return 15
+end
+
+# A verified scalar leaf has only scalar MIR operations and cannot allocate or
+# mutate managed storage. Its arithmetic may still fail, so retain that effect.
+def mir_verified_call_effects(native_module: MirModule, signature: MirSignature): Integer
+	if signature.kind == 0
+		index := mir_function_index(native_module, signature.id)
+		if index >= 0 && native_module.functions[index].kind == 1
+			return 8
+		end
+	end
+	return mir_call_effects(signature)
+end
+
+def mir_refine_scalar_call_effects(mut native_module: MirModule)
+	mut index := 0
+	while index < native_module.calls.size()
+		call := native_module.calls[index]
+		if call.callee >= 0 && call.callee < native_module.signatures.size()
+			effects := mir_verified_call_effects(native_module, native_module.signatures[call.callee])
+			if effects != call.effects
+				native_module.calls[index] = MirCall.new(callee: call.callee, argument_start: call.argument_start, argument_count: call.argument_count, effects: effects)
+			end
+		end
+		index += 1
+	end
 end
 
 # The resolver has already bound the package identity, including import aliases.
@@ -251,7 +277,7 @@ def mir_call_error(flow: MirFlow, native_module: MirModule, function: MirFunctio
 		return "MIR call declaration is missing"
 	end
 	signature := native_module.signatures[call.callee]
-	if call.effects != mir_call_effects(signature)
+	if call.effects != mir_verified_call_effects(native_module, signature)
 		return "MIR call effects or adapter differ"
 	end
 	if !mir_table_span_valid(call.argument_start, call.argument_count, native_module.arguments.size())

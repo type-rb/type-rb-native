@@ -1516,3 +1516,5 @@
 | Mutable empty Array without element evidence | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Mutable empty Array inference of scalar and managed types | accepts | accepts | matches reference | matches reference |
 | Untyped mutable Array cannot escape before inference | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Numeric Array inference across control branches | accepts | accepts | matches reference | matches reference |
+| Separate writes keep the first inferred element type | rejects as reference | rejects as reference | not reached | rejects as reference |
