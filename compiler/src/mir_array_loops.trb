@@ -216,9 +216,13 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 		mut instruction_index := block.instruction_start
 		while instruction_index < block.instruction_start + block.instruction_count
 			instruction := native_module.instructions[instruction_index]
-			# Only scalar operations and non-allocating Array access are admitted.
-			# Calls, pushes and managed allocation invalidate retained storage.
-			if (instruction.kind < 6 || instruction.kind > 9) && (instruction.kind < 20 || instruction.kind > 23)
+			# Only scalar operations, non-allocating Array access and verified
+			# effect-free calls can retain the Array header across the loop.
+			mut pure_call := false
+			if instruction.kind == 11 && instruction.payload >= 0 && instruction.payload < native_module.calls.size()
+				pure_call = native_module.calls[instruction.payload].effects == 0
+			end
+			if (instruction.kind < 6 || instruction.kind > 9) && (instruction.kind < 20 || instruction.kind > 23) && !pure_call
 				return mir_no_array_loop()
 			end
 			if instruction.kind == 22 && mir_loop_dominates(flow, body, member)
