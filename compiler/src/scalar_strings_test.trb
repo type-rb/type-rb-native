@@ -7,6 +7,23 @@ import { verify_mir } from mir_verifier
 import { describe, expect, test } from trb/std/test
 
 describe("Scalar String conversion MIR") do
+	test("dispatches Any scalar output through verified type tests") do
+		mut state := logical_checked_source("def main()\nvalues: Array<Any> := [1, \"word\", true, nil, 1.5]\nputs(values[0])\nputs(values[1])\nputs(values[2])\nputs(values[3])\nputs(values[4])\nend\n")
+		expect(check(state)).to_be_true()
+		mut tests := 0
+		mut extractions := 0
+		state.scalar_mir.instructions.each do |instruction|
+			if instruction.kind == 53
+				tests += 1
+			elsif instruction.kind == 54
+				extractions += 1
+			end
+		end
+		expect(tests).to_equal(20)
+		expect(extractions).to_equal(25)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+	end
+
 	test("formats special values and asymmetric rounding boundaries after erasing source") do
 		managed_mir_test_fixture("scalar-string-values", 1)
 	end

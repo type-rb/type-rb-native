@@ -69,7 +69,7 @@ def mir_puts_type(type_name: String): Boolean
 	if base != ""
 		return mir_puts_type(base)
 	end
-	if type_name == "String" || type_name == "Integer" || type_name == "Float" || type_name == "Boolean" || type_name == "Nil" || type_name == "Never"
+	if type_name == "Any" || type_name == "String" || type_name == "Integer" || type_name == "Float" || type_name == "Boolean" || type_name == "Nil" || type_name == "Never"
 		return true
 	end
 	return false
@@ -91,6 +91,34 @@ def mir_checked_puts(mut state: CompilerState, mut locals: CheckedLocals, argume
 	type_name := mir_semantic_type_name(state.scalar_mir, locals.mir_value_rows[value].type_id)
 	if type_name == "Nil"
 		return mir_puts_nil(state, locals, origin)
+	end
+	if type_name == "Any"
+		mir_control_prepare(state, locals)
+		if !mir_control_active(locals)
+			return checked_value("Void", 0, 9007199254740991, 0)
+		end
+		line := load_integer(state.token_lines, origin)
+		any_value := mir_checked_value(type_name, value, origin, 0)
+		join := mir_control_allocate(locals)
+		alternatives := ["Integer", "Float", "Boolean", "String", "Nil"]
+		mut index := 0
+		while index < alternatives.size()
+			alternative := alternatives[index]
+			mut next_branch :=- 1
+			if index + 1 < alternatives.size()
+				condition := mir_union_operation(state, locals, 53, any_value, alternative, "Boolean", origin)
+				next_branch = mir_control_branch(state, locals, condition, line)
+			end
+			payload := mir_union_operation(state, locals, 54, any_value, alternative, alternative, origin)
+			mir_checked_puts(state, locals, [checked_mir_value(payload)], origin)
+			mir_control_jump(state, locals, join, locals.count[0])
+			if next_branch >= 0
+				mir_control_enter(state, locals, next_branch, line)
+			end
+			index += 1
+		end
+		mir_control_enter(state, locals, join, line)
+		return checked_value("Void", 0, 9007199254740991, 0)
 	end
 	element := nullable_element(type_name)
 	if element != ""
