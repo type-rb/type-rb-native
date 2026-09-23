@@ -2,11 +2,11 @@ import { mir_object_dispatch_error } from object_dispatch_mir
 import { mir_object_initialization_error, mir_object_initializers_error } from object_initialization
 import { mir_global_initialization_error, mir_globals_error } from mir_globals
 import { mir_numeric_plans, mir_numeric_plans_equal } from mir_numeric
-import { mir_array_loops_equal, mir_function_array_loops } from mir_array_loops
+import { mir_array_loops_equal, mir_function_array_check_reuse, mir_function_array_loops } from mir_array_loops
 import { integer_string } from literals
 import { mir_definition_index, mir_identity_key } from mir_identities
 import { mir_semantic_type_name, mir_semantic_value_type, mir_types_error } from mir_types
-import { mir_function_roots, mir_root_plan_equal } from mir_roots
+import { mir_function_roots, mir_live_equal, mir_root_plan_equal } from mir_roots
 import { MirFlow, mir_build_flow, mir_flow_blocks, mir_flow_graph_error, mir_flow_type, mir_value_available } from mir_flow
 import { MirBlock, MirFunction, MirModule, mir_block_index, mir_origin_valid, mir_table_span_valid } from mir
 import { mir_scalar_guard } from mir_analysis
@@ -359,6 +359,9 @@ def verify_mir(native_module: MirModule, optimized: Boolean): String
 		if native_module.array_loops.size() != 0
 			return "MIR Array-loop plan count differs"
 		end
+		if native_module.array_check_reuse.size() != 0
+			return "MIR Array check-reuse plan count differs"
+		end
 		return ""
 	end
 	mut functions: Hash<String, Integer> := {}
@@ -440,6 +443,12 @@ def verify_mir(native_module: MirModule, optimized: Boolean): String
 	if optimized && native_module.array_loops.size() != native_module.functions.size()
 		return "MIR Array-loop plan count differs"
 	end
+	if !optimized && native_module.array_check_reuse.size() != 0
+		return "MIR input cannot supply Array check-reuse plans"
+	end
+	if optimized && native_module.array_check_reuse.size() != native_module.functions.size()
+		return "MIR Array check-reuse plan count differs"
+	end
 	if optimized
 		if native_module.root_plans.size() != native_module.functions.size()
 			return "MIR root plan count differs"
@@ -452,6 +461,9 @@ def verify_mir(native_module: MirModule, optimized: Boolean): String
 		while index < native_module.functions.size()
 			if !mir_array_loops_equal(native_module.array_loops[index], mir_function_array_loops(native_module, native_module.functions[index]))
 				return "MIR Array-loop plan differs"
+			end
+			if !mir_live_equal(native_module.array_check_reuse[index], mir_function_array_check_reuse(native_module, native_module.functions[index]))
+				return "MIR Array check-reuse plan differs"
 			end
 			if !mir_root_plan_equal(native_module.root_plans[index], mir_function_roots(native_module, native_module.functions[index]))
 				return "MIR live root plan differs"

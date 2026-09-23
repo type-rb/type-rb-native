@@ -141,6 +141,37 @@ describe("Managed Array MIR") do
 		end
 	end
 
+	test("reuses a checked assignment index only before a mutating right-hand side") do
+		source := "def grow(mut values: Array<Integer>): Integer\nvalues.push(3)\nreturn 9\nend\ndef main()\nmut values := [1, 2]\nvalues[-1] += 7\nvalues[-1] = grow(values)\nputs(values[0])\nputs(values[1])\nputs(values[2])\nend\n"
+		mut state := logical_checked_source(source)
+		expect(check(state)).to_be_true()
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		mut stores: Array<Integer> := []
+		mut index := 0
+		state.scalar_mir.instructions.each do |instruction|
+			if instruction.kind == 23
+				stores.push(index)
+			end
+			index += 1
+		end
+		expect(stores.size()).to_equal(2)
+		reuse := state.scalar_mir.array_check_reuse[1]
+		expect(reuse.include?(stores[0])).to_be_true()
+		expect(reuse.include?(stores[1])).to_be_false()
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe(qbe, control_test_output(emit_qbe(state)))
+			when Result::Ok(actual)
+				expect(actual).to_equal("1\n9\n3\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+		state.scalar_mir.array_check_reuse[1].push(stores[1])
+		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR Array check-reuse plan differs")
+	end
+
 	test("executes erased reordered Array MIR with collection at every allocating operation") do
 		root := Process.environment("TYPE_RB_NATIVE_ROOT")
 		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
