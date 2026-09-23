@@ -70,7 +70,12 @@
 | Top-level constant | accepts | accepts | matches reference | matches reference |
 | Symbol literal equality | accepts | accepts | matches reference | matches reference |
 | Named import alias and reachable file | accepts | accepts | matches reference | matches reference |
-| Reject unused local binding | accepts; reference rejects | accepts; reference rejects | differs | output differs |
+| Reject unused local binding | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject unused block parameter | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject unused enum pattern binding | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Reject unused catch binding | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Accept named discarded local and block parameter | accepts | accepts | matches reference | matches reference |
+| Count a closure capture as a local use | accepts | accepts | matches reference | matches reference |
 | Reject immutable binding assignment | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Reject record field rebinding | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Reject non-Boolean condition | rejects as reference | rejects as reference | not reached | rejects as reference |

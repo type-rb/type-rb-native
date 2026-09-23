@@ -1,6 +1,6 @@
 # Ordinary Native language coverage
 
-Status: the shared contract contains 1495 ordinary-path probes and 32 feature
+Status: the shared contract contains 1508 ordinary-path probes and 32 feature
 families derived from the pinned reference AST and public language/standard-library
 documentation. This is a test inventory with explicit gaps, not complete language
 support. [Issue #454](https://github.com/type-rb/type-rb-native/issues/454) owns
@@ -89,6 +89,17 @@ Direct catch-tail empty Arrays receive the known success type. Wider contextual
 inference and discarded untyped empty collections remain incomplete. Existing
 Hash/embedded-NUL display differences and diagnostic presentation remain visible
 in the shared observations. See [decision 0083](decisions/0083-builtin-result-values.md).
+
+## Authored local bindings
+
+Ordinary checking rejects unused local variables, block parameters, pattern
+bindings and catch bindings at their lexical scope boundary. An underscore
+where permitted by the syntax, or an underscore-prefixed name, explicitly
+discards an otherwise unused value. A closure capture counts as use.
+Interactive top-level bindings remain available for later submissions.
+Standard Result bindings retain their separate must-use
+diagnostic. The shared cases cover check, build, execution and REPL outcomes;
+broader shadowing and mutation combinations remain open.
 
 ## File and project global bindings
 

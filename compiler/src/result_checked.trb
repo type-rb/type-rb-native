@@ -100,12 +100,27 @@ def result_interactive_entry(state: CompilerState, locals: CheckedLocals): Boole
 	return load_string(state.function_names, function) == "main"
 end
 
-def result_scope_check(mut state: CompilerState, locals: CheckedLocals, start: Integer)
+def binding_scope_check(mut state: CompilerState, locals: CheckedLocals, start: Integer)
 	mut index := start
 	while index < locals.count[0]
-		origin := sparse_integer_at(locals.result_pending, index) - 1
-		if origin >= 0 && sparse_integer_at(locals.result_uses, index) == 0
-			diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "Result binding " + load_string(locals.names, index) + " must be used")
+		encoded := sparse_integer_at(locals.binding_use_obligations, index)
+		if encoded > 0 && sparse_integer_at(locals.binding_use_counts, index) == 0
+			origin := encoded / 8 - 1
+			use_kind := encoded % 8
+			name := load_string(locals.names, index)
+			if use_kind == 5
+				diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "Result binding " + name + " must be used")
+			else
+				mut kind := "local variable"
+				if use_kind == 2
+					kind = "block parameter"
+				elsif use_kind == 3
+					kind = "pattern binding"
+				elsif use_kind == 4
+					kind = "catch binding"
+				end
+				diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), kind + " " + name + " is not used")
+			end
 		end
 		index += 1
 	end
