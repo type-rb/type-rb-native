@@ -709,6 +709,7 @@
 | Boolean to_s rejects unexpected arguments | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Scalar String results cannot initialize a numeric binding | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Union scalar cases | accepts | accepts | matches reference | matches reference |
+| Union scalar output | accepts | accepts | matches reference | matches reference |
 | Union numeric normalization | accepts | accepts | matches reference | matches reference |
 | Union inferred array | accepts | accepts | matches reference | matches reference |
 | Union inferred hash | accepts | accepts | matches reference | output differs |
@@ -1113,7 +1114,7 @@
 | Invalid closed union array | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Invalid closed enum array | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Nominal values remain invalid Hash keys | rejects as reference | rejects as reference | not reached | rejects as reference |
-| Union output remains a builtin gap | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Newtype union representation output | accepts | accepts | matches reference | matches reference |
 | Literal types: scalar | accepts | accepts | matches reference | matches reference |
 | Literal types: negative | accepts | accepts | matches reference | matches reference |
 | Literal types: zero | accepts | accepts | matches reference | matches reference |

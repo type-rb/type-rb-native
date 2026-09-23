@@ -158,7 +158,8 @@ cover these combinations. The exact reference incorporates
 crashes, alias construction and representation conversion.
 
 Literal/class/interface representations and method-specific generic parameters
-retain their owning family dependencies. General union output and existing Hash
+retain their owning family dependencies. Printable scalar unions, including
+newtype representations, use verified MIR dispatch for output. Existing Hash
 presentation differences remain explicit observations. See
 [decision 0077](decisions/0077-newtype-mir.md).
 
