@@ -201,6 +201,41 @@ describe("Array loop CFG MIR") do
 		expect(verify_mir(state.scalar_mir, true).empty?()).to_be_false()
 	end
 
+	test("proves nested checked induction nonnegative without assuming an unknown seed") do
+		positive := "def scan(values: Array<Integer>, peer: Array<Integer>): Integer\nmut index := 0\nmut total := 0\nwhile index < values.size()\nmut other := index + 1\nwhile other < values.size()\ntotal += peer[other]\nother += 1\nend\nindex += 1\nend\nreturn total\nend\ndef main()\nputs(scan([1, 2, 3], [4, 5, 6]))\nend\n"
+		mut state := array_loop_mir_check(positive)
+		mut function_index := mir_function_index(state.scalar_mir, 0)
+		mut plan := state.scalar_mir.array_loops[function_index][0]
+		expect(plan.headers.size()).to_equal(1)
+		expect(plan.headers[0].nonnegative_accesses.size()).to_equal(1)
+		expect(control_test_output(emit_qbe(state)).include?("call $trbn_fail(l $trbn_bounds_error, l 30)")).to_be_true()
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe(qbe, control_test_output(emit_qbe(state)))
+			when Result::Ok(actual)
+				expect(actual).to_equal("17\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+		unknown := "def scan(values: Array<Integer>, peer: Array<Integer>, start: Integer): Integer\nmut index := 0\nmut total := 0\nwhile index < values.size()\nmut other := start\nwhile other < values.size()\ntotal += peer[other]\nother += 1\nend\nindex += 1\nend\nreturn total\nend\ndef main()\nputs(scan([1, 2, 3], [4, 5, 6], -1))\nend\n"
+		state = array_loop_mir_check(unknown)
+		function_index = mir_function_index(state.scalar_mir, 0)
+		plan = state.scalar_mir.array_loops[function_index][0]
+		expect(plan.headers.size()).to_equal(1)
+		expect(plan.headers[0].nonnegative_accesses.size()).to_equal(0)
+		if qbe != nil
+			case logical_run_qbe(qbe, control_test_output(emit_qbe(state)))
+			when Result::Ok(actual)
+				expect(actual).to_equal("63\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+
 	test("does not cache a peer Array rebound on the loop backedge") do
 		source := array_loop_mir_source("mut secondary := [1, 2, 3]\nwhile index < values.size()\ntotal += values[index] + secondary[index] + secondary[index]\nsecondary = values\nindex += 1\nend")
 		state := array_loop_mir_check(source)

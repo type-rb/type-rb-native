@@ -1,5 +1,6 @@
-import { ascii_code } from literals
+import { ascii_code, integer_string } from literals
 import { MirFunction, MirInstruction, MirModule, mir_block_index, mir_value_type } from mir
+import { MirFlow, mir_flow_definition_block, mir_flow_position } from mir_flow
 
 def mir_exact_integer_literal(
 		native_module: MirModule,
@@ -49,6 +50,116 @@ def mir_scalar_literal(text: String): Integer
 		return - 1
 	end
 	return value
+end
+
+# A true entry is a portable Integer known to be nonnegative on every reachable
+# path. Start optimistically and remove unsupported entries until loop-carried
+# parameters settle; checked additions preserve nonnegativity or terminate.
+record MirNonnegative
+	dense: Array<Integer>
+	sparse: Hash<String, Integer>
+end
+
+def mir_nonnegative_value(values: MirNonnegative, value: Integer): Boolean
+	if values.dense.size() > 0
+		if value >= 0 && value < values.dense.size()
+			return values.dense[value] == 1
+		end
+		return false
+	end
+	key := integer_string(value)
+	if !values.sparse.key?(key)
+		return false
+	end
+	return values.sparse[key] == 1
+end
+
+def mir_nonnegative_instruction(native_module: MirModule, instruction: MirInstruction, values: MirNonnegative): Boolean
+	if instruction.kind == 6
+		if instruction.payload >= 0 && instruction.payload < native_module.literal_texts.size()
+			return mir_scalar_literal(native_module.literal_texts[instruction.payload]) >= 0
+		end
+	end
+	if instruction.kind == 7 && (instruction.payload == 1 || instruction.payload == 13) && instruction.failure >= 0
+		if mir_nonnegative_value(values, instruction.first)
+			return mir_nonnegative_value(values, instruction.second)
+		end
+	end
+	return false
+end
+
+def mir_nonnegative_block_parameter(native_module: MirModule, function: MirFunction, flow: MirFlow, value: Integer, values: MirNonnegative): Boolean
+	owner := mir_flow_definition_block(flow, value)
+	if owner < 0 || owner >= function.block_count || flow.ranks[owner] < 0 || flow.predecessors[owner].size() == 0
+		return false
+	end
+	block := native_module.blocks[function.block_start + owner]
+	mut slot := 0
+	while slot < block.parameter_count && native_module.arguments[block.parameter_start + slot] != value
+		slot += 1
+	end
+	if slot == block.parameter_count
+		return false
+	end
+	mut edge := 0
+	while edge < flow.incoming_starts[owner].size()
+		incoming := native_module.arguments[flow.incoming_starts[owner][edge] + slot]
+		if !mir_nonnegative_value(values, incoming)
+			return false
+		end
+		edge += 1
+	end
+	return true
+end
+
+def mir_nonnegative_values(native_module: MirModule, function: MirFunction, flow: MirFlow): MirNonnegative
+	mut dense: Array<Integer> := []
+	mut sparse: Hash<String, Integer> := {}
+	mut integers: Array<Integer> := []
+	if flow.dense_types.size() > 0
+		mut value := 0
+		while value < flow.dense_types.size()
+			mut proven := 0
+			if flow.dense_types[value] == 1
+				proven = 1
+				integers.push(value)
+			end
+			dense.push(proven)
+			value += 1
+		end
+	else
+		native_module.values.each do |value|
+			if value.function_id == function.id && value.type_id == 1
+				sparse[integer_string(value.id)] = 1
+				integers.push(value.id)
+			end
+		end
+	end
+	mut values := MirNonnegative.new(dense: dense, sparse: sparse)
+	mut changed := true
+	while changed
+		changed = false
+		integers.each do |value|
+			if mir_nonnegative_value(values, value)
+				position := mir_flow_position(flow, value)
+				mut proven := false
+				if position >= 0
+					proven = mir_nonnegative_instruction(native_module, native_module.instructions[position], values)
+				else
+					proven = mir_nonnegative_block_parameter(native_module, function, flow, value, values)
+				end
+				if !proven
+					if values.dense.size() > 0
+						values.dense[value] = 0
+					else
+						values.sparse[integer_string(value)] = 0
+					end
+					changed = true
+				end
+			end
+		end
+	end
+	return values
 end
 
 # A nonzero guard is an exclusive power-of-two bound on every Integer
