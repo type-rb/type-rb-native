@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { pathToFileURL } from 'node:url';
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, readFileSync } from 'node:fs';
 
 const staticDocumentationTools = new Set([
   'tools/capability-map-check.mjs',
@@ -116,6 +116,34 @@ const pullRequestLane = path =>
     'tools/check-conformance-sources.py'].includes(path) ||
   (cliInputs.has(path) && !completeCliInputs.has(path)) || toolingTests.has(path);
 export const gates = ['complete', 'tiered'];
+
+// Only an unchanged recovery harness may narrow the expensive per-module
+// mutations. Unknown paths and source identities restore the full control set.
+export function recoveryModules(paths, moduleNames) {
+  const names = new Set();
+  for (const path of paths) {
+    if (documentation(path)) continue;
+    const match = /^compiler\/src\/([a-z][a-z0-9_]*)\.trb$/.exec(path);
+    if (!match) return 'all';
+    const name = match[1];
+    if (moduleNames.has(name)) {
+      if (name !== 'compiler') names.add(name);
+    } else if (!name.endsWith('_test')) {
+      return 'all';
+    }
+  }
+  return names.size ? [...names].sort().join(',') : 'none';
+}
+
+function recoveryModuleNames() {
+  const layout = readFileSync(new URL('../src/compiler_recovery_layout.trb', import.meta.url), 'utf8');
+  const names = [...layout.matchAll(/RecoveryCompilerModule\.new\(name: "([a-z][a-z0-9_]*)"/g)]
+    .map(match => match[1]);
+  if (!names.includes('compiler') || new Set(names).size !== names.length) {
+    throw new Error('Recovery module inventory is missing or duplicated');
+  }
+  return new Set(names);
+}
 
 export function classify(paths, draft, costMode = 'strict', gate = 'complete') {
   if (!['strict', 'mir-migration'].includes(costMode)) throw new Error('Invalid compiler cost mode');
@@ -238,5 +266,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       process.env.NATIVE_MIR_COST_MODE ?? 'strict', gate))) {
       console.log(`${key}=${value}`);
     }
+    if (mode === 'push') console.log(`recovery_modules=${recoveryModules(paths, recoveryModuleNames())}`);
   }
 }

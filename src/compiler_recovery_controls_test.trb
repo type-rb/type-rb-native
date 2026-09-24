@@ -1,4 +1,4 @@
-import { RecoveryCommandControl, recovery_control_limit, run_recovery_command_controls } from compiler_recovery_controls
+import { RecoveryCommandControl, recovery_control_limit, recovery_module_selection, run_recovery_command_controls } from compiler_recovery_controls
 import { allocate_compiler_recovery_workspace, discard_empty_compiler_recovery_workspace } from compiler_recovery_workspace
 import trb/std/process
 import trb/std/result
@@ -67,6 +67,38 @@ def _control_fixture(root: String, limit: Integer, failures: Boolean): Result<Bo
 end
 
 describe("Bounded compiler recovery controls") do
+	test("defaults to every dependency and rejects stale or duplicate delta selections") do
+		names := ["compiler", "lexer", "parser", "mir"]
+		["", "all"].each do |scope|
+			case recovery_module_selection(scope, names)
+			when Result::Ok(selected)
+				expect(selected).to_equal(["lexer", "parser", "mir"])
+			when Result::Err(_error)
+				expect(false).to_be_true()
+			end
+		end
+		case recovery_module_selection("none", names)
+		when Result::Ok(selected)
+			expect(selected.empty?()).to_be_true()
+		when Result::Err(_error)
+			expect(false).to_be_true()
+		end
+		case recovery_module_selection("mir,lexer", names)
+		when Result::Ok(selected)
+			expect(selected).to_equal(["mir", "lexer"])
+		when Result::Err(_error)
+			expect(false).to_be_true()
+		end
+		["compiler", "unknown", "lexer,lexer", "lexer,unknown", ",lexer", "lexer,", "lexer,,mir"].each do |scope|
+			case recovery_module_selection(scope, names)
+			when Result::Ok(_selected)
+				expect(false).to_be_true()
+			when Result::Err(error)
+				expect(error.start_with?("invalid recovery module selection: ")).to_be_true()
+			end
+		end
+	end
+
 	test("keeps all workers and deterministic failures within the configured bound") do
 		root := Process.environment("TYPE_RB_NATIVE_ROOT")
 		if root != nil

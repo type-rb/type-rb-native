@@ -3,15 +3,17 @@ name: Main validation
 on:
   push:
     branches: [main]
+  schedule:
+    # 03:17 JST: retain a full per-module recovery run each day.
+    - cron: '17 18 * * *'
 
 permissions:
   contents: read
 
-# Tiered PRs make this the complete-lane authority. One validation runs at a
-# time; a newer pending push replaces an older pending one, and the planner
-# covers every change since the last fully validated main commit.
+# Pushes validate the delta from the last passing main commit. A separate
+# scheduled run validates every recovery module even during busy push periods.
 concurrency:
-  group: native-main-validation
+  group: native-main-validation-${{ github.event_name }}
   cancel-in-progress: false
 
 env:
@@ -31,6 +33,7 @@ jobs:
       memory: ${{ steps.plan.outputs.memory }}
       tooling: ${{ steps.plan.outputs.tooling }}
       cli: ${{ steps.plan.outputs.cli }}
+      recovery_modules: ${{ steps.plan.outputs.recovery_modules }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -42,9 +45,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if test "$GITHUB_EVENT_NAME" = schedule; then
+            echo "sha=$(git hash-object -t tree /dev/null)" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           base=
           for sha in $(gh run list --repo "$GITHUB_REPOSITORY" --workflow push-validation.yml \
-              --branch main --event push --status success --limit 50 --json headSha --jq '.[].headSha'); do
+              --branch main --status success --limit 50 --json headSha --jq '.[].headSha'); do
             if git merge-base --is-ancestor "$sha" "$GITHUB_SHA"; then
               base=$sha
               break
@@ -65,6 +72,7 @@ jobs:
     uses: ./.github/workflows/native-validation.yml
     with:
       cost_mode: mir-migration
+      recovery_modules: ${{ needs.plan.outputs.recovery_modules }}
 
   targets:
     needs: plan

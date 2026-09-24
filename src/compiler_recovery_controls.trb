@@ -25,6 +25,32 @@ def recovery_control_limit(value: String): Result<Integer, String>
 	return Result<Integer, String>::Err("TYPE_RB_NATIVE_RECOVERY_JOBS must be an integer from 1 to 4")
 end
 
+# The default remains every module; a CI delta may select only current modules.
+def recovery_module_selection(value: String, names: Array<String>): Result<Array<String>, String>
+	mut selected: Array<String> := []
+	if value.empty?() || value == "all"
+		names.each do |name|
+			if name != "compiler"
+				selected.push(name)
+			end
+		end
+		return Result<Array<String>, String>::Ok(selected)
+	end
+	if value == "none"
+		return Result<Array<String>, String>::Ok(selected)
+	end
+	if value.start_with?(",") || value.end_with?(",") || value.include?(",,")
+		return Result<Array<String>, String>::Err("invalid recovery module selection: " + value)
+	end
+	value.split(",").each do |name|
+		if name == "compiler" || !names.include?(name) || selected.include?(name)
+			return Result<Array<String>, String>::Err("invalid recovery module selection: " + name)
+		end
+		selected.push(name)
+	end
+	return Result<Array<String>, String>::Ok(selected)
+end
+
 # Collect every admitted result in input order, including failures after a peer fails.
 def collect_recovery_controls(results: Array<Result<Boolean, String>>): Result<Boolean, String>
 	mut errors := ""

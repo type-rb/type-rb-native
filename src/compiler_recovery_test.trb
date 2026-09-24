@@ -1,5 +1,5 @@
 import { verify_recovery_source_transport, verify_recovery_transport_runtime } from compiler_recovery_transport
-import { RecoveryCommandControl, recovery_control_limit, collect_recovery_controls, run_recovery_command_controls } from compiler_recovery_controls
+import { RecoveryCommandControl, recovery_control_limit, recovery_module_selection, collect_recovery_controls, run_recovery_command_controls } from compiler_recovery_controls
 import { compiler_recovery_mutations } from compiler_recovery_mutations
 import { decode_recovery_managed_snapshot, decode_bootstrap_snapshot } from recovery_managed_snapshot
 import { build_compiler_recovery_executable, build_recovery_managed_executable } from recovery_managed_toolchain
@@ -1428,6 +1428,7 @@ record RecoveryModuleControl
 	mutations: Array<Array<String>>
 	canonical_qbe: String
 	index: Integer
+	check_mutation: Boolean
 end
 
 # Each task owns its mutation, missing-module and malformed-module directories.
@@ -1442,26 +1443,28 @@ def _recovery_verify_module_control(control: RecoveryModuleControl): Result<Bool
 	sources.each do |source|
 		changed.push(source)
 	end
-	mut found := false
-	mutations.each do |mutation|
-		if mutation[0] == names[index]
-			changed[index] = try _recovery_replace_once(sources[index], mutation[1], mutation[2])
-			found = true
+	if control.check_mutation
+		mut found := false
+		mutations.each do |mutation|
+			if mutation[0] == names[index]
+				changed[index] = try _recovery_replace_once(sources[index], mutation[1], mutation[2])
+				found = true
+			end
 		end
+		if !found
+			return Result<Boolean, String>::Err("missing compiler module mutation: " + names[index])
+		end
+		directory := workspace + "/compiler-source-compiler-" + names[index] + "-mutation"
+		try _prepare_compiler_closure(directory, names, changed, "")
+		emission := try _recovery_process(executable, ["emit-qbe", directory + "/compiler.trb"])
+		if emission.status != 0 || emission.stdout.empty?() || !emission.stderr.empty?()
+			return Result<Boolean, String>::Err(names[index] + " mutation emission failed: " + emission.stderr)
+		end
+		if emission.stdout == control.canonical_qbe
+			return Result<Boolean, String>::Err(names[index] + " mutation did not change compiler QBE")
+		end
+		try _recovery_require_no_intermediates(directory)
 	end
-	if !found
-		return Result<Boolean, String>::Err("missing compiler module mutation: " + names[index])
-	end
-	directory := workspace + "/compiler-source-compiler-" + names[index] + "-mutation"
-	try _prepare_compiler_closure(directory, names, changed, "")
-	emission := try _recovery_process(executable, ["emit-qbe", directory + "/compiler.trb"])
-	if emission.status != 0 || emission.stdout.empty?() || !emission.stderr.empty?()
-		return Result<Boolean, String>::Err(names[index] + " mutation emission failed: " + emission.stderr)
-	end
-	if emission.stdout == control.canonical_qbe
-		return Result<Boolean, String>::Err(names[index] + " mutation did not change compiler QBE")
-	end
-	try _recovery_require_no_intermediates(directory)
 
 	missing := workspace + "/compiler-source-compiler-missing-" + names[index]
 	try _prepare_compiler_closure(missing, names, sources, names[index])
@@ -1509,6 +1512,7 @@ def _recovery_verify_compiler_source_closure(
 	sources := closure.contents
 	mutations := compiler_recovery_mutations()
 	limit := try recovery_control_limit(_recovery_environment("TYPE_RB_NATIVE_RECOVERY_JOBS"))
+	selected := try recovery_module_selection(_recovery_environment("TYPE_RB_NATIVE_RECOVERY_MODULES"), names)
 	mut controls: Array<RecoveryModuleControl> := []
 	names.each.with_index do |name, index|
 		if name != "compiler"
@@ -1519,6 +1523,7 @@ def _recovery_verify_compiler_source_closure(
 					mutations: mutations,
 					canonical_qbe: canonical.stdout,
 					index: index,
+					check_mutation: selected.include?(name),
 				))
 		end
 	end

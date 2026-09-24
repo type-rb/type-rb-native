@@ -44,6 +44,15 @@ and closes it after a later run passes. Fix or revert main before merging more
 feature PRs; development on branches continues. Release, seed and milestone
 decisions use a main commit with a passing `Main validation` run.
 
+For an ordinary main push, the expensive per-module recovery mutations run for
+compiler modules changed since the last passing main validation. The canonical
+compiler emission, missing/malformed controls for every module, all other
+recovery stages, and the independent compiler suite still run. An unknown source
+path or recovery-harness change selects every module. A scheduled main run each
+day selects every module and all complete lanes, so unchanged modules retain a
+daily mutation check. PRs that require complete recovery also select every
+module. The selected module names are recorded in the main plan output.
+
 ## Required authorities
 
 | Changed surface | Required PR validation |
@@ -150,12 +159,13 @@ Optional local suites without recovery variables remain partial evidence. Do
 not merge while required PR checks are pending. Merge each coherent PR once its
 acceptance passes instead of stacking dependent PRs behind a long run.
 
-`Main validation` runs the complete Native, target, CLI, memory, tooling and
+`Main validation` runs the applicable Native, target, CLI, memory, tooling and
 documentation lanes on main. It plans the two-dot delta from the most recent
 main commit whose `Main validation` passed (the empty tree when none is an
 ancestor), so a failed or skipped run's changes are planned again until a run
-passes. One run executes at a time; a newer pending push replaces an older
-pending one, which batches rapid merges without losing their changes.
+passes. One push run executes at a time; a newer pending push replaces an older
+pending one, which batches rapid merges without losing their changes. Scheduled
+full runs use a separate concurrency group so a push cannot replace them.
 Unknown or invalid revisions fail planning rather than skip checks. Manual
 workflow controls remain available.
 
@@ -232,8 +242,9 @@ diagnostic phase durations, not controlled measurements.
 The B0-to-B3 recovery and B1-to-B4 ordinary generation chains stay sequential.
 Independent generation commands and per-module boundary controls run with
 `TYPE_RB_NATIVE_RECOVERY_JOBS` concurrency (default `2`, accepted `1` to `4`;
-hosted CI uses `4`). Each module control keeps its mutation, missing-module and
-malformed-module checks. Each root invocation owns a fresh `mktemp -d` workspace
+hosted CI uses `4`). Each module keeps its missing-module and malformed-module
+checks; selected modules also run the QBE mutation check. Each root invocation
+owns a fresh `mktemp -d` workspace
 validated by `tools/recovery-workspace.mjs` before later consumers use it and
 before cleanup. Do not remove generation identity, mutation or differential
 checks merely because they are slow; measure phase costs before rescheduling.
