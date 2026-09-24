@@ -5,14 +5,14 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { acceptance, changedPaths, classify, toolingTests, quickToolingTests, compilerTestInputs, cliInputs } from './ci-plan.mjs';
+import { acceptance, changedPaths, classify, mainAcceptance, toolingTests, quickToolingTests, compilerTestInputs, cliInputs } from './ci-plan.mjs';
 
 function results(plan) {
   return {
     plan: { result: 'success', outputs: Object.fromEntries(
       Object.entries(plan).map(([key, value]) => [key, String(value)])) },
     ...Object.fromEntries(Object.entries({ quick: plan.quick,
-      documentation: plan.documentation, native: !plan.draft && plan.code, targets: !plan.draft && plan.code,
+      documentation: plan.documentation, native: !plan.draft && plan.code && plan.complete, targets: !plan.draft && plan.code,
       memory: !plan.draft && plan.memory, performance: !plan.draft && plan.performance,
       tooling: plan.tooling, cli: !plan.draft && plan.cli,
     }).map(([key, value]) => [key, { result: value ? 'success' : 'skipped' }])),
@@ -55,7 +55,7 @@ test('integration explicitly passes migration mode while standalone workflows re
     const workflow = readFileSync(new URL(`../.github/workflows/${name}.yml`, import.meta.url), 'utf8');
     assert.match(workflow, /^env:\n[\s\S]*?  NATIVE_MIR_COST_MODE: mir-migration$/m);
     const calls = [...workflow.matchAll(/    uses: \.\/\.github\/workflows\/(native-validation|linux-amd64-targets|runtime-worker-memory)\.yml\n([^]*?)(?=\n  \w|$)/g)];
-    assert.equal(calls.length, name === 'pull-request' ? 3 : 2);
+    assert.equal(calls.length, 3);
     for (const call of calls) assert.match(call[2], /    with:\n      cost_mode: mir-migration/);
   }
   for (const name of ['native-validation', 'linux-amd64-targets', 'runtime-worker-memory']) {
@@ -187,7 +187,7 @@ test('documentation-only PRs do not run compiler or performance matrices', () =>
   const plan = classify(['README.md', 'docs/index.html', 'results/a.json',
     'tools/native-mir-guarded-add/README.md'], false);
   assert.deepEqual(plan, { code: false, quick: false, documentation: true,
-    memory: false, performance: false, draft: false, tooling: false, cli: false });
+    memory: false, performance: false, draft: false, tooling: false, cli: false, complete: false });
   assert.deepEqual(acceptance(results(plan)), []);
 });
 test('ordinary language cases use a separate reference oracle and Go-free CLI checks', () => {
@@ -233,7 +233,7 @@ test('static documentation and evidence tools do not run compiler matrices', () 
     '.github/workflows/documentation.yml']) {
     const plan = classify([tool, 'docs/capabilities/benchmarks/data.js'], false);
     assert.deepEqual(plan, { code: false, quick: false, documentation: true,
-      memory: false, performance: false, draft: false, tooling: false, cli: false });
+      memory: false, performance: false, draft: false, tooling: false, cli: false, complete: false });
     assert.deepEqual(acceptance(results(plan)), []);
     assert.equal(classify([`${tool}.unknown`], false).code, true);
     assert.equal(classify([tool, 'compiler/gate4/src/compiler.trb'], false).performance, true);
@@ -253,7 +253,7 @@ test('planning-only maintenance uses its unconditional tests, not compiler matri
   for (const path of ['tools/ci-plan.mjs', 'tools/ci-plan-test.mjs']) {
     const plan = classify([path, 'docs/evidence-retention.md', 'results/historical/raw.tsv'], false);
     assert.deepEqual(plan, { code: false, quick: false, documentation: true,
-      memory: false, performance: false, draft: false, tooling: false, cli: false });
+      memory: false, performance: false, draft: false, tooling: false, cli: false, complete: false });
     assert.deepEqual(acceptance(results(plan)), []);
     for (const failure of ['failure', 'cancelled', 'skipped', undefined]) {
       const needs = results(plan);
@@ -381,7 +381,7 @@ test('CLI classifies real historical-to-documentation and current-project rename
         env: { ...process.env, NATIVE_MIR_COST_MODE: mode } });
       assert.deepEqual(Object.fromEntries(output.trim().split('\n').map(row => row.split('='))),
         { code: 'true', quick: 'true', documentation: 'true', memory: 'true', performance: String(mode === 'strict'),
-          draft: 'false', tooling: 'true', cli: 'true' });
+          draft: 'false', tooling: 'true', cli: 'true', complete: 'true' });
     }
     assert.throws(() => execFileSync(process.execPath, args, { cwd: directory, encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, NATIVE_MIR_COST_MODE: 'invalid' } }),
@@ -508,8 +508,9 @@ test('synthetic tooling tests have an executable authority without compiler rebu
 test('main uses the same complete path classifier and Pages PR checks are not duplicated', () => {
   const main = readFileSync(new URL('../.github/workflows/push-validation.yml', import.meta.url), 'utf8');
   assert(main.includes('node tools/ci-plan.mjs "$BASE_SHA" "$HEAD_SHA" false push'));
-  assert(main.includes('BASE_SHA: ${{ github.event.before }}'));
-  for (const job of ['native', 'memory', 'tooling', 'documentation']) assert(main.includes(`  ${job}:`));
+  assert(main.includes('BASE_SHA: ${{ steps.base.outputs.sha }}'));
+  assert(!main.includes('github.event.before'), 'main compares against its last fully validated commit');
+  for (const job of ['native', 'targets', 'cli', 'memory', 'tooling', 'documentation']) assert(main.includes(`  ${job}:`));
   for (const name of ['native-validation', 'runtime-worker-memory', 'documentation']) {
     const source = readFileSync(new URL(`../.github/workflows/${name}.yml`, import.meta.url), 'utf8');
     assert(!source.includes('  push:'), `${name} must not independently rerun the same main validation`);
@@ -576,7 +577,7 @@ test('known compiler test modules retain correctness without unchanged-binary me
   for (const file of compilerTestInputs) {
     const plan = classify([file], false);
     assert.deepEqual(plan, { code: true, quick: true, documentation: false,
-      memory: false, performance: false, draft: false, tooling: true, cli: true });
+      memory: false, performance: false, draft: false, tooling: true, cli: true, complete: true });
     assert.deepEqual(acceptance(results(plan)), []);
     for (const job of ['quick', 'native', 'targets', 'tooling', 'cli']) {
       for (const state of ['failure', 'cancelled', 'skipped', undefined]) {
@@ -619,7 +620,7 @@ test('synthetic project and policy tests retain Linux without building the refer
     assert(toolingStep.includes(`sh ${file}`));
     const plan = classify([file], false);
     assert.deepEqual(plan, { code: false, quick: true, documentation: false,
-      memory: false, performance: false, draft: false, tooling: true, cli: false });
+      memory: false, performance: false, draft: false, tooling: true, cli: false, complete: false });
     assert.deepEqual(acceptance(results(plan)), []);
     for (const job of ['quick', 'tooling']) {
       for (const state of ['failure', 'cancelled', 'skipped', undefined]) {
@@ -650,5 +651,159 @@ test('controller-only test edits keep both Linux and macOS execution', () => {
     assert.equal(plan.quick, false);
     assert.equal(plan.tooling, true);
     assert.deepEqual(acceptance(results(plan)), []);
+  }
+});
+
+test('the tiered PR gate defers complete lanes only for ordinary compiler, CLI and conformance edits', () => {
+  for (const paths of [
+    ['compiler/src/compiler.trb'],
+    ['compiler/src/new_mir_pass.trb', 'src/compiler_recovery_layout.trb', 'src/compiler_recovery_mutations.trb'],
+    ['compiler/conformance/valid/new.trb', 'compiler/cli/repl.trb', 'tools/native-cli-test.py'],
+    ['compiler/cli/main.trb', 'tools/recovery_stage_test.py', 'docs/architecture.md'],
+  ]) {
+    const tiered = classify(paths, false, 'mir-migration', 'tiered');
+    assert.deepEqual(tiered, { ...classify(paths, false, 'mir-migration'), complete: false }, paths.join());
+    const needs = results(tiered);
+    assert.equal(needs.native.result, 'skipped');
+    assert.deepEqual(acceptance(needs), []);
+    for (const job of ['quick', 'targets', 'cli']) {
+      if (needs[job].result !== 'success') continue;
+      for (const result of ['failure', 'cancelled', 'skipped', undefined]) {
+        assert.notDeepEqual(acceptance({ ...needs, [job]: { result } }), [], `${paths}: ${job}: ${result}`);
+      }
+    }
+    assert.notDeepEqual(acceptance({ ...needs, native: { result: 'success' } }), [],
+      'a deferred authority cannot silently run');
+  }
+  for (const other of ['src/recovery_managed_mir.trb', 'src/compiler_recovery_test.trb',
+    'fixtures/recovery/programs/x.trb', 'corpus/recovery-scalar/a/main.trb', 'benchmarks/benchmarksgame/a.trb',
+    'TYPE_RB_REVISION', 'compatibility/current.json', 'trbn', 'tools/build-native.sh',
+    'tools/native-bootstrap-test.py', 'tools/check-bootstrap-snapshot.sh', 'tools/recovery-bootstrap.sh',
+    '.github/workflows/native-validation.yml', '.github/workflows/pull-request.yml',
+    'tools/ci-run-suites.mjs', 'tools/linux-amd64-targets.sh', 'unknown/file']) {
+    const plan = classify(['compiler/src/compiler.trb', other], false, 'mir-migration', 'tiered');
+    assert.equal(plan.complete, true, other);
+    assert.deepEqual(plan, classify(['compiler/src/compiler.trb', other], false, 'mir-migration'), other);
+    const needs = results(plan);
+    assert.equal(needs.native.result, 'success');
+    assert.notDeepEqual(acceptance({ ...needs, native: { result: 'skipped' } }), [], other);
+  }
+  assert.equal(classify(['README.md'], false, 'mir-migration', 'tiered').complete, false);
+  assert.equal(classify(['compiler/src/compiler.trb'], false, 'strict', 'tiered').performance, false,
+    'comparisons need the complete lanes they wait for');
+  assert.equal(classify(['compiler/src/compiler.trb'], false, 'strict').performance, true);
+  for (const gate of ['', 'TIERED', 'post-merge', null]) {
+    assert.throws(() => classify(['compiler/src/compiler.trb'], false, 'mir-migration', gate), /Invalid CI gate/);
+  }
+});
+
+test('PR workflows pass the tiered scope while main runs every complete lane', () => {
+  const entry = readFileSync(new URL('../.github/workflows/pull-request.yml', import.meta.url), 'utf8');
+  const main = readFileSync(new URL('../.github/workflows/push-validation.yml', import.meta.url), 'utf8');
+  const cli = readFileSync(new URL('../.github/workflows/native-cli.yml', import.meta.url), 'utf8');
+  const targets = readFileSync(new URL('../.github/workflows/linux-amd64-targets.yml', import.meta.url), 'utf8');
+  assert.match(entry, /^env:\n[\s\S]*?  NATIVE_CI_GATE: tiered$/m);
+  assert(!main.includes('NATIVE_CI_GATE'), 'main always plans the complete lanes');
+  assert(entry.includes('complete: ${{ steps.plan.outputs.complete }}'));
+  const scope = "scope: ${{ needs.plan.outputs.complete == 'true' && 'complete' || 'pull-request' }}";
+  for (const job of ['cli', 'targets']) {
+    const block = entry.match(new RegExp(`^  ${job}:\\n([\\s\\S]*?)(?=^  [a-z]+:)`, 'm'))?.[1];
+    assert(block?.includes(scope), `${job} must follow the planned scope`);
+  }
+  const native = entry.match(/^  native:\n([\s\S]*?)(?=^  [a-z]+:)/m)?.[1];
+  assert(native?.includes("needs.plan.outputs.complete == 'true'"));
+  const quick = entry.match(/^  quick:\n([\s\S]*?)(?=^  documentation:)/m)?.[1];
+  assert(quick.includes('tools/check-bootstrap-snapshot.sh "$RUNNER_TEMP/trb"'),
+    'the snapshot-v4 subset check must run before merge');
+  const [build, cache] = cli.split('\n  cache:\n');
+  assert(build.includes('python3 tools/check-conformance-sources.py .trb/bootstrap/core/compiler'));
+  assert(cache.startsWith("    # Tiered PRs leave repeated rebuilds to Main validation.\n    if: inputs.scope != 'pull-request'\n"));
+  assert.match(cli, /workflow_call:\n    inputs:\n      scope:[\s\S]*?default: complete/);
+  assert.match(targets, /      scope:\n[^]*?default: complete\n  workflow_dispatch:/);
+  for (const job of ['regress-linux-arm64', 'compare-target-neutral-evidence']) {
+    const block = targets.match(new RegExp(`^  ${job}:\\n([\\s\\S]*?)(?=^    runs-on:|^    needs:)`, 'm'))?.[1];
+    assert(block?.includes("if: inputs.scope != 'pull-request'"), job);
+  }
+  assert(!targets.match(/^  verify-linux-amd64:\n([\s\S]*?)(?=^    runs-on:)/m)[1].includes('if:'),
+    'x64 target verification stays in the PR gate');
+  for (const call of ['uses: ./.github/workflows/native-validation.yml', 'uses: ./.github/workflows/native-cli.yml',
+    'uses: ./.github/workflows/linux-amd64-targets.yml']) assert(main.includes(call));
+  assert(!/native-cli\.yml\n    with:\n      scope/.test(main), 'main CLI keeps the complete default');
+  assert.match(main, /concurrency:\n  group: native-main-validation\n  cancel-in-progress: false/);
+  assert(main.includes('--workflow push-validation.yml') && main.includes('--status success'));
+  assert(main.includes('git merge-base --is-ancestor "$sha" "$GITHUB_SHA"'));
+  assert(main.includes('git hash-object -t tree /dev/null'), 'no validated ancestor plans everything');
+  assert(main.includes('needs: [plan, native, targets, cli, tooling, memory, documentation]'));
+  assert(main.includes('node tools/ci-plan.mjs accept-main'));
+  assert(main.includes('gh issue create') && main.includes('gh issue close'));
+});
+
+test('main acceptance requires every lane planned for changes since the last validated commit', () => {
+  const lanes = { code: true, documentation: true, memory: true, tooling: true, cli: true };
+  const needs = {
+    plan: { result: 'success', outputs: Object.fromEntries(Object.entries(lanes).map(([k, v]) => [k, String(v)])) },
+    ...Object.fromEntries(['native', 'targets', 'cli', 'memory', 'tooling', 'documentation']
+      .map(job => [job, { result: 'success' }])),
+  };
+  assert.deepEqual(mainAcceptance(needs), []);
+  for (const job of ['native', 'targets', 'cli', 'memory', 'tooling', 'documentation']) {
+    for (const result of ['failure', 'cancelled', 'skipped', undefined]) {
+      assert.notDeepEqual(mainAcceptance({ ...needs, [job]: { result } }), [], `${job}: ${result}`);
+    }
+  }
+  const documentation = structuredClone(needs);
+  for (const key of ['code', 'memory', 'tooling', 'cli']) documentation.plan.outputs[key] = 'false';
+  for (const job of ['native', 'targets', 'cli', 'memory', 'tooling']) documentation[job].result = 'skipped';
+  assert.deepEqual(mainAcceptance(documentation), []);
+  documentation.native.result = 'success';
+  assert.notDeepEqual(mainAcceptance(documentation), [], 'planned and executed lanes must agree');
+  const malformed = structuredClone(needs);
+  delete malformed.plan.outputs.cli;
+  assert.notDeepEqual(mainAcceptance(malformed), []);
+  assert.notDeepEqual(mainAcceptance({ ...needs, plan: { result: 'failure' } }), []);
+  assert.notDeepEqual(mainAcceptance({}), []);
+});
+
+test('the planner CLI reads the PR gate, ignores it on main and reports deferred lanes', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'native-ci-gate-test-'));
+  const git = (args, input) => execFileSync('git', [
+    '-c', 'user.name=CI Test', '-c', 'user.email=ci-test@example.invalid',
+    '-c', 'commit.gpgsign=false', ...args,
+  ], { cwd: directory, encoding: 'utf8', input }).trim();
+  const planner = fileURLToPath(new URL('./ci-plan.mjs', import.meta.url));
+  try {
+    git(['init']);
+    const emptyTree = git(['mktree'], '');
+    const base = git(['commit-tree', emptyTree], 'Base\n');
+    const blob = git(['hash-object', '-w', '--stdin'], 'Synthetic\n');
+    const src = git(['mktree'], `100644 blob ${blob}\tcompiler.trb\n`);
+    const compiler = git(['mktree'], `040000 tree ${src}\tsrc\n`);
+    const head = git(['commit-tree', git(['mktree'], `040000 tree ${compiler}\tcompiler\n`), '-p', base], 'Code\n');
+    const plan = (args, gate) => Object.fromEntries(execFileSync(process.execPath, [planner, ...args], {
+      cwd: directory, encoding: 'utf8',
+      env: { ...process.env, NATIVE_MIR_COST_MODE: 'mir-migration', ...(gate ? { NATIVE_CI_GATE: gate } : {}) },
+    }).trim().split('\n').map(row => row.split('=')));
+    assert.equal(plan([base, head, 'false']).complete, 'true', 'an unset gate stays complete');
+    assert.equal(plan([base, head, 'false'], 'tiered').complete, 'false');
+    assert.equal(plan([base, head, 'false', 'push'], 'tiered').complete, 'true');
+    assert.equal(plan([emptyTree, head, 'false', 'push']).code, 'true', 'the empty tree plans every path');
+    assert.throws(() => plan([base, head, 'false'], 'invalid'));
+
+    const summary = join(directory, 'summary.md');
+    const needs = results(classify(['compiler/src/compiler.trb'], false, 'mir-migration', 'tiered'));
+    const output = execFileSync(process.execPath, [planner, 'accept'], {
+      encoding: 'utf8', env: { ...process.env, NEEDS_JSON: JSON.stringify(needs), GITHUB_STEP_SUMMARY: summary },
+    });
+    assert.match(output, /Pre-merge lanes passed/);
+    assert.match(readFileSync(summary, 'utf8'), /run on main after merge/);
+    const complete = results(classify(['compiler/src/compiler.trb'], false, 'mir-migration'));
+    assert.doesNotMatch(execFileSync(process.execPath, [planner, 'accept'], {
+      encoding: 'utf8', env: { ...process.env, NEEDS_JSON: JSON.stringify(complete), GITHUB_STEP_SUMMARY: '' },
+    }), /Pre-merge lanes passed/);
+    assert.throws(() => execFileSync(process.execPath, [planner, 'accept-main'], {
+      encoding: 'utf8', stdio: 'pipe', env: { ...process.env, NEEDS_JSON: '{}' },
+    }));
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
   }
 });

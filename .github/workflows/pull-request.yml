@@ -14,6 +14,9 @@ concurrency:
 env:
   # Issue #439: costs are observed during MIR consolidation.
   NATIVE_MIR_COST_MODE: mir-migration
+  # Alpha development: ordinary compiler edits merge after the pre-merge lanes;
+  # Main validation runs the complete lanes. Use `complete` to restore them here.
+  NATIVE_CI_GATE: tiered
 
 jobs:
   plan:
@@ -27,6 +30,7 @@ jobs:
       draft: ${{ steps.plan.outputs.draft }}
       tooling: ${{ steps.plan.outputs.tooling }}
       cli: ${{ steps.plan.outputs.cli }}
+      complete: ${{ steps.plan.outputs.complete }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -89,6 +93,9 @@ jobs:
           "$RUNNER_TEMP/trb" check --config trbconfig.reference.jsonc
           "$RUNNER_TEMP/trb" check --config compiler/trbconfig.jsonc
           tools/check-native-cli.sh "$RUNNER_TEMP/trb"
+      - name: Check the Native compiler closure against snapshot v4
+        if: needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true'
+        run: tools/check-bootstrap-snapshot.sh "$RUNNER_TEMP/trb"
       - name: Verify project and transition policy tooling on Linux
         run: |
           sh tools/native-mir-transition-policy-test.sh
@@ -139,10 +146,14 @@ jobs:
     needs: plan
     if: needs.plan.outputs.cli == 'true' && needs.plan.outputs.draft == 'false'
     uses: ./.github/workflows/native-cli.yml
+    with:
+      scope: ${{ needs.plan.outputs.complete == 'true' && 'complete' || 'pull-request' }}
 
   native:
     needs: plan
-    if: needs.plan.outputs.code == 'true' && needs.plan.outputs.draft == 'false'
+    if: >-
+      needs.plan.outputs.code == 'true' && needs.plan.outputs.draft == 'false' &&
+      needs.plan.outputs.complete == 'true'
     uses: ./.github/workflows/native-validation.yml
     with:
       cost_mode: mir-migration
@@ -153,6 +164,7 @@ jobs:
     uses: ./.github/workflows/linux-amd64-targets.yml
     with:
       cost_mode: mir-migration
+      scope: ${{ needs.plan.outputs.complete == 'true' && 'complete' || 'pull-request' }}
 
   memory:
     needs: plan

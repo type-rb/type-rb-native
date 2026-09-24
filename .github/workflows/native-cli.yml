@@ -3,6 +3,11 @@ name: Native CLI validation
 on:
   workflow_dispatch:
   workflow_call:
+    inputs:
+      scope:
+        description: complete, or pull-request to leave cache invalidation to main
+        type: string
+        default: complete
 
 permissions:
   contents: read
@@ -31,6 +36,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y lld
       - name: Build from the pinned native seed and verify fixed points
         run: ./trbn --version
+      - name: Check every reviewed conformance source with the built core compiler
+        run: python3 tools/check-conformance-sources.py .trb/bootstrap/core/compiler
       - name: Verify deterministic key-reader interruption boundaries
         run: python3 tools/native-cli-key-test.py --qbe bin/qbe --output "$RUNNER_TEMP/native-cli-key.json"
       - name: Retain key-reader boundary observations
@@ -97,6 +104,8 @@ jobs:
           if-no-files-found: error
 
   cache:
+    # Tiered PRs leave repeated rebuilds to Main validation.
+    if: inputs.scope != 'pull-request'
     strategy:
       fail-fast: false
       matrix:

@@ -23,6 +23,27 @@ strict cost matrix. Daily/weekly diagnostic schedules remain.
 The matrix and historical scheduling below describe the strict contract; green
 migration CI must not be reported as a performance-qualified result.
 
+## Tiered gate during alpha development
+
+`NATIVE_CI_GATE: tiered` in the PR workflow lets ordinary compiler, CLI and
+conformance edits merge after the pre-merge lanes: planning, quick (including
+the snapshot-v4 subset check), documentation, tooling, the CLI build on Darwin
+and Linux arm64 (including the conformance source scan), the Ubuntu x64 target
+and memory. Native recovery, CLI cache invalidation and the arm64 regression
+then run in `Main validation`.
+
+The planner output `complete` keeps those lanes before merge whenever a PR
+touches a path only they execute: workflows and `tools/ci-*`, root recovery
+sources other than the generated import and mutation inventories, fixtures,
+corpora, benchmarks, compatibility pins, bootstrap and cache inputs, target
+scripts, or any unknown path. Main always plans with the complete gate. Set
+`NATIVE_CI_GATE: complete` to restore complete pre-merge validation for every PR.
+
+A red `Main validation` opens or updates the `Main validation is failing` issue
+and closes it after a later run passes. Fix or revert main before merging more
+feature PRs; development on branches continues. Release, seed and milestone
+decisions use a main commit with a passing `Main validation` run.
+
 ## Required authorities
 
 | Changed surface | Required PR validation |
@@ -151,9 +172,10 @@ the Pages workflow requires documentation validation, not compiler benchmarks.
    path before recovery. Recovery-artifact consumers remain in the Native job after recovery joins.
    The retired source-era benchmark controllers are no longer rebuilt or tested
    against current source; see [their preserved versions](retired-experiment-tools.md).
-3. **Correctness and CLI.** On ready PRs, complete Native, target, applicable
-   memory and CLI jobs start alongside quick after planning. Quick failure still
-   fails acceptance, even if the complete jobs succeed. Parallel startup saves
+3. **Correctness and CLI.** On ready PRs, the planned Native, target, memory
+   and CLI jobs start alongside quick after planning; under the tiered gate
+   they run in their pre-merge scope unless `complete` is planned. Quick failure
+   still fails acceptance, even if the other jobs succeed. Parallel startup saves
    wall time on passing PRs but may use more runner time on a failing quick job.
    Development drafts retain source/CLI checks in quick feedback and defer the
    complete jobs.
@@ -162,7 +184,8 @@ the Pages workflow requires documentation validation, not compiler benchmarks.
    repetitions, interleaving, baseline identities, raw evidence and limits stay
    unchanged. Diagnostic stage recording never runs inside measured chains.
 5. **Acceptance.** `Native CI acceptance` checks every planned authority,
-   including tooling and CLI. Failed, cancelled, missing or skipped required
+   including tooling and CLI. A tiered PR summary states that the deferred
+   lanes run on main after merge. Failed, cancelled, missing or skipped required
    jobs reject acceptance. Unexpected execution of a disabled authority also
    rejects the plan/result mismatch.
 
@@ -176,26 +199,23 @@ work. Cancelled measurements are not accepted results.
 Develop complete language families with focused local units, reference/Native
 positive and negative cases, MIR ownership and retained REPL checks. Include an
 ordinary Native build when compiler source changes. Hosted CI is the complete
-integration authority by default; full local recovery is additionally required
-for bootstrap or recovery-execution changes and recovery/platform diagnosis.
+integration authority: PR acceptance for the planned lanes, then `Main
+validation` for deferred lanes. Full local recovery is only for
+recovery/platform diagnosis, including a red `Main validation`.
 Scheduling-only workflow changes run controller tests and hosted full CI; local
 recovery does not exercise changed job dependencies or draft reporting.
 Optional local suites without recovery variables remain partial evidence. Do
-not mark a language family complete or merge while required CI is pending.
-Larger cohesive PRs may combine syntax through execution and REPL; keep one
-ready candidate and one subsequent development batch instead of repeatedly
-revalidating a stack of small dependent PRs.
+not merge while required PR checks are pending. Merge each coherent PR once its
+acceptance passes instead of stacking dependent PRs behind a long run.
 
-`Main validation` replaces the separate Native, memory and documentation push
-triggers. It executes the same planner using the complete **before-to-head**
-push delta (two-dot, rather than a PR merge-base delta), then selects those
-post-merge authorities and tooling controls. It does not add a second full PR
-performance/target/CLI pipeline. Removed inputs and multi-commit pushes remain
-visible. Unknown or invalid revisions fail planning rather than skip checks.
-Main memory routing now covers the current compiler modules consistently rather
-than maintaining a separate list of old entry paths. Manual workflow controls
-remain available. Main pushes do not cancel earlier validations: a later
-documentation-only delta must not erase an unfinished code validation.
+`Main validation` runs the complete Native, target, CLI, memory, tooling and
+documentation lanes on main. It plans the two-dot delta from the most recent
+main commit whose `Main validation` passed (the empty tree when none is an
+ancestor), so a failed or skipped run's changes are planned again until a run
+passes. One run executes at a time; a newer pending push replaces an older
+pending one, which batches rapid merges without losing their changes.
+Unknown or invalid revisions fail planning rather than skip checks. Manual
+workflow controls remain available.
 
 Full multi-language benchmark refreshes and Native runtime A/B remain manual.
 During MIR migration they supply milestone qualification separately from

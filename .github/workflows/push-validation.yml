@@ -7,6 +7,13 @@ on:
 permissions:
   contents: read
 
+# Tiered PRs make this the complete-lane authority. One validation runs at a
+# time; a newer pending push replaces an older pending one, and the planner
+# covers every change since the last fully validated main commit.
+concurrency:
+  group: native-main-validation
+  cancel-in-progress: false
+
 env:
   # Issue #439: costs are observed during MIR consolidation.
   NATIVE_MIR_COST_MODE: mir-migration
@@ -14,21 +21,41 @@ env:
 jobs:
   plan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     outputs:
+      base: ${{ steps.base.outputs.sha }}
       code: ${{ steps.plan.outputs.code }}
       documentation: ${{ steps.plan.outputs.documentation }}
       memory: ${{ steps.plan.outputs.memory }}
       tooling: ${{ steps.plan.outputs.tooling }}
+      cli: ${{ steps.plan.outputs.cli }}
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: Test shared routing and acceptance
         run: node --test tools/ci-plan-test.mjs tools/ci-run-suites-test.mjs tools/recovery-workspace-test.mjs
-      - name: Classify the complete push delta
+      - name: Select the last fully validated main commit
+        id: base
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          base=
+          for sha in $(gh run list --repo "$GITHUB_REPOSITORY" --workflow push-validation.yml \
+              --branch main --event push --status success --limit 50 --json headSha --jq '.[].headSha'); do
+            if git merge-base --is-ancestor "$sha" "$GITHUB_SHA"; then
+              base=$sha
+              break
+            fi
+          done
+          # Without a validated ancestor, plan every tracked path from the empty tree.
+          echo "sha=${base:-$(git hash-object -t tree /dev/null)}" >> "$GITHUB_OUTPUT"
+      - name: Classify every change since that commit
         id: plan
         env:
-          BASE_SHA: ${{ github.event.before }}
+          BASE_SHA: ${{ steps.base.outputs.sha }}
           HEAD_SHA: ${{ github.sha }}
         run: node tools/ci-plan.mjs "$BASE_SHA" "$HEAD_SHA" false push >> "$GITHUB_OUTPUT"
 
@@ -38,6 +65,18 @@ jobs:
     uses: ./.github/workflows/native-validation.yml
     with:
       cost_mode: mir-migration
+
+  targets:
+    needs: plan
+    if: needs.plan.outputs.code == 'true'
+    uses: ./.github/workflows/linux-amd64-targets.yml
+    with:
+      cost_mode: mir-migration
+
+  cli:
+    needs: plan
+    if: needs.plan.outputs.cli == 'true'
+    uses: ./.github/workflows/native-cli.yml
 
   tooling:
     needs: plan
@@ -55,3 +94,44 @@ jobs:
     needs: plan
     if: needs.plan.outputs.documentation == 'true'
     uses: ./.github/workflows/documentation.yml
+
+  acceptance:
+    name: Main validation acceptance
+    if: ${{ !cancelled() }}
+    needs: [plan, native, targets, cli, tooling, memory, documentation]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TITLE: Main validation is failing
+      BASE_SHA: ${{ needs.plan.outputs.base }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Require every planned main authority
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: node tools/ci-plan.mjs accept-main
+      - name: Open or update the main failure issue
+        if: failure()
+        run: |
+          body=$(printf 'Main validation failed at %s.\n\nRun: %s\nChanges since the last fully validated commit: %s/%s/compare/%s...%s\n\nFix or revert this on main before merging further feature PRs.\n' \
+            "$GITHUB_SHA" "$RUN_URL" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "${BASE_SHA:-unknown}" "$GITHUB_SHA")
+          number=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$TITLE\" in:title" \
+            --json number,title --jq '.[] | select(.title == $ENV.TITLE) | .number' | head -n 1)
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$body"
+          fi
+      - name: Close the main failure issue after recovery
+        if: success()
+        run: |
+          gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$TITLE\" in:title" \
+            --json number,title --jq '.[] | select(.title == $ENV.TITLE) | .number' |
+          while read -r number; do
+            gh issue close "$number" --repo "$GITHUB_REPOSITORY" \
+              --comment "Main validation passed at $GITHUB_SHA: $RUN_URL"
+          done
