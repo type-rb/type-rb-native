@@ -142,6 +142,17 @@ the recovery compiler cannot yet read:
 tools/check-bootstrap-snapshot.sh /path/to/pinned/trb
 ```
 
+When a compiler source import changes, synchronize the recovery import
+inventory from canonical source before the focused checks:
+
+```sh
+python3 tools/recovery_layout_sync.py --write
+python3 tools/recovery_layout_sync.py --check
+```
+
+Quick CI repeats the check. The generated inventory is not a separate
+behavioral change; the hosted recovery suite verifies the resulting closure.
+
 When checked binding or diagnostic behavior changes, scan the reviewed
 conformance sources with an already built Native compiler before rerunning the
 long recovery suite. This checks all valid, runtime-failing and compile-failing

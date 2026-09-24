@@ -34,8 +34,10 @@ nominal and callable paths with exact reclamation checks.
 Initialized superclasses and inherited overrides remain guarded. Construction
 through class aliases uses the canonical class's checked MIR allocation and
 constructor path, including generic, qualified and imported targets. Static
-`self.new`, diagnostic differences and the reference's
-deferred object contracts remain listed in the feature inventory. See
+class-method `self.new` and `self.method()` now follow the same checked
+constructor and dispatch paths in ordinary builds and the retained REPL.
+Diagnostic differences and the reference's deferred object contracts remain
+listed in the feature inventory. See
 [decision 0085](decisions/0085-object-type-and-execution-mir.md) for the implemented
 boundary and outstanding reference issues. This does not complete the object
 family or the basic-language milestone.

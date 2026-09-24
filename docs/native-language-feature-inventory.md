@@ -27,7 +27,7 @@ Each count describes registered probes, not language coverage percentages.
 | Structured and value-producing iteration | basic | 0 / 176 | Remaining receiver APIs that shorten or reorder an Array during traversal | IterationExpression, BlockExpression |
 | Range values and boundaries | basic | 0 / 19 | none registered | RangeExpression |
 | Result and typed propagation | basic | 0 / 81 | General union errors and compiler-declared structured package boundaries | TryExpression, CatchExpression |
-| Classes, fields and methods | basic | 1 / 80 | Initialized superclass storage and constructor chaining; inherited overrides (TypeRB #797); Static self.new | ClassStatement, FieldStatement |
+| Classes, fields and methods | basic | 1 / 80 | Initialized superclass storage and constructor chaining; inherited overrides (TypeRB #797) | ClassStatement, FieldStatement |
 | Explicit interface conformance | basic | 0 / 21 | Variance and method-specific generic contracts with the reference object specification; Initialized-superclass and override dependencies | InterfaceStatement |
 | Modules and constant lookup | basic | 1 / 38 | Forward initialization dependencies and cycles; remaining module method boundaries | ModuleStatement |
 | Symbol values | basic | 1 / 36 | Remaining reference operator/control framing and multiline interpolation boundaries | SymbolLiteral |

@@ -2,7 +2,7 @@
 
 TypeRB Native currently follows exact reference revisions during development. The
 current source and semantic oracle is TypeRB
-`999ff165933ac6ec824c3334e98a8be52e7b2948` (the `0.4.9-dev` development identity), recorded
+`977da4f4edbdd068eda484207ae2d220c861691f` (the `0.4.9-dev` development identity), recorded
 in `TYPE_RB_REVISION`. This declares one exact reference identity during Native
 development, without claiming a supported version range.
 
@@ -34,18 +34,20 @@ The earlier scoped-file successor is registered in
 passes the selected-reference, migration, exact-baseline, target-regression,
 fixed-point, process, resource, and size criteria.
 
-## Single-quoted literal and checker reference update
+## Literal, checker and class-self reference update
 
 The current development pin includes TypeRB
 [PR #821](https://github.com/type-rb/type-rb/pull/821),
-[#822](https://github.com/type-rb/type-rb/pull/822) and
-[#824](https://github.com/type-rb/type-rb/pull/824).
+[#822](https://github.com/type-rb/type-rb/pull/822),
+[#824](https://github.com/type-rb/type-rb/pull/824) and
+[#825](https://github.com/type-rb/type-rb/pull/825).
 Single-quoted Strings and Symbols now decode the same validated escapes across
 Go, Ruby and TypeScript output and the REPL. Direct indexing of a union value
 is rejected consistently, and REPL logical assignment evaluates its right
-side only when required. Native covers the quoted-literal syntax in its lexer,
-MIR, execution and REPL; the other reference corrections retain their
-existing independent tests. This is an exact development-source update, not
+side only when required. Class-method `self.new(...)` resolves to its declared
+class in all three output modes. Native covers the quoted-literal and class-self
+syntax through checking, MIR, execution and REPL; the other reference corrections
+retain their independent tests. This is an exact development-source update, not
 a release or a performance qualification.
 
 ## Class alias and constructor reference update

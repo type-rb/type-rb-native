@@ -1,14 +1,17 @@
 # Current reference compatibility
 
 The selected development reference is TypeRB `0.4.9-dev` at
-`999ff165933ac6ec824c3334e98a8be52e7b2948`. It incorporates
+`977da4f4edbdd068eda484207ae2d220c861691f`. It incorporates
 [PR #821](https://github.com/type-rb/type-rb/pull/821) for portable
 single-quoted String and Symbol execution,
 [PR #822](https://github.com/type-rb/type-rb/pull/822) for checked union
 indexing, and
 [PR #824](https://github.com/type-rb/type-rb/pull/824) for REPL
-short-circuit assignment. Native pairs the new quoted-literal contract with
-lexer, verified MIR, ordinary execution and retained REPL cases. Exact
+short-circuit assignment, and
+[PR #825](https://github.com/type-rb/type-rb/pull/825) for class-method
+`self.new(...)` checking and Go output. Native pairs the quoted-literal and
+class-self contracts with lexer, verified MIR, ordinary execution and retained
+REPL cases. Exact
 cross-target, recovery and shared-language CI remain the integration authority.
 This development pin does not change a release or immutable seed. Earlier
 reference identities and evidence follow.

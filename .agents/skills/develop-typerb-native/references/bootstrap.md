@@ -50,8 +50,10 @@ For CLI tests against a temporary `trbn` binary, put a verified `qbe` beside
 that binary (a symlink is sufficient). Several test scripts invoke the adjacent
 executable directly, even when `TRBN_QBE` is set. Shared language-case runs
 also need `TRBN_QBE` when the binary has no adjacent QBE.
-When compiler-module imports change, update `src/compiler_recovery_layout.trb`
-and run the focused `Compiler recovery source closure` root test before pushing.
+When compiler-module imports change, run
+`python3 tools/recovery_layout_sync.py --write` and `--check` to update
+`src/compiler_recovery_layout.trb`, then run the focused
+`Compiler recovery source closure` root test before pushing.
 When adding or renaming a compiler module, also update the independent module
 inventory in `compiler/src/compiler_test.trb` and run its focused
 `parses the checked-in compiler closure through its own frontend` test. The
