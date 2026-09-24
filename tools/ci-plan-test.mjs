@@ -741,7 +741,7 @@ test('PR workflows pass the tiered scope while main runs every complete lane', (
     'the snapshot-v4 subset check must run before merge');
   const [build, cache] = cli.split('\n  cache:\n');
   assert(build.includes('python3 tools/check-conformance-sources.py .trb/bootstrap/core/compiler'));
-  assert(cache.startsWith("    # Tiered PRs leave repeated rebuilds to Main validation.\n    if: inputs.scope != 'pull-request'\n"));
+  assert.match(cache, /^(?:    #.*\n)*    if: inputs.scope != 'pull-request'\n/);
   assert.match(cli, /workflow_call:\n    inputs:\n      scope:[\s\S]*?default: complete/);
   assert.match(targets, /      scope:\n[^]*?default: complete\n  workflow_dispatch:/);
   for (const job of ['regress-linux-arm64', 'compare-target-neutral-evidence']) {
