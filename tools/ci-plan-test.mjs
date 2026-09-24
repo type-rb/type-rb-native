@@ -12,8 +12,9 @@ function results(plan) {
     plan: { result: 'success', outputs: Object.fromEntries(
       Object.entries(plan).map(([key, value]) => [key, String(value)])) },
     ...Object.fromEntries(Object.entries({ quick: plan.quick,
-      documentation: plan.documentation, native: plan.code, targets: plan.code,
-      memory: plan.memory, performance: plan.performance, tooling: plan.tooling, cli: plan.cli,
+      documentation: plan.documentation, native: !plan.draft && plan.code, targets: !plan.draft && plan.code,
+      memory: !plan.draft && plan.memory, performance: !plan.draft && plan.performance,
+      tooling: plan.tooling, cli: !plan.draft && plan.cli,
     }).map(([key, value]) => [key, { result: value ? 'success' : 'skipped' }])),
   };
 }
@@ -150,7 +151,7 @@ test('manual Boolean compactness loads its dependencies in a fresh step shell', 
   }
 });
 
-test('compatibility checks precede matrix fan-out and remain in standalone validation', () => {
+test('compatibility checks remain in quick and standalone validation', () => {
   const workflow = readFileSync(new URL('../.github/workflows/pull-request.yml', import.meta.url), 'utf8');
   const standalone = readFileSync(new URL('../.github/workflows/native-validation.yml', import.meta.url), 'utf8');
   const quick = workflow.match(/^  quick:\n([\s\S]*?)(?=^  documentation:)/m)?.[1];
@@ -174,10 +175,12 @@ test('compatibility checks precede matrix fan-out and remain in standalone valid
       `${command} must run after reference build and before later quick checks`);
     assert(standalone.includes(command), 'standalone validation must retain the same check');
   }
-  for (const job of ['native', 'targets', 'memory']) {
-    assert(workflow.includes(`  ${job}:\n    needs: [plan, quick]\n`),
-      `${job} must wait for successful quick feedback`);
+  for (const job of ['cli', 'native', 'targets', 'memory']) {
+    assert(workflow.includes(`  ${job}:\n    needs: plan\n`),
+      `${job} should start alongside quick after planning`);
   }
+  assert(workflow.includes('needs: [plan, quick, documentation, native, targets, memory, performance, tooling, cli]'),
+    'acceptance must still require quick and all complete authorities');
 });
 
 test('documentation-only PRs do not run compiler or performance matrices', () => {
@@ -278,20 +281,52 @@ test('deletions, renames, mixed changes and unknown paths fail toward more check
   assert.equal(classify(['new-directory/file'], false).code, true);
   assert.equal(classify(['compiler/gate4/src/with\na newline.trb'], false).code, true);
 });
-test('draft feedback cannot be accepted even when all jobs happen to succeed', () => {
-  assert.notDeepEqual(acceptance(results(classify(['README.md'], true))), []);
+test('draft feedback succeeds only for its selected authorities', () => {
+  const documentation = results(classify(['README.md'], true));
+  assert.deepEqual(acceptance(documentation), []);
+  const code = results(classify(['compiler/src/compiler.trb'], true));
+  assert.deepEqual(acceptance(code), []);
+  for (const job of ['quick', 'documentation', 'tooling']) {
+    if (code[job].result === 'success') {
+      code[job].result = 'failure';
+      assert.notDeepEqual(acceptance(code), [], `${job} failure must reject draft feedback`);
+      code[job].result = 'success';
+    }
+  }
+  code.native.result = 'success';
+  assert.notDeepEqual(acceptance(code), [], 'draft cannot silently run a complete authority');
+});
+test('draft acceptance explicitly records partial feedback', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'native-draft-summary-'));
+  try {
+    const summary = join(directory, 'summary.md');
+    const plan = results(classify(['compiler/src/compiler.trb'], true));
+    const output = execFileSync(process.execPath, [fileURLToPath(new URL('ci-plan.mjs', import.meta.url)), 'accept'], {
+      encoding: 'utf8', env: { ...process.env, NEEDS_JSON: JSON.stringify(plan), GITHUB_STEP_SUMMARY: summary },
+    });
+    assert.match(output, /Draft feedback only/);
+    assert.match(readFileSync(summary, 'utf8'), /complete validation runs when the PR is marked ready/);
+    plan.quick.result = 'failure';
+    assert.throws(() => execFileSync(process.execPath,
+      [fileURLToPath(new URL('ci-plan.mjs', import.meta.url)), 'accept'], {
+        encoding: 'utf8', stdio: 'pipe',
+        env: { ...process.env, NEEDS_JSON: JSON.stringify(plan), GITHUB_STEP_SUMMARY: summary },
+      }));
+    assert.equal(readFileSync(summary, 'utf8').match(/Draft feedback only/g)?.length, 1);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 test('draft development defers expensive authorities without relaxing ready acceptance', () => {
   const workflow = readFileSync(new URL('../.github/workflows/pull-request.yml', import.meta.url), 'utf8');
   for (const job of ['cli', 'native', 'targets', 'memory']) {
     const block = workflow.match(new RegExp(`^  ${job}:\\n([\\s\\S]*?)(?=^  [a-z]+:)`, 'm'))?.[1];
-    assert(block?.includes('needs: [plan, quick]'), `${job} must follow quick feedback`);
+    assert(block?.includes('needs: plan'), `${job} must wait for planning`);
     assert(block.includes("needs.plan.outputs.draft == 'false'"), `${job} must wait for ready integration`);
   }
   for (const file of ['compiler/cli/main.trb', 'compiler/src/compiler.trb']) {
     const draft = results(classify([file], true));
-    for (const job of ['cli', 'native', 'targets', 'memory']) draft[job].result = 'skipped';
-    assert(acceptance(draft).some(error => error.includes('Draft feedback')));
+    assert.deepEqual(acceptance(draft), []);
     const ready = results(classify([file], false));
     assert.deepEqual(acceptance(ready), []);
     ready.cli.result = 'skipped';
@@ -464,7 +499,8 @@ test('synthetic tooling tests have an executable authority without compiler rebu
   const native = readFileSync(new URL('../.github/workflows/native-validation.yml', import.meta.url), 'utf8');
   assert(!native.includes('Verify bootstrap seed tooling'));
   const entry = readFileSync(new URL('../.github/workflows/pull-request.yml', import.meta.url), 'utf8');
-  assert(entry.includes('needs: [plan, native, targets, memory, tooling, cli]'));
+  assert(entry.includes('needs: [plan, quick, native, targets, memory, tooling, cli]'));
+  assert(entry.includes("needs.quick.result == 'success'"), 'comparative work must stop when quick fails');
   assert(entry.includes("needs.tooling.result == 'success'"));
   assert(entry.includes('needs: [plan, quick, documentation, native, targets, memory, performance, tooling, cli]'));
 });
