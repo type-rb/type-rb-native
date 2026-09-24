@@ -87,14 +87,16 @@ def mir_call_effects(signature: MirSignature): Integer
 	return 15
 end
 
-# A direct ordinary leaf can read managed values or branch without changing
-# caller state. A call in its body, including recursion, stays conservative;
-# this bounded local summary does not assume anything about another callee.
-def mir_direct_call_effects(native_module: MirModule, function: MirFunction): Integer
+# A bounded ordinary body can read managed values or branch without changing
+# caller state. Follow at most two direct calls per body and two levels below
+# the caller; recursive, wide and opaque call chains remain conservative.
+# Derive nested effects from callee bodies, never from a stored call record.
+def mir_direct_call_effects(native_module: MirModule, function: MirFunction, depth: Integer): Integer
 	if function.kind != 3 || function.block_count < 1 || function.block_count > 16 || !mir_table_span_valid(function.block_start, function.block_count, native_module.blocks.size())
 		return 15
 	end
 	mut remaining := 64
+	mut nested_calls := 0
 	mut failure := false
 	mut block_index := function.block_start
 	while block_index < function.block_start + function.block_count
@@ -112,10 +114,23 @@ def mir_direct_call_effects(native_module: MirModule, function: MirFunction): In
 			end
 			remaining -= 1
 			instruction := native_module.instructions[index]
-			if instruction.kind < 6 || instruction.kind > 66 || instruction.kind == 11
+			if instruction.kind < 6 || instruction.kind > 66
 				return 15
 			end
-			effects := mir_instruction_effects(native_module, instruction)
+			mut effects := 15
+			if instruction.kind == 11
+				if depth == 0 || nested_calls == 2 || instruction.payload < 0 || instruction.payload >= native_module.calls.size()
+					return 15
+				end
+				nested_calls += 1
+				call := native_module.calls[instruction.payload]
+				if call.callee < 0 || call.callee >= native_module.signatures.size()
+					return 15
+				end
+				effects = mir_verified_call_effects(native_module, native_module.signatures[call.callee], depth - 1)
+			else
+				effects = mir_instruction_effects(native_module, instruction)
+			end
 			if effects != 0 && effects != 8
 				return 15
 			end
@@ -134,7 +149,7 @@ end
 
 # Scalar adapters already have a verified no-allocation/no-mutation contract.
 # Their arithmetic may still fail, so retain that effect.
-def mir_verified_call_effects(native_module: MirModule, signature: MirSignature): Integer
+def mir_verified_call_effects(native_module: MirModule, signature: MirSignature, depth: Integer): Integer
 	if signature.kind == 0
 		index := mir_function_index(native_module, signature.id)
 		if index >= 0
@@ -142,7 +157,7 @@ def mir_verified_call_effects(native_module: MirModule, signature: MirSignature)
 			if function.kind == 1
 				return 8
 			end
-			return mir_direct_call_effects(native_module, function)
+			return mir_direct_call_effects(native_module, function, depth)
 		end
 	end
 	return mir_call_effects(signature)
@@ -153,7 +168,7 @@ def mir_refine_scalar_call_effects(mut native_module: MirModule)
 	while index < native_module.calls.size()
 		call := native_module.calls[index]
 		if call.callee >= 0 && call.callee < native_module.signatures.size()
-			effects := mir_verified_call_effects(native_module, native_module.signatures[call.callee])
+			effects := mir_verified_call_effects(native_module, native_module.signatures[call.callee], 2)
 			if effects != call.effects
 				native_module.calls[index] = MirCall.new(callee: call.callee, argument_start: call.argument_start, argument_count: call.argument_count, effects: effects)
 			end
@@ -327,7 +342,7 @@ def mir_call_error(flow: MirFlow, native_module: MirModule, function: MirFunctio
 		return "MIR call declaration is missing"
 	end
 	signature := native_module.signatures[call.callee]
-	if call.effects != mir_verified_call_effects(native_module, signature)
+	if call.effects != mir_verified_call_effects(native_module, signature, 2)
 		return "MIR call effects or adapter differ"
 	end
 	if !mir_table_span_valid(call.argument_start, call.argument_count, native_module.arguments.size())
