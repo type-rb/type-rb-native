@@ -223,15 +223,15 @@ def mir_declare_types(mut state: CompilerState)
 		native_module.records.push(MirRecord.new(declaration: declaration, type_id: id, name: load_string(state.declarations.record_names, declaration), source_id: load_integer(state.declarations.record_modules, declaration), line: load_integer(state.declarations.record_lines, declaration), field_start: load_integer(state.declarations.record_field_starts, declaration), field_count: load_integer(state.declarations.record_field_counts, declaration)))
 		declaration += 1
 	end
-	state.newtypes.each do |definition|
+	state.nominal.newtypes.each do |definition|
 		id := native_module.types.size() + 9
 		owner := native_module.newtypes.size()
 		native_module.types.push(MirType.new(kind: 11, name: newtype_type(owner), element: 0, key: 0, declaration: owner))
 		native_module.newtypes.push(MirNewtype.new(declaration: owner, type_id: id, name: definition.name, source_id: definition.source_id, line: definition.line, representation: 0, closed: definition.closed))
 	end
 	declaration = 0
-	state.object_instances.each do |instance|
-		definition := state.objects[instance.definition]
+	state.nominal.object_instances.each do |instance|
+		definition := state.nominal.objects[instance.definition]
 		id := native_module.types.size() + 9
 		mut kind := 13
 		if definition.interface_type
@@ -244,7 +244,7 @@ def mir_declare_types(mut state: CompilerState)
 	end
 	mir_declare_enums(state)
 	declaration = 0
-	state.object_instances.each do |instance|
+	state.nominal.object_instances.each do |instance|
 		row := native_module.objects[declaration]
 		mut parent :=- 1
 		if instance.superclass >= 0
@@ -264,7 +264,7 @@ def mir_declare_types(mut state: CompilerState)
 	declaration = 0
 	while declaration < native_module.newtypes.size()
 		row := native_module.newtypes[declaration]
-		representation := mir_semantic_type_id(native_module, state.newtypes[declaration].representation)
+		representation := mir_semantic_type_id(native_module, state.nominal.newtypes[declaration].representation)
 		native_module.newtypes[declaration] = MirNewtype.new(declaration: declaration, type_id: row.type_id, name: row.name, source_id: row.source_id, line: row.line, representation: representation, closed: row.closed)
 		declaration += 1
 	end
@@ -546,19 +546,19 @@ end
 def mir_declare_enums(mut state: CompilerState)
 	mut native_module := state.scalar_mir
 	mut owner := 0
-	state.enums.each do |definition|
+	state.nominal.enums.each do |definition|
 		native_module.types.push(MirType.new(kind: 8, name: enum_type(owner), element: 0, key: 0, declaration: owner))
 		native_module.enums.push(definition)
 		owner += 1
 	end
 	mut variant := 0
-	state.enum_variants.each do |row|
+	state.nominal.enum_variants.each do |row|
 		native_module.enum_variants.push(row)
 		mut field := row.field_start
 		while field < row.field_start + row.field_count
-			item := state.enum_fields[field]
+			item := state.nominal.enum_fields[field]
 			type_id := mir_semantic_type_id(native_module, item.type_name)
-			native_module.enum_fields.push(MirField.new(owner: variant, name: item.name, type_id: type_id, source_id: state.enums[row.owner].source_id, line: item.line))
+			native_module.enum_fields.push(MirField.new(owner: variant, name: item.name, type_id: type_id, source_id: state.nominal.enums[row.owner].source_id, line: item.line))
 			field += 1
 		end
 		variant += 1

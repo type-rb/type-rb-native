@@ -74,7 +74,8 @@ import { resolve_body_names, standard_package_import, standard_package_root } fr
 import { find_visible_declaration, find_visible_enum, find_visible_function, find_visible_generic_function, find_visible_record } from declaration_lookup
 import { string_starts_with } from path
 import { array_element_type, array_type, common_array_element_type, find_field, find_record_type, record_type, resolve_type_name, type_display } from type_resolution
-import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_add, local_bind, local_bind_temporary, local_find, local_require_use, terminal_token } from state
+import { CompilerState, diagnostic, has_diagnostic, local_add, terminal_token } from state
+import { CheckedLocals, local_bind, local_bind_temporary, local_find, local_require_use } from local_state
 import { load_integer, load_string, sparse_integer_at, sparse_string_at, store_integer, store_string } from storage
 
 def checked_hash_literal(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, expected: String): CheckedValue
@@ -645,10 +646,10 @@ def check_call(mut state: CompilerState, mut position: Array<Integer>, mut local
 		return type_diagnostic(state, line, "value is not callable")
 	end
 	mut bindings := function_argument_bindings(state, function)
-	if function >= 0 && sparse_string_at(state.function_receivers, function) != ""
+	if function >= 0 && sparse_string_at(state.nominal.function_receivers, function) != ""
 		if !bound
 			self_slot := local_find(locals, "self")
-			if self_slot < 0 || load_string(locals.types, self_slot) != sparse_string_at(state.function_receivers, function)
+			if self_slot < 0 || load_string(locals.types, self_slot) != sparse_string_at(state.nominal.function_receivers, function)
 				return type_diagnostic(state, line, "instance method requires its nominal receiver")
 			end
 			lambda_use_binding(locals, self_slot)
@@ -1365,7 +1366,7 @@ def check_expression_value(
 				end
 				mut owner := find_newtype_type(state, value.type_name)
 				while owner >= 0
-					representation := state.newtypes[owner].representation
+					representation := state.nominal.newtypes[owner].representation
 					value = mir_newtype_operation(state, locals, 56, value, owner, representation, operator_origin)
 					binary_right = mir_newtype_operation(state, locals, 56, binary_right, owner, representation, operator_origin)
 					owner = find_newtype_type(state, representation)
@@ -2435,7 +2436,7 @@ def check_enum_constructor(mut state: CompilerState, mut position: Array<Integer
 	if variant < 0
 		return type_diagnostic(state, line, "unknown enum variant")
 	end
-	row := state.enum_variants[variant]
+	row := state.nominal.enum_variants[variant]
 	mut bindings := enum_argument_bindings(state, variant)
 	if row.field_count == 0
 		if token_is(state, position[0], "(")
@@ -2455,7 +2456,7 @@ def check_enum_constructor(mut state: CompilerState, mut position: Array<Integer
 		if slot < 0
 			return type_diagnostic(state, line, bindings.error[0])
 		end
-		value := check_expression(state, position, locals, 1, state.enum_fields[row.field_start + slot].type_name)
+		value := check_expression(state, position, locals, 1, state.nominal.enum_fields[row.field_start + slot].type_name)
 		if value.type_name == "Never"
 			diverged = true
 			scalar_mir_disable(locals)
@@ -2505,10 +2506,10 @@ def check_statement_value(mut state: CompilerState, mut position: Array<Integer>
 	mut join := mir_value_join(locals, line)
 	condition := mir_enum_operation(state, locals, 38, value, - 1, operation.ok_variant, "Boolean", origin)
 	failure := mir_control_branch(state, locals, condition, line)
-	payload := mir_enum_operation(state, locals, 39, value, - 1, state.enum_variants[operation.ok_variant].field_start, operation.success_type, origin)
+	payload := mir_enum_operation(state, locals, 39, value, - 1, state.nominal.enum_variants[operation.ok_variant].field_start, operation.success_type, origin)
 	mir_value_exit(state, locals, join, payload)
 	mir_control_enter(state, locals, failure, line)
-	error := mir_enum_operation(state, locals, 39, value, - 1, state.enum_variants[operation.err_variant].field_start, operation.error_type, origin)
+	error := mir_enum_operation(state, locals, 39, value, - 1, state.nominal.enum_variants[operation.err_variant].field_start, operation.error_type, origin)
 	catch_name := load_string(state.source_tokens.token_texts, handler.binding)
 	local_bind(locals, catch_name, operation.error_type, 0)
 	local_require_use(locals, locals.count[0] - 1, catch_name, handler.binding, 4)
@@ -2899,7 +2900,7 @@ end
 
 def check_newtype_member(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue, member: String): CheckedValue
 	owner := find_newtype_type(state, receiver.type_name)
-	definition := state.newtypes[owner]
+	definition := state.nominal.newtypes[owner]
 	origin := position[0]
 	line := load_integer(state.source_tokens.token_lines, origin)
 	class_method := receiver.category == 7
@@ -2981,8 +2982,8 @@ def check_object_member(mut state: CompilerState, mut position: Array<Integer>, 
 	origin := position[0]
 	line := load_integer(state.source_tokens.token_lines, origin)
 	owner := find_object_type(state, receiver.type_name)
-	instance := state.object_instances[owner]
-	definition := state.objects[instance.definition]
+	instance := state.nominal.object_instances[owner]
+	definition := state.nominal.objects[instance.definition]
 	if definition.interface_type && receiver.category == 8
 		return type_diagnostic(state, line, "interface cannot be constructed or used as a class receiver")
 	end
@@ -3030,7 +3031,7 @@ def check_object_member(mut state: CompilerState, mut position: Array<Integer>, 
 		return type_diagnostic(state, line, "unknown class method " + member)
 	end
 	declaring_owner := object_function_owner(state, function)
-	declaring := state.objects[declaring_owner]
+	declaring := state.nominal.objects[declaring_owner]
 	if !namespace_member_access(state, declaring.source_id, declaring.name + "::" + member, origin)
 		return checked_value("Invalid", 0, origin, 0)
 	end

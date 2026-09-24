@@ -28,7 +28,8 @@ import { validate_alias_declarations, validate_generic_declarations } from gener
 import { find_enum_in_module, find_enum_variant } from enum_types
 import { syntax_loop_transfer_kind } from syntax_forms
 import { path_basename, path_directory, string_without_suffix } from path
-import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_bind, local_find, locals_new, select_checked_body, terminal_token } from state
+import { CompilerState, diagnostic, has_diagnostic, select_checked_body, terminal_token } from state
+import { CheckedLocals, local_bind, local_find, locals_new } from local_state
 import { load_integer, load_string, sparse_integer_at, sparse_string_at, store_integer, store_string } from storage
 import { declare_default_functions } from default_arguments
 
@@ -334,7 +335,7 @@ def resolve_bare_imports(mut state: CompilerState): Boolean
 					end
 					record_index += 1
 				end
-				state.enums.each do |definition|
+				state.nominal.enums.each do |definition|
 					if definition.source_id == target && ascii_fold(definition.name) == wanted
 						if candidates != ""
 							candidates += ", "
@@ -354,7 +355,7 @@ def resolve_bare_imports(mut state: CompilerState): Boolean
 						matches += 1
 					end
 				end
-				state.newtypes.each do |definition|
+				state.nominal.newtypes.each do |definition|
 					if definition.source_id == target && ascii_fold(definition.name) == wanted
 						if candidates != ""
 							candidates += ", "
@@ -699,7 +700,7 @@ def resolve_function_body(
 	end
 	owner := object_initializer_owner(state, function_index)
 	if owner >= 0
-		state.object_instances[owner].fields.each do |field|
+		state.nominal.object_instances[owner].fields.each do |field|
 			if field.default_start >= 0 && !resolve_body_names(state, field.default_start, field.default_finish, locals)
 				return false
 			end
@@ -986,7 +987,7 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 end
 
 def resolve(mut state: CompilerState): Boolean
-	if state.raw_enum_values.size() > 0 || builtin_result_source(state)
+	if state.nominal.raw_enum_values.size() > 0 || builtin_result_source(state)
 		load_standard_source(state, 1)
 		load_standard_source(state, 3)
 	end
@@ -1117,8 +1118,8 @@ end
 
 def resolve_enum_declarations(mut state: CompilerState): Boolean
 	mut owner := 0
-	while owner < state.enums.size()
-		definition := state.enums[owner]
+	while owner < state.nominal.enums.size()
+		definition := state.nominal.enums[owner]
 		state.module_graph.active_module[0] = definition.source_id
 		state.global_bindings.declaration_owner[0] = namespace_parent(definition.name)
 		if find_enum_in_module(state, definition.source_id, definition.name) != owner || find_record_in_module(state, definition.source_id, definition.name) >= 0 || find_function_in_module(state, definition.source_id, definition.name) >= 0
@@ -1126,16 +1127,16 @@ def resolve_enum_declarations(mut state: CompilerState): Boolean
 		end
 		mut variant := definition.variant_start
 		while variant < definition.variant_start + definition.variant_count
-			row := state.enum_variants[variant]
+			row := state.nominal.enum_variants[variant]
 			if find_enum_variant(state, owner, row.name) != variant
 				diagnostic(state, "TRBN4003", row.line, "duplicate enum variant " + row.name)
 			end
 			mut field := row.field_start
 			while field < row.field_start + row.field_count
-				item := state.enum_fields[field]
+				item := state.nominal.enum_fields[field]
 				mut previous := row.field_start
 				while previous < field
-					if state.enum_fields[previous].name == item.name
+					if state.nominal.enum_fields[previous].name == item.name
 						diagnostic(state, "TRBN4003", item.line, "duplicate enum payload field " + item.name)
 					end
 					previous += 1
@@ -1144,7 +1145,7 @@ def resolve_enum_declarations(mut state: CompilerState): Boolean
 				if type_name == ""
 					diagnostic(state, "TRBN4003", item.line, "unknown enum payload type " + item.type_name)
 				end
-				state.enum_fields[field] = EnumField.new(name: item.name, type_name: type_name, line: item.line, named_only: item.named_only)
+				state.nominal.enum_fields[field] = EnumField.new(name: item.name, type_name: type_name, line: item.line, named_only: item.named_only)
 				field += 1
 			end
 			variant += 1

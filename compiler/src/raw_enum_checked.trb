@@ -9,7 +9,8 @@ import { mir_nullable_coerce } from nullable_mir
 import { mir_control_active, mir_control_branch, mir_control_enter, mir_control_prepare } from mir_control
 import { mir_value_complete, mir_value_exit, mir_value_join } from mir_value_control
 import { find_record_type } from type_resolution
-import { CheckedLocals, CompilerState } from state
+import { CompilerState } from state
+import { CheckedLocals } from local_state
 import { load_integer, load_string, sparse_string_at } from storage
 
 def raw_enum_literal(mut state: CompilerState, mut locals: CheckedLocals, type_name: String, text: String, origin: Integer): CheckedValue
@@ -42,7 +43,7 @@ def checked_raw_enum_value(mut state: CompilerState, mut locals: CheckedLocals, 
 	end
 	line := load_integer(state.source_tokens.token_lines, origin)
 	mut join := mir_value_join(locals, line)
-	definition := state.enums[owner]
+	definition := state.nominal.enums[owner]
 	mut variant := definition.variant_start
 	finish := variant + definition.variant_count
 	while variant < finish
@@ -63,7 +64,7 @@ def checked_raw_enum_value(mut state: CompilerState, mut locals: CheckedLocals, 
 end
 
 def checked_raw_enum_from(mut state: CompilerState, mut locals: CheckedLocals, owner: Integer, value: CheckedValue, origin: Integer): CheckedValue
-	result_type := sparse_string_at(state.raw_enum_results, owner)
+	result_type := sparse_string_at(state.nominal.raw_enum_results, owner)
 	state.callables.checked[0].raw_enum_conversions.push(RawEnumConversion.new(origin: origin, owner: owner, result_type: result_type))
 	mir_control_prepare(state, locals)
 	if !mir_control_active(locals)
@@ -74,7 +75,7 @@ def checked_raw_enum_from(mut state: CompilerState, mut locals: CheckedLocals, o
 	result_owner := find_enum_type(state, result_type)
 	ok := find_enum_variant(state, result_owner, "Ok")
 	err := find_enum_variant(state, result_owner, "Err")
-	definition := state.enums[owner]
+	definition := state.nominal.enums[owner]
 	mut variant := definition.variant_start
 	finish := variant + definition.variant_count
 	while variant < finish
@@ -93,7 +94,7 @@ def checked_raw_enum_from(mut state: CompilerState, mut locals: CheckedLocals, o
 		mir_control_enter(state, locals, alternate, line)
 		variant += 1
 	end
-	error_type := state.enum_fields[state.enum_variants[err].field_start].type_name
+	error_type := state.nominal.enum_fields[state.nominal.enum_variants[err].field_start].type_name
 	error_record := find_record_type(state, error_type)
 	error_start := load_integer(state.declarations.record_field_starts, error_record)
 	converted := mir_nullable_coerce(state, locals, value, load_string(state.declarations.field_types, error_start), origin)

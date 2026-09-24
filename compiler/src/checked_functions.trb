@@ -17,7 +17,8 @@ import { optimize_verified_mir } from mir_passes
 import { mir_managed_type, mir_semantic_type_id } from mir_types
 import { verify_mir } from mir_verifier
 import { resolve_function_body, validate_import_usage } from resolution
-import { CheckedLocals, CompilerState, diagnostic, has_diagnostic, local_add, local_identity, locals_new, select_checked_body } from state
+import { CompilerState, diagnostic, has_diagnostic, local_add, select_checked_body } from state
+import { CheckedLocals, local_identity, locals_new } from local_state
 import { load_integer, load_string, sparse_integer_at, sparse_string_at, store_integer } from storage
 
 # Parameter binding and body checking are separate semantic stages. All
@@ -84,7 +85,7 @@ def check_function_body(mut state: CompilerState, function_index: Integer, mut l
 	end
 	owner := object_initializer_owner(state, function_index)
 	if owner >= 0
-		state.object_instances[owner].fields.each do |field|
+		state.nominal.object_instances[owner].fields.each do |field|
 			if field.default_start >= 0
 				mut default_position := [field.default_start]
 				value := check_expression(state, default_position, locals, 1, field.type_name)
@@ -153,7 +154,7 @@ def analyze_callable_bodies(mut state: CompilerState): Boolean
 			generic_methods = true
 		end
 	end
-	if state.callables.lambdas.size() == 0 && state.parsed.transforms.size() == 0 && !state.hash_repl[0] && !generic_methods && state.objects.size() == 0 && !builtin_result_source(state)
+	if state.callables.lambdas.size() == 0 && state.parsed.transforms.size() == 0 && !state.hash_repl[0] && !generic_methods && state.nominal.objects.size() == 0 && !builtin_result_source(state)
 		return true
 	end
 	state.callables.lambda_phase[0] = 1
