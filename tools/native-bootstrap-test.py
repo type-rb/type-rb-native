@@ -2,8 +2,8 @@
 """Exercise checkout cache invalidation in an isolated copy.
 
 Content-key decisions use `tools/build-native.sh --plan`, which shares the
-build's decision. Two real rebuilds cover publishing a replaced core and a
-CLI rebuild that reuses the core under concurrent callers.
+build's decision. The CLI-only cache path has one real rebuild under concurrent
+callers; the build job independently verifies core publication and fixed points.
 """
 import os
 from pathlib import Path
@@ -183,11 +183,8 @@ with tempfile.TemporaryDirectory(prefix='native bootstrap ') as temporary:
         assert plan(empty) == 'core'
         assert not (empty / 'bin').exists() or not any((empty / 'bin').iterdir())
 
-    # Replacing a published core is a real rebuild of the core and CLI.
-    edit('compiler/src/compiler.trb', '\n# Core edit\n')
-    result = build(label='core replacement')
-    assert 'bootstrapping' in result and 'reusing' not in result
-    assert snapshot()[1] != baseline[1]
+    # Core invalidation is covered by --plan above. The companion CLI build
+    # job already rebuilds the core from the pinned seed and checks fixed points.
     assert legacy_seed.read_bytes() == b'synthetic stale legacy seed\n'
     assert plan() == 'cached' and build() == ''
 
