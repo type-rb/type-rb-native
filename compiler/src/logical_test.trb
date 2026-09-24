@@ -172,6 +172,16 @@ describe("Short-circuit Boolean expressions") do
 		expect(state.diagnostic_count[0] > 0).to_be_true()
 	end
 
+	test("rejects non-Boolean or immutable logical assignment targets") do
+		cases := ["mut value := 1\nvalue ||= true", "mut value := true\nvalue &&= 1", "value := false\nvalue ||= true"]
+		cases.each do |body|
+			source := "def main()\n" + body + "\nend\n"
+			mut state := logical_checked_source(source)
+			expect(check(state)).to_be_false()
+			expect(state.diagnostic_count[0] > 0).to_be_true()
+		end
+	end
+
 	test("publishes conditional RHS blocks and emits after source bodies are erased") do
 		source := "def choose(a: Boolean, b: Boolean, c: Boolean): Boolean\n\treturn !a && (b || c)\nend\ndef main()\n\tputs(choose(false, false, true))\n\treturn\nend\n"
 		mut state := logical_checked_source(source)
@@ -188,6 +198,34 @@ describe("Short-circuit Boolean expressions") do
 		end
 		expect(control_test_output(emit_qbe(state))).to_equal(before)
 		expect(state.diagnostic_count[0]).to_equal(0)
+	end
+
+	test("keeps logical assignment effects conditional in verified MIR") do
+		source := "def bump(mut calls: Array<Integer>): Boolean\ncalls[0] += 1\nreturn true\nend\ndef index(mut calls: Array<Integer>): Integer\ncalls[0] += 1\nreturn 0\nend\ndef main()\nmut calls := [0]\nmut yes := true\nmut no := false\nyes ||= bump(calls)\nno &&= bump(calls)\nputs(calls[0])\nno ||= bump(calls)\nyes &&= bump(calls)\nputs(calls[0])\nmut flags := [true]\nflags[index(calls)] ||= bump(calls)\nputs(calls[0])\nflags[index(calls)] &&= bump(calls)\nputs(calls[0])\nend\n"
+		mut state := logical_checked_source(source)
+		expect(check(state)).to_be_true()
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		before := control_test_output(emit_qbe(state))
+		mut function_id := 0
+		while function_id < state.function_count[0]
+			mut token := load_integer(state.function_body_starts, function_id)
+			while token < load_integer(state.function_body_ends, function_id)
+				store_string(state.token_texts, token, "unavailable")
+				token += 1
+			end
+			function_id += 1
+		end
+		expect(control_test_output(emit_qbe(state))).to_equal(before)
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe(qbe, before)
+			when Result::Ok(output)
+				expect(output).to_equal("0\n2\n3\n5\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
 	end
 
 	test("executes nested logical calls and loops with reversed MIR block storage") do

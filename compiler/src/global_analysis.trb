@@ -1,7 +1,29 @@
 import { checked_function_locals } from checked_functions
 import { check_expression, checked_readonly_reference_binding } from checked_program
 import { CompilerState, diagnostic, has_diagnostic } from state
+import { token_is } from syntax_tokens
 import { load_string, store_string } from storage
+
+# An unannotated constant may retain the reference's empty collection type.
+# Locals still require an element or key/value witness before MIR publication.
+def global_empty_literal(state: CompilerState, start: Integer, finish: Integer): Integer
+	mut left := start
+	mut right := finish
+	while right - left > 2 && token_is(state, left, "(") && token_is(state, right - 1, ")")
+		left += 1
+		right -= 1
+	end
+	if right != left + 2
+		return 0
+	end
+	if token_is(state, left, "[") && token_is(state, left + 1, "]")
+		return 1
+	end
+	if token_is(state, left, "{") && token_is(state, left + 1, "}")
+		return 2
+	end
+	return 0
+end
 
 # Infer once in the checked initialization order before freezing MIR signatures.
 # This pass checks expressions but does not execute initializer side effects.
@@ -16,7 +38,11 @@ def infer_global_types(mut state: CompilerState): Boolean
 		function := state.global_functions[index]
 		mut locals := checked_function_locals(state, function)
 		mut position := [row.start]
-		expected := load_string(state.function_result_types, function)
+		mut expected := load_string(state.function_result_types, function)
+		empty := global_empty_literal(state, row.start, row.finish)
+		if row.constant && expected == "" && empty == 1
+			expected = "Array<Any>"
+		end
 		value := check_expression(state, position, locals, 1, expected)
 		if row.mutable && checked_readonly_reference_binding(state, locals, value)
 			diagnostic(state, "TRBN4004", row.line, "cannot initialize mutable " + row.name + " from an immutable value")
@@ -25,7 +51,14 @@ def infer_global_types(mut state: CompilerState): Boolean
 		if type_name == ""
 			type_name = value.type_name
 		end
-		if type_name == "Void" || type_name == "Nil" || type_name == "Never" || type_name == "Hash" || type_name == ""
+		mut invalid := false
+		if type_name == "Void" || type_name == "Nil" || type_name == "Never" || type_name == ""
+			invalid = true
+		end
+		if type_name == "Hash" && !(row.constant && empty == 2)
+			invalid = true
+		end
+		if invalid
 			diagnostic(state, "TRBN4004", row.line, "constant requires a concrete value type; add an annotation when needed")
 		end
 		if position[0] != row.finish

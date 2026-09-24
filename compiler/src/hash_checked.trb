@@ -65,8 +65,39 @@ def checked_hash_method(method: String): Integer
 	return 0
 end
 
+def checked_hash_empty_constant(state: CompilerState, plan: MirHashOperation): Boolean
+	if plan.type_name != "Hash" || plan.entries != 0
+		return false
+	end
+	if plan.kind == 4 || plan.kind == 12
+		return true
+	end
+	if plan.kind != 1
+		return false
+	end
+	mut index := 0
+	while index < state.globals.size()
+		row := state.globals[index]
+		mut start := row.start
+		mut finish := row.finish
+		while finish - start > 2 && token_is(state, start, "(") && token_is(state, finish - 1, ")")
+			start += 1
+			finish -= 1
+		end
+		if row.constant && start == plan.origin && finish == plan.finish + 1
+			return true
+		end
+		index += 1
+	end
+	return false
+end
+
 def checked_hash_valid(state: CompilerState, plan: MirHashOperation, pending: Boolean): Boolean
-	if !mir_hash_valid(plan, state.token_count[0], pending)
+	mut allow_pending := pending
+	if checked_hash_empty_constant(state, plan)
+		allow_pending = true
+	end
+	if !mir_hash_valid(plan, state.token_count[0], allow_pending)
 		return false
 	end
 	if plan.type_name != "Hash" && !checked_hash_value_layout(state, plan.value_type)

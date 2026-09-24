@@ -503,6 +503,26 @@ false == 1 < 2 || 3 > 2 == true
     assert logical.count('true : Boolean') == 4, logical
     assert logical.count('false : Boolean') == 2, logical
     assert 'panic:' not in logical, logical
+    logical_assignment = run('repl', text='''def mark(value: Boolean): Boolean
+puts("visited")
+return value
+end
+def index(): Integer
+puts("index")
+return 0
+end
+mut enabled := true
+enabled ||= mark(false)
+enabled &&= mark(false)
+mut flags := [true]
+flags[index()] ||= mark(true)
+flags[index()] &&= mark(false)
+flags[0]
+:quit
+''')
+    assert logical_assignment.count('visited') == 2, logical_assignment
+    assert logical_assignment.count('index') == 2, logical_assignment
+    assert logical_assignment.endswith('false : Boolean\n'), logical_assignment
     unary = run('repl', text='-1 + 2\n-1 * 2 + 3\n-(1 + 2)\n!true && false || true\n:quit\n')
     assert unary == '1 : Integer\n1 : Integer\n-3 : Integer\ntrue : Boolean\n', unary
     required_rhs = run('repl', text='false || 1 / 0 == 0\n:q\n')

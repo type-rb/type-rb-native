@@ -87,6 +87,24 @@ with tempfile.TemporaryDirectory(prefix='native-diagnostics-') as temporary:
             assert actual == [origin(line + '\n') for line in baseline.stderr.splitlines()], baseline
         if '1 / 0' in source:
             assert '(trb):2: error: division by zero\n' in result.stderr, result
+
+    for expression, message in (
+            ('2 ** -1', 'negative Integer exponent'),
+            ('2 ** 53', 'Integer is outside the portable range')):
+        entry.write_text('def main()\n puts(' + expression + ')\nend\n')
+        executable = root / 'power-program'
+        built = run(binary, root, ('build', '--compile', '--outfile', executable, entry))
+        assert built.returncode == 0 and executable.is_file(), built
+        failed = run(executable, root, ())
+        assert (failed.returncode == 2 and failed.stdout == ''
+                and failed.stderr == 'panic: ' + message + '\n'), failed
+        interactive = run(binary, root, ('repl',),
+                          'puts(' + expression + ')\nputs(5)\n:quit\n')
+        assert (interactive.returncode == 0 and interactive.stdout == '5\n'
+                and interactive.stderr == '(trb):1: error: ' + message + '\n'), interactive
+        executable.unlink()
+    entry.unlink()
+
     loaded = root / 'session.trb'
     loaded.write_text('mut x := 1\ndef answer(): Integer\n  return true\nend\n')
     result = run(binary, root, ('repl',), f':load {loaded}\nputs(123)\n:quit\n')

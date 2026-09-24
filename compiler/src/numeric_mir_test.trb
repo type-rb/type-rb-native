@@ -26,6 +26,17 @@ def numeric_mir_source(): String
 end
 
 describe("MIR numeric expansion ownership") do
+	test("emits checked Integer and Float powers from verified MIR after source erasure") do
+		mut state := numeric_mir_check("def integer_power(value: Integer): Integer\nreturn value ** 3\nend\ndef float_power(value: Float): Float\nreturn value ** 0.5\nend\ndef main()\nputs(integer_power(3))\nputs(float_power(4.0))\nend\n")
+		qbe := control_test_output(emit_qbe(state))
+		expect(qbe.include?("call $trbn_integer_power")).to_be_true()
+		expect(qbe.include?("call $pow(d ")).to_be_true()
+		expect(qbe.include?("function l $trbn_integer_power")).to_be_true()
+		intrinsic_mir_erase(state)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		expect(control_test_output(emit_qbe(state))).to_equal(qbe)
+	end
+
 	test("selects bounded calls from CFG loops independently of the outside reserve") do
 		state := numeric_mir_check(numeric_mir_source())
 		mut expanded := 0

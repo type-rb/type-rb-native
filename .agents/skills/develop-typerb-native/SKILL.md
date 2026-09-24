@@ -51,9 +51,11 @@ Use CI as the full integration authority by default, with additional full local
 recovery for bootstrap or validation-orchestration changes and failure diagnosis.
 While a run is in progress, inspect completed failures as well as unfinished
 jobs; an early CLI or target failure can coexist with a long-running Native job.
-After changing checked binding or diagnostic behavior, use the existing Native
-compiler with `tools/check-conformance-sources.py` for a quick conformance
-source scan before the full recovery run; keep the latter as the authority.
+After changing checked binding or diagnostic behavior, run
+`tools/check-conformance-sources.py .trb/bootstrap/core/compiler` after an
+ordinary Native build for a quick conformance source scan. This script uses
+the core compiler's `--source-content` protocol; the `bin/trbn` CLI does not
+implement that protocol. Keep the full recovery run as the authority.
 For basic-language coverage, combine syntax, checking, MIR, execution and REPL
 into a coherent family rather than opening a PR for each internal step. A larger
 PR with reviewable commits and complete acceptance evidence is appropriate.
