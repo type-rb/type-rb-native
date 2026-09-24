@@ -27,6 +27,10 @@ seven-implementation cohort or a manual prose update.
   performance claim that needs it. There is no required monthly refresh.
 - Long-lived memory, worker stability and sanitizer checks keep their own
   existing triggers. Short speed measurements cannot replace them.
+- The separate [weekly development progress report](../tools/development-progress/README.md)
+  displays reviewed language-probe gaps, recent PR CI feedback time, the latest
+  daily compiler self-build observation and same-cohort Native/Pure Go ratios.
+  It compiles no programs and sets no acceptance threshold.
 
 The first four-role run completed in about 5 minutes 40 seconds, with 2 minutes
 10 seconds spent measuring. It shared current/previous compiler preparation;
