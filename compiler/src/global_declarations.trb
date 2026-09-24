@@ -10,10 +10,10 @@ def order_global_module(mut state: CompilerState, source: Integer, mut visited: 
 		return
 	end
 	visited[source] = 1
-	mut binding := load_integer(state.module_import_starts, source)
-	finish := binding + load_integer(state.module_import_counts, source)
+	mut binding := load_integer(state.module_graph.module_import_starts, source)
+	finish := binding + load_integer(state.module_graph.module_import_counts, source)
 	while binding < finish
-		target := load_integer(state.import_targets, binding)
+		target := load_integer(state.module_graph.import_targets, binding)
 		if target >= 0
 			order_global_module(state, target, visited)
 		end
@@ -34,22 +34,22 @@ def declare_global_functions(mut state: CompilerState): Boolean
 	end
 	mut visited: Array<Integer> := []
 	mut source := 0
-	while source < state.module_count[0] || source <= state.entry_module[0]
+	while source < state.module_graph.module_count[0] || source <= state.module_graph.entry_module[0]
 		visited.push(0)
 		source += 1
 	end
-	order_global_module(state, state.entry_module[0], visited)
+	order_global_module(state, state.module_graph.entry_module[0], visited)
 	# Configured projects check every production source, including independent
 	# roots. File-root loading has already restricted this catalog to imports.
 	source = 0
-	while source < state.module_count[0]
+	while source < state.module_graph.module_count[0]
 		order_global_module(state, source, visited)
 		source += 1
 	end
 	mut index := 0
 	while index < state.globals.size()
 		row := state.globals[index]
-		state.active_module[0] = row.source_id
+		state.module_graph.active_module[0] = row.source_id
 		state.declaration_owner[0] = namespace_parent(row.name)
 		mut kind := 0
 		while kind < 7

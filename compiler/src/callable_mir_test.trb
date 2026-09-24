@@ -29,7 +29,7 @@ import { describe, expect, test } from trb/std/test
 def callable_mir_state(): CompilerState
 	source := "alias Callback = (String) -> String\nrecord Holder\ncallback: Callback\nend\ndef transform(value: String): String\nreturn value + \"!\"\nend\ndef keep(callback: Callback): Callback\nreturn callback\nend\ndef report(callback: Callback)\nvalues := [callback]\ntable: Hash<String, Callback> := {\"saved\" => callback}\nitem := Holder.new(callback: callback)\nputs(values[0](\"array\" + \" value\"))\nputs(table[\"saved\"](\"hash\" + \" value\"))\nputs(item.callback(\"field\" + \" value\"))\nend\ndef numeric(value: Float, other: Integer): Float\nreturn value + other\nend\ndef report_numeric(callback: (Float, Integer) -> Float)\nputs(callback(2.5, 3).to_i())\nend\ndef nothing()\nputs(\"void\")\nend\ndef report_void(callback: () -> Void)\ncallback()\nend\ndef main()\ndispatch := report\nidentity := keep\ndispatch(identity(transform))\nreport_numeric(numeric)\nreport_void(nothing)\nend\n"
 	mut state := compiler_new(source.size() * 4 + 64)
-	valid := lex(state, source) && parse_module(state, 0, state.entry_module[0]) && resolve(state) && check(state)
+	valid := lex(state, source) && parse_module(state, 0, state.module_graph.entry_module[0]) && resolve(state) && check(state)
 	if !valid
 		puts(load_string(state.diagnostics.messages, 0))
 	end
@@ -41,7 +41,7 @@ describe("Anonymous function syntax ownership") do
 	test("parses multiline headers and immediate calls without consuming the containing expression") do
 		source := "def main()\nvalue := (fn(\nmut input: Integer\n): Integer\nreturn input\nend)(7) + 1\nend\n"
 		mut state := compiler_new(source.size() * 4 + 64)
-		expect(lex(state, source) && parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(lex(state, source) && parse_module(state, 0, state.module_graph.entry_module[0])).to_be_true()
 		expect(state.lambdas.size()).to_equal(1)
 		expect(state.lambdas[0].parameters.size()).to_equal(1)
 		expect(load_string(state.token_texts, state.lambdas[0].finish)).to_equal(")")
@@ -51,7 +51,7 @@ describe("Anonymous function syntax ownership") do
 	test("keeps nested fn parameters and defaults separate from surrounding declarations") do
 		source := "alias Callback = (Integer) -> Integer\nrecord Holder\ncallback: Callback = fn(input: Integer): Integer; return input; end\nend\ndef consume(callback: Callback = fn(mut first: Integer): Integer\nnested := fn(second: Integer): Integer; return second; end\nreturn nested(first)\nend, tail: Integer = 7): Integer\nreturn callback(tail)\nend\ndef main()\nend\n"
 		mut state := compiler_new(source.size() * 4 + 64)
-		expect(lex(state, source) && parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(lex(state, source) && parse_module(state, 0, state.module_graph.entry_module[0])).to_be_true()
 		expect(state.function_count[0]).to_equal(2)
 		expect(state.parameter_count[0]).to_equal(2)
 		expect(load_string(state.parameter_names, 0)).to_equal("callback")
@@ -77,7 +77,7 @@ describe("Anonymous function syntax ownership") do
 	test("resolves shared fn syntax separately for each generic body") do
 		source := "def probe<T>()\ncallback := fn(value: T): T; return value; end\nend\ndef main()\nprobe<Integer>()\nprobe<String>()\nend\n"
 		mut state := compiler_new(source.size() * 4 + 64)
-		expect(lex(state, source) && parse_module(state, 0, state.entry_module[0]) && resolve(state)).to_be_true()
+		expect(lex(state, source) && parse_module(state, 0, state.module_graph.entry_module[0]) && resolve(state)).to_be_true()
 		expect(state.lambdas.size()).to_equal(1)
 		origin := state.lambdas[0].origin
 		first := state.generic_function_instances[0].function
@@ -95,7 +95,7 @@ describe("Anonymous function syntax ownership") do
 		bodies.each do |body|
 			source := "def main()\n" + body + "puts(hidden)\nend\n"
 			mut state := compiler_new(source.size() * 4 + 64)
-			expect(lex(state, source) && parse_module(state, 0, state.entry_module[0])).to_be_true()
+			expect(lex(state, source) && parse_module(state, 0, state.module_graph.entry_module[0])).to_be_true()
 			expect(resolve(state)).to_be_false()
 			expect(load_string(state.diagnostics.messages, 0)).to_equal("unresolved local hidden")
 		end
@@ -106,13 +106,13 @@ describe("Anonymous function syntax ownership") do
 			source := "def main()\ncallback := " + header + "\nend\nend\n"
 			mut state := compiler_new(source.size() * 4 + 64)
 			expect(lex(state, source)).to_be_true()
-			expect(parse_module(state, 0, state.entry_module[0])).to_be_false()
+			expect(parse_module(state, 0, state.module_graph.entry_module[0])).to_be_false()
 		end
 		annotations := ["fn(value: Missing)", "fn(value: Void)", "fn(): Missing"]
 		annotations.each do |header|
 			source := "def unused<T>()\nouter := fn()\ninner := " + header + "\nend\nend\nend\ndef main()\nend\n"
 			mut state := compiler_new(source.size() * 4 + 64)
-			expect(lex(state, source) && parse_module(state, 0, state.entry_module[0]) && resolve(state)).to_be_true()
+			expect(lex(state, source) && parse_module(state, 0, state.module_graph.entry_module[0]) && resolve(state)).to_be_true()
 			expect(check(state)).to_be_false()
 			expect(load_string(state.diagnostics.codes, 0)).to_equal("TRBN4003")
 		end
@@ -124,7 +124,7 @@ end
 def callable_capture_state(): CompilerState
 	source := "alias Callback = (Integer) -> Integer\nrecord Envelope\ncallback: Callback\nend\ndef step(mut cell: Array<Integer>, label: String, scale: Float, enabled: Boolean, delta: Integer): Integer\nputs(label)\nif enabled\ncell[0] += delta + scale.to_i()\nend\nreturn cell[0]\nend\ndef make(mut cell: Array<Integer>, label: String, scale: Float, enabled: Boolean): Callback\nend\ndef dispatch(inner: Callback, value: Integer): Integer\nreturn inner(value)\nend\ndef wrap(inner: Callback): Callback\nend\ndef cycle_step(callbacks: Array<Callback>, delta: Integer): Integer\nreturn callbacks.size() + delta\nend\ndef make_cycle(callbacks: Array<Callback>): Callback\nend\ndef invoke(first: Callback, second: Callback)\nvalues := [first, second]\ntable: Hash<String, Callback> := {\"saved\" => values[1]}\nholder := Envelope.new(callback: table[\"saved\"])\nputs(values[0](1))\nputs(holder.callback(2))\nputs(values[0](3))\nend\ndef main()\nmut cell := [10]\nfirst := make(cell, \"one\" + \"!\", 1.5, true)\nsecond := make(cell, \"two\" + \"!\", 2.5, true)\ninvoke(wrap(first), second)\nother := make([100], \"other\" + \"!\", 3.5, true)\nputs(other(4))\nmut callbacks: Array<Callback> := []\ncycle := make_cycle(callbacks)\ncallbacks.push(cycle)\nputs(cycle(8))\nend\n"
 	mut state := compiler_new(source.size() * 4 + 64)
-	valid := lex(state, source) && parse_module(state, 0, state.entry_module[0]) && resolve(state)
+	valid := lex(state, source) && parse_module(state, 0, state.module_graph.entry_module[0]) && resolve(state)
 	expect(valid).to_be_true()
 	if !valid
 		puts(load_string(state.diagnostics.messages, 0))
@@ -132,21 +132,21 @@ def callable_capture_state(): CompilerState
 	end
 	mir_declare_types(state)
 	mir_declare_signatures(state)
-	factory := find_function_in_module(state, state.entry_module[0], "make")
-	wrapper := find_function_in_module(state, state.entry_module[0], "wrap")
-	cyclic := find_function_in_module(state, state.entry_module[0], "make_cycle")
+	factory := find_function_in_module(state, state.module_graph.entry_module[0], "make")
+	wrapper := find_function_in_module(state, state.module_graph.entry_module[0], "wrap")
+	cyclic := find_function_in_module(state, state.module_graph.entry_module[0], "make_cycle")
 	mut function := 0
 	while function < state.function_count[0]
 		if function == factory || function == wrapper || function == cyclic
 			mut locals := checked_function_locals(state, function)
 			origin := load_integer(state.function_body_starts, function)
-			mut target := find_function_in_module(state, state.entry_module[0], "step")
+			mut target := find_function_in_module(state, state.module_graph.entry_module[0], "step")
 			mut captures := [0, 1, 2, 3]
 			if function == wrapper
-				target = find_function_in_module(state, state.entry_module[0], "dispatch")
+				target = find_function_in_module(state, state.module_graph.entry_module[0], "dispatch")
 				captures = [0]
 			elsif function == cyclic
-				target = find_function_in_module(state, state.entry_module[0], "cycle_step")
+				target = find_function_in_module(state, state.module_graph.entry_module[0], "cycle_step")
 				captures = [0]
 			end
 			value := mir_checked_closure(state, locals, target, captures, origin)
@@ -376,7 +376,7 @@ describe("MIR callable foundation") do
 				elsif mode == 7
 					payload = 9007199254740991
 				elsif mode == 8
-					payload = find_function_in_module(state, state.entry_module[0], "nothing")
+					payload = find_function_in_module(state, state.module_graph.entry_module[0], "nothing")
 				else
 					first = 9007199254740991
 				end
@@ -413,7 +413,7 @@ describe("MIR callable foundation") do
 		sources.each do |declarations|
 			source := declarations + "def main()\nend\n"
 			mut state := compiler_new(source.size() * 4 + 64)
-			valid := lex(state, source) && parse_module(state, 0, state.entry_module[0]) && resolve(state) && check(state)
+			valid := lex(state, source) && parse_module(state, 0, state.module_graph.entry_module[0]) && resolve(state) && check(state)
 			if valid
 				puts(source)
 			end
@@ -427,7 +427,7 @@ end
 # Negative cases inspect their diagnostics; positive cases also materialize bodies.
 def lambda_analysis_state(source: String): CompilerState
 	mut state := compiler_new(source.size() * 4 + 64)
-	expect(lex(state, source) && parse_module(state, 0, state.entry_module[0]) && resolve(state)).to_be_true()
+	expect(lex(state, source) && parse_module(state, 0, state.module_graph.entry_module[0]) && resolve(state)).to_be_true()
 	state.hash_repl[0] = true
 	check(state)
 	return state
@@ -551,7 +551,7 @@ describe("Anonymous lexical body checking") do
 	test("owns different typed anonymous bodies for shared generic syntax") do
 		source := "def probe<T>(value: T)\ncallback := fn(): T; return value; end\nend\ndef main()\nprobe<Integer>(1)\nprobe<String>(\"text\")\nend\n"
 		mut state := compiler_new(source.size() * 4 + 64)
-		expect(lex(state, source) && parse_module(state, 0, state.entry_module[0]) && resolve(state)).to_be_true()
+		expect(lex(state, source) && parse_module(state, 0, state.module_graph.entry_module[0]) && resolve(state)).to_be_true()
 		mut body_ids: Array<Integer> := []
 		mut index := 0
 		while index < 2

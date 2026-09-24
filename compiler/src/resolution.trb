@@ -167,9 +167,9 @@ def standard_package_import(
 	if import_index < 0
 		return - 1
 	end
-	target := load_integer(state.import_targets, import_index)
+	target := load_integer(state.module_graph.import_targets, import_index)
 	if target < - 1
-		store_integer(state.import_used, import_index, 1)
+		store_integer(state.module_graph.import_used, import_index, 1)
 	end
 	return target
 end
@@ -264,33 +264,33 @@ end
 
 def resolve_bare_imports(mut state: CompilerState): Boolean
 	mut import_index := 0
-	while import_index < state.import_count[0]
-		if load_integer(state.import_kinds, import_index) == 1
-			module_index := load_integer(state.import_modules, import_index)
-			state.active_module[0] = module_index
-			mut target := load_integer(state.import_targets, import_index)
-			line := load_integer(state.import_lines, import_index)
+	while import_index < state.module_graph.import_count[0]
+		if load_integer(state.module_graph.import_kinds, import_index) == 1
+			module_index := load_integer(state.module_graph.import_modules, import_index)
+			state.module_graph.active_module[0] = module_index
+			mut target := load_integer(state.module_graph.import_targets, import_index)
+			line := load_integer(state.module_graph.import_lines, import_index)
 			if target == - 1
 				target = standard_package_target(
-					import_path_value(load_string(state.import_paths, import_index)),
+					import_path_value(load_string(state.module_graph.import_paths, import_index)),
 				)
 				if target < - 1
-					store_integer(state.import_targets, import_index, target)
+					store_integer(state.module_graph.import_targets, import_index, target)
 				end
 			end
 			if target < 0
 				if target < - 1
 					declaration := standard_package_root(target)
-					store_string(state.import_declarations, import_index, declaration)
-					if load_string(state.import_symbols, import_index) == ""
-						store_string(state.import_symbols, import_index, declaration)
+					store_string(state.module_graph.import_declarations, import_index, declaration)
+					if load_string(state.module_graph.import_symbols, import_index) == ""
+						store_string(state.module_graph.import_symbols, import_index, declaration)
 					end
 				else
 					diagnostic(state, "TRBN4003", line, "bare import target is unresolved")
 					return false
 				end
 			else
-				mut segment := load_string(state.module_names, target)
+				mut segment := load_string(state.module_graph.module_names, target)
 				if path_basename(segment) == "index"
 					segment = path_directory(segment)
 				end
@@ -374,7 +374,7 @@ def resolve_bare_imports(mut state: CompilerState): Boolean
 						matches += 1
 					end
 				end
-				raw_path := load_string(state.import_paths, import_index)
+				raw_path := load_string(state.module_graph.import_paths, import_index)
 				if matches == 0
 					mut matching_function := false
 					mut function_index := 0
@@ -418,9 +418,9 @@ def resolve_bare_imports(mut state: CompilerState): Boolean
 					)
 					return false
 				end
-				store_string(state.import_declarations, import_index, declaration)
-				if load_string(state.import_symbols, import_index) == ""
-					store_string(state.import_symbols, import_index, declaration)
+				store_string(state.module_graph.import_declarations, import_index, declaration)
+				if load_string(state.module_graph.import_symbols, import_index) == ""
+					store_string(state.module_graph.import_symbols, import_index, declaration)
 				end
 			end
 		end
@@ -431,17 +431,17 @@ end
 
 def validate_import_bindings(mut state: CompilerState): Boolean
 	mut import_index := 0
-	while import_index < state.import_count[0]
-		module_index := load_integer(state.import_modules, import_index)
-		state.active_module[0] = module_index
-		name := load_string(state.import_symbols, import_index)
-		declaration := load_string(state.import_declarations, import_index)
-		line := load_integer(state.import_lines, import_index)
-		target := load_integer(state.import_targets, import_index)
-		mut other := load_integer(state.module_import_starts, module_index)
+	while import_index < state.module_graph.import_count[0]
+		module_index := load_integer(state.module_graph.import_modules, import_index)
+		state.module_graph.active_module[0] = module_index
+		name := load_string(state.module_graph.import_symbols, import_index)
+		declaration := load_string(state.module_graph.import_declarations, import_index)
+		line := load_integer(state.module_graph.import_lines, import_index)
+		target := load_integer(state.module_graph.import_targets, import_index)
+		mut other := load_integer(state.module_graph.module_import_starts, module_index)
 		while other < import_index
-			other_target := load_integer(state.import_targets, other)
-			other_declaration := load_string(state.import_declarations, other)
+			other_target := load_integer(state.module_graph.import_targets, other)
+			other_declaration := load_string(state.module_graph.import_declarations, other)
 			if target >= 0
 				if other_target == target
 					if other_declaration == declaration
@@ -449,13 +449,13 @@ def validate_import_bindings(mut state: CompilerState): Boolean
 							state,
 							"TRBN4003",
 							line,
-							"declaration " + declaration + " from " + load_string(state.module_names, target) + " is already imported as " + load_string(state.import_symbols, other),
+							"declaration " + declaration + " from " + load_string(state.module_graph.module_names, target) + " is already imported as " + load_string(state.module_graph.import_symbols, other),
 						)
 					end
 				end
 			end
 			if !has_diagnostic(state)
-				if load_string(state.import_symbols, other) == name
+				if load_string(state.module_graph.import_symbols, other) == name
 					diagnostic(state, "TRBN4003", line, "duplicate import binding " + name)
 				end
 			end
@@ -493,14 +493,14 @@ end
 
 def validate_import_usage(mut state: CompilerState): Boolean
 	mut import_index := 0
-	while import_index < state.import_count[0]
-		if load_integer(state.import_used, import_index) == 0
-			state.active_module[0] = load_integer(state.import_modules, import_index)
+	while import_index < state.module_graph.import_count[0]
+		if load_integer(state.module_graph.import_used, import_index) == 0
+			state.module_graph.active_module[0] = load_integer(state.module_graph.import_modules, import_index)
 			diagnostic(
 				state,
 				"TRBN4003",
-				load_integer(state.import_lines, import_index),
-				"unused import " + load_string(state.import_symbols, import_index),
+				load_integer(state.module_graph.import_lines, import_index),
+				"unused import " + load_string(state.module_graph.import_symbols, import_index),
 			)
 		end
 		import_index += 1
@@ -513,7 +513,7 @@ def resolve_declarations(mut state: CompilerState): Boolean
 		mut kind := 0
 		while kind < 6
 			if find_declaration_in_module(state, declaration.source_id, declaration.name, kind) >= 0
-				state.active_module[0] = declaration.source_id
+				state.module_graph.active_module[0] = declaration.source_id
 				diagnostic(state, "TRBN4003", declaration.line, "duplicate declaration " + declaration.name)
 			end
 			kind += 1
@@ -546,7 +546,7 @@ def resolve_declarations(mut state: CompilerState): Boolean
 	mut record_index := 0
 	while record_index < state.record_count[0]
 		module_index := load_integer(state.record_modules, record_index)
-		state.active_module[0] = module_index
+		state.module_graph.active_module[0] = module_index
 		mut other_record := record_index - 1
 		state.declaration_owner[0] = namespace_parent(load_string(state.record_names, record_index))
 		while other_record >= 0
@@ -604,8 +604,8 @@ def resolve_declarations(mut state: CompilerState): Boolean
 			declared_functions = {}
 			declared_module = module_index
 		end
-		state.active_module[0] = module_index
-		if module_index == state.entry_module[0]
+		state.module_graph.active_module[0] = module_index
+		if module_index == state.module_graph.entry_module[0]
 			if load_string(state.function_names, function_index) == "main"
 				main_count += 1
 				if load_integer(state.function_parameter_counts, function_index) != 0
@@ -668,7 +668,7 @@ def resolve_declarations(mut state: CompilerState): Boolean
 		function_index += 1
 	end
 	if main_count != 1
-		state.active_module[0] = state.entry_module[0]
+		state.module_graph.active_module[0] = state.module_graph.entry_module[0]
 		diagnostic(state, "TRBN4003", 1, "program must declare exactly one main function")
 	end
 	return !has_diagnostic(state)
@@ -681,7 +681,7 @@ def resolve_function_body(
 	): Boolean
 	select_checked_body(state, function_index)
 	module_index := load_integer(state.function_modules, function_index)
-	state.active_module[0] = module_index
+	state.module_graph.active_module[0] = module_index
 	body_start := load_integer(state.function_body_starts, function_index)
 	state.declaration_owner[0] = sparse_string_at(state.token_namespaces, body_start)
 	body_finish := load_integer(state.function_body_ends, function_index)
@@ -710,7 +710,7 @@ end
 
 # Resolve one owned lexical region, shared by named and anonymous bodies.
 def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finish: Integer, mut locals: CheckedLocals): Boolean
-	module_index := state.active_module[0]
+	module_index := state.module_graph.active_module[0]
 	if !resolve_lambda_headers(state, body_start, body_finish)
 		return false
 	end
@@ -991,10 +991,10 @@ def resolve(mut state: CompilerState): Boolean
 		load_standard_source(state, 3)
 	end
 	mut import_index := 0
-	while import_index < state.import_count[0]
-		kind := standard_source_kind(import_path_value(load_string(state.import_paths, import_index)))
+	while import_index < state.module_graph.import_count[0]
+		kind := standard_source_kind(import_path_value(load_string(state.module_graph.import_paths, import_index)))
 		if kind > 0
-			store_integer(state.import_targets, import_index, load_standard_source(state, kind))
+			store_integer(state.module_graph.import_targets, import_index, load_standard_source(state, kind))
 		end
 		import_index += 1
 	end
@@ -1048,7 +1048,7 @@ def compiler_main_signature(state: CompilerState, index: Integer): Integer
 end
 
 def compiler_entry_function(state: CompilerState): Integer
-	return compiler_main_signature(state, find_function_in_module(state, state.entry_module[0], "compiler_main"))
+	return compiler_main_signature(state, find_function_in_module(state, state.module_graph.entry_module[0], "compiler_main"))
 end
 
 # CLI entry adapters import the ordinary compiler under core_main. Follow that
@@ -1057,8 +1057,8 @@ def compiler_runtime_owner(state: CompilerState): Integer
 	if compiler_entry_function(state) < 0
 		return - 1
 	end
-	if find_function_in_module(state, state.entry_module[0], "native_cli_main") >= 0
-		core := find_visible_function(state, state.entry_module[0], "core_main")
+	if find_function_in_module(state, state.module_graph.entry_module[0], "native_cli_main") >= 0
+		core := find_visible_function(state, state.module_graph.entry_module[0], "core_main")
 		if compiler_main_signature(state, core) < 0
 			return - 1
 		end
@@ -1067,7 +1067,7 @@ def compiler_runtime_owner(state: CompilerState): Integer
 		end
 		return load_integer(state.function_modules, core)
 	end
-	return state.entry_module[0]
+	return state.module_graph.entry_module[0]
 end
 
 def compiler_runtime_intrinsic(state: CompilerState, function_index: Integer): Boolean
@@ -1109,17 +1109,17 @@ def compiler_host_intrinsic(state: CompilerState, function_index: Integer): Bool
 	if function_index < 0 || function_index >= state.function_count[0]
 		return false
 	end
-	if compiler_entry_function(state) < 0 || find_function_in_module(state, state.entry_module[0], "native_cli_main") < 0
+	if compiler_entry_function(state) < 0 || find_function_in_module(state, state.module_graph.entry_module[0], "native_cli_main") < 0
 		return false
 	end
-	return load_string(state.module_names, load_integer(state.function_modules, function_index)) == "host"
+	return load_string(state.module_graph.module_names, load_integer(state.function_modules, function_index)) == "host"
 end
 
 def resolve_enum_declarations(mut state: CompilerState): Boolean
 	mut owner := 0
 	while owner < state.enums.size()
 		definition := state.enums[owner]
-		state.active_module[0] = definition.source_id
+		state.module_graph.active_module[0] = definition.source_id
 		state.declaration_owner[0] = namespace_parent(definition.name)
 		if find_enum_in_module(state, definition.source_id, definition.name) != owner || find_record_in_module(state, definition.source_id, definition.name) >= 0 || find_function_in_module(state, definition.source_id, definition.name) >= 0
 			diagnostic(state, "TRBN4003", definition.line, "duplicate declaration " + definition.name)

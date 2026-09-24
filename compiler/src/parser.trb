@@ -23,23 +23,23 @@ def append_import(
 		kind: Integer,
 		line: Integer,
 	): Integer
-	import_index := state.import_count[0]
-	store_integer(state.import_modules, import_index, state.active_module[0])
-	store_string(state.import_paths, import_index, path)
-	store_string(state.import_symbols, import_index, binding)
-	store_string(state.import_declarations, import_index, declaration)
-	store_integer(state.import_kinds, import_index, kind)
-	store_integer(state.import_lines, import_index, line)
-	store_integer(state.import_targets, import_index, - 1)
-	store_integer(state.import_used, import_index, 0)
-	state.import_count[0] = import_index + 1
+	import_index := state.module_graph.import_count[0]
+	store_integer(state.module_graph.import_modules, import_index, state.module_graph.active_module[0])
+	store_string(state.module_graph.import_paths, import_index, path)
+	store_string(state.module_graph.import_symbols, import_index, binding)
+	store_string(state.module_graph.import_declarations, import_index, declaration)
+	store_integer(state.module_graph.import_kinds, import_index, kind)
+	store_integer(state.module_graph.import_lines, import_index, line)
+	store_integer(state.module_graph.import_targets, import_index, - 1)
+	store_integer(state.module_graph.import_used, import_index, 0)
+	state.module_graph.import_count[0] = import_index + 1
 	return import_index
 end
 
 def parse_named_import(mut state: CompilerState, mut position: Array<Integer>, line: Integer): Boolean
 	advance(position)
 	skip_newlines(state, position)
-	import_start := state.import_count[0]
+	import_start := state.module_graph.import_count[0]
 	mut finished := false
 	while !finished
 		if token_is(state, position[0], "}")
@@ -70,7 +70,7 @@ def parse_named_import(mut state: CompilerState, mut position: Array<Integer>, l
 			end
 		end
 	end
-	if state.import_count[0] == import_start
+	if state.module_graph.import_count[0] == import_start
 		diagnostic(state, "TRBN4002", line, "named import must contain at least one declaration")
 		return false
 	end
@@ -89,8 +89,8 @@ def parse_named_import(mut state: CompilerState, mut position: Array<Integer>, l
 				return false
 			end
 			mut terminal_index := import_start
-			while terminal_index < state.import_count[0]
-				store_string(state.import_paths, terminal_index, path)
+			while terminal_index < state.module_graph.import_count[0]
+				store_string(state.module_graph.import_paths, terminal_index, path)
 				terminal_index += 1
 			end
 			return true
@@ -103,8 +103,8 @@ def parse_named_import(mut state: CompilerState, mut position: Array<Integer>, l
 		return false
 	end
 	mut import_index := import_start
-	while import_index < state.import_count[0]
-		store_string(state.import_paths, import_index, path)
+	while import_index < state.module_graph.import_count[0]
+		store_string(state.module_graph.import_paths, import_index, path)
 		import_index += 1
 	end
 	return finish_statement(state, position)
@@ -157,12 +157,12 @@ def parse_namespace(mut state: CompilerState, mut position: Array<Integer>): Boo
 	name := namespace_qualify(parent, leaf)
 	mut found := false
 	state.namespaces.each do |declaration|
-		if declaration.source_id == state.active_module[0] && declaration.name == name
+		if declaration.source_id == state.module_graph.active_module[0] && declaration.name == name
 			found = true
 		end
 	end
 	if !found
-		state.namespaces.push(NamespaceDeclaration.new(name: name, source_id: state.active_module[0], line: line))
+		state.namespaces.push(NamespaceDeclaration.new(name: name, source_id: state.module_graph.active_module[0], line: line))
 	end
 	if !finish_statement(state, position)
 		return false
@@ -325,11 +325,11 @@ def parse_declaration(mut state: CompilerState, mut position: Array<Integer>): B
 end
 
 def parse_module(mut state: CompilerState, start: Integer, module_index: Integer): Boolean
-	state.active_module[0] = module_index
+	state.module_graph.active_module[0] = module_index
 	state.declaration_owner[0] = ""
-	import_start := state.import_count[0]
-	store_integer(state.module_import_starts, module_index, import_start)
-	store_integer(state.module_import_counts, module_index, 0)
+	import_start := state.module_graph.import_count[0]
+	store_integer(state.module_graph.module_import_starts, module_index, import_start)
+	store_integer(state.module_graph.module_import_counts, module_index, 0)
 	mut position := [start]
 	skip_newlines(state, position)
 	while !terminal_token(state, position[0])
@@ -349,16 +349,16 @@ def parse_module(mut state: CompilerState, start: Integer, module_index: Integer
 			return false
 		end
 		store_integer(
-			state.module_import_counts,
+			state.module_graph.module_import_counts,
 			module_index,
-			state.import_count[0] - import_start,
+			state.module_graph.import_count[0] - import_start,
 		)
 		skip_newlines(state, position)
 	end
 	store_integer(
-		state.module_import_counts,
+		state.module_graph.module_import_counts,
 		module_index,
-		state.import_count[0] - import_start,
+		state.module_graph.import_count[0] - import_start,
 	)
 	return true
 end

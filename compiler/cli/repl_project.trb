@@ -164,14 +164,14 @@ def repl_project_source(source: String, prelude: String): String
 		explicit[definition.name] = 1
 	end
 	index = 0
-	while index < session.import_count[0]
-		if load_integer(session.import_kinds, index) == 0
+	while index < session.module_graph.import_count[0]
+		if load_integer(session.module_graph.import_kinds, index) == 0
 			# Match the original declaration, including when it has an alias.
-			explicit[load_string(session.import_declarations, index)] = 1
+			explicit[load_string(session.module_graph.import_declarations, index)] = 1
 		else
 			# A bare alias still owns the package's one exported root.
 			# Suppress its generated import under the original spelling too.
-			paths[load_string(session.import_paths, index)] = 1
+			paths[load_string(session.module_graph.import_paths, index)] = 1
 		end
 		index += 1
 	end
@@ -196,10 +196,10 @@ def repl_project_source(source: String, prelude: String): String
 		hidden.push(false)
 	end
 	index = 0
-	while index < generated.import_count[0]
-		path := load_string(generated.import_paths, index)
-		mut name := load_string(generated.import_declarations, index)
-		if load_integer(generated.import_kinds, index) == 1
+	while index < generated.module_graph.import_count[0]
+		path := load_string(generated.module_graph.import_paths, index)
+		mut name := load_string(generated.module_graph.import_declarations, index)
+		if load_integer(generated.module_graph.import_kinds, index) == 1
 			kind := standard_source_kind(path)
 			if kind == 1
 				name = "Result"
@@ -210,7 +210,7 @@ def repl_project_source(source: String, prelude: String): String
 			end
 		end
 		if explicit.key?(name) || paths.key?(path)
-			hidden[load_integer(generated.import_lines, index) - 1] = true
+			hidden[load_integer(generated.module_graph.import_lines, index) - 1] = true
 		end
 		index += 1
 	end
@@ -324,7 +324,7 @@ def repl_type_name(state: CompilerState, type_name: String): String
 end
 
 def repl_visible_type_name(state: CompilerState, owner: Integer, name: String): String
-	if owner == state.entry_module[0]
+	if owner == state.module_graph.entry_module[0]
 		return name
 	end
 	visible := repl_imported_name(state, owner, name)
@@ -335,16 +335,16 @@ def repl_visible_type_name(state: CompilerState, owner: Integer, name: String): 
 end
 
 def repl_imported_name(state: CompilerState, owner: Integer, name: String): String
-	start := load_integer(state.module_import_starts, state.entry_module[0])
-	finish := start + load_integer(state.module_import_counts, state.entry_module[0])
+	start := load_integer(state.module_graph.module_import_starts, state.module_graph.entry_module[0])
+	finish := start + load_integer(state.module_graph.module_import_counts, state.module_graph.entry_module[0])
 	mut index := start
 	while index < finish
-		if load_integer(state.import_targets, index) == owner
-			declaration := load_string(state.import_declarations, index)
+		if load_integer(state.module_graph.import_targets, index) == owner
+			declaration := load_string(state.module_graph.import_declarations, index)
 			mut root := name
 			while root != ""
 				if root == declaration
-					return load_string(state.import_symbols, index) + compiler_source_slice(name, root.size(), name.size())
+					return load_string(state.module_graph.import_symbols, index) + compiler_source_slice(name, root.size(), name.size())
 				end
 				root = namespace_parent(root)
 			end
@@ -407,7 +407,7 @@ def repl_witness_type_name_at(state: CompilerState, type_name: String, blocked: 
 		if instance.type_name == type_name && available
 			definition := state.type_aliases[instance.definition]
 			mut visible := ""
-			if definition.source_id == state.entry_module[0]
+			if definition.source_id == state.module_graph.entry_module[0]
 				visible = definition.name
 			else
 				visible = repl_imported_name(state, definition.source_id, definition.name)

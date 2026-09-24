@@ -81,8 +81,8 @@ describe("Object nominal resolution") do
 			expect(parse_module(state, start, index)).to_be_true()
 			index += 1
 		end
-		store_integer(state.import_targets, 0, 1)
-		store_integer(state.import_targets, 1, 1)
+		store_integer(state.module_graph.import_targets, 0, 1)
+		store_integer(state.module_graph.import_targets, 1, 1)
 		expect(resolve_declarations(state)).to_be_true()
 		state.declaration_owner[0] = ""
 		local := resolve_type_name(state, 0, "Item", false)
@@ -90,8 +90,8 @@ describe("Object nominal resolution") do
 		expect(local == remote).to_be_false()
 		expect(resolve_type_name(state, 0, "Alias", false)).to_equal(remote)
 		expect(state.object_instances[find_object_type(state, remote)].fields[0].type_name).to_equal(remote + "?")
-		expect(load_integer(state.import_used, 0)).to_equal(1)
-		expect(load_integer(state.import_used, 1)).to_equal(1)
+		expect(load_integer(state.module_graph.import_used, 0)).to_equal(1)
+		expect(load_integer(state.module_graph.import_used, 1)).to_equal(1)
 	end
 	test("restores lexical resolution scope through nested instance expansion") do
 		mut state := object_resolution_state("module First\nclass Item<T>\n@value: T\nend\nalias Wrapped<T> = Item<T>\nend\nmodule Second\nclass Item\nend\nclass Uses\n@value: First::Wrapped<Integer>\n@local: Item\nend\nend\n")
@@ -112,6 +112,19 @@ describe("Object nominal resolution") do
 		expect(resolve_type_name(state, 0, "Box<Boolean>", false)).to_equal("Class#1")
 		expect(state.object_instances[1].fields[0].type_name).to_equal("Boolean")
 		expect(fork.object_instances[1].fields[0].type_name).to_equal("String")
+	end
+	test("keeps parsed module facts while isolating specialization import state") do
+		mut state := compiler_new(32)
+		add_module(state, "main", "/project/main.trb")
+		store_integer(state.module_graph.import_used, 0, 1)
+		mut fork := generic_program_fork(state)
+		fork.module_graph.active_module[0] = 1
+		store_integer(fork.module_graph.import_used, 0, 2)
+		expect(state.module_graph.active_module[0]).to_equal(0)
+		expect(load_integer(state.module_graph.import_used, 0)).to_equal(1)
+		add_module(state, "shared", "/project/shared.trb")
+		expect(fork.module_graph.module_count[0]).to_equal(2)
+		expect(load_string(fork.module_graph.module_names, 1)).to_equal("shared")
 	end
 	test("rejects duplicate declarations fields and both method kinds") do
 		["class Same\nend\nclass Same\nend\n", "record Same\nend\nclass Same\nend\n", "alias Same = Integer\nclass Same\nend\n", "module Same\nend\nclass Same\nend\n", "class Fields\n@value: Integer\n@value: String\nend\n", "class Methods\ndef value(): Integer\nreturn 1\nend\ndef self.value(): Integer\nreturn 2\nend\nend\n"].each do |source|
