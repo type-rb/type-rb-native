@@ -46,7 +46,7 @@ puts(error.input)
 puts(error.message)
 end
 '''
-    initial = ('Result::Ok(value: "日\x00本") : Result<String, IndexLookupError>\n'
+    initial = ('Result::Ok(value: "日\\x00本") : Result<String, IndexLookupError>\n'
                'Result::Err(error: IndexLookupError(index: 3, size: 1, message: "String index is out of bounds")) : Result<String, IndexLookupError>\n'
                'Result::Err(error: NumberParseError(kind: NumberParseErrorKind::InvalidFormat, input: "bad", message: "invalid Float")) : Result<Float, NumberParseError>\n')
     output = '日\x00本\n3\n1\nbad\ninvalid Float\n'

@@ -541,7 +541,12 @@ types and allocation effects belong to verified MIR; Boolean text is static.
 runtime, asymmetric rounding intervals and ordinary compiler self-use. Shared
 cases cover extreme values, optional calls, constants, receiver effects and
 rejections; the CLI authority checks 8,392 binary64 boundaries and retained calls.
-General REPL value-display formatting remains separate from `to_s` parity.
+The REPL now displays finite Floats in compact round-trip notation with the
+reference's fixed/scientific threshold and signed zero. A few shortest-decimal
+rounding boundaries still differ from the reference. String
+inspection quotes ASCII controls and invalid UTF-8 bytes without changing the
+underlying String. Full Unicode printability and nominal value formatting
+remain separate from `to_s` parity.
 
 ## Callable signatures and MIR foundation
 

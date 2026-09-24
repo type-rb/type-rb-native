@@ -869,9 +869,9 @@
 | Array ordering: integer order | accepts | accepts | matches reference | matches reference |
 | Array ordering: empty single | accepts | accepts | matches reference | matches reference |
 | Array ordering: integer limits | accepts | accepts | matches reference | matches reference |
-| Array ordering: unicode prefix nul | accepts | accepts | matches reference | output differs |
+| Array ordering: unicode prefix nul | accepts | accepts | matches reference | matches reference |
 | Array ordering: invalid bytes | accepts | accepts | matches reference | matches reference |
-| Array ordering: float specials | accepts | accepts | matches reference | output differs |
+| Array ordering: float specials | accepts | accepts | matches reference | matches reference |
 | Array ordering: independent copy | accepts | accepts | matches reference | matches reference |
 | Array ordering: single evaluation | accepts | accepts | matches reference | matches reference |
 | Array ordering: optional | accepts | accepts | matches reference | matches reference |
@@ -893,7 +893,7 @@
 | Array keyed ordering: empty single | accepts | accepts | matches reference | matches reference |
 | Array keyed ordering: numeric live | accepts | accepts | matches reference | matches reference |
 | Array keyed ordering: managed narrowed | accepts | accepts | matches reference | matches reference |
-| Array keyed ordering: unicode keys | accepts | accepts | matches reference | output differs |
+| Array keyed ordering: unicode keys | accepts | accepts | matches reference | matches reference |
 | Array keyed ordering: nullable values | accepts | accepts | matches reference | matches reference |
 | Array keyed ordering: union values | accepts | accepts | matches reference | matches reference |
 | Array keyed ordering: boolean values | accepts | accepts | matches reference | matches reference |
@@ -1283,7 +1283,7 @@
 | Namespace bindings: import alias | accepts | accepts | matches reference | matches reference |
 | Namespace bindings: import identity | accepts | accepts | matches reference | matches reference |
 | Safe collection lookup: array bounds | accepts | accepts | matches reference | matches reference |
-| Safe collection lookup: string codepoints | accepts | accepts | matches reference | output differs |
+| Safe collection lookup: string codepoints | accepts | accepts | matches reference | matches reference |
 | Safe collection lookup: array slices | accepts | accepts | matches reference | matches reference |
 | Safe collection lookup: string slices | accepts | accepts | matches reference | matches reference |
 | Safe collection lookup: empty array slices | accepts | accepts | matches reference | matches reference |

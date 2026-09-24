@@ -86,7 +86,7 @@ puts(read())
 :quit
 ''')
     assert retained.stdout == (
-        '"日\x00本" : Label [mut]\n#<fn> : () -> String\nLabel\n'
+        '"日\\x00本" : Label [mut]\n#<fn> : () -> String\nLabel\n'
         '日\x00本\n日\x00本\n日\x00本\n日\x00本\nreloaded\n日\x00本\n'), retained
     assert len(retained.stderr.splitlines()) == 1 and 'Label' in retained.stderr, retained
 

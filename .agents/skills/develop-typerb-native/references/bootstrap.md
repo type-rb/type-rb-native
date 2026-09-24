@@ -48,6 +48,10 @@ worktree, point `TRBN_QBE` and `TRBN_BOOTSTRAP_SEED` at already verified local
 assets when available so the fast loop does not wait on network downloads.
 When compiler-module imports change, update `src/compiler_recovery_layout.trb`
 and run the focused `Compiler recovery source closure` root test before pushing.
+When adding or renaming a compiler module, also update the independent module
+inventory in `compiler/src/compiler_test.trb` and run its focused
+`parses the checked-in compiler closure through its own frontend` test. The
+root closure test does not check that second inventory.
 Run `tools/check-bootstrap-snapshot.sh /path/to/pinned/trb` on the canonical
 compiler closure before publishing each compiler-source batch. It is a short
 snapshot-v4 compatibility check, not a check of the Native decoder's byte bound

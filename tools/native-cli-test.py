@@ -47,6 +47,7 @@ subprocess.run([sys.executable, str(repository / "tools/native-object-methods-te
 subprocess.run([sys.executable, str(repository / "tools/native-literal-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-union-hash-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-scalar-strings-test.py"), str(binary)], check=True)
+subprocess.run([sys.executable, str(repository / "tools/native-repl-display-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-union-test.py"), str(binary)], check=True)
 subprocess.run([sys.executable, str(repository / "tools/native-hash-range-test.py"), str(binary)], check=True)
 
