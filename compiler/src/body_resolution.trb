@@ -1,0 +1,386 @@
+import { object_method_function } from object_methods
+import { object_static_self_type } from object_types
+import { find_newtype_type } from newtype_types
+import { find_visible_global, find_visible_newtype } from declaration_lookup
+import { find_newtype_in_module } from newtype_types
+import { enum_method_declaration_name, enum_method_function } from enum_methods
+import { integer_string } from literals
+import { next_generic_depth } from generic_bindings
+import { namespace_parent } from namespace_model
+import { resolve_lambda_headers } from lambda_resolution
+import { lambda_contains_origin } from lambda_syntax
+import { instantiate_generic_function } from generic_functions
+import { generic_application, generic_arguments, generic_base } from generic_arguments
+import { find_import_binding, find_result_pattern, find_visible_alias, find_visible_declaration, find_visible_enum, find_visible_function, find_visible_generic_function, find_visible_record } from declaration_lookup
+import { namespace_member_access, parse_declaration_reference } from namespace_references
+import { resolve_type_name } from type_resolution
+import { parse_type, token_is } from syntax_tokens
+import { nominal_application_end, nominal_application_name } from generic_syntax
+import { syntax_loop_transfer_kind } from syntax_forms
+import { CompilerState, diagnostic, has_diagnostic, terminal_token } from state
+import { CheckedLocals, local_bind, local_find } from local_state
+import { load_integer, load_string, sparse_integer_at, store_integer, store_string } from storage
+
+def resolution_local_add(
+		mut locals: CheckedLocals,
+		name: String,
+		type_name: String,
+		mutable: Integer,
+	)
+	if local_find(locals, name) < 0
+		local_bind(locals, name, type_name, mutable)
+	end
+	return
+end
+
+def resolution_keyword(name: String): Boolean
+	if name == "try" || name == "catch"
+		return true
+	end
+	if name == "nil" || name == "case" || name == "when"
+		return true
+	end
+	if name == "do"
+		return true
+	end
+	mut keyword := false
+	if name == "if"
+		keyword = true
+	end
+	if name == "else"
+		keyword = true
+	end
+	if name == "elsif"
+		keyword = true
+	end
+	if name == "end"
+		keyword = true
+	end
+	if name == "while"
+		keyword = true
+	end
+	if name == "return"
+		keyword = true
+	end
+	if name == "mut"
+		keyword = true
+	end
+	if name == "true"
+		keyword = true
+	end
+	if name == "false"
+		keyword = true
+	end
+	return keyword
+end
+
+def is_typed_local_declaration(state: CompilerState, index: Integer): Boolean
+	mut parentheses := 0
+	mut depth := 0
+	mut cursor := index + 2
+	while !terminal_token(state, cursor)
+		if load_integer(state.source_tokens.token_kinds, cursor) == 4
+			return false
+		end
+		if token_is(state, cursor, ":=")
+			if depth != 0
+				return false
+			end
+			return parentheses == 0
+		end
+		if token_is(state, cursor, ",") && depth == 0 && parentheses == 0
+			return false
+		end
+		if token_is(state, cursor, "(")
+			parentheses += 1
+		elsif token_is(state, cursor, ")")
+			if parentheses == 0
+				return false
+			end
+			parentheses -= 1
+		end
+		if token_is(state, cursor, "<")
+			depth += 1
+		elsif token_is(state, cursor, ">")
+			depth -= 1
+		end
+		cursor += 1
+	end
+	return false
+end
+
+def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finish: Integer, mut locals: CheckedLocals): Boolean
+	module_index := state.module_graph.active_module[0]
+	if !resolve_lambda_headers(state, body_start, body_finish)
+		return false
+	end
+	mut iteration_index := 0
+	while iteration_index < state.parsed.iterations.size()
+		iteration := state.parsed.iterations[iteration_index]
+		if iteration.origin >= body_start && iteration.finish <= body_finish && !lambda_contains_origin(state, body_start, body_finish, iteration.origin)
+			resolution_local_add(locals, load_string(state.source_tokens.token_texts, iteration.element_origin), "", 1)
+			if iteration.second_origin >= 0
+				resolution_local_add(locals, load_string(state.source_tokens.token_texts, iteration.second_origin), "", 1)
+			end
+		end
+		iteration_index += 1
+	end
+	state.parsed.transforms.each do |transform|
+		shape := transform.iteration
+		if shape.origin >= body_start && shape.finish <= body_finish && !lambda_contains_origin(state, body_start, body_finish, shape.origin)
+			resolution_local_add(locals, load_string(state.source_tokens.token_texts, shape.element_origin), "", 1)
+			if shape.second_origin >= 0
+				resolution_local_add(locals, load_string(state.source_tokens.token_texts, shape.second_origin), "", 1)
+			end
+			if transform.accumulator_origin >= 0
+				resolution_local_add(locals, load_string(state.source_tokens.token_texts, transform.accumulator_origin), "", 1)
+			end
+		end
+	end
+	state.parsed.catch_syntax.each do |handler|
+		if handler.origin >= body_start && handler.finish <= body_finish && !lambda_contains_origin(state, body_start, body_finish, handler.origin)
+			resolution_local_add(locals, load_string(state.source_tokens.token_texts, handler.binding), "", 0)
+		end
+	end
+	mut type_patterns: Hash<String, Integer> := {}
+	state.parsed.controls.each do |control|
+		if control.kind == 2 && control.origin >= body_start && control.finish <= body_finish && !lambda_contains_origin(state, body_start, body_finish, control.origin)
+			control.branches.each do |branch|
+				mut pattern_name := ""
+				if branch.condition >= 0
+					pattern_name = load_string(state.source_tokens.token_texts, branch.condition)
+				end
+				if branch.condition >= 0 && (pattern_name == "Integer" || pattern_name == "Float" || pattern_name == "Boolean" || pattern_name == "String") && token_is(state, branch.condition + 1, "(")
+					type_patterns[integer_string(branch.condition)] = branch.condition_finish
+					mut binding := branch.condition + 2
+					while binding < branch.condition_finish
+						if load_integer(state.source_tokens.token_kinds, binding) == 1
+							resolution_local_add(locals, load_string(state.source_tokens.token_texts, binding), "", 0)
+						end
+						binding += 1
+					end
+				end
+				if branch.condition >= 0 && token_is(state, branch.condition + 1, "::")
+					mut token := branch.condition
+					while token < branch.condition_finish && !token_is(state, token, "(")
+						token += 1
+					end
+					token += 1
+					while token < branch.condition_finish
+						if load_integer(state.source_tokens.token_kinds, token) == 1 && !token_is(state, token + 1, ":")
+							resolution_local_add(locals, load_string(state.source_tokens.token_texts, token), "", 0)
+						end
+						token += 1
+					end
+				end
+			end
+		end
+	end
+	mut index := body_start
+	finish := body_finish
+	mut skipping_type := false
+	while index < finish
+		if type_patterns.key?(integer_string(index))
+			index = type_patterns[integer_string(index)]
+			next
+		end
+		lambda := sparse_integer_at(state.callables.lambda_origins, index)
+		if lambda > 0
+			index = state.callables.lambdas[lambda - 1].finish
+			next
+		end
+		kind := load_integer(state.source_tokens.token_kinds, index)
+		text := load_string(state.source_tokens.token_texts, index)
+		if skipping_type
+			if token_is(state, index, ":=")
+				skipping_type = false
+			end
+		else
+			if kind == 1
+				mut reference_name := text
+				mut reference_position := [index + 1]
+				if local_find(locals, text) < 0 && find_visible_declaration(state, module_index, text, 6) >= 0
+					reference_position[0] = index
+					reference_name = parse_declaration_reference(state, reference_position)
+				end
+				application_finish := nominal_application_end(state, index)
+				if application_finish > index
+					# Receiver methods bind after expression typing. Their explicit type
+					# arguments must not be mistaken for a free generic function.
+					mut receiver_application := false
+					if local_find(locals, text) >= 0 && nominal_application_name(state, index) > index
+						receiver_application = true
+					end
+					if index > body_start && (token_is(state, index - 1, ".") || token_is(state, index - 1, "&."))
+						receiver_application = true
+					end
+					if nominal_application_name(state, index) >= reference_position[0] && find_visible_declaration(state, module_index, reference_name, 9) >= 0
+						receiver_application = true
+					end
+					if receiver_application
+						index = application_finish
+						next
+					end
+					mut application_position := [nominal_application_name(state, index)]
+					mut raw := parse_type(state, application_position)
+					if reference_position[0] > index + 1
+						raw = generic_application(reference_name, generic_arguments(raw))
+					end
+					if token_is(state, application_finish, "(")
+						definition := find_visible_generic_function(state, module_index, generic_base(raw))
+						if definition < 0
+							diagnostic(state, "TRBN4003", load_integer(state.source_tokens.token_lines, index), "unresolved generic function " + generic_base(raw))
+							return false
+						end
+						declaration := state.type_resolution.generic_functions[definition]
+						if !namespace_member_access(state, declaration.source_id, declaration.name, index)
+							return false
+						end
+						mut arguments: Array<String> := []
+						generic_arguments(raw).each do |argument|
+							arguments.push(resolve_type_name(state, module_index, argument, false))
+						end
+						depth := next_generic_depth(state)
+						function := instantiate_generic_function(state, definition, arguments, depth)
+						store_integer(state.callables.checked[0].generic_calls, application_finish, function + 1)
+						store_integer(state.callables.checked[0].generic_application_finishes, index, application_finish)
+						index = application_finish
+						next
+					end
+					resolved := resolve_type_name(state, module_index, raw, false)
+					if resolved == ""
+						diagnostic(state, "TRBN4003", load_integer(state.source_tokens.token_lines, index), "invalid nominal type application " + raw)
+						return false
+					end
+					store_string(state.callables.checked[0].generic_application_types, index, resolved)
+					store_integer(state.callables.checked[0].generic_application_finishes, index, application_finish)
+					index = application_finish
+					next
+				end
+				if reference_position[0] > index + 1
+					alias_index := find_visible_alias(state, module_index, reference_name)
+					if alias_index >= 0 && state.type_resolution.type_aliases[alias_index].parameters.size() == 0
+						resolved := resolve_type_name(state, module_index, reference_name, false)
+						store_string(state.callables.checked[0].generic_application_types, index, resolved)
+						store_integer(state.callables.checked[0].generic_application_finishes, index, reference_position[0])
+					end
+					index = reference_position[0]
+					next
+				end
+				if local_find(locals, text) < 0 && (token_is(state, index + 1, "::") || token_is(state, index + 1, "."))
+					alias_index := find_visible_alias(state, module_index, text)
+					if alias_index >= 0 && state.type_resolution.type_aliases[alias_index].parameters.size() == 0
+						resolved := resolve_type_name(state, module_index, text, false)
+						store_string(state.callables.checked[0].generic_application_types, index, resolved)
+						store_integer(state.callables.checked[0].generic_application_finishes, index, index + 1)
+					end
+				end
+				mut keyword := resolution_keyword(text)
+				if syntax_loop_transfer_kind(state, index) > 0
+					mut leading := index == body_start
+					if !leading
+						leading = load_integer(state.source_tokens.token_kinds, index - 1) == 4
+						if !leading
+							leading = token_is(state, index - 1, "|")
+						end
+					end
+					if leading
+						keyword = true
+					end
+				end
+				if keyword
+				else
+					mut previous := ""
+					if index > body_start
+						previous = load_string(state.source_tokens.token_texts, index - 1)
+					end
+					if previous == "." || previous == "&." || previous == "::"
+					elsif token_is(state, index + 1, "::")
+						if find_visible_enum(state, module_index, text) < 0 && find_result_pattern(state, module_index, text) < 0 && find_visible_alias(state, module_index, text) < 0
+							diagnostic(state, "TRBN4003", load_integer(state.source_tokens.token_lines, index), "unresolved enum " + text)
+						end
+					else
+						if token_is(state, index + 1, ":=")
+							resolution_local_add(locals, text, "", 0)
+						else
+							if token_is(state, index + 1, ":")
+								if is_typed_local_declaration(state, index)
+									resolution_local_add(locals, text, "", 0)
+									mut annotation := [index + 2]
+									raw := parse_type(state, annotation)
+									if resolve_type_name(state, module_index, raw, false) == "" && has_diagnostic(state)
+										return false
+									end
+									skipping_type = true
+								end
+							else
+								if token_is(state, index + 1, "(")
+									if text != "puts"
+										mut implicit_method :=- 1
+										self_slot := local_find(locals, "self")
+										if self_slot >= 0 && local_find(locals, text) < 0
+											receiver := load_string(locals.types, self_slot)
+											declaration := enum_method_declaration_name(state, receiver, text)
+											if declaration != "" && namespace_parent(declaration) == state.global_bindings.declaration_owner[0]
+												implicit_method = enum_method_function(state, receiver, text)
+											end
+											if implicit_method < 0
+												implicit_method = object_method_function(state, receiver, text, false, [])
+											end
+										end
+										if implicit_method >= 0
+											store_integer(state.callables.checked[0].generic_calls, index + 1, implicit_method + 1)
+										end
+										if implicit_method < 0 && !(text == "value" && self_slot >= 0 && find_newtype_type(state, load_string(locals.types, self_slot)) >= 0) && find_visible_function(state, module_index, text) < 0 && local_find(locals, text) < 0 && find_visible_global(state, module_index, text, index) < 0
+											diagnostic(
+												state,
+												"TRBN4003",
+												load_integer(state.source_tokens.token_lines, index),
+												"unresolved function " + text,
+											)
+										end
+									end
+								else
+									if token_is(state, index + 1, ".")
+										if token_is(state, index + 2, "new")
+											if find_visible_declaration(state, module_index, text, 9) < 0 && find_visible_record(state, module_index, text) < 0 && find_visible_newtype(state, module_index, text) < 0 && !(text == "self" && (find_newtype_in_module(state, module_index, state.global_bindings.declaration_owner[0]) >= 0 || object_static_self_type(state) != "")) && find_visible_alias(state, module_index, text) < 0
+												diagnostic(
+													state,
+													"TRBN4003",
+													load_integer(state.source_tokens.token_lines, index),
+													"unresolved record " + text,
+												)
+											end
+										else
+											if local_find(locals, text) < 0 && find_visible_declaration(state, module_index, text, 9) < 0 && find_visible_newtype(state, module_index, text) < 0 && !(text == "self" && (find_newtype_in_module(state, module_index, state.global_bindings.declaration_owner[0]) >= 0 || object_static_self_type(state) != "")) && find_visible_enum(state, module_index, text) < 0 && find_visible_alias(state, module_index, text) < 0 && find_visible_global(state, module_index, text, index) < 0
+												if find_import_binding(state, module_index, text) < 0
+													diagnostic(
+														state,
+														"TRBN4003",
+														load_integer(state.source_tokens.token_lines, index),
+														"unresolved local " + text,
+													)
+												end
+											end
+										end
+									else
+										if local_find(locals, text) < 0 && find_visible_function(state, module_index, text) < 0 && find_visible_generic_function(state, module_index, text) < 0 && find_visible_global(state, module_index, text, index) < 0
+											diagnostic(
+												state,
+												"TRBN4003",
+												load_integer(state.source_tokens.token_lines, index),
+												"unresolved local " + text,
+											)
+										end
+									end
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+		index += 1
+	end
+	return !has_diagnostic(state)
+end

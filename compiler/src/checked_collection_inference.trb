@@ -1,0 +1,125 @@
+import { checked_hash_plan, checked_hash_publish } from hash_checked
+import { hash_type, hash_value_type } from hash_types
+import { mir_hash_operation } from hash_mir
+import { CheckedValue, checked_mir_value, scalar_mir_convert_float } from checked_values
+import { mir_checked_array_refine } from mir_arrays
+import { CheckedLocals, local_find } from local_state
+import { CompilerState, diagnostic } from state
+import { array_type, common_array_element_type } from type_resolution
+import { load_integer, load_string, store_integer, store_string } from storage
+
+def checked_hash_inference_region(state: CompilerState, locals: CheckedLocals, origin: Integer): Boolean
+	if origin < 0 || origin >= state.source_tokens.token_count[0]
+		return false
+	end
+	plan := checked_hash_plan(state, origin)
+	if plan.kind != 3 || plan.receiver_origin < 0 || plan.receiver_origin >= state.source_tokens.token_count[0] || hash_value_type(plan.type_name) == "" || locals.inference_active_region[0] == 0
+		return false
+	end
+	binding := local_find(locals, load_string(state.source_tokens.token_texts, plan.receiver_origin))
+	if binding < 0 || load_integer(locals.hash_literal_origins, binding) == 0 || load_integer(locals.hash_inference_regions, binding) != locals.inference_active_region[0]
+		return false
+	end
+	return true
+end
+
+def checked_hash_numeric_region(state: CompilerState, locals: CheckedLocals, origin: Integer): Boolean
+	if !checked_hash_inference_region(state, locals, origin)
+		return false
+	end
+	return hash_value_type(checked_hash_plan(state, origin).type_name) == "Integer"
+end
+
+def checked_hash_refine(mut state: CompilerState, mut locals: CheckedLocals, origin: Integer, value_type: String)
+	plan := checked_hash_plan(state, origin)
+	if plan.kind != 3
+		return
+	end
+	first_store := plan.value_type == ""
+	if !first_store && !checked_hash_inference_region(state, locals, origin)
+		return
+	end
+	mut resolved := value_type
+	if !first_store
+		resolved = common_array_element_type(plan.value_type, value_type)
+		if resolved == ""
+			diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, origin), "incompatible inferred Hash value types")
+			return
+		end
+		if resolved == plan.value_type
+			return
+		end
+	end
+	binding := local_find(locals, load_string(state.source_tokens.token_texts, plan.receiver_origin))
+	if binding < 0
+		diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, origin), "empty Hash requires a typed binding")
+		return
+	end
+	type_name := hash_type(plan.key_type, resolved)
+	store_string(locals.types, binding, type_name)
+	if first_store
+		store_integer(locals.hash_inference_regions, binding, locals.inference_active_region[0])
+	end
+	declaration := load_integer(locals.hash_declaration_origins, binding)
+	if declaration > 0
+		store_string(state.callables.checked[0].local_types, declaration - 1, type_name)
+	end
+	literal_origin := load_integer(locals.hash_literal_origins, binding) - 1
+	literal := checked_hash_plan(state, literal_origin)
+	if literal.kind != 1
+		diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, origin), "empty Hash requires a typed binding")
+		return
+	end
+	checked_hash_publish(state, mir_hash_operation(1, literal.origin, literal.finish, literal.receiver_origin, type_name, true, 0))
+	checked_hash_publish(state, mir_hash_operation(3, plan.origin, plan.finish, plan.receiver_origin, type_name, plan.mutable, 0))
+end
+
+def checked_array_refine(mut state: CompilerState, mut locals: CheckedLocals, receiver: CheckedValue, element_type: String): String
+	binding := local_find(locals, load_string(state.source_tokens.token_texts, receiver.origin))
+	if binding < 0 || load_integer(locals.array_literal_origins, binding) == 0
+		return "cannot infer an untyped Array after its value escapes"
+	end
+	inferred := array_type(element_type)
+	if inferred == ""
+		return "unsupported inferred Array element type " + element_type
+	end
+	store_string(locals.types, binding, inferred)
+	store_string(state.callables.checked[0].array_literal_types, load_integer(locals.array_literal_origins, binding) - 1, inferred)
+	store_string(state.callables.checked[0].local_types, load_integer(locals.array_declaration_origins, binding) - 1, inferred)
+	if receiver.type_name == "Array"
+		store_integer(locals.array_inference_regions, binding, locals.inference_active_region[0])
+	end
+	mir_checked_array_refine(state, locals, receiver, inferred)
+	return ""
+end
+
+def checked_array_numeric_region(state: CompilerState, locals: CheckedLocals, receiver: CheckedValue): Boolean
+	if receiver.type_name != "Array<Integer>" || locals.inference_active_region[0] == 0
+		return false
+	end
+	if receiver.origin < 0 || receiver.origin >= state.source_tokens.token_count[0]
+		return false
+	end
+	binding := local_find(locals, load_string(state.source_tokens.token_texts, receiver.origin))
+	if binding < 0 || load_integer(locals.array_literal_origins, binding) == 0 || load_integer(locals.array_inference_regions, binding) != locals.inference_active_region[0]
+		return false
+	end
+	return true
+end
+
+def checked_array_numeric_candidate(mut state: CompilerState, mut locals: CheckedLocals, value: CheckedValue, origin: Integer, eligible: Boolean): Integer
+	if !eligible || value.type_name != "Integer" || locals.inference_active_region[0] == 0
+		return - 1
+	end
+	converted := scalar_mir_convert_float(state, locals, value, origin)
+	return checked_mir_value(converted)
+end
+
+def checked_array_numeric_record(mut locals: CheckedLocals, receiver: CheckedValue, conversion: Integer)
+	if conversion < 0
+		return
+	end
+	locals.mir_array_numeric_candidates.push(locals.mir_instructions.size() - 1)
+	locals.mir_array_numeric_candidates.push(conversion)
+	locals.mir_array_numeric_candidates.push(checked_mir_value(receiver))
+end
