@@ -31,7 +31,7 @@ def callable_mir_state(): CompilerState
 	mut state := compiler_new(source.size() * 4 + 64)
 	valid := lex(state, source) && parse_module(state, 0, state.entry_module[0]) && resolve(state) && check(state)
 	if !valid
-		puts(load_string(state.diagnostic_messages, 0))
+		puts(load_string(state.diagnostics.messages, 0))
 	end
 	expect(valid).to_be_true()
 	return state
@@ -97,7 +97,7 @@ describe("Anonymous function syntax ownership") do
 			mut state := compiler_new(source.size() * 4 + 64)
 			expect(lex(state, source) && parse_module(state, 0, state.entry_module[0])).to_be_true()
 			expect(resolve(state)).to_be_false()
-			expect(load_string(state.diagnostic_messages, 0)).to_equal("unresolved local hidden")
+			expect(load_string(state.diagnostics.messages, 0)).to_equal("unresolved local hidden")
 		end
 	end
 	test("rejects invalid fn headers including unused generic nested annotations") do
@@ -114,7 +114,7 @@ describe("Anonymous function syntax ownership") do
 			mut state := compiler_new(source.size() * 4 + 64)
 			expect(lex(state, source) && parse_module(state, 0, state.entry_module[0]) && resolve(state)).to_be_true()
 			expect(check(state)).to_be_false()
-			expect(load_string(state.diagnostic_codes, 0)).to_equal("TRBN4003")
+			expect(load_string(state.diagnostics.codes, 0)).to_equal("TRBN4003")
 		end
 	end
 end
@@ -127,7 +127,7 @@ def callable_capture_state(): CompilerState
 	valid := lex(state, source) && parse_module(state, 0, state.entry_module[0]) && resolve(state)
 	expect(valid).to_be_true()
 	if !valid
-		puts(load_string(state.diagnostic_messages, 0))
+		puts(load_string(state.diagnostics.messages, 0))
 		return state
 	end
 	mir_declare_types(state)
@@ -154,7 +154,7 @@ def callable_capture_state(): CompilerState
 			expect(scalar_mir_commit(state, function, locals)).to_equal("")
 		else
 			if !check_function(state, function)
-				puts(load_string(state.diagnostic_messages, 0))
+				puts(load_string(state.diagnostics.messages, 0))
 				expect(false).to_be_true()
 				return state
 			end
@@ -163,7 +163,7 @@ def callable_capture_state(): CompilerState
 	end
 	finished := finalize_checked_module(state)
 	if !finished
-		puts(load_string(state.diagnostic_messages, 0))
+		puts(load_string(state.diagnostics.messages, 0))
 	end
 	expect(finished).to_be_true()
 	return state
@@ -511,24 +511,24 @@ describe("Anonymous lexical body checking") do
 		while index < bodies.size()
 			source := "def factory(value: Integer)\ncallback := " + bodies[index] + "\nend\ndef main()\nend\n"
 			state := lambda_analysis_state(source)
-			expect(load_string(state.diagnostic_messages, 0)).to_equal(errors[index])
+			expect(load_string(state.diagnostics.messages, 0)).to_equal(errors[index])
 			index += 1
 		end
 	end
 
 	test("keeps loop transfers and conditional returns inside the fn boundary") do
 		state := lambda_analysis_state("def main()\nwhile true\ncallback := fn(); break; end\nbreak\nend\nend\n")
-		expect(load_string(state.diagnostic_messages, 0)).to_equal("break is only valid inside a loop")
+		expect(load_string(state.diagnostics.messages, 0)).to_equal("break is only valid inside a loop")
 		valid := lambda_analysis_state("def main()\ncallback := fn(flag: Boolean): Integer\nif flag\nreturn 1\nelse\nreturn 2\nend\nend\nend\n")
 		expect(has_diagnostic(valid)).to_be_false()
 	end
 
 	test("checks unused nested bodies and their Result obligations") do
 		invalid := lambda_analysis_state("def main()\nouter := fn()\ninner := fn(): Integer; return \"wrong\"; end\nend\nend\n")
-		expect(load_string(invalid.diagnostic_messages, 0)).to_equal("expected Integer, found String")
+		expect(load_string(invalid.diagnostics.messages, 0)).to_equal("expected Integer, found String")
 		source := "import trb/std/result\ndef operation(): Result<Integer, String>\nreturn Result<Integer, String>::Ok(1)\nend\ndef main()\ncallback := fn()\nunused := operation()\nend\nend\n"
 		result := lambda_analysis_state(source)
-		expect(load_string(result.diagnostic_messages, 0)).to_equal("Result binding unused must be used")
+		expect(load_string(result.diagnostics.messages, 0)).to_equal("Result binding unused must be used")
 	end
 
 	test("resolves generic applications inside an owned anonymous body") do
@@ -563,7 +563,7 @@ describe("Anonymous lexical body checking") do
 			mut position := [state.lambdas[0].origin]
 			value := check_lambda_value(state, position, parent)
 			expect(value.type_name).to_equal("$Callable<" + type_name + ">")
-			expect(state.diagnostic_count[0]).to_equal(0)
+			expect(state.diagnostics.count[0]).to_equal(0)
 			lambda := state.checked[0].lambdas[0]
 			expect(lambda.captures[0].type_name).to_equal(type_name)
 			body_ids.push(lambda.body)
@@ -575,7 +575,7 @@ describe("Anonymous lexical body checking") do
 		accepted := lambda_analysis_state("def factory(value: Integer?)\nif value != nil\n_callback := fn(): Integer; return value; end\nend\nend\ndef main()\nend\n")
 		expect(has_diagnostic(accepted)).to_be_false()
 		rejected := lambda_analysis_state("def factory(mut value: Integer?)\nif value != nil\ncallback := fn(): Integer; return value; end\nend\nend\ndef main()\nend\n")
-		expect(load_string(rejected.diagnostic_messages, 0)).to_equal("expected Integer, found Integer?")
+		expect(load_string(rejected.diagnostics.messages, 0)).to_equal("expected Integer, found Integer?")
 	end
 
 end

@@ -69,6 +69,16 @@ record CheckedSubmission
 	captured: Array<String>
 end
 
+# One independent diagnostic result per compiler state. Generic specialization
+# starts with a fresh result while sharing its immutable source tokens.
+record CompilerDiagnostics
+	codes: StringStorage
+	lines: IntegerStorage
+	messages: StringStorage
+	modules: IntegerStorage
+	count: Array<Integer>
+end
+
 record CompilerState
 	objects: Array<ObjectDefinition>
 	object_instances: Array<ObjectInstance>
@@ -186,11 +196,7 @@ record CompilerState
 	parameter_named_only: IntegerStorage
 	parameter_lines: IntegerStorage
 	parameter_count: Array<Integer>
-	diagnostic_codes: StringStorage
-	diagnostic_lines: IntegerStorage
-	diagnostic_messages: StringStorage
-	diagnostic_modules: IntegerStorage
-	diagnostic_count: Array<Integer>
+	diagnostics: CompilerDiagnostics
 end
 
 def compiler_new(capacity: Integer): CompilerState
@@ -276,11 +282,10 @@ def compiler_new(capacity: Integer): CompilerState
 		parameter_named_only: integer_storage(capacity),
 		parameter_lines: integer_storage(capacity),
 		parameter_count: [0],
-		diagnostic_codes: string_storage(1),
-		diagnostic_lines: integer_storage(1),
-		diagnostic_messages: string_storage(1),
-		diagnostic_modules: integer_storage(1),
-		diagnostic_count: [0],
+		diagnostics: CompilerDiagnostics.new(
+			codes: string_storage(1), lines: integer_storage(1),
+			messages: string_storage(1), modules: integer_storage(1), count: [0],
+		),
 	)
 end
 
@@ -319,16 +324,16 @@ def terminal_token(state: CompilerState, index: Integer): Boolean
 end
 
 def has_diagnostic(state: CompilerState): Boolean
-	return state.diagnostic_count[0] > 0
+	return state.diagnostics.count[0] > 0
 end
 
 def diagnostic(mut state: CompilerState, code: String, line: Integer, message: String)
-	if state.diagnostic_count[0] == 0
-		store_string(state.diagnostic_codes, 0, code)
-		store_integer(state.diagnostic_lines, 0, line)
-		store_string(state.diagnostic_messages, 0, message)
-		store_integer(state.diagnostic_modules, 0, state.active_module[0])
-		state.diagnostic_count[0] = 1
+	if state.diagnostics.count[0] == 0
+		store_string(state.diagnostics.codes, 0, code)
+		store_integer(state.diagnostics.lines, 0, line)
+		store_string(state.diagnostics.messages, 0, message)
+		store_integer(state.diagnostics.modules, 0, state.active_module[0])
+		state.diagnostics.count[0] = 1
 	end
 	return
 end
