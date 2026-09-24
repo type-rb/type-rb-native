@@ -1,9 +1,11 @@
+import trb/std/process
+import trb/std/result
 import { check, emit_qbe } from compiler
 import { check_function_body, checked_function_locals } from checked_functions
 import { scalar_mir_disable } from checked_values
 import { control_test_output } from control_mir_test
 import { intrinsic_mir_erase } from intrinsic_mir_test
-import { logical_checked_source } from logical_test
+import { logical_checked_source, logical_run_qbe } from logical_test
 import { MirNumericOperation, MirNumericPlan } from mir
 import { mir_declare_signatures } from mir_calls
 import { mir_declare_types } from mir_types
@@ -26,6 +28,36 @@ def numeric_mir_source(): String
 end
 
 describe("MIR numeric expansion ownership") do
+	test("uses verified collection lengths for one-sided Integer range checks") do
+		source := "def add_array_size(value: Integer, numbers: Array<Integer>): Integer\nreturn value + numbers.size()\nend\ndef add_string_size(value: Integer, text: String): Integer\nreturn value + text.size()\nend\ndef add_unknown(value: Integer, step: Integer): Integer\nreturn value + step\nend\ndef main()\nputs(add_array_size(4, [1, 2]))\nputs(add_string_size(4, \"xy\"))\nputs(add_unknown(4, -1))\nend\n"
+		mut state := numeric_mir_check(source)
+		known := mir_numeric_find(state.scalar_mir.numeric_plans[0], 0, - 1, - 1)
+		string_plan := mir_numeric_find(state.scalar_mir.numeric_plans[0], 1, - 1, - 1)
+		unknown := mir_numeric_find(state.scalar_mir.numeric_plans[0], 2, - 1, - 1)
+		expect(known.operations.size()).to_equal(1)
+		expect(known.operations[0].mode).to_equal(2)
+		expect(string_plan.operations.size()).to_equal(1)
+		expect(string_plan.operations[0].mode).to_equal(2)
+		expect(unknown.operations.size()).to_equal(1)
+		expect(unknown.operations[0].mode).to_equal(1)
+		before := control_test_output(emit_qbe(state))
+		expect(before.include?("=w csgtl")).to_be_true()
+		expect(before.include?("=w cugtl")).to_be_true()
+		intrinsic_mir_erase(state)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		expect(control_test_output(emit_qbe(state))).to_equal(before)
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe(qbe, before)
+			when Result::Ok(actual)
+				expect(actual).to_equal("6\n6\n3\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+
 	test("emits checked Integer and Float powers from verified MIR after source erasure") do
 		mut state := numeric_mir_check("def integer_power(value: Integer): Integer\nreturn value ** 3\nend\ndef float_power(value: Float): Float\nreturn value ** 0.5\nend\ndef main()\nputs(integer_power(3))\nputs(float_power(4.0))\nend\n")
 		qbe := control_test_output(emit_qbe(state))
