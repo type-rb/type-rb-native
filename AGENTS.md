@@ -28,8 +28,8 @@ Use focused local proof during development and hosted CI for complete integratio
 by default. Bootstrap and recovery-execution changes also need full local
 recovery. Scheduling-only workflow changes use controller tests and hosted full
 CI when recovery commands and compiler sources are unchanged. Until basic-language
-coverage is complete, prefer coherent language
-families in larger, reviewable PRs over separate PRs for each implementation step;
+coverage is complete, prefer coherent language families in larger, reviewable
+PRs over separate PRs for each implementation step;
 follow `CONTRIBUTING.md` for the development and integration cadence.
 
 ## Public repository boundary
