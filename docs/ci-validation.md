@@ -151,12 +151,14 @@ the Pages workflow requires documentation validation, not compiler benchmarks.
    path before recovery. Recovery-artifact consumers remain in the Native job after recovery joins.
    The retired source-era benchmark controllers are no longer rebuilt or tested
    against current source; see [their preserved versions](retired-experiment-tools.md).
-3. **Correctness and CLI.** Complete Native, target and applicable memory jobs
-   start after quick succeeds on non-draft core PRs. Complete CLI validation,
-   including bootstrap-cache invalidation, also starts only when the applicable
-   PR is ready. Development drafts retain the source/CLI checks in quick feedback.
-4. **Comparative measurement.** Applicable non-draft changes wait for Native,
-   targets, memory, tooling and CLI success before starting comparisons. Existing
+3. **Correctness and CLI.** On ready PRs, complete Native, target, applicable
+   memory and CLI jobs start alongside quick after planning. Quick failure still
+   fails acceptance, even if the complete jobs succeed. Parallel startup saves
+   wall time on passing PRs but may use more runner time on a failing quick job.
+   Development drafts retain source/CLI checks in quick feedback and defer the
+   complete jobs.
+4. **Comparative measurement.** Applicable non-draft changes wait for quick,
+   Native, targets, memory, tooling and CLI success before starting comparisons. Existing
    repetitions, interleaving, baseline identities, raw evidence and limits stay
    unchanged. Diagnostic stage recording never runs inside measured chains.
 5. **Acceptance.** `Native CI acceptance` checks every planned authority,
@@ -164,17 +166,20 @@ the Pages workflow requires documentation validation, not compiler benchmarks.
    jobs reject acceptance. Unexpected execution of a disabled authority also
    rejects the plan/result mismatch.
 
-Drafts receive quick, applicable tooling and documentation feedback but
-reject merge acceptance with `Draft feedback is not merge acceptance`. Marking
-ready triggers complete validation; converting back to draft cancels the old
-run. New commits cancel superseded PR work. Cancelled measurements are not
-accepted results.
+Drafts receive quick, applicable tooling and documentation feedback. Their
+acceptance job succeeds only when those selected jobs pass and the complete jobs
+are skipped; its summary explicitly says this is partial draft feedback. GitHub
+does not allow a draft PR to merge. Marking ready triggers complete validation;
+converting back to draft cancels the old run. New commits cancel superseded PR
+work. Cancelled measurements are not accepted results.
 
 Develop complete language families with focused local units, reference/Native
 positive and negative cases, MIR ownership and retained REPL checks. Include an
 ordinary Native build when compiler source changes. Hosted CI is the complete
 integration authority by default; full local recovery is additionally required
-for bootstrap or validation-orchestration changes and recovery/platform diagnosis.
+for bootstrap or recovery-execution changes and recovery/platform diagnosis.
+Scheduling-only workflow changes run controller tests and hosted full CI; local
+recovery does not exercise changed job dependencies or draft reporting.
 Optional local suites without recovery variables remain partial evidence. Do
 not mark a language family complete or merge while required CI is pending.
 Larger cohesive PRs may combine syntax through execution and REPL; keep one
