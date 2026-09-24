@@ -239,6 +239,19 @@ describe("Native TypeRB frontend") do
 		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR failure target does not exist")
 	end
 
+	test("shares checked Integer addition and subtraction failure in one function") do
+		source := "def combined(left: Integer, right: Integer): Integer\n\tfirst := left + right\n\treturn first - right\nend\n\ndef main()\n\tputs(combined(3, 2).to_s())\n\treturn\nend\n"
+		mut state := compiler_new(source.size() + 1)
+		expect(lex(state, source)).to_be_true()
+		expect(parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(resolve(state)).to_be_true()
+		expect(check(state)).to_be_true()
+		qbe := output_source(emit_qbe(state))
+		expect(qbe.include?("call $trbn_integer_add(l ")).to_be_false()
+		expect(qbe.include?("call $trbn_integer_subtract(l ")).to_be_false()
+		expect(occurrence_count(qbe, "@integer_range_failure\n")).to_equal(1)
+	end
+
 	test("lowers one complete Array induction helper through verified MIR") do
 		source := "def scan(values: Array<Integer>)\n\tmut index := 0\n\twhile index < values.size()\n\t\t_value := values[index]\n\t\tindex += 1\n\tend\n\treturn\nend\n\ndef main()\n\tscan([10, 20])\n\treturn\nend\n"
 		mut state := compiler_new(source.size() + 1)
@@ -1568,31 +1581,28 @@ describe("Native TypeRB frontend") do
 				qbe,
 				"%t0 =l add %p0, 1\n" +
 				"\t%t1 =w csgtl %t0, 9007199254740991\n" +
-				"\tjnz %t1, @l0, @l1",
+				"\tjnz %t1, @integer_range_failure, @l0",
 			),
 		).to_equal(2)
 		expect(
 			qbe.include?(
 				"%t0 =l add %p0, 1024\n" +
 				"\t%t1 =w csgtl %t0, 9007199254740991\n" +
-				"\tjnz %t1, @l0, @l1\n" +
-				"@l0\n\tcall $trbn_fail",
+				"\tjnz %t1, @integer_range_failure, @l0",
 			),
 		).to_be_true()
 		expect(
 			qbe.include?(
 				"%t0 =l add %p0, 1025\n" +
-				"\t%t1 =w csgtl %t0, 9007199254740991\n" +
-				"\tjnz %t1, @l0, @l2\n" +
-				"@l2\n\t%t2 =w csltl %t0, -9007199254740991",
+				"\t%t1 =l add %t0, 9007199254740991\n" +
+				"\t%t2 =w cugtl %t1, 18014398509481982",
 			),
 		).to_be_true()
 		expect(
 			qbe.include?(
 				"%t0 =l add %p0, %p1\n" +
-				"\t%t1 =w csgtl %t0, 9007199254740991\n" +
-				"\tjnz %t1, @l0, @l2\n" +
-				"@l2\n\t%t2 =w csltl %t0, -9007199254740991",
+				"\t%t1 =l add %t0, 9007199254740991\n" +
+				"\t%t2 =w cugtl %t1, 18014398509481982",
 			),
 		).to_be_true()
 	end
@@ -1606,7 +1616,8 @@ describe("Native TypeRB frontend") do
 		expect(resolve(state)).to_be_true()
 		expect(check(state)).to_be_true()
 		qbe := output_source(emit_qbe(state))
-		expect(qbe.include?("call $trbn_integer_add")).to_be_true()
+		expect(qbe.include?("call $trbn_integer_add")).to_be_false()
+		expect(qbe.include?("@integer_range_failure")).to_be_true()
 		# Capture, read and final store independently check current storage.
 		expect(occurrence_count(qbe, "call $trbn_fail(l $trbn_bounds_error, l 30)") >= 3).to_be_true()
 	end
@@ -1622,10 +1633,10 @@ describe("Native TypeRB frontend") do
 		expect(eligible_qbe.include?("call $trbnf0")).to_be_false()
 		expect(eligible_qbe.include?("function l $trbnf0(")).to_be_true()
 		expect(eligible_qbe.include?("# native retained scalar call ")).to_be_false()
-		expect(eligible_qbe.include?("@scalar_inline_integer_range_failure")).to_be_true()
+		expect(eligible_qbe.include?("@integer_range_failure")).to_be_true()
 		expect(
-			occurrence_count(eligible_qbe, "@scalar_inline_integer_range_failure"),
-		).to_equal(4)
+			occurrence_count(eligible_qbe, "@integer_range_failure\n"),
+		).to_equal(2)
 
 		non_loop_source := "def scalar(value: Integer): Integer\n\treturn value + 1\nend\n\ndef main()\n\t_value := scalar(1)\n\treturn\nend\n"
 		mut non_loop := compiler_new(non_loop_source.size() + 1)
@@ -1637,7 +1648,7 @@ describe("Native TypeRB frontend") do
 		expect(non_loop_qbe.include?("call $trbnf0")).to_be_true()
 		expect(non_loop_qbe.include?("function l $trbnf0(")).to_be_true()
 		expect(non_loop_qbe.include?("# native retained scalar call ")).to_be_false()
-		expect(non_loop_qbe.include?("@scalar_inline_integer_range_failure")).to_be_false()
+		expect(non_loop_qbe.include?("@integer_range_failure")).to_be_true()
 
 		ineligible_source := "def choose(value: Integer): Integer\n\tif value > 0\n\t\treturn value\n\telse\n\t\treturn 0\n\tend\nend\n\ndef main()\n\t_marker := {1 => 1}\n\tmut index := 0\n\twhile index < 1\n\t\tvalue := choose(index)\n\t\tindex += value + 1\n\tend\n\treturn\nend\n"
 		mut ineligible := compiler_new(ineligible_source.size() + 1)
@@ -1656,7 +1667,7 @@ describe("Native TypeRB frontend") do
 		expect(output_source(emit_qbe(delegating)).include?("call $trbnf1")).to_be_true()
 	end
 
-	test("retains caller lower-bound checks after the literal-return inline budget") do
+	test("retains caller range checks after the literal-return inline budget") do
 		# Exercise the ordinary MIR path.
 		source := "def one(): Integer\n\treturn 1\nend\n\ndef main()\n\t_retained := {1 => 1}\n\t_owner := [1]\n\tmut value := 7\n\tmut index := 0\n\twhile index < 1\n\t\tvalue += one()\n\t\tvalue += one()\n\t\tvalue += one()\n\t\tindex += 1\n\tend\n\tputs(value.to_s())\n\treturn\nend\n"
 		mut state := compiler_new(source.size() + 1)
@@ -1667,8 +1678,8 @@ describe("Native TypeRB frontend") do
 		qbe := output_source(emit_qbe(state))
 		expect(occurrence_count(qbe, "call $trbnf0()")).to_equal(1)
 		# Inlining does not invent caller range facts from the emitted operand.
-		# All three call results retain lower-bound checks until MIR proves them.
-		expect(occurrence_count(qbe, " =w csltl %t")).to_equal(3)
+		# All three call results retain range checks until MIR proves them.
+		expect(occurrence_count(qbe, " =w cugtl %t")).to_equal(3)
 
 	end
 

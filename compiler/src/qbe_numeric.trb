@@ -2,21 +2,8 @@ import { QbeEmitContext, QbeValue, emit_label, emit_temporary } from qbe_context
 import { QbeOutput, qbe_output_branch, qbe_output_line } from qbe_output
 
 def integer_range_failure_label(mut context: QbeEmitContext): String
-	if context.scalar_inline_depth[0] > 0
-		context.scalar_inline_range_failure_used[0] = true
-		return "@scalar_inline_integer_range_failure"
-	end
-	return emit_label(context)
-end
-
-def emit_integer_range_failure(mut output: QbeOutput, failure: String)
-	if failure == "@scalar_inline_integer_range_failure"
-		return
-	end
-	qbe_output_line(output, failure)
-	qbe_output_line(output, "\tcall $trbn_fail(l $trbn_integer_range_error, l 45)")
-	qbe_output_line(output, "\thlt")
-	return
+	context.integer_range_failure_used[0] = true
+	return "@integer_range_failure"
 end
 
 def emit_checked_integer_operation(
@@ -28,22 +15,21 @@ def emit_checked_integer_operation(
 		operation: String,
 		right_nonnegative: Boolean,
 	): String
-	too_high := emit_temporary(context)
 	failure := integer_range_failure_label(context)
 	complete := emit_label(context)
 	qbe_output_line(output, "\t" + result + " =l " + operation + " " + left + ", " + right)
-	qbe_output_line(output, "\t" + too_high + " =w csgtl " + result + ", 9007199254740991")
 	if right_nonnegative
+		too_high := emit_temporary(context)
+		qbe_output_line(output, "\t" + too_high + " =w csgtl " + result + ", 9007199254740991")
 		qbe_output_branch(output, too_high, failure, complete)
 	else
-		too_low := emit_temporary(context)
-		check_low := emit_label(context)
-		qbe_output_branch(output, too_high, failure, check_low)
-		qbe_output_line(output, check_low)
-		qbe_output_line(output, "\t" + too_low + " =w csltl " + result + ", -9007199254740991")
-		qbe_output_branch(output, too_low, failure, complete)
+		# A single unsigned comparison checks both ends of the portable range.
+		shifted := emit_temporary(context)
+		outside := emit_temporary(context)
+		qbe_output_line(output, "\t" + shifted + " =l add " + result + ", 9007199254740991")
+		qbe_output_line(output, "\t" + outside + " =w cugtl " + shifted + ", 18014398509481982")
+		qbe_output_branch(output, outside, failure, complete)
 	end
-	emit_integer_range_failure(output, failure)
 	qbe_output_line(output, complete)
 	return complete
 end
@@ -118,8 +104,8 @@ def emit_integer_call(
 	return
 end
 
-# Verified MIR selects expansion and bounds. The target adapter only spells
-# the selected checked operation; mode 0 uses the shared runtime helper.
+# Verified MIR selects expansion and bounds. The target adapter spells the
+# selected operation; checked additions and subtractions share a failure block.
 def lower_binary_operand(
 		mut context: QbeEmitContext,
 		mut output: QbeOutput,
@@ -182,7 +168,7 @@ def lower_binary_operand(
 			end
 			emit_checked_integer_operation(context, output, result, left_operand, right_operand, "add", nonnegative)
 		else
-			emit_integer_call(output, result, "add", left_operand, right_operand)
+			emit_checked_integer_operation(context, output, result, left_operand, right_operand, "add", false)
 		end
 		return result
 	end
@@ -190,7 +176,7 @@ def lower_binary_operand(
 		if mode == 1
 			emit_checked_integer_operation(context, output, result, left_operand, right_operand, "sub", false)
 		else
-			emit_integer_call(output, result, "subtract", left_operand, right_operand)
+			emit_checked_integer_operation(context, output, result, left_operand, right_operand, "sub", false)
 		end
 		return result
 	end
