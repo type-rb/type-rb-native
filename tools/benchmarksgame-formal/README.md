@@ -92,6 +92,13 @@ JIT activity. It does not represent steady-state service latency. Compiler
 time, build RSS, raw/stripped artifacts, and distribution inventory remain a
 separate formal controller so a build failure cannot contaminate runtime data.
 
+The [measurement-host procedure](../../docs/benchmarksgame.md#measurement-host-procedure)
+requires reviewing the host/setup context and complete sample spread before a
+formal claim. A fresh hosted runner and serial controller prevent competing
+project commands in that job; they cannot prove that the physical host is
+otherwise idle. Clear interference makes the cohort inconclusive, and a new
+complete run must retain the earlier evidence.
+
 The dispatch-only
 [`benchmarksgame-formal.yml`](../../.github/workflows/benchmarksgame-formal.yml)
 workflow assigns each case to a fresh `ubuntu-24.04-arm` runner. It closes the
