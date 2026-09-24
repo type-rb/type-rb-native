@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { acceptance, changedPaths, classify, mainAcceptance, toolingTests, quickToolingTests, compilerTestInputs, cliInputs } from './ci-plan.mjs';
+import { acceptance, changedPaths, classify, mainAcceptance, toolingTests, dailyMeasurementInputs, quickToolingTests, compilerTestInputs, cliInputs } from './ci-plan.mjs';
 
 // Planner subprocesses must not inherit the workflow's own gate setting.
 function plannerEnv(extra = {}) {
@@ -509,6 +509,24 @@ test('synthetic tooling tests have an executable authority without compiler rebu
   assert(entry.includes("needs.quick.result == 'success'"), 'comparative work must stop when quick fails');
   assert(entry.includes("needs.tooling.result == 'success'"));
   assert(entry.includes('needs: [plan, quick, documentation, native, targets, memory, performance, tooling, cli]'));
+});
+
+test('daily measurement controllers use their dedicated tooling suite', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/ci-tooling.yml', import.meta.url), 'utf8');
+  assert(workflow.includes("python3 -m unittest discover -s tools/daily-performance -p 'test_*.py'"));
+  for (const file of dailyMeasurementInputs) {
+    assert(file.startsWith('tools/daily-performance/'));
+    const plan = classify([file], false, 'strict', 'tiered');
+    assert.equal(plan.code, false, file);
+    assert.equal(plan.cli, false, file);
+    assert.equal(plan.tooling, true, file);
+    assert.deepEqual(acceptance(results(plan)), []);
+    assert.equal(classify([file + '.unknown'], false, 'strict', 'tiered').code, true);
+  }
+  const mixed = classify(['compiler/src/compiler.trb', 'tools/daily-performance/measure.py'], false,
+    'strict', 'tiered');
+  assert.equal(mixed.code, true);
+  assert.equal(mixed.complete, true);
 });
 
 test('main uses the same complete path classifier and Pages PR checks are not duplicated', () => {

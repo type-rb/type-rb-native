@@ -272,7 +272,9 @@ class DailyTests(unittest.TestCase):
         def observe(command, directory, timeout, cwd=None, env=None, core=None):
             directory.mkdir(parents=True, exist_ok=False)
             arguments = list(map(str, command))
-            if "--output" in arguments or "--outfile" in arguments or arguments[1:2] == ["build"]:
+            if arguments[1:2] == ["emit-qbe"]:
+                (directory / "stdout").write_bytes(b"function l $main() {}\n")
+            elif "--output" in arguments or "--outfile" in arguments or arguments[1:2] == ["build"]:
                 output = arguments[arguments.index("--output" if "--output" in arguments else
                                                    "--outfile" if "--outfile" in arguments else "-o") + 1]
                 Path(output).write_bytes(b"program")
@@ -292,6 +294,9 @@ class DailyTests(unittest.TestCase):
                          for role in ("native", "previous", "baseline", "typerb-go")}
             for role in [*compilers, "go", "qbe"]:
                 (root / role).write_bytes(role.encode())
+            source = root / ("a" * 40) / "source/compiler/src/compiler.trb"
+            source.parent.mkdir(parents=True)
+            source.write_text("def main()\nend\n")
             state.write(root / "compilers.json", compilers)
             arguments = type("Arguments", (), {"compilers": root / "compilers.json", "qbe": root / "qbe",
                                                "evidence": root / "evidence", "output": root / "snapshot.json"})
@@ -309,6 +314,7 @@ class DailyTests(unittest.TestCase):
             result = state.read(root / "snapshot.json")
         state.validate({**state.empty(), "latest": result})
         self.assertEqual(result["status"], "measured")
+        self.assertEqual(result["compilerSelf"]["status"], "pass")
         self.assertEqual({row["case"] for row in result["rows"]}, {case["id"] for case in suite["cases"]})
         kernels = {case["id"] for case in suite["cases"] if not case.get("frozenBaseline", True)}
         self.assertTrue(kernels)

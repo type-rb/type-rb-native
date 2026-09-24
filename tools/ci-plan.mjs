@@ -43,6 +43,13 @@ export const toolingTests = new Set([
   'tools/runtime-worker-soak/analyze-process-series-test.sh',
   'tools/recovery_stage_test.py',
 ]);
+// The tooling job discovers this daily measurement suite. Compiler and CLI
+// validation do not execute these controllers, even in the complete lane.
+export const dailyMeasurementInputs = new Set([
+  'tools/daily-performance/measure.py',
+  'tools/daily-performance/state.py',
+  'tools/daily-performance/test_daily.py',
+]);
 // These existing test modules are excluded from ordinary compiler builds.
 // Keep complete correctness validation; only unchanged-binary measurements
 // are unnecessary. New test paths, configurations and fixtures default to code.
@@ -114,7 +121,8 @@ export function classify(paths, draft, costMode = 'strict', gate = 'complete') {
   if (!['strict', 'mir-migration'].includes(costMode)) throw new Error('Invalid compiler cost mode');
   if (!gates.includes(gate)) throw new Error('Invalid CI gate');
   const executable = paths.filter(path => !documentation(path) && !planningTools.has(path));
-  const codePaths = executable.filter(path => !toolingTests.has(path) && !cliInputs.has(path));
+  const toolingInput = path => toolingTests.has(path) || dailyMeasurementInputs.has(path);
+  const codePaths = executable.filter(path => !toolingInput(path) && !cliInputs.has(path));
   const code = codePaths.length > 0;
   const routing = paths.some(path => path.startsWith('.github/workflows/') || path.startsWith('tools/ci-'));
   const compiler = codePaths.some(path => path.startsWith('compiler/')) &&
@@ -129,7 +137,7 @@ export function classify(paths, draft, costMode = 'strict', gate = 'complete') {
     code, quick: code || executable.some(path => cliInputs.has(path) || quickToolingTests.has(path)),
     documentation: routing || paths.some(documentation),
     memory, performance: performance && complete, draft,
-    tooling: code || executable.some(path => toolingTests.has(path)),
+    tooling: code || executable.some(toolingInput),
     cli, complete,
   };
 }
