@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { pathToFileURL } from 'node:url';
+import { appendFileSync } from 'node:fs';
 
 const staticDocumentationTools = new Set([
   'tools/capability-map-check.mjs',
@@ -128,12 +129,12 @@ export function acceptance(needs) {
   if ((plan.code === 'true' || plan.cli === 'true') && plan.quick !== 'true') {
     return ['Code and CLI validation require quick feedback'];
   }
-  if (plan.draft === 'true') return ['Draft feedback is not merge acceptance'];
+  const draft = plan.draft === 'true';
   const required = {
     quick: plan.quick, documentation: plan.documentation,
-    native: plan.code, targets: plan.code,
-    memory: plan.memory, performance: plan.performance,
-    tooling: plan.tooling, cli: plan.cli,
+    native: draft ? 'false' : plan.code, targets: draft ? 'false' : plan.code,
+    memory: draft ? 'false' : plan.memory, performance: draft ? 'false' : plan.performance,
+    tooling: plan.tooling, cli: draft ? 'false' : plan.cli,
   };
   return Object.entries(required).flatMap(([job, enabled]) => {
     const expected = enabled === 'true' ? 'success' : 'skipped';
@@ -166,8 +167,15 @@ export async function changedPaths(base, head, cwd, direct = false) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   if (process.argv[2] === 'accept') {
-    const errors = acceptance(JSON.parse(process.env.NEEDS_JSON ?? '{}'));
+    const needs = JSON.parse(process.env.NEEDS_JSON ?? '{}');
+    const errors = acceptance(needs);
     for (const error of errors) console.error(error);
+    if (!errors.length && needs.plan.outputs.draft === 'true') {
+      const message = 'Draft feedback only: complete validation runs when the PR is marked ready.';
+      console.log(message);
+      if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+        `### ${message}\n`);
+    }
     process.exitCode = errors.length ? 1 : 0;
   } else {
     const [base, head, draft, mode] = process.argv.slice(2);
