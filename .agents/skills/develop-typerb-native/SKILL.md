@@ -47,11 +47,10 @@ The CI plan for the actual changed paths determines required authorities; do
 not skip them because a change looks small. Complete focused local checks and
 the required CI, fixing failures caused by the change. After they pass, repeat
 or broaden checks only for new edits, failures, or unresolved concerns.
-Use CI as the full integration authority by default, with additional full local
-recovery for bootstrap or recovery-execution changes and failure diagnosis.
-Scheduling-only workflow changes use controller tests plus hosted full CI when
-recovery commands and compiler sources are unchanged; another local recovery
-run would exercise the same source, not the changed scheduling.
+Use hosted CI as the integration authority. Under the tiered gate, merge after
+PR acceptance; `Main validation` runs the deferred complete lanes, and a red
+main run takes priority over further feature merges. Run full local recovery
+only to diagnose recovery or platform failures.
 While a run is in progress, inspect completed failures as well as unfinished
 jobs; an early CLI or target failure can coexist with a long-running Native job.
 After changing checked binding or diagnostic behavior, run

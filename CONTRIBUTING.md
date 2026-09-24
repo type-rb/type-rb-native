@@ -34,9 +34,9 @@ During basic-language completion, organize changes by complete language families
 syntax, checking, MIR ownership, execution, REPL and shared conformance belong
 in the same integration candidate. Large PRs are appropriate when they close
 that coherent contract; keep their commits and acceptance evidence reviewable.
-Prefer one ready integration candidate and one subsequent development batch
-over a stack of small PRs that repeatedly run complete validation. Measure
-progress by completed language contracts and remaining gaps, not PR count.
+Merge each coherent PR once its tiered acceptance passes rather than stacking
+dependent PRs behind a long validation run. Measure progress by completed
+language contracts and remaining gaps, not PR count.
 During MIR consolidation, detailed comparative cost qualification belongs at
 milestones; costs observed during migration do not establish qualification. See the
 [CI validation stages](docs/ci-validation.md) for routing, manual runs, and
@@ -104,13 +104,12 @@ changes, failures or unresolved concerns rather than by default.
 For compiler-source changes, also enable the recovery/QBE environment described
 in [the compiler recovery guidance](.agents/skills/develop-typerb-native/references/bootstrap.md).
 An optional test that skips recovery does not count as recovery evidence.
-Hosted CI owns complete integration verification by default. Locally, run the
+Hosted CI owns integration verification: PR acceptance for the planned lanes,
+then `Main validation` for the lanes a tiered PR defers. Locally, run the
 affected units, positive/negative reference comparisons, MIR and REPL checks,
-and the ordinary Native build when compiler source changes. A second full local
-recovery run is required when changing bootstrap or validation orchestration,
-or when diagnosing a recovery or platform failure; it is not a prerequisite
-for every intermediate language edit. Record pending CI authorities explicitly
-and merge only after all applicable checks accept the candidate.
+and the ordinary Native build when compiler source changes. Run full local
+recovery only to diagnose a recovery or platform failure, such as a red
+`Main validation`. Merge only after PR acceptance passes.
 
 Keep the edit loop local and narrow. For example, after a MIR Array change,
 run its QBE-backed compiler tests with the pinned reference compiler and QBE:
@@ -123,15 +122,14 @@ TYPE_RB_NATIVE_ROOT="$PWD" TYPE_RB_NATIVE_QBE=/path/to/qbe \
 
 Use the matching test name for another feature family. Run formatting, type
 checking, reference/Native behavior cases and the ordinary Native fixed point
-as the batch becomes coherent; leave the full cross-platform recovery, target,
-CLI and memory authorities to the one ready PR. Start the next local batch while
-that PR validates instead of waiting for each hosted job to finish.
+as the batch becomes coherent; leave the cross-platform recovery, target, CLI
+and memory authorities to hosted CI. Start the next local batch while a PR
+validates instead of waiting for each hosted job to finish.
 Use an ordinary Native compiler built from the active worktree for differential
 probes; a core artifact in another checkout may predate the source under test.
 For newly accepted syntax, compare check, build, execution and REPL against the
 exact reference revision: a successful reference check alone does not prove
-its output backend can execute the source. Keep the next batch's local checks
-focused while another full recovery runs to avoid competing long builds.
+its output backend can execute the source.
 
 For any compiler-source edit, also check the recovery snapshot subset before
 publishing. This quick check uses the same canonical source copy and snapshot

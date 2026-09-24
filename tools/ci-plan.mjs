@@ -98,8 +98,21 @@ export const cliInputs = new Set([
   'compiler/cli/repl_hash.trb',
 ]);
 
-export function classify(paths, draft, costMode = 'strict') {
+// A tiered PR gate integrates ordinary compiler, CLI and conformance edits with
+// the pre-merge lanes; main then runs the complete lanes. Cache and bootstrap
+// inputs, recovery sources, workflows and unknown paths still need the complete
+// lanes before merge because only those lanes execute them.
+const completeCliInputs = new Set(['trbn', 'tools/build-native.sh', 'tools/native-bootstrap-test.py']);
+const pullRequestLane = path =>
+  ['compiler/src/', 'compiler/cli/', 'compiler/conformance/'].some(prefix => path.startsWith(prefix)) ||
+  ['compiler/trbconfig.jsonc', 'src/compiler_recovery_layout.trb', 'src/compiler_recovery_mutations.trb',
+    'tools/check-conformance-sources.py'].includes(path) ||
+  (cliInputs.has(path) && !completeCliInputs.has(path)) || toolingTests.has(path);
+export const gates = ['complete', 'tiered'];
+
+export function classify(paths, draft, costMode = 'strict', gate = 'complete') {
   if (!['strict', 'mir-migration'].includes(costMode)) throw new Error('Invalid compiler cost mode');
+  if (!gates.includes(gate)) throw new Error('Invalid CI gate');
   const executable = paths.filter(path => !documentation(path) && !planningTools.has(path));
   const codePaths = executable.filter(path => !toolingTests.has(path) && !cliInputs.has(path));
   const code = codePaths.length > 0;
@@ -110,19 +123,21 @@ export function classify(paths, draft, costMode = 'strict') {
     path.startsWith('tools/compiler-project') || path.startsWith('tools/compiler-cost'));
   const performance = code && costMode === 'strict' && (routing || policy || compiler);
   const memory = code && (routing || compiler || policy || codePaths.some(path => path.startsWith('tools/runtime-worker-soak/')));
+  const cli = code || executable.some(path => cliInputs.has(path));
+  const complete = cli && (gate === 'complete' || executable.some(path => !pullRequestLane(path)));
   return {
     code, quick: code || executable.some(path => cliInputs.has(path) || quickToolingTests.has(path)),
     documentation: routing || paths.some(documentation),
-    memory, performance, draft,
+    memory, performance: performance && complete, draft,
     tooling: code || executable.some(path => toolingTests.has(path)),
-    cli: code || executable.some(path => cliInputs.has(path)),
+    cli, complete,
   };
 }
 
 export function acceptance(needs) {
   if (needs.plan?.result !== 'success') return ['CI planning did not succeed'];
   const plan = needs.plan.outputs;
-  if (!plan || ['code', 'documentation', 'memory', 'performance', 'draft', 'tooling', 'cli', 'quick']
+  if (!plan || ['code', 'documentation', 'memory', 'performance', 'draft', 'tooling', 'cli', 'quick', 'complete']
     .some(key => !['true', 'false'].includes(plan[key]))) {
     return ['CI planning outputs are missing or malformed'];
   }
@@ -132,9 +147,29 @@ export function acceptance(needs) {
   const draft = plan.draft === 'true';
   const required = {
     quick: plan.quick, documentation: plan.documentation,
-    native: draft ? 'false' : plan.code, targets: draft ? 'false' : plan.code,
+    native: draft || plan.complete === 'false' ? 'false' : plan.code, targets: draft ? 'false' : plan.code,
     memory: draft ? 'false' : plan.memory, performance: draft ? 'false' : plan.performance,
     tooling: plan.tooling, cli: draft ? 'false' : plan.cli,
+  };
+  return Object.entries(required).flatMap(([job, enabled]) => {
+    const expected = enabled === 'true' ? 'success' : 'skipped';
+    return needs[job]?.result === expected ? [] :
+      [`${job}: expected ${expected}, got ${needs[job]?.result ?? 'missing'}`];
+  });
+}
+
+// Main validation owns the complete lanes after a tiered PR merge. Its planner
+// compares against the last fully validated main commit, not the push delta.
+export function mainAcceptance(needs) {
+  if (needs.plan?.result !== 'success') return ['Main planning did not succeed'];
+  const plan = needs.plan.outputs;
+  if (!plan || ['code', 'documentation', 'memory', 'tooling', 'cli']
+    .some(key => !['true', 'false'].includes(plan[key]))) {
+    return ['Main planning outputs are missing or malformed'];
+  }
+  const required = {
+    documentation: plan.documentation, tooling: plan.tooling, memory: plan.memory,
+    native: plan.code, targets: plan.code, cli: plan.cli,
   };
   return Object.entries(required).flatMap(([job, enabled]) => {
     const expected = enabled === 'true' ? 'success' : 'skipped';
@@ -166,12 +201,16 @@ export async function changedPaths(base, head, cwd, direct = false) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  if (process.argv[2] === 'accept') {
+  if (process.argv[2] === 'accept' || process.argv[2] === 'accept-main') {
     const needs = JSON.parse(process.env.NEEDS_JSON ?? '{}');
-    const errors = acceptance(needs);
+    const errors = process.argv[2] === 'accept' ? acceptance(needs) : mainAcceptance(needs);
     for (const error of errors) console.error(error);
-    if (!errors.length && needs.plan.outputs.draft === 'true') {
-      const message = 'Draft feedback only: complete validation runs when the PR is marked ready.';
+    const outputs = needs.plan?.outputs ?? {};
+    const message = errors.length || process.argv[2] !== 'accept' ? '' :
+      outputs.draft === 'true' ? 'Draft feedback only: complete validation runs when the PR is marked ready.' :
+      outputs.complete === 'false' && outputs.cli === 'true' ?
+        'Pre-merge lanes passed: Native recovery, CLI cache and arm64 regression run on main after merge.' : '';
+    if (message) {
       console.log(message);
       if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY,
         `### ${message}\n`);
@@ -185,7 +224,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     }
     // Include both sides of renames, and preserve arbitrary path characters.
     const paths = await changedPaths(base, head, undefined, mode === 'push');
-    for (const [key, value] of Object.entries(classify(paths, draft === 'true', process.env.NATIVE_MIR_COST_MODE ?? 'strict'))) {
+    // Main always plans the complete lanes; only PRs may use the tiered gate.
+    const gate = mode === 'push' ? 'complete' : process.env.NATIVE_CI_GATE ?? 'complete';
+    for (const [key, value] of Object.entries(classify(paths, draft === 'true',
+      process.env.NATIVE_MIR_COST_MODE ?? 'strict', gate))) {
       console.log(`${key}=${value}`);
     }
   }

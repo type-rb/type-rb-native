@@ -24,13 +24,13 @@ for specialized constraints. For routine documentation edits, check the changed
 text and applicable documentation CI. For code, complete the authorities in
 [CI validation](docs/ci-validation.md); avoid redundant runs after they pass
 unless a new change, failure, or unresolved concern warrants them.
-Use focused local proof during development and hosted CI for complete integration
-by default. Bootstrap and recovery-execution changes also need full local
-recovery. Scheduling-only workflow changes use controller tests and hosted full
-CI when recovery commands and compiler sources are unchanged. Until basic-language
-coverage is complete, prefer coherent language families in larger, reviewable
-PRs over separate PRs for each implementation step;
-follow `CONTRIBUTING.md` for the development and integration cadence.
+Use focused local proof during development and hosted CI for integration.
+During alpha development the PR gate is tiered: merge once PR acceptance passes;
+`Main validation` then runs the deferred complete lanes. When it is red, fixing
+or reverting main comes before merging more feature PRs. Run full local recovery
+only to diagnose a recovery or platform failure. Until basic-language coverage is
+complete, prefer coherent language families in reviewable PRs over separate PRs
+for each implementation step; follow `CONTRIBUTING.md` for the cadence.
 
 ## Public repository boundary
 
