@@ -20,28 +20,28 @@ end
 
 def mir_declare_globals(mut state: CompilerState)
 	mut index := 0
-	while index < state.globals.size()
-		row := state.globals[index]
-		type_id := mir_semantic_type_id(state.scalar_mir, state.global_types[index])
-		state.scalar_mir.globals.push(MirGlobal.new(mutable: row.mutable, id: index, name: row.name, source_id: row.source_id, line: row.line, type_id: type_id, initializer: state.global_functions[index], managed: mir_managed_type(state.scalar_mir, type_id)))
+	while index < state.global_bindings.globals.size()
+		row := state.global_bindings.globals[index]
+		type_id := mir_semantic_type_id(state.scalar_mir, state.global_bindings.global_types[index])
+		state.scalar_mir.globals.push(MirGlobal.new(mutable: row.mutable, id: index, name: row.name, source_id: row.source_id, line: row.line, type_id: type_id, initializer: state.global_bindings.global_functions[index], managed: mir_managed_type(state.scalar_mir, type_id)))
 		index += 1
 	end
-	state.global_order.each do |identity|
+	state.global_bindings.global_order.each do |identity|
 		state.scalar_mir.global_initialization.push(identity)
 	end
 end
 
 def checked_global_read(mut state: CompilerState, mut locals: CheckedLocals, identity: Integer, origin: Integer): CheckedValue
 	mut mutable := 0
-	if state.globals[identity].mutable
+	if state.global_bindings.globals[identity].mutable
 		mutable = 1
 	end
-	type_name := state.global_types[identity]
+	type_name := state.global_bindings.global_types[identity]
 	if type_name == ""
 		diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, origin), "constant initializer cannot read a later constant")
 		return checked_value("Invalid", 0, origin, 0)
 	end
-	store_integer(state.checked[0].global_references, origin, identity + 1)
+	store_integer(state.callables.checked[0].global_references, origin, identity + 1)
 	mut value := checked_value(type_name, 0, origin, 0)
 	mir_control_prepare(state, locals)
 	if mir_control_active(locals)

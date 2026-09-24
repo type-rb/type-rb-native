@@ -172,7 +172,7 @@ def resolve_type_name(
 	if literal_type_base(type_name) != ""
 		return type_name
 	end
-	encoded := state.checked[0].generic_binding[0]
+	encoded := state.callables.checked[0].generic_binding[0]
 	if encoded > 0
 		binding := state.type_resolution.generic_bindings[encoded - 1]
 		if module_index == binding.source_id
@@ -325,8 +325,8 @@ def instantiate_generic_nominal(mut state: CompilerState, definition: Integer, a
 		return ""
 	end
 	previous_module := state.module_graph.active_module[0]
-	previous_owner := state.declaration_owner[0]
-	state.declaration_owner[0] = namespace_parent(declaration.name)
+	previous_owner := state.global_bindings.declaration_owner[0]
+	state.global_bindings.declaration_owner[0] = namespace_parent(declaration.name)
 	saved_alias_depth := state.type_resolution.alias_expansion_depth[0]
 	mut saved_alias_path: Array<Integer> := []
 	mut alias_step := 0
@@ -337,8 +337,8 @@ def instantiate_generic_nominal(mut state: CompilerState, definition: Integer, a
 	state.type_resolution.alias_expansion_depth[0] = 0
 	state.module_graph.active_module[0] = declaration.source_id
 	state.type_resolution.generic_depth[0] += 1
-	saved_binding := state.checked[0].generic_binding[0]
-	state.checked[0].generic_binding[0] = 0
+	saved_binding := state.callables.checked[0].generic_binding[0]
+	state.callables.checked[0].generic_binding[0] = 0
 	name := generic_application(declaration.name, arguments)
 	mut type_name := ""
 	mut owner := 0
@@ -414,9 +414,9 @@ def instantiate_generic_nominal(mut state: CompilerState, definition: Integer, a
 	end
 	state.type_resolution.alias_expansion_depth[0] = saved_alias_depth
 	state.type_resolution.generic_depth[0] -= 1
-	state.checked[0].generic_binding[0] = saved_binding
+	state.callables.checked[0].generic_binding[0] = saved_binding
 	state.module_graph.active_module[0] = previous_module
-	state.declaration_owner[0] = previous_owner
+	state.global_bindings.declaration_owner[0] = previous_owner
 	return type_name
 end
 
@@ -505,14 +505,14 @@ def resolve_alias_type(mut state: CompilerState, index: Integer, arguments: Arra
 	end
 	store_integer(state.type_resolution.alias_expansion_path, depth, index)
 	state.type_resolution.alias_expansion_depth[0] = depth + 1
-	saved_binding := state.checked[0].generic_binding[0]
-	state.checked[0].generic_binding[0] = 0
-	previous_owner := state.declaration_owner[0]
-	state.declaration_owner[0] = namespace_parent(row.name)
+	saved_binding := state.callables.checked[0].generic_binding[0]
+	state.callables.checked[0].generic_binding[0] = 0
+	previous_owner := state.global_bindings.declaration_owner[0]
+	state.global_bindings.declaration_owner[0] = namespace_parent(row.name)
 	target := generic_substitute(row.target, row.parameters, arguments)
 	resolved := resolve_type_name(state, row.source_id, target, false)
-	state.declaration_owner[0] = previous_owner
-	state.checked[0].generic_binding[0] = saved_binding
+	state.global_bindings.declaration_owner[0] = previous_owner
+	state.callables.checked[0].generic_binding[0] = saved_binding
 	state.type_resolution.alias_expansion_depth[0] = depth
 	if resolved != "" && !has_diagnostic(state) && !state.type_resolution.alias_instance_lookup.key?(key)
 		state.type_resolution.alias_instance_lookup[key] = state.type_resolution.alias_instances.size()
@@ -546,11 +546,11 @@ def instantiate_object_type(mut state: CompilerState, definition: Integer, argum
 	state.object_instance_lookup[key] = owner
 	state.object_instances.push(ObjectInstance.new(definition: definition, arguments: arguments, superclass: - 1, interfaces: [], fields: []))
 	previous_module := state.module_graph.active_module[0]
-	previous_owner := state.declaration_owner[0]
-	saved_binding := state.checked[0].generic_binding[0]
+	previous_owner := state.global_bindings.declaration_owner[0]
+	saved_binding := state.callables.checked[0].generic_binding[0]
 	state.module_graph.active_module[0] = declaration.source_id
-	state.declaration_owner[0] = namespace_parent(declaration.name)
-	state.checked[0].generic_binding[0] = 0
+	state.global_bindings.declaration_owner[0] = namespace_parent(declaration.name)
+	state.callables.checked[0].generic_binding[0] = 0
 	state.type_resolution.generic_depth[0] += 1
 	# Crossing a nominal storage edge terminates a transparent alias expansion.
 	saved_alias_depth := state.type_resolution.alias_expansion_depth[0]
@@ -614,8 +614,8 @@ def instantiate_object_type(mut state: CompilerState, definition: Integer, argum
 	end
 	state.type_resolution.alias_expansion_depth[0] = saved_alias_depth
 	state.type_resolution.generic_depth[0] -= 1
-	state.checked[0].generic_binding[0] = saved_binding
+	state.callables.checked[0].generic_binding[0] = saved_binding
 	state.module_graph.active_module[0] = previous_module
-	state.declaration_owner[0] = previous_owner
+	state.global_bindings.declaration_owner[0] = previous_owner
 	return object_instance_type(state, owner)
 end

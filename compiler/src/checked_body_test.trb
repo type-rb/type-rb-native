@@ -46,11 +46,11 @@ describe("Checked function body ownership") do
 		store_integer(state.declarations.function_body_ends, 1, load_integer(state.declarations.function_body_ends, 0))
 		expect(resolve(state) && check(state)).to_be_true()
 		select_checked_body(state, 0)
-		first := state.checked[0]
+		first := state.callables.checked[0]
 		expect(first.function).to_equal(0)
 		expect(first.hash_operations[0].type_name).to_equal("Hash<Integer,Integer>")
 		select_checked_body(state, 1)
-		second := state.checked[0]
+		second := state.callables.checked[0]
 		expect(second.function).to_equal(1)
 		expect(second.hash_operations[0].type_name).to_equal("Hash<Integer,String>")
 		expect(first.hash_operations[0].origin).to_equal(second.hash_operations[0].origin)
@@ -61,8 +61,8 @@ describe("Checked function body ownership") do
 		expect(load_string(first.nullable_reads, origin + 1)).to_equal("Integer")
 		expect(load_string(second.nullable_reads, origin + 1)).to_equal("String")
 		previous := select_checked_body(state, 0)
-		state.checked[0] = previous
-		expect(state.checked[0].function).to_equal(1)
+		state.callables.checked[0] = previous
+		expect(state.callables.checked[0].function).to_equal(1)
 		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
 		if qbe != nil
 			case logical_run_qbe(qbe, control_test_output(emit_qbe(state)))
@@ -80,10 +80,10 @@ describe("Checked function body ownership") do
 		mut state := compiler_new(source.size() * 3 + 16)
 		expect(lex(state, source) && parse_module(state, 0, state.module_graph.entry_module[0]) && resolve(state) && check(state)).to_be_true()
 		select_checked_body(state, 0)
-		state.checked[0].hash_operations[0] = mir_hash_operation(0, 0, 0, 0, "", false, 0)
+		state.callables.checked[0].hash_operations[0] = mir_hash_operation(0, 0, 0, 0, "", false, 0)
 		select_checked_body(state, 1)
 		expect(checked_hash_verify(state)).to_be_false()
-		expect(state.checked[0].function).to_equal(1)
+		expect(state.callables.checked[0].function).to_equal(1)
 	end
 
 	test("emits unchanged MIR after discarding every checked body projection") do
@@ -93,12 +93,12 @@ describe("Checked function body ownership") do
 		before := control_test_output(emit_qbe(state))
 		intrinsic_mir_erase(state)
 		mut index := 0
-		while index < state.checked_bodies.size()
-			state.checked_bodies[index] = checked_body_new(state.checked_bodies[index].function, 0, 0)
+		while index < state.callables.checked_bodies.size()
+			state.callables.checked_bodies[index] = checked_body_new(state.callables.checked_bodies[index].function, 0, 0)
 			index += 1
 		end
-		state.checked[0] = checked_body_new(- 1, 0, 0)
-		state.checked_body_indices.used[0] = 0
+		state.callables.checked[0] = checked_body_new(- 1, 0, 0)
+		state.callables.checked_body_indices.used[0] = 0
 		expect(control_test_output(emit_qbe(state))).to_equal(before)
 		expect(before.include?("data $trbn_desc_range")).to_be_true()
 		qbe := Process.environment("TYPE_RB_NATIVE_QBE")

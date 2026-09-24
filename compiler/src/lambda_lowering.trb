@@ -14,11 +14,11 @@ import { array_type } from type_resolution
 def declare_lambda(mut state: CompilerState, mut lambda: CheckedLambda)
 	function := state.declarations.function_count[0]
 	start := state.declarations.parameter_count[0]
-	syntax := state.lambdas[sparse_integer_at(state.lambda_origins, lambda.origin) - 1]
+	syntax := state.callables.lambdas[sparse_integer_at(state.callables.lambda_origins, lambda.origin) - 1]
 	parts := callable_parts(lambda.type_name)
 	lambda.function[0] = function
-	state.checked_lambdas.push(lambda)
-	store_integer(state.function_lambdas, function, state.checked_lambdas.size())
+	state.callables.checked_lambdas.push(lambda)
+	store_integer(state.callables.function_lambdas, function, state.callables.checked_lambdas.size())
 	store_string(state.declarations.function_names, function, "$lambda" + integer_string(function))
 	store_integer(state.declarations.function_modules, function, state.module_graph.active_module[0])
 	store_integer(state.declarations.function_parameter_starts, function, start)
@@ -27,8 +27,8 @@ def declare_lambda(mut state: CompilerState, mut lambda: CheckedLambda)
 	store_integer(state.declarations.function_body_starts, function, syntax.body_start)
 	store_integer(state.declarations.function_body_ends, function, syntax.body_finish)
 	store_integer(state.declarations.function_lines, function, load_integer(state.source_tokens.token_lines, lambda.origin))
-	store_integer(state.type_resolution.function_generic_bindings, function, state.checked_bodies[lambda.body].generic_binding[0])
-	store_integer(state.checked_body_indices, function, lambda.body + 1)
+	store_integer(state.type_resolution.function_generic_bindings, function, state.callables.checked_bodies[lambda.body].generic_binding[0])
+	store_integer(state.callables.checked_body_indices, function, lambda.body + 1)
 	lambda.captures.each do |capture|
 		index := state.declarations.parameter_count[0]
 		mut storage := capture.type_name
@@ -58,11 +58,11 @@ end
 # Adopt captured cells rather than boxing them again. The sparse identity prefix
 # preserves nested captures and shared-binding plans independently of ABI slots.
 def lambda_bind_captures(mut state: CompilerState, mut locals: CheckedLocals, function: Integer): Integer
-	encoded := sparse_integer_at(state.function_lambdas, function)
+	encoded := sparse_integer_at(state.callables.function_lambdas, function)
 	if encoded == 0
 		return 0
 	end
-	lambda := state.checked_lambdas[encoded - 1]
+	lambda := state.callables.checked_lambdas[encoded - 1]
 	while locals.binding_slots.size() < lambda.inherited_count
 		locals.binding_slots.push(- 1)
 	end
@@ -86,7 +86,7 @@ def lambda_bind_captures(mut state: CompilerState, mut locals: CheckedLocals, fu
 end
 
 def lower_lambda(mut state: CompilerState, mut locals: CheckedLocals, origin: Integer): CheckedValue
-	state.checked[0].lambdas.each do |lambda|
+	state.callables.checked[0].lambdas.each do |lambda|
 		if lambda.origin == origin
 			mut captures: Array<Integer> := []
 			lambda.captures.each do |capture|

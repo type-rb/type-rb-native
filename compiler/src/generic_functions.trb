@@ -16,7 +16,7 @@ def validate_generic_functions(mut state: CompilerState): Boolean
 	while index < state.type_resolution.generic_functions.size() && !has_diagnostic(state)
 		row := state.type_resolution.generic_functions[index]
 		state.module_graph.active_module[0] = row.source_id
-		state.declaration_owner[0] = namespace_parent(row.name)
+		state.global_bindings.declaration_owner[0] = namespace_parent(row.name)
 		if find_generic_function_in_module(state, row.source_id, row.name) != index || find_function_in_module(state, row.source_id, row.name) >= 0 || find_generic_in_module(state, row.source_id, row.name) >= 0 || find_record_in_module(state, row.source_id, row.name) >= 0 || find_enum_in_module(state, row.source_id, row.name) >= 0
 			diagnostic(state, "TRBN4003", row.line, "duplicate function declaration " + row.name)
 		end
@@ -95,10 +95,10 @@ def instantiate_method_signature(mut state: CompilerState, definition: Integer, 
 	state.type_resolution.generic_function_instances.push(GenericFunctionInstance.new(application_key: key, definition: definition, arguments: arguments, function: function))
 	state.type_resolution.generic_function_lookup[key] = instance
 	store_integer(state.type_resolution.function_generic_bindings, function, add_generic_binding(state, row.source_id, row.type_parameters, arguments, depth))
-	saved_owner := state.declaration_owner[0]
-	state.declaration_owner[0] = namespace_parent(row.name)
-	saved_binding := state.checked[0].generic_binding[0]
-	state.checked[0].generic_binding[0] = 0
+	saved_owner := state.global_bindings.declaration_owner[0]
+	state.global_bindings.declaration_owner[0] = namespace_parent(row.name)
+	saved_binding := state.callables.checked[0].generic_binding[0]
+	state.callables.checked[0].generic_binding[0] = 0
 	row.parameters.each do |parameter|
 		index := state.declarations.parameter_count[0]
 		mut type_name := resolve_type_name(state, row.source_id, generic_substitute(parameter.type_name, row.type_parameters, arguments), false)
@@ -125,7 +125,7 @@ def instantiate_method_signature(mut state: CompilerState, definition: Integer, 
 		store_string(state.function_receivers, function, receiver_type)
 	end
 	store_string(state.declarations.function_result_types, function, resolve_type_name(state, row.source_id, generic_substitute(row.result_type, row.type_parameters, arguments), true))
-	state.checked[0].generic_binding[0] = saved_binding
-	state.declaration_owner[0] = saved_owner
+	state.callables.checked[0].generic_binding[0] = saved_binding
+	state.global_bindings.declaration_owner[0] = saved_owner
 	return function
 end

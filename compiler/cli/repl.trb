@@ -82,7 +82,7 @@ end
 
 def repl_show(mut state: CompilerState, mut session: ReplSession, input: String, prefix: String, type_only: Boolean, display: Boolean): Boolean
 	state.module_graph.active_module[0] = state.module_graph.entry_module[0]
-	state.declaration_owner[0] = ""
+	state.global_bindings.declaration_owner[0] = ""
 	line_number := repl_lines(prefix) + 1
 	main := find_function_in_module(state, state.module_graph.entry_module[0], "main")
 	mut position := [load_integer(state.declarations.function_body_starts, main)]
@@ -254,18 +254,18 @@ def repl_submit(mut session: ReplSession, input: String, type_only: Boolean, dis
 		session.text[2] = repl_binding_witnesses(state, session.store, session.environment, true)
 		if display
 			mut identity := 0
-			while identity < state.globals.size()
-				row := state.globals[identity]
+			while identity < state.global_bindings.globals.size()
+				row := state.global_bindings.globals[identity]
 				if row.source_id == state.module_graph.entry_module[0] && row.line > repl_lines(session.text[0]) && row.line <= repl_lines(session.text[0] + input + "\n") && !row.name.include?("::")
 					key := repl_global_key(state, identity)
 					value := session.store.children[session.store.globals[key]][0]
-					puts(repl_editor_paint(repl_render(state, session.store, value, 0), 2, repl_use_color()) + repl_editor_paint(" : ", 4, repl_use_color()) + repl_editor_paint(repl_type_name(state, state.global_types[identity]), 5, repl_use_color()))
+					puts(repl_editor_paint(repl_render(state, session.store, value, 0), 2, repl_use_color()) + repl_editor_paint(" : ", 4, repl_use_color()) + repl_editor_paint(repl_type_name(state, state.global_bindings.global_types[identity]), 5, repl_use_color()))
 				end
 				identity += 1
 			end
 		end
 		mut initializes := false
-		state.globals.each do |row|
+		state.global_bindings.globals.each do |row|
 			if row.source_id == state.module_graph.entry_module[0] && row.line > repl_lines(session.text[0]) && row.line <= repl_lines(session.text[0] + input + "\n")
 				initializes = true
 			end
@@ -488,7 +488,7 @@ def repl_complete(session: ReplSession): ReplCandidates
 	while index < state.declarations.function_count[0]
 		if load_integer(state.declarations.function_modules, index) == state.module_graph.entry_module[0]
 			name := load_string(state.declarations.function_names, index)
-			if name != "main" && sparse_integer_at(state.parsed.function_expression_bodies, index) == 0 && sparse_integer_at(state.function_lambdas, index) == 0
+			if name != "main" && sparse_integer_at(state.parsed.function_expression_bodies, index) == 0 && sparse_integer_at(state.callables.function_lambdas, index) == 0
 				repl_candidate(candidates, name, repl_function_insertion(state, index, name), repl_function_detail(state, index), 6)
 			end
 		end
@@ -621,8 +621,8 @@ def repl_replay(mut session: ReplSession, config: String, additional: Array<Stri
 	# Reserve authored globals and future bindings without running initializers.
 	# Project modules initialize once; session globals follow authored input order.
 	mut identity := 0
-	while identity < initial.globals.size()
-		row := initial.globals[identity]
+	while identity < initial.global_bindings.globals.size()
+		row := initial.global_bindings.globals[identity]
 		if row.source_id == initial.module_graph.entry_module[0]
 			replayed.store.globals[repl_global_key(initial, identity)] = 0
 		end
@@ -649,8 +649,8 @@ def repl_replay(mut session: ReplSession, config: String, additional: Array<Stri
 			repl_link_globals(initial, replayed.store, replayed.environment)
 			mut initializes := false
 			identity = 0
-			while identity < initial.globals.size()
-				row := initial.globals[identity]
+			while identity < initial.global_bindings.globals.size()
+				row := initial.global_bindings.globals[identity]
 				if row.source_id == initial.module_graph.entry_module[0] && row.line >= declaration_line && row.line < finish
 					replayed.store.globals.delete(repl_global_key(initial, identity))
 					initializes = true
