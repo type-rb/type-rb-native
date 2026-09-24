@@ -36,12 +36,12 @@ def parse_record(mut state: CompilerState, mut position: Array<Integer>): Boolea
 	if !finish_statement(state, position)
 		return false
 	end
-	record_index := state.record_count[0]
+	record_index := state.declarations.record_count[0]
 	if parameters.size() == 0
-		store_string(state.record_names, record_index, name)
-		store_integer(state.record_modules, record_index, state.module_graph.active_module[0])
-		store_integer(state.record_field_starts, record_index, state.field_count[0])
-		store_integer(state.record_lines, record_index, line)
+		store_string(state.declarations.record_names, record_index, name)
+		store_integer(state.declarations.record_modules, record_index, state.module_graph.active_module[0])
+		store_integer(state.declarations.record_field_starts, record_index, state.declarations.field_count[0])
+		store_integer(state.declarations.record_lines, record_index, line)
 	end
 	mut count := 0
 	mut default_seen := false
@@ -66,7 +66,7 @@ def parse_record(mut state: CompilerState, mut position: Array<Integer>): Boolea
 					return false
 				end
 				default_finish = position[0]
-			elsif !parse_default_initializer(state, position, 1, record_index, state.field_count[0])
+			elsif !parse_default_initializer(state, position, 1, record_index, state.declarations.field_count[0])
 				return false
 			end
 			default_seen = true
@@ -80,11 +80,11 @@ def parse_record(mut state: CompilerState, mut position: Array<Integer>): Boolea
 		if parameters.size() > 0
 			fields.push(GenericField.new(name: field_name, type_name: field_type, line: field_line, named_only: true, default_start: default_start, default_finish: default_finish))
 		else
-			field_index := state.field_count[0]
-			store_string(state.field_names, field_index, field_name)
-			store_string(state.field_types, field_index, field_type)
-			store_integer(state.field_lines, field_index, field_line)
-			state.field_count[0] = field_index + 1
+			field_index := state.declarations.field_count[0]
+			store_string(state.declarations.field_names, field_index, field_name)
+			store_string(state.declarations.field_types, field_index, field_type)
+			store_integer(state.declarations.field_lines, field_index, field_line)
+			state.declarations.field_count[0] = field_index + 1
 		end
 		count += 1
 	end
@@ -93,8 +93,8 @@ def parse_record(mut state: CompilerState, mut position: Array<Integer>): Boolea
 		variant := GenericVariant.new(name: name, line: line, fields: fields)
 		state.type_resolution.generic_definitions.push(GenericDefinition.new(kind: 1, name: name, source_id: state.module_graph.active_module[0], line: line, parameters: parameters, variants: [variant]))
 	else
-		store_integer(state.record_field_counts, record_index, count)
-		state.record_count[0] = record_index + 1
+		store_integer(state.declarations.record_field_counts, record_index, count)
+		state.declarations.record_count[0] = record_index + 1
 	end
 	return finish_statement(state, position)
 end
@@ -145,18 +145,18 @@ def parse_function(mut state: CompilerState, mut position: Array<Integer>, recei
 		return false
 	end
 	skip_newlines(state, position)
-	parameter_start := state.parameter_count[0]
+	parameter_start := state.declarations.parameter_count[0]
 	mut parameter_count := 0
 	if receiver_type != ""
 		if type_parameters.size() > 0 || object_member
 			generic_parameters.push(GenericParameter.new(name: "self", type_name: receiver_type, line: line, mutable: 0, named_only: 0, default_start: - 1, default_finish: - 1))
 		else
-			store_string(state.parameter_names, parameter_start, "self")
-			store_string(state.parameter_types, parameter_start, receiver_type)
-			store_integer(state.parameter_mutable, parameter_start, 0)
-			store_integer(state.parameter_named_only, parameter_start, 0)
-			store_integer(state.parameter_lines, parameter_start, line)
-			state.parameter_count[0] += 1
+			store_string(state.declarations.parameter_names, parameter_start, "self")
+			store_string(state.declarations.parameter_types, parameter_start, receiver_type)
+			store_integer(state.declarations.parameter_mutable, parameter_start, 0)
+			store_integer(state.declarations.parameter_named_only, parameter_start, 0)
+			store_integer(state.declarations.parameter_lines, parameter_start, line)
+			state.declarations.parameter_count[0] += 1
 		end
 		parameter_count = 1
 	end
@@ -192,7 +192,7 @@ def parse_function(mut state: CompilerState, mut position: Array<Integer>, recei
 					return false
 				end
 				parameter_type := parse_type(state, position)
-				parameter_index := state.parameter_count[0]
+				parameter_index := state.declarations.parameter_count[0]
 				mut default_start :=- 1
 				mut default_finish :=- 1
 				if token_is(state, position[0], "=")
@@ -203,7 +203,7 @@ def parse_function(mut state: CompilerState, mut position: Array<Integer>, recei
 							return false
 						end
 						default_finish = position[0]
-					elsif !parse_default_initializer(state, position, 0, state.function_count[0], parameter_index)
+					elsif !parse_default_initializer(state, position, 0, state.declarations.function_count[0], parameter_index)
 						return false
 					end
 					default_seen = true
@@ -218,12 +218,12 @@ def parse_function(mut state: CompilerState, mut position: Array<Integer>, recei
 				if type_parameters.size() > 0 || object_member
 					generic_parameters.push(GenericParameter.new(name: parameter_name, type_name: parameter_type, line: parameter_line, mutable: mutable, named_only: named_only, default_start: default_start, default_finish: default_finish))
 				else
-					store_string(state.parameter_names, parameter_index, parameter_name)
-					store_string(state.parameter_types, parameter_index, parameter_type)
-					store_integer(state.parameter_mutable, parameter_index, mutable)
-					store_integer(state.parameter_named_only, parameter_index, named_only)
-					store_integer(state.parameter_lines, parameter_index, parameter_line)
-					state.parameter_count[0] = parameter_index + 1
+					store_string(state.declarations.parameter_names, parameter_index, parameter_name)
+					store_string(state.declarations.parameter_types, parameter_index, parameter_type)
+					store_integer(state.declarations.parameter_mutable, parameter_index, mutable)
+					store_integer(state.declarations.parameter_named_only, parameter_index, named_only)
+					store_integer(state.declarations.parameter_lines, parameter_index, parameter_line)
+					state.declarations.parameter_count[0] = parameter_index + 1
 				end
 				named_count += named_only
 				parameter_count += 1
@@ -267,18 +267,18 @@ def parse_function(mut state: CompilerState, mut position: Array<Integer>, recei
 		state.type_resolution.generic_functions.push(GenericFunction.new(receiver_type: receiver_type, name: name, source_id: state.module_graph.active_module[0], line: line, type_parameters: type_parameters, parameters: generic_parameters, result_type: result_type, body_start: body_start, body_finish: body_end))
 		return true
 	end
-	function_index := state.function_count[0]
+	function_index := state.declarations.function_count[0]
 	store_string(state.function_receivers, function_index, receiver_type)
-	store_string(state.function_names, function_index, name)
-	store_integer(state.function_modules, function_index, state.module_graph.active_module[0])
-	store_integer(state.function_parameter_starts, function_index, parameter_start)
-	store_integer(state.function_parameter_counts, function_index, parameter_count)
-	store_string(state.function_result_types, function_index, result_type)
-	store_integer(state.function_body_starts, function_index, body_start)
-	store_integer(state.function_body_ends, function_index, body_end)
-	store_integer(state.function_lines, function_index, line)
-	state.function_lookup[function_index_key(state.module_graph.active_module[0], name)] = function_index
-	state.function_count[0] = function_index + 1
+	store_string(state.declarations.function_names, function_index, name)
+	store_integer(state.declarations.function_modules, function_index, state.module_graph.active_module[0])
+	store_integer(state.declarations.function_parameter_starts, function_index, parameter_start)
+	store_integer(state.declarations.function_parameter_counts, function_index, parameter_count)
+	store_string(state.declarations.function_result_types, function_index, result_type)
+	store_integer(state.declarations.function_body_starts, function_index, body_start)
+	store_integer(state.declarations.function_body_ends, function_index, body_end)
+	store_integer(state.declarations.function_lines, function_index, line)
+	state.declarations.function_lookup[function_index_key(state.module_graph.active_module[0], name)] = function_index
+	state.declarations.function_count[0] = function_index + 1
 	return true
 end
 

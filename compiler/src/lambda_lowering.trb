@@ -12,47 +12,47 @@ import { array_type } from type_resolution
 # Only analysis appends declarations. The complete catalog is frozen before
 # signatures, standard adapters or any executable body are emitted.
 def declare_lambda(mut state: CompilerState, mut lambda: CheckedLambda)
-	function := state.function_count[0]
-	start := state.parameter_count[0]
+	function := state.declarations.function_count[0]
+	start := state.declarations.parameter_count[0]
 	syntax := state.lambdas[sparse_integer_at(state.lambda_origins, lambda.origin) - 1]
 	parts := callable_parts(lambda.type_name)
 	lambda.function[0] = function
 	state.checked_lambdas.push(lambda)
 	store_integer(state.function_lambdas, function, state.checked_lambdas.size())
-	store_string(state.function_names, function, "$lambda" + integer_string(function))
-	store_integer(state.function_modules, function, state.module_graph.active_module[0])
-	store_integer(state.function_parameter_starts, function, start)
-	store_integer(state.function_parameter_counts, function, lambda.captures.size() + syntax.parameters.size())
-	store_string(state.function_result_types, function, parts[0])
-	store_integer(state.function_body_starts, function, syntax.body_start)
-	store_integer(state.function_body_ends, function, syntax.body_finish)
-	store_integer(state.function_lines, function, load_integer(state.token_lines, lambda.origin))
+	store_string(state.declarations.function_names, function, "$lambda" + integer_string(function))
+	store_integer(state.declarations.function_modules, function, state.module_graph.active_module[0])
+	store_integer(state.declarations.function_parameter_starts, function, start)
+	store_integer(state.declarations.function_parameter_counts, function, lambda.captures.size() + syntax.parameters.size())
+	store_string(state.declarations.function_result_types, function, parts[0])
+	store_integer(state.declarations.function_body_starts, function, syntax.body_start)
+	store_integer(state.declarations.function_body_ends, function, syntax.body_finish)
+	store_integer(state.declarations.function_lines, function, load_integer(state.token_lines, lambda.origin))
 	store_integer(state.type_resolution.function_generic_bindings, function, state.checked_bodies[lambda.body].generic_binding[0])
 	store_integer(state.checked_body_indices, function, lambda.body + 1)
 	lambda.captures.each do |capture|
-		index := state.parameter_count[0]
+		index := state.declarations.parameter_count[0]
 		mut storage := capture.type_name
 		if capture.mutable > 0
 			storage = array_type(storage)
 		end
-		store_string(state.parameter_names, index, capture.name)
-		store_string(state.parameter_types, index, storage)
-		store_integer(state.parameter_mutable, index, capture.mutable)
-		store_integer(state.parameter_lines, index, load_integer(state.token_lines, lambda.origin))
-		state.parameter_count[0] += 1
+		store_string(state.declarations.parameter_names, index, capture.name)
+		store_string(state.declarations.parameter_types, index, storage)
+		store_integer(state.declarations.parameter_mutable, index, capture.mutable)
+		store_integer(state.declarations.parameter_lines, index, load_integer(state.token_lines, lambda.origin))
+		state.declarations.parameter_count[0] += 1
 	end
 	mut parameter := 0
 	while parameter < syntax.parameters.size()
 		row := syntax.parameters[parameter]
-		index := state.parameter_count[0]
-		store_string(state.parameter_names, index, row.name)
-		store_string(state.parameter_types, index, parts[parameter + 1])
-		store_integer(state.parameter_mutable, index, row.mutable)
-		store_integer(state.parameter_lines, index, load_integer(state.token_lines, row.origin))
-		state.parameter_count[0] += 1
+		index := state.declarations.parameter_count[0]
+		store_string(state.declarations.parameter_names, index, row.name)
+		store_string(state.declarations.parameter_types, index, parts[parameter + 1])
+		store_integer(state.declarations.parameter_mutable, index, row.mutable)
+		store_integer(state.declarations.parameter_lines, index, load_integer(state.token_lines, row.origin))
+		state.declarations.parameter_count[0] += 1
 		parameter += 1
 	end
-	state.function_count[0] += 1
+	state.declarations.function_count[0] += 1
 end
 
 # Adopt captured cells rather than boxing them again. The sparse identity prefix
@@ -67,7 +67,7 @@ def lambda_bind_captures(mut state: CompilerState, mut locals: CheckedLocals, fu
 		locals.binding_slots.push(- 1)
 	end
 	locals.lambda_result.push(callable_parts(lambda.type_name)[0])
-	start := load_integer(state.function_parameter_starts, function)
+	start := load_integer(state.declarations.function_parameter_starts, function)
 	mut parameter := 0
 	lambda.captures.each do |capture|
 		slot := local_bind_identity(locals, capture.name, capture.type_name, capture.mutable, capture.child_identity)

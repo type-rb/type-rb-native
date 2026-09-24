@@ -21,11 +21,11 @@ end
 def intrinsic_mir_erase(mut state: CompilerState)
 	state.scalar_mir.functions.each do |function|
 		# CLI runtime templates are compile-time backend data, not call operands.
-		if load_string(state.function_names, function.id) == "native_cli_runtime_qbe"
+		if load_string(state.declarations.function_names, function.id) == "native_cli_runtime_qbe"
 			next
 		end
-		mut token := load_integer(state.function_body_starts, function.id)
-		while token < load_integer(state.function_body_ends, function.id)
+		mut token := load_integer(state.declarations.function_body_starts, function.id)
+		while token < load_integer(state.declarations.function_body_ends, function.id)
 			store_string(state.token_texts, token, "unavailable")
 			token += 1
 		end
@@ -35,7 +35,7 @@ end
 describe("MIR runtime and host calls") do
 	test("admits every runtime operation with exact declaration types and live roots") do
 		state := intrinsic_mir_state()
-		expect(state.scalar_mir.functions.size()).to_equal(state.function_count[0])
+		expect(state.scalar_mir.functions.size()).to_equal(state.declarations.function_count[0])
 		expect(verify_mir(state.scalar_mir, true)).to_equal("")
 		mut adapters: Array<Integer> := []
 		state.scalar_mir.calls.each do |call|
@@ -170,14 +170,14 @@ describe("MIR runtime and host calls") do
 			puts(load_string(state.diagnostics.messages, 0))
 		end
 		expect(checked).to_be_true()
-		expect(state.scalar_mir.functions.size()).to_equal(state.function_count[0])
+		expect(state.scalar_mir.functions.size()).to_equal(state.declarations.function_count[0])
 		before := control_test_output(emit_qbe(state))
 		expect(before.include?("call $external_float(d ")).to_be_true()
 		expect(before.include?("\tcall $external_void()")).to_be_true()
 		expect(before.include?("=l call $external_void")).to_be_false()
 		intrinsic_mir_erase(state)
 		id := find_function_in_module(state, find_module(state, "host"), "external_float")
-		store_string(state.function_names, id, "unavailable")
+		store_string(state.declarations.function_names, id, "unavailable")
 		expect(control_test_output(emit_qbe(state))).to_equal(before)
 		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
 		if qbe != nil

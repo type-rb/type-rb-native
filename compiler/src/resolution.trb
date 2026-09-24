@@ -320,9 +320,9 @@ def resolve_bare_imports(mut state: CompilerState): Boolean
 					end
 				end
 				mut record_index := 0
-				while record_index < state.record_count[0]
-					if load_integer(state.record_modules, record_index) == target
-						name := load_string(state.record_names, record_index)
+				while record_index < state.declarations.record_count[0]
+					if load_integer(state.declarations.record_modules, record_index) == target
+						name := load_string(state.declarations.record_names, record_index)
 						if ascii_fold(name) == wanted
 							if candidates != ""
 								candidates += ", "
@@ -378,9 +378,9 @@ def resolve_bare_imports(mut state: CompilerState): Boolean
 				if matches == 0
 					mut matching_function := false
 					mut function_index := 0
-					while function_index < state.function_count[0]
-						if load_integer(state.function_modules, function_index) == target
-							name := load_string(state.function_names, function_index)
+					while function_index < state.declarations.function_count[0]
+						if load_integer(state.declarations.function_modules, function_index) == target
+							name := load_string(state.declarations.function_names, function_index)
 							if ascii_fold(name) == wanted
 								matching_function = true
 							end
@@ -544,48 +544,48 @@ def resolve_declarations(mut state: CompilerState): Boolean
 		return false
 	end
 	mut record_index := 0
-	while record_index < state.record_count[0]
-		module_index := load_integer(state.record_modules, record_index)
+	while record_index < state.declarations.record_count[0]
+		module_index := load_integer(state.declarations.record_modules, record_index)
 		state.module_graph.active_module[0] = module_index
 		mut other_record := record_index - 1
-		state.declaration_owner[0] = namespace_parent(load_string(state.record_names, record_index))
+		state.declaration_owner[0] = namespace_parent(load_string(state.declarations.record_names, record_index))
 		while other_record >= 0
-			if load_integer(state.record_modules, other_record) != module_index
+			if load_integer(state.declarations.record_modules, other_record) != module_index
 				other_record =- 1
 			else
-				if load_string(state.record_names, other_record) == load_string(state.record_names, record_index)
+				if load_string(state.declarations.record_names, other_record) == load_string(state.declarations.record_names, record_index)
 					diagnostic(
 						state,
 						"TRBN4003",
-						load_integer(state.record_lines, record_index),
-						"duplicate record declaration " + load_string(state.record_names, record_index),
+						load_integer(state.declarations.record_lines, record_index),
+						"duplicate record declaration " + load_string(state.declarations.record_names, record_index),
 					)
 				end
 				other_record -= 1
 			end
 		end
-		start := load_integer(state.record_field_starts, record_index)
-		finish := start + load_integer(state.record_field_counts, record_index)
+		start := load_integer(state.declarations.record_field_starts, record_index)
+		finish := start + load_integer(state.declarations.record_field_counts, record_index)
 		mut field_index := start
 		while field_index < finish
 			mut other_field := start
 			while other_field < field_index
-				if load_string(state.field_names, other_field) == load_string(state.field_names, field_index)
+				if load_string(state.declarations.field_names, other_field) == load_string(state.declarations.field_names, field_index)
 					diagnostic(
 						state,
 						"TRBN4003",
-						load_integer(state.field_lines, field_index),
-						"duplicate field declaration " + load_string(state.field_names, field_index),
+						load_integer(state.declarations.field_lines, field_index),
+						"duplicate field declaration " + load_string(state.declarations.field_names, field_index),
 					)
 				end
 				other_field += 1
 			end
-			raw_type := load_string(state.field_types, field_index)
+			raw_type := load_string(state.declarations.field_types, field_index)
 			resolved_type := resolve_type_name(state, module_index, raw_type, false)
 			if resolved_type == ""
-				diagnostic(state, "TRBN4003", load_integer(state.field_lines, field_index), "unknown field type " + type_display(state, raw_type))
+				diagnostic(state, "TRBN4003", load_integer(state.declarations.field_lines, field_index), "unknown field type " + type_display(state, raw_type))
 			else
-				store_string(state.field_types, field_index, resolved_type)
+				store_string(state.declarations.field_types, field_index, resolved_type)
 			end
 			field_index += 1
 		end
@@ -598,72 +598,72 @@ def resolve_declarations(mut state: CompilerState): Boolean
 	mut declared_functions: Hash<String, Integer> := {}
 	mut declared_module :=- 1
 	mut function_index := 0
-	while function_index < state.function_count[0]
-		module_index := load_integer(state.function_modules, function_index)
+	while function_index < state.declarations.function_count[0]
+		module_index := load_integer(state.declarations.function_modules, function_index)
 		if module_index != declared_module
 			declared_functions = {}
 			declared_module = module_index
 		end
 		state.module_graph.active_module[0] = module_index
 		if module_index == state.module_graph.entry_module[0]
-			if load_string(state.function_names, function_index) == "main"
+			if load_string(state.declarations.function_names, function_index) == "main"
 				main_count += 1
-				if load_integer(state.function_parameter_counts, function_index) != 0
-					diagnostic(state, "TRBN4003", load_integer(state.function_lines, function_index), "main must take no parameters")
+				if load_integer(state.declarations.function_parameter_counts, function_index) != 0
+					diagnostic(state, "TRBN4003", load_integer(state.declarations.function_lines, function_index), "main must take no parameters")
 				end
-				if load_string(state.function_result_types, function_index) != "Void"
+				if load_string(state.declarations.function_result_types, function_index) != "Void"
 					diagnostic(
 						state,
 						"TRBN4003",
-						load_integer(state.function_lines, function_index),
-						"main must return Void, found " + load_string(state.function_result_types, function_index),
+						load_integer(state.declarations.function_lines, function_index),
+						"main must return Void, found " + load_string(state.declarations.function_result_types, function_index),
 					)
 				end
 			end
 		end
-		name := load_string(state.function_names, function_index)
+		name := load_string(state.declarations.function_names, function_index)
 		state.declaration_owner[0] = namespace_parent(name)
 		if declared_functions.key?(name)
 			diagnostic(
 				state,
 				"TRBN4003",
-				load_integer(state.function_lines, function_index),
+				load_integer(state.declarations.function_lines, function_index),
 				"duplicate function declaration " + name,
 			)
 		else
 			declared_functions[name] = 0
 		end
-		parameter_start := load_integer(state.function_parameter_starts, function_index)
-		parameter_finish := parameter_start + load_integer(state.function_parameter_counts, function_index)
+		parameter_start := load_integer(state.declarations.function_parameter_starts, function_index)
+		parameter_finish := parameter_start + load_integer(state.declarations.function_parameter_counts, function_index)
 		mut parameter_index := parameter_start
 		while parameter_index < parameter_finish
 			mut other_parameter := parameter_start
 			while other_parameter < parameter_index
-				if load_string(state.parameter_names, other_parameter) == load_string(state.parameter_names, parameter_index)
+				if load_string(state.declarations.parameter_names, other_parameter) == load_string(state.declarations.parameter_names, parameter_index)
 					diagnostic(
 						state,
 						"TRBN4003",
-						load_integer(state.parameter_lines, parameter_index),
-						"duplicate parameter declaration " + load_string(state.parameter_names, parameter_index),
+						load_integer(state.declarations.parameter_lines, parameter_index),
+						"duplicate parameter declaration " + load_string(state.declarations.parameter_names, parameter_index),
 					)
 				end
 				other_parameter += 1
 			end
-			raw_type := load_string(state.parameter_types, parameter_index)
+			raw_type := load_string(state.declarations.parameter_types, parameter_index)
 			resolved_type := resolve_type_name(state, module_index, raw_type, false)
 			if resolved_type == ""
-				diagnostic(state, "TRBN4003", load_integer(state.parameter_lines, parameter_index), "unknown parameter type " + type_display(state, raw_type))
+				diagnostic(state, "TRBN4003", load_integer(state.declarations.parameter_lines, parameter_index), "unknown parameter type " + type_display(state, raw_type))
 			else
-				store_string(state.parameter_types, parameter_index, resolved_type)
+				store_string(state.declarations.parameter_types, parameter_index, resolved_type)
 			end
 			parameter_index += 1
 		end
-		raw_result := load_string(state.function_result_types, function_index)
+		raw_result := load_string(state.declarations.function_result_types, function_index)
 		resolved_result := resolve_type_name(state, module_index, raw_result, true)
 		if resolved_result == ""
-			diagnostic(state, "TRBN4003", load_integer(state.function_lines, function_index), "unknown result type " + type_display(state, raw_result))
+			diagnostic(state, "TRBN4003", load_integer(state.declarations.function_lines, function_index), "unknown result type " + type_display(state, raw_result))
 		else
-			store_string(state.function_result_types, function_index, resolved_result)
+			store_string(state.declarations.function_result_types, function_index, resolved_result)
 		end
 		function_index += 1
 	end
@@ -680,20 +680,20 @@ def resolve_function_body(
 		mut locals: CheckedLocals,
 	): Boolean
 	select_checked_body(state, function_index)
-	module_index := load_integer(state.function_modules, function_index)
+	module_index := load_integer(state.declarations.function_modules, function_index)
 	state.module_graph.active_module[0] = module_index
-	body_start := load_integer(state.function_body_starts, function_index)
+	body_start := load_integer(state.declarations.function_body_starts, function_index)
 	state.declaration_owner[0] = sparse_string_at(state.token_namespaces, body_start)
-	body_finish := load_integer(state.function_body_ends, function_index)
-	parameter_start := load_integer(state.function_parameter_starts, function_index)
-	parameter_finish := parameter_start + load_integer(state.function_parameter_counts, function_index)
+	body_finish := load_integer(state.declarations.function_body_ends, function_index)
+	parameter_start := load_integer(state.declarations.function_parameter_starts, function_index)
+	parameter_finish := parameter_start + load_integer(state.declarations.function_parameter_counts, function_index)
 	mut parameter_index := parameter_start
 	while parameter_index < parameter_finish
 		resolution_local_add(
 			locals,
-			load_string(state.parameter_names, parameter_index),
-			load_string(state.parameter_types, parameter_index),
-			load_integer(state.parameter_mutable, parameter_index),
+			load_string(state.declarations.parameter_names, parameter_index),
+			load_string(state.declarations.parameter_types, parameter_index),
+			load_integer(state.declarations.parameter_mutable, parameter_index),
 		)
 		parameter_index += 1
 	end
@@ -1012,7 +1012,7 @@ def resolve(mut state: CompilerState): Boolean
 		return false
 	end
 	mut function_index := 0
-	while function_index < state.function_count[0]
+	while function_index < state.declarations.function_count[0]
 		mut locals := locals_new(state.token_count[0] + 1)
 		resolve_function_body(state, function_index, locals)
 		declare_default_functions(state)
@@ -1028,20 +1028,20 @@ def compiler_main_signature(state: CompilerState, index: Integer): Integer
 	if index < 0
 		return - 1
 	end
-	if load_integer(state.function_parameter_counts, index) != 3
+	if load_integer(state.declarations.function_parameter_counts, index) != 3
 		return - 1
 	end
-	start := load_integer(state.function_parameter_starts, index)
-	if load_string(state.parameter_types, start) != "String"
+	start := load_integer(state.declarations.function_parameter_starts, index)
+	if load_string(state.declarations.parameter_types, start) != "String"
 		return - 1
 	end
-	if load_string(state.parameter_types, start + 1) != "String"
+	if load_string(state.declarations.parameter_types, start + 1) != "String"
 		return - 1
 	end
-	if load_string(state.parameter_types, start + 2) != "Boolean"
+	if load_string(state.declarations.parameter_types, start + 2) != "Boolean"
 		return - 1
 	end
-	if load_string(state.function_result_types, index) != "Integer"
+	if load_string(state.declarations.function_result_types, index) != "Integer"
 		return - 1
 	end
 	return index
@@ -1062,19 +1062,19 @@ def compiler_runtime_owner(state: CompilerState): Integer
 		if compiler_main_signature(state, core) < 0
 			return - 1
 		end
-		if load_string(state.function_names, core) != "compiler_main"
+		if load_string(state.declarations.function_names, core) != "compiler_main"
 			return - 1
 		end
-		return load_integer(state.function_modules, core)
+		return load_integer(state.declarations.function_modules, core)
 	end
 	return state.module_graph.entry_module[0]
 end
 
 def compiler_runtime_intrinsic(state: CompilerState, function_index: Integer): Boolean
-	if function_index < 0 || function_index >= state.function_count[0]
+	if function_index < 0 || function_index >= state.declarations.function_count[0]
 		return false
 	end
-	name := load_string(state.function_names, function_index)
+	name := load_string(state.declarations.function_names, function_index)
 	if name == "compiler_string_bytes" || name == "compiler_source_is_utf8" || name == "compiler_literal_byte"
 		owner := compiler_runtime_owner(state)
 		if owner >= 0
@@ -1085,13 +1085,13 @@ def compiler_runtime_intrinsic(state: CompilerState, function_index: Integer): B
 			emitter := find_visible_function(state, owner, anchor)
 			if emitter >= 0
 				if name == "compiler_literal_byte"
-					decoder := find_visible_function(state, load_integer(state.function_modules, emitter), "decode_escape")
+					decoder := find_visible_function(state, load_integer(state.declarations.function_modules, emitter), "decode_escape")
 					if decoder < 0
 						return false
 					end
-					return find_visible_function(state, load_integer(state.function_modules, decoder), name) == function_index
+					return find_visible_function(state, load_integer(state.declarations.function_modules, decoder), name) == function_index
 				end
-				return find_visible_function(state, load_integer(state.function_modules, emitter), name) == function_index
+				return find_visible_function(state, load_integer(state.declarations.function_modules, emitter), name) == function_index
 			end
 		end
 		return false
@@ -1106,13 +1106,13 @@ def compiler_runtime_intrinsic(state: CompilerState, function_index: Integer): B
 end
 
 def compiler_host_intrinsic(state: CompilerState, function_index: Integer): Boolean
-	if function_index < 0 || function_index >= state.function_count[0]
+	if function_index < 0 || function_index >= state.declarations.function_count[0]
 		return false
 	end
 	if compiler_entry_function(state) < 0 || find_function_in_module(state, state.module_graph.entry_module[0], "native_cli_main") < 0
 		return false
 	end
-	return load_string(state.module_graph.module_names, load_integer(state.function_modules, function_index)) == "host"
+	return load_string(state.module_graph.module_names, load_integer(state.declarations.function_modules, function_index)) == "host"
 end
 
 def resolve_enum_declarations(mut state: CompilerState): Boolean

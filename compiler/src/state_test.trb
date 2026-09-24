@@ -3,7 +3,9 @@ import { lex } from lexer
 import { parse_module } from parser
 import { resolve } from resolution
 import { find_function_in_module } from declaration_lookup
+import { generic_program_fork } from generic_program
 import { add_module, compiler_new, find_module, find_name_index, function_index_key } from state
+import { load_string, store_integer, store_string } from storage
 import { describe, expect, test } from trb/std/test
 
 describe("Compiler Hash indexes") do
@@ -46,5 +48,39 @@ describe("Compiler Hash indexes") do
 		expect(resolve(state)).to_be_true()
 		expect(resolve(state)).to_be_true()
 		expect(find_function_in_module(state, 0, "first")).to_equal(0)
+	end
+
+	test("isolates mutable declaration catalogs in template-checking forks") do
+		mut state := compiler_new(64)
+		store_string(state.declarations.record_names, 0, "Parent")
+		state.declarations.record_count[0] = 1
+		store_string(state.declarations.field_names, 0, "item")
+		state.declarations.field_count[0] = 1
+		store_string(state.declarations.function_names, 0, "run")
+		store_integer(state.declarations.function_modules, 0, 0)
+		state.declarations.function_count[0] = 1
+		state.declarations.function_lookup[function_index_key(0, "run")] = 0
+		store_string(state.declarations.parameter_names, 0, "value")
+		state.declarations.parameter_count[0] = 1
+		mut fork := generic_program_fork(state)
+		store_string(fork.declarations.record_names, 0, "Fork")
+		fork.declarations.record_count[0] = 2
+		store_string(fork.declarations.field_names, 0, "entry")
+		fork.declarations.field_count[0] = 2
+		store_string(fork.declarations.function_names, 0, "other")
+		fork.declarations.function_count[0] = 2
+		fork.declarations.function_lookup[function_index_key(0, "other")] = 1
+		store_string(fork.declarations.parameter_names, 0, "argument")
+		fork.declarations.parameter_count[0] = 2
+		expect(load_string(state.declarations.record_names, 0)).to_equal("Parent")
+		expect(state.declarations.record_count[0]).to_equal(1)
+		expect(load_string(state.declarations.field_names, 0)).to_equal("item")
+		expect(state.declarations.field_count[0]).to_equal(1)
+		expect(load_string(state.declarations.function_names, 0)).to_equal("run")
+		expect(state.declarations.function_count[0]).to_equal(1)
+		expect(find_name_index(state.declarations.function_lookup, function_index_key(0, "other"))).to_equal(- 1)
+		expect(load_string(state.declarations.parameter_names, 0)).to_equal("value")
+		expect(state.declarations.parameter_count[0]).to_equal(1)
+		expect(find_name_index(fork.declarations.function_lookup, function_index_key(0, "run"))).to_equal(0)
 	end
 end

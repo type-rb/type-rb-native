@@ -45,17 +45,17 @@ describe("Anonymous function syntax ownership") do
 		expect(state.lambdas.size()).to_equal(1)
 		expect(state.lambdas[0].parameters.size()).to_equal(1)
 		expect(load_string(state.token_texts, state.lambdas[0].finish)).to_equal(")")
-		expect(state.parameter_count[0]).to_equal(0)
+		expect(state.declarations.parameter_count[0]).to_equal(0)
 		expect(resolve(state)).to_be_true()
 	end
 	test("keeps nested fn parameters and defaults separate from surrounding declarations") do
 		source := "alias Callback = (Integer) -> Integer\nrecord Holder\ncallback: Callback = fn(input: Integer): Integer; return input; end\nend\ndef consume(callback: Callback = fn(mut first: Integer): Integer\nnested := fn(second: Integer): Integer; return second; end\nreturn nested(first)\nend, tail: Integer = 7): Integer\nreturn callback(tail)\nend\ndef main()\nend\n"
 		mut state := compiler_new(source.size() * 4 + 64)
 		expect(lex(state, source) && parse_module(state, 0, state.module_graph.entry_module[0])).to_be_true()
-		expect(state.function_count[0]).to_equal(2)
-		expect(state.parameter_count[0]).to_equal(2)
-		expect(load_string(state.parameter_names, 0)).to_equal("callback")
-		expect(load_string(state.parameter_names, 1)).to_equal("tail")
+		expect(state.declarations.function_count[0]).to_equal(2)
+		expect(state.declarations.parameter_count[0]).to_equal(2)
+		expect(load_string(state.declarations.parameter_names, 0)).to_equal("callback")
+		expect(load_string(state.declarations.parameter_names, 1)).to_equal("tail")
 		expect(state.lambdas.size()).to_equal(3)
 		expect(state.default_initializers.size()).to_equal(3)
 		expect(state.default_initializers[1].owner).to_equal(0)
@@ -69,7 +69,7 @@ describe("Anonymous function syntax ownership") do
 		expect(parse_lambda_syntax(state, position)).to_be_true()
 		expect(position[0]).to_equal(outer.finish)
 		expect(state.lambdas.size()).to_equal(3)
-		expect(state.parameter_count[0]).to_equal(2)
+		expect(state.declarations.parameter_count[0]).to_equal(2)
 		expect(resolve(state)).to_be_true()
 		state.hash_repl[0] = true
 		expect(check(state)).to_be_true()
@@ -136,10 +136,10 @@ def callable_capture_state(): CompilerState
 	wrapper := find_function_in_module(state, state.module_graph.entry_module[0], "wrap")
 	cyclic := find_function_in_module(state, state.module_graph.entry_module[0], "make_cycle")
 	mut function := 0
-	while function < state.function_count[0]
+	while function < state.declarations.function_count[0]
 		if function == factory || function == wrapper || function == cyclic
 			mut locals := checked_function_locals(state, function)
-			origin := load_integer(state.function_body_starts, function)
+			origin := load_integer(state.declarations.function_body_starts, function)
 			mut target := find_function_in_module(state, state.module_graph.entry_module[0], "step")
 			mut captures := [0, 1, 2, 3]
 			if function == wrapper
@@ -198,14 +198,14 @@ describe("MIR callable foundation") do
 		before := control_test_output(emit_qbe(state))
 		intrinsic_mir_erase(state)
 		mut index := 0
-		while index < state.function_count[0]
-			store_string(state.function_names, index, "erased")
-			store_string(state.function_result_types, index, "Invalid")
+		while index < state.declarations.function_count[0]
+			store_string(state.declarations.function_names, index, "erased")
+			store_string(state.declarations.function_result_types, index, "Invalid")
 			index += 1
 		end
 		index = 0
-		while index < state.parameter_count[0]
-			store_string(state.parameter_types, index, "Invalid")
+		while index < state.declarations.parameter_count[0]
+			store_string(state.declarations.parameter_types, index, "Invalid")
 			index += 1
 		end
 		expect(verify_mir(state.scalar_mir, true)).to_equal("")
@@ -228,14 +228,14 @@ describe("MIR callable foundation") do
 		before := control_test_output(emit_qbe(state))
 		intrinsic_mir_erase(state)
 		mut index := 0
-		while index < state.function_count[0]
-			store_string(state.function_names, index, "erased")
-			store_string(state.function_result_types, index, "Invalid")
+		while index < state.declarations.function_count[0]
+			store_string(state.declarations.function_names, index, "erased")
+			store_string(state.declarations.function_result_types, index, "Invalid")
 			index += 1
 		end
 		index = 0
-		while index < state.parameter_count[0]
-			store_string(state.parameter_types, index, "Invalid")
+		while index < state.declarations.parameter_count[0]
+			store_string(state.declarations.parameter_types, index, "Invalid")
 			index += 1
 		end
 		expect(verify_mir(state.scalar_mir, true)).to_equal("")
@@ -451,8 +451,8 @@ describe("Anonymous lexical body checking") do
 		expect(lambda.captures[1].name).to_equal("label")
 		expect(lambda.captures[1].mutable).to_equal(0)
 		expect(state.checked_bodies[lambda.body].function).to_equal(lambda.function[0])
-		expect(state.function_count[0]).to_equal(3)
-		expect(state.parameter_count[0]).to_equal(6)
+		expect(state.declarations.function_count[0]).to_equal(3)
+		expect(state.declarations.parameter_count[0]).to_equal(6)
 	end
 
 	test("lets fn parameters and local declarations shadow parent bindings") do
@@ -558,7 +558,7 @@ describe("Anonymous lexical body checking") do
 			function := state.type_resolution.generic_function_instances[index].function
 			select_checked_body(state, function)
 			mut parent := locals_new(state.token_count[0] + 1)
-			type_name := load_string(state.parameter_types, load_integer(state.function_parameter_starts, function))
+			type_name := load_string(state.declarations.parameter_types, load_integer(state.declarations.function_parameter_starts, function))
 			local_bind(parent, "value", type_name, 0)
 			mut position := [state.lambdas[0].origin]
 			value := check_lambda_value(state, position, parent)

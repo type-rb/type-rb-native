@@ -85,7 +85,7 @@ def repl_show(mut state: CompilerState, mut session: ReplSession, input: String,
 	state.declaration_owner[0] = ""
 	line_number := repl_lines(prefix) + 1
 	main := find_function_in_module(state, state.module_graph.entry_module[0], "main")
-	mut position := [load_integer(state.function_body_starts, main)]
+	mut position := [load_integer(state.declarations.function_body_starts, main)]
 	while load_integer(state.token_lines, position[0]) < line_number
 		position[0] += 1
 	end
@@ -473,21 +473,21 @@ def repl_complete(session: ReplSession): ReplCandidates
 		end
 		record_index := find_record_type(state, type_name)
 		if record_index >= 0
-			start := load_integer(state.record_field_starts, record_index)
-			count := load_integer(state.record_field_counts, record_index)
+			start := load_integer(state.declarations.record_field_starts, record_index)
+			count := load_integer(state.declarations.record_field_counts, record_index)
 			mut field := 0
 			while field < count
-				member := name + "." + load_string(state.field_names, start + field)
-				repl_candidate(candidates, member, member, repl_type_name(state, load_string(state.field_types, start + field)), 0)
+				member := name + "." + load_string(state.declarations.field_names, start + field)
+				repl_candidate(candidates, member, member, repl_type_name(state, load_string(state.declarations.field_types, start + field)), 0)
 				field += 1
 			end
 		end
 		index += 1
 	end
 	index = 0
-	while index < state.function_count[0]
-		if load_integer(state.function_modules, index) == state.module_graph.entry_module[0]
-			name := load_string(state.function_names, index)
+	while index < state.declarations.function_count[0]
+		if load_integer(state.declarations.function_modules, index) == state.module_graph.entry_module[0]
+			name := load_string(state.declarations.function_names, index)
 			if name != "main" && sparse_integer_at(state.function_expression_bodies, index) == 0 && sparse_integer_at(state.function_lambdas, index) == 0
 				repl_candidate(candidates, name, repl_function_insertion(state, index, name), repl_function_detail(state, index), 6)
 			end
@@ -511,9 +511,9 @@ def repl_complete(session: ReplSession): ReplCandidates
 		index += 1
 	end
 	index = 0
-	while index < state.record_count[0]
-		repl_candidate(candidates, load_string(state.record_names, index), load_string(state.record_names, index), "record type", 5)
-		repl_candidate(candidates, load_string(state.record_names, index) + ".new", load_string(state.record_names, index) + ".new(", "record constructor", 6)
+	while index < state.declarations.record_count[0]
+		repl_candidate(candidates, load_string(state.declarations.record_names, index), load_string(state.declarations.record_names, index), "record type", 5)
+		repl_candidate(candidates, load_string(state.declarations.record_names, index) + ".new", load_string(state.declarations.record_names, index) + ".new(", "record constructor", 6)
 		index += 1
 	end
 	return candidates
@@ -747,26 +747,26 @@ def repl_candidate(mut candidates: ReplCandidates, label: String, insertion: Str
 end
 
 def repl_function_detail(state: CompilerState, index: Integer): String
-	mut detail := load_string(state.function_names, index) + "("
-	start := load_integer(state.function_parameter_starts, index)
-	count := load_integer(state.function_parameter_counts, index)
+	mut detail := load_string(state.declarations.function_names, index) + "("
+	start := load_integer(state.declarations.function_parameter_starts, index)
+	count := load_integer(state.declarations.function_parameter_counts, index)
 	mut parameter := 0
 	mut named := false
 	while parameter < count
 		if parameter > 0
 			detail += ", "
 		end
-		if !named && load_integer(state.parameter_named_only, start + parameter) == 1
+		if !named && load_integer(state.declarations.parameter_named_only, start + parameter) == 1
 			detail += "*, "
 			named = true
 		end
-		detail += load_string(state.parameter_names, start + parameter) + ": " + repl_type_name(state, load_string(state.parameter_types, start + parameter))
+		detail += load_string(state.declarations.parameter_names, start + parameter) + ": " + repl_type_name(state, load_string(state.declarations.parameter_types, start + parameter))
 		if sparse_integer_at(state.parameter_defaults, start + parameter) > 0
 			detail += " = ..."
 		end
 		parameter += 1
 	end
-	return detail + "): " + repl_type_name(state, load_string(state.function_result_types, index))
+	return detail + "): " + repl_type_name(state, load_string(state.declarations.function_result_types, index))
 end
 
 def repl_use_color(): Boolean
@@ -789,7 +789,7 @@ def repl_diagnostic(state: CompilerState, offset: Integer)
 end
 
 def repl_function_insertion(state: CompilerState, index: Integer, name: String): String
-	if load_integer(state.function_parameter_counts, index) == 0
+	if load_integer(state.declarations.function_parameter_counts, index) == 0
 		return name + "()"
 	end
 	return name + "("
