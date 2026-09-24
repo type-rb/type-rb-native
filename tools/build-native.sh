@@ -23,6 +23,14 @@ source_hashes() {
 }
 sha256() { sha256_files "$1" | cut -d ' ' -f 1; }
 verify() { test "$(sha256 "$1")" = "$2" || fail "checksum mismatch: $1"; }
+# --plan reports whether a build would reuse everything (cached), rebuild only
+# the CLI (cli) or rebuild the core and CLI (core), without building anything.
+mode=build
+case "$#:${1:-}" in
+	0:) ;;
+	1:--plan) mode=plan ;;
+	*) fail 'usage: tools/build-native.sh [--plan]' ;;
+esac
 case "$(uname -s)/$(uname -m)" in
 	Darwin/arm64)
 		profile=darwin-arm64-v0
@@ -76,11 +84,23 @@ stage=$(mktemp -d "$cache/build.XXXXXX")
 	cd "$repository_root"
 	source_hashes compiler/cli
 ) > "$stage/inputs"
-if test -x "$output/trbn" && test -x "$output/qbe" && test -f "$cache/inputs"; then
-	if cmp -s "$stage/inputs" "$cache/inputs"; then
-		printf '%s\n' "$output/trbn"
-		exit 0
-	fi
+# One decision serves the build and --plan, so plan checks exercise the same
+# content keys and published-state checks. The lock keeps the cache stable.
+decision=core
+if test -x "$output/trbn" && test -x "$output/qbe" && test -f "$cache/inputs" &&
+	cmp -s "$stage/inputs" "$cache/inputs"; then
+	decision=cached
+elif test -x "$cache/core/compiler" && test -f "$cache/core/inputs" &&
+	cmp -s "$stage/core-inputs" "$cache/core/inputs"; then
+	decision=cli
+fi
+if test "$mode" = plan; then
+	printf '%s\n' "$decision"
+	exit 0
+fi
+if test "$decision" = cached; then
+	printf '%s\n' "$output/trbn"
+	exit 0
 fi
 printf '%s\n' 'trbn: bootstrapping the native compiler' >&2
 qbe=${TRBN_QBE:-$cache/qbe-1.3/qbe}
@@ -110,7 +130,7 @@ verify "$seed" "$seed_digest"
 chmod 0755 "$seed"
 mkdir -p "$stage/first" "$stage/runtime" "$stage/core" "$stage/verify" "$stage/source"
 core="$cache/core/compiler"
-if test -x "$core" && test -f "$cache/core/inputs" && cmp -s "$stage/core-inputs" "$cache/core/inputs"; then
+if test "$decision" = cli; then
 	printf '%s\n' 'trbn: reusing the verified core compiler' >&2
 else
 	source="$repository_root/compiler/src/compiler.trb"

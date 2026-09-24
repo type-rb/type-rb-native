@@ -227,6 +227,10 @@ unsupported; their portable formatting requires separate coverage.
 compiled and REPL output with the reference compiler. After a normal checkout
 build, `python3 tools/native-bootstrap-test.py` checks cache invalidation, core
 reuse, failed-build preservation and concurrent callers in an isolated copy.
+`tools/build-native.sh --plan` prints the scope a build would take (`cached`,
+`cli` or `core`) from the same content keys without building; the test uses it
+for edits, additions, removals and nested inputs, and performs two real
+rebuilds: a replaced core, and a CLI rebuild shared by concurrent callers.
 
 ## Diagnostics
 
