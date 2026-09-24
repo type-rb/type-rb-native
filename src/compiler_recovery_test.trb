@@ -1431,7 +1431,8 @@ record RecoveryModuleControl
 	check_mutation: Boolean
 end
 
-# Each task owns its mutation, missing-module and malformed-module directories.
+# Each task owns its mutation and negative-control directories. Missing and
+# malformed modules are checked sequentially in the same isolated closure.
 def _recovery_verify_module_control(control: RecoveryModuleControl): Result<Boolean, String>
 	executable := control.executable
 	workspace := control.workspace
@@ -1439,11 +1440,11 @@ def _recovery_verify_module_control(control: RecoveryModuleControl): Result<Bool
 	sources := control.closure.contents
 	mutations := control.mutations
 	index := control.index
-	mut changed: Array<String> := []
-	sources.each do |source|
-		changed.push(source)
-	end
 	if control.check_mutation
+		mut changed: Array<String> := []
+		sources.each do |source|
+			changed.push(source)
+		end
 		mut found := false
 		mutations.each do |mutation|
 			if mutation[0] == names[index]
@@ -1466,10 +1467,10 @@ def _recovery_verify_module_control(control: RecoveryModuleControl): Result<Bool
 		try _recovery_require_no_intermediates(directory)
 	end
 
-	missing := workspace + "/compiler-source-compiler-missing-" + names[index]
-	try _prepare_compiler_closure(missing, names, sources, names[index])
-	missing_output := missing + "/compiler"
-	missing_build := try _recovery_build(executable, missing + "/compiler.trb", missing_output, missing + "/missing-qbe", missing + "/missing-cc")
+	negative := workspace + "/compiler-source-compiler-invalid-" + names[index]
+	try _prepare_compiler_closure(negative, names, sources, names[index])
+	missing_output := negative + "/compiler-missing"
+	missing_build := try _recovery_build(executable, negative + "/compiler.trb", missing_output, negative + "/missing-qbe", negative + "/missing-cc")
 	if missing_build.status != 1 || !missing_build.stdout.empty?()
 		return Result<Boolean, String>::Err("missing " + names[index] + " module did not fail before tools")
 	end
@@ -1477,13 +1478,13 @@ def _recovery_verify_module_control(control: RecoveryModuleControl): Result<Bool
 		return Result<Boolean, String>::Err("missing " + names[index] + " module diagnostic differs: " + missing_build.stderr)
 	end
 	try _recovery_require_missing(missing_output)
-	try _recovery_require_no_intermediates(missing)
+	try _recovery_require_no_intermediates(negative)
 
-	malformed := workspace + "/compiler-source-compiler-malformed-" + names[index]
-	changed[index] = sources[index] + "\n`\n"
-	try _prepare_compiler_closure(malformed, names, changed, "")
-	malformed_output := malformed + "/compiler"
-	malformed_build := try _recovery_build(executable, malformed + "/compiler.trb", malformed_output, malformed + "/missing-qbe", malformed + "/missing-cc")
+	# Restore the omitted module with invalid source. The compiler must still
+	# reject it before launching either external tool.
+	try _recovery_write_source(negative + "/" + names[index] + ".trb", sources[index] + "\n`\n")
+	malformed_output := negative + "/compiler-malformed"
+	malformed_build := try _recovery_build(executable, negative + "/compiler.trb", malformed_output, negative + "/missing-qbe", negative + "/missing-cc")
 	if malformed_build.status != 1 || !malformed_build.stdout.empty?()
 		return Result<Boolean, String>::Err("malformed " + names[index] + " module did not fail before tools")
 	end
@@ -1491,7 +1492,7 @@ def _recovery_verify_module_control(control: RecoveryModuleControl): Result<Bool
 		return Result<Boolean, String>::Err("malformed " + names[index] + " module diagnostic differs: " + malformed_build.stderr)
 	end
 	try _recovery_require_missing(malformed_output)
-	try _recovery_require_no_intermediates(malformed)
+	try _recovery_require_no_intermediates(negative)
 	return Result<Boolean, String>::Ok(true)
 end
 
