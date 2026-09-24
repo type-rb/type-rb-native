@@ -27,5 +27,5 @@ func scan(rounds int64) int64 {
 }
 
 func main() {
-	fmt.Println(scan(60000))
+	fmt.Println(scan(210000))
 }

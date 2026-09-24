@@ -21,5 +21,5 @@ func run(rounds int64) int64 {
 }
 
 func main() {
-	fmt.Println(run(300000))
+	fmt.Println(run(1200000))
 }

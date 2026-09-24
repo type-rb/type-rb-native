@@ -18,6 +18,6 @@ func tak(x, y, z int64) int64 {
 }
 
 func main() {
-	fmt.Println(fib(27))
-	fmt.Println(tak(18, 12, 6))
+	fmt.Println(fib(35))
+	fmt.Println(tak(24, 16, 8))
 }

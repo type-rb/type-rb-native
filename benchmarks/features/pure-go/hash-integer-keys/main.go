@@ -23,5 +23,5 @@ func run(count int64) int64 {
 }
 
 func main() {
-	fmt.Println(run(400000))
+	fmt.Println(run(2400000))
 }

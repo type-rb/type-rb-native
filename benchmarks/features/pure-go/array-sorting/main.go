@@ -27,5 +27,5 @@ func run(count int, rounds int) int64 {
 }
 
 func main() {
-	fmt.Println(run(20000, 12))
+	fmt.Println(run(20000, 24))
 }
