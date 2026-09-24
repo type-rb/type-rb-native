@@ -4,8 +4,8 @@ import { parse_module } from parser
 import { resolve } from resolution
 import { find_function_in_module } from declaration_lookup
 import { generic_program_fork } from generic_program
-import { add_module, compiler_new, find_module, find_name_index, function_index_key } from state
-import { load_string, store_integer, store_string } from storage
+import { DefaultInitializer, add_module, compiler_new, find_module, find_name_index, function_index_key } from state
+import { load_integer, load_string, store_integer, store_string } from storage
 import { describe, expect, test } from trb/std/test
 
 describe("Compiler Hash indexes") do
@@ -82,5 +82,28 @@ describe("Compiler Hash indexes") do
 		expect(load_string(state.declarations.parameter_names, 0)).to_equal("value")
 		expect(state.declarations.parameter_count[0]).to_equal(1)
 		expect(find_name_index(fork.declarations.function_lookup, function_index_key(0, "run"))).to_equal(0)
+	end
+
+	test("shares parsed regions but isolates template default plans") do
+		mut state := compiler_new(64)
+		state.parsed.default_initializers.push(DefaultInitializer.new(kind: 1, owner: 0, slot: 0, start: 2, finish: 4))
+		state.parsed.default_functions.push(3)
+		store_integer(state.parsed.parameter_defaults, 0, 7)
+		store_integer(state.parsed.field_defaults, 0, 8)
+		store_integer(state.parsed.function_expression_bodies, 0, 9)
+		store_integer(state.parsed.record_default_parameters, 0, 10)
+		mut fork := generic_program_fork(state)
+		fork.parsed.default_initializers.push(DefaultInitializer.new(kind: 2, owner: 1, slot: 0, start: 5, finish: 6))
+		fork.parsed.default_functions.push(4)
+		store_integer(fork.parsed.parameter_defaults, 0, 17)
+		store_integer(fork.parsed.field_defaults, 0, 18)
+		store_integer(fork.parsed.function_expression_bodies, 0, 19)
+		store_integer(fork.parsed.record_default_parameters, 0, 20)
+		expect(state.parsed.default_initializers.size()).to_equal(1)
+		expect(state.parsed.default_functions.size()).to_equal(1)
+		expect(load_integer(state.parsed.parameter_defaults, 0)).to_equal(7)
+		expect(load_integer(state.parsed.field_defaults, 0)).to_equal(8)
+		expect(load_integer(state.parsed.function_expression_bodies, 0)).to_equal(9)
+		expect(load_integer(state.parsed.record_default_parameters, 0)).to_equal(10)
 	end
 end

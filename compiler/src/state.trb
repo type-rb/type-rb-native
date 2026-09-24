@@ -154,6 +154,28 @@ record CompilerDeclarationCatalog
 	parameter_count: Array<Integer>
 end
 
+# Parsed statement regions and authored initializer plans remain source facts.
+# A template-checking fork shares syntax indexes but owns mutable default plans.
+record CompilerParsedProgram
+	catch_syntax: Array<CatchSyntax>
+	catch_origins: IntegerStorage
+	statement_finishes: IntegerStorage
+	loop_finishes: IntegerStorage
+	controls: Array<ControlSyntax>
+	# Positive rows identify parsed controls; typed facts live in CheckedBody.
+	control_origins: IntegerStorage
+	default_initializers: Array<DefaultInitializer>
+	default_functions: Array<Integer>
+	parameter_defaults: IntegerStorage
+	field_defaults: IntegerStorage
+	function_expression_bodies: IntegerStorage
+	record_default_parameters: IntegerStorage
+	transforms: Array<TransformSyntax>
+	transform_origins: IntegerStorage
+	iterations: Array<IterationSyntax>
+	iteration_origins: IntegerStorage
+end
+
 record CompilerState
 	objects: Array<ObjectDefinition>
 	object_instances: Array<ObjectInstance>
@@ -183,29 +205,13 @@ record CompilerState
 	checked: Array<CheckedBody>
 	checked_bodies: Array<CheckedBody>
 	checked_body_indices: IntegerStorage
-	catch_syntax: Array<CatchSyntax>
-	catch_origins: IntegerStorage
-	statement_finishes: IntegerStorage
 	standard_modules: IntegerStorage
 	type_resolution: CompilerTypeResolution
 	enums: Array<EnumDefinition>
 	enum_variants: Array<EnumVariant>
 	enum_fields: Array<EnumField>
 	submissions: Array<CheckedSubmission>
-	loop_finishes: IntegerStorage
-	controls: Array<ControlSyntax>
-	# Positive rows identify immutable parsed controls; typed facts live in CheckedBody.
-	control_origins: IntegerStorage
-	default_initializers: Array<DefaultInitializer>
-	default_functions: Array<Integer>
-	parameter_defaults: IntegerStorage
-	field_defaults: IntegerStorage
-	function_expression_bodies: IntegerStorage
-	record_default_parameters: IntegerStorage
-	transforms: Array<TransformSyntax>
-	transform_origins: IntegerStorage
-	iterations: Array<IterationSyntax>
-	iteration_origins: IntegerStorage
+	parsed: CompilerParsedProgram
 	hash_repl: Array<Boolean>
 	token_kinds: IntegerStorage
 	token_texts: StringStorage
@@ -215,6 +221,42 @@ record CompilerState
 	module_graph: CompilerModuleGraph
 	declarations: CompilerDeclarationCatalog
 	diagnostics: CompilerDiagnostics
+end
+
+def compiler_parsed_program_new(capacity: Integer): CompilerParsedProgram
+	return CompilerParsedProgram.new(
+		catch_syntax: [], catch_origins: integer_storage(capacity),
+		statement_finishes: integer_storage(capacity), loop_finishes: integer_storage(capacity),
+		controls: [], control_origins: integer_storage(capacity),
+		default_initializers: [], default_functions: [],
+		parameter_defaults: integer_storage(capacity), field_defaults: integer_storage(capacity),
+		function_expression_bodies: integer_storage(capacity), record_default_parameters: integer_storage(capacity),
+		transforms: [], transform_origins: integer_storage(capacity),
+		iterations: [], iteration_origins: integer_storage(capacity),
+	)
+end
+
+def compiler_parsed_program_fork(parsed: CompilerParsedProgram): CompilerParsedProgram
+	mut default_initializers: Array<DefaultInitializer> := []
+	parsed.default_initializers.each do |value|
+		default_initializers.push(value)
+	end
+	mut default_functions: Array<Integer> := []
+	parsed.default_functions.each do |value|
+		default_functions.push(value)
+	end
+	return CompilerParsedProgram.new(
+		catch_syntax: parsed.catch_syntax, catch_origins: parsed.catch_origins,
+		statement_finishes: parsed.statement_finishes, loop_finishes: parsed.loop_finishes,
+		controls: parsed.controls, control_origins: parsed.control_origins,
+		default_initializers: default_initializers, default_functions: default_functions,
+		parameter_defaults: integer_storage_copy(parsed.parameter_defaults),
+		field_defaults: integer_storage_copy(parsed.field_defaults),
+		function_expression_bodies: integer_storage_copy(parsed.function_expression_bodies),
+		record_default_parameters: integer_storage_copy(parsed.record_default_parameters),
+		transforms: parsed.transforms, transform_origins: parsed.transform_origins,
+		iterations: parsed.iterations, iteration_origins: parsed.iteration_origins,
+	)
 end
 
 def compiler_type_resolution_new(capacity: Integer): CompilerTypeResolution
@@ -350,20 +392,11 @@ def compiler_new(capacity: Integer): CompilerState
 		lambdas: [], lambda_origins: integer_storage(capacity),
 		lambda_phase: [0], checked_lambdas: [], function_lambdas: integer_storage(capacity),
 		checked: [checked_body_new(- 1, 0, capacity)], checked_bodies: [], checked_body_indices: integer_storage(capacity),
-		catch_syntax: [], catch_origins: integer_storage(capacity), statement_finishes: integer_storage(capacity),
 		standard_modules: integer_storage(capacity),
 		type_resolution: compiler_type_resolution_new(capacity),
 		enums: [], enum_variants: [], enum_fields: [],
 		submissions: [],
-		loop_finishes: integer_storage(capacity),
-		controls: [], control_origins: integer_storage(capacity),
-		default_initializers: [], default_functions: [],
-		parameter_defaults: integer_storage(capacity),
-		field_defaults: integer_storage(capacity),
-		function_expression_bodies: integer_storage(capacity),
-		record_default_parameters: integer_storage(capacity),
-		transforms: [], transform_origins: integer_storage(capacity),
-		iterations: [], iteration_origins: integer_storage(capacity),
+		parsed: compiler_parsed_program_new(capacity),
 		hash_repl: [false],
 		token_kinds: integer_storage(capacity),
 		token_texts: string_storage(capacity),
