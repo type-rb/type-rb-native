@@ -38,10 +38,11 @@ limit. This is an operational budget, not a duration guarantee or a
 requirement to wait after merging. Calibrate using the first real daily runs;
 reduce redundant work before broadening the suite.
 
-## Initial coverage
+## Coverage
 
 The machine-readable contract is `tools/daily-performance/suite.json`.
-It reuses the existing TypeRB workload bodies and checked-in output oracles:
+Numeric and runtime workloads reuse the existing TypeRB bodies and checked-in
+output oracles:
 
 | Area | Workload | Daily input |
 | --- | --- | --- |
@@ -58,11 +59,20 @@ Separate untimed Native probes report whether automatic GC actually occurred.
 Their runtime observations have instrumentation disabled. A missing GC signal
 is a coverage gap, not evidence of healthy collector performance.
 
-These are a bounded first slice. General String processing, Hash, JSON, I/O,
-service latency and large working sets are not covered. Add one useful case
-at a time as ordinary portable support exists; do not extend language semantics
-just to port a suite. The compiler's own bootstrap cost remains separate from
-the application's clean-output build timings and sizes shown here.
+Language-area workloads live in `benchmarks/features/`. Each is a small,
+deterministic program for one ordinary-language family, with a checked-in
+output and a hand-written Pure Go program using the same algorithm. Its
+`family` names the matching entry in `tools/native-language-cases.json`, so the
+benchmark page shows each area's assessment next to that family's language
+coverage. They use features newer than the frozen Native baseline and set
+`frozenBaseline: false`; they compare with the previous measurement, TypeRB Go
+and Pure Go. Add a workload only when ordinary Native support for its features
+exists and both TypeRB outputs match the Pure Go output; do not extend language
+semantics just to port a benchmark.
+
+JSON, I/O, service latency and large working sets are not covered. The
+compiler's own bootstrap cost remains separate from the application's
+clean-output build timings and sizes shown here.
 
 ## Comparison and measurement
 

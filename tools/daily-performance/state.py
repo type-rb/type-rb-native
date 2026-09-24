@@ -65,11 +65,17 @@ def validate(state):
                 raise ValueError("Invalid compiler revision")
         pure_go_cases = snapshot.get("pureGoCases", [])
         if "pure-go" in roles and not weekly:
-            if (not isinstance(pure_go_cases, list) or len(pure_go_cases) != 3 or
-                    set(pure_go_cases) != {"fannkuch-redux", "n-body", "spectral-norm"}):
+            if (not isinstance(pure_go_cases, list) or not pure_go_cases or
+                    len(set(pure_go_cases)) != len(pure_go_cases) or
+                    not {"fannkuch-redux", "n-body", "spectral-norm"}.issubset(pure_go_cases)):
                 raise ValueError("Invalid Pure Go coverage")
         elif pure_go_cases:
             raise ValueError("Pure Go cases lack a compiler identity")
+        # Snapshots before language-area kernels compared every case with the frozen baseline.
+        baseline_cases = snapshot.get("baselineCases")
+        if baseline_cases is not None and (weekly or not isinstance(baseline_cases, list) or
+                                           len(set(baseline_cases)) != len(baseline_cases)):
+            raise ValueError("Invalid frozen baseline coverage")
         cases = {}
         if not 1 <= len(snapshot["rows"]) <= 100:
             raise ValueError("Invalid row count")
@@ -79,6 +85,8 @@ def validate(state):
                 raise ValueError("Invalid row identity")
             if role in cases.setdefault(case, set()):
                 raise ValueError("Duplicate observation row")
+            if "family" in row and (not isinstance(row["family"], str) or not re.fullmatch(r"[a-z-]+", row["family"])):
+                raise ValueError("Invalid language family")
             cases[case].add(role)
             if row.get("status") not in {"pass", "timeout", "nonzero-exit", "output-mismatch", "unexpected-stderr", "build-failure"}:
                 raise ValueError("Invalid observation status")
@@ -97,10 +105,14 @@ def validate(state):
                         raise ValueError("Invalid measurement range")
         if weekly and set(cases) != {"fannkuch-redux", "n-body", "spectral-norm"}:
             raise ValueError("Invalid weekly workload coverage")
-        if not set(pure_go_cases).issubset(cases):
-            raise ValueError("Missing Pure Go workload")
-        if any(members != (base_roles | ({"pure-go"} if case in pure_go_cases else set()))
-               for case, members in cases.items()):
+        if not set(pure_go_cases).issubset(cases) or not set(baseline_cases or []).issubset(cases):
+            raise ValueError("Missing Pure Go or frozen baseline workload")
+        def expected(case):
+            members = set(base_roles)
+            if baseline_cases is not None and case not in baseline_cases:
+                members.discard("baseline")
+            return members | ({"pure-go"} if case in pure_go_cases else set())
+        if any(members != expected(case) for case, members in cases.items()):
             raise ValueError("Missing comparison role")
     return state
 

@@ -126,7 +126,10 @@ def run(args):
         case_dir = evidence / case["id"]
         expected = source_case(case, case_dir)
         (case_dir / "expected").write_bytes(expected)
-        case_roles = {key: role for key, role in roles.items() if key != "pure-go" or "pureGoSource" in case}
+        # Language-area kernels can use features newer than the frozen baseline.
+        case_roles = {key: role for key, role in roles.items()
+                      if (key != "pure-go" or "pureGoSource" in case) and
+                      (key != "baseline" or case.get("frozenBaseline", True))}
         if "pureGoSource" in case:
             shutil.copyfile(ROOT / case["pureGoSource"], case_dir / "pure-go.go")
         row_roles = {}
@@ -137,6 +140,8 @@ def run(args):
                                "sourceSha256": digest(case_dir / ("pure-go.go" if role == "pure-go" else "src/main.trb")),
                                "expectedSha256": hashlib.sha256(expected).hexdigest(),
                                "args": case["args"], "status": "pass", "coverage": None}
+            if "family" in case:
+                row_roles[role]["family"] = case["family"]
         build_records = {role: [] for role in case_roles}
         runtime_records = {role: [] for role in case_roles}
         for round_index in range(4):
@@ -221,6 +226,7 @@ def run(args):
                         "platform": "Linux arm64 / ubuntu-24.04-arm", "core": core,
                         "roles": {key: {field: value[field] for field in ("revision", "sha256", "bytes", "version") if field in value} for key, value in roles.items()},
                         "pureGoCases": [case["id"] for case in suite["cases"] if "pureGoSource" in case],
+                        "baselineCases": [case["id"] for case in suite["cases"] if case.get("frozenBaseline", True)],
                         "samples": suite["samples"], "buildSamples": 3})
 
 
