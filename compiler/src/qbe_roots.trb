@@ -18,22 +18,38 @@ def qbe_root_plan_start(instructions: Array<Integer>, first: Integer): Integer
 	return low
 end
 
-# MIR supplies the exact live-before set. Rebuild this frame's segment before
-# each allocating operation, dropping dead temporaries/undemanded loop bindings.
-# The global root buffer may move in any call: never cache its address across one.
-# gc_temp_reserve may fail, but cannot collect TypeRB objects.
-def emit_mir_roots(roots: Array<Integer>, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput)
+# Each callee preserves its caller's root slots, but may append a managed return
+# and may move the root buffer. Within one MIR block, unchanged leading slots can
+# therefore survive an allocation; the current count must still be restored.
+def qbe_root_common_prefix(previous: Array<Integer>, current: Array<Integer>): Integer
+	mut index := 0
+	while index < previous.size() && index < current.size()
+		if previous[index] != current[index]
+			break
+		end
+		index += 1
+	end
+	return index
+end
+
+# MIR supplies the exact live-before set. Publish changed slots and set the
+# count before each allocating operation, dropping dead temporaries. Never
+# retain a root-buffer address across a call; reserve can move it.
+def emit_mir_roots(roots: Array<Integer>, first_changed: Integer, operands: Array<String>, mut context: QbeEmitContext, mut output: QbeOutput)
 	if roots.size() == 0
 		qbe_output_line(output, "\tstorel %temporary_roots, $trbn_gc_temp_count")
 		return
 	end
-	data := emit_temporary(context)
-	offset := emit_temporary(context)
-	base := emit_temporary(context)
-	qbe_output_line(output, "\t" + data + " =l loadl $trbn_gc_temp_data")
-	qbe_output_line(output, "\t" + offset + " =l mul %temporary_roots, 8")
-	qbe_output_line(output, "\t" + base + " =l add " + data + ", " + offset)
-	mut index := 0
+	mut base := ""
+	if first_changed < roots.size()
+		data := emit_temporary(context)
+		offset := emit_temporary(context)
+		base = emit_temporary(context)
+		qbe_output_line(output, "\t" + data + " =l loadl $trbn_gc_temp_data")
+		qbe_output_line(output, "\t" + offset + " =l mul %temporary_roots, 8")
+		qbe_output_line(output, "\t" + base + " =l add " + data + ", " + offset)
+	end
+	mut index := first_changed
 	while index < roots.size()
 		mut address := base
 		if index > 0

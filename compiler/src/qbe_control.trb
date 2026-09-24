@@ -16,7 +16,7 @@ import { mir_numeric_find, mir_numeric_operation } from mir_numeric
 import { QbeEmitContext, emit_label, emit_temporary, emit_typed_store, emitted_value, qbe_type } from qbe_context
 import { emit_mir_scalar_instruction, emit_scalar_mir } from qbe_mir
 import { QbeOutput, qbe_output_branch, qbe_output_line } from qbe_output
-import { emit_mir_roots, qbe_root_plan_start } from qbe_roots
+import { emit_mir_roots, qbe_root_common_prefix, qbe_root_plan_start } from qbe_roots
 import { emit_mir_string_instruction } from qbe_strings
 import { CompilerState } from state
 
@@ -76,13 +76,17 @@ def emit_control_mir(state: CompilerState, function_index: Integer, result_type:
 		qbe_output_line(output, "@mir_" + integer_string(block.id))
 		index = block.instruction_start
 		mut point := qbe_root_plan_start(roots.instructions, index)
+		mut previous_roots: Array<Integer> := []
 		while index < block.instruction_start + block.instruction_count
 			instruction := state.scalar_mir.instructions[index]
 			while point < roots.instructions.size()
 				if roots.instructions[point] != index
 					break
 				end
-				emit_mir_roots(roots.roots[point], operands, context, output)
+				current_roots := roots.roots[point]
+				prefix := qbe_root_common_prefix(previous_roots, current_roots)
+				emit_mir_roots(current_roots, prefix, operands, context, output)
+				previous_roots = current_roots
 				point += 1
 			end
 			mut value := emitted_value("", "Void")
