@@ -225,11 +225,11 @@ def emit_entry(mut state: CompilerState, mut output: QbeOutput)
 				return
 			end
 			runtime_token := load_integer(state.declarations.function_body_starts, runtime_function) + 1
-			if load_integer(state.token_kinds, runtime_token) != 3
+			if load_integer(state.source_tokens.token_kinds, runtime_token) != 3
 				diagnostic(state, "TRBN4005", 1, "Native CLI runtime template must be a literal String")
 				return
 			end
-			qbe_output_line(output, load_string(state.token_texts, runtime_token))
+			qbe_output_line(output, load_string(state.source_tokens.token_texts, runtime_token))
 			qbe_output_line(output, "export function w $main(w %argc, l %argv) {\n@start\n\tcall $trbn_gc_trace_initialize()")
 			if output.runtime_flags[2] == 1
 				qbe_output_line(output, "\tcall $trbn_static_strings_initialize()")
@@ -245,7 +245,7 @@ def emit_entry(mut state: CompilerState, mut output: QbeOutput)
 end
 
 def emit_qbe(mut state: CompilerState): QbeOutput
-	mut output := qbe_output_new(state.token_count[0] * 24 + 4096, [0, 0, 0, 0, 0, 0, 0, 0])
+	mut output := qbe_output_new(state.source_tokens.token_count[0] * 24 + 4096, [0, 0, 0, 0, 0, 0, 0, 0])
 	emit_static_strings(state, output)
 	if has_diagnostic(state)
 		return output
@@ -846,7 +846,7 @@ def load_project_sources(
 	module_index = 0
 	while module_index < state.module_graph.module_count[0]
 		state.module_graph.active_module[0] = module_index
-		start := state.token_count[0]
+		start := state.source_tokens.token_count[0]
 		lex_module(state, ordered.sources[module_index], module_index)
 		if !has_diagnostic(state)
 			parse_module(state, start, module_index)
@@ -912,7 +912,7 @@ def load_file_root(entry_source: String, entry_path: String): CompilerState
 			next
 		end
 		state.module_graph.active_module[0] = module_index
-		start := state.token_count[0]
+		start := state.source_tokens.token_count[0]
 		lex_module(state, sources[module_index], module_index)
 		if !has_diagnostic(state)
 			parse_module(state, start, module_index)
@@ -1010,9 +1010,9 @@ end
 
 def check(mut state: CompilerState): Boolean
 	mut annotation_index := 0
-	while annotation_index < state.internal_type_annotations.size()
-		annotation := state.internal_type_annotations[annotation_index]
-		line := load_integer(state.token_lines, annotation.origin)
+	while annotation_index < state.source_tokens.internal_type_annotations.size()
+		annotation := state.source_tokens.internal_type_annotations[annotation_index]
+		line := load_integer(state.source_tokens.token_lines, annotation.origin)
 		if annotation.source_id != state.module_graph.entry_module[0] || line < state.projected_type_lines[0] || line >= state.projected_type_lines[1]
 			state.module_graph.active_module[0] = annotation.source_id
 			diagnostic(state, "TRBN4004", line, "Nil is an internal flow type; use an explicit nullable type annotation")

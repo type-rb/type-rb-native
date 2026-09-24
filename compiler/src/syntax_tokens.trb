@@ -5,13 +5,13 @@ import { CompilerState, InternalTypeAnnotation, diagnostic, has_diagnostic, term
 import { load_integer, load_string, sparse_integer_at, store_integer, store_string } from storage
 
 def token_is(state: CompilerState, index: Integer, text: String): Boolean
-	kind := load_integer(state.token_kinds, index)
+	kind := load_integer(state.source_tokens.token_kinds, index)
 	if kind != 1
 		if kind != 5
 			return false
 		end
 	end
-	return load_string(state.token_texts, index) == text
+	return load_string(state.source_tokens.token_texts, index) == text
 end
 
 def advance(mut position: Array<Integer>)
@@ -20,7 +20,7 @@ def advance(mut position: Array<Integer>)
 end
 
 def skip_newlines(state: CompilerState, mut position: Array<Integer>)
-	while load_integer(state.token_kinds, position[0]) == 4
+	while load_integer(state.source_tokens.token_kinds, position[0]) == 4
 		position[0] = position[0] + 1
 	end
 	return
@@ -34,35 +34,35 @@ def expect(mut state: CompilerState, mut position: Array<Integer>, text: String)
 	diagnostic(
 		state,
 		"TRBN4002",
-		load_integer(state.token_lines, position[0]),
-		"expected " + text + ", found " + load_string(state.token_texts, position[0]),
+		load_integer(state.source_tokens.token_lines, position[0]),
+		"expected " + text + ", found " + load_string(state.source_tokens.token_texts, position[0]),
 	)
 	return false
 end
 
 def valid_identifier(mut state: CompilerState, origin: Integer): Boolean
-	value := load_string(state.token_texts, origin)
+	value := load_string(state.source_tokens.token_texts, origin)
 	if value == "try" || value == "catch" || value == "alias" || value == "newtype"
-		diagnostic(state, "TRBN4002", load_integer(state.token_lines, origin), "reserved keyword cannot be an identifier")
+		diagnostic(state, "TRBN4002", load_integer(state.source_tokens.token_lines, origin), "reserved keyword cannot be an identifier")
 		return false
 	end
 	if value.size() >= 5 && value[0] == "_" && value[1] == "_" && value[2] == "t" && value[3] == "r" && value[4] == "b"
-		diagnostic(state, "TRBN4002", load_integer(state.token_lines, origin), "identifier uses the compiler-reserved __trb prefix")
+		diagnostic(state, "TRBN4002", load_integer(state.source_tokens.token_lines, origin), "identifier uses the compiler-reserved __trb prefix")
 		return false
 	end
 	return true
 end
 
 def expect_identifier(mut state: CompilerState, mut position: Array<Integer>): String
-	if load_integer(state.token_kinds, position[0]) == 1
-		value := load_string(state.token_texts, position[0])
+	if load_integer(state.source_tokens.token_kinds, position[0]) == 1
+		value := load_string(state.source_tokens.token_texts, position[0])
 		if !valid_identifier(state, position[0])
 			return ""
 		end
 		position[0] = position[0] + 1
 		return value
 	end
-	diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), "expected an identifier")
+	diagnostic(state, "TRBN4002", load_integer(state.source_tokens.token_lines, position[0]), "expected an identifier")
 	return ""
 end
 
@@ -86,17 +86,17 @@ def expand_type_closer(mut state: CompilerState, origin: Integer)
 	if !token_is(state, origin, ">>")
 		return
 	end
-	mut index := state.token_count[0]
+	mut index := state.source_tokens.token_count[0]
 	while index > origin
-		store_integer(state.token_kinds, index, load_integer(state.token_kinds, index - 1))
-		store_string(state.token_texts, index, load_string(state.token_texts, index - 1))
-		store_integer(state.token_lines, index, load_integer(state.token_lines, index - 1))
-		store_integer(state.token_fused_literals, index, sparse_integer_at(state.token_fused_literals, index - 1))
+		store_integer(state.source_tokens.token_kinds, index, load_integer(state.source_tokens.token_kinds, index - 1))
+		store_string(state.source_tokens.token_texts, index, load_string(state.source_tokens.token_texts, index - 1))
+		store_integer(state.source_tokens.token_lines, index, load_integer(state.source_tokens.token_lines, index - 1))
+		store_integer(state.source_tokens.token_fused_literals, index, sparse_integer_at(state.source_tokens.token_fused_literals, index - 1))
 		index -= 1
 	end
-	store_string(state.token_texts, origin, ">")
-	store_string(state.token_texts, origin + 1, ">")
-	state.token_count[0] += 1
+	store_string(state.source_tokens.token_texts, origin, ">")
+	store_string(state.source_tokens.token_texts, origin + 1, ">")
+	state.source_tokens.token_count[0] += 1
 end
 
 def parse_type_atom(mut state: CompilerState, mut position: Array<Integer>): String
@@ -133,7 +133,7 @@ def parse_type_atom(mut state: CompilerState, mut position: Array<Integer>): Str
 		name += "::" + expect_identifier(state, position)
 	end
 	if name == "Nil"
-		state.internal_type_annotations.push(InternalTypeAnnotation.new(source_id: state.module_graph.active_module[0], origin: type_origin))
+		state.source_tokens.internal_type_annotations.push(InternalTypeAnnotation.new(source_id: state.module_graph.active_module[0], origin: type_origin))
 	end
 	if token_is(state, position[0], "<")
 		advance(position)
@@ -160,7 +160,7 @@ def parse_type_atom(mut state: CompilerState, mut position: Array<Integer>): Str
 end
 
 def finish_statement(mut state: CompilerState, mut position: Array<Integer>): Boolean
-	if load_integer(state.token_kinds, position[0]) == 4
+	if load_integer(state.source_tokens.token_kinds, position[0]) == 4
 		skip_newlines(state, position)
 		return true
 	end
@@ -170,8 +170,8 @@ def finish_statement(mut state: CompilerState, mut position: Array<Integer>): Bo
 	diagnostic(
 		state,
 		"TRBN4002",
-		load_integer(state.token_lines, position[0]),
-		"unexpected token " + load_string(state.token_texts, position[0]) + " after statement",
+		load_integer(state.source_tokens.token_lines, position[0]),
+		"unexpected token " + load_string(state.source_tokens.token_texts, position[0]) + " after statement",
 	)
 	return false
 end

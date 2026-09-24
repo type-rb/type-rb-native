@@ -45,7 +45,7 @@ def parse_named_import(mut state: CompilerState, mut position: Array<Integer>, l
 		if token_is(state, position[0], "}")
 			finished = true
 		else
-			symbol_line := load_integer(state.token_lines, position[0])
+			symbol_line := load_integer(state.source_tokens.token_lines, position[0])
 			declaration := expect_identifier(state, position)
 			if has_diagnostic(state)
 				return false
@@ -82,7 +82,7 @@ def parse_named_import(mut state: CompilerState, mut position: Array<Integer>, l
 		return false
 	end
 	mut path := ""
-	while load_integer(state.token_kinds, position[0]) != 4
+	while load_integer(state.source_tokens.token_kinds, position[0]) != 4
 		if terminal_token(state, position[0])
 			if path == ""
 				diagnostic(state, "TRBN4002", line, "import path is required")
@@ -95,7 +95,7 @@ def parse_named_import(mut state: CompilerState, mut position: Array<Integer>, l
 			end
 			return true
 		end
-		path += load_string(state.token_texts, position[0])
+		path += load_string(state.source_tokens.token_texts, position[0])
 		advance(position)
 	end
 	if path == ""
@@ -117,13 +117,13 @@ def parse_bare_import(mut state: CompilerState, mut position: Array<Integer>, li
 		if terminal_token(state, position[0])
 			scanning = false
 		else
-			if load_integer(state.token_kinds, position[0]) == 4
+			if load_integer(state.source_tokens.token_kinds, position[0]) == 4
 				scanning = false
 			else
 				if token_is(state, position[0], "as")
 					scanning = false
 				else
-					path += load_string(state.token_texts, position[0])
+					path += load_string(state.source_tokens.token_texts, position[0])
 					advance(position)
 				end
 			end
@@ -146,7 +146,7 @@ def parse_bare_import(mut state: CompilerState, mut position: Array<Integer>, li
 end
 
 def parse_namespace(mut state: CompilerState, mut position: Array<Integer>): Boolean
-	line := load_integer(state.token_lines, position[0])
+	line := load_integer(state.source_tokens.token_lines, position[0])
 	advance(position)
 	leaf := expect_identifier(state, position)
 	if !enum_uppercase(leaf)
@@ -175,8 +175,8 @@ def parse_namespace(mut state: CompilerState, mut position: Array<Integer>): Boo
 	end
 	mut token := start
 	while token < position[0]
-		if sparse_string_at(state.token_namespaces, token) == ""
-			store_string(state.token_namespaces, token, name)
+		if sparse_string_at(state.source_tokens.token_namespaces, token) == ""
+			store_string(state.source_tokens.token_namespaces, token, name)
 		end
 		token += 1
 	end
@@ -198,7 +198,7 @@ def parse_object_declaration(mut state: CompilerState, mut position: Array<Integ
 	mut methods: Array<ObjectMethod> := []
 	while !token_is(state, position[0], "end") && !has_diagnostic(state)
 		origin := position[0]
-		line := load_integer(state.token_lines, origin)
+		line := load_integer(state.source_tokens.token_lines, origin)
 		if terminal_token(state, origin)
 			diagnostic(state, "TRBN4002", line, "expected end for " + header.name)
 			break
@@ -215,7 +215,7 @@ def parse_object_declaration(mut state: CompilerState, mut position: Array<Integ
 			if class_member
 				name_origin += 2
 			end
-			name := load_string(state.token_texts, name_origin)
+			name := load_string(state.source_tokens.token_texts, name_origin)
 			mut receiver := header.name
 			if header.parameters.size() > 0
 				receiver = generic_application(header.name, header.parameters)
@@ -236,16 +236,16 @@ def parse_object_declaration(mut state: CompilerState, mut position: Array<Integ
 				generic_function = generic_start
 			end
 			methods.push(ObjectMethod.new(name: name, class_member: class_member, origin: origin, function: function, generic_function: generic_function))
-		elsif token_is(state, origin, "readonly") || load_integer(state.token_kinds, origin) == 8
+		elsif token_is(state, origin, "readonly") || load_integer(state.source_tokens.token_kinds, origin) == 8
 			readonly := token_is(state, origin, "readonly")
 			if readonly
 				advance(position)
 			end
-			if load_integer(state.token_kinds, position[0]) != 8
+			if load_integer(state.source_tokens.token_kinds, position[0]) != 8
 				diagnostic(state, "TRBN4002", line, "expected an instance field")
 				break
 			end
-			name := load_string(state.token_texts, position[0])
+			name := load_string(state.source_tokens.token_texts, position[0])
 			advance(position)
 			if !expect(state, position, ":")
 				break
@@ -278,8 +278,8 @@ def parse_object_declaration(mut state: CompilerState, mut position: Array<Integ
 	end
 	mut token := header.origin
 	while token < position[0]
-		if sparse_string_at(state.token_namespaces, token) == ""
-			store_string(state.token_namespaces, token, header.name)
+		if sparse_string_at(state.source_tokens.token_namespaces, token) == ""
+			store_string(state.source_tokens.token_namespaces, token, header.name)
 		end
 		token += 1
 	end
@@ -320,7 +320,7 @@ def parse_declaration(mut state: CompilerState, mut position: Array<Integer>): B
 	if state.declaration_owner[0] == ""
 		scope = "top-level "
 	end
-	diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), "unsupported " + scope + "declaration " + load_string(state.token_texts, position[0]))
+	diagnostic(state, "TRBN4002", load_integer(state.source_tokens.token_lines, position[0]), "unsupported " + scope + "declaration " + load_string(state.source_tokens.token_texts, position[0]))
 	return false
 end
 
@@ -334,7 +334,7 @@ def parse_module(mut state: CompilerState, start: Integer, module_index: Integer
 	skip_newlines(state, position)
 	while !terminal_token(state, position[0])
 		if token_is(state, position[0], "import")
-			line := load_integer(state.token_lines, position[0])
+			line := load_integer(state.source_tokens.token_lines, position[0])
 			advance(position)
 			skip_newlines(state, position)
 			if token_is(state, position[0], "{")
@@ -387,9 +387,9 @@ def parse_enum_declaration(mut state: CompilerState, mut position: Array<Integer
 		receiver_type = enum_type(owner)
 	end
 	while token_is(state, position[0], "def") && !has_diagnostic(state)
-		method_name := load_string(state.token_texts, position[0] + 1)
+		method_name := load_string(state.source_tokens.token_texts, position[0] + 1)
 		if method_name == "raw_value" || method_name == "from_raw"
-			diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), "enum method name " + method_name + " is reserved")
+			diagnostic(state, "TRBN4002", load_integer(state.source_tokens.token_lines, position[0]), "enum method name " + method_name + " is reserved")
 			return false
 		end
 		parent := state.declaration_owner[0]
@@ -398,7 +398,7 @@ def parse_enum_declaration(mut state: CompilerState, mut position: Array<Integer
 		parsed := parse_function(state, position, receiver_type, parameters, false, false)
 		mut token := start
 		while token < position[0]
-			store_string(state.token_namespaces, token, name)
+			store_string(state.source_tokens.token_namespaces, token, name)
 			token += 1
 		end
 		state.declaration_owner[0] = parent
@@ -434,7 +434,7 @@ def parse_newtype_declaration(mut state: CompilerState, mut position: Array<Inte
 		row := state.newtypes[owner]
 		if token_is(state, position[0], "private")
 			if method_seen || row.closed
-				diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), "private new must occur once before newtype methods")
+				diagnostic(state, "TRBN4002", load_integer(state.source_tokens.token_lines, position[0]), "private new must occur once before newtype methods")
 				return false
 			end
 			advance(position)
@@ -445,7 +445,7 @@ def parse_newtype_declaration(mut state: CompilerState, mut position: Array<Inte
 			next
 		end
 		if !token_is(state, position[0], "def")
-			diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), "newtype body accepts only methods and private new")
+			diagnostic(state, "TRBN4002", load_integer(state.source_tokens.token_lines, position[0]), "newtype body accepts only methods and private new")
 			return false
 		end
 		method_seen = true
@@ -455,9 +455,9 @@ def parse_newtype_declaration(mut state: CompilerState, mut position: Array<Inte
 			name_origin += 2
 			receiver = ""
 		end
-		name := load_string(state.token_texts, name_origin)
+		name := load_string(state.source_tokens.token_texts, name_origin)
 		if name == "new" || name == "value" || name == "initialize"
-			diagnostic(state, "TRBN4002", load_integer(state.token_lines, name_origin), "newtype method name " + name + " is reserved")
+			diagnostic(state, "TRBN4002", load_integer(state.source_tokens.token_lines, name_origin), "newtype method name " + name + " is reserved")
 			return false
 		end
 		parent := state.declaration_owner[0]
@@ -466,7 +466,7 @@ def parse_newtype_declaration(mut state: CompilerState, mut position: Array<Inte
 		parsed := parse_function(state, position, receiver, [], false, false)
 		mut token := start
 		while token < position[0]
-			store_string(state.token_namespaces, token, row.name)
+			store_string(state.source_tokens.token_namespaces, token, row.name)
 			token += 1
 		end
 		state.declaration_owner[0] = parent

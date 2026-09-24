@@ -31,7 +31,7 @@ def checked_hash_publish(mut state: CompilerState, plan: MirHashOperation)
 end
 
 def checked_hash_plan(state: CompilerState, origin: Integer): MirHashOperation
-	if origin >= 0 && origin < state.token_count[0]
+	if origin >= 0 && origin < state.source_tokens.token_count[0]
 		index := checked_hash_index_at(state, origin)
 		if index >= 0 && index < state.checked[0].hash_operations.size()
 			return state.checked[0].hash_operations[index]
@@ -97,7 +97,7 @@ def checked_hash_valid(state: CompilerState, plan: MirHashOperation, pending: Bo
 	if checked_hash_empty_constant(state, plan)
 		allow_pending = true
 	end
-	if !mir_hash_valid(plan, state.token_count[0], allow_pending)
+	if !mir_hash_valid(plan, state.source_tokens.token_count[0], allow_pending)
 		return false
 	end
 	if plan.type_name != "Hash" && !checked_hash_value_layout(state, plan.value_type)
@@ -123,7 +123,7 @@ def checked_hash_valid(state: CompilerState, plan: MirHashOperation, pending: Bo
 		end
 		return true
 	end
-	if token_is(state, plan.origin, "(") && token_is(state, plan.finish, ")") && plan.kind == checked_hash_method(load_string(state.token_texts, plan.origin - 1))
+	if token_is(state, plan.origin, "(") && token_is(state, plan.finish, ")") && plan.kind == checked_hash_method(load_string(state.source_tokens.token_texts, plan.origin - 1))
 		return true
 	end
 	return false
@@ -132,7 +132,7 @@ end
 def checked_hash_verify_body(mut state: CompilerState): Boolean
 	state.checked[0].hash_operations.each do |plan|
 		if !checked_hash_valid(state, plan, state.hash_repl[0])
-			diagnostic(state, "TRBN4004", load_integer(state.token_lines, plan.origin), "unresolved or invalid Hash operation; annotate Hash<K, V>")
+			diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, plan.origin), "unresolved or invalid Hash operation; annotate Hash<K, V>")
 			return false
 		end
 	end
@@ -144,7 +144,7 @@ end
 def checked_hash_binding_target(state: CompilerState, origin: Integer): Boolean
 	mut root := origin
 	mut depth := 0
-	while depth < state.token_count[0]
+	while depth < state.source_tokens.token_count[0]
 		parent := checked_hash_plan(state, root)
 		if parent.kind == 1
 			return false

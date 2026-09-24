@@ -22,7 +22,7 @@ def parse_arguments_syntax(mut state: CompilerState, mut position: Array<Integer
 		if token_is(state, position[0], ")")
 			finished = true
 		else
-			if load_integer(state.token_kinds, position[0]) == 1
+			if load_integer(state.source_tokens.token_kinds, position[0]) == 1
 				if token_is(state, position[0] + 1, ":")
 					if !valid_identifier(state, position[0])
 						return false
@@ -136,12 +136,12 @@ def parse_primary_syntax(mut state: CompilerState, mut position: Array<Integer>)
 		if !expand_quoted_token(state, position[0], false)
 			return false
 		end
-		kind := load_integer(state.token_kinds, position[0])
+		kind := load_integer(state.source_tokens.token_kinds, position[0])
 		if kind == 0 || kind == 4 || kind == 6
-			diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), "expected a Symbol literal name")
+			diagnostic(state, "TRBN4002", load_integer(state.source_tokens.token_lines, position[0]), "expected a Symbol literal name")
 			return false
 		end
-		store_integer(state.token_kinds, position[0], 3)
+		store_integer(state.source_tokens.token_kinds, position[0], 3)
 		advance(position)
 	end
 	if !symbol && token_is(state, position[0], "try")
@@ -179,16 +179,16 @@ def parse_primary_syntax(mut state: CompilerState, mut position: Array<Integer>)
 				while first < last && token_is(state, first, "(") && token_is(state, last, ")")
 					first += 1
 					last -= 1
-					while first < last && load_integer(state.token_kinds, first) == 4
+					while first < last && load_integer(state.source_tokens.token_kinds, first) == 4
 						first += 1
 					end
 				end
 				# Parentheses preserve an identifier label; other expressions retain
 				# their evaluated key and are checked against the Hash key types.
-				if first == last && load_integer(state.token_kinds, first) == 1 && !token_is(state, first, "true") && !token_is(state, first, "false") && !token_is(state, first, "nil")
-					store_integer(state.token_kinds, first, 3)
+				if first == last && load_integer(state.source_tokens.token_kinds, first) == 1 && !token_is(state, first, "true") && !token_is(state, first, "false") && !token_is(state, first, "nil")
+					store_integer(state.source_tokens.token_kinds, first, 3)
 				end
-				store_string(state.token_texts, position[0], "=>")
+				store_string(state.source_tokens.token_texts, position[0], "=>")
 			end
 			if !expect(state, position, "=>")
 				return false
@@ -207,7 +207,7 @@ def parse_primary_syntax(mut state: CompilerState, mut position: Array<Integer>)
 			return false
 		end
 	end
-	kind := load_integer(state.token_kinds, position[0])
+	kind := load_integer(state.source_tokens.token_kinds, position[0])
 	if hash_literal || control || lambda || symbol
 	elsif kind == 1 || kind == 8
 		application_end := nominal_application_end(state, position[0])
@@ -272,7 +272,7 @@ def parse_primary_syntax(mut state: CompilerState, mut position: Array<Integer>)
 							advance(position)
 							return parse_binary_syntax(state, position, 8)
 						end
-						diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), "expected an expression")
+						diagnostic(state, "TRBN4002", load_integer(state.source_tokens.token_lines, position[0]), "expected an expression")
 						return false
 					end
 				end
@@ -342,7 +342,7 @@ def parse_lambda_syntax(mut state: CompilerState, mut position: Array<Integer>):
 		advance(position)
 		result_type = parse_type(state, position)
 		if result_type == "Void"
-			diagnostic(state, "TRBN4002", load_integer(state.token_lines, origin), "fn without a result must omit the return annotation")
+			diagnostic(state, "TRBN4002", load_integer(state.source_tokens.token_lines, origin), "fn without a result must omit the return annotation")
 			return false
 		end
 	end
@@ -376,7 +376,7 @@ def parse_binary_syntax(
 	end
 	mut scanning := true
 	while scanning
-		precedence := syntax_expression_precedence(load_string(state.token_texts, position[0]))
+		precedence := syntax_expression_precedence(load_string(state.source_tokens.token_texts, position[0]))
 		if precedence < minimum_precedence
 			scanning = false
 		else
@@ -416,7 +416,7 @@ def parse_expression_syntax(mut state: CompilerState, mut position: Array<Intege
 			return false
 		end
 		if token_is(state, position[0], "?")
-			diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), "nested conditional expressions must be parenthesized")
+			diagnostic(state, "TRBN4002", load_integer(state.source_tokens.token_lines, position[0]), "nested conditional expressions must be parenthesized")
 			return false
 		end
 		publish_control(state, ControlSyntax.new(kind: 3, origin: origin, finish: position[0], selector: - 1, selector_finish: - 1, branches: [ControlBranch.new(condition: - 1, condition_finish: - 1, body: first, finish: first_finish), ControlBranch.new(condition: - 1, condition_finish: - 1, body: second, finish: position[0])]))
@@ -428,7 +428,7 @@ def parse_declaration_statement(mut state: CompilerState, mut position: Array<In
 	# The reference treats a statement-leading next as loop control, not a
 	# binding. Keep contextual identifiers (including mut next) unchanged.
 	if token_is(state, position[0], "next")
-		diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), "next does not take a value")
+		diagnostic(state, "TRBN4002", load_integer(state.source_tokens.token_lines, position[0]), "next does not take a value")
 		return false
 	end
 	if token_is(state, position[0], "mut")
@@ -456,7 +456,7 @@ def parse_simple_statement(mut state: CompilerState, mut position: Array<Integer
 	if !parse_statement_value_syntax(state, position)
 		return false
 	end
-	operator := load_string(state.token_texts, position[0])
+	operator := load_string(state.source_tokens.token_texts, position[0])
 	if (operator == "." || operator == "&.") && syntax_iteration_suffix(state, position[0]) >= 0
 		return parse_iteration_statement(state, position, origin)
 	end
@@ -481,7 +481,7 @@ def parse_statement_block(mut state: CompilerState, mut position: Array<Integer>
 	while true
 		statement_origin := position[0]
 		if terminal_token(state, position[0])
-			diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), "expected end")
+			diagnostic(state, "TRBN4002", load_integer(state.source_tokens.token_lines, position[0]), "expected end")
 			break
 		elsif syntax_block_end(state, position[0])
 			break
@@ -555,7 +555,7 @@ def parse_control_syntax(mut state: CompilerState, mut position: Array<Integer>)
 	end
 	while token_is(state, position[0], "elsif") || token_is(state, position[0], "when")
 		if (kind == 1 && !token_is(state, position[0], "elsif")) || (kind == 2 && !token_is(state, position[0], "when"))
-			diagnostic(state, "TRBN4002", load_integer(state.token_lines, position[0]), "unexpected control branch")
+			diagnostic(state, "TRBN4002", load_integer(state.source_tokens.token_lines, position[0]), "unexpected control branch")
 			return false
 		end
 		advance(position)
@@ -591,7 +591,7 @@ def parse_control_syntax(mut state: CompilerState, mut position: Array<Integer>)
 		branches.push(ControlBranch.new(condition: - 1, condition_finish: - 1, body: body, finish: position[0]))
 	end
 	if branches.size() == 0 || (kind == 2 && branches[0].condition < 0)
-		diagnostic(state, "TRBN4002", load_integer(state.token_lines, origin), "case requires at least one when branch")
+		diagnostic(state, "TRBN4002", load_integer(state.source_tokens.token_lines, origin), "case requires at least one when branch")
 		return false
 	end
 	if !expect(state, position, "end")
@@ -619,7 +619,7 @@ def parse_transfer_syntax(mut state: CompilerState, mut position: Array<Integer>
 		end
 		publish_control(state, ControlSyntax.new(kind: 4, origin: origin, finish: position[0], selector: condition, selector_finish: position[0], branches: [ControlBranch.new(condition: condition, condition_finish: position[0], body: origin, finish: body_finish)]))
 	elsif !returns && !syntax_statement_boundary(state, position[0])
-		diagnostic(state, "TRBN4002", load_integer(state.token_lines, origin), load_string(state.token_texts, origin) + " does not take a value")
+		diagnostic(state, "TRBN4002", load_integer(state.source_tokens.token_lines, origin), load_string(state.source_tokens.token_texts, origin) + " does not take a value")
 		return false
 	end
 	return finish_statement(state, position)
@@ -658,7 +658,7 @@ end
 # Parse the shared statement grammar inside an expression-owned block.
 def parse_transform_syntax(mut state: CompilerState, mut position: Array<Integer>): Boolean
 	origin := position[0]
-	kind := transform_kind(load_string(state.token_texts, origin + 1))
+	kind := transform_kind(load_string(state.source_tokens.token_texts, origin + 1))
 	position[0] += 2
 	mut initial_start :=- 1
 	mut initial_finish :=- 1

@@ -232,7 +232,7 @@ def is_typed_local_declaration(state: CompilerState, index: Integer): Boolean
 	mut depth := 0
 	mut cursor := index + 2
 	while !terminal_token(state, cursor)
-		if load_integer(state.token_kinds, cursor) == 4
+		if load_integer(state.source_tokens.token_kinds, cursor) == 4
 			return false
 		end
 		if token_is(state, cursor, ":=")
@@ -683,7 +683,7 @@ def resolve_function_body(
 	module_index := load_integer(state.declarations.function_modules, function_index)
 	state.module_graph.active_module[0] = module_index
 	body_start := load_integer(state.declarations.function_body_starts, function_index)
-	state.declaration_owner[0] = sparse_string_at(state.token_namespaces, body_start)
+	state.declaration_owner[0] = sparse_string_at(state.source_tokens.token_namespaces, body_start)
 	body_finish := load_integer(state.declarations.function_body_ends, function_index)
 	parameter_start := load_integer(state.declarations.function_parameter_starts, function_index)
 	parameter_finish := parameter_start + load_integer(state.declarations.function_parameter_counts, function_index)
@@ -718,9 +718,9 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 	while iteration_index < state.parsed.iterations.size()
 		iteration := state.parsed.iterations[iteration_index]
 		if iteration.origin >= body_start && iteration.finish <= body_finish && !lambda_contains_origin(state, body_start, body_finish, iteration.origin)
-			resolution_local_add(locals, load_string(state.token_texts, iteration.element_origin), "", 1)
+			resolution_local_add(locals, load_string(state.source_tokens.token_texts, iteration.element_origin), "", 1)
 			if iteration.second_origin >= 0
-				resolution_local_add(locals, load_string(state.token_texts, iteration.second_origin), "", 1)
+				resolution_local_add(locals, load_string(state.source_tokens.token_texts, iteration.second_origin), "", 1)
 			end
 		end
 		iteration_index += 1
@@ -728,18 +728,18 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 	state.parsed.transforms.each do |transform|
 		shape := transform.iteration
 		if shape.origin >= body_start && shape.finish <= body_finish && !lambda_contains_origin(state, body_start, body_finish, shape.origin)
-			resolution_local_add(locals, load_string(state.token_texts, shape.element_origin), "", 1)
+			resolution_local_add(locals, load_string(state.source_tokens.token_texts, shape.element_origin), "", 1)
 			if shape.second_origin >= 0
-				resolution_local_add(locals, load_string(state.token_texts, shape.second_origin), "", 1)
+				resolution_local_add(locals, load_string(state.source_tokens.token_texts, shape.second_origin), "", 1)
 			end
 			if transform.accumulator_origin >= 0
-				resolution_local_add(locals, load_string(state.token_texts, transform.accumulator_origin), "", 1)
+				resolution_local_add(locals, load_string(state.source_tokens.token_texts, transform.accumulator_origin), "", 1)
 			end
 		end
 	end
 	state.parsed.catch_syntax.each do |handler|
 		if handler.origin >= body_start && handler.finish <= body_finish && !lambda_contains_origin(state, body_start, body_finish, handler.origin)
-			resolution_local_add(locals, load_string(state.token_texts, handler.binding), "", 0)
+			resolution_local_add(locals, load_string(state.source_tokens.token_texts, handler.binding), "", 0)
 		end
 	end
 	mut type_patterns: Hash<String, Integer> := {}
@@ -748,14 +748,14 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 			control.branches.each do |branch|
 				mut pattern_name := ""
 				if branch.condition >= 0
-					pattern_name = load_string(state.token_texts, branch.condition)
+					pattern_name = load_string(state.source_tokens.token_texts, branch.condition)
 				end
 				if branch.condition >= 0 && (pattern_name == "Integer" || pattern_name == "Float" || pattern_name == "Boolean" || pattern_name == "String") && token_is(state, branch.condition + 1, "(")
 					type_patterns[integer_string(branch.condition)] = branch.condition_finish
 					mut binding := branch.condition + 2
 					while binding < branch.condition_finish
-						if load_integer(state.token_kinds, binding) == 1
-							resolution_local_add(locals, load_string(state.token_texts, binding), "", 0)
+						if load_integer(state.source_tokens.token_kinds, binding) == 1
+							resolution_local_add(locals, load_string(state.source_tokens.token_texts, binding), "", 0)
 						end
 						binding += 1
 					end
@@ -767,8 +767,8 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 					end
 					token += 1
 					while token < branch.condition_finish
-						if load_integer(state.token_kinds, token) == 1 && !token_is(state, token + 1, ":")
-							resolution_local_add(locals, load_string(state.token_texts, token), "", 0)
+						if load_integer(state.source_tokens.token_kinds, token) == 1 && !token_is(state, token + 1, ":")
+							resolution_local_add(locals, load_string(state.source_tokens.token_texts, token), "", 0)
 						end
 						token += 1
 					end
@@ -789,8 +789,8 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 			index = state.lambdas[lambda - 1].finish
 			next
 		end
-		kind := load_integer(state.token_kinds, index)
-		text := load_string(state.token_texts, index)
+		kind := load_integer(state.source_tokens.token_kinds, index)
+		text := load_string(state.source_tokens.token_texts, index)
 		if skipping_type
 			if token_is(state, index, ":=")
 				skipping_type = false
@@ -829,7 +829,7 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 					if token_is(state, application_finish, "(")
 						definition := find_visible_generic_function(state, module_index, generic_base(raw))
 						if definition < 0
-							diagnostic(state, "TRBN4003", load_integer(state.token_lines, index), "unresolved generic function " + generic_base(raw))
+							diagnostic(state, "TRBN4003", load_integer(state.source_tokens.token_lines, index), "unresolved generic function " + generic_base(raw))
 							return false
 						end
 						declaration := state.type_resolution.generic_functions[definition]
@@ -849,7 +849,7 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 					end
 					resolved := resolve_type_name(state, module_index, raw, false)
 					if resolved == ""
-						diagnostic(state, "TRBN4003", load_integer(state.token_lines, index), "invalid nominal type application " + raw)
+						diagnostic(state, "TRBN4003", load_integer(state.source_tokens.token_lines, index), "invalid nominal type application " + raw)
 						return false
 					end
 					store_string(state.checked[0].generic_application_types, index, resolved)
@@ -879,7 +879,7 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 				if syntax_loop_transfer_kind(state, index) > 0
 					mut leading := index == body_start
 					if !leading
-						leading = load_integer(state.token_kinds, index - 1) == 4
+						leading = load_integer(state.source_tokens.token_kinds, index - 1) == 4
 						if !leading
 							leading = token_is(state, index - 1, "|")
 						end
@@ -892,12 +892,12 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 				else
 					mut previous := ""
 					if index > body_start
-						previous = load_string(state.token_texts, index - 1)
+						previous = load_string(state.source_tokens.token_texts, index - 1)
 					end
 					if previous == "." || previous == "&." || previous == "::"
 					elsif token_is(state, index + 1, "::")
 						if find_visible_enum(state, module_index, text) < 0 && find_result_pattern(state, module_index, text) < 0 && find_visible_alias(state, module_index, text) < 0
-							diagnostic(state, "TRBN4003", load_integer(state.token_lines, index), "unresolved enum " + text)
+							diagnostic(state, "TRBN4003", load_integer(state.source_tokens.token_lines, index), "unresolved enum " + text)
 						end
 					else
 						if token_is(state, index + 1, ":=")
@@ -935,7 +935,7 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 											diagnostic(
 												state,
 												"TRBN4003",
-												load_integer(state.token_lines, index),
+												load_integer(state.source_tokens.token_lines, index),
 												"unresolved function " + text,
 											)
 										end
@@ -947,7 +947,7 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 												diagnostic(
 													state,
 													"TRBN4003",
-													load_integer(state.token_lines, index),
+													load_integer(state.source_tokens.token_lines, index),
 													"unresolved record " + text,
 												)
 											end
@@ -957,7 +957,7 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 													diagnostic(
 														state,
 														"TRBN4003",
-														load_integer(state.token_lines, index),
+														load_integer(state.source_tokens.token_lines, index),
 														"unresolved local " + text,
 													)
 												end
@@ -968,7 +968,7 @@ def resolve_body_names(mut state: CompilerState, body_start: Integer, body_finis
 											diagnostic(
 												state,
 												"TRBN4003",
-												load_integer(state.token_lines, index),
+												load_integer(state.source_tokens.token_lines, index),
 												"unresolved local " + text,
 											)
 										end
@@ -1013,7 +1013,7 @@ def resolve(mut state: CompilerState): Boolean
 	end
 	mut function_index := 0
 	while function_index < state.declarations.function_count[0]
-		mut locals := locals_new(state.token_count[0] + 1)
+		mut locals := locals_new(state.source_tokens.token_count[0] + 1)
 		resolve_function_body(state, function_index, locals)
 		declare_default_functions(state)
 		function_index += 1
