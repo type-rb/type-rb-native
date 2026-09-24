@@ -76,8 +76,8 @@ def type_display(state: CompilerState, type_name: String): String
 	end
 	instance := generic_instance_for_type(state, type_name)
 	if instance >= 0
-		row := state.generic_instances[instance]
-		mut display := state.generic_definitions[row.definition].name + "<"
+		row := state.type_resolution.generic_instances[instance]
+		mut display := state.type_resolution.generic_definitions[row.definition].name + "<"
 		mut index := 0
 		row.arguments.each do |argument|
 			if index > 0
@@ -174,7 +174,7 @@ def resolve_type_name(
 	end
 	encoded := state.checked[0].generic_binding[0]
 	if encoded > 0
-		binding := state.generic_bindings[encoded - 1]
+		binding := state.type_resolution.generic_bindings[encoded - 1]
 		if module_index == binding.source_id
 			bound := generic_substitute(type_name, binding.parameters, binding.arguments)
 			if bound != type_name
@@ -182,7 +182,7 @@ def resolve_type_name(
 			end
 		end
 	end
-	if state.generic_template_mode[0] && abstract_generic_type_valid(state, type_name)
+	if state.type_resolution.generic_template_mode[0] && abstract_generic_type_valid(state, type_name)
 		return type_name
 	end
 	if string_starts_with(type_name, "Record#") || string_starts_with(type_name, "Enum#") || string_starts_with(type_name, "Newtype#") || string_starts_with(type_name, "Class#") || string_starts_with(type_name, "Interface#")
@@ -290,8 +290,8 @@ end
 
 def generic_instance_for_type(state: CompilerState, type_name: String): Integer
 	mut index := 0
-	while index < state.generic_instances.size()
-		if state.generic_instances[index].type_name == type_name
+	while index < state.type_resolution.generic_instances.size()
+		if state.type_resolution.generic_instances[index].type_name == type_name
 			return index
 		end
 		index += 1
@@ -302,7 +302,7 @@ end
 # Publish the complete shell before resolving fields. Recursion reuses its
 # nominal identity; nested instances cannot interleave this instance's spans.
 def instantiate_generic_nominal(mut state: CompilerState, definition: Integer, arguments: Array<String>): String
-	declaration := state.generic_definitions[definition]
+	declaration := state.type_resolution.generic_definitions[definition]
 	if arguments.size() != declaration.parameters.size()
 		return ""
 	end
@@ -316,10 +316,10 @@ def instantiate_generic_nominal(mut state: CompilerState, definition: Integer, a
 		return ""
 	end
 	key := generic_application(integer_string(definition), arguments)
-	if state.generic_instance_lookup.key?(key)
-		return state.generic_instances[state.generic_instance_lookup[key]].type_name
+	if state.type_resolution.generic_instance_lookup.key?(key)
+		return state.type_resolution.generic_instances[state.type_resolution.generic_instance_lookup[key]].type_name
 	end
-	depth := state.generic_depth[0] + next_generic_depth(state)
+	depth := state.type_resolution.generic_depth[0] + next_generic_depth(state)
 	if depth >= 128
 		diagnostic(state, "TRBN4003", declaration.line, "generic type expansion exceeds the compiler nesting limit")
 		return ""
@@ -327,16 +327,16 @@ def instantiate_generic_nominal(mut state: CompilerState, definition: Integer, a
 	previous_module := state.module_graph.active_module[0]
 	previous_owner := state.declaration_owner[0]
 	state.declaration_owner[0] = namespace_parent(declaration.name)
-	saved_alias_depth := state.alias_expansion_depth[0]
+	saved_alias_depth := state.type_resolution.alias_expansion_depth[0]
 	mut saved_alias_path: Array<Integer> := []
 	mut alias_step := 0
 	while alias_step < saved_alias_depth
-		saved_alias_path.push(load_integer(state.alias_expansion_path, alias_step))
+		saved_alias_path.push(load_integer(state.type_resolution.alias_expansion_path, alias_step))
 		alias_step += 1
 	end
-	state.alias_expansion_depth[0] = 0
+	state.type_resolution.alias_expansion_depth[0] = 0
 	state.module_graph.active_module[0] = declaration.source_id
-	state.generic_depth[0] += 1
+	state.type_resolution.generic_depth[0] += 1
 	saved_binding := state.checked[0].generic_binding[0]
 	state.checked[0].generic_binding[0] = 0
 	name := generic_application(declaration.name, arguments)
@@ -351,7 +351,7 @@ def instantiate_generic_nominal(mut state: CompilerState, definition: Integer, a
 		store_integer(state.record_field_starts, owner, state.field_count[0])
 		store_integer(state.record_field_counts, owner, declaration.variants[0].fields.size())
 		state.record_count[0] += 1
-		store_integer(state.record_generic_bindings, owner, add_generic_binding(state, declaration.source_id, declaration.parameters, arguments, depth))
+		store_integer(state.type_resolution.record_generic_bindings, owner, add_generic_binding(state, declaration.source_id, declaration.parameters, arguments, depth))
 		declaration.variants[0].fields.each do |field|
 			slot := state.field_count[0]
 			store_string(state.field_names, slot, field.name)
@@ -375,8 +375,8 @@ def instantiate_generic_nominal(mut state: CompilerState, definition: Integer, a
 			end
 		end
 	end
-	state.generic_instance_lookup[key] = state.generic_instances.size()
-	state.generic_instances.push(GenericInstance.new(definition: definition, arguments: arguments, type_name: type_name))
+	state.type_resolution.generic_instance_lookup[key] = state.type_resolution.generic_instances.size()
+	state.type_resolution.generic_instances.push(GenericInstance.new(definition: definition, arguments: arguments, type_name: type_name))
 	if declaration.kind == 1
 		mut field := load_integer(state.record_field_starts, owner)
 		finish := field + load_integer(state.record_field_counts, owner)
@@ -409,11 +409,11 @@ def instantiate_generic_nominal(mut state: CompilerState, definition: Integer, a
 	end
 	alias_step = 0
 	saved_alias_path.each do |entry|
-		store_integer(state.alias_expansion_path, alias_step, entry)
+		store_integer(state.type_resolution.alias_expansion_path, alias_step, entry)
 		alias_step += 1
 	end
-	state.alias_expansion_depth[0] = saved_alias_depth
-	state.generic_depth[0] -= 1
+	state.type_resolution.alias_expansion_depth[0] = saved_alias_depth
+	state.type_resolution.generic_depth[0] -= 1
 	state.checked[0].generic_binding[0] = saved_binding
 	state.module_graph.active_module[0] = previous_module
 	state.declaration_owner[0] = previous_owner
@@ -471,7 +471,7 @@ def common_array_element_type(left: String, right: String): String
 end
 
 def resolve_alias_type(mut state: CompilerState, index: Integer, arguments: Array<String>): String
-	row := state.type_aliases[index]
+	row := state.type_resolution.type_aliases[index]
 	if row.parameters.size() != arguments.size()
 		return ""
 	end
@@ -485,13 +485,13 @@ def resolve_alias_type(mut state: CompilerState, index: Integer, arguments: Arra
 		return ""
 	end
 	key := generic_application(integer_string(index), arguments)
-	if state.alias_instance_lookup.key?(key)
-		return state.alias_instances[state.alias_instance_lookup[key]].type_name
+	if state.type_resolution.alias_instance_lookup.key?(key)
+		return state.type_resolution.alias_instances[state.type_resolution.alias_instance_lookup[key]].type_name
 	end
-	depth := state.alias_expansion_depth[0]
+	depth := state.type_resolution.alias_expansion_depth[0]
 	mut item := 0
 	while item < depth
-		if load_integer(state.alias_expansion_path, item) == index
+		if load_integer(state.type_resolution.alias_expansion_path, item) == index
 			state.module_graph.active_module[0] = row.source_id
 			diagnostic(state, "TRBN4003", row.line, "type alias cycle involving " + row.name)
 			return ""
@@ -503,8 +503,8 @@ def resolve_alias_type(mut state: CompilerState, index: Integer, arguments: Arra
 		diagnostic(state, "TRBN4003", row.line, "type alias expansion exceeds the compiler nesting limit")
 		return ""
 	end
-	store_integer(state.alias_expansion_path, depth, index)
-	state.alias_expansion_depth[0] = depth + 1
+	store_integer(state.type_resolution.alias_expansion_path, depth, index)
+	state.type_resolution.alias_expansion_depth[0] = depth + 1
 	saved_binding := state.checked[0].generic_binding[0]
 	state.checked[0].generic_binding[0] = 0
 	previous_owner := state.declaration_owner[0]
@@ -513,10 +513,10 @@ def resolve_alias_type(mut state: CompilerState, index: Integer, arguments: Arra
 	resolved := resolve_type_name(state, row.source_id, target, false)
 	state.declaration_owner[0] = previous_owner
 	state.checked[0].generic_binding[0] = saved_binding
-	state.alias_expansion_depth[0] = depth
-	if resolved != "" && !has_diagnostic(state) && !state.alias_instance_lookup.key?(key)
-		state.alias_instance_lookup[key] = state.alias_instances.size()
-		state.alias_instances.push(TypeAliasInstance.new(definition: index, arguments: arguments, type_name: resolved))
+	state.type_resolution.alias_expansion_depth[0] = depth
+	if resolved != "" && !has_diagnostic(state) && !state.type_resolution.alias_instance_lookup.key?(key)
+		state.type_resolution.alias_instance_lookup[key] = state.type_resolution.alias_instances.size()
+		state.type_resolution.alias_instances.push(TypeAliasInstance.new(definition: index, arguments: arguments, type_name: resolved))
 	end
 	return resolved
 end
@@ -538,7 +538,7 @@ def instantiate_object_type(mut state: CompilerState, definition: Integer, argum
 	if state.object_instance_lookup.key?(key)
 		return object_instance_type(state, state.object_instance_lookup[key])
 	end
-	if state.generic_depth[0] + next_generic_depth(state) >= 128
+	if state.type_resolution.generic_depth[0] + next_generic_depth(state) >= 128
 		diagnostic(state, "TRBN4003", declaration.line, "generic type expansion exceeds the compiler nesting limit")
 		return ""
 	end
@@ -551,16 +551,16 @@ def instantiate_object_type(mut state: CompilerState, definition: Integer, argum
 	state.module_graph.active_module[0] = declaration.source_id
 	state.declaration_owner[0] = namespace_parent(declaration.name)
 	state.checked[0].generic_binding[0] = 0
-	state.generic_depth[0] += 1
+	state.type_resolution.generic_depth[0] += 1
 	# Crossing a nominal storage edge terminates a transparent alias expansion.
-	saved_alias_depth := state.alias_expansion_depth[0]
+	saved_alias_depth := state.type_resolution.alias_expansion_depth[0]
 	mut alias_path: Array<Integer> := []
 	mut step := 0
 	while step < saved_alias_depth
-		alias_path.push(load_integer(state.alias_expansion_path, step))
+		alias_path.push(load_integer(state.type_resolution.alias_expansion_path, step))
 		step += 1
 	end
-	state.alias_expansion_depth[0] = 0
+	state.type_resolution.alias_expansion_depth[0] = 0
 	mut superclass :=- 1
 	if declaration.superclass != ""
 		name := generic_substitute(declaration.superclass, declaration.parameters, arguments)
@@ -609,11 +609,11 @@ def instantiate_object_type(mut state: CompilerState, definition: Integer, argum
 	state.object_instances[owner] = ObjectInstance.new(definition: definition, arguments: arguments, superclass: superclass, interfaces: interfaces, fields: fields)
 	step = 0
 	alias_path.each do |entry|
-		store_integer(state.alias_expansion_path, step, entry)
+		store_integer(state.type_resolution.alias_expansion_path, step, entry)
 		step += 1
 	end
-	state.alias_expansion_depth[0] = saved_alias_depth
-	state.generic_depth[0] -= 1
+	state.type_resolution.alias_expansion_depth[0] = saved_alias_depth
+	state.type_resolution.generic_depth[0] -= 1
 	state.checked[0].generic_binding[0] = saved_binding
 	state.module_graph.active_module[0] = previous_module
 	state.declaration_owner[0] = previous_owner
