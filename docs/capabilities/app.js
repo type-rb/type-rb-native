@@ -81,6 +81,12 @@ const renderOrdinaryLanguage = () => {
   };
   family.addEventListener('change', renderRows);
   document.querySelector('#ordinary-only-gaps').addEventListener('change', renderRows);
+  // Benchmark areas link here with ?family=<id>.
+  const requested = new URLSearchParams(window.location.search).get('family');
+  if (features.some((feature) => feature.id === requested)) {
+    family.value = requested;
+    document.querySelector('.ordinary-details').open = true;
+  }
   renderRows();
 };
 

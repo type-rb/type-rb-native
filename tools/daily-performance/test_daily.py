@@ -108,10 +108,42 @@ class DailyTests(unittest.TestCase):
         with open(state.ROOT / "benchmarks/benchmarksgame/context-sources.tsv") as stream:
             hashes = {r["case"]: r["source_sha256"] for r in csv.DictReader(stream, delimiter="\t") if r["language"] == "go"}
         cases = state.read(state.ROOT / "tools/daily-performance/suite.json")["cases"]
-        selected = [case for case in cases if "pureGoSource" in case]
-        self.assertEqual(len(selected), 3)
-        for case in selected:
+        upstream = [case for case in cases if "pureGoSource" in case and case["id"] in hashes]
+        self.assertEqual({case["id"] for case in upstream}, {"fannkuch-redux", "n-body", "spectral-norm"})
+        for case in upstream:
             self.assertEqual(hashlib.sha256((state.ROOT / case["pureGoSource"]).read_bytes()).hexdigest(), hashes[case["id"]])
+
+    def test_language_area_kernels_map_to_coverage_families(self):
+        registry = state.read(state.ROOT / "tools/native-language-cases.json")
+        families = {feature["id"] for feature in registry["features"]}
+        cases = state.read(state.ROOT / "tools/daily-performance/suite.json")["cases"]
+        kernels = [case for case in cases if case["source"].startswith("benchmarks/features/")]
+        self.assertGreaterEqual(len(kernels), 9)
+        self.assertEqual(len({case["id"] for case in cases}), len(cases))
+        for case in kernels:
+            self.assertIn(case["family"], families, case["id"])
+            self.assertFalse(case["frozenBaseline"], case["id"])
+            self.assertEqual(case["pureGoSource"], f"benchmarks/features/pure-go/{case['id']}/main.go")
+            self.assertTrue((state.ROOT / case["pureGoSource"]).is_file(), case["id"])
+            self.assertTrue((state.ROOT / f"benchmarks/features/{case['id']}/trbconfig.jsonc").is_file(), case["id"])
+
+    def test_frozen_baseline_coverage_is_explicit_and_legacy_snapshots_require_it(self):
+        current = snapshot()
+        current["baselineCases"] = ["example"]
+        kernel = [dict(copy.deepcopy(row), case="kernel", family="strings")
+                  for row in current["rows"] if row["role"] != "baseline"]
+        current["rows"].extend(kernel)
+        state.validate({**state.empty(), "latest": current})
+        legacy = copy.deepcopy(current); del legacy["baselineCases"]
+        with self.assertRaises(ValueError): state.validate({**state.empty(), "latest": legacy})
+        extra = copy.deepcopy(current)
+        extra["rows"].append({**copy.deepcopy(kernel[0]), "role": "baseline"})
+        with self.assertRaises(ValueError): state.validate({**state.empty(), "latest": extra})
+        for invalid in ("not-a-list", ["example", "example"], ["missing"]):
+            broken = copy.deepcopy(current); broken["baselineCases"] = invalid
+            with self.assertRaises(ValueError): state.validate({**state.empty(), "latest": broken})
+        family = copy.deepcopy(current); family["rows"][-1]["family"] = "Not a family"
+        with self.assertRaises(ValueError): state.validate({**state.empty(), "latest": family})
 
     def test_weekly_profile_requires_all_languages_and_cases(self):
         weekly = snapshot()
@@ -179,6 +211,54 @@ class DailyTests(unittest.TestCase):
                 expected = measure.source_case(case, Path(directory))
                 self.assertTrue(expected.endswith(b"\n"))
                 self.assertTrue((Path(directory) / "src/main.trb").exists())
+
+    def test_simulated_run_produces_a_valid_snapshot_for_every_registered_case(self):
+        suite = state.read(state.ROOT / "tools/daily-performance/suite.json")
+        def observe(command, directory, timeout, cwd=None, env=None, core=None):
+            directory.mkdir(parents=True, exist_ok=False)
+            arguments = list(map(str, command))
+            if "--output" in arguments or "--outfile" in arguments or arguments[1:2] == ["build"]:
+                output = arguments[arguments.index("--output" if "--output" in arguments else
+                                                   "--outfile" if "--outfile" in arguments else "-o") + 1]
+                Path(output).write_bytes(b"program")
+                (directory / "stdout").write_bytes(b"")
+            else:
+                (directory / "stdout").write_bytes((Path(arguments[0]).parent.parent / "expected").read_bytes())
+            (directory / "stderr").write_bytes(b"")
+            record = {"command": arguments, "timeoutSeconds": timeout, "status": "pass", "wallSeconds": .5,
+                      "exitCode": 0, "cpuSeconds": .4, "memoryBytes": 4096}
+            state.write(directory / "observation.json", record)
+            return record
+        def check_output(command, *args, **kwargs):
+            return b"go version go1.27 linux/arm64" if command[:2] == ["/usr/bin/go", "version"] or command == ["go", "version"] else b"host"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            compilers = {role: {"revision": "a" * 40, "path": str(root / role)}
+                         for role in ("native", "previous", "baseline", "typerb-go")}
+            for role in [*compilers, "go", "qbe"]:
+                (root / role).write_bytes(role.encode())
+            state.write(root / "compilers.json", compilers)
+            arguments = type("Arguments", (), {"compilers": root / "compilers.json", "qbe": root / "qbe",
+                                               "evidence": root / "evidence", "output": root / "snapshot.json"})
+            with patch.object(measure.platform, "system", return_value="Linux"), \
+                 patch.object(measure.platform, "machine", return_value="aarch64"), \
+                 patch.object(measure.platform, "platform", return_value="Linux-aarch64"), \
+                 patch.object(measure.os, "sched_getaffinity", return_value={0}, create=True), \
+                 patch.object(measure.shutil, "which", return_value=str(root / "go")), \
+                 patch.object(measure.subprocess, "check_output", side_effect=check_output), \
+                 patch.object(measure.subprocess, "run"), \
+                 patch.object(measure, "observe", side_effect=observe), \
+                 patch.object(measure, "git", return_value="a" * 40), \
+                 patch("builtins.print"):
+                measure.run(arguments)
+            result = state.read(root / "snapshot.json")
+        state.validate({**state.empty(), "latest": result})
+        self.assertEqual(result["status"], "measured")
+        self.assertEqual({row["case"] for row in result["rows"]}, {case["id"] for case in suite["cases"]})
+        kernels = {case["id"] for case in suite["cases"] if not case.get("frozenBaseline", True)}
+        self.assertTrue(kernels)
+        self.assertFalse(any(row["role"] == "baseline" and row["case"] in kernels for row in result["rows"]))
+        self.assertTrue(all(row.get("family") for row in result["rows"] if row["case"] in kernels))
 
     @unittest.skipUnless(platform.system() == "Linux", "GNU time is Linux-specific")
     def test_real_timeout_and_output_mismatch(self):

@@ -1,4 +1,5 @@
-import { metrics, comparisons, value, valid, change, assessment } from './daily-model.mjs';
+import { metrics, comparisons, value, valid, change, assessment, areaSummary, familyCoverage } from './daily-model.mjs';
+import { ordinaryLanguage } from '../ordinary-language.js';
 const $ = id => document.getElementById(id);
 const node = (tag, text, className) => {
   const element = document.createElement(tag);
@@ -35,7 +36,8 @@ function choices(id, items, selected, onSelect) {
 function unavailable(snapshot, row, name) {
   if (row) return row.status === 'pass' ? 'Below resolution' : `Failed: ${row.status}`;
   if (comparisonKey === 'previous') return 'No previous measurement in this series';
-  if (comparisonKey === 'pure-go') return snapshot.roles['pure-go'] ? 'Outside the 3-case Go comparison' : 'Pure Go measurement pending';
+  if (comparisonKey === 'pure-go') return snapshot.roles['pure-go'] ? 'No hand-written Pure Go program for this workload' : 'Pure Go measurement pending';
+  if (comparisonKey === 'baseline' && snapshot.baselineCases && !snapshot.baselineCases.includes(name)) return 'Uses features newer than the frozen baseline';
   return 'Not measured';
 }
 function verdictCell(current, control, metric, missing) {
@@ -81,6 +83,35 @@ function renderCurrent() {
     const card = node('div', undefined, `summary-count ${tone}`);
     card.append(node('strong', String(counts[tone])), node('span', assessment(tone === 'better' ? -.1 : tone === 'worse' ? .1 : 0, metricKey).label));
     $('verdict-summary').append(card);
+  }
+  renderAreas(snapshot, metric);
+}
+function renderAreas(snapshot, metric) {
+  const summary = areaSummary(snapshot.rows.filter(row => row.role === 'native'), row => reference(snapshot, row.case), metric);
+  $('area-body').replaceChildren();
+  const overall = assessment(summary.overall.ratio === null ? null : summary.overall.ratio - 1, metricKey);
+  $('area-overall').textContent = summary.overall.compared ?
+    `All ${summary.overall.compared} compared workloads: ${overall.label}${overall.detail ? ` (${overall.detail}, geometric mean)` : ''}.` :
+    'No workload has a comparable value for this selection.';
+  for (const area of summary.areas) {
+    const tr = node('tr');
+    const title = node('th', area.area); title.scope = 'row';
+    const verdict = assessment(area.ratio === null ? null : area.ratio - 1, metricKey);
+    const verdictCellNode = node('td'); verdictCellNode.dataset.label = 'Assessment';
+    verdictCellNode.append(node('span', verdict.label, `verdict ${verdict.tone}`), node('small', verdict.detail));
+    const compared = node('td', `${area.compared} of ${area.compared + area.missing}`); compared.dataset.label = 'Compared';
+    const weakest = node('td', area.weakest && area.compared > 1 ? `${area.weakest.case} (${assessment(area.weakest.ratio - 1, metricKey).detail})` : '—');
+    weakest.dataset.label = 'Weakest workload';
+    const coverage = node('td'); coverage.dataset.label = 'Language coverage';
+    const family = area.family && familyCoverage(ordinaryLanguage, area.family);
+    if (family) {
+      const anchor = node('a', `${family.differing} of ${family.probes} probes differ`);
+      anchor.href = `../?family=${encodeURIComponent(area.family)}#ordinary-language`;
+      coverage.append(anchor);
+      if (family.pending) coverage.append(node('small', `${family.pending} uncovered contracts`));
+    } else coverage.textContent = '—';
+    tr.append(title, verdictCellNode, compared, weakest, coverage);
+    $('area-body').append(tr);
   }
 }
 function renderHistory() {
