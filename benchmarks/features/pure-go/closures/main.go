@@ -42,5 +42,5 @@ func run(rounds int64) int64 {
 }
 
 func main() {
-	fmt.Println(run(3000))
+	fmt.Println(run(60000))
 }

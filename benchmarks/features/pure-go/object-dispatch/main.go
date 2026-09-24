@@ -37,5 +37,5 @@ func run(rounds int64) int64 {
 }
 
 func main() {
-	fmt.Println(run(1000000))
+	fmt.Println(run(20000000))
 }

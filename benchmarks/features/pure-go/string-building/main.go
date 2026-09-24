@@ -18,5 +18,5 @@ func build(count int64) int64 {
 }
 
 func main() {
-	fmt.Println(build(300000))
+	fmt.Println(build(600000))
 }
