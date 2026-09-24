@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check retained REPL rendering for quoted Strings and shortest Floats."""
+"""Check retained REPL rendering for quoted Strings and compact Floats."""
 import os
 from pathlib import Path
 import subprocess
@@ -32,4 +32,4 @@ with tempfile.TemporaryDirectory(prefix='native-repl-display-') as temporary:
     assert floats == ('[NaN, +Inf, -Inf, 0, -0, 1.2345678901234567, 1e+15, 1e-06] : Array<Float>\n'
                       '[100000, 1e+06, 0.0001, 1e-05, 123456, 1.234567e+06] : Array<Float>\n'), floats
 
-print('PASS REPL display: quoted control characters and shortest Float notation')
+print('PASS REPL display: quoted control characters and compact Float notation')
