@@ -1,7 +1,8 @@
 import { integer_string } from literals
 import { MirFunction, MirModule, MirNumericOperation, MirNumericPlan, mir_block_index, mir_function_index, mir_value_type } from mir
+import { mir_nonnegative_value, mir_nonnegative_values } from mir_analysis
 import { mir_loop_dominates } from mir_array_loops
-import { mir_build_flow, mir_flow_block_index, mir_flow_blocks } from mir_flow
+import { MirFlow, mir_build_flow, mir_flow_block_index, mir_flow_blocks } from mir_flow
 
 def mir_numeric_empty(): MirNumericPlan
 	return MirNumericPlan.new(function_id: - 1, caller: - 1, call_instruction: - 1, operations: [])
@@ -28,7 +29,7 @@ def mir_numeric_blocks(native_module: MirModule, function: MirFunction): Array<I
 	return ordered
 end
 
-def mir_numeric_loops(native_module: MirModule, function: MirFunction): Array<Integer>
+def mir_numeric_loops(native_module: MirModule, function: MirFunction, flow: MirFlow): Array<Integer>
 	mut members: Array<Integer> := []
 	mut predecessors: Array<Array<Integer>> := []
 	mut index := 0
@@ -40,7 +41,6 @@ def mir_numeric_loops(native_module: MirModule, function: MirFunction): Array<In
 	if function.kind != 3
 		return members
 	end
-	flow := mir_build_flow(native_module, function, mir_flow_blocks(native_module, function))
 	index = 0
 	while index < function.block_count
 		block := native_module.blocks[function.block_start + index]
@@ -126,7 +126,7 @@ def mir_numeric_small(native_module: MirModule, function: MirFunction, arguments
 	return small
 end
 
-def mir_numeric_mode(operator: Integer, left_small: Boolean, right_small: Boolean, inline: Boolean, mut budget: Array<Integer>, loop: Integer): Integer
+def mir_numeric_mode(operator: Integer, left_small: Boolean, right_small: Boolean, left_nonnegative: Boolean, right_nonnegative: Boolean, inline: Boolean, mut budget: Array<Integer>, loop: Integer): Integer
 	if operator == 13 && inline && !left_small && !right_small
 		return 4
 	end
@@ -140,10 +140,15 @@ def mir_numeric_mode(operator: Integer, left_small: Boolean, right_small: Boolea
 	if eligible && budget[loop] > 0
 		budget[loop] -= 1
 		if operator == 1 || operator == 13
+			# Preserve existing small-operand selections when both proofs apply.
 			if left_small
 				return 3
 			elsif right_small
 				return 2
+			elsif right_nonnegative
+				return 2
+			elsif left_nonnegative
+				return 3
 			end
 		end
 		return 1
@@ -160,13 +165,25 @@ def mir_numeric_leaf(native_module: MirModule, function: MirFunction, caller: In
 		return mir_numeric_empty()
 	end
 	small := mir_numeric_small(native_module, function, arguments)
+	flow := mir_build_flow(native_module, function, mir_flow_blocks(native_module, function))
+	nonnegative := mir_nonnegative_values(native_module, function, flow)
 	mut operations: Array<MirNumericOperation> := []
 	block := native_module.blocks[entry]
 	mut index := block.instruction_start
 	while index < block.instruction_start + block.instruction_count
 		instruction := native_module.instructions[index]
 		if instruction.kind == 7 && mir_value_type(native_module, function.id, instruction.result) == 1
-			mode := mir_numeric_mode(instruction.payload, small.key?(integer_string(instruction.first)), small.key?(integer_string(instruction.second)), true, budget, 0)
+			left_small := small.key?(integer_string(instruction.first))
+			right_small := small.key?(integer_string(instruction.second))
+			mut left_nonnegative := left_small
+			mut right_nonnegative := right_small
+			if !left_nonnegative
+				left_nonnegative = mir_nonnegative_value(nonnegative, instruction.first)
+			end
+			if !right_nonnegative
+				right_nonnegative = mir_nonnegative_value(nonnegative, instruction.second)
+			end
+			mode := mir_numeric_mode(instruction.payload, left_small, right_small, left_nonnegative, right_nonnegative, true, budget, 0)
 			if mode > 0
 				operations.push(MirNumericOperation.new(instruction: index, mode: mode))
 			end
@@ -206,8 +223,10 @@ def mir_numeric_plans(native_module: MirModule): Array<MirNumericPlan>
 	end
 	ordered.each do |function_index|
 		function := native_module.functions[function_index]
-		loops := mir_numeric_loops(native_module, function)
+		flow := mir_build_flow(native_module, function, mir_flow_blocks(native_module, function))
+		loops := mir_numeric_loops(native_module, function, flow)
 		small := mir_numeric_small(native_module, function, [])
+		nonnegative := mir_nonnegative_values(native_module, function, flow)
 		mut operations: Array<MirNumericOperation> := []
 		mir_numeric_blocks(native_module, function).each do |block_index|
 			block := native_module.blocks[block_index]
@@ -219,7 +238,17 @@ def mir_numeric_plans(native_module: MirModule): Array<MirNumericPlan>
 			while position < block.instruction_start + block.instruction_count
 				instruction := native_module.instructions[position]
 				if instruction.kind == 7 && mir_value_type(native_module, function.id, instruction.result) == 1
-					mode := mir_numeric_mode(instruction.payload, small.key?(integer_string(instruction.first)), small.key?(integer_string(instruction.second)), false, budget, loop)
+					left_small := small.key?(integer_string(instruction.first))
+					right_small := small.key?(integer_string(instruction.second))
+					mut left_nonnegative := left_small
+					mut right_nonnegative := right_small
+					if !left_nonnegative
+						left_nonnegative = mir_nonnegative_value(nonnegative, instruction.first)
+					end
+					if !right_nonnegative
+						right_nonnegative = mir_nonnegative_value(nonnegative, instruction.second)
+					end
+					mode := mir_numeric_mode(instruction.payload, left_small, right_small, left_nonnegative, right_nonnegative, false, budget, loop)
 					if mode > 0
 						operations.push(MirNumericOperation.new(instruction: position, mode: mode))
 					end
