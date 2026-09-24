@@ -7,6 +7,12 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { acceptance, changedPaths, classify, mainAcceptance, toolingTests, quickToolingTests, compilerTestInputs, cliInputs } from './ci-plan.mjs';
 
+// Planner subprocesses must not inherit the workflow's own gate setting.
+function plannerEnv(extra = {}) {
+  const { NATIVE_CI_GATE, ...env } = process.env;
+  return { ...env, ...extra };
+}
+
 function results(plan) {
   return {
     plan: { result: 'success', outputs: Object.fromEntries(
@@ -378,13 +384,13 @@ test('CLI classifies real historical-to-documentation and current-project rename
     const args = [fileURLToPath(new URL('./ci-plan.mjs', import.meta.url)), base, head, 'false'];
     for (const mode of ['strict', 'mir-migration']) {
       const output = execFileSync(process.execPath, args, { cwd: directory, encoding: 'utf8',
-        env: { ...process.env, NATIVE_MIR_COST_MODE: mode } });
+        env: plannerEnv({ NATIVE_MIR_COST_MODE: mode }) });
       assert.deepEqual(Object.fromEntries(output.trim().split('\n').map(row => row.split('='))),
         { code: 'true', quick: 'true', documentation: 'true', memory: 'true', performance: String(mode === 'strict'),
           draft: 'false', tooling: 'true', cli: 'true', complete: 'true' });
     }
     assert.throws(() => execFileSync(process.execPath, args, { cwd: directory, encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, NATIVE_MIR_COST_MODE: 'invalid' } }),
+      stdio: ['ignore', 'pipe', 'pipe'], env: plannerEnv({ NATIVE_MIR_COST_MODE: 'invalid' }) }),
     error => error.status !== 0 && error.stderr.includes('Invalid compiler cost mode'));
     mkdirSync(join(directory, 'compiler/src'), { recursive: true });
     renameSync(join(directory, 'docs/example.md'), join(directory, 'compiler/src/current.trb'));
@@ -781,7 +787,7 @@ test('the planner CLI reads the PR gate, ignores it on main and reports deferred
     const head = git(['commit-tree', git(['mktree'], `040000 tree ${compiler}\tcompiler\n`), '-p', base], 'Code\n');
     const plan = (args, gate) => Object.fromEntries(execFileSync(process.execPath, [planner, ...args], {
       cwd: directory, encoding: 'utf8',
-      env: { ...process.env, NATIVE_MIR_COST_MODE: 'mir-migration', ...(gate ? { NATIVE_CI_GATE: gate } : {}) },
+      env: plannerEnv({ NATIVE_MIR_COST_MODE: 'mir-migration', ...(gate ? { NATIVE_CI_GATE: gate } : {}) }),
     }).trim().split('\n').map(row => row.split('=')));
     assert.equal(plan([base, head, 'false']).complete, 'true', 'an unset gate stays complete');
     assert.equal(plan([base, head, 'false'], 'tiered').complete, 'false');
