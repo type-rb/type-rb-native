@@ -1,5 +1,5 @@
 import { integer_string } from literals
-import { MirBlock, MirFunction, MirModule, MirValue } from mir
+import { MirBlock, MirFunction, MirModule, MirValue, mir_function_index } from mir
 
 # Derived from checked storage, never accepted as input optimization facts.
 # Sparse value/declaration IDs use Hash; CFG storage grows with actual blocks
@@ -16,6 +16,23 @@ record MirFlow
 	definitions: Hash<String, Integer>
 	positions: Hash<String, Integer>
 	types: Hash<String, Integer>
+end
+
+# The verifier has already checked value ownership before optimization. Keep
+# function-local rows together for passes that inspect every function.
+def mir_function_value_groups(native_module: MirModule): Array<Array<MirValue>>
+	mut groups: Array<Array<MirValue>> := []
+	native_module.functions.each do |_function|
+		groups.push([])
+	end
+	native_module.values.each do |value|
+		index := mir_function_index(native_module, value.function_id)
+		if index >= 0
+			mut group := groups[index]
+			group.push(value)
+		end
+	end
+	return groups
 end
 
 def mir_flow_blocks(native_module: MirModule, function: MirFunction): Hash<String, Integer>
