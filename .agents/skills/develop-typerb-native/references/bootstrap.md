@@ -50,14 +50,13 @@ For CLI tests against a temporary `trbn` binary, put a verified `qbe` beside
 that binary (a symlink is sufficient). Several test scripts invoke the adjacent
 executable directly, even when `TRBN_QBE` is set. Shared language-case runs
 also need `TRBN_QBE` when the binary has no adjacent QBE.
-When compiler-module imports change, run
-`python3 tools/recovery_layout_sync.py --write` and `--check` to update
-`src/compiler_recovery_layout.trb`, then run the focused
+When compiler-module imports change, or a module is added, renamed or removed,
+run `python3 tools/recovery_layout_sync.py --write` and `--check`. It keeps the
+recovery layout, the per-module recovery mutations and the own-frontend module
+list in `compiler/src/compiler_test.trb` equal to the import closure of
+`compiler/src/compiler.trb`, and generates a default mutation for a new module
+or a stale needle. Review generated mutations, then run the focused
 `Compiler recovery source closure` root test before pushing.
-When adding or renaming a compiler module, also update the independent module
-inventory in `compiler/src/compiler_test.trb` and run its focused
-`parses the checked-in compiler closure through its own frontend` test. The
-root closure test does not check that second inventory.
 Run `tools/check-bootstrap-snapshot.sh /path/to/pinned/trb` on the canonical
 compiler closure before publishing each compiler-source batch. It is a short
 snapshot-v4 compatibility check, not a check of the Native decoder's byte bound
