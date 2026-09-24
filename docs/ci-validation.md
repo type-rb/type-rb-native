@@ -97,10 +97,13 @@ adapter restores the core lanes.
 
 The CLI smoke (`build`) and cache-invalidation (`cache`) jobs run independently
 on Darwin and Linux arm64, so a failed smoke does not require rerunning the
-cache job. Each complete rebuild in the cache test has a 600-second watchdog and
-both jobs have a 90-minute limit; a timeout is a failure and terminates the owned
-builder process group. Cache reuse, invalidation, failure atomicity and
-concurrent-caller assertions remain required.
+cache job. The build job verifies a fresh core and CLI fixed point. The cache
+job checks core and CLI content-key invalidation through the build's `--plan`
+path, then performs one real CLI-only rebuild under concurrent callers to
+verify core reuse and atomic publication. Its rebuild has a 600-second
+watchdog and both jobs have a 90-minute limit; a timeout is a failure and
+terminates the owned builder process group. Cache reuse, invalidation, failure
+atomicity and concurrent-caller assertions remain required.
 
 The documentation authority checks evidence retention, skill metadata, public
 path hygiene, the capability catalog and benchmark explorer. Pages does not
