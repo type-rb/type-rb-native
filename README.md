@@ -74,12 +74,8 @@ Current work consolidates supported ordinary features into verified MIR,
 completes needed basic language coverage and splits large implementation files
 by responsibility. See the [MIR consolidation milestone](docs/mir-consolidation.md)
 and [basic language coverage plan](docs/native-language-coverage.md). Detailed
-performance qualification follows coherent architecture milestones.
-The current spectral-norm result exceeds Pure Go; broader runtime parity remains
-a goal. The later [numeric regression recovery](docs/native-numeric-regression-recovery.md)
-confirms that accepted main has restored n-body and fannkuch against the former
-published baseline while retaining the spectral improvement. Application runtime
-and compilation measurements are separate in the
+performance qualification follows coherent architecture milestones; current
+runtime and compilation measurements against Pure Go are in the
 [benchmark explorer](https://type-rb.github.io/type-rb-native/benchmarks/).
 See [MIR status](docs/native-mir-optimization-status.md) for the migration and
 [development history](https://github.com/type-rb/type-rb-native/blob/7726ff18e9230cd149e9f0c317577f6429f907fc/docs/development-history.md) for dated checkpoints.

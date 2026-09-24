@@ -103,67 +103,16 @@ backend. Neither is built merely to populate a comparison table.
 
 ## Self-hosted MIR optimization transition
 
-The active [MIR consolidation milestone](mir-consolidation.md) supersedes the
-per-slice cost envelopes and registration cadence below during migration.
-Preserve correctness and architectural boundaries, but complete cohesive
-ownership changes before milestone performance qualification. The earlier
-contracts remain historical and standalone strict measurement references.
-
-The early bootstrap path proved a distinct Native MIR. The compact self-hosted
-compiler later reached closure through direct QBE emission, with several local
-semantic facts represented in emitter state. Before adding broader range,
-alias, effect, or loop optimization, the self-hosted path restores the intended
-MIR boundary described by
-[Decision 0028](decisions/0028-native-mir-optimization-boundary.md).
-
-The transition is incremental but has one target architecture:
-
-1. Complete already registered narrow emitter experiments and preserve their
-   accepted or rejected evidence.
-2. Define the smallest Native MIR value, block, operation, origin, and verifier
-   subset that can carry one current hot scalar/Array loop vertically.
-3. Represent only the facts needed by that slice, beginning with Integer range
-   or nonnegativity, index validity, loop induction/bounds, call allocation and
-   mutation effects, Array-header stability, and GC safety.
-4. Run target-independent transforms over verified MIR and lower the result
-   through the existing QBE ABI without source-pattern discovery in the
-   adapter.
-5. Move existing optimization families into this path and remove their
-   superseded emitter ownership before adding broader analysis.
-
-Each slice retains source origins, exact TypeRB behavior, deterministic output,
-self-hosted fixed points, the complete conformance corpus, and registered
-application outputs. A no-optimization or unchanged region must remain a useful
-differential control while the slice is introduced.
-
-For the first explicit pass in an already measured fact family, pre-register
-both sides of the trade: any small compiler-QBE or code-section cost must fit
-the existing temporary envelope with no complete-compiler growth, while the
-selected generated workload must strictly shrink and improve materially in
-wall and CPU time without an RSS regression. The pass cost remains recoverable
-migration space under ordinary acceptance. A bounded trade-off investigation
-uses the separate registration/decision procedure above, not a silent expansion
-of this envelope.
-
-Historical MIR transition measurements and their exact source-era bounds are
-preserved in the [historical record](https://github.com/type-rb/type-rb-native/blob/7726ff18e9230cd149e9f0c317577f6429f907fc/docs/gate-reference.md#mir-transition-history).
-The [current MIR status](native-mir-optimization-status.md) records accepted
-ownership and the remaining direct path; it is not complete general-purpose
-MIR lowering. The [transition policy](../tools/native-mir-transition-policy.sh)
-and its exact validated markers remain the executable source for current
-limits. Only a preregistered marker introduction may use its one-time ratios;
-later ordinary changes return to 1.05. Recovery, generated-code and application
-identity, catastrophic, process, stack, and cleanup bounds remain independent.
-Remove superseded emitter ownership as each slice migrates. Separately account
-for duplicate migration code and useful optimizer code; cumulative cost and
-outstanding ownership debt must be reviewed before another fact family, but
-return to the exact pre-MIR byte count is not the sole condition for bounded
-investigation. No historical limit or failed result is changed by this policy.
-
+The [MIR consolidation milestone](mir-consolidation.md) supersedes the per-slice
+transition envelopes. [Decision 0028](decisions/0028-native-mir-optimization-boundary.md)
+keeps TypeRB facts and optimizations in verified MIR, and the
+[transition policy](../tools/native-mir-transition-policy.sh) with its validated
+markers remains the executable source for current limits. The earlier transition
+sequence and its source-era bounds are in the
+[prior version of this plan](https://github.com/type-rb/type-rb-native/blob/04c6ca7263c066fd13e83b3faa09c4e80d707c13/docs/experiment-plan.md#self-hosted-mir-optimization-transition).
 LLVM remains deferred until the shared path and benchmark corpus cover scalar,
-Array, allocation, and I/O behavior. Its first role is a bounded
-optimization-ceiling comparison over the same MIR and ABI, not a second copy of
-TypeRB semantic analysis.
+Array, allocation and I/O behavior; its first role is a bounded
+optimization-ceiling comparison over the same MIR and ABI.
 
 ## Repository organization
 

@@ -25,8 +25,15 @@ temporary cost policy; individual helper moves do not need a new proposal.
 Follow the [repository organization schedule](docs/repository-organization.md)
 for source moves and naming cleanup. Inventory consumers before removing
 recovery and ordinary compiler code, keep mechanical changes separate from optimization, and
-preserve recovery and measurement coverage. Keep routine checkpoint narratives
-out of the root README; link to the owning status page or dated evidence.
+preserve recovery and measurement coverage.
+
+Keep documentation current rather than cumulative. A document states the present
+contract, ownership or procedure; the PR and its issue record what a change
+delivered, how it was validated and what remains. Do not append per-feature or
+per-reference-update sections, dated checkpoint narratives, hand-counted totals
+or test-by-test inventories that the code, tests or generated views already
+state. When a section only describes history, remove it and link the immutable
+revision that contains it.
 
 Keep implementation drafts in the quick-feedback stage. After focused local
 proof and negative-case review, mark cohesive PRs ready for complete correctness.
