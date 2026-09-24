@@ -10,7 +10,7 @@ import { verify_mir } from mir_verifier
 import { parse_module } from parser
 import { resolve } from resolution
 import { CompilerState, compiler_new } from state
-import { load_integer, store_string } from storage
+import { load_integer, load_string, store_string } from storage
 import { describe, expect, test } from trb/std/test
 
 def call_test_state(): CompilerState
@@ -50,7 +50,7 @@ describe("MIR declaration-bound calls") do
 		end
 	end
 
-	test("summarizes direct managed reads while retaining mutation and nested-call barriers") do
+	test("summarizes managed reads through bounded calls while retaining mutation barriers") do
 		source := "def length(values: Array<Integer>): Integer\nreturn values.size()\nend\ndef read(values: Array<Integer>, index: Integer): Integer\nreturn values[index]\nend\ndef grow(mut values: Array<Integer>): Integer\nvalues.push(3)\nreturn values.size()\nend\ndef delegate(values: Array<Integer>): Integer\nreturn length(values)\nend\ndef scan(values: Array<Integer>): Integer\nmut index := 0\nmut total := 0\nwhile index < values.size()\ntotal += values[index] + length(values) + read(values, index)\nindex += 1\nend\nreturn total\nend\ndef main()\nmut values := [1, 2]\nputs(scan(values))\nputs(grow(values))\nputs(delegate(values))\nend\n"
 		mut state := logical_checked_source(source)
 		expect(check(state)).to_be_true()
@@ -58,7 +58,7 @@ describe("MIR declaration-bound calls") do
 		mut seen := [false, false, false, false]
 		state.scalar_mir.calls.each do |call|
 			if call.callee < 4
-				expect(call.effects).to_equal([8, 8, 15, 15][call.callee])
+				expect(call.effects).to_equal([8, 8, 15, 8][call.callee])
 				seen[call.callee] = true
 			end
 		end
@@ -93,6 +93,87 @@ describe("MIR declaration-bound calls") do
 		end
 		call := state.scalar_mir.calls[0]
 		state.scalar_mir.calls[0] = MirCall.new(callee: call.callee, argument_start: call.argument_start, argument_count: call.argument_count, effects: 15)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR call effects or adapter differ")
+	end
+
+	test("retains Array loop headers across bounded read chains and rejects nested mutation") do
+		source := "def length(values: Array<Integer>): Integer\nreturn values.size()\nend\ndef delegate(values: Array<Integer>): Integer\nreturn length(values)\nend\ndef twice(values: Array<Integer>): Integer\nreturn delegate(values)\nend\ndef grow(mut values: Array<Integer>): Integer\nvalues.push(3)\nreturn values.size()\nend\ndef delegate_grow(mut values: Array<Integer>): Integer\nreturn grow(values)\nend\ndef scan(values: Array<Integer>): Integer\nmut index := 0\nmut total := 0\nwhile index < values.size()\ntotal += values[index] + twice(values)\nindex += 1\nend\nreturn total\nend\ndef main()\nmut values := [1, 2]\nputs(scan(values))\nputs(delegate_grow(values))\nend\n"
+		mut state := logical_checked_source(source)
+		expect(check(state)).to_be_true()
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		mut seen := [false, false, false, false, false]
+		state.scalar_mir.calls.each do |call|
+			if call.callee < 5
+				expect(call.effects).to_equal([8, 8, 8, 15, 15][call.callee])
+				seen[call.callee] = true
+			end
+		end
+		seen.each do |found|
+			expect(found).to_be_true()
+		end
+		scan := mir_function_index(state.scalar_mir, 5)
+		expect(state.scalar_mir.array_loops[scan].size() > 0).to_be_true()
+		mut calls_without_roots := 0
+		mut index := 0
+		while index < state.scalar_mir.instructions.size()
+			instruction := state.scalar_mir.instructions[index]
+			if instruction.kind == 11 && state.scalar_mir.calls[instruction.payload].callee == 2
+				expect(state.scalar_mir.root_plans[scan].instructions.include?(index)).to_be_false()
+				calls_without_roots += 1
+			end
+			index += 1
+		end
+		expect(calls_without_roots > 0).to_be_true()
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe_arguments(qbe, control_test_output(emit_qbe(state)), [])
+			when Result::Ok(actual)
+				expect(actual).to_equal("7\n3\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+		index = 0
+		while index < state.scalar_mir.calls.size()
+			call := state.scalar_mir.calls[index]
+			if call.callee == 4
+				state.scalar_mir.calls[index] = MirCall.new(callee: call.callee, argument_start: call.argument_start, argument_count: call.argument_count, effects: 8)
+				break
+			end
+			index += 1
+		end
+		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR call effects or adapter differ")
+	end
+
+	test("keeps recursive deep and wide call chains conservative") do
+		source := "def length(values: Array<Integer>): Integer\nreturn values.size()\nend\ndef once(values: Array<Integer>): Integer\nreturn length(values)\nend\ndef twice(values: Array<Integer>): Integer\nreturn once(values)\nend\ndef thrice(values: Array<Integer>): Integer\nreturn twice(values)\nend\ndef cycle(values: Array<Integer>): Integer\nreturn cycle(values)\nend\ndef wide(values: Array<Integer>): Integer\nreturn length(values) + length(values) + length(values)\nend\ndef main()\nputs(twice([1]))\nputs(thrice([1]))\nputs(wide([1]))\nend\n"
+		mut state := logical_checked_source(source)
+		checked := check(state)
+		if !checked
+			puts(load_string(state.diagnostics.messages, 0))
+		end
+		expect(checked).to_be_true()
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		mut seen := [false, false, false, false, false, false]
+		state.scalar_mir.calls.each do |call|
+			if call.callee < 6
+				expect(call.effects).to_equal([8, 8, 8, 15, 15, 15][call.callee])
+				seen[call.callee] = true
+			end
+		end
+		seen.each do |found|
+			expect(found).to_be_true()
+		end
+		mut index := 0
+		while index < state.scalar_mir.calls.size()
+			call := state.scalar_mir.calls[index]
+			if call.callee == 4
+				state.scalar_mir.calls[index] = MirCall.new(callee: call.callee, argument_start: call.argument_start, argument_count: call.argument_count, effects: 8)
+				break
+			end
+			index += 1
+		end
 		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR call effects or adapter differ")
 	end
 
