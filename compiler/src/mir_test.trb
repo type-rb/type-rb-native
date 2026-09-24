@@ -1,5 +1,5 @@
 import { mir_definition_index } from mir_identities
-import { mir_build_flow, mir_flow_blocks, mir_flow_type } from mir_flow
+import { mir_build_flow, mir_flow_blocks, mir_flow_position, mir_flow_type, mir_value_available } from mir_flow
 import { MirBlock, MirFunction, MirInstruction, MirModule, MirValue, mir_value_index, mir_value_type } from mir
 import { optimize_verified_mir } from mir_passes
 import { verify_mir } from mir_verifier
@@ -67,15 +67,38 @@ describe("Native MIR model and verifier") do
 		function := native_module.functions[0]
 		mut flow := mir_build_flow(native_module, function, mir_flow_blocks(native_module, function))
 		expect(flow.dense_types.size()).to_equal(9)
+		expect(flow.dense_definitions.size()).to_equal(9)
+		expect(flow.definitions.size()).to_equal(0)
 		expect(flow.types.size()).to_equal(0)
 		expect(mir_flow_type(flow, 6)).to_equal(4)
 		expect(mir_flow_type(flow, 9)).to_equal(0)
+		expect(mir_flow_position(flow, 1)).to_equal(0)
+		expect(mir_flow_position(flow, 9)).to_equal(- 1)
+		expect(mir_value_available(flow, native_module.blocks[0], 0, 1)).to_be_false()
+		expect(mir_value_available(flow, native_module.blocks[0], 1, 1)).to_be_true()
+		expect(mir_value_available(flow, native_module.blocks[0], 1, 0)).to_be_true()
+		expect(mir_value_available(flow, native_module.blocks[0], 1, 9)).to_be_false()
 		native_module.values[8] = MirValue.new(function_id: 1, id: 9007199254740991, type_id: 2, source_id: 0, line: 4)
 		flow = mir_build_flow(native_module, function, mir_flow_blocks(native_module, function))
 		expect(flow.dense_types.size()).to_equal(0)
+		expect(flow.dense_definitions.size()).to_equal(0)
+		expect(flow.definitions.size()).to_equal(9)
 		expect(flow.types.size()).to_equal(9)
 		expect(mir_flow_type(flow, 9007199254740991)).to_equal(2)
 		expect(mir_flow_type(flow, 8)).to_equal(0)
+		expect(mir_flow_position(flow, 1)).to_equal(0)
+		expect(mir_value_available(flow, native_module.blocks[0], 1, 1)).to_be_true()
+	end
+
+	test("keeps malformed out-of-range result identities in the sparse fallback") do
+		mut native_module := mir_test_module(false, false)
+		function := native_module.functions[0]
+		native_module.instructions[5] = mir_test_instruction_with_cell(native_module.instructions[5], 1, 999)
+		flow := mir_build_flow(native_module, function, mir_flow_blocks(native_module, function))
+		expect(flow.dense_definitions.size()).to_equal(9)
+		expect(flow.definitions.size()).to_equal(1)
+		expect(mir_flow_position(flow, 999)).to_equal(5)
+		expect(mir_value_available(flow, native_module.blocks[2], 6, 999)).to_be_true()
 	end
 
 	test("looks up sparse values in grouped and interleaved function rows") do
