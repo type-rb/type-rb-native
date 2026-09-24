@@ -118,6 +118,10 @@ The dynamic Array-address split is registered in
 `raw.tsv` retains warmups and measurements, `medians.tsv` contains only the
 eleven retained observations, and `evaluation.tsv` applies the registered
 ratio. Any measured failure completes the schedule before returning failure.
+Use the [measurement-host procedure](../../docs/benchmarksgame.md#measurement-host-procedure)
+when interpreting a local or hosted A/B: run no other project workload during
+timing, retain the complete schedule, and treat clear contention as
+inconclusive rather than rerunning only an unfavorable sample.
 The deterministic fake-`runexec` regression is:
 
 ```text

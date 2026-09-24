@@ -213,12 +213,39 @@ versions and complete command lines are result inputs. Raw and stripped
 artifacts are distinct; Java application size and required JRE distribution
 size are both explicit.
 
-Formal context runs use pinned BenchExec `runexec` 3.35 on an otherwise idle
-Linux arm64 host. The harness checks cgroup support, validates all output
+Formal context runs use pinned BenchExec `runexec` 3.35 on a fresh Linux arm64
+hosted runner, with no other project workload in that job. The harness checks
+cgroup support, validates all output
 before timing, drops the Linux page cache before every measured process, uses
 two warmup and eleven retained rounds, prevents network access during
 execution, and records every timeout or failure. One-core and four-core results
 use the same binaries and inputs.
+
+## Measurement-host procedure
+
+For an optimization A/B, first register the candidate and baseline revisions,
+source bytes, inputs, output oracle, target, sample count and stop conditions.
+Run both candidates on the same host, with no other project build, profiler or
+benchmark running during timed observations. Use the registered controller's
+warmups and alternating order. Keep every raw observation, including failures;
+do not retry individual slow samples or select the best cohort.
+
+For a formal cross-language result, use the dispatch-only workflow's fresh
+runner for one case. The controller runs candidates serially under its cgroup
+CPU and memory limits, with swap disabled and the registered cache policy.
+Review the retained host identity, cgroup/setup checks, command traces,
+resource-limit outcomes and full sample spread before promoting a claim. A
+hosted runner isolates this job from other project jobs, but does not establish
+that the underlying physical machine had no competing workload. Describe that
+limit explicitly instead of treating a small wall-time difference as certain.
+
+If setup isolation fails, another project workload ran on the measurement host,
+or the recorded run shows material CPU/memory contention or outliers beyond its
+registered contract, retain the evidence and mark that cohort inconclusive.
+After removing the cause, run a new complete cohort under the same declared
+policy; never silently discard one observation. Compare Native and Pure Go
+within one cohort. Absolute times from separate hosts or dates are trend
+signals, not causal evidence for one compiler change.
 
 ## Interpretation limits
 
