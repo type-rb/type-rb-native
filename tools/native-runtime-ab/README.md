@@ -42,9 +42,6 @@ The currently registered cases and thresholds are:
 | `worker-literal-concat` | one phase, 400,000 batches | 0.70 |
 | `worker-managed-alias-roots` | one phase, 400,000 batches | 0.80 |
 | `worker-managed-array-growth` | one phase, 400,000 batches | 0.95 |
-| `worker-array-push-fast-path` | one phase, 400,000 batches | 0.95 |
-| `worker-dynamic-array-address` | one phase, 400,000 batches | 0.95 |
-| `worker-gc-temp-push-fast-path` | one phase, 400,000 batches | 0.985 |
 
 The default `spectral-norm` threshold remains `0.95`. The named
 `nonnegative-loop-index` contract registered in

@@ -11,7 +11,7 @@ new results also have the per-result limits in the
 these limits, not merely to make a new snapshot fit.
 
 For past decisions and rejected approaches, see the
-[development history](../docs/development-history.md). The
+[development history](../docs/history.md). The
 [pre-retirement snapshot](https://github.com/type-rb/type-rb-native/tree/bd483cfc5b51035d9fac193a74ee9d0eda2419ed/results)
 contains the original historical reports and their source-era inventories.
 Retiring a result changes neither its original outcome nor a running experiment's
