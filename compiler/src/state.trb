@@ -101,6 +101,28 @@ record CompilerModuleGraph
 	import_count: Array<Integer>
 end
 
+# Type aliases and generic specializations share one resolution catalog. A
+# template-checking fork retains declarations but owns mutable lookup/progress.
+record CompilerTypeResolution
+	type_aliases: Array<TypeAlias>
+	alias_instances: Array<TypeAliasInstance>
+	alias_instance_lookup: Hash<String, Integer>
+	alias_patterns: StringStorage
+	alias_expansion_path: IntegerStorage
+	alias_expansion_depth: Array<Integer>
+	generic_definitions: Array<GenericDefinition>
+	generic_instances: Array<GenericInstance>
+	generic_instance_lookup: Hash<String, Integer>
+	generic_depth: Array<Integer>
+	generic_functions: Array<GenericFunction>
+	generic_function_instances: Array<GenericFunctionInstance>
+	generic_function_lookup: Hash<String, Integer>
+	generic_bindings: Array<GenericBinding>
+	record_generic_bindings: IntegerStorage
+	function_generic_bindings: IntegerStorage
+	generic_template_mode: Array<Boolean>
+end
+
 record CompilerState
 	objects: Array<ObjectDefinition>
 	object_instances: Array<ObjectInstance>
@@ -134,23 +156,7 @@ record CompilerState
 	catch_origins: IntegerStorage
 	statement_finishes: IntegerStorage
 	standard_modules: IntegerStorage
-	type_aliases: Array<TypeAlias>
-	alias_instances: Array<TypeAliasInstance>
-	alias_instance_lookup: Hash<String, Integer>
-	alias_patterns: StringStorage
-	alias_expansion_path: IntegerStorage
-	alias_expansion_depth: Array<Integer>
-	generic_definitions: Array<GenericDefinition>
-	generic_instances: Array<GenericInstance>
-	generic_instance_lookup: Hash<String, Integer>
-	generic_depth: Array<Integer>
-	generic_functions: Array<GenericFunction>
-	generic_function_instances: Array<GenericFunctionInstance>
-	generic_function_lookup: Hash<String, Integer>
-	generic_bindings: Array<GenericBinding>
-	record_generic_bindings: IntegerStorage
-	function_generic_bindings: IntegerStorage
-	generic_template_mode: Array<Boolean>
+	type_resolution: CompilerTypeResolution
 	enums: Array<EnumDefinition>
 	enum_variants: Array<EnumVariant>
 	enum_fields: Array<EnumField>
@@ -203,6 +209,17 @@ record CompilerState
 	parameter_lines: IntegerStorage
 	parameter_count: Array<Integer>
 	diagnostics: CompilerDiagnostics
+end
+
+def compiler_type_resolution_new(capacity: Integer): CompilerTypeResolution
+	return CompilerTypeResolution.new(
+		type_aliases: [], alias_instances: [], alias_instance_lookup: {},
+		alias_patterns: string_storage(capacity), alias_expansion_path: integer_storage(capacity), alias_expansion_depth: [0],
+		generic_definitions: [], generic_instances: [], generic_instance_lookup: {}, generic_depth: [0],
+		generic_functions: [], generic_function_instances: [], generic_function_lookup: {},
+		generic_bindings: [], record_generic_bindings: integer_storage(capacity), function_generic_bindings: integer_storage(capacity),
+		generic_template_mode: [false],
+	)
 end
 
 def compiler_module_graph_new(capacity: Integer): CompilerModuleGraph
@@ -258,10 +275,7 @@ def compiler_new(capacity: Integer): CompilerState
 		checked: [checked_body_new(- 1, 0, capacity)], checked_bodies: [], checked_body_indices: integer_storage(capacity),
 		catch_syntax: [], catch_origins: integer_storage(capacity), statement_finishes: integer_storage(capacity),
 		standard_modules: integer_storage(capacity),
-		type_aliases: [], alias_instances: [], alias_instance_lookup: {}, alias_patterns: string_storage(capacity), alias_expansion_path: integer_storage(capacity), alias_expansion_depth: [0],
-		generic_definitions: [], generic_instances: [], generic_instance_lookup: {}, generic_depth: [0],
-		generic_functions: [], generic_function_instances: [], generic_function_lookup: {},
-		generic_bindings: [], record_generic_bindings: integer_storage(capacity), function_generic_bindings: integer_storage(capacity), generic_template_mode: [false],
+		type_resolution: compiler_type_resolution_new(capacity),
 		enums: [], enum_variants: [], enum_fields: [],
 		submissions: [],
 		loop_finishes: integer_storage(capacity),
@@ -588,7 +602,7 @@ def select_checked_body(mut state: CompilerState, function: Integer): CheckedBod
 	if encoded == 0
 		mut origin := load_integer(state.function_body_starts, function)
 		mut finish := load_integer(state.function_body_ends, function) + 1
-		state.generic_function_instances.each do |instance|
+		state.type_resolution.generic_function_instances.each do |instance|
 			if instance.function == function
 				state.objects.each do |definition|
 					definition.methods.each do |method|
@@ -609,6 +623,6 @@ def select_checked_body(mut state: CompilerState, function: Integer): CheckedBod
 		store_integer(state.checked_body_indices, function, encoded)
 	end
 	state.checked[0] = state.checked_bodies[encoded - 1]
-	state.checked[0].generic_binding[0] = sparse_integer_at(state.function_generic_bindings, function)
+	state.checked[0].generic_binding[0] = sparse_integer_at(state.type_resolution.function_generic_bindings, function)
 	return previous
 end

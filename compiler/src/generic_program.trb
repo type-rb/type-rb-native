@@ -4,7 +4,7 @@ import { generic_application } from generic_arguments
 import { integer_string } from literals
 import { GenericBinding, GenericFunctionInstance, GenericInstance } from generic_model
 import { EnumDefinition, EnumField, EnumVariant } from enum_model
-import { CompilerState, DefaultInitializer, compiler_module_graph_fork, compiler_new, function_index_key } from state
+import { CompilerState, CompilerTypeResolution, DefaultInitializer, compiler_module_graph_fork, compiler_new, function_index_key } from state
 import { integer_storage_copy, load_integer, load_string, string_storage_copy } from storage
 
 # Template validation uses the ordinary checker with abstract parameter identities.
@@ -21,37 +21,37 @@ def generic_program_fork(state: CompilerState): CompilerState
 	mut alias_instances: Array<TypeAliasInstance> := []
 	mut alias_lookup: Hash<String, Integer> := {}
 	mut alias_index := 0
-	state.alias_instances.each do |instance|
+	state.type_resolution.alias_instances.each do |instance|
 		alias_instances.push(instance)
 		alias_lookup[generic_application(integer_string(instance.definition), instance.arguments)] = alias_index
 		alias_index += 1
 	end
 	mut generic_bindings: Array<GenericBinding> := []
-	state.generic_bindings.each do |binding|
+	state.type_resolution.generic_bindings.each do |binding|
 		generic_bindings.push(binding)
 	end
 	mut generic_instances: Array<GenericInstance> := []
-	state.generic_instances.each do |value|
+	state.type_resolution.generic_instances.each do |value|
 		generic_instances.push(value)
 	end
 	mut generic_instance_lookup: Hash<String, Integer> := {}
 	mut instance := 0
-	state.generic_instances.each do |value|
+	state.type_resolution.generic_instances.each do |value|
 		key := generic_application(integer_string(value.definition), value.arguments)
 		generic_instance_lookup[key] = instance
 		instance += 1
 	end
 	mut generic_depth: Array<Integer> := []
-	state.generic_depth.each do |value|
+	state.type_resolution.generic_depth.each do |value|
 		generic_depth.push(value)
 	end
 	mut generic_function_instances: Array<GenericFunctionInstance> := []
-	state.generic_function_instances.each do |value|
+	state.type_resolution.generic_function_instances.each do |value|
 		generic_function_instances.push(value)
 	end
 	mut generic_function_lookup: Hash<String, Integer> := {}
 	mut function_instance := 0
-	state.generic_function_instances.each do |value|
+	state.type_resolution.generic_function_instances.each do |value|
 		generic_function_lookup[value.application_key] = function_instance
 		function_instance += 1
 	end
@@ -125,23 +125,25 @@ def generic_program_fork(state: CompilerState): CompilerState
 		catch_origins: state.catch_origins,
 		statement_finishes: state.statement_finishes,
 		standard_modules: state.standard_modules,
-		type_aliases: state.type_aliases,
-		alias_instances: alias_instances,
-		alias_instance_lookup: alias_lookup,
-		alias_patterns: string_storage_copy(state.alias_patterns),
-		alias_expansion_path: fresh.alias_expansion_path,
-		alias_expansion_depth: [0],
-		generic_definitions: state.generic_definitions,
-		generic_instances: generic_instances,
-		generic_instance_lookup: generic_instance_lookup,
-		generic_depth: generic_depth,
-		generic_functions: state.generic_functions,
-		generic_function_instances: generic_function_instances,
-		generic_function_lookup: generic_function_lookup,
-		generic_bindings: generic_bindings,
-		record_generic_bindings: integer_storage_copy(state.record_generic_bindings),
-		function_generic_bindings: integer_storage_copy(state.function_generic_bindings),
-		generic_template_mode: [true],
+		type_resolution: CompilerTypeResolution.new(
+			type_aliases: state.type_resolution.type_aliases,
+			alias_instances: alias_instances,
+			alias_instance_lookup: alias_lookup,
+			alias_patterns: string_storage_copy(state.type_resolution.alias_patterns),
+			alias_expansion_path: fresh.type_resolution.alias_expansion_path,
+			alias_expansion_depth: [0],
+			generic_definitions: state.type_resolution.generic_definitions,
+			generic_instances: generic_instances,
+			generic_instance_lookup: generic_instance_lookup,
+			generic_depth: generic_depth,
+			generic_functions: state.type_resolution.generic_functions,
+			generic_function_instances: generic_function_instances,
+			generic_function_lookup: generic_function_lookup,
+			generic_bindings: generic_bindings,
+			record_generic_bindings: integer_storage_copy(state.type_resolution.record_generic_bindings),
+			function_generic_bindings: integer_storage_copy(state.type_resolution.function_generic_bindings),
+			generic_template_mode: [true],
+		),
 		enums: enums,
 		enum_variants: enum_variants,
 		enum_fields: enum_fields,

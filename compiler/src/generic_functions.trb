@@ -13,8 +13,8 @@ import { store_integer, store_string } from storage
 
 def validate_generic_functions(mut state: CompilerState): Boolean
 	mut index := 0
-	while index < state.generic_functions.size() && !has_diagnostic(state)
-		row := state.generic_functions[index]
+	while index < state.type_resolution.generic_functions.size() && !has_diagnostic(state)
+		row := state.type_resolution.generic_functions[index]
 		state.module_graph.active_module[0] = row.source_id
 		state.declaration_owner[0] = namespace_parent(row.name)
 		if find_generic_function_in_module(state, row.source_id, row.name) != index || find_function_in_module(state, row.source_id, row.name) >= 0 || find_generic_in_module(state, row.source_id, row.name) >= 0 || find_record_in_module(state, row.source_id, row.name) >= 0 || find_enum_in_module(state, row.source_id, row.name) >= 0
@@ -45,7 +45,7 @@ end
 # Publish the identity before visiting its body so recursion reuses the instance.
 def instantiate_generic_function(mut state: CompilerState, definition: Integer, arguments: Array<String>, depth: Integer): Integer
 	if object_abstract_method(state, definition)
-		row := state.generic_functions[definition]
+		row := state.type_resolution.generic_functions[definition]
 		diagnostic(state, "TRBN4003", row.line, "interface method has no executable body")
 		return - 1
 	end
@@ -55,7 +55,7 @@ end
 # Abstract contracts own signatures but never executable bodies. Inherited
 # methods specialize the receiver as well as the declaring class's arguments.
 def instantiate_method_signature(mut state: CompilerState, definition: Integer, arguments: Array<String>, depth: Integer, receiver: String): Integer
-	row := state.generic_functions[definition]
+	row := state.type_resolution.generic_functions[definition]
 	if arguments.size() != row.type_parameters.size()
 		diagnostic(state, "TRBN4003", row.line, "generic function type argument count differs")
 		return - 1
@@ -74,8 +74,8 @@ def instantiate_method_signature(mut state: CompilerState, definition: Integer, 
 	if receiver != ""
 		key += ":" + receiver
 	end
-	if state.generic_function_lookup.key?(key)
-		return state.generic_function_instances[state.generic_function_lookup[key]].function
+	if state.type_resolution.generic_function_lookup.key?(key)
+		return state.type_resolution.generic_function_instances[state.type_resolution.generic_function_lookup[key]].function
 	end
 	if depth >= 128
 		diagnostic(state, "TRBN4003", row.line, "generic function expansion exceeds the compiler nesting limit")
@@ -91,10 +91,10 @@ def instantiate_method_signature(mut state: CompilerState, definition: Integer, 
 	store_integer(state.function_body_ends, function, row.body_finish)
 	store_integer(state.function_lines, function, row.line)
 	state.function_count[0] += 1
-	instance := state.generic_function_instances.size()
-	state.generic_function_instances.push(GenericFunctionInstance.new(application_key: key, definition: definition, arguments: arguments, function: function))
-	state.generic_function_lookup[key] = instance
-	store_integer(state.function_generic_bindings, function, add_generic_binding(state, row.source_id, row.type_parameters, arguments, depth))
+	instance := state.type_resolution.generic_function_instances.size()
+	state.type_resolution.generic_function_instances.push(GenericFunctionInstance.new(application_key: key, definition: definition, arguments: arguments, function: function))
+	state.type_resolution.generic_function_lookup[key] = instance
+	store_integer(state.type_resolution.function_generic_bindings, function, add_generic_binding(state, row.source_id, row.type_parameters, arguments, depth))
 	saved_owner := state.declaration_owner[0]
 	state.declaration_owner[0] = namespace_parent(row.name)
 	saved_binding := state.checked[0].generic_binding[0]

@@ -14,12 +14,12 @@ import { load_integer, load_string, store_integer, store_string } from storage
 # Unused declarations receive exactly the same abstract validation as used ones.
 # Concrete arguments cannot make an invalid unconstrained template legal.
 def check_generic_templates(mut state: CompilerState): Boolean
-	mut needed := state.generic_functions.size() > 0
-	if state.type_aliases.size() > 0
+	mut needed := state.type_resolution.generic_functions.size() > 0
+	if state.type_resolution.type_aliases.size() > 0
 		needed = true
 	end
 	mut nominal := 0
-	while nominal < state.generic_definitions.size()
+	while nominal < state.type_resolution.generic_definitions.size()
 		if generic_record_defaults(state, nominal)
 			needed = true
 		end
@@ -30,31 +30,31 @@ def check_generic_templates(mut state: CompilerState): Boolean
 	end
 	mut program := generic_program_fork(state)
 	mut alias_index := 0
-	while alias_index < program.type_aliases.size() && !has_diagnostic(program)
-		row := program.type_aliases[alias_index]
+	while alias_index < program.type_resolution.type_aliases.size() && !has_diagnostic(program)
+		row := program.type_resolution.type_aliases[alias_index]
 		arguments := abstract_generic_arguments("alias", alias_index, row.parameters)
 		target := resolve_alias_type(program, alias_index, arguments)
 		if target == ""
 			program.module_graph.active_module[0] = row.source_id
 			diagnostic(program, "TRBN4003", row.line, "invalid type alias target " + type_display(program, row.target))
 		else
-			store_string(program.alias_patterns, alias_index, alias_pattern_type(program, target))
+			store_string(program.type_resolution.alias_patterns, alias_index, alias_pattern_type(program, target))
 		end
 		alias_index += 1
 	end
 	mut function := state.function_count[0]
 	mut definition := 0
-	while definition < program.generic_functions.size()
+	while definition < program.type_resolution.generic_functions.size()
 		if !object_abstract_method(program, definition)
-			arguments := abstract_generic_arguments("function", definition, program.generic_functions[definition].type_parameters)
+			arguments := abstract_generic_arguments("function", definition, program.type_resolution.generic_functions[definition].type_parameters)
 			instantiate_generic_function(program, definition, arguments, 0)
 		end
 		definition += 1
 	end
 	nominal = 0
-	while nominal < program.generic_definitions.size()
+	while nominal < program.type_resolution.generic_definitions.size()
 		if generic_record_defaults(program, nominal)
-			arguments := abstract_generic_arguments("nominal", nominal, program.generic_definitions[nominal].parameters)
+			arguments := abstract_generic_arguments("nominal", nominal, program.type_resolution.generic_definitions[nominal].parameters)
 			instantiate_generic_nominal(program, nominal, arguments)
 		end
 		nominal += 1
@@ -80,8 +80,8 @@ def check_generic_templates(mut state: CompilerState): Boolean
 		declare_object_witnesses(program)
 	end
 	alias_index = 0
-	while alias_index < state.type_aliases.size() && !has_diagnostic(program)
-		store_string(state.alias_patterns, alias_index, load_string(program.alias_patterns, alias_index))
+	while alias_index < state.type_resolution.type_aliases.size() && !has_diagnostic(program)
+		store_string(state.type_resolution.alias_patterns, alias_index, load_string(program.type_resolution.alias_patterns, alias_index))
 		alias_index += 1
 	end
 	mut binding := 0

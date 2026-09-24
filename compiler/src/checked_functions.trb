@@ -27,7 +27,7 @@ def checked_function_locals(mut state: CompilerState, function_index: Integer): 
 	state.module_graph.active_module[0] = load_integer(state.function_modules, function_index)
 	state.declaration_owner[0] = sparse_string_at(state.token_namespaces, load_integer(state.function_body_starts, function_index))
 	mut locals := locals_new(state.token_count[0] + 1)
-	if state.generic_template_mode[0] || state.lambda_phase[0] == 1
+	if state.type_resolution.generic_template_mode[0] || state.lambda_phase[0] == 1
 		locals.mir_state[1] = function_index
 	else
 		scalar_mir_begin(state, function_index, locals)
@@ -103,11 +103,11 @@ def check_function_body(mut state: CompilerState, function_index: Integer, mut l
 			scalar_mir_disable(locals)
 		end
 	else
-		if state.generic_template_mode[0] || state.lambda_phase[0] == 1
+		if state.type_resolution.generic_template_mode[0] || state.lambda_phase[0] == 1
 			completion := check_block_value(state, position, locals, result_type, - 1, false, "")
 			if result_type != "Void" && completion.type_name != "Never"
 				mut message := "function must return on every completing path"
-				if state.generic_template_mode[0]
+				if state.type_resolution.generic_template_mode[0]
 					message = "generic " + message
 				end
 				diagnostic(state, "TRBN4004", load_integer(state.function_lines, function_index), message)
@@ -128,7 +128,7 @@ def check_function_body(mut state: CompilerState, function_index: Integer, mut l
 	if result_type == "Void" && mir_control_active(locals) && locals.mir_control[6] == 0
 		mir_control_return(state, locals, - 1)
 	end
-	if !has_diagnostic(state) && !state.generic_template_mode[0] && state.lambda_phase[0] != 1
+	if !has_diagnostic(state) && !state.type_resolution.generic_template_mode[0] && state.lambda_phase[0] != 1
 		mir_error := scalar_mir_commit(state, function_index, locals)
 		if mir_error != ""
 			diagnostic(
@@ -148,7 +148,7 @@ end
 # REPL witnesses also analyze retained shared bindings before MIR lowering.
 def analyze_callable_bodies(mut state: CompilerState): Boolean
 	mut generic_methods := false
-	state.generic_functions.each do |definition|
+	state.type_resolution.generic_functions.each do |definition|
 		if definition.receiver_type != ""
 			generic_methods = true
 		end
