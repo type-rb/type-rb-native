@@ -100,23 +100,23 @@ def type_display(state: CompilerState, type_name: String): String
 	end
 	object_index := find_object_type(state, type_name)
 	if object_index >= 0
-		row := state.object_instances[object_index]
+		row := state.nominal.object_instances[object_index]
 		mut arguments: Array<String> := []
 		row.arguments.each do |argument|
 			arguments.push(type_display(state, argument))
 		end
 		if arguments.size() == 0
-			return state.objects[row.definition].name
+			return state.nominal.objects[row.definition].name
 		end
-		return generic_application(state.objects[row.definition].name, arguments)
+		return generic_application(state.nominal.objects[row.definition].name, arguments)
 	end
 	newtype_index := find_newtype_type(state, type_name)
 	if newtype_index >= 0
-		return state.newtypes[newtype_index].name
+		return state.nominal.newtypes[newtype_index].name
 	end
 	enum_index := find_enum_type(state, type_name)
 	if enum_index >= 0
-		return state.enums[enum_index].name
+		return state.nominal.enums[enum_index].name
 	end
 	record_index := find_record_type(state, type_name)
 	if record_index >= 0
@@ -365,13 +365,13 @@ def instantiate_generic_nominal(mut state: CompilerState, definition: Integer, a
 			state.declarations.field_count[0] += 1
 		end
 	else
-		owner = state.enums.size()
+		owner = state.nominal.enums.size()
 		type_name = enum_type(owner)
-		state.enums.push(EnumDefinition.new(name: name, source_id: declaration.source_id, line: declaration.line, variant_start: state.enum_variants.size(), variant_count: declaration.variants.size()))
+		state.nominal.enums.push(EnumDefinition.new(name: name, source_id: declaration.source_id, line: declaration.line, variant_start: state.nominal.enum_variants.size(), variant_count: declaration.variants.size()))
 		declaration.variants.each do |variant|
-			state.enum_variants.push(EnumVariant.new(owner: owner, name: variant.name, line: variant.line, field_start: state.enum_fields.size(), field_count: variant.fields.size()))
+			state.nominal.enum_variants.push(EnumVariant.new(owner: owner, name: variant.name, line: variant.line, field_start: state.nominal.enum_fields.size(), field_count: variant.fields.size()))
 			variant.fields.each do |field|
-				state.enum_fields.push(EnumField.new(name: field.name, type_name: generic_substitute(field.type_name, declaration.parameters, arguments), line: field.line, named_only: field.named_only))
+				state.nominal.enum_fields.push(EnumField.new(name: field.name, type_name: generic_substitute(field.type_name, declaration.parameters, arguments), line: field.line, named_only: field.named_only))
 			end
 		end
 	end
@@ -390,18 +390,18 @@ def instantiate_generic_nominal(mut state: CompilerState, definition: Integer, a
 			field += 1
 		end
 	else
-		mut variant := state.enums[owner].variant_start
-		finish := variant + state.enums[owner].variant_count
+		mut variant := state.nominal.enums[owner].variant_start
+		finish := variant + state.nominal.enums[owner].variant_count
 		while variant < finish && !has_diagnostic(state)
-			mut field := state.enum_variants[variant].field_start
-			field_finish := field + state.enum_variants[variant].field_count
+			mut field := state.nominal.enum_variants[variant].field_start
+			field_finish := field + state.nominal.enum_variants[variant].field_count
 			while field < field_finish && !has_diagnostic(state)
-				item := state.enum_fields[field]
+				item := state.nominal.enum_fields[field]
 				resolved := resolve_type_name(state, declaration.source_id, item.type_name, false)
 				if resolved == ""
 					diagnostic(state, "TRBN4003", item.line, "invalid instantiated payload type " + item.type_name)
 				end
-				state.enum_fields[field] = EnumField.new(name: item.name, type_name: resolved, line: item.line, named_only: item.named_only)
+				state.nominal.enum_fields[field] = EnumField.new(name: item.name, type_name: resolved, line: item.line, named_only: item.named_only)
 				field += 1
 			end
 			variant += 1
@@ -525,7 +525,7 @@ end
 # A published nominal shell breaks valid recursive storage graphs; inheritance
 # cycles are rejected separately after the complete edge catalog is available.
 def instantiate_object_type(mut state: CompilerState, definition: Integer, arguments: Array<String>): String
-	declaration := state.objects[definition]
+	declaration := state.nominal.objects[definition]
 	if arguments.size() != declaration.parameters.size()
 		return ""
 	end
@@ -535,16 +535,16 @@ def instantiate_object_type(mut state: CompilerState, definition: Integer, argum
 		end
 	end
 	key := generic_application(integer_string(definition), arguments)
-	if state.object_instance_lookup.key?(key)
-		return object_instance_type(state, state.object_instance_lookup[key])
+	if state.nominal.object_instance_lookup.key?(key)
+		return object_instance_type(state, state.nominal.object_instance_lookup[key])
 	end
 	if state.type_resolution.generic_depth[0] + next_generic_depth(state) >= 128
 		diagnostic(state, "TRBN4003", declaration.line, "generic type expansion exceeds the compiler nesting limit")
 		return ""
 	end
-	owner := state.object_instances.size()
-	state.object_instance_lookup[key] = owner
-	state.object_instances.push(ObjectInstance.new(definition: definition, arguments: arguments, superclass: - 1, interfaces: [], fields: []))
+	owner := state.nominal.object_instances.size()
+	state.nominal.object_instance_lookup[key] = owner
+	state.nominal.object_instances.push(ObjectInstance.new(definition: definition, arguments: arguments, superclass: - 1, interfaces: [], fields: []))
 	previous_module := state.module_graph.active_module[0]
 	previous_owner := state.global_bindings.declaration_owner[0]
 	saved_binding := state.callables.checked[0].generic_binding[0]
@@ -567,7 +567,7 @@ def instantiate_object_type(mut state: CompilerState, definition: Integer, argum
 		superclass = find_object_type(state, resolve_type_name(state, declaration.source_id, name, false))
 		mut valid := superclass >= 0
 		if valid
-			valid =!state.objects[state.object_instances[superclass].definition].interface_type
+			valid =!state.nominal.objects[state.nominal.object_instances[superclass].definition].interface_type
 		end
 		if !valid
 			diagnostic(state, "TRBN4003", declaration.line, "superclass must name a class")
@@ -579,7 +579,7 @@ def instantiate_object_type(mut state: CompilerState, definition: Integer, argum
 		contract := find_object_type(state, resolve_type_name(state, declaration.source_id, name, false))
 		mut valid := contract >= 0
 		if valid
-			valid = state.objects[state.object_instances[contract].definition].interface_type
+			valid = state.nominal.objects[state.nominal.object_instances[contract].definition].interface_type
 		end
 		if !valid
 			diagnostic(state, "TRBN4003", declaration.line, "implements must name an interface")
@@ -606,7 +606,7 @@ def instantiate_object_type(mut state: CompilerState, definition: Integer, argum
 		end
 		fields.push(ObjectField.new(name: field.name, type_name: type_name, line: field.line, origin: field.origin, readonly: field.readonly, default_start: field.default_start, default_finish: field.default_finish))
 	end
-	state.object_instances[owner] = ObjectInstance.new(definition: definition, arguments: arguments, superclass: superclass, interfaces: interfaces, fields: fields)
+	state.nominal.object_instances[owner] = ObjectInstance.new(definition: definition, arguments: arguments, superclass: superclass, interfaces: interfaces, fields: fields)
 	step = 0
 	alias_path.each do |entry|
 		store_integer(state.type_resolution.alias_expansion_path, step, entry)

@@ -27,7 +27,7 @@ def newtype_representation_cycle(state: CompilerState, type_name: String, visiti
 			path.push(current)
 		end
 		path.push(owner)
-		return newtype_representation_cycle(state, state.newtypes[owner].representation, path)
+		return newtype_representation_cycle(state, state.nominal.newtypes[owner].representation, path)
 	end
 	mut parts := union_parts(type_name)
 	if nullable_element(type_name) != ""
@@ -83,7 +83,7 @@ def immutable_newtype_representation(state: CompilerState, type_name: String, vi
 	record_index := find_record_type(state, type_name)
 	enum_index := find_enum_type(state, type_name)
 	if owner >= 0
-		immutable = immutable_newtype_representation(state, state.newtypes[owner].representation, path)
+		immutable = immutable_newtype_representation(state, state.nominal.newtypes[owner].representation, path)
 	elsif record_index >= 0
 		immutable = true
 		mut field := load_integer(state.declarations.record_field_starts, record_index)
@@ -96,13 +96,13 @@ def immutable_newtype_representation(state: CompilerState, type_name: String, vi
 		end
 	elsif enum_index >= 0
 		immutable = true
-		definition := state.enums[enum_index]
+		definition := state.nominal.enums[enum_index]
 		mut variant := definition.variant_start
 		while variant < definition.variant_start + definition.variant_count
-			row := state.enum_variants[variant]
+			row := state.nominal.enum_variants[variant]
 			mut field := row.field_start
 			while field < row.field_start + row.field_count
-				if !immutable_newtype_representation(state, state.enum_fields[field].type_name, path)
+				if !immutable_newtype_representation(state, state.nominal.enum_fields[field].type_name, path)
 					immutable = false
 				end
 				field += 1
@@ -115,8 +115,8 @@ end
 
 def resolve_newtype_declarations(mut state: CompilerState): Boolean
 	mut owner := 0
-	while owner < state.newtypes.size()
-		row := state.newtypes[owner]
+	while owner < state.nominal.newtypes.size()
+		row := state.nominal.newtypes[owner]
 		state.module_graph.active_module[0] = row.source_id
 		state.global_bindings.declaration_owner[0] = namespace_parent(row.name)
 		mut kind := 0
@@ -128,7 +128,7 @@ def resolve_newtype_declarations(mut state: CompilerState): Boolean
 		end
 		mut previous := 0
 		while previous < owner
-			other := state.newtypes[previous]
+			other := state.nominal.newtypes[previous]
 			if other.source_id == row.source_id && other.name == row.name
 				diagnostic(state, "TRBN4003", row.line, "duplicate newtype declaration " + row.name)
 			end
@@ -138,10 +138,10 @@ def resolve_newtype_declarations(mut state: CompilerState): Boolean
 		if representation == "" || representation == "Any" || representation == "Nil" || representation == "Hash" || nullable_element(representation) != ""
 			diagnostic(state, "TRBN4003", row.line, "newtype requires a concrete nonnullable representation")
 		end
-		state.newtypes[owner] = NewtypeDefinition.new(name: row.name, source_id: row.source_id, line: row.line, target: row.target, representation: representation, closed: row.closed)
+		state.nominal.newtypes[owner] = NewtypeDefinition.new(name: row.name, source_id: row.source_id, line: row.line, target: row.target, representation: representation, closed: row.closed)
 		owner += 1
 	end
-	state.newtypes.each do |row|
+	state.nominal.newtypes.each do |row|
 		state.module_graph.active_module[0] = row.source_id
 		if newtype_representation_cycle(state, row.representation, [])
 			diagnostic(state, "TRBN4003", row.line, "newtype representation cycle involving " + row.name)
@@ -151,7 +151,7 @@ def resolve_newtype_declarations(mut state: CompilerState): Boolean
 end
 
 def validate_closed_newtypes(mut state: CompilerState): Boolean
-	state.newtypes.each do |row|
+	state.nominal.newtypes.each do |row|
 		if row.closed && !immutable_newtype_representation(state, row.representation, [])
 			state.module_graph.active_module[0] = row.source_id
 			diagnostic(state, "TRBN4003", row.line, "closed newtype requires a recursively immutable representation")

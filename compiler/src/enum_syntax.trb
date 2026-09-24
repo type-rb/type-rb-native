@@ -113,20 +113,20 @@ def parse_enum(mut state: CompilerState, mut position: Array<Integer>, mut metho
 	if !finish_statement(state, position)
 		return false
 	end
-	owner := state.enums.size()
-	start := state.enum_variants.size()
-	state.enums.push(EnumDefinition.new(name: name, source_id: state.module_graph.active_module[0], line: line, variant_start: start, variant_count: 0))
+	owner := state.nominal.enums.size()
+	start := state.nominal.enum_variants.size()
+	state.nominal.enums.push(EnumDefinition.new(name: name, source_id: state.module_graph.active_module[0], line: line, variant_start: start, variant_count: 0))
 	while !token_is(state, position[0], "end") && !has_diagnostic(state)
 		if terminal_token(state, position[0])
 			diagnostic(state, "TRBN4002", line, "expected end for enum " + name)
 			return false
 		end
 		if token_is(state, position[0], "def")
-			if state.enum_variants.size() == start
+			if state.nominal.enum_variants.size() == start
 				diagnostic(state, "TRBN4002", line, "enum requires at least one variant")
 				return false
 			end
-			state.enums[owner] = EnumDefinition.new(name: name, source_id: state.module_graph.active_module[0], line: line, variant_start: start, variant_count: state.enum_variants.size() - start)
+			state.nominal.enums[owner] = EnumDefinition.new(name: name, source_id: state.module_graph.active_module[0], line: line, variant_start: start, variant_count: state.nominal.enum_variants.size() - start)
 			method_owner[0] = owner
 			return validate_raw_enum(state, owner)
 		end
@@ -136,7 +136,7 @@ def parse_enum(mut state: CompilerState, mut position: Array<Integer>, mut metho
 			diagnostic(state, "TRBN4002", variant_line, "enum variant must start with an uppercase letter")
 			return false
 		end
-		field_start := state.enum_fields.size()
+		field_start := state.nominal.enum_fields.size()
 		mut named := false
 		mut named_count := 0
 		if token_is(state, position[0], "(")
@@ -161,7 +161,7 @@ def parse_enum(mut state: CompilerState, mut position: Array<Integer>, mut metho
 					end
 					type_name := parse_type(state, position)
 					skip_newlines(state, position)
-					state.enum_fields.push(EnumField.new(name: field, type_name: type_name, line: field_line, named_only: named))
+					state.nominal.enum_fields.push(EnumField.new(name: field, type_name: type_name, line: field_line, named_only: named))
 					if named
 						named_count += 1
 					end
@@ -172,7 +172,7 @@ def parse_enum(mut state: CompilerState, mut position: Array<Integer>, mut metho
 				end
 				skip_newlines(state, position)
 			end
-			if state.enum_fields.size() == field_start || (named && named_count == 0)
+			if state.nominal.enum_fields.size() == field_start || (named && named_count == 0)
 				diagnostic(state, "TRBN4002", variant_line, "payload declaration requires a typed field in each declared region")
 				return false
 			end
@@ -181,7 +181,7 @@ def parse_enum(mut state: CompilerState, mut position: Array<Integer>, mut metho
 			end
 		end
 		if token_is(state, position[0], "=")
-			if !parse_raw_enum_value(state, position, state.enum_variants.size())
+			if !parse_raw_enum_value(state, position, state.nominal.enum_variants.size())
 				return false
 			end
 		end
@@ -191,16 +191,16 @@ def parse_enum(mut state: CompilerState, mut position: Array<Integer>, mut metho
 		if !finish_statement(state, position)
 			return false
 		end
-		state.enum_variants.push(EnumVariant.new(owner: owner, name: variant, line: variant_line, field_start: field_start, field_count: state.enum_fields.size() - field_start))
+		state.nominal.enum_variants.push(EnumVariant.new(owner: owner, name: variant, line: variant_line, field_start: field_start, field_count: state.nominal.enum_fields.size() - field_start))
 	end
-	if state.enum_variants.size() == start
+	if state.nominal.enum_variants.size() == start
 		diagnostic(state, "TRBN4002", line, "enum requires at least one variant")
 		return false
 	end
 	if !expect(state, position, "end")
 		return false
 	end
-	state.enums[owner] = EnumDefinition.new(name: name, source_id: state.module_graph.active_module[0], line: line, variant_start: start, variant_count: state.enum_variants.size() - start)
+	state.nominal.enums[owner] = EnumDefinition.new(name: name, source_id: state.module_graph.active_module[0], line: line, variant_start: start, variant_count: state.nominal.enum_variants.size() - start)
 	if !validate_raw_enum(state, owner)
 		return false
 	end

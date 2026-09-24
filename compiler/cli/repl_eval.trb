@@ -284,7 +284,7 @@ def repl_call(mut state: CompilerState, function: Integer, arguments: Array<Inte
 	owner := object_initializer_owner(state, function)
 	if owner >= 0
 		mut field_index := 0
-		state.object_instances[owner].fields.each do |field|
+		state.nominal.object_instances[owner].fields.each do |field|
 			if field.default_start >= 0
 				mut default_position := [field.default_start]
 				value := repl_expression(state, default_position, store, environment, 1, field.type_name)
@@ -628,7 +628,7 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		if encoded > 0
 			function = encoded - 1
 		end
-		if function >= 0 && sparse_string_at(state.function_receivers, function) != ""
+		if function >= 0 && sparse_string_at(state.nominal.function_receivers, function) != ""
 			self_slot := repl_find(environment, "self")
 			return repl_reference(repl_nominal_method_call(state, position, store, environment, function, repl_binding_value(store, environment, self_slot)))
 		end
@@ -696,7 +696,7 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		end
 		variant := find_enum_variant(state, owner, load_string(state.source_tokens.token_texts, position[0] + 1))
 		position[0] += 2
-		row := state.enum_variants[variant]
+		row := state.nominal.enum_variants[variant]
 		mut bindings := enum_argument_bindings(state, variant)
 		if row.field_count > 0
 			position[0] += 1
@@ -708,7 +708,7 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 					store.error[0] = bindings.error[0]
 					return repl_reference(0)
 				end
-				type_name := state.enum_fields[row.field_start + slot].type_name
+				type_name := state.nominal.enum_fields[row.field_start + slot].type_name
 				value := repl_expression(state, position, store, environment, 1, type_name)
 				if environment.flow[0] != 0
 					return repl_reference(environment.flow[1])
@@ -748,7 +748,7 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		if member == "new"
 			position[0] += 1
 			skip_newlines(state, position)
-			representation := state.newtypes[newtype_owner].representation
+			representation := state.nominal.newtypes[newtype_owner].representation
 			argument := repl_expression(state, position, store, environment, 1, representation)
 			if environment.flow[0] != 0
 				return repl_reference(environment.flow[1])
@@ -1636,7 +1636,7 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 		if left.container >= 0
 			object_owner := find_object_type(state, repl_type(store, left.container))
 			if object_owner >= 0
-				expected = state.object_instances[object_owner].fields[left.slot].type_name
+				expected = state.nominal.object_instances[object_owner].fields[left.slot].type_name
 			end
 			if hash_key_type(repl_type(store, left.container)) != ""
 				hash_assignment = true
@@ -2074,7 +2074,7 @@ def repl_object_method(mut state: CompilerState, mut position: Array<Integer>, m
 	encoded := sparse_integer_at(state.callables.checked[0].generic_calls, position[0])
 	if receiver < 0 && member == "new"
 		mut fields: Array<Integer> := []
-		state.object_instances[find_object_type(state, type_name)].fields.each do |_field|
+		state.nominal.object_instances[find_object_type(state, type_name)].fields.each do |_field|
 			fields.push(0)
 		end
 		value := repl_value(store, type_name, 0, 0.0, "", fields)

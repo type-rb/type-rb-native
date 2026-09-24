@@ -30,7 +30,7 @@ describe("Object nominal resolution") do
 		expect(node).to_equal("Class#0")
 		expect(named).to_equal("Interface#1")
 		expect(resolve_type_name(state, 0, "Holder", false)).to_equal("Record#0")
-		expect(state.object_instances[0].fields[0].type_name).to_equal("Class#0?")
+		expect(state.nominal.object_instances[0].fields[0].type_name).to_equal("Class#0?")
 		expect(type_display(state, node)).to_equal("Node")
 		expect(load_string(state.declarations.field_types, 0)).to_equal(node)
 		expect(resolve_type_name(state, 0, "Class#1", false)).to_equal("")
@@ -42,10 +42,10 @@ describe("Object nominal resolution") do
 		expect(integer_node).to_equal("Class#0")
 		expect(resolve_type_name(state, 0, "Link<Integer>", false)).to_equal(integer_node)
 		expect(resolve_type_name(state, 0, "Node<String>", false)).to_equal("Class#1")
-		expect(state.object_instances.size()).to_equal(2)
-		expect(state.object_instances[0].fields[0].type_name).to_equal("Class#0?")
-		expect(state.object_instances[0].fields[1].type_name).to_equal("Array<Integer>")
-		expect(state.object_instances[1].fields[2].type_name).to_equal("Hash<String,String>")
+		expect(state.nominal.object_instances.size()).to_equal(2)
+		expect(state.nominal.object_instances[0].fields[0].type_name).to_equal("Class#0?")
+		expect(state.nominal.object_instances[0].fields[1].type_name).to_equal("Array<Integer>")
+		expect(state.nominal.object_instances[1].fields[2].type_name).to_equal("Hash<String,String>")
 		expect(type_display(state, integer_node)).to_equal("Node<Integer>")
 		expect(resolve_type_name(state, 0, "Node", false)).to_equal("")
 		expect(resolve_type_name(state, 0, "Node<Void>", false)).to_equal("")
@@ -67,7 +67,7 @@ describe("Object nominal resolution") do
 	test("canonicalizes repeated implemented interface identities") do
 		mut state := object_resolution_state("interface Contract\nend\nalias Named = Contract\nclass Value implements Contract, Named, Contract\nend\n")
 		value := resolve_type_name(state, 0, "Value", false)
-		instance := state.object_instances[find_object_type(state, value)]
+		instance := state.nominal.object_instances[find_object_type(state, value)]
 		expect(instance.interfaces.size()).to_equal(1)
 	end
 	test("resolves imported aliases and same-spelled local declarations by owner") do
@@ -89,7 +89,7 @@ describe("Object nominal resolution") do
 		remote := resolve_type_name(state, 0, "Remote", false)
 		expect(local == remote).to_be_false()
 		expect(resolve_type_name(state, 0, "Alias", false)).to_equal(remote)
-		expect(state.object_instances[find_object_type(state, remote)].fields[0].type_name).to_equal(remote + "?")
+		expect(state.nominal.object_instances[find_object_type(state, remote)].fields[0].type_name).to_equal(remote + "?")
 		expect(load_integer(state.module_graph.import_used, 0)).to_equal(1)
 		expect(load_integer(state.module_graph.import_used, 1)).to_equal(1)
 	end
@@ -97,7 +97,7 @@ describe("Object nominal resolution") do
 		mut state := object_resolution_state("module First\nclass Item<T>\n@value: T\nend\nalias Wrapped<T> = Item<T>\nend\nmodule Second\nclass Item\nend\nclass Uses\n@value: First::Wrapped<Integer>\n@local: Item\nend\nend\n")
 		state.global_bindings.declaration_owner[0] = "Second"
 		uses := resolve_type_name(state, 0, "Uses", false)
-		fields := state.object_instances[find_object_type(state, uses)].fields
+		fields := state.nominal.object_instances[find_object_type(state, uses)].fields
 		expect(type_display(state, fields[0].type_name)).to_equal("First::Item<Integer>")
 		expect(type_display(state, fields[1].type_name)).to_equal("Second::Item")
 		expect(state.global_bindings.declaration_owner[0]).to_equal("Second")
@@ -108,15 +108,15 @@ describe("Object nominal resolution") do
 		expect(resolve_type_name(state, 0, "Holder<Integer>", false)).to_equal("Class#0")
 		mut fork := generic_program_fork(state)
 		expect(resolve_type_name(fork, 0, "Holder<String>", false)).to_equal("Class#1")
-		expect(state.object_instances.size()).to_equal(1)
-		expect(fork.object_instances.size()).to_equal(2)
+		expect(state.nominal.object_instances.size()).to_equal(1)
+		expect(fork.nominal.object_instances.size()).to_equal(2)
 		expect(state.type_resolution.alias_instances.size()).to_equal(1)
 		expect(fork.type_resolution.alias_instances.size()).to_equal(2)
 		expect(state.type_resolution.alias_instance_lookup.size()).to_equal(1)
 		expect(fork.type_resolution.alias_instance_lookup.size()).to_equal(2)
 		expect(resolve_type_name(state, 0, "Box<Boolean>", false)).to_equal("Class#1")
-		expect(state.object_instances[1].fields[0].type_name).to_equal("Boolean")
-		expect(fork.object_instances[1].fields[0].type_name).to_equal("String")
+		expect(state.nominal.object_instances[1].fields[0].type_name).to_equal("Boolean")
+		expect(fork.nominal.object_instances[1].fields[0].type_name).to_equal("String")
 	end
 	test("keeps parsed module facts while isolating specialization import state") do
 		mut state := compiler_new(32)

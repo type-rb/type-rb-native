@@ -1,14 +1,12 @@
-import { ObjectDefinition, ObjectInstance } from object_model
-import { NewtypeDefinition } from newtype_model
 import { TransformSyntax } from transform_model
 import { TypeAlias, TypeAliasInstance } from alias_model
 import { CheckedBody, checked_body_new } from checked_body
 import { DeclarationAttribute } from attribute_model
 import { CompilerCallableAnalysis, compiler_callable_analysis_new } from callable_state
 import { CompilerGlobalBindings, compiler_global_bindings_new } from global_state
+import { CompilerNominalTypes, compiler_nominal_types_new } from nominal_state
 import { CatchSyntax } from result_model
 import { GenericBinding, GenericDefinition, GenericFunction, GenericFunctionInstance, GenericInstance } from generic_model
-import { EnumDefinition, EnumField, EnumVariant, RawEnumValue } from enum_model
 import iteration_syntax
 import { integer_string } from literals
 import { MirBlock, MirCall, MirControlLoop, MirIndexedTarget, MirInstruction, MirModule, MirUnionTarget, MirValue } from mir
@@ -190,21 +188,11 @@ record CompilerSourceTokens
 end
 
 record CompilerState
-	objects: Array<ObjectDefinition>
-	object_instances: Array<ObjectInstance>
-	object_instance_lookup: Hash<String, Integer>
-	newtypes: Array<NewtypeDefinition>
-	raw_enum_values: Array<RawEnumValue>
-	raw_enum_results: StringStorage
-	function_receivers: StringStorage
-	projected_type_lines: Array<Integer>
+	nominal: CompilerNominalTypes
 	global_bindings: CompilerGlobalBindings
 	callables: CompilerCallableAnalysis
 	standard_modules: IntegerStorage
 	type_resolution: CompilerTypeResolution
-	enums: Array<EnumDefinition>
-	enum_variants: Array<EnumVariant>
-	enum_fields: Array<EnumField>
 	submissions: Array<CheckedSubmission>
 	parsed: CompilerParsedProgram
 	hash_repl: Array<Boolean>
@@ -392,12 +380,11 @@ def compiler_declaration_catalog_fork(catalog: CompilerDeclarationCatalog): Comp
 end
 
 def compiler_new(capacity: Integer): CompilerState
-	return CompilerState.new(objects: [], object_instances: [], object_instance_lookup: {}, newtypes: [], raw_enum_values: [], raw_enum_results: string_storage(capacity), function_receivers: string_storage(capacity), projected_type_lines: [- 1, - 1],
+	return CompilerState.new(nominal: compiler_nominal_types_new(capacity),
 		global_bindings: compiler_global_bindings_new(capacity),
 		callables: compiler_callable_analysis_new(capacity),
 		standard_modules: integer_storage(capacity),
 		type_resolution: compiler_type_resolution_new(capacity),
-		enums: [], enum_variants: [], enum_fields: [],
 		submissions: [],
 		parsed: compiler_parsed_program_new(capacity),
 		hash_repl: [false],
@@ -689,7 +676,7 @@ def select_checked_body(mut state: CompilerState, function: Integer): CheckedBod
 		mut finish := load_integer(state.declarations.function_body_ends, function) + 1
 		state.type_resolution.generic_function_instances.each do |instance|
 			if instance.function == function
-				state.objects.each do |definition|
+				state.nominal.objects.each do |definition|
 					definition.methods.each do |method|
 						if method.generic_function == instance.definition
 							origin = definition.origin
