@@ -1,7 +1,7 @@
 import { integer_string } from literals
 import { MirArrayHeader, MirArrayLoop, MirBlock, MirFunction, MirModule } from mir
 import { mir_exact_integer_literal } from mir_analysis
-import { MirFlow, mir_build_flow, mir_flow_blocks, mir_flow_type } from mir_flow
+import { MirFlow, mir_build_flow, mir_flow_block_index, mir_flow_blocks, mir_flow_position, mir_flow_type } from mir_flow
 import { mir_instruction_effects, mir_live_add, mir_live_equal } from mir_roots
 import { mir_element_type } from mir_types
 
@@ -127,11 +127,7 @@ def mir_loop_aliases(native_module: MirModule, function: MirFunction, flow: MirF
 end
 
 def mir_loop_definition(flow: MirFlow, value: Integer): Integer
-	key := integer_string(value)
-	if flow.positions.key?(key)
-		return flow.positions[key]
-	end
-	return - 1
+	return mir_flow_position(flow, value)
 end
 
 def mir_loop_literal(native_module: MirModule, flow: MirFlow, value: Integer, text: String): Boolean
@@ -307,12 +303,12 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 			end
 		end
 	end
-	if visited.key?(integer_string(flow.blocks[integer_string(header.second_target)]))
+	if visited.key?(integer_string(mir_flow_block_index(flow, header.second_target)))
 		return mir_no_array_loop()
 	end
 	mut accesses: Array<Integer> := []
 	mut headers := mir_array_stable_headers(native_module, flow, header, header_index, preheader_start, guard_owner, aliases)
-	body := flow.blocks[integer_string(header.first_target)]
+	body := mir_flow_block_index(flow, header.first_target)
 	members.each do |member|
 		block := native_module.blocks[function.block_start + member]
 		mut captured: Hash<String, Integer> := {}
@@ -394,7 +390,7 @@ def mir_function_array_loops(native_module: MirModule, function: MirFunction): A
 	end
 	flow := mir_build_flow(native_module, function, mir_flow_blocks(native_module, function))
 	headers.each do |id|
-		plan := mir_array_loop(native_module, function, flow, flow.blocks[integer_string(id)])
+		plan := mir_array_loop(native_module, function, flow, mir_flow_block_index(flow, id))
 		if plan.header >= 0
 			plans.push(plan)
 		end

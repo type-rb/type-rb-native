@@ -2,17 +2,23 @@ import { integer_string } from literals
 import { MirBlock, MirFunction, MirModule, MirValue, mir_function_index } from mir
 
 # Derived from checked storage, never accepted as input optimization facts.
-# Sparse value/declaration IDs use Hash; CFG storage grows with actual blocks
-# and edges. Decimal keys preserve sparse IDs within the recovery subset.
+# Compact function-local value and block IDs use bounded arrays; sparse IDs
+# use Hash. CFG storage grows with actual blocks and edges. Decimal keys
+# preserve sparse IDs within the recovery subset.
 # Immediate dominators avoid a quadratic dominance matrix.
 record MirFlow
 	blocks: Hash<String, Integer>
+	# The compact block index is relative to this function's minimum block ID.
+	dense_block_base: Integer
+	dense_blocks: Array<Integer>
 	# Parallel rows retain every incoming edge, including both branch arms.
 	predecessors: Array<Array<Integer>>
 	incoming_starts: Array<Array<Integer>>
 	entry: Integer
 	ranks: Array<Integer>
 	dominators: Array<Integer>
+	dense_definitions: Array<Integer>
+	dense_positions: Array<Integer>
 	definitions: Hash<String, Integer>
 	positions: Hash<String, Integer>
 	# Compiler-generated value IDs are dense; raw fixtures may be sparse.
@@ -45,6 +51,16 @@ def mir_flow_blocks(native_module: MirModule, function: MirFunction): Hash<Strin
 		index += 1
 	end
 	return blocks
+end
+
+def mir_flow_block_index(flow: MirFlow, id: Integer): Integer
+	if id >= flow.dense_block_base && id - flow.dense_block_base < flow.dense_blocks.size()
+		index := flow.dense_blocks[id - flow.dense_block_base]
+		if index >= 0
+			return index
+		end
+	end
+	return flow.blocks[integer_string(id)]
 end
 
 def mir_flow_graph_error(native_module: MirModule, function: MirFunction, blocks: Hash<String, Integer>): String
@@ -121,6 +137,35 @@ def mir_flow_intersect(dominators: Array<Integer>, ranks: Array<Integer>, mut fi
 end
 
 def mir_build_flow_with_values(native_module: MirModule, function: MirFunction, blocks: Hash<String, Integer>, values: Array<MirValue>): MirFlow
+	mut dense_block_base := 0
+	mut dense_blocks: Array<Integer> := []
+	if function.block_count > 0
+		mut minimum_id := native_module.blocks[function.block_start].id
+		mut maximum_id := minimum_id
+		mut block_index := 1
+		while block_index < function.block_count
+			id := native_module.blocks[function.block_start + block_index].id
+			if id < minimum_id
+				minimum_id = id
+			end
+			if id > maximum_id
+				maximum_id = id
+			end
+			block_index += 1
+		end
+		if minimum_id >= 0 && maximum_id - minimum_id < function.block_count * 2
+			dense_block_base = minimum_id
+			while dense_blocks.size() <= maximum_id - minimum_id
+				dense_blocks.push(- 1)
+			end
+			block_index = 0
+			while block_index < function.block_count
+				id := native_module.blocks[function.block_start + block_index].id
+				dense_blocks[id - minimum_id] = block_index
+				block_index += 1
+			end
+		end
+	end
 	mut successors: Array<Array<Integer>> := []
 	mut predecessors: Array<Array<Integer>> := []
 	mut incoming_starts: Array<Array<Integer>> := []
@@ -144,9 +189,13 @@ def mir_build_flow_with_values(native_module: MirModule, function: MirFunction, 
 		end
 	end
 	mut dense_types: Array<Integer> := []
+	mut dense_definitions: Array<Integer> := []
+	mut dense_positions: Array<Integer> := []
 	if dense_possible && maximum_id >= 0 && maximum_id < local_count * 2
 		while dense_types.size() <= maximum_id
 			dense_types.push(0)
+			dense_definitions.push(- 2)
+			dense_positions.push(- 1)
 		end
 	end
 	values.each do |value|
@@ -170,8 +219,14 @@ def mir_build_flow_with_values(native_module: MirModule, function: MirFunction, 
 	index = 0
 	while index < function.parameter_count
 		value := native_module.arguments[function.parameter_start + index]
-		definitions[integer_string(value)] =- 1
-		positions[integer_string(value)] =- 1
+		if value >= 0 && value < dense_definitions.size()
+			dense_definitions[value] =- 1
+			dense_positions[value] =- 1
+		else
+			key := integer_string(value)
+			definitions[key] =- 1
+			positions[key] =- 1
+		end
 		index += 1
 	end
 	index = 0
@@ -195,16 +250,28 @@ def mir_build_flow_with_values(native_module: MirModule, function: MirFunction, 
 		mut parameter := 0
 		while parameter < block.parameter_count
 			value := native_module.arguments[block.parameter_start + parameter]
-			definitions[integer_string(value)] = index
-			positions[integer_string(value)] =- 1
+			if value >= 0 && value < dense_definitions.size()
+				dense_definitions[value] = index
+				dense_positions[value] =- 1
+			else
+				key := integer_string(value)
+				definitions[key] = index
+				positions[key] =- 1
+			end
 			parameter += 1
 		end
 		mut instruction := block.instruction_start
 		while instruction < block.instruction_start + block.instruction_count
 			value := native_module.instructions[instruction].result
 			if value >= 0
-				definitions[integer_string(value)] = index
-				positions[integer_string(value)] = instruction
+				if value < dense_definitions.size()
+					dense_definitions[value] = index
+					dense_positions[value] = instruction
+				else
+					key := integer_string(value)
+					definitions[key] = index
+					positions[key] = instruction
+				end
 			end
 			instruction += 1
 		end
@@ -243,7 +310,7 @@ def mir_build_flow_with_values(native_module: MirModule, function: MirFunction, 
 			index += 1
 		end
 	end
-	return MirFlow.new(blocks: blocks, predecessors: predecessors, incoming_starts: incoming_starts, entry: entry, ranks: ranks, dominators: dominators, definitions: definitions, positions: positions, dense_types: dense_types, types: types)
+	return MirFlow.new(blocks: blocks, dense_block_base: dense_block_base, dense_blocks: dense_blocks, predecessors: predecessors, incoming_starts: incoming_starts, entry: entry, ranks: ranks, dominators: dominators, dense_definitions: dense_definitions, dense_positions: dense_positions, definitions: definitions, positions: positions, dense_types: dense_types, types: types)
 end
 
 def mir_build_flow(native_module: MirModule, function: MirFunction, blocks: Hash<String, Integer>): MirFlow
@@ -257,17 +324,26 @@ def mir_build_flow(native_module: MirModule, function: MirFunction, blocks: Hash
 end
 
 def mir_value_available(flow: MirFlow, block: MirBlock, instruction_finish: Integer, value: Integer): Boolean
-	key := integer_string(value)
-	if !flow.definitions.key?(key)
-		return false
+	mut owner :=- 2
+	mut position :=- 1
+	if value >= 0 && value < flow.dense_definitions.size()
+		owner = flow.dense_definitions[value]
+		position = flow.dense_positions[value]
 	end
-	owner := flow.definitions[key]
+	if owner == - 2
+		key := integer_string(value)
+		if !flow.definitions.key?(key)
+			return false
+		end
+		owner = flow.definitions[key]
+		position = flow.positions[key]
+	end
 	if owner < 0
 		return true
 	end
-	mut current := flow.blocks[integer_string(block.id)]
+	mut current := mir_flow_block_index(flow, block.id)
 	if owner == current
-		return flow.positions[key] < instruction_finish
+		return position < instruction_finish
 	end
 	if flow.ranks[current] < 0
 		return false
@@ -279,6 +355,17 @@ def mir_value_available(flow: MirFlow, block: MirBlock, instruction_finish: Inte
 		end
 	end
 	return false
+end
+
+def mir_flow_position(flow: MirFlow, value: Integer): Integer
+	if value >= 0 && value < flow.dense_definitions.size() && flow.dense_definitions[value] != - 2
+		return flow.dense_positions[value]
+	end
+	key := integer_string(value)
+	if flow.positions.key?(key)
+		return flow.positions[key]
+	end
+	return - 1
 end
 
 # Rebuilt from the checked value table for each verification. A raw MIR edit
