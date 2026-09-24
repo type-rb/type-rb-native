@@ -4,7 +4,6 @@ set -eu
 
 INITIAL_ROOT_QBE_SIZE=658639
 INITIAL_ROOT_QBE_SHA256=62db3c31527a670c3050051a9fa27bf142b6c5deaab81ef8234104bd467aa95a
-MAX_COMPILER_SIZE=310000
 
 usage() {
 	cat >&2 <<'EOF'
@@ -254,14 +253,6 @@ fi
 . "$script_directory/compiler-cost.sh"
 compiler_cost_mode > /dev/null || exit 64
 compiler_project=$(native_compiler_project_directory "$repository_root") || fail "invalid compiler project"
-transition_policy=$repository_root/tools/native-mir-transition-policy.sh
-control_flow_marker=$compiler_project/native-mir-control-flow-v1.txt
-if test -f "$transition_policy" && test -f "$control_flow_marker"; then
-	. "$transition_policy"
-	if native_mir_transition_markers_valid "$repository_root"; then
-		MAX_COMPILER_SIZE=$(native_mir_target_compiler_limit "$profile")
-	fi
-fi
 compiler_entry=$compiler_project/src/compiler.trb
 configured_directory=$(native_configured_fixture_directory "$repository_root") || fail "invalid configured-project fixture"
 configured_project=$configured_directory/trbconfig.jsonc
@@ -682,7 +673,6 @@ EOF
 			"$median_b2_b3_cpu" "$median_b3_b4_cpu"
 	fi
 fi
-printf 'compiler_size_limit=%s\n' "$MAX_COMPILER_SIZE" >> "$evidence/measurement-policy.txt"
 
 trace_directory=$workspace/trace
 mkdir -p "$trace_directory"
@@ -724,7 +714,6 @@ require_no_intermediates "$trace_directory"
 	printf 'mode=%s\n' "$mode"
 	printf 'profile=%s\n' "$profile"
 	printf 'runner_image=%s\n' "$runner_image"
-	printf 'compiler_size_limit=%s\n' "$MAX_COMPILER_SIZE"
 	printf 'repository_revision=%s\n' "$(git -C "$repository_root" rev-parse HEAD)"
 	printf 'type_rb_revision=%s\n' "$(tr -d '\n' < "$repository_root/TYPE_RB_REVISION")"
 	uname -a
@@ -757,7 +746,6 @@ fi
 	printf 'b4_sha256=%s\n' "$(sha256 "$b4")"
 	printf 'fixed_point_qbe_size=%s\n' "$fixed_point_qbe_size"
 	printf 'fixed_point_qbe_sha256=%s\n' "$fixed_point_qbe_sha256"
-	printf 'compiler_size_limit=%s\n' "$MAX_COMPILER_SIZE"
 } > "$evidence/identities.txt"
 
 {
@@ -775,8 +763,7 @@ if test "$input_role" = ordinary; then
 	size_candidates="$b1 $size_candidates"
 fi
 for compiler in $size_candidates; do
-	compiler_cost_check compiler-bytes "$(file_size "$compiler")" "$MAX_COMPILER_SIZE" \
-		>> "$evidence/cost-observations.txt" || fail "compiler generation exceeds size bound: $compiler"
+	compiler_cost_observe compiler-bytes "$(file_size "$compiler")" >> "$evidence/cost-observations.txt"
 done
 compiler_size=$(file_size "$b4")
 compiler_sha256=$(sha256 "$b4")

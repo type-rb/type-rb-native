@@ -29,9 +29,10 @@ There are two routes:
 | Ordinary acceptance | Detect regressions against the registered Native baseline using existing limits and all correctness authorities | Eligible for normal review only when the complete contract passes |
 | Bounded trade-off evaluation | Learn a promising candidate's runtime benefit even when an ordinary cost limit fails | Diagnostic evidence and an explicit decision, never automatic acceptance |
 
-The ordinary 1.05 ratios and current absolute limits in
-[`native-mir-transition-policy.sh`](../tools/native-mir-transition-policy.sh)
-govern acceptance. An explicit complete-compiler budget revision for safe Array
+The ordinary 1.05 ratios and absolute limits of the retired
+[transition policy](https://github.com/type-rb/type-rb-native/blob/d1c151d02e051c6557acb479a9e9d7c713226858/tools/native-mir-transition-policy.sh)
+governed strict acceptance; during MIR migration compiler size is recorded
+without a limit. An explicit complete-compiler budget revision for safe Array
 assignment is recorded in
 [Decision 0029](decisions/0029-array-assignment-compiler-budget.md); it changes
 no relative limit or historical result. The separately validated

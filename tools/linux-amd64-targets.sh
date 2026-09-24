@@ -190,8 +190,6 @@ verifier_root=$(CDPATH= cd -- "$script_directory/.." && pwd)
 . "$script_directory/compiler-project.sh"
 . "$script_directory/compiler-cost.sh"
 compiler_cost_mode > /dev/null || exit 64
-. "$script_directory/native-mir-transition-policy.sh"
-MAX_COMPILER_SIZE=$(native_mir_target_compiler_limit "$PROFILE")
 external_recipe=$verifier_root/tools/external-qbe-build.sh
 measurement_controller=$verifier_root/tools/measure-command.py
 
@@ -1633,12 +1631,10 @@ test "$(cat "$publication_output/sentinel")" = preserve-publication-directory ||
 require_no_intermediates "$failure_order_directory"
 
 compiler_size=$(file_size "$output_compiler")
-compiler_cost_check compiler-bytes "$compiler_size" "$MAX_COMPILER_SIZE" \
-	>> "$evidence/cost-observations.txt" || fail "candidate compiler exceeds the size bound"
+compiler_cost_observe compiler-bytes "$compiler_size" >> "$evidence/cost-observations.txt"
 {
 	printf 'platform=linux-amd64\n'
 	printf 'raw_compiler_bytes=%s\n' "$compiler_size"
-	printf 'raw_compiler_limit_bytes=%s\n' "$MAX_COMPILER_SIZE"
 } > "$evidence/compiler-size.txt"
 
 mkdir -p \

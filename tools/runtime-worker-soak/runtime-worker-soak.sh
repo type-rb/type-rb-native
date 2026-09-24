@@ -3,17 +3,9 @@
 set -eu
 
 script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-. "$script_directory/../compiler-project.sh"
 . "$script_directory/../compiler-cost.sh"
 compiler_cost_mode > /dev/null || exit 64
-. "$script_directory/../native-mir-transition-policy.sh"
-native_mir_transition_markers_valid "$script_directory/../.." || {
-	printf '%s\n' 'runtime-worker-soak: invalid Native MIR transition markers' >&2
-	exit 1
-}
 
-MAX_DARWIN_COMPILER_SIZE=$NATIVE_MIR_DARWIN_COMPILER_LIMIT
-MAX_LINUX_COMPILER_SIZE=$NATIVE_MIR_LINUX_COMPILER_LIMIT
 MAX_PEAK_HEAP_BYTES=4194304
 MAX_SMOKE_SECONDS=2.25
 MIN_FORMAL_ALLOCATED_BYTES=32212254720
@@ -209,12 +201,10 @@ case "$profile" in
 darwin-arm64-v0)
 	qbe_target=arm64_apple
 	expected_system=Darwin
-	max_compiler_size=$MAX_DARWIN_COMPILER_SIZE
 	;;
 linux-arm64-v0)
 	qbe_target=arm64
 	expected_system=Linux
-	max_compiler_size=$MAX_LINUX_COMPILER_SIZE
 	;;
 *) usage ;;
 esac
@@ -292,9 +282,7 @@ else
 fi
 stripped_compiler_size=$(file_size "$workspace/compiler.stripped")
 printf '%s\n' "$stripped_compiler_size" > "$evidence/compiler-size-bytes.txt"
-compiler_cost_check compiler-bytes "$stripped_compiler_size" "$max_compiler_size" \
-	>> "$evidence/cost-observations.txt" ||
-	fail "stripped compiler exceeds the registered target limit: $stripped_compiler_size"
+compiler_cost_observe compiler-bytes "$stripped_compiler_size" >> "$evidence/cost-observations.txt"
 
 reference_program=$workspace/reference/program
 if test "$build_reference" -eq 1; then

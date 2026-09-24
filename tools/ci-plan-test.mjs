@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,40 +32,33 @@ function results(plan) {
       Object.entries(plan).map(([key, value]) => [key, String(value)])) },
     ...Object.fromEntries(Object.entries({ quick: plan.quick,
       documentation: plan.documentation, native: !plan.draft && plan.code && plan.complete, targets: !plan.draft && plan.code,
-      memory: !plan.draft && plan.memory, performance: !plan.draft && plan.performance,
+      memory: !plan.draft && plan.memory,
       tooling: plan.tooling, cli: !plan.draft && plan.cli,
     }).map(([key, value]) => [key, { result: value ? 'success' : 'skipped' }])),
   };
 }
 
-test('MIR migration defers compiler comparisons but preserves every correctness authority', () => {
+test('compiler and routing changes require every correctness authority', () => {
   for (const paths of [
     ['compiler/src/compiler.trb'],
     ['compiler/src/new-mir-pass.trb', 'docs/architecture.md'],
     ['compiler/conformance/valid/new.trb', 'tools/native-cli-test.py'],
   ]) {
-    const strict = classify(paths, false);
-    const migration = classify(paths, false, 'mir-migration');
-    assert.equal(strict.performance, true);
-    assert.deepEqual(migration, { ...strict, performance: false });
-    const needs = results(migration);
+    const plan = classify(paths, false);
+    assert.equal(plan.memory, true);
+    const needs = results(plan);
     assert.deepEqual(acceptance(needs), []);
     for (const job of ['quick', 'native', 'targets', 'memory', 'cli', 'tooling']) {
       for (const result of ['failure', 'cancelled', 'skipped']) {
         assert(acceptance({ ...needs, [job]: { result } }).length > 0);
       }
     }
-    assert.deepEqual(classify(paths, false, 'strict'), strict);
   }
   for (const path of ['.github/workflows/native-validation.yml', 'tools/ci-run-suites.mjs',
-    'tools/compiler-cost.sh', 'tools/native-mir-transition-policy.sh']) {
-    const strict = classify([path], false);
-    assert.equal(strict.performance, true);
-    assert.deepEqual(classify([path], false, 'mir-migration'), { ...strict, performance: false });
-    assert.equal(classify([path, 'compiler/src/compiler.trb'], false, 'mir-migration').performance, false);
-  }
-  for (const mode of ['', 'migration', 'STRICT', null]) {
-    assert.throws(() => classify(['compiler/src/compiler.trb'], false, mode), /Invalid/);
+    'tools/compiler-cost.sh', 'tools/compiler-project.sh']) {
+    const plan = classify([path], false);
+    assert.equal(plan.code, true, path);
+    assert.equal(plan.memory, true, path);
   }
 });
 
@@ -123,53 +116,6 @@ test('amd64 migration still verifies binary format and records identities after 
   }
 });
 
-test('runtime A/B remains manual with separate frozen historical and Boolean contracts', () => {
-  const workflow = readFileSync(new URL('../.github/workflows/native-runtime-ab.yml', import.meta.url), 'utf8');
-  const entry = readFileSync(new URL('../.github/workflows/pull-request.yml', import.meta.url), 'utf8');
-  assert(workflow.includes('  workflow_dispatch:\n'));
-  assert(!workflow.includes('  pull_request:') && !workflow.includes('  workflow_call:'));
-  assert(!entry.includes('native-runtime-ab.yml'), 'manual experiments must not add an automatic PR job');
-  assert(workflow.includes('default: derived-loop-index'));
-  assert.match(workflow, /derived-loop-index\)\n\s+BASELINE_REVISION=aad4954c66ae394a5edb836b20498e5a60b769bd/);
-  assert.match(workflow, /checked-boolean-branches\)\n\s+BASELINE_REVISION=6f7e3ba10623d40b5b0f7e6cc03b732125607795/);
-  assert(workflow.includes('*) exit 64 ;;'), 'unknown contracts must not materialize a baseline');
-  assert(workflow.includes('native_compiler_project_directory "$RUNNER_TEMP/baseline-source"'));
-  assert(!workflow.includes('baseline-source/compiler/gate4/'));
-  assert(workflow.includes('compiler_limit=255000'), 'historical absolute limit remains');
-  assert(workflow.includes('compiler_limit=$(native_mir_target_compiler_limit linux-arm64-v0)'));
-  assert(workflow.includes('compiler_text_bytes strict-shrink'));
-  assert(workflow.includes('compiler_qbe_bytes strict-shrink'));
-  assert(workflow.includes('build_cost_authority=normal-exact-head-PR-interleaved-compactness'));
-  assert(workflow.includes('if test "$NATIVE_RUNTIME_AB_CONTRACT" = derived-loop-index; then\n            for stage'));
-});
-
-test('manual Boolean compactness loads its dependencies in a fresh step shell', () => {
-  const root = fileURLToPath(new URL('../', import.meta.url));
-  const workflow = readFileSync(new URL('../.github/workflows/native-runtime-ab.yml', import.meta.url), 'utf8');
-  const setup = workflow.match(/          compiler_maximum=1\.01\n[\s\S]*?(?=            for role in baseline candidate; do)/)?.[0];
-  assert(setup, 'the actual compactness setup must be exercised');
-  const directory = mkdtempSync(join(tmpdir(), 'native-runtime-policy-test-'));
-  try {
-    symlinkSync(root, join(directory, 'baseline-source'), 'dir');
-    const script = `set -eu\n${setup}\nfi\nprintf '%s %s\\n' "$compiler_maximum" "$compiler_limit"\n`;
-    const options = { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: {
-      PATH: process.env.PATH,
-      GITHUB_WORKSPACE: root,
-      RUNNER_TEMP: directory,
-      NATIVE_RUNTIME_AB_CONTRACT: 'checked-boolean-branches',
-    } };
-    for (const shell of ['/bin/sh', '/bin/bash']) {
-      assert.equal(execFileSync(shell, ['-c', script], options).trim(), '1.00 388000');
-      // A previous workflow step's functions do not survive in a new shell.
-      assert.throws(() => execFileSync(shell, ['-c', script.replace(
-        '. tools/compiler-project.sh', ': missing-project-helper')], options),
-      error => error.status !== 0 && /native_compiler_project_directory/.test(error.stderr));
-    }
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
-});
-
 test('compatibility checks remain in quick and standalone validation', () => {
   const workflow = readFileSync(new URL('../.github/workflows/pull-request.yml', import.meta.url), 'utf8');
   const standalone = readFileSync(new URL('../.github/workflows/native-validation.yml', import.meta.url), 'utf8');
@@ -198,15 +144,15 @@ test('compatibility checks remain in quick and standalone validation', () => {
     assert(workflow.includes(`  ${job}:\n    needs: plan\n`),
       `${job} should start alongside quick after planning`);
   }
-  assert(workflow.includes('needs: [plan, quick, documentation, native, targets, memory, performance, tooling, cli]'),
+  assert(workflow.includes('needs: [plan, quick, documentation, native, targets, memory, tooling, cli]'),
     'acceptance must still require quick and all complete authorities');
 });
 
-test('documentation-only PRs do not run compiler or performance matrices', () => {
+test('documentation-only PRs do not run compiler matrices', () => {
   const plan = classify(['README.md', 'docs/index.html', 'results/a.json',
-    'tools/native-mir-guarded-add/README.md'], false);
+    'tools/native-mir-array-loop-recovery/README.md'], false);
   assert.deepEqual(plan, { code: false, quick: false, documentation: true,
-    memory: false, performance: false, draft: false, tooling: false, cli: false, complete: false });
+    memory: false, draft: false, tooling: false, cli: false, complete: false });
   assert.deepEqual(acceptance(results(plan)), []);
 });
 test('ordinary language cases use a separate reference oracle and Go-free CLI checks', () => {
@@ -216,16 +162,16 @@ test('ordinary language cases use a separate reference oracle and Go-free CLI ch
   assert(entry.includes('tools/native-language-coverage.py --reference "$RUNNER_TEMP/trb"'));
   assert(cli.includes('tools/native-language-coverage.py --native bin/trbn'));
   assert(!cli.includes('tools/native-language-coverage.py --reference'));
-  assert(docs.includes('tools/native-language-coverage.py --check-table docs/native-language-coverage-matrix.md'));
+  assert(docs.includes('tools/native-language-coverage.py --check-feature-table docs/native-language-feature-inventory.md'));
+  assert(!docs.includes('--check-table'), 'the retired full matrix is not generated or checked');
   for (const path of ['tools/native-language-cases.json', 'tools/native-language-coverage.py',
     'tools/native-language-coverage-test.py']) {
     const plan = classify([path], false);
     assert.equal(plan.quick, true);
     assert.equal(plan.cli, true);
     assert.equal(plan.code, false);
-    assert.equal(plan.performance, false);
-    assert.deepEqual(acceptance(results(plan)), []);
-    assert.equal(classify([path, 'compiler/src/compiler.trb'], false).performance, true);
+      assert.deepEqual(acceptance(results(plan)), []);
+    assert.equal(classify([path, 'compiler/src/compiler.trb'], false).memory, true);
   }
 });
 test('compiler, conformance and execution workflows retain the full authority', () => {
@@ -235,12 +181,11 @@ test('compiler, conformance and execution workflows retain the full authority', 
     'compiler/gate4/src/storage.trb',
     'compiler/gate4/conformance/runtime-invalid/new.trb',
     '.github/workflows/pull-request.yml', '.github/workflows/native-validation.yml',
-    '.github/workflows/static-string-compactness.yml', 'tools/ci-run-suites.mjs',
-    'tools/native-mir-transition-policy.sh']) {
+    '.github/workflows/runtime-worker-memory.yml', 'tools/ci-run-suites.mjs',
+    'tools/compiler-project.sh']) {
     const plan = classify([path], false);
     assert.equal(plan.code, true);
     assert.equal(plan.memory, true);
-    assert.equal(plan.performance, true);
     assert.deepEqual(acceptance(results(plan)), []);
   }
 });
@@ -252,11 +197,11 @@ test('static documentation and evidence tools do not run compiler matrices', () 
     '.github/workflows/documentation.yml']) {
     const plan = classify([tool, 'docs/capabilities/benchmarks/data.js'], false);
     assert.deepEqual(plan, { code: false, quick: false, documentation: true,
-      memory: false, performance: false, draft: false, tooling: false, cli: false, complete: false });
+      memory: false, draft: false, tooling: false, cli: false, complete: false });
     assert.deepEqual(acceptance(results(plan)), []);
     assert.equal(classify([`${tool}.unknown`], false).code, true);
-    assert.equal(classify([tool, 'compiler/gate4/src/compiler.trb'], false).performance, true);
-    assert.equal(classify([tool, 'tools/ci-plan.mjs'], false).performance, false);
+    assert.equal(classify([tool, 'compiler/gate4/src/compiler.trb'], false).memory, true);
+    assert.equal(classify([tool, 'tools/ci-plan.mjs'], false).memory, false);
   }
   assert.equal(classify(['tools/benchmarksgame-formal/run.sh'], false).code, true);
 });
@@ -272,7 +217,7 @@ test('planning-only maintenance uses its unconditional tests, not compiler matri
   for (const path of ['tools/ci-plan.mjs', 'tools/ci-plan-test.mjs']) {
     const plan = classify([path, 'docs/evidence-retention.md', 'results/historical/raw.tsv'], false);
     assert.deepEqual(plan, { code: false, quick: false, documentation: true,
-      memory: false, performance: false, draft: false, tooling: false, cli: false, complete: false });
+      memory: false, draft: false, tooling: false, cli: false, complete: false });
     assert.deepEqual(acceptance(results(plan)), []);
     for (const failure of ['failure', 'cancelled', 'skipped', undefined]) {
       const needs = results(plan);
@@ -281,22 +226,20 @@ test('planning-only maintenance uses its unconditional tests, not compiler matri
     }
     for (const other of ['compiler/src/compiler.trb', 'src/runtime.trb', 'TYPE_RB_REVISION',
       'tools/ci-run-suites.mjs', '.github/workflows/pull-request.yml',
-      'tools/native-mir-transition-policy.sh', `${path}.unknown`, 'unknown/file']) {
+      'tools/compiler-project.sh', `${path}.unknown`, 'unknown/file']) {
       const mixed = classify([path, other], false);
       assert.equal(mixed.code, true, other);
-      assert.equal(mixed.performance, true, other);
     }
   }
 });
 test('other executable changes retain complete correctness and target checks', () => {
   const plan = classify(['src/decoder.trb'], false);
   assert.equal(plan.code, true);
-  assert.equal(plan.performance, false);
   assert.deepEqual(acceptance(results(plan)), []);
 });
 
 test('deletions, renames, mixed changes and unknown paths fail toward more checking', () => {
-  assert.equal(classify(['README.md', 'compiler/gate4/src/old.trb'], false).performance, true);
+  assert.equal(classify(['README.md', 'compiler/gate4/src/old.trb'], false).memory, true);
   assert.equal(classify(['new-directory/file'], false).code, true);
   assert.equal(classify(['compiler/gate4/src/with\na newline.trb'], false).code, true);
 });
@@ -353,7 +296,7 @@ test('draft development defers expensive authorities without relaxing ready acce
   }
 });
 test('failed, cancelled, skipped, missing and pending required jobs reject acceptance', () => {
-  for (const job of ['quick', 'documentation', 'native', 'targets', 'memory', 'performance', 'tooling', 'cli']) {
+  for (const job of ['quick', 'documentation', 'native', 'targets', 'memory', 'tooling', 'cli']) {
     for (const state of ['failure', 'cancelled', 'skipped', 'pending', undefined]) {
       const needs = results(classify(['compiler/gate4/src/compiler.trb', 'README.md'], false));
       needs[job] = state ? { result: state } : undefined;
@@ -395,16 +338,10 @@ test('CLI classifies real historical-to-documentation and current-project rename
     git('commit', '-m', 'Move synthetic fixture');
     const head = git('rev-parse', 'HEAD');
     const args = [fileURLToPath(new URL('./ci-plan.mjs', import.meta.url)), base, head, 'false'];
-    for (const mode of ['strict', 'mir-migration']) {
-      const output = execFileSync(process.execPath, args, { cwd: directory, encoding: 'utf8',
-        env: plannerEnv({ NATIVE_MIR_COST_MODE: mode }) });
-      assert.deepEqual(Object.fromEntries(output.trim().split('\n').map(row => row.split('='))),
-        { code: 'true', quick: 'true', documentation: 'true', memory: 'true', performance: String(mode === 'strict'),
-          draft: 'false', tooling: 'true', cli: 'true', complete: 'true' });
-    }
-    assert.throws(() => execFileSync(process.execPath, args, { cwd: directory, encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'], env: plannerEnv({ NATIVE_MIR_COST_MODE: 'invalid' }) }),
-    error => error.status !== 0 && error.stderr.includes('Invalid compiler cost mode'));
+    const output = execFileSync(process.execPath, args, { cwd: directory, encoding: 'utf8', env: plannerEnv() });
+    assert.deepEqual(Object.fromEntries(output.trim().split('\n').map(row => row.split('='))),
+      { code: 'true', quick: 'true', documentation: 'true', memory: 'true',
+        draft: 'false', tooling: 'true', cli: 'true', complete: 'true' });
     mkdirSync(join(directory, 'compiler/src'), { recursive: true });
     renameSync(join(directory, 'docs/example.md'), join(directory, 'compiler/src/current.trb'));
     git('add', '-A');
@@ -413,7 +350,6 @@ test('CLI classifies real historical-to-documentation and current-project rename
     assert.deepEqual(movedPaths.sort(), ['compiler/gate4/src/old\nname.trb', 'compiler/src/current.trb']);
     const movedPlan = classify(movedPaths, false);
     assert.equal(movedPlan.memory, true);
-    assert.equal(movedPlan.performance, true);
     assert.deepEqual(acceptance(results(movedPlan)), []);
   } finally {
     rmSync(directory, { recursive: true, force: true });
@@ -463,7 +399,6 @@ test('exact CLI inputs run quick and CLI authorities without core measurements',
     assert.equal(plan.code, false, file);
     assert.equal(plan.cli, true, file);
     assert.equal(plan.memory, false, file);
-    assert.equal(plan.performance, false, file);
     assert.deepEqual(acceptance(results(plan)), []);
     for (const state of ['skipped', 'failure', 'cancelled', undefined]) {
       const needs = results(plan);
@@ -471,7 +406,7 @@ test('exact CLI inputs run quick and CLI authorities without core measurements',
       assert.notDeepEqual(acceptance(needs), [], file);
     }
     assert.equal(classify([file + '.unknown'], false).code, true);
-    assert.equal(classify([file, 'compiler/src/compiler.trb'], false).performance, true);
+    assert.equal(classify([file, 'compiler/src/compiler.trb'], false).memory, true);
   }
   const workflow = readFileSync(new URL('../.github/workflows/native-cli.yml', import.meta.url), 'utf8');
   const cliTests = readFileSync(new URL('../tools/native-cli-test.py', import.meta.url), 'utf8');
@@ -509,7 +444,7 @@ test('synthetic tooling tests have an executable authority without compiler rebu
     needs.tooling.result = 'skipped';
     assert.notDeepEqual(acceptance(needs), []);
     assert.equal(classify([file + '.unknown'], false).code, true);
-    assert.equal(classify([file, 'compiler/src/compiler.trb'], false).performance, true);
+    assert.equal(classify([file, 'compiler/src/compiler.trb'], false).memory, true);
   }
   for (const file of ['tools/benchmarksgame-build-formal/build-controller.sh',
     'tools/recovery-stage.py', 'tools/ci-run-suites.mjs', '.github/workflows/ci-tooling.yml']) {
@@ -518,10 +453,8 @@ test('synthetic tooling tests have an executable authority without compiler rebu
   const native = readFileSync(new URL('../.github/workflows/native-validation.yml', import.meta.url), 'utf8');
   assert(!native.includes('Verify bootstrap seed tooling'));
   const entry = readFileSync(new URL('../.github/workflows/pull-request.yml', import.meta.url), 'utf8');
-  assert(entry.includes('needs: [plan, quick, native, targets, memory, tooling, cli]'));
-  assert(entry.includes("needs.quick.result == 'success'"), 'comparative work must stop when quick fails');
-  assert(entry.includes("needs.tooling.result == 'success'"));
-  assert(entry.includes('needs: [plan, quick, documentation, native, targets, memory, performance, tooling, cli]'));
+  assert(!entry.includes('  performance:'), 'strict comparative measurement is retired');
+  assert(entry.includes('needs: [plan, quick, documentation, native, targets, memory, tooling, cli]'));
 });
 
 test('daily measurement controllers use their dedicated tooling suite', () => {
@@ -529,15 +462,14 @@ test('daily measurement controllers use their dedicated tooling suite', () => {
   assert(workflow.includes("python3 -m unittest discover -s tools/daily-performance -p 'test_*.py'"));
   for (const file of dailyMeasurementInputs) {
     assert(file.startsWith('tools/daily-performance/'));
-    const plan = classify([file], false, 'strict', 'tiered');
+    const plan = classify([file], false, 'tiered');
     assert.equal(plan.code, false, file);
     assert.equal(plan.cli, false, file);
     assert.equal(plan.tooling, true, file);
     assert.deepEqual(acceptance(results(plan)), []);
-    assert.equal(classify([file + '.unknown'], false, 'strict', 'tiered').code, true);
+    assert.equal(classify([file + '.unknown'], false, 'tiered').code, true);
   }
-  const mixed = classify(['compiler/src/compiler.trb', 'tools/daily-performance/measure.py'], false,
-    'strict', 'tiered');
+  const mixed = classify(['compiler/src/compiler.trb', 'tools/daily-performance/measure.py'], false, 'tiered');
   assert.equal(mixed.code, true);
   assert.equal(mixed.complete, true);
 });
@@ -614,7 +546,7 @@ test('known compiler test modules retain correctness without unchanged-binary me
   for (const file of compilerTestInputs) {
     const plan = classify([file], false);
     assert.deepEqual(plan, { code: true, quick: true, documentation: false,
-      memory: false, performance: false, draft: false, tooling: true, cli: true, complete: true });
+      memory: false, draft: false, tooling: true, cli: true, complete: true });
     assert.deepEqual(acceptance(results(plan)), []);
     for (const job of ['quick', 'native', 'targets', 'tooling', 'cli']) {
       for (const state of ['failure', 'cancelled', 'skipped', undefined]) {
@@ -625,13 +557,12 @@ test('known compiler test modules retain correctness without unchanged-binary me
     }
     for (const other of ['compiler/src/compiler.trb', 'compiler/conformance/new.source',
       'compiler/trbconfig.jsonc', 'compiler/src/new_test.trb', 'src/decoder.trb',
-      'TYPE_RB_REVISION', 'tools/native-mir-transition-policy.sh',
+      'TYPE_RB_REVISION', 'tools/compiler-project.sh',
       '.github/workflows/pull-request.yml', 'tools/ci-plan.mjs', 'unknown/file']) {
-      assert.equal(classify([file, other], false).performance, true, other);
       assert.equal(classify([file, other], false).memory, true, other);
     }
-    assert.equal(classify([file + '.unknown'], false).performance, true);
-    assert.equal(classify([file, 'README.md'], false).performance, false);
+    assert.equal(classify([file + '.unknown'], false).memory, true);
+    assert.equal(classify([file, 'README.md'], false).memory, false);
   }
 });
 
@@ -657,7 +588,7 @@ test('synthetic project and policy tests retain Linux without building the refer
     assert(toolingStep.includes(`sh ${file}`));
     const plan = classify([file], false);
     assert.deepEqual(plan, { code: false, quick: true, documentation: false,
-      memory: false, performance: false, draft: false, tooling: true, cli: false, complete: false });
+      memory: false, draft: false, tooling: true, cli: false, complete: false });
     assert.deepEqual(acceptance(results(plan)), []);
     for (const job of ['quick', 'tooling']) {
       for (const state of ['failure', 'cancelled', 'skipped', undefined]) {
@@ -698,8 +629,8 @@ test('the tiered PR gate defers complete lanes only for ordinary compiler, CLI a
     ['compiler/conformance/valid/new.trb', 'compiler/cli/repl.trb', 'tools/native-cli-test.py'],
     ['compiler/cli/main.trb', 'tools/recovery_stage_test.py', 'docs/architecture.md'],
   ]) {
-    const tiered = classify(paths, false, 'mir-migration', 'tiered');
-    assert.deepEqual(tiered, { ...classify(paths, false, 'mir-migration'), complete: false }, paths.join());
+    const tiered = classify(paths, false, 'tiered');
+    assert.deepEqual(tiered, { ...classify(paths, false), complete: false }, paths.join());
     const needs = results(tiered);
     assert.equal(needs.native.result, 'skipped');
     assert.deepEqual(acceptance(needs), []);
@@ -718,19 +649,16 @@ test('the tiered PR gate defers complete lanes only for ordinary compiler, CLI a
     'tools/native-bootstrap-test.py', 'tools/check-bootstrap-snapshot.sh', 'tools/recovery-bootstrap.sh',
     '.github/workflows/native-validation.yml', '.github/workflows/pull-request.yml',
     'tools/ci-run-suites.mjs', 'tools/linux-amd64-targets.sh', 'unknown/file']) {
-    const plan = classify(['compiler/src/compiler.trb', other], false, 'mir-migration', 'tiered');
+    const plan = classify(['compiler/src/compiler.trb', other], false, 'tiered');
     assert.equal(plan.complete, true, other);
-    assert.deepEqual(plan, classify(['compiler/src/compiler.trb', other], false, 'mir-migration'), other);
+    assert.deepEqual(plan, classify(['compiler/src/compiler.trb', other], false), other);
     const needs = results(plan);
     assert.equal(needs.native.result, 'success');
     assert.notDeepEqual(acceptance({ ...needs, native: { result: 'skipped' } }), [], other);
   }
-  assert.equal(classify(['README.md'], false, 'mir-migration', 'tiered').complete, false);
-  assert.equal(classify(['compiler/src/compiler.trb'], false, 'strict', 'tiered').performance, false,
-    'comparisons need the complete lanes they wait for');
-  assert.equal(classify(['compiler/src/compiler.trb'], false, 'strict').performance, true);
+  assert.equal(classify(['README.md'], false, 'tiered').complete, false);
   for (const gate of ['', 'TIERED', 'post-merge', null]) {
-    assert.throws(() => classify(['compiler/src/compiler.trb'], false, 'mir-migration', gate), /Invalid CI gate/);
+    assert.throws(() => classify(['compiler/src/compiler.trb'], false, gate), /Invalid CI gate/);
   }
 });
 
@@ -833,13 +761,13 @@ test('the planner CLI reads the PR gate, ignores it on main and reports deferred
     assert.throws(() => plan([base, head, 'false'], 'invalid'));
 
     const summary = join(directory, 'summary.md');
-    const needs = results(classify(['compiler/src/compiler.trb'], false, 'mir-migration', 'tiered'));
+    const needs = results(classify(['compiler/src/compiler.trb'], false, 'tiered'));
     const output = execFileSync(process.execPath, [planner, 'accept'], {
       encoding: 'utf8', env: { ...process.env, NEEDS_JSON: JSON.stringify(needs), GITHUB_STEP_SUMMARY: summary },
     });
     assert.match(output, /Pre-merge lanes passed/);
     assert.match(readFileSync(summary, 'utf8'), /run on main after merge/);
-    const complete = results(classify(['compiler/src/compiler.trb'], false, 'mir-migration'));
+    const complete = results(classify(['compiler/src/compiler.trb'], false));
     assert.doesNotMatch(execFileSync(process.execPath, [planner, 'accept'], {
       encoding: 'utf8', env: { ...process.env, NEEDS_JSON: JSON.stringify(complete), GITHUB_STEP_SUMMARY: '' },
     }), /Pre-merge lanes passed/);

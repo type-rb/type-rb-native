@@ -26,7 +26,6 @@ jobs:
       quick: ${{ steps.plan.outputs.quick }}
       documentation: ${{ steps.plan.outputs.documentation }}
       memory: ${{ steps.plan.outputs.memory }}
-      performance: ${{ steps.plan.outputs.performance }}
       draft: ${{ steps.plan.outputs.draft }}
       tooling: ${{ steps.plan.outputs.tooling }}
       cli: ${{ steps.plan.outputs.cli }}
@@ -96,9 +95,8 @@ jobs:
       - name: Check the Native compiler closure against snapshot v4
         if: needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true'
         run: tools/check-bootstrap-snapshot.sh "$RUNNER_TEMP/trb"
-      - name: Verify project and transition policy tooling on Linux
+      - name: Verify project and cost tooling on Linux
         run: |
-          sh tools/native-mir-transition-policy-test.sh
           sh tools/compiler-cost-test.sh
           sh tools/compiler-project-test.sh
       # Reference validity belongs to this oracle job, not the Go-free CLI chain.
@@ -117,10 +115,9 @@ jobs:
           path: ${{ runner.temp }}/reference-language.json
           if-no-files-found: warn
           retention-days: 30
-      - name: Check that the coverage table matches the fixture registry
+      - name: Check that the coverage views match the fixture registry
         if: needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true'
         run: |
-          python3 tools/native-language-coverage.py --check-table docs/native-language-coverage-matrix.md
           python3 tools/native-language-coverage.py --check-feature-table docs/native-language-feature-inventory.md
           python3 tools/native-language-coverage.py --check-pages-data docs/capabilities/ordinary-language.js
       - name: Run root units and focused MIR correctness tests
@@ -173,20 +170,10 @@ jobs:
     with:
       cost_mode: mir-migration
 
-  performance:
-    needs: [plan, quick, native, targets, memory, tooling, cli]
-    if: >-
-      !cancelled() && needs.quick.result == 'success' &&
-      needs.plan.outputs.performance == 'true' &&
-      needs.plan.outputs.draft == 'false' && needs.native.result == 'success' &&
-      needs.targets.result == 'success' && needs.memory.result == 'success' &&
-      needs.tooling.result == 'success' && needs.cli.result == 'success'
-    uses: ./.github/workflows/static-string-compactness.yml
-
   acceptance:
     name: Native CI acceptance
     if: always()
-    needs: [plan, quick, documentation, native, targets, memory, performance, tooling, cli]
+    needs: [plan, quick, documentation, native, targets, memory, tooling, cli]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

@@ -92,9 +92,9 @@ for each helper extraction, rename or small syntax adoption.
 PR and main integration explicitly select `mir-migration` cost mode. They retain
 all applicable correctness, target identity, process, recovery, fixed-point,
 ASan/LSan, Valgrind, GC-lifetime and cleanup authorities. Failed or missing required
-jobs still reject integration. Compiler byte ceilings and smoke-time
-ceilings produce retained `within-limit` or `exceeded` observations; an overrun
-cannot stop those correctness checks. Invalid modes or malformed observations
+jobs still reject integration. Compiler size is recorded without a ceiling,
+and smoke-time ceilings produce retained `within-limit` or `exceeded`
+observations; an overrun cannot stop those correctness checks. Invalid modes or malformed observations
 are errors. Existing workload timeouts and memory-lifecycle checks remain.
 
 Migration PRs omit the separate interleaved arm64 cost matrix. Linux

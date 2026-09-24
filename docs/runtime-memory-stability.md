@@ -92,9 +92,10 @@ runtime, compiler size, and artifact identities. The normal pull-request
 workflow runs the 5,000,000-iteration Darwin arm64 smoke after closing the
 self-hosted compiler chain.
 
-The manually dispatched
-[`runtime-memory-formal.yml`](../.github/workflows/runtime-memory-formal.yml)
-starts from the published ordinary Native seeds. Because those seeds predate
+The former manually dispatched
+[`runtime-memory-formal.yml`](https://github.com/type-rb/type-rb-native/blob/d1c151d02e051c6557acb479a9e9d7c713226858/.github/workflows/runtime-memory-formal.yml)
+is retired; run `runtime-memory-soak.sh` in its formal mode to reproduce it. It
+started from the published ordinary Native seeds. Because those seeds predate
 the current emitter and embedded linker policy, each target first builds two
 setup-only, Go-free transitions from the current compiler sources. The first
 introduces the current TypeRB-authored emitter through the published seed's
@@ -115,7 +116,7 @@ can omit these compatibility transitions. The workflow then records:
 - an ordinary least-squares RSS slope in bytes per minute;
 - exact revisions, source, tools, commands, hashes, sizes, timings, runtime
   statistics, and process inventory; and
-- the per-target and combined stripped compiler size result.
+- the per-target and combined stripped compiler size.
 
 The analyzer reports both trend values independently. Passing the absolute RSS
 ceiling cannot substitute for either trend limit. The dedicated sanitizer link
