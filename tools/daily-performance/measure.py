@@ -96,6 +96,66 @@ def source_case(case, directory):
     return (ROOT / case["expectedFile"]).read_bytes() if "expectedFile" in case else case["expected"].encode()
 
 
+def measure_self_compilation(args, roles, evidence, environment, core):
+    """Measure the current compiler building its exact-revision source."""
+    source = Path(args.compilers).parent / roles["native"]["revision"] / "source/compiler/src/compiler.trb"
+    if not source.is_file():
+        raise ValueError("Current compiler source is absent from the prepared worktree")
+    directory = evidence / "compiler-self"
+    directory.mkdir()
+    result = {"status": "pass", "sourceSha256": digest(source), "ir": None,
+              "build": None, "binaryBytes": None, "binarySha256": None}
+    records = []
+    ir_dir = directory / "emit-qbe"
+    ir_record = observe([roles["native"]["path"], "emit-qbe", source], ir_dir, 90,
+                        env=environment, core=core)
+    ir_record.update(kind="compiler-ir", case="compiler-self", role="native", phase="retained")
+    ir_output = ir_dir / "stdout"
+    if ir_record["status"] == "pass":
+        if not ir_output.stat().st_size or (ir_dir / "stderr").stat().st_size:
+            ir_record["status"] = "unexpected-stderr" if (ir_dir / "stderr").stat().st_size else "output-mismatch"
+        else:
+            result["ir"] = {"bytes": ir_output.stat().st_size, "sha256": digest(ir_output),
+                            "wallSeconds": ir_record["wallSeconds"],
+                            "cpuSeconds": ir_record["cpuSeconds"],
+                            "memoryBytes": ir_record["memoryBytes"]}
+    write(ir_dir / "observation.json", ir_record)
+    # Keep the digest and size, not a 20+ MB IR blob in every daily artifact.
+    ir_output.unlink(missing_ok=True)
+    records.append(ir_record)
+    if ir_record["status"] != "pass":
+        result["status"] = ir_record["status"]
+        return result, records
+
+    builds = []
+    for round_index in range(3):
+        output = directory / f"compiler-{round_index}"
+        build_dir = directory / f"build-{round_index}"
+        record = observe([roles["native"]["path"], "build", source, "--output", output,
+                          "--qbe", args.qbe, "--cc", "/usr/bin/cc", "--target", "linux-arm64-v0"],
+                         build_dir, 120, env=environment, core=core)
+        record.update(kind="compiler-self", case="compiler-self", role="native",
+                      phase="warmup" if round_index == 0 else "retained")
+        if record["status"] == "pass":
+            if not output.is_file() or (build_dir / "stdout").stat().st_size or (build_dir / "stderr").stat().st_size:
+                record["status"] = "build-failure"
+            else:
+                size, sha = output.stat().st_size, digest(output)
+                if result["binarySha256"] is not None and (size, sha) != (result["binaryBytes"], result["binarySha256"]):
+                    record["status"] = "output-mismatch"
+                else:
+                    result["binaryBytes"], result["binarySha256"] = size, sha
+        output.unlink(missing_ok=True)
+        write(build_dir / "observation.json", record)
+        records.append(record)
+        builds.append(record)
+        if record["status"] != "pass":
+            result["status"] = record["status"]
+            break
+    result["build"] = summarize(builds, 2)
+    return result, records
+
+
 def run(args):
     if platform.system() != "Linux" or platform.machine() not in ("aarch64", "arm64"):
         raise ValueError("Daily measurement requires Linux arm64")
@@ -212,6 +272,9 @@ def run(args):
             row["build"] = summarize(build_records[role], 3)
             rows.append(row)
         write(evidence / "raw.json", raw)
+    compiler_self, self_records = measure_self_compilation(args, roles, evidence, environment, core)
+    raw.extend(self_records)
+    write(evidence / "raw.json", raw)
     # Preserve exact commands and host context separately from the compact page data.
     context = {"cpu": subprocess.check_output(["lscpu"]).decode(), "platform": platform.platform(),
                "core": core, "qbeSha256": digest(args.qbe), "roles": roles,
@@ -222,7 +285,8 @@ def run(args):
                "memoryMetric": "GNU time maximum resident set size; not a sampled process-tree sum"}
     write(evidence / "context.json", context)
     write(args.output, {"revision": git("rev-parse", "HEAD"), "at": now(), "rows": rows,
-                        "status": "measured" if all(row["status"] == "pass" for row in rows) else "measured-with-failures",
+                        "compilerSelf": compiler_self,
+                        "status": "measured" if all(row["status"] == "pass" for row in rows) and compiler_self["status"] == "pass" else "measured-with-failures",
                         "platform": "Linux arm64 / ubuntu-24.04-arm", "core": core,
                         "roles": {key: {field: value[field] for field in ("revision", "sha256", "bytes", "version") if field in value} for key, value in roles.items()},
                         "pureGoCases": [case["id"] for case in suite["cases"] if "pureGoSource" in case],

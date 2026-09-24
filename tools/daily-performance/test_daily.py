@@ -1,4 +1,5 @@
 import csv
+from argparse import Namespace
 import hashlib
 import copy
 import io
@@ -26,6 +27,60 @@ def snapshot(status="measured"):
 
 
 class DailyTests(unittest.TestCase):
+    def test_self_compile_records_sizes_without_retaining_generated_artifacts(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            revision = "a" * 40
+            compilers = root / "compilers"
+            source = compilers / revision / "source/compiler/src/compiler.trb"
+            source.parent.mkdir(parents=True)
+            source.write_text("def main()\nend\n")
+            evidence = root / "evidence"
+            evidence.mkdir()
+
+            def observed(command, directory, _timeout, **_kwargs):
+                directory.mkdir()
+                if command[1] == "emit-qbe":
+                    (directory / "stdout").write_bytes(b"function l $main() {}\n")
+                else:
+                    (directory / "stdout").write_bytes(b"")
+                    Path(command[command.index("--output") + 1]).write_bytes(b"compiler binary")
+                (directory / "stderr").write_bytes(b"")
+                return {"status": "pass", "wallSeconds": 1.0, "cpuSeconds": 0.8,
+                        "memoryBytes": 1234}
+
+            with patch.object(measure, "observe", side_effect=observed):
+                result, records = measure.measure_self_compilation(
+                    Namespace(compilers=str(compilers / "compilers.json"), qbe="qbe"),
+                    {"native": {"revision": revision, "path": "compiler"}},
+                    evidence, {}, 0)
+            self.assertEqual(result["status"], "pass")
+            self.assertEqual(result["ir"]["bytes"], len(b"function l $main() {}\n"))
+            self.assertEqual(result["binaryBytes"], len(b"compiler binary"))
+            self.assertEqual(len(records), 4)
+            self.assertFalse(list((evidence / "compiler-self").rglob("compiler-[0-9]")))
+            self.assertFalse((evidence / "compiler-self/emit-qbe/stdout").exists())
+            self.assertTrue((evidence / "compiler-self/emit-qbe/observation.json").exists())
+
+    def test_compiler_self_measurement_is_optional_but_complete_when_passing(self):
+        old = snapshot()
+        state.validate({**state.empty(), "latest": old})
+        current = snapshot()
+        current["compilerSelf"] = {
+            "status": "pass", "sourceSha256": "b" * 64,
+            "ir": {"sha256": "c" * 64, "bytes": 24000000,
+                   "wallSeconds": 8, "cpuSeconds": 7.5, "memoryBytes": 200000000},
+            "build": {"wallSeconds": 30, "cpuSeconds": 29, "memoryBytes": 300000000,
+                      "wallMin": 29, "wallMax": 31},
+            "binaryBytes": 2000000, "binarySha256": "d" * 64,
+        }
+        state.validate({**state.empty(), "latest": current, "history": [old]})
+        for field, value in (("ir", None), ("binarySha256", "bad"), ("build", None)):
+            invalid = copy.deepcopy(current)
+            invalid["compilerSelf"][field] = value
+            with self.assertRaises(ValueError):
+                state.validate({**state.empty(), "latest": invalid})
+
     def test_nonperformance_changes_skip_but_runtime_and_inputs_do_not(self):
         for path in ["docs/example.md", "compiler/src/parser_test.trb", "README.md"]:
             self.assertFalse(state.relevant(path), path)

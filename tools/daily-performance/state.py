@@ -114,6 +114,36 @@ def validate(state):
             return members | ({"pure-go"} if case in pure_go_cases else set())
         if any(members != expected(case) for case, members in cases.items()):
             raise ValueError("Missing comparison role")
+        compiler_self = snapshot.get("compilerSelf")
+        if compiler_self is not None:
+            if not isinstance(compiler_self, dict) or weekly or compiler_self.get("status") not in {"pass", "timeout", "nonzero-exit", "output-mismatch", "unexpected-stderr", "build-failure"}:
+                raise ValueError("Invalid compiler self-measurement status")
+            if not re.fullmatch(r"[0-9a-f]{64}", compiler_self.get("sourceSha256", "")):
+                raise ValueError("Invalid compiler source identity")
+            ir, build = compiler_self.get("ir"), compiler_self.get("build")
+            if compiler_self["status"] == "pass" and (ir is None or build is None):
+                raise ValueError("Passing compiler self-measurement is incomplete")
+            if ir is not None:
+                if not isinstance(ir, dict):
+                    raise ValueError("Invalid compiler IR measurement")
+                if not re.fullmatch(r"[0-9a-f]{64}", ir.get("sha256", "")) or not isinstance(ir.get("bytes"), int) or ir["bytes"] <= 0:
+                    raise ValueError("Invalid compiler IR identity")
+                for name in ("wallSeconds", "cpuSeconds", "memoryBytes"):
+                    value = ir.get(name)
+                    if not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+                        raise ValueError("Invalid compiler IR measurement")
+            if build is not None:
+                if not isinstance(build, dict):
+                    raise ValueError("Invalid compiler build measurement")
+                for name in ("wallSeconds", "cpuSeconds", "memoryBytes", "wallMin", "wallMax"):
+                    value = build.get(name)
+                    if not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+                        raise ValueError("Invalid compiler build measurement")
+                if not 0 < build["wallMin"] <= build["wallSeconds"] <= build["wallMax"]:
+                    raise ValueError("Invalid compiler build range")
+            if compiler_self["status"] == "pass":
+                if not isinstance(compiler_self.get("binaryBytes"), int) or compiler_self["binaryBytes"] <= 0 or not re.fullmatch(r"[0-9a-f]{64}", compiler_self.get("binarySha256", "")):
+                    raise ValueError("Invalid compiler binary identity")
     return state
 
 
