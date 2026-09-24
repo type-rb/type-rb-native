@@ -114,6 +114,41 @@ function renderAreas(snapshot, metric) {
     $('area-body').append(tr);
   }
 }
+function renderCompilerSelf() {
+  const current = state.latest?.compilerSelf;
+  if (!current || !$('compiler-self')) return;
+  $('compiler-self').hidden = false;
+  const summary = $('compiler-self-summary'); summary.replaceChildren();
+  const history = $('compiler-self-history'); history.replaceChildren();
+  const intro = node('div', undefined, 'summary-intro');
+  intro.append(node('span', 'Current compiler', 'control-label'),
+    node('strong', current.status === 'pass' ? 'Self-compilation measured' : `Measurement failed: ${current.status}`),
+    node('small', `${state.latest.revision.slice(0, 8)} · same-revision compiler source`));
+  summary.append(intro);
+  if (current.status === 'pass') {
+    for (const [label, result] of [
+      ['Self build', format(current.build.wallSeconds, { unit: 'seconds' })],
+      ['QBE size', `${(current.ir.bytes / 1048576).toFixed(2)} MiB`],
+      ['Compiler binary', `${(current.binaryBytes / 1048576).toFixed(2)} MiB`],
+    ]) {
+      const card = node('div', undefined, 'summary-count neutral');
+      card.append(node('strong', result), node('span', label)); summary.append(card);
+    }
+  }
+  for (const snapshot of state.history.filter(item => item.series === state.latest.series && item.compilerSelf).slice(-10).reverse()) {
+    const self = snapshot.compilerSelf, tr = node('tr');
+    for (const [label, text] of [
+      ['Measured', new Date(snapshot.at).toLocaleDateString()],
+      ['Revision', snapshot.revision.slice(0, 8)],
+      ['Self build', self.build ? format(self.build.wallSeconds, { unit: 'seconds' }) : `Failed: ${self.status}`],
+      ['QBE size', self.ir ? `${(self.ir.bytes / 1048576).toFixed(2)} MiB` : '—'],
+      ['QBE emission', self.ir ? format(self.ir.wallSeconds, { unit: 'seconds' }) : '—'],
+    ]) {
+      const cell = node('td', text); cell.dataset.label = label; tr.append(cell);
+    }
+    history.append(tr);
+  }
+}
 function renderHistory() {
   const metric = metrics[metricKey];
   const history = state.history.filter(snapshot => snapshot.series === state.latest?.series);
@@ -157,7 +192,7 @@ function renderHistory() {
 }
 function render() {
   $('metric-description').textContent = metrics[metricKey].description + ' “About the same” means a difference below 5%; it is not a statistical conclusion.';
-  if (document.body.dataset.view === 'history') renderHistory(); else renderCurrent();
+  if (document.body.dataset.view === 'history') renderHistory(); else { renderCurrent(); renderCompilerSelf(); }
 }
 async function main() {
   const response = await fetch('./daily-state.json', { cache: 'no-store' });

@@ -72,7 +72,8 @@ semantics just to port a benchmark.
 
 JSON, I/O, service latency and large working sets are not covered. The
 compiler's own bootstrap cost remains separate from the application's
-clean-output build timings and sizes shown here.
+clean-output build timings and sizes shown here. Its daily self-compilation
+measurement is reported separately.
 
 ## Comparison and measurement
 
@@ -115,6 +116,19 @@ cache; this is not a cold-cache build claim. Role order rotates each round.
 Filesystem caches stay warm, swap is disabled, and measurements do not run
 concurrently on the measurement host. Warmup in a separate process does not
 warm a later process's JIT or heap.
+
+After workload measurement, the current Native compiler emits QBE for its
+same-revision compiler source once, recording wall/CPU time, peak RSS, byte size
+and SHA-256. It then builds that source three times (one warmup, two retained)
+with the registered QBE and C compiler, recording the retained median and range
+of the full build cost. Output binary size and hash must agree across all three
+builds. This is self-compilation telemetry, not the multi-generation bootstrap
+or a Pure Go comparison. Each emission has a 90-second timeout and each build
+a 120-second timeout; failure is published explicitly. The large QBE text and
+repeated binaries are removed after their hashes and sizes are recorded, while
+timing logs remain in the 90-day evidence artifact. The daily page shows the
+latest values and up to ten recent observations; old snapshots without this
+field remain valid.
 
 Wall time includes launcher overhead. GNU time records CPU and maximum RSS;
 RSS is not a simultaneous sum of a process tree. Short startup CPU/RSS values
