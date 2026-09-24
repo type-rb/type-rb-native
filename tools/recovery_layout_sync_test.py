@@ -25,8 +25,8 @@ class RecoveryInventorySyncTest(unittest.TestCase):
         self.source("unrelated", 'def unused(): String\n\treturn "not in the closure"\nend\n')
         self.write("src/compiler_recovery_layout.trb", LAYOUT_HEAD +
                    '\t\tRecoveryCompilerModule.new(name: "second", imports: ""),\n'
-                   '\t\tRecoveryCompilerModule.new(name: "compiler", imports: "import { label } from first\\n\\n"),\n'
                    '\t\tRecoveryCompilerModule.new(name: "first", imports: "import { Point } from second\\n\\n"),\n'
+                   '\t\tRecoveryCompilerModule.new(name: "compiler", imports: "import { label } from first\\n\\n"),\n'
                    "\t]\nend\n")
         self.write("src/compiler_recovery_mutations.trb", MUTATIONS_HEAD +
                    '\t\t["first", "\\"first label\\"", "\\"first title\\""],\n'
@@ -69,11 +69,24 @@ class RecoveryInventorySyncTest(unittest.TestCase):
         self.assertEqual(synchronize(self.root, False), [])
         layout = self.read("src/compiler_recovery_layout.trb")
         self.assertLess(layout.index('"second"'), layout.index('"compiler"'))
-        self.assertIn('RecoveryCompilerModule.new(name: "third", imports: ""),\n\t]', layout)
+        self.assertLess(layout.index('name: "third"'), layout.index('name: "compiler"'))
+        self.assertIn('RecoveryCompilerModule.new(name: "compiler", imports: "import { label } from first\\n\\n"),\n\t]', layout)
         self.assertIn('imports: "import { Point } from second\\nimport { extra } from third\\n\\n"', layout)
         self.assertIn('["third", "\\"third extra\\"", "\\"third extra~\\""],\n\t]',
                       self.read("src/compiler_recovery_mutations.trb"))
         self.assertIn('names := ["compiler", "second", "first", "third"]', self.read("compiler/src/compiler_test.trb"))
+
+    def test_misplaced_compiler_entry_is_moved_to_the_end(self):
+        layout = self.read("src/compiler_recovery_layout.trb")
+        compiler = '\t\tRecoveryCompilerModule.new(name: "compiler", imports: "import { label } from first\\n\\n"),\n'
+        self.write("src/compiler_recovery_layout.trb", layout.replace(compiler, "").replace(
+            '\t\tRecoveryCompilerModule.new(name: "first", imports: "import { Point } from second\\n\\n"),\n',
+            compiler + '\t\tRecoveryCompilerModule.new(name: "first", imports: "import { Point } from second\\n\\n"),\n',
+        ))
+        self.assertEqual(synchronize(self.root, False), ["layout: move compiler to final position"])
+        synchronize(self.root, True)
+        self.assertEqual(synchronize(self.root, False), [])
+        self.assertIn(compiler + "\t]\n", self.read("src/compiler_recovery_layout.trb"))
 
     def test_module_leaving_the_closure_is_removed_everywhere(self):
         self.source("first", 'def label(): String\n\treturn "first label"\nend\n')
