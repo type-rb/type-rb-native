@@ -106,30 +106,42 @@ def default_mutation(name: str, source: str) -> list[str] | None:
 def sync_layout(root: Path, modules: list[str], sources: dict[str, str], write: bool) -> list[str]:
     path = root / LAYOUT
     original = path.read_text()
-    rows = LAYOUT_ROW.findall(original)
-    if len(rows) != original.count("RecoveryCompilerModule.new(name:"):
+    rows = list(LAYOUT_ROW.finditer(original))
+    if len(rows) != original.count("RecoveryCompilerModule.new(name:") or not rows:
         raise InventoryError("recovery layout contains an unrecognized module row")
-    names = [name for name, _ in rows]
+    if any(left.end() != right.start() for left, right in zip(rows, rows[1:])):
+        raise InventoryError("recovery layout rows must be contiguous")
+    names = [row.group(1) for row in rows]
     if len(set(names)) != len(names):
         raise InventoryError("duplicate recovery module")
     changes = [f"layout: add {name}" for name in modules if name not in names]
     changes += [f"layout: remove {name}" for name in names if name not in modules]
+    if "compiler" not in modules:
+        raise InventoryError("compiler entry is missing from the closure")
+    if "compiler" in names and names[-1] != "compiler":
+        changes.append("layout: move compiler to final position")
 
-    def replace(match: re.Match[str]) -> str:
-        name, encoded = match.group(1), match.group(2)
+    entries: dict[str, str] = {}
+    for row in rows:
+        name, encoded = row.group(1), row.group(2)
         if name not in modules:
-            return ""
+            continue
         expected = encode(canonical_imports(sources[name]))
         if encoded != expected:
             changes.append(f"layout: imports {name}")
-        return match.group(0).replace(encoded, expected)
-
-    updated = LAYOUT_ROW.sub(replace, original)
-    additions = "".join(
-        f'\t\tRecoveryCompilerModule.new(name: "{name}", imports: {encode(canonical_imports(sources[name]))}),\n'
-        for name in modules if name not in names)
-    closing = updated.rindex("\t]\n")
-    updated = updated[:closing] + additions + updated[closing:]
+        entries[name] = row.group(0).replace(encoded, expected)
+    for name in modules:
+        if name not in entries:
+            entries[name] = (
+                f'\t\tRecoveryCompilerModule.new(name: "{name}", '
+                f'imports: {encode(canonical_imports(sources[name]))}),\n'
+            )
+    # The matched-Go recovery driver replaces the compiler entry's final main().
+    # Keep all newly discovered modules before it, including on later syncs.
+    ordered = [name for name in names if name in modules and name != "compiler"]
+    ordered += [name for name in modules if name not in names and name != "compiler"]
+    ordered.append("compiler")
+    updated = original[:rows[0].start()] + "".join(entries[name] for name in ordered) + original[rows[-1].end():]
     if write and updated != original:
         path.write_text(updated)
     return changes
