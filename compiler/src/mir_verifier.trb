@@ -7,8 +7,8 @@ import { integer_string } from literals
 import { mir_definition_index, mir_identity_key } from mir_identities
 import { mir_semantic_type_name, mir_semantic_value_type, mir_types_error } from mir_types
 import { mir_function_roots, mir_live_equal, mir_root_plan_equal } from mir_roots
-import { MirFlow, mir_build_flow, mir_flow_blocks, mir_flow_graph_error, mir_flow_type, mir_value_available } from mir_flow
-import { MirBlock, MirFunction, MirModule, mir_block_index, mir_origin_valid, mir_table_span_valid } from mir
+import { MirFlow, mir_build_flow_with_values, mir_flow_blocks, mir_flow_graph_error, mir_flow_type, mir_value_available } from mir_flow
+import { MirBlock, MirFunction, MirModule, MirValue, mir_block_index, mir_origin_valid, mir_table_span_valid } from mir
 import { mir_scalar_guard } from mir_analysis
 import { mir_function_signature_error, mir_signatures_error } from mir_calls
 import { mir_instruction_error } from mir_instructions
@@ -249,12 +249,12 @@ def mir_adapter_error(flow: MirFlow, native_module: MirModule, function: MirFunc
 	return ""
 end
 
-def mir_function_error(native_module: MirModule, function: MirFunction): String
+def mir_function_error(native_module: MirModule, function: MirFunction, values: Array<MirValue>): String
 	if function.kind < 0 || function.kind > 3 || function.kind == 2
 		return "MIR function adapter kind is invalid"
 	end
 	if function.kind == 3
-		native_module.values.each do |value|
+		values.each do |value|
 			if value.function_id == function.id
 				if !mir_semantic_value_type(native_module, value.type_id)
 					return "MIR scalar control value type differs"
@@ -274,7 +274,7 @@ def mir_function_error(native_module: MirModule, function: MirFunction): String
 	if graph_error != ""
 		return graph_error
 	end
-	flow := mir_build_flow(native_module, function, blocks)
+	flow := mir_build_flow_with_values(native_module, function, blocks, values)
 	mut index := function.parameter_start
 	mut finish := index + function.parameter_count
 	while index < finish
@@ -365,6 +365,7 @@ def verify_mir(native_module: MirModule, optimized: Boolean): String
 		return ""
 	end
 	mut functions: Hash<String, Integer> := {}
+	mut function_values: Array<Array<MirValue>> := []
 	index = 0
 	while index < native_module.functions.size()
 		function := native_module.functions[index]
@@ -379,6 +380,7 @@ def verify_mir(native_module: MirModule, optimized: Boolean): String
 			return "MIR function identifier is duplicated"
 		end
 		functions[function_key] = index
+		function_values.push([])
 		if function.id == native_module.entry_function[0]
 			entry_found = true
 		end
@@ -416,6 +418,8 @@ def verify_mir(native_module: MirModule, optimized: Boolean): String
 			return "MIR value is defined more than once"
 		end
 		values[key] = 1
+		mut owned := function_values[functions[integer_string(value.function_id)]]
+		owned.push(value)
 		if !definitions.key?(key) || definitions[key] != 1
 			return "MIR value definition count differs"
 		end
@@ -423,7 +427,7 @@ def verify_mir(native_module: MirModule, optimized: Boolean): String
 	end
 	index = 0
 	while index < native_module.functions.size()
-		error := mir_function_error(native_module, native_module.functions[index])
+		error := mir_function_error(native_module, native_module.functions[index], function_values[index])
 		if error != ""
 			return error
 		end

@@ -362,6 +362,26 @@ def mir_value_index(
 		function_id: Integer,
 		value_id: Integer,
 	): Integer
+	# Compiler-built values are grouped by function. Locate that group without
+	# walking every earlier function's values on each lookup. Independent MIR
+	# fixtures may arrange rows differently, so retain the general scan below.
+	mut lower := 0
+	mut upper := native_module.values.size()
+	while lower < upper
+		middle := lower + (upper - lower) / 2
+		if native_module.values[middle].function_id < function_id
+			lower = middle + 1
+		else
+			upper = middle
+		end
+	end
+	mut candidate := lower
+	while candidate < native_module.values.size() && native_module.values[candidate].function_id == function_id
+		if native_module.values[candidate].id == value_id
+			return candidate
+		end
+		candidate += 1
+	end
 	mut index := 0
 	while index < native_module.values.size()
 		row := native_module.values[index]
