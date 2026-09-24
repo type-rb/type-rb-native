@@ -42,10 +42,58 @@ describe("MIR declaration-bound calls") do
 		state.scalar_mir.calls.each do |call|
 			if call.callee == 1
 				expect(call.effects).to_equal(8)
+			elsif call.callee == 4
+				expect(call.effects).to_equal(8)
 			else
 				expect(call.effects).to_equal(15)
 			end
 		end
+	end
+
+	test("summarizes direct managed reads while retaining mutation and nested-call barriers") do
+		source := "def length(values: Array<Integer>): Integer\nreturn values.size()\nend\ndef read(values: Array<Integer>, index: Integer): Integer\nreturn values[index]\nend\ndef grow(mut values: Array<Integer>): Integer\nvalues.push(3)\nreturn values.size()\nend\ndef delegate(values: Array<Integer>): Integer\nreturn length(values)\nend\ndef scan(values: Array<Integer>): Integer\nmut index := 0\nmut total := 0\nwhile index < values.size()\ntotal += values[index] + length(values) + read(values, index)\nindex += 1\nend\nreturn total\nend\ndef main()\nmut values := [1, 2]\nputs(scan(values))\nputs(grow(values))\nputs(delegate(values))\nend\n"
+		mut state := logical_checked_source(source)
+		expect(check(state)).to_be_true()
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		mut seen := [false, false, false, false]
+		state.scalar_mir.calls.each do |call|
+			if call.callee < 4
+				expect(call.effects).to_equal([8, 8, 15, 15][call.callee])
+				seen[call.callee] = true
+			end
+		end
+		seen.each do |found|
+			expect(found).to_be_true()
+		end
+		scan := mir_function_index(state.scalar_mir, 4)
+		expect(state.scalar_mir.array_loops[scan].size() > 0).to_be_true()
+		mut checked_calls := 0
+		mut index := 0
+		while index < state.scalar_mir.instructions.size()
+			instruction := state.scalar_mir.instructions[index]
+			if instruction.kind == 11
+				call := state.scalar_mir.calls[instruction.payload]
+				if call.callee == 0 || call.callee == 1
+					expect(state.scalar_mir.root_plans[scan].instructions.include?(index)).to_be_false()
+					checked_calls += 1
+				end
+			end
+			index += 1
+		end
+		expect(checked_calls > 0).to_be_true()
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe_arguments(qbe, control_test_output(emit_qbe(state)), [])
+			when Result::Ok(actual)
+				expect(actual).to_equal("10\n3\n3\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+		call := state.scalar_mir.calls[0]
+		state.scalar_mir.calls[0] = MirCall.new(callee: call.callee, argument_start: call.argument_start, argument_count: call.argument_count, effects: 15)
+		expect(verify_mir(state.scalar_mir, true)).to_equal("MIR call effects or adapter differ")
 	end
 
 	test("omits GC roots at verified scalar leaf calls but rejects forged effects") do
