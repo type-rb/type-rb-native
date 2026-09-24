@@ -1532,3 +1532,8 @@
 | Separate Hash writes do not join unrelated values | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Separate writes keep the first inferred Hash value type | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Empty Hash inference keeps the first key type | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Single-quoted Strings | accepts | accepts | matches reference | matches reference |
+| Single-quoted Symbols | accepts | accepts | matches reference | matches reference |
+| Invalid single-quoted escape | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Logical assignment skips unneeded side effects | accepts | accepts | matches reference | matches reference |
+| Direct union indexing requires narrowing | rejects as reference | rejects as reference | not reached | rejects as reference |

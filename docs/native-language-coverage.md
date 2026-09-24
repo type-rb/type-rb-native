@@ -189,8 +189,7 @@ and Hash label text remains literal. Maximal operator tokens preserve Symbol
 spelling; type parsing expands nested closing angles without losing later source
 origins. Shared cases and source-erased/reordered/forced-GC MIR cover these
 boundaries, with Unicode/NUL returns and retained invalid-declaration/reload checks.
-Unicode identifiers follow the builtin-value family above. The reference's
-unsettled single-quote and remaining Symbol framing contracts stay explicit. See
+Unicode identifiers follow the builtin-value family above. The remaining Symbol framing contracts stay explicit. See
 [decision 0076](decisions/0076-lexical-boundaries.md).
 
 ## Stable natural Array ordering
@@ -365,12 +364,16 @@ This does not complete the module/binding families or the whole basic language.
 
 ## Symbol expressions
 
-Unquoted and double-quoted Symbol spellings use the reference String semantics.
-Quoted interpolation-looking contents remain literal; actual String interpolation,
-Hash labels and named arguments retain their separate syntax. Existing String
-MIR covers values, defaults, nullable results, captures and managed storage, with
-source-erased/reordered/forced-GC and retained-session checks. Keyword Symbols also retain their literal identity in REPL framing. Single-quote,
-operator spelling and multiline interpolation boundaries remain explicit; see
+Unquoted, double-quoted and single-quoted Symbol spellings use the reference
+String semantics. Single-quoted Strings and Symbols decode validated escapes
+without interpolation, including Unicode and escaped apostrophes. Quoted
+interpolation-looking contents remain literal; actual double-quoted String
+interpolation, Hash labels and named arguments retain their separate syntax.
+Existing String MIR covers values, defaults, nullable results, captures and
+managed storage, with source-erased/reordered/forced-GC and retained-session
+checks. Keyword Symbols retain their literal identity in REPL framing.
+Remaining operator/control framing and multiline interpolation boundaries stay
+explicit; see
 [decision 0066](decisions/0066-symbol-literal-syntax.md).
 
 ## Unicode String trimming

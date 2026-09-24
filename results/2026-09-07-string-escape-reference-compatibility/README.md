@@ -1,6 +1,21 @@
 # Current reference compatibility
 
 The selected development reference is TypeRB `0.4.9-dev` at
+`999ff165933ac6ec824c3334e98a8be52e7b2948`. It incorporates
+[PR #821](https://github.com/type-rb/type-rb/pull/821) for portable
+single-quoted String and Symbol execution,
+[PR #822](https://github.com/type-rb/type-rb/pull/822) for checked union
+indexing, and
+[PR #824](https://github.com/type-rb/type-rb/pull/824) for REPL
+short-circuit assignment. Native pairs the new quoted-literal contract with
+lexer, verified MIR, ordinary execution and retained REPL cases. Exact
+cross-target, recovery and shared-language CI remain the integration authority.
+This development pin does not change a release or immutable seed. Earlier
+reference identities and evidence follow.
+
+# Previous object-reference compatibility
+
+The selected development reference is TypeRB `0.4.9-dev` at
 `71519dac58abc79811a35ef88fe9f38ccc435185`, incorporating
 [PR #820](https://github.com/type-rb/type-rb/pull/820).
 Transparent class aliases resolve to their target class for construction and
@@ -11,7 +26,7 @@ observations, recovery and target validation remain required. This development
 pin does not change a release, immutable seed or performance qualification.
 Previous reference identities and evidence follow.
 
-# Previous object-reference compatibility
+# Earlier object-reference compatibility
 
 The selected development reference is TypeRB `0.4.9-dev` at
 `92e170123eae0dc697138f3a1091441fe95e1b89`, incorporating

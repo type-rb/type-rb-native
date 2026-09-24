@@ -2,7 +2,7 @@
 
 TypeRB Native currently follows exact reference revisions during development. The
 current source and semantic oracle is TypeRB
-`71519dac58abc79811a35ef88fe9f38ccc435185` (the `0.4.9-dev` development identity), recorded
+`999ff165933ac6ec824c3334e98a8be52e7b2948` (the `0.4.9-dev` development identity), recorded
 in `TYPE_RB_REVISION`. This declares one exact reference identity during Native
 development, without claiming a supported version range.
 
@@ -33,6 +33,20 @@ The earlier scoped-file successor is registered in
 [Darwin/Linux arm64 result](https://github.com/type-rb/type-rb-native/blob/5cf61c740aa600c34ed94f1b130ea2ffefd9e783/results/2026-08-31-typerb-0-4-4-compatibility-darwin-linux-arm64/README.md)
 passes the selected-reference, migration, exact-baseline, target-regression,
 fixed-point, process, resource, and size criteria.
+
+## Single-quoted literal and checker reference update
+
+The current development pin includes TypeRB
+[PR #821](https://github.com/type-rb/type-rb/pull/821),
+[#822](https://github.com/type-rb/type-rb/pull/822) and
+[#824](https://github.com/type-rb/type-rb/pull/824).
+Single-quoted Strings and Symbols now decode the same validated escapes across
+Go, Ruby and TypeScript output and the REPL. Direct indexing of a union value
+is rejected consistently, and REPL logical assignment evaluates its right
+side only when required. Native covers the quoted-literal syntax in its lexer,
+MIR, execution and REPL; the other reference corrections retain their
+existing independent tests. This is an exact development-source update, not
+a release or a performance qualification.
 
 ## Class alias and constructor reference update
 
@@ -147,8 +161,7 @@ Transparent aliases retain nominal construction, Integer-to-Float conversion is
 explicit in typed IR, and inferred union representations retain their storage
 in generated Go. All three portable targets and the REPL have controls. The pin
 also incorporates [PR #776](https://github.com/type-rb/type-rb/pull/776), normalizing
-successfully decoded String literals before backend emission. The full remaining
-single-quote contract is still tracked separately in TypeRB #748.
+successfully decoded String literals before backend emission. The later single-quote correction is recorded above.
 Shared observations and the reference AST inventory are reviewed at this accepted
 revision. This changes neither the release version nor the immutable Native seed.
 

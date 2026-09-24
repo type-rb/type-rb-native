@@ -92,6 +92,6 @@ joining, Hash snapshot iteration and scoped numeric value inference, Range mater
 uniqueness, concatenation, insertion/removal, edges/copies/slicing, and the String
 query, sequence, slice and escape families. Literal-union Hash keys preserve
 their semantic identity through lookup, copies, snapshots and collection.
-Its 1521 registered cases include
+Its 1535 registered cases include
 explicit remaining differences; neither this count nor green regression CI
 closes #454.
