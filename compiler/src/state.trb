@@ -12,7 +12,7 @@ import { EnumDefinition, EnumField, EnumVariant, RawEnumValue } from enum_model
 import iteration_syntax
 import { integer_string } from literals
 import { MirBlock, MirCall, MirControlLoop, MirIndexedTarget, MirInstruction, MirModule, MirUnionTarget, MirValue } from mir
-import { IntegerStorage, StringStorage, integer_storage, integer_storage_copy, load_integer, load_string, sparse_integer_at, store_integer, store_string, string_storage } from storage
+import { IntegerStorage, StringStorage, integer_storage, integer_storage_copy, load_integer, load_string, sparse_integer_at, store_integer, store_string, string_storage, string_storage_copy } from storage
 
 # Parsed declaration-scope expression. Function identities are assigned only
 # after all authored declarations and their types have been resolved.
@@ -123,6 +123,37 @@ record CompilerTypeResolution
 	generic_template_mode: Array<Boolean>
 end
 
+# Parsed record, function and parameter declarations form one catalog. A
+# template-checking fork copies its mutable storage and lookup independently.
+record CompilerDeclarationCatalog
+	record_names: StringStorage
+	record_modules: IntegerStorage
+	record_field_starts: IntegerStorage
+	record_field_counts: IntegerStorage
+	record_lines: IntegerStorage
+	record_count: Array<Integer>
+	field_names: StringStorage
+	field_types: StringStorage
+	field_lines: IntegerStorage
+	field_count: Array<Integer>
+	function_names: StringStorage
+	function_modules: IntegerStorage
+	function_parameter_starts: IntegerStorage
+	function_parameter_counts: IntegerStorage
+	function_result_types: StringStorage
+	function_body_starts: IntegerStorage
+	function_body_ends: IntegerStorage
+	function_lines: IntegerStorage
+	function_count: Array<Integer>
+	function_lookup: Hash<String, Integer>
+	parameter_names: StringStorage
+	parameter_types: StringStorage
+	parameter_mutable: IntegerStorage
+	parameter_named_only: IntegerStorage
+	parameter_lines: IntegerStorage
+	parameter_count: Array<Integer>
+end
+
 record CompilerState
 	objects: Array<ObjectDefinition>
 	object_instances: Array<ObjectInstance>
@@ -182,32 +213,7 @@ record CompilerState
 	token_count: Array<Integer>
 	scalar_mir: MirModule
 	module_graph: CompilerModuleGraph
-	record_names: StringStorage
-	record_modules: IntegerStorage
-	record_field_starts: IntegerStorage
-	record_field_counts: IntegerStorage
-	record_lines: IntegerStorage
-	record_count: Array<Integer>
-	field_names: StringStorage
-	field_types: StringStorage
-	field_lines: IntegerStorage
-	field_count: Array<Integer>
-	function_names: StringStorage
-	function_modules: IntegerStorage
-	function_parameter_starts: IntegerStorage
-	function_parameter_counts: IntegerStorage
-	function_result_types: StringStorage
-	function_body_starts: IntegerStorage
-	function_body_ends: IntegerStorage
-	function_lines: IntegerStorage
-	function_count: Array<Integer>
-	function_lookup: Hash<String, Integer>
-	parameter_names: StringStorage
-	parameter_types: StringStorage
-	parameter_mutable: IntegerStorage
-	parameter_named_only: IntegerStorage
-	parameter_lines: IntegerStorage
-	parameter_count: Array<Integer>
+	declarations: CompilerDeclarationCatalog
 	diagnostics: CompilerDiagnostics
 end
 
@@ -266,6 +272,77 @@ def compiler_module_graph_fork(graph: CompilerModuleGraph, active_module: Array<
 	)
 end
 
+def compiler_declaration_catalog_new(capacity: Integer): CompilerDeclarationCatalog
+	return CompilerDeclarationCatalog.new(
+		record_names: string_storage(capacity), record_modules: integer_storage(capacity),
+		record_field_starts: integer_storage(capacity), record_field_counts: integer_storage(capacity),
+		record_lines: integer_storage(capacity), record_count: [0],
+		field_names: string_storage(capacity), field_types: string_storage(capacity),
+		field_lines: integer_storage(capacity), field_count: [0],
+		function_names: string_storage(capacity), function_modules: integer_storage(capacity),
+		function_parameter_starts: integer_storage(capacity), function_parameter_counts: integer_storage(capacity),
+		function_result_types: string_storage(capacity), function_body_starts: integer_storage(capacity),
+		function_body_ends: integer_storage(capacity), function_lines: integer_storage(capacity),
+		function_count: [0], function_lookup: {},
+		parameter_names: string_storage(capacity), parameter_types: string_storage(capacity),
+		parameter_mutable: integer_storage(capacity), parameter_named_only: integer_storage(capacity),
+		parameter_lines: integer_storage(capacity), parameter_count: [0],
+	)
+end
+
+def compiler_declaration_catalog_fork(catalog: CompilerDeclarationCatalog): CompilerDeclarationCatalog
+	mut record_count: Array<Integer> := []
+	catalog.record_count.each do |value|
+		record_count.push(value)
+	end
+	mut field_count: Array<Integer> := []
+	catalog.field_count.each do |value|
+		field_count.push(value)
+	end
+	mut function_count: Array<Integer> := []
+	catalog.function_count.each do |value|
+		function_count.push(value)
+	end
+	mut function_lookup: Hash<String, Integer> := {}
+	mut function := 0
+	while function < catalog.function_count[0]
+		key := function_index_key(load_integer(catalog.function_modules, function), load_string(catalog.function_names, function))
+		if catalog.function_lookup.key?(key)
+			function_lookup[key] = catalog.function_lookup[key]
+		end
+		function += 1
+	end
+	mut parameter_count: Array<Integer> := []
+	catalog.parameter_count.each do |value|
+		parameter_count.push(value)
+	end
+	return CompilerDeclarationCatalog.new(
+		record_names: string_storage_copy(catalog.record_names),
+		record_modules: integer_storage_copy(catalog.record_modules),
+		record_field_starts: integer_storage_copy(catalog.record_field_starts),
+		record_field_counts: integer_storage_copy(catalog.record_field_counts),
+		record_lines: integer_storage_copy(catalog.record_lines), record_count: record_count,
+		field_names: string_storage_copy(catalog.field_names),
+		field_types: string_storage_copy(catalog.field_types),
+		field_lines: integer_storage_copy(catalog.field_lines), field_count: field_count,
+		function_names: string_storage_copy(catalog.function_names),
+		function_modules: integer_storage_copy(catalog.function_modules),
+		function_parameter_starts: integer_storage_copy(catalog.function_parameter_starts),
+		function_parameter_counts: integer_storage_copy(catalog.function_parameter_counts),
+		function_result_types: string_storage_copy(catalog.function_result_types),
+		function_body_starts: integer_storage_copy(catalog.function_body_starts),
+		function_body_ends: integer_storage_copy(catalog.function_body_ends),
+		function_lines: integer_storage_copy(catalog.function_lines),
+		function_count: function_count, function_lookup: function_lookup,
+		parameter_names: string_storage_copy(catalog.parameter_names),
+		parameter_types: string_storage_copy(catalog.parameter_types),
+		parameter_mutable: integer_storage_copy(catalog.parameter_mutable),
+		parameter_named_only: integer_storage_copy(catalog.parameter_named_only),
+		parameter_lines: integer_storage_copy(catalog.parameter_lines),
+		parameter_count: parameter_count,
+	)
+end
+
 def compiler_new(capacity: Integer): CompilerState
 	return CompilerState.new(objects: [], object_instances: [], object_instance_lookup: {}, newtypes: [], token_fused_literals: integer_storage(capacity), raw_enum_values: [], raw_enum_results: string_storage(capacity), function_receivers: string_storage(capacity), internal_type_annotations: [], projected_type_lines: [- 1, - 1],
 		global_scope_orders: integer_storage(capacity), globals: [], global_types: [], global_functions: [], global_order: [],
@@ -304,32 +381,7 @@ def compiler_new(capacity: Integer): CompilerState
 			literal_texts: [],
 		),
 		module_graph: compiler_module_graph_new(capacity),
-		record_names: string_storage(capacity),
-		record_modules: integer_storage(capacity),
-		record_field_starts: integer_storage(capacity),
-		record_field_counts: integer_storage(capacity),
-		record_lines: integer_storage(capacity),
-		record_count: [0],
-		field_names: string_storage(capacity),
-		field_types: string_storage(capacity),
-		field_lines: integer_storage(capacity),
-		field_count: [0],
-		function_names: string_storage(capacity),
-		function_modules: integer_storage(capacity),
-		function_parameter_starts: integer_storage(capacity),
-		function_parameter_counts: integer_storage(capacity),
-		function_result_types: string_storage(capacity),
-		function_body_starts: integer_storage(capacity),
-		function_body_ends: integer_storage(capacity),
-		function_lines: integer_storage(capacity),
-		function_count: [0],
-		function_lookup: {},
-		parameter_names: string_storage(capacity),
-		parameter_types: string_storage(capacity),
-		parameter_mutable: integer_storage(capacity),
-		parameter_named_only: integer_storage(capacity),
-		parameter_lines: integer_storage(capacity),
-		parameter_count: [0],
+		declarations: compiler_declaration_catalog_new(capacity),
 		diagnostics: CompilerDiagnostics.new(
 			codes: string_storage(1), lines: integer_storage(1),
 			messages: string_storage(1), modules: integer_storage(1), count: [0],
@@ -594,14 +646,14 @@ end
 # Source token origins remain authored coordinates within each independent body.
 def select_checked_body(mut state: CompilerState, function: Integer): CheckedBody
 	previous := state.checked[0]
-	if function < 0 || function >= state.function_count[0]
+	if function < 0 || function >= state.declarations.function_count[0]
 		diagnostic(state, "TRBN4004", 1, "checked body requires a declared function")
 		return previous
 	end
 	mut encoded := sparse_integer_at(state.checked_body_indices, function)
 	if encoded == 0
-		mut origin := load_integer(state.function_body_starts, function)
-		mut finish := load_integer(state.function_body_ends, function) + 1
+		mut origin := load_integer(state.declarations.function_body_starts, function)
+		mut finish := load_integer(state.declarations.function_body_ends, function) + 1
 		state.type_resolution.generic_function_instances.each do |instance|
 			if instance.function == function
 				state.objects.each do |definition|

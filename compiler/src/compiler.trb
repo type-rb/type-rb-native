@@ -61,23 +61,23 @@ def compiler_file_entry_function(state: CompilerState): Integer
 	if index < 0
 		return - 1
 	end
-	if load_integer(state.function_parameter_counts, index) != 4
+	if load_integer(state.declarations.function_parameter_counts, index) != 4
 		return - 1
 	end
-	start := load_integer(state.function_parameter_starts, index)
-	if load_string(state.parameter_types, start) != "String"
+	start := load_integer(state.declarations.function_parameter_starts, index)
+	if load_string(state.declarations.parameter_types, start) != "String"
 		return - 1
 	end
-	if load_string(state.parameter_types, start + 1) != "String"
+	if load_string(state.declarations.parameter_types, start + 1) != "String"
 		return - 1
 	end
-	if load_string(state.parameter_types, start + 2) != "String"
+	if load_string(state.declarations.parameter_types, start + 2) != "String"
 		return - 1
 	end
-	if load_string(state.parameter_types, start + 3) != "Boolean"
+	if load_string(state.declarations.parameter_types, start + 3) != "Boolean"
 		return - 1
 	end
-	if load_string(state.function_result_types, index) != "Integer"
+	if load_string(state.declarations.function_result_types, index) != "Integer"
 		return - 1
 	end
 	return index
@@ -224,7 +224,7 @@ def emit_entry(mut state: CompilerState, mut output: QbeOutput)
 				diagnostic(state, "TRBN4005", 1, "Native CLI runtime template is missing")
 				return
 			end
-			runtime_token := load_integer(state.function_body_starts, runtime_function) + 1
+			runtime_token := load_integer(state.declarations.function_body_starts, runtime_function) + 1
 			if load_integer(state.token_kinds, runtime_token) != 3
 				diagnostic(state, "TRBN4005", 1, "Native CLI runtime template must be a literal String")
 				return
@@ -256,7 +256,7 @@ def emit_qbe(mut state: CompilerState): QbeOutput
 	emit_object_dispatch(state.scalar_mir, output)
 	compiler_runtime := compiler_entry_function(state) >= 0
 	emit_qbe_runtime(output, compiler_runtime)
-	function_count := state.function_count[0]
+	function_count := state.declarations.function_count[0]
 	mut function_index := 0
 	# Flat recovery and CLI input retain their source fallbacks. Ordinary compiler
 	# intrinsics are omitted by declaration identity, independent of source order.
@@ -623,15 +623,15 @@ end
 def project_select_entry(mut state: CompilerState): Boolean
 	mut entry :=- 1
 	mut function_index := 0
-	while function_index < state.function_count[0]
-		if load_string(state.function_names, function_index) == "main"
-			module_index := load_integer(state.function_modules, function_index)
+	while function_index < state.declarations.function_count[0]
+		if load_string(state.declarations.function_names, function_index) == "main"
+			module_index := load_integer(state.declarations.function_modules, function_index)
 			if entry >= 0
 				state.module_graph.active_module[0] = module_index
 				diagnostic(
 					state,
 					"TRBN4010",
-					load_integer(state.function_lines, function_index),
+					load_integer(state.declarations.function_lines, function_index),
 					"project has more than one top-level main function",
 				)
 				return false
@@ -1033,7 +1033,7 @@ def check(mut state: CompilerState): Boolean
 	mir_declare_signatures(state)
 	mir_declare_globals(state)
 	mut function_index := 0
-	while function_index < state.function_count[0]
+	while function_index < state.declarations.function_count[0]
 		if !object_abstract_function(state, function_index)
 			check_function(state, function_index)
 		end

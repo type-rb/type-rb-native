@@ -28,7 +28,7 @@ end
 def find_record_type(state: CompilerState, type_name: String): Integer
 	mut found :=- 1
 	mut index := 0
-	while index < state.record_count[0]
+	while index < state.declarations.record_count[0]
 		if record_type(index) == type_name
 			found = index
 		end
@@ -120,7 +120,7 @@ def type_display(state: CompilerState, type_name: String): String
 	end
 	record_index := find_record_type(state, type_name)
 	if record_index >= 0
-		return load_string(state.record_names, record_index)
+		return load_string(state.declarations.record_names, record_index)
 	end
 	element := array_element_type(type_name)
 	if element != ""
@@ -130,10 +130,10 @@ def type_display(state: CompilerState, type_name: String): String
 end
 
 def find_field(state: CompilerState, record_index: Integer, name: String): Integer
-	start := load_integer(state.record_field_starts, record_index)
-	mut index := start + load_integer(state.record_field_counts, record_index) - 1
+	start := load_integer(state.declarations.record_field_starts, record_index)
+	mut index := start + load_integer(state.declarations.record_field_counts, record_index) - 1
 	while index >= start
-		if load_string(state.field_names, index) == name
+		if load_string(state.declarations.field_names, index) == name
 			return index
 		end
 		index -= 1
@@ -343,26 +343,26 @@ def instantiate_generic_nominal(mut state: CompilerState, definition: Integer, a
 	mut type_name := ""
 	mut owner := 0
 	if declaration.kind == 1
-		owner = state.record_count[0]
+		owner = state.declarations.record_count[0]
 		type_name = record_type(owner)
-		store_string(state.record_names, owner, name)
-		store_integer(state.record_modules, owner, declaration.source_id)
-		store_integer(state.record_lines, owner, declaration.line)
-		store_integer(state.record_field_starts, owner, state.field_count[0])
-		store_integer(state.record_field_counts, owner, declaration.variants[0].fields.size())
-		state.record_count[0] += 1
+		store_string(state.declarations.record_names, owner, name)
+		store_integer(state.declarations.record_modules, owner, declaration.source_id)
+		store_integer(state.declarations.record_lines, owner, declaration.line)
+		store_integer(state.declarations.record_field_starts, owner, state.declarations.field_count[0])
+		store_integer(state.declarations.record_field_counts, owner, declaration.variants[0].fields.size())
+		state.declarations.record_count[0] += 1
 		store_integer(state.type_resolution.record_generic_bindings, owner, add_generic_binding(state, declaration.source_id, declaration.parameters, arguments, depth))
 		declaration.variants[0].fields.each do |field|
-			slot := state.field_count[0]
-			store_string(state.field_names, slot, field.name)
-			store_string(state.field_types, slot, generic_substitute(field.type_name, declaration.parameters, arguments))
-			store_integer(state.field_lines, slot, field.line)
+			slot := state.declarations.field_count[0]
+			store_string(state.declarations.field_names, slot, field.name)
+			store_string(state.declarations.field_types, slot, generic_substitute(field.type_name, declaration.parameters, arguments))
+			store_integer(state.declarations.field_lines, slot, field.line)
 			if field.default_start >= 0
 				state.default_initializers.push(DefaultInitializer.new(kind: 1, owner: owner, slot: slot, start: field.default_start, finish: field.default_finish))
 				state.default_functions.push(- 1)
 				store_integer(state.field_defaults, slot, state.default_initializers.size())
 			end
-			state.field_count[0] += 1
+			state.declarations.field_count[0] += 1
 		end
 	else
 		owner = state.enums.size()
@@ -378,15 +378,15 @@ def instantiate_generic_nominal(mut state: CompilerState, definition: Integer, a
 	state.type_resolution.generic_instance_lookup[key] = state.type_resolution.generic_instances.size()
 	state.type_resolution.generic_instances.push(GenericInstance.new(definition: definition, arguments: arguments, type_name: type_name))
 	if declaration.kind == 1
-		mut field := load_integer(state.record_field_starts, owner)
-		finish := field + load_integer(state.record_field_counts, owner)
+		mut field := load_integer(state.declarations.record_field_starts, owner)
+		finish := field + load_integer(state.declarations.record_field_counts, owner)
 		while field < finish && !has_diagnostic(state)
-			raw := load_string(state.field_types, field)
+			raw := load_string(state.declarations.field_types, field)
 			resolved := resolve_type_name(state, declaration.source_id, raw, false)
 			if resolved == ""
-				diagnostic(state, "TRBN4003", load_integer(state.field_lines, field), "invalid instantiated field type " + raw)
+				diagnostic(state, "TRBN4003", load_integer(state.declarations.field_lines, field), "invalid instantiated field type " + raw)
 			end
-			store_string(state.field_types, field, resolved)
+			store_string(state.declarations.field_types, field, resolved)
 			field += 1
 		end
 	else

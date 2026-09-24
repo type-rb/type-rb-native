@@ -23,19 +23,19 @@ def mir_declare_signatures(mut state: CompilerState)
 	end
 	state.scalar_mir.source_count[0] = source_count
 	mut index := 0
-	while index < state.function_count[0]
-		start := load_integer(state.function_parameter_starts, index)
-		count := load_integer(state.function_parameter_counts, index)
+	while index < state.declarations.function_count[0]
+		start := load_integer(state.declarations.function_parameter_starts, index)
+		count := load_integer(state.declarations.function_parameter_counts, index)
 		mut types: Array<String> := []
 		mut mutable: Array<Integer> := []
 		mut parameter := 0
 		while parameter < count
-			types.push(load_string(state.parameter_types, start + parameter))
-			mir_semantic_type_id(state.scalar_mir, load_string(state.parameter_types, start + parameter))
-			mutable.push(load_integer(state.parameter_mutable, start + parameter))
+			types.push(load_string(state.declarations.parameter_types, start + parameter))
+			mir_semantic_type_id(state.scalar_mir, load_string(state.declarations.parameter_types, start + parameter))
+			mutable.push(load_integer(state.declarations.parameter_mutable, start + parameter))
 			parameter += 1
 		end
-		source := load_integer(state.function_modules, index)
+		source := load_integer(state.declarations.function_modules, index)
 		mut kind := 0
 		mut adapter := 0
 		if object_abstract_function(state, index)
@@ -48,7 +48,7 @@ def mir_declare_signatures(mut state: CompilerState)
 				method_index += 1
 			end
 		end
-		name := load_string(state.function_names, index)
+		name := load_string(state.declarations.function_names, index)
 		if compiler_runtime_intrinsic(state, index)
 			kind = 1
 			adapter = mir_runtime_adapter(name)
@@ -57,8 +57,8 @@ def mir_declare_signatures(mut state: CompilerState)
 			kind = 2
 			adapter = 9
 		end
-		mir_semantic_type_id(state.scalar_mir, load_string(state.function_result_types, index))
-		state.scalar_mir.signatures.push(MirSignature.new(id: index, kind: kind, name: name, adapter: adapter, source_id: source, line: load_integer(state.function_lines, index), parameter_types: types, parameter_mutable: mutable, result_type: load_string(state.function_result_types, index)))
+		mir_semantic_type_id(state.scalar_mir, load_string(state.declarations.function_result_types, index))
+		state.scalar_mir.signatures.push(MirSignature.new(id: index, kind: kind, name: name, adapter: adapter, source_id: source, line: load_integer(state.declarations.function_lines, index), parameter_types: types, parameter_mutable: mutable, result_type: load_string(state.declarations.function_result_types, index)))
 		index += 1
 	end
 end
@@ -184,7 +184,7 @@ def mir_checked_standard_call(mut state: CompilerState, mut locals: CheckedLocal
 		return checked_value(result_type, 0, 9007199254740991, 0)
 	end
 	adapter := category + 6
-	mut callee := state.function_count[0]
+	mut callee := state.declarations.function_count[0]
 	while callee < state.scalar_mir.signatures.size()
 		if state.scalar_mir.signatures[callee].kind == 3 && state.scalar_mir.signatures[callee].adapter == adapter
 			break
@@ -262,7 +262,7 @@ def mir_complete_arguments(mut state: CompilerState, mut locals: CheckedLocals, 
 		if !bindings.provided[index]
 			callee := bindings.defaults[index]
 			arguments := default_call_arguments(state, callee, bindings.values, index)
-			result_type := load_string(state.function_result_types, callee)
+			result_type := load_string(state.declarations.function_result_types, callee)
 			value := mir_checked_call(state, locals, callee, arguments, result_type, origin)
 			bindings.values[index] = checked_mir_value(value)
 			bindings.provided[index] = true

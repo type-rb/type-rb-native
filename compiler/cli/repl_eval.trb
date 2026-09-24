@@ -267,20 +267,20 @@ def repl_call(mut state: CompilerState, function: Integer, arguments: Array<Inte
 	previous_body := select_checked_body(state, function)
 	store.depth[0] += 1
 	mut environment := repl_environment()
-	start := load_integer(state.function_parameter_starts, function)
+	start := load_integer(state.declarations.function_parameter_starts, function)
 	mut index := 0
 	while index < arguments.size()
-		type_name := load_string(state.parameter_types, start + index)
+		type_name := load_string(state.declarations.parameter_types, start + index)
 		value := repl_coerce(store, arguments[index], type_name)
-		repl_bind(environment, load_string(state.parameter_names, start + index), value, load_integer(state.parameter_mutable, start + index))
+		repl_bind(environment, load_string(state.declarations.parameter_names, start + index), value, load_integer(state.declarations.parameter_mutable, start + index))
 		index += 1
 	end
-	mut position := [load_integer(state.function_body_starts, function)]
+	mut position := [load_integer(state.declarations.function_body_starts, function)]
 	mut flow := [0]
 	module_name := state.module_graph.active_module[0]
 	previous_owner := state.declaration_owner[0]
 	state.declaration_owner[0] = sparse_string_at(state.token_namespaces, position[0])
-	state.module_graph.active_module[0] = load_integer(state.function_modules, function)
+	state.module_graph.active_module[0] = load_integer(state.declarations.function_modules, function)
 	owner := object_initializer_owner(state, function)
 	if owner >= 0
 		mut field_index := 0
@@ -295,7 +295,7 @@ def repl_call(mut state: CompilerState, function: Integer, arguments: Array<Inte
 	end
 	mut result := 0
 	if sparse_integer_at(state.function_expression_bodies, function) > 0
-		value := repl_expression(state, position, store, environment, 1, load_string(state.function_result_types, function))
+		value := repl_expression(state, position, store, environment, 1, load_string(state.declarations.function_result_types, function))
 		result = value.value
 	else
 		result = repl_block(state, position, store, environment, flow, - 1)
@@ -304,10 +304,10 @@ def repl_call(mut state: CompilerState, function: Integer, arguments: Array<Inte
 	state.declaration_owner[0] = previous_owner
 	state.checked[0] = previous_body
 	store.depth[0] -= 1
-	if load_string(state.function_result_types, function) == "Void"
+	if load_string(state.declarations.function_result_types, function) == "Void"
 		return 0
 	end
-	return repl_coerce(store, result, load_string(state.function_result_types, function))
+	return repl_coerce(store, result, load_string(state.declarations.function_result_types, function))
 end
 
 # Retained boxes carry the actual class value. Remapping a submission changes
@@ -385,14 +385,14 @@ def repl_indirect_call(mut store: ReplStore, id: Integer, arguments: Array<Integ
 	previous_body := select_checked_body(state, function)
 	previous_module := state.module_graph.active_module[0]
 	previous_owner := state.declaration_owner[0]
-	state.declaration_owner[0] = sparse_string_at(state.token_namespaces, load_integer(state.function_body_starts, function))
-	state.module_graph.active_module[0] = load_integer(state.function_modules, function)
+	state.declaration_owner[0] = sparse_string_at(state.token_namespaces, load_integer(state.declarations.function_body_starts, function))
+	state.module_graph.active_module[0] = load_integer(state.declarations.function_modules, function)
 	store.depth[0] += 1
 	mut environment := repl_closure_environment(state, store, id, arguments)
-	mut position := [load_integer(state.function_body_starts, function)]
+	mut position := [load_integer(state.declarations.function_body_starts, function)]
 	mut flow := [0]
 	mut result := repl_block(state, position, store, environment, flow, - 1)
-	result_type := load_string(state.function_result_types, function)
+	result_type := load_string(state.declarations.function_result_types, function)
 	if result_type == "Void"
 		result = 0
 	else
@@ -644,8 +644,8 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 			end
 			mut parameter_type := "String"
 			if function >= 0
-				start := load_integer(state.function_parameter_starts, function)
-				parameter_type = load_string(state.parameter_types, start + slot)
+				start := load_integer(state.declarations.function_parameter_starts, function)
+				parameter_type = load_string(state.declarations.parameter_types, start + slot)
 			end
 			value := repl_expression(state, position, store, environment, 1, parameter_type)
 			if environment.flow[0] != 0
@@ -804,7 +804,7 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		end
 		if record_index >= 0
 			if member == "new"
-				start := load_integer(state.record_field_starts, record_index)
+				start := load_integer(state.declarations.record_field_starts, record_index)
 				mut bindings := record_argument_bindings(state, record_index)
 				skip_newlines(state, position)
 				while !token_is(state, position[0], ")")
@@ -815,7 +815,7 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 						return repl_reference(0)
 					end
 					field := start + slot
-					type_name := load_string(state.field_types, field)
+					type_name := load_string(state.declarations.field_types, field)
 					value := repl_expression(state, position, store, environment, 1, type_name)
 					if environment.flow[0] != 0
 						return repl_reference(environment.flow[1])
@@ -978,7 +978,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 				record_index := find_record_type(state, value.type_name)
 				if record_index >= 0
 					field := find_field(state, record_index, member)
-					start := load_integer(state.record_field_starts, record_index)
+					start := load_integer(state.declarations.record_field_starts, record_index)
 					result = ReplReference.new(value: repl_nullable_read(state, store, value.children[field - start], position[0] - 1), binding: - 1, container: result.value, slot: field - start)
 					if token_is(state, position[0], "(")
 						result = repl_callable_expression(state, position, store, environment, result.value)
@@ -2037,8 +2037,8 @@ def repl_nominal_method_call(mut state: CompilerState, mut position: Array<Integ
 			store.error[0] = bindings.error[0]
 			return 0
 		end
-		start := load_integer(state.function_parameter_starts, function)
-		type_name := load_string(state.parameter_types, start + slot)
+		start := load_integer(state.declarations.function_parameter_starts, function)
+		type_name := load_string(state.declarations.parameter_types, start + slot)
 		value := repl_expression(state, position, store, environment, 1, type_name)
 		if environment.flow[0] != 0
 			return environment.flow[1]

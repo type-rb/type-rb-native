@@ -592,13 +592,13 @@ def check_primary(
 		end
 		function := find_visible_function(state, state.module_graph.active_module[0], name)
 		if function >= 0
-			if !namespace_member_access(state, load_integer(state.function_modules, function), load_string(state.function_names, function), origin)
+			if !namespace_member_access(state, load_integer(state.declarations.function_modules, function), load_string(state.declarations.function_names, function), origin)
 				return checked_value("", 0, origin, 0)
 			end
 			if token_is(state, position[0], "(")
 				return checked_value("", 1, origin, 0)
 			end
-			if namespace_parent(load_string(state.function_names, function)) != ""
+			if namespace_parent(load_string(state.declarations.function_names, function)) != ""
 				return type_diagnostic(state, line, "module method requires an explicit fn wrapper to be used as a value")
 			end
 			return checked_function_value(state, locals, function, origin)
@@ -639,8 +639,8 @@ def check_call(mut state: CompilerState, mut position: Array<Integer>, mut local
 	if (callee_name == "puts" && encoded == 0) || callee_category == 4 || callee_category == 5
 		function =- 1
 	elsif function >= 0
-		parameter_start = load_integer(state.function_parameter_starts, function)
-		result_type = load_string(state.function_result_types, function)
+		parameter_start = load_integer(state.declarations.function_parameter_starts, function)
+		result_type = load_string(state.declarations.function_result_types, function)
 	else
 		return type_diagnostic(state, line, "value is not callable")
 	end
@@ -684,7 +684,7 @@ def check_call(mut state: CompilerState, mut position: Array<Integer>, mut local
 			if callee_category == 5
 				expected = "Float"
 			elsif function >= 0
-				expected = load_string(state.parameter_types, parameter_start + slot)
+				expected = load_string(state.declarations.parameter_types, parameter_start + slot)
 			end
 			mut argument := check_expression(state, position, locals, 1, expected)
 			if callee_name == "puts" && encoded == 0
@@ -739,7 +739,7 @@ def check_record_new(mut state: CompilerState, mut position: Array<Integer>, mut
 	line := load_integer(state.token_lines, origin)
 	advance(position)
 	skip_newlines(state, position)
-	start := load_integer(state.record_field_starts, record_index)
+	start := load_integer(state.declarations.record_field_starts, record_index)
 	mut bindings := record_argument_bindings(state, record_index)
 	saved_mir := locals.mir_state[0]
 	mut diverged := false
@@ -754,7 +754,7 @@ def check_record_new(mut state: CompilerState, mut position: Array<Integer>, mut
 			if slot < 0
 				return type_diagnostic(state, argument_line, bindings.error[0])
 			end
-			value := check_expression(state, position, locals, 1, load_string(state.field_types, start + slot))
+			value := check_expression(state, position, locals, 1, load_string(state.declarations.field_types, start + slot))
 			if value.type_name == "Never"
 				diverged = true
 				scalar_mir_disable(locals)
@@ -848,7 +848,7 @@ def check_method_call(
 	end
 	function := enum_method_function(state, receiver.type_name, method)
 	if function >= 0
-		if !namespace_member_access(state, load_integer(state.function_modules, function), enum_method_declaration_name(state, receiver.type_name, method), position[0])
+		if !namespace_member_access(state, load_integer(state.declarations.function_modules, function), enum_method_declaration_name(state, receiver.type_name, method), position[0])
 			return checked_value("Invalid", 0, position[0], 0)
 		end
 		return check_call(state, position, locals, 1, "", function, checked_mir_value(receiver), true)
@@ -1064,8 +1064,8 @@ def check_member(mut state: CompilerState, mut position: Array<Integer>, mut loc
 	owner := find_record_type(state, value.type_name)
 	if owner >= 0
 		field := find_field(state, owner, member)
-		if field >= 0 && callable_parts(load_string(state.field_types, field)).size() > 0
-			return mir_checked_record_field(state, locals, value, field, load_string(state.field_types, field), position[0] - 1)
+		if field >= 0 && callable_parts(load_string(state.declarations.field_types, field)).size() > 0
+			return mir_checked_record_field(state, locals, value, field, load_string(state.declarations.field_types, field), position[0] - 1)
 		end
 	end
 	if union_parts(value.type_name).size() > 0 && callable_parts(union_member_type(state, value.type_name, member)).size() > 0
@@ -1131,7 +1131,7 @@ def check_member(mut state: CompilerState, mut position: Array<Integer>, mut loc
 				if value.nullable_field == - 1
 					binding = value.nullable_binding
 				end
-				value = mir_checked_record_field(state, locals, value, field_index, load_string(state.field_types, field_index), position[0] - 1)
+				value = mir_checked_record_field(state, locals, value, field_index, load_string(state.declarations.field_types, field_index), position[0] - 1)
 				value = nullable_read(state, locals, value, binding, field_index, position[0] - 1)
 			end
 		end
@@ -3013,7 +3013,7 @@ def check_object_member(mut state: CompilerState, mut position: Array<Integer>, 
 		end
 		initializer := object_method_function(state, receiver.type_name, "initialize", false, [])
 		if initializer >= 0
-			if load_string(state.function_result_types, initializer) != "Void"
+			if load_string(state.declarations.function_result_types, initializer) != "Void"
 				return type_diagnostic(state, line, "class initializer must return Void")
 			end
 			store_integer(state.checked[0].generic_calls, position[0], initializer + 1)
