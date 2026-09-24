@@ -30,10 +30,10 @@ describe("Named argument binding") do
 	test("checks private initializer bodies with only the preceding typed parameters") do
 		mut state := logical_checked_source("def select(first: Integer, second: Integer = first + 1, *, third: Integer = second + 1): Integer\nreturn first * 100 + second * 10 + third\nend\ndef main()\nputs(select(1, third: 8))\nend\n")
 		expect(check(state)).to_be_true()
-		expect(state.default_functions.size()).to_equal(2)
+		expect(state.parsed.default_functions.size()).to_equal(2)
 		expect(state.scalar_mir.functions.size()).to_equal(4)
-		first := state.default_functions[0]
-		second := state.default_functions[1]
+		first := state.parsed.default_functions[0]
+		second := state.parsed.default_functions[1]
 		expect(state.scalar_mir.signatures[first].parameter_types).to_equal(["Integer"])
 		expect(state.scalar_mir.signatures[second].parameter_types).to_equal(["Integer", "Integer"])
 		expect(find_function_in_module(state, state.module_graph.entry_module[0], load_string(state.declarations.function_names, first))).to_equal(- 1)
@@ -51,7 +51,7 @@ describe("Named argument binding") do
 		mut state := logical_checked_source("def select(first: Integer, second: Integer = first + 1): Integer\nreturn second\nend\ndef main()\nputs(select(1))\nend\n")
 		expect(check(state)).to_be_true()
 		call := state.scalar_mir.calls[0]
-		expect(call.callee).to_equal(state.default_functions[0])
+		expect(call.callee).to_equal(state.parsed.default_functions[0])
 		state.scalar_mir.calls[0] = MirCall.new(callee: call.callee, argument_start: call.argument_start, argument_count: 0, effects: call.effects)
 		expect(verify_mir(state.scalar_mir, true).include?("arity")).to_be_true()
 	end
@@ -107,11 +107,11 @@ describe("Named argument binding") do
 					expect(check(state)).to_be_true()
 					before := control_test_output(emit_qbe(state))
 					intrinsic_mir_erase(state)
-					state.default_functions.each.with_index do |_function, default_index|
-						state.default_functions[default_index] =- 1
+					state.parsed.default_functions.each.with_index do |_function, default_index|
+						state.parsed.default_functions[default_index] =- 1
 					end
 					state.scalar_mir.functions.each do |function|
-						store_integer(state.function_expression_bodies, function.id, 0)
+						store_integer(state.parsed.function_expression_bodies, function.id, 0)
 					end
 					mut index := 0
 					while index < state.declarations.parameter_count[0]

@@ -118,10 +118,10 @@ def parse_iteration_statement(mut state: CompilerState, mut position: Array<Inte
 		return false
 	end
 	# Re-parsing unreachable syntax must not replace an already checked plan.
-	if sparse_integer_at(state.iteration_origins, origin) == 0
-		state.iterations.push(IterationSyntax.new(origin: origin, receiver_finish: receiver_finish, slice_start: slice_start, slice_finish: slice_finish, element_origin: element_origin, second_origin: second_origin, body_start: body_start, body_finish: body_finish, finish: position[0]))
-		store_integer(state.iteration_origins, origin, state.iterations.size())
-		store_integer(state.iteration_origins, body_finish, - state.iterations.size())
+	if sparse_integer_at(state.parsed.iteration_origins, origin) == 0
+		state.parsed.iterations.push(IterationSyntax.new(origin: origin, receiver_finish: receiver_finish, slice_start: slice_start, slice_finish: slice_finish, element_origin: element_origin, second_origin: second_origin, body_start: body_start, body_finish: body_finish, finish: position[0]))
+		store_integer(state.parsed.iteration_origins, origin, state.parsed.iterations.size())
+		store_integer(state.parsed.iteration_origins, body_finish, - state.parsed.iterations.size())
 	end
 	return finish_statement(state, position)
 end
@@ -497,7 +497,7 @@ def parse_statement_block(mut state: CompilerState, mut position: Array<Integer>
 				if finish_statement(state, position)
 					parse_statement_block(state, position)
 					if expect(state, position, "end")
-						store_integer(state.loop_finishes, origin, position[0])
+						store_integer(state.parsed.loop_finishes, origin, position[0])
 						finish_statement(state, position)
 					end
 				end
@@ -509,7 +509,7 @@ def parse_statement_block(mut state: CompilerState, mut position: Array<Integer>
 		else
 			parse_simple_statement(state, position)
 		end
-		store_integer(state.statement_finishes, statement_origin, position[0])
+		store_integer(state.parsed.statement_finishes, statement_origin, position[0])
 		if has_diagnostic(state)
 			break
 		end
@@ -518,18 +518,18 @@ def parse_statement_block(mut state: CompilerState, mut position: Array<Integer>
 end
 
 def publish_control(mut state: CompilerState, control: ControlSyntax)
-	encoded := sparse_integer_at(state.control_origins, control.origin)
+	encoded := sparse_integer_at(state.parsed.control_origins, control.origin)
 	if encoded == 0
-		state.controls.push(control)
-		store_integer(state.control_origins, control.origin, state.controls.size())
+		state.parsed.controls.push(control)
+		store_integer(state.parsed.control_origins, control.origin, state.parsed.controls.size())
 	end
 end
 
 def parse_control_syntax(mut state: CompilerState, mut position: Array<Integer>): Boolean
 	origin := position[0]
-	encoded := sparse_integer_at(state.control_origins, origin)
+	encoded := sparse_integer_at(state.parsed.control_origins, origin)
 	if encoded > 0
-		position[0] = state.controls[encoded - 1].finish
+		position[0] = state.parsed.controls[encoded - 1].finish
 		return true
 	end
 	mut kind := 1
@@ -650,8 +650,8 @@ def parse_statement_value_syntax(mut state: CompilerState, mut position: Array<I
 	if !parse_statement_block(state, position) || !expect(state, position, "end")
 		return false
 	end
-	state.catch_syntax.push(CatchSyntax.new(origin: origin, operand_finish: operand_finish, binding: binding, body: body, finish: position[0]))
-	store_integer(state.catch_origins, origin, state.catch_syntax.size())
+	state.parsed.catch_syntax.push(CatchSyntax.new(origin: origin, operand_finish: operand_finish, binding: binding, body: body, finish: position[0]))
+	store_integer(state.parsed.catch_origins, origin, state.parsed.catch_syntax.size())
 	return true
 end
 
@@ -737,11 +737,11 @@ def parse_transform_syntax(mut state: CompilerState, mut position: Array<Integer
 	if !expect(state, position, terminator)
 		return false
 	end
-	if sparse_integer_at(state.transform_origins, origin) == 0
+	if sparse_integer_at(state.parsed.transform_origins, origin) == 0
 		shape := IterationSyntax.new(origin: origin, receiver_finish: origin, slice_start: - 1, slice_finish: - 1, element_origin: element_origin, second_origin: second_origin, body_start: body_start, body_finish: body_finish, finish: position[0])
-		state.transforms.push(TransformSyntax.new(iteration: shape, kind: kind, initial_start: initial_start, initial_finish: initial_finish, accumulator_origin: accumulator_origin))
-		store_integer(state.transform_origins, origin, state.transforms.size())
-		store_integer(state.transform_origins, body_finish, - state.transforms.size())
+		state.parsed.transforms.push(TransformSyntax.new(iteration: shape, kind: kind, initial_start: initial_start, initial_finish: initial_finish, accumulator_origin: accumulator_origin))
+		store_integer(state.parsed.transform_origins, origin, state.parsed.transforms.size())
+		store_integer(state.parsed.transform_origins, body_finish, - state.parsed.transforms.size())
 	end
 	return !has_diagnostic(state)
 end

@@ -1203,7 +1203,7 @@ def check_postfix(
 			end
 		else
 			if token_is(state, position[0], ".")
-				if sparse_integer_at(state.transform_origins, position[0]) > 0
+				if sparse_integer_at(state.parsed.transform_origins, position[0]) > 0
 					value = check_transform(state, position, locals, value)
 					if has_diagnostic(state)
 						return value
@@ -1713,11 +1713,11 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 	flow_parent := locals.nullable_state[0]
 	flow_first := locals.nullable_facts.size()
 	origin := position[0]
-	encoded := sparse_integer_at(state.iteration_origins, origin)
-	if encoded < 1 || encoded > state.iterations.size()
+	encoded := sparse_integer_at(state.parsed.iteration_origins, origin)
+	if encoded < 1 || encoded > state.parsed.iterations.size()
 		return checked_value("Invalid", 0, origin, 0)
 	end
-	shape := state.iterations[encoded - 1]
+	shape := state.parsed.iterations[encoded - 1]
 	if !checked_iteration_shape(state, shape, origin)
 		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "invalid iteration syntax plan")
 		return checked_value("Invalid", 0, origin, 0)
@@ -1864,7 +1864,7 @@ def checked_while(mut state: CompilerState, mut position: Array<Integer>, mut lo
 	count := locals.count[0]
 	flow_parent := locals.nullable_state[0]
 	flow_first := locals.nullable_facts.size()
-	nullable_loop_writes(state, locals, origin, sparse_integer_at(state.loop_finishes, origin))
+	nullable_loop_writes(state, locals, origin, sparse_integer_at(state.parsed.loop_finishes, origin))
 	exit := mir_control_loop_begin(state, locals, origin, line)
 	advance(position)
 	condition := check_expression(state, position, locals, 1, "Boolean")
@@ -1927,7 +1927,7 @@ def check_block_value(mut state: CompilerState, mut position: Array<Integer>, mu
 		# returns keep their own expression/function boundaries.
 		mut contextual := ""
 		if wants_value && expected != ""
-			mut after := [sparse_integer_at(state.statement_finishes, statement_origin)]
+			mut after := [sparse_integer_at(state.parsed.statement_finishes, statement_origin)]
 			if after[0] > 0
 				skip_newlines(state, after)
 				if syntax_block_end(state, after[0]) || syntax_conditional_tail(state, after[0])
@@ -1943,9 +1943,9 @@ def check_block_value(mut state: CompilerState, mut position: Array<Integer>, mu
 		end
 		result = checked_value("Void", 0, 9007199254740991, 0)
 		if syntax_loop_transfer_kind(state, position[0]) > 0 || token_is(state, position[0], "return")
-			guard := sparse_integer_at(state.control_origins, position[0])
-			if guard > 0 && state.controls[guard - 1].kind == 4
-				control := state.controls[guard - 1]
+			guard := sparse_integer_at(state.parsed.control_origins, position[0])
+			if guard > 0 && state.parsed.controls[guard - 1].kind == 4
+				control := state.parsed.controls[guard - 1]
 				mir_control_prepare(state, locals)
 				position[0] = control.selector
 				condition := check_expression(state, position, locals, 1, "Boolean")
@@ -1972,7 +1972,7 @@ def check_block_value(mut state: CompilerState, mut position: Array<Integer>, mu
 				result = check_transfer_value(state, position, locals, result_type, loop_origin, - 1)
 			end
 		elsif token_is(state, position[0], "if") || token_is(state, position[0], "case")
-			control := state.controls[sparse_integer_at(state.control_origins, position[0]) - 1]
+			control := state.parsed.controls[sparse_integer_at(state.parsed.control_origins, position[0]) - 1]
 			mut after := [control.finish]
 			skip_newlines(state, after)
 			mut last := syntax_block_end(state, after[0])
@@ -1991,7 +1991,7 @@ def check_block_value(mut state: CompilerState, mut position: Array<Integer>, mu
 			finish_statement(state, position)
 		elsif token_is(state, position[0], "while")
 			checked_while(state, position, locals, result_type)
-		elsif sparse_integer_at(state.iteration_origins, position[0]) > 0
+		elsif sparse_integer_at(state.parsed.iteration_origins, position[0]) > 0
 			result = checked_iteration(state, position, locals, result_type, loop_origin)
 		elsif declaration_start(state, position[0])
 			result = check_declaration(state, position, locals)
@@ -2032,7 +2032,7 @@ end
 def check_control_value(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, wants_value: Boolean, expected: String, predicate: CheckedValue): CheckedValue
 	origin := position[0]
 	line := load_integer(state.token_lines, origin)
-	control := state.controls[sparse_integer_at(state.control_origins, origin) - 1]
+	control := state.parsed.controls[sparse_integer_at(state.parsed.control_origins, origin) - 1]
 	saved_flow := locals.nullable_state[0]
 	flow_first := locals.nullable_facts.size()
 	saved_count := locals.count[0]
@@ -2309,7 +2309,7 @@ def check_transfer_value(mut state: CompilerState, mut position: Array<Integer>,
 	if token_is(state, origin, "return") && locals.value_block[0]
 		return type_diagnostic(state, load_integer(state.token_lines, origin), "return is unavailable inside a value-producing collection block")
 	end
-	if token_is(state, origin, "return") && locals.lambda_result.size() == 0 && sparse_integer_at(state.function_expression_bodies, locals.mir_state[1]) > 0
+	if token_is(state, origin, "return") && locals.lambda_result.size() == 0 && sparse_integer_at(state.parsed.function_expression_bodies, locals.mir_state[1]) > 0
 		return type_diagnostic(state, load_integer(state.token_lines, origin), "return is unavailable inside a default initializer")
 	end
 	line := load_integer(state.token_lines, origin)
@@ -2353,7 +2353,7 @@ def check_transfer_value(mut state: CompilerState, mut position: Array<Integer>,
 end
 
 def check_safe_present_member(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue): CheckedValue
-	if sparse_integer_at(state.transform_origins, position[0]) > 0
+	if sparse_integer_at(state.parsed.transform_origins, position[0]) > 0
 		return check_transform(state, position, locals, receiver)
 	end
 	advance(position)
@@ -2488,11 +2488,11 @@ end
 # Check one Result and lower both outcomes with the existing enum/CFG machinery.
 def check_statement_value(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, expected: String): CheckedValue
 	origin := position[0]
-	encoded := sparse_integer_at(state.catch_origins, origin)
+	encoded := sparse_integer_at(state.parsed.catch_origins, origin)
 	if encoded == 0
 		return check_expression(state, position, locals, 1, expected)
 	end
-	handler := state.catch_syntax[encoded - 1]
+	handler := state.parsed.catch_syntax[encoded - 1]
 	value := check_expression(state, position, locals, 1, "")
 	operation := result_operation(state, origin, handler.finish, value.type_name, "")
 	if has_diagnostic(state)
@@ -2628,11 +2628,11 @@ end
 def check_transform(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue): CheckedValue
 	origin := position[0]
 	line := load_integer(state.token_lines, origin)
-	encoded := sparse_integer_at(state.transform_origins, origin)
-	if encoded < 1 || encoded > state.transforms.size()
+	encoded := sparse_integer_at(state.parsed.transform_origins, origin)
+	if encoded < 1 || encoded > state.parsed.transforms.size()
 		return type_diagnostic(state, line, "missing collection transform syntax")
 	end
-	syntax := state.transforms[encoded - 1]
+	syntax := state.parsed.transforms[encoded - 1]
 	shape := syntax.iteration
 	if !checked_transform_shape(state, syntax, origin)
 		return type_diagnostic(state, line, "invalid collection transform syntax")
