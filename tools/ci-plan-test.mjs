@@ -604,9 +604,13 @@ test('synthetic project and policy tests retain Linux without building the refer
   assert(entry.includes('quick: ${{ steps.plan.outputs.quick }}'));
   const steps = quick.split('      - ').slice(1);
   const compilerCondition = "if: needs.plan.outputs.code == 'true' || needs.plan.outputs.cli == 'true'";
+  const recoveryImports = steps.find(step => step.startsWith('name: Check generated recovery import boundaries'));
+  assert(recoveryImports?.includes('python3 tools/recovery_layout_sync.py --check'));
+  assert(!recoveryImports.includes('if:'), 'Recovery import check does not need the reference compiler');
   for (const step of steps) {
     if (step.includes('repository: type-rb/type-rb') || step.includes('actions/setup-go') ||
-      step.startsWith('name: Build the pinned') || step.startsWith('name: Check ') ||
+      step.startsWith('name: Build the pinned') ||
+      (step.startsWith('name: Check ') && step !== recoveryImports) ||
       step.startsWith('name: Run root')) assert(step.includes(compilerCondition), step);
   }
   const toolingStep = steps.find(step => step.startsWith('name: Verify project'));

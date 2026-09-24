@@ -33,13 +33,15 @@ self-use of Symbol spelling remains blocked by the preceding immutable seed;
 ordinary core and CLI fixed points still verify the complete implementation.
 
 The reference quoted-Symbol validation and Ruby quoting correction is tracked in
-[TypeRB PR #747](https://github.com/type-rb/type-rb/pull/747). Single-quote semantics
-and remaining operator names remain explicit boundaries under
-[TypeRB #748](https://github.com/type-rb/type-rb/issues/748) and
-[TypeRB #749](https://github.com/type-rb/type-rb/issues/749). Multiline interpolation
-also retains a shared reference gap. These cases do not establish complete Symbol
-or basic-language coverage. Existing invalid interpolated escapes now reject the
-whole REPL declaration, avoiding the former cascade of unrelated body errors.
+[TypeRB PR #747](https://github.com/type-rb/type-rb/pull/747). The later
+[TypeRB PR #821](https://github.com/type-rb/type-rb/pull/821) defines portable
+single-quoted Strings and Symbols. Native decodes them through the same checked
+String/MIR path; shared ordinary and REPL cases include valid escapes, Unicode,
+literal interpolation spelling and rejection. Remaining operator names under
+[TypeRB #749](https://github.com/type-rb/type-rb/issues/749) and multiline
+interpolation retain explicit boundaries. These cases do not establish complete
+Symbol or basic-language coverage. Invalid interpolated escapes reject the whole
+REPL declaration without a cascade of unrelated body errors.
 
 The current reference fixes control-keyword Symbol framing. Native submission
 framing now uses the ordinary parser to distinguish these literal names from

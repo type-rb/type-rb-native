@@ -33,8 +33,8 @@ retained CLI session checks Unicode/NUL returns, failed declaration isolation,
 function identity and replay. No new runtime representation or MIR instruction is
 needed; compiler self-use retains the immutable seed's accepted spelling.
 
-Unicode identifiers and the full single-quote contract remain open. The reference
-also retains operator/control Symbol framing boundaries under
-[TypeRB #749](https://github.com/type-rb/type-rb/issues/749), and single quotes under
-[TypeRB #748](https://github.com/type-rb/type-rb/issues/748). This does not establish
-complete lexical or basic-language coverage.
+Unicode identifiers and single-quoted Strings and Symbols now have shared
+ordinary and REPL cases. The reference still retains operator/control Symbol
+framing boundaries under [TypeRB #749](https://github.com/type-rb/type-rb/issues/749).
+Malformed-source origins and wider quoted/interpolated combinations remain open;
+this does not establish complete lexical or basic-language coverage.

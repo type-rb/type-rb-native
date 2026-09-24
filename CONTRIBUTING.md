@@ -126,6 +126,12 @@ checking, reference/Native behavior cases and the ordinary Native fixed point
 as the batch becomes coherent; leave the full cross-platform recovery, target,
 CLI and memory authorities to the one ready PR. Start the next local batch while
 that PR validates instead of waiting for each hosted job to finish.
+Use an ordinary Native compiler built from the active worktree for differential
+probes; a core artifact in another checkout may predate the source under test.
+For newly accepted syntax, compare check, build, execution and REPL against the
+exact reference revision: a successful reference check alone does not prove
+its output backend can execute the source. Keep the next batch's local checks
+focused while another full recovery runs to avoid competing long builds.
 
 For any compiler-source edit, also check the recovery snapshot subset before
 publishing. This quick check uses the same canonical source copy and snapshot
@@ -135,6 +141,17 @@ the recovery compiler cannot yet read:
 ```sh
 tools/check-bootstrap-snapshot.sh /path/to/pinned/trb
 ```
+
+When a compiler source import changes, synchronize the recovery import
+inventory from canonical source before the focused checks:
+
+```sh
+python3 tools/recovery_layout_sync.py --write
+python3 tools/recovery_layout_sync.py --check
+```
+
+Quick CI repeats the check. The generated inventory is not a separate
+behavioral change; the hosted recovery suite verifies the resulting closure.
 
 When checked binding or diagnostic behavior changes, scan the reviewed
 conformance sources with an already built Native compiler before rerunning the

@@ -1441,6 +1441,7 @@
 | Class self method call | accepts | accepts | matches reference | matches reference |
 | Class self return | accepts | accepts | matches reference | matches reference |
 | Class static method | accepts | accepts | matches reference | matches reference |
+| Class self dispatches static methods and constructors | accepts | accepts | matches reference | matches reference |
 | Class through instance | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Object field type | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Object implicit interface | rejects as reference | rejects as reference | not reached | rejects as reference |
@@ -1532,3 +1533,8 @@
 | Separate Hash writes do not join unrelated values | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Separate writes keep the first inferred Hash value type | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Empty Hash inference keeps the first key type | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Single-quoted Strings | accepts | accepts | matches reference | matches reference |
+| Single-quoted Symbols | accepts | accepts | matches reference | matches reference |
+| Invalid single-quoted escape | rejects as reference | rejects as reference | not reached | rejects as reference |
+| Logical assignment skips unneeded side effects | accepts | accepts | matches reference | matches reference |
+| Direct union indexing requires narrowing | rejects as reference | rejects as reference | not reached | rejects as reference |
