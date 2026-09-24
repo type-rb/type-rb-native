@@ -3,9 +3,12 @@
 | Case | Check | Build | Execute | REPL |
 | --- | --- | --- | --- | --- |
 | Integer arithmetic | accepts | accepts | matches reference | matches reference |
+| Integer power, precedence and associativity | accepts | accepts | matches reference | matches reference |
+| Float and mixed numeric power | accepts | accepts | matches reference | matches reference |
 | if / else | accepts | accepts | matches reference | matches reference |
 | while | accepts | accepts | matches reference | matches reference |
 | Short-circuit OR / AND | accepts | accepts | matches reference | matches reference |
+| Boolean short-circuit assignment | accepts | accepts | matches reference | matches reference |
 | Record construction and field read | accepts | accepts | matches reference | matches reference |
 | Array&lt;Integer&gt; | accepts | accepts | matches reference | matches reference |
 | elsif | accepts | accepts | matches reference | matches reference |
@@ -700,8 +703,8 @@
 | Generic module methods remain unsupported by the reference | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Imported module aliases preserve method and record identity | accepts | accepts | matches reference | matches reference |
 | Constant inference nil | rejects as reference | rejects as reference | not reached | rejects as reference |
-| Constant inference array | rejects valid input | rejects valid input | not reached | rejects valid input |
-| Constant inference hash | rejects valid input | rejects valid input | not reached | rejects valid input |
+| Constant inference array | accepts | accepts | matches reference | matches reference |
+| Constant inference hash | accepts | accepts | matches reference | matches reference |
 | Constant record bindings reject field mutation | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Constant record projection rejects Array mutation | rejects as reference | rejects as reference | not reached | rejects as reference |
 | Keyword Symbol constant uses ordinary String semantics | accepts | accepts | matches reference | matches reference |

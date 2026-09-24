@@ -459,12 +459,7 @@ def check_primary(
 	end
 	if token_is(state, position[0], "!")
 		advance(position)
-		value := check_postfix(
-			state,
-			position,
-			locals,
-			check_primary(state, position, locals, "Boolean"),
-		)
+		value := check_expression_value(state, position, locals, 8, "Boolean")
 		if value.type_name == "Never"
 			return value
 		end
@@ -473,12 +468,7 @@ def check_primary(
 	end
 	if token_is(state, position[0], "-")
 		advance(position)
-		mut value := check_postfix(
-			state,
-			position,
-			locals,
-			check_primary(state, position, locals, ""),
-		)
+		mut value := check_expression_value(state, position, locals, 8, "")
 		if value.type_name == "Never"
 			return value
 		end
@@ -490,12 +480,7 @@ def check_primary(
 	end
 	if token_is(state, position[0], "+")
 		advance(position)
-		mut value := check_postfix(
-			state,
-			position,
-			locals,
-			check_primary(state, position, locals, ""),
-		)
+		mut value := check_expression_value(state, position, locals, 8, "")
 		if value.type_name == "Never"
 			return value
 		end
@@ -1327,7 +1312,11 @@ def check_expression_value(
 			advance(position)
 			skip_newlines(state, position)
 			end_origin := position[0]
-			mut right := check_expression(state, position, locals, precedence + 1, "")
+			mut right_precedence := precedence + 1
+			if precedence == 8
+				right_precedence = precedence
+			end
+			mut right := check_expression(state, position, locals, right_precedence, "")
 			if precedence <= 2
 				nullable_finish(locals, flow_parent, flow_first, locals.count[0])
 			end
@@ -1646,7 +1635,31 @@ def check_simple_statement(
 			mir_binding_assign(state, locals, left, right)
 		end
 	else
-		if binary_operator_id(operator) >= 17
+		if operator == "||=" || operator == "&&="
+			if left.type_name != "Boolean"
+				diagnostic(state, "TRBN4004", line, "logical assignment requires a Boolean target")
+			end
+			if left.mutable == 0
+				diagnostic(state, "TRBN4004", line, "assignment target is immutable")
+			end
+			mut binary := "||"
+			mut short_value := 1
+			if operator == "&&="
+				binary = "&&"
+				short_value = 0
+			end
+			short := mir_logical_begin(state, locals, left, short_value, operator_origin)
+			advance(position)
+			right := check_statement_value(state, position, locals, "Boolean")
+			result_type := binary_result_type(state, binary, left.type_name, right.type_name, line, operator_origin)
+			checked_submission_result(state, origin, result_type, display_mutable)
+			if right.type_name != "Never" && result_type == "Boolean" && locals.mir_state[0] == 1
+				if !mir_checked_union_store(state, locals, left, right) && !mir_checked_object_store(state, locals, left, right) && !mir_checked_array_store(state, locals, left, right)
+					mir_binding_assign(state, locals, left, right)
+				end
+			end
+			mir_logical_join(state, locals, left, right, short, operator_origin)
+		elsif binary_operator_id(operator) >= 17
 			compound := operator[0]
 			mut declared := left.type_name
 			if left.nullable_field == - 1

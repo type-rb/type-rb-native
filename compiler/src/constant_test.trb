@@ -36,6 +36,20 @@ def constant_expect_program(source: String, expected: String)
 end
 
 describe("MIR constant initialization") do
+	test("keeps unannotated empty collection constants and grouped forms") do
+		constant_expect_program("ITEMS := []\nWRAPPED := ([])\nTABLE := {}\nWRAPPED_TABLE := ({})\ndef main()\nputs(ITEMS.size())\nputs(WRAPPED.size())\nputs(TABLE.size())\nputs(WRAPPED_TABLE.empty?())\nend\n", "0\n0\n0\ntrue\n")
+	end
+	test("retains empty collection constants across module qualification") do
+		constant_expect_program("module Store\nITEMS := []\nTABLE := {}\nend\ndef main()\nputs(Store::ITEMS.size())\nputs(Store::TABLE.empty?())\nend\n", "0\ntrue\n")
+	end
+	test("still requires concrete local empty collections") do
+		cases := ["mut values := []\nputs(values.size())", "mut table := {}\nputs(table.size())"]
+		cases.each do |body|
+			mut state := logical_checked_source("def main()\n" + body + "\nend\n")
+			expect(check(state)).to_be_false()
+			expect(state.diagnostic_count[0] > 0).to_be_true()
+		end
+	end
 	test("keeps scalar and managed values after one initializer evaluation") do
 		constant_expect_program("def mark(value: String): String\nputs(value)\nreturn value\nend\nCOUNT := 3\nFIRST := mark(\"first\")\nSECOND := mark(FIRST + \" second\")\nVALUES: Array<String> := [FIRST, SECOND]\ndef main()\nputs(COUNT)\nputs(VALUES[0])\nputs(VALUES[1])\nputs(SECOND)\nend\n", "first\nfirst second\n3\nfirst\nfirst second\nfirst second\n")
 	end

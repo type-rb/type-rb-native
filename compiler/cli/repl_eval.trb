@@ -46,14 +46,14 @@ import trb/std/math
 import { CompilerState } from state
 import { sparse_integer_at, load_integer, load_string, sparse_string_at } from storage
 import { parse_argument_label, syntax_statement_boundary, syntax_iteration_suffix, syntax_loop_transfer_kind, syntax_block_end, syntax_conditional_tail, binary_operator_id, syntax_expression_precedence, declaration_start } from syntax_forms
-import { parse_expression_syntax } from body_syntax
+import { parse_expression_syntax, parse_statement_value_syntax } from body_syntax
 import { mir_logical_short_value } from mir
 import { checked_loop_transfer_kind } from checked_program
 import { checked_iteration_require, checked_range_require, checked_transform_require } from iteration_checked
 import { find_visible_enum, find_visible_function, find_visible_record } from declaration_lookup
 import { find_record_type, find_field, record_type, array_element_type } from type_resolution
 import { number_is_float, number_without_underscores, integer_string } from literals
-import { native_cli_float, native_cli_interrupt } from host
+import { native_cli_float, native_cli_interrupt, native_cli_pow } from host
 import { repl_type, repl_set_type, repl_variant, repl_get, ReplStore, ReplEnvironment, ReplReference, repl_value, repl_integer, repl_float, repl_boolean, repl_string, repl_reference, repl_environment } from repl_model
 import { repl_scalar_string, repl_binding_value, repl_assign_binding, repl_render, repl_find, repl_bind, repl_coerce } from repl_values
 
@@ -139,6 +139,9 @@ def repl_numeric(mut store: ReplStore, left: Integer, operator: String, right: I
 		if operator == "/"
 			return repl_float(store, x / y)
 		end
+		if operator == "**"
+			return repl_float(store, native_cli_pow(x, y))
+		end
 		if operator == "=="
 			return repl_boolean(store, x == y)
 		end
@@ -175,6 +178,31 @@ def repl_numeric(mut store: ReplStore, left: Integer, operator: String, right: I
 	end
 	if operator == ">="
 		return repl_boolean(store, x >= y)
+	end
+	if operator == "**"
+		if y < 0
+			store.error[0] = "panic: negative Integer exponent"
+			return 0
+		end
+		mut result := repl_integer(store, 1)
+		mut factor := left
+		mut exponent := y
+		while exponent > 0
+			if exponent % 2 == 1
+				result = repl_numeric(store, result, "*", factor)
+				if store.error[0] != ""
+					return 0
+				end
+			end
+			exponent /= 2
+			if exponent > 0
+				factor = repl_numeric(store, factor, "*", factor)
+				if store.error[0] != ""
+					return 0
+				end
+			end
+		end
+		return result
 	end
 	limit := 9007199254740991
 	mut overflow := false
@@ -449,14 +477,14 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		return repl_reference(repl_boolean(store, false))
 	end
 	if text == "+"
-		operand := repl_expression(state, position, store, environment, 7, "")
+		operand := repl_expression(state, position, store, environment, 8, "")
 		if environment.flow[0] != 0
 			return repl_reference(environment.flow[1])
 		end
 		return repl_reference(operand.value)
 	end
 	if text == "-"
-		operand := repl_expression(state, position, store, environment, 7, "")
+		operand := repl_expression(state, position, store, environment, 8, "")
 		if environment.flow[0] != 0
 			return repl_reference(environment.flow[1])
 		end
@@ -471,7 +499,7 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		return repl_reference(repl_integer(store, - value.integer))
 	end
 	if text == "!"
-		operand := repl_expression(state, position, store, environment, 7, "Boolean")
+		operand := repl_expression(state, position, store, environment, 8, "Boolean")
 		if environment.flow[0] != 0
 			return repl_reference(environment.flow[1])
 		end
@@ -1225,7 +1253,11 @@ def repl_expression(mut state: CompilerState, mut position: Array<Integer>, mut 
 				end
 			else
 				end_origin := position[0]
-				right := repl_expression(state, position, store, environment, precedence + 1, "")
+				mut right_precedence := precedence + 1
+				if precedence == 8
+					right_precedence = precedence
+				end
+				right := repl_expression(state, position, store, environment, right_precedence, "")
 				if environment.flow[0] != 0
 					return repl_reference(environment.flow[1])
 				end
@@ -1563,23 +1595,29 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 	end
 	operator := load_string(state.token_texts, position[0])
 	mut assignment := operator == "="
-	if operator == "+="
-		assignment = true
-	end
-	if operator == "-="
-		assignment = true
-	end
-	if operator == "*="
-		assignment = true
-	end
-	if operator == "/="
-		assignment = true
-	end
-	if operator == "%="
+	if binary_operator_id(operator) >= 17
 		assignment = true
 	end
 	if assignment
+		logical := operator == "||=" || operator == "&&="
+		mut short_value := 0
+		if operator == "||="
+			short_value = 1
+		end
+		if logical
+			plan := load_integer(state.checked[0].checked_operator_plans, position[0])
+			if mir_logical_short_value(plan) != short_value
+				store.error[0] = "invalid checked logical assignment"
+				return 0
+			end
+		end
 		position[0] += 1
+		if logical && store.integers[left.value] == short_value
+			if !parse_statement_value_syntax(state, position)
+				store.error[0] = "invalid checked logical assignment right-hand side"
+			end
+			return left.value
+		end
 		mut expected := repl_type(store, left.value)
 		if left.binding >= 0
 			expected = repl_type(store, repl_binding_value(store, environment, left.binding))
@@ -1602,7 +1640,7 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 			return environment.flow[1]
 		end
 		mut result := repl_coerce(store, right.value, expected)
-		if operator != "="
+		if operator != "=" && !logical
 			result = repl_numeric(store, left.value, operator[0], result)
 		end
 		if store.error[0] == ""
