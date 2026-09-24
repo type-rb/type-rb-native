@@ -1618,8 +1618,8 @@ describe("Native TypeRB frontend") do
 		qbe := output_source(emit_qbe(state))
 		expect(qbe.include?("call $trbn_integer_add")).to_be_false()
 		expect(qbe.include?("@integer_range_failure")).to_be_true()
-		# Capture, read and final store independently check current storage.
-		expect(occurrence_count(qbe, "call $trbn_fail(l $trbn_bounds_error, l 30)") >= 3).to_be_true()
+		# A verified failure-only call keeps the captured position valid.
+		expect(occurrence_count(qbe, "call $trbn_fail(l $trbn_bounds_error, l 30)") >= 2).to_be_true()
 	end
 
 	test("inlines only eligible scalar leaf calls in managed caller loops") do
@@ -1944,8 +1944,8 @@ describe("Native TypeRB frontend") do
 		expect(resolve(call_state)).to_be_true()
 		expect(check(call_state)).to_be_true()
 		call_qbe := output_source(emit_qbe(call_state))
-		expect(call_qbe.include?("%temporary_roots =l loadl $trbn_gc_temp_count")).to_be_true()
-		expect(call_qbe.include?("%root_capacity =l add %temporary_roots, 1")).to_be_true()
+		expect(call_qbe.include?("%temporary_roots =l loadl $trbn_gc_temp_count")).to_be_false()
+		expect(call_qbe.include?("%root_capacity =l add %temporary_roots, 1")).to_be_false()
 	end
 
 	test("publishes Array roots only at operations that can collect") do
@@ -1963,16 +1963,16 @@ describe("Native TypeRB frontend") do
 			expect(kind == 19 || kind == 24).to_be_true()
 		end
 		called := state.scalar_mir.root_plans[mir_function_index(state.scalar_mir, 2)]
-		expect(called.instructions.size()).to_equal(3)
-		call := state.scalar_mir.instructions[called.instructions[2]]
-		expect(call.kind).to_equal(11)
-		expect(called.roots[2].size()).to_equal(1)
+		expect(called.instructions.size()).to_equal(2)
+		called.instructions.each do |point|
+			expect(state.scalar_mir.instructions[point].kind == 11).to_be_false()
+		end
 		qbe := output_source(emit_qbe(state))
 		expect(qbe.include?("%root_capacity =l add %temporary_roots, 2")).to_be_true()
 	end
 
 	test("retains Array loop values across allocating calls") do
-		source := "def observe_loop_value(value: Array<String>)\n\treturn\nend\n\ndef make_loop_values(): Array<String>\n\treturn [\"made\"]\nend\n\ndef grow_in_loop(limit: Integer): String\n\tmut values: Array<String> := [\"kept\"]\n\tmut index := 0\n\twhile index < limit\n\t\tvalues.push(\"grown\")\n\t\tindex += 1\n\tend\n\treturn values[0]\nend\n\ndef allocate_in_loop(limit: Integer): String\n\tmut values: Array<String> := [\"kept\"]\n\tmut index := 0\n\twhile index < limit\n\t\tmade: Array<String> := []\n\t\tif made.size() > 0\n\t\t\tputs(\"unexpected\")\n\t\tend\n\t\tindex += 1\n\tend\n\treturn values[0]\nend\n\ndef managed_result_in_loop(limit: Integer): String\n\tmut values: Array<String> := [\"kept\"]\n\tmut index := 0\n\twhile index < limit\n\t\tmade := make_loop_values()\n\t\tif made.size() == 0\n\t\t\tputs(\"unexpected\")\n\t\tend\n\t\tindex += 1\n\tend\n\treturn values[0]\nend\n\ndef opaque_call_in_loop(limit: Integer): String\n\tmut values: Array<String> := [\"kept\"]\n\tmut index := 0\n\twhile index < limit\n\t\tobserve_loop_value(values)\n\t\tindex += 1\n\tend\n\treturn values[0]\nend\n\ndef main()\n\treturn\nend\n"
+		source := "def observe_loop_value(value: Array<String>)\n\tmut copy: Array<String> := []\n\tcopy.push(value[0])\n\treturn\nend\n\ndef make_loop_values(): Array<String>\n\treturn [\"made\"]\nend\n\ndef grow_in_loop(limit: Integer): String\n\tmut values: Array<String> := [\"kept\"]\n\tmut index := 0\n\twhile index < limit\n\t\tvalues.push(\"grown\")\n\t\tindex += 1\n\tend\n\treturn values[0]\nend\n\ndef allocate_in_loop(limit: Integer): String\n\tmut values: Array<String> := [\"kept\"]\n\tmut index := 0\n\twhile index < limit\n\t\tmade: Array<String> := []\n\t\tif made.size() > 0\n\t\t\tputs(\"unexpected\")\n\t\tend\n\t\tindex += 1\n\tend\n\treturn values[0]\nend\n\ndef managed_result_in_loop(limit: Integer): String\n\tmut values: Array<String> := [\"kept\"]\n\tmut index := 0\n\twhile index < limit\n\t\tmade := make_loop_values()\n\t\tif made.size() == 0\n\t\t\tputs(\"unexpected\")\n\t\tend\n\t\tindex += 1\n\tend\n\treturn values[0]\nend\n\ndef opaque_call_in_loop(limit: Integer): String\n\tmut values: Array<String> := [\"kept\"]\n\tmut index := 0\n\twhile index < limit\n\t\tobserve_loop_value(values)\n\t\tindex += 1\n\tend\n\treturn values[0]\nend\n\ndef main()\n\treturn\nend\n"
 		mut state := compiler_new(source.size() + 1)
 		expect(lex(state, source)).to_be_true()
 		expect(parse_module(state, 0, state.module_graph.entry_module[0])).to_be_true()

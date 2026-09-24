@@ -6,6 +6,7 @@ import { CheckedValue, checked_mir_value, checked_value, mir_checked_value, scal
 import { MirBlock, MirCall, MirFunction, MirInstruction, MirModule, MirSignature, mir_function_index, mir_origin_valid, mir_table_span_valid, mir_type_id, mir_value_type } from mir
 import { mir_control_active, mir_control_prepare } from mir_control
 import { mir_intrinsic_signature_error, mir_runtime_adapter } from mir_intrinsics
+import { mir_instruction_effects } from mir_roots
 import { compiler_host_intrinsic, compiler_runtime_intrinsic } from resolution
 import { CheckedLocals, CompilerState } from state
 import { load_integer, load_string } from storage
@@ -77,8 +78,8 @@ def mir_call_value_type(native_module: MirModule, name: String): Boolean
 	return false
 end
 
-# Only the verified standard math adapter is pure. Ordinary and host calls
-# retain conservative effects until an interprocedural summary proves more.
+# Standard math is pure. All other calls start conservative until their
+# verified body can justify a narrower effect at module finalization.
 def mir_call_effects(signature: MirSignature): Integer
 	if signature.kind == 3 && signature.adapter == 11
 		return 0
@@ -86,13 +87,62 @@ def mir_call_effects(signature: MirSignature): Integer
 	return 15
 end
 
-# A verified scalar leaf has only scalar MIR operations and cannot allocate or
-# mutate managed storage. Its arithmetic may still fail, so retain that effect.
+# A direct ordinary leaf can read managed values or branch without changing
+# caller state. A call in its body, including recursion, stays conservative;
+# this bounded local summary does not assume anything about another callee.
+def mir_direct_call_effects(native_module: MirModule, function: MirFunction): Integer
+	if function.kind != 3 || function.block_count < 1 || function.block_count > 16 || !mir_table_span_valid(function.block_start, function.block_count, native_module.blocks.size())
+		return 15
+	end
+	mut remaining := 64
+	mut failure := false
+	mut block_index := function.block_start
+	while block_index < function.block_start + function.block_count
+		block := native_module.blocks[block_index]
+		if block.terminator < 1 || block.terminator > 4 || !mir_table_span_valid(block.instruction_start, block.instruction_count, native_module.instructions.size())
+			return 15
+		end
+		if block.terminator == 4
+			failure = true
+		end
+		mut index := block.instruction_start
+		while index < block.instruction_start + block.instruction_count
+			if remaining == 0
+				return 15
+			end
+			remaining -= 1
+			instruction := native_module.instructions[index]
+			if instruction.kind < 6 || instruction.kind > 66 || instruction.kind == 11
+				return 15
+			end
+			effects := mir_instruction_effects(native_module, instruction)
+			if effects != 0 && effects != 8
+				return 15
+			end
+			if effects == 8
+				failure = true
+			end
+			index += 1
+		end
+		block_index += 1
+	end
+	if failure
+		return 8
+	end
+	return 0
+end
+
+# Scalar adapters already have a verified no-allocation/no-mutation contract.
+# Their arithmetic may still fail, so retain that effect.
 def mir_verified_call_effects(native_module: MirModule, signature: MirSignature): Integer
 	if signature.kind == 0
 		index := mir_function_index(native_module, signature.id)
-		if index >= 0 && native_module.functions[index].kind == 1
-			return 8
+		if index >= 0
+			function := native_module.functions[index]
+			if function.kind == 1
+				return 8
+			end
+			return mir_direct_call_effects(native_module, function)
 		end
 	end
 	return mir_call_effects(signature)
