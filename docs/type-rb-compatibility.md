@@ -571,18 +571,16 @@ pinned reference compiler.
 
 The quick PR job validates reference checkout configuration before downloading
 or building the reference compiler. `tools/compatibility_manifest.py` inventories
-all 13 checkouts in 12 maintained workflows, their post-checkout identity checks,
-and the Linux amd64 controller pin. Missing, added, or changed consumers require
+every reference checkout in the maintained workflows, their post-checkout identity
+checks, and the Linux amd64 controller pin. Missing, added, or changed consumers require
 an explicit validator update. Mutation tests exercise each checkout separately.
 The later executable version check remains required before matrix fan-out.
 
 Snapshot validation, PR validation, worker memory, formal runtime/build benchmarks, and
 the Linux amd64 workflow follow `TYPE_RB_REVISION`. Daily and weekly workflows
-derive it from the checked-out file before their reference checkout. The
-Array-push, temporary-push GC, and dynamic-Array-address experiments retain
-`bae19032aa1bb7b263bc827d02606edc6e981c52`; both historical portable-entry checkouts retain
-`5dc09070cf7f88a569279f5e63982a6de59d692c`. These historical pins are checked
-explicitly and must not be advanced with the current development oracle.
+derive it from the checked-out file before their reference checkout.
+Retired experiments keep their historical pins in the
+[retired workflows](retired-experiment-tools.md).
 
 This is a strict check of the maintained block-mapping and shell spellings,
 not a general YAML or shell interpreter. Post-checkout Git identity and the

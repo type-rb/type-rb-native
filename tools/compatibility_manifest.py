@@ -168,10 +168,6 @@ REFERENCE_WORKFLOWS = {
     "linux-amd64-targets.yml": ("environment", 1),
     "daily-performance.yml": ("derived", 1),
     "weekly-performance.yml": ("derived", 1),
-    "array-push-fast-path.yml": ("bae19032aa1bb7b263bc827d02606edc6e981c52", 1),
-    "gc-temp-push-fast-path.yml": ("bae19032aa1bb7b263bc827d02606edc6e981c52", 1),
-    "dynamic-array-address.yml": ("bae19032aa1bb7b263bc827d02606edc6e981c52", 1),
-    "historical-portable-entry.yml": ("5dc09070cf7f88a569279f5e63982a6de59d692c", 2),
 }
 
 

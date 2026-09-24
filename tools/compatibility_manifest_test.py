@@ -200,7 +200,7 @@ class ReferenceCheckoutTest(unittest.TestCase):
                 self.reject(path, source[:ref.start(1)].rsplit("\n", 1)[0] +
                             source[ref.end(1):])
                 checked += 1
-        self.assertEqual(checked, 13)
+        self.assertEqual(checked, 8)
 
     def test_environment_pins_retain_current_or_historical_identity(self) -> None:
         for name, (mode, _) in REFERENCE_WORKFLOWS.items():
