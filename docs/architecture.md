@@ -86,8 +86,7 @@ linker can be a dependency of another self-hosted language implementation.
 ```text
 TypeRB source
     -> Native file/project loader, lexer, parser, resolver, checker
-    -> verified Native MIR and target-independent passes (supported slices)
-       or the remaining checked direct path (migration work)
+    -> verified Native MIR and target-independent passes
     -> QBE adapter and generated managed runtime
     -> external QBE, assembler, and linker
     -> executable
@@ -96,104 +95,40 @@ TypeRB source
 Each boundary must preserve source origins so diagnostics and runtime failures
 can eventually refer to authored TypeRB source.
 
-Every accepted ordinary function now requires a verified MIR body; the ordinary
-direct expression/body emitter has been removed. The
-[MIR status](native-mir-optimization-status.md) distinguishes implemented
-vertical slices from remaining ownership.
+Every accepted ordinary function requires a verified MIR body. The
+[MIR status](native-mir-optimization-status.md) records current ownership and
+remaining optimization work.
 
 ### Current compiler source ownership
 
 The ordinary entry is [compiler/src/compiler.trb](../compiler/src/compiler.trb).
 Its explicit transitive import closure is registered in
-`src/compiler_recovery_layout.trb`:
+`src/compiler_recovery_layout.trb`.
 
-| Modules in `compiler/src/` | Current responsibility |
+The import closure changes as language coverage grows; the generated layout,
+not a hand-maintained module table, is the exact inventory. Its main responsibility
+boundaries are:
+
+| Source group | Responsibility |
 | --- | --- |
-| `compiler_bytes.trb`, `literal_types.trb`, `literal_type_syntax.trb`, `literal_mir.trb`, `literal_cases.trb`, `union_members.trb` | Byte-exact singleton types, verified constants/widening, exhaustive literal cases and common union fields with lexical discriminant narrowing; see [decision 0078](decisions/0078-literal-types-and-union-members.md). |
-| `object_model.trb`, `object_syntax.trb`, `object_types.trb`, `object_resolution.trb`, `object_methods.trb`, `object_fields.trb`, `object_initialization.trb`, `object_dispatch.trb`, `object_dispatch_shapes.trb`, `object_dispatch_mir.trb`, `object_mir_types.trb`, `object_mir.trb`, `qbe_objects.trb`, `qbe_object_dispatch.trb` | Authored and concrete object identities, method specialization, definite field initialization, typed field operations and explicit interface witnesses. Backend adapters consume verified layouts and dispatch; see [decision 0085](decisions/0085-object-type-and-execution-mir.md). |
-| `newtype_model.trb`, `newtype_types.trb`, `newtype_syntax.trb`, `newtype_resolution.trb`, `newtype_methods.trb`, `newtype_mir.trb`, `newtype_mir_types.trb` | Nominal construction policy, representation resolution, method identity and verified storage erasure; see [decision 0077](decisions/0077-newtype-mir.md). |
-| `sliced_iteration.trb` | Streams fresh Array batches from retained Array/Range receivers through verified MIR control edges. |
-| `raw_enum_types.trb`, `raw_enum_syntax.trb`, `raw_enum_checked.trb`, `raw_enum_resolution.trb`, `enum_methods.trb` | Raw value declarations, canonical conversions, standard dependencies and receiver-specialized ordinary/generic enum method resolution; see [decisions 0070](decisions/0070-raw-enum-and-method-mir.md) and [0071](decisions/0071-generic-enum-method-mir.md). |
-| `union_types.trb`, `union_checked.trb`, `union_mir.trb`, `qbe_unions.trb` | Canonical alternatives, scalar type cases, verified union injection/test/extraction and traced payload adaptation; see [decision 0069](decisions/0069-union-value-mir.md). |
-| `transform_model.trb` | Parser-owned collection block shapes and concrete transform projections; lowering uses ordinary iteration control. |
-| `qbe_array_join.trb` | Linear Array-to-String byte assembly for verified join MIR; see [decision 0063](decisions/0063-array-join-mir.md). |
-| `qbe_string_trimming.trb` | Unicode edge trimming and one retained-byte copy for verified String MIR; see [decision 0065](decisions/0065-string-trimming-mir.md). |
-| `qbe_scalar_strings.trb` | Bounded binary64 shortest-roundtrip formatting for verified scalar conversion MIR; see [decision 0068](decisions/0068-scalar-string-conversion.md). |
-| `lexer.trb`, `syntax_tokens.trb` | Identifier/operator token boundaries and parser-owned nested generic closer expansion; see [decision 0076](decisions/0076-lexical-boundaries.md). |
-| `literal_syntax.trb` | Parser-selected String interpolation and literal Symbol normalization; see [decision 0066](decisions/0066-symbol-literal-syntax.md). |
-| `storage.trb`, `path.trb`, `literals.trb` | Shared storage, path predicates, and numeric/ASCII predicates. |
-| `string_escapes.trb`, `qbe_string_literals.trb` | String escape widths, byte/scalar validation and the private byte constructor; see [escape decoding](decisions/0058-string-escape-decoding.md). |
-| `state.trb` | Compiler state, symbol indexes, shared locals, and diagnostics. |
-| `namespace_model.trb`, `namespace_references.trb` | Source-owned declaration namespaces, qualified references and private member access. |
-| `global_model.trb`, `global_declarations.trb`, `global_analysis.trb`, `mir_globals.trb`, `qbe_globals.trb` | Runtime initializer bodies, exact global types and mutability, verified identities/order/reads/writes and persistent GC roots; see [decision 0080](decisions/0080-global-binding-mir.md). |
-| `parser.trb`, `syntax_tokens.trb`, `resolution.trb` | Syntax/token boundaries, import/declaration orchestration and body name resolution. |
-| `declaration_lookup.trb`, `type_resolution.trb` | Visible declaration identity, semantic type resolution and concrete nominal instantiation. |
-| `generic_model.trb`, `generic_arguments.trb`, `generic_syntax.trb`, `generic_validation.trb` | Authored generic templates, recursive type substitution, explicit applications and template validation; see [generic nominal MIR](decisions/0045-generic-nominal-mir.md). |
-| `generic_functions.trb`, `generic_bindings.trb`, `generic_program.trb`, `generic_check.trb` | Concrete function instances, shared function/record initializer bindings, isolated abstract template checking and declaration-owned parameter identities; see [generic record defaults](decisions/0049-generic-record-default-mir.md). |
-| `alias_model.trb`, `alias_syntax.trb`, `alias_patterns.trb` | Transparent/generic aliases, declaration-owned expansion and structural pattern identity. |
-| `callable_types.trb`, `lambda_syntax.trb`, `lambda_resolution.trb`, `mir_callables.trb`, `qbe_callables.trb` | Structural callback types, verified captured environments/indirect calls and managed ABI adaptation; the [callable foundation](decisions/0051-callable-mir-foundation.md) precedes authored closures. |
-| `checked_body.trb` | Function-owned concrete checking and REPL projections; [checked body ownership](decisions/0047-checked-body-ownership.md) separates shared syntax from instantiated semantic facts. |
-| `standard_library.trb`, `result_model.trb`, `result_checked.trb` | Compiler-owned portable declarations, checked Result operations, propagation and required-use boundaries; see [Result control MIR](decisions/0046-result-control-mir.md). |
-| `enum_model.trb`, `enum_types.trb`, `enum_syntax.trb`, `enum_checked.trb`, `enum_mir.trb`, `qbe_enums.trb` | Nominal variants/payloads, patterns, verified operations and layout adaptation. |
-| `argument_binding.trb`, `default_arguments.trb` | Shared argument slots, duplicate/order rejection, private declaration-scoped default identities and typed prefix bindings for checking and the REPL; see [default lowering](decisions/0040-default-initializer-mir.md). |
-| `checked_program.trb`, `checked_values.trb`, `checked_types.trb` | Recursive expression/body checking, typed checked values and shared type/operator rules. |
-| `integer_methods.trb` | Integer receiver classification, arity and existing scalar/CFG construction, including an independently verified clamp guard; see [Integer receiver MIR](decisions/0053-integer-receiver-mir.md). |
-| `float_methods.trb` | Float receiver classification and existing scalar/CFG construction, including rounding and non-finite behavior; see [Float receiver MIR](decisions/0054-float-receiver-mir.md). |
-| `array_methods.trb`, `array_queries.trb`, `array_sorting.trb`, `qbe_array_copies.trb`, `qbe_array_mutations.trb` | Array edges, copies, queries, stable sorting and insertion/removal lower through verified Array operations; bounded runtimes preserve shared headers, element identities and storage accounting. |
-| `string_methods.trb`, `qbe_string_queries.trb`, `qbe_string_sequences.trb`, `qbe_string_slices.trb`, `qbe_string_trimming.trb` | String method classification, typed construction and bounded runtimes; see [query MIR](decisions/0055-string-query-mir.md), [sequence MIR](decisions/0056-string-sequence-mir.md) and [slice MIR](decisions/0057-string-slice-mir.md). |
-| `nullable_types.trb`, `nullable_flow.trb`, `nullable_mir.trb`, `qbe_nullable.trb` | Optional type identity, lexical and stable-field facts, typed storage/test/extraction and numeric conversion blocks, and representation adaptation; see [nullable MIR](decisions/0042-nullable-mir.md). |
-| `mir.trb`, `mir_types.trb`, `mir_analysis.trb`, `mir_numeric.trb`, `mir_array_loops.trb`, `mir_flow.trb`, `mir_identities.trb`, `mir_roots.trb`, `mir_passes.trb`, `mir_verifier.trb`, `mir_instructions.trb` | MIR model, semantic composite types and queries, reusable proofs, CFG/dominance, operation effects/liveness/root plans, rewrites, structural verification and instruction contracts. |
-| `mir_construction.trb`, `mir_builder.trb`, `mir_control.trb`, `mir_value_control.trb`, `mir_calls.trb`, `mir_intrinsics.trb`, `mir_logical.trb`, `mir_strings.trb`, `mir_arrays.trb`, `mir_records.trb`, `mir_hashes.trb`, `mir_hash_inference.trb`, `mir_ranges.trb`, `mir_iteration_control.trb` | Declaration-bound ordinary/runtime/host and standard-package call contracts, checked ABI shapes, block construction and publication of scalar and mutable scalar/managed control/value, Array, nominal record, Hash and Range operations, checked empty-Hash type constraints, live Array/streaming Range loops, conversion/I/O and short-circuit MIR. |
-| `qbe_context.trb`, `qbe_functions.trb`, `qbe_numeric.trb`, `qbe_constants.trb` | Target context, function ABI/root-frame emission, MIR-selected numeric lowering and static data. |
-| `qbe_calls.trb`, `qbe_mir.trb`, `qbe_control.trb`, `qbe_strings.trb`, `qbe_arrays.trb`, `qbe_records.trb`, `qbe_hashes.trb`, `qbe_ranges.trb`, `qbe_roots.trb` | Shared typed scalar/call adaptation, verified Array loop plans, general scalar/managed blocks and MIR-selected root publication. |
-| `hash_types.trb`, `hash_mir.trb`, `hash_checked.trb` | Hash types and value layout, operation plans, and their checked source bindings. |
-| `iteration_syntax.trb`, `iteration_mir.trb`, `iteration_checked.trb` | Immutable parsed iteration regions, typed Array/Range traversal plans, Range construction, structural validation, and checked source bindings. |
-| `qbe_output.trb`, `qbe_runtime.trb`, `hash_runtime.trb`, `hash_key_runtime.trb` | Ordered QBE output and runtime generation; Hash key hashing/probing is separate from table allocation, growth and snapshots. Verified MIR selects scalar and union key layouts. |
-| `project_config.trb` | Project configuration records, JSONC parsing, and validation. |
-| `checked_functions.trb` | Parameter binding, body checking and module finalization. |
-| `compiler.trb` | Final checking orchestration, declaration-bound runtime hooks, QBE adaptation, emission temporary-storage lifetimes, and the remaining driver code. |
+| Lexer, parser, resolution and checked declarations | Authored syntax, names, semantic types, diagnostics and source origins. |
+| `mir_*` and checked construction modules | Typed operations, control flow, effects, liveness, proof plans and independent verification. |
+| `qbe_*` and runtime modules | QBE/ABI adaptation of verified MIR, managed runtime code and target output. |
+| `compiler.trb` | Entry orchestration, final checking and emission lifetime. |
 
-The [shared iteration proof module](../compiler/src/iteration_checked.trb)
-serves the checker, compiler entry, and REPL without importing the recursive
-checker or emitter. Recursive expression/body checking stays in `checked_program.trb`; the independent
-[value-join builder](decisions/0041-value-control-mir.md) owns typed result edges.
-The current iteration plans cover Array and `Range<Integer>` statement `each`
-and `each.with_index`. Checked Range construction retains the two Integer endpoint
-regions and exclusivity; the same source-proof module validates construction
-before MIR construction and REPL evaluation. Admitted functions lower Hash values,
-Range values and iteration entirely from verified MIR; the backend does not
-read their source proofs. Compiler runtime and typed host calls use the same MIR
-call instruction as ordinary functions. The checked declaration retains its name,
-source identity, adapter and parameter/result types. Verification checks runtime
-signatures and the project-source record layout; runtime and host adapters cannot
-be interchanged. Shared QBE call adaptation consumes these declarations, including
-Void and Float ABI handling. Calls conservatively retain allocation, mutation, I/O
-and failure effects, with MIR-selected live roots at every call.
+The recursive checker remains in `checked_program.trb`; the CLI/REPL reuses
+checked source identities and core runtime behavior. Calls, including standard
+package and host adapters, carry typed signatures and conservative effects in
+MIR. The backend consumes verified plans and does not recover source-level
+Array, Range, iteration or root facts. Future decomposition should follow these
+responsibilities without duplicating the canonical compiler closure.
 
-Resolved `Math.sqrt` and `Process.argv` calls also use typed MIR signatures,
-with a distinct standard-package adapter kind. Import aliases preserve package
-identity; ordinary same-spelled functions remain ordinary declarations. Argument
-widening and managed argv results use the shared call and live-root machinery.
-Unreachable tails retain language diagnostics without discarding scalar or CFG
-MIR ownership. Static strings in those tails are not emitted. Once a whole body
-has committed to MIR, its token-bound Array region is discarded; legacy region
-verification and QBE header setup are reserved for the retained direct adapter.
-
-Every declaration in the actual compiler source closure is required to have MIR
-by its self-use test. Numeric Array functions now share the general typed CFG;
-the positional induction builder is removed. The direct adapter and remaining
-token-bound analyses still await retirement. Retained direct-adapter tests explicitly disable their selected
-builder before body checking through the shared checker stages; they do not rely
-on an otherwise supported language operation as an opt-out. The CLI runtime
-literal remains compile-time backend data, separate from runtime call operands.
-See [Range coverage](native-range.md) and the [MIR milestone](mir-consolidation.md).
-
-The CLI/REPL under `compiler/cli/` consumes these modules but is outside this
-ordinary core closure. Snapshot recovery derives a temporary flattened source
+The CLI/REPL under `compiler/cli/` is outside the ordinary core closure.
+Snapshot recovery derives a temporary flattened source
 from the canonical modules using
 [strict closure validation](../src/compiler_recovery_source.trb); it does not
 replace file-root imports in ordinary self-hosting. The
-[organization schedule](repository-organization.md) tracks further extraction
+[organization guide](repository-organization.md) tracks further extraction
 and removal of superseded implementation.
 
 The ordinary self-hosting sequence
@@ -215,7 +150,7 @@ ordinary Native-to-Native generation.
 ## Bootstrap snapshot
 
 The bootstrap snapshot is a deterministic, versioned, target-neutral, data-only
-interchange for the experiment. It is distinct from both the reference typed IR
+interchange for recovery. It is distinct from both the reference typed IR
 and Native MIR.
 
 It may eventually contain:
@@ -287,64 +222,20 @@ Block storage order and source tokens are not proof inputs. Unknown aliases,
 changed guards or indexes, calls and allocation/mutation outside the admitted
 operation set retain checks. Integer arithmetic overflow checks remain explicit.
 
-This admits nonzero and subtracting reductions, multiple parameters, branches
-and lexical transfers without a special Array function shape. Legacy direct-path
-range/header tables and direct emission still serve their remaining consumers;
-retiring those owners and broadening the CFG facts remain part of consolidation.
-The independent low-level verifier fixtures are not an ordinary emission route.
-
-The self-hosted compiler initially reached fixed-point closure with analysis
-interleaved into direct QBE emission. That implementation remains valuable
-migration and benchmark evidence, but it is not the target organization. The
-migration proceeds as bounded vertical slices: define and verify a minimal MIR
-operation/fact subset, lower it through the existing QBE ABI, move the matching
-optimization ownership above the adapter, and remove the superseded emitter
-logic before broadening the subset.
-
-The [trade-off policy](optimization-tradeoffs.md) distinguishes ordinary
-acceptance from bounded runtime-benefit investigation after a cost miss. It
-retains cumulative budgets and removes superseded ownership, while allowing
-useful optimizer code to have an explicitly justified cost. QBE text alone is
-not a deployed-artifact objective. Existing ordinary CI limits remain unchanged.
-
-Ordinary optimization acceptance keeps its pre-registered compactness caps.
-A structural MIR slice may use a distinct temporary compiler-size envelope
-only after the smallest useful skeleton has been measured and the envelope,
-build/RSS limits, removal condition, and final compactness target have been
-registered publicly. This temporary allowance does not weaken the end goal of
-matching or improving the Go backend's build time and generated artifact size.
-Each successive structural slice uses a validated marker that names its exact
-accepted baseline, measured candidate identity, and one-time relative limits.
-Before a candidate has a public revision, exact compiler and compiler-test
-source digests identify the measured implementation without making the policy
-retrospective. Once that marker exists in the baseline, later changes
-automatically return to the ordinary limits.
-Remove superseded Array induction token facts and direct emission as the
-control-flow slice migrates. Assess outstanding migration debt and cumulative
-cost before expanding the fact family; useful verified passes are not required
-to have zero net code cost as a prerequisite to bounded investigation.
-
-The first complete `Array<Integer>` reduction slice extends that same family
-with verified induction and accumulator block parameters. Its measured
-one-time ceilings are 350,000 Darwin arm64 bytes, 317,000 Linux arm64 bytes,
-667,000 bytes combined, and 1,120,000 bytes of target-neutral compiler QBE.
-The measured code-section ceilings are 250,904 Mach-O `__text` bytes and
-253,424 ELF `.text` bytes. Ordinary 1.05 compiler/build/RSS ratios and the 2.0
-catastrophic bound remain in force for ordinary acceptance. Retain these
-historical ceilings and apply the trade-off policy to future cost decisions.
-See [Decision 0028](decisions/0028-native-mir-optimization-boundary.md).
-
-The current complete-compiler limits account for safe Array assignment
-retention under [Decision 0029](decisions/0029-array-assignment-compiler-budget.md):
-350,000 Darwin arm64 bytes, 328,000 Linux arm64 bytes and 678,000 bytes combined.
-Linux amd64 remains at 310,000 bytes. Historical transition markers and all
-relative, code-section, QBE and correctness requirements retain their contracts.
+This admits nonzero and subtracting reductions, multiple parameters,
+branches and lexical transfers without a special Array function shape. The
+ordinary direct body emitter and token-bound Array/header analysis are retired;
+independent low-level verifier fixtures are not a second emission route.
+The [MIR milestone](mir-consolidation.md) permits measured intermediate cost
+regressions while preserving correctness, recovery and lifetime checks. Daily
+and weekly measurements guide optimization; formal Pure Go comparison follows
+the coherent milestone. Historical strict limits and rejected experiments remain
+in their immutable decisions and results, not as current PR gates.
 
 ## Backend adapters
 
-Candidate adapters consume the same verified, target-neutral MIR subset. QBE
-is the current backend; the other entries below describe possible experiments,
-not implemented adapters.
+QBE is the current backend and consumes verified, target-neutral MIR.
+Other entries below are possible experiments, not implemented adapters.
 Target lowering selects a versioned ABI profile for an operating system and
 architecture. Backend comparisons on the same target use the same profile.
 
@@ -352,7 +243,7 @@ architecture. Backend comparisons on the same target use the same profile.
 | --- | --- |
 | Cranelift | Balanced fast-codegen candidate for development and AOT builds |
 | LLVM | Optimizing ceiling for release-oriented measurements |
-| QBE | Compact-backend and small-toolchain comparison |
+| QBE | Current Native backend |
 | Direct emitter | Limited lower-bound experiment for compile time and size |
 
 The architecture permits comparison; it does not promise long-term support for
@@ -410,10 +301,9 @@ representation is one exact managed-reference stack with per-function
 watermarks, loop compaction, alias roots, and managed-return preservation.
 Managed values loaded from containers retain independent roots across later
 allocation: replacing an element may remove the owner's last reference to a
-still-used alias. The retained direct path omits those publications only when
-its function has no following collection point; general MIR supplies explicit
-live-before sets. Record field identities and types have one verified MIR owner, also consumed
-by GC descriptors. Constructor operands and returned projections participate
+still-used alias. Verified MIR supplies explicit live-before sets. Record field
+identities and types have one verified MIR owner, also consumed by GC
+descriptors. Constructor operands and returned projections participate
 in the same live-before analysis. The collector does not conservatively scan the machine stack. Fixed descriptors,
 Array-backing reclamation, and deterministic pacing are therefore shared by
 compiler-generated applications rather than being confined to the earlier
@@ -463,11 +353,9 @@ retain the original experiment-to-decision mapping and seed provenance.
 
 ## Source organization
 
-Superseded implementation names reflect development history rather than
-architectural layers. The [organization schedule](repository-organization.md)
-separates ordinary compiler responsibilities from snapshot/recovery adapters,
-runtime generation, and verification support. It starts with documentation and
-root support-code cleanup, then decomposes the compiler alongside MIR work.
+The [organization guide](repository-organization.md) separates ordinary
+compiler responsibilities from snapshot/recovery adapters, runtime generation
+and verification support. Compiler decomposition continues alongside MIR work.
 The schedule preserves the canonical closure, explicit recovery boundary, and
 historical evidence; it does not create a second compiler or wait for promotion.
 

@@ -38,9 +38,9 @@ Strings, Arrays, Hash, Range, conditionals, loops and lexical transfers.
 [The basic-language contract](native-language-coverage.md), tracked in
 [issue #454](https://github.com/type-rb/type-rb-native/issues/454), broadens that
 inventory from pinned reference syntax and semantic probes. Complete useful
-families together with their MIR dependencies, beginning with ordinary UTF-8
-String behavior; do not wait for all existing MIR migration before closing
-basic language gaps. The shared tests also generate the public Capabilities
+families together with their MIR dependencies; do not wait for all existing MIR
+migration before closing basic language gaps. The shared tests generate the
+public Capabilities
 detail view. A completed MIR milestone is not 100% TypeRB language coverage.
 
 Keep checked-program type, origin and high-level semantic information available
@@ -52,8 +52,8 @@ list does not establish those capabilities.
 
 ## Completion conditions
 
-- Every supported ordinary function follows the verified MIR route, including
-  currently direct-lowered functions. Checked operations, traps, origins, values,
+- Every supported ordinary function follows the verified MIR route. Checked
+  operations, traps, origins, values,
   control edges and lexical ownership remain explicit.
 - Portable range/index/loop relationships, allocation and mutation effects,
   Array-header stability and root-safety decisions have shared MIR owners.
@@ -68,118 +68,17 @@ list does not establish those capabilities.
   compiler build/size/RSS and toolchain distribution. It identifies and pursues
   performance recovery before claiming qualification or refreshing formal Pages.
 
-The previous rough 60% estimate was architecture coverage, not a remaining-effort
-estimate. Track the conditions above and explicit coverage gaps instead of
-counting small PRs or treating a renamed data structure as full MIR migration.
+## Current implementation
 
-## Current integration: sole MIR emission
+Every accepted ordinary function requires a verified MIR body. The direct body
+emitter is retired; numeric selection, managed roots and container operations
+have MIR owners. The [ownership status](native-mir-optimization-status.md)
+describes the current representation and remaining optimization work. The
+[reference-derived inventory](native-language-feature-inventory.md) and
+[Capabilities](capabilities/) record language coverage and known gaps.
 
-The current ownership change requires a MIR body for every accepted ordinary
-function, moves numeric/call expansion selection to verified CFG/SSA plans and
-removes the direct body emitter with its token-bound Array/header/assignment
-analyses. Function ABI and root-frame emission has its own target module.
-Acceptance requires ordinary core/CLI fixed points, snapshot-v4 and full hosted
-recovery, portable output/failure order, malformed-plan controls and managed
-lifetime tests with erased/reordered MIR. No baseline, language expectation,
-seed, pin or timeout is relaxed. Cost observations use the migration policy below;
-this integration is not final Pure Go qualification. See the
-[current ownership status](native-mir-optimization-status.md) for retained policy
-bounds and remaining optimization/coverage work.
-
-## Default initialization checkpoint
-
-Required and default positional/named-only function parameters and record fields
-share source-order binding. Each default gets a private, declaration-scoped
-initializer with a normal typed MIR signature and body. Call checking evaluates
-explicit expressions first, fills omitted slots in declaration order and emits
-full-arity calls. The REPL consumes the same private declaration identities.
-The [lowering decision](decisions/0040-default-initializer-mir.md) records ownership
-and future callable boundaries.
-
-Acceptance includes 108 reference/Native ordinary contracts, wrong-label/order/type
-and invalid-scope controls, fresh managed values under forced collection and
-source-erased/reordered MIR, ordinary core/CLI fixed points and the synchronized
-60-module recovery closure. Compiler self-use of authored defaults waits for an
-accepted seed refresh: the current pinned seed cannot parse that syntax. The
-implementation itself remains compatible with that seed. No seed, pin, baseline
-or performance qualification changes are implied.
-
-## Value-control checkpoint
-
-Value-producing conditionals and scalar case now use typed block arguments,
-including Integer/Float joins, managed results and lexical transfer branches.
-Conditional transfers share parsed regions with the REPL. The independent
-`mir_value_control.trb` builder leaves QBE responsible only for verified MIR
-adaptation; source erasure, reordered storage and forced-collection checks cover
-that boundary. See [the decision](decisions/0041-value-control-mir.md) and the
-shared language inventory for the exact subset and remaining gaps.
-
-That checkpoint contained 61 ordinary compiler modules, including the new
-value-join builder. Its acceptance remains historical evidence; each subsequent
-integration requires its own complete correctness authorities.
-
-## Current basic-language integration: nominal values and Result control flow
-
-Optional values, nil guards, safe navigation and optional numeric widening now
-have typed MIR operations and control edges. Dedicated type, flow-fact and MIR
-builders own the semantics; QBE consumes verified operations. Calls, returns,
-defaults and managed collections retain optional payloads through shared root
-planning. See [decision 0042](decisions/0042-nullable-mir.md) for the private layout
-and conservative fact invalidation across assignments and loop backedges.
-
-The ordinary compiler closure contains 114 modules. Implementation syntax stays
-within the existing immutable seed and snapshot-v4 boundary; compiler self-use
-of the new syntax still depends on an accepted seed refresh. The shared language
-contract contains 509 cases with explicit remaining differences. Retained REPL
-assignment flow now uses an ordinary checker projection, with conservative
-failure/interruption invalidation and explicit replay boundaries; see
-[decision 0043](decisions/0043-checked-repl-submissions.md). Ordinary enum payloads and exhaustive cases now have independently verified
-nominal catalogs, typed operations and managed roots, including recursive
-record/enum fields. [Decision 0044](decisions/0044-enum-mir.md) records the boundary.
-Explicit generic records/enums now resolve concrete nominal catalogs before MIR;
-[decision 0045](decisions/0045-generic-nominal-mir.md) records recursive identity,
-REPL remapping and source erasure. Standard Result construction, prefix try,
-statement-value catch and required-use checks now share these concrete enum
-operations and ordinary control-flow joins; see
-[decision 0046](decisions/0046-result-control-mir.md).
-Function-owned checked projections now isolate concrete body facts while preserving
-authored origins; [decision 0047](decisions/0047-checked-body-ownership.md) records
-the prerequisite for generic body specialization.
-Generic methods/classes, structured package propagation boundaries,
-raw conversions, wider patterns/unions, full REPL display parity and final
-performance qualification remain open. This checkpoint does not imply complete
-basic-language coverage.
-
-Explicit generic functions now share authored syntax while owning concrete
-signatures, checked projections and verified MIR bodies. Unused declarations and
-parameter defaults receive independent abstract validation before concrete MIR
-publication. [Decision 0048](decisions/0048-generic-function-mir.md) records the
-semantic fork and backend boundary. Generic record defaults now reuse ordinary
-record parsing and private typed initializer calls. Shared declaration-owned
-bindings keep function and nominal parameters independent; unused defaults are
-checked before concrete MIR publication. [Decision 0049](decisions/0049-generic-record-default-mir.md)
-records the shared ownership and verification. Transparent and generic aliases
-now expand to existing canonical types before MIR;
-[decision 0050](decisions/0050-transparent-alias-mir.md) records abstract validation,
-recursive nominal identity and REPL projections. Other declaration families and
-final performance qualification remain open.
-
-## Callable foundation
-
-Callback signatures, captured environments and indirect calls now have verified
-MIR owners, conservative effects and live-root planning. Internal fixtures execute
-escaped/nested closures, shared captured Array storage and cyclic container
-references after frontend erasure and forced collection. Lexical binding identities
-survive active-slot reuse and own nullable facts.
-[Decision 0051](decisions/0051-callable-mir-foundation.md) separates this foundation
-from ordinary acceptance. Authored `fn` bodies now use analyzed captures, shared
-mutable cells and concrete MIR declarations, with ordinary file check/build/run
-and retained REPL coverage. REPL code/type contexts survive later submissions and
-are collected with their reachable values. Named declaration values now reuse the
-same callable operations, including optional receiver calls and direct generic
-function-type arguments; see [Decision 0064](decisions/0064-named-function-values.md).
-The remaining signature/capability boundaries stay explicit. Internal factories remain
-independent lifetime controls, alongside the shared ordinary cases.
+Earlier feature checkpoints, acceptance counts and implementation histories
+remain in the [immutable milestone history](https://github.com/type-rb/type-rb-native/blob/f864151fa53a99a9491ca0268198d5ec914124fd/docs/mir-consolidation.md#current-integration-sole-mir-emission).
 
 ## Development loop
 
@@ -244,100 +143,3 @@ routing and the documented next-phase contract; this mode must not silently
 become permanent release qualification. Stable releases and final benchmark
 claims cannot rely on migration CI alone. Formal Pages changes require complete
 accepted formal measurements; no old result is rewritten as a new observation.
-
-Value-producing Array/Range transformations now share the same typed loop
-builders: map/select results and reduce accumulators are ordinary loop-carried
-values. Checked projections serve the REPL; source-erasure and forced-GC tests
-verify independent executable MIR. See [decision 0052](decisions/0052-collection-transform-mir.md).
-
-## Float receiver checkpoint
-
-Float absolute value, rounding and finite/infinite/NaN classification share
-existing verified operations, conversion failures and typed joins. Integer and
-Float receivers reuse numeric argument checking and a common value-selection
-builder. Ordinary and REPL checks include signed zero, rounding ties, portable
-limits, non-finite failures and managed captures. The new Float owner raises the
-ordinary closure to 102 modules; no new backend dispatch or instruction kind is
-needed. See [decision 0054](decisions/0054-float-receiver-mir.md). Wider numeric
-APIs and final performance qualification remain open.
-
-Scalar-leaf verification, Integer guard proofs and numeric call expansion also
-use the entry block's identity rather than its storage position. Reordering
-controls now cover scalar leaves as well as control-flow functions, preserving
-verified plans and source-independent execution.
-
-String `empty?`, `include?`, `start_with?`, `end_with?`, `index` and `rindex`
-now share verified search outcomes, Boolean comparisons and optional joins.
-Instruction 44 owns operand, mode, result and effect contracts; its bounded
-runtime has no temporary String allocation. The 104-module closure separates
-query construction from runtime implementation. Unicode, external bytes,
-receiver retention and lexical transfers have distinct ordinary/MIR controls;
-see [decision 0055](decisions/0055-string-query-mir.md).
-
-String `codepoints`, `chars` and `reverse` now use independently verified typed
-sequence operations with explicit allocation/failure effects and source roots.
-The method owner was renamed to reflect both query and transform construction;
-a separate sequence runtime uses linear decoding and bounded temporary roots.
-That checkpoint contained 344 shared cases and kept slicing explicitly unsupported.
-See [decision 0056](decisions/0056-string-sequence-mir.md).
-
-String `slice` now uses a checked MIR operation with captured String/Range operands,
-explicit allocation/failure effects and independently verified roots. Its bounded
-runtime validates before offset lookup and normalizes selected code points with
-one String allocation. The 362-case shared contract covers boundaries, argument
-order, optional calls and Unicode; see [decision 0057](decisions/0057-string-slice-mir.md).
-
-String control, octal, hexadecimal and Unicode escapes now share a byte-preserving
-decoder across ordinary files and the REPL. A declaration-bound runtime adapter
-retains verified call types/effects and exact literal bytes. The 509-case contract
-includes all byte values, scalar boundaries and malformed syntax; ordinary
-fixed points preserve the preceding seed and explicit recovery boundary. See
-[decision 0058](decisions/0058-string-escape-decoding.md).
-
-Array `unshift`, `pop` and `shift` now share an independently verified mutation
-operation. Its exact Array/element operands, closed mode, effects and managed
-roots precede backend lowering. Mutation invalidates retained loop storage
-plans, and checked assignment positions remain valid only while the current
-length admits them. Source-erased/reordered and forced-GC controls cover removed
-managed values and growth; see [decision 0060](decisions/0060-array-mutation-mir.md).
-
-Array equality queries, uniqueness and concatenation now construct existing typed
-MIR loops, comparisons, nullable values and Array operations. They introduce no
-new instruction or backend semantic owner. Verified block arguments and root
-plans retain source and destination values across nested searches and allocation;
-see [decision 0061](decisions/0061-array-query-loops.md).
-
-Hash iteration now lowers a shallow entry snapshot to existing Hash projection,
-Array read and typed loop instructions. Range materialization shares the checked
-endpoint test used by iteration and carries its result through ordinary block
-parameters. Neither path adds an opcode or reads source plans in QBE; independent
-controls erase source, reorder blocks and force collection. See
-[decision 0062](decisions/0062-hash-range-collection-loops.md).
-
-Float and Boolean String conversion extend the verified scalar conversion
-instruction with exact modes and effects. Float output lowers through that
-conversion; the backend does not infer a formatting operation from source.
-Source-erased and forced-GC controls cover managed results, and the CLI uses the
-ordinary Float conversion itself. A bounded decimal runtime retains the reference
-shortest-roundtrip contract, including asymmetric intervals at powers of two;
-see [decision 0068](decisions/0068-scalar-string-conversion.md).
-
-General unions now own a verified semantic alternative catalog and explicit
-injection, type-test and checked-extraction instructions. Widening and optional
-payload conversion lower through typed CFG edges. Traced payload descriptors,
-live roots and case results remain verifiable after frontend state is erased;
-see [decision 0069](decisions/0069-union-value-mir.md). Literal/discriminated unions
-and the remaining nominal families stay part of the completion milestone.
-
-## Builtin Result values and Unicode frontend coverage
-
-Safe Array/String/Hash retrieval and slicing now compose existing typed MIR
-comparisons, branches, reads and aggregate construction. String numeric parsing
-adds independently verified scalar conversion/status operations while Result
-ownership and failure construction remain target-independent. The REPL uses
-the same core parsing runtime and retains structured values across replay.
-Unicode names use frontend category tables and the existing Native byte adapter,
-with ordinary/recovered Native evidence separate from the Go-hosted frontend.
-See [decision 0083](decisions/0083-builtin-result-values.md) and the reviewed
-Capabilities inventory for remaining contracts; this is integration coverage,
-not final cost qualification.
