@@ -177,7 +177,9 @@ Develop complete language families with focused local units, reference/Native
 positive and negative cases, MIR ownership and retained REPL checks. Include an
 ordinary Native build when compiler source changes. Hosted CI is the complete
 integration authority by default; full local recovery is additionally required
-for bootstrap or validation-orchestration changes and recovery/platform diagnosis.
+for bootstrap or recovery-execution changes and recovery/platform diagnosis.
+Scheduling-only workflow changes run controller tests and hosted full CI; local
+recovery does not exercise changed job dependencies or draft reporting.
 Optional local suites without recovery variables remain partial evidence. Do
 not mark a language family complete or merge while required CI is pending.
 Larger cohesive PRs may combine syntax through execution and REPL; keep one

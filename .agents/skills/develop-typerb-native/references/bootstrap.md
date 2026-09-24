@@ -64,8 +64,10 @@ snapshot-v4 compatibility check, not a check of the Native decoder's byte bound
 or a replacement for recovery-enabled suites. If a larger compiler snapshot
 reaches that bound, measure the emitted bytes and retain exact-limit tests when
 adjusting the compiler-only limit.
-Bootstrap and validation-orchestration changes additionally require full local
-recovery, as does diagnosis of recovery or platform failures. For a full run,
+Bootstrap and recovery-execution changes additionally require full local
+recovery, as does diagnosis of recovery or platform failures. Changes only to
+CI job dependencies or draft reporting use controller tests and hosted full CI;
+they do not alter the locally executed recovery suite. For a full run,
 set `TYPE_RB_NATIVE_REFERENCE_TRB` to the absolute pinned compiler executable
 and `TYPE_RB_NATIVE_QBE` to QBE 1.3, together with `TYPE_RB_NATIVE_ROOT`, when
 running the root and `compiler` suites. Without those variables, optional
