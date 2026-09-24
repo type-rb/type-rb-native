@@ -72,6 +72,9 @@ outward-facing text before publication.
   reference/Native case contract and regenerate the Capabilities detail view
   when ordinary behavior changes. Deferred optimizer acceptance does not block
   language work.
+- Documents describe the current contract. Record how a change was delivered in
+  its PR and issue; do not append per-feature or per-update narratives, dated
+  status or hand-counted totals to docs. Regenerate generated views instead.
 - For source organization, follow `docs/repository-organization.md`, including
   root recovery files and symbols. At accepted optimization checkpoints,
   advance a bounded cleanup or record its concrete blocker within the task's

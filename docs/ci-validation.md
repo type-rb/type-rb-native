@@ -79,77 +79,19 @@ production source and measurement policies retain conservative routing. A mixed
 non-exempt code change restores the previous compiler measurement requirements;
 changing routing/execution workflows still exercises the full graph.
 
-CLI adapters are outside the ordinary compiler source closure. Their dedicated
-workflow builds the current core from the pinned Native seed, verifies fixed
-points, tests the CLI/REPL and packages Darwin/Linux artifacts. CLI-only changes
-still run reference formatting/type checks and quick tests. Changing core
-source alongside an adapter restores core and comparative checks. Documentation
-under `compiler/` no longer accidentally triggers a separate CLI matrix.
-The extracted `compiler/cli/repl_project.trb`, `repl_check.trb` and
-`repl_defaults.trb` are explicit CLI inputs: the
-builder stages every CLI module, and both target CLI authorities execute the
-project/import, retained-record, replay and shared-language controls that use them.
-The callable environment and type-context adapters (`repl_callables.trb` and
-`repl_types.trb`) are also staged in every CLI build. `native-callable-test.py`
-is invoked by the CLI authority on both targets and covers retained calls,
-nominal remapping, cyclic captures, failure recovery and replay.
-`repl_globals.trb` retains runtime constants and is staged with the CLI modules.
-`native-constants-test.py` runs in both CLI authorities and checks persistent GC
-roots, initializer order, retained values, failed initialization and replay.
-`native-scalar-strings-test.py` runs in both CLI authorities and independently
-checks Float String conversion across every binary64 binade and adjacent values,
-including subnormals, plus retained callbacks, optional calls and session replay.
+CLI adapters are outside the ordinary compiler source closure. The CLI workflow
+builds the current core from the pinned Native seed, verifies fixed points, runs
+the CLI/REPL test scripts listed in `.github/workflows/native-cli.yml` and
+packages Darwin/Linux artifacts. CLI-only changes still run reference
+formatting/type checks and quick tests; changing core source alongside an
+adapter restores the core lanes.
 
-`native-sliced-iteration-test.py` runs in both CLI authorities. It checks fresh
-managed batches under forced collection, exact reclamation, bounded first-batch
-execution over the full portable Range, and retained REPL failure/replay.
-
-`native-union-hash-test.py` runs in both CLI authorities. It checks Integer and
-String literal-union keys through growth, deletion, copies and snapshots under
-forced GC, including Unicode/NUL payloads, exact reclamation, and retained
-snapshot closures across declaration remapping and replay.
-
-`native-object-methods-test.py` runs in both CLI authorities. It covers class
-fields and constructors, inherited methods, explicit interface dispatch, forced
-collection with exact reclamation, retained aliases/captures and replay.
-Class union fixtures also exercise readonly discriminants, overlapping tags,
-different field offsets, generic and nullable payloads, containers, captures and
-Results. Retained union receivers preserve aliases across type growth and replay.
-
-The CLI smoke and cache-invalidation jobs run independently on both Darwin and
-Linux arm64. Each builds from the pinned Native seed and verifies fixed points;
-the smoke job retains CLI/REPL, language observations and distribution artifacts,
-while the cache job retains the repeated invalidation controls and their log.
-Both jobs must succeed for the reusable CLI authority to pass, so a failed smoke
-does not require rerunning the independent cache job. The duplicated initial
-build is included when comparing total runner time and wall time. The cache test
-gives each complete core/CLI fixed-point rebuild a bounded 600-second watchdog
-and records its elapsed time; both jobs retain the 90-minute limit.
-Literal-union Hash integration completed Linux rebuilds in 272 and 289 seconds
-before another rebuild exceeded
-the earlier 300-second deadline. The ordinary fixed point and CLI/GC controls
-had passed. The previous 30-minute job
-limit expired on Linux during the generic-enum integration after the CLI,
-UTF-8 and GC checks had passed. A 120-second rebuild watchdog
-expired during nullable integration after the ordinary build and functional
-controls had passed. These are execution deadlines, separate from the performance
-acceptance contracts. Timeout remains a failure and terminates the owned builder
-process group. Cache reuse, failure atomicity and concurrent-caller assertions
-remain required.
-
-After a nested compiler input is added and rebuilt, the modification and
-removal controls start from copies of that same verified cache state. They run
-in separate checkouts, so each must independently invalidate its core key and
-complete a real fixed-point rebuild. These two independent builds overlap
-under a shared 600-second watchdog; the log records both build times and
-the cohort wall time. A timeout or cancellation terminates owned builder
-process groups before either temporary checkout is removed.
-
-Concurrent callers share the same 600-second rebuild deadline, including the
-launcher's bounded lock wait. Key-based sorting CI exposed a remaining
-120-second concurrent-call timeout after ordinary rebuilds and functional checks
-had passed. The concurrent test records elapsed time and still requires both
-callers to succeed, identical output, exactly one builder and subsequent reuse.
+The CLI smoke (`build`) and cache-invalidation (`cache`) jobs run independently
+on Darwin and Linux arm64, so a failed smoke does not require rerunning the
+cache job. Each complete rebuild in the cache test has a 600-second watchdog and
+both jobs have a 90-minute limit; a timeout is a failure and terminates the owned
+builder process group. Cache reuse, invalidation, failure atomicity and
+concurrent-caller assertions remain required.
 
 The documentation authority checks evidence retention, skill metadata, public
 path hygiene, the capability catalog and benchmark explorer. Pages does not
@@ -278,135 +220,23 @@ registered run budget rather than retrying an unchanged failure. Passing this
 preflight does not make a draft mergeable or replace fresh complete PR acceptance;
 the formal multi-language benchmark remains a separate manual operation.
 
-## Further latency boundaries
+## Recovery suite
 
-Standalone strict acceptance limits remain unchanged by the
-[trade-off policy](optimization-tradeoffs.md). Active migration integration
-instead follows the explicit observation contract above. A registered bounded diagnostic
-may use standalone measurement controllers when ordinary compactness fails;
-label that evidence diagnostic and retain the ordinary failed status. This
-does not enable a hidden CI skip, a force-merge path, or a new benchmark on every
-PR. No generic diagnostic-to-acceptance switch exists. A future candidate-scoped
-acceptance budget requires a reviewed enforcement change and fail-closed tests
-before it can affect CI acceptance.
+`tools/ci-run-suites.mjs` runs the root and compiler recovery suites as two owned
+process groups with separate logs and `status.json`; one failure keeps the
+peer's evidence, and cancellation terminates only owned process groups. The root
+suite records ordered phase receipts through `tools/recovery-stage.py`; missing,
+reordered or incomplete receipts reject an otherwise successful run. These are
+diagnostic phase durations, not controlled measurements.
 
-Full flattened source reaches recovery compilers through the hidden
-`--source-file MODE FILE` adapter, including repeated generation controls and
-the shell cross-check. This reads literal source without resolving imports from
-the transport path. Small differential probes retain `--source-content`; the
-ordinary file/project commands remain separate. Tests compare both adapters'
-output and failures, paths with spaces, missing files and input larger than
-conservative command-line limits. B0 bounds the file to the same 64 MiB as the
-reference source preparation and releases its temporary file buffer.
-The small compiler-shaped transport fixture runs before full recovery generation
-and independently checks byte retention, Unicode counts/indexes, malformed bytes
-and the size boundary. Recovery String indexing uses a direct offset when byte
-and code-point counts are equal, avoiding a scan from the beginning for every
-ASCII source character. Multi-byte input still uses bounded UTF-8 traversal;
-this recovery-runtime change does not claim faster ordinary application output.
-
-Generation controls check the recovery source through B0, B1 and B2 and compare
-repeated QBE emission against each previously built generation. Those repeated
-commands test distinct seed/command behavior and deterministic output; deleting
-them would remove coverage. Ordinary B1-to-B4 regeneration also preserves its
-sequential seed dependencies. No generation check or benchmark repetition is
-removed by test-only routing.
-
-Quick checks retain their ordering for compiler/CLI changes. Independent recovery
-controls use bounded concurrency within the existing runner, as described below.
-Comparative performance still follows complete correctness acceptance.
-
-## Recovery scheduling and stage evidence
-
-`tools/ci-run-suites.mjs` runs exactly two recovery-enabled process groups: root
-and compiler. Both retain their complete commands and recovery/QBE variables,
-independent stdout/stderr logs, exit code/signal and monotonic elapsed duration
-in `status.json`. A failure does not discard the peer's evidence. Cancellation
-terminates only owned process groups, with a bounded grace period; orphaned
-descendants fail validation. Log setup finishes before either process starts.
-
-The root test also records thirteen ordered phases:
-
-- source preparation and matched-Go comparison build;
-- snapshot generation and B0 recovery;
-- recovery generations, ordinary Native fixed point and generation controls;
-- module-boundary mutations;
-- file CLI, build CLI and project/module controls;
-- normalization and differential conformance.
-
-The controller gives only the root suite an invocation-local
-`TYPE_RB_NATIVE_RECOVERY_STAGES` path. The test calls `tools/recovery-stage.py`
-at phase boundaries; this external test observer uses Python's monotonic clock
-and closes each JSONL receipt before returning. It adds no ordinary compiler or
-runtime dependency. Direct recovery tests can omit this optional variable.
-The receipt includes test-observer overhead and is a diagnostic phase duration,
-not a replacement for controlled build/runtime measurements.
-
-The controller finalizes `recovery-stages.summary.json` after root termination.
-An unfinished phase is failed/cancelled/incomplete, never completed. Missing,
-malformed, reordered, repeated or incomplete evidence rejects an otherwise
-successful suite. Previously completed phases remain visible when a later
-phase fails, but the summary cannot claim successful recovery. Both raw receipts
-and the summary live in the always-uploaded suite evidence directory.
-
-After generation production and ordinary fixed points complete, the thirteen
-independent generation commands run with bounded concurrency. Each retains its
-exact executable, arguments and expected stdout, zero exit status and empty
-stderr. All results are collected in input order, including failures after a
-peer fails. Empty batches, duplicate labels, launch failures and output mismatches
-reject acceptance. The B0-to-B3 recovery and B1-to-B4 ordinary generation chains
-remain sequential; no dependent producer/consumer pair runs concurrently.
-
-Module-boundary controls use the same limit across modules. Each module owns
-separate mutation, missing-module and malformed-module directories; shared
-compiler inputs are read-only. Every module still checks changed QBE, diagnostic
-and exit behavior, failure before external tools, and absent output/intermediate
-files. Hidden-import and unrelated-sibling controls also remain required. Both
-control groups fully join before their stage-end receipt is written. Their
-descendants stay in the root suite's owned process group for cancellation.
-
-`TYPE_RB_NATIVE_RECOVERY_JOBS` defaults to `2`; explicit values `1` through `4`
-are accepted, with `1` available for serial diagnosis. Other values fail before
-workspace allocation. The limit is per root invocation; the compiler suite
-continues independently. Native CI explicitly uses `4` for the independent
-recovery controls, while local runs keep the more conservative default. This is
-test orchestration through the pinned Go reference's `concurrent_map`, not a
-Native concurrency-support claim or a new ordinary compiler dependency.
-Synthetic subprocess tests check bounded overlap,
-exactly-once admission/completion and complete, ordered failure collection at
-limits 1, 2 and 4. Record phase durations and runner resource costs when evaluating
-the change; do not present an estimated speedup as a measurement.
-
-The source-mutation helper uses the reference compiler's code-point `index`,
-`rindex` and `slice` operations. Comparing the first and last match preserves
-strict uniqueness, including overlapping needles; prefix/suffix slices preserve
-all surrounding source bytes. This removes repeated per-character scans and
-string reconstruction from module-boundary setup without removing a mutation,
-missing-module, malformed-module or generated-output check. Focused tests cover
-Unicode, empty/missing needles, overlaps and replacements at both boundaries.
-
-Stage instrumentation completes the remaining observability scope of
-[issue #295](https://github.com/type-rb/type-rb-native/issues/295). Use measured
-phase costs to select later bounded scheduling changes; do not remove generation
-identity, mutation or differential checks merely because they are slow.
-
-### Recovery workspace ownership
-
-Each root invocation allocates a fresh workspace with `mktemp -d` through
-`src/compiler_recovery_workspace.trb`. `TYPE_RB_NATIVE_RECOVERY_RECEIPT` names
-an evidence file, not a caller-supplied workspace. The exact generated path and
-owner marker are checked by `tools/recovery-workspace.mjs` before later smoke,
-corpus and shell-bootstrap consumers use it. The always-run cleanup removes
-only that validated directory and uploads the receipt and outcome. Invalid or
-foreign ownership fails cleanup; absence before allocation is `not-created`.
-A killed runner can still prevent an always-run step. This is not an orphan
-reaper or a boundary against hostile processes with the same user privileges.
-
-Tests cover actual suite concurrency, failures, cancellation/descendants,
-stage receipt order and completeness, workspace isolation and ownership,
-large/deleted/renamed/mixed path inventories, selective routing and acceptance.
-The bounded CI changes are recorded in
-[issue #313](https://github.com/type-rb/type-rb-native/issues/313).
+The B0-to-B3 recovery and B1-to-B4 ordinary generation chains stay sequential.
+Independent generation commands and per-module boundary controls run with
+`TYPE_RB_NATIVE_RECOVERY_JOBS` concurrency (default `2`, accepted `1` to `4`;
+hosted CI uses `4`). Each module control keeps its mutation, missing-module and
+malformed-module checks. Each root invocation owns a fresh `mktemp -d` workspace
+validated by `tools/recovery-workspace.mjs` before later consumers use it and
+before cleanup. Do not remove generation identity, mutation or differential
+checks merely because they are slow; measure phase costs before rescheduling.
 
 ## Protection and review
 
@@ -421,10 +251,3 @@ invalidate the compiler evidence.
 Routing and tests cannot replace review of semantic proof boundaries. Preserve
 raw MIR verification, mutation/effect exclusions, negative cases, compactness
 and measured thresholds before accepting a compiler optimization.
-
-Callable suffix and lexical-boundary changes retain the shared ordinary/REPL
-registry, source-erased and reordered MIR under forced GC, and the Symbol CLI
-retained-session checks. Those checks exercise reserved-name failures, Unicode/NUL
-function returns and replay. Maximal operator tokenization is independently
-checked with nested generic annotations/applications and later default origins;
-it does not qualify unimplemented executable operators.

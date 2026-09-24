@@ -6,7 +6,6 @@ Start with the [repository overview](../README.md), [architecture](architecture.
 ## Development and implementation
 
 - [Repository ownership and decomposition](repository-organization.md)
-- [Root source ownership](root-source-inventory.md)
 - [Compiler project layout](compiler-project-layout.md)
 - [Ordinary language coverage](native-language-coverage.md)
 - [Native CLI and REPL](native-cli.md)

@@ -194,7 +194,7 @@ establish runtime, build-time or binary-size parity.
 
 ## Measurements and history
 
-The accepted [numeric regression recovery](native-numeric-regression-recovery.md)
+The accepted [numeric regression recovery](https://github.com/type-rb/type-rb-native/blob/04c6ca7263c066fd13e83b3faa09c4e80d707c13/docs/native-numeric-regression-recovery.md)
 and [formal runtime measurements](../results/2026-09-10-benchmarksgame-runtime-loop-local-headers-linux-arm64/README.md)
 retain their exact source identities and observations. They do not qualify later
 MIR migration candidates. No new Pure Go comparison or formal Pages performance
