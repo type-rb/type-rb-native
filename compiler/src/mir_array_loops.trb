@@ -1,6 +1,6 @@
 import { integer_string } from literals
 import { MirArrayHeader, MirArrayLoop, MirBlock, MirFunction, MirModule } from mir
-import { mir_exact_integer_literal } from mir_analysis
+import { MirNonnegative, mir_exact_integer_literal, mir_nonnegative_value, mir_nonnegative_values } from mir_analysis
 import { MirFlow, mir_build_flow, mir_flow_block_index, mir_flow_blocks, mir_flow_position, mir_flow_type } from mir_flow
 import { mir_instruction_effects, mir_live_add, mir_live_equal } from mir_roots
 import { mir_element_type } from mir_types
@@ -138,26 +138,6 @@ def mir_loop_literal(native_module: MirModule, flow: MirFlow, value: Integer, te
 	return mir_exact_integer_literal(native_module, native_module.instructions[position], text)
 end
 
-# A checked increment of the zero-origin induction value is also nonnegative.
-# It does not prove the position belongs to any particular Array.
-def mir_loop_nonnegative_index(native_module: MirModule, flow: MirFlow, aliases: Hash<String, Integer>, induction: Integer, value: Integer): Boolean
-	if mir_loop_alias(aliases, value) == induction
-		return true
-	end
-	definition := mir_loop_definition(flow, value)
-	if definition < 0
-		return false
-	end
-	instruction := native_module.instructions[definition]
-	if instruction.kind != 7 || (instruction.payload != 1 && instruction.payload != 13) || instruction.failure < 0
-		return false
-	end
-	if mir_loop_alias(aliases, instruction.first) != induction
-		return false
-	end
-	return mir_loop_literal(native_module, flow, mir_loop_alias(aliases, instruction.second), "1")
-end
-
 def mir_loop_parameter(native_module: MirModule, header: MirBlock, value: Integer): Integer
 	mut slot := 0
 	while slot < header.parameter_count
@@ -204,7 +184,7 @@ def mir_array_stable_headers(native_module: MirModule, flow: MirFlow, header: Mi
 	return headers
 end
 
-def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlow, header_index: Integer): MirArrayLoop
+def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlow, nonnegative: MirNonnegative, header_index: Integer): MirArrayLoop
 	header := native_module.blocks[function.block_start + header_index]
 	if header.terminator != 2 || flow.ranks[header_index] < 0 || header.first_target == header.id || header.first_target == header.second_target
 		return mir_no_array_loop()
@@ -347,7 +327,7 @@ def mir_array_loop(native_module: MirModule, function: MirFunction, flow: MirFlo
 				headers.each do |candidate|
 					if candidate.identity == identity
 						mir_live_add(candidate.accesses, instruction_index)
-						if instruction.kind >= 21 && mir_loop_dominates(flow, body, member) && mir_loop_nonnegative_index(native_module, flow, aliases, condition.first, instruction.second)
+						if instruction.kind >= 21 && mir_loop_dominates(flow, body, member) && mir_nonnegative_value(nonnegative, instruction.second)
 							mir_live_add(candidate.nonnegative_accesses, instruction_index)
 						end
 					end
@@ -389,8 +369,9 @@ def mir_function_array_loops(native_module: MirModule, function: MirFunction): A
 		return plans
 	end
 	flow := mir_build_flow(native_module, function, mir_flow_blocks(native_module, function))
+	nonnegative := mir_nonnegative_values(native_module, function, flow)
 	headers.each do |id|
-		plan := mir_array_loop(native_module, function, flow, mir_flow_block_index(flow, id))
+		plan := mir_array_loop(native_module, function, flow, nonnegative, mir_flow_block_index(flow, id))
 		if plan.header >= 0
 			plans.push(plan)
 		end
