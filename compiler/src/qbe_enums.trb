@@ -21,6 +21,11 @@ def emit_enum_descriptors(state: CompilerState, mut output: QbeOutput)
 			field += 1
 		end
 		qbe_output_line(output, "data $trbn_desc_enum" + integer_string(variant) + " = align 8 { l 1, l " + integer_string(managed) + ", l " + integer_string(8 + row.field_count * 8) + offsets + " }")
+		# A payloadless variant is immutable and has no children for the GC to trace.
+		# Descriptor zero is the runtime's existing static-object sentinel.
+		if row.field_count == 0
+			qbe_output_line(output, "data $trbn_static_enum" + integer_string(variant) + " = align 8 { l 0, l " + integer_string(variant) + " }")
+		end
 		variant += 1
 	end
 	if variant > 0
@@ -35,6 +40,10 @@ def emit_mir_enum_instruction(state: CompilerState, types: Array<Integer>, instr
 	mut variant := instruction.payload
 	if instruction.kind == 37
 		row := native_module.enum_variants[variant]
+		if row.field_count == 0
+			qbe_output_line(output, "\t" + result + " =l copy $trbn_static_enum" + integer_string(variant))
+			return emitted_value(result, type_name)
+		end
 		qbe_output_line(output, "\t" + result + " =l call $trbn_gc_alloc(l $trbn_desc_enum" + integer_string(variant) + ", l " + integer_string(8 + row.field_count * 8) + ", l 0)")
 		tag := emit_address(context, output, result, 8)
 		qbe_output_line(output, "\tstorel " + integer_string(variant) + ", " + tag)
