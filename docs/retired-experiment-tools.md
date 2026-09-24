@@ -15,6 +15,14 @@ another authority over today's compiler.
   together with the matching controller cases in
   [`tools/native-runtime-ab`](https://github.com/type-rb/type-rb-native/tree/04c6ca7263c066fd13e83b3faa09c4e80d707c13/tools/native-runtime-ab).
 
+- The strict comparative cost contract remains in the
+  [pre-retirement tree](https://github.com/type-rb/type-rb-native/tree/d1c151d02e051c6557acb479a9e9d7c713226858): the static String compactness
+  workflow and its registered MIR transition tools, the MIR transition size
+  markers under `compiler/native-mir-*-v1.txt` with
+  `tools/native-mir-transition-policy.sh`, the `native-runtime-ab` workflow and
+  controller, the manual formal runtime memory workflow, the manual bootstrap
+  seed verification workflow and the generated full language case matrix.
+
 Source, oracle, seed and measurement identities recorded by those experiments
 are unchanged. Current recovery, conformance, target and memory checks stay
 required.

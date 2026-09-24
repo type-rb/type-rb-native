@@ -11,17 +11,18 @@ cannot silently truncate or bypass validation. Git failures reject planning.
 [Issue #439](mir-consolidation.md) establishes an explicit `mir-migration` mode
 for PR/main integration. All applicable correctness, recovery, target identity,
 process, memory-lifetime, sanitizer and cleanup jobs remain required. Compiler
-size and smoke-time limits write observations with their actual exceeded
-status; they do not stop correctness verification. Standalone tools and workflows
-default to `strict`, and unknown modes or malformed measurements fail.
+size is recorded as an observation without a limit, and smoke-time limits write
+observations with their actual exceeded status; neither stops correctness
+verification. Standalone tools default to `strict`, and unknown modes or
+malformed measurements fail. Migration changes omit the amd64 repeated formal
+timing series; binary-format, dependency, generation, output and failure checks
+still execute.
 
-Migration changes omit the separate arm64 comparison and the amd64
-repeated formal timing series. Binary-format, dependency, generation, output and
-failure checks still execute. CI workflow/routing/policy changes also retain
-controller tests and applicable integration correctness, without restoring the
-strict cost matrix. Daily/weekly diagnostic schedules remain.
-The matrix and historical scheduling below describe the strict contract; green
-migration CI must not be reported as a performance-qualified result.
+The strict comparative cost contract (the static String compactness workflow,
+the MIR transition size markers and the runtime A/B controller) is retired; see
+[retired experiment controllers](retired-experiment-tools.md). Daily and weekly
+measurements track compiler and application costs. Green CI must not be
+reported as a performance-qualified result.
 
 ## Tiered gate during alpha development
 
@@ -60,10 +61,10 @@ module. The selected module names are recorded in the main plan output.
 | Markdown, development metadata, static documentation, registered results and exact documentation generators | Planning and documentation |
 | The two exact planning files | Their unconditional planning tests and documentation |
 | Exact synthetic tool-test files listed in `toolingTests` | Planning and macOS tooling; project/policy shell tests also run Linux quick tooling |
-| Existing compiler unit-test modules listed in `compilerTestInputs` | Complete quick, Native, CLI, tooling and target correctness; no unchanged-binary performance or worker-memory measurements |
+| Existing compiler unit-test modules listed in `compilerTestInputs` | Complete quick, Native, CLI, tooling and target correctness; no unchanged-binary worker-memory measurements |
 | Exact CLI adapter, launcher, build helper and CLI-test inputs listed in `cliInputs` | Planning, quick checks and Darwin/Linux CLI artifacts |
-| Ordinary compiler, conformance, execution workflows and measurement policy | Full applicable correctness, tooling, CLI, target, memory and comparative authorities |
-| Other code or unknown files | Complete Native correctness, tooling and CLI/target checks; memory and performance according to the conservative rules in the planner |
+| Ordinary compiler, conformance, execution workflows and measurement policy | Full applicable correctness, tooling, CLI, target and memory authorities |
+| Other code or unknown files | Complete Native correctness, tooling and CLI/target checks; memory according to the conservative rules in the planner |
 | Mixed changes | The union of applicable authorities, with core changes restoring the core lane |
 
 These are exact allowlists for executable exceptions, not filename suffix rules
@@ -82,8 +83,7 @@ TypeRB units; the Linux shell tests need none of those compiler inputs.
 The ten reviewed compiler unit-test modules are excluded from ordinary
 reference/Native compiler builds and CLI source staging. Changing only those
 modules cannot change the measured compiler or worker binary. Full correctness
-and target checks still execute; only comparative and worker-memory measurements
-are omitted. Conformance fixtures, new test paths, project configurations,
+and target checks still execute; only worker-memory measurements are omitted. Conformance fixtures, new test paths, project configurations,
 production source and measurement policies retain conservative routing. A mixed
 non-exempt code change restores the previous compiler measurement requirements;
 changing routing/execution workflows still exercises the full graph.
@@ -133,11 +133,7 @@ the Pages workflow requires documentation validation, not compiler benchmarks.
    wall time on passing PRs but may use more runner time on a failing quick job.
    Development drafts retain source/CLI checks in quick feedback and defer the
    complete jobs.
-4. **Comparative measurement.** Applicable non-draft changes wait for quick,
-   Native, targets, memory, tooling and CLI success before starting comparisons. Existing
-   repetitions, interleaving, baseline identities, raw evidence and limits stay
-   unchanged. Diagnostic stage recording never runs inside measured chains.
-5. **Acceptance.** `Native CI acceptance` checks every planned authority,
+4. **Acceptance.** `Native CI acceptance` checks every planned authority,
    including tooling and CLI. A tiered PR summary states that the deferred
    lanes run on main after merge. Failed, cancelled, missing or skipped required
    jobs reject acceptance. Unexpected execution of a disabled authority also
@@ -172,9 +168,9 @@ full runs use a separate concurrency group so a push cannot replace them.
 Unknown or invalid revisions fail planning rather than skip checks. Manual
 workflow controls remain available.
 
-Full multi-language benchmark refreshes and Native runtime A/B remain manual.
-During MIR migration they supply milestone qualification separately from
-integration correctness; ordinary compiler edits do not wait for detailed costs.
+Full multi-language benchmark refreshes remain manual. During MIR migration
+they supply milestone qualification separately from integration correctness;
+ordinary compiler edits do not wait for detailed costs.
 
 ## Focused compiler preflight feedback
 
@@ -205,14 +201,6 @@ existing target controller:
 
 ```sh
 gh workflow run linux-amd64-targets.yml --ref "$candidate_ref"
-```
-
-For a separately registered compiler-cost comparison, the existing compactness
-workflow accepts an explicit baseline instead of its historical default:
-
-```sh
-gh workflow run static-string-compactness.yml --ref "$candidate_ref" \
-  -f "baseline_revision=$baseline_revision"
 ```
 
 Select the newly created dispatch by its run ID, then use

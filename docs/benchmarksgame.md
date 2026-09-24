@@ -192,13 +192,10 @@ an observation fails.
 ## Native optimization A/B procedure
 
 The cross-language result is a durable reference point, not a same-host baseline
-for every compiler optimization. The separate
-[`native-runtime-ab` controller](../tools/native-runtime-ab/README.md) compares
-an exact Native baseline and candidate on one Linux arm64 host, with identical
-authored TypeRB source, alternating warmups and retained observations, and
-complete correctness, resource and compiler-cost evidence. The registered
-contract for each experiment determines its signal and non-regression controls.
-The prior contracts and accepted or rejected results remain in the
+for every compiler optimization. The daily measurement compares each main
+revision with the previously measured one on the same host. The former
+`native-runtime-ab` controller, its registered contracts and accepted or
+rejected results remain in the
 [immutable experiment history](https://github.com/type-rb/type-rb-native/blob/f864151fa53a99a9491ca0268198d5ec914124fd/docs/benchmarksgame.md#native-optimization-ab-procedure).
 New portable facts and transforms belong in verified Native MIR as described by
 [Decision 0028](decisions/0028-native-mir-optimization-boundary.md).

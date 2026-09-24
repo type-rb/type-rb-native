@@ -298,12 +298,9 @@ jobs:
           pattern: runtime-worker-*
           path: evidence
 
-      - name: Compare target-neutral QBE and enforce combined size
+      - name: Compare target-neutral QBE and record combined size
         run: |
-          . tools/compiler-project.sh
-          . tools/native-mir-transition-policy.sh
           . tools/compiler-cost.sh
-          native_mir_transition_markers_valid "$GITHUB_WORKSPACE"
           cmp \
             evidence/runtime-worker-darwin-arm64/build-evidence/compiler-first.ssa \
             evidence/runtime-worker-linux-arm64/build-evidence/compiler-first.ssa
@@ -313,14 +310,13 @@ jobs:
           darwin_size=$(cat evidence/runtime-worker-darwin-arm64/worker-smoke-evidence/compiler-size-bytes.txt)
           linux_size=$(cat evidence/runtime-worker-linux-arm64/worker-smoke-evidence/compiler-size-bytes.txt)
           combined_size=$((darwin_size + linux_size))
-          compiler_cost_check darwin-compiler-bytes "$darwin_size" "$NATIVE_MIR_DARWIN_COMPILER_LIMIT" > evidence/cross-target-costs.txt
-          compiler_cost_check linux-compiler-bytes "$linux_size" "$NATIVE_MIR_LINUX_COMPILER_LIMIT" >> evidence/cross-target-costs.txt
-          compiler_cost_check combined-compiler-bytes "$combined_size" "$NATIVE_MIR_COMBINED_COMPILER_LIMIT" >> evidence/cross-target-costs.txt
+          compiler_cost_observe darwin-compiler-bytes "$darwin_size" > evidence/cross-target-costs.txt
+          compiler_cost_observe linux-compiler-bytes "$linux_size" >> evidence/cross-target-costs.txt
+          compiler_cost_observe combined-compiler-bytes "$combined_size" >> evidence/cross-target-costs.txt
           {
             printf 'darwin_stripped_compiler_bytes=%s\n' "$darwin_size"
             printf 'linux_stripped_compiler_bytes=%s\n' "$linux_size"
             printf 'combined_stripped_compiler_bytes=%s\n' "$combined_size"
-            printf 'combined_limit_bytes=%s\n' "$NATIVE_MIR_COMBINED_COMPILER_LIMIT"
           } > evidence/cross-target-summary.txt
 
       - name: Upload cross-target summary

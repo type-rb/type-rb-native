@@ -51,15 +51,14 @@ class LanguageCoverageTests(unittest.TestCase):
             with self.subTest(mutation=mutation), self.assertRaises(ValueError):
                 coverage.validate(document)
 
-    def test_table_does_not_count_session_exit_zero_as_feature_support(self):
-        table = coverage.coverage_table(coverage.validate(self.document))
-        self.assertIn("| UTF-8 String literal | accepts | accepts | matches reference | matches reference |", table)
-        self.assertIn("| while | accepts | accepts | matches reference | matches reference |", table)
-        self.assertIn("| Union inferred hash | accepts | accepts | matches reference | matches reference |", table)
-        self.assertIn("| Union retained mutation | accepts | accepts | matches reference | output differs |", table)
-        self.assertIn("| elsif | accepts | accepts | matches reference | matches reference |", table)
-        self.assertIn("Array&lt;Boolean&gt;", table)
-        self.assertEqual(table, coverage.coverage_table(self.document["cases"]))
+    def test_states_do_not_count_session_exit_zero_as_feature_support(self):
+        states = [(case["title"], coverage.coverage_states(case)) for case in coverage.validate(self.document)]
+        for title, repl in [("UTF-8 String literal", "matches reference"), ("while", "matches reference"),
+                            ("Union inferred hash", "matches reference"), ("Union retained mutation", "output differs"),
+                            ("elsif", "matches reference")]:
+            with self.subTest(case=title):
+                self.assertIn((title, dict(check="accepts", build="accepts", execute="matches reference", repl=repl)),
+                              states)
 
     def test_exact_output_and_diagnostics_are_not_normalized_away(self):
         with tempfile.TemporaryDirectory() as temporary:

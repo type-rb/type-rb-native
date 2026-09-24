@@ -40,8 +40,7 @@ justify its existence. Final performance goals remain unchanged.
 
 ## Coverage is path-specific
 
-The [generated case matrix](native-language-coverage-matrix.md), generated family
-inventory and the [Capabilities detail view](capabilities/README.md) use
+The generated family inventory and the [Capabilities detail view](capabilities/README.md) use
 [`tools/native-language-cases.json`](../tools/native-language-cases.json).
 Each row describes one bounded example, not full support for a feature or a
 percentage of the TypeRB language. The exact reference revision, executable
@@ -110,13 +109,12 @@ it never rewrites expectations. Review all four paths before accepting a change.
 Then regenerate all public views from that same reviewed registry:
 
 ```sh
-python3 tools/native-language-coverage.py --table > docs/native-language-coverage-matrix.md
 python3 tools/native-language-coverage.py --feature-table > docs/native-language-feature-inventory.md
 python3 tools/native-language-coverage.py --pages-data > docs/capabilities/ordinary-language.js
 ```
 
-CI checks exact generated contents with `--check-table`, `--check-feature-table`
-and `--check-pages-data`. Review the related broad `capabilities/catalog.js`
+CI checks exact generated contents with `--check-feature-table` and
+`--check-pages-data`. Review the related broad `capabilities/catalog.js`
 entries when behavior changes, preserving their stated scope and separating
 snapshot evidence from ordinary support. A Pages capability update needs no
 formal benchmark rerun when runtime benchmark evidence has not changed.

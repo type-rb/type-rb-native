@@ -184,17 +184,6 @@ def coverage_states(case):
     return dict(check=acceptance("check"), build=acceptance("build"), execute=execution, repl=repl_state)
 
 
-def coverage_table(cases):
-    lines = ["<!-- Generated from tools/native-language-cases.json; do not edit by hand. -->",
-             "", "| Case | Check | Build | Execute | REPL |",
-             "| --- | --- | --- | --- | --- |"]
-    for case in cases:
-        states = coverage_states(case)
-        title = html.escape(case["title"]).replace("|", "&#124;").replace("\n", " ")
-        lines.append(f"| {title} | " + " | ".join(states[path] for path in PATHS) + " |")
-    return "\n".join(lines) + "\n"
-
-
 def feature_table(document):
     cases = {case["id"]: case for case in document["cases"]}
     lines = ["<!-- Generated from tools/native-language-cases.json; do not edit by hand. -->", "",
@@ -299,8 +288,6 @@ def main():
     parser.add_argument("--reference", type=Path)
     parser.add_argument("--observe", action="store_true")
     parser.add_argument("--case")
-    parser.add_argument("--table", action="store_true")
-    parser.add_argument("--check-table", type=Path)
     parser.add_argument("--feature-table", action="store_true")
     parser.add_argument("--check-feature-table", type=Path)
     parser.add_argument("--pages-data", action="store_true")
@@ -316,16 +303,13 @@ def main():
     cases = validate(document)
     if args.reference_ast:
         verify_reference_ast(document, args.reference_ast)
-    if args.table or args.check_table or args.feature_table or args.check_feature_table or args.pages_data or args.check_pages_data:
+    if args.feature_table or args.check_feature_table or args.pages_data or args.check_pages_data:
         if args.case or native or reference or args.observe or args.require_parity:
             parser.error("table commands do not execute compilers or select cases")
-        if sum(bool(value) for value in (args.table or args.check_table, args.feature_table or args.check_feature_table,
-                                        args.pages_data or args.check_pages_data)) > 1:
-            parser.error("select one generated table")
-        table = feature_table(document) if args.feature_table or args.check_feature_table else coverage_table(cases)
-        if args.pages_data or args.check_pages_data:
-            table = pages_data(document, registry)
-        check_table = args.check_table or args.check_feature_table or args.check_pages_data
+        if (args.feature_table or args.check_feature_table) and (args.pages_data or args.check_pages_data):
+            parser.error("select one generated view")
+        table = feature_table(document) if args.feature_table or args.check_feature_table else pages_data(document, registry)
+        check_table = args.check_feature_table or args.check_pages_data
         if check_table:
             if check_table.read_text() != table:
                 raise ValueError("coverage table differs from reviewed expectations")

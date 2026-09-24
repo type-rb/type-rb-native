@@ -25,7 +25,7 @@ class SeedReleaseTests(unittest.TestCase):
 
     def test_active_ci_consumers_authenticate_the_current_seed(self):
         root = Path(__file__).resolve().parent.parent
-        for name in ("static-string-compactness", "runtime-worker-memory",
+        for name in ("runtime-worker-memory",
                      "benchmarksgame-formal", "benchmarksgame-build-formal",
                      "linux-amd64-targets", "daily-performance", "weekly-performance"):
             with self.subTest(workflow=name):

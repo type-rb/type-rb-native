@@ -26,7 +26,6 @@ const planningTools = new Set(['tools/ci-plan.mjs', 'tools/ci-plan-test.mjs']);
 export const quickToolingTests = new Set([
   'tools/compiler-project-test.sh',
   'tools/compiler-cost-test.sh',
-  'tools/native-mir-transition-policy-test.sh',
 ]);
 export const toolingTests = new Set([
   ...quickToolingTests,
@@ -36,7 +35,6 @@ export const toolingTests = new Set([
   'tools/bootstrap-seed-arguments-test.sh',
   'tools/measure-command-test.py',
   'tools/benchmarksgame-formal/runtime-controller-test.sh',
-  'tools/native-runtime-ab/runtime-controller-test.sh',
   'tools/benchmarksgame-build-formal/build-controller-test.sh',
   'tools/runtime-memory-soak/analyze-rss-test.sh',
   'tools/runtime-worker-soak/analyze-gc-trace-test.sh',
@@ -145,8 +143,7 @@ function recoveryModuleNames() {
   return new Set(names);
 }
 
-export function classify(paths, draft, costMode = 'strict', gate = 'complete') {
-  if (!['strict', 'mir-migration'].includes(costMode)) throw new Error('Invalid compiler cost mode');
+export function classify(paths, draft, gate = 'complete') {
   if (!gates.includes(gate)) throw new Error('Invalid CI gate');
   const executable = paths.filter(path => !documentation(path) && !planningTools.has(path));
   const toolingInput = path => toolingTests.has(path) || dailyMeasurementInputs.has(path);
@@ -157,14 +154,13 @@ export function classify(paths, draft, costMode = 'strict', gate = 'complete') {
     !codePaths.every(path => compilerTestInputs.has(path));
   const policy = codePaths.some(path => path.startsWith('tools/native-mir-') ||
     path.startsWith('tools/compiler-project') || path.startsWith('tools/compiler-cost'));
-  const performance = code && costMode === 'strict' && (routing || policy || compiler);
   const memory = code && (routing || compiler || policy || codePaths.some(path => path.startsWith('tools/runtime-worker-soak/')));
   const cli = code || executable.some(path => cliInputs.has(path));
   const complete = cli && (gate === 'complete' || executable.some(path => !pullRequestLane(path)));
   return {
     code, quick: code || executable.some(path => cliInputs.has(path) || quickToolingTests.has(path)),
     documentation: routing || paths.some(documentation),
-    memory, performance: performance && complete, draft,
+    memory, draft,
     tooling: code || executable.some(toolingInput),
     cli, complete,
   };
@@ -173,7 +169,7 @@ export function classify(paths, draft, costMode = 'strict', gate = 'complete') {
 export function acceptance(needs) {
   if (needs.plan?.result !== 'success') return ['CI planning did not succeed'];
   const plan = needs.plan.outputs;
-  if (!plan || ['code', 'documentation', 'memory', 'performance', 'draft', 'tooling', 'cli', 'quick', 'complete']
+  if (!plan || ['code', 'documentation', 'memory', 'draft', 'tooling', 'cli', 'quick', 'complete']
     .some(key => !['true', 'false'].includes(plan[key]))) {
     return ['CI planning outputs are missing or malformed'];
   }
@@ -184,7 +180,7 @@ export function acceptance(needs) {
   const required = {
     quick: plan.quick, documentation: plan.documentation,
     native: draft || plan.complete === 'false' ? 'false' : plan.code, targets: draft ? 'false' : plan.code,
-    memory: draft ? 'false' : plan.memory, performance: draft ? 'false' : plan.performance,
+    memory: draft ? 'false' : plan.memory,
     tooling: plan.tooling, cli: draft ? 'false' : plan.cli,
   };
   return Object.entries(required).flatMap(([job, enabled]) => {
@@ -262,8 +258,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const paths = await changedPaths(base, head, undefined, mode === 'push');
     // Main always plans the complete lanes; only PRs may use the tiered gate.
     const gate = mode === 'push' ? 'complete' : process.env.NATIVE_CI_GATE ?? 'complete';
-    for (const [key, value] of Object.entries(classify(paths, draft === 'true',
-      process.env.NATIVE_MIR_COST_MODE ?? 'strict', gate))) {
+    for (const [key, value] of Object.entries(classify(paths, draft === 'true', gate))) {
       console.log(`${key}=${value}`);
     }
     if (mode === 'push') console.log(`recovery_modules=${recoveryModules(paths, recoveryModuleNames())}`);

@@ -27,3 +27,12 @@ compiler_cost_check() (
 		"$cost_metric" "$cost_mode" "$cost_actual" "$cost_limit" "$cost_status"
 	test "$cost_status" = within-limit || test "$cost_mode" = mir-migration
 )
+
+# Retired transition markers no longer set compiler size limits. Size remains
+# retained evidence; daily measurements track its trend.
+compiler_cost_observe() (
+	test "$#" -eq 2 || exit 64
+	awk -v actual="$2" 'BEGIN { exit !(actual ~ "^[0-9]+([.][0-9]+)?$") }' ||
+		{ printf '%s\n' 'invalid compiler cost observation' >&2; exit 64; }
+	printf 'metric=%s actual=%s status=observed\n' "$1" "$2"
+)

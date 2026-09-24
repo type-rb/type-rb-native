@@ -105,10 +105,9 @@ backend. Neither is built merely to populate a comparison table.
 
 The [MIR consolidation milestone](mir-consolidation.md) supersedes the per-slice
 transition envelopes. [Decision 0028](decisions/0028-native-mir-optimization-boundary.md)
-keeps TypeRB facts and optimizations in verified MIR, and the
-[transition policy](../tools/native-mir-transition-policy.sh) with its validated
-markers remains the executable source for current limits. The earlier transition
-sequence and its source-era bounds are in the
+keeps TypeRB facts and optimizations in verified MIR. The transition size
+markers are retired; the earlier transition sequence, its markers and
+source-era bounds are in the
 [prior version of this plan](https://github.com/type-rb/type-rb-native/blob/04c6ca7263c066fd13e83b3faa09c4e80d707c13/docs/experiment-plan.md#self-hosted-mir-optimization-transition).
 LLVM remains deferred until the shared path and benchmark corpus cover scalar,
 Array, allocation and I/O behavior; its first role is a bounded

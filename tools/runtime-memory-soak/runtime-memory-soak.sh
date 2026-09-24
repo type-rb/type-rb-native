@@ -2,7 +2,6 @@
 
 set -eu
 
-MAX_COMPILER_SIZE=310000
 MAX_PEAK_HEAP_BYTES=4194304
 MAX_SMOKE_SECONDS=4.25
 MIN_FORMAL_ALLOCATED_BYTES=32212254720
@@ -142,19 +141,8 @@ test ! -e "$workspace" || fail "workspace already exists"
 test ! -e "$evidence" || fail "evidence path already exists"
 
 script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-repository_root=$(CDPATH= cd -- "$script_directory/../.." && pwd)
-. "$script_directory/../compiler-project.sh"
 . "$script_directory/../compiler-cost.sh"
 compiler_cost_mode > /dev/null || exit 64
-compiler_project=$(native_compiler_project_directory "$repository_root") || exit 1
-transition_policy=$repository_root/tools/native-mir-transition-policy.sh
-control_flow_marker=$compiler_project/native-mir-control-flow-v1.txt
-if test -f "$transition_policy" && test -f "$control_flow_marker"; then
-	. "$transition_policy"
-	if native_mir_transition_markers_valid "$repository_root"; then
-		MAX_COMPILER_SIZE=$(native_mir_target_compiler_limit "$profile")
-	fi
-fi
 template=$script_directory/workload.trb
 analyzer=$script_directory/analyze-rss.awk
 test -f "$template" || fail "workload template is missing"
@@ -214,9 +202,7 @@ else
 fi
 stripped_compiler_size=$(file_size "$workspace/compiler.stripped")
 printf '%s\n' "$stripped_compiler_size" > "$evidence/compiler-size-bytes.txt"
-compiler_cost_check compiler-bytes "$stripped_compiler_size" "$MAX_COMPILER_SIZE" \
-	>> "$evidence/cost-observations.txt" ||
-	fail "stripped compiler exceeds $MAX_COMPILER_SIZE bytes: $stripped_compiler_size"
+compiler_cost_observe compiler-bytes "$stripped_compiler_size" >> "$evidence/cost-observations.txt"
 
 stdout=$evidence/stdout.txt
 runtime_log=$evidence/runtime-stderr.txt
@@ -329,7 +315,6 @@ fi
 	printf 'iterations_per_phase=%s\n' "$iterations"
 	printf 'compiler_size=%s\n' "$(file_size "$compiler")"
 	printf 'stripped_compiler_size=%s\n' "$stripped_compiler_size"
-	printf 'compiler_size_limit=%s\n' "$MAX_COMPILER_SIZE"
 	printf 'compiler_sha256=%s\n' "$(sha256 "$compiler")"
 	printf 'qbe_sha256=%s\n' "$(sha256 "$qbe")"
 	printf 'workload_sha256=%s\n' "$(sha256 "$source")"

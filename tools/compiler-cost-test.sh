@@ -32,4 +32,10 @@ if compiler_cost_check compiler-bytes 432048 417000; then exit 1; fi
 cost_actual=keep
 compiler_cost_check compiler-bytes 1 417000 > /dev/null
 test "$cost_actual" = keep
+test "$(compiler_cost_observe compiler-bytes 2133296)" = \
+	'metric=compiler-bytes actual=2133296 status=observed'
+for invalid in '' -1 abc; do
+	if compiler_cost_observe compiler-bytes "$invalid" 2>/dev/null; then exit 1; fi
+done
+if compiler_cost_observe compiler-bytes 2>/dev/null; then exit 1; fi
 printf '%s\n' 'Compiler cost modes passed'
