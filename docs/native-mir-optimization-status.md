@@ -34,7 +34,7 @@ QBE adaptation captures edge values before overwriting destinations. Instruction
 results retain stable MIR operand names even when block storage is reordered.
 
 `mir_flow.trb` derives reachability, reverse postorder, immediate dominators and
-value definition sites and a function-local Hash type index after structural/identity validation.
+value definition sites and function-local value/type and block indexes after structural/identity validation.
 Its predecessor and incoming-argument indexes retain both arms when a branch
 targets the same block. Array-loop alias propagation and natural-loop traversal
 reuse these derived edges instead of rescanning every block for every parameter.
@@ -43,44 +43,17 @@ cache or an input optimization fact. Type indexes are rebuilt from current rows,
 so later raw-MIR edits cannot reuse stale types. Function parameters
 are available everywhere; reachable blocks may use dominating definitions, while
 unreachable blocks may only use function parameters and their own earlier
-values. Same-block instruction uses must follow their definitions. Sparse
-identity indexes and block/edge arrays avoid storage proportional to the largest
-value ID or a quadratic dominance matrix. Instruction failure edges must end in
+values. Same-block instruction uses must follow their definitions. Compact IDs use bounded arrays; sparse or malformed identities use Hash fallbacks.
+Block/edge arrays avoid a quadratic dominance matrix. Instruction failure edges must end in
 empty traps; they cannot carry a value into an ordinary continuation. This is
 verifier analysis, not caller-supplied optimization metadata.
 
-`control_mir_test.trb` checks mutable branches, loops, lexical transfers, malformed
-edges and adapter selection. `call_mir_test.trb` checks recursive/forward/Void calls,
-missing callees, argument availability/types and forged effects or declarations. It also changes checked body tokens and requires identical generated
-output. The `scalar-branches` differential fixture exercises Integer/Float/Boolean
-branches and an unexecuted division-by-zero path across compiler generations.
-The `scalar-loop-calls` differential fixture adds loop-carried parallel copies,
-nested transfers, early returns, mutable parameters, Float arithmetic, ordered
-nested call arguments, recursion and Void calls. Call overflow/division fixtures
-retain the portable failure classes. The `scalar-short-circuit` fixture covers
-ordered effects, earlier call/binary operands, skipped division, and loop
-predicates. `logical_test.trb` also executes it with reversed MIR block storage
-and erased admitted source bodies. `flow_mir_test.trb` compares dominance with an
-independent node-removal reachability oracle over all 343 three-block graphs
-with at most two successors, and rejects unavailable return/edge operands.
-The `managed-string-mir` fixture adds managed calls/returns, loop rebinding,
-short-circuit String operations, negative indexing, conversion and nested calls
-that grow the root buffer. `managed_mir_test.trb` erases all admitted bodies,
-reverses block storage and executes the result with a test-only collection before
-every String allocation. Independent expectations require the first call argument
-to survive later argument allocation and discard undemanded branch bindings.
-Tampered roots, capacity, instruction identities and String operations reject.
-Existing induction, managed-lifetime and target controls remain. All ordinary
-function bodies now use MIR. `numeric_mir_test.trb` rejects missing or forged
-numeric/call plans and retains decisions after source erasure, physical block
-reordering and repeated optimization. No performance improvement is inferred.
-
-The `managed-array-mir` fixture adds nested managed Arrays, owner replacement
-during compound assignment, growth across a retained negative-index target,
-mixed Float literals, Boolean elements, managed call arguments/returns and
-branch/loop joins. `array_mir_test.trb` executes erased/reordered MIR with
-collection immediately before every allocating operation and call in ordinary
-functions. Malformed element graphs, Array operations and omitted roots reject.
+Independent verifier tests reject malformed values, effects, roots, control
+edges and source-dependent plans. Differential fixtures exercise ordinary
+execution and error behavior across generations. Erased frontend state,
+reordered MIR storage and forced collection check that verified MIR retains the
+required semantics and managed lifetimes. These controls establish correctness,
+not a performance improvement.
 
 ## Responsibility boundaries
 
@@ -167,8 +140,10 @@ omission implicitly. A future use-graph pass can select dead bodies explicitly.
 
 Small-operand facts mean Integer values in `[0, 1024]`, not arbitrary nonnegative
 values. This bound permits a checked multiply without overflowing the machine
-intermediate. Selected additions keep the required upper/lower checks; other
-operations retain shared helpers, explicit zero checks or guarded fallback.
+intermediate. Selected Integer additions and subtractions emit the portable
+range guard directly with a shared failure block; proven nonnegative additions
+need only the upper check. Other operations retain shared helpers, explicit
+zero checks or guarded fallback.
 Inline leaf copies can use verified caller argument bounds. Their emitted literal
 operands do not silently become new caller proofs. Optimized-module verification
 recomputes the entire plan, including owners, sites, operations and modes, only
