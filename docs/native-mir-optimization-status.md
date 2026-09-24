@@ -110,7 +110,9 @@ functions. Malformed element graphs, Array operations and omitted roots reject.
 - `mir_roots.trb`: operation effects, backward managed-value liveness and exact
   safe-point root plans. Block parameters transfer only demanded values.
 - `qbe_strings.trb`, `qbe_roots.trb`: runtime adaptation of those operations and
-  publication of the verified root lists, without backend lifetime analysis.
+  publication of the verified root lists. The adapter reuses unchanged leading
+  slots within one MIR block and resets the exact root count at every safe point;
+  it does not perform a separate backend lifetime analysis.
 - `mir_logical.trb`: conditional RHS and expression-result join construction.
 - `checked_types.trb`: assignability, operator result types and diagnostics.
 - `argument_binding.trb`: shared required positional/named slots and record labels; authored evaluation precedes operand reordering.
@@ -180,8 +182,9 @@ language, standard-library or source-backend coverage. Those gaps remain in the
 General constant/range propagation, call-effect summaries, broader inlining and
 explicit dead-body elimination still need shared MIR passes. Ordinary call
 effects remain conservative allocation/mutation barriers; managed liveness is
-intraprocedural. Root publication rewrites the frame segment from its live-before
-plan, reloads root-buffer addresses across calls and preserves managed-return ABI.
+intraprocedural. Root publication rewrites changed slots from the verified
+live-before plan, republishes at block entries, reloads root-buffer addresses
+across calls and preserves the exact count and managed-return ABI.
 
 The recursive checker and compiler driver still need responsibility-based
 splitting. Preserve source origins, recovery and ordinary fixed points during
