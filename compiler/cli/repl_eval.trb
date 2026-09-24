@@ -886,7 +886,9 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 			end
 			result = ReplReference.new(value: repl_payload(store, result.value), binding: result.binding, container: result.container, slot: result.slot)
 		end
+		mut union_receiver := false
 		if token_is(state, position[0], ".") && union_parts(repl_type(store, result.value)).size() > 0
+			union_receiver = true
 			result = repl_reference(store.children[result.value][0])
 		end
 		value := repl_get(store, result.value)
@@ -960,8 +962,11 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 				if find_object_type(state, value.type_name) >= 0
 					owner := find_object_type(state, value.type_name)
 					field := object_field_index(state, owner, "@" + member)
-					if field >= 0 && !token_is(state, position[0], "(") && !token_is(state, position[0], "<")
+					if field >= 0 && (union_receiver || (!token_is(state, position[0], "(") && !token_is(state, position[0], "<")))
 						result = ReplReference.new(value: store.children[result.value][field], binding: - 1, container: result.value, slot: field)
+						if token_is(state, position[0], "(")
+							result = repl_callable_expression(state, position, store, environment, result.value)
+						end
 					else
 						result = repl_reference(repl_object_method(state, position, store, environment, value.type_name, member, result.value))
 					end
