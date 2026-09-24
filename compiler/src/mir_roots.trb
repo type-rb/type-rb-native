@@ -1,6 +1,6 @@
 import { mir_managed_type } from mir_types
 import { integer_string } from literals
-import { MirBlock, MirFunction, MirInstruction, MirModule, MirRootPlan } from mir
+import { MirBlock, MirFunction, MirInstruction, MirModule, MirRootPlan, MirValue } from mir
 import { mir_flow_blocks } from mir_flow
 
 # Effects are allocation, mutation, I/O and failure bits. Runtime-internal
@@ -195,7 +195,7 @@ end
 
 # Called only after storage/types/uses are verified. Sparse IDs have no bearing
 # on allocation size. The least fixed point includes loop/backedge liveness.
-def mir_function_roots(native_module: MirModule, function: MirFunction): MirRootPlan
+def mir_function_roots_with_values(native_module: MirModule, function: MirFunction, values: Array<MirValue>): MirRootPlan
 	mut points: Array<Integer> := []
 	mut roots: Array<Array<Integer>> := []
 	if function.kind != 3
@@ -204,7 +204,7 @@ def mir_function_roots(native_module: MirModule, function: MirFunction): MirRoot
 	blocks := mir_flow_blocks(native_module, function)
 	mut managed: Hash<String, Integer> := {}
 	mut managed_count := 0
-	native_module.values.each do |value|
+	values.each do |value|
 		if value.function_id == function.id && mir_managed_type(native_module, value.type_id)
 			managed[integer_string(value.id)] = 1
 			managed_count += 1
@@ -266,6 +266,16 @@ def mir_function_roots(native_module: MirModule, function: MirFunction): MirRoot
 		index += 1
 	end
 	return MirRootPlan.new(function_id: function.id, instructions: points, roots: roots, capacity: capacity)
+end
+
+def mir_function_roots(native_module: MirModule, function: MirFunction): MirRootPlan
+	mut values: Array<MirValue> := []
+	native_module.values.each do |value|
+		if value.function_id == function.id
+			values.push(value)
+		end
+	end
+	return mir_function_roots_with_values(native_module, function, values)
 end
 
 def mir_root_plan_equal(left: MirRootPlan, right: MirRootPlan): Boolean
