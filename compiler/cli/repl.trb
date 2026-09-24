@@ -81,10 +81,10 @@ record ReplSession
 end
 
 def repl_show(mut state: CompilerState, mut session: ReplSession, input: String, prefix: String, type_only: Boolean, display: Boolean): Boolean
-	state.active_module[0] = state.entry_module[0]
+	state.module_graph.active_module[0] = state.module_graph.entry_module[0]
 	state.declaration_owner[0] = ""
 	line_number := repl_lines(prefix) + 1
-	main := find_function_in_module(state, state.entry_module[0], "main")
+	main := find_function_in_module(state, state.module_graph.entry_module[0], "main")
 	mut position := [load_integer(state.function_body_starts, main)]
 	while load_integer(state.token_lines, position[0]) < line_number
 		position[0] += 1
@@ -256,7 +256,7 @@ def repl_submit(mut session: ReplSession, input: String, type_only: Boolean, dis
 			mut identity := 0
 			while identity < state.globals.size()
 				row := state.globals[identity]
-				if row.source_id == state.entry_module[0] && row.line > repl_lines(session.text[0]) && row.line <= repl_lines(session.text[0] + input + "\n") && !row.name.include?("::")
+				if row.source_id == state.module_graph.entry_module[0] && row.line > repl_lines(session.text[0]) && row.line <= repl_lines(session.text[0] + input + "\n") && !row.name.include?("::")
 					key := repl_global_key(state, identity)
 					value := session.store.children[session.store.globals[key]][0]
 					puts(repl_editor_paint(repl_render(state, session.store, value, 0), 2, repl_use_color()) + repl_editor_paint(" : ", 4, repl_use_color()) + repl_editor_paint(repl_type_name(state, state.global_types[identity]), 5, repl_use_color()))
@@ -266,7 +266,7 @@ def repl_submit(mut session: ReplSession, input: String, type_only: Boolean, dis
 		end
 		mut initializes := false
 		state.globals.each do |row|
-			if row.source_id == state.entry_module[0] && row.line > repl_lines(session.text[0]) && row.line <= repl_lines(session.text[0] + input + "\n")
+			if row.source_id == state.module_graph.entry_module[0] && row.line > repl_lines(session.text[0]) && row.line <= repl_lines(session.text[0] + input + "\n")
 				initializes = true
 			end
 		end
@@ -486,7 +486,7 @@ def repl_complete(session: ReplSession): ReplCandidates
 	end
 	index = 0
 	while index < state.function_count[0]
-		if load_integer(state.function_modules, index) == state.entry_module[0]
+		if load_integer(state.function_modules, index) == state.module_graph.entry_module[0]
 			name := load_string(state.function_names, index)
 			if name != "main" && sparse_integer_at(state.function_expression_bodies, index) == 0 && sparse_integer_at(state.function_lambdas, index) == 0
 				repl_candidate(candidates, name, repl_function_insertion(state, index, name), repl_function_detail(state, index), 6)
@@ -495,12 +495,12 @@ def repl_complete(session: ReplSession): ReplCandidates
 		index += 1
 	end
 	index = 0
-	while index < state.import_count[0]
-		name := load_string(state.import_symbols, index)
+	while index < state.module_graph.import_count[0]
+		name := load_string(state.module_graph.import_symbols, index)
 		if name != ""
 			mut imported_function :=- 1
-			if load_integer(state.import_kinds, index) == 0
-				imported_function = find_function_in_module(state, load_integer(state.import_targets, index), name)
+			if load_integer(state.module_graph.import_kinds, index) == 0
+				imported_function = find_function_in_module(state, load_integer(state.module_graph.import_targets, index), name)
 			end
 			if imported_function >= 0
 				repl_candidate(candidates, name, repl_function_insertion(state, imported_function, name), repl_function_detail(state, imported_function), 6)
@@ -623,7 +623,7 @@ def repl_replay(mut session: ReplSession, config: String, additional: Array<Stri
 	mut identity := 0
 	while identity < initial.globals.size()
 		row := initial.globals[identity]
-		if row.source_id == initial.entry_module[0]
+		if row.source_id == initial.module_graph.entry_module[0]
 			replayed.store.globals[repl_global_key(initial, identity)] = 0
 		end
 		identity += 1
@@ -651,7 +651,7 @@ def repl_replay(mut session: ReplSession, config: String, additional: Array<Stri
 			identity = 0
 			while identity < initial.globals.size()
 				row := initial.globals[identity]
-				if row.source_id == initial.entry_module[0] && row.line >= declaration_line && row.line < finish
+				if row.source_id == initial.module_graph.entry_module[0] && row.line >= declaration_line && row.line < finish
 					replayed.store.globals.delete(repl_global_key(initial, identity))
 					initializes = true
 				end

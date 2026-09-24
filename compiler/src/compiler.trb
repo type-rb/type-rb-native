@@ -57,7 +57,7 @@ def compiler_eputs(_value: String)
 end
 
 def compiler_file_entry_function(state: CompilerState): Integer
-	index := find_function_in_module(state, state.entry_module[0], "compiler_file_main")
+	index := find_function_in_module(state, state.module_graph.entry_module[0], "compiler_file_main")
 	if index < 0
 		return - 1
 	end
@@ -208,14 +208,14 @@ def emit_entry(mut state: CompilerState, mut output: QbeOutput)
 			emit_process_arguments(output)
 		end
 		qbe_output_line(output, "\tcall $trbn_initialize_globals()")
-		main_index := find_function_in_module(state, state.entry_module[0], "main")
+		main_index := find_function_in_module(state, state.module_graph.entry_module[0], "main")
 		qbe_output_line(output, "\tcall $trbnf" + integer_string(main_index) + "()")
 		qbe_output_line(output, "\tcall $trbn_gc_finish()")
 		qbe_output_line(output, "\tret 0")
 	end
 	qbe_output_line(output, "}")
 	if compiler_entry >= 0
-		cli_entry := find_function_in_module(state, state.entry_module[0], "native_cli_main")
+		cli_entry := find_function_in_module(state, state.module_graph.entry_module[0], "native_cli_main")
 		if cli_entry >= 0
 			output.runtime_flags[1] = 1
 			runtime_module := find_module(state, "host")
@@ -261,7 +261,7 @@ def emit_qbe(mut state: CompilerState): QbeOutput
 	# Flat recovery and CLI input retain their source fallbacks. Ordinary compiler
 	# intrinsics are omitted by declaration identity, independent of source order.
 	mut omit_intrinsics := false
-	if compiler_runtime && state.module_count[0] > 1 && find_function_in_module(state, state.entry_module[0], "native_cli_main") < 0
+	if compiler_runtime && state.module_graph.module_count[0] > 1 && find_function_in_module(state, state.module_graph.entry_module[0], "native_cli_main") < 0
 		omit_intrinsics = true
 	end
 	while function_index < function_count
@@ -305,7 +305,7 @@ def print_diagnostic(state: CompilerState, file_mode: Boolean)
 	mut message := ""
 	module_index := load_integer(state.diagnostics.modules, 0)
 	if module_index > 0
-		message += load_string(state.module_files, module_index) + ":"
+		message += load_string(state.module_graph.module_files, module_index) + ":"
 	end
 	message += load_string(state.diagnostics.codes, 0) + ":"
 	message += integer_string(load_integer(state.diagnostics.lines, 0))
@@ -359,7 +359,7 @@ def compiler_main(source: String, mode: String, file_mode: Boolean): Integer
 	mut state := compiler_new(source.size() * 3 + 16)
 	lex(state, source)
 	if !has_diagnostic(state)
-		parse_module(state, 0, state.entry_module[0])
+		parse_module(state, 0, state.module_graph.entry_module[0])
 	end
 	return compile_state(state, mode, file_mode)
 end
@@ -377,8 +377,8 @@ end
 def project_error_state(path: String, line: Integer, message: String): CompilerState
 	mut state := compiler_new(1024)
 	module_index := add_module(state, "trbconfig", path)
-	state.entry_module[0] = module_index
-	state.active_module[0] = module_index
+	state.module_graph.entry_module[0] = module_index
+	state.module_graph.active_module[0] = module_index
 	diagnostic(state, "TRBN4010", line, message)
 	return state
 end
@@ -627,7 +627,7 @@ def project_select_entry(mut state: CompilerState): Boolean
 		if load_string(state.function_names, function_index) == "main"
 			module_index := load_integer(state.function_modules, function_index)
 			if entry >= 0
-				state.active_module[0] = module_index
+				state.module_graph.active_module[0] = module_index
 				diagnostic(
 					state,
 					"TRBN4010",
@@ -641,12 +641,12 @@ def project_select_entry(mut state: CompilerState): Boolean
 		function_index += 1
 	end
 	if entry < 0
-		state.active_module[0] = 0
+		state.module_graph.active_module[0] = 0
 		diagnostic(state, "TRBN4010", 1, "project must declare exactly one top-level main function")
 		return false
 	end
-	state.entry_module[0] = entry
-	state.active_module[0] = entry
+	state.module_graph.entry_module[0] = entry
+	state.module_graph.active_module[0] = entry
 	return true
 end
 
@@ -656,10 +656,10 @@ def project_module_acyclic(state: CompilerState, module_index: Integer, mut colo
 		return color == 2
 	end
 	colors[module_index] = 1
-	mut import_index := load_integer(state.module_import_starts, module_index)
-	import_end := import_index + load_integer(state.module_import_counts, module_index)
+	mut import_index := load_integer(state.module_graph.module_import_starts, module_index)
+	import_end := import_index + load_integer(state.module_graph.module_import_counts, module_index)
 	while import_index < import_end
-		target := load_integer(state.import_targets, import_index)
+		target := load_integer(state.module_graph.import_targets, import_index)
 		if target >= 0
 			if !project_module_acyclic(state, target, colors)
 				return false
@@ -674,12 +674,12 @@ end
 def project_import_graph_acyclic(state: CompilerState): Boolean
 	mut colors: Array<Integer> := []
 	mut module_index := 0
-	while module_index < state.module_count[0]
+	while module_index < state.module_graph.module_count[0]
 		colors.push(0)
 		module_index += 1
 	end
 	module_index = 0
-	while module_index < state.module_count[0]
+	while module_index < state.module_graph.module_count[0]
 		if !project_module_acyclic(state, module_index, colors)
 			return false
 		end
@@ -697,13 +697,13 @@ end
 
 def validate_project_module_roots(mut state: CompilerState): Boolean
 	mut module_index := 0
-	while module_index < state.module_count[0]
-		name := load_string(state.module_names, module_index)
+	while module_index < state.module_graph.module_count[0]
+		name := load_string(state.module_graph.module_names, module_index)
 		peer_name := module_root_peer(name)
 		peer := find_module(state, peer_name)
 		if peer >= 0
 			if peer < module_index
-				state.active_module[0] = module_index
+				state.module_graph.active_module[0] = module_index
 				diagnostic(
 					state,
 					"TRBN4003",
@@ -734,13 +734,13 @@ end
 
 def resolve_project_imports(mut state: CompilerState): Boolean
 	mut module_index := 0
-	while module_index < state.module_count[0]
-		mut import_index := load_integer(state.module_import_starts, module_index)
-		import_end := import_index + load_integer(state.module_import_counts, module_index)
+	while module_index < state.module_graph.module_count[0]
+		mut import_index := load_integer(state.module_graph.module_import_starts, module_index)
+		import_end := import_index + load_integer(state.module_graph.module_import_counts, module_index)
 		while import_index < import_end
-			state.active_module[0] = module_index
-			raw_path := load_string(state.import_paths, import_index)
-			line := load_integer(state.import_lines, import_index)
+			state.module_graph.active_module[0] = module_index
+			raw_path := load_string(state.module_graph.import_paths, import_index)
+			line := load_integer(state.module_graph.import_lines, import_index)
 			normalized := normalize_import_path(state, raw_path, line)
 			if has_diagnostic(state)
 				return false
@@ -750,7 +750,7 @@ def resolve_project_imports(mut state: CompilerState): Boolean
 			if owned_kind > 0
 				target = load_standard_source(state, owned_kind)
 			elsif target < - 1
-				if load_integer(state.import_kinds, import_index) != 1
+				if load_integer(state.module_graph.import_kinds, import_index) != 1
 					diagnostic(state, "TRBN4003", line, "supported standard packages require a bare import")
 					return false
 				end
@@ -772,23 +772,23 @@ def resolve_project_imports(mut state: CompilerState): Boolean
 					return false
 				end
 			end
-			store_integer(state.import_targets, import_index, target)
+			store_integer(state.module_graph.import_targets, import_index, target)
 			import_index += 1
 		end
 		module_index += 1
 	end
 	if !project_import_graph_acyclic(state)
 		module_index = 0
-		while module_index < state.module_count[0]
-			mut import_index := load_integer(state.module_import_starts, module_index)
-			import_end := import_index + load_integer(state.module_import_counts, module_index)
+		while module_index < state.module_graph.module_count[0]
+			mut import_index := load_integer(state.module_graph.module_import_starts, module_index)
+			import_end := import_index + load_integer(state.module_graph.module_import_counts, module_index)
 			while import_index < import_end
-				state.active_module[0] = module_index
-				target := load_integer(state.import_targets, import_index)
+				state.module_graph.active_module[0] = module_index
+				target := load_integer(state.module_graph.import_targets, import_index)
 				if target >= 0
 					if module_reaches(state, target, module_index)
-						raw_path := load_string(state.import_paths, import_index)
-						line := load_integer(state.import_lines, import_index)
+						raw_path := load_string(state.module_graph.import_paths, import_index)
+						line := load_integer(state.module_graph.import_lines, import_index)
 						diagnostic(state, "TRBN4003", line, "import cycle through " + raw_path)
 						return false
 					end
@@ -798,7 +798,7 @@ def resolve_project_imports(mut state: CompilerState): Boolean
 			module_index += 1
 		end
 	end
-	state.active_module[0] = state.entry_module[0]
+	state.module_graph.active_module[0] = state.module_graph.entry_module[0]
 	return true
 end
 
@@ -832,7 +832,7 @@ def load_project_sources(
 	mut state := compiler_new(4194304)
 	mut module_index := 0
 	while module_index < ordered.paths.size()
-		state.active_module[0] = module_index
+		state.module_graph.active_module[0] = module_index
 		name := project_module_name(state, source_root, ordered.paths[module_index])
 		if has_diagnostic(state)
 			return state
@@ -844,8 +844,8 @@ def load_project_sources(
 		return state
 	end
 	module_index = 0
-	while module_index < state.module_count[0]
-		state.active_module[0] = module_index
+	while module_index < state.module_graph.module_count[0]
+		state.module_graph.active_module[0] = module_index
 		start := state.token_count[0]
 		lex_module(state, ordered.sources[module_index], module_index)
 		if !has_diagnostic(state)
@@ -869,7 +869,7 @@ def module_reaches(state: CompilerState, start: Integer, goal: Integer): Boolean
 	end
 	mut visited: Array<Integer> := []
 	mut index := 0
-	while index < state.module_count[0]
+	while index < state.module_graph.module_count[0]
 		visited.push(0)
 		index += 1
 	end
@@ -878,10 +878,10 @@ def module_reaches(state: CompilerState, start: Integer, goal: Integer): Boolean
 	mut cursor := 0
 	while cursor < queue.size()
 		module_index := queue[cursor]
-		mut import_index := load_integer(state.module_import_starts, module_index)
-		import_end := import_index + load_integer(state.module_import_counts, module_index)
+		mut import_index := load_integer(state.module_graph.module_import_starts, module_index)
+		import_end := import_index + load_integer(state.module_graph.module_import_counts, module_index)
 		while import_index < import_end
-			target := load_integer(state.import_targets, import_index)
+			target := load_integer(state.module_graph.import_targets, import_index)
 			if target == goal
 				return true
 			end
@@ -903,15 +903,15 @@ def load_file_root(entry_source: String, entry_path: String): CompilerState
 	root := path_directory(entry_path)
 	entry_name := string_without_suffix(path_basename(entry_path), ".trb")
 	entry_module := add_module(state, entry_name, entry_path)
-	state.entry_module[0] = entry_module
+	state.module_graph.entry_module[0] = entry_module
 	mut sources := [entry_source]
 	mut module_index := 0
-	while module_index < state.module_count[0]
+	while module_index < state.module_graph.module_count[0]
 		if sparse_integer_at(state.standard_modules, module_index) > 0
 			module_index += 1
 			next
 		end
-		state.active_module[0] = module_index
+		state.module_graph.active_module[0] = module_index
 		start := state.token_count[0]
 		lex_module(state, sources[module_index], module_index)
 		if !has_diagnostic(state)
@@ -920,12 +920,12 @@ def load_file_root(entry_source: String, entry_path: String): CompilerState
 		if has_diagnostic(state)
 			return state
 		end
-		mut import_index := load_integer(state.module_import_starts, module_index)
-		import_end := import_index + load_integer(state.module_import_counts, module_index)
+		mut import_index := load_integer(state.module_graph.module_import_starts, module_index)
+		import_end := import_index + load_integer(state.module_graph.module_import_counts, module_index)
 		while import_index < import_end
-			state.active_module[0] = module_index
-			raw_path := load_string(state.import_paths, import_index)
-			line := load_integer(state.import_lines, import_index)
+			state.module_graph.active_module[0] = module_index
+			raw_path := load_string(state.module_graph.import_paths, import_index)
+			line := load_integer(state.module_graph.import_lines, import_index)
 			normalized := normalize_import_path(state, raw_path, line)
 			if has_diagnostic(state)
 				return state
@@ -934,14 +934,14 @@ def load_file_root(entry_source: String, entry_path: String): CompilerState
 			owned_kind := standard_source_kind(normalized)
 			mut target_added := false
 			if owned_kind > 0
-				before := state.module_count[0]
+				before := state.module_graph.module_count[0]
 				target = load_standard_source(state, owned_kind)
-				if state.module_count[0] > before
+				if state.module_graph.module_count[0] > before
 					sources.push("")
 					target_added = true
 				end
 			elsif target < - 1
-				if load_integer(state.import_kinds, import_index) != 1
+				if load_integer(state.module_graph.import_kinds, import_index) != 1
 					diagnostic(state, "TRBN4003", line, "supported standard packages require a bare import")
 					return state
 				end
@@ -991,12 +991,12 @@ def load_file_root(entry_source: String, entry_path: String): CompilerState
 					end
 				end
 			end
-			store_integer(state.import_targets, import_index, target)
+			store_integer(state.module_graph.import_targets, import_index, target)
 			import_index += 1
 		end
 		module_index += 1
 	end
-	state.active_module[0] = state.entry_module[0]
+	state.module_graph.active_module[0] = state.module_graph.entry_module[0]
 	return state
 end
 
@@ -1013,8 +1013,8 @@ def check(mut state: CompilerState): Boolean
 	while annotation_index < state.internal_type_annotations.size()
 		annotation := state.internal_type_annotations[annotation_index]
 		line := load_integer(state.token_lines, annotation.origin)
-		if annotation.source_id != state.entry_module[0] || line < state.projected_type_lines[0] || line >= state.projected_type_lines[1]
-			state.active_module[0] = annotation.source_id
+		if annotation.source_id != state.module_graph.entry_module[0] || line < state.projected_type_lines[0] || line >= state.projected_type_lines[1]
+			state.module_graph.active_module[0] = annotation.source_id
 			diagnostic(state, "TRBN4004", line, "Nil is an internal flow type; use an explicit nullable type annotation")
 			return false
 		end

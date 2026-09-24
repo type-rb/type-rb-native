@@ -39,7 +39,7 @@ describe("Checked function body ownership") do
 		body := "if input != nil\nvalues := [input]\ntable := {1 => values[0]}\nfound := table[1]\nputs(found)\nend\n"
 		source := "def first(input: Integer?)\n" + body + "end\ndef second(input: String?)\n" + body + "end\ndef main()\nfirst(7)\nsecond(\"held\")\nend\n"
 		mut state := compiler_new(source.size() * 3 + 16)
-		expect(lex(state, source) && parse_module(state, 0, state.entry_module[0])).to_be_true()
+		expect(lex(state, source) && parse_module(state, 0, state.module_graph.entry_module[0])).to_be_true()
 		# Model two semantic bodies referring to one authored region. No source
 		# tokens are cloned or rewritten; ordinary parameter/MIR types differ.
 		store_integer(state.function_body_starts, 1, load_integer(state.function_body_starts, 0))
@@ -78,7 +78,7 @@ describe("Checked function body ownership") do
 	test("validates Hash projections outside the selected body") do
 		source := "def first()\nvalues := {1 => 7}\nputs(values[1])\nend\ndef main()\nend\n"
 		mut state := compiler_new(source.size() * 3 + 16)
-		expect(lex(state, source) && parse_module(state, 0, state.entry_module[0]) && resolve(state) && check(state)).to_be_true()
+		expect(lex(state, source) && parse_module(state, 0, state.module_graph.entry_module[0]) && resolve(state) && check(state)).to_be_true()
 		select_checked_body(state, 0)
 		state.checked[0].hash_operations[0] = mir_hash_operation(0, 0, 0, 0, "", false, 0)
 		select_checked_body(state, 1)
@@ -89,7 +89,7 @@ describe("Checked function body ownership") do
 	test("emits unchanged MIR after discarding every checked body projection") do
 		source := "import trb/std/result\ndef operation(): Result<Integer, String>\nreturn Result<Integer, String>::Ok(2)\nend\ndef helper(input: Integer?)\nif input != nil\nputs(input)\nend\nend\ndef main()\nvalue := operation() catch |_error|\n3\nend\nitems := {1 => value}\nhelper(items[1])\n(1..2).each do |item|\nputs(item)\nend\nend\n"
 		mut state := compiler_new(source.size() * 3 + 16)
-		expect(lex(state, source) && parse_module(state, 0, state.entry_module[0]) && resolve(state) && check(state)).to_be_true()
+		expect(lex(state, source) && parse_module(state, 0, state.module_graph.entry_module[0]) && resolve(state) && check(state)).to_be_true()
 		before := control_test_output(emit_qbe(state))
 		intrinsic_mir_erase(state)
 		mut index := 0

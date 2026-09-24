@@ -324,7 +324,7 @@ def instantiate_generic_nominal(mut state: CompilerState, definition: Integer, a
 		diagnostic(state, "TRBN4003", declaration.line, "generic type expansion exceeds the compiler nesting limit")
 		return ""
 	end
-	previous_module := state.active_module[0]
+	previous_module := state.module_graph.active_module[0]
 	previous_owner := state.declaration_owner[0]
 	state.declaration_owner[0] = namespace_parent(declaration.name)
 	saved_alias_depth := state.alias_expansion_depth[0]
@@ -335,7 +335,7 @@ def instantiate_generic_nominal(mut state: CompilerState, definition: Integer, a
 		alias_step += 1
 	end
 	state.alias_expansion_depth[0] = 0
-	state.active_module[0] = declaration.source_id
+	state.module_graph.active_module[0] = declaration.source_id
 	state.generic_depth[0] += 1
 	saved_binding := state.checked[0].generic_binding[0]
 	state.checked[0].generic_binding[0] = 0
@@ -415,7 +415,7 @@ def instantiate_generic_nominal(mut state: CompilerState, definition: Integer, a
 	state.alias_expansion_depth[0] = saved_alias_depth
 	state.generic_depth[0] -= 1
 	state.checked[0].generic_binding[0] = saved_binding
-	state.active_module[0] = previous_module
+	state.module_graph.active_module[0] = previous_module
 	state.declaration_owner[0] = previous_owner
 	return type_name
 end
@@ -492,14 +492,14 @@ def resolve_alias_type(mut state: CompilerState, index: Integer, arguments: Arra
 	mut item := 0
 	while item < depth
 		if load_integer(state.alias_expansion_path, item) == index
-			state.active_module[0] = row.source_id
+			state.module_graph.active_module[0] = row.source_id
 			diagnostic(state, "TRBN4003", row.line, "type alias cycle involving " + row.name)
 			return ""
 		end
 		item += 1
 	end
 	if depth >= 128
-		state.active_module[0] = row.source_id
+		state.module_graph.active_module[0] = row.source_id
 		diagnostic(state, "TRBN4003", row.line, "type alias expansion exceeds the compiler nesting limit")
 		return ""
 	end
@@ -545,10 +545,10 @@ def instantiate_object_type(mut state: CompilerState, definition: Integer, argum
 	owner := state.object_instances.size()
 	state.object_instance_lookup[key] = owner
 	state.object_instances.push(ObjectInstance.new(definition: definition, arguments: arguments, superclass: - 1, interfaces: [], fields: []))
-	previous_module := state.active_module[0]
+	previous_module := state.module_graph.active_module[0]
 	previous_owner := state.declaration_owner[0]
 	saved_binding := state.checked[0].generic_binding[0]
-	state.active_module[0] = declaration.source_id
+	state.module_graph.active_module[0] = declaration.source_id
 	state.declaration_owner[0] = namespace_parent(declaration.name)
 	state.checked[0].generic_binding[0] = 0
 	state.generic_depth[0] += 1
@@ -615,7 +615,7 @@ def instantiate_object_type(mut state: CompilerState, definition: Integer, argum
 	state.alias_expansion_depth[0] = saved_alias_depth
 	state.generic_depth[0] -= 1
 	state.checked[0].generic_binding[0] = saved_binding
-	state.active_module[0] = previous_module
+	state.module_graph.active_module[0] = previous_module
 	state.declaration_owner[0] = previous_owner
 	return object_instance_type(state, owner)
 end

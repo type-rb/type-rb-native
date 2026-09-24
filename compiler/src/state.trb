@@ -12,7 +12,7 @@ import { EnumDefinition, EnumField, EnumVariant, RawEnumValue } from enum_model
 import iteration_syntax
 import { integer_string } from literals
 import { MirBlock, MirCall, MirControlLoop, MirIndexedTarget, MirInstruction, MirModule, MirUnionTarget, MirValue } from mir
-import { IntegerStorage, StringStorage, integer_storage, load_integer, load_string, sparse_integer_at, store_integer, store_string, string_storage } from storage
+import { IntegerStorage, StringStorage, integer_storage, integer_storage_copy, load_integer, load_string, sparse_integer_at, store_integer, store_string, string_storage } from storage
 
 # Parsed declaration-scope expression. Function identities are assigned only
 # after all authored declarations and their types have been resolved.
@@ -77,6 +77,28 @@ record CompilerDiagnostics
 	messages: StringStorage
 	modules: IntegerStorage
 	count: Array<Integer>
+end
+
+# Parsed module and import catalogs. Generic specialization shares source facts
+# but owns its active-module cursor and import-use facts.
+record CompilerModuleGraph
+	module_names: StringStorage
+	module_files: StringStorage
+	module_count: Array<Integer>
+	module_import_starts: IntegerStorage
+	module_import_counts: IntegerStorage
+	module_lookup: Hash<String, Integer>
+	entry_module: Array<Integer>
+	active_module: Array<Integer>
+	import_modules: IntegerStorage
+	import_paths: StringStorage
+	import_symbols: StringStorage
+	import_declarations: StringStorage
+	import_kinds: IntegerStorage
+	import_lines: IntegerStorage
+	import_targets: IntegerStorage
+	import_used: IntegerStorage
+	import_count: Array<Integer>
 end
 
 record CompilerState
@@ -153,23 +175,7 @@ record CompilerState
 	token_lines: IntegerStorage
 	token_count: Array<Integer>
 	scalar_mir: MirModule
-	module_names: StringStorage
-	module_files: StringStorage
-	module_count: Array<Integer>
-	module_import_starts: IntegerStorage
-	module_import_counts: IntegerStorage
-	module_lookup: Hash<String, Integer>
-	entry_module: Array<Integer>
-	active_module: Array<Integer>
-	import_modules: IntegerStorage
-	import_paths: StringStorage
-	import_symbols: StringStorage
-	import_declarations: StringStorage
-	import_kinds: IntegerStorage
-	import_lines: IntegerStorage
-	import_targets: IntegerStorage
-	import_used: IntegerStorage
-	import_count: Array<Integer>
+	module_graph: CompilerModuleGraph
 	record_names: StringStorage
 	record_modules: IntegerStorage
 	record_field_starts: IntegerStorage
@@ -197,6 +203,50 @@ record CompilerState
 	parameter_lines: IntegerStorage
 	parameter_count: Array<Integer>
 	diagnostics: CompilerDiagnostics
+end
+
+def compiler_module_graph_new(capacity: Integer): CompilerModuleGraph
+	return CompilerModuleGraph.new(
+		module_names: string_storage(capacity),
+		module_files: string_storage(capacity),
+		module_count: [0],
+		module_import_starts: integer_storage(capacity),
+		module_import_counts: integer_storage(capacity),
+		module_lookup: {},
+		entry_module: [0],
+		active_module: [0],
+		import_modules: integer_storage(capacity),
+		import_paths: string_storage(capacity),
+		import_symbols: string_storage(capacity),
+		import_declarations: string_storage(capacity),
+		import_kinds: integer_storage(capacity),
+		import_lines: integer_storage(capacity),
+		import_targets: integer_storage(capacity),
+		import_used: integer_storage(capacity),
+		import_count: [0],
+	)
+end
+
+def compiler_module_graph_fork(graph: CompilerModuleGraph, active_module: Array<Integer>): CompilerModuleGraph
+	return CompilerModuleGraph.new(
+		module_names: graph.module_names,
+		module_files: graph.module_files,
+		module_count: graph.module_count,
+		module_import_starts: graph.module_import_starts,
+		module_import_counts: graph.module_import_counts,
+		module_lookup: graph.module_lookup,
+		entry_module: graph.entry_module,
+		active_module: active_module,
+		import_modules: graph.import_modules,
+		import_paths: graph.import_paths,
+		import_symbols: graph.import_symbols,
+		import_declarations: graph.import_declarations,
+		import_kinds: graph.import_kinds,
+		import_lines: graph.import_lines,
+		import_targets: graph.import_targets,
+		import_used: integer_storage_copy(graph.import_used),
+		import_count: graph.import_count,
+	)
 end
 
 def compiler_new(capacity: Integer): CompilerState
@@ -239,23 +289,7 @@ def compiler_new(capacity: Integer): CompilerState
 			arguments: [],
 			literal_texts: [],
 		),
-		module_names: string_storage(capacity),
-		module_files: string_storage(capacity),
-		module_count: [0],
-		module_import_starts: integer_storage(capacity),
-		module_import_counts: integer_storage(capacity),
-		module_lookup: {},
-		entry_module: [0],
-		active_module: [0],
-		import_modules: integer_storage(capacity),
-		import_paths: string_storage(capacity),
-		import_symbols: string_storage(capacity),
-		import_declarations: string_storage(capacity),
-		import_kinds: integer_storage(capacity),
-		import_lines: integer_storage(capacity),
-		import_targets: integer_storage(capacity),
-		import_used: integer_storage(capacity),
-		import_count: [0],
+		module_graph: compiler_module_graph_new(capacity),
 		record_names: string_storage(capacity),
 		record_modules: integer_storage(capacity),
 		record_field_starts: integer_storage(capacity),
@@ -301,18 +335,18 @@ def function_index_key(module_index: Integer, name: String): String
 end
 
 def add_module(mut state: CompilerState, name: String, filename: String): Integer
-	index := state.module_count[0]
-	store_string(state.module_names, index, name)
-	store_string(state.module_files, index, filename)
-	store_integer(state.module_import_starts, index, state.import_count[0])
-	store_integer(state.module_import_counts, index, 0)
-	state.module_count[0] = index + 1
-	state.module_lookup[name] = index
+	index := state.module_graph.module_count[0]
+	store_string(state.module_graph.module_names, index, name)
+	store_string(state.module_graph.module_files, index, filename)
+	store_integer(state.module_graph.module_import_starts, index, state.module_graph.import_count[0])
+	store_integer(state.module_graph.module_import_counts, index, 0)
+	state.module_graph.module_count[0] = index + 1
+	state.module_graph.module_lookup[name] = index
 	return index
 end
 
 def find_module(state: CompilerState, name: String): Integer
-	return find_name_index(state.module_lookup, name)
+	return find_name_index(state.module_graph.module_lookup, name)
 end
 
 def terminal_token(state: CompilerState, index: Integer): Boolean
@@ -332,7 +366,7 @@ def diagnostic(mut state: CompilerState, code: String, line: Integer, message: S
 		store_string(state.diagnostics.codes, 0, code)
 		store_integer(state.diagnostics.lines, 0, line)
 		store_string(state.diagnostics.messages, 0, message)
-		store_integer(state.diagnostics.modules, 0, state.active_module[0])
+		store_integer(state.diagnostics.modules, 0, state.module_graph.active_module[0])
 		state.diagnostics.count[0] = 1
 	end
 	return
