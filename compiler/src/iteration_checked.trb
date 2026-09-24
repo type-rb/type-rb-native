@@ -9,10 +9,10 @@ import { CompilerState, diagnostic } from state
 import { load_integer, load_string, sparse_integer_at } from storage
 
 def checked_slice_zero_literal(state: CompilerState, origin: Integer): Boolean
-	if origin < 0 || origin >= state.token_count[0] || load_integer(state.token_kinds, origin) != 2
+	if origin < 0 || origin >= state.source_tokens.token_count[0] || load_integer(state.source_tokens.token_kinds, origin) != 2
 		return false
 	end
-	text := load_string(state.token_texts, origin)
+	text := load_string(state.source_tokens.token_texts, origin)
 	mut index := 0
 	while index < text.size()
 		if text[index] != "0" && text[index] != "_"
@@ -24,7 +24,7 @@ def checked_slice_zero_literal(state: CompilerState, origin: Integer): Boolean
 end
 
 def checked_iteration_shape(state: CompilerState, plan: IterationSyntax, origin: Integer): Boolean
-	if !iteration_syntax_valid(plan, origin, state.token_count[0])
+	if !iteration_syntax_valid(plan, origin, state.source_tokens.token_count[0])
 		return false
 	end
 	# The parser pairs both boundaries. A stale end cannot silently skip
@@ -46,7 +46,7 @@ def checked_iteration_shape(state: CompilerState, plan: IterationSyntax, origin:
 			return false
 		end
 		suffix += 1
-		while load_integer(state.token_kinds, suffix) == 4
+		while load_integer(state.source_tokens.token_kinds, suffix) == 4
 			suffix += 1
 		end
 		if suffix != plan.slice_start
@@ -64,12 +64,12 @@ def checked_iteration_shape(state: CompilerState, plan: IterationSyntax, origin:
 			end
 			suffix += 1
 		end
-		while load_integer(state.token_kinds, suffix) == 4
+		while load_integer(state.source_tokens.token_kinds, suffix) == 4
 			suffix += 1
 		end
 		if token_is(state, suffix, ",")
 			suffix += 1
-			while load_integer(state.token_kinds, suffix) == 4
+			while load_integer(state.source_tokens.token_kinds, suffix) == 4
 				suffix += 1
 			end
 		end
@@ -86,12 +86,12 @@ def checked_iteration_shape(state: CompilerState, plan: IterationSyntax, origin:
 		end
 		suffix += 1
 	end
-	if (indexed && plan.second_origin < 0) || load_integer(state.token_kinds, plan.element_origin) != 1
+	if (indexed && plan.second_origin < 0) || load_integer(state.source_tokens.token_kinds, plan.element_origin) != 1
 		return false
 	end
 	mut close := plan.element_origin + 1
 	if plan.second_origin >= 0
-		if plan.second_origin != close + 1 || !token_is(state, close, ",") || load_integer(state.token_kinds, plan.second_origin) != 1
+		if plan.second_origin != close + 1 || !token_is(state, close, ",") || load_integer(state.source_tokens.token_kinds, plan.second_origin) != 1
 			return false
 		end
 		close = plan.second_origin + 1
@@ -99,11 +99,11 @@ def checked_iteration_shape(state: CompilerState, plan: IterationSyntax, origin:
 	if !token_is(state, close, "|")
 		return false
 	end
-	if token_is(state, delimiter, "do") && load_integer(state.token_kinds, close + 1) != 4
+	if token_is(state, delimiter, "do") && load_integer(state.source_tokens.token_kinds, close + 1) != 4
 		return false
 	end
 	mut cursor := close + 1
-	while load_integer(state.token_kinds, cursor) == 4
+	while load_integer(state.source_tokens.token_kinds, cursor) == 4
 		cursor += 1
 	end
 	mut terminator := "end"
@@ -151,14 +151,14 @@ def checked_iteration_require(mut state: CompilerState, origin: Integer, parent_
 	if encoded > 0 && encoded <= state.checked[0].iterations.size()
 		plan := state.checked[0].iterations[encoded - 1]
 		if checked_iteration_shape(state, plan.syntax, origin) && plan.parent_loop == parent_loop && checked_iteration_parameters(state, plan)
-			if mir_iteration_valid(plan, origin, state.token_count[0], plan.type_name, iteration_element_type(plan.type_name))
+			if mir_iteration_valid(plan, origin, state.source_tokens.token_count[0], plan.type_name, iteration_element_type(plan.type_name))
 				return plan
 			end
 		end
 	end
 	mut line := 1
-	if origin >= 0 && origin < state.token_count[0]
-		line = load_integer(state.token_lines, origin)
+	if origin >= 0 && origin < state.source_tokens.token_count[0]
+		line = load_integer(state.source_tokens.token_lines, origin)
 	end
 	diagnostic(state, "TRBN4004", line, "invalid checked iteration")
 	return invalid
@@ -178,14 +178,14 @@ def checked_range_require(mut state: CompilerState, origin: Integer, operator_or
 	encoded := sparse_integer_at(state.checked[0].range_origins, operator_origin)
 	if encoded > 0 && encoded <= state.checked[0].ranges.size()
 		plan := state.checked[0].ranges[encoded - 1]
-		if mir_range_valid(plan, origin, operator_origin, end_origin, finish, state.token_count[0])
+		if mir_range_valid(plan, origin, operator_origin, end_origin, finish, state.source_tokens.token_count[0])
 			mut spelling := ".."
 			if plan.exclusive == 1
 				spelling = "..."
 			end
 			if token_is(state, operator_origin, spelling)
 				mut next_origin := operator_origin + 1
-				while load_integer(state.token_kinds, next_origin) == 4
+				while load_integer(state.source_tokens.token_kinds, next_origin) == 4
 					next_origin += 1
 				end
 				if next_origin == end_origin
@@ -195,15 +195,15 @@ def checked_range_require(mut state: CompilerState, origin: Integer, operator_or
 		end
 	end
 	mut line := 1
-	if operator_origin >= 0 && operator_origin < state.token_count[0]
-		line = load_integer(state.token_lines, operator_origin)
+	if operator_origin >= 0 && operator_origin < state.source_tokens.token_count[0]
+		line = load_integer(state.source_tokens.token_lines, operator_origin)
 	end
 	diagnostic(state, "TRBN4004", line, "invalid checked Range construction")
 	return MirRangeConstruction.new(origin: - 1, operator_origin: - 1, end_origin: - 1, finish: - 1, exclusive: - 1, start_type: "", end_type: "")
 end
 
 def checked_transform_shape(state: CompilerState, plan: TransformSyntax, origin: Integer): Boolean
-	if !transform_syntax_valid(plan, origin, state.token_count[0]) || (!token_is(state, origin, ".") && !token_is(state, origin, "&.")) || transform_kind(load_string(state.token_texts, origin + 1)) != plan.kind
+	if !transform_syntax_valid(plan, origin, state.source_tokens.token_count[0]) || (!token_is(state, origin, ".") && !token_is(state, origin, "&.")) || transform_kind(load_string(state.source_tokens.token_texts, origin + 1)) != plan.kind
 		return false
 	end
 	shape := plan.iteration
@@ -216,14 +216,14 @@ def checked_transform_shape(state: CompilerState, plan: TransformSyntax, origin:
 			return false
 		end
 		cursor += 1
-		while load_integer(state.token_kinds, cursor) == 4
+		while load_integer(state.source_tokens.token_kinds, cursor) == 4
 			cursor += 1
 		end
 		if cursor != plan.initial_start
 			return false
 		end
 		cursor = plan.initial_finish
-		while load_integer(state.token_kinds, cursor) == 4
+		while load_integer(state.source_tokens.token_kinds, cursor) == 4
 			cursor += 1
 		end
 		if !token_is(state, cursor, ")")
@@ -254,17 +254,17 @@ def checked_transform_shape(state: CompilerState, plan: TransformSyntax, origin:
 	end
 	cursor += 2
 	if plan.kind == 3
-		if cursor != plan.accumulator_origin || load_integer(state.token_kinds, cursor) != 1 || !token_is(state, cursor + 1, ",")
+		if cursor != plan.accumulator_origin || load_integer(state.source_tokens.token_kinds, cursor) != 1 || !token_is(state, cursor + 1, ",")
 			return false
 		end
 		cursor += 2
 	end
-	if cursor != shape.element_origin || load_integer(state.token_kinds, cursor) != 1
+	if cursor != shape.element_origin || load_integer(state.source_tokens.token_kinds, cursor) != 1
 		return false
 	end
 	cursor += 1
 	if shape.second_origin >= 0
-		if !token_is(state, cursor, ",") || cursor + 1 != shape.second_origin || load_integer(state.token_kinds, cursor + 1) != 1
+		if !token_is(state, cursor, ",") || cursor + 1 != shape.second_origin || load_integer(state.source_tokens.token_kinds, cursor + 1) != 1
 			return false
 		end
 		cursor += 2
@@ -273,10 +273,10 @@ def checked_transform_shape(state: CompilerState, plan: TransformSyntax, origin:
 		return false
 	end
 	cursor += 1
-	if !brace && load_integer(state.token_kinds, cursor) != 4
+	if !brace && load_integer(state.source_tokens.token_kinds, cursor) != 4
 		return false
 	end
-	while load_integer(state.token_kinds, cursor) == 4
+	while load_integer(state.source_tokens.token_kinds, cursor) == 4
 		cursor += 1
 	end
 	mut terminator := "end"
@@ -293,7 +293,7 @@ def checked_transform_require(mut state: CompilerState, origin: Integer): MirTra
 	encoded := sparse_integer_at(state.checked[0].transform_origins, origin)
 	if encoded > 0 && encoded <= state.checked[0].transforms.size()
 		plan := state.checked[0].transforms[encoded - 1]
-		if checked_transform_shape(state, plan.syntax, origin) && mir_transform_valid(plan, origin, state.token_count[0], iteration_element_type(plan.iteration.type_name))
+		if checked_transform_shape(state, plan.syntax, origin) && mir_transform_valid(plan, origin, state.source_tokens.token_count[0], iteration_element_type(plan.iteration.type_name))
 			if plan.syntax.kind >= 3 || array_element_type(plan.type_name) != ""
 				if plan.syntax.kind != 2 || array_element_type(plan.type_name) == plan.iteration.element_type
 					return plan
@@ -301,7 +301,7 @@ def checked_transform_require(mut state: CompilerState, origin: Integer): MirTra
 			end
 		end
 	end
-	diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "invalid checked collection transform")
+	diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, origin), "invalid checked collection transform")
 	shape := IterationSyntax.new(origin: - 1, receiver_finish: - 1, slice_start: - 1, slice_finish: - 1, element_origin: - 1, second_origin: - 1, body_start: - 1, body_finish: - 1, finish: - 1)
 	syntax := TransformSyntax.new(iteration: shape, kind: 0, initial_start: - 1, initial_finish: - 1, accumulator_origin: - 1)
 	iteration := MirIteration.new(syntax: shape, parent_loop: - 1, source_kind: 0, type_name: "", element_type: "")

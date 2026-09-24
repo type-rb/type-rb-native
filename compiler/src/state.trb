@@ -176,16 +176,26 @@ record CompilerParsedProgram
 	iteration_origins: IntegerStorage
 end
 
+# One token table and its source-origin annotations are shared by semantic
+# template forks. Checked facts and executable MIR belong to other owners.
+record CompilerSourceTokens
+	token_kinds: IntegerStorage
+	token_texts: StringStorage
+	token_lines: IntegerStorage
+	token_count: Array<Integer>
+	token_fused_literals: IntegerStorage
+	token_namespaces: StringStorage
+	internal_type_annotations: Array<InternalTypeAnnotation>
+end
+
 record CompilerState
 	objects: Array<ObjectDefinition>
 	object_instances: Array<ObjectInstance>
 	object_instance_lookup: Hash<String, Integer>
 	newtypes: Array<NewtypeDefinition>
-	token_fused_literals: IntegerStorage
 	raw_enum_values: Array<RawEnumValue>
 	raw_enum_results: StringStorage
 	function_receivers: StringStorage
-	internal_type_annotations: Array<InternalTypeAnnotation>
 	projected_type_lines: Array<Integer>
 	# Synthetic entries retain authored submission order independently of headers.
 	global_scope_orders: IntegerStorage
@@ -195,7 +205,6 @@ record CompilerState
 	global_order: Array<Integer>
 	namespaces: Array<NamespaceDeclaration>
 	declaration_owner: Array<String>
-	token_namespaces: StringStorage
 	lambdas: Array<LambdaSyntax>
 	lambda_origins: IntegerStorage
 	# Analysis discovers the complete callable catalog before MIR signatures freeze.
@@ -213,14 +222,23 @@ record CompilerState
 	submissions: Array<CheckedSubmission>
 	parsed: CompilerParsedProgram
 	hash_repl: Array<Boolean>
-	token_kinds: IntegerStorage
-	token_texts: StringStorage
-	token_lines: IntegerStorage
-	token_count: Array<Integer>
+	source_tokens: CompilerSourceTokens
 	scalar_mir: MirModule
 	module_graph: CompilerModuleGraph
 	declarations: CompilerDeclarationCatalog
 	diagnostics: CompilerDiagnostics
+end
+
+def compiler_source_tokens_new(capacity: Integer): CompilerSourceTokens
+	return CompilerSourceTokens.new(
+		token_kinds: integer_storage(capacity),
+		token_texts: string_storage(capacity),
+		token_lines: integer_storage(capacity),
+		token_count: [0],
+		token_fused_literals: integer_storage(capacity),
+		token_namespaces: string_storage(capacity),
+		internal_type_annotations: [],
+	)
 end
 
 def compiler_parsed_program_new(capacity: Integer): CompilerParsedProgram
@@ -386,9 +404,9 @@ def compiler_declaration_catalog_fork(catalog: CompilerDeclarationCatalog): Comp
 end
 
 def compiler_new(capacity: Integer): CompilerState
-	return CompilerState.new(objects: [], object_instances: [], object_instance_lookup: {}, newtypes: [], token_fused_literals: integer_storage(capacity), raw_enum_values: [], raw_enum_results: string_storage(capacity), function_receivers: string_storage(capacity), internal_type_annotations: [], projected_type_lines: [- 1, - 1],
+	return CompilerState.new(objects: [], object_instances: [], object_instance_lookup: {}, newtypes: [], raw_enum_values: [], raw_enum_results: string_storage(capacity), function_receivers: string_storage(capacity), projected_type_lines: [- 1, - 1],
 		global_scope_orders: integer_storage(capacity), globals: [], global_types: [], global_functions: [], global_order: [],
-		namespaces: [], declaration_owner: [""], token_namespaces: string_storage(capacity),
+		namespaces: [], declaration_owner: [""],
 		lambdas: [], lambda_origins: integer_storage(capacity),
 		lambda_phase: [0], checked_lambdas: [], function_lambdas: integer_storage(capacity),
 		checked: [checked_body_new(- 1, 0, capacity)], checked_bodies: [], checked_body_indices: integer_storage(capacity),
@@ -398,10 +416,7 @@ def compiler_new(capacity: Integer): CompilerState
 		submissions: [],
 		parsed: compiler_parsed_program_new(capacity),
 		hash_repl: [false],
-		token_kinds: integer_storage(capacity),
-		token_texts: string_storage(capacity),
-		token_lines: integer_storage(capacity),
-		token_count: [0],
+		source_tokens: compiler_source_tokens_new(capacity),
 		scalar_mir: MirModule.new(object_methods: [], object_witnesses: [], objects: [], newtypes: [], unions: [], globals: [], global_initialization: [], callables: [], enums: [], enum_variants: [], enum_fields: [], numeric_plans: [[]], types: [], records: [], fields: [], root_plans: [], array_loops: [], array_check_reuse: [],
 			signatures: [], calls: [],
 			source_count: [1],
@@ -449,7 +464,7 @@ def find_module(state: CompilerState, name: String): Integer
 end
 
 def terminal_token(state: CompilerState, index: Integer): Boolean
-	kind := load_integer(state.token_kinds, index)
+	kind := load_integer(state.source_tokens.token_kinds, index)
 	if kind == 0
 		return true
 	end

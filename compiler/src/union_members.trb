@@ -77,7 +77,7 @@ end
 # alternative. The checked target keeps the receiver selected before the RHS.
 def union_member_write_type(mut state: CompilerState, name: String, member: String, origin: Integer): String
 	mut common := ""
-	line := load_integer(state.token_lines, origin)
+	line := load_integer(state.source_tokens.token_lines, origin)
 	union_parts(name).each do |alternative|
 		if union_member_storage(state, alternative) != 2 || member.size() == 0 || member[0] == "_"
 			diagnostic(state, "TRBN4004", line, "union assignment requires a public class field in every alternative")
@@ -115,13 +115,13 @@ end
 
 def check_union_member(mut state: CompilerState, mut locals: CheckedLocals, value: CheckedValue, member: String, origin: Integer): CheckedValue
 	expected := union_member_type(state, value.type_name, member)
-	line := load_integer(state.token_lines, origin)
+	line := load_integer(state.source_tokens.token_lines, origin)
 	if expected == ""
 		diagnostic(state, "TRBN4004", line, "union alternatives do not expose a common data field " + member)
 		return checked_view(value, "Invalid", 0)
 	end
 	assignment := token_is(state, origin + 1, "=")
-	compound := binary_operator_id(load_string(state.token_texts, origin + 1)) >= 17
+	compound := binary_operator_id(load_string(state.source_tokens.token_texts, origin + 1)) >= 17
 	if assignment || compound
 		writable := union_member_write_type(state, value.type_name, member, origin)
 		if writable == ""
@@ -196,18 +196,18 @@ def mir_checked_union_store(mut state: CompilerState, mut locals: CheckedLocals,
 					mut next_branch :=- 1
 					if alternative_index + 1 < alternatives.size()
 						condition := mir_union_operation(state, locals, 53, receiver, alternative, "Boolean", row.origin)
-						next_branch = mir_control_branch(state, locals, condition, load_integer(state.token_lines, row.origin))
+						next_branch = mir_control_branch(state, locals, condition, load_integer(state.source_tokens.token_lines, row.origin))
 					end
 					payload := mir_union_operation(state, locals, 54, receiver, alternative, alternative, row.origin)
 					field := object_field_index(state, find_object_type(state, alternative), "@" + row.member)
-					scalar_mir_instruction(state, locals, 65, - 1, checked_mir_value(payload), operand, field, - 1, load_integer(state.token_lines, row.origin))
+					scalar_mir_instruction(state, locals, 65, - 1, checked_mir_value(payload), operand, field, - 1, load_integer(state.source_tokens.token_lines, row.origin))
 					mir_control_jump(state, locals, join, locals.count[0])
 					if next_branch >= 0
-						mir_control_enter(state, locals, next_branch, load_integer(state.token_lines, row.origin))
+						mir_control_enter(state, locals, next_branch, load_integer(state.source_tokens.token_lines, row.origin))
 					end
 					alternative_index += 1
 				end
-				mir_control_enter(state, locals, join, load_integer(state.token_lines, row.origin))
+				mir_control_enter(state, locals, join, load_integer(state.source_tokens.token_lines, row.origin))
 			end
 			return true
 		end
@@ -222,14 +222,14 @@ end
 def narrow_union_discriminant(state: CompilerState, mut locals: CheckedLocals, control: ControlSyntax, branch_index: Integer)
 	mut first := control.selector
 	mut finish := control.selector_finish
-	while finish - first > 3 && load_string(state.token_texts, first) == "(" && load_string(state.token_texts, finish - 1) == ")"
+	while finish - first > 3 && load_string(state.source_tokens.token_texts, first) == "(" && load_string(state.source_tokens.token_texts, finish - 1) == ")"
 		first += 1
 		finish -= 1
 	end
-	if finish - first != 3 || load_string(state.token_texts, first + 1) != "."
+	if finish - first != 3 || load_string(state.source_tokens.token_texts, first + 1) != "."
 		return
 	end
-	binding := local_find(locals, load_string(state.token_texts, first))
+	binding := local_find(locals, load_string(state.source_tokens.token_texts, first))
 	if binding < 0
 		return
 	end
@@ -239,7 +239,7 @@ def narrow_union_discriminant(state: CompilerState, mut locals: CheckedLocals, c
 	if alternatives.size() == 0
 		return
 	end
-	member := load_string(state.token_texts, first + 2)
+	member := load_string(state.source_tokens.token_texts, first + 2)
 	branch := control.branches[branch_index]
 	mut matched: Array<String> := []
 	mut values: Array<String> := []

@@ -79,7 +79,7 @@ import { load_integer, load_string, sparse_integer_at, sparse_string_at, store_i
 
 def checked_hash_literal(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, expected: String): CheckedValue
 	origin := position[0]
-	line := load_integer(state.token_lines, origin)
+	line := load_integer(state.source_tokens.token_lines, origin)
 	mut context := expected
 	if nullable_element(context) != ""
 		context = nullable_element(context)
@@ -153,7 +153,7 @@ end
 
 def checked_hash_index(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue): CheckedValue
 	origin := position[0]
-	line := load_integer(state.token_lines, origin)
+	line := load_integer(state.source_tokens.token_lines, origin)
 	advance(position)
 	key := check_expression(state, position, locals, 1, "")
 	if key.type_name == "Never"
@@ -174,7 +174,7 @@ def checked_hash_index(mut state: CompilerState, mut position: Array<Integer>, m
 	if token_is(state, position[0], "=")
 		kind = 3
 	end
-	if binary_operator_id(load_string(state.token_texts, position[0])) >= 17
+	if binary_operator_id(load_string(state.source_tokens.token_texts, position[0])) >= 17
 		return type_diagnostic(state, line, "compound assignment to Hash entries is unsupported")
 	end
 	mut type_name := receiver.type_name
@@ -192,14 +192,14 @@ def checked_hash_index(mut state: CompilerState, mut position: Array<Integer>, m
 end
 
 def checked_hash_inference_region(state: CompilerState, locals: CheckedLocals, origin: Integer): Boolean
-	if origin < 0 || origin >= state.token_count[0]
+	if origin < 0 || origin >= state.source_tokens.token_count[0]
 		return false
 	end
 	plan := checked_hash_plan(state, origin)
-	if plan.kind != 3 || plan.receiver_origin < 0 || plan.receiver_origin >= state.token_count[0] || hash_value_type(plan.type_name) == "" || locals.inference_active_region[0] == 0
+	if plan.kind != 3 || plan.receiver_origin < 0 || plan.receiver_origin >= state.source_tokens.token_count[0] || hash_value_type(plan.type_name) == "" || locals.inference_active_region[0] == 0
 		return false
 	end
-	binding := local_find(locals, load_string(state.token_texts, plan.receiver_origin))
+	binding := local_find(locals, load_string(state.source_tokens.token_texts, plan.receiver_origin))
 	if binding < 0 || load_integer(locals.hash_literal_origins, binding) == 0 || load_integer(locals.hash_inference_regions, binding) != locals.inference_active_region[0]
 		return false
 	end
@@ -226,16 +226,16 @@ def checked_hash_refine(mut state: CompilerState, mut locals: CheckedLocals, ori
 	if !first_store
 		resolved = common_array_element_type(plan.value_type, value_type)
 		if resolved == ""
-			diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "incompatible inferred Hash value types")
+			diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, origin), "incompatible inferred Hash value types")
 			return
 		end
 		if resolved == plan.value_type
 			return
 		end
 	end
-	binding := local_find(locals, load_string(state.token_texts, plan.receiver_origin))
+	binding := local_find(locals, load_string(state.source_tokens.token_texts, plan.receiver_origin))
 	if binding < 0
-		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "empty Hash requires a typed binding")
+		diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, origin), "empty Hash requires a typed binding")
 		return
 	end
 	type_name := hash_type(plan.key_type, resolved)
@@ -250,7 +250,7 @@ def checked_hash_refine(mut state: CompilerState, mut locals: CheckedLocals, ori
 	literal_origin := load_integer(locals.hash_literal_origins, binding) - 1
 	literal := checked_hash_plan(state, literal_origin)
 	if literal.kind != 1
-		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "empty Hash requires a typed binding")
+		diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, origin), "empty Hash requires a typed binding")
 		return
 	end
 	checked_hash_publish(state, mir_hash_operation(1, literal.origin, literal.finish, literal.receiver_origin, type_name, true, 0))
@@ -259,7 +259,7 @@ end
 
 def checked_hash_call(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue, method: String): CheckedValue
 	origin := position[0]
-	line := load_integer(state.token_lines, origin)
+	line := load_integer(state.source_tokens.token_lines, origin)
 	kind := checked_hash_method(method)
 	if kind == 0
 		return type_diagnostic(state, line, "unsupported Hash method " + method)
@@ -320,7 +320,7 @@ def check_array_literal(
 	): CheckedValue
 	origin := position[0]
 	mut values: Array<CheckedValue> := []
-	line := load_integer(state.token_lines, origin)
+	line := load_integer(state.source_tokens.token_lines, origin)
 	advance(position)
 	skip_newlines(state, position)
 	mut context := expected
@@ -349,7 +349,7 @@ def check_array_literal(
 						state,
 						value.type_name,
 						element_type,
-						load_integer(state.token_lines, position[0]),
+						load_integer(state.source_tokens.token_lines, position[0]),
 					)
 				else
 					element_type = common_type
@@ -399,7 +399,7 @@ def check_primary(
 	end
 	if token_is(state, position[0], "try")
 		if locals.value_block[0]
-			return type_diagnostic(state, load_integer(state.token_lines, position[0]), "try is unavailable inside a value-producing collection block")
+			return type_diagnostic(state, load_integer(state.source_tokens.token_lines, position[0]), "try is unavailable inside a value-producing collection block")
 		end
 		try_origin := position[0]
 		advance(position)
@@ -412,8 +412,8 @@ def check_primary(
 		return checked_result_try(state, locals, value, operation)
 	end
 	origin := position[0]
-	line := load_integer(state.token_lines, origin)
-	kind := load_integer(state.token_kinds, origin)
+	line := load_integer(state.source_tokens.token_lines, origin)
+	kind := load_integer(state.source_tokens.token_kinds, origin)
 	if token_is(state, origin, "fn")
 		value := check_lambda_value(state, position, locals)
 		if state.lambda_phase[0] == 0 && locals.lambda_result.size() == 0 && !has_diagnostic(state)
@@ -426,7 +426,7 @@ def check_primary(
 		return mir_checked_nullable(state, locals, 33, checked_value("Nil", 0, origin, 0), "Nil", 0, origin)
 	end
 	if kind == 2
-		literal := load_string(state.token_texts, origin)
+		literal := load_string(state.source_tokens.token_texts, origin)
 		advance(position)
 		if number_is_float(literal)
 			if !float_literal_in_range(literal)
@@ -498,7 +498,7 @@ def check_primary(
 		application_finish := sparse_integer_at(state.checked[0].generic_application_finishes, origin)
 		if application_finish > origin
 			if sparse_integer_at(state.checked[0].generic_calls, application_finish) > 0
-				if local_find(locals, load_string(state.token_texts, origin)) >= 0 || find_visible_global(state, state.module_graph.active_module[0], load_string(state.token_texts, origin), origin) >= 0
+				if local_find(locals, load_string(state.source_tokens.token_texts, origin)) >= 0 || find_visible_global(state, state.module_graph.active_module[0], load_string(state.source_tokens.token_texts, origin), origin) >= 0
 					return type_diagnostic(state, line, "local value does not accept type arguments")
 				end
 				position[0] = application_finish
@@ -526,7 +526,7 @@ def check_primary(
 			return checked_value("", 2, origin, 0)
 		end
 		mut selected_position := [origin]
-		mut name := load_string(state.token_texts, origin)
+		mut name := load_string(state.source_tokens.token_texts, origin)
 		if name == "_"
 			return type_diagnostic(state, line, "blank binding _ cannot be used as a value")
 		end
@@ -623,7 +623,7 @@ end
 
 def check_call(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, callee_category: Integer, callee_name: String, target: Integer, mut receiver: Integer, bound: Boolean): CheckedValue
 	origin := position[0]
-	line := load_integer(state.token_lines, origin)
+	line := load_integer(state.source_tokens.token_lines, origin)
 	advance(position)
 	skip_newlines(state, position)
 	mut function := target
@@ -671,7 +671,7 @@ def check_call(mut state: CompilerState, mut position: Array<Integer>, mut local
 		if token_is(state, position[0], ")")
 			finished = true
 		else
-			argument_line := load_integer(state.token_lines, position[0])
+			argument_line := load_integer(state.source_tokens.token_lines, position[0])
 			label := parse_argument_label(state, position)
 			slot := argument_binding_slot(bindings, label)
 			if slot < 0
@@ -736,7 +736,7 @@ def check_record_new(mut state: CompilerState, mut position: Array<Integer>, mut
 		record_index = find_visible_record(state, state.module_graph.active_module[0], record_name)
 	end
 	origin := position[0]
-	line := load_integer(state.token_lines, origin)
+	line := load_integer(state.source_tokens.token_lines, origin)
 	advance(position)
 	skip_newlines(state, position)
 	start := load_integer(state.declarations.record_field_starts, record_index)
@@ -748,7 +748,7 @@ def check_record_new(mut state: CompilerState, mut position: Array<Integer>, mut
 		if token_is(state, position[0], ")")
 			finished = true
 		else
-			argument_line := load_integer(state.token_lines, position[0])
+			argument_line := load_integer(state.source_tokens.token_lines, position[0])
 			label := parse_argument_label(state, position)
 			slot := argument_binding_slot(bindings, label)
 			if slot < 0
@@ -780,7 +780,7 @@ def check_record_new(mut state: CompilerState, mut position: Array<Integer>, mut
 end
 
 def checked_array_refine(mut state: CompilerState, mut locals: CheckedLocals, receiver: CheckedValue, element_type: String): String
-	binding := local_find(locals, load_string(state.token_texts, receiver.origin))
+	binding := local_find(locals, load_string(state.source_tokens.token_texts, receiver.origin))
 	if binding < 0 || load_integer(locals.array_literal_origins, binding) == 0
 		return "cannot infer an untyped Array after its value escapes"
 	end
@@ -802,10 +802,10 @@ def checked_array_numeric_region(state: CompilerState, locals: CheckedLocals, re
 	if receiver.type_name != "Array<Integer>" || locals.inference_active_region[0] == 0
 		return false
 	end
-	if receiver.origin < 0 || receiver.origin >= state.token_count[0]
+	if receiver.origin < 0 || receiver.origin >= state.source_tokens.token_count[0]
 		return false
 	end
-	binding := local_find(locals, load_string(state.token_texts, receiver.origin))
+	binding := local_find(locals, load_string(state.source_tokens.token_texts, receiver.origin))
 	if binding < 0 || load_integer(locals.array_literal_origins, binding) == 0 || load_integer(locals.array_inference_regions, binding) != locals.inference_active_region[0]
 		return false
 	end
@@ -865,7 +865,7 @@ def check_method_call(
 	end
 	if (receiver.type_name == "Array" || unshift_numeric_region) && method == "unshift"
 		origin := position[0]
-		line := load_integer(state.token_lines, origin)
+		line := load_integer(state.source_tokens.token_lines, origin)
 		if receiver.mutable == 0
 			return type_diagnostic(state, line, "unshift receiver is immutable")
 		end
@@ -912,7 +912,7 @@ def check_method_call(
 	if (receiver.type_name == "Range<Integer>" && method == "to_a") || (receiver.type_name == "Integer" && integer_method_kind(method) > 0) || (receiver.type_name == "Float" && float_method_kind(method) > 0) || (receiver.type_name == "String" && string_method_kind(method) > 0) || (array_element_type(receiver.type_name) != "" && array_method_kind(method) > 0) || (receiver.type_name == "Array" && method == "empty?")
 		return check_primitive_method(state, position, locals, receiver, method)
 	end
-	line := load_integer(state.token_lines, position[0])
+	line := load_integer(state.source_tokens.token_lines, position[0])
 	advance(position)
 	skip_newlines(state, position)
 	if method == "size"
@@ -1049,7 +1049,7 @@ def check_member(mut state: CompilerState, mut position: Array<Integer>, mut loc
 		raw_type := raw_enum_type(state, owner)
 		origin := position[0]
 		if member != "from_raw" || raw_type == "" || !token_is(state, origin, "(")
-			return type_diagnostic(state, load_integer(state.token_lines, origin), "enum type requires a valid from_raw call")
+			return type_diagnostic(state, load_integer(state.source_tokens.token_lines, origin), "enum type requires a valid from_raw call")
 		end
 		advance(position)
 		skip_newlines(state, position)
@@ -1083,7 +1083,7 @@ def check_member(mut state: CompilerState, mut position: Array<Integer>, mut loc
 			if member != expected_member
 				value = type_diagnostic(
 					state,
-					load_integer(state.token_lines, position[0]),
+					load_integer(state.source_tokens.token_lines, position[0]),
 					"unsupported standard package member",
 				)
 			end
@@ -1099,7 +1099,7 @@ def check_member(mut state: CompilerState, mut position: Array<Integer>, mut loc
 				else
 					value = type_diagnostic(
 						state,
-						load_integer(state.token_lines, position[0]),
+						load_integer(state.source_tokens.token_lines, position[0]),
 						"unsupported record constructor member " + member,
 					)
 				end
@@ -1115,7 +1115,7 @@ def check_member(mut state: CompilerState, mut position: Array<Integer>, mut loc
 		if record_index < 0
 			value = type_diagnostic(
 				state,
-				load_integer(state.token_lines, position[0]),
+				load_integer(state.source_tokens.token_lines, position[0]),
 				"field access requires a record value",
 			)
 		else
@@ -1123,7 +1123,7 @@ def check_member(mut state: CompilerState, mut position: Array<Integer>, mut loc
 			if field_index < 0
 				value = type_diagnostic(
 					state,
-					load_integer(state.token_lines, position[0]),
+					load_integer(state.source_tokens.token_lines, position[0]),
 					"unknown field " + member + " on " + type_display(state, value.type_name),
 				)
 			else
@@ -1187,7 +1187,7 @@ def check_postfix(
 			if value.category == 0
 				value = type_diagnostic(
 					state,
-					load_integer(state.token_lines, position[0]),
+					load_integer(state.source_tokens.token_lines, position[0]),
 					"value is not directly callable",
 				)
 				scanning = false
@@ -1220,7 +1220,7 @@ def check_postfix(
 			else
 				if token_is(state, position[0], "[")
 					index_origin := position[0]
-					line := load_integer(state.token_lines, position[0])
+					line := load_integer(state.source_tokens.token_lines, position[0])
 					receiver_id := checked_mir_value(value)
 					advance(position)
 					index := check_expression(state, position, locals, 1, "Integer")
@@ -1233,7 +1233,7 @@ def check_postfix(
 					mut lowered := false
 					if locals.mir_state[0] == 1 && array_element_type(value.type_name) != ""
 						mut assignment := token_is(state, position[0] + 1, "=")
-						if binary_operator_id(load_string(state.token_texts, position[0] + 1)) >= 17
+						if binary_operator_id(load_string(state.source_tokens.token_texts, position[0] + 1)) >= 17
 							assignment = true
 						end
 						value = mir_checked_array_index(state, locals, value, index, array_element_type(value.type_name), index_origin, assignment)
@@ -1281,7 +1281,7 @@ def check_expression_value(
 		expected: String,
 	): CheckedValue
 	expression_origin := position[0]
-	line := load_integer(state.token_lines, position[0])
+	line := load_integer(state.source_tokens.token_lines, position[0])
 	mut value := check_postfix(
 		state,
 		position,
@@ -1291,7 +1291,7 @@ def check_expression_value(
 	mut scanning := true
 	while scanning
 		operator_origin := position[0]
-		operator := load_string(state.token_texts, position[0])
+		operator := load_string(state.source_tokens.token_texts, position[0])
 		precedence := syntax_expression_precedence(operator)
 		if precedence < minimum_precedence
 			scanning = false
@@ -1408,7 +1408,7 @@ def check_expression(
 	): CheckedValue
 	# Context guides Array literals without coercing a grouped operand early.
 	expression_origin := position[0]
-	line := load_integer(state.token_lines, expression_origin)
+	line := load_integer(state.source_tokens.token_lines, expression_origin)
 	mut value := check_expression_value(state, position, locals, minimum_precedence, expected)
 	value = mir_literal_context(state, locals, value, expected, expression_origin, position[0])
 	check_expected(state, value.type_name, expected, line)
@@ -1437,7 +1437,7 @@ def checked_readonly_reference_binding(
 	# Only a direct checked binding read retains its binding-token origin.
 	# Grouping preserves it; field/index reads and call results clear it.
 	# Reference readonly is shallow, not inherited from every container.
-	if value.origin >= state.token_count[0]
+	if value.origin >= state.source_tokens.token_count[0]
 		return false
 	end
 	mut reference_type := value.type_name
@@ -1449,7 +1449,7 @@ def checked_readonly_reference_binding(
 			return false
 		end
 	end
-	if local_find(locals, load_string(state.token_texts, value.origin)) >= 0
+	if local_find(locals, load_string(state.source_tokens.token_texts, value.origin)) >= 0
 		return true
 	end
 	return sparse_integer_at(state.checked[0].global_references, value.origin) > 0
@@ -1466,7 +1466,7 @@ def check_declaration(
 		mutable = 1
 		advance(position)
 	end
-	line := load_integer(state.token_lines, position[0])
+	line := load_integer(state.source_tokens.token_lines, position[0])
 	name := expect_identifier(state, position)
 	if name == "_"
 		diagnostic(state, "TRBN4004", line, "blank binding _ is only valid as a parameter or pattern binding")
@@ -1549,14 +1549,14 @@ def check_simple_statement(
 		contextual: String,
 	): CheckedValue
 	origin := position[0]
-	line := load_integer(state.token_lines, position[0])
+	line := load_integer(state.source_tokens.token_lines, position[0])
 	left := check_statement_value(state, position, locals, contextual)
 	mut display_mutable := 0
 	if left.nullable_binding >= 0 && left.nullable_field == - 1
 		display_mutable = left.mutable
 	end
 	operator_origin := position[0]
-	operator := load_string(state.token_texts, position[0])
+	operator := load_string(state.source_tokens.token_texts, position[0])
 	mut assignment := operator == "="
 	if binary_operator_id(operator) >= 17
 		assignment = true
@@ -1719,7 +1719,7 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 	end
 	shape := state.parsed.iterations[encoded - 1]
 	if !checked_iteration_shape(state, shape, origin)
-		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "invalid iteration syntax plan")
+		diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, origin), "invalid iteration syntax plan")
 		return checked_value("Invalid", 0, origin, 0)
 	end
 	mut receiver := check_expression(state, position, locals, 1, "")
@@ -1731,7 +1731,7 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 	mut absent :=- 1
 	if optional
 		condition := nullable_nil_condition(state, locals, receiver, true, shape.receiver_finish)
-		absent = mir_control_branch(state, locals, condition, load_integer(state.token_lines, origin))
+		absent = mir_control_branch(state, locals, condition, load_integer(state.source_tokens.token_lines, origin))
 		nullable_apply(locals, condition.truth)
 		present_type := nullable_element(receiver.type_name)
 		payload := mir_checked_nullable(state, locals, 36, receiver, present_type, 0, shape.receiver_finish)
@@ -1739,7 +1739,7 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 	end
 	element_type := iteration_element_type(receiver.type_name)
 	if element_type == "" || position[0] != shape.receiver_finish
-		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "ordinary each requires a supported Array, Range or Hash receiver")
+		diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, origin), "ordinary each requires a supported Array, Range or Hash receiver")
 		return checked_value("Invalid", 0, origin, 0)
 	end
 	mut source_kind := 1
@@ -1751,7 +1751,7 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 	end
 	plan := MirIteration.new(syntax: shape, parent_loop: parent_loop, source_kind: source_kind, type_name: receiver.type_name, element_type: element_type)
 	if !checked_iteration_parameters(state, plan)
-		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "each block parameters differ from its receiver and with_index mode")
+		diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, origin), "each block parameters differ from its receiver and with_index mode")
 		return checked_value("Invalid", 0, origin, 0)
 	end
 	mut size := checked_value("Integer", 0, origin, 0)
@@ -1759,15 +1759,15 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 	if shape.slice_start >= 0
 		position[0] = shape.slice_start
 		size = check_expression(state, position, locals, 1, "Integer")
-		if !check_expected(state, size.type_name, "Integer", load_integer(state.token_lines, shape.slice_start))
+		if !check_expected(state, size.type_name, "Integer", load_integer(state.source_tokens.token_lines, shape.slice_start))
 			return checked_value("Invalid", 0, origin, 0)
 		end
 		if position[0] != shape.slice_finish
-			diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "invalid each_slice size boundary")
+			diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, origin), "invalid each_slice size boundary")
 			return checked_value("Invalid", 0, origin, 0)
 		end
 		if checked_slice_zero_literal(state, size.origin)
-			diagnostic(state, "TRBN4004", load_integer(state.token_lines, shape.slice_start), "each_slice size must be greater than zero")
+			diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, shape.slice_start), "each_slice size must be greater than zero")
 			return checked_value("Invalid", 0, origin, 0)
 		end
 		block_type = array_type(element_type)
@@ -1802,20 +1802,20 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 		end
 		element = mir_checked_iteration_begin(state, locals, plan, receiver, saved)
 	end
-	element_name := load_string(state.token_texts, plan.syntax.element_origin)
+	element_name := load_string(state.source_tokens.token_texts, plan.syntax.element_origin)
 	local_bind(locals, element_name, block_type, 1)
 	local_require_use(locals, locals.count[0] - 1, element_name, plan.syntax.element_origin, 2)
 	mir_binding_initialize(state, locals, locals.count[0] - 1, element, plan.syntax.element_origin)
 	if plan.syntax.second_origin >= 0
-		if load_string(state.token_texts, plan.syntax.element_origin) == load_string(state.token_texts, plan.syntax.second_origin)
-			diagnostic(state, "TRBN4004", load_integer(state.token_lines, plan.syntax.second_origin), "iteration block parameter is duplicated")
+		if load_string(state.source_tokens.token_texts, plan.syntax.element_origin) == load_string(state.source_tokens.token_texts, plan.syntax.second_origin)
+			diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, plan.syntax.second_origin), "iteration block parameter is duplicated")
 			return checked_value("Invalid", 0, origin, 0)
 		end
 		mut second_type := "Integer"
 		if source_kind == 3
 			second_type = hash_value_type(receiver.type_name)
 		end
-		second_name := load_string(state.token_texts, plan.syntax.second_origin)
+		second_name := load_string(state.source_tokens.token_texts, plan.syntax.second_origin)
 		local_bind(locals, second_name, second_type, 1)
 		local_require_use(locals, locals.count[0] - 1, second_name, plan.syntax.second_origin, 2)
 		mut index_slot := saved + 1
@@ -1833,7 +1833,7 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 	nullable_loop_writes(state, locals, plan.syntax.body_start, plan.syntax.body_finish)
 	check_block(state, position, locals, result_type, origin)
 	if position[0] != plan.syntax.body_finish
-		diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "invalid iteration body boundary")
+		diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, origin), "invalid iteration body boundary")
 	end
 	binding_scope_check(state, locals, saved)
 	if shape.slice_start >= 0
@@ -1847,7 +1847,7 @@ def checked_iteration(mut state: CompilerState, mut position: Array<Integer>, mu
 	end
 	if absent >= 0
 		mir_control_jump(state, locals, absent, saved)
-		mir_control_enter(state, locals, absent, load_integer(state.token_lines, origin))
+		mir_control_enter(state, locals, absent, load_integer(state.source_tokens.token_lines, origin))
 	end
 	nullable_finish(locals, flow_parent, flow_first, saved)
 	position[0] = plan.syntax.finish
@@ -1860,7 +1860,7 @@ end
 
 def checked_while(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, result_type: String): Boolean
 	origin := position[0]
-	line := load_integer(state.token_lines, origin)
+	line := load_integer(state.source_tokens.token_lines, origin)
 	count := locals.count[0]
 	flow_parent := locals.nullable_state[0]
 	flow_first := locals.nullable_facts.size()
@@ -1875,7 +1875,7 @@ def checked_while(mut state: CompilerState, mut position: Array<Integer>, mut lo
 	check_block(state, position, locals, result_type, origin)
 	binding_scope_check(state, locals, count)
 	locals.count[0] = count
-	mir_control_loop_end(state, locals, load_integer(state.token_lines, position[0]))
+	mir_control_loop_end(state, locals, load_integer(state.source_tokens.token_lines, position[0]))
 	nullable_finish(locals, flow_parent, flow_first, count)
 	expect(state, position, "end")
 	return finish_statement(state, position)
@@ -1898,7 +1898,7 @@ def checked_discarded_empty_collection(state: CompilerState, position: Array<Int
 		return false
 	end
 	mut after := [origin + 2]
-	if load_integer(state.token_kinds, after[0]) != 4 && !terminal_token(state, after[0]) && !token_is(state, after[0], "}")
+	if load_integer(state.source_tokens.token_kinds, after[0]) != 4 && !terminal_token(state, after[0]) && !token_is(state, after[0], "}")
 		return false
 	end
 	if wants_value
@@ -1919,7 +1919,7 @@ def check_block_value(mut state: CompilerState, mut position: Array<Integer>, mu
 	skip_newlines(state, position)
 	while !syntax_block_end(state, position[0]) && !syntax_conditional_tail(state, position[0])
 		if terminal_token(state, position[0])
-			diagnostic(state, "TRBN4004", load_integer(state.token_lines, position[0]), "unexpected end of input")
+			diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, position[0]), "unexpected end of input")
 			break
 		end
 		statement_origin := position[0]
@@ -1949,7 +1949,7 @@ def check_block_value(mut state: CompilerState, mut position: Array<Integer>, mu
 				mir_control_prepare(state, locals)
 				position[0] = control.selector
 				condition := check_expression(state, position, locals, 1, "Boolean")
-				line := load_integer(state.token_lines, control.origin)
+				line := load_integer(state.source_tokens.token_lines, control.origin)
 				guard_mir := locals.mir_state[0]
 				if condition.type_name == "Never"
 					scalar_mir_disable(locals)
@@ -2009,7 +2009,7 @@ def check_block_value(mut state: CompilerState, mut position: Array<Integer>, mu
 				last = syntax_conditional_tail(state, after[0])
 			end
 			if !wants_value || !last
-				diagnostic(state, "TRBN4004", load_integer(state.token_lines, statement_origin), "Result value must be used; handle, return, pass or store it")
+				diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, statement_origin), "Result value must be used; handle, return, pass or store it")
 			end
 		end
 		if result.type_name == "Never"
@@ -2031,7 +2031,7 @@ end
 # ordinary typed blocks, jump arguments and return/loop terminators.
 def check_control_value(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, wants_value: Boolean, expected: String, predicate: CheckedValue): CheckedValue
 	origin := position[0]
-	line := load_integer(state.token_lines, origin)
+	line := load_integer(state.source_tokens.token_lines, origin)
 	control := state.parsed.controls[sparse_integer_at(state.parsed.control_origins, origin) - 1]
 	saved_flow := locals.nullable_state[0]
 	flow_first := locals.nullable_facts.size()
@@ -2230,9 +2230,9 @@ def check_case_condition(mut state: CompilerState, mut position: Array<Integer>,
 		if token_is(state, literal, "-")
 			literal += 1
 		end
-		kind := load_integer(state.token_kinds, literal)
+		kind := load_integer(state.source_tokens.token_kinds, literal)
 		if kind != 2 && kind != 3
-			return type_diagnostic(state, load_integer(state.token_lines, origin), "case patterns currently require scalar literals")
+			return type_diagnostic(state, load_integer(state.source_tokens.token_lines, origin), "case patterns currently require scalar literals")
 		end
 		mut expected := selector.type_name
 		if expected == "Never"
@@ -2240,7 +2240,7 @@ def check_case_condition(mut state: CompilerState, mut position: Array<Integer>,
 		end
 		value := check_expression(state, position, locals, 1, expected)
 		if position[0] != literal + 1
-			return type_diagnostic(state, load_integer(state.token_lines, origin), "case patterns currently require scalar literals")
+			return type_diagnostic(state, load_integer(state.source_tokens.token_lines, origin), "case patterns currently require scalar literals")
 		end
 		if selector.type_name == "Never"
 			if token_is(state, position[0], ",")
@@ -2248,7 +2248,7 @@ def check_case_condition(mut state: CompilerState, mut position: Array<Integer>,
 			end
 			next
 		end
-		binary_result_type(state, "==", selector.type_name, value.type_name, load_integer(state.token_lines, origin), origin)
+		binary_result_type(state, "==", selector.type_name, value.type_name, load_integer(state.source_tokens.token_lines, origin), origin)
 		mut comparison := checked_value("Boolean", 0, 9007199254740991, 0)
 		if selector.type_name == "String"
 			comparison = mir_checked_string_binary(state, locals, selector, value, "==", origin)
@@ -2286,38 +2286,38 @@ def checked_loop_transfer_kind(mut state: CompilerState, origin: Integer, loop_o
 		origin: origin,
 		target: target,
 	)
-	if mir_loop_transfer_valid(plan, origin, syntax_loop_transfer_kind(state, origin), loop_origin, state.token_count[0])
+	if mir_loop_transfer_valid(plan, origin, syntax_loop_transfer_kind(state, origin), loop_origin, state.source_tokens.token_count[0])
 		if token_is(state, loop_origin, "while")
 			return plan.kind
 		end
 		encoded_iteration := sparse_integer_at(state.checked[0].iteration_origins, loop_origin)
 		if encoded_iteration > 0 && encoded_iteration <= state.checked[0].iterations.size()
 			iteration := state.checked[0].iterations[encoded_iteration - 1]
-			if checked_iteration_shape(state, iteration.syntax, loop_origin) && checked_iteration_parameters(state, iteration) && mir_iteration_valid(iteration, loop_origin, state.token_count[0], iteration.type_name, iteration_element_type(iteration.type_name))
+			if checked_iteration_shape(state, iteration.syntax, loop_origin) && checked_iteration_parameters(state, iteration) && mir_iteration_valid(iteration, loop_origin, state.source_tokens.token_count[0], iteration.type_name, iteration_element_type(iteration.type_name))
 				if origin >= iteration.syntax.body_start && origin < iteration.syntax.body_finish
 					return plan.kind
 				end
 			end
 		end
 	end
-	diagnostic(state, "TRBN4004", load_integer(state.token_lines, origin), "invalid checked loop transfer target")
+	diagnostic(state, "TRBN4004", load_integer(state.source_tokens.token_lines, origin), "invalid checked loop transfer target")
 	return 0
 end
 
 def check_transfer_value(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, result_type: String, loop_origin: Integer, finish: Integer): CheckedValue
 	origin := position[0]
 	if token_is(state, origin, "return") && locals.value_block[0]
-		return type_diagnostic(state, load_integer(state.token_lines, origin), "return is unavailable inside a value-producing collection block")
+		return type_diagnostic(state, load_integer(state.source_tokens.token_lines, origin), "return is unavailable inside a value-producing collection block")
 	end
 	if token_is(state, origin, "return") && locals.lambda_result.size() == 0 && sparse_integer_at(state.parsed.function_expression_bodies, locals.mir_state[1]) > 0
-		return type_diagnostic(state, load_integer(state.token_lines, origin), "return is unavailable inside a default initializer")
+		return type_diagnostic(state, load_integer(state.source_tokens.token_lines, origin), "return is unavailable inside a default initializer")
 	end
-	line := load_integer(state.token_lines, origin)
+	line := load_integer(state.source_tokens.token_lines, origin)
 	kind := syntax_loop_transfer_kind(state, origin)
 	advance(position)
 	if kind > 0
 		if loop_origin < 0
-			diagnostic(state, "TRBN4004", line, load_string(state.token_texts, origin) + " is only valid inside a loop")
+			diagnostic(state, "TRBN4004", line, load_string(state.source_tokens.token_texts, origin) + " is only valid inside a loop")
 		else
 			store_integer(state.checked[0].loop_transfer_kinds, origin, kind)
 			store_integer(state.checked[0].loop_transfer_targets, origin, loop_origin + 1)
@@ -2369,7 +2369,7 @@ end
 # arguments and blocks; the absent edge contributes none, or no Void result.
 def check_safe_member(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue): CheckedValue
 	origin := position[0]
-	line := load_integer(state.token_lines, origin)
+	line := load_integer(state.source_tokens.token_lines, origin)
 	element := nullable_element(receiver.type_name)
 	if element == ""
 		value := check_safe_present_member(state, position, locals, receiver)
@@ -2418,7 +2418,7 @@ end
 
 def check_enum_constructor(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals): CheckedValue
 	origin := position[0]
-	line := load_integer(state.token_lines, origin)
+	line := load_integer(state.source_tokens.token_lines, origin)
 	mut owner := find_enum_type(state, sparse_string_at(state.checked[0].generic_application_types, origin))
 	if owner >= 0
 		position[0] = sparse_integer_at(state.checked[0].generic_application_finishes, origin)
@@ -2498,7 +2498,7 @@ def check_statement_value(mut state: CompilerState, mut position: Array<Integer>
 	if has_diagnostic(state)
 		return checked_value("Invalid", 0, origin, 0)
 	end
-	line := load_integer(state.token_lines, origin)
+	line := load_integer(state.source_tokens.token_lines, origin)
 	saved_count := locals.count[0]
 	saved_flow := locals.nullable_state[0]
 	flow_first := locals.nullable_facts.size()
@@ -2509,7 +2509,7 @@ def check_statement_value(mut state: CompilerState, mut position: Array<Integer>
 	mir_value_exit(state, locals, join, payload)
 	mir_control_enter(state, locals, failure, line)
 	error := mir_enum_operation(state, locals, 39, value, - 1, state.enum_variants[operation.err_variant].field_start, operation.error_type, origin)
-	catch_name := load_string(state.token_texts, handler.binding)
+	catch_name := load_string(state.source_tokens.token_texts, handler.binding)
 	local_bind(locals, catch_name, operation.error_type, 0)
 	local_require_use(locals, locals.count[0] - 1, catch_name, handler.binding, 4)
 	store_integer(locals.mir_values, locals.count[0] - 1, checked_mir_value(error) + 1)
@@ -2532,7 +2532,7 @@ end
 
 def check_callable_call(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, callee: CheckedValue): CheckedValue
 	origin := position[0]
-	line := load_integer(state.token_lines, origin)
+	line := load_integer(state.source_tokens.token_lines, origin)
 	parts := callable_parts(callee.type_name)
 	advance(position)
 	skip_newlines(state, position)
@@ -2574,7 +2574,7 @@ end
 # Analysis selects captures; the lowering phase constructs their MIR environment.
 def check_lambda_value(mut state: CompilerState, mut position: Array<Integer>, mut parent: CheckedLocals): CheckedValue
 	origin := position[0]
-	line := load_integer(state.token_lines, origin)
+	line := load_integer(state.source_tokens.token_lines, origin)
 	encoded := sparse_integer_at(state.lambda_origins, origin)
 	if encoded <= 0 || encoded > state.lambdas.size()
 		return type_diagnostic(state, line, "fn requires an owned syntax region")
@@ -2594,7 +2594,7 @@ def check_lambda_value(mut state: CompilerState, mut position: Array<Integer>, m
 	state.checked_bodies.push(checked_body_new(- 1, syntax.body_start, syntax.body_finish + 1))
 	state.checked[0] = state.checked_bodies[body]
 	state.checked[0].generic_binding[0] = previous.generic_binding[0]
-	mut names := lambda_names(locals, state.token_count[0] + 1)
+	mut names := lambda_names(locals, state.source_tokens.token_count[0] + 1)
 	if resolve_body_names(state, syntax.body_start, syntax.body_finish, names)
 		declare_default_functions(state)
 		mut inner := [syntax.body_start]
@@ -2627,7 +2627,7 @@ end
 # The same checked statement body supplies analysis, MIR and the REPL projection.
 def check_transform(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue): CheckedValue
 	origin := position[0]
-	line := load_integer(state.token_lines, origin)
+	line := load_integer(state.source_tokens.token_lines, origin)
 	encoded := sparse_integer_at(state.parsed.transform_origins, origin)
 	if encoded < 1 || encoded > state.parsed.transforms.size()
 		return type_diagnostic(state, line, "missing collection transform syntax")
@@ -2705,20 +2705,20 @@ def check_transform(mut state: CompilerState, mut position: Array<Integer>, mut 
 	element := mir_checked_iteration_begin(state, locals, plan, receiver, saved)
 	if syntax.kind == 3
 		accumulator := mir_binding_read(state, locals, outer, syntax.accumulator_origin)
-		accumulator_name := load_string(state.token_texts, syntax.accumulator_origin)
+		accumulator_name := load_string(state.source_tokens.token_texts, syntax.accumulator_origin)
 		local_bind(locals, accumulator_name, output, 1)
 		local_require_use(locals, locals.count[0] - 1, accumulator_name, syntax.accumulator_origin, 2)
 		mir_binding_initialize(state, locals, locals.count[0] - 1, accumulator, syntax.accumulator_origin)
-		if load_string(state.token_texts, syntax.accumulator_origin) == load_string(state.token_texts, shape.element_origin)
+		if load_string(state.source_tokens.token_texts, syntax.accumulator_origin) == load_string(state.source_tokens.token_texts, shape.element_origin)
 			return type_diagnostic(state, line, "collection block parameter is duplicated")
 		end
 	end
-	transform_name := load_string(state.token_texts, shape.element_origin)
+	transform_name := load_string(state.source_tokens.token_texts, shape.element_origin)
 	local_bind(locals, transform_name, element_type, 1)
 	local_require_use(locals, locals.count[0] - 1, transform_name, shape.element_origin, 2)
 	mir_binding_initialize(state, locals, locals.count[0] - 1, element, shape.element_origin)
 	if shape.second_origin >= 0
-		if load_string(state.token_texts, shape.second_origin) == load_string(state.token_texts, shape.element_origin)
+		if load_string(state.source_tokens.token_texts, shape.second_origin) == load_string(state.source_tokens.token_texts, shape.element_origin)
 			return type_diagnostic(state, line, "collection block parameter is duplicated")
 		end
 		mut index_slot := saved + 1
@@ -2726,7 +2726,7 @@ def check_transform(mut state: CompilerState, mut position: Array<Integer>, mut 
 			index_slot = saved + 2
 		end
 		ordinal := mir_binding_read(state, locals, index_slot, shape.second_origin)
-		ordinal_name := load_string(state.token_texts, shape.second_origin)
+		ordinal_name := load_string(state.source_tokens.token_texts, shape.second_origin)
 		local_bind(locals, ordinal_name, "Integer", 1)
 		local_require_use(locals, locals.count[0] - 1, ordinal_name, shape.second_origin, 2)
 		mir_binding_initialize(state, locals, locals.count[0] - 1, ordinal, shape.second_origin)
@@ -2800,7 +2800,7 @@ end
 # Preserve source order and lexical transfers before lowering a receiver method.
 def check_primitive_method(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue, method: String): CheckedValue
 	origin := position[0]
-	line := load_integer(state.token_lines, origin)
+	line := load_integer(state.source_tokens.token_lines, origin)
 	mut kind := integer_method_kind(method)
 	mut arity := integer_method_arity(kind)
 	mut argument_type := "Integer"
@@ -2901,7 +2901,7 @@ def check_newtype_member(mut state: CompilerState, mut position: Array<Integer>,
 	owner := find_newtype_type(state, receiver.type_name)
 	definition := state.newtypes[owner]
 	origin := position[0]
-	line := load_integer(state.token_lines, origin)
+	line := load_integer(state.source_tokens.token_lines, origin)
 	class_method := receiver.category == 7
 	if !token_is(state, origin, "(")
 		return type_diagnostic(state, line, "newtype member requires an explicit call")
@@ -2979,7 +2979,7 @@ end
 # contracts and instance allocation never masquerade as empty source bodies.
 def check_object_member(mut state: CompilerState, mut position: Array<Integer>, mut locals: CheckedLocals, receiver: CheckedValue, member: String): CheckedValue
 	origin := position[0]
-	line := load_integer(state.token_lines, origin)
+	line := load_integer(state.source_tokens.token_lines, origin)
 	owner := find_object_type(state, receiver.type_name)
 	instance := state.object_instances[owner]
 	definition := state.objects[instance.definition]
@@ -2999,7 +2999,7 @@ def check_object_member(mut state: CompilerState, mut position: Array<Integer>, 
 		field := object_field_index(state, owner, "@" + member)
 		if receiver.category != 8 && field >= 0
 			mut internal := false
-			if receiver.origin >= 0 && receiver.origin < state.token_count[0] && token_is(state, receiver.origin, "self") && state.declaration_owner[0] == definition.name && state.module_graph.active_module[0] == definition.source_id
+			if receiver.origin >= 0 && receiver.origin < state.source_tokens.token_count[0] && token_is(state, receiver.origin, "self") && state.declaration_owner[0] == definition.name && state.module_graph.active_module[0] == definition.source_id
 				internal = true
 			end
 			return checked_object_field(state, locals, receiver, field, origin - 1, position[0], internal)

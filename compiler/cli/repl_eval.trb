@@ -279,7 +279,7 @@ def repl_call(mut state: CompilerState, function: Integer, arguments: Array<Inte
 	mut flow := [0]
 	module_name := state.module_graph.active_module[0]
 	previous_owner := state.declaration_owner[0]
-	state.declaration_owner[0] = sparse_string_at(state.token_namespaces, position[0])
+	state.declaration_owner[0] = sparse_string_at(state.source_tokens.token_namespaces, position[0])
 	state.module_graph.active_module[0] = load_integer(state.declarations.function_modules, function)
 	owner := object_initializer_owner(state, function)
 	if owner >= 0
@@ -385,7 +385,7 @@ def repl_indirect_call(mut store: ReplStore, id: Integer, arguments: Array<Integ
 	previous_body := select_checked_body(state, function)
 	previous_module := state.module_graph.active_module[0]
 	previous_owner := state.declaration_owner[0]
-	state.declaration_owner[0] = sparse_string_at(state.token_namespaces, load_integer(state.declarations.function_body_starts, function))
+	state.declaration_owner[0] = sparse_string_at(state.source_tokens.token_namespaces, load_integer(state.declarations.function_body_starts, function))
 	state.module_graph.active_module[0] = load_integer(state.declarations.function_modules, function)
 	store.depth[0] += 1
 	mut environment := repl_closure_environment(state, store, id, arguments)
@@ -409,7 +409,7 @@ end
 def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut store: ReplStore, mut environment: ReplEnvironment, expected: String): ReplReference
 	if token_is(state, position[0], ":")
 		position[0] += 1
-		text := load_string(state.token_texts, position[0])
+		text := load_string(state.source_tokens.token_texts, position[0])
 		position[0] += 1
 		return repl_reference(repl_string(store, text))
 	end
@@ -444,8 +444,8 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 	if token_is(state, position[0], "if") || token_is(state, position[0], "case")
 		return repl_reference(repl_control(state, position, store, environment, 0))
 	end
-	mut text := load_string(state.token_texts, position[0])
-	kind := load_integer(state.token_kinds, position[0])
+	mut text := load_string(state.source_tokens.token_texts, position[0])
+	kind := load_integer(state.source_tokens.token_kinds, position[0])
 	position[0] += 1
 	if kind == 8
 		self_binding := repl_find(environment, "self")
@@ -694,7 +694,7 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		if owner < 0
 			owner = find_visible_enum(state, state.module_graph.active_module[0], text)
 		end
-		variant := find_enum_variant(state, owner, load_string(state.token_texts, position[0] + 1))
+		variant := find_enum_variant(state, owner, load_string(state.source_tokens.token_texts, position[0] + 1))
 		position[0] += 2
 		row := state.enum_variants[variant]
 		mut bindings := enum_argument_bindings(state, variant)
@@ -731,7 +731,7 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		object_type = resolve_type_name(state, state.module_graph.active_module[0], text, false)
 	end
 	if find_object_type(state, object_type) >= 0 && token_is(state, position[0], ".")
-		member := load_string(state.token_texts, position[0] + 1)
+		member := load_string(state.source_tokens.token_texts, position[0] + 1)
 		position[0] += 2
 		return repl_reference(repl_object_method(state, position, store, environment, object_type, member, - 1))
 	end
@@ -743,7 +743,7 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 		newtype_owner = find_newtype_in_module(state, state.module_graph.active_module[0], state.declaration_owner[0])
 	end
 	if newtype_owner >= 0 && token_is(state, position[0], ".")
-		member := load_string(state.token_texts, position[0] + 1)
+		member := load_string(state.source_tokens.token_texts, position[0] + 1)
 		position[0] += 2
 		if member == "new"
 			position[0] += 1
@@ -766,7 +766,7 @@ def repl_primary(mut state: CompilerState, mut position: Array<Integer>, mut sto
 	end
 	if token_is(state, position[0], ".")
 		position[0] += 1
-		member := load_string(state.token_texts, position[0])
+		member := load_string(state.source_tokens.token_texts, position[0])
 		position[0] += 2
 		if member == "from_raw"
 			call_origin := position[0] - 1
@@ -953,7 +953,7 @@ def repl_postfix(mut state: CompilerState, mut position: Array<Integer>, mut sto
 					next
 				end
 				position[0] += 1
-				member := load_string(state.token_texts, position[0])
+				member := load_string(state.source_tokens.token_texts, position[0])
 				position[0] += 1
 				if (member == "each" || member == "each_slice") && syntax_iteration_suffix(state, position[0] - 2) >= 0
 					position[0] -= 2
@@ -1231,7 +1231,7 @@ def repl_expression(mut state: CompilerState, mut position: Array<Integer>, mut 
 		if store.error[0] != ""
 			return repl_reference(0)
 		end
-		operator := load_string(state.token_texts, position[0])
+		operator := load_string(state.source_tokens.token_texts, position[0])
 		precedence := syntax_expression_precedence(operator)
 		if precedence < minimum
 			complete = true
@@ -1296,7 +1296,7 @@ end
 def repl_block_end(state: CompilerState, start: Integer, stop_else: Boolean): Integer
 	mut position := start
 	mut depth := 0
-	while position < state.token_count[0]
+	while position < state.source_tokens.token_count[0]
 		transformed := sparse_integer_at(state.parsed.transform_origins, position)
 		if transformed > 0
 			position = state.parsed.transforms[transformed - 1].iteration.finish
@@ -1430,7 +1430,7 @@ def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut s
 		else
 			element = repl_integer(store, cursor)
 		end
-		repl_bind(environment, load_string(state.token_texts, plan.syntax.element_origin), element, 1)
+		repl_bind(environment, load_string(state.source_tokens.token_texts, plan.syntax.element_origin), element, 1)
 		if plan.syntax.second_origin >= 0
 			mut second := 0
 			if plan.source_kind == 3
@@ -1438,7 +1438,7 @@ def repl_iteration(mut state: CompilerState, mut position: Array<Integer>, mut s
 			else
 				second = repl_integer(store, ordinal)
 			end
-			repl_bind(environment, load_string(state.token_texts, plan.syntax.second_origin), second, 1)
+			repl_bind(environment, load_string(state.source_tokens.token_texts, plan.syntax.second_origin), second, 1)
 		end
 		position[0] = plan.syntax.body_start
 		result = repl_block(state, position, store, environment, flow, plan.syntax.origin)
@@ -1575,7 +1575,7 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 			mutable = 1
 			position[0] += 1
 		end
-		name := load_string(state.token_texts, position[0])
+		name := load_string(state.source_tokens.token_texts, position[0])
 		position[0] += 1
 		mut expected := ""
 		if token_is(state, position[0], ":")
@@ -1601,7 +1601,7 @@ def repl_statement_value(mut state: CompilerState, mut position: Array<Integer>,
 	if store.error[0] != ""
 		return 0
 	end
-	operator := load_string(state.token_texts, position[0])
+	operator := load_string(state.source_tokens.token_texts, position[0])
 	mut assignment := operator == "="
 	if binary_operator_id(operator) >= 17
 		assignment = true
@@ -1829,7 +1829,7 @@ def repl_control(mut state: CompilerState, mut position: Array<Integer>, mut sto
 			payload := store.children[selector][0]
 			selected = repl_type(store, payload) == pattern.type_name
 			if selected
-				repl_bind(environment, load_string(state.token_texts, pattern.binding), payload, 0)
+				repl_bind(environment, load_string(state.source_tokens.token_texts, pattern.binding), payload, 0)
 			end
 		elsif control.kind == 2 && branch.condition >= 0 && find_enum_type(state, repl_type(store, selector)) >= 0
 			pattern := state.checked[0].enum_patterns[sparse_integer_at(state.checked[0].enum_pattern_origins, branch.condition) - 1]
@@ -1837,7 +1837,7 @@ def repl_control(mut state: CompilerState, mut position: Array<Integer>, mut sto
 			if selected
 				mut slot := 0
 				while slot < pattern.bindings.size()
-					repl_bind(environment, load_string(state.token_texts, pattern.bindings[slot]), store.children[selector][slot], 0)
+					repl_bind(environment, load_string(state.source_tokens.token_texts, pattern.bindings[slot]), store.children[selector][slot], 0)
 					slot += 1
 				end
 			end
@@ -1893,7 +1893,7 @@ def repl_statement_expression(mut state: CompilerState, mut position: Array<Inte
 	mut value := store.children[operand.value][0]
 	if repl_variant(store, operand.value) == operation.err_variant
 		saved := environment.count[0]
-		repl_bind(environment, load_string(state.token_texts, handler.binding), value, 0)
+		repl_bind(environment, load_string(state.source_tokens.token_texts, handler.binding), value, 0)
 		position[0] = handler.body
 		value = repl_block(state, position, store, environment, environment.flow, environment.flow[2])
 		environment.count[0] = saved
@@ -1956,11 +1956,11 @@ def repl_transform(mut state: CompilerState, mut position: Array<Integer>, mut s
 			element = repl_integer(store, cursor)
 		end
 		if syntax.kind == 3
-			repl_bind(environment, load_string(state.token_texts, syntax.accumulator_origin), result, 1)
+			repl_bind(environment, load_string(state.source_tokens.token_texts, syntax.accumulator_origin), result, 1)
 		end
-		repl_bind(environment, load_string(state.token_texts, shape.element_origin), element, 1)
+		repl_bind(environment, load_string(state.source_tokens.token_texts, shape.element_origin), element, 1)
 		if shape.second_origin >= 0
-			repl_bind(environment, load_string(state.token_texts, shape.second_origin), repl_integer(store, ordinal), 1)
+			repl_bind(environment, load_string(state.source_tokens.token_texts, shape.second_origin), repl_integer(store, ordinal), 1)
 		end
 		position[0] = shape.body_start
 		yielded := repl_block(state, position, store, environment, flow, - 1)

@@ -22,7 +22,7 @@ def mir_transform_search_yield(mut state: CompilerState, mut locals: CheckedLoca
 		return
 	end
 	origin := plan.syntax.iteration.origin
-	line := load_integer(state.token_lines, origin)
+	line := load_integer(state.source_tokens.token_lines, origin)
 	frame := locals.mir_loops[locals.mir_control[8] - 1]
 	alternate := mir_control_branch(state, locals, yielded, line)
 	mut selected := checked_value(element.type_name, element.category, element.origin, element.mutable)
@@ -43,7 +43,7 @@ end
 # Both Range comparisons and every exit are ordinary MIR control edges. The
 # dynamic exclusivity flag never requires computing end + 1 at portable MAX.
 def mir_iteration_range_test(mut state: CompilerState, mut locals: CheckedLocals, frame: MirControlLoop, body: Integer, saved: Integer)
-	line := load_integer(state.token_lines, frame.origin)
+	line := load_integer(state.source_tokens.token_lines, frame.origin)
 	owner := load_integer(locals.mir_values, saved) - 1
 	exclusive := mir_checked_range_field(state, locals, owner, 2, frame.origin)
 	first := mir_control_allocate(locals)
@@ -90,7 +90,7 @@ def mir_checked_iteration_begin(mut state: CompilerState, mut locals: CheckedLoc
 		values := mir_checked_hash_operation(state, locals, 30, owner, - 1, 11, "Array<" + hash_value_type(plan.type_name) + ">", plan.syntax.origin)
 		store_integer(locals.mir_values, saved + 3, checked_mir_value(values) + 1)
 	end
-	line := load_integer(state.token_lines, plan.syntax.origin)
+	line := load_integer(state.source_tokens.token_lines, plan.syntax.origin)
 	exit := mir_control_loop_begin(state, locals, plan.syntax.origin, line)
 	depth := locals.mir_control[8] - 1
 	previous := locals.mir_loops[depth]
@@ -134,7 +134,7 @@ def mir_checked_iteration_end(mut state: CompilerState, mut locals: CheckedLocal
 	end
 	depth := locals.mir_control[8] - 1
 	frame := locals.mir_loops[depth]
-	line := load_integer(state.token_lines, plan.syntax.body_finish)
+	line := load_integer(state.source_tokens.token_lines, plan.syntax.body_finish)
 	mir_control_jump(state, locals, frame.continuation, frame.binding_count)
 	locals.count[0] = frame.binding_count
 	# An unconditional break/return may leave no continuation predecessor.
@@ -197,12 +197,12 @@ def mir_transform_yield(mut state: CompilerState, mut locals: CheckedLocals, kin
 		else
 			mir_control_conditional(state, locals, checked_mir_value(yielded), frame.exit, frame.exit_binding_count, continuation, locals.count[0])
 		end
-		mir_control_enter(state, locals, continuation, load_integer(state.token_lines, origin))
+		mir_control_enter(state, locals, continuation, load_integer(state.source_tokens.token_lines, origin))
 		return
 	end
 	mut alternate :=- 1
 	if kind == 2
-		alternate = mir_control_branch(state, locals, yielded, load_integer(state.token_lines, origin))
+		alternate = mir_control_branch(state, locals, yielded, load_integer(state.source_tokens.token_lines, origin))
 	end
 	owner := load_integer(locals.mir_values, result_slot) - 1
 	mut value := checked_mir_value(yielded)
@@ -212,6 +212,6 @@ def mir_transform_yield(mut state: CompilerState, mut locals: CheckedLocals, kin
 	mir_checked_array_operation(state, locals, 24, owner, value, 0, "Void", origin)
 	if kind == 2
 		mir_control_jump(state, locals, alternate, locals.count[0])
-		mir_control_enter(state, locals, alternate, load_integer(state.token_lines, origin))
+		mir_control_enter(state, locals, alternate, load_integer(state.source_tokens.token_lines, origin))
 	end
 end
