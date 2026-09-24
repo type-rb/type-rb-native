@@ -10,6 +10,22 @@ import { verify_mir } from mir_verifier
 import { describe, expect, test } from trb/std/test
 
 describe("Scalar String conversion MIR") do
+	test("concatenates empty and nonempty Strings through the runtime") do
+		mut state := logical_checked_source("def main()\nempty := \"\"\nputs(join(\"hello\", empty))\nputs(join(empty, \"world\"))\nputs(join(empty, empty).size())\nputs(join(\"a\", \"b\"))\nend\ndef join(left: String, right: String): String\nreturn left + right\nend\n")
+		expect(check(state)).to_be_true()
+		expect(verify_mir(state.scalar_mir, true)).to_equal("")
+		qbe := Process.environment("TYPE_RB_NATIVE_QBE")
+		if qbe != nil
+			case logical_run_qbe(qbe, control_test_output(emit_qbe(state)))
+			when Result::Ok(actual)
+				expect(actual).to_equal("hello\nworld\n0\nab\n")
+			when Result::Err(error)
+				puts(error)
+				expect(false).to_be_true()
+			end
+		end
+	end
+
 	test("prints Any scalars through a verified dynamic output operation") do
 		mut state := logical_checked_source("def main()\nvalues: Array<Any> := [1, \"word\", true, nil, 1.5, 2.0]\nputs(values[0])\nputs(values[1])\nputs(values[2])\nputs(values[3])\nputs(values[4])\nputs(values[5])\nend\n")
 		expect(check(state)).to_be_true()
