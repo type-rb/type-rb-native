@@ -13,10 +13,10 @@ Each count describes registered probes, not language coverage percentages.
 | Conditions and value-producing branches | basic | 0 / 16 | Nullable/union common result types and broader expression nesting boundaries | IfStatement |
 | Loop control and transfers | basic | 0 / 10 | Additional nested transfer and diagnostic-origin differential probes | WhileStatement, BreakStatement, NextStatement |
 | Case statements and expressions | basic | 0 / 5 | Exhaustiveness, repeated/unreachable branches and pattern-binding diagnostics | CaseStatement |
-| Records and field bindings | basic | 0 / 36 | Nominal cycles and defaults involving remaining unsupported value types | RecordStatement, RecordFieldStatement |
+| Records and field bindings | basic | 0 / 39 | Nominal cycles and defaults involving remaining unsupported value types | RecordStatement, RecordFieldStatement |
 | Member access and projections | basic | 0 / 4 | Safe member access, chained field narrowing and receiver replacement | MemberExpression |
 | Nullable values and narrowing | basic | 1 / 44 | Class/callback and general pattern narrowing; collection/union optional conversions; Nullable standard-library methods beyond the currently implemented Native APIs |  |
-| Enums and tagged values | basic | 4 / 110 | Method-specific type parameters, enum attributes and wider pattern forms; Reference REPL initializer replay (TypeRB #768) and shadowed standard error identity (#769); imported/nested REPL presentation parity | EnumStatement, EnumMemberStatement |
+| Enums and tagged values | basic | 4 / 113 | Method-specific type parameters, attribute output-mode effects and wider pattern forms; Reference REPL initializer replay (TypeRB #768) and shadowed standard error identity (#769); imported/nested REPL presentation parity | EnumStatement, EnumMemberStatement |
 | Transparent aliases | basic | 5 / 33 | Literal/discriminated union alias targets; Authored alias spelling in REPL display and diagnostics | TypeAliasStatement |
 | Nominal newtypes | basic | 1 / 83 | Class/interface representation dependencies; Method-specific generic parameters with the remaining callable/generic family | NewtypeStatement |
 | Generic declarations and applications | basic | 3 / 80 | Remaining method-specific generic combinations and deferred generic class methods; Wider constraints and type applications | GenericExpression |
