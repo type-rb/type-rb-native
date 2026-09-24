@@ -4,6 +4,7 @@ import { parse_module } from parser
 import { resolve } from resolution
 import { find_function_in_module } from declaration_lookup
 import { generic_program_fork } from generic_program
+import { checked_body_new } from checked_body
 import { DefaultInitializer, add_module, compiler_new, find_module, find_name_index, function_index_key } from state
 import { load_integer, load_string, store_integer, store_string } from storage
 import { describe, expect, test } from trb/std/test
@@ -105,5 +106,30 @@ describe("Compiler Hash indexes") do
 		expect(load_integer(state.parsed.field_defaults, 0)).to_equal(8)
 		expect(load_integer(state.parsed.function_expression_bodies, 0)).to_equal(9)
 		expect(load_integer(state.parsed.record_default_parameters, 0)).to_equal(10)
+	end
+
+	test("shares authored bindings and lambda origins while isolating checked fork state") do
+		mut state := compiler_new(64)
+		state.global_bindings.global_types.push("Integer")
+		state.global_bindings.global_functions.push(2)
+		state.global_bindings.declaration_owner[0] = "Parent"
+		store_integer(state.global_bindings.global_scope_orders, 0, 3)
+		store_integer(state.callables.lambda_origins, 0, 4)
+		store_integer(state.callables.function_lambdas, 0, 5)
+		mut fork := generic_program_fork(state)
+		fork.global_bindings.global_types[0] = "String"
+		fork.global_bindings.global_functions[0] = 6
+		fork.global_bindings.declaration_owner[0] = "Fork"
+		store_integer(fork.callables.function_lambdas, 0, 7)
+		fork.callables.checked_bodies.push(checked_body_new(- 1, 0, 1))
+		expect(state.global_bindings.global_types[0]).to_equal("Integer")
+		expect(state.global_bindings.global_functions[0]).to_equal(2)
+		expect(state.global_bindings.declaration_owner[0]).to_equal("Parent")
+		expect(load_integer(fork.global_bindings.global_scope_orders, 0)).to_equal(3)
+		expect(load_integer(fork.callables.lambda_origins, 0)).to_equal(4)
+		expect(fork.callables.lambda_phase[0]).to_equal(1)
+		expect(state.callables.lambda_phase[0]).to_equal(0)
+		expect(load_integer(state.callables.function_lambdas, 0)).to_equal(5)
+		expect(state.callables.checked_bodies.size()).to_equal(0)
 	end
 end

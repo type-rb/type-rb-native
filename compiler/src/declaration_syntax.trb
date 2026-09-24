@@ -27,7 +27,7 @@ end
 def parse_record(mut state: CompilerState, mut position: Array<Integer>): Boolean
 	line := load_integer(state.source_tokens.token_lines, position[0])
 	advance(position)
-	name := namespace_qualify(state.declaration_owner[0], expect_identifier(state, position))
+	name := namespace_qualify(state.global_bindings.declaration_owner[0], expect_identifier(state, position))
 	mut parameters: Array<String> := []
 	mut fields: Array<GenericField> := []
 	if token_is(state, position[0], "<")
@@ -111,21 +111,21 @@ def parse_function(mut state: CompilerState, mut position: Array<Integer>, recei
 			diagnostic(state, "TRBN4002", line, "enum class methods are not supported")
 			return false
 		end
-		if state.declaration_owner[0] == ""
+		if state.global_bindings.declaration_owner[0] == ""
 			diagnostic(state, "TRBN4002", line, "class method requires a declaration owner")
 			return false
 		end
 		advance(position)
 		name = expect_identifier(state, position)
 		class_member = true
-	elsif state.declaration_owner[0] != "" && receiver_type == ""
+	elsif state.global_bindings.declaration_owner[0] != "" && receiver_type == ""
 		diagnostic(state, "TRBN4002", line, "module methods currently require def self.name")
 		return false
 	end
 	if object_member && class_member
 		name = "self::" + name
 	end
-	name = namespace_qualify(state.declaration_owner[0], name)
+	name = namespace_qualify(state.global_bindings.declaration_owner[0], name)
 	mut type_parameters: Array<String> := []
 	outer_parameters.each do |parameter|
 		type_parameters.push(parameter)
@@ -136,7 +136,7 @@ def parse_function(mut state: CompilerState, mut position: Array<Integer>, recei
 		method_parameters.each do |parameter|
 			type_parameters.push(parameter)
 		end
-		if state.declaration_owner[0] != "" && !object_member
+		if state.global_bindings.declaration_owner[0] != "" && !object_member
 			diagnostic(state, "TRBN4002", line, "module methods do not support type parameters")
 			return false
 		end
@@ -292,7 +292,7 @@ def parse_global(mut state: CompilerState, mut position: Array<Integer>): Boolea
 	end
 	constant := enum_uppercase(load_string(state.source_tokens.token_texts, position[0]))
 	leaf := expect_identifier(state, position)
-	name := namespace_qualify(state.declaration_owner[0], leaf)
+	name := namespace_qualify(state.global_bindings.declaration_owner[0], leaf)
 	if leaf == "_"
 		diagnostic(state, "TRBN4002", line, "blank binding _ is only valid as a parameter or pattern binding")
 		return false
@@ -313,6 +313,6 @@ def parse_global(mut state: CompilerState, mut position: Array<Integer>): Boolea
 	if !parse_expression_syntax(state, position, 1)
 		return false
 	end
-	state.globals.push(GlobalDeclaration.new(constant: constant, mutable: mutable, name: name, source_id: state.module_graph.active_module[0], line: line, origin: origin, start: start, finish: position[0], annotation: annotation))
+	state.global_bindings.globals.push(GlobalDeclaration.new(constant: constant, mutable: mutable, name: name, source_id: state.module_graph.active_module[0], line: line, origin: origin, start: start, finish: position[0], annotation: annotation))
 	return finish_statement(state, position)
 end

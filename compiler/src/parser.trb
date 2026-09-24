@@ -153,22 +153,22 @@ def parse_namespace(mut state: CompilerState, mut position: Array<Integer>): Boo
 		diagnostic(state, "TRBN4002", line, "module name must start with an uppercase letter")
 		return false
 	end
-	parent := state.declaration_owner[0]
+	parent := state.global_bindings.declaration_owner[0]
 	name := namespace_qualify(parent, leaf)
 	mut found := false
-	state.namespaces.each do |declaration|
+	state.global_bindings.namespaces.each do |declaration|
 		if declaration.source_id == state.module_graph.active_module[0] && declaration.name == name
 			found = true
 		end
 	end
 	if !found
-		state.namespaces.push(NamespaceDeclaration.new(name: name, source_id: state.module_graph.active_module[0], line: line))
+		state.global_bindings.namespaces.push(NamespaceDeclaration.new(name: name, source_id: state.module_graph.active_module[0], line: line))
 	end
 	if !finish_statement(state, position)
 		return false
 	end
 	start := position[0]
-	state.declaration_owner[0] = name
+	state.global_bindings.declaration_owner[0] = name
 	while !terminal_token(state, position[0]) && !token_is(state, position[0], "end") && !has_diagnostic(state)
 		parse_declaration(state, position)
 		skip_newlines(state, position)
@@ -180,7 +180,7 @@ def parse_namespace(mut state: CompilerState, mut position: Array<Integer>): Boo
 		end
 		token += 1
 	end
-	state.declaration_owner[0] = parent
+	state.global_bindings.declaration_owner[0] = parent
 	if has_diagnostic(state) || !expect(state, position, "end")
 		return false
 	end
@@ -192,8 +192,8 @@ def parse_object_declaration(mut state: CompilerState, mut position: Array<Integ
 	if has_diagnostic(state)
 		return false
 	end
-	parent := state.declaration_owner[0]
-	state.declaration_owner[0] = header.name
+	parent := state.global_bindings.declaration_owner[0]
+	state.global_bindings.declaration_owner[0] = header.name
 	mut fields: Array<ObjectField> := []
 	mut methods: Array<ObjectMethod> := []
 	while !token_is(state, position[0], "end") && !has_diagnostic(state)
@@ -283,7 +283,7 @@ def parse_object_declaration(mut state: CompilerState, mut position: Array<Integ
 		end
 		token += 1
 	end
-	state.declaration_owner[0] = parent
+	state.global_bindings.declaration_owner[0] = parent
 	if has_diagnostic(state)
 		return false
 	end
@@ -317,7 +317,7 @@ def parse_declaration(mut state: CompilerState, mut position: Array<Integer>): B
 		return parse_function(state, position, "", [], false, false)
 	end
 	mut scope := ""
-	if state.declaration_owner[0] == ""
+	if state.global_bindings.declaration_owner[0] == ""
 		scope = "top-level "
 	end
 	diagnostic(state, "TRBN4002", load_integer(state.source_tokens.token_lines, position[0]), "unsupported " + scope + "declaration " + load_string(state.source_tokens.token_texts, position[0]))
@@ -326,7 +326,7 @@ end
 
 def parse_module(mut state: CompilerState, start: Integer, module_index: Integer): Boolean
 	state.module_graph.active_module[0] = module_index
-	state.declaration_owner[0] = ""
+	state.global_bindings.declaration_owner[0] = ""
 	import_start := state.module_graph.import_count[0]
 	store_integer(state.module_graph.module_import_starts, module_index, import_start)
 	store_integer(state.module_graph.module_import_counts, module_index, 0)
@@ -392,16 +392,16 @@ def parse_enum_declaration(mut state: CompilerState, mut position: Array<Integer
 			diagnostic(state, "TRBN4002", load_integer(state.source_tokens.token_lines, position[0]), "enum method name " + method_name + " is reserved")
 			return false
 		end
-		parent := state.declaration_owner[0]
+		parent := state.global_bindings.declaration_owner[0]
 		start := position[0]
-		state.declaration_owner[0] = name
+		state.global_bindings.declaration_owner[0] = name
 		parsed := parse_function(state, position, receiver_type, parameters, false, false)
 		mut token := start
 		while token < position[0]
 			store_string(state.source_tokens.token_namespaces, token, name)
 			token += 1
 		end
-		state.declaration_owner[0] = parent
+		state.global_bindings.declaration_owner[0] = parent
 		if !parsed
 			return false
 		end
@@ -460,16 +460,16 @@ def parse_newtype_declaration(mut state: CompilerState, mut position: Array<Inte
 			diagnostic(state, "TRBN4002", load_integer(state.source_tokens.token_lines, name_origin), "newtype method name " + name + " is reserved")
 			return false
 		end
-		parent := state.declaration_owner[0]
+		parent := state.global_bindings.declaration_owner[0]
 		start := position[0]
-		state.declaration_owner[0] = row.name
+		state.global_bindings.declaration_owner[0] = row.name
 		parsed := parse_function(state, position, receiver, [], false, false)
 		mut token := start
 		while token < position[0]
 			store_string(state.source_tokens.token_namespaces, token, row.name)
 			token += 1
 		end
-		state.declaration_owner[0] = parent
+		state.global_bindings.declaration_owner[0] = parent
 		if !parsed
 			return false
 		end

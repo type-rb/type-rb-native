@@ -144,8 +144,8 @@ def find_declaration_in_module(state: CompilerState, source: Integer, name: Stri
 	end
 	if kind == 7
 		mut index := 0
-		while index < state.globals.size()
-			row := state.globals[index]
+		while index < state.global_bindings.globals.size()
+			row := state.global_bindings.globals[index]
 			if row.source_id == source && row.name == name
 				return index
 			end
@@ -154,8 +154,8 @@ def find_declaration_in_module(state: CompilerState, source: Integer, name: Stri
 	end
 	if kind == 6
 		mut index := 0
-		while index < state.namespaces.size()
-			row := state.namespaces[index]
+		while index < state.global_bindings.namespaces.size()
+			row := state.global_bindings.namespaces[index]
 			if row.source_id == source && row.name == name
 				return index
 			end
@@ -166,7 +166,7 @@ def find_declaration_in_module(state: CompilerState, source: Integer, name: Stri
 end
 
 def find_visible_declaration(mut state: CompilerState, source: Integer, name: String, kind: Integer): Integer
-	mut owner := state.declaration_owner[0]
+	mut owner := state.global_bindings.declaration_owner[0]
 	while owner != ""
 		local := find_declaration_in_module(state, source, namespace_qualify(owner, name), kind)
 		if local >= 0
@@ -202,7 +202,7 @@ def find_visible_declaration(mut state: CompilerState, source: Integer, name: St
 		return - 1
 	end
 	resolved := find_declaration_in_module(state, target, load_string(state.module_graph.import_declarations, binding) + suffix, kind)
-	if kind == 7 && resolved >= 0 && !state.globals[resolved].constant
+	if kind == 7 && resolved >= 0 && !state.global_bindings.globals[resolved].constant
 		return - 1
 	end
 	if resolved >= 0
@@ -219,9 +219,9 @@ end
 # stay available independently, so an earlier use keeps its function identity.
 # A REPL projection supplies authored order without rewriting source tokens.
 def global_binding_precedes(state: CompilerState, identity: Integer, origin: Integer): Boolean
-	row := state.globals[identity]
-	binding_order := sparse_integer_at(state.global_scope_orders, row.origin)
-	use_order := sparse_integer_at(state.global_scope_orders, origin)
+	row := state.global_bindings.globals[identity]
+	binding_order := sparse_integer_at(state.global_bindings.global_scope_orders, row.origin)
+	use_order := sparse_integer_at(state.global_bindings.global_scope_orders, origin)
 	if binding_order > 0 && use_order > 0
 		if binding_order < use_order
 			return true
@@ -238,7 +238,7 @@ def find_visible_global(mut state: CompilerState, source: Integer, name: String,
 	if identity < 0
 		return - 1
 	end
-	if state.globals[identity].constant
+	if state.global_bindings.globals[identity].constant
 		return identity
 	end
 	# Qualified lowercase members remain unsupported; the reference accepts
@@ -247,7 +247,7 @@ def find_visible_global(mut state: CompilerState, source: Integer, name: String,
 	if namespace_parent(name) != ""
 		return - 1
 	end
-	mut owner := state.declaration_owner[0]
+	mut owner := state.global_bindings.declaration_owner[0]
 	while owner != ""
 		local := find_declaration_in_module(state, source, namespace_qualify(owner, name), 7)
 		if local >= 0 && global_binding_precedes(state, local, origin)

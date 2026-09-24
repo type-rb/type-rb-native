@@ -50,7 +50,7 @@ describe("Array iteration MIR") do
 		mut mode := 0
 		while mode < 6
 			mut state := iteration_test_state("def main()\n[1, 2].each_slice(1).with_index do |batch, index|\nputs(batch[0] + index)\nend\nend\n")
-			plan := state.checked[0].iterations[0]
+			plan := state.callables.checked[0].iterations[0]
 			mut first := plan.syntax.slice_start
 			mut last := plan.syntax.slice_finish
 			mut kind := plan.source_kind
@@ -68,7 +68,7 @@ describe("Array iteration MIR") do
 				kind = 3
 			end
 			shape := IterationSyntax.new(origin: plan.syntax.origin, receiver_finish: plan.syntax.receiver_finish, slice_start: first, slice_finish: last, element_origin: plan.syntax.element_origin, second_origin: plan.syntax.second_origin, body_start: plan.syntax.body_start, body_finish: plan.syntax.body_finish, finish: plan.syntax.finish)
-			state.checked[0].iterations[0] = MirIteration.new(syntax: shape, parent_loop: plan.parent_loop, source_kind: kind, type_name: plan.type_name, element_type: plan.element_type)
+			state.callables.checked[0].iterations[0] = MirIteration.new(syntax: shape, parent_loop: plan.parent_loop, source_kind: kind, type_name: plan.type_name, element_type: plan.element_type)
 			checked_iteration_require(state, plan.syntax.origin, - 1)
 			expect(has_diagnostic(state)).to_be_true()
 			mode += 1
@@ -100,7 +100,7 @@ describe("Array iteration MIR") do
 		mut mode := 0
 		while mode < 8
 			mut state := iteration_test_state(source)
-			plan := state.checked[0].iterations[0]
+			plan := state.callables.checked[0].iterations[0]
 			mut element_type := plan.element_type
 			mut parent_loop := plan.parent_loop
 			mut second_origin := plan.syntax.second_origin
@@ -125,7 +125,7 @@ describe("Array iteration MIR") do
 			else
 				store_integer(state.parsed.iteration_origins, plan.syntax.body_finish, 0)
 			end
-			state.checked[0].iterations[0] = MirIteration.new(syntax: IterationSyntax.new(origin: plan.syntax.origin, receiver_finish: receiver_finish, slice_start: - 1, slice_finish: - 1, element_origin: plan.syntax.element_origin, second_origin: second_origin, body_start: plan.syntax.body_start, body_finish: body_finish, finish: finish), parent_loop: parent_loop, source_kind: 1, type_name: plan.type_name, element_type: element_type)
+			state.callables.checked[0].iterations[0] = MirIteration.new(syntax: IterationSyntax.new(origin: plan.syntax.origin, receiver_finish: receiver_finish, slice_start: - 1, slice_finish: - 1, element_origin: plan.syntax.element_origin, second_origin: second_origin, body_start: plan.syntax.body_start, body_finish: body_finish, finish: finish), parent_loop: parent_loop, source_kind: 1, type_name: plan.type_name, element_type: element_type)
 			checked_iteration_require(state, plan.syntax.origin, - 1)
 			expect(has_diagnostic(state)).to_be_true()
 			mode += 1
@@ -151,9 +151,9 @@ describe("iteration source proof") do
 			while kind < 4
 				if kind != source + 1
 					mut state := iteration_test_state("def main()\n" + receiver + ".each do |_value|\nnext\nend\nend\n")
-					plan := state.checked[0].iterations[0]
+					plan := state.callables.checked[0].iterations[0]
 					expect(checked_loop_transfer_kind(state, plan.syntax.body_start, plan.syntax.origin)).to_equal(2)
-					state.checked[0].iterations[0] = MirIteration.new(syntax: plan.syntax, parent_loop: plan.parent_loop, source_kind: kind, type_name: plan.type_name, element_type: plan.element_type)
+					state.callables.checked[0].iterations[0] = MirIteration.new(syntax: plan.syntax, parent_loop: plan.parent_loop, source_kind: kind, type_name: plan.type_name, element_type: plan.element_type)
 					checked_iteration_require(state, plan.syntax.origin, - 1)
 					expect(has_diagnostic(state)).to_be_true()
 					state.diagnostics.count[0] = 0
@@ -172,8 +172,8 @@ describe("value-producing collection blocks") do
 		operations := ["find", "find_index"]
 		operations.each do |operation|
 			mut state := iteration_test_state("def main()\nresult := [1]." + operation + " { |item| item > 0 }\nputs(result == nil)\nend\n")
-			plan := state.checked[0].transforms[0]
-			state.checked[0].transforms[0] = MirTransform.new(syntax: plan.syntax, iteration: plan.iteration, type_name: "String?", key_type: plan.key_type)
+			plan := state.callables.checked[0].transforms[0]
+			state.callables.checked[0].transforms[0] = MirTransform.new(syntax: plan.syntax, iteration: plan.iteration, type_name: "String?", key_type: plan.key_type)
 			checked_transform_require(state, plan.syntax.iteration.origin)
 			expect(has_diagnostic(state)).to_be_true()
 		end
@@ -200,8 +200,8 @@ describe("value-producing collection blocks") do
 
 	test("requires Boolean predicate projections") do
 		mut state := iteration_test_state("def main()\nresult := [1].any? { |item| item > 0 }\nputs(result)\nend\n")
-		plan := state.checked[0].transforms[0]
-		state.checked[0].transforms[0] = MirTransform.new(syntax: plan.syntax, iteration: plan.iteration, type_name: "Array<Boolean>", key_type: plan.key_type)
+		plan := state.callables.checked[0].transforms[0]
+		state.callables.checked[0].transforms[0] = MirTransform.new(syntax: plan.syntax, iteration: plan.iteration, type_name: "Array<Boolean>", key_type: plan.key_type)
 		checked_transform_require(state, plan.syntax.iteration.origin)
 		expect(has_diagnostic(state)).to_be_true()
 	end
@@ -224,7 +224,7 @@ describe("value-producing collection blocks") do
 		mut mutation := 0
 		while mutation < 8
 			mut state := iteration_test_state("def main()\nvalues := [1].select.with_index { |item, index| item > index }\nputs(values.size())\nend\n")
-			plan := state.checked[0].transforms[0]
+			plan := state.callables.checked[0].transforms[0]
 			origin := plan.syntax.iteration.origin
 			mut kind := plan.syntax.kind
 			mut output := plan.type_name
@@ -234,7 +234,7 @@ describe("value-producing collection blocks") do
 			elsif mutation == 1
 				store_integer(state.parsed.transform_origins, plan.syntax.iteration.body_finish, 0)
 			elsif mutation == 2
-				store_integer(state.checked[0].transform_origins, origin, 99)
+				store_integer(state.callables.checked[0].transform_origins, origin, 99)
 			elsif mutation == 3
 				kind = 1
 			elsif mutation == 4
@@ -247,7 +247,7 @@ describe("value-producing collection blocks") do
 				output = "Void"
 			end
 			syntax := TransformSyntax.new(iteration: plan.syntax.iteration, kind: kind, initial_start: initial, initial_finish: plan.syntax.initial_finish, accumulator_origin: plan.syntax.accumulator_origin)
-			state.checked[0].transforms[0] = MirTransform.new(syntax: syntax, iteration: plan.iteration, type_name: output, key_type: plan.key_type)
+			state.callables.checked[0].transforms[0] = MirTransform.new(syntax: syntax, iteration: plan.iteration, type_name: output, key_type: plan.key_type)
 			checked_transform_require(state, origin)
 			expect(has_diagnostic(state)).to_be_true()
 			mutation += 1

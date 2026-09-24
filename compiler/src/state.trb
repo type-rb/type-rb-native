@@ -1,11 +1,10 @@
 import { ObjectDefinition, ObjectInstance } from object_model
 import { NewtypeDefinition } from newtype_model
-import { GlobalDeclaration } from global_model
 import { TransformSyntax } from transform_model
-import { NamespaceDeclaration } from namespace_model
 import { TypeAlias, TypeAliasInstance } from alias_model
-import { CheckedLambda, LambdaSyntax } from callable_types
 import { CheckedBody, checked_body_new } from checked_body
+import { CompilerCallableAnalysis, compiler_callable_analysis_new } from callable_state
+import { CompilerGlobalBindings, compiler_global_bindings_new } from global_state
 import { CatchSyntax } from result_model
 import { GenericBinding, GenericDefinition, GenericFunction, GenericFunctionInstance, GenericInstance } from generic_model
 import { EnumDefinition, EnumField, EnumVariant, RawEnumValue } from enum_model
@@ -197,23 +196,8 @@ record CompilerState
 	raw_enum_results: StringStorage
 	function_receivers: StringStorage
 	projected_type_lines: Array<Integer>
-	# Synthetic entries retain authored submission order independently of headers.
-	global_scope_orders: IntegerStorage
-	globals: Array<GlobalDeclaration>
-	global_types: Array<String>
-	global_functions: Array<Integer>
-	global_order: Array<Integer>
-	namespaces: Array<NamespaceDeclaration>
-	declaration_owner: Array<String>
-	lambdas: Array<LambdaSyntax>
-	lambda_origins: IntegerStorage
-	# Analysis discovers the complete callable catalog before MIR signatures freeze.
-	lambda_phase: Array<Integer>
-	checked_lambdas: Array<CheckedLambda>
-	function_lambdas: IntegerStorage
-	checked: Array<CheckedBody>
-	checked_bodies: Array<CheckedBody>
-	checked_body_indices: IntegerStorage
+	global_bindings: CompilerGlobalBindings
+	callables: CompilerCallableAnalysis
 	standard_modules: IntegerStorage
 	type_resolution: CompilerTypeResolution
 	enums: Array<EnumDefinition>
@@ -405,11 +389,8 @@ end
 
 def compiler_new(capacity: Integer): CompilerState
 	return CompilerState.new(objects: [], object_instances: [], object_instance_lookup: {}, newtypes: [], raw_enum_values: [], raw_enum_results: string_storage(capacity), function_receivers: string_storage(capacity), projected_type_lines: [- 1, - 1],
-		global_scope_orders: integer_storage(capacity), globals: [], global_types: [], global_functions: [], global_order: [],
-		namespaces: [], declaration_owner: [""],
-		lambdas: [], lambda_origins: integer_storage(capacity),
-		lambda_phase: [0], checked_lambdas: [], function_lambdas: integer_storage(capacity),
-		checked: [checked_body_new(- 1, 0, capacity)], checked_bodies: [], checked_body_indices: integer_storage(capacity),
+		global_bindings: compiler_global_bindings_new(capacity),
+		callables: compiler_callable_analysis_new(capacity),
 		standard_modules: integer_storage(capacity),
 		type_resolution: compiler_type_resolution_new(capacity),
 		enums: [], enum_variants: [], enum_fields: [],
@@ -693,12 +674,12 @@ end
 # Select by semantic function identity, preserving an explicit caller context.
 # Source token origins remain authored coordinates within each independent body.
 def select_checked_body(mut state: CompilerState, function: Integer): CheckedBody
-	previous := state.checked[0]
+	previous := state.callables.checked[0]
 	if function < 0 || function >= state.declarations.function_count[0]
 		diagnostic(state, "TRBN4004", 1, "checked body requires a declared function")
 		return previous
 	end
-	mut encoded := sparse_integer_at(state.checked_body_indices, function)
+	mut encoded := sparse_integer_at(state.callables.checked_body_indices, function)
 	if encoded == 0
 		mut origin := load_integer(state.declarations.function_body_starts, function)
 		mut finish := load_integer(state.declarations.function_body_ends, function) + 1
@@ -718,11 +699,11 @@ def select_checked_body(mut state: CompilerState, function: Integer): CheckedBod
 				end
 			end
 		end
-		state.checked_bodies.push(checked_body_new(function, origin, finish))
-		encoded = state.checked_bodies.size()
-		store_integer(state.checked_body_indices, function, encoded)
+		state.callables.checked_bodies.push(checked_body_new(function, origin, finish))
+		encoded = state.callables.checked_bodies.size()
+		store_integer(state.callables.checked_body_indices, function, encoded)
 	end
-	state.checked[0] = state.checked_bodies[encoded - 1]
-	state.checked[0].generic_binding[0] = sparse_integer_at(state.type_resolution.function_generic_bindings, function)
+	state.callables.checked[0] = state.callables.checked_bodies[encoded - 1]
+	state.callables.checked[0].generic_binding[0] = sparse_integer_at(state.type_resolution.function_generic_bindings, function)
 	return previous
 end

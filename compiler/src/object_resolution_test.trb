@@ -24,7 +24,7 @@ describe("Object nominal resolution") do
 	test("distinguishes class interface and record identities with recursive fields") do
 		mut state := object_resolution_state("class Node\n@following: Node?\nend\ninterface Named\nname(): String\nend\nrecord Holder\nvalue: Node\nend\ndef main()\nend\n")
 		expect(resolve_declarations(state)).to_be_true()
-		state.declaration_owner[0] = ""
+		state.global_bindings.declaration_owner[0] = ""
 		node := resolve_type_name(state, 0, "Node", false)
 		named := resolve_type_name(state, 0, "Named", false)
 		expect(node).to_equal("Class#0")
@@ -84,7 +84,7 @@ describe("Object nominal resolution") do
 		store_integer(state.module_graph.import_targets, 0, 1)
 		store_integer(state.module_graph.import_targets, 1, 1)
 		expect(resolve_declarations(state)).to_be_true()
-		state.declaration_owner[0] = ""
+		state.global_bindings.declaration_owner[0] = ""
 		local := resolve_type_name(state, 0, "Item", false)
 		remote := resolve_type_name(state, 0, "Remote", false)
 		expect(local == remote).to_be_false()
@@ -95,12 +95,12 @@ describe("Object nominal resolution") do
 	end
 	test("restores lexical resolution scope through nested instance expansion") do
 		mut state := object_resolution_state("module First\nclass Item<T>\n@value: T\nend\nalias Wrapped<T> = Item<T>\nend\nmodule Second\nclass Item\nend\nclass Uses\n@value: First::Wrapped<Integer>\n@local: Item\nend\nend\n")
-		state.declaration_owner[0] = "Second"
+		state.global_bindings.declaration_owner[0] = "Second"
 		uses := resolve_type_name(state, 0, "Uses", false)
 		fields := state.object_instances[find_object_type(state, uses)].fields
 		expect(type_display(state, fields[0].type_name)).to_equal("First::Item<Integer>")
 		expect(type_display(state, fields[1].type_name)).to_equal("Second::Item")
-		expect(state.declaration_owner[0]).to_equal("Second")
+		expect(state.global_bindings.declaration_owner[0]).to_equal("Second")
 	end
 	test("copies concrete catalogs for generic template checking") do
 		mut state := object_resolution_state("class Box<T>\n@value: T\nend\nalias Holder<T> = Box<T>\n")
