@@ -1,6 +1,6 @@
 import { mir_loop_aliases } from mir_array_loops
 import { MirBlock, MirFunction, MirInstruction, MirModule, MirValue, mir_failure_error } from mir
-import { mir_build_flow, mir_flow_blocks, mir_flow_graph_error, mir_value_available } from mir_flow
+import { mir_build_flow, mir_flow_block_index, mir_flow_blocks, mir_flow_graph_error, mir_value_available } from mir_flow
 import { mir_test_block_with_cell, mir_test_module } from mir_test
 import { verify_mir } from mir_verifier
 import { describe, expect, test } from trb/std/test
@@ -58,6 +58,19 @@ def flow_test_reachable(excluded: Integer, edges: Array<Array<Integer>>): Array<
 end
 
 describe("MIR control-flow dominance") do
+	test("indexes compact block identities with a base and retains sparse fallback") do
+		mut native_module := flow_test_module([[1], [], []])
+		function := native_module.functions[0]
+		mut flow := mir_build_flow(native_module, function, mir_flow_blocks(native_module, function))
+		expect(flow.dense_block_base).to_equal(100)
+		expect(flow.dense_blocks.size()).to_equal(3)
+		expect(mir_flow_block_index(flow, 102)).to_equal(2)
+		native_module.blocks[2] = mir_test_block_with_cell(native_module.blocks[2], 0, 9007199254740991)
+		flow = mir_build_flow(native_module, function, mir_flow_blocks(native_module, function))
+		expect(flow.dense_blocks.size()).to_equal(0)
+		expect(mir_flow_block_index(flow, 9007199254740991)).to_equal(2)
+	end
+
 	test("matches node-removal reachability on all three-block graphs with at most two successors") do
 		mut mask := 0
 		mut checked := 0
