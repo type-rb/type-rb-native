@@ -62,6 +62,13 @@ PR with reviewable commits and complete acceptance evidence is appropriate.
 When probing reference language semantics, run the exact `TYPE_RB_REVISION`
 compiler used by compatibility checks; an installed `trb` may be a different
 release and can disagree on check, generated code, or execution.
+Use a Native compiler rebuilt from the active worktree, and compare all four
+ordinary paths for new syntax. A cached compiler in a neighboring checkout
+may accept or reject a different language contract.
+When compiler imports change, run `python3 tools/recovery_layout_sync.py --write`
+and `--check` instead of copying import text into the recovery layout by hand.
+Updating the generated import inventory alone does not change recovery
+orchestration; validate it with the focused check and hosted full recovery.
 
 For root TypeRB source checks, use the exact `TYPE_RB_REVISION` compiler:
 

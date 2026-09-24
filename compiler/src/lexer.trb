@@ -151,8 +151,8 @@ def interpolation_end(source: String, mut index: Integer): Integer
 	mut depth := 1
 	while index < source.size()
 		character := source[index]
-		if character == "\""
-			index = interpolation_quote_end(source, index + 1)
+		if character == "\"" || character == "'"
+			index = interpolation_quote_end(source, index + 1, character)
 			if index < 0
 				return - 1
 			end
@@ -186,16 +186,20 @@ def interpolation_end(source: String, mut index: Integer): Integer
 	return - 1
 end
 
-def interpolation_quote_end(source: String, mut index: Integer): Integer
+def interpolation_quote_end(source: String, mut index: Integer, quote: String): Integer
 	while index < source.size()
 		character := source[index]
 		if character == "\\"
 			index += 1
 		else
-			if character == "\""
+			if character == quote
 				return index
 			end
-			if character == "#"
+			mut opening := character == "#"
+			if quote != "\""
+				opening = false
+			end
+			if opening
 				if index + 1 < source.size()
 					if source[index + 1] == "{"
 						index = interpolation_end(source, index + 2)
@@ -221,6 +225,7 @@ def scan_string(
 		interpolation: Boolean,
 	): Integer
 	start_line := line
+	quote := source[position[0]]
 	position[0] += 1
 	mut interpolated := false
 	mut text := ""
@@ -232,7 +237,7 @@ def scan_string(
 			scanning = false
 		else
 			current := source[position[0]]
-			if current == "\""
+			if current == quote
 				text += compiler_source_slice(source, chunk_start, position[0])
 				closed = true
 				scanning = false
@@ -249,12 +254,15 @@ def scan_string(
 							diagnostic(state, "TRBN4001", line, "unterminated String escape")
 							scanning = false
 						else
-							escaped_hash := source[position[0]] == "#"
+							mut escaped_hash := source[position[0]] == "#"
+							if quote != "\""
+								escaped_hash = false
+							end
 							if escaped_hash
 								text += "#"
 								position[0] += 1
 							else
-								text += decode_escape(state, source, position, line)
+								text += decode_escape(state, source, position, line, quote)
 							end
 							if has_diagnostic(state)
 								return line - start_line
@@ -373,7 +381,10 @@ end
 # quotes until the expression parser chooses String or Symbol interpretation.
 # Ordinary quotes without interpolation retain the existing literal token.
 def scan_quoted_token(mut state: CompilerState, source: String, mut position: Array<Integer>, line: Integer): Integer
-	finish := interpolation_quote_end(source, position[0] + 1)
+	if source[position[0]] == "'"
+		return scan_string(state, source, position, line, false)
+	end
+	finish := interpolation_quote_end(source, position[0] + 1, "\"")
 	if finish < 0
 		return scan_string(state, source, position, line, true)
 	end
@@ -502,7 +513,7 @@ def lex_source(mut state: CompilerState, source: String, terminal_kind: Integer)
 								if character_in(character, "0123456789")
 									scan_number(state, source, position, line)
 								else
-									if character == "\""
+									if character == "\"" || character == "'"
 										line += scan_quoted_token(state, source, position, line)
 									else
 										scan_symbol(state, source, position, line)
