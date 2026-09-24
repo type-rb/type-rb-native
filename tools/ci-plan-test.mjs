@@ -5,7 +5,20 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { acceptance, changedPaths, classify, mainAcceptance, toolingTests, dailyMeasurementInputs, quickToolingTests, compilerTestInputs, cliInputs } from './ci-plan.mjs';
+import { acceptance, changedPaths, classify, mainAcceptance, recoveryModules, toolingTests, dailyMeasurementInputs, quickToolingTests, compilerTestInputs, cliInputs } from './ci-plan.mjs';
+
+test('main recovery selects only changed compiler modules and fails closed on unknown inputs', () => {
+  const modules = new Set(['compiler', 'lexer', 'parser', 'mir']);
+  assert.equal(recoveryModules(['compiler/src/lexer.trb', 'compiler/src/mir.trb',
+    'compiler/src/compiler_test.trb', 'docs/architecture.md'], modules), 'lexer,mir');
+  assert.equal(recoveryModules(['compiler/src/compiler.trb', 'compiler/src/parser_test.trb'], modules), 'none');
+  for (const paths of [
+    ['compiler/src/new_module.trb'], ['src/compiler_recovery_test.trb'],
+    ['src/compiler_recovery_mutations.trb'], ['tools/recovery_layout_sync.py'],
+    ['.github/workflows/native-validation.yml'], ['TYPE_RB_REVISION'],
+    ['compiler/src/lexer.trb', 'fixtures/recovery/changed.trb'],
+  ]) assert.equal(recoveryModules(paths, modules), 'all', String(paths));
+});
 
 // Planner subprocesses must not inherit the workflow's own gate setting.
 function plannerEnv(extra = {}) {
@@ -753,7 +766,13 @@ test('PR workflows pass the tiered scope while main runs every complete lane', (
   for (const call of ['uses: ./.github/workflows/native-validation.yml', 'uses: ./.github/workflows/native-cli.yml',
     'uses: ./.github/workflows/linux-amd64-targets.yml']) assert(main.includes(call));
   assert(!/native-cli\.yml\n    with:\n      scope/.test(main), 'main CLI keeps the complete default');
-  assert.match(main, /concurrency:\n  group: native-main-validation\n  cancel-in-progress: false/);
+  assert.match(main, /concurrency:\n  group: native-main-validation-\$\{\{ github.event_name \}\}\n  cancel-in-progress: false/);
+  assert(main.includes("- cron: '17 18 * * *'"), 'daily full recovery is retained');
+  assert(main.includes('if test "$GITHUB_EVENT_NAME" = schedule; then'));
+  assert(main.includes('recovery_modules: ${{ steps.plan.outputs.recovery_modules }}'));
+  assert(main.includes('recovery_modules: ${{ needs.plan.outputs.recovery_modules }}'));
+  const nativeValidation = readFileSync(new URL('../.github/workflows/native-validation.yml', import.meta.url), 'utf8');
+  assert(nativeValidation.includes("TYPE_RB_NATIVE_RECOVERY_MODULES: ${{ inputs.recovery_modules || 'all' }}"));
   assert(main.includes('--workflow push-validation.yml') && main.includes('--status success'));
   assert(main.includes('git merge-base --is-ancestor "$sha" "$GITHUB_SHA"'));
   assert(main.includes('git hash-object -t tree /dev/null'), 'no validated ancestor plans everything');
