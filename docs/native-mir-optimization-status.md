@@ -81,7 +81,10 @@ not a performance improvement.
 - `mir_calls.trb`: declaration capture, checked calls and their verification.
 - `mir_strings.trb`: String, conversion and output construction/contracts.
 - `mir_roots.trb`: operation effects, backward managed-value liveness and exact
-  safe-point root plans. Block parameters transfer only demanded values.
+  safe-point root plans. Block parameters transfer only demanded values. Instruction
+  uses and definitions are summarized once per block; a bounded predecessor worklist solves live-in sets
+  before the exact safe-point walk. These summaries are rebuilt from verified MIR
+  and are never input optimization facts.
 - `qbe_strings.trb`, `qbe_roots.trb`: runtime adaptation of those operations and
   publication of the verified root lists. The adapter reuses unchanged leading
   slots within one MIR block and resets the exact root count at every safe point;
