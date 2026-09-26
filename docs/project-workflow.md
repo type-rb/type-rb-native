@@ -1,6 +1,6 @@
 # Project workflow
 
-Planned work is tracked on the [TypeRB Native project](https://github.com/orgs/type-rb/projects/6).
+Planned work is tracked in issues and the associated project board.
 Agents do the implementation work. The maintainer approves initiatives and
 answers decisions. There are no sprints: a weekly review and work-in-progress
 limits keep the flow moving.
