@@ -6,7 +6,11 @@ and its follow-up initiatives.
 ## Context
 
 Production use of the official `trb/web`, `trb/orm` and `trb/jobs` packages is a
-project goal ([MIR consolidation](../mir-consolidation.md)). The current Native
+project goal ([MIR consolidation](../mir-consolidation.md)). The end state is one
+unchanged application source that works in every mode of the TypeRB-authored
+toolchain: `mode: trb` for Native executables, and the `go`, `ruby` and
+`typescript` modes. This decision covers the path to `mode: trb`. The
+three-language emission track reuses the package semantics decided here. The current Native
 toolchain cannot load such projects:
 
 - `trbn` rejects the package and lint configuration fields.
@@ -79,8 +83,11 @@ dependency costs justify it. PostgreSQL is deferred.
 ### Package semantics
 
 The compiler owns TypeRB-authored providers that follow the pinned reference
-contracts. They produce checked declarations and package plans that feed
-verified MIR, and they preserve:
+contracts. They sit at the shared semantic boundary, before Native-specific
+lowering, so that one provider serves every mode. Runtime adapters are per mode:
+external libraries and TypeRB runtime services for `mode: trb`, and each host
+ecosystem's libraries for the source modes. Providers produce checked
+declarations and package plans that feed verified MIR, and they preserve:
 
 - file-route precedence and middleware composition
 - schema-derived model members and typed queries
@@ -95,14 +102,19 @@ These rules hold for every provider:
 - Ordinary builds never invoke the Go reference.
 - Builds from a schema lock stay offline.
 - Unsupported package behavior fails explicitly.
-- `mode: go` never selects Native implicitly.
+- The configured mode selects the target. `mode: trb` builds Native
+  executables. Until the source modes are emitted, a project configured for
+  another mode becomes a Native executable only through an explicit selection,
+  such as a separate configuration passed with `--config`. Application source
+  stays unchanged across modes. M1 settles how the current acceptance of
+  `mode: go` configurations moves to this rule.
 - No Native-only syntax or MIR package API is introduced.
 
 ### Milestones
 
 | Milestone | Scope | First measure |
 | --- | --- | --- |
-| M1 | Project configuration and local path packages | Frozen configuration and import matrix, including invalid options and conflicting identities |
+| M1 | Project configuration, explicit mode selection and local path packages | Frozen configuration and import matrix, including invalid options, mode selection and conflicting identities |
 | M2 | `trbn test` and `trb/std/test` | Discovery, assertions, failure origins and exit status match the reference |
 | M3a | Bytes, JSON and time services | Service conformance cases |
 | M3b | Blocking sockets, deadlines and deterministic resource cleanup | Service cases; no leaked owned handles |
