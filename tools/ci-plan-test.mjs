@@ -150,7 +150,7 @@ test('compatibility checks remain in quick and standalone validation', () => {
 
 test('documentation-only PRs do not run compiler matrices', () => {
   const plan = classify(['README.md', 'docs/index.html', 'results/a.json',
-    'tools/native-mir-array-loop-recovery/README.md'], false);
+    'tools/native-mir-array-loop-recovery/README.md', '.github/ISSUE_TEMPLATE/task.yml'], false);
   assert.deepEqual(plan, { code: false, quick: false, documentation: true,
     memory: false, draft: false, tooling: false, cli: false, complete: false });
   assert.deepEqual(acceptance(results(plan)), []);
