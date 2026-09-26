@@ -41,6 +41,25 @@ documentation corrections do not need a new experiment proposal. For material
 experiments and source-organization slices, use the owning plan's registration
 requirements and establish scope and exit criteria before implementation.
 
+## Propose specification improvements
+
+Reproducing the reference exposes the specification in detail. When a contract
+is ambiguous, contradicts its own documentation, differs between modes, is more
+complex than its purpose needs, prevents an efficient implementation, or gives
+poor diagnostics, propose an improvement:
+
+- Keep implementing the pinned reference behavior. Do not ship a Native-only
+  deviation while the proposal is open.
+- Open a Specification proposal issue. Include a minimal generic reproduction,
+  the observed behavior at `TYPE_RB_REVISION`, the proposed contract, the reason
+  (clarity, portability, performance, diagnostics or simplicity), and the effect
+  on existing programs.
+- Set Attention to Needs decision. The maintainer decides whether to adopt the
+  change and where it lands. Posting it to another repository also needs that
+  decision.
+- Link the proposal from the task, PR or scenario that found it, such as a
+  `triage` expectation in a scenario manifest.
+
 ## Verify the affected surface
 
 Use `docs/ci-validation.md` and the maintained commands in `CONTRIBUTING.md`.

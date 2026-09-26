@@ -59,6 +59,11 @@ a differential oracle; a discrepancy may reveal a bug on either side and must
 be triaged against the specification. Unsupported behavior must produce a
 deterministic diagnostic rather than a fallback with different semantics.
 
+Reproducing the specification also reveals ambiguities and opportunities to
+improve it. Propose them with the Specification proposal issue form, with a
+generic reproduction and rationale, rather than implementing a deviation. The
+maintainer decides whether to adopt a proposal and where it lands.
+
 Performance does not justify changing portable integer behavior, Unicode
 behavior, failure behavior, initialization order, source attribution, or other
 TypeRB guarantees.

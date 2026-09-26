@@ -15,7 +15,8 @@ limits keep the flow moving.
   task is a sub-issue of exactly one initiative. A bug waiting for triage and an
   emergency repair of `main` may exist without a parent.
 
-Open initiatives with the Initiative form and tasks with the Task form. They set
+Open initiatives with the Initiative form, tasks with the Task form, and
+specification improvements with the Specification proposal form. They set
 the issue type and add it to the project when the author has project write
 permission. The auto-add workflow also collects new or updated open issues from
 this repository, including those created without the forms. A project
@@ -176,6 +177,7 @@ a merged child PR. Set a newly added initiative to Proposed during triage.
 | Fix or revert a failing `main` | Remove or weaken required CI checks |
 | Update documentation within the task's scope | Change secrets, permissions, organization or project settings |
 | File, reproduce and triage bugs | Post to other repositories or external services |
+| File specification proposals found while reproducing TypeRB | Adopt a specification change or send it upstream |
 
 A maintainer's direct request defines its own scope and completion point; these
 rules apply to work an agent takes from the board.
